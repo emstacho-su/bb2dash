@@ -1,0 +1,45 @@
+fall2026 courses + context
+
+<context>
+I am a Senior at Syracuse University majoring in Information Management and Technology within the iSchool. Syracuse uses blackboard ultra as the LMS. These are the titles of my classes as they appear when viewing blackboard. The context of providing these are so that we can create the skeletal framing of a potential wireframe. 
+
+<plan> In the first phase you will identify my classes and begin building out the data syntax to be used moving forward. The next phase will be letting cowork run a session out of a blackboard window that I log into explicitly within a claude-controlled browser. The final planned phase thus far after that is to identify the different grading methodologies for each class (by identifying from syllabus), different assignment types, recurring vs. one-of (homework/readings vs. quiz/tests), assignment dates, etc. to then create a structured data warehouse for all of my relevant academic data. (professional side of the end product to be decided on later). 
+</plan> 
+Here is the location of the tentative folder architecture to be used regarding gathering the context for each class. This is just a starting point, I assume organization will likely eventually mirror blackboard storage format (at least how the user perceives it). 
+"C:\Users\estac\OneDrive - Syracuse University\.fall2026\.projects2026\bb2dash\course context"
+</context>
+
+<content> 
+ECN.304.M001.FALL26.The Economics of Social Issues
+--refer to as "ECN.304" "The Economics of Social Issues"
+--Professor: Chung-Chin Lui
+
+GEO.103.M001.FALL26.Environment and Society
+--refer to as "GEO.103.lecture" "Environment and Society"
+--Professor: Robert Wilson
+GEO.103.M003.FALL26.Environment and Society
+--refer to as "GEO.103.recitation" "Environment and Society"
+--Teaching Advisor: Cheyenne Morris
+
+IST.323.M002.FALL26.Intro to Cybersecurity
+--refer to as "IST.323" "Intro to Cybersecurity" 
+--Professor: Christopher Croad
+
+IST.352.M001.FALL26.Info Analysis of Org. Systems
+--refer to as "IST.352" "Info Analysis of Organization Systems"
+--Professor: Michael Larche
+
+IST.466.M003.FALL26.IM and T Capstone
+--refer to as "IST.466" "IM&T Capstone"
+--Professor: Alexander Corsello
+----Additional Context: Ethics Case Group #2, Group #3 for the other case study assignments (when relevant, will be once diving into each class page and materials within blackboard)
+
+IST.471.M800.FALL26.Internship in Info Mgmt and Tech
+--refer to as "IST.471" "Internship"
+</content> 
+
+<task>
+begin the first phase of the plan so that we can then execute the second (next use checkpoint should be logging into blackboard in the claude window). 
+</task>
+
+
