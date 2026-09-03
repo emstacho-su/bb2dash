@@ -1,6 +1,6 @@
 ---
 name: bb-course-pull
-description: Execute a course map — download every file in a Blackboard Ultra course, classify it into the course's buckets, store bytes in Supabase Storage with a local mirror, extract text, and update the typed tables. Use when Stack says "pull <course>", "run the pull", "harvest <course>", or after bb-course-map has produced a map. Requires his explicit download approval for the batch.
+description: 'Execute a course map. Refreshes file URLs, batch-downloads every file in a Blackboard Ultra course in one call, stores bytes in Supabase Storage plus a local mirror laid out class, bucket, assignment folder, files, extracts text and updates the typed tables. Use when Stack says pull a course or harvest a course, after bb-course-map.'
 ---
 
 # bb-course-pull

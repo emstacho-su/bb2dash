@@ -1,6 +1,6 @@
 ---
 name: bb-course-map
-description: Map one Blackboard Ultra course before pulling it. Reads the course's syllabus, schedule, content tree, gradebook and announcements, decides which fields THIS course needs, and writes a versioned course map (JSON in course_maps + course context/<course>/course_map.json) that bb-course-pull executes. Use when Stack says "map <course>", "build the course map", "what does <course> need", or before the first pull of any course.
+description: 'Map one Blackboard Ultra course before pulling it. Reads the syllabus, schedule, content tree, gradebook and announcements, decides which fields this course needs, and writes a versioned course map that bb-course-pull executes. Use when Stack says map a course, build the course map, or before the first pull of any course.'
 ---
 
 # bb-course-map
