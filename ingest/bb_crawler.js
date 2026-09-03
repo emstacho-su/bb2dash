@@ -73,5 +73,14 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
     for (const m of mine) { const p = await crawl(m.id); log.push([m.name, (await post(run_id, 'course', m.id, p)).status]); }
     log.push(['calendar', (await post(run_id, 'calendar', null, await calendar(since, until))).status]);
     return { run_id, log }; };
-  return { j, strip, pageAll, walk, grades, crawl, memberships, calendar, post, runAll };
+  // Fire every download from ONE call so the browser's permission prompt (if any) appears once, not per file.
+  // Anchor clicks keep the page in place; files land in ~/Downloads under their Blackboard display names.
+  const downloadAll = async (urls, gapMs = 1500) => { const sleep = (ms) => new Promise(r => setTimeout(r, ms)); let n = 0;
+    for (const u of urls) { const a = document.createElement('a'); a.href = u.includes('?') ? u : u + '?xythos-download=true'; a.download = ''; a.style.display = 'none'; document.body.appendChild(a); a.click(); a.remove(); n++; await sleep(gapMs); }
+    return n; };
+  // Re-read the embedded files of Ultra documents (data-bbfile) — catalogs go stale when instructors re-upload.
+  const refreshEmbeds = async (C, contentIds) => { const out = {}; for (const id of contentIds) { const full = await j(`/learn/api/v1/courses/${C}/contents/${id}`); const html = full.body?.rawText || ''; const files = []; const re = /data-bbfile="([^"]+)"/g; let m;
+      while ((m = re.exec(html))) { try { const o = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')); files.push({ name: o.displayName || o.linkName, url: o.resourceUrl || (o.viewerUrl ? o.viewerUrl.split('?')[0] : null), mime: o.mimeType || null }); } catch (_) {} }
+      out[id] = { modified: full.modifiedDate, files }; } return out; };
+  return { j, strip, pageAll, walk, grades, crawl, memberships, calendar, post, runAll, downloadAll, refreshEmbeds };
 }

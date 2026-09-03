@@ -23,32 +23,39 @@ replace changed URLs (instructors re-upload; the old rid 404s), add files the ca
 insert/patch `bb_files` before downloading. Lesson from the pilot: 1 of 6 URLs was stale and 1 file
 was missing entirely.
 
-## Step 1 — Download (per `file_manifest`, priority order)
-- `direct_url`: navigate the browser tab to `source_url` + `?xythos-download=true`. In the built-in
-  browser a successful download surfaces as a "navigation denied or failed" result; a real failure
-  shows a Blackboard "Not Found" page instead, so check `~/Downloads` (newest file) rather than the
-  tool's message. Files save with their Blackboard display name; collisions get `(1)` appended
-  (Electron style, no space).
-- `open_parent_and_click`: navigate to the parent content page
-  (`/ultra/courses/<bb_id>/outline/edit/document/<content_id>` or the folder), read the page, click
-  the attachment link, then record as above.
-- Never click test/survey/discussion/attempt controls. Files only.
-- After each file: `sha256`, `bytes`, mime sniff; if a `bb_files` row with the same sha already has
-  `storage_path`, mark this row as duplicate-of and skip upload/extraction.
+## Step 1 — Download the whole course in ONE call (no per-file prompts)
+- Build the URL list from the refreshed manifest (`source_url` + `?xythos-download=true`).
+- In the logged-in tab run `bb.downloadAll(urls)` (from `ingest/bb_crawler.js`): hidden anchor clicks
+  ~1.5 s apart. The page stays put; files land in `~/Downloads` under their Blackboard display names
+  (collisions get `(1)` appended). Any browser permission prompt appears once for the batch, never per
+  file. Do NOT navigate the tab per file.
+- Verify by listing `~/Downloads` (names + sizes), not by tool messages. Re-fire only the missing ones.
+- Files only: never click test, survey, discussion, or attempt controls.
+- Per file: sha256, bytes, mime. If a `bb_files` row with the same sha already has `storage_path`,
+  mark duplicate and skip upload/extraction.
 
 ## Step 2 — Classify
 - Start from the map's bucket for the file. If the map says `unclassified` or confidence < 0.8,
   open the extracted text (Step 4) and decide; write a one-line rationale to `bb_files.notes`.
 - Never change a row where `classified_by = 'stack'`.
 
-## Step 3 — Store
-- Local mirror: move from Downloads to `course context/<course_id>/<bucket>/<file_name>` (create
-  dirs; if a hand-placed copy already exists there with the same sha, keep one).
-- Canonical: upload to Supabase Storage `bb-files/<course_id>/<bucket>/<file_name>` (browser page
-  context with the publishable key cannot read local files, so upload from the cloud workspace or the
-  device shell via the Storage REST API with the publishable key: `POST /storage/v1/object/bb-files/<key>`).
-- Update `bb_files`: `storage_path, local_path, sha256, bytes, mime_type, downloaded_at, bucket,
-  week_no, session_id, assignment_id, reading_id, classified_by, classification_confidence`.
+## Step 3 — Store (the end product: class → bucket → assignment folder → files)
+- Link every file to its assignment first (`bb_files.assignment_id`; readings/slides get `week_no`).
+  The canonical relative path is `bb_file_relpath(id)` (migration 008):
+  `<course>/<bucket>/<assignment-slug>/<file>` when linked to an assignment,
+  `<course>/<bucket>/week-NN/<file>` for lecture_slides/readings with a week, else `<course>/<bucket>/<file>`.
+  `v_file_layout` shows the target path per row and `needs_move` for drift.
+- Local mirror: PowerShell `Move-Item` from Downloads to `course context/<relpath>` (create dirs;
+  rename `(1)` collisions back). Move hand-placed copies into the layout too. The Linux device shell
+  cannot delete from mounted folders, so use PowerShell for moves.
+- Canonical: `device_stage_files` the mirrored files, then `POST /storage/v1/object/bb-files/<relpath>`
+  with the publishable key, correct Content-Type, NO `x-upsert` header (anon is insert-only; a changed
+  file gets a new key; old keys need an authenticated Storage delete). Never use the service key in a browser.
+- Update `bb_files` via the Supabase MCP: `storage_path='bb-files/'||bb_file_relpath(id)`,
+  `local_path='course context/'||bb_file_relpath(id)`, sha256, bytes, mime_type, downloaded_at, bucket,
+  week_no, links, classified_by, classification_confidence, text_status.
+- Acceptance: `select count(*) from v_file_layout where course_id=$1 and needs_move` = 0 and the
+  local tree matches (`Get-ChildItem -Recurse`).
 
 ## Step 4 — Extract text
 - Stage files to the cloud workspace; run `ingest/extract_text.py` (pdftotext per page, python-docx

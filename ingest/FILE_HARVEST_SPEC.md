@@ -22,11 +22,12 @@ only opens `source_url`s from the manifest (or new ones a fresh crawl adds).
 
 1. Chrome is already logged into Blackboard. Open a new tab.
 2. Ask Stack once per run for download permission, listing file names, course, and count.
-3. For each manifest row: navigate the tab to `source_url`. Blackboard 302s to the CDN and Chrome
-   saves the file to `~/Downloads`. Wait for the save; record the landed filename (Chrome may
-   append ` (1)` on collisions).
-4. Inline-renderable types (PDF) may open in the viewer instead of saving; append
-   `?xythos-download=true` or use the `viewerUrl` variant with `xythos-download=true` to force a save.
+3. Refresh every embedded-file URL from the owning document first (`bb.refreshEmbeds`); catalogs go
+   stale within a day when instructors re-upload.
+4. Fire the whole course's downloads from ONE page-context call (`bb.downloadAll(urls)`): hidden
+   anchor clicks with `?xythos-download=true`, ~1.5 s apart. The page stays put, files land in
+   `~/Downloads` under their Blackboard display names, and any browser permission prompt appears once
+   for the batch rather than per file. Verify by listing Downloads, not by tool messages.
 5. Never open a file URL that isn't in the manifest; never click anything that submits, opens an
    attempt, or changes course state (test links, surveys, discussion posts are NOT files).
 6. After the batch, hand off to the sorter (section 4) with `[(bb_files.id, landed_filename)]`.
@@ -68,10 +69,17 @@ Every file additionally gets: `week_no`, `session_id` (class date it supports), 
 
 ## 5. Storage layout
 
-Canonical: Supabase Storage bucket `bb-files`, object key
-`<course_id>/<bucket>/<sanitized_file_name>` e.g. `IST.352/syllabus_policy/IST 352 Syllabus Fall 2026.docx`.
-Local mirror: `course context/<course_id>/<bucket>/<file>` under the OneDrive bb2dash folder
-(gitignored; professors' IP). Existing hand-placed files get moved into this layout too.
+One relative path per file, computed by `bb_file_relpath(id)` (migration 008) and used for BOTH the
+Storage key (`bb-files/<relpath>`) and the local mirror (`course context/<relpath>`):
+
+    <course>/<bucket>/<assignment-slug>/<file>   linked to an assignment  (e.g. IST.323/project_materials/fp-packet/...)
+    <course>/<bucket>/week-NN/<file>              lecture_slides / readings with a known week
+    <course>/<bucket>/<file>                      everything else (syllabus_policy, schedule, admin)
+
+So a class folder reads: course → bucket → the assignment (or week) the material belongs to → files.
+`v_file_layout.needs_move` flags rows whose stored path drifted from the canonical one (e.g. after
+an assignment link is added); the pull skill re-lays them. Existing hand-placed files get moved
+into this layout too. The mirror lives under the OneDrive bb2dash folder (gitignored; professors' IP).
 
 `bb_files` row per file: `sha256` (dedupe across shells; the two IST 466 "Ethics Criteria.pptx" are
 the same bytes), `bytes`, `mime_type`, `storage_path`, `local_path`, `downloaded_at`, `bucket`,
