@@ -1,0 +1,70 @@
+{
+  "course_id": "IST.352",
+  "bb_id": "_570144_1",
+  "version": 1,
+  "mapped_at": "2026-09-03",
+  "meeting": {"days": ["Mon", "Wed"], "start": "12:45", "end": "14:05", "room": "Hinds Hall 018", "source": "announcement Welcome! (8/18)", "confidence": "confirmed"},
+  "grading": {
+    "method": "unknown",
+    "components_seen_in_gradebook": [
+      {"name": "Research - Role of Systems Analyst", "points": 5, "category": "Assignment"},
+      {"name": "Project Assignment #1A - Project Description", "points": 10, "category": "Assignment"},
+      {"name": "Reading confirmations (Ch1 pp11-12, Ch1 All, Ch2)", "points": 0, "category": "Assignment"},
+      {"name": "Knowledge Check series (in-class, per session)", "points": 0, "category": "Test"},
+      {"name": "Project Teams & Option", "points": 0, "category": "Assignment"}
+    ],
+    "rules": [],
+    "source": "gradebook columns only; syllabus docx not yet read",
+    "confidence": "inferred"
+  },
+  "tree_shape": {
+    "principle": "weekly_modules_plus_functional_roots",
+    "roots": ["Instructor Info", "Syllabus & Class Schedule", "Orange Inclusive Access", "Assignments", "Weekly Modules"],
+    "bucket_paths": {
+      "syllabus_policy": ["Syllabus & Class Schedule / Syllabus / *"],
+      "schedule": ["Syllabus & Class Schedule / Class Schedule / *"],
+      "admin": ["Instructor Info / *"],
+      "media_links": ["Orange Inclusive Access / *"],
+      "lecture_slides": ["Weekly Modules / WK* / * / ultraDocumentBody embedded .pptx", "Weekly Modules / WK* - Welcome / *"],
+      "readings": ["Weekly Modules / WK* / <chapter> / non-pptx attachments"],
+      "assignment_spec": ["Assignments / <test-link> (spec text lives in the test item, no file)"],
+      "project_materials": ["Assignments / Project Team Assignments / *"]
+    },
+    "week_key": "WK(\\d{2})",
+    "session_key_in_titles": "Knowledge Check - MM/DD/YY"
+  },
+  "sources": [
+    {"kind": "content_tree", "locator": "/learn/api/v1/courses/_570144_1/contents/ROOT/children (recurse)", "file_bearing": true},
+    {"kind": "gradebook", "locator": "/learn/api/v1/courses/_570144_1/gradebook/grades?userId=_21025199_1", "file_bearing": false},
+    {"kind": "announcements", "locator": "/learn/api/v1/courses/_570144_1/announcements", "file_bearing": false},
+    {"kind": "calendar", "locator": "/learn/api/v1/calendars/calendarItems", "file_bearing": false},
+    {"kind": "groups", "locator": "/learn/api/v1/courses/_570144_1/groups (not yet probed); also Project Teams .xlsx", "file_bearing": true},
+    {"kind": "attempts", "locator": "gradebook lastAttempt + /learn/api/v1/courses/_570144_1/gradebook/columns/<id>/attempts (not yet probed)", "file_bearing": true},
+    {"kind": "lti", "locator": "Orange Inclusive Access (VitalSource e-text)", "file_bearing": false}
+  ],
+  "course_fields": [
+    {"name": "project_team", "source": "Assignments / Project Team Assignments (IST 352 Fall 2026 - Project Teams.xlsx)", "value": null, "confidence": "n/a", "stack_must_confirm": true},
+    {"name": "project_option", "source": "same xlsx / Project Teams & Option submission", "value": null, "confidence": "n/a", "stack_must_confirm": true},
+    {"name": "project_name", "source": "same", "value": null, "confidence": "n/a", "stack_must_confirm": true},
+    {"name": "knowledge_check_series", "source": "Weekly Modules / WK* / Knowledge Check - <date>; one per class session, opens at class time, 0 pts in gradebook", "value": "3 so far (08/26, 08/31, 09/02)", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "reading_confirmation_series", "source": "Assignments / Reading - *  (test links, 0 pts)", "value": "3 so far", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "textbook_access", "source": "Orange Inclusive Access LTI (Valacich & George, Modern Systems Analysis and Design 10e)", "value": null, "confidence": "n/a", "stack_must_confirm": true},
+    {"name": "grading_weights", "source": "IST 352 Syllabus Fall 2026.docx", "value": null, "confidence": "n/a", "stack_must_confirm": false}
+  ],
+  "file_manifest": [
+    {"bb_file_id": 27, "file_name": "IST 352 Syllabus Fall 2026.docx", "download_method": "direct_url", "bucket": "syllabus_policy", "week_no": null, "priority": 1},
+    {"bb_file_id": 28, "file_name": "IST 352 Class Schedule Fall 2026.docx", "download_method": "direct_url", "bucket": "schedule", "week_no": null, "priority": 1},
+    {"bb_file_id": 29, "file_name": "IST 352 Fall 2026 - Project Teams.xlsx", "download_method": "direct_url", "bucket": "project_materials", "week_no": null, "assignment_id": "IST.352/term-project", "priority": 2},
+    {"bb_file_id": 30, "file_name": "Welcome & Course Introduction.pptx", "download_method": "direct_url", "bucket": "lecture_slides", "week_no": 1, "priority": 3, "note": "already in course context/IST.352 by hand"},
+    {"bb_file_id": 31, "file_name": "Introduction to SA&D - Part 1.pptx", "download_method": "open_parent_and_click", "parent_content_id": "_13156512_1", "bucket": "lecture_slides", "week_no": 1, "priority": 3},
+    {"bb_file_id": 32, "file_name": "Introduction to SA&D - Part 1.2.pptx", "download_method": "direct_url", "bucket": "lecture_slides", "week_no": 1, "priority": 3}
+  ],
+  "gaps": [
+    {"what": "Grading method/weights", "owner": "blackboard_pull", "closes_with": "bb_file_id 27"},
+    {"what": "Full session calendar + reading plan", "owner": "blackboard_pull", "closes_with": "bb_file_id 28"},
+    {"what": "Project team / option / name", "owner": "stack", "closes_with": "bb_file_id 29 + Stack confirmation"},
+    {"what": "Project Teams & Option (due 9/1) unopened; Knowledge Checks 08/31 and 09/02 unopened", "owner": "stack"},
+    {"what": "Groups and attempts endpoints not yet probed", "owner": "blackboard_pull"},
+    {"what": "Instructor bio PDF in course context is image-only", "owner": "wait"}
+  ]
+}
