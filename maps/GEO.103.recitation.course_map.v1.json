@@ -1,0 +1,69 @@
+{
+  "course_id": "GEO.103.recitation",
+  "bb_id": "_569318_1",
+  "version": 1,
+  "mapped_at": "2026-09-03",
+  "meeting": {
+    "days": ["Fri"],
+    "start": "11:40",
+    "end": "12:35",
+    "room": "Maxwell Hall 108",
+    "source": "seed (GEO 103 lecture syllabus, section list); confidence tentative — the Fri slot is an assumption that section M003 == syllabus 'Sec. 3'"
+  },
+  "grading": {
+    "method": "rolls_into_parent",
+    "components": [
+      {"code": "section_participation", "name": "Discussion Section Attendance & Participation", "weight_pct": 15, "owner_course": "GEO.103.lecture"},
+      {"code": "reading_quizzes", "name": "Reading Quizzes", "weight_pct": 10, "owner_course": "GEO.103.lecture", "rule": "~5 unannounced; lowest dropped"}
+    ],
+    "rules": ["The recitation shell has no grading scheme of its own; its 25% is scored in GEO.103.lecture's weighted_pct scheme. Section-specific rules (participation criteria, quiz policy) are appended to grading_schemes.notes for GEO.103.lecture."],
+    "source": "GEO 103 lecture syllabus",
+    "confidence": "confirmed_for_weights_unknown_for_section_rules"
+  },
+  "tree_shape": {
+    "principle": "flat_shell",
+    "note": "Two top-level items under the default Content folder (_12786460_1); no folders, no weekly modules. All course material lives in the GEO.103.lecture shell; this shell carries only the TA's section syllabus and a course link to the lecture shell's Introductions discussion.",
+    "bucket_paths": {
+      "syllabus_policy": ["<root>/*Syllabus*.docx"],
+      "media_links": ["<root>/* (item_kind = course_link | lti)"]
+    }
+  },
+  "sources": [
+    {"kind": "content_tree", "locator": "/learn/api/v1/courses/_569318_1/contents?recursive=true", "file_bearing": true, "note": "2 items: 1 x-bb-file, 1 x-bb-courselink"},
+    {"kind": "gradebook", "locator": "bb_raw run 3e12fd89 payload->'gradebook'", "file_bearing": false, "note": "single column 'Attendance' (_3602445_1, category _5693191_1, possible 100, aggregation LAST, no score yet) — feeds section_participation in the lecture scheme"},
+    {"kind": "announcements", "locator": "payload->'announcements'", "file_bearing": false, "note": "empty"},
+    {"kind": "calendar", "locator": "payload->'schedule'", "file_bearing": false, "note": "empty"},
+    {"kind": "discussions", "locator": "course link _13175563_1 -> lecture shell content _13175562_1 ('Introductions!')", "file_bearing": false}
+  ],
+  "course_fields": [
+    {"name": "section_no", "source": "bb course name GEO.103.M003.FALL26 + discussion section syllabus", "value": "M003", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "meeting_day_time", "source": "discussion section syllabus (pending download)", "value": null, "confidence": "tentative", "stack_must_confirm": true},
+    {"name": "ta_office_hours", "source": "discussion section syllabus (pending download)", "value": null, "confidence": "unknown", "stack_must_confirm": true},
+    {"name": "participation_criteria", "source": "discussion section syllabus (pending download)", "value": null, "confidence": "unknown", "stack_must_confirm": true},
+    {"name": "carbon_footprint_handin_date", "source": "discussion section syllabus + lecture syllabus 'Week Three'", "value": "2026-09-11", "confidence": "tentative", "stack_must_confirm": true}
+  ],
+  "file_manifest": [
+    {
+      "bb_file_id": 22,
+      "content_id": "_13164610_1",
+      "file_name": "Discussion Section Syllabus Fall 2026.docx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13164610-dt-content-rid-165136031_1/xid-165136031_1",
+      "download_method": "direct_url",
+      "bucket": "syllabus_policy",
+      "week_no": null,
+      "assignment_id": null,
+      "reading_id": null,
+      "priority": 1,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "expected_bytes": 20400
+    }
+  ],
+  "gaps": [
+    {"what": "meetings row for GEO.103.recitation is tentative (Fri 11:40-12:35, Maxwell Hall 108) — day/time/room must come from the section syllabus", "owner": "blackboard_pull"},
+    {"what": "TA office hours and contact for Cheyenne Morris (course_staff id 6) are null", "owner": "blackboard_pull"},
+    {"what": "section-specific participation criteria and quiz policy not yet in grading_schemes.notes", "owner": "blackboard_pull"},
+    {"what": "carbon-footprint activity due date (GEO.103/carbon-footprint-activity, 2026-09-11, tentative) needs confirming against the section calendar", "owner": "blackboard_pull"},
+    {"what": "no sessions rows exist for the recitation; add only if the section syllabus lists dated meetings", "owner": "blackboard_pull"},
+    {"what": "'Introductions!' course link is link-only (points at the lecture shell discussion) — no bytes to harvest", "owner": "wait"}
+  ]
+}
