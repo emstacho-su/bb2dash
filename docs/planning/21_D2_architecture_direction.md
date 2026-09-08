@@ -76,6 +76,10 @@ silently.
 
 ### 1.1 Electron. Committed.
 
+Revised 2026-09-08 by section 13: the shell choice below stands, but its position in the build order
+does not. Docker comes first and Electron moves later; read section 13 before acting on anything in
+this section that implies Electron is phase one.
+
 I agree with R3's conclusion and disagree with part of its reasoning, which changes what the decision
 rests on.
 
@@ -1234,3 +1238,346 @@ contract.
 
 The publishable key plus open signups is a live hole today, before any app exists. It is the one
 thing in this document worth doing this week regardless of what gets built.
+
+---
+
+## 13. Docker addendum (2026-09-08, revision 2)
+
+Stack's decision: the app is also hosted in Docker, and Docker comes before the Electron wrap. Docker
+Desktop on the Windows laptop, not the Hetzner VPS, not internet-reachable. One compose stack, the
+built renderer behind nginx plus a small Node hub running the transform driver, the iCal poller and a
+staleness scheduler. Supabase stays the cloud project.
+
+This makes section 1's ordering wrong rather than its conclusion wrong, and it is the right call,
+because the hub supplies the one thing this project has never had: something that folds `bb_raw` into
+typed tables without a human deciding to. Everything below follows from that.
+
+Electron's remaining justification, stated so it can be tested rather than assumed: two capabilities,
+`shell.openPath` against the OneDrive mirror and spawning `claude` in a terminal. If the browser
+fallbacks in 13.4 prove good enough over a few weeks of real use, Electron may never need to ship,
+and that would be a fine outcome.
+
+### 13.1 Repo layout delta
+
+```
+bb2dash/
+  compose.yaml                 # repo root. the file Stack runs `docker compose up -d` against
+  .dockerignore                # course context/, node_modules, .git, .env, app/dist
+  docker/
+    Dockerfile.web             # stage 1 node:22-alpine build of app/ ; stage 2 nginx:alpine
+    Dockerfile.hub             # node:22-alpine ; hub/ + ingest/transform/
+    nginx.conf                 # SPA fallback only. no proxy to the hub, on purpose
+    secrets/                   # gitignored. supabase_password
+  hub/
+    package.json               # ESM, node 22, depends on @bb2dash/transform
+    src/index.js               # boot catch-up, cron registration, 127.0.0.1 http server
+    src/supabase.js            # signInWithPassword from /run/secrets/supabase_password
+    src/jobs/{transform,ical,reaper,freshness,heartbeat}.js
+  ingest/transform/            # gains a package.json, name @bb2dash/transform
+  app/                         # unchanged
+```
+
+The renderer builds once. `app/` `npm run build` emits `app/dist/renderer`, which is a plain static
+bundle with no Electron assumptions in it (that is what the bridge rule in 13.4 guarantees).
+`Dockerfile.web` runs that build in stage one and copies `dist/renderer` into nginx in stage two;
+Electron packaging, when it happens, consumes the same directory. One build script, two consumers,
+no second copy of the renderer anywhere.
+
+`ingest/transform/` is not copied into the hub. It gains a `package.json` naming it
+`@bb2dash/transform`, the root becomes an npm workspace over `app`, `hub` and `ingest/transform`, and
+`hub/package.json` depends on it as `"@bb2dash/transform": "*"`. `Dockerfile.hub` copies both
+directories into the image and runs `npm ci --workspaces`. The CLI entry point
+`node ingest/transform/run.js --run-id X` keeps working unchanged outside Docker, so the
+`bb-transform` skill and the hub run identical code with no drift and no vendoring.
+
+nginx does not proxy to the hub. Keeping them on separate localhost ports means the renderer never
+speaks HTTP to the hub at all (it speaks to Supabase), which removes CORS, proxy config and a
+coupling that would otherwise have to be maintained. Add the proxy later if a real `/api` need
+appears.
+
+### 13.2 The hub service contract
+
+Node 22, ESM, no framework beyond `node:http`.
+
+HTTP surface: yes, but minimal, bound to `127.0.0.1` only, and explicitly not the control plane.
+
+| Route | Purpose |
+|---|---|
+| `GET /healthz` | 200 with `{ok:true}`. The compose healthcheck, nothing else. |
+| `GET /status` | `{version, startedAt, jobs:[{name, lastRunAt, lastStatus, nextRunAt}]}`. Read-only, for a PowerShell curl when something looks wrong. |
+| `POST /jobs/:name/run` | Kick one job now. Convenience for Stack and Claude Code from a terminal. |
+
+Control flows through `agent_requests`, not through HTTP. The renderer's Run transform now button
+inserts an `agent_requests` row exactly as designed in migration 012 and the hub picks it up within
+two minutes. That path works when the hub is down (the row waits), works identically when the request
+comes from a Claude session instead of the app, and needs no cross-origin call from the nginx origin
+to the hub port. The HTTP surface exists for liveness and for a human at a prompt.
+
+The 127.0.0.1 binding is the authentication boundary, which is honest on a laptop-only host and
+dishonest anywhere else. The moment that port is not localhost-only, `POST /jobs/:name/run` needs a
+shared token in a header. Stated here so it is not discovered later.
+
+Authentication to Supabase: the hub signs in as the same single Supabase Auth user as everything
+else. No service-role key. Being explicit, because the question is fair and the posture genuinely did
+change:
+
+A container on Stack's laptop is a legitimate server-side context, so `NOTES.md` caveat 9 and
+`CLAUDE.md` do not forbid a service key here the way they forbid it in a browser. The reason to
+refuse it anyway is that it buys nothing. Every table the hub writes carries
+`for all to authenticated using (true) with check (true)`, and the `bb-files` bucket carries
+`bb_files_auth_all` for `authenticated` (`003_bb_files_bucket.sql` line 4). There is no hub job that
+`authenticated` cannot perform. Against that zero benefit sits a real cost: a service key has
+BYPASSRLS, so a transform bug becomes total rather than scoped, and the project would carry two auth
+models where a policy mistake could be invisible on one side.
+
+So the earlier positions survive intact. Zero RLS changes still holds, because the hub is
+`authenticated` like the app. The publishable key still ships, now inlined into the web image's
+JavaScript instead of an Electron binary, with a lower exposure profile since the image never leaves
+the laptop. What is new is that the project now holds one secret class it did not have before: the
+account password. It goes in a Docker secret file mounted at `/run/secrets/supabase_password`, never
+as an environment variable in `compose.yaml`, because env vars surface in `docker inspect` and in the
+process listing. The hub calls `signInWithPassword` at boot and on a 401 and keeps the session in
+memory. Hardening option for later: persist the refresh token to a named volume so the password is
+needed only on first run.
+
+The one condition that flips this: if a hub job ever needs something `authenticated` cannot do, such
+as deleting a storage object outside `bb-files`, reading `auth.users`, or running maintenance DDL,
+then a service key in a Docker secret is acceptable at that point, scoped to that job and not to the
+whole process.
+
+Scheduler: `node-cron`, not `setInterval`, not app polling. The cadence is calendar-shaped (a
+weekday morning and afternoon, a Sunday deep run, an hourly reaper) and `setInterval` has no concept
+of 07:30. App polling is disqualified outright because jobs would stop when the app is closed, which
+is the reason the hub exists.
+
+Two concrete gotchas that must be handled at setup rather than discovered. Set `TZ=America/New_York`
+in the hub service, or cron fires on UTC and 07:30 local becomes 03:30. And node-cron does not
+replay missed firings, so a laptop that was asleep overnight fires nothing on wake. Every job is
+therefore catch-up shaped: on boot, and again on each cron tick, the job runs if
+`hub_jobs.last_finished_at` is older than its interval. That is what makes "always-on while the
+laptop is up" behave sanely rather than silently skipping a day.
+
+Jobs:
+
+| Job | Cadence | What it does |
+|---|---|---|
+| `transform-on-new-raw` | every 2 min + boot | Find `bb_raw.run_id` values with no `sync_runs` row, or one that is `failed`; run `transformRun()` per section 4; write `sync_runs` and `sync_stage_runs`. Also drains `agent_requests where kind in ('transform','classify_files')`. |
+| `ical-poll` | 05:00 daily + boot catch-up | Fetch `BB_ICAL_FEED_URL`, update `due_at`/`due_date` under the reconciliation predicate, `sync_runs` with `source='ical'`. Blocked until the URL is captured; until then it logs skipped. |
+| `stale-run-reaper` | every 10 min | `update sync_runs set status='failed' where status='running' and started_at < now() - interval '30 minutes'`. This is the reaper migration 010 promised and had no owner for. |
+| `freshness-nag` | hourly | Read `v_data_freshness`; when the gradebook or announcements class exceeds threshold, raise an `attention_items` row of kind `stack_must_confirm`, deduped by 011's unique key. |
+| `heartbeat` | every 30 s | Upsert `hub_jobs` so the GUI can say whether the hub is alive without reaching its HTTP port. |
+
+`transform-on-new-raw` is the payoff. A Claude session crawls, posts `bb_raw`, and the typed tables
+follow within two minutes with no second human step. That deletes `CADENCE_RUNBOOK.md` step 3 as a
+manual procedure, which R3 named as the weakest link in the whole pipeline.
+
+The crawl is not a hub job and never will be. Every Blackboard endpoint is authorized by a session
+cookie obtained through NetID plus a Duo push on Stack's phone. A container cannot produce that. The
+hub is downstream of the crawl, not a replacement for it.
+
+### 13.3 What the hub must not do on Docker Desktop for Windows
+
+No bind mount of the OneDrive mirror. Four reasons, each sufficient on its own. OneDrive Files
+On-Demand stores placeholders as reparse points, so a container reading through the WSL2 filesystem
+bridge sees a sparse or zero-length file and computes the wrong sha256 without erroring. Path
+translation from a Windows path into WSL2 is slow enough that a recursive walk is noticeable and a
+`chokidar` watcher is unreliable, because inotify events do not propagate from the Windows host.
+Permissions map to root-owned 0777, which destroys any ability to reason about what wrote what. And
+the path itself is hostile (`OneDrive - Syracuse University`, then `.fall2026`, `.projects2026`,
+`course context`, with spaces, a hyphen and leading dots).
+
+So file operations stay outside the container, with Electron or with a local script that Claude Code
+runs through PowerShell. Consequences for items that assumed otherwise:
+
+T-13, local file mapping and mirror health, does not move to the hub. It stays an Electron feature,
+with a browser-mode degradation described in 13.4.
+
+`bb-course-pull` steps 1 through 4 stay exactly where they are: browser download, PowerShell
+`Move-Item`, staging, hashing, `extract_text.py`. None of it containerizes, and trying would break
+the sha256 verification that run 12 relies on.
+
+The rule that makes this tractable going forward: anything the hub needs to know about a file, it
+gets from Supabase Storage over HTTPS or from `bb_file_text` in the database, never from the mirror.
+That keeps the door open for `bb-classify-files` to become a hub job later, since it works entirely
+off path strings and extracted text with no bytes involved.
+
+### 13.4 Renderer in a browser versus in Electron
+
+The preload bridge is named `window.desktop` from here on, replacing the `window.bb2` name used in
+sections 1.2 and 1.4. It is absent in the Docker build.
+
+Feature detection is a capability object, never a runtime sniff. `lib/bridge.ts` exports
+`const desktop = window.desktop ?? webFallback`, where both implementations expose the same methods
+and a `desktop.can` record of booleans. Components ask `desktop.can.openLocalFile`, never
+`if (isElectron)`. Three modes now share two implementations: Electron, Docker browser, and Vite dev
+browser, with the last two identical.
+
+| Affordance | Electron | Browser |
+|---|---|---|
+| Open a file (`03-lecture.dc.html` File row Open) | `shell.openPath(bb_files.local_path)` | Open the Storage URL for `bb_files.storage_path` in a new tab |
+| Locate folder | `shell.showItemInFolder` | Show `v_file_layout.local_relpath` with a copy button |
+| Open in Blackboard | `shell.openExternal` | `<a target="_blank" rel="noreferrer">` |
+| Run a skill | spawn `wt.exe ... claude "/bb-sync 42"` | Copy the command with a toast. The `agent_requests` row is inserted either way, so intent is recorded identically |
+| On disk versus Blackboard only | `fs.stat` plus the watcher, verified | Render from `local_path is not null` and `downloaded_at`, labelled recorded on disk rather than on disk |
+| sha256 verify | main process | not offered, and the button is hidden rather than disabled |
+
+The last two rows are the honesty rule for this build: the browser cannot verify the mirror, so it
+must not claim to. A label that says recorded on disk and a hidden verify button are correct; a
+green check that means "the database once said so" is not.
+
+One finding that lands here and needs a decision before the browser Open path is built. The
+`bb-files` bucket was created with `public: true` (`003_bb_files_bucket.sql` line 1), so every stored
+file is readable by URL to anyone who knows the path, and paths are derivable from `bb_file_relpath()`
+whose definition is in a repo that phase 4 plans to make public. That is professors' material, which
+`.gitignore` deliberately protects. Recommendation: flip the bucket to private and use
+`createSignedUrl` for the browser Open path, which is one settings change plus one line in the
+fallback and makes the browser build's behaviour correct rather than accidental.
+
+### 13.5 Auth for the Docker-served UI
+
+Supabase email and password in the browser, session in `localStorage`, no `safeStorage` because there
+is no main process. Sufficient here for one reason that must stay true: the port is bound to
+loopback. `compose.yaml` says `ports: ["127.0.0.1:8080:80"]` and never `"8080:80"`. That single line
+is the security boundary, and the threat model with it in place is identical to Stack's own browser
+cookie jar on the same laptop.
+
+The one thing that must change if it is ever exposed beyond localhost: the permissive policies stop
+being survivable. Every table is `for all to authenticated using (true)`, and Supabase email signup
+is on by default, so a reachable page plus the publishable key means a stranger signs up and owns the
+database. Exposure therefore requires all three of: signups disabled (which should happen this week
+regardless, per open question 1), policies rewritten to `auth.uid() = app_owner()`, and HTTPS with a
+real certificate, because a session in `localStorage` served over plain HTTP on a routable address is
+harvestable. Anything short of all three, keep it on loopback.
+
+### 13.6 Dev and prod split
+
+`npm run dev` in `app/` on port 5174, Vite with HMR, pointed at the same cloud Supabase. This stays
+the URL Claude hands Stack for visual review per `CLAUDE.md`, unchanged.
+
+`docker compose up -d` serves the built renderer on `127.0.0.1:8080` and the hub on `127.0.0.1:8787`.
+Different ports on purpose, so both can run at once and a screen can be compared between the dev
+bundle and the built one.
+
+Images are tagged `bb2dash-web:<git-short-sha>` and `bb2dash-hub:<git-short-sha>`, with a moving
+`:local` tag that `compose.yaml` references through `${BB2DASH_TAG:-local}`. Rollback is
+`docker compose down` then `BB2DASH_TAG=<older-sha> docker compose up -d`. Keep the last three tags;
+pruning is manual and deliberate.
+
+Claude Code rebuilds from PowerShell:
+
+```
+docker compose build --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+docker compose up -d
+docker compose logs -f hub
+```
+
+Docker Desktop must be on the WSL2 backend rather than Hyper-V; builds are substantially faster and
+the Node toolchain behaves. Keep the repo at `C:\Users\estac\projects\bb2dash` as the runbook already
+says. Building from a Windows path is fine because the build context is copied; it is watch-mode bind
+mounts across the boundary that are slow, and the hub does not need one in production mode.
+`.dockerignore` must exclude `course context/`, `node_modules`, `.git`, `.env` and `app/dist`.
+
+Vite inlines `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` at build, so the web image is
+environment-specific. Fine for one user with one project; if a second environment appears, emit a
+`/config.json` the renderer fetches at boot so one image serves both.
+
+### 13.7 Migration and skill deltas
+
+One new migration, taking the next free number and shifting the earlier "later" list from 020..025 to
+021..026.
+
+020, `hub_jobs`. Owner: hub. Why: the GUI needs to know whether the hub is alive and when each job
+last succeeded, without reaching an HTTP port from a different origin; and the catch-up rule in 13.2
+needs somewhere to read `last_finished_at`. GUI depends: the sync and data health screen (T-04), and
+the honesty of the freshness indicators when the hub has been down.
+
+```sql
+create table hub_jobs (
+  name             text primary key,
+  last_started_at  timestamptz,
+  last_finished_at timestamptz,
+  last_status      text check (last_status in ('ok','failed','skipped','running')),
+  last_error       text,
+  next_run_at      timestamptz,
+  heartbeat_at     timestamptz,
+  counts           jsonb not null default '{}'
+);
+alter table hub_jobs enable row level security;
+create policy hub_jobs_owner_all on hub_jobs for all to authenticated using (true) with check (true);
+
+alter table sync_runs drop constraint if exists sync_runs_trigger_check;
+alter table sync_runs add constraint sync_runs_trigger_check
+  check (trigger in ('manual','scheduled','app_request','hub'));
+```
+
+Data work keeps using `sync_runs` and `sync_stage_runs` with `trigger = 'hub'`. `hub_jobs` is
+liveness and scheduling only, and holds no facts. Do not merge them; a heartbeat every 30 seconds
+must not create sync run rows.
+
+Skills, revised against the eight in section 7.3:
+
+`bb-transform` is absorbed. Routine invocation is now `transform-on-new-raw`. The skill survives as a
+manual escape hatch for a targeted re-run (`--run-id X --stage gradebook --dry-run`), and its
+SKILL.md must open by checking `hub_jobs` so a session does not race the hub.
+
+`bb-grade-snapshot` collapses. Writing `bb_gradebook` was always `stageGradebook`'s job, so with the
+hub running the transform there is nothing left for a separate skill to write. Keep the name only if
+it becomes a reporting skill ("what changed in grades since Friday"), otherwise drop it and let the
+change feed in `sync_runs.summary` answer the question.
+
+`bb-sync` is unchanged and still spawns `claude`. Duo. This is the skill the hub cannot touch.
+
+`bb-course-map` and `bb-course-pull` are unchanged, browser and files both.
+
+`bb-classify-files` stays a skill for now and is the obvious next candidate for absorption, since it
+works only off path strings and `bb_file_text` and needs no bytes.
+
+`bb-announce-extract` and `planner-triage` stay skills permanently. They are language work.
+
+Net effect: five skills still need a Claude session, three of them because of Duo or files. The
+routine per-class-day loop shrinks from crawl, transform, report to crawl and report.
+
+### 13.8 Open questions for Stack (revision 2)
+
+Only the ones that change the plan. The twelve in the earlier section still stand, and question 1
+(disable signups) becomes more urgent, not less, because the UI now has a URL.
+
+13. The `bb-files` Storage bucket is public (`003_bb_files_bucket.sql` line 1) and the browser build's
+    Open File affordance would use those URLs. Paths are derivable from `bb_file_relpath()` in a repo
+    phase 4 makes public, so professors' materials become fetchable by anyone who reads the schema.
+    May I flip the bucket to private and switch the browser Open path to signed URLs?
+14. The hub needs your Supabase account password in a Docker secret file so it can sign in without a
+    service key. Are you comfortable with that, or would you rather I use a service key in the same
+    secret file and accept BYPASSRLS? My recommendation is the password.
+15. Confirm the cron times for the hub: iCal at 05:00, freshness nag hourly, reaper every ten
+    minutes, transform sweep every two minutes. The only one you experience is the nag.
+16. Do you want the hub to auto-start with Docker Desktop (`restart: unless-stopped`), which means it
+    runs whenever the laptop is on, or only when you type `docker compose up`?
+17. Given that Electron now only has to justify `shell.openPath` and spawning `claude`, do you want
+    it scheduled at all in this plan, or parked until the browser build has been used for a few weeks
+    and the two gaps are felt rather than assumed?
+
+### 13.9 Handoff notes (revision 2)
+
+The build order is now Docker first. Concretely: migrations 010 through 012, then
+`ingest/transform/`, then `hub/` with `transform-on-new-raw` and the reaper, then `compose.yaml` and
+the web image, then screens. Electron last and only if 13.8 question 17 says so.
+
+`ingest/transform/` becoming a workspace package is a small change with a large consequence. Do it
+before the hub is written, not after, or the hub will get a vendored copy and the CLI and the hub
+will drift within a week.
+
+The renderer must have no Electron assumptions in it at all now, because the primary target is a
+static bundle behind nginx. The bridge rule in 13.4 is what enforces that, and it is easier to hold
+from the first screen than to retrofit.
+
+Loopback binding is the whole security model for the Docker build. `127.0.0.1:8080:80` in
+`compose.yaml`, `127.0.0.1:8787` for the hub. A reviewer should treat a plain `"8080:80"` in any
+draft as a defect, not a preference.
+
+The hub does not solve Duo and does not touch files. Any plan item that reads "the hub will handle
+it" for a crawl or for the OneDrive mirror is wrong. The hub's domain is exactly the space between
+`bb_raw` landing and the typed tables being correct, plus the clock.
+
+node-cron does not replay missed runs. Every job needs the boot catch-up described in 13.2 or a
+laptop that slept through 05:00 silently skips the iCal poll and nobody finds out.
