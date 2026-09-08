@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- GUI REFERENCE · v1 Home — superseded by 13-home-v2. See README.md in this folder. -->
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/styles.css">
+<script src="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-bg)} a{color:var(--color-accent)} a:hover{color:var(--color-accent-400)}</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)">
+<aside style="width:216px;flex:none;position:sticky;top:0;height:100vh;overflow:auto;background:var(--color-surface);display:flex;flex-direction:column;padding:14px 10px;gap:2px;box-shadow:inset -1px 0 0 var(--color-divider)">
+  <a href="01-dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:6px 10px 16px;text-decoration:none;color:var(--color-text);font-family:var(--font-heading);font-weight:500;font-size:16px"><span style="width:9px;height:9px;border-radius:2px;background:var(--color-accent);box-shadow:0 0 10px var(--color-accent)"></span>bb2dash<span style="margin-left:auto;font-size:10px;color:var(--color-neutral-500);letter-spacing:.06em">FALL26</span></a>
+  <a href="01-dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13.5px;color:var(--color-accent);background:var(--color-accent-900)">Home</a>
+  <a href="07-planner.dc.html" style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13.5px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)">Planner</a>
+  <a href="05-grades.dc.html" style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13.5px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)">Grades</a>
+  <a href="08-materials.dc.html" style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13.5px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)">Materials</a>
+  <a href="09-announcements.dc.html" style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13.5px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)">Announcements<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:8px;background:var(--color-accent-800);color:var(--color-accent-100)">3</span></a>
+  <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-500);padding:16px 10px 6px">Courses</div>
+  <a href="02-course.dc.html" style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400);width:56px;flex:none">ECN 304</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Econ of Social Issues</span></a>
+  <a href="02-course.dc.html" style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400);width:56px;flex:none">GEO 103</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Environment &amp; Society</span></a>
+  <a href="02-course.dc.html" style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400);width:56px;flex:none">IST 323</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Intro to Cybersecurity</span><span style="font-size:10px;color:var(--color-neutral-500)">3</span></a>
+  <a href="02-course.dc.html" style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400);width:56px;flex:none">IST 352</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Info Analysis of Org Sys</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent)"></span></a>
+  <a href="02-course.dc.html" style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400);width:56px;flex:none">IST 466</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">IM&amp;T Capstone</span></a>
+  <a href="02-course.dc.html" style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:13px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400);width:56px;flex:none">IST 471</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Internship</span></a>
+  <a href="10-sync.dc.html" style="margin-top:auto;display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:var(--radius-md);text-decoration:none;font-size:12px;color:var(--color-text)" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><span style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);box-shadow:0 0 6px var(--color-accent)"></span>Sync &amp; data health</span><span style="color:var(--color-neutral-500);font-size:11px">Last run today 09:14 · 2 conflicts</span></a>
+</aside><main style="flex:1;min-width:0;padding:26px 36px 48px;display:flex;flex-direction:column;gap:22px">
+  <header style="display:flex;align-items:flex-end;gap:16px">
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <div class="card-kicker">Wednesday · September 2, 2026 · Week 2 of 16</div>
+      <h1 style="font-size:28px;margin:0">Today</h1>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <span class="tag tag-outline" style="font-size:10px">Mockup 01 · Dashboard</span>
+      <a href="00-mvp-plan.dc.html" class="btn btn-ghost" style="font-size:12px">Plan</a>
+      <button class="btn btn-primary">Log status</button>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 10px; width: 899px; height: 244px">
+      <div style="display:flex;align-items:baseline;gap:10px"><h2 style="font-size:17px;margin:0">Due in the next 14 days</h2><span class="text-muted" style="font-size:12px">from v_upcoming · 9 items</span><a href="07-planner.dc.html" style="margin-left:auto;font-size:12px;text-decoration:none">Open planner →</a></div>
+      <table class="table" style="font-size:13px">
+        <thead><tr><th style="width:96px">Due</th><th style="width:70px">Course</th><th>Item</th><th style="width:60px">Pts</th><th style="width:112px">Status</th></tr></thead>
+        <tbody>
+          <tr><td>Wed 9/9 · 3:45p</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)">IST 323</td><td><a href="04-assignment.dc.html" style="color:inherit;text-decoration:none">Quiz #1 — Chap 1</a> <span class="text-muted" style="font-size:11px">Blackboard · 3 attempts</span></td><td>0.5</td><td><span class="tag tag-neutral">not started</span></td></tr>
+          <tr><td>Wed 9/9 · 3:45p</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)">IST 323</td><td><a href="04-assignment.dc.html" style="color:inherit;text-decoration:none">Quiz #2 — Chap 2.1–2.7</a></td><td>0.5</td><td><span class="tag tag-neutral">not started</span></td></tr>
+          <tr><td>Wed 9/9</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)">IST 323</td><td><a href="04-assignment.dc.html" style="color:inherit;text-decoration:none">Presentation Choice — topic + date</a> <span class="text-muted" style="font-size:11px">first come, first served</span></td><td>—</td><td><span class="tag tag-accent">planned</span></td></tr>
+          <tr><td>Thu 9/10 · 2:00p</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)">IST 466</td><td><a href="04-assignment.dc.html" style="color:inherit;text-decoration:none">Ethics Team 2 practice</a> <span class="text-muted" style="font-size:11px">in class · Group #2</span></td><td>—</td><td><span class="tag tag-accent">in progress</span></td></tr>
+          <tr><td>Fri 9/11 · 11:40a</td></tr>
+          <tr><td>Fri 9/11</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)">IST 471</td><td><a href="04-assignment.dc.html" style="color:inherit;text-decoration:none">A1 Internship Proposal</a></td><td>—</td><td><span class="tag tag-accent">in progress</span></td></tr>
+          <tr><td>Fri 9/11</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)">IST 471</td><td><a href="04-assignment.dc.html" style="color:inherit;text-decoration:none">A2 Sharing Introductions</a> <span class="text-muted" style="font-size:11px">discussion board</span></td><td>—</td><td><span class="tag tag-neutral">not started</span></td></tr>
+          <tr><td>Mon 9/14 · 3:45p</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)">IST 323</td><td><a href="04-assignment.dc.html" style="color:inherit;text-decoration:none">Exam #1</a> <span class="text-muted" style="font-size:11px">in class, online · weeks 1–3</span></td><td>10</td><td><span class="tag tag-neutral">not started</span></td></tr>
+          <tr><td>Wed 9/16 · 3:45p</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)">IST 323</td><td><a href="04-assignment.dc.html" style="color:inherit;text-decoration:none">Quiz #3 — Cryptography 1</a></td><td>0.5</td><td><span class="tag tag-neutral">not started</span></td></tr>
+        </tbody>
+      </table>
+    </div><section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;gap:8px;padding:14px" style-hover="box-shadow:var(--shadow-md)">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-accent)">IST 323</span><span style="font-size:11px;color:var(--color-neutral-500)">MW 3:45–5:05 · Hinds 010</span><span class="tag tag-accent" style="margin-left:auto;font-size:10px">Today 3:45</span></div>
+      <div class="card-title">Intro to Cybersecurity</div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Next due</div><div>Quiz #1 &amp; #2 · Wed 9/9</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Grade so far</div><div>10 / 10 pts</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Open</div><div>3 items</div></div>
+      </div>
+      <div class="card-meta">Presentation Choice form still open · 1 unread</div>
+    </a>
+    <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;gap:8px;padding:14px" style-hover="box-shadow:var(--shadow-md)">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-accent)">IST 352</span><span style="font-size:11px;color:var(--color-neutral-500)">MW 12:45–2:05 · Hinds 018</span><span class="tag tag-accent" style="margin-left:auto;font-size:10px">Today 12:45</span></div>
+      <div class="card-title">Info Analysis of Org Systems</div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Next due</div><div>Knowledge Check · today</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Grade so far</div><div class="text-muted">scheme unknown</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Open</div><div>5 items</div></div>
+      </div>
+      <div class="card-meta" style="color:var(--color-accent-300)">3 marked missed · 2 awaiting grade</div>
+    </a>
+    <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;gap:8px;padding:14px" style-hover="box-shadow:var(--shadow-md)">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-accent)">GEO 103</span><span style="font-size:11px;color:var(--color-neutral-500)">MW 10:35 Watson · F 11:40 Maxwell 108</span><span class="tag tag-accent" style="margin-left:auto;font-size:10px">Today 10:35</span></div>
+      <div class="card-title">Environment &amp; Society</div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Next due</div><div>Carbon footprint · Fri 9/11</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Grade so far</div><div>— · 0 absences</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Open</div><div>2 items</div></div>
+      </div>
+      <div class="card-meta">First Exam Wed 9/23 · lecture + section M003</div>
+    </a>
+    <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;gap:8px;padding:14px" style-hover="box-shadow:var(--shadow-md)">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-accent)">ECN 304</span><span style="font-size:11px;color:var(--color-neutral-500)">TTh 3:30–4:50 · LSB 001</span><span class="tag tag-neutral" style="margin-left:auto;font-size:10px">Thu 9/3</span></div>
+      <div class="card-title">Economics of Social Issues</div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Next due</div><div>Exam 1 · Thu 10/1</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Grade so far</div><div>Attendance 100</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Open</div><div>1 item</div></div>
+      </div>
+      <div class="card-meta">Reading quizzes unannounced · lowest dropped</div>
+    </a>
+    <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;gap:8px;padding:14px" style-hover="box-shadow:var(--shadow-md)">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-accent)">IST 466</span><span style="font-size:11px;color:var(--color-neutral-500)">TTh 2:00–3:20 · Hinds 243</span><span class="tag tag-neutral" style="margin-left:auto;font-size:10px">Thu 9/3</span></div>
+      <div class="card-title">IM&amp;T Capstone</div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Next due</div><div>Ethics Team 2 practice · Thu 9/10</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Grade so far</div><div class="text-muted">weights unknown</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Open</div><div>4 items</div></div>
+      </div>
+      <div class="card-meta">Ethics Group #2 · Major Case Group #3</div>
+    </a>
+    <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;gap:8px;padding:14px" style-hover="box-shadow:var(--shadow-md)">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-accent)">IST 471</span><span style="font-size:11px;color:var(--color-neutral-500)">Online · SU ITS internship</span><span class="tag tag-neutral" style="margin-left:auto;font-size:10px">No meetings</span></div>
+      <div class="card-title">Internship</div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Next due</div><div>A1 Proposal + A2 Intros · Fri 9/11</div></div>
+        <div><div style="color:var(--color-neutral-500);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Hours</div><div>0 / 150 <span class="tag tag-outline" style="font-size:9px;padding:1px 6px;margin-left:4px">T-09</span></div></div>
+      </div>
+      <div class="card-meta">Supervisor evaluation required for credit</div>
+    </a>
+  </section>
+
+  <section style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start">
+    
+
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <h2 style="font-size:17px;margin:0">Today's meetings</h2>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <a href="03-lecture.dc.html" class="card" style="flex-direction:row;align-items:center;gap:12px;padding:10px 12px;text-decoration:none;color:inherit" style-hover="box-shadow:var(--shadow-sm)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;width:52px;color:var(--color-neutral-400)">10:35</span><div style="flex:1;min-width:0"><div style="font-size:13.5px">From Population Bomb to Population Bust</div><div class="text-muted" style="font-size:11px">GEO 103 · Watson Theater · Qwickly attendance</div></div></a>
+          <a href="03-lecture.dc.html" class="card" style="flex-direction:row;align-items:center;gap:12px;padding:10px 12px;text-decoration:none;color:inherit" style-hover="box-shadow:var(--shadow-sm)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;width:52px;color:var(--color-neutral-400)">12:45</span><div style="flex:1;min-width:0"><div style="font-size:13.5px">Systems analyst role · Knowledge Check 09/02</div><div class="text-muted" style="font-size:11px">IST 352 · Hinds 018</div></div></a>
+          <a href="03-lecture.dc.html" class="card" style="flex-direction:row;align-items:center;gap:12px;padding:10px 12px;text-decoration:none;color:inherit;box-shadow:0 0 0 1px var(--color-accent-700)"><span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;width:52px;color:var(--color-accent)">3:45</span><div style="flex:1;min-width:0"><div style="font-size:13.5px">Threat environment · Week 2</div><div class="text-muted" style="font-size:11px">IST 323 · Hinds 010 · 2 files on Blackboard</div></div></a>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:baseline;gap:8px"><h2 style="font-size:17px;margin:0">Needs attention</h2><a href="10-sync.dc.html" style="margin-left:auto;font-size:12px;text-decoration:none">Data health →</a></div>
+        <div class="card" style="gap:0;padding:4px 12px">
+          <div style="display:flex;gap:10px;padding:9px 0;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat bottom / 100% 1px"><span class="tag tag-accent" style="font-size:10px;flex:none">overdue</span><span>IST 352 Project Teams &amp; Option (due 9/1) — unopened, marked missed. <a href="04-assignment.dc.html">Override if done in class</a></span></div>
+          <div style="display:flex;gap:10px;padding:9px 0;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat bottom / 100% 1px"><span class="tag tag-outline" style="font-size:10px;flex:none">conflict</span><span>IST 323 Quiz #1 due moved 9/2 → 9/9 (syllabus v1.3.1 vs Blackboard). <a href="10-sync.dc.html">Resolve</a></span></div>
+          <div style="display:flex;gap:10px;padding:9px 0;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat bottom / 100% 1px"><span class="tag tag-neutral" style="font-size:10px;flex:none">missing</span><span>Grading schemes unknown for IST 352 and IST 466 — syllabi are embedded .docx in Blackboard.</span></div>
+          <div style="display:flex;gap:10px;padding:9px 0;font-size:13px"><span class="tag tag-neutral" style="font-size:10px;flex:none">deadline</span><span>IST 323 Orange Inclusive Access textbook opt-out · Mon 9/14</span></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:baseline;gap:8px"><h2 style="font-size:17px;margin:0">Announcements</h2><a href="09-announcements.dc.html" style="margin-left:auto;font-size:12px;text-decoration:none">All 8 →</a></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <a href="09-announcements.dc.html" class="card" style="gap:2px;padding:10px 12px;text-decoration:none;color:inherit"><div style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-500)"><span style="font-family:ui-monospace,Menlo,monospace">IST 466</span><span>Corsello</span><span style="margin-left:auto">Tue 9/1</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span></div><div style="font-size:13px">Welcome — meeting room Hinds 243, office 206 Hinds</div></a>
+          <a href="09-announcements.dc.html" class="card" style="gap:2px;padding:10px 12px;text-decoration:none;color:inherit"><div style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-500)"><span style="font-family:ui-monospace,Menlo,monospace">IST 323</span><span>Croad</span><span style="margin-left:auto">Mon 8/31</span></div><div style="font-size:13px">Final Project packets assigned — you have Packet A, Meridian Pharmacy</div></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer style="display:flex;gap:18px;font-size:11.5px;color:var(--color-neutral-500);padding-top:8px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px">
+    <span style="color:var(--color-neutral-400)">MVP notes</span><span>Course cards read <code>courses</code> + <code>meetings</code> + <code>v_upcoming</code> + gradebook rows.</span><span>Status tags are click-to-edit (T-06).</span><span>Hours field on IST 471 needs T-09.</span>
+  </footer>
+</main>
+
+
+</div>
+</x-dc>
+</body>
+</html>

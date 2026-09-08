@@ -45,3 +45,4 @@ browser pass; keep it in `.env` / `sync_runs.notes`, never in the repo.
 - `DATA_SYNTAX.md` — data dictionary, enums, ID conventions, phase-2 capture checklist
 - `db/migrations/001_schema.sql` — schema
 - `db/seed/002..004_*.sql` — syllabus seeds (reproducible)
+- gui research context/gui/ — GUI layout reference (Home v2, Course v2, plan, options); see gui research context/gui/README.md. Styling pending; gui research context/_ds is the placeholder skin (must stay a sibling of gui/ — pages load it via ../_ds/).
