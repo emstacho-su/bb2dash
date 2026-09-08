@@ -40,9 +40,12 @@ If the latest crawl is older than 7 days or `bb_content` is empty for the course
    `project_option`, `knowledge_check_series`. Each field: name, source locator, current value if
    visible, confidence, `stack_must_confirm` flag.
 5. **Build the file manifest.** Every `bb_files` row for the course + any file the tree walk found
-   that the catalog lacks. For Ultra documents (content items with `bb_type` null), re-fetch the item
-   and parse every `data-bbfile` embed: take `resourceUrl`, else `viewerUrl` minus its query string;
-   embeds that only carry a viewer URL are real files the summary crawl misses. For each: target bucket, week_no, linked session/assignment/reading,
+   that the catalog lacks. Re-fetch EVERY content item (documents AND assessments/assignments/tests)
+   and deep-scan all string fields for `data-bbfile` embeds (`bb.embedsDeep`): attachments to
+   assessment items live under `contentDetail.<asmt>.test.assessment.instructions`, not `body`.
+   Keep only durable `bbcswebdav/pid-…-rid-N_1/xid-N_1` URLs (`resourceUrl`, else `viewerUrl` minus
+   its query string); `/sessions/…` URLs expire with the login and must never enter the manifest.
+   Embeds that only carry a viewer URL are real files the summary crawl misses. For each: target bucket, week_no, linked session/assignment/reading,
    `download_method` (`direct_url` | `open_parent_and_click` when `source_url` is missing/`undefined`),
    priority (syllabus/schedule first), and `expected_mime`.
 6. **List gaps and conflicts.** Anything the syllabus says that Blackboard contradicts (dates,

@@ -17,11 +17,18 @@ whose bytes changed. Never runs without a map; if none exists, invoke bb-course-
 
 ## Step 0 — Refresh the manifest against Blackboard (mandatory; catalogs go stale within a day)
 For every owning content item in the manifest, re-fetch `/learn/api/v1/courses/<bb_id>/contents/<content_id>`
-from the logged-in tab and re-parse `body.rawText` for `<a data-bbfile="{json}">`. Use `resourceUrl`,
-and when it is absent fall back to `viewerUrl` stripped of its query string. Diff against the manifest:
-replace changed URLs (instructors re-upload; the old rid 404s), add files the catalog lacks, and
-insert/patch `bb_files` before downloading. Lesson from the pilot: 1 of 6 URLs was stale and 1 file
-was missing entirely.
+from the logged-in tab and run `bb.refreshEmbeds(bb_id, ids)` / `bb.embedsDeep(item)` (from
+`ingest/bb_crawler.js`). It scans EVERY string field of the item for `<a data-bbfile="{json}">`, not
+just `body.rawText`: assessment and assignment items keep their attachments under
+`contentDetail.<asmt>.test.assessment.instructions`, which a body-only scan misses entirely (IST 471
+had 0 embeds catalogued that way; IST 323 hid two example decks the same way).
+URL rule: keep only durable `bbcswebdav/pid-…-rid-N_1/xid-N_1` URLs (`resourceUrl`, else `viewerUrl`
+minus its query string). A `/sessions/<id>/...` URL is session-scoped and returns 403 the next day; never
+store one in `bb_files.source_url`. The same attachment usually appears twice (durable + session-scoped);
+collapse by file name and keep the durable one.
+Diff against the manifest: replace changed URLs (instructors re-upload; the old rid 404s), add files the
+catalog lacks, and insert/patch `bb_files` before downloading. Lessons: the pilot had 1 stale URL of 6
+and 1 missing file; the 9/8 validation found 3 files that only the deep scan sees.
 
 ## Step 1 — Download the whole course in ONE call (no per-file prompts)
 - Build the URL list from the refreshed manifest (`source_url` + `?xythos-download=true`).
@@ -30,6 +37,11 @@ was missing entirely.
   (collisions get `(1)` appended). Any browser permission prompt appears once for the batch, never per
   file. Do NOT navigate the tab per file.
 - Verify by listing `~/Downloads` (names + sizes), not by tool messages. Re-fire only the missing ones.
+- Under concurrency files often land as `<uuid>.tmp` and are never renamed. Claim each by size + magic
+  bytes (`504b0304` zip/OOXML, `%PDF`) + a text signature (slide 1 / first page / docProps date) before
+  renaming on move; size alone mis-files near-identical decks.
+- Progress: after every step post a one-line status to Stack (files landed / stored / extracted / DB
+  updated) so a long run never looks stalled.
 - Files only: never click test, survey, discussion, or attempt controls.
 - Per file: sha256, bytes, mime. If a `bb_files` row with the same sha already has `storage_path`,
   mark duplicate and skip upload/extraction.

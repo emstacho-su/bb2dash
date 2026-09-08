@@ -35,10 +35,13 @@ Pilot notes: `/home/claude/bb2dash/ingest/PILOT_IST352.md`. Spec: `/home/claude/
   the returned tabId; pass `tabId` on EVERY browser call. Never act on tab 'seed' or another agent's tab.
 - In javascript_exec use ABSOLUTE URLs. Session cookie authorizes /learn/api/v1/... JSON.
 - Refresh embeds (mandatory before download): for each owning content id, fetch
-  `https://blackboard.syracuse.edu/learn/api/v1/courses/<bb_id>/contents/<content_id>` and parse every
-  `data-bbfile="..."` attribute in `body.rawText` (HTML-unescape &quot; and &amp;, JSON.parse): use
-  `resourceUrl`, else `viewerUrl` with its query string removed. Compare with bb_files.source_url; patch stale
-  URLs and insert rows for files the catalog lacks (via execute_sql).
+  `https://blackboard.syracuse.edu/learn/api/v1/courses/<bb_id>/contents/<content_id>` and deep-scan EVERY
+  string field of the JSON (not just `body.rawText`) for `data-bbfile="..."` (HTML-unescape &quot; and &amp;,
+  JSON.parse) — assessment items keep attachments under `contentDetail.<asmt>.test.assessment.instructions`.
+  Use `resourceUrl`, else `viewerUrl` with its query string removed; keep ONLY durable
+  `bbcswebdav/pid-…-rid-N_1/xid-N_1` URLs (a `/sessions/…` URL 403s after logout — never store it); the same
+  file appears twice, collapse by name. `bb.embedsDeep(item)` in `ingest/bb_crawler.js` does all of this.
+  Compare with bb_files.source_url; patch stale URLs and insert rows for files the catalog lacks (via execute_sql).
 - Downloads may land as `<uuid>.tmp` (never renamed) under concurrency: claim by size + magic bytes + text signature, then rename on move.
 - Sanitize file_name for Storage keys: no `#`, no curly quotes.
 - Refresh embeds on EVERY content item incl. test links (attachments hide in assessment instruction bodies).

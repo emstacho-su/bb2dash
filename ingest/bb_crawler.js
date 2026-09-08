@@ -16,7 +16,9 @@
  *  - Navigating the tab wipes window state; extract/post before navigating.
  *  - Content children come back with `contentHandler: null` for folders; the real type is the key of
  *    `contentDetail`. Containers = hasChildren || type matches folder|lesson|learningmodule.
- *  - Ultra "documents" (type null) embed files as <a data-bbfile="{json}"> in body.rawText.
+ *  - Ultra "documents" (type null) embed files as <a data-bbfile="{json}"> in body.rawText. Assessment items hide
+ *    attachments under contentDetail.<asmt>.test.assessment.instructions — embedsDeep() scans every string field.
+ *  - Only durable bbcswebdav URLs (…-rid-N_1/xid-N_1) survive the session; /sessions/… URLs 403 the next day.
  *  - bbcswebdav file URLs 302 to a cross-origin CDN with no CORS; bytes cannot be fetched from
  *    page JS. Catalog them (bb_files) and download manually or via the Learn public API with a token.
  *  - Public REST (/learn/api/public/v1/...) also answers with the cookie; prefer it for anything
@@ -31,7 +33,24 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
   const pageAll = async (u) => { let out = [], off = 0; for (;;) { const r = await j(u + (u.includes('?') ? '&' : '?') + `offset=${off}`); if (r.__status) return { error: r.__status, results: out }; out = out.concat(r.results || []); if (!r.paging || !r.paging.nextPage || !(r.results || []).length || off > 5000) break; off += r.results.length; } return { results: out }; };
   const typeOf = (c) => c.contentHandler?.id || Object.keys(c.contentDetail || {})[0] || null;
   const isContainer = (c) => c.hasChildren || /folder|lesson|learningmodule/i.test(typeOf(c) || '');
-  const embeddedFiles = (html) => { const out = []; const re = /data-bbfile="([^"]+)"/g; let m; while ((m = re.exec(html || ''))) { try { const o = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')); out.push({ name: o.displayName || o.linkName, url: o.resourceUrl, mime: o.mimeType || null }); } catch (_) {} } return out; };
+  // Prefer durable bbcswebdav URLs (pid-…-dt-…-rid-N_1/xid-N_1). Session-scoped /sessions/<id>/... URLs 403 once the
+  // session ends, so a catalog built from them is useless the next day.
+  const durableUrl = (o) => { const cands = [o.resourceUrl, o.viewerUrl ? o.viewerUrl.split('?')[0] : null, o.permanentUrl, o.href].filter(Boolean);
+    return cands.find(u => /bbcswebdav\/pid-.*-rid-\d+_\d+\/xid-\d+_\d+/.test(u)) || cands.find(u => !/\/sessions\//.test(u)) || cands[0] || null; };
+  const parseBbfile = (html, out) => { const re = /data-bbfile="([^"]+)"/g; let m; while ((m = re.exec(html || ''))) { try { const o = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'"));
+      const url = durableUrl(o); if (url && !out.some(f => f.url === url)) out.push({ name: o.displayName || o.linkName || o.fileName || null, url, mime: o.mimeType || null, sessionScoped: /\/sessions\//.test(url) }); } catch (_) {} } return out; };
+  const embeddedFiles = (html) => parseBbfile(html, []);
+  // Deep scan: attachments to assessment items (tests, assignments) live under
+  // contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions, not body — so walk EVERY string
+  // field of the full item and collect every data-bbfile embed. Lesson from the 9/8 validation (IST 471, IST 323).
+  const embedsDeep = (item) => { const out = []; const seen = new Set(); const rec = (v, d) => { if (v == null || d > 12) return;
+      if (typeof v === 'string') { if (v.includes('data-bbfile')) parseBbfile(v, out); return; }
+      if (typeof v === 'object') { if (seen.has(v)) return; seen.add(v); for (const k of Object.keys(v)) rec(v[k], d + 1); } };
+    rec(item, 0);
+    // The same attachment usually appears twice (a durable embed in the instructions and a session-scoped one in the
+    // rendered view). Collapse by name, keeping the durable URL.
+    const byName = new Map(); for (const f of out) { const k = (f.name || f.url).toLowerCase(); const prev = byName.get(k); if (!prev || (prev.sessionScoped && !f.sessionScoped)) byName.set(k, f); }
+    return [...byName.values()]; };
   const slim = (c, path) => { const t = typeOf(c); const v = (c.contentDetail || {})[t] || {}; const keep = {};
     for (const f of ['url', 'fileName', 'mimeType', 'points', 'pointsPossible', 'dueDate', 'gradingType', 'isGroupAssignment', 'attemptsAllowed', 'questionsCount', 'gradebookColumnId', 'gradeColumnId', 'fileType', 'duration', 'startDate', 'endDate']) if (v[f] !== undefined) keep[f] = v[f];
     if (v.file) keep.file = { name: v.file.name || v.file.fileName, url: v.file.permanentUrl || v.file.url };
@@ -43,7 +62,9 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
     while (stack.length && guard++ < 1000) { const { id, path } = stack.shift();
       const r = await pageAll(`/learn/api/v1/courses/${C}/contents/${id}/children?@view=Summary&expand=assignedGroups,selfEnrollmentGroups.group,gradebookCategory&includeInActivityTracking=true&limit=100`);
       for (const c of (r.results || [])) { const p = path ? path + ' / ' + c.title : c.title; const s = slim(c, p);
-        if (s.type === null) { const full = await j(`/learn/api/v1/courses/${C}/contents/${c.id}`); s.body = strip(full.body)?.slice(0, 12000) || null; s.embeddedFiles = embeddedFiles(full.body?.rawText); }
+        // Fetch the full item for documents (type null) AND for anything that could carry attachments in a nested
+        // instruction body (assessments/assignments). Cheap: one GET per item.
+        if (s.type === null || /asmt|assignment|test|survey/i.test(s.type || '')) { const full = await j(`/learn/api/v1/courses/${C}/contents/${c.id}`); if (!full.__status) { if (s.type === null) s.body = strip(full.body)?.slice(0, 12000) || null; s.embeddedFiles = embedsDeep(full); } }
         items.push(s); if (isContainer(c)) stack.push({ id: c.id, path: p }); } }
     return items; };
   const grades = async (C) => { const g0 = await pageAll(`/learn/api/v1/courses/${C}/gradebook/grades?userId=${userId}&limit=100&sort=column.position(asc)&expand=lastAttempt,attemptsLeft,submissionStatus,column,column.restricted,canStudentViewGradeResults,column.isLateAttemptCreationDisallowed&includeNoGradeItems=true&skipExternalGrade=true&skipKnowledgeCheck=true`);
@@ -79,8 +100,8 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
     for (const u of urls) { const a = document.createElement('a'); a.href = u.includes('?') ? u : u + '?xythos-download=true'; a.download = ''; a.style.display = 'none'; document.body.appendChild(a); a.click(); a.remove(); n++; await sleep(gapMs); }
     return n; };
   // Re-read the embedded files of Ultra documents (data-bbfile) — catalogs go stale when instructors re-upload.
-  const refreshEmbeds = async (C, contentIds) => { const out = {}; for (const id of contentIds) { const full = await j(`/learn/api/v1/courses/${C}/contents/${id}`); const html = full.body?.rawText || ''; const files = []; const re = /data-bbfile="([^"]+)"/g; let m;
-      while ((m = re.exec(html))) { try { const o = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')); files.push({ name: o.displayName || o.linkName, url: o.resourceUrl || (o.viewerUrl ? o.viewerUrl.split('?')[0] : null), mime: o.mimeType || null }); } catch (_) {} }
-      out[id] = { modified: full.modifiedDate, files }; } return out; };
-  return { j, strip, pageAll, walk, grades, crawl, memberships, calendar, post, runAll, downloadAll, refreshEmbeds };
+  // Deep-scans the whole item (body + assessment instructions + any other string field), durable URLs only.
+  const refreshEmbeds = async (C, contentIds) => { const out = {}; for (const id of contentIds) { const full = await j(`/learn/api/v1/courses/${C}/contents/${id}`);
+      out[id] = full.__status ? { error: full.__status, files: [] } : { modified: full.modifiedDate, files: embedsDeep(full) }; } return out; };
+  return { j, strip, pageAll, walk, grades, crawl, memberships, calendar, post, runAll, downloadAll, refreshEmbeds, embedsDeep, durableUrl };
 }
