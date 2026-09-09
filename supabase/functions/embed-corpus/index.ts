@@ -2,7 +2,8 @@
 // Embeds un-embedded bb_file_text units with the edge runtime's built-in `gte-small`
 // model (384-dim, MIT, no API key) and writes them to bb_text_embeddings.
 //
-// POST { limit?: number = 40, max_parts?: number = 6, dry_run?: boolean = false }
+// POST { limit?: number = 40, max_parts?: number = 6, skip_parts?: number = 0,
+//        dry_run?: boolean = false }
 // ->   { processed_units, inserted_rows, failed: [{text_id, error}], remaining_units, ... }
 //
 // Chunking policy (PLAN_EMBEDDING_POC.md):
@@ -109,7 +110,12 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    let body: { limit?: number; max_parts?: number; dry_run?: boolean } = {};
+    let body: {
+      limit?: number;
+      max_parts?: number;
+      skip_parts?: number;
+      dry_run?: boolean;
+    } = {};
     try {
       const raw = await req.text();
       if (raw.trim()) body = JSON.parse(raw);
@@ -122,6 +128,10 @@ Deno.serve(async (req: Request) => {
     };
     const limit = num(body.limit, 40, 1, 1000);
     const maxParts = num(body.max_parts, 6, 1, 500);
+    // Skip the first N still-missing parts (global order: unit id, then part_no).
+    // Lets a driver fan out several concurrent invocations over disjoint slices;
+    // any overlap that does occur is absorbed by the duplicate-insert check below.
+    const skipParts = num(body.skip_parts, 0, 0, 100000);
     const dryRun = body.dry_run === true;
 
     const sb = createClient(
@@ -156,6 +166,7 @@ Deno.serve(async (req: Request) => {
     type Job = { unit: Unit; parts: Part[]; missingTotal: number; ok: boolean };
     const jobs: Job[] = [];
     let jobParts = 0;
+    let seenMissing = 0; // counts missing parts scanned, for the skip window
     let totalUnits = 0;
     let totalParts = 0;
     let missingUnitsBefore = 0;
@@ -190,14 +201,21 @@ Deno.serve(async (req: Request) => {
         missingUnitsBefore++;
         missingPartsBefore += missing.length;
 
-        if (jobs.length < limit && jobParts < maxParts) {
+        // Walk this unit's missing parts against the global skip window and the
+        // per-invocation part budget.
+        const take: Part[] = [];
+        for (const p of missing) {
+          if (seenMissing++ < skipParts) continue;
+          if (jobParts + take.length >= maxParts) break;
+          take.push(p);
+        }
+        if (take.length > 0 && jobs.length < limit) {
           // deno-lint-ignore no-explicit-any
           const f: any = Array.isArray((r as any).bb_files)
             // deno-lint-ignore no-explicit-any
             ? (r as any).bb_files[0]
             // deno-lint-ignore no-explicit-any
             : (r as any).bb_files;
-          const take = missing.slice(0, Math.max(1, maxParts - jobParts));
           jobs.push({
             unit: {
               id,
@@ -207,6 +225,8 @@ Deno.serve(async (req: Request) => {
               file_name: f?.file_name ?? null,
             },
             parts: take,
+            missingTotal: missing.length,
+            ok: false,
           });
           jobParts += take.length;
         }
@@ -260,6 +280,7 @@ Deno.serve(async (req: Request) => {
           }
           if (!insErr) insertedRows++;
         }
+        job.ok = true;
         processedUnits++;
       } catch (e) {
         failed.push({
@@ -269,19 +290,13 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const partsDone = dryRun ? 0 : insertedRows;
-    const remainingParts = Math.max(0, missingPartsBefore - partsDone);
-    // A unit is only "remaining" while it still has a missing part.
-    const unitsFinished = dryRun
-      ? 0
-      : jobs.filter((j) =>
-        j.parts.length ===
-          (j.parts.length) /* all of this unit's missing parts were queued */ &&
-        j.parts.length > 0
-      ).length;
-    const remainingUnits = dryRun
-      ? missingUnitsBefore
-      : Math.max(0, missingUnitsBefore - Math.min(unitsFinished, processedUnits));
+    const remainingParts = Math.max(0, missingPartsBefore - insertedRows);
+    // A unit stops being "remaining" only once every part it was missing is stored:
+    // it must have succeeded AND not have been truncated by max_parts.
+    const unitsCompleted = jobs.filter(
+      (j) => j.ok && j.parts.length === j.missingTotal,
+    ).length;
+    const remainingUnits = Math.max(0, missingUnitsBefore - unitsCompleted);
 
     return new Response(
       JSON.stringify({
@@ -291,10 +306,12 @@ Deno.serve(async (req: Request) => {
         remaining_units: remainingUnits,
         // extras, for the batch runner / monitoring
         remaining_parts: remainingParts,
+        units_completed: unitsCompleted,
         dry_run: dryRun,
         model: MODEL,
         limit,
         max_parts: maxParts,
+        skip_parts: skipParts,
         parts_attempted: jobParts,
         units_selected: jobs.length,
         missing_units_before: missingUnitsBefore,
