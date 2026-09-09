@@ -157,9 +157,8 @@ and the message says so plainly with `isError` false. The floor gates the vector
 that matched the query terms literally still comes back, with its real similarity and a label
 (`below the 0.78 floor — surfaced by literal keyword match`).
 
-**Until the v3 `search` function is deployed**, the floor is not applied server-side; the server
-says so in the result header and labels sub-floor hits rather than removing them. See "Deploying
-the search function" below.
+If the deployed `search` function ever predates the floor (v2), the server says so in the result
+header and labels sub-floor hits rather than removing them; the client works with either version.
 
 An empty result with a `course` filter lists the course ids that actually exist, because a
 mistyped id (`IST323`) and an empty topic look identical otherwise.
@@ -186,18 +185,19 @@ filter accepts.
 
 ---
 
-## Deploying the search function
+## The search function
 
-`supabase/functions/search/index.ts` in this branch is **v3**: it accepts `min_similarity`,
-forwards it to `hybrid_search_file_text` (migration 012, applied), filters `vector` results by it,
-and echoes it in the response so the client knows the floor was applied. Omit the field and v3
-behaves exactly like v2. The deployed function is still **v2** at the time of writing; deploy with
+`supabase/functions/search/index.ts` is **v3, deployed 2026-09-09**: it accepts `min_similarity`,
+forwards it to `hybrid_search_file_text` (migrations 012–013), filters and de-duplicates `vector`
+results per unit, echoes the floor in the response so the client knows it was applied, rejects
+malformed bodies with 400, and logs failures in full server-side while returning only a code to the
+caller. Omit `min_similarity` and it behaves exactly like v2. To redeploy after a change:
 
 ```powershell
 supabase functions deploy search --project-ref goultdzqcavefcgnifdy
 ```
 
-or through the Supabase MCP `deploy_edge_function` tool (`verify_jwt: true`, as today).
+or the Supabase MCP `deploy_edge_function` tool (`verify_jwt: true`).
 
 ---
 
