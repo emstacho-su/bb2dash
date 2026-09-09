@@ -1,0 +1,84 @@
+{
+  "course_id": "ECN.304",
+  "bb_id": "_572517_1",
+  "version": 1,
+  "mapped_at": "2026-09-03",
+  "meeting": {
+    "days": ["Tue", "Thu"],
+    "start": "15:30",
+    "end": "16:50",
+    "room": "Life Sciences Building (LSB) 001",
+    "source": "announcement 'Welcome to ECN 304!' (8/24) + syllabus seed; meetings rows 1-2",
+    "confidence": "confirmed"
+  },
+  "grading": {
+    "method": "weighted_pct",
+    "components": [
+      {"code": "exams", "name": "Exams (rank-weighted)", "weight_pct": 75, "count_expected": 3, "aggregation": "rank_weighted", "rank_weights": [30, 25, 20], "note": "highest exam 30%, median 25%, lowest 20%; all non-cumulative"},
+      {"code": "quizzes", "name": "Average Quiz Grade", "weight_pct": 15, "aggregation": "average_drop_lowest", "drop_lowest": 1, "note": "count not stated in syllabus"},
+      {"code": "participation", "name": "Participation", "weight_pct": 10, "aggregation": "manual", "note": "attendance + active participation; email beforehand to be excused"}
+    ],
+    "letter_scale": [{"letter": "A", "min": 93}, {"letter": "A-", "min": 90}, {"letter": "B+", "min": 87}, {"letter": "B", "min": 83}, {"letter": "B-", "min": 80}, {"letter": "C+", "min": 77}, {"letter": "C", "min": 73}, {"letter": "C-", "min": 70}, {"letter": "D", "min": 60}, {"letter": "F", "min": 0}],
+    "rules": [
+      "Three non-cumulative exams; weights assigned by rank of score, not by exam number.",
+      "Lowest quiz grade dropped.",
+      "Exams not made up without an urgent, documented reason.",
+      "AI permitted only for reviewing course materials; not on any assignment/quiz/exam unless instructions say so."
+    ],
+    "source": "syllabus seed (ECN 304 F26 Syllabus_M001.pdf, read at seed time)",
+    "confidence": "confirmed",
+    "verify_against": "bb_file 23 text after pull (check only; seed already confirmed)"
+  },
+  "tree_shape": {
+    "principle": "topic_folders",
+    "roots": ["ECN 304 F26 Syllabus_M001.pdf (loose file at course root)", "Content (learning module)"],
+    "bucket_paths": {
+      "syllabus_policy": ["<course root> / *Syllabus*.pdf"],
+      "lecture_slides": ["Content / <topic folder> / *.pptx", "Content / <topic folder> / *_HO.*"],
+      "readings": ["Content / <topic folder> / non-pptx article attachments (none present yet; syllabus readings are external URLs)"],
+      "assignment_spec": ["none - exams and quizzes are in-class paper, no Blackboard items"]
+    },
+    "week_key": "none in filenames; week comes from the topic-folder -> week map below",
+    "topic_folder_week_map": [
+      {"folder": "National Debt", "week_no": 1, "first_session_date": "2026-08-27", "session_id": 2, "session_topic": "Federal Budget Deficits and Growing National Debt", "spans_sessions": [2, 3, 4]},
+      {"folder": "Social Security", "week_no": 3, "first_session_date": "2026-09-08", "session_id": 5, "session_topic": "Socio-Economic Impact of an Unsustainable Social Security Program", "spans_sessions": [5, 6]},
+      {"folder": "Healthcare", "week_no": 4, "first_session_date": "2026-09-15", "session_id": 7, "session_topic": "Causes and Effects of Rising Health Care Costs", "spans_sessions": [7, 8, 9, 10, 11]},
+      {"folder": "Environmental Economics", "week_no": 7, "first_session_date": "2026-10-06", "session_id": 13, "session_topic": "Economics of Climate Change and Environmental Sustainability", "spans_sessions": [13, 14, 16]},
+      {"folder": "Great Recession", "week_no": 9, "first_session_date": "2026-10-20", "session_id": 17, "session_topic": "Lessons from the Great Recession", "spans_sessions": [17, 18, 19]},
+      {"folder": "International Financial Crisis", "week_no": 10, "first_session_date": "2026-10-29", "session_id": 20, "session_topic": "Lessons from Recent International Financial Crisis", "spans_sessions": [20, 21]},
+      {"folder": "Discrimination", "week_no": 12, "first_session_date": "2026-11-10", "session_id": 23, "session_topic": "Economics of Racial and Gender Discrimination", "spans_sessions": [23, 24]},
+      {"folder": "International Trade", "week_no": 13, "first_session_date": "2026-11-17", "session_id": 25, "session_topic": "Impact of International Trade on Jobs and Income Inequality", "spans_sessions": [25, 26]},
+      {"folder": "Crime", "week_no": 15, "first_session_date": "2026-12-01", "session_id": 29, "session_topic": "Economics of Crime", "spans_sessions": [29, 30]}
+    ],
+    "classification_rule": "A new file under 'Content / <topic>' is lecture_slides with week_no and session_id = the topic's FIRST session in the sessions table (course_id='ECN.304'); match on sessions.topic ILIKE the folder's session_topic prefix. Non-pptx article attachments under a topic folder are readings with the same week_no."
+  },
+  "sources": [
+    {"kind": "content_tree", "locator": "/learn/api/v1/courses/_572517_1/contents/ROOT/children (recurse)", "file_bearing": true},
+    {"kind": "gradebook", "locator": "/learn/api/v1/courses/_572517_1/gradebook/grades?userId=_21025199_1", "file_bearing": false, "note": "single column 'Attendance' _3598937_1, 100 pts, scored 100 on 8/25; no quiz/exam columns exist"},
+    {"kind": "announcements", "locator": "/learn/api/v1/courses/_572517_1/announcements", "file_bearing": false, "note": "2 posts: Welcome (8/24), Quiz 1 on Tuesday 09/01 (8/29)"},
+    {"kind": "calendar", "locator": "/learn/api/v1/calendars/calendarItems", "file_bearing": false},
+    {"kind": "schedule", "locator": "/learn/api/v1/courses/_572517_1/schedule", "file_bearing": false, "note": "returns 0 rows"},
+    {"kind": "external_readings", "locator": "syllabus reading list -> readings table (38 rows, all public URLs, on_blackboard=false)", "file_bearing": false}
+  ],
+  "course_fields": [
+    {"name": "quiz_series", "source": "syllabus (quizzes on readings, lowest dropped) + announcements; no Blackboard test items or gradebook columns", "value": "In-class, unannounced paper quizzes. Quiz 1 given 09/01 at start of class, drawn from NY Fed 'Monetary Policy Implementation' and SEC 'Interest Rate Risk'. Total count not stated.", "confidence": "confirmed_partial", "stack_must_confirm": true, "confirm_question": "How many quizzes have actually been given so far, and what did you score on Quiz 1?"},
+    {"name": "exam_dates", "source": "syllabus schedule -> sessions rows 12, 22, 31 + assignments exam-1/2/3", "value": {"exam_1": "2026-10-01", "exam_2": "2026-11-05", "exam_3": "2026-12-08"}, "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "ta_contact", "source": "syllabus -> course_staff row 2", "value": {"name": "Brenda Revilla", "email": "bateruya@syr.edu", "office_hours": "Email for appointment"}, "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "readings_by_topic", "source": "syllabus reading list -> readings table (course_id='ECN.304'), keyed by for_date/topic", "value": "38 rows across 8 topics; all external URLs, none on Blackboard. Verify against the pulled syllabus PDF and add any missing.", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "attendance_column", "source": "gradebook column _3598937_1 'Attendance' (100 pts, category Attendance.name)", "value": "single manual column; proxy for the 10% participation component", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "textbook", "source": "syllabus", "value": "Guell, Issues in Economics Today 9e - OPTIONAL/recommended only; chapter refs appear per topic in readings", "confidence": "confirmed", "stack_must_confirm": false}
+  ],
+  "file_manifest": [
+    {"bb_file_id": 23, "file_name": "ECN 304 F26 Syllabus_M001.pdf", "content_id": "_13005441_1", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13005441-dt-content-rid-164595868_1/xid-164595868_1", "download_method": "direct_url", "bucket": "syllabus_policy", "week_no": null, "session_id": null, "assignment_id": null, "reading_id": null, "expected_mime": "application/pdf", "priority": 1, "note": "hand-placed copy already at 'course context/ECN.304/ECN 304 F26 Syllabus_M001.pdf'; dedupe by sha256 and move into syllabus_policy/"},
+    {"bb_file_id": 24, "file_name": "National Debt_v3HO.pptx", "content_id": "_13152893_1", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13152893-dt-content-rid-165018624_1/xid-165018624_1", "download_method": "direct_url", "bucket": "lecture_slides", "week_no": 1, "session_id": 2, "assignment_id": null, "reading_id": null, "expected_mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "priority": 2},
+    {"bb_file_id": 25, "file_name": "Social Security_v3HO.pptx", "content_id": "_13177657_1", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13177657-dt-content-rid-165260173_1/xid-165260173_1", "download_method": "direct_url", "bucket": "lecture_slides", "week_no": 3, "session_id": 5, "assignment_id": null, "reading_id": null, "expected_mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "priority": 2}
+  ],
+  "gaps": [
+    {"what": "Quiz count/dates for the semester - not in syllabus, no Blackboard items; only Quiz 1 (9/1) is known from an announcement", "owner": "wait"},
+    {"what": "Quiz 1 score and any later quiz scores - gradebook has no quiz column", "owner": "stack"},
+    {"what": "Exam point values - syllabus gives weights only, never raw points", "owner": "wait"},
+    {"what": "Topic folders Healthcare / Environmental Economics / Great Recession / International Financial Crisis / Discrimination / International Trade / Crime are all empty as of 9/3; decks post as each topic starts", "owner": "wait"},
+    {"what": "All 38 readings are external URLs, not Blackboard files - nothing to download for the readings bucket", "owner": "wait"},
+    {"what": "Verify seed grading (30/25/20 rank-weighted exams, 15 quizzes drop-lowest, 10 participation) against the pulled PDF text", "owner": "blackboard_pull", "closes_with": "bb_file_id 23"}
+  ]
+}

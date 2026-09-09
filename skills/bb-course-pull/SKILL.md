@@ -1,0 +1,92 @@
+---
+name: bb-course-pull
+description: 'Execute a course map. Refreshes file URLs, batch-downloads every file in a Blackboard Ultra course in one call, stores bytes in Supabase Storage plus a local mirror laid out class, bucket, assignment folder, files, extracts text and updates the typed tables. Use when Stack says pull a course or harvest a course, after bb-course-map.'
+---
+
+# bb-course-pull
+
+Executes `course_maps` (latest version) for one course. Idempotent: re-running only touches rows
+whose bytes changed. Never runs without a map; if none exists, invoke bb-course-map first.
+
+## Preconditions
+1. Latest map: `select map from course_maps where course_id=$1 order by version desc limit 1`.
+2. Stack has approved this batch in chat (file count, course, largest size). One approval per run.
+3. A browser is logged into Blackboard: built-in browser (`Claude_Browser__*`) preferred; Claude in
+   Chrome as fallback. Check with a page-context probe (`location.href` not on the login page).
+4. Downloads folder and the course-context folder are connected on the device.
+
+## Step 0 — Refresh the manifest against Blackboard (mandatory; catalogs go stale within a day)
+For every owning content item in the manifest, re-fetch `/learn/api/v1/courses/<bb_id>/contents/<content_id>`
+from the logged-in tab and run `bb.refreshEmbeds(bb_id, ids)` / `bb.embedsDeep(item)` (from
+`ingest/bb_crawler.js`). It scans EVERY string field of the item for `<a data-bbfile="{json}">`, not
+just `body.rawText`: assessment and assignment items keep their attachments under
+`contentDetail.<asmt>.test.assessment.instructions`, which a body-only scan misses entirely (IST 471
+had 0 embeds catalogued that way; IST 323 hid two example decks the same way).
+URL rule: keep only durable `bbcswebdav/pid-…-rid-N_1/xid-N_1` URLs (`resourceUrl`, else `viewerUrl`
+minus its query string). A `/sessions/<id>/...` URL is session-scoped and returns 403 the next day; never
+store one in `bb_files.source_url`. The same attachment usually appears twice (durable + session-scoped);
+collapse by file name and keep the durable one.
+Diff against the manifest: replace changed URLs (instructors re-upload; the old rid 404s), add files the
+catalog lacks, and insert/patch `bb_files` before downloading. Lessons: the pilot had 1 stale URL of 6
+and 1 missing file; the 9/8 validation found 3 files that only the deep scan sees.
+
+## Step 1 — Download the whole course in ONE call (no per-file prompts)
+- Build the URL list from the refreshed manifest (`source_url` + `?xythos-download=true`).
+- In the logged-in tab run `bb.downloadAll(urls)` (from `ingest/bb_crawler.js`): hidden anchor clicks
+  ~1.5 s apart. The page stays put; files land in `~/Downloads` under their Blackboard display names
+  (collisions get `(1)` appended). Any browser permission prompt appears once for the batch, never per
+  file. Do NOT navigate the tab per file.
+- Verify by listing `~/Downloads` (names + sizes), not by tool messages. Re-fire only the missing ones.
+- Under concurrency files often land as `<uuid>.tmp` and are never renamed. Claim each by size + magic
+  bytes (`504b0304` zip/OOXML, `%PDF`) + a text signature (slide 1 / first page / docProps date) before
+  renaming on move; size alone mis-files near-identical decks.
+- Progress: after every step post a one-line status to Stack (files landed / stored / extracted / DB
+  updated) so a long run never looks stalled.
+- Files only: never click test, survey, discussion, or attempt controls.
+- Per file: sha256, bytes, mime. If a `bb_files` row with the same sha already has `storage_path`,
+  mark duplicate and skip upload/extraction.
+
+## Step 2 — Classify
+- Start from the map's bucket for the file. If the map says `unclassified` or confidence < 0.8,
+  open the extracted text (Step 4) and decide; write a one-line rationale to `bb_files.notes`.
+- Never change a row where `classified_by = 'stack'`.
+
+## Step 3 — Store (the end product: class → bucket → assignment folder → files)
+- Link every file to its assignment first (`bb_files.assignment_id`; readings/slides get `week_no`).
+  The canonical relative path is `bb_file_relpath(id)` (migration 008):
+  `<course>/<bucket>/<assignment-slug>/<file>` when linked to an assignment,
+  `<course>/<bucket>/week-NN/<file>` for lecture_slides/readings with a week, else `<course>/<bucket>/<file>`.
+  `v_file_layout` shows the target path per row and `needs_move` for drift.
+- Local mirror: PowerShell `Move-Item` from Downloads to `course context/<relpath>` (create dirs;
+  rename `(1)` collisions back). Move hand-placed copies into the layout too. The Linux device shell
+  cannot delete from mounted folders, so use PowerShell for moves.
+- Canonical: `device_stage_files` the mirrored files, then `POST /storage/v1/object/bb-files/<relpath>`
+  with the publishable key, correct Content-Type, NO `x-upsert` header (anon is insert-only; a changed
+  file gets a new key; old keys need an authenticated Storage delete). Never use the service key in a browser.
+- Update `bb_files` via the Supabase MCP: `storage_path='bb-files/'||bb_file_relpath(id)`,
+  `local_path='course context/'||bb_file_relpath(id)`, sha256, bytes, mime_type, downloaded_at, bucket,
+  week_no, links, classified_by, classification_confidence, text_status.
+- Acceptance: `select count(*) from v_file_layout where course_id=$1 and needs_move` = 0 and the
+  local tree matches (`Get-ChildItem -Recurse`).
+
+## Step 4 — Extract text
+- Stage files to the cloud workspace; run `ingest/extract_text.py` (pdftotext per page, python-docx
+  whole doc, python-pptx per slide incl. notes, openpyxl per sheet). Insert into `bb_file_text`.
+  Set `text_status = extracted | failed | na` (na for images/media).
+
+## Step 5 — Apply what the documents say
+- If the pulled set includes a syllabus or schedule: run the bb-course-map "frame the course" step
+  again against the new text and update `grading_schemes`, `grade_components`, `assignments`,
+  `sessions`, `readings` (respecting the seed's confirmed/tentative rules). Bump the map version.
+
+## Step 6 — Report
+- `insert into sync_runs (source, scope, summary)` with counts: downloaded, duplicates, uploaded,
+  extracted, failed, reclassified, gaps closed.
+- Tell Stack: per-bucket counts (`v_course_corpus`), anything that failed, and any
+  `stack_must_confirm` fields still open.
+
+## Failure handling
+- Download lands nowhere (viewer opened instead): retry with `?xythos-download=true`; if it still
+  renders, screenshot and ask Stack once; do not loop.
+- A 403/redirect to login: the session expired; stop, ask Stack to log in, resume from the manifest
+  (rows without `downloaded_at`).

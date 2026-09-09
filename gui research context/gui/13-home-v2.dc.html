@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- GUI REFERENCE · Home v2 (current). Nav 1c, tracker 2a (scrollable, 8 wks), cards 3c, bell 4a, needs-attention 5a. Styling pending. See README.md in this folder. -->
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/styles.css">
+<script src="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)} a{color:var(--color-accent)} a:hover{color:var(--color-accent-400)}
+.nv{display:flex;align-items:center;gap:22px;padding:10px 28px;background:var(--color-surface);box-shadow:inset 0 -1px 0 var(--color-divider);font-size:13.5px;position:sticky;top:0;z-index:5}.nv a{color:var(--color-text);text-decoration:none;padding:6px 2px}.nv a:hover{color:var(--color-accent)}.nv .on{color:var(--color-accent);box-shadow:inset 0 -2px 0 var(--color-accent)}.ic{all:unset;width:32px;height:32px;display:grid;place-items:center;border-radius:var(--radius-md);color:var(--color-neutral-200);position:relative;cursor:pointer}.ic:hover{background:color-mix(in srgb,var(--color-text) 7%,transparent)}.ic:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ic svg{width:18px;height:18px;fill:currentColor}.bd{position:absolute;top:3px;right:3px;font-size:9px;padding:0 4px;border-radius:7px;background:var(--color-accent-800);color:var(--color-accent-100);line-height:14px}.dd{position:absolute;z-index:6;background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg),0 0 0 1px var(--color-divider);display:flex;flex-direction:column;overflow:hidden}.dd a{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:13px;color:var(--color-text);text-decoration:none}.dd a:hover{background:color-mix(in srgb,var(--color-text) 7%,transparent)}.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)}.gl{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:4px;font-size:10px;font-weight:500}.k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--color-neutral-500)}.tag{white-space:nowrap;flex:none}.trk::-webkit-scrollbar{display:none}.rule{background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+<nav class="nv"><a href="13-home-v2.dc.html" style="display:flex;align-items:center;gap:9px;font-family:var(--font-heading);font-weight:500;font-size:16px;margin-right:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--color-accent);box-shadow:0 0 10px var(--color-accent)"></span>bb2dash</a><a class="on" href="13-home-v2.dc.html">Home</a><a href="07-planner.dc.html">Planner</a><a href="05-grades.dc.html">Grades</a><a href="08-materials.dc.html">Materials</a>
+  <span style="margin-left:auto;display:flex;gap:4px;align-items:center;position:relative">
+    <button class="ic" onClick="{{ toggleCourses }}" title="Courses" style="color:{{ coursesColor }};background:{{ coursesBg }}"><svg viewBox="0 0 256 256"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></button>
+    <button class="ic" onClick="{{ toggleBell }}" title="Announcements" style="color:{{ bellColor }};background:{{ bellBg }}"><svg viewBox="0 0 256 256"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg><span class="bd">3</span></button>
+    <button class="ic" title="Stack · account"><svg viewBox="0 0 256 256"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg></button>
+    <div class="dd" style="right:72px;top:40px;width:300px;display:{{ coursesDisplay }}">
+      <div style="display:flex;align-items:center;padding:10px 12px 6px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-500)">Courses · Fall 26<span style="margin-left:auto;letter-spacing:0;text-transform:none">due this week →</span></div>
+      <sc-for list="{{ courses }}" as="c" hint-placeholder-count="6"><a href="14-course-v2.dc.html"><span class="mono" style="width:54px">{{ c.code }}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.title }}</span><span class="mono">{{ c.openLabel }}</span></a></sc-for>
+    </div>
+    <div class="dd" style="right:36px;top:40px;width:380px;display:{{ bellDisplay }}">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px 8px;font-size:13px">Announcements<span class="mono">3 unread</span><a href="09-announcements.dc.html" style="margin-left:auto;font-size:11.5px;padding:0;color:var(--color-accent)">Mark all read</a></div>
+      <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px;background:var(--color-accent-900)"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">IST 466</span><span>Corsello</span><span style="margin-left:auto">Tue 9/1</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span></span><span>Welcome — meeting room Hinds 243, office 206 Hinds</span></a>
+      <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">IST 352</span><span>Larche</span><span style="margin-left:auto">Tue 9/1</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span></span><span>Project teams posted — check Option A/B before Wednesday</span></a>
+      <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">GEO 103</span><span>Wilson</span><span style="margin-left:auto">Mon 8/31</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span></span><span>Qwickly attendance starts this week — bring your phone</span></a>
+      <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px;opacity:.6"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">IST 323</span><span>Croad</span><span style="margin-left:auto">Mon 8/31</span></span><span>Final Project packets assigned — you have Packet A, Meridian Pharmacy</span></a>
+      <a href="09-announcements.dc.html" style="justify-content:center;font-size:12.5px;color:var(--color-accent);box-shadow:inset 0 1px 0 var(--color-divider)">See all 8 →</a>
+    </div>
+  </span>
+</nav>
+<main style="flex:1;padding:24px 36px 40px;display:flex;flex-direction:column;gap:22px;max-width:1240px;width:100%;box-sizing:border-box">
+  <header style="display:flex;align-items:flex-end;gap:16px">
+    <div style="display:flex;flex-direction:column;gap:2px"><div class="card-kicker">Thursday · September 3, 2026 · Week 2 of 16</div><h1 style="font-size:28px;margin:0">Today</h1></div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center"><span class="tag tag-outline" style="font-size:10px">Mockup 13 · Home v2</span><a href="12-home-options.dc.html" class="btn btn-ghost" style="font-size:12px">Options</a><a href="00-mvp-plan.dc.html" class="btn btn-ghost" style="font-size:12px">Plan</a></div>
+  </header>
+
+  <section style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:baseline;gap:10px"><h2 style="font-size:17px;margin:0">Upcoming work</h2><span class="text-muted" style="font-size:12px;white-space:nowrap">{{ totalN }} items · {{ totalEff }} effort pts · 8 weeks</span><span style="margin-left:auto;display:flex;gap:10px;align-items:center;font-size:11px;color:var(--color-neutral-500)"><span class="gl" style="background:var(--color-neutral-800);color:var(--color-neutral-200)">R</span>reading <span class="gl" style="background:var(--color-accent-900);color:var(--color-accent-200)">A</span>assignment <span class="gl" style="background:var(--color-accent-800);color:var(--color-accent-100)">Q</span>quiz <span class="gl" style="background:var(--color-accent-700);color:var(--color-accent-100)">P</span>project <span class="gl" style="background:var(--color-accent-500);color:var(--color-bg)">E</span>exam</span><a href="07-planner.dc.html" style="font-size:12px;text-decoration:none;white-space:nowrap">Open planner →</a><span style="display:flex;gap:4px"><button class="btn btn-ghost" onClick="{{ scrollPrev }}" style="font-size:12px;padding:3px 9px" title="Earlier">◂</button><button class="btn btn-ghost" onClick="{{ scrollNext }}" style="font-size:12px;padding:3px 9px" title="Later">▸</button></span></div>
+    <div ref="{{ trackRef }}" class="trk" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px;align-items:flex-end">
+      <sc-for list="{{ days }}" as="d" hint-placeholder-count="14">
+        <button onClick="{{ d.pick }}" style="all:unset;cursor:pointer;flex:none;width:calc(100% / 14);min-width:56px;box-sizing:border-box;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 4px;border-radius:var(--radius-md);background:{{ d.colBg }};box-shadow:{{ d.ring }};border-left:{{ d.weekStart }}" style-hover="background:color-mix(in srgb,var(--color-text) 6%,transparent)" style-focus="outline:2px solid var(--color-accent);outline-offset:-2px">
+          <span class="k" style="height:12px;color:var(--color-neutral-400)">{{ d.monLabel }}</span>
+          <span style="font-size:11px;color:var(--color-neutral-300);height:14px">{{ d.countLabel }}</span>
+          <span style="display:flex;flex-direction:column-reverse;gap:1px;height:112px;width:100%"><sc-for list="{{ d.segs }}" as="s" hint-placeholder-count="0"><span style="display:block;width:100%;border-radius:2px;height:{{ s.h }}px;background:{{ s.bg }}"></span></sc-for></span>
+          <span style="font-size:11px;color:{{ d.dayColor }};white-space:nowrap">{{ d.dowLabel }}</span><span class="mono" style="font-size:10px">{{ d.dn }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-neutral-500);padding:0 4px;white-space:nowrap;gap:12px"><span>This window · Sep 3–9 · {{ wk1N }} items · {{ wk1Eff }} pts · Sep 10–16 · {{ wk2N }} items · {{ wk2Eff }} pts</span><span>◂ ▸ or scroll sideways for later weeks · line = Monday</span></div>
+    <div class="card" style="gap:0;padding:6px 14px 4px">
+      <div style="display:flex;align-items:baseline;gap:10px;padding:6px 0 8px"><span style="font-size:14px">{{ selLabel }}</span><span class="text-muted" style="font-size:12px">{{ selCount }} due · {{ selEffort }} effort pts</span><span style="margin-left:auto;font-size:11px;color:var(--color-neutral-500)">status is click-to-edit (T-06)</span></div>
+      <sc-for list="{{ selItems }}" as="it" hint-placeholder-count="3">
+        <a href="04-assignment.dc.html" class="rule" style="display:grid;grid-template-columns:22px 62px 1fr 110px 150px 96px;gap:12px;align-items:center;padding:8px 0;text-decoration:none;color:inherit;font-size:13px;white-space:nowrap"><span class="gl" style="background:{{ it.bg }};color:{{ it.fg }}">{{ it.g }}</span><span class="mono">{{ it.course }}</span><span style="display:flex;gap:8px;align-items:center;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.title }}</span><span style="font-size:9px;color:var(--color-accent);border:1px solid var(--color-accent-700);border-radius:4px;padding:0 4px;display:{{ it.sampleDisplay }}">sample</span></span><span style="font-size:12px;color:var(--color-neutral-400)">{{ it.time }}</span><span class="mono">{{ it.effLabel }} · start {{ it.startBy }}</span><span class="tag tag-neutral" style="font-size:10px;justify-content:center">{{ it.status }}</span></a>
+      </sc-for>
+      <div style="padding:10px 0 8px;font-size:12.5px;color:var(--color-neutral-500);display:{{ emptyDisplay }}">Nothing due — a good day to start on what's coming.</div>
+    </div>
+  </section>
+<section style="display:flex;flex-direction:column;gap:6px">
+    <button onClick="{{ toggleAttn }}" class="card" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--radius-lg);background:var(--color-surface);font-size:14px" style-hover="box-shadow:var(--shadow-sm)" style-focus="outline:2px solid var(--color-accent);outline-offset:2px"><span>Needs attention</span><span class="tag tag-accent" style="font-size:10px">1 overdue</span><span class="tag tag-outline" style="font-size:10px">1 conflict</span><span class="tag tag-neutral" style="font-size:10px">2 missing</span><span class="tag tag-neutral" style="font-size:10px">1 deadline</span><span style="margin-left:auto;font-size:11.5px;color:var(--color-neutral-500)">last sync today 09:14</span><span style="font-size:12px;color:var(--color-neutral-400)">{{ attnChevron }}</span></button>
+    <div class="card" style="gap:0;padding:4px 14px;display:{{ attnDisplay }}">
+      <div class="rule" style="display:flex;gap:10px;padding:9px 0;font-size:13px;background:none"><span class="tag tag-accent" style="font-size:10px;flex:none">overdue</span><span>IST 352 Project Teams &amp; Option (due 9/1) — unopened, marked missed. <a href="04-assignment.dc.html">Override if done in class</a></span></div>
+      <div class="rule" style="display:flex;gap:10px;padding:9px 0;font-size:13px"><span class="tag tag-outline" style="font-size:10px;flex:none">conflict</span><span>IST 323 Quiz #1 due moved 9/2 → 9/9 (syllabus v1.3.1 vs Blackboard). <a href="10-sync.dc.html">Resolve</a></span></div>
+      <div class="rule" style="display:flex;gap:10px;padding:9px 0;font-size:13px"><span class="tag tag-neutral" style="font-size:10px;flex:none">missing</span><span>Grading schemes unknown for IST 352 and IST 466 — syllabi are embedded .docx in Blackboard.</span></div>
+      <div class="rule" style="display:flex;gap:10px;padding:9px 0;font-size:13px"><span class="tag tag-neutral" style="font-size:10px;flex:none">deadline</span><span>IST 323 Orange Inclusive Access textbook opt-out · Mon 9/14</span></div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:baseline;gap:10px"><h2 style="font-size:17px;margin:0">Courses</h2><span class="text-muted" style="font-size:12px">Open = items due this week · strip = meeting days, dot = something due</span></div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+      <sc-for list="{{ courses }}" as="c" hint-placeholder-count="6">
+        <a href="14-course-v2.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;flex-direction:row;gap:16px;padding:14px;align-items:stretch" style-hover="box-shadow:var(--shadow-md)">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:baseline;gap:8px;min-width:0"><span class="mono" style="color:var(--color-accent);flex:none;white-space:nowrap">{{ c.code }}</span><span class="card-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.title }}</span></div>
+            <span style="font-size:11.5px;color:var(--color-neutral-400)">{{ c.meet }} · {{ c.room }}</span>
+            <div style="display:flex;gap:18px;font-size:12.5px;margin-top:auto;white-space:nowrap">
+              <div style="display:flex;flex-direction:column;gap:3px"><span class="k">Next due · {{ c.nextDate }}</span><span>{{ c.nextText }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span class="k">Grade</span><span style="overflow:hidden;text-overflow:ellipsis">{{ c.grade }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:3px"><span class="k">Open</span><span>{{ c.open }}</span></div>
+            </div>
+            <span class="card-meta" style="font-size:11px">{{ c.note }}</span>
+          </div>
+          <div style="flex:none;display:flex;flex-direction:column;gap:4px;justify-content:center"><span class="k" style="text-align:center">this week</span><span style="display:flex;gap:3px"><sc-for list="{{ c.meetDots }}" as="m" hint-placeholder-count="5"><span style="display:flex;flex-direction:column;align-items:center;gap:3px"><span style="width:16px;height:22px;border-radius:3px;background:{{ m.bg }}"></span><span style="width:5px;height:5px;border-radius:50%;background:{{ m.dot }}"></span><span class="mono" style="font-size:9px">{{ m.l }}</span></span></sc-for></span></div>
+        </a>
+      </sc-for>
+    </div>
+  </section>
+
+  <footer class="rule" style="display:flex;gap:18px;font-size:11.5px;color:var(--color-neutral-500);padding-top:10px;flex-wrap:wrap"><span style="color:var(--color-neutral-400);white-space:nowrap">MVP notes</span><span>Composed from options 1c · 2a · 3c · 4a · 5a.</span><span>Tracker reads <code>v_upcoming</code> + effort score (T-15).</span><span>Daily schedule moved to Planner (T-17).</span></footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sel: 6, courses: false, bell: false, attn: false };
+  trackRef = React.createRef();
+  scrollTrack(dir) { const el = this.trackRef.current; if (el) el.scrollBy({left: dir * el.clientWidth, behavior: 'smooth'}); }
+  renderVals() {
+    const EFF = {reading:1, form:1, discussion:1.5, homework:2, quiz:3, presentation:4, project:6, paper:6, exam:8};
+    const CAT = {reading:'reading', form:'assignment', discussion:'assignment', homework:'assignment', quiz:'quiz', presentation:'project', project:'project', paper:'project', exam:'exam'};
+    const G = {reading:'R', assignment:'A', quiz:'Q', project:'P', exam:'E'};
+    const BG = {reading:'var(--color-neutral-800)', assignment:'var(--color-accent-900)', quiz:'var(--color-accent-800)', project:'var(--color-accent-700)', exam:'var(--color-accent-500)'};
+    const FG = {reading:'var(--color-neutral-200)', assignment:'var(--color-accent-200)', quiz:'var(--color-accent-100)', project:'var(--color-accent-100)', exam:'var(--color-bg)'};
+    const raw = [
+      {d:0, course:'ECN 304', title:'Ch. 2 — Poverty & inequality', type:'reading', time:'before 3:30p', status:'not started', sample:true},
+      {d:1, course:'GEO 103', title:'Population Bomb → Population Bust (reading)', type:'reading', time:'before 11:40a', status:'in progress', sample:true},
+      {d:5, course:'IST 466', title:'Ethics case prep — Team 2', type:'reading', time:'before 2:00p', status:'not started', sample:true},
+      {d:6, course:'IST 323', title:'Quiz #1 — Chap 1', type:'quiz', time:'3:45p', status:'not started'},
+      {d:6, course:'IST 323', title:'Quiz #2 — Chap 2.1–2.7', type:'quiz', time:'3:45p', status:'not started'},
+      {d:6, course:'IST 323', title:'Presentation Choice — topic + date', type:'form', time:'3:45p', status:'planned'},
+      {d:6, course:'IST 323', title:'Chap 3.1–3.3 (Cryptography 1)', type:'reading', time:'before class', status:'not started', sample:true},
+      {d:6, course:'IST 352', title:'Knowledge Check 09/09', type:'quiz', time:'12:45p', status:'not started', sample:true},
+      {d:7, course:'IST 466', title:'Ethics Team 2 practice', type:'presentation', time:'2:00p · in class', status:'in progress'},
+      {d:8, course:'GEO 103', title:'Carbon footprint exercise', type:'homework', time:'11:40a', status:'not started'},
+      {d:8, course:'IST 471', title:'A1 Internship Proposal', type:'homework', time:'11:59p', status:'in progress'},
+      {d:8, course:'IST 471', title:'A2 Sharing Introductions', type:'discussion', time:'11:59p', status:'not started'},
+      {d:11, course:'IST 323', title:'Exam #1 — weeks 1–3', type:'exam', time:'3:45p · in class', status:'not started'},
+      {d:11, course:'IST 323', title:'Inclusive Access textbook opt-out', type:'form', time:'deadline', status:'planned'},
+      {d:13, course:'IST 323', title:'Quiz #3 — Cryptography 1', type:'quiz', time:'3:45p', status:'not started'},
+      {d:13, course:'GEO 103', title:'Ch. 4 reading', type:'reading', time:'before 10:35a', status:'not started', sample:true},
+      {d:20, course:'GEO 103', title:'First Exam', type:'exam', time:'10:35a · Watson', status:'not started'},
+      {d:20, course:'IST 323', title:'Quiz #4 — Cryptography 2', type:'quiz', time:'3:45p', status:'not started'},
+      {d:21, course:'IST 466', title:'Ethics case — written analysis', type:'paper', time:'2:00p', status:'not started', sample:true},
+      {d:27, course:'IST 323', title:'Quiz #5 — Protocols', type:'quiz', time:'3:45p', status:'not started'},
+      {d:28, course:'ECN 304', title:'Exam 1', type:'exam', time:'3:30p · LSB 001', status:'not started'},
+      {d:29, course:'IST 323', title:'Lab #1 report', type:'homework', time:'11:59p', status:'not started'},
+      {d:34, course:'IST 323', title:'Quiz #6 — Access control', type:'quiz', time:'3:45p', status:'not started'},
+      {d:35, course:'IST 352', title:'Project milestone 1', type:'project', time:'12:45p', status:'not started', sample:true},
+      {d:39, course:'IST 323', title:'Exam #2 — weeks 4–7', type:'exam', time:'3:45p · in class', status:'not started'},
+      {d:41, course:'IST 323', title:'Lab #2 report', type:'homework', time:'11:59p', status:'not started'},
+      {d:43, course:'IST 471', title:'A3 Mid-term reflection', type:'homework', time:'11:59p', status:'not started', sample:true},
+      {d:55, course:'IST 323', title:'Quiz #7', type:'quiz', time:'3:45p', status:'not started'},
+    ];
+    const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const sel = this.state.sel;
+    const items = raw.map(x => { const cat = CAT[x.type]; return {...x, cat, g:G[cat], bg:BG[cat], fg:FG[cat], eff:EFF[x.type]}; });
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const days = Array.from({length:56}, (_, i) => {
+      const dt = new Date(2026, 8, 3 + i);
+      const its = items.filter(x => x.d === i);
+      const effort = its.reduce((a, b) => a + b.eff, 0);
+      const isSel = i === sel, wk = dt.getDay() === 0 || dt.getDay() === 6;
+      return { i, dow: DOW[dt.getDay()], dn: dt.getDate(), n: its.length, effort, items: its, mon: MON[dt.getMonth()],
+        monLabel: dt.getDate() === 1 || i === 0 ? MON[dt.getMonth()] : '',
+        weekStart: dt.getDay() === 1 ? '1px solid var(--color-divider)' : '1px solid transparent',
+        segs: its.map(x => ({h: x.eff * 7, bg: x.bg})),
+        countLabel: its.length ? String(its.length) : '',
+        colBg: isSel ? 'var(--color-accent-900)' : 'transparent',
+        ring: isSel ? 'inset 0 0 0 1px var(--color-accent)' : 'none',
+        dayColor: isSel ? 'var(--color-accent)' : (wk ? 'var(--color-neutral-600)' : (i === 0 ? 'var(--color-accent-300)' : 'var(--color-neutral-300)')),
+        dowLabel: i === 0 ? 'Today' : DOW[dt.getDay()],
+        pick: () => this.setState({sel: i}) };
+    });
+    const sd = days[sel];
+    const selItems = sd.items.map(x => { const lead = Math.max(0, Math.ceil(x.eff / 2) - 1); const st = new Date(2026, 8, 3 + x.d - lead); return {...x, startBy: lead ? DOW[st.getDay()] + ' ' + (st.getMonth() + 1) + '/' + st.getDate() : 'day of', effLabel: x.eff + ' pt', sampleDisplay: x.sample ? 'inline' : 'none'}; });
+    const sum = arr => arr.reduce((a, d) => a + d.effort, 0), cnt = arr => arr.reduce((a, d) => a + d.n, 0);
+    const wk1 = days.slice(0, 7), wk2 = days.slice(7);
+    const courses = [
+      {code:'IST 323', title:'Intro to Cybersecurity', meet:'MW 3:45–5:05', room:'Hinds 010', nextDate:'Wed 9/9', nextText:'2 quiz · 1 assignment', grade:'10 / 10 pts', open:3, meetDays:[1,0,1,0,0], dueDays:[0,0,1,0,0], note:'Presentation Choice form still open'},
+      {code:'IST 352', title:'Info Analysis of Org Systems', meet:'MW 12:45–2:05', room:'Hinds 018', nextDate:'Wed 9/9', nextText:'1 quiz', grade:'scheme unknown', open:1, meetDays:[1,0,1,0,0], dueDays:[0,0,1,0,0], note:'3 marked missed · 2 awaiting grade'},
+      {code:'GEO 103', title:'Environment & Society', meet:'MW 10:35–11:30 · F 11:40–12:35', room:'Watson · Maxwell 108', nextDate:'Fri 9/11', nextText:'1 assignment', grade:'—', open:1, meetDays:[1,0,1,0,1], dueDays:[0,0,0,0,1], note:'First Exam Wed 9/23'},
+      {code:'ECN 304', title:'Economics of Social Issues', meet:'TTh 3:30–4:50', room:'LSB 001', nextDate:'Thu 10/1', nextText:'1 exam', grade:'attendance 100', open:0, meetDays:[0,1,0,1,0], dueDays:[0,0,0,0,0], note:'Reading quizzes unannounced · lowest dropped'},
+      {code:'IST 466', title:'IM&T Capstone', meet:'TTh 2:00–3:20', room:'Hinds 243', nextDate:'Thu 9/10', nextText:'1 project', grade:'weights unknown', open:1, meetDays:[0,1,0,1,0], dueDays:[0,0,0,1,0], note:'Ethics Group #2 · Major Case Group #3'},
+      {code:'IST 471', title:'Internship', meet:'Online', room:'SU ITS', nextDate:'Fri 9/11', nextText:'2 assignments', grade:'0 / 150 hrs', open:2, meetDays:[0,0,0,0,0], dueDays:[0,0,0,0,1], note:'Supervisor evaluation required for credit'},
+    ].map(c => ({...c, openLabel: c.open ? String(c.open) : '', meetDots: c.meetDays.map((m, i) => ({bg: m ? 'var(--color-accent-700)' : 'var(--color-neutral-800)', dot: c.dueDays[i] ? 'var(--color-accent)' : 'transparent', l: 'MTWTF'[i]}))}));
+    const s = this.state;
+    return {
+      days, wk1, wk2, selItems, courses,
+      selLabel: (sel === 0 ? 'Today' : sd.dow) + ', ' + sd.mon + ' ' + sd.dn, selCount: sd.n, selEffort: sd.effort, emptyDisplay: sd.n ? 'none' : 'block',
+      wk1Eff: sum(wk1), wk1N: cnt(wk1), wk2Eff: sum(wk2), wk2N: cnt(wk2), totalN: items.length, totalEff: sum(days),
+      trackRef: this.trackRef, scrollPrev: () => this.scrollTrack(-1), scrollNext: () => this.scrollTrack(1),
+      toggleCourses: () => this.setState({courses: !s.courses, bell: false}),
+      toggleBell: () => this.setState({bell: !s.bell, courses: false}),
+      toggleAttn: () => this.setState({attn: !s.attn}),
+      coursesDisplay: s.courses ? 'flex' : 'none', bellDisplay: s.bell ? 'flex' : 'none',
+      coursesColor: s.courses ? 'var(--color-accent)' : 'var(--color-neutral-200)', coursesBg: s.courses ? 'var(--color-accent-900)' : 'transparent',
+      bellColor: s.bell ? 'var(--color-accent)' : 'var(--color-neutral-200)', bellBg: s.bell ? 'var(--color-accent-900)' : 'transparent',
+      attnDisplay: s.attn ? 'flex' : 'none', attnChevron: s.attn ? '▴' : '▾',
+    };
+  }
+}
+</script>
+</body>
+</html>

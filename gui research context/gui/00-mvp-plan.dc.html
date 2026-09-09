@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- GUI REFERENCE · plan sheet. Layout/feature spec; styling pending. See README.md in this folder. -->
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/styles.css">
+<script src="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-bg)} a{color:var(--color-accent)} a:hover{color:var(--color-accent-400)}</style>
+</helmet>
+<div style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);padding:40px 48px 64px;display:flex;flex-direction:column;gap:28px;max-width:1180px">
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <div class="card-kicker">bb2dash · mockup sheet 00</div>
+    <h1 style="font-size:34px;margin:0">MVP plan — context, added features, mockup list</h1>
+    <p class="text-muted" style="max-width:76ch;margin:0">Synthesized from <code>README</code>, <code>NOTES</code>, <code>PHASE2_FINDINGS</code>, <code>DATA_SYNTAX</code>, migrations 001–004 and the Fall 2026 seeds (state as of 2026-09-02). All mockups use real seed rows; anything marked <span class="tag tag-outline" style="font-size:10px">sample</span> is illustrative.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+    <div class="card elev-sm" style="gap:8px">
+      <div class="card-kicker">What exists (data)</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.6;color:var(--color-neutral-300)">
+        <li>7 course shells (GEO lecture + recitation linked via <code>parent_course_id</code>), 12 staff, 11 meeting patterns, 127 dated <code>sessions</code>, 75 <code>readings</code>.</li>
+        <li>64 <code>assignments</code>; 28 carry Blackboard column ids + exact <code>due_at</code>. Facts vs. your state split: <code>assignment_progress</code> (status, priority, planned dates, score).</li>
+        <li>Grading is declarative: <code>grading_schemes</code> + <code>grade_components</code> with <code>aggregation</code> rules (rank_weighted, average_drop_lowest, normalized, sum) — 4 different models across 6 courses; IST 352 / 466 still <code>unknown</code>.</li>
+        <li>Blackboard capture: <code>bb_content</code> (139 nodes), <code>announcements</code> (8, with <code>is_read</code>), <code>bb_files</code> (45, catalogued but bytes not fetchable), <code>sync_runs</code> provenance.</li>
+        <li>Every fact row has <code>source</code> + <code>confidence</code> (confirmed / tentative / inferred); conflicts land in <code>sync_runs.summary</code> and must be surfaced.</li>
+      </ul>
+    </div>
+    <div class="card elev-sm" style="gap:8px">
+      <div class="card-kicker">Design constraints derived from it</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.6;color:var(--color-neutral-300)">
+        <li>Materials hub must map two locations: the Blackboard catalog (<code>bb_files.source_url</code>) and the local OneDrive <code>course context/</code> copy. Needs a <code>local_path</code> per file (schema add).</li>
+        <li>Chronology is the spine: sessions, readings and assignments all key on dates → course page = one timeline with two lanes (lecture / assignment).</li>
+        <li>Confidence must be visible everywhere a date or weight is shown (tentative dates are common: IST 466 typos, IST 471 undated).</li>
+        <li>Planner status is a first-class control (<code>progress_status</code> selector) on every assignment surface, never buried.</li>
+        <li>Grade math differs per course, so the breakdown popout explains the rule, not just the number.</li>
+        <li>Single user, dark, dense (Nocturne 0.7× density). Desktop-first; local device.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2 style="font-size:22px;margin:0">Suggested additional pages, features &amp; functions</h2>
+    <p class="text-muted" style="margin:0;font-size:13px">Beyond the 7 requested screens. Each row is a task item; priority reflects whether the MVP can be a "source of truth + materials hub" without it.</p>
+    <table class="table" style="font-size:13px">
+      <thead><tr><th style="width:52px">Task</th><th>Item</th><th>Why</th><th style="width:130px">Data touched</th><th style="width:78px">Priority</th></tr></thead>
+      <tbody>
+        <tr><td>T-01</td><td><a href="07-planner.dc.html">Planner / week view</a></td><td>Home shows the next 7–14 days; the semester needs a scrollable week grid mixing <code>sessions</code>, <code>due_at</code> and planned work windows.</td><td>sessions, v_upcoming, assignment_progress</td><td><span class="tag tag-accent">Must</span></td></tr>
+        <tr><td>T-02</td><td><a href="08-materials.dc.html">Materials library</a></td><td>The "central hub for materials" requirement. Browse by course → Blackboard folder path, see which files exist locally, open them from disk.</td><td>bb_content, bb_files (+local_path)</td><td><span class="tag tag-accent">Must</span></td></tr>
+        <tr><td>T-03</td><td><a href="09-announcements.dc.html">Announcements inbox</a></td><td>8 announcements already hold facts the syllabi lacked (rooms, times). Unified, cross-course, read/unread.</td><td>announcements</td><td><span class="tag tag-accent">Must</span></td></tr>
+        <tr><td>T-04</td><td><a href="10-sync.dc.html">Sync &amp; data health</a></td><td>Reconciliation rule says conflicts with <code>confirmed</code> rows are surfaced, not overwritten. Needs a screen: last run, diffs, conflicts to resolve, open caveats, missing syllabi.</td><td>sync_runs, confidence columns</td><td><span class="tag tag-accent">Must</span></td></tr>
+        <tr><td>T-05</td><td><a href="11-course-info.dc.html">Course info tab</a></td><td>Staff, office hours, meeting pattern, late/AI policy, letter scale, syllabus file, group memberships — the syllabus, structured.</td><td>course_staff, meetings, grading_schemes</td><td><span class="tag tag-accent">Must</span></td></tr>
+        <tr><td>T-06</td><td>Status quick-edit everywhere</td><td>Inline <code>progress_status</code> / priority / planned dates on any assignment row (dashboard, course page, grades) — the planner half of "source of truth".</td><td>assignment_progress</td><td><span class="tag tag-accent">Must</span></td></tr>
+        <tr><td>T-07</td><td>Grade forecaster (what-if)</td><td>Enter hypothetical scores; engine applies each course's <code>aggregation</code> rule (rank weights, drop lowest, normalize to 5). Shown as a tab in <a href="06-course-grades.dc.html">06</a>.</td><td>grade_components</td><td><span class="tag tag-outline">Should</span></td></tr>
+        <tr><td>T-08</td><td>Readings tracker</td><td>75 readings are workload, not grades. Lane on the course timeline + <code>reading_progress</code> checkbox.</td><td>readings, reading_progress</td><td><span class="tag tag-outline">Should</span></td></tr>
+        <tr><td>T-09</td><td>Internship hours log (IST 471)</td><td>150-hour minimum has no home in the schema. Weekly hours entry + supervisor eval checklist.</td><td>new table <code>internship_hours</code></td><td><span class="tag tag-outline">Should</span></td></tr>
+        <tr><td>T-10</td><td>Per-lecture notes</td><td>Running-log habit (IST 323 needs 2–3 lines per session anyway). Notes attached to a session or assignment.</td><td>new table <code>notes</code></td><td><span class="tag tag-outline">Should</span></td></tr>
+        <tr><td>T-11</td><td>Series view for recurring items</td><td><code>series_key</code> exists; show IST 323 quizzes 1–10 as one strip with per-instance status.</td><td>assignments.series_key</td><td><span class="tag tag-outline">Should</span></td></tr>
+        <tr><td>T-12</td><td>Command palette / search</td><td>Jump to a course, assignment or file by name from any screen.</td><td>all</td><td><span class="tag tag-neutral">Later</span></td></tr>
+        <tr><td>T-13</td><td>Local file mapping</td><td>Map <code>bb_files</code> rows to OneDrive paths (watcher or manual "locate"); mark downloaded vs. missing. Prerequisite for T-02 being complete.</td><td>bb_files.local_path</td><td><span class="tag tag-neutral">Later</span></td></tr>
+        <tr><td>T-14</td><td>Auth before browser</td><td>NOTES caveat 7: add Supabase Auth / anon policy before the dashboard runs in a browser.</td><td>RLS</td><td><span class="tag tag-neutral">Later</span></td></tr>
+        <tr><td>T-15</td><td>Effort score per assignment</td><td>Drives the 14-day tracker (<a href="12-home-options.dc.html#g-track">options 2a–2c</a>). Base score by <code>assignment_type</code>: reading 1 · form 1 · discussion_post 1.5 · homework / activity 2 · quiz 3 · lab / presentation 4 · project / paper / group_presentation 6 · exam 8 · final_exam 10. Multiply by <code>points_possible ÷ course median points</code> when known (clamped 0.5–2); a manual <code>effort_override</code> on <code>assignment_progress</code> wins. Day load = Σ scores due that day; suggested start = due − (⌈score ÷ 2⌉ − 1) days.</td><td>assignments.type, points_possible, assignment_progress.effort_override (new)</td><td><span class="tag tag-accent">Must</span></td></tr>
+        <tr><td>T-16</td><td>Top navbar + courses pop-down</td><td>Replaces the left rail: bb2dash · Home · Planner · Grades · Materials · bell · user; courses behind ☰ (<a href="12-home-options.dc.html#g-nav">options 1a–1c</a>). Announcements live in the bell popout with See all → 09.</td><td>courses, announcements.is_read</td><td><span class="tag tag-accent">Must</span></td></tr>
+        <tr><td>T-17</td><td>Daily schedule (Planner day view)</td><td>"Today's meetings" leaves Home; the Planner gets a full day/week schedule from <code>meetings</code> + <code>sessions</code> with rooms, attendance tools and files for each session.</td><td>meetings, sessions</td><td><span class="tag tag-outline">Should</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2 style="font-size:22px;margin:0">MVP mockup sheets</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <a href="01-dashboard.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">01 · requested</div><div class="card-title">Dashboard / home</div><p class="card-body">Course pop-out cards, today's meetings, next 14 days, needs-attention, recent announcements.</p><div class="card-meta">MVP: read-only + status quick-edit</div></a>
+      <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">02 · requested</div><div class="card-title">Course page</div><p class="card-body">Classroom-style stream: lectures lane and assignments lane, chronological by week, tabs to grades / info / materials.</p><div class="card-meta">MVP: sessions + assignments + readings</div></a>
+      <a href="03-lecture.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">03 · requested</div><div class="card-title">Lecture material pop-out</div><p class="card-body">Session topic, files (Blackboard + local), readings for the day, linked quiz, notes.</p><div class="card-meta">MVP: open file locally</div></a>
+      <a href="04-assignment.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">04 · requested</div><div class="card-title">Assignment pop-out</div><p class="card-body">Due, points, submission format, status/priority/plan editor, materials, Blackboard link, provenance.</p><div class="card-meta">MVP: write assignment_progress</div></a>
+      <a href="05-grades.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">05 · requested</div><div class="card-title">Grades — all courses</div><p class="card-body">One row per course: method, current, projected, letter, confidence, graded / total items.</p><div class="card-meta">MVP: current + letter scale</div></a>
+      <a href="06-course-grades.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">06 · requested</div><div class="card-title">Course grades + breakdown</div><p class="card-body">Component table with rule explanations, item list, and the grading-breakdown popout.</p><div class="card-meta">MVP: breakdown popout; forecaster later</div></a>
+      <a href="07-planner.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">07 · added (T-01)</div><div class="card-title">Planner / week</div><p class="card-body">Week grid: meetings, due items, planned work windows.</p><div class="card-meta">MVP: week view only</div></a>
+      <a href="08-materials.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">08 · added (T-02)</div><div class="card-title">Materials library</div><p class="card-body">Course → Blackboard path tree → files, local/remote availability.</p><div class="card-meta">MVP: browse + open local</div></a>
+      <a href="09-announcements.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">09 · added (T-03)</div><div class="card-title">Announcements</div><p class="card-body">Cross-course inbox, unread first, extracted facts flagged.</p><div class="card-meta">MVP: list + read state</div></a>
+      <a href="10-sync.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">10 · added (T-04)</div><div class="card-title">Sync &amp; data health</div><p class="card-body">Last run, conflicts to resolve, tentative rows, open caveats.</p><div class="card-meta">MVP: read + resolve conflict</div></a>
+      <a href="11-course-info.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">11 · added (T-05)</div><div class="card-title">Course info</div><p class="card-body">Staff, meetings, policies, letter scale, syllabus, groups.</p><div class="card-meta">MVP: read-only</div></a>
+      <a href="12-home-options.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;box-shadow:0 0 0 1px var(--color-accent-800)"><div class="card-kicker">12 · options canvas</div><div class="card-title">Home &amp; course page — layout options</div><p class="card-body">Navbar (1a–c), 14-day effort tracker (2a–c, live), course cards (3a–c), announcements popout (4a–b), needs-attention (5a–b), course week filter (6a–b).</p><div class="card-meta">Picked: 1c · 2a · 3c · 4a · 5a · 6b</div></a>
+      <a href="13-home-v2.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">13 · v2 of 01</div><div class="card-title">Home v2</div><p class="card-body">Top nav with ☰ courses + bell popout, 14-day effort tracker (click a day), collapsed needs-attention, 2-up course cards with M–F strip.</p><div class="card-meta">Supersedes 01</div></a>
+      <a href="14-course-v2.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit"><div class="card-kicker">14 · v2 of 02</div><div class="card-title">Course page v2</div><p class="card-body">Course sub-bar, sticky week rail 1–16, "Current" anchored to this week with earlier weeks above.</p><div class="card-meta">Supersedes 02</div></a>
+    </div>
+  </section>
+
+  <section class="card" style="gap:6px">
+    <div class="card-kicker">Assumptions</div>
+    <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--color-neutral-300)">
+      <li>Desktop web app on your machine, one user, dark Nocturne theme; navigation is a persistent top bar (T-16) — the left rail in sheets 01–04 is superseded.</li>
+      <li>GEO 103 lecture + recitation display as one course with a section badge (schema keeps two shells).</li>
+      <li>Lecture "material" = a <code>sessions</code> row joined to <code>bb_content</code>/<code>bb_files</code> by date and to <code>readings.for_date</code>.</li>
+      <li>IST 352 / IST 466 render with an explicit "grading unknown" state rather than fake numbers.</li>
+    </ul>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>

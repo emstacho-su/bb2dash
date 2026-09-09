@@ -1,0 +1,80 @@
+{
+  "course_id": "GEO.103.lecture",
+  "bb_id": "_569316_1",
+  "version": 1,
+  "mapped_at": "2026-09-03T21:15:00Z",
+  "meeting": {
+    "days": ["Mon", "Wed"],
+    "start": "10:35",
+    "end": "11:30",
+    "room": "Watson Theater",
+    "source": "syllabus p.1 (confirmed; matches meetings id 3,4)"
+  },
+  "grading": {
+    "method": "weighted_pct",
+    "components": [
+      {"code": "lecture_attendance", "name": "Lecture Attendance", "weight_pct": 5, "notes": "Qwickly; 3 free absences"},
+      {"code": "section_participation", "name": "Discussion Section: Attendance and Participation", "weight_pct": 15, "notes": "earned in section; TA sets criteria"},
+      {"code": "reading_quizzes", "name": "Reading Quizzes", "weight_pct": 10, "notes": "~5 unannounced, in section; lowest (or a missed zero) dropped"},
+      {"code": "exam_1", "name": "First Exam", "weight_pct": 20, "date": "2026-09-23"},
+      {"code": "exam_2", "name": "Second Exam", "weight_pct": 20, "date": "2026-11-02"},
+      {"code": "final_exam", "name": "Final Exam", "weight_pct": 30, "date": "2026-12-15", "time": "17:15-19:15"}
+    ],
+    "rules": [
+      "letter scale A 94 / A- 90 / B+ 87 / B 83 / B- 80 / C+ 77 / C 73 / C- 70 / D 60 / F 0",
+      "reading quizzes: drop lowest score, including a zero for a missed quiz",
+      "lecture attendance: 3 absences free, further absences deduct",
+      "no written assignments -> no late policy stated in the syllabus",
+      "AI allowed as a study aid (e.g. NotebookLM explainers); no AI or any technology during in-class quizzes/exams"
+    ],
+    "source": "syllabus seed (GEO 103 (2026) - syllabus - FINAL.pdf)",
+    "confidence": "confirmed"
+  },
+  "tree_shape": {
+    "principle": "weekly_learning_modules_with_embedded_readings",
+    "notes": "Top level = one learning module per week ('Week I - ...', 'Week 2 -...', 'Week 3 - ...') plus standing folders. Inside a week module, each reading is its own folder whose Ultra document carries the PDF as a data-bbfile embed; some weeks carry link-only external items instead of files.",
+    "bucket_paths": {
+      "syllabus_policy": ["GEO 103 - Syllabus and TA Discussion Section Guidelines / GEO 103 - Syllabus / *"],
+      "readings": ["Week * / <author or reading title> / *", "Week * / Week * Reading Questions / *"],
+      "admin": ["Problems with Qwickly Attendance App? - Click Here / *"],
+      "media_links": ["Week * / <external link item>", "** Listen to Song ... ** / ultraDocumentBody", "Orange Instant Access (course textoobk ebooks)"]
+    },
+    "week_regex": "^Week\\s+(I{1,3}|[0-9]+)\\b  -> roman or arabic week number at the head of a top-level module title"
+  },
+  "sources": [
+    {"kind": "content_tree", "locator": "/learn/api/v1/courses/_569316_1/contents (+ /children per node)", "file_bearing": true, "notes": "7 top-level nodes, 15 descendants, 6 file embeds total"},
+    {"kind": "gradebook", "locator": "bb_raw payload->'gradebook' run 3e12fd89 (2026-09-02)", "file_bearing": false, "notes": "single column 'Absences' _3602583_1, manualScore 0, possible 100"},
+    {"kind": "announcements", "locator": "announcements table", "file_bearing": false, "notes": "none captured"},
+    {"kind": "external_links", "locator": "Week 3 module: EPA carbon calculator, phys.org article", "file_bearing": false},
+    {"kind": "lti", "locator": "Orange Instant Access (course textbook ebooks)", "file_bearing": false, "notes": "textbook access, link-only"},
+    {"kind": "sibling_shell", "locator": "GEO.103.recitation (_569318_1)", "file_bearing": true, "notes": "discussion-section shell; NOT this agent's scope"}
+  ],
+  "course_fields": [
+    {"name": "qwickly_absences", "source": "gradebook column 'Absences' (_3602583_1), latest bb_raw", "value": 0, "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "discussion_questions_location", "source": "syllabus p.4 says questions are posted on Blackboard under the heading 'Discussion Questions'; content tree has no such heading", "value": null, "confidence": "tentative", "stack_must_confirm": true, "note": "resolve during the pull by walking the live tree"},
+    {"name": "exam_dates", "source": "syllabus schedule pp. 246/319/383", "value": {"exam_1": "2026-09-23", "exam_2": "2026-11-02", "final": "2026-12-15T17:15/19:15"}, "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "reading_quiz_series", "source": "syllabus p.4", "value": {"count_expected": 5, "announced": false, "location": "discussion section", "drop_lowest": 1}, "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "section_no", "source": "syllabus lists sections 3,4,5,7,9,10; Stack's section is recorded on the recitation shell", "value": null, "confidence": "unknown", "stack_must_confirm": true}
+  ],
+  "file_manifest": [
+    {"bb_file_id": 42, "content_id": "_12904416_1", "file_name": "GEO 103 (2026) - syllabus - FINAL.pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12904416-dt-content-rid-164861774_1/xid-164861774_1", "download_method": "direct_url", "bucket": "syllabus_policy", "week_no": null, "assignment_id": null, "reading_id": null, "priority": 1, "expected_mime": "application/pdf", "note": "a hand-placed copy already sits in 'course context/GEO.103/' - dedupe by sha"},
+    {"bb_file_id": 43, "content_id": "_12904397_1", "file_name": "McNEILL-FirstHundredThousand-2010.pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12904397-dt-content-rid-164291454_1/xid-164291454_1", "download_method": "direct_url", "bucket": "readings", "week_no": 1, "assignment_id": null, "reading_id": 40, "priority": 2, "expected_mime": "application/pdf"},
+    {"bb_file_id": 44, "content_id": "_12904422_1", "file_name": "GEO 103 Population Reading Questions.docx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12904422-dt-content-rid-165405142_1/xid-165405142_1", "download_method": "direct_url", "bucket": "readings", "week_no": 2, "assignment_id": null, "reading_id": null, "priority": 2, "expected_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "note": "the week-2 realization of the syllabus's 'Discussion Questions'"},
+    {"bb_file_id": 45, "content_id": "_12904399_1", "file_name": "Kristof-‘China’s Worst Policy Mistake’- NY Review of Books.pdf", "source_url": null, "download_method": "embed_refresh", "bucket": "readings", "week_no": 2, "assignment_id": null, "reading_id": 42, "priority": 2, "expected_mime": "application/pdf", "note": "catalog source_url is the literal string 'undefined'; the embed carries only a viewerUrl, so resolve it from content _12904399_1 before downloading"},
+    {"bb_file_id": 46, "content_id": "_12904467_1", "file_name": "The End of Children _ The New Yorker.pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12904467-dt-content-rid-164291801_1/xid-164291801_1", "download_method": "direct_url", "bucket": "readings", "week_no": 2, "assignment_id": null, "reading_id": 43, "priority": 2, "expected_mime": "application/pdf"},
+    {"bb_file_id": 41, "content_id": "_13180631_1", "file_name": "Qwickly_Attendance_Technical_Help.pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13180631-dt-content-rid-165313615_1/xid-165313615_1", "download_method": "direct_url", "bucket": "admin", "week_no": null, "assignment_id": null, "reading_id": null, "priority": 3, "expected_mime": "application/pdf"}
+  ],
+  "link_only": [
+    {"title": "EPA-Carbon Footprint Calculator", "bb_item_id": "_12904331_1", "url": "https://www3.epa.gov/carbon-footprint-calculator/", "bucket": "media_links", "week_no": 3},
+    {"title": "Institute of Physics-The most effective individual steps to tackle climate change aren't being discussed", "bb_item_id": "_12904333_1", "url": "https://phys.org/news/2017-07-effective-individual-tackle-climate-discussed.html", "bucket": "media_links", "week_no": 3, "reading_id": 45},
+    {"title": "Dolly Parton, 'My Tennessee Mountain Home' (1973)", "bb_item_id": "_13177626_1", "url": "https://www.youtube.com/watch?v=VG2kL4ojylk", "bucket": "media_links", "week_no": 2, "note": "listen before class Mon 8/31; no bytes"},
+    {"title": "Orange Instant Access (course textbook ebooks)", "bb_item_id": "_12920094_1", "url": null, "bucket": "media_links", "note": "LTI placement for the Murphy / Robbins / Goodell / Johnson ebooks"}
+  ],
+  "gaps": [
+    {"what": "Where the 'Discussion Questions' the syllabus promises actually live in the tree", "owner": "blackboard_pull"},
+    {"what": "Weeks 4-16 have no Blackboard modules yet; the syllabus lists 25 readings but only 3 PDFs are posted", "owner": "wait"},
+    {"what": "Stack's discussion-section number (sec. 3/4/5/7/9/10)", "owner": "stack"},
+    {"what": "Textbook access is via the Orange Instant Access LTI - no downloadable bytes", "owner": "stack"},
+    {"what": "Gradebook has only an 'Absences' column; no quiz or exam columns created yet", "owner": "wait"}
+  ]
+}

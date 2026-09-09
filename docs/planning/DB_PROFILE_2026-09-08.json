@@ -1,0 +1,2505 @@
+{
+ "courses": [
+  {
+   "id": "ECN.304",
+   "title_short": "The Economics of Social Issues",
+   "kind": "lecture",
+   "parent_course_id": null,
+   "credits": 3.0,
+   "location": "Life Sciences Building 001",
+   "syllabus_status": "complete",
+   "bb_group_id": null
+  },
+  {
+   "id": "GEO.103.lecture",
+   "title_short": "Environment and Society",
+   "kind": "lecture",
+   "parent_course_id": null,
+   "credits": 3.0,
+   "location": "Watson Theater",
+   "syllabus_status": "complete",
+   "bb_group_id": null
+  },
+  {
+   "id": "GEO.103.recitation",
+   "title_short": "Environment and Society (Discussion Section)",
+   "kind": "recitation",
+   "parent_course_id": "GEO.103.lecture",
+   "credits": null,
+   "location": "Maxwell Hall 108",
+   "syllabus_status": "complete",
+   "bb_group_id": null
+  },
+  {
+   "id": "IST.323",
+   "title_short": "Intro to Cybersecurity",
+   "kind": "lecture",
+   "parent_course_id": null,
+   "credits": 3.0,
+   "location": "Hinds Hall 010",
+   "syllabus_status": "complete",
+   "bb_group_id": null
+  },
+  {
+   "id": "IST.352",
+   "title_short": "Info Analysis of Organization Systems",
+   "kind": "lecture",
+   "parent_course_id": null,
+   "credits": 3.0,
+   "location": "Hinds Hall 018",
+   "syllabus_status": "complete",
+   "bb_group_id": "_306028_1"
+  },
+  {
+   "id": "IST.466",
+   "title_short": "IM&T Capstone",
+   "kind": "lecture",
+   "parent_course_id": null,
+   "credits": 3.0,
+   "location": "Hinds Hall 243",
+   "syllabus_status": "complete",
+   "bb_group_id": null
+  },
+  {
+   "id": "IST.471",
+   "title_short": "Internship",
+   "kind": "internship",
+   "parent_course_id": null,
+   "credits": 3.0,
+   "location": "Online",
+   "syllabus_status": "complete",
+   "bb_group_id": null
+  }
+ ],
+ "meetings": [
+  {
+   "course_id": "ECN.304",
+   "day_of_week": 2,
+   "start_time": "15:30:00",
+   "end_time": "16:50:00",
+   "location": "Life Sciences Building (LSB) 001",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "ECN.304",
+   "day_of_week": 4,
+   "start_time": "15:30:00",
+   "end_time": "16:50:00",
+   "location": "Life Sciences Building (LSB) 001",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "day_of_week": 1,
+   "start_time": "10:35:00",
+   "end_time": "11:30:00",
+   "location": "Watson Theater",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "day_of_week": 3,
+   "start_time": "10:35:00",
+   "end_time": "11:30:00",
+   "location": "Watson Theater",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "GEO.103.recitation",
+   "day_of_week": 5,
+   "start_time": "11:40:00",
+   "end_time": "12:35:00",
+   "location": "Maxwell Hall 140",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.323",
+   "day_of_week": 1,
+   "start_time": "15:45:00",
+   "end_time": "17:05:00",
+   "location": "Hinds Hall 010",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.323",
+   "day_of_week": 3,
+   "start_time": "15:45:00",
+   "end_time": "17:05:00",
+   "location": "Hinds Hall 010",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.352",
+   "day_of_week": 1,
+   "start_time": "12:45:00",
+   "end_time": "14:05:00",
+   "location": "Hinds Hall 018",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.352",
+   "day_of_week": 3,
+   "start_time": "12:45:00",
+   "end_time": "14:05:00",
+   "location": "Hinds Hall 018",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.466",
+   "day_of_week": 2,
+   "start_time": "14:00:00",
+   "end_time": "15:20:00",
+   "location": "Hinds Hall 243",
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.466",
+   "day_of_week": 4,
+   "start_time": "14:00:00",
+   "end_time": "15:20:00",
+   "location": "Hinds Hall 243",
+   "confidence": "confirmed"
+  }
+ ],
+ "grading": [
+  {
+   "course_id": "IST.323",
+   "method": "points",
+   "total_points": 104.0,
+   "graded_out_of": 100.0,
+   "has_late": true,
+   "has_ai": true,
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "ECN.304",
+   "method": "weighted_pct",
+   "total_points": null,
+   "graded_out_of": null,
+   "has_late": true,
+   "has_ai": true,
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.352",
+   "method": "weighted_pct",
+   "total_points": null,
+   "graded_out_of": null,
+   "has_late": true,
+   "has_ai": true,
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.466",
+   "method": "points",
+   "total_points": 1020.0,
+   "graded_out_of": 1020.0,
+   "has_late": true,
+   "has_ai": true,
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "IST.471",
+   "method": "qualitative",
+   "total_points": null,
+   "graded_out_of": null,
+   "has_late": true,
+   "has_ai": true,
+   "confidence": "confirmed"
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "method": "weighted_pct",
+   "total_points": null,
+   "graded_out_of": null,
+   "has_late": true,
+   "has_ai": true,
+   "confidence": "confirmed"
+  }
+ ],
+ "grade_components": [
+  {
+   "course_id": "ECN.304",
+   "code": "participation",
+   "name": "Participation",
+   "parent_id": null,
+   "weight_pct": 10.0,
+   "points": null,
+   "count_expected": null,
+   "aggregation": "manual",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "ECN.304",
+   "code": "quizzes",
+   "name": "Average Quiz Grade",
+   "parent_id": null,
+   "weight_pct": 15.0,
+   "points": null,
+   "count_expected": null,
+   "aggregation": "average_drop_lowest",
+   "drop_lowest": 1,
+   "rank_weights": null
+  },
+  {
+   "course_id": "ECN.304",
+   "code": "exams",
+   "name": "Exams (rank-weighted)",
+   "parent_id": null,
+   "weight_pct": 75.0,
+   "points": null,
+   "count_expected": 3,
+   "aggregation": "rank_weighted",
+   "drop_lowest": 0,
+   "rank_weights": [
+    30,
+    25,
+    20
+   ]
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "code": "lecture_attendance",
+   "name": "Lecture Attendance",
+   "parent_id": null,
+   "weight_pct": 5.0,
+   "points": null,
+   "count_expected": null,
+   "aggregation": "manual",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "code": "section_participation",
+   "name": "Discussion Section Attendance & Participation",
+   "parent_id": null,
+   "weight_pct": 15.0,
+   "points": null,
+   "count_expected": null,
+   "aggregation": "manual",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "code": "reading_quizzes",
+   "name": "Reading Quizzes",
+   "parent_id": null,
+   "weight_pct": 10.0,
+   "points": null,
+   "count_expected": 5,
+   "aggregation": "average_drop_lowest",
+   "drop_lowest": 1,
+   "rank_weights": null
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "code": "exam_1",
+   "name": "First Exam",
+   "parent_id": null,
+   "weight_pct": 20.0,
+   "points": null,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "code": "exam_2",
+   "name": "Second Exam",
+   "parent_id": null,
+   "weight_pct": 20.0,
+   "points": null,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "code": "final_exam",
+   "name": "Final Exam",
+   "parent_id": null,
+   "weight_pct": 30.0,
+   "points": null,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "participation",
+   "name": "Class Participation",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 5.0,
+   "count_expected": null,
+   "aggregation": "manual",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "quizzes",
+   "name": "Blackboard Quizzes",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 5.0,
+   "count_expected": 10,
+   "aggregation": "normalized",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "sitn_group",
+   "name": "Security in the News Group Presentation",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 5.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "individual_presentation",
+   "name": "Individual Security Presentation",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 15.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "final_project",
+   "name": "Final Project: Security Program Proposal",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 20.0,
+   "count_expected": null,
+   "aggregation": "sum",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "exams",
+   "name": "Exams",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 30.0,
+   "count_expected": 3,
+   "aggregation": "sum",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "labs",
+   "name": "Required Labs",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 20.0,
+   "count_expected": 4,
+   "aggregation": "sum",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "extra_credit_lab",
+   "name": "Extra Credit Lab",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 4.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "fp_proposal",
+   "name": "Final Project: Proposal",
+   "parent_id": 14,
+   "weight_pct": null,
+   "points": 11.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "fp_log",
+   "name": "Final Project: Running Log",
+   "parent_id": 14,
+   "weight_pct": null,
+   "points": 3.0,
+   "count_expected": 2,
+   "aggregation": "sum",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.323",
+   "code": "fp_defense",
+   "name": "Final Project: In-class Defense",
+   "parent_id": 14,
+   "weight_pct": null,
+   "points": 6.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.352",
+   "code": "research",
+   "name": "Research - Role of Systems Analyst",
+   "parent_id": null,
+   "weight_pct": 5.0,
+   "points": null,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.352",
+   "code": "project_deliverables",
+   "name": "Project Assignment Deliverables",
+   "parent_id": null,
+   "weight_pct": 60.0,
+   "points": null,
+   "count_expected": null,
+   "aggregation": "sum",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.352",
+   "code": "project_final",
+   "name": "Project Presentation / Final Version of Deliverables",
+   "parent_id": null,
+   "weight_pct": 10.0,
+   "points": null,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.352",
+   "code": "peer_assessment",
+   "name": "Project Self / Peer Assessment",
+   "parent_id": null,
+   "weight_pct": 10.0,
+   "points": null,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.352",
+   "code": "attendance",
+   "name": "Attendance, Class Contribution",
+   "parent_id": null,
+   "weight_pct": 15.0,
+   "points": null,
+   "count_expected": null,
+   "aggregation": "manual",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.466",
+   "code": "participation",
+   "name": "Participation (10 ethics presentations x 10)",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 100.0,
+   "count_expected": 10,
+   "aggregation": "sum",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.466",
+   "code": "major_cases",
+   "name": "Two Major Case Studies (Synchrony, SU IT)",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 300.0,
+   "count_expected": 2,
+   "aggregation": "sum",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.466",
+   "code": "ethics_presentations",
+   "name": "Team Ethics Case Presentations",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 100.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.466",
+   "code": "attendance",
+   "name": "Attendance",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 150.0,
+   "count_expected": 30,
+   "aggregation": "sum",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.466",
+   "code": "ethics_practice",
+   "name": "Ethics Case Practice",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 50.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.466",
+   "code": "ethics_vs",
+   "name": "Ethics vs. Presentation",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 120.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.466",
+   "code": "letter_of_gratitude",
+   "name": "Letter of Gratitude",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 100.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.466",
+   "code": "ai_team_assignment",
+   "name": "AI Team Assignment",
+   "parent_id": null,
+   "weight_pct": null,
+   "points": 100.0,
+   "count_expected": 1,
+   "aggregation": "single",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.471",
+   "code": "work_quality",
+   "name": "Quality of professional work in the internship",
+   "parent_id": null,
+   "weight_pct": 70.0,
+   "points": null,
+   "count_expected": null,
+   "aggregation": "manual",
+   "drop_lowest": 0,
+   "rank_weights": null
+  },
+  {
+   "course_id": "IST.471",
+   "code": "assignments",
+   "name": "Complete, timely, correctly formatted assignments",
+   "parent_id": null,
+   "weight_pct": 30.0,
+   "points": null,
+   "count_expected": null,
+   "aggregation": "manual",
+   "drop_lowest": 0,
+   "rank_weights": null
+  }
+ ],
+ "assignments_by_course_type": [
+  {
+   "course_id": "ECN.304",
+   "type": "exam",
+   "n": 3,
+   "with_due_at": 0,
+   "with_due_date": 3,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 3,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "ECN.304",
+   "type": "quiz",
+   "n": 3,
+   "with_due_at": 2,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 3,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "type": "exam",
+   "n": 2,
+   "with_due_at": 0,
+   "with_due_date": 2,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 2,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "type": "final_exam",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 1,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "GEO.103.recitation",
+   "type": "quiz",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 0,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "GEO.103.recitation",
+   "type": "discussion_post",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 0,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "GEO.103.recitation",
+   "type": "activity",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 1,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.323",
+   "type": "exam",
+   "n": 4,
+   "with_due_at": 0,
+   "with_due_date": 4,
+   "with_points": 4,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 4,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "IST.323",
+   "type": "quiz",
+   "n": 10,
+   "with_due_at": 10,
+   "with_due_date": 0,
+   "with_points": 2,
+   "with_bb_col": 2,
+   "with_bb_item": 2,
+   "with_desc": 10,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "IST.323",
+   "type": "lab",
+   "n": 5,
+   "with_due_at": 0,
+   "with_due_date": 5,
+   "with_points": 5,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 5,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "IST.323",
+   "type": "homework",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 0,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.323",
+   "type": "presentation",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.323",
+   "type": "group_presentation",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 1,
+   "grp": 1,
+   "series": 0
+  },
+  {
+   "course_id": "IST.323",
+   "type": "project",
+   "n": 1,
+   "with_due_at": 1,
+   "with_due_date": 1,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.323",
+   "type": "form",
+   "n": 1,
+   "with_due_at": 1,
+   "with_due_date": 1,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.323",
+   "type": "checkpoint",
+   "n": 2,
+   "with_due_at": 2,
+   "with_due_date": 2,
+   "with_points": 2,
+   "with_bb_col": 2,
+   "with_bb_item": 2,
+   "with_desc": 2,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.323",
+   "type": "other",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 1,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.352",
+   "type": "quiz",
+   "n": 3,
+   "with_due_at": 3,
+   "with_due_date": 0,
+   "with_points": 3,
+   "with_bb_col": 3,
+   "with_bb_item": 3,
+   "with_desc": 3,
+   "grp": 0,
+   "series": 1
+  },
+  {
+   "course_id": "IST.352",
+   "type": "homework",
+   "n": 1,
+   "with_due_at": 1,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.352",
+   "type": "reading",
+   "n": 3,
+   "with_due_at": 3,
+   "with_due_date": 0,
+   "with_points": 3,
+   "with_bb_col": 3,
+   "with_bb_item": 3,
+   "with_desc": 3,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.352",
+   "type": "project",
+   "n": 2,
+   "with_due_at": 1,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 2,
+   "grp": 1,
+   "series": 1
+  },
+  {
+   "course_id": "IST.352",
+   "type": "form",
+   "n": 2,
+   "with_due_at": 1,
+   "with_due_date": 2,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 2,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.466",
+   "type": "presentation",
+   "n": 2,
+   "with_due_at": 0,
+   "with_due_date": 2,
+   "with_points": 2,
+   "with_bb_col": 2,
+   "with_bb_item": 0,
+   "with_desc": 2,
+   "grp": 1,
+   "series": 0
+  },
+  {
+   "course_id": "IST.466",
+   "type": "group_presentation",
+   "n": 3,
+   "with_due_at": 0,
+   "with_due_date": 3,
+   "with_points": 3,
+   "with_bb_col": 3,
+   "with_bb_item": 0,
+   "with_desc": 3,
+   "grp": 3,
+   "series": 0
+  },
+  {
+   "course_id": "IST.466",
+   "type": "project",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 1,
+   "grp": 1,
+   "series": 0
+  },
+  {
+   "course_id": "IST.466",
+   "type": "paper",
+   "n": 1,
+   "with_due_at": 0,
+   "with_due_date": 1,
+   "with_points": 1,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.466",
+   "type": "other",
+   "n": 2,
+   "with_due_at": 0,
+   "with_due_date": 2,
+   "with_points": 0,
+   "with_bb_col": 0,
+   "with_bb_item": 0,
+   "with_desc": 2,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.471",
+   "type": "paper",
+   "n": 2,
+   "with_due_at": 1,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 2,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.471",
+   "type": "discussion_post",
+   "n": 1,
+   "with_due_at": 1,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.471",
+   "type": "form",
+   "n": 2,
+   "with_due_at": 2,
+   "with_due_date": 0,
+   "with_points": 2,
+   "with_bb_col": 2,
+   "with_bb_item": 2,
+   "with_desc": 2,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.471",
+   "type": "meeting",
+   "n": 1,
+   "with_due_at": 1,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  },
+  {
+   "course_id": "IST.471",
+   "type": "evaluation",
+   "n": 1,
+   "with_due_at": 1,
+   "with_due_date": 0,
+   "with_points": 1,
+   "with_bb_col": 1,
+   "with_bb_item": 1,
+   "with_desc": 1,
+   "grp": 0,
+   "series": 0
+  }
+ ],
+ "progress_status": [
+  {
+   "status": "submitted",
+   "n": 1,
+   "with_score": 0
+  },
+  {
+   "status": "in_progress",
+   "n": 1,
+   "with_score": 0
+  },
+  {
+   "status": "not_applicable",
+   "n": 3,
+   "with_score": 0
+  },
+  {
+   "status": "missed",
+   "n": 3,
+   "with_score": 0
+  },
+  {
+   "status": "not_started",
+   "n": 52,
+   "with_score": 0
+  },
+  {
+   "status": "graded",
+   "n": 5,
+   "with_score": 5
+  }
+ ],
+ "bb_submission_status": [
+  {
+   "bb_submission_status": "SUBMITTED",
+   "n": 2
+  },
+  {
+   "bb_submission_status": "DRAFT_SAVED_STUDENT",
+   "n": 1
+  },
+  {
+   "bb_submission_status": "UNOPENED",
+   "n": 16
+  },
+  {
+   "bb_submission_status": null,
+   "n": 44
+  },
+  {
+   "bb_submission_status": "GRADED",
+   "n": 3
+  }
+ ],
+ "sessions": [
+  {
+   "course_id": "ECN.304",
+   "kind": "lecture",
+   "n": 25,
+   "first": "2026-08-25",
+   "last": "2026-12-03",
+   "with_topic": 25,
+   "with_week": 25
+  },
+  {
+   "course_id": "ECN.304",
+   "kind": "exam",
+   "n": 3,
+   "first": "2026-10-01",
+   "last": "2026-12-08",
+   "with_topic": 3,
+   "with_week": 3
+  },
+  {
+   "course_id": "ECN.304",
+   "kind": "no_class",
+   "n": 3,
+   "first": "2026-10-13",
+   "last": "2026-11-26",
+   "with_topic": 3,
+   "with_week": 3
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "kind": "lecture",
+   "n": 25,
+   "first": "2026-08-24",
+   "last": "2026-12-07",
+   "with_topic": 25,
+   "with_week": 25
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "kind": "exam",
+   "n": 3,
+   "first": "2026-09-23",
+   "last": "2026-12-15",
+   "with_topic": 3,
+   "with_week": 3
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "kind": "no_class",
+   "n": 4,
+   "first": "2026-09-07",
+   "last": "2026-11-25",
+   "with_topic": 4,
+   "with_week": 4
+  },
+  {
+   "course_id": "IST.323",
+   "kind": "lecture",
+   "n": 14,
+   "first": "2026-08-24",
+   "last": "2026-12-02",
+   "with_topic": 14,
+   "with_week": 14
+  },
+  {
+   "course_id": "IST.323",
+   "kind": "exam",
+   "n": 3,
+   "first": "2026-09-14",
+   "last": "2026-12-07",
+   "with_topic": 3,
+   "with_week": 3
+  },
+  {
+   "course_id": "IST.323",
+   "kind": "lab",
+   "n": 4,
+   "first": "2026-09-09",
+   "last": "2026-11-30",
+   "with_topic": 4,
+   "with_week": 4
+  },
+  {
+   "course_id": "IST.323",
+   "kind": "presentation",
+   "n": 5,
+   "first": "2026-09-30",
+   "last": "2026-11-16",
+   "with_topic": 5,
+   "with_week": 5
+  },
+  {
+   "course_id": "IST.323",
+   "kind": "no_class",
+   "n": 4,
+   "first": "2026-09-07",
+   "last": "2026-11-23",
+   "with_topic": 4,
+   "with_week": 4
+  },
+  {
+   "course_id": "IST.323",
+   "kind": "other",
+   "n": 1,
+   "first": "2026-12-15",
+   "last": "2026-12-15",
+   "with_topic": 1,
+   "with_week": 1
+  },
+  {
+   "course_id": "IST.352",
+   "kind": "lecture",
+   "n": 11,
+   "first": "2026-08-24",
+   "last": "2026-10-26",
+   "with_topic": 11,
+   "with_week": 11
+  },
+  {
+   "course_id": "IST.352",
+   "kind": "presentation",
+   "n": 5,
+   "first": "2026-11-02",
+   "last": "2026-12-07",
+   "with_topic": 5,
+   "with_week": 5
+  },
+  {
+   "course_id": "IST.352",
+   "kind": "no_class",
+   "n": 3,
+   "first": "2026-09-07",
+   "last": "2026-11-23",
+   "with_topic": 3,
+   "with_week": 3
+  },
+  {
+   "course_id": "IST.352",
+   "kind": "other",
+   "n": 1,
+   "first": "2026-10-14",
+   "last": "2026-10-14",
+   "with_topic": 1,
+   "with_week": 1
+  },
+  {
+   "course_id": "IST.466",
+   "kind": "lecture",
+   "n": 1,
+   "first": "2026-08-25",
+   "last": "2026-08-25",
+   "with_topic": 1,
+   "with_week": 1
+  },
+  {
+   "course_id": "IST.466",
+   "kind": "lab",
+   "n": 4,
+   "first": "2026-09-17",
+   "last": "2026-11-12",
+   "with_topic": 4,
+   "with_week": 4
+  },
+  {
+   "course_id": "IST.466",
+   "kind": "presentation",
+   "n": 13,
+   "first": "2026-09-01",
+   "last": "2026-12-05",
+   "with_topic": 13,
+   "with_week": 13
+  },
+  {
+   "course_id": "IST.466",
+   "kind": "practice",
+   "n": 6,
+   "first": "2026-09-08",
+   "last": "2026-12-03",
+   "with_topic": 6,
+   "with_week": 6
+  },
+  {
+   "course_id": "IST.466",
+   "kind": "guest",
+   "n": 2,
+   "first": "2026-09-10",
+   "last": "2026-11-05",
+   "with_topic": 2,
+   "with_week": 2
+  },
+  {
+   "course_id": "IST.466",
+   "kind": "no_class",
+   "n": 3,
+   "first": "2026-10-13",
+   "last": "2026-11-26",
+   "with_topic": 3,
+   "with_week": 3
+  },
+  {
+   "course_id": "IST.466",
+   "kind": "discussion",
+   "n": 1,
+   "first": "2026-08-27",
+   "last": "2026-08-27",
+   "with_topic": 1,
+   "with_week": 1
+  },
+  {
+   "course_id": "IST.466",
+   "kind": "other",
+   "n": 1,
+   "first": "2026-12-10",
+   "last": "2026-12-10",
+   "with_topic": 1,
+   "with_week": 1
+  }
+ ],
+ "readings": [
+  {
+   "course_id": "ECN.304",
+   "n": 38,
+   "on_bb": 0,
+   "with_url": 29,
+   "with_date": 38,
+   "with_week": 38
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "n": 25,
+   "on_bb": 23,
+   "with_url": 0,
+   "with_date": 25,
+   "with_week": 25
+  },
+  {
+   "course_id": "IST.323",
+   "n": 12,
+   "on_bb": 0,
+   "with_url": 0,
+   "with_date": 12,
+   "with_week": 12
+  },
+  {
+   "course_id": "IST.352",
+   "n": 1,
+   "on_bb": 0,
+   "with_url": 0,
+   "with_date": 1,
+   "with_week": 1
+  },
+  {
+   "course_id": "IST.466",
+   "n": 10,
+   "on_bb": 10,
+   "with_url": 0,
+   "with_date": 0,
+   "with_week": 0
+  }
+ ],
+ "reading_progress": [
+  {
+   "status": "not_started",
+   "n": 75
+  }
+ ],
+ "announcements": [
+  {
+   "course_id": "ECN.304",
+   "n": 3,
+   "read": 1,
+   "latest": "2026-09-07T15:14:06.768+00:00"
+  },
+  {
+   "course_id": "IST.323",
+   "n": 3,
+   "read": 0,
+   "latest": "2026-09-01T20:39:54.918+00:00"
+  },
+  {
+   "course_id": "IST.352",
+   "n": 2,
+   "read": 1,
+   "latest": "2026-09-07T15:19:33.776+00:00"
+  },
+  {
+   "course_id": "IST.466",
+   "n": 2,
+   "read": 0,
+   "latest": "2026-09-08T13:27:08.828+00:00"
+  },
+  {
+   "course_id": "IST.471",
+   "n": 1,
+   "read": 0,
+   "latest": "2026-08-26T15:46:21.874+00:00"
+  }
+ ],
+ "bb_content": [
+  {
+   "course_id": "ECN.304",
+   "bb_type": "resource/x-bb-file",
+   "item_kind": "file",
+   "n": 3,
+   "with_body": 0,
+   "with_detail": 3,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "ECN.304",
+   "bb_type": "resource/x-bb-folder",
+   "item_kind": "folder",
+   "n": 9,
+   "with_body": 0,
+   "with_detail": 9,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "ECN.304",
+   "bb_type": "resource/x-bb-lesson",
+   "item_kind": "learning_module",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "bb_type": "resource/x-bb-bltiplacement-bnc_coursematerials",
+   "item_kind": "lti",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "bb_type": "resource/x-bb-externallink",
+   "item_kind": "link",
+   "n": 2,
+   "with_body": 0,
+   "with_detail": 2,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "bb_type": "resource/x-bb-folder",
+   "item_kind": "folder",
+   "n": 8,
+   "with_body": 0,
+   "with_detail": 8,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "bb_type": "resource/x-bb-lesson",
+   "item_kind": "learning_module",
+   "n": 3,
+   "with_body": 0,
+   "with_detail": 3,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "bb_type": null,
+   "item_kind": "document",
+   "n": 7,
+   "with_body": 2,
+   "with_detail": 7,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "GEO.103.recitation",
+   "bb_type": "resource/x-bb-courselink",
+   "item_kind": "course_link",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "GEO.103.recitation",
+   "bb_type": "resource/x-bb-file",
+   "item_kind": "file",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.323",
+   "bb_type": "resource/x-bb-asmt-survey-link",
+   "item_kind": "survey",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 1
+  },
+  {
+   "course_id": "IST.323",
+   "bb_type": "resource/x-bb-asmt-test-link",
+   "item_kind": "test",
+   "n": 5,
+   "with_body": 0,
+   "with_detail": 5,
+   "linked_asmt": 5
+  },
+  {
+   "course_id": "IST.323",
+   "bb_type": "resource/x-bb-bltiplacement-bnc_coursematerials",
+   "item_kind": "lti",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.323",
+   "bb_type": "resource/x-bb-courselink",
+   "item_kind": "course_link",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.323",
+   "bb_type": "resource/x-bb-file",
+   "item_kind": "file",
+   "n": 13,
+   "with_body": 0,
+   "with_detail": 13,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.323",
+   "bb_type": "resource/x-bb-folder",
+   "item_kind": "folder",
+   "n": 9,
+   "with_body": 0,
+   "with_detail": 9,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.323",
+   "bb_type": null,
+   "item_kind": "document",
+   "n": 1,
+   "with_body": 1,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.352",
+   "bb_type": "resource/x-bb-asmt-test-link",
+   "item_kind": "test",
+   "n": 9,
+   "with_body": 0,
+   "with_detail": 9,
+   "linked_asmt": 9
+  },
+  {
+   "course_id": "IST.352",
+   "bb_type": "resource/x-bb-blti-link",
+   "item_kind": "lti",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.352",
+   "bb_type": "resource/x-bb-folder",
+   "item_kind": "folder",
+   "n": 10,
+   "with_body": 0,
+   "with_detail": 10,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.352",
+   "bb_type": "resource/x-bb-lesson",
+   "item_kind": "learning_module",
+   "n": 5,
+   "with_body": 0,
+   "with_detail": 5,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.352",
+   "bb_type": null,
+   "item_kind": "document",
+   "n": 7,
+   "with_body": 2,
+   "with_detail": 7,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.466",
+   "bb_type": "resource/x-bb-blti-link",
+   "item_kind": "lti",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.466",
+   "bb_type": "resource/x-bb-file",
+   "item_kind": "file",
+   "n": 5,
+   "with_body": 0,
+   "with_detail": 5,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.466",
+   "bb_type": "resource/x-bb-folder",
+   "item_kind": "folder",
+   "n": 9,
+   "with_body": 0,
+   "with_detail": 9,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.466",
+   "bb_type": "resource/x-bb-lesson",
+   "item_kind": "learning_module",
+   "n": 6,
+   "with_body": 0,
+   "with_detail": 6,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.466",
+   "bb_type": null,
+   "item_kind": "document",
+   "n": 9,
+   "with_body": 3,
+   "with_detail": 9,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.471",
+   "bb_type": "resource/x-bb-asmt-test-link",
+   "item_kind": "test",
+   "n": 6,
+   "with_body": 0,
+   "with_detail": 6,
+   "linked_asmt": 6
+  },
+  {
+   "course_id": "IST.471",
+   "bb_type": "resource/x-bb-courselink",
+   "item_kind": "course_link",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.471",
+   "bb_type": "resource/x-bb-file",
+   "item_kind": "file",
+   "n": 1,
+   "with_body": 0,
+   "with_detail": 1,
+   "linked_asmt": 0
+  },
+  {
+   "course_id": "IST.471",
+   "bb_type": "resource/x-bb-lesson",
+   "item_kind": "learning_module",
+   "n": 2,
+   "with_body": 0,
+   "with_detail": 2,
+   "linked_asmt": 0
+  }
+ ],
+ "bb_files": [
+  {
+   "course_id": "ECN.304",
+   "bucket": "syllabus_policy",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 215332
+  },
+  {
+   "course_id": "ECN.304",
+   "bucket": "lecture_slides",
+   "n": 2,
+   "asmt": 0,
+   "sess": 2,
+   "rdg": 0,
+   "wk": 2,
+   "txt": 2,
+   "bytes": 1361232
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "bucket": "syllabus_policy",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 263644
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "bucket": "readings",
+   "n": 4,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 3,
+   "wk": 4,
+   "txt": 4,
+   "bytes": 13265989
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "bucket": "admin",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 93172
+  },
+  {
+   "course_id": "GEO.103.recitation",
+   "bucket": "syllabus_policy",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 20400
+  },
+  {
+   "course_id": "IST.323",
+   "bucket": "syllabus_policy",
+   "n": 2,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 2,
+   "bytes": 97569
+  },
+  {
+   "course_id": "IST.323",
+   "bucket": "lecture_slides",
+   "n": 4,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 4,
+   "txt": 4,
+   "bytes": 18616895
+  },
+  {
+   "course_id": "IST.323",
+   "bucket": "assignment_spec",
+   "n": 2,
+   "asmt": 2,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 2,
+   "bytes": 943864
+  },
+  {
+   "course_id": "IST.323",
+   "bucket": "lab_materials",
+   "n": 1,
+   "asmt": 1,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 18913
+  },
+  {
+   "course_id": "IST.323",
+   "bucket": "project_materials",
+   "n": 5,
+   "asmt": 5,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 5,
+   "bytes": 311850
+  },
+  {
+   "course_id": "IST.323",
+   "bucket": "admin",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 115565
+  },
+  {
+   "course_id": "IST.352",
+   "bucket": "syllabus_policy",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 53185
+  },
+  {
+   "course_id": "IST.352",
+   "bucket": "schedule",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 27057
+  },
+  {
+   "course_id": "IST.352",
+   "bucket": "lecture_slides",
+   "n": 4,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 4,
+   "txt": 4,
+   "bytes": 672745
+  },
+  {
+   "course_id": "IST.352",
+   "bucket": "project_materials",
+   "n": 1,
+   "asmt": 1,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 14417
+  },
+  {
+   "course_id": "IST.352",
+   "bucket": "admin",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 262750
+  },
+  {
+   "course_id": "IST.466",
+   "bucket": "syllabus_policy",
+   "n": 2,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 2,
+   "bytes": 78619
+  },
+  {
+   "course_id": "IST.466",
+   "bucket": "schedule",
+   "n": 4,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 4,
+   "bytes": 187240
+  },
+  {
+   "course_id": "IST.466",
+   "bucket": "lecture_slides",
+   "n": 2,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 2,
+   "txt": 2,
+   "bytes": 136537
+  },
+  {
+   "course_id": "IST.466",
+   "bucket": "readings",
+   "n": 10,
+   "asmt": 10,
+   "sess": 0,
+   "rdg": 10,
+   "wk": 0,
+   "txt": 10,
+   "bytes": 3849102
+  },
+  {
+   "course_id": "IST.466",
+   "bucket": "assignment_spec",
+   "n": 5,
+   "asmt": 5,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 4,
+   "bytes": 283293
+  },
+  {
+   "course_id": "IST.466",
+   "bucket": "project_materials",
+   "n": 2,
+   "asmt": 2,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 2,
+   "bytes": 818802
+  },
+  {
+   "course_id": "IST.466",
+   "bucket": "admin",
+   "n": 2,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 2,
+   "bytes": 32468
+  },
+  {
+   "course_id": "IST.471",
+   "bucket": "syllabus_policy",
+   "n": 1,
+   "asmt": 0,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 1,
+   "bytes": 365853
+  },
+  {
+   "course_id": "IST.471",
+   "bucket": "assignment_spec",
+   "n": 3,
+   "asmt": 3,
+   "sess": 0,
+   "rdg": 0,
+   "wk": 0,
+   "txt": 3,
+   "bytes": 531192
+  }
+ ],
+ "bb_file_text": [
+  {
+   "unit_kind": "slide",
+   "n": 295,
+   "chars": 90746
+  },
+  {
+   "unit_kind": "page",
+   "n": 219,
+   "chars": 729256
+  },
+  {
+   "unit_kind": "sheet",
+   "n": 3,
+   "chars": 14870
+  },
+  {
+   "unit_kind": "doc",
+   "n": 17,
+   "chars": 114399
+  }
+ ],
+ "bb_raw": [
+  {
+   "bb_course_id": "_569316_1",
+   "kind": "course",
+   "n": 3,
+   "bytes": 40379,
+   "latest": "2026-09-08T17:29:00.710419+00:00"
+  },
+  {
+   "bb_course_id": "_569318_1",
+   "kind": "course",
+   "n": 3,
+   "bytes": 5892,
+   "latest": "2026-09-08T17:29:01.905897+00:00"
+  },
+  {
+   "bb_course_id": "_570144_1",
+   "kind": "course",
+   "n": 3,
+   "bytes": 74737,
+   "latest": "2026-09-08T17:28:49.608044+00:00"
+  },
+  {
+   "bb_course_id": "_570160_1",
+   "kind": "course",
+   "n": 3,
+   "bytes": 72749,
+   "latest": "2026-09-08T17:28:56.503984+00:00"
+  },
+  {
+   "bb_course_id": "_570161_1",
+   "kind": "course",
+   "n": 3,
+   "bytes": 27472,
+   "latest": "2026-09-08T17:29:10.100452+00:00"
+  },
+  {
+   "bb_course_id": "_571529_1",
+   "kind": "course",
+   "n": 3,
+   "bytes": 100692,
+   "latest": "2026-09-08T17:28:43.38438+00:00"
+  },
+  {
+   "bb_course_id": "_572517_1",
+   "kind": "course",
+   "n": 3,
+   "bytes": 25243,
+   "latest": "2026-09-08T17:29:06.755269+00:00"
+  },
+  {
+   "bb_course_id": null,
+   "kind": "calendar",
+   "n": 3,
+   "bytes": 54493,
+   "latest": "2026-09-08T17:29:10.46879+00:00"
+  }
+ ],
+ "sync_runs": [
+  {
+   "id": 1,
+   "ran_at": "2026-09-02T20:12:59.309155+00:00",
+   "source": "syllabus",
+   "scope": "all",
+   "notes": "Phase 1 seed from syllabi/intro decks in bb2dash/course context, 2026-09-02",
+   "summary": {
+    "courses": 7,
+    "readings": 75,
+    "sessions": 127,
+    "assignments": 57,
+    "grade_components": 25
+   }
+  },
+  {
+   "id": 2,
+   "ran_at": "2026-09-02T20:32:23.238827+00:00",
+   "source": "blackboard",
+   "scope": "all",
+   "notes": "Phase 2 initial Blackboard pass via built-in browser + internal /learn/api/v1 endpoints; raw payloads in bb_raw. File do",
+   "summary": {
+    "run_id": "3e12fd89-1ac8-4ab1-bd2a-0dce984a90fc",
+    "courses": 7,
+    "announcements": 8,
+    "content_items": 139,
+    "calendar_items": 22,
+    "files_catalogued": 0,
+    "gradebook_columns": 36,
+    "conflicts_with_confirmed_seed": [
+     "IST.323/presentation-choice: Blackboard column shows 100 pts, syllabus says 0 (kept 0, noted)",
+     "IST.323/fp-proposal: Blackboard column = 13 pts (proposal 11 + log 2 combined); seed had 11",
+     "IST.466: gradebook columns rolled over from 2021-2023 with stale names/dates; points scheme inferred as tentative"
+    ]
+   }
+  },
+  {
+   "id": 3,
+   "ran_at": "2026-09-03T20:09:57.677754+00:00",
+   "source": "blackboard",
+   "scope": "IST.352",
+   "notes": "Built-in browser download to ~/Downloads works (navigate returns \"denied or failed\" on success). Storage upload needs no",
+   "summary": {
+    "pilot": "bb-course-pull v1",
+    "uploaded": 7,
+    "downloaded": 7,
+    "text_units": 68,
+    "new_files_found": 1,
+    "grading_resolved": true,
+    "stale_urls_fixed": 2,
+    "course_fields_resolved": [
+     "project_team",
+     "project_option",
+     "project_name"
+    ]
+   }
+  },
+  {
+   "id": 4,
+   "ran_at": "2026-09-03T20:17:26.353536+00:00",
+   "source": "manual",
+   "scope": "IST.352",
+   "notes": "Layout changed to <course>/<bucket>/<assignment|week>/<file> (migration 008). Old flat storage keys cannot be deleted wi",
+   "summary": {
+    "relayout": 5,
+    "old_storage_objects_orphaned": 6
+   }
+  },
+  {
+   "id": 5,
+   "ran_at": "2026-09-03T20:58:54.395445+00:00",
+   "source": "blackboard",
+   "scope": "IST.466 bb-course-map v1 + bb-course-pull -> map v2",
+   "notes": "Built-in browser saves downloads as GUID .tmp then finalizes names ~2 min later; same-name collisions overwrite. bb_file",
+   "summary": {
+    "failed": 0,
+    "uploaded": 25,
+    "downloaded": 25,
+    "duplicates": 1,
+    "text_units": 142,
+    "gaps_closed": [
+     "grading model (syllabus)",
+     "schedule v. Sep 3 applied (practice 9/8)",
+     "HBR case pool catalogued as readings"
+    ],
+    "reclassified": 1,
+    "new_files_found": 10,
+    "stale_urls_fixed": 3
+   }
+  },
+  {
+   "id": 6,
+   "ran_at": "2026-09-03T21:08:50.115089+00:00",
+   "source": "blackboard",
+   "scope": "IST.466 verification pass (re-run of map v1 + pull + map v2)",
+   "notes": "Re-ran the map/pull cycle against live Blackboard: all 25 live file URLs (18 data-bbfile embeds + 7 x-bb-file attachment",
+   "summary": {
+    "failed": 0,
+    "uploaded": 0,
+    "downloaded": 0,
+    "duplicates": 0,
+    "needs_move": 0,
+    "text_units": 0,
+    "files_verified": 26,
+    "new_files_found": 0,
+    "embeds_rechecked": 25,
+    "stale_urls_fixed": 0,
+    "storage_objects_verified": 25
+   }
+  },
+  {
+   "id": 7,
+   "ran_at": "2026-09-03T21:11:23.960126+00:00",
+   "source": "blackboard",
+   "scope": "GEO.103.recitation",
+   "notes": "bb-course-map v1 + bb-course-pull + map v2. Manifest verified live against /learn/api/v1 before download: 1 file, URL un",
+   "summary": {
+    "failed": 0,
+    "uploaded": 1,
+    "gaps_open": [
+     "carbon_footprint_handin_date still derived",
+     "no recitation sessions rows",
+     "course_staff id 5 office_hours (lecture course)"
+    ],
+    "downloaded": 1,
+    "duplicates": 0,
+    "needs_move": 0,
+    "text_units": 1,
+    "gaps_closed": [
+     "meetings day/time/room confirmed",
+     "ta_office_hours",
+     "participation_criteria",
+     "quiz_makeup_policy",
+     "courses.group_notes"
+    ],
+    "map_versions": [
+     1,
+     2
+    ],
+    "reclassified": 0,
+    "new_files_found": 0,
+    "stale_urls_fixed": 0
+   }
+  },
+  {
+   "id": 8,
+   "ran_at": "2026-09-03T21:14:09.766119+00:00",
+   "source": "blackboard",
+   "scope": "ECN.304",
+   "notes": "bb-course-map v1 + bb-course-pull + map v2 for ECN.304 (The Economics of Social Issues, Liu). Live tree re-walk found 0 ",
+   "summary": {
+    "bb_id": "_572517_1",
+    "failed": 0,
+    "buckets": {
+     "lecture_slides": 2,
+     "syllabus_policy": 1
+    },
+    "uploaded": 3,
+    "course_id": "ECN.304",
+    "gaps_open": [
+     "quiz count/dates for semester",
+     "Quiz 1 score",
+     "exam point values (never published)",
+     "7 empty topic folders"
+    ],
+    "downloaded": 3,
+    "duplicates": 1,
+    "text_units": 56,
+    "gaps_closed": [
+     "grading verified verbatim against syllabus PDF",
+     "late_policy/ai_policy rewritten from PDF",
+     "38/38 readings verified, week_no backfilled",
+     "both decks linked to sessions 2 and 5",
+     "hand-placed syllabus deduped into layout",
+     "courses.group_notes written"
+    ],
+    "reclassified": 0,
+    "manifest_rows": 3,
+    "new_files_found": 0,
+    "needs_move_after": 0,
+    "stale_urls_fixed": 0,
+    "map_version_after": 2,
+    "map_version_before": 1
+   }
+  },
+  {
+   "id": 9,
+   "ran_at": "2026-09-03T21:19:02.878568+00:00",
+   "source": "blackboard",
+   "scope": "GEO.103.lecture",
+   "notes": "bb-course-map v1 -> bb-course-pull -> map v2. Live tree walk found no files the catalog lacked. Row 45's source_url (lit",
+   "summary": {
+    "bb_id": "_569316_1",
+    "failed": 0,
+    "buckets": {
+     "admin": 1,
+     "readings": 4,
+     "syllabus_policy": 1
+    },
+    "uploaded": 6,
+    "course_id": "GEO.103.lecture",
+    "downloaded": 6,
+    "duplicates": 0,
+    "needs_move": 0,
+    "text_units": 77,
+    "gaps_closed": [
+     "discussion_questions_location",
+     "bb_files.45 source_url (was undefined)",
+     "hand-placed GEO.103 syllabus deduped and folder removed",
+     "grading_schemes.late_policy",
+     "assignments final-exam event window"
+    ],
+    "map_version": 2,
+    "reclassified": 0,
+    "new_files_found": 0,
+    "stale_urls_fixed": 1
+   }
+  },
+  {
+   "id": 10,
+   "ran_at": "2026-09-03T21:20:08.683644+00:00",
+   "source": "blackboard",
+   "scope": "IST.471",
+   "notes": "bb-course-map v1 -> bb-course-pull -> map v2 for IST.471 (Internship, Bevans, online). Embed refresh of all 11 content i",
+   "summary": {
+    "bb_id": "_570161_1",
+    "failed": 0,
+    "buckets": {
+     "assignment_spec": 3,
+     "syllabus_policy": 1
+    },
+    "grading": "confirmed unchanged (70/30); ai_policy filled",
+    "uploaded": 4,
+    "course_id": "IST.471",
+    "gaps_open": 10,
+    "downloaded": 3,
+    "duplicates": 0,
+    "needs_move": 0,
+    "text_units": 15,
+    "new_file_ids": [
+     59,
+     60,
+     61
+    ],
+    "course_map_ids": [
+     10,
+     14
+    ],
+    "manifest_files": 4,
+    "new_files_found": 3,
+    "stale_urls_fixed": 0,
+    "reused_hand_placed": 1,
+    "stack_must_confirm": 7,
+    "a7_final_reflection": "still no gradebook column as of 2026-09-03; due date left null",
+    "map_versions_written": [
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "id": 11,
+   "ran_at": "2026-09-03T21:23:17.678983+00:00",
+   "source": "blackboard",
+   "scope": "IST.323 bb-course-map v1 + bb-course-pull + map v2",
+   "notes": "Manifest refresh: 13/13 URLs current (0 stale, 0 new); all items are resource/x-bb-file, no data-bbfile embeds anywhere.",
+   "summary": {
+    "bb_id": "_571529_1",
+    "failed": 0,
+    "uploaded": 13,
+    "course_id": "IST.323",
+    "gaps_open": [
+     "sitn_group",
+     "sitn_date",
+     "individual_presentation_date",
+     "lab_access_code_status"
+    ],
+    "catalogued": 13,
+    "downloaded": 13,
+    "duplicates": 0,
+    "needs_move": 0,
+    "text_units": 163,
+    "gaps_closed": [
+     "fp_organization confirmed (Packet A - Meridian Specialty Pharmacy)",
+     "oia_textbook_optout_deadline 2026-09-14",
+     "jbl_course_id BD53C5"
+    ],
+    "maps_written": [
+     1,
+     2
+    ],
+    "reclassified": 1,
+    "new_files_found": 0,
+    "stale_urls_fixed": 0
+   }
+  },
+  {
+   "id": 12,
+   "ran_at": "2026-09-08T17:37:06.285708+00:00",
+   "source": "blackboard",
+   "scope": "validation+gap-bridge 2026-09-08 (run 6b122650-49f3-4a70-a801-c177fbf27f1a)",
+   "notes": "Orchestrator run after the cancelled 9/7 harvest; validation of DB vs Storage vs local mirror vs live Blackboard, then g",
+   "summary": {
+    "files": {
+     "failed": 0,
+     "uploaded": 3,
+     "extracted": 3,
+     "downloaded": 3,
+     "superseded": [
+      "bb_files 16",
+      "bb_files 40",
+      "bb_files 58"
+     ],
+     "new_files_found": 3,
+     "stale_urls_fixed": 0,
+     "text_units_added": 11
+    },
+    "typed": {
+     "sessions_changed": 0,
+     "assignments_updated": [
+      "ECN.304/quiz-01",
+      "IST.352/project-1a",
+      "IST.352/role-of-systems-analyst",
+      "IST.352/reading-ch1-all"
+     ],
+     "assignments_inserted": [
+      "ECN.304/quiz-02"
+     ],
+     "announcements_inserted": 3
+    },
+    "lessons": [
+     "attachments in assessment items live under contentDetail.<asmt>.test.assessment.instructions, not body: scan every string field for data-bbfile",
+     "use durable bbcswebdav asiobject URLs, never session-scoped /sessions/ URLs"
+    ],
+    "validation": {
+     "db_storage": "61 rows matched sizes",
+     "local_mirror": "60/60 sha256 match",
+     "text_units_before": 523
+    },
+    "observations": [
+     "IST.466 W3 schedule text identical to Wk2xy except version date",
+     "GEO.103.recitation Attendance column shows 0/100 as of 2026-09-04 (no assignment row; left as observation)",
+     "GEO.103.lecture Dolly Parton item removed from Blackboard",
+     "IST.352 Project 1A item re-created by instructor (new content+column ids)",
+     "IST.471 session-scoped /sessions/ URLs 403 later; durable asiobject URLs kept"
+    ],
+    "totals_after": {
+     "bb_files": 64,
+     "needs_move": 0,
+     "bb_file_text": 534
+    }
+   }
+  }
+ ],
+ "course_staff": [
+  {
+   "course_id": "ECN.304",
+   "name": "Chung-Chin Eugene Liu",
+   "role": "instructor",
+   "has_oh": true,
+   "has_email": true
+  },
+  {
+   "course_id": "ECN.304",
+   "name": "Brenda Revilla",
+   "role": "ta",
+   "has_oh": true,
+   "has_email": true
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "name": "Bob Wilson",
+   "role": "instructor",
+   "has_oh": true,
+   "has_email": true
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "name": "Rachel Ameen",
+   "role": "ta",
+   "has_oh": false,
+   "has_email": true
+  },
+  {
+   "course_id": "GEO.103.lecture",
+   "name": "Cheyenne Morris",
+   "role": "ta",
+   "has_oh": false,
+   "has_email": true
+  },
+  {
+   "course_id": "GEO.103.recitation",
+   "name": "Cheyenne Morris",
+   "role": "ta",
+   "has_oh": true,
+   "has_email": true
+  },
+  {
+   "course_id": "IST.323",
+   "name": "Christopher Croad",
+   "role": "instructor",
+   "has_oh": true,
+   "has_email": true
+  },
+  {
+   "course_id": "IST.352",
+   "name": "Michael Larche",
+   "role": "instructor",
+   "has_oh": true,
+   "has_email": true
+  },
+  {
+   "course_id": "IST.466",
+   "name": "Alexander Corsello",
+   "role": "instructor",
+   "has_oh": false,
+   "has_email": true
+  },
+  {
+   "course_id": "IST.466",
+   "name": "Sloan Strudler",
+   "role": "coordinator",
+   "has_oh": false,
+   "has_email": false
+  },
+  {
+   "course_id": "IST.471",
+   "name": "Patti Bevans",
+   "role": "instructor",
+   "has_oh": true,
+   "has_email": true
+  },
+  {
+   "course_id": "IST.471",
+   "name": "Dan Cohen",
+   "role": "faculty_sponsor",
+   "has_oh": false,
+   "has_email": false
+  }
+ ]
+}

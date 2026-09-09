@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- GUI REFERENCE · options considered; picks recorded in README.md. See README.md in this folder. -->
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/styles.css">
+<script src="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)} a{color:var(--color-accent)} a:hover{color:var(--color-accent-400)}
+.dv-turn{padding:40px 44px 32px;scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-accent);color:var(--color-bg);border-radius:4px;text-decoration:none}.dv-tname{font-size:15px;color:var(--color-text)}.dv-group{display:flex;flex-direction:column;gap:12px;padding:26px 0 30px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat bottom / 100% 1px}.dv-ghd{display:flex;flex-direction:column;gap:3px}.dv-gk{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-500)}.dv-gt{font-size:18px;margin:0}.dv-gq{font-size:12.5px;color:var(--color-neutral-400);max-width:92ch;margin:0}.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-800);color:var(--color-neutral-100);border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font-size:12px;color:var(--color-neutral-300)}.dv-card{max-width:100%;background:var(--color-bg);box-shadow:0 0 0 1px var(--color-divider);border-radius:8px;overflow:visible;position:relative}.dv-note{font-size:11.5px;line-height:1.5;color:var(--color-neutral-500);max-width:100%;margin:0}.dv-note b{color:var(--color-neutral-300);font-weight:500}.dv-opt:target .dv-oid{background:var(--color-accent);color:var(--color-bg)}.dv-next{margin:22px 0 0;font-size:12px;line-height:1.5;color:var(--color-neutral-500)}
+.nv{display:flex;align-items:center;gap:22px;padding:10px 20px;background:var(--color-surface);box-shadow:inset 0 -1px 0 var(--color-divider);border-radius:8px 8px 0 0;font-size:13.5px}.nv a{color:var(--color-text);text-decoration:none;padding:6px 2px}.nv a:hover{color:var(--color-accent)}.nv .on{color:var(--color-accent);box-shadow:inset 0 -2px 0 var(--color-accent)}.ic{width:32px;height:32px;display:grid;place-items:center;border-radius:var(--radius-md);color:var(--color-neutral-200);position:relative}.ic:hover{background:color-mix(in srgb,var(--color-text) 7%,transparent)}.ic svg{width:18px;height:18px;fill:currentColor}.bd{position:absolute;top:3px;right:3px;font-size:9px;padding:0 4px;border-radius:7px;background:var(--color-accent-800);color:var(--color-accent-100);line-height:14px}.dd{position:absolute;z-index:3;background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg),0 0 0 1px var(--color-divider);display:flex;flex-direction:column;overflow:hidden}.dd a{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:13px;color:var(--color-text);text-decoration:none}.dd a:hover{background:color-mix(in srgb,var(--color-text) 7%,transparent)}.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)}.gl{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:4px;font-size:10px;font-weight:500}.k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--color-neutral-500)}
+</style>
+</helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Home page &amp; course page — layout options per change request</span></div>
+<p class="dv-gq">Each group below is one change request from your notes; options inside a group are alternatives, so pick one per group (or mix). The tracker options are live — click a day. Data is the Fall 26 seed; items tagged <span class="tag tag-outline" style="font-size:9px;padding:0 5px">sample</span> are illustrative.</p>
+
+<div class="dv-group" id="g-nav">
+<div class="dv-ghd"><span class="dv-gk">Change 1 · navigation</span><h2 class="dv-gt">Persistent top navbar, courses behind a hamburger</h2><p class="dv-gq">Requirement: bb2dash mark · Home · Planner · Grades · Materials · bell (announcements) · user icon on the right; courses pop down from a ☰ toggle and open the course page directly. The three options differ in where ☰ lives and how the pop-down is shaped.</p></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>☰ far left, flat course list</div>
+<div class="dv-card" style="width:1120px;height:330px">
+  <nav class="nv"><span class="ic" style="color:var(--color-accent)"><svg viewBox="0 0 256 256"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></span><a href="#1a" style="display:flex;align-items:center;gap:9px;font-family:var(--font-heading);font-weight:500;font-size:16px;margin-right:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--color-accent);box-shadow:0 0 10px var(--color-accent)"></span>bb2dash</a><a class="on" href="#1a">Home</a><a href="#1a">Planner</a><a href="#1a">Grades</a><a href="#1a">Materials</a><span style="margin-left:auto;display:flex;gap:4px;align-items:center"><span class="ic"><svg viewBox="0 0 256 256"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg><span class="bd">3</span></span><span class="ic"><svg viewBox="0 0 256 256"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg></span></span></nav>
+  <div class="dd" style="left:12px;top:54px;width:300px">
+    <div style="display:flex;align-items:center;padding:10px 12px 6px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-500)">Courses · Fall 26<span style="margin-left:auto;letter-spacing:0;text-transform:none">6</span></div>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">ECN 304</span><span style="flex:1">Econ of Social Issues</span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">GEO 103</span><span style="flex:1">Environment &amp; Society</span><span class="mono">1</span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">IST 323</span><span style="flex:1">Intro to Cybersecurity</span><span class="mono">3</span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">IST 352</span><span style="flex:1">Info Analysis of Org Sys</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent)"></span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">IST 466</span><span style="flex:1">IM&amp;T Capstone</span><span class="mono">1</span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">IST 471</span><span style="flex:1">Internship</span></a>
+    <div style="padding:6px 12px 10px;font-size:11px;color:var(--color-neutral-500);box-shadow:inset 0 1px 0 var(--color-divider)">Number = items due this week</div>
+  </div>
+  <div style="position:absolute;left:340px;top:78px;width:740px;height:220px;border-radius:var(--radius-md);border:1px dashed var(--color-neutral-700);display:grid;place-items:center;font-size:12px;color:var(--color-neutral-600)">page content</div>
+</div>
+<p class="dv-note"><b>Why:</b> ☰ where every app puts it — zero learning. Flat list is fastest to scan for 6 courses. <b>Trade-off:</b> ☰ next to the logo reads as "menu for the whole site", not "courses"; the panel leaves room for nothing but the name.</p></div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>"☰ Courses" in the nav row, grid pop-down with next due</div>
+<div class="dv-card" style="width:1120px;height:330px">
+  <nav class="nv"><a href="#1b" style="display:flex;align-items:center;gap:9px;font-family:var(--font-heading);font-weight:500;font-size:16px;margin-right:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--color-accent);box-shadow:0 0 10px var(--color-accent)"></span>bb2dash</a><a class="on" href="#1b">Home</a><a href="#1b">Planner</a><a href="#1b">Grades</a><a href="#1b">Materials</a><a href="#1b" style="display:flex;align-items:center;gap:6px;color:var(--color-accent);background:var(--color-accent-900);padding:6px 10px;border-radius:var(--radius-md)"><svg viewBox="0 0 256 256" style="width:16px;height:16px;fill:currentColor"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg>Courses</a><span style="margin-left:auto;display:flex;gap:4px;align-items:center"><span class="ic"><svg viewBox="0 0 256 256"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg><span class="bd">3</span></span><span class="ic"><svg viewBox="0 0 256 256"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg></span></span></nav>
+  <div class="dd" style="left:330px;top:54px;width:600px;padding:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+    <a href="02-course.dc.html" style="flex-direction:column;align-items:flex-start;gap:3px;border-radius:var(--radius-md)"><span class="mono" style="color:var(--color-accent)">ECN 304</span><span>Econ of Social Issues</span><span class="k">next · Exam 1 · Oct 1</span></a>
+    <a href="02-course.dc.html" style="flex-direction:column;align-items:flex-start;gap:3px;border-radius:var(--radius-md)"><span class="mono" style="color:var(--color-accent)">GEO 103</span><span>Environment &amp; Society</span><span class="k">next · Carbon footprint · Fri 9/11</span></a>
+    <a href="02-course.dc.html" style="flex-direction:column;align-items:flex-start;gap:3px;border-radius:var(--radius-md)"><span class="mono" style="color:var(--color-accent)">IST 323</span><span>Intro to Cybersecurity</span><span class="k">next · 2 quiz · 1 form · Wed 9/9</span></a>
+    <a href="02-course.dc.html" style="flex-direction:column;align-items:flex-start;gap:3px;border-radius:var(--radius-md)"><span class="mono" style="color:var(--color-accent)">IST 352</span><span>Info Analysis of Org Sys</span><span class="k">next · Knowledge check · Wed 9/9</span></a>
+    <a href="02-course.dc.html" style="flex-direction:column;align-items:flex-start;gap:3px;border-radius:var(--radius-md)"><span class="mono" style="color:var(--color-accent)">IST 466</span><span>IM&amp;T Capstone</span><span class="k">next · Ethics practice · Thu 9/10</span></a>
+    <a href="02-course.dc.html" style="flex-direction:column;align-items:flex-start;gap:3px;border-radius:var(--radius-md)"><span class="mono" style="color:var(--color-accent)">IST 471</span><span>Internship</span><span class="k">next · A1 + A2 · Fri 9/11</span></a>
+  </div>
+  <div style="position:absolute;left:20px;top:78px;width:290px;height:220px;border-radius:var(--radius-md);border:1px dashed var(--color-neutral-700);display:grid;place-items:center;font-size:12px;color:var(--color-neutral-600)">page content</div>
+</div>
+<p class="dv-note"><b>Why:</b> labelled ☰ says what it opens; Courses sits in reading order after the four sections. Grid cells carry next-due, so the menu doubles as a mini-dashboard. <b>Trade-off:</b> widest pop-down; 6 cells is the ceiling before it gets noisy.</p></div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>☰ right cluster, list + persistent course sub-bar when inside a course</div>
+<div class="dv-card" style="width:1120px;height:330px">
+  <nav class="nv"><a href="#1c" style="display:flex;align-items:center;gap:9px;font-family:var(--font-heading);font-weight:500;font-size:16px;margin-right:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--color-accent);box-shadow:0 0 10px var(--color-accent)"></span>bb2dash</a><a href="#1c">Home</a><a href="#1c">Planner</a><a href="#1c">Grades</a><a href="#1c">Materials</a><span style="margin-left:auto;display:flex;gap:4px;align-items:center"><span class="ic" style="color:var(--color-accent);background:var(--color-accent-900)"><svg viewBox="0 0 256 256"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></span><span class="ic"><svg viewBox="0 0 256 256"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg><span class="bd">3</span></span><span class="ic"><svg viewBox="0 0 256 256"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg></span></span></nav>
+  <div style="display:flex;align-items:center;gap:4px;padding:0 20px;background:var(--color-surface);box-shadow:inset 0 -1px 0 var(--color-divider);font-size:13px"><span class="mono" style="color:var(--color-accent);margin-right:8px">IST 323</span><span style="padding:8px 10px;color:var(--color-accent);box-shadow:inset 0 -2px 0 var(--color-accent)">Stream</span><span style="padding:8px 10px">Grades</span><span style="padding:8px 10px">Materials</span><span style="padding:8px 10px">Info</span><span style="font-size:11px;color:var(--color-neutral-500);margin-left:12px">← course sub-bar · only inside a course</span></div>
+  <div class="dd" style="right:96px;top:54px;width:300px">
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">ECN 304</span><span style="flex:1">Econ of Social Issues</span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">GEO 103</span><span style="flex:1">Environment &amp; Society</span></a>
+    <a href="02-course.dc.html" style="background:var(--color-accent-900);color:var(--color-accent)"><span class="mono" style="width:54px">IST 323</span><span style="flex:1">Intro to Cybersecurity</span><span class="k" style="color:var(--color-accent)">open</span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">IST 352</span><span style="flex:1">Info Analysis of Org Sys</span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">IST 466</span><span style="flex:1">IM&amp;T Capstone</span></a>
+    <a href="02-course.dc.html"><span class="mono" style="width:54px">IST 471</span><span style="flex:1">Internship</span></a>
+  </div>
+  <div style="position:absolute;left:20px;top:112px;width:680px;height:190px;border-radius:var(--radius-md);border:1px dashed var(--color-neutral-700);display:grid;place-items:center;font-size:12px;color:var(--color-neutral-600)">course page content</div>
+</div>
+<p class="dv-note"><b>Why:</b> all icon-actions (courses, bell, user) cluster right; the left stays a clean section nav. Inside a course, a second bar keeps Stream / Grades / Materials / Info one click away and shows which course you're in. <b>Trade-off:</b> ☰ on the right is unconventional; the sub-bar costs 36px of height on course pages.</p></div>
+
+</div></div>
+<div class="dv-group" id="g-track">
+<div class="dv-ghd"><span class="dv-gk">Change 2 · due in the next 14 days</span><h2 class="dv-gt">Horizontal, chronological tracker with quantity + effort, details for the selected day beneath</h2><p class="dv-gq">Effort score per item (proposed, logged as T-15 in the plan): reading 1 · form 1 · discussion 1.5 · homework 2 · quiz 3 · presentation 4 · project / paper 6 · exam 8. Glyphs: <span class="gl" style="background:var(--color-neutral-800);color:var(--color-neutral-200)">R</span> reading <span class="gl" style="background:var(--color-accent-900);color:var(--color-accent-200)">A</span> assignment <span class="gl" style="background:var(--color-accent-800);color:var(--color-accent-100)">Q</span> quiz <span class="gl" style="background:var(--color-accent-700);color:var(--color-accent-100)">P</span> project <span class="gl" style="background:var(--color-accent-500);color:var(--color-bg)">E</span> exam. All three options share one selected day — click any column.</p></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Stacked effort bars · one column per day</div>
+<div class="dv-card" style="width:1120px;padding:16px 20px 18px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:10px"><h2 style="font-size:17px;margin:0">Due in the next 14 days</h2><span class="text-muted" style="font-size:12px">{{ totalN }} items · {{ totalEff }} effort pts</span><span style="margin-left:auto;font-size:11px;color:var(--color-neutral-500)">bar height = effort · segments = items</span><a href="07-planner.dc.html" style="font-size:12px;text-decoration:none">Open planner →</a></div>
+  <div style="display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:4px;align-items:end">
+    <sc-for list="{{ days }}" as="d" hint-placeholder-count="14">
+      <button onClick="{{ d.pick }}" style="all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px 6px;border-radius:var(--radius-md);background:{{ d.colBg }};box-shadow:{{ d.ring }}" style-hover="background:color-mix(in srgb,var(--color-text) 6%,transparent)">
+        <span style="font-size:11px;color:var(--color-neutral-300);height:14px">{{ d.countLabel }}</span>
+        <span style="display:flex;flex-direction:column-reverse;gap:1px;height:112px;width:100%;justify-content:flex-start"><sc-for list="{{ d.segs }}" as="s" hint-placeholder-count="0"><span style="display:block;width:100%;border-radius:2px;height:{{ s.h }}px;background:{{ s.bg }}"></span></sc-for></span>
+        <span style="font-size:11px;color:{{ d.dayColor }}">{{ d.dowLabel }}</span><span class="mono" style="font-size:10px">{{ d.dn }}</span>
+      </button>
+    </sc-for>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-neutral-500);padding:0 4px"><span>Week 2 · Sep 3–9 · {{ wk1N }} items · {{ wk1Eff }} pts</span><span>Week 3–4 · Sep 10–16 · {{ wk2N }} items · {{ wk2Eff }} pts</span></div>
+  <div class="card" style="gap:0;padding:6px 14px 4px">
+    <div style="display:flex;align-items:baseline;gap:10px;padding:6px 0 8px"><span style="font-size:14px">{{ selLabel }}</span><span class="text-muted" style="font-size:12px">{{ selCount }} due · {{ selEffort }} effort pts</span><span style="margin-left:auto;font-size:11px;color:var(--color-neutral-500)">click a title to open</span></div>
+    <sc-for list="{{ selItems }}" as="it" hint-placeholder-count="3">
+      <a href="04-assignment.dc.html" style="display:grid;grid-template-columns:22px 62px 1fr 110px 50px 96px;gap:12px;align-items:center;padding:8px 0;text-decoration:none;color:inherit;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span class="gl" style="background:{{ it.bg }};color:{{ it.fg }}">{{ it.g }}</span><span class="mono">{{ it.course }}</span><span style="display:flex;gap:8px;align-items:center;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.title }}</span><span style="font-size:9px;color:var(--color-accent);border:1px solid var(--color-accent-700);border-radius:4px;padding:0 4px">{{ it.sampleTag }}</span></span><span style="font-size:12px;color:var(--color-neutral-400)">{{ it.time }}</span><span class="mono">{{ it.effLabel }}</span><span class="tag tag-neutral" style="font-size:10px;justify-content:center">{{ it.status }}</span></a>
+    </sc-for>
+  </div>
+</div>
+<p class="dv-note"><b>Why:</b> the classic "how heavy is each day" read — tall bar = hard day, many segments = many items, both visible at a glance without reading numbers. <b>Trade-off:</b> type is only encoded by tint; exact due-times live in the detail list.</p></div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Timeline rail · node size = effort, glyph chips per day, "start by" column</div>
+<div class="dv-card" style="width:1120px;padding:16px 20px 18px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:10px"><h2 style="font-size:17px;margin:0">Next 14 days</h2><span class="text-muted" style="font-size:12px">{{ totalN }} items · {{ totalEff }} pts</span><span style="margin-left:auto;font-size:11px;color:var(--color-neutral-500)">Thu Sep 3 → Wed Sep 16</span></div>
+  <div style="position:relative;padding-top:6px">
+    <div style="position:absolute;left:3%;right:3%;top:38px;height:1px;background:linear-gradient(to right,transparent,var(--color-neutral-700) 40px,var(--color-neutral-700) calc(100% - 40px),transparent)"></div>
+    <div style="display:grid;grid-template-columns:repeat(14,minmax(0,1fr))">
+      <sc-for list="{{ days }}" as="d" hint-placeholder-count="14">
+        <button onClick="{{ d.pick }}" style="all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 2px 8px;border-radius:var(--radius-md);background:{{ d.colBg }}" style-hover="background:color-mix(in srgb,var(--color-text) 6%,transparent)">
+          <span style="height:56px;display:grid;place-items:center"><span style="display:grid;place-items:center;border-radius:50%;width:{{ d.node }}px;height:{{ d.node }}px;background:{{ d.nodeBg }};color:{{ d.nodeFg }};font-size:11px;box-shadow:0 0 0 3px var(--color-bg)">{{ d.countLabel }}</span></span>
+          <span style="font-size:11px;color:{{ d.dayColor }}">{{ d.dowLabel }} <span class="mono" style="font-size:10px">{{ d.dn }}</span></span>
+          <span style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;min-height:18px;max-width:64px"><sc-for list="{{ d.chips }}" as="c" hint-placeholder-count="0"><span class="gl" style="width:15px;height:15px;font-size:9px;background:{{ c.bg }};color:{{ c.fg }}">{{ c.g }}</span></sc-for></span>
+          <span class="mono" style="font-size:10px;color:var(--color-neutral-500)">{{ d.effLabel }}</span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
+    <div class="card" style="gap:0;padding:6px 14px 4px">
+      <div style="display:flex;align-items:baseline;gap:10px;padding:6px 0 8px"><span style="font-size:14px">Due {{ selLabel }}</span><span class="text-muted" style="font-size:12px">{{ selCount }} items · {{ selEffort }} pts</span></div>
+      <sc-for list="{{ selItems }}" as="it" hint-placeholder-count="3">
+        <a href="04-assignment.dc.html" style="display:grid;grid-template-columns:22px 1fr 84px;gap:10px;align-items:center;padding:8px 0;text-decoration:none;color:inherit;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span class="gl" style="background:{{ it.bg }};color:{{ it.fg }}">{{ it.g }}</span><span style="min-width:0;display:flex;flex-direction:column;gap:1px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.title }}</span><span style="font-size:11px;color:var(--color-neutral-500)">{{ it.course }} · {{ it.time }}</span></span><span class="tag tag-neutral" style="font-size:10px;justify-content:center">{{ it.status }}</span></a>
+      </sc-for>
+    </div>
+    <div class="card" style="gap:0;padding:6px 14px 4px">
+      <div style="display:flex;align-items:baseline;gap:10px;padding:6px 0 8px"><span style="font-size:14px">Start by</span><span class="text-muted" style="font-size:12px">lead time = ⌈effort ÷ 2⌉ − 1 days</span></div>
+      <sc-for list="{{ selItems }}" as="it" hint-placeholder-count="3">
+        <div style="display:grid;grid-template-columns:1fr 70px 50px;gap:10px;align-items:center;padding:8px 0;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-neutral-300)">{{ it.title }}</span><span class="mono" style="color:var(--color-accent-300)">{{ it.startBy }}</span><span class="mono">{{ it.effLabel }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+<p class="dv-note"><b>Why:</b> reads as a planner timeline, not a chart; the glyph chips show type per day directly, and the "start by" pane turns effort into an action (when to begin), which is the tracker's real job. <b>Trade-off:</b> node sizes are harder to compare precisely than bar heights; two panes beneath take more height.</p></div>
+
+<div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Two-week ribbon · 7 columns, effort meter per cell, by-course split</div>
+<div class="dv-card" style="width:1120px;padding:16px 20px 18px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:10px"><h2 style="font-size:17px;margin:0">Two weeks out</h2><span class="text-muted" style="font-size:12px">{{ totalN }} items · {{ totalEff }} pts</span><span style="margin-left:auto;font-size:11px;color:var(--color-neutral-500)">meter fills at 20 pts / day</span></div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px">
+      <sc-for list="{{ wk1 }}" as="d" hint-placeholder-count="7">
+        <button onClick="{{ d.pick }}" class="card" style="all:unset;cursor:pointer;display:flex;flex-direction:column;gap:6px;padding:8px 10px;min-height:76px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:{{ d.ring }}" style-hover="box-shadow:var(--shadow-sm)">
+          <span style="display:flex;justify-content:space-between;font-size:11px"><span style="color:{{ d.dayColor }}">{{ d.dowLabel }} <span class="mono" style="font-size:10px">{{ d.dn }}</span></span><span class="mono" style="font-size:10px">{{ d.effLabel }}</span></span>
+          <span style="display:flex;flex-wrap:wrap;gap:3px;flex:1"><sc-for list="{{ d.chips }}" as="c" hint-placeholder-count="0"><span class="gl" style="background:{{ c.bg }};color:{{ c.fg }}">{{ c.g }}</span></sc-for></span>
+          <span style="height:3px;border-radius:2px;background:var(--color-neutral-800);overflow:hidden;display:block"><span style="display:block;height:100%;background:var(--color-accent);width:{{ d.meterW }}%"></span></span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px">
+      <sc-for list="{{ wk2 }}" as="d" hint-placeholder-count="7">
+        <button onClick="{{ d.pick }}" class="card" style="all:unset;cursor:pointer;display:flex;flex-direction:column;gap:6px;padding:8px 10px;min-height:76px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:{{ d.ring }}" style-hover="box-shadow:var(--shadow-sm)">
+          <span style="display:flex;justify-content:space-between;font-size:11px"><span style="color:{{ d.dayColor }}">{{ d.dowLabel }} <span class="mono" style="font-size:10px">{{ d.dn }}</span></span><span class="mono" style="font-size:10px">{{ d.effLabel }}</span></span>
+          <span style="display:flex;flex-wrap:wrap;gap:3px;flex:1"><sc-for list="{{ d.chips }}" as="c" hint-placeholder-count="0"><span class="gl" style="background:{{ c.bg }};color:{{ c.fg }}">{{ c.g }}</span></sc-for></span>
+          <span style="height:3px;border-radius:2px;background:var(--color-neutral-800);overflow:hidden;display:block"><span style="display:block;height:100%;background:var(--color-accent);width:{{ d.meterW }}%"></span></span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:12px;align-items:start">
+    <div class="card" style="gap:0;padding:6px 14px 4px">
+      <div style="display:flex;align-items:baseline;gap:10px;padding:6px 0 8px"><span style="font-size:14px">{{ selLabel }}</span><span class="text-muted" style="font-size:12px">{{ selCount }} due · {{ selEffort }} pts</span></div>
+      <sc-for list="{{ selItems }}" as="it" hint-placeholder-count="3">
+        <a href="04-assignment.dc.html" style="display:grid;grid-template-columns:22px 62px 1fr 96px 96px;gap:12px;align-items:center;padding:8px 0;text-decoration:none;color:inherit;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span class="gl" style="background:{{ it.bg }};color:{{ it.fg }}">{{ it.g }}</span><span class="mono">{{ it.course }}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.title }}</span><span style="font-size:12px;color:var(--color-neutral-400)">{{ it.time }}</span><span class="tag tag-neutral" style="font-size:10px;justify-content:center">{{ it.status }}</span></a>
+      </sc-for>
+    </div>
+    <div class="card" style="gap:0;padding:6px 14px 4px">
+      <div style="display:flex;align-items:baseline;gap:10px;padding:6px 0 8px"><span style="font-size:14px">Effort by course</span></div>
+      <sc-for list="{{ byCourse }}" as="c" hint-placeholder-count="2">
+        <div style="display:grid;grid-template-columns:62px 1fr 60px;gap:10px;align-items:center;padding:8px 0;font-size:12px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span class="mono">{{ c.course }}</span><span style="height:5px;border-radius:3px;background:var(--color-neutral-800);overflow:hidden;display:block"><span style="display:block;height:100%;background:var(--color-accent-600);width:{{ c.w }}%"></span></span><span class="mono">{{ c.n }} · {{ c.eff }} pt</span></div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+<p class="dv-note"><b>Why:</b> week-aligned like a calendar, so Monday-heavy weeks are obvious; each cell lists its item types outright and the meter gives effort without needing to compare heights. Scales cleanly to a 4-week planner view. <b>Trade-off:</b> least "chronological strip" feel of the three; two rows use more height than one.</p></div>
+
+</div></div>
+<div class="dv-group" id="g-cards">
+<div class="dv-ghd"><span class="dv-gk">Change 3 · class elements</span><h2 class="dv-gt">Course cards: fixed overlaps, "DD: X:XX–X:XX + room", next-due as typed counts, Grade, Open = due this week</h2><p class="dv-gq">The overlap came from the "Today 3:45" tag sharing a line with a long schedule string. All options drop the next-meeting tag entirely (that belongs to the daily schedule) and give each stat a fixed slot.</p></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="3a"><div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a>3-up cards · fixed stat row with glyph counts</div>
+<div class="dv-card" style="width:1120px;padding:16px 20px 18px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+  <sc-for list="{{ courses }}" as="c" hint-placeholder-count="6">
+    <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;gap:10px;padding:14px" style-hover="box-shadow:var(--shadow-md)">
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span class="mono" style="color:var(--color-accent)">{{ c.code }}</span><span class="card-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.title }}</span><span style="font-size:11.5px;color:var(--color-neutral-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.meet }} · {{ c.room }}</span></div>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr .6fr;gap:10px;font-size:12.5px;padding-top:8px;background:linear-gradient(to right,transparent,var(--color-divider) 24px,var(--color-divider) calc(100% - 24px),transparent) no-repeat top / 100% 1px">
+        <div style="display:flex;flex-direction:column;gap:4px"><span class="k">Next due · {{ c.nextDate }}</span><span style="display:flex;gap:4px"><sc-for list="{{ c.chips }}" as="ch" hint-placeholder-count="1"><span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px 1px 3px;border-radius:4px;background:{{ ch.bg }};color:{{ ch.fg }};font-size:11px"><span class="gl" style="width:14px;height:14px;font-size:9px;background:color-mix(in srgb,var(--color-bg) 30%,transparent)">{{ ch.g }}</span>{{ ch.n }}</span></sc-for></span></div>
+        <div style="display:flex;flex-direction:column;gap:4px"><span class="k">Grade</span><span>{{ c.grade }}</span></div>
+        <div style="display:flex;flex-direction:column;gap:4px"><span class="k">Open</span><span>{{ c.open }}</span></div>
+      </div>
+    </a>
+  </sc-for>
+</div>
+<p class="dv-note"><b>Why:</b> keeps the pop-out card feel you asked for; every card has the same three slots so eyes can scan down a column. Glyph chips (2 Q · 1 A) answer "what kind" without words. <b>Trade-off:</b> long GEO schedule still truncates; six cards is two rows of height.</p></div>
+
+<div class="dv-opt" id="3b"><div class="dv-olabel"><a class="dv-oid" href="#3b">3b</a>Course strip · one row per course, typed counts as words</div>
+<div class="dv-card" style="width:1120px;padding:16px 20px 18px;display:flex;flex-direction:column;gap:8px">
+  <div style="display:grid;grid-template-columns:70px 1.5fr 1.6fr 1.3fr 1fr 60px;gap:14px;padding:0 12px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-500)"><span>Course</span><span></span><span>Meets</span><span>Next due</span><span>Grade</span><span>Open</span></div>
+  <div class="card" style="gap:0;padding:0 12px">
+    <sc-for list="{{ courses }}" as="c" hint-placeholder-count="6">
+      <a href="02-course.dc.html" style="display:grid;grid-template-columns:70px 1.5fr 1.6fr 1.3fr 1fr 60px;gap:14px;align-items:center;padding:11px 0;text-decoration:none;color:inherit;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px" style-hover="color:var(--color-accent)"><span class="mono" style="color:var(--color-accent)">{{ c.code }}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.title }}</span><span style="font-size:12px;color:var(--color-neutral-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.meet }} · {{ c.room }}</span><span style="display:flex;flex-direction:column;gap:1px"><span style="font-size:12.5px">{{ c.nextText }}</span><span style="font-size:11px;color:var(--color-neutral-500)">{{ c.nextDate }}</span></span><span style="font-size:12.5px">{{ c.grade }}</span><span class="mono" style="font-size:13px;color:var(--color-text)">{{ c.open }}</span></a>
+    </sc-for>
+  </div>
+</div>
+<p class="dv-note"><b>Why:</b> six courses fit in ~300px, leaving the tracker most of the screen; columns make Grade and Open directly comparable across courses, which cards never do. <b>Trade-off:</b> loses the "pop-out per class" identity; less room to grow (hours, unread) without adding columns.</p></div>
+
+<div class="dv-opt" id="3c"><div class="dv-olabel"><a class="dv-oid" href="#3c">3c</a>2-up wide cards · M–F mini-strip (meeting days + due dots)</div>
+<div class="dv-card" style="width:1120px;padding:16px 20px 18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+  <sc-for list="{{ courses }}" as="c" hint-placeholder-count="6">
+    <a href="02-course.dc.html" class="card elev-sm" style="text-decoration:none;color:inherit;flex-direction:row;gap:16px;padding:14px;align-items:stretch" style-hover="box-shadow:var(--shadow-md)">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:baseline;gap:8px;min-width:0"><span class="mono" style="color:var(--color-accent)">{{ c.code }}</span><span class="card-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.title }}</span></div>
+        <span style="font-size:11.5px;color:var(--color-neutral-400)">{{ c.meet }} · {{ c.room }}</span>
+        <div style="display:flex;gap:18px;font-size:12.5px;margin-top:auto;white-space:nowrap">
+          <div style="display:flex;flex-direction:column;gap:3px"><span class="k">Next due · {{ c.nextDate }}</span><span>{{ c.nextText }}</span></div>
+          <div style="display:flex;flex-direction:column;gap:3px"><span class="k">Grade</span><span>{{ c.grade }}</span></div>
+          <div style="display:flex;flex-direction:column;gap:3px"><span class="k">Open</span><span>{{ c.open }}</span></div>
+        </div>
+      </div>
+      <div style="flex:none;display:flex;flex-direction:column;gap:4px;justify-content:center"><span class="k" style="text-align:center">this week</span><span style="display:flex;gap:3px"><sc-for list="{{ c.meetDots }}" as="m" hint-placeholder-count="5"><span style="display:flex;flex-direction:column;align-items:center;gap:3px"><span style="width:16px;height:22px;border-radius:3px;background:{{ m.bg }}"></span><span style="width:5px;height:5px;border-radius:50%;background:{{ m.dot }}"></span><span class="mono" style="font-size:9px">{{ m.l }}</span></span></sc-for></span></div>
+    </a>
+  </sc-for>
+</div>
+<p class="dv-note"><b>Why:</b> the M–F strip shows meeting days and due-dots per course in one glance, which replaces the dropped "Today's meetings" section at card level. Wider cards give titles and schedules room. <b>Trade-off:</b> three rows tall; the strip duplicates what the tracker above already tells you.</p></div>
+
+</div></div>
+<div class="dv-group" id="g-ann">
+<div class="dv-ghd"><span class="dv-gk">Change 4 · announcements</span><h2 class="dv-gt">Bell → notifications popout → "See all" opens the full screen</h2><p class="dv-gq">Both options list unread first, show course + author + time, mark read on click, and end in a See all link that opens <a href="09-announcements.dc.html">09 · Announcements</a>.</p></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="4a"><div class="dv-olabel"><a class="dv-oid" href="#4a">4a</a>Anchored dropdown under the bell</div>
+<div class="dv-card" style="width:520px;height:470px">
+  <nav class="nv" style="justify-content:flex-end;gap:4px"><span class="ic" style="color:var(--color-accent);background:var(--color-accent-900)"><svg viewBox="0 0 256 256"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg><span class="bd">3</span></span><span class="ic"><svg viewBox="0 0 256 256"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg></span></nav>
+  <div class="dd" style="right:56px;top:54px;width:380px">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px 8px;font-size:13px">Announcements<span class="mono">3 unread</span><a href="09-announcements.dc.html" style="margin-left:auto;font-size:11.5px;padding:0">Mark all read</a></div>
+    <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px;background:var(--color-accent-900)"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">IST 466</span><span>Corsello</span><span style="margin-left:auto">Tue 9/1</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span></span><span>Welcome — meeting room Hinds 243, office 206 Hinds</span></a>
+    <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">IST 352</span><span>Larche</span><span style="margin-left:auto">Tue 9/1</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span></span><span>Project teams posted — check Option A/B before Wednesday</span></a>
+    <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">GEO 103</span><span>Wilson</span><span style="margin-left:auto">Mon 8/31</span><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span></span><span>Qwickly attendance starts this week — bring your phone</span></a>
+    <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px;opacity:.6"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">IST 323</span><span>Croad</span><span style="margin-left:auto">Mon 8/31</span></span><span>Final Project packets assigned — you have Packet A, Meridian Pharmacy</span></a>
+    <a href="09-announcements.dc.html" style="flex-direction:column;align-items:stretch;gap:2px;opacity:.6"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span class="mono">ECN 304</span><span>Lui</span><span style="margin-left:auto">Thu 8/27</span></span><span>Reading quizzes are unannounced; lowest dropped</span></a>
+    <a href="09-announcements.dc.html" style="justify-content:center;font-size:12.5px;color:var(--color-accent);box-shadow:inset 0 1px 0 var(--color-divider)">See all 8 →</a>
+  </div>
+</div>
+<p class="dv-note"><b>Why:</b> standard notification pattern — light, dismisses on outside click, never leaves the page. <b>Trade-off:</b> 5-item ceiling; long announcement bodies need the full screen.</p></div>
+
+<div class="dv-opt" id="4b"><div class="dv-olabel"><a class="dv-oid" href="#4b">4b</a>Right-side drawer with course filter chips</div>
+<div class="dv-card" style="width:520px;height:400px;overflow:hidden">
+  <nav class="nv" style="justify-content:flex-end;gap:4px"><span class="ic" style="color:var(--color-accent);background:var(--color-accent-900)"><svg viewBox="0 0 256 256"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg><span class="bd">3</span></span><span class="ic"><svg viewBox="0 0 256 256"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg></span></nav>
+  <div style="position:absolute;inset:53px 0 0 0;background:color-mix(in srgb,var(--color-neutral-900) 45%,transparent)"></div>
+  <div style="position:absolute;top:53px;right:0;bottom:0;width:400px;background:var(--color-surface);box-shadow:var(--shadow-lg);display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px 8px"><span style="font-size:15px">Announcements</span><span class="mono">3 unread</span><a href="09-announcements.dc.html" style="margin-left:auto;font-size:12px;text-decoration:none">See all →</a></div>
+    <div style="display:flex;gap:6px;padding:0 16px 10px;flex-wrap:wrap"><span class="tag tag-accent" style="font-size:10px">All</span><span class="tag tag-neutral" style="font-size:10px">Unread</span><span class="tag tag-neutral" style="font-size:10px">IST 323</span><span class="tag tag-neutral" style="font-size:10px">IST 352</span><span class="tag tag-neutral" style="font-size:10px">IST 466</span><span class="tag tag-neutral" style="font-size:10px">GEO 103</span><span class="tag tag-neutral" style="font-size:10px">ECN 304</span></div>
+    <div style="display:flex;flex-direction:column;overflow:auto">
+      <a href="09-announcements.dc.html" style="display:flex;flex-direction:column;gap:3px;padding:10px 16px;text-decoration:none;color:inherit;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span><span class="mono">IST 466</span><span>Corsello</span><span style="margin-left:auto">Tue 9/1 · 4:12p</span></span><span>Welcome — meeting room Hinds 243, office 206 Hinds</span><span style="font-size:11.5px;color:var(--color-neutral-500)">Office hours TTh 12–1:30 or by appointment. Slides posted after each class…</span></a>
+      <a href="09-announcements.dc.html" style="display:flex;flex-direction:column;gap:3px;padding:10px 16px;text-decoration:none;color:inherit;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span><span class="mono">IST 352</span><span>Larche</span><span style="margin-left:auto">Tue 9/1 · 9:03a</span></span><span>Project teams posted — check Option A/B before Wednesday</span><span style="font-size:11.5px;color:var(--color-neutral-500)">Teams are in the Project Teams &amp; Option folder. Confirm with your team…</span></a>
+      <a href="09-announcements.dc.html" style="display:flex;flex-direction:column;gap:3px;padding:10px 16px;text-decoration:none;color:inherit;font-size:13px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-400)"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);align-self:center"></span><span class="mono">GEO 103</span><span>Wilson</span><span style="margin-left:auto">Mon 8/31</span></span><span>Qwickly attendance starts this week — bring your phone</span></a>
+    </div>
+  </div>
+</div>
+<p class="dv-note"><b>Why:</b> room for a preview line and course filters, so most announcements are fully read without opening the screen; the drawer can later host notifications of other kinds (sync conflicts, grade posted). <b>Trade-off:</b> heavier interaction — dims the page; overkill for 8 announcements per semester unless notifications grow.</p></div>
+
+</div></div>
+
+<div class="dv-group" id="g-attn">
+<div class="dv-ghd"><span class="dv-gk">Change 5 · needs attention</span><h2 class="dv-gt">Collapsed by default</h2></div>
+<div class="dv-opts">
+<div class="dv-opt" id="5a"><div class="dv-olabel"><a class="dv-oid" href="#5a">5a</a>Collapsed summary row with typed counts</div>
+<div class="dv-card" style="width:1120px;padding:16px 20px">
+  <div class="card" style="flex-direction:row;align-items:center;gap:12px;padding:10px 14px;cursor:pointer" style-hover="box-shadow:var(--shadow-sm)"><span style="font-size:14px">Needs attention</span><span class="tag tag-accent" style="font-size:10px">1 overdue</span><span class="tag tag-outline" style="font-size:10px">1 conflict</span><span class="tag tag-neutral" style="font-size:10px">2 missing</span><span class="tag tag-neutral" style="font-size:10px">1 deadline</span><span style="margin-left:auto;font-size:11.5px;color:var(--color-neutral-500)">last sync today 09:14</span><span style="font-size:12px;color:var(--color-neutral-400)">▾</span></div>
+</div>
+<p class="dv-note"><b>Why:</b> the counts still say whether anything is wrong; the click expands the existing list in place. Sits between the tracker and course cards, or at the bottom.</p></div>
+<div class="dv-opt" id="5b"><div class="dv-olabel"><a class="dv-oid" href="#5b">5b</a>Folded into a slim status bar at the page foot</div>
+<div class="dv-card" style="width:1120px;padding:16px 20px">
+  <div style="display:flex;align-items:center;gap:16px;padding:8px 4px 0;font-size:12px;color:var(--color-neutral-400);background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);box-shadow:0 0 6px var(--color-accent)"></span>Synced today 09:14</span><a href="10-sync.dc.html" style="text-decoration:none">5 items need attention →</a><span style="margin-left:auto" class="mono">Week 2 of 16</span></div>
+</div>
+<p class="dv-note"><b>Why:</b> zero vertical cost on the main canvas; issues route to the Sync &amp; data health screen. <b>Trade-off:</b> an overdue item is easy to miss down there.</p></div>
+</div></div>
+
+<div class="dv-group" id="g-course">
+<div class="dv-ghd"><span class="dv-gk">Change 6 · course page</span><h2 class="dv-gt">Week filter: "Weeks 1–16" vs "Current" (anchored to this week, earlier weeks reachable by scrolling up)</h2></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="6a"><div class="dv-olabel"><a class="dv-oid" href="#6a">6a</a>Segmented control + week jump; earlier weeks load above on scroll-up</div>
+<div class="dv-card" style="width:720px;padding:16px 20px 18px;display:flex;flex-direction:column;gap:12px">
+  <div style="display:flex;align-items:center;gap:12px"><div class="seg"><label class="seg-opt"><input type="radio" name="wk6a"><span>Weeks 1–16</span></label><label class="seg-opt"><input type="radio" name="wk6a" checked><span>Current</span></label></div><div class="seg"><label class="seg-opt"><input type="radio" name="ln6a" checked><span>Both</span></label><label class="seg-opt"><input type="radio" name="ln6a"><span>Lectures</span></label><label class="seg-opt"><input type="radio" name="ln6a"><span>Assignments</span></label></div><span style="margin-left:auto;font-size:12px;color:var(--color-neutral-400);display:flex;align-items:center;gap:6px">Jump to <span class="btn btn-ghost" style="font-size:12px;padding:4px 10px">Week 2 ▾</span></span></div>
+  <div style="display:flex;justify-content:center;padding:6px;font-size:11.5px;color:var(--color-neutral-500);border-radius:var(--radius-md);border:1px dashed var(--color-neutral-700)">↑ scroll up for Week 1 · Aug 24 – 28</div>
+  <div style="display:grid;grid-template-columns:72px 1fr 1fr;gap:12px;padding:12px 0;position:sticky;top:0;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat bottom / 100% 1px">
+    <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:var(--color-accent)">Week 2</span><span style="font-size:11px;color:var(--color-neutral-500)">Aug 31 – Sep 4</span><span class="tag tag-accent" style="font-size:9px;padding:1px 6px;width:fit-content;margin-top:4px">this week</span></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Mon 8/31</span><span style="font-size:13px">Planning &amp; policy · packets assigned</span></div><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Wed 9/2</span><span style="font-size:13px">Risk management</span></div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Wed 9/2 · 3:45p</span><span style="font-size:13px">Knowledge check (in class)</span></div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:72px 1fr 1fr;gap:12px;padding:12px 0">
+    <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:var(--color-neutral-300)">Week 3</span><span style="font-size:11px;color:var(--color-neutral-500)">Sep 7 – 11</span></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Wed 9/9 · lab</span><span style="font-size:13px">Cryptography 1 · Lab #1</span></div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Wed 9/9 · 3:45p</span><span style="font-size:13px">Quiz #1 · Quiz #2 · Presentation choice</span></div></div>
+  </div>
+  <div style="text-align:center;font-size:11px;color:var(--color-neutral-600)">weeks 4 – 16 continue ↓</div>
+</div>
+<p class="dv-note"><b>Why:</b> one control, obvious default (Current), and the "scroll up for earlier" affordance makes the anchor discoverable instead of surprising. Jump-to handles "go to week 11" without scrolling. <b>Trade-off:</b> scroll-anchoring on load needs care so the page doesn't jump when earlier weeks render.</p></div>
+
+<div class="dv-opt" id="6b"><div class="dv-olabel"><a class="dv-oid" href="#6b">6b</a>Sticky week rail (1–16) as filter + scrubber</div>
+<div class="dv-card" style="width:720px;padding:16px 20px 18px;display:grid;grid-template-columns:44px 1fr;gap:14px">
+  <div style="display:flex;flex-direction:column;gap:2px;align-items:center;position:sticky;top:0;font-size:10.5px">
+    <span class="k" style="margin-bottom:4px">wk</span>
+    <span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--color-neutral-600)">1</span>
+    <span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px;background:var(--color-accent);color:var(--color-bg)">2</span>
+    <span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--color-accent-300);box-shadow:inset 0 0 0 1px var(--color-accent-800)">3</span>
+    <span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--color-accent-300);box-shadow:inset 0 0 0 1px var(--color-accent-800)">4</span>
+    <span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px">5</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px">6</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--color-accent-300);box-shadow:inset 0 0 0 1px var(--color-accent-800)">7</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px">8</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px">9</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px">10</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px">11</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--color-accent-300);box-shadow:inset 0 0 0 1px var(--color-accent-800)">12</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px">13</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--color-accent-300);box-shadow:inset 0 0 0 1px var(--color-accent-800)">14</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px">15</span><span class="mono" style="width:28px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--color-accent-300);box-shadow:inset 0 0 0 1px var(--color-accent-800)">16</span>
+    <span style="font-size:9px;color:var(--color-neutral-500);text-align:center;margin-top:6px;line-height:1.3">ring = graded item due</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+    <div style="display:flex;align-items:center;gap:12px"><div class="seg"><label class="seg-opt"><input type="radio" name="ln6b" checked><span>Both</span></label><label class="seg-opt"><input type="radio" name="ln6b"><span>Lectures</span></label><label class="seg-opt"><input type="radio" name="ln6b"><span>Assignments</span></label></div><a href="#6b" style="margin-left:auto;font-size:12px;text-decoration:none">Show week 1 (1 earlier) ↑</a></div>
+    <div style="display:grid;grid-template-columns:72px 1fr 1fr;gap:12px;padding:12px 0;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat bottom / 100% 1px">
+      <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:var(--color-accent)">Week 2</span><span style="font-size:11px;color:var(--color-neutral-500)">Aug 31 – Sep 4</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Mon 8/31</span><span style="font-size:13px">Planning &amp; policy</span></div><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Wed 9/2</span><span style="font-size:13px">Risk management</span></div></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Wed 9/2</span><span style="font-size:13px">Knowledge check</span></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:72px 1fr 1fr;gap:12px;padding:12px 0">
+      <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:var(--color-neutral-300)">Week 3</span><span style="font-size:11px;color:var(--color-neutral-500)">Sep 7 – 11</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Wed 9/9 · lab</span><span style="font-size:13px">Cryptography 1 · Lab #1</span></div></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><div class="card" style="padding:9px 12px;gap:2px"><span style="font-size:11px;color:var(--color-neutral-500)">Wed 9/9 · 3:45p</span><span style="font-size:13px">Quiz #1 · Quiz #2</span></div></div>
+    </div>
+  </div>
+</div>
+<p class="dv-note"><b>Why:</b> the rail is both filter and map — shows where you are in the semester and which weeks carry graded work, one click to any week; "Current" is simply the default scroll position. <b>Trade-off:</b> 44px of width on every course page; the rail must stay in sync with scroll to be trusted.</p></div>
+
+</div></div>
+<p class="dv-next">Try next: "build Home v2 from <a class="dv-oid" href="#1b">1b</a> + <a class="dv-oid" href="#2a">2a</a> + <a class="dv-oid" href="#3a">3a</a> + <a class="dv-oid" href="#4a">4a</a> + <a class="dv-oid" href="#5a">5a</a>" · "<a class="dv-oid" href="#2b">2b</a> but with bars instead of nodes" · "apply <a class="dv-oid" href="#6a">6a</a> to the course page"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sel: 6 };
+  renderVals() {
+    const EFF = {reading:1, form:1, discussion:1.5, homework:2, quiz:3, presentation:4, project:6, paper:6, exam:8};
+    const CAT = {reading:'reading', form:'assignment', discussion:'assignment', homework:'assignment', quiz:'quiz', presentation:'project', project:'project', paper:'project', exam:'exam'};
+    const G = {reading:'R', assignment:'A', quiz:'Q', project:'P', exam:'E'};
+    const BG = {reading:'var(--color-neutral-800)', assignment:'var(--color-accent-900)', quiz:'var(--color-accent-800)', project:'var(--color-accent-700)', exam:'var(--color-accent-500)'};
+    const FG = {reading:'var(--color-neutral-200)', assignment:'var(--color-accent-200)', quiz:'var(--color-accent-100)', project:'var(--color-accent-100)', exam:'var(--color-bg)'};
+    const raw = [
+      {d:0, course:'ECN 304', title:'Ch. 2 — Poverty & inequality', type:'reading', time:'before 3:30p', status:'not started', sample:true},
+      {d:1, course:'GEO 103', title:'Population Bomb → Population Bust (reading)', type:'reading', time:'before 11:40a', status:'in progress', sample:true},
+      {d:5, course:'IST 466', title:'Ethics case prep — Team 2', type:'reading', time:'before 2:00p', status:'not started', sample:true},
+      {d:6, course:'IST 323', title:'Quiz #1 — Chap 1', type:'quiz', time:'3:45p', status:'not started'},
+      {d:6, course:'IST 323', title:'Quiz #2 — Chap 2.1–2.7', type:'quiz', time:'3:45p', status:'not started'},
+      {d:6, course:'IST 323', title:'Presentation Choice — topic + date', type:'form', time:'3:45p', status:'planned'},
+      {d:6, course:'IST 323', title:'Chap 3.1–3.3 (Cryptography 1)', type:'reading', time:'before class', status:'not started', sample:true},
+      {d:6, course:'IST 352', title:'Knowledge Check 09/09', type:'quiz', time:'12:45p', status:'not started', sample:true},
+      {d:7, course:'IST 466', title:'Ethics Team 2 practice', type:'presentation', time:'2:00p · in class', status:'in progress'},
+      {d:8, course:'GEO 103', title:'Carbon footprint exercise', type:'homework', time:'11:40a', status:'not started'},
+      {d:8, course:'IST 471', title:'A1 Internship Proposal', type:'homework', time:'11:59p', status:'in progress'},
+      {d:8, course:'IST 471', title:'A2 Sharing Introductions', type:'discussion', time:'11:59p', status:'not started'},
+      {d:11, course:'IST 323', title:'Exam #1 — weeks 1–3', type:'exam', time:'3:45p · in class', status:'not started'},
+      {d:11, course:'IST 323', title:'Inclusive Access textbook opt-out', type:'form', time:'deadline', status:'planned'},
+      {d:13, course:'IST 323', title:'Quiz #3 — Cryptography 1', type:'quiz', time:'3:45p', status:'not started'},
+      {d:13, course:'GEO 103', title:'Ch. 4 reading', type:'reading', time:'before 10:35a', status:'not started', sample:true},
+    ];
+    const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const sel = this.state.sel;
+    const items = raw.map(x => { const cat = CAT[x.type]; return {...x, cat, g:G[cat], bg:BG[cat], fg:FG[cat], eff:EFF[x.type]}; });
+    const days = Array.from({length:14}, (_, i) => {
+      const dt = new Date(2026, 8, 3 + i);
+      const its = items.filter(x => x.d === i);
+      const effort = its.reduce((a, b) => a + b.eff, 0);
+      const isSel = i === sel, wk = dt.getDay() === 0 || dt.getDay() === 6;
+      return {
+        i, dow: DOW[dt.getDay()], dn: dt.getDate(), n: its.length, effort, items: its,
+        segs: its.map(x => ({h: x.eff * 7, bg: x.bg})),
+        chips: its.map(x => ({g: x.g, bg: x.bg, fg: x.fg})),
+        countLabel: its.length ? String(its.length) : '',
+        effLabel: effort ? effort + ' pt' : '',
+        node: effort ? 16 + effort * 2 : 6,
+        nodeBg: effort ? (isSel ? 'var(--color-accent)' : 'var(--color-accent-800)') : 'var(--color-neutral-700)',
+        nodeFg: isSel ? 'var(--color-bg)' : 'var(--color-accent-100)',
+        meterW: Math.min(100, effort / 20 * 100),
+        colBg: isSel ? 'var(--color-accent-900)' : 'transparent',
+        ring: isSel ? 'inset 0 0 0 1px var(--color-accent)' : 'none',
+        dayColor: isSel ? 'var(--color-accent)' : (wk ? 'var(--color-neutral-600)' : (i === 0 ? 'var(--color-accent-300)' : 'var(--color-neutral-300)')),
+        dowLabel: i === 0 ? 'Today' : DOW[dt.getDay()],
+        pick: () => this.setState({sel: i}),
+      };
+    });
+    const sd = days[sel];
+    const selItems = sd.items.map(x => { const lead = Math.max(0, Math.ceil(x.eff / 2) - 1); const st = new Date(2026, 8, 3 + x.d - lead); return {...x, startBy: lead ? DOW[st.getDay()] + ' ' + (st.getMonth() + 1) + '/' + st.getDate() : 'same day', effLabel: x.eff + ' pt', sampleTag: x.sample ? 'sample' : ''}; });
+    const byCourseMap = {};
+    sd.items.forEach(x => { byCourseMap[x.course] = byCourseMap[x.course] || {course: x.course, n: 0, eff: 0}; byCourseMap[x.course].n++; byCourseMap[x.course].eff += x.eff; });
+    const byCourse = Object.values(byCourseMap).map(c => ({...c, w: Math.round(c.eff / Math.max(1, sd.effort) * 100)}));
+    const sum = arr => arr.reduce((a, d) => a + d.effort, 0), cnt = arr => arr.reduce((a, d) => a + d.n, 0);
+    const wk1 = days.slice(0, 7), wk2 = days.slice(7);
+    return {
+      days, wk1, wk2, selItems, byCourse,
+      selLabel: sd.dow + ', Sep ' + sd.dn, selCount: sd.n, selEffort: sd.effort, hasSel: sd.n > 0,
+      wk1Eff: sum(wk1), wk1N: cnt(wk1), wk2Eff: sum(wk2), wk2N: cnt(wk2),
+      totalN: items.length, totalEff: sum(days),
+      courses: [
+        {code:'IST 323', title:'Intro to Cybersecurity', meet:'MW 3:45–5:05', room:'Hinds 010', nextDate:'Wed 9/9', chips:[{g:'Q',n:2,bg:BG.quiz,fg:FG.quiz,label:'2 quiz'},{g:'A',n:1,bg:BG.assignment,fg:FG.assignment,label:'1 form'}], nextText:'2 quiz · 1 assignment', grade:'10 / 10 pts', open:'3', meetDays:[1,1,0,1,0], dueDays:[0,0,1,0,0]},
+        {code:'IST 352', title:'Info Analysis of Org Systems', meet:'MW 12:45–2:05', room:'Hinds 018', nextDate:'Wed 9/9', chips:[{g:'Q',n:1,bg:BG.quiz,fg:FG.quiz,label:'1 quiz'}], nextText:'1 quiz', grade:'scheme unknown', open:'1', meetDays:[1,0,1,0,0], dueDays:[0,0,1,0,0]},
+        {code:'GEO 103', title:'Environment & Society', meet:'MW 10:35–11:30 · F 11:40–12:35', room:'Watson · Maxwell 108', nextDate:'Fri 9/11', chips:[{g:'A',n:1,bg:BG.assignment,fg:FG.assignment,label:'1 assignment'}], nextText:'1 assignment', grade:'—', open:'1', meetDays:[1,0,1,0,1], dueDays:[0,0,0,0,1]},
+        {code:'ECN 304', title:'Economics of Social Issues', meet:'TTh 3:30–4:50', room:'LSB 001', nextDate:'Thu 10/1', chips:[{g:'E',n:1,bg:BG.exam,fg:FG.exam,label:'1 exam'}], nextText:'1 exam', grade:'attendance 100', open:'0', meetDays:[0,1,0,1,0], dueDays:[0,0,0,0,0]},
+        {code:'IST 466', title:'IM&T Capstone', meet:'TTh 2:00–3:20', room:'Hinds 243', nextDate:'Thu 9/10', chips:[{g:'P',n:1,bg:BG.project,fg:FG.project,label:'1 project'}], nextText:'1 project', grade:'weights unknown', open:'1', meetDays:[0,1,0,1,0], dueDays:[0,0,0,1,0]},
+        {code:'IST 471', title:'Internship', meet:'Online', room:'SU ITS', nextDate:'Fri 9/11', chips:[{g:'A',n:2,bg:BG.assignment,fg:FG.assignment,label:'2 assignments'}], nextText:'2 assignments', grade:'0 / 150 hrs', open:'0', meetDays:[0,0,0,0,0], dueDays:[0,0,0,0,1]},
+      ].map(c => ({...c, meetDots: c.meetDays.map((m, i) => ({bg: m ? 'var(--color-accent-700)' : 'var(--color-neutral-800)', dot: c.dueDays[i] ? 'var(--color-accent)' : 'transparent', l: 'MTWTF'[i]}))})),
+    };
+  }
+}
+</script>
+</body>
+</html>

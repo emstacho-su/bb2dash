@@ -1,0 +1,642 @@
+{
+  "course_id": "IST.323",
+  "bb_id": "_571529_1",
+  "version": 2,
+  "mapped_at": "2026-09-03T21:25:00Z",
+  "title": "Intro to Cybersecurity (IST.323.M002.FALL26)",
+  "instructor": "Christopher Croad (ccroad@syr.edu, SU CISO)",
+  "meeting": {
+    "days": [
+      "Mon",
+      "Wed"
+    ],
+    "start": "15:45",
+    "end": "17:05",
+    "room": "Hinds Hall 010",
+    "starts_on": "2026-08-24",
+    "ends_on": "2026-12-07",
+    "source": "syllabus v1.3.1 + meetings rows 6,7 (confirmed)"
+  },
+  "grading": {
+    "method": "points",
+    "total_points": 104,
+    "graded_out_of": 100,
+    "components": [
+      {
+        "code": "participation",
+        "name": "Class Participation",
+        "points": 5
+      },
+      {
+        "code": "quizzes",
+        "name": "Blackboard Quizzes",
+        "points": 5,
+        "count_expected": 10,
+        "aggregation": "normalized to 5"
+      },
+      {
+        "code": "sitn_group",
+        "name": "Security in the News Group Presentation",
+        "points": 5
+      },
+      {
+        "code": "individual_presentation",
+        "name": "Individual Security Presentation",
+        "points": 15
+      },
+      {
+        "code": "final_project",
+        "name": "Final Project: Security Program Proposal",
+        "points": 20,
+        "children": [
+          {
+            "code": "fp_proposal",
+            "points": 11
+          },
+          {
+            "code": "fp_log",
+            "points": 3
+          },
+          {
+            "code": "fp_defense",
+            "points": 6
+          }
+        ]
+      },
+      {
+        "code": "exams",
+        "name": "Exams",
+        "points": 30,
+        "count_expected": 3
+      },
+      {
+        "code": "labs",
+        "name": "Required Labs",
+        "points": 20,
+        "count_expected": 4
+      },
+      {
+        "code": "extra_credit_lab",
+        "name": "Extra Credit Lab",
+        "points": 4,
+        "is_extra_credit": true
+      }
+    ],
+    "rules": [
+      "104 points possible, graded out of 100 (the 4-pt extra-credit lab is the overage)",
+      "Quizzes normalized to 5 points at semester end; untimed, up to 3 attempts, due before class",
+      "Deadlines firm; late submissions NOT accepted; wrong submission format => lowered grade or 0",
+      "AI allowed as a disclosed tool; NOT during tests, quizzes, or the in-class Final Project defense",
+      "Instructor reserves the right to curve/adjust letter grades"
+    ],
+    "letter_scale": [
+      {
+        "letter": "A",
+        "min": 94
+      },
+      {
+        "letter": "A-",
+        "min": 90
+      },
+      {
+        "letter": "B+",
+        "min": 87
+      },
+      {
+        "letter": "B",
+        "min": 83
+      },
+      {
+        "letter": "B-",
+        "min": 80
+      },
+      {
+        "letter": "C+",
+        "min": 77
+      },
+      {
+        "letter": "C",
+        "min": 73
+      },
+      {
+        "letter": "C-",
+        "min": 70
+      },
+      {
+        "letter": "D",
+        "min": 65
+      },
+      {
+        "letter": "D-",
+        "min": 60
+      },
+      {
+        "letter": "F",
+        "min": 0
+      }
+    ],
+    "source": "syllabus v1.3.1 (323Fall26V1.3.1.docx) via seed; grading_schemes + grade_components rows",
+    "confidence": "confirmed",
+    "verified_against_pulled_syllabus": {
+      "file": "bb_files id 2 / 323Fall26V1.3.1.docx (v1.3.1, 9/1/2026)",
+      "result": "UNCHANGED - the pulled syllabus grading table, letter scale, late policy and AI policy match grading_schemes + grade_components exactly (104 pts possible, graded out of 100; 5/5/5/15/20/30/20 + 4 extra credit). No differences applied.",
+      "change_log_latest": "1.3.1 | 9/1/2026 | Moved due dates for Quiz 1&2 to 9/9/2026 based on confusion with the text and OIA"
+    }
+  },
+  "tree_shape": {
+    "principle": "functional_folders",
+    "note": "Four top-level functional folders plus one LTI placement. No weekly modules; week numbers come from lecture titles ('Lecture #N - Week N') and from the syllabus schedule, not from the tree.",
+    "bucket_paths": {
+      "syllabus_policy": [
+        "Syllabus & Course Information / *Syllabus*",
+        "Syllabus & Course Information / Student Policies*"
+      ],
+      "admin": [
+        "Syllabus & Course Information / Logging into*",
+        "Syllabus & Course Information / *Logon*"
+      ],
+      "lecture_slides": [
+        "Lecture Slides / *"
+      ],
+      "lab_materials": [
+        "Assignments / Labs / *"
+      ],
+      "project_materials": [
+        "Assignments / Final Project / **"
+      ],
+      "assignment_spec": [
+        "Assignments / * (non-folder file items outside Final Project and Labs)"
+      ],
+      "media_links": [
+        "Orange Instant Access (LTI, link-only, no bytes)"
+      ]
+    },
+    "week_rule": "lecture_slides: parse 'Week N' from the content item title; 'Week 1 - Course Intro' => week 1. Everything else has no week; project files are keyed to the assignment IST.323/fp-packet instead."
+  },
+  "sources": [
+    {
+      "kind": "content_tree",
+      "locator": "/learn/api/v1/courses/_571529_1/contents/<id>/children",
+      "file_bearing": true,
+      "note": "4 top folders: Syllabus & Course Information, Lecture Slides, Assignments, Quizzes"
+    },
+    {
+      "kind": "gradebook",
+      "locator": "bb_raw id 1 payload->'gradebook' (10 columns); run 3e12fd89 captured 2026-09-02",
+      "file_bearing": false
+    },
+    {
+      "kind": "announcements",
+      "locator": "announcements rows 1-3 (8/18 welcome, 8/31 OIA textbook, 9/1 quiz date change)",
+      "file_bearing": false
+    },
+    {
+      "kind": "groups",
+      "locator": "/learn/api/v1/courses/_571529_1/groups",
+      "file_bearing": false,
+      "probe_result": "HTTP 200, results=[] (0 groups), permissions.viewGroupMembers=false; /groups/sets returns HTTP 404 'groupId is invalid for an id.' => SitN groups not yet published as Blackboard groups"
+    },
+    {
+      "kind": "attempts",
+      "locator": "gradebook lastAttempt per column; only Quiz #1 has an attempt (10/10, submitted 2026-08-31)",
+      "file_bearing": false
+    },
+    {
+      "kind": "lti",
+      "locator": "Orange Instant Access (_13181932_1), bnc_coursematerials placement",
+      "file_bearing": false,
+      "note": "OIA digital textbook; auto-charge unless opt out by 2026-09-14"
+    },
+    {
+      "kind": "discussions",
+      "locator": "none in this shell",
+      "file_bearing": false
+    }
+  ],
+  "course_fields": [
+    {
+      "name": "sitn_group",
+      "source": "Blackboard groups endpoint (empty) / Security in the News Group Presentation item _12928176_1 / instructor in class",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true,
+      "note": "Unresolved after the pull. GET /learn/api/v1/courses/_571529_1/groups -> HTTP 200 with results=[] (0 groups) and permissions.viewGroupMembers=false; GET .../groups/sets -> HTTP 404 'groupId is invalid for an id.'. The graded item exists (column _3560526_1, 5 pts, submissionStatus UNOPENED) but carries no group or date. Syllabus: groups are assigned randomly and start Week 4."
+    },
+    {
+      "name": "sitn_date",
+      "source": "derived from sitn_group via sessions notes",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true,
+      "group_date_map": {
+        "1": "2026-09-16",
+        "2": "2026-09-21",
+        "3": "2026-09-28",
+        "4": "2026-10-05",
+        "5": "2026-10-07",
+        "6": "2026-10-19",
+        "7": "2026-10-28",
+        "8": "2026-11-11",
+        "9": "2026-11-18",
+        "10": "2026-12-02"
+      },
+      "note": "Derivable the moment sitn_group is known, via the group_date_map below; no other source needed."
+    },
+    {
+      "name": "individual_presentation_date",
+      "source": "Individual Presentation Selection survey _13145817_1 (column _3598132_1), due 2026-09-09 23:59 ET",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true,
+      "note": "Unresolved. Individual Presentation Selection survey (_13145817_1, column _3598132_1) still UNOPENED; due Wed 9/9 23:59 ET. Session options 9/30, 10/14, 10/26, 11/4, 11/16; first come, first served. Once submitted, set assignments.IST.323/individual-presentation.due_date to the chosen session date (slides due to Blackboard 24h before)."
+    },
+    {
+      "name": "fp_organization",
+      "source": "Assignments / Final Project / Final Assignment Packets (only Packet A visible to this student) + assignments row IST.323/fp-packet",
+      "value": "Packet A - Meridian Specialty Pharmacy",
+      "confidence": "confirmed",
+      "stack_must_confirm": false,
+      "note": "Confirmed from the pulled packet text: independent family-owned specialty pharmacy, 3 sites in central NY (Liverpool main + compounding lab, Camillus, Oswego), 62 employees, ~$18.4M revenue, ~4,100 active patients / ~19,000 historical records."
+    },
+    {
+      "name": "lab_access_code_status",
+      "source": "Assignments / Labs / Instructions for getting access to the J&B Learning Labs (bb_files id 9) + jblearning.com purchase ($60)",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true,
+      "note": "Still unknown. The pulled access guide (bb_files id 9) gives the mechanics: buy the $60 code at checkout.jblearning.com (package 'Syracuse University Custom ISSA Lab', ISBN 9781284310696, coupon SYRCUSTOM), then Redeem Code at jblearning.com and enroll with Course ID BD53C5 - NOT Open Enrollment. Whether Stack has purchased/redeemed is not visible in Blackboard. Lab #1 runs in class Wed 9/9."
+    },
+    {
+      "name": "oia_textbook_optout_deadline",
+      "source": "announcement 2026-08-31 'Info on Textbook and Quiz' + Orange Instant Access LTI",
+      "value": "2026-09-14",
+      "confidence": "confirmed",
+      "stack_must_confirm": false,
+      "note": "Opt out by this date or the digital Boyle & Panko 6e is billed to the Bursar account."
+    },
+    {
+      "name": "jbl_course_id",
+      "source": "bb_files id 9 (JBLearning Access & Course Setup Guide)",
+      "value": "BD53C5",
+      "confidence": "confirmed",
+      "stack_must_confirm": false,
+      "note": "Enroll with this Course ID; Open Enrollment must not be used."
+    }
+  ],
+  "file_manifest": [
+    {
+      "bb_file_id": 2,
+      "content_id": "_12928159_1",
+      "file_name": "323Fall26V1.3.1.docx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12928159-dt-content-rid-165447072_1/xid-165447072_1",
+      "download_method": "direct_url",
+      "bucket": "syllabus_policy",
+      "week_no": null,
+      "assignment_id": null,
+      "priority": 1,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "relpath": "IST.323/syllabus_policy/323Fall26V1.3.1.docx",
+      "storage_path": "bb-files/IST.323/syllabus_policy/323Fall26V1.3.1.docx",
+      "local_path": "course context/IST.323/syllabus_policy/323Fall26V1.3.1.docx",
+      "sha256": "937103b490783f0d71f37b82953a92061a8d14fbcb6e5498ff5a1f8e7527303a",
+      "bytes": 59742,
+      "text_units": 1,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 3,
+      "content_id": "_12928160_1",
+      "file_name": "Student Policies and Services - syllabus appendix August 2026 .docx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12928160-dt-content-rid-164622104_1/xid-164622104_1",
+      "download_method": "direct_url",
+      "bucket": "syllabus_policy",
+      "week_no": null,
+      "assignment_id": null,
+      "priority": 2,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "collision_risk": "IST.466 catalogs a same-named file; claim only if base name matches and no prior copy existed",
+      "relpath": "IST.323/syllabus_policy/Student Policies and Services - syllabus appendix August 2026 .docx",
+      "storage_path": "bb-files/IST.323/syllabus_policy/Student Policies and Services - syllabus appendix August 2026 .docx",
+      "local_path": "course context/IST.323/syllabus_policy/Student Policies and Services - syllabus appendix August 2026 .docx",
+      "sha256": "2974bbc5a369500d7db32b5955827e12d703d94e68dcf4b7a45c5b12ff1889b9",
+      "bytes": 37827,
+      "text_units": 1,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 4,
+      "content_id": "_13158706_1",
+      "file_name": "IST323-Initial-Logon-v2.docx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13158706-dt-content-rid-165066647_1/xid-165066647_1",
+      "download_method": "direct_url",
+      "bucket": "admin",
+      "week_no": null,
+      "assignment_id": null,
+      "priority": 5,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "relpath": "IST.323/admin/IST323-Initial-Logon-v2.docx",
+      "storage_path": "bb-files/IST.323/admin/IST323-Initial-Logon-v2.docx",
+      "local_path": "course context/IST.323/admin/IST323-Initial-Logon-v2.docx",
+      "sha256": "68bc5ff0d34322b4b60d6356206c4009a0227ec38f944afba3a7550b0b3d2f49",
+      "bytes": 115565,
+      "text_units": 1,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 5,
+      "content_id": "_12928171_1",
+      "file_name": "Lecture3 -Chap 2- Planning, Policy, and RIsk - Fall2025-rebranded.pptx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12928171-dt-content-rid-165447024_1/xid-165447024_1",
+      "download_method": "direct_url",
+      "bucket": "lecture_slides",
+      "week_no": 3,
+      "assignment_id": null,
+      "priority": 4,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "relpath": "IST.323/lecture_slides/week-03/Lecture3 -Chap 2- Planning, Policy, and RIsk - Fall2025-rebranded.pptx",
+      "storage_path": "bb-files/IST.323/lecture_slides/week-03/Lecture3 -Chap 2- Planning, Policy, and RIsk - Fall2025-rebranded.pptx",
+      "local_path": "course context/IST.323/lecture_slides/week-03/Lecture3 -Chap 2- Planning, Policy, and RIsk - Fall2025-rebranded.pptx",
+      "sha256": "6614faf3298cdc812e55caeca5d8ff3f38897ecffd3525608ad0f3e403f4e926",
+      "bytes": 3177989,
+      "text_units": 45,
+      "status": "stored",
+      "blackboard_display_name": "Lecture#3 -Chap 2- Planning, Policy, and RIsk - Fall2025-rebranded.pptx",
+      "note": "renamed for Supabase Storage: '#' is not a legal object-key character"
+    },
+    {
+      "bb_file_id": 6,
+      "content_id": "_12928172_1",
+      "file_name": "Lecture2-Chap 1-ThreatsConcerns-Fall25-rebranded.pptx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12928172-dt-content-rid-165268182_1/xid-165268182_1",
+      "download_method": "direct_url",
+      "bucket": "lecture_slides",
+      "week_no": 2,
+      "assignment_id": null,
+      "priority": 4,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "relpath": "IST.323/lecture_slides/week-02/Lecture2-Chap 1-ThreatsConcerns-Fall25-rebranded.pptx",
+      "storage_path": "bb-files/IST.323/lecture_slides/week-02/Lecture2-Chap 1-ThreatsConcerns-Fall25-rebranded.pptx",
+      "local_path": "course context/IST.323/lecture_slides/week-02/Lecture2-Chap 1-ThreatsConcerns-Fall25-rebranded.pptx",
+      "sha256": "bac44eeb03fefc9519726eae1b24bcccd4e32087d2d5ddf5992e6bfd0a0d9a7c",
+      "bytes": 2079118,
+      "text_units": 37,
+      "status": "stored",
+      "blackboard_display_name": "Lecture#2-Chap 1-ThreatsConcerns-Fall25-rebranded.pptx",
+      "note": "renamed for Supabase Storage: '#' is not a legal object-key character"
+    },
+    {
+      "bb_file_id": 7,
+      "content_id": "_12928173_1",
+      "file_name": "Lecture_1-PropertiesTrends-Fall2026.pptx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12928173-dt-content-rid-165067537_1/xid-165067537_1",
+      "download_method": "direct_url",
+      "bucket": "lecture_slides",
+      "week_no": 1,
+      "assignment_id": null,
+      "priority": 4,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "relpath": "IST.323/lecture_slides/week-01/Lecture_1-PropertiesTrends-Fall2026.pptx",
+      "storage_path": "bb-files/IST.323/lecture_slides/week-01/Lecture_1-PropertiesTrends-Fall2026.pptx",
+      "local_path": "course context/IST.323/lecture_slides/week-01/Lecture_1-PropertiesTrends-Fall2026.pptx",
+      "sha256": "be48a1bd7ed3eb841bdde57612ce7b5b35e680faab55cd7c815fb2ba2744572c",
+      "bytes": 4145289,
+      "text_units": 33,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 8,
+      "content_id": "_12928174_1",
+      "file_name": "CourseIntro-Fall2026-BA.pptx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12928174-dt-content-rid-164908344_1/xid-164908344_1",
+      "download_method": "direct_url",
+      "bucket": "lecture_slides",
+      "week_no": 1,
+      "assignment_id": null,
+      "priority": 4,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "note": "largest file in the batch (9 MB); a hand-placed copy already sits in course context/IST.323",
+      "relpath": "IST.323/lecture_slides/week-01/CourseIntro-Fall2026-BA.pptx",
+      "storage_path": "bb-files/IST.323/lecture_slides/week-01/CourseIntro-Fall2026-BA.pptx",
+      "local_path": "course context/IST.323/lecture_slides/week-01/CourseIntro-Fall2026-BA.pptx",
+      "sha256": "f3db3ad6eadbc4c2796aa6cec866c2bc4179a0560738954f1bdc95fd7fd617c3",
+      "bytes": 9214499,
+      "text_units": 36,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 9,
+      "content_id": "_13159053_1",
+      "file_name": "Syracuse IST 323 Fall 26 Croad.docx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13159053-dt-content-rid-165067566_1/xid-165067566_1",
+      "download_method": "direct_url",
+      "bucket": "lab_materials",
+      "week_no": null,
+      "assignment_id": "IST.323/lab-1",
+      "priority": 3,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "note": "J&B Learning lab access instructions; linked to Lab #1 so it lands in lab_materials/lab-1",
+      "relpath": "IST.323/lab_materials/lab-1/Syracuse IST 323 Fall 26 Croad.docx",
+      "storage_path": "bb-files/IST.323/lab_materials/lab-1/Syracuse IST 323 Fall 26 Croad.docx",
+      "local_path": "course context/IST.323/lab_materials/lab-1/Syracuse IST 323 Fall 26 Croad.docx",
+      "sha256": "453215939ad2fa4a84d5e232b7584fa58354bc8609ed23f6c4413b571cee4223",
+      "bytes": 18913,
+      "text_units": 1,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 10,
+      "content_id": "_13178445_1",
+      "file_name": "IST323_Packet_A_Meridian_Pharmacy.docx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13178445-dt-content-rid-165271709_1/xid-165271709_1",
+      "download_method": "direct_url",
+      "bucket": "project_materials",
+      "week_no": null,
+      "assignment_id": "IST.323/fp-packet",
+      "priority": 2,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "relpath": "IST.323/project_materials/fp-packet/IST323_Packet_A_Meridian_Pharmacy.docx",
+      "storage_path": "bb-files/IST.323/project_materials/fp-packet/IST323_Packet_A_Meridian_Pharmacy.docx",
+      "local_path": "course context/IST.323/project_materials/fp-packet/IST323_Packet_A_Meridian_Pharmacy.docx",
+      "sha256": "ebfe17216c4ae91c71a3451ad5a4614a8987232d4670d9083b60e4b030d99986",
+      "bytes": 49008,
+      "text_units": 1,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 11,
+      "content_id": "_13192066_1",
+      "file_name": "IST323_Vendor_Price_Sheet.docx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13192066-dt-content-rid-165490890_1/xid-165490890_1",
+      "download_method": "direct_url",
+      "bucket": "project_materials",
+      "week_no": null,
+      "assignment_id": "IST.323/fp-packet",
+      "priority": 3,
+      "expected_mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "relpath": "IST.323/project_materials/fp-packet/IST323_Vendor_Price_Sheet.docx",
+      "storage_path": "bb-files/IST.323/project_materials/fp-packet/IST323_Vendor_Price_Sheet.docx",
+      "local_path": "course context/IST.323/project_materials/fp-packet/IST323_Vendor_Price_Sheet.docx",
+      "sha256": "3f309e884e7a473852486ba7bd78f46168cc65c325e626f0bf4a53bac8a14bfe",
+      "bytes": 37368,
+      "text_units": 1,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 12,
+      "content_id": "_12983488_1",
+      "file_name": "IST323_Appendix_A_Ranked_Risk_Summary.pdf",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12983488-dt-content-rid-164556091_1/xid-164556091_1",
+      "download_method": "direct_url",
+      "bucket": "project_materials",
+      "week_no": null,
+      "assignment_id": "IST.323/fp-packet",
+      "priority": 3,
+      "expected_mime": "application/pdf",
+      "relpath": "IST.323/project_materials/fp-packet/IST323_Appendix_A_Ranked_Risk_Summary.pdf",
+      "storage_path": "bb-files/IST.323/project_materials/fp-packet/IST323_Appendix_A_Ranked_Risk_Summary.pdf",
+      "local_path": "course context/IST.323/project_materials/fp-packet/IST323_Appendix_A_Ranked_Risk_Summary.pdf",
+      "sha256": "f708be6ee3a588a720513a3a70d8139a5ab8a9c35dc1b6c1e0751fc9cd6ac5f7",
+      "bytes": 84321,
+      "text_units": 2,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 13,
+      "content_id": "_12983631_1",
+      "file_name": "IST323_Appendix_B_AI_Use_Statement.pdf",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12983631-dt-content-rid-164556093_1/xid-164556093_1",
+      "download_method": "direct_url",
+      "bucket": "project_materials",
+      "week_no": null,
+      "assignment_id": "IST.323/fp-packet",
+      "priority": 3,
+      "expected_mime": "application/pdf",
+      "relpath": "IST.323/project_materials/fp-packet/IST323_Appendix_B_AI_Use_Statement.pdf",
+      "storage_path": "bb-files/IST.323/project_materials/fp-packet/IST323_Appendix_B_AI_Use_Statement.pdf",
+      "local_path": "course context/IST.323/project_materials/fp-packet/IST323_Appendix_B_AI_Use_Statement.pdf",
+      "sha256": "680b0f3acb5b50a98605d05fb56daeee425061fac5b93256ce63e040ecddbc46",
+      "bytes": 71130,
+      "text_units": 2,
+      "status": "stored"
+    },
+    {
+      "bb_file_id": 14,
+      "content_id": "_12983632_1",
+      "file_name": "IST323_Appendix_C_Running_Log.pdf",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12983632-dt-content-rid-164556095_1/xid-164556095_1",
+      "download_method": "direct_url",
+      "bucket": "project_materials",
+      "week_no": null,
+      "assignment_id": "IST.323/fp-packet",
+      "priority": 3,
+      "expected_mime": "application/pdf",
+      "relpath": "IST.323/project_materials/fp-packet/IST323_Appendix_C_Running_Log.pdf",
+      "storage_path": "bb-files/IST.323/project_materials/fp-packet/IST323_Appendix_C_Running_Log.pdf",
+      "local_path": "course context/IST.323/project_materials/fp-packet/IST323_Appendix_C_Running_Log.pdf",
+      "sha256": "b3187e2624c2bed7a1b4dca227c675da062f5a85eb982e98a54adcb9fa6479f3",
+      "bytes": 70023,
+      "text_units": 2,
+      "status": "stored"
+    }
+  ],
+  "manifest_refresh": {
+    "checked_at": "2026-09-03T21:08:00Z",
+    "method": "GET /learn/api/v1/courses/_571529_1/contents/<id> -> contentDetail['resource/x-bb-file'].file.permanentUrl (these are x-bb-file items, not Ultra documents; body.rawText is empty and carries no data-bbfile embeds)",
+    "stale_urls_found": 0,
+    "new_files_found": 0,
+    "folders_walked": [
+      "_12928152_1",
+      "_12928153_1",
+      "_12928154_1",
+      "_12928155_1",
+      "_12982946_1",
+      "_12983276_1",
+      "_13178434_1",
+      "_13192070_1",
+      "_12928179_1"
+    ],
+    "note": "Final Project - START HERE / ultraDocumentBody (_12983277_1) is a real Ultra document but contains no data-bbfile embeds (rawText 10,968 chars, prose only).",
+    "result": "13/13 URLs current; 0 stale, 0 new. All items are resource/x-bb-file; URL lives at contentDetail[\"resource/x-bb-file\"].file.permanentUrl."
+  },
+  "hand_placed_files": [
+    {
+      "name": "323Fall26V1.3.1.docx",
+      "expected_match": "bb_file_id 2"
+    },
+    {
+      "name": "CourseIntro-Fall2026-BA.pptx",
+      "expected_match": "bb_file_id 8"
+    },
+    {
+      "name": "Student Policies and Services - syllabus appendix August 2026 (1).docx",
+      "expected_match": "bb_file_id 3 (rename back to the manifest name)"
+    }
+  ],
+  "gaps": [
+    {
+      "what": "Security in the News group number and presentation date",
+      "owner": "stack",
+      "detail": "Blackboard groups endpoint is empty (probed 2026-09-03). Ask Prof. Croad or watch for an announcement; Group 1 presents 9/16."
+    },
+    {
+      "what": "Individual Security Presentation date + topic",
+      "owner": "stack",
+      "detail": "Selection survey due Wed 9/9 and still unopened - this is an action, not just a gap."
+    },
+    {
+      "what": "J&B Learning lab access code purchased/redeemed (Course ID BD53C5)",
+      "owner": "stack",
+      "detail": "Lab #1 is in class Wed 9/9."
+    },
+    {
+      "what": "OIA textbook: keep the digital copy or opt out by 9/14/26",
+      "owner": "stack"
+    },
+    {
+      "what": "Assignment #1 (syllabus schedule 8/24) has no matching Blackboard item",
+      "owner": "stack",
+      "detail": "assignments row IST.323/assignment-1 stays confidence=inferred; most likely the 'Presentation Choice' survey."
+    },
+    {
+      "what": "Quiz #3-#10 points_possible unknown (columns not deployed yet)",
+      "owner": "blackboard_pull",
+      "detail": "Quizzes normalize to 5 pts total, so per-quiz points do not affect the model."
+    },
+    {
+      "what": "Individual Presentation Selection column shows possible=100 while the syllabus says ungraded",
+      "owner": "blackboard_pull",
+      "detail": "Treated as an ungraded gate; excluded from the Total Score formula's item list, so it does not affect the grade."
+    },
+    {
+      "what": "Lab topics TBA",
+      "owner": "wait",
+      "detail": "Syllabus: 'LAB TOPICS TO BE ANNOUNCED'."
+    }
+  ],
+  "pull": {
+    "ran_at": "2026-09-03T21:20:00Z",
+    "downloaded": 13,
+    "new_files_found": 0,
+    "stale_urls_fixed": 0,
+    "uploaded": 13,
+    "text_units": 163,
+    "duplicates": 0,
+    "failed": 0,
+    "notes": [
+      "Built-in browser downloads landed in C:\\\\Users\\\\estac\\\\Downloads as GUID .tmp staging files that were never renamed to their Blackboard display names. Each of the 13 files was claimed by exact byte-size match against the manifest (every expected size appeared exactly once, and none collided with another agent's concurrent .tmp), verified by magic bytes (PK.. / %PDF) and sha256, then copied into the layout and the claimed .tmp files deleted.",
+      "Three hand-placed copies already in course context\\\\IST.323 (323Fall26V1.3.1.docx, CourseIntro-Fall2026-BA.pptx, 'Student Policies and Services - syllabus appendix August 2026 (1).docx') were sha256-identical to the freshly pulled bytes; the loose copies were removed and the pulled copies laid out.",
+      "Supabase Storage rejects '#' in object keys (InvalidKey). bb_files.file_name for ids 5 and 6 was sanitized ('Lecture#3 ...' -> 'Lecture3 ...', 'Lecture#2-...' -> 'Lecture2-...') and the local mirror renamed to match, so bb_file_relpath, the storage key and the mirror stay identical (v_file_layout.needs_move = 0). Blackboard display names are preserved in bb_files.notes.",
+      "No duplicate sha256 within the course; nothing skipped."
+    ]
+  },
+  "applied": {
+    "grading_schemes": "no change (verified identical)",
+    "grade_components": "no change (verified identical)",
+    "assignments": "no change - every dated row was already confidence=confirmed and matches the pulled syllabus; the two undated rows (individual-presentation, sitn-group-presentation) stay tentative pending the two unresolved fields",
+    "sessions": "no change - all 31 rows match the pulled schedule",
+    "readings": "no change - all 12 rows match",
+    "meetings": "no change - Mon/Wed 15:45-17:05 Hinds Hall 010 already confirmed (syllabus header says the pattern runs 8/24-12/8; last actual session is Mon 12/7)",
+    "course_staff": "no change - name/email/phone/office/office-hours already populated",
+    "courses": "group_notes written (SitN group structure + Group N -> date map + Final Project is individual); notes extended with the J&B package/Course ID and the OIA opt-out deadline; syllabus_status stays 'complete'"
+  }
+}
