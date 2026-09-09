@@ -4,7 +4,7 @@ import type { Database } from './database.types';
 import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from './env';
 
 /** Paths that render without a session. Everything else is guarded. */
-const PUBLIC_PATHS = ['/login', '/auth'];
+const PUBLIC_PATHS = ['/login'];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

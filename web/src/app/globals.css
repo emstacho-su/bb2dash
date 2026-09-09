@@ -2,7 +2,7 @@
    bb2dash — global stylesheet.
 
    Design tokens are ported from the Nocturne design system used by the GUI
-   artboards ("gui research context/_ds/nocturne-*/styles.css"). Nocturne is a
+   artboards (the nocturne styles.css under "gui research context"). Nocturne is a
    PLACEHOLDER SKIN: the artboards are the layout/interaction spec, the colours
    and type are provisional until Stack signs off a styling pass. Everything
    below is therefore expressed as custom properties so a restyle is a
