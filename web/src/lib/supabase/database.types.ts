@@ -1205,6 +1205,47 @@ export type Database = {
       }
     }
     Views: {
+      v_course_display: {
+        Row: {
+          bb_url: string | null
+          code: string | null
+          display_id: string | null
+          meetings: Json | null
+          room_disputed: boolean | null
+          shell_ids: string[] | null
+          title: string | null
+        }
+        Relationships: []
+      }
+      v_work_items: {
+        Row: {
+          category: string | null
+          confidence: string | null
+          course_id: string | null
+          due_at: string | null
+          due_on: string | null
+          due_rule: string | null
+          effort: number | null
+          effort_source: string | null
+          glyph: string | null
+          in_workload: boolean | null
+          is_override: boolean | null
+          item_id: string | null
+          item_kind: string | null
+          multiplier_applied: boolean | null
+          points_possible: number | null
+          priority: string | null
+          sequence_no: number | null
+          series_key: string | null
+          status: string | null
+          submission: string | null
+          suggested_start: string | null
+          title: string | null
+          type: string | null
+          undated: boolean | null
+        }
+        Relationships: []
+      }
       v_course_corpus: {
         Row: {
           bucket: Database["public"]["Enums"]["file_bucket"] | null
