@@ -74,11 +74,19 @@ Two retrieval tiers over the corpus, both scoped by course when wanted:
 * **Full-text** — generated `tsvector` + GIN on `bb_file_text.text`, `bb_content` (title+body),
   `announcements` (title+body). Query with `search_file_text(q, course, limit)` → ranked hits
   with bucket/file context and a highlighted snippet. Live now.
-* **Vector** — `bb_text_embeddings` holds `vector(1024)` per `(text_id, model, part_no)` with an
-  HNSW cosine index; `part_no` exists because 12 text units exceed ~8k chars and must be split
-  at embed time. Query with `match_file_text(query_embedding, model, course, limit)`. Empty
-  until an embedding model is chosen (column sized for Voyage `voyage-3.5`; re-size before
-  first insert if a different model wins).
+* **Vector** — `bb_text_embeddings` holds `vector(384)` (gte-small, migration 011) per
+  `(text_id, model, part_no)` with an HNSW cosine index. Fully populated: 534 units →
+  1,195 rows. Corpus chunks are embedded with a `"{course} {bucket} — {file_name}: "` context
+  header; queries are embedded raw. Query with `match_file_text(query_embedding, model,
+  course, limit)` or, preferred, `hybrid_search_file_text(q, query_embedding, ...)` (RRF over
+  FTS + vector, deduped to one row per text unit).
+* **Edge functions** (`supabase/functions/`): `embed-corpus` (batch embedder, part-level
+  resume, `max_parts`/`skip_parts` fan-out controls) and `search` (the hub's retrieval API:
+  `{q, course?, mode: fts|vector|hybrid, limit?}`). **Hub default mode = hybrid** per
+  `EVAL_EMBEDDING_POC.md` (hybrid/vector hit@1 9/10 vs FTS 1/10 on conversational queries).
+  Known issues: returned text is the unit head, not the matched part's slice (`part_range` is
+  stored but unused — top UI follow-up); one cosmetic `part_range` off-by-one on text 276
+  (UTF-16 vs char counting); near-duplicate schedule file versions crowd top ranks.
 
 ## Enums
 

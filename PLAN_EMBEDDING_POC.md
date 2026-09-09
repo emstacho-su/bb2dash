@@ -1,6 +1,9 @@
 # Plan — Embedding proof of concept (open source, $0)
 
-Status: **awaiting Stack's go-ahead before development begins.** Written 2026-09-09.
+Status: **EXECUTED 2026-09-09** on `dev/embedding-poc` — see `EVAL_EMBEDDING_POC.md` for
+results. Corpus-size estimates below were off: 205 units (not 12) exceeded the split
+threshold, yielding 1,195 embedding rows (not ~700), 329 single-part units (not 522).
+Original plan follows, preserved as written and approved.
 Constraints set by Stack: open-source model, no paid services, no Docker.
 
 ## Model decision: `gte-small` inside Supabase Edge Functions

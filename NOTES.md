@@ -14,9 +14,15 @@ central hub for all schoolwork. Professional-side data comes later.
 3b. DONE (2026-09-09) — extract audit + search layer. Repo backfilled with live migrations
    005–009 (drift fixed); migration 010 adds FTS (live) and pgvector `bb_text_embeddings`
    (empty, awaiting embedding-model decision). See `AUDIT_2026-09-09.md`.
-3c. NEXT — pick the embedding model, run the embed job (534 units; split the 12 oversized ones),
-   and make the crawl repeatable on a cadence (weekly + before each class day), diffing `bb_raw`
-   runs into the typed tables.
+3c. DONE (2026-09-09) — embedding POC on `dev/embedding-poc`: gte-small via Supabase Edge
+   Functions (migration 011, `embed-corpus` + `search` functions). Corpus 100% embedded
+   (534 units → 1,195 vector rows, 0 failures). Eval (`EVAL_EMBEDDING_POC.md`): hybrid/vector
+   hit@1 9/10 vs FTS 1/10 on natural-language queries; **hub retrieval default = hybrid**.
+3d. NEXT — retrieval polish (return the matched part's slice using `part_range` instead of the
+   unit head; dedupe near-identical schedule file versions), then make the crawl repeatable on
+   a cadence (weekly + before each class day), diffing `bb_raw` runs into the typed tables.
+   Note: `pg_net` is enabled and load-bearing — sandboxed sessions can't reach supabase.co
+   directly (egress policy), so edge functions are invoked server-side via `net.http_post`.
 4. NEXT — stage this codebase as a public GitHub repo. Dev workflow rule: develop on branches, test visually on a local port, push to prod only when Stack explicitly asks (saved in project memory as `feedback_dev_workflow.md`).
 5. LATER — the app on top: dashboard + planner + agentic hub; professional-side data.
 
