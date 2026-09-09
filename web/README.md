@@ -118,6 +118,25 @@ comment) and run `npm run typecheck`.
 
 ## Deployment
 
-Vercel, preview deployments only until Stack signs off the visuals. Set both
-`NEXT_PUBLIC_*` vars in the Vercel project before deploying — a build without
-them succeeds, but every screen behind auth will bounce to `/login`.
+Vercel, **preview deployments only** until Stack signs off the visuals — do not
+promote to production or attach a domain.
+
+Project settings when the Vercel project is created:
+
+| Setting | Value |
+| --- | --- |
+| Framework preset | Next.js |
+| Root Directory | `web` (the app is not at the repo root) |
+| Env vars (Preview + Production) | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+
+Set both env vars before the first deploy. A build without them succeeds, but
+every screen behind auth bounces to `/login` and the sign-in page shows the
+"deployment is unconfigured" notice.
+
+> **Not yet deployed.** The Vercel connector available to the build agent is
+> authorised to read projects and deployments but not to create them — both
+> `deploy_to_vercel` and `create_git_project` return
+> `403 forbidden: You don't have permission to create a project`. The project
+> has to be created once by an account with project-create rights (Vercel team
+> `emstacho-sus-projects`, `team_ohEBa3VTUFU4xAf7tHm4VY0e`); after that, deploys
+> to the existing project work normally.
