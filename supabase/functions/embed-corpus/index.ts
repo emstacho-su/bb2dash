@@ -2,7 +2,7 @@
 // Embeds un-embedded bb_file_text units with the edge runtime's built-in `gte-small`
 // model (384-dim, MIT, no API key) and writes them to bb_text_embeddings.
 //
-// POST { limit?: number = 40, dry_run?: boolean = false }
+// POST { limit?: number = 40, max_parts?: number = 6, dry_run?: boolean = false }
 // ->   { processed_units, inserted_rows, failed: [{text_id, error}], remaining_units, ... }
 //
 // Chunking policy (PLAN_EMBEDDING_POC.md):
@@ -13,6 +13,13 @@
 //                                then hard cut) with ~200 chars of overlap; part_range
 //                                records the raw-text char offsets.
 // The header is NOT counted in part_range — ranges are offsets into bb_file_text.text.
+//
+// CPU budget: gte-small inference is the dominant cost and the edge worker is killed
+// (WORKER_RESOURCE_LIMIT / HTTP 546) well before a long unit's parts are all embedded.
+// So work is tracked and resumed at PART granularity: each part is inserted as soon as
+// it is embedded, `max_parts` caps the inference calls per invocation, and the next
+// invocation picks up exactly the (text_id, part_no) pairs that are still missing.
+// Chunking is deterministic, so part boundaries are stable across invocations.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -102,17 +109,19 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    let body: { limit?: number; dry_run?: boolean } = {};
+    let body: { limit?: number; max_parts?: number; dry_run?: boolean } = {};
     try {
       const raw = await req.text();
       if (raw.trim()) body = JSON.parse(raw);
     } catch {
       body = {};
     }
-    const limit = Math.max(
-      1,
-      Math.min(500, Number.isFinite(Number(body.limit)) && body.limit != null ? Number(body.limit) : 40),
-    );
+    const num = (v: unknown, dflt: number, lo: number, hi: number) => {
+      const n = Number(v);
+      return v == null || !Number.isFinite(n) ? dflt : Math.max(lo, Math.min(hi, n));
+    };
+    const limit = num(body.limit, 40, 1, 1000);
+    const maxParts = num(body.max_parts, 6, 1, 500);
     const dryRun = body.dry_run === true;
 
     const sb = createClient(
@@ -121,29 +130,40 @@ Deno.serve(async (req: Request) => {
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
 
-    // ---- which units already have gte-small embeddings ------------------------
-    const embedded = new Set<number>();
+    // ---- parts that already exist, per unit -----------------------------------
+    const done = new Map<number, Set<number>>();
     for (let from = 0; ; from += 1000) {
       const { data, error } = await sb
         .from("bb_text_embeddings")
-        .select("text_id")
+        .select("text_id, part_no")
         .eq("model", MODEL)
         .range(from, from + 999);
       if (error) throw new Error(`read bb_text_embeddings: ${error.message}`);
-      for (const r of data ?? []) embedded.add(r.text_id as number);
+      for (const r of data ?? []) {
+        const k = r.text_id as number;
+        let s = done.get(k);
+        if (!s) done.set(k, (s = new Set<number>()));
+        s.add(r.part_no as number);
+      }
       if (!data || data.length < 1000) break;
     }
 
-    const { count: totalUnits, error: countErr } = await sb
-      .from("bb_file_text")
-      .select("id", { count: "exact", head: true });
-    if (countErr) throw new Error(`count bb_file_text: ${countErr.message}`);
-    const unembeddedBefore = (totalUnits ?? 0) - embedded.size;
+    // ---- full scan: classify every unit, and collect this run's work ----------
+    // Chunking is cheap next to inference, so one full pass gives both the work
+    // queue and an honest remaining-count.
+    // parts = the missing parts queued for THIS run; missingTotal = all parts the
+    // unit is still missing (larger than parts.length when max_parts truncated it).
+    type Job = { unit: Unit; parts: Part[]; missingTotal: number; ok: boolean };
+    const jobs: Job[] = [];
+    let jobParts = 0;
+    let totalUnits = 0;
+    let totalParts = 0;
+    let missingUnitsBefore = 0;
+    let missingPartsBefore = 0;
+    const scanFailed: { text_id: number; error: string }[] = [];
 
-    // ---- pull the next `limit` un-embedded units, ordered by id ---------------
-    const units: Unit[] = [];
     const PAGE = 500;
-    for (let from = 0; units.length < limit; from += PAGE) {
+    for (let from = 0; ; from += PAGE) {
       const { data, error } = await sb
         .from("bb_file_text")
         .select("id, text, bb_files!inner(course_id, bucket, file_name)")
@@ -152,54 +172,69 @@ Deno.serve(async (req: Request) => {
       if (error) throw new Error(`read bb_file_text: ${error.message}`);
       const rows = data ?? [];
       for (const r of rows) {
-        if (embedded.has(r.id as number)) continue;
-        // deno-lint-ignore no-explicit-any
-        const f: any = Array.isArray((r as any).bb_files)
+        totalUnits++;
+        const id = r.id as number;
+        const text = (r.text as string) ?? "";
+        const parts = chunk(text);
+        totalParts += parts.length;
+        if (parts.length === 0) {
+          scanFailed.push({ text_id: id, error: "unit has empty text" });
+          continue;
+        }
+        const have = done.get(id);
+        const missing = have
+          ? parts.filter((p) => !have.has(p.part_no))
+          : parts;
+        if (missing.length === 0) continue;
+
+        missingUnitsBefore++;
+        missingPartsBefore += missing.length;
+
+        if (jobs.length < limit && jobParts < maxParts) {
           // deno-lint-ignore no-explicit-any
-          ? (r as any).bb_files[0]
-          // deno-lint-ignore no-explicit-any
-          : (r as any).bb_files;
-        units.push({
-          id: r.id as number,
-          text: (r.text as string) ?? "",
-          course_id: f?.course_id ?? null,
-          bucket: f?.bucket ?? null,
-          file_name: f?.file_name ?? null,
-        });
-        if (units.length >= limit) break;
+          const f: any = Array.isArray((r as any).bb_files)
+            // deno-lint-ignore no-explicit-any
+            ? (r as any).bb_files[0]
+            // deno-lint-ignore no-explicit-any
+            : (r as any).bb_files;
+          const take = missing.slice(0, Math.max(1, maxParts - jobParts));
+          jobs.push({
+            unit: {
+              id,
+              text,
+              course_id: f?.course_id ?? null,
+              bucket: f?.bucket ?? null,
+              file_name: f?.file_name ?? null,
+            },
+            parts: take,
+          });
+          jobParts += take.length;
+        }
       }
       if (rows.length < PAGE) break;
     }
 
-    // ---- chunk / embed / insert ----------------------------------------------
+    // ---- embed + insert, one part at a time so a CPU kill keeps its progress ---
     // deno-lint-ignore no-explicit-any
     let session: any = null;
-    if (!dryRun && units.length > 0) {
+    if (!dryRun && jobs.length > 0) {
       // deno-lint-ignore no-explicit-any
       session = new (globalThis as any).Supabase.ai.Session(MODEL);
     }
 
     let processedUnits = 0;
     let insertedRows = 0;
-    let plannedParts = 0;
-    const failed: { text_id: number; error: string }[] = [];
+    const failed: { text_id: number; error: string }[] = [...scanFailed];
 
-    for (const u of units) {
+    for (const job of jobs) {
+      const u = job.unit;
       try {
-        const parts = chunk(u.text);
-        if (parts.length === 0) {
-          throw new Error("unit has empty text");
-        }
-        plannedParts += parts.length;
-
         if (dryRun) {
           processedUnits++;
           continue;
         }
-
         const head = header(u);
-        const rows: Record<string, unknown>[] = [];
-        for (const p of parts) {
+        for (const p of job.parts) {
           const input = head + u.text.slice(p.start, p.end);
           const vec: number[] = await session.run(input, {
             mean_pool: true,
@@ -212,21 +247,19 @@ Deno.serve(async (req: Request) => {
               }`,
             );
           }
-          rows.push({
+          const { error: insErr } = await sb.from("bb_text_embeddings").insert({
             text_id: u.id,
             part_no: p.part_no,
             part_range: `[${p.start},${p.end})`,
             model: MODEL,
             embedding: JSON.stringify(vec),
           });
+          // A duplicate means a concurrent run already stored this part — not a failure.
+          if (insErr && insErr.code !== "23505") {
+            throw new Error(`insert part ${p.part_no}: ${insErr.message}`);
+          }
+          if (!insErr) insertedRows++;
         }
-
-        const { error: insErr } = await sb
-          .from("bb_text_embeddings")
-          .insert(rows);
-        if (insErr) throw new Error(`insert: ${insErr.message}`);
-
-        insertedRows += rows.length;
         processedUnits++;
       } catch (e) {
         failed.push({
@@ -236,7 +269,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const remainingUnits = Math.max(0, unembeddedBefore - processedUnits);
+    const partsDone = dryRun ? 0 : insertedRows;
+    const remainingParts = Math.max(0, missingPartsBefore - partsDone);
+    // A unit is only "remaining" while it still has a missing part.
+    const unitsFinished = dryRun
+      ? 0
+      : jobs.filter((j) =>
+        j.parts.length ===
+          (j.parts.length) /* all of this unit's missing parts were queued */ &&
+        j.parts.length > 0
+      ).length;
+    const remainingUnits = dryRun
+      ? missingUnitsBefore
+      : Math.max(0, missingUnitsBefore - Math.min(unitsFinished, processedUnits));
 
     return new Response(
       JSON.stringify({
@@ -244,14 +289,18 @@ Deno.serve(async (req: Request) => {
         inserted_rows: insertedRows,
         failed,
         remaining_units: remainingUnits,
-        // extras, handy for the batch runner / monitoring
+        // extras, for the batch runner / monitoring
+        remaining_parts: remainingParts,
         dry_run: dryRun,
         model: MODEL,
         limit,
-        parts_planned: plannedParts,
-        units_selected: units.length,
-        unembedded_before: unembeddedBefore,
-        total_units: totalUnits ?? 0,
+        max_parts: maxParts,
+        parts_attempted: jobParts,
+        units_selected: jobs.length,
+        missing_units_before: missingUnitsBefore,
+        missing_parts_before: missingPartsBefore,
+        total_units: totalUnits,
+        total_parts: totalParts,
       }),
       { headers: JSON_HEADERS },
     );
