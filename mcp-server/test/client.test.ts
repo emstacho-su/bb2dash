@@ -139,7 +139,8 @@ describe('search — error mapping', () => {
     const error = await instance.search(request).catch((e: unknown) => e);
     expect((error as ApiError).message).toContain('hybrid_search_file_text');
     expect((error as ApiError).message).toContain('42883');
-    expect((error as ApiError).hint).toContain('apply migration 012');
+    // A known Postgres code names the migration before any server-supplied hint.
+    expect((error as ApiError).hint).toContain('012_hybrid_similarity');
   });
 
   it('a network failure becomes an ApiError with a connectivity hint', async () => {
@@ -218,5 +219,33 @@ describe('listCourses', () => {
     expect(calls[0]!.url).toContain('/rest/v1/courses?');
     expect(calls[0]!.url).toContain('order=id');
     expect(courses).toEqual([{ id: 'ECN.304', title: 'The Economics of Social Issues', kind: 'lecture' }]);
+  });
+});
+
+describe('review follow-ups', () => {
+  it('a unit whose file has no course mapping is rendered as unassigned, not an error', async () => {
+    const { instance } = client([{ status: 200, body: { results: [{ ...hybridRow, course_id: null }] } }]);
+    const result = await instance.search(request);
+    expect(result.hits[0]!.courseId).toBe('(unassigned)');
+  });
+
+  it('a body that fails mid-read is still an ApiError, not a raw TypeError', async () => {
+    const brokenBody = (async () =>
+      new Response(new ReadableStream({ start(controller) { controller.error(new TypeError('terminated')); } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+    const instance = new SupabaseMaterialsClient({ supabaseUrl: TEST_URL, serviceKey: TEST_KEY, timeoutMs: 1000, fetchImpl: brokenBody });
+    const error = await instance.search(request).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).message).toContain('terminated');
+  });
+
+  it('PGRST202 names migration 012 even when PostgREST supplies its own overload hint', async () => {
+    const { instance } = client([
+      { status: 500, body: { error: 'search failed (code PGRST202)', code: 'PGRST202', hint: 'Perhaps you meant to call public.hybrid_search_file_text(p_course, p_limit, p_model, q, query_embedding, rrf_k)' } },
+    ]);
+    const error = await instance.search(request).catch((e: unknown) => e);
+    expect((error as ApiError).hint).toContain('012_hybrid_similarity');
   });
 });

@@ -100,3 +100,10 @@ describe('loadConfig — tuning', () => {
     expect(() => loadConfig({ ...base, BB2DASH_TIMEOUT_MS: '-1' })).toThrow(/BB2DASH_TIMEOUT_MS/);
   });
 });
+
+describe('loadConfig — limit ceiling', () => {
+  it('refuses a BB2DASH_MAX_LIMIT above the advertised hard ceiling', () => {
+    expect(() => loadConfig({ ...base, BB2DASH_MAX_LIMIT: String(MAX_LIMIT + 1) })).toThrow(/hard ceiling/);
+    expect(loadConfig({ ...base, BB2DASH_MAX_LIMIT: String(MAX_LIMIT) }).search.maxLimit).toBe(MAX_LIMIT);
+  });
+});

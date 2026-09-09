@@ -125,6 +125,14 @@ function resolveKey(env: Env): string {
 export function loadConfig(env: Env = process.env): Config {
   const defaultLimit = readPositiveInt(env, 'BB2DASH_DEFAULT_LIMIT', DEFAULT_LIMIT);
   const maxLimit = readPositiveInt(env, 'BB2DASH_MAX_LIMIT', MAX_LIMIT);
+  if (maxLimit > MAX_LIMIT) {
+    // The tool schema advertises MAX_LIMIT to the model and the Edge Function
+    // clamps at 100; a larger value here would be silently ignored upstream.
+    throw new ConfigError(
+      `BB2DASH_MAX_LIMIT (${maxLimit}) exceeds the hard ceiling of ${MAX_LIMIT}.`,
+      `BB2DASH_MAX_LIMIT can only lower the ceiling advertised to the model (${MAX_LIMIT}); raise MAX_LIMIT in src/config.ts to change it.`,
+    );
+  }
   if (defaultLimit > maxLimit) {
     throw new ConfigError(
       `BB2DASH_DEFAULT_LIMIT (${defaultLimit}) exceeds BB2DASH_MAX_LIMIT (${maxLimit}).`,

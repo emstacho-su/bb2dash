@@ -86,7 +86,9 @@ export interface MaterialsClient {
 const hitRow = z.object({
   file_id: z.number(),
   text_id: z.number(),
-  course_id: z.string(),
+  // bb_files.course_id is nullable (a file whose Blackboard shell never mapped
+  // to a course). One such unit must not turn a whole result set into an error.
+  course_id: z.string().nullable(),
   bucket: z.string(),
   file_name: z.string(),
   unit_kind: z.string(),
@@ -139,6 +141,8 @@ export interface SupabaseClientOptions {
 }
 
 const SEARCH_PATH = '/functions/v1/search';
+/** Rendered course id for a file with no course mapping. */
+export const UNASSIGNED_COURSE = '(unassigned)';
 const TEXT_SELECT = 'id,unit_kind,unit_no,text,char_count,bb_files(id,file_name,course_id,bucket,path)';
 
 export class SupabaseMaterialsClient implements MaterialsClient {
@@ -225,7 +229,7 @@ export class SupabaseMaterialsClient implements MaterialsClient {
       file: {
         fileId: file.id,
         fileName: file.file_name,
-        courseId: file.course_id ?? '(unassigned)',
+        courseId: file.course_id ?? UNASSIGNED_COURSE,
         bucket: file.bucket,
         path: file.path,
       },
@@ -248,7 +252,10 @@ export class SupabaseMaterialsClient implements MaterialsClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
 
+    // The timer stays armed until the BODY has been read: a server that sends
+    // headers and then stalls the stream would otherwise hang past the timeout.
     let response: Response;
+    let text: string;
     try {
       response = await this.#fetch(url, {
         ...init,
@@ -260,6 +267,7 @@ export class SupabaseMaterialsClient implements MaterialsClient {
         },
         signal: controller.signal,
       });
+      text = await response.text();
     } catch (cause) {
       if (isAbort(cause)) {
         throw new ApiError(
@@ -279,7 +287,6 @@ export class SupabaseMaterialsClient implements MaterialsClient {
       clearTimeout(timer);
     }
 
-    const text = await response.text();
     let payload: unknown = null;
     if (text.length > 0) {
       try {
@@ -300,7 +307,7 @@ function normaliseHit(row: z.infer<typeof hitRow>): MaterialHit {
   return {
     fileId: row.file_id,
     textId: row.text_id,
-    courseId: row.course_id,
+    courseId: row.course_id ?? UNASSIGNED_COURSE,
     bucket: row.bucket,
     fileName: row.file_name,
     unitKind: row.unit_kind,
@@ -332,7 +339,13 @@ function errorFor(status: number, path: string, payload: unknown): ApiError {
   const isFunction = path.startsWith('/functions/');
 
   let hint: string;
-  if (serverHint) {
+  if (code === 'PGRST202' || code === '42883') {
+    // PostgREST's own hint ("Perhaps you meant to call ...") describes the
+    // overload it found, which sends an operator to change the caller. The
+    // real fix is the migration the caller was written for.
+    hint =
+      'No SQL function matched the call. Apply db/migrations/012_hybrid_similarity.sql (hybrid_search_file_text with p_min_similarity and a similarity column) and confirm the deployed search function matches supabase/functions/search/index.ts.';
+  } else if (serverHint) {
     hint = serverHint;
   } else if (status === 401 || status === 403) {
     hint = 'The key was rejected. SUPABASE_SERVICE_ROLE must be the bb2dash sb_secret_… key (or legacy service-role JWT); the publishable key cannot read bb_file_text or call `search` behind verify_jwt.';
