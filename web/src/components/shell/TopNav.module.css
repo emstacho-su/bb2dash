@@ -1,0 +1,255 @@
+/* Top bar — GUI decision 1c. Ported from the .nv block in 13-home-v2.dc.html.
+   Left rail is retired; this bar is the only global navigation. */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 10px 28px;
+  min-height: var(--nav-height);
+  background: var(--color-surface);
+  box-shadow: inset 0 -1px 0 var(--color-divider);
+  font-size: var(--text-base);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-right: 6px;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 16px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+.brand:hover { color: var(--color-text); }
+
+.mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--color-accent);
+  box-shadow: 0 0 10px var(--color-accent);
+}
+
+.links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.link {
+  color: var(--color-text);
+  text-decoration: none;
+  padding: 6px 2px;
+  white-space: nowrap;
+}
+.link:hover { color: var(--color-accent); }
+
+.linkActive {
+  composes: link;
+  color: var(--color-accent);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+
+.right {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  position: relative;
+}
+
+/* icon button */
+.ic {
+  all: unset;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--color-neutral-200);
+  position: relative;
+  cursor: pointer;
+}
+.ic:hover { background: var(--color-hover); }
+.ic:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ic svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  display: block;
+}
+
+.icOpen {
+  composes: ic;
+  color: var(--color-accent);
+  background: var(--color-hover);
+}
+
+.icDisabled {
+  composes: ic;
+  color: var(--color-neutral-600);
+  cursor: default;
+}
+.icDisabled:hover { background: transparent; }
+
+/* pop-down panel */
+.dd {
+  position: absolute;
+  z-index: 30;
+  top: 40px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ddCourses {
+  composes: dd;
+  right: 72px;
+  width: 300px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.ddUser {
+  composes: dd;
+  right: 0;
+  width: 240px;
+}
+
+.ddHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 12px 6px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+
+.ddRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--color-text);
+  text-decoration: none;
+  background: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+.ddRow:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.ddCode {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-neutral-400);
+  width: 58px;
+  flex: none;
+}
+
+.ddTitle {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ddNote {
+  padding: 10px 12px 14px;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-500);
+}
+
+.ddIdentity {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: inset 0 -1px 0 var(--color-divider);
+}
+
+.ddEmail {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: var(--color-accent-800);
+  color: var(--color-accent-100);
+  line-height: 14px;
+}
+
+/* the cmd-K affordance sits between the links and the icon cluster */
+.cmdk {
+  all: unset;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  color: var(--color-neutral-500);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  min-width: 180px;
+}
+.cmdk:hover {
+  background: var(--color-hover);
+  color: var(--color-neutral-300);
+}
+.cmdk:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.kbd {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-400);
+}
+
+@media (max-width: 720px) {
+  .bar {
+    gap: var(--space-4);
+    padding: 10px 14px;
+  }
+  .links { gap: var(--space-4); }
+  .cmdk { display: none; }
+  .ddCourses {
+    right: 0;
+    width: min(300px, calc(100vw - 28px));
+  }
+}
