@@ -1,10 +1,19 @@
-// bb2dash :: edge function `search`
+// bb2dash :: edge function `search`  (v3)
 // The hub's retrieval API over the harvested Blackboard corpus.
 //
-// POST { q: string, course?: string, mode?: 'fts'|'vector'|'hybrid', limit?: number }
+// POST { q: string, course?: string, mode?: 'fts'|'vector'|'hybrid', limit?: number,
+//        min_similarity?: number }
 //   fts     -> rpc search_file_text(q, p_course, p_limit)            [migration 010]
 //   vector  -> embed q with gte-small, rpc match_file_text(...)      [migration 011, vector(384)]
-//   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migration 011, RRF merge]
+//   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migration 012, RRF + floor]
+//
+// min_similarity (0..1, optional) is a cosine floor on the VECTOR evidence. Measured on this
+// corpus 2026-09-09: relevant hits 0.83-0.92, nonsense English 0.75-0.77, so 0.78 is the
+// recommended default for agent callers. It is not applied server-side by default — omit it and
+// v3 behaves exactly like v2 — because the Materials cmd-K overlay may prefer "always show
+// something". In hybrid mode it is forwarded to the SQL function, which gates only the vector
+// arm and still returns literal keyword hits (with their real similarity) below the floor. In
+// vector mode there is no keyword arm, so it simply filters the ranked list. fts ignores it.
 //
 // The query string is embedded RAW — no "{course} {bucket} — {file_name}: " context header.
 // That header is a corpus-side construct (see PLAN_EMBEDDING_POC.md, chunking policy); prefixing
@@ -44,6 +53,16 @@ async function embed(q: string): Promise<number[]> {
   return Array.from(v as number[]);
 }
 
+/** Parse the optional floor. Returns null when absent, or an error string when malformed. */
+function parseMinSimilarity(raw: unknown): { value: number | null; error?: string } {
+  if (raw === undefined || raw === null) return { value: null };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 1) {
+    return { value: null, error: "min_similarity must be a number between 0 and 1" };
+  }
+  return { value: n };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: JSON_HEADERS });
   if (req.method !== "POST") {
@@ -74,6 +93,10 @@ Deno.serve(async (req: Request) => {
     ? Math.min(100, Math.max(1, Math.trunc(rawLimit)))
     : 10;
 
+  const floor = parseMinSimilarity(body.min_similarity);
+  if (floor.error) return json({ error: floor.error }, 400);
+  const minSimilarity = floor.value;
+
   try {
     let results: unknown[] = [];
 
@@ -93,7 +116,12 @@ Deno.serve(async (req: Request) => {
         p_limit: limit,
       });
       if (error) throw error;
-      results = data ?? [];
+      results = (data ?? []) as Array<{ similarity: number }>;
+      if (minSimilarity !== null) {
+        results = (results as Array<{ similarity: number }>).filter(
+          (r) => typeof r.similarity === "number" && r.similarity >= minSimilarity,
+        );
+      }
     } else {
       const { data, error } = await supabase.rpc("hybrid_search_file_text", {
         q,
@@ -101,12 +129,20 @@ Deno.serve(async (req: Request) => {
         p_model: MODEL,
         p_course: course,
         p_limit: limit,
+        p_min_similarity: minSimilarity,
       });
       if (error) throw error;
       results = data ?? [];
     }
 
-    return json({ mode, q, course, count: results.length, results });
+    return json({
+      mode,
+      q,
+      course,
+      min_similarity: minSimilarity,
+      count: results.length,
+      results,
+    });
   } catch (err) {
     const e = err as { message?: string; code?: string; details?: string; hint?: string };
     return json(
