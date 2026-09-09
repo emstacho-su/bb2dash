@@ -6,3 +6,5 @@ dist/
 .DS_Store
 # Blackboard course materials are professors' IP; keep them out of a public repo
 course context/
+# Local worktree scaffolding for isolated subagents
+.claude/worktrees/
