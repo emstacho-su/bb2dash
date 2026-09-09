@@ -241,7 +241,7 @@ mcp-server/
 ## Tests
 
 ```powershell
-npm test                 # 66 tests
+npm test                 # 74 tests
 npm run test:coverage    # 95% statements, 82% branches, 100% functions
 npm run typecheck
 ```

@@ -41,16 +41,35 @@ function unitLabel(hit: { unitKind: string; unitNo: number }): string {
   return `${hit.unitKind} ${hit.unitNo}`;
 }
 
-function formatSimilarity(similarity: number | null, floor: number | null): string {
-  if (similarity === null || !Number.isFinite(similarity)) return 'n/a';
-  const value = similarity.toFixed(4);
-  if (floor !== null && similarity < floor) {
-    return `${value} (below the ${floor} floor — surfaced by literal keyword match, not semantic similarity)`;
+/**
+ * What a sub-floor similarity means depends on how the row got here:
+ *   - hybrid, floor applied server-side: the vector arm excluded it, so it is a
+ *     literal keyword hit — independent evidence, labelled as such.
+ *   - hybrid, floor NOT applied (v2 function): could be either a keyword hit or
+ *     the nearest semantic junk; say so rather than guess.
+ *   - vector mode has no keyword arm at all: it is simply a weak match.
+ */
+function formatSimilarity(
+  similarity: number | null,
+  floor: number | null,
+  mode: Mode,
+  floorApplied: boolean,
+): string {
+  if (similarity === null || !Number.isFinite(similarity)) {
+    return mode === 'fts' ? 'n/a' : 'n/a (this unit has no embedding — keyword-only evidence)';
   }
-  return value;
+  const value = similarity.toFixed(4);
+  if (floor === null || similarity >= floor) return value;
+  if (mode === 'vector') {
+    return `${value} (below the ${floor} floor — a weak semantic match; vector mode has no keyword arm)`;
+  }
+  if (!floorApplied) {
+    return `${value} (below the ${floor} floor — the server did not apply it, so this may be a keyword hit or merely the nearest semantic neighbour)`;
+  }
+  return `${value} (below the ${floor} floor — surfaced by literal keyword match, not semantic similarity)`;
 }
 
-function renderHit(hit: MaterialHit, index: number, floor: number | null): string {
+function renderHit(hit: MaterialHit, index: number, context: SearchContext, floorApplied: boolean): string {
   const lines = [
     `### ${index + 1}. ${hit.fileName}`,
     `- course: ${hit.courseId}`,
@@ -58,7 +77,7 @@ function renderHit(hit: MaterialHit, index: number, floor: number | null): strin
     `- unit: ${unitLabel(hit)}`,
     `- text_id: ${hit.textId}${hit.partNo !== null ? ` (part ${hit.partNo})` : ''}`,
     `- file_id: ${hit.fileId}`,
-    `- similarity: ${formatSimilarity(hit.similarity, floor)}`,
+    `- similarity: ${formatSimilarity(hit.similarity, context.minSimilarity, context.mode, floorApplied)}`,
   ];
   if (hit.score !== null) lines.push(`- score: ${hit.score.toFixed(6)} (RRF, ordering only)`);
   if (hit.rank !== null) lines.push(`- rank: ${hit.rank} (ts_rank)`);
@@ -85,7 +104,7 @@ export function formatSearchResults(context: SearchContext, result: SearchResult
     );
   }
 
-  const blocks = hits.map((hit, index) => renderHit(hit, index, context.minSimilarity));
+  const blocks = hits.map((hit, index) => renderHit(hit, index, context, result.floorApplied));
   const footer = 'To read a full unit, call get_material_text with its `text_id`. Course ids are exact (e.g. IST.323).';
 
   return [header.join('\n'), '', blocks.join('\n\n---\n\n'), '', footer].join('\n');

@@ -124,3 +124,30 @@ describe('formatTextNotFound / formatCourses / truncate', () => {
     expect(truncate('abcdef', 3)).toContain('truncated');
   });
 });
+
+
+describe('sub-floor labels depend on how the row got here', () => {
+  const low = makeHit({ similarity: 0.61 });
+
+  it('hybrid with the floor applied: a literal keyword hit', () => {
+    const out = formatSearchResults(context, { hits: [low], floorApplied: true });
+    expect(out).toMatch(/literal keyword match/);
+  });
+
+  it('hybrid without the floor applied (v2 function): could be either, and says so', () => {
+    const out = formatSearchResults(context, { hits: [low], floorApplied: false });
+    expect(out).toMatch(/server did not apply it/);
+    expect(out).not.toMatch(/literal keyword match/);
+  });
+
+  it('vector mode: a weak semantic match, never called a keyword hit', () => {
+    const out = formatSearchResults({ ...context, mode: 'vector' }, { hits: [low], floorApplied: false });
+    expect(out).toMatch(/weak semantic match/);
+    expect(out).not.toMatch(/keyword match/);
+  });
+
+  it('an unembedded unit in hybrid mode is labelled keyword-only evidence', () => {
+    const out = formatSearchResults(context, { hits: [makeHit({ similarity: null })], floorApplied: true });
+    expect(out).toMatch(/no embedding/);
+  });
+});
