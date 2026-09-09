@@ -3,7 +3,7 @@
 Blackboard Ultra → Supabase → a personal academic hub. Syracuse University, Fall 2026.
 
 ## Layout
-- `db/migrations/` — schema, numbered. `001` typed warehouse, `002` raw landing table, `003` file catalog + storage bucket, `004` Blackboard identifiers.
+- `db/migrations/` — schema, numbered. `001` typed warehouse, `002` raw landing table, `003` file catalog + storage bucket, `004` Blackboard identifiers, `005` file corpus (buckets, extracted text), `006` course maps, `007` text anon insert, `008` canonical file layout, `009` v_upcoming fix, `010` search layer (FTS + pgvector).
 - `db/seed/` — syllabus-derived seed (courses, grading rules, assignments, sessions, readings).
 - `ingest/bb_crawler.js` — runs inside a logged-in Blackboard tab; posts raw JSON to `bb_raw`.
 - `DATA_SYNTAX.md` — data dictionary and conventions. `PHASE2_FINDINGS.md` — what the first Blackboard pass found. `NOTES.md` — phases and open caveats.
@@ -13,7 +13,10 @@ Blackboard Ultra → Supabase → a personal academic hub. Syracuse University, 
 psql "$DATABASE_URL" -f db/migrations/001_schema.sql -f db/migrations/002_raw_landing.sql \
   -f db/migrations/003_bb_files_bucket.sql -f db/seed/002_seed_fall2026_core.sql \
   -f db/seed/003_seed_fall2026_assignments.sql -f db/seed/004_seed_fall2026_sessions_readings.sql \
-  -f db/migrations/004_bb_identifiers.sql
+  -f db/migrations/004_bb_identifiers.sql -f db/migrations/005_file_corpus.sql \
+  -f db/migrations/006_course_maps.sql -f db/migrations/007_text_anon_insert.sql \
+  -f db/migrations/008_file_layout.sql -f db/migrations/009_upcoming_excludes_missed.sql \
+  -f db/migrations/010_search_layer.sql
 ```
 
 ## Ingest
