@@ -1,31 +1,18 @@
 import type { Metadata } from 'next';
-import { TodaySummary } from './TodaySummary';
-import styles from './Shell.module.css';
+import { Today } from './Today';
 
 export const metadata: Metadata = {
   title: 'Today · bb2dash',
 };
 
 /**
- * Today (Home). The real screen — the scrollable Upcoming-work effort tracker,
- * the collapsed Needs-attention row and the 2-up course cards with the M–F
- * strip — is artboard 13-home-v2 and belongs to W-5.
+ * Today (Home) — artboard 13-home-v2, owned by W-5.
  *
- * What is here is the shell plus a live read through the query layer, so the
- * scaffold proves the whole path (auth cookie -> RLS -> PostgREST -> TanStack
- * cache) end to end without inventing any content.
+ * The whole screen (effort tracker, undated tray, status quick-edit, last-sync
+ * line, course cards) is a client component so it can read live data through
+ * the query layer and drive the click-to-select tracker + optimistic status
+ * edits. The (app) layout supplies the top bar and the <main> wrapper.
  */
 export default function TodayPage() {
-  return (
-    <>
-      <header className={styles.header}>
-        <div className={styles.headerText}>
-          <span className={styles.kicker}>Home</span>
-          <h1 className={styles.title}>Today</h1>
-        </div>
-      </header>
-
-      <TodaySummary />
-    </>
-  );
+  return <Today />;
 }
