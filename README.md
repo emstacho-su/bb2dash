@@ -7,6 +7,7 @@ Blackboard Ultra → Supabase → a personal academic hub. Syracuse University, 
 - `db/seed/` — syllabus-derived seed (courses, grading rules, assignments, sessions, readings).
 - `ingest/bb_crawler.js` — runs inside a logged-in Blackboard tab; posts raw JSON to `bb_raw`.
 - `supabase/functions/` — edge functions: `embed-corpus` (gte-small batch embedder), `search` (retrieval API: fts/vector/hybrid; default hybrid).
+- `mcp-server/` — stdio MCP server that gives Claude Code `search_materials` / `get_material_text` / `list_courses` over the corpus. See `mcp-server/README.md`.
 - `DATA_SYNTAX.md` — data dictionary and conventions. `PHASE2_FINDINGS.md` — what the first Blackboard pass found. `NOTES.md` — phases and open caveats.
 
 ## Rebuild from scratch
