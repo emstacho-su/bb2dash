@@ -57,8 +57,28 @@ inferred. `inferred` = existence inferred (placeholders like "quiz series").
 | `announcements` | Blackboard announcement | Blackboard |
 | `bb_content` | Blackboard content tree node (as you see it) | Blackboard |
 | `sync_runs` | provenance log per capture | sync jobs |
+| `bb_raw` | raw crawl payload per (run, course) | crawler |
+| `bb_files` | harvested file: bucket, links, hash, storage + local paths | bb-course-pull |
+| `bb_file_text` | extracted text unit (slide/page/doc/sheet) per file | bb-course-pull |
+| `course_maps` | versioned per-course pull plan (jsonb) | bb-course-map |
+| `bb_text_embeddings` | vector embedding per (text unit, model, part) | embed job (pending) |
 
-Views: `v_upcoming` (not-yet-due, not finished), `v_overdue` (past due, still open).
+Views: `v_upcoming` (not-yet-due, not finished), `v_overdue` (past due, still open),
+`v_course_corpus` (files/stored/with-text per course+bucket), `v_course_map_latest`,
+`v_file_layout` (canonical storage/local paths + needs_move), `v_embedding_status`.
+
+## Search layer (migration 010)
+
+Two retrieval tiers over the corpus, both scoped by course when wanted:
+
+* **Full-text** — generated `tsvector` + GIN on `bb_file_text.text`, `bb_content` (title+body),
+  `announcements` (title+body). Query with `search_file_text(q, course, limit)` → ranked hits
+  with bucket/file context and a highlighted snippet. Live now.
+* **Vector** — `bb_text_embeddings` holds `vector(1024)` per `(text_id, model, part_no)` with an
+  HNSW cosine index; `part_no` exists because 12 text units exceed ~8k chars and must be split
+  at embed time. Query with `match_file_text(query_embedding, model, course, limit)`. Empty
+  until an embedding model is chosen (column sized for Voyage `voyage-3.5`; re-size before
+  first insert if a different model wins).
 
 ## Enums
 

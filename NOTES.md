@@ -9,7 +9,14 @@ central hub for all schoolwork. Professional-side data comes later.
 ## Phases
 1. DONE — identify classes, build data syntax, seed from syllabi (Supabase `bb2dash`).
 2. DONE (initial pass) — Blackboard capture via built-in browser + internal JSON API → `bb_raw` → typed tables. See `PHASE2_FINDINGS.md`.
-3. NEXT — read the remaining syllabi (IST 352, IST 466, GEO recitation), finish grading models, and make the crawl repeatable on a cadence (weekly + before each class day), diffing `bb_raw` runs into the typed tables.
+3. DONE (2026-09-03/08) — bb-course-map + bb-course-pull per course: 64 files harvested into
+   Storage + local mirror, 534 text units extracted, buckets classified, maps at v2+.
+3b. DONE (2026-09-09) — extract audit + search layer. Repo backfilled with live migrations
+   005–009 (drift fixed); migration 010 adds FTS (live) and pgvector `bb_text_embeddings`
+   (empty, awaiting embedding-model decision). See `AUDIT_2026-09-09.md`.
+3c. NEXT — pick the embedding model, run the embed job (534 units; split the 12 oversized ones),
+   and make the crawl repeatable on a cadence (weekly + before each class day), diffing `bb_raw`
+   runs into the typed tables.
 4. NEXT — stage this codebase as a public GitHub repo. Dev workflow rule: develop on branches, test visually on a local port, push to prod only when Stack explicitly asks (saved in project memory as `feedback_dev_workflow.md`).
 5. LATER — the app on top: dashboard + planner + agentic hub; professional-side data.
 
