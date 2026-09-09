@@ -16,3 +16,12 @@ Running log of design decisions and their reasoning. Append-only; newest last.
 | 2026-09-09 | `pg_net` enabled and kept | only route from sandboxed sessions to edge functions (org egress blocks supabase.co); pairs with pg_cron later |
 | 2026-09-09 | Docker: skipped | Postgres+pgvector managed by Supabase; model lives in edge runtime; nothing to containerize |
 | 2026-09-09 | Workflow SOP: dev on branches, push per completed task, **one PR per phase**, merge only on Stack's word | Stack's instruction |
+| 2026-09-09 | GUI stack: **Next.js on Vercel + Supabase Auth**, no Docker | supersedes the recovered local "Docker-first hub" plan; pg_cron+pg_net cover the scheduler jobs; see `docs/planning/40_RECONCILIATION_2026-09-09.md` |
+| 2026-09-09 | Electron endgame parked to a later phase, not dropped | its only unique value (open local OneDrive files, spawn `claude`) doesn't survive on Vercel; browser fallbacks (signed URLs, copy-path) ship first |
+| 2026-09-09 | Renderer: CSS Modules + custom properties, **no Tailwind** | the `.dc.html` Nocturne artboards are the layout spec and port 1:1 |
+| 2026-09-09 | GUI v1 scope cuts: no bell/announcements, no planner day view, **no grade display** this term, 14-day tracker window | honesty rule (no gradebook data yet) + reconciliation scope |
+| 2026-09-09 | Effort model from `20_D1` §3 (19-type base, ≥5-points multiplier gate, source label per figure) | authoritative over the `21_D2` variant where they disagreed |
+| 2026-09-09 | Screen workers run in **isolated git worktrees**, PM integrates by copying deliverable files | prevents 4 parallel Opus workers (and a concurrent external session) from clobbering one tree |
+| 2026-09-09 | Adopted the out-of-band `hybrid_search_file_text` upgrade (relevance floor + similarity), captured as migration 018 | backward compatible (null-default param); a concurrent session applied it under a colliding `012` name; reverting good work made no sense |
+| 2026-09-09 | RLS hardening (W-9) sequenced AFTER the first live preview | a policy bug during hardening must not be confused with a screen bug; also safer to tighten once, late, while a second session writes prod |
+| 2026-09-09 | A second Claude session also edits bb2dash (prod + repo) | fetch-before-act, never force-push, flag anything not originated here — treat prod and branch as shared |
