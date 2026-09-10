@@ -1,0 +1,204 @@
+/* ============================================================================
+   tokens.module.css — the CSS-Modules composition pattern for this codebase.
+
+   globals.css owns the raw design tokens. This module owns the *reusable
+   primitives* the artboards use over and over (card, tag, rule, mono, kicker,
+   the assignment-type glyph). Feature modules pull them in with `composes`
+   rather than restating token values:
+
+       // src/app/(app)/some-screen/Thing.module.css
+       .panel {
+         composes: card from '@/styles/tokens.module.css';
+         gap: var(--space-4);
+       }
+
+   Two rules that keep a restyle cheap:
+     1. Never write a raw colour, radius or spacing value in a feature module —
+        reference a var(--…) from globals.css.
+     2. If three feature modules want the same thing, it belongs here.
+   ========================================================================= */
+
+/* — surfaces ——————————————————————————————————————————————————————— */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.cardLg {
+  composes: card;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+}
+
+.elevSm { box-shadow: var(--shadow-sm); }
+.elevMd { box-shadow: var(--shadow-md); }
+.elevLg { box-shadow: var(--shadow-lg); }
+
+/* — the Nocturne signature rule: fades to transparent at both ends ——— */
+.rule {
+  height: 1px;
+  border: 0;
+  margin: var(--space-4) 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-divider) 48px,
+    var(--color-divider) calc(100% - 48px),
+    transparent
+  );
+}
+
+/* — text roles ————————————————————————————————————————————————————— */
+.kicker {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-neutral-400);
+}
+
+.muted { color: var(--color-muted); }
+
+/* — tags ——————————————————————————————————————————————————————————— */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: calc(var(--radius-md) * 0.75);
+  white-space: nowrap;
+  flex: none;
+}
+
+.tagAccent {
+  composes: tag;
+  background: var(--color-accent-800);
+  color: var(--color-accent-100);
+}
+
+.tagNeutral {
+  composes: tag;
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-100);
+}
+
+.tagOutline {
+  composes: tag;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* — buttons ————————————————————————————————————————————————————————— */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  border-radius: var(--radius-md);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  composes: btn;
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.btnPrimary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.btnPrimary:active:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+
+.btnSecondary {
+  composes: btn;
+  border-color: var(--color-divider);
+}
+.btnSecondary:hover:not(:disabled) { background: var(--color-hover); }
+.btnSecondary:active:not(:disabled) { background: var(--color-active); }
+
+.btnGhost {
+  composes: btn;
+  color: var(--color-accent);
+  padding-inline: var(--space-1);
+}
+.btnGhost:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+
+/* — forms ——————————————————————————————————————————————————————————— */
+.field > label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:focus-visible {
+  border-color: var(--color-accent);
+  outline-offset: 0;
+}
+
+/* — the assignment-type glyph (R · A · Q · P · E, T-15) ————————————— */
+.glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--type-reading-bg);
+  color: var(--type-reading-fg);
+}
+.glyphReading { composes: glyph; }
+.glyphAssignment {
+  composes: glyph;
+  background: var(--type-assignment-bg);
+  color: var(--type-assignment-fg);
+}
+.glyphQuiz {
+  composes: glyph;
+  background: var(--type-quiz-bg);
+  color: var(--type-quiz-fg);
+}
+.glyphProject {
+  composes: glyph;
+  background: var(--type-project-bg);
+  color: var(--type-project-fg);
+}
+.glyphExam {
+  composes: glyph;
+  background: var(--type-exam-bg);
+  color: var(--type-exam-fg);
+}

@@ -1,0 +1,107 @@
+{
+  "course_id": "ECN.304",
+  "bb_id": "_572517_1",
+  "version": 2,
+  "mapped_at": "2026-09-03",
+  "supersedes": 1,
+  "pull_result": {
+    "ran_at": "2026-09-03",
+    "downloaded": 3,
+    "new_files_found": 0,
+    "stale_urls_fixed": 0,
+    "uploaded": 3,
+    "text_units": 56,
+    "duplicates": 1,
+    "failed": 0,
+    "note": "Hand-placed 'course context/ECN.304/ECN 304 F26 Syllabus_M001.pdf' was byte-identical (sha 99d96381...) to the fresh download; the hand-placed copy was moved into syllabus_policy/ and the redundant download discarded. Only one bb_files row exists for it, so no duplicate row was created."
+  },
+  "meeting": {
+    "days": ["Tue", "Thu"],
+    "start": "15:30",
+    "end": "16:50",
+    "room": "Life Sciences Building (LSB) 001",
+    "source": "announcement 'Welcome to ECN 304!' (8/24); syllabus PDF gives no room/time",
+    "confidence": "confirmed"
+  },
+  "grading": {
+    "method": "weighted_pct",
+    "components": [
+      {"code": "exams", "name": "Exams (rank-weighted)", "weight_pct": 75, "count_expected": 3, "aggregation": "rank_weighted", "rank_weights": [30, 25, 20], "note": "Highest exam 30%, median 25%, lowest 20%. Weights follow the RANK of the score, not the exam number. All three non-cumulative."},
+      {"code": "quizzes", "name": "Average Quiz Grade", "weight_pct": 15, "aggregation": "average_drop_lowest", "drop_lowest": 1, "note": "Quizzes on assigned readings and course materials throughout the semester; lowest dropped. Count/dates not stated anywhere."},
+      {"code": "participation", "name": "Participation", "weight_pct": 10, "aggregation": "manual", "note": "Attend and actively participate in every class; email beforehand to be excused. Gradebook shows one manual 'Attendance' column (_3598937_1, 100 pts, currently 100)."}
+    ],
+    "letter_scale": [{"letter": "A", "min": 93}, {"letter": "A-", "min": 90}, {"letter": "B+", "min": 87}, {"letter": "B", "min": 83}, {"letter": "B-", "min": 80}, {"letter": "C+", "min": 77}, {"letter": "C", "min": 73}, {"letter": "C-", "min": 70}, {"letter": "D", "min": 60}, {"letter": "F", "min": 0}],
+    "total_points": null,
+    "rules": [
+      "Three non-cumulative exams weighted by rank: highest 30%, median 25%, lowest 20%.",
+      "Lowest quiz grade dropped from the quiz average.",
+      "Exams may not be made up unless an urgent and legitimate reason is demonstrated with proof.",
+      "AI permitted only for reviewing course materials; if an item gives no AI instructions, no AI use is permitted.",
+      "Prerequisite ECN 101. No textbook required; Guell 9e optional."
+    ],
+    "source": "ECN 304 F26 Syllabus_M001.pdf (bb_files.id 23), pages 2-3, verified verbatim after the pull",
+    "confidence": "confirmed",
+    "seed_vs_pdf": "identical - the seed's 30/25/20 rank-weighted exams, 15% quizzes drop-lowest, 10% participation and the full letter scale all match the PDF exactly. No corrections needed."
+  },
+  "tree_shape": {
+    "principle": "topic_folders",
+    "roots": ["ECN 304 F26 Syllabus_M001.pdf (loose file at course root)", "Content (learning module)"],
+    "bucket_paths": {
+      "syllabus_policy": ["<course root> / *Syllabus*.pdf"],
+      "lecture_slides": ["Content / <topic folder> / *.pptx", "Content / <topic folder> / *_HO.*"],
+      "readings": ["Content / <topic folder> / non-pptx article attachments (none exist; all 38 assigned readings are external URLs)"],
+      "assignment_spec": ["none - exams and quizzes are in-class paper, no Blackboard items or gradebook columns"]
+    },
+    "week_key": "no week token in filenames or paths; week comes from the topic-folder -> week map below",
+    "deck_version_key": "_v<N>HO = handout version N of a topic deck; a later _v4HO replaces _v3HO in the same folder",
+    "topic_folder_week_map": [
+      {"folder": "National Debt", "week_no": 1, "first_session_date": "2026-08-27", "session_id": 2, "session_topic": "Federal Budget Deficits and Growing National Debt", "spans_sessions": [2, 3, 4], "files_present": ["National Debt_v3HO.pptx"]},
+      {"folder": "Social Security", "week_no": 3, "first_session_date": "2026-09-08", "session_id": 5, "session_topic": "Socio-Economic Impact of an Unsustainable Social Security Program", "spans_sessions": [5, 6], "files_present": ["Social Security_v3HO.pptx"]},
+      {"folder": "Healthcare", "week_no": 4, "first_session_date": "2026-09-15", "session_id": 7, "session_topic": "Causes and Effects of Rising Health Care Costs", "spans_sessions": [7, 8, 9, 10, 11], "files_present": []},
+      {"folder": "Environmental Economics", "week_no": 7, "first_session_date": "2026-10-06", "session_id": 13, "session_topic": "Economics of Climate Change and Environmental Sustainability", "spans_sessions": [13, 14, 16], "files_present": []},
+      {"folder": "Great Recession", "week_no": 9, "first_session_date": "2026-10-20", "session_id": 17, "session_topic": "Lessons from the Great Recession", "spans_sessions": [17, 18, 19], "files_present": []},
+      {"folder": "International Financial Crisis", "week_no": 10, "first_session_date": "2026-10-29", "session_id": 20, "session_topic": "Lessons from Recent International Financial Crisis", "spans_sessions": [20, 21], "files_present": []},
+      {"folder": "Discrimination", "week_no": 12, "first_session_date": "2026-11-10", "session_id": 23, "session_topic": "Economics of Racial and Gender Discrimination", "spans_sessions": [23, 24], "files_present": []},
+      {"folder": "International Trade", "week_no": 13, "first_session_date": "2026-11-17", "session_id": 25, "session_topic": "Impact of International Trade on Jobs and Income Inequality", "spans_sessions": [25, 26], "files_present": []},
+      {"folder": "Crime", "week_no": 15, "first_session_date": "2026-12-01", "session_id": 29, "session_topic": "Economics of Crime", "spans_sessions": [29, 30], "files_present": []}
+    ],
+    "classification_rule": "A new file under 'Content / <topic>' is lecture_slides; set week_no and session_id to the topic's FIRST session in the sessions table (course_id='ECN.304'), matching sessions.topic against the folder's session_topic. A non-pptx article attachment under a topic folder is readings with the same week_no and should be linked to the matching readings row for that topic. The same map keys the readings table: readings.for_date = the topic's first session date, readings.week_no = the topic's week."
+  },
+  "sources": [
+    {"kind": "content_tree", "locator": "/learn/api/v1/courses/_572517_1/contents/ROOT/children (recurse)", "file_bearing": true, "state": "13 items, 3 file-bearing; re-walked live 9/3, identical to the 9/2 crawl"},
+    {"kind": "gradebook", "locator": "/learn/api/v1/courses/_572517_1/gradebook/grades?userId=_21025199_1", "file_bearing": false, "state": "one column: 'Attendance' _3598937_1, 100 pts, effectiveScore 100, submitted 8/25. No quiz or exam columns exist."},
+    {"kind": "announcements", "locator": "/learn/api/v1/courses/_572517_1/announcements", "file_bearing": false, "state": "2 posts: 'Welcome to ECN 304!' (8/24), 'Quiz 1 on Tuesday (09/01)' (8/29)"},
+    {"kind": "calendar", "locator": "/learn/api/v1/calendars/calendarItems", "file_bearing": false},
+    {"kind": "schedule", "locator": "/learn/api/v1/courses/_572517_1/schedule", "file_bearing": false, "state": "0 rows"},
+    {"kind": "external_readings", "locator": "syllabus pp.4-6 reading list -> readings table (38 rows, all public URLs, on_blackboard=false)", "file_bearing": false, "state": "verified 38/38 against the pulled PDF; none missing, none extra; week_no backfilled from the topic map"}
+  ],
+  "course_fields": [
+    {"name": "quiz_series", "source": "syllabus p.2 + announcement 8/29; no Blackboard test items and no gradebook column", "value": {"format": "in-class paper, unannounced", "known": [{"seq": 1, "date": "2026-09-01", "readings": ["NY Fed - Monetary Policy Implementation", "SEC Investor Bulletin - Interest Rate Risk"], "source": "announcement 'Quiz 1 on Tuesday (09/01)'"}], "count_for_semester": null, "drop_lowest": 1}, "confidence": "partial", "stack_must_confirm": true, "confirm_question": "How many quizzes have been given so far and what did you score on Quiz 1? Nothing about quizzes reaches Blackboard - no test item, no gradebook column - so the dashboard can only track what you enter."},
+    {"name": "exam_dates", "source": "syllabus p.7 schedule -> sessions 12/22/31 and assignments exam-1/2/3", "value": {"exam_1": "2026-10-01", "exam_2": "2026-11-05", "exam_3": "2026-12-08"}, "confidence": "confirmed", "stack_must_confirm": false, "note": "all three in class, non-cumulative; Exam 3 falls on the last class day, so there is no separate final-exam-period sitting"},
+    {"name": "ta_contact", "source": "syllabus p.1 -> course_staff id 2", "value": {"name": "Brenda Revilla", "email": "bateruya@syr.edu", "office_hours": "Email for appointment", "office": null}, "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "readings_by_topic", "source": "syllabus pp.4-6 -> readings table (course_id='ECN.304')", "value": {"rows": 38, "topics": 9, "required": 20, "recommended": 18, "on_blackboard": 0, "keyed_by": "for_date = topic's first session date; week_no now populated", "verification": "38/38 matched the pulled PDF line by line; nothing missing, nothing added"}, "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "attendance_column", "source": "gradebook column _3598937_1 'Attendance' (category Attendance.name, 100 pts)", "value": {"columnId": "_3598937_1", "possible": 100, "current_score": 100, "role": "the only live gradebook signal; proxy for the 10% participation component"}, "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "textbook", "source": "syllabus pp.1-2", "value": "None required. Optional: Guell, Issues in Economics Today, 9e (McGraw-Hill) - used copy suggested; chapter references appear as 'recommended' rows per topic in readings.", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "deck_cadence", "source": "Content tree", "value": "One handout deck per topic, posted at or just before the topic starts (National Debt posted 8/25, Social Security 8/30). Seven topic folders are still empty; expect ~7 more decks over the semester.", "confidence": "confirmed", "stack_must_confirm": false}
+  ],
+  "file_manifest": [
+    {"bb_file_id": 23, "file_name": "ECN 304 F26 Syllabus_M001.pdf", "content_id": "_13005441_1", "bucket": "syllabus_policy", "week_no": null, "session_id": null, "assignment_id": null, "reading_id": null, "sha256": "99d96381e8cb4bba00e8c7469baa38c93ed73130420f93ff24d1366812b62ec8", "bytes": 215332, "mime_type": "application/pdf", "storage_path": "bb-files/ECN.304/syllabus_policy/ECN 304 F26 Syllabus_M001.pdf", "local_path": "course context/ECN.304/syllabus_policy/ECN 304 F26 Syllabus_M001.pdf", "text_units": 7, "text_status": "extracted", "status": "stored"},
+    {"bb_file_id": 24, "file_name": "National Debt_v3HO.pptx", "content_id": "_13152893_1", "bucket": "lecture_slides", "week_no": 1, "session_id": 2, "assignment_id": null, "reading_id": null, "sha256": "849e4a4208131b9ab6e474e2c3d797c6be11622c939c728efcd38cea79a0628f", "bytes": 411352, "mime_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "storage_path": "bb-files/ECN.304/lecture_slides/week-01/National Debt_v3HO.pptx", "local_path": "course context/ECN.304/lecture_slides/week-01/National Debt_v3HO.pptx", "text_units": 26, "text_status": "extracted", "status": "stored"},
+    {"bb_file_id": 25, "file_name": "Social Security_v3HO.pptx", "content_id": "_13177657_1", "bucket": "lecture_slides", "week_no": 3, "session_id": 5, "assignment_id": null, "reading_id": null, "sha256": "7917182d09add3863856c1c701d0597e4bc1bbe119bf4e94a5c2653fde1bd7cc", "bytes": 949880, "mime_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "storage_path": "bb-files/ECN.304/lecture_slides/week-03/Social Security_v3HO.pptx", "local_path": "course context/ECN.304/lecture_slides/week-03/Social Security_v3HO.pptx", "text_units": 23, "text_status": "extracted", "status": "stored"}
+  ],
+  "gaps": [
+    {"what": "Quiz count and dates for the semester - the syllabus never states them and no Blackboard item or gradebook column exists. Only Quiz 1 (9/1) is known, from an announcement.", "owner": "wait", "closes_with": "future announcements; otherwise Stack logs each quiz by hand"},
+    {"what": "Quiz 1 score (and any later quiz scores)", "owner": "stack"},
+    {"what": "Exam point values - the syllabus publishes weights only, never raw points, so grade_components.points and assignments.points_possible stay null by design", "owner": "wait"},
+    {"what": "Seven topic folders (Healthcare, Environmental Economics, Great Recession, International Financial Crisis, Discrimination, International Trade, Crime) are empty; decks post as each topic starts. The topic_folder_week_map above classifies them automatically.", "owner": "wait"},
+    {"what": "All 38 readings are external URLs, nothing to download into the readings bucket", "owner": "wait"}
+  ],
+  "resolved_since_v1": [
+    "Grading verified verbatim against the pulled syllabus PDF (identical to the seed).",
+    "Late policy and AI policy rewritten from the PDF's own wording.",
+    "38/38 readings verified against the PDF reading list; week_no backfilled on every row from the topic map.",
+    "Both decks classified lecture_slides and linked to sessions 2 and 5 (weeks 1 and 3).",
+    "Hand-placed syllabus copy deduped by sha and moved into the canonical layout.",
+    "courses.group_notes written: no group work, no graded Blackboard submissions."
+  ]
+}

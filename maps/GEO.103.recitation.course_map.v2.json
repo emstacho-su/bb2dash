@@ -1,0 +1,93 @@
+{
+  "course_id": "GEO.103.recitation",
+  "bb_id": "_569318_1",
+  "version": 2,
+  "mapped_at": "2026-09-03",
+  "meeting": {
+    "days": ["Fri"],
+    "day_of_week": 5,
+    "start": "11:40",
+    "end": "12:35",
+    "room": "Maxwell Hall 140",
+    "starts_on": "2026-08-28",
+    "ends_on": "2026-12-04",
+    "source": "Discussion Section Syllabus Fall 2026.docx (bb_files 22)",
+    "confidence": "confirmed",
+    "changed_from_v1": "room corrected from 'Maxwell Hall 108' to 'Maxwell Hall 140'; day/time held (Fri 11:40-12:35) and are now confirmed rather than assumed"
+  },
+  "grading": {
+    "method": "rolls_into_parent",
+    "components": [
+      {"code": "section_participation", "name": "Discussion Section Attendance & Participation", "weight_pct": 15, "owner_course": "GEO.103.lecture"},
+      {"code": "reading_quizzes", "name": "Reading Quizzes", "weight_pct": 10, "owner_course": "GEO.103.lecture", "rule": "~5 unannounced; lowest dropped"}
+    ],
+    "rules": [
+      "The recitation shell has no grading scheme of its own; its 25% is scored in GEO.103.lecture's weighted_pct scheme.",
+      "Participation rubric (Prof. Wilson's guidelines, applied by the TA) A/B/C/D/F, appended verbatim-in-substance to grading_schemes.notes for GEO.103.lecture on 2026-09-03.",
+      "Section environment: smartphones barred in section (repeated reminders reduce the participation score); laptops for note-taking only unless directed.",
+      "Absence: notify the TA in advance for university activities, ASAP if sick; the student must check in with the TA about a reading-quiz make-up after an absence.",
+      "Grades are not discussed over email - office hours only."
+    ],
+    "source": "GEO 103 lecture syllabus + Discussion Section Syllabus Fall 2026.docx",
+    "confidence": "confirmed"
+  },
+  "tree_shape": {
+    "principle": "flat_shell",
+    "note": "Two top-level items under the default Content folder (_12786460_1); no folders, no weekly modules. Course material lives in the GEO.103.lecture shell.",
+    "bucket_paths": {
+      "syllabus_policy": ["<root>/*Syllabus*.docx"],
+      "media_links": ["<root>/* (item_kind = course_link | lti)"]
+    }
+  },
+  "sources": [
+    {"kind": "content_tree", "locator": "/learn/api/v1/courses/_569318_1/contents?recursive=true", "file_bearing": true, "note": "2 items, verified live 2026-09-03: 1 x-bb-file (harvested), 1 x-bb-courselink"},
+    {"kind": "gradebook", "locator": "bb_raw run 3e12fd89 payload->'gradebook'", "file_bearing": false, "note": "single column 'Attendance' (_3602445_1, category _5693191_1, possible 100, aggregation LAST, no score yet) - feeds section_participation (15%) in the lecture scheme"},
+    {"kind": "announcements", "locator": "payload->'announcements'", "file_bearing": false, "note": "empty"},
+    {"kind": "calendar", "locator": "payload->'schedule'", "file_bearing": false, "note": "empty"},
+    {"kind": "discussions", "locator": "course link _13175563_1 -> lecture shell content _13175562_1 ('Introductions!')", "file_bearing": false}
+  ],
+  "course_fields": [
+    {"name": "section_no", "source": "bb course name GEO.103.M003.FALL26 + section syllabus 'Meeting Times' block", "value": "M003 (= the TA's section #3)", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "meeting_day_time", "source": "Discussion Section Syllabus Fall 2026.docx", "value": "Friday 11:40-12:35, Maxwell Hall 140", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "ta_office_hours", "source": "Discussion Section Syllabus Fall 2026.docx", "value": "Tuesday 1-2 PM & Thursday 2-3 PM, Eggers 140; appointments if these conflict", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "participation_criteria", "source": "Discussion Section Syllabus Fall 2026.docx", "value": "A/B/C/D/F rubric on reading preparation, quality and frequency of contribution, listening, and device use; absences lower the grade. Stored in grading_schemes.notes for GEO.103.lecture.", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "carbon_footprint_handin_date", "source": "GEO 103 lecture syllabus 'Week Three' + now-confirmed Friday meeting day", "value": "2026-09-11", "confidence": "tentative", "stack_must_confirm": true, "note": "The Friday assumption behind this date is now confirmed and sessions put week 3 at Sep 7-11, so Fri 2026-09-11 follows. Still derived: no document names the date and the section syllabus has no calendar."},
+    {"name": "quiz_makeup_policy", "source": "Discussion Section Syllabus Fall 2026.docx", "value": "After an absence the student must check in with the TA about a reading-quiz make-up; the TA does not chase it.", "confidence": "confirmed", "stack_must_confirm": false}
+  ],
+  "file_manifest": [
+    {
+      "bb_file_id": 22,
+      "content_id": "_13164610_1",
+      "file_name": "Discussion Section Syllabus Fall 2026.docx",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13164610-dt-content-rid-165136031_1/xid-165136031_1",
+      "download_method": "direct_url",
+      "bucket": "syllabus_policy",
+      "week_no": null,
+      "assignment_id": null,
+      "reading_id": null,
+      "priority": 1,
+      "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "bytes": 20400,
+      "sha256": "80788b3c61285bd41224524d0657874405dc3a732e98c977cbaf0b36bbc98f17",
+      "storage_path": "bb-files/GEO.103.recitation/syllabus_policy/Discussion Section Syllabus Fall 2026.docx",
+      "local_path": "course context/GEO.103.recitation/syllabus_policy/Discussion Section Syllabus Fall 2026.docx",
+      "text_status": "extracted",
+      "text_units": 1,
+      "status": "harvested"
+    }
+  ],
+  "gaps": [
+    {"what": "carbon-footprint activity hand-in date (2026-09-11) is derived, not stated; the section syllabus carries no calendar", "owner": "stack"},
+    {"what": "no sessions rows for the recitation - the section syllabus lists no dated meetings, so none were invented. Section dates can be generated from the confirmed Fri 11:40 pattern (2026-08-28 to 2026-12-04) if Stack wants them.", "owner": "stack"},
+    {"what": "reading-quiz dates are unknowable by design (quizzes are unannounced); GEO.103/reading-quiz-series stays a placeholder", "owner": "wait"},
+    {"what": "course_staff id 5 (Cheyenne Morris on GEO.103.lecture) still has null office_hours; the same hours apply but that row belongs to the lecture course and was left untouched", "owner": "stack"},
+    {"what": "'Introductions!' course link is link-only (points at the lecture shell discussion _13175562_1) - no bytes to harvest", "owner": "wait"}
+  ],
+  "resolved_since_v1": [
+    "Section meeting room corrected: Maxwell Hall 108 -> Maxwell Hall 140; meetings.confidence tentative -> confirmed, source -> blackboard.",
+    "TA office hours, office and contact rules written to course_staff id 6.",
+    "Section participation rubric, device policy, absence and quiz-make-up rules appended to grading_schemes.notes for GEO.103.lecture (append, not overwrite).",
+    "courses.group_notes written; syllabus_status stays complete.",
+    "bb_files 22 downloaded, stored, mirrored, hashed and extracted (1 text unit, 4066 chars)."
+  ]
+}

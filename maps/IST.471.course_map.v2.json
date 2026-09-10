@@ -1,0 +1,383 @@
+{
+  "course_id": "IST.471",
+  "bb_id": "_570161_1",
+  "version": 2,
+  "mapped_at": "2026-09-03T21:35:00Z",
+  "title": "Internship in Info Mgmt and Tech (IST 471 M800, Fall 2026)",
+  "kind": "internship",
+  "credits": "3.0",
+  "meeting": {
+    "days": [],
+    "start": null,
+    "end": null,
+    "room": "Online",
+    "source": "courses.location + syllabus (no class meetings; fully online, asynchronous internship course)",
+    "note": "No lecture pattern. The only scheduled synchronous event is the Assignment 5 midpoint conference, which the student schedules individually."
+  },
+  "grading": {
+    "method": "qualitative",
+    "components": [
+      {
+        "code": "work_quality",
+        "name": "Quality of professional work in the internship",
+        "weight_pct": 70,
+        "notes": "Site supervisor evaluation (Assignment 6, 100-pt Blackboard column)"
+      },
+      {
+        "code": "assignments",
+        "name": "Complete, timely, correctly formatted assignments",
+        "weight_pct": 30,
+        "notes": "Assignments 1-7"
+      }
+    ],
+    "rules": [
+      "Penalties for incomplete, late, or incorrectly formatted assignments are at the professor's discretion.",
+      "Failure to receive the site supervisor's evaluation form results in NO CREDIT for the course, regardless of other work.",
+      "Minimum 50 work hours per credit hour; 3 credits = 150 hours minimum.",
+      "Blackboard point totals (5+5+5+5+10+100 = 130) are bookkeeping for the two weighted buckets, not the grade basis."
+    ],
+    "letter_scale": [
+      {
+        "letter": "A",
+        "min": 93
+      },
+      {
+        "letter": "A-",
+        "min": 90
+      },
+      {
+        "letter": "B+",
+        "min": 87
+      },
+      {
+        "letter": "B",
+        "min": 84
+      },
+      {
+        "letter": "B-",
+        "min": 81
+      },
+      {
+        "letter": "C+",
+        "min": 77
+      },
+      {
+        "letter": "C",
+        "min": 74
+      },
+      {
+        "letter": "C-",
+        "min": 71
+      }
+    ],
+    "source": "IST 471 Syllabus.pdf p.5, pulled and extracted 2026-09-03 (bb_files 26, sha cf69c388..., 8 pages / 14723 chars in bb_file_text)",
+    "confidence": "confirmed",
+    "verified": "Seed 70/30 split, letter scale and late-penalty wording all match the pulled PDF exactly. No change made to weights or method.",
+    "ai_policy": "iSchool appendix 'Limited and Specified Artificial Intelligence Use' with the permitted-assignment placeholder left unfilled; appendix default therefore governs - no AI tool permitted on any assignment absent documented instructor permission. Written to grading_schemes.ai_policy.",
+    "instrument": "The 70% work-quality half is scored from Site Supervisor Evaluation.pdf (bb_files 61): 8 competencies rated 1-5, 8 IM&T learning outcomes rated S/D-SA-N/O, 4 narrative questions."
+  },
+  "tree_shape": {
+    "principle": "functional_folders_flat",
+    "description": "Three top-level nodes, no weeks and no modules. Content = course documents; Assignments = one Ultra test-link per numbered assignment, each carrying its own attachments in the instructions body; Introductions! = a course link to the single discussion forum. Nothing is dated or sequenced by week; the course is paced by the student's own internship hours.",
+    "bucket_paths": {
+      "syllabus_policy": [
+        "Content / *Syllabus*"
+      ],
+      "assignment_spec": [
+        "Assignments / Assignment N - * / <attachment>",
+        "Content / *Learning Agreement*",
+        "Content / *Evaluation*"
+      ],
+      "media_links": [
+        "Introductions! (course link -> discussion forum, no bytes)"
+      ]
+    },
+    "new_file_rule": "A new file next week will arrive as a data-bbfile attachment inside an Assignment N test-link's instructions body -> assignment_spec, linked to the matching IST.471/aN assignment. A new file dropped into Content is syllabus_policy only if its title says syllabus/policy; a form (Learning Agreement, evaluation) placed in Content is assignment_spec linked to the assignment that requires it."
+  },
+  "sources": [
+    {
+      "kind": "content_tree",
+      "locator": "/learn/api/v1/courses/_570161_1/contents?expand=all (3 top-level: _13156822_1 Introductions!, _13156722_1 Content, _13156723_1 Assignments)",
+      "file_bearing": true,
+      "readable": true
+    },
+    {
+      "kind": "content_item_embeds",
+      "locator": "/learn/api/v1/courses/_570161_1/contents/<id> -> contentDetail...assessment.instructions.rawText, parse data-bbfile",
+      "file_bearing": true,
+      "readable": true,
+      "note": "CRITICAL for this course: all three non-syllabus files live here, not in the content-tree summary. The summary crawl found 1 of 4 files."
+    },
+    {
+      "kind": "gradebook",
+      "locator": "/learn/api/v1/courses/_570161_1/gradebook/columns (6 columns _3599883_1.._3599888_1, category _5605302_1 Assignment.name, all weight null)",
+      "file_bearing": false,
+      "readable": true
+    },
+    {
+      "kind": "announcements",
+      "locator": "payload->'announcements' (1 item: 'Welcome!' _1663468_1, 2026-08-26)",
+      "file_bearing": false,
+      "readable": true
+    },
+    {
+      "kind": "calendar",
+      "locator": "payload->'schedule' \u2014 empty array; no calendar events for this shell",
+      "file_bearing": false,
+      "readable": true
+    },
+    {
+      "kind": "discussions",
+      "locator": "/learn/api/v1/courses/_570161_1/discussionboards -> 200, returns ids only ([{id:_760791_1}]); board detail /discussionboards/_760791_1 -> 403; forum detail /discussionboards/_760791_1/forums/_653399_1 -> 200 (title 'Introductions!', isAvailable true, created 2026-08-26, allowThreadGrading true); /discussionboards/_760791_1/forums/_653399_1/threads -> 404; /courses/_570161_1/discussions -> 404",
+      "file_bearing": false,
+      "readable": "partial",
+      "note": "Board listing and forum metadata are readable; thread/post contents are not reachable from this API path. Nothing was posted. The forum is reached in the UI via course link _13156822_1 -> forumlink _13156821_1 -> conference _760791_1 / forum _653399_1."
+    },
+    {
+      "kind": "groups",
+      "locator": "none \u2014 individual internship, no groups",
+      "file_bearing": false,
+      "readable": false
+    },
+    {
+      "kind": "attempts",
+      "locator": "all six columns submissionStatus=UNOPENED, no attempts to harvest",
+      "file_bearing": false,
+      "readable": true
+    }
+  ],
+  "course_fields": [
+    {
+      "name": "site",
+      "source": "courses.notes (Stack seed)",
+      "value": "Syracuse University ITS \u2014 Information Security/Development internship",
+      "confidence": "confirmed",
+      "stack_must_confirm": false
+    },
+    {
+      "name": "site_supervisor",
+      "source": "Learning Agreement Undergrad.pdf (bb_files 60) page 1 has the SITE SUPERVISOR block: Name, Title, Work Phone, E-mail. That form is unsubmitted, so the values are still unknown.",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true
+    },
+    {
+      "name": "faculty_sponsor",
+      "source": "course_staff id 12 (Stack seed)",
+      "value": "Dan Cohen",
+      "confidence": "confirmed",
+      "stack_must_confirm": false,
+      "note": "The Registrar proposal form (bb_files 59) requires the SU Faculty Sponsor name, email and last 4 of SUID, and a faculty-sponsor signature on page 2. Dan Cohen is the sponsor per the seed; his email and SUID last-4 are not in Blackboard."
+    },
+    {
+      "name": "hours_required",
+      "source": "IST 471 Syllabus.pdf p.2 ('minimum of 50 hours per credit hour') x 3.0 credits",
+      "value": 150,
+      "confidence": "confirmed",
+      "stack_must_confirm": false,
+      "conflict": "CONFLICT FOUND IN THE PULL: the Registrar Internship Proposal/Agreement form (bb_files 59) computes required hours as 'Number of Credits x 45 hours', i.e. 135 for 3 credits, while the IST 471 syllabus p.2 says 'a minimum of 50 hours per credit hour', i.e. 150. Using the syllabus figure (150) as the course authority; the Registrar form is a university-wide minimum. Stack should log hours against 150."
+    },
+    {
+      "name": "learning_agreement_deadline",
+      "source": "Learning Agreement Undergrad.pdf (bb_files 60) states it 'must be uploaded ... upon completion of 30 hours of the work assignment' and warns 'Late paperwork can affect your grade.' Syllabus p.3-4 agrees. Blackboard column _3599886_1 backstop due 2026-10-09 23:59 ET.",
+      "value": null,
+      "confidence": "inferred",
+      "stack_must_confirm": true,
+      "note": "Still hours-based, so still not a date. Once internship_start_date and weekly_hours are known this resolves to a real date; until then the 2026-10-09 Blackboard date is the only hard deadline."
+    },
+    {
+      "name": "midpoint_meeting_scheduled",
+      "source": "Assignment 5 \u2014 student must email Bevans proposed times; column _3599887_1 due 2026-11-06 23:59 ET",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true,
+      "note": "Unchanged by the pull - nothing in the shell records scheduling state. Student must initiate by emailing pabevans@syr.edu."
+    },
+    {
+      "name": "internship_start_date",
+      "source": "not in Blackboard; needed to derive the 30-hour and midpoint milestones",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true
+    },
+    {
+      "name": "weekly_hours",
+      "source": "not in Blackboard; needed to pace 150 hours across the term",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true
+    },
+    {
+      "name": "internship_credits_and_grading_basis",
+      "source": "Registrar Internship Proposal/Agreement (bb_files 59) page 1: number of credits, and Grading Basis = letter grade (A-F) OR pass/fail (undergrads only)",
+      "value": "3.0 credits; grading basis not recorded in Blackboard",
+      "confidence": "tentative",
+      "stack_must_confirm": true,
+      "note": "Whether IST 471 was registered letter-graded or pass/fail changes what the 70/30 score means on the transcript."
+    },
+    {
+      "name": "academic_advisor",
+      "source": "required signature on the Registrar proposal form and a named field on the Learning Agreement (bb_files 59, 60)",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true
+    },
+    {
+      "name": "work_block_dates_and_schedule",
+      "source": "Learning Agreement Undergrad.pdf (bb_files 60): 'Dates of work block: From / To' and 'Schedule (days, hours of work)'",
+      "value": null,
+      "confidence": "unknown",
+      "stack_must_confirm": true,
+      "note": "Same underlying unknown as internship_start_date + weekly_hours; the Learning Agreement is where it gets committed in writing."
+    }
+  ],
+  "file_manifest": [
+    {
+      "bb_file_id": 26,
+      "file_name": "IST 471 Syllabus.pdf",
+      "content_id": "_13156729_1",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-13156729-dt-content-rid-165054177_1/xid-165054177_1",
+      "download_method": "direct_url",
+      "bucket": "syllabus_policy",
+      "week_no": null,
+      "assignment_id": null,
+      "reading_id": null,
+      "priority": 1,
+      "expected_mime": "application/pdf",
+      "already_local": "course context/IST.471/IST 471 Syllabus.pdf (hand-placed, 365853 bytes, matches Blackboard fileSize)",
+      "status": "stored",
+      "storage_path": "bb-files/IST.471/syllabus_policy/IST 471 Syllabus.pdf",
+      "local_path": "course context/IST.471/syllabus_policy/IST 471 Syllabus.pdf",
+      "sha256": "cf69c38846bf02b8a7176fea3a9cb5e31ec43efb702b28b2eddb2a9f5a128f0c",
+      "bytes": 365853,
+      "text_units": 8,
+      "text_status": "extracted"
+    },
+    {
+      "bb_file_id": 59,
+      "file_name": "form-internship-proposal-agreement-1.pdf",
+      "content_id": "_13156730_1",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-14225538-dt-asiobject-rid-165054445_1/xid-165054445_1",
+      "download_method": "direct_url",
+      "bucket": "assignment_spec",
+      "week_no": null,
+      "assignment_id": "IST.471/a1-proposal",
+      "reading_id": null,
+      "priority": 2,
+      "expected_mime": "application/pdf",
+      "note": "embed carried viewerUrl only (no resourceUrl) \u2014 exactly the pilot's missing-file case",
+      "status": "stored",
+      "storage_path": "bb-files/IST.471/assignment_spec/a1-proposal/form-internship-proposal-agreement-1.pdf",
+      "local_path": "course context/IST.471/assignment_spec/a1-proposal/form-internship-proposal-agreement-1.pdf",
+      "sha256": "a65901acc0d2b37e291629b3ecac08c1d020d18a8aedba4233864ab6f23bdbd8",
+      "bytes": 223872,
+      "text_units": 2,
+      "text_status": "extracted"
+    },
+    {
+      "bb_file_id": 60,
+      "file_name": "Learning Agreement Undergrad.pdf",
+      "content_id": "_13156733_1",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-14225536-dt-asiobject-rid-165054443_1/xid-165054443_1",
+      "download_method": "direct_url",
+      "bucket": "assignment_spec",
+      "week_no": null,
+      "assignment_id": "IST.471/a4-learning-agreement",
+      "reading_id": null,
+      "priority": 2,
+      "expected_mime": "application/pdf",
+      "note": "embed resourceUrl was a session-scoped /sessions/... URL; stored the durable bbcswebdav permanent URL",
+      "status": "stored",
+      "storage_path": "bb-files/IST.471/assignment_spec/a4-learning-agreement/Learning Agreement Undergrad.pdf",
+      "local_path": "course context/IST.471/assignment_spec/a4-learning-agreement/Learning Agreement Undergrad.pdf",
+      "sha256": "7c7a610f0395c7a103da6e429c8a94b7ef0bff89f0a544ad245780cd9b1233c1",
+      "bytes": 136629,
+      "text_units": 2,
+      "text_status": "extracted"
+    },
+    {
+      "bb_file_id": 61,
+      "file_name": "Site Supervisor Evaluation.pdf",
+      "content_id": "_13156735_1",
+      "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-14225539-dt-asiobject-rid-165054447_1/xid-165054447_1",
+      "download_method": "direct_url",
+      "bucket": "assignment_spec",
+      "week_no": null,
+      "assignment_id": "IST.471/a6-site-evaluations",
+      "reading_id": null,
+      "priority": 2,
+      "expected_mime": "application/pdf",
+      "note": "the form the site supervisor must email to pabevans@syr.edu; no-credit gate",
+      "status": "stored",
+      "storage_path": "bb-files/IST.471/assignment_spec/a6-site-evaluations/Site Supervisor Evaluation.pdf",
+      "local_path": "course context/IST.471/assignment_spec/a6-site-evaluations/Site Supervisor Evaluation.pdf",
+      "sha256": "3741d14094b29ea0528e933faff322a5fe4bcb3cad3ebb9b8f8823c3d1c767a1",
+      "bytes": 170691,
+      "text_units": 3,
+      "text_status": "extracted"
+    }
+  ],
+  "expected_layout": [
+    "IST.471/syllabus_policy/IST 471 Syllabus.pdf",
+    "IST.471/assignment_spec/a1-proposal/form-internship-proposal-agreement-1.pdf",
+    "IST.471/assignment_spec/a4-learning-agreement/Learning Agreement Undergrad.pdf",
+    "IST.471/assignment_spec/a6-site-evaluations/Site Supervisor Evaluation.pdf"
+  ],
+  "gaps": [
+    {
+      "what": "Assignment 7 (Final Reflection) still has no Blackboard gradebook column, content item, due date or point value. Re-probed twice on 2026-09-03 (map v1 and again during the pull): /gradebook/columns returns exactly 6 columns, Assignments folder has exactly 6 test links. assignments row IST.471/a7-final-reflection remains due_at null, points null, confidence=tentative.",
+      "owner": "wait"
+    },
+    {
+      "what": "Required-hours conflict: syllabus says 50 hours/credit (150 for 3 credits); the Registrar proposal form pulled this run says credits x 45 hours (135). Recorded 150 as authoritative. Worth one line of confirmation from Bevans so hour logging is not disputed at evaluation time.",
+      "owner": "stack"
+    },
+    {
+      "what": "The STUDENT evaluation form the syllabus promises under Content (p.4, Assignment 6) does not exist anywhere in the shell. A data-bbfile scan of all 11 content items this run found only Site Supervisor Evaluation.pdf. Assignment 6 as described needs both forms.",
+      "owner": "stack"
+    },
+    {
+      "what": "site_supervisor name, title, work phone and email unknown. Blocks Assignment 1 (proposal), Assignment 4 (Learning Agreement), Assignment 5 (the supervisor must attend the midpoint conference) and Assignment 6 (the supervisor's emailed evaluation is a hard no-credit gate).",
+      "owner": "stack"
+    },
+    {
+      "what": "Internship start date, end date and weekly schedule unknown, so the 150 hours cannot be paced, the 30-hour Learning Agreement trigger cannot be dated, and the midpoint conference window cannot be placed.",
+      "owner": "stack"
+    },
+    {
+      "what": "Midpoint faculty conference (Assignment 5) not scheduled. Student-initiated: email proposed times to pabevans@syr.edu. Blackboard backstop 2026-11-06.",
+      "owner": "stack"
+    },
+    {
+      "what": "Faculty sponsor Dan Cohen's email address and last-4 SUID are required on the Registrar proposal form and are not in Blackboard; course_staff row 12 has email null.",
+      "owner": "stack"
+    },
+    {
+      "what": "Grading basis at registration (letter grade vs pass/fail) is not recorded anywhere in Blackboard.",
+      "owner": "stack"
+    },
+    {
+      "what": "Discussion thread and post contents are not reachable via the v1 API (board detail 403, forum threads 404); only board id and forum metadata are readable. Assignment 2 must be posted and read in the Ultra UI.",
+      "owner": "wait"
+    },
+    {
+      "what": "Submission-channel ambiguity for Assignment 4: the Learning Agreement PDF says upload it to the CONTENT section of Blackboard, but Blackboard exposes an Assignment 4 test-link submission. Assumed the Assignment 4 link is correct; noted in the assignments row.",
+      "owner": "stack"
+    }
+  ],
+  "notes": "Pull complete. Whole corpus = 4 PDFs, all stored, mirrored and extracted (15 text units); needs_move=0. The decisive finding stands from v1: 3 of the 4 files were data-bbfile attachments inside assessment instruction bodies, which the summary crawl does not walk - the summary catalog had 1 of 4 files, so 75% of this course's corpus was invisible before the embed refresh. Zero stale URLs. Grading needed no change: the pulled syllabus confirmed the seed's 70/30 split, letter scale and late policy verbatim; the only grading write was the previously-null ai_policy. The three pulled forms are the real value of this pull - together they enumerate exactly which facts Stack must supply (site supervisor identity, work-block dates and schedule, faculty sponsor email, grading basis, academic advisor) before Assignments 1 and 4 can be completed, and they surfaced a 45-vs-50 hours-per-credit conflict between the Registrar form and the syllabus.",
+  "supersedes": "course_maps id 10 (IST.471 v1)",
+  "pull_result": {
+    "ran": "2026-09-03 (bb-course-pull)",
+    "downloaded": 3,
+    "reused_hand_placed": 1,
+    "new_files_found": 3,
+    "stale_urls_fixed": 0,
+    "uploaded": 4,
+    "text_units": 15,
+    "duplicates": 0,
+    "failed": 0,
+    "needs_move": 0,
+    "note": "The Learning Agreement did not land on the first batch fire and was re-fired once; it then landed. Downloads in this environment land as UUID .tmp files rather than Blackboard display names, so files were claimed by first-page text signature (pdftotext) rather than by filename."
+  }
+}

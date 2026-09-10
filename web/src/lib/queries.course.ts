@@ -1,0 +1,374 @@
+/**
+ * Course-page (W-6) query layer.
+ *
+ * Follows the same conventions as `queries.ts` (see its header) but lives in
+ * its own file so the W-6 screen can add queries without editing the shared
+ * layer. Row types come from the generated `database.types.ts` via the `Tables`
+ * / `Views` helpers re-exported from `queries.ts`; nothing here hand-writes a
+ * table shape.
+ *
+ * The course page reads seven things and merges shells for display courses that
+ * span more than one Blackboard shell (GEO 103 = lecture + recitation):
+ *   - v_course_display  one row per *display* course (merged meetings, bb_url)
+ *   - courses           the underlying shells (locations, term_id)
+ *   - terms             start_date, so week 1 = the week of start_date
+ *   - sessions          lecture lane, carries week_no + session_date + topic
+ *   - v_work_items      assignment lane + readings, effort/glyph precomputed
+ *   - grading_schemes   the AI policy shown verbatim
+ *   - bb_files          harvested files, counted per session
+ */
+
+import { queryOptions, useQuery } from '@tanstack/react-query';
+import { getSupabaseBrowserClient } from './supabase/client';
+import type { Tables, Views } from './queries';
+
+export type CourseDisplay = Views<'v_course_display'>;
+export type WorkItem = Views<'v_work_items'>;
+export type Session = Tables<'sessions'>;
+export type GradingScheme = Tables<'grading_schemes'>;
+export type Term = Tables<'terms'>;
+
+/** One weekly meeting slot inside `v_course_display.meetings` (jsonb array). */
+export type MeetingSlot = {
+  day: number; // 0 = Sunday … 6 = Saturday (meetings.day_of_week)
+  start: string | null; // "HH:MM:SS"
+  end: string | null;
+  room: string | null;
+};
+
+/** The `session_id`-bearing subset of bb_files the panel needs. */
+export type SessionFile = Pick<
+  Tables<'bb_files'>,
+  'id' | 'session_id' | 'file_name' | 'bucket'
+>;
+
+/* ---------------------------------------------------------------------------
+ * Cache keys
+ * ------------------------------------------------------------------------ */
+
+/** Stable, greppable key for a set of shells (order-independent). */
+function shellKey(shellIds: string[]): string {
+  return [...shellIds].sort().join('+');
+}
+
+export const courseQueryKeys = {
+  display: (courseId: string) => ['course-display', courseId] as const,
+  shells: (shellIds: string[]) => ['course-shells', shellKey(shellIds)] as const,
+  term: (termId: string) => ['term', termId] as const,
+  sessions: (shellIds: string[]) => ['course-sessions', shellKey(shellIds)] as const,
+  workItems: (shellIds: string[]) => ['course-work-items', shellKey(shellIds)] as const,
+  gradingScheme: (shellIds: string[]) => ['course-grading-scheme', shellKey(shellIds)] as const,
+  sessionFiles: (shellIds: string[]) => ['course-session-files', shellKey(shellIds)] as const,
+} as const;
+
+/* ---------------------------------------------------------------------------
+ * Queries
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The merged display row for a course. Resolves whether the route id is the
+ * display id ('GEO.103.lecture') or a child shell ('GEO.103.recitation') by
+ * also matching on the shell_ids array, so a link to either shell lands on the
+ * one merged page.
+ */
+export function courseDisplayOptions(courseId: string) {
+  return queryOptions({
+    queryKey: courseQueryKeys.display(courseId),
+    queryFn: async (): Promise<CourseDisplay | null> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('v_course_display')
+        .select('*')
+        .or(`display_id.eq.${courseId},shell_ids.cs.{${courseId}}`)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
+/** The underlying shells — locations (for the room-dispute check) + term_id. */
+export function courseShellsOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.shells(shellIds),
+    queryFn: async (): Promise<Pick<Tables<'courses'>, 'id' | 'location' | 'term_id' | 'kind'>[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('courses')
+        .select('id, location, term_id, kind')
+        .in('id', shellIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
+/** One term row — the week rail is derived from `start_date`. */
+export function termOptions(termId: string | undefined) {
+  return queryOptions({
+    queryKey: courseQueryKeys.term(termId ?? 'none'),
+    queryFn: async (): Promise<Term | null> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('terms')
+        .select('*')
+        .eq('id', termId as string)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(termId),
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+/** Every session across the display course's shells, oldest first. */
+export function courseSessionsOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.sessions(shellIds),
+    queryFn: async (): Promise<Session[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .in('course_id', shellIds)
+        .order('session_date', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 15 * 60 * 1000,
+  });
+}
+
+/** Work items (assignments + readings) across the display course's shells. */
+export function courseWorkItemsOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.workItems(shellIds),
+    queryFn: async (): Promise<WorkItem[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('v_work_items')
+        .select('*')
+        .in('course_id', shellIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * The grading scheme for the display course. A merged course keys its scheme on
+ * one shell (GEO on the lecture shell); we take whichever shell has one.
+ */
+export function courseGradingSchemeOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.gradingScheme(shellIds),
+    queryFn: async (): Promise<GradingScheme | null> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('grading_schemes')
+        .select('*')
+        .in('course_id', shellIds);
+      if (error) throw error;
+      if (!data || data.length === 0) return null;
+      // Prefer a scheme with an ai_policy; otherwise the first row.
+      return data.find((s) => s.ai_policy) ?? data[0];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
+/** Harvested files that are pinned to a session, for the per-session count. */
+export function courseSessionFilesOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.sessionFiles(shellIds),
+    queryFn: async (): Promise<SessionFile[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('bb_files')
+        .select('id, session_id, file_name, bucket')
+        .in('course_id', shellIds)
+        .not('session_id', 'is', null);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 15 * 60 * 1000,
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * Hooks
+ * ------------------------------------------------------------------------ */
+
+export function useCourseDisplay(courseId: string) {
+  return useQuery(courseDisplayOptions(courseId));
+}
+export function useCourseShells(shellIds: string[]) {
+  return useQuery(courseShellsOptions(shellIds));
+}
+export function useTerm(termId: string | undefined) {
+  return useQuery(termOptions(termId));
+}
+export function useCourseSessions(shellIds: string[]) {
+  return useQuery(courseSessionsOptions(shellIds));
+}
+export function useCourseWorkItems(shellIds: string[]) {
+  return useQuery(courseWorkItemsOptions(shellIds));
+}
+export function useCourseGradingScheme(shellIds: string[]) {
+  return useQuery(courseGradingSchemeOptions(shellIds));
+}
+export function useCourseSessionFiles(shellIds: string[]) {
+  return useQuery(courseSessionFilesOptions(shellIds));
+}
+
+/* ---------------------------------------------------------------------------
+ * Display helpers — pure functions, unit-testable, no React
+ * ------------------------------------------------------------------------ */
+
+/** Total weeks on the rail. The rail is fixed 1–16 per the layout spec. */
+export const RAIL_WEEKS = 16;
+
+const DAY_LETTERS = ['Su', 'M', 'T', 'W', 'Th', 'F', 'Sa'];
+
+/** UTC midnight for a 'YYYY-MM-DD' date string (TZ-stable arithmetic). */
+function utcMidnight(dateISO: string): number {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  return Date.UTC(y, (m ?? 1) - 1, d ?? 1);
+}
+
+/** Milliseconds of the Monday that opens `dateISO`'s week. */
+function mondayOfWeek(ms: number): number {
+  const dow = new Date(ms).getUTCDay(); // 0=Sun … 6=Sat
+  const back = (dow + 6) % 7; // days since Monday
+  return ms - back * 86_400_000;
+}
+
+/**
+ * Week number (1-based) of a date within a term, where week 1 is the week that
+ * contains `start_date`. Weeks run Monday→Sunday, so a weekend due date lands in
+ * the same week as its Monday. Returns at least 1.
+ */
+export function weekNumberFor(dateISO: string, termStartISO: string): number {
+  const start = mondayOfWeek(utcMidnight(termStartISO));
+  const target = mondayOfWeek(utcMidnight(dateISO));
+  const weeks = Math.round((target - start) / (7 * 86_400_000));
+  return Math.max(1, weeks + 1);
+}
+
+/** The Monday-anchored date range label for a rail week, e.g. "Sep 7 – 11". */
+export function weekRangeLabel(week: number, termStartISO: string): string {
+  const start = mondayOfWeek(utcMidnight(termStartISO)) + (week - 1) * 7 * 86_400_000;
+  const end = start + 4 * 86_400_000; // Mon–Fri span
+  const fmt = (ms: number, withMonth: boolean) => {
+    const dt = new Date(ms);
+    const mon = dt.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+    const day = dt.getUTCDate();
+    return withMonth ? `${mon} ${day}` : `${day}`;
+  };
+  const sameMonth = new Date(start).getUTCMonth() === new Date(end).getUTCMonth();
+  return `${fmt(start, true)} – ${fmt(end, !sameMonth)}`;
+}
+
+/** The date a work item is due, as 'YYYY-MM-DD' in America/New_York, or null. */
+export function workItemDueDate(item: WorkItem): string | null {
+  if (item.due_on) return item.due_on;
+  if (item.due_at) {
+    // en-CA renders ISO-ordered Y-M-D; scope to the course's local zone.
+    return new Date(item.due_at).toLocaleDateString('en-CA', {
+      timeZone: 'America/New_York',
+    });
+  }
+  return null;
+}
+
+/** "15:45:00" → "3:45p". Null-safe. */
+export function formatClock(t: string | null): string {
+  if (!t) return '';
+  const [hRaw, m] = t.split(':');
+  let h = Number(hRaw);
+  const suffix = h >= 12 ? 'p' : 'a';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return m === '00' ? `${h}${suffix}` : `${h}:${m}${suffix}`;
+}
+
+/** A collapsed weekly meeting pattern, e.g. "MW 3:45–5:05p · Hinds Hall 010". */
+export type MeetingPattern = { days: string; time: string; room: string | null };
+
+/**
+ * Collapse the jsonb meetings array into one line per distinct (time, room):
+ * days that share a time and room are merged ("MW", "TTh", "MWF").
+ */
+export function meetingPatterns(meetings: unknown): MeetingPattern[] {
+  if (!Array.isArray(meetings)) return [];
+  const slots = meetings as MeetingSlot[];
+  const groups = new Map<string, { days: number[]; start: string | null; end: string | null; room: string | null }>();
+  for (const s of slots) {
+    const key = `${s.start ?? ''}|${s.end ?? ''}|${s.room ?? ''}`;
+    const g = groups.get(key);
+    if (g) g.days.push(s.day);
+    else groups.set(key, { days: [s.day], start: s.start, end: s.end, room: s.room });
+  }
+  return [...groups.values()]
+    .sort((a, b) => Math.min(...a.days) - Math.min(...b.days))
+    .map((g) => {
+      const days = [...g.days].sort((a, b) => a - b).map((d) => DAY_LETTERS[d] ?? '?').join('');
+      const start = formatClock(g.start);
+      const end = formatClock(g.end);
+      // Drop the am/pm on the start when it matches the end (e.g. 3:45–5:05p).
+      const startTrim =
+        start && end && start.slice(-1) === end.slice(-1) ? start.slice(0, -1) : start;
+      const time = start && end ? `${startTrim}–${end}` : start || end;
+      return { days, time, room: g.room };
+    });
+}
+
+/** Normalize a room string so cosmetic variants compare equal. */
+function normalizeRoom(room: string | null | undefined): string {
+  if (!room) return '';
+  return room
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ') // drop parentheticals like "(LSB)"
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * `v_course_display.room_disputed` flags any string difference between a shell's
+ * `location` and its meeting `location`. That fires on cosmetic variants too
+ * (ECN 304: "Life Sciences Building (LSB) 001" vs "…Building 001" — same room).
+ * A dispute is only *real* when a meeting room, once normalized, matches no
+ * shell location on file (GEO 103: room 108 on file vs confirmed room 140).
+ */
+export function realRoomDispute(
+  roomDisputed: boolean | null,
+  meetings: unknown,
+  shellLocations: (string | null)[],
+): boolean {
+  if (!roomDisputed) return false;
+  const known = new Set(shellLocations.map(normalizeRoom).filter(Boolean));
+  const rooms = meetingPatterns(meetings)
+    .map((p) => normalizeRoom(p.room))
+    .filter(Boolean);
+  if (rooms.length === 0) return false;
+  return rooms.some((r) => !known.has(r));
+}
+
+/**
+ * A verbatim AI policy reads as "zero tolerance" when it forbids AI outright at
+ * every stage. IST 352 is the one such course; surface it prominently.
+ */
+export function isZeroToleranceAiPolicy(policy: string | null | undefined): boolean {
+  if (!policy) return false;
+  return /zero[\s-]?tolerance/i.test(policy);
+}

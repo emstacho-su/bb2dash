@@ -1,0 +1,107 @@
+{
+  "course_id": "IST.466",
+  "bb_id": "_570160_1",
+  "version": 1,
+  "mapped_at": "2026-09-03",
+  "meeting": {"days": ["Tue", "Thu"], "start": "14:00", "end": "15:20", "room": "Hinds Hall 243", "source": "announcement 'Capstone - IST466/M003- Fall 2026' (8/11) + schedule docx", "confidence": "confirmed"},
+  "grading": {
+    "method": "points",
+    "components": [
+      {"code": "participation", "name": "Participation / Attendance", "points": null},
+      {"code": "major_cases", "name": "Two Major Case Studies (Synchrony, SU IT)", "points": null},
+      {"code": "ethics_presentations", "name": "Team Ethics Case Presentations", "points": 100},
+      {"code": "ethics_practice", "name": "Ethics Case Practice", "points": 50}
+    ],
+    "rules": [
+      "attendance/participation counted on 15 starred classes (schedule '*')",
+      "ethics practice 30 min = up to 50 pts the week before; team ethics presentation 30-40 min = up to 100 pts (Spring 2023 Cases page)"
+    ],
+    "components_seen_in_gradebook": [
+      {"name": "Ethics Case Practice", "points": 50, "column": "_3562491_1", "stale_due": "2021-05-28"},
+      {"name": "Zomatoes Major Case #2", "points": 150, "column": "_3562492_1", "note": "stale name; = SU IT Major Case #2"},
+      {"name": "Attendance", "points": 150, "column": "_3562493_1", "stale_due": "2021-11-18"},
+      {"name": "Class Participation", "points": 150, "column": "_3562494_1", "stale_due": "2021-11-18"},
+      {"name": "Ethics vs. Activity", "points": 120, "column": "_3562495_1", "stale_due": "2022-09-08"},
+      {"name": "Synchrony Major Case #1", "points": 150, "column": "_3562496_1", "stale_due": "2022-10-14"},
+      {"name": "Ethics Case Presentation", "points": 100, "column": "_3562497_1", "stale_due": "2022-09-20"},
+      {"name": "Attendance (category Attendance)", "points": 100, "column": "_3562500_1", "note": "second attendance column, UNOPENED"}
+    ],
+    "source": "intro deck slide 4 (three families) + rolled-over gradebook columns; IST466M3 Fall2026 Syllabus.docx (bb_file 39) not yet read",
+    "confidence": "tentative"
+  },
+  "tree_shape": {
+    "principle": "functional_roots_duplicated",
+    "roots": ["\"Ethics vs.\" Criteria for Presentations (x2 file items)", "Information (x2 learning modules)", "Assignments (x2)", "Content (x2)", "Syllabus", "Student Policy and Procedures- Fall 2026", "Schedule", "Ethics Cases Fall 2026", "IST466/M3 Schedule Fall2026 (root file)"],
+    "note": "Rolled-over course: two copies of Information/Assignments/Content roots; folders titled 'Fall 2023 M002' / 'Spring 2023 Cases' hold Fall 2026 files. Files are attached as Ultra document embeds (data-bbfile, several viewer-only) or root-level x-bb-file items. No weekly modules; week_no comes only from the schedule docx.",
+    "week_key": null,
+    "bucket_paths": {
+      "syllabus_policy": ["Syllabus / * / *", "Student Policy and Procedures- Fall 2026 / *"],
+      "schedule": ["Schedule / Class Schedule - * / *", "IST466/M3 Schedule Fall2026 (root file item)"],
+      "lecture_slides": ["Information / Class Introduction - * (root file items)", "Information / <dated lecture>"],
+      "assignment_spec": ["\"Ethics vs.\" Criteria for Presentations (root)", "Information / IST466/M1 Rubrics for Ethics Cases vs.", "Assignments / Class Exercise - * / *"],
+      "project_materials": ["Information / Major Case #* - <company> / *", "Ethics Cases Fall 2026 / *.docx"],
+      "readings": ["Ethics Cases Fall 2026 / Fall 2026 Ethics Cases / * (HBR case PDFs)"],
+      "admin": ["Information / Class Roster - * / *"],
+      "media_links": ["Content / * (Kaltura LTI)"]
+    }
+  },
+  "sources": [
+    {"kind": "content_tree", "locator": "/learn/api/v1/courses/_570160_1/contents/ROOT/children (recurse lesson+folder; children have no hasChildren flag)", "file_bearing": true},
+    {"kind": "ultra_document_embeds", "locator": "/learn/api/v1/courses/_570160_1/contents/<id> -> body.rawText data-bbfile JSON (resourceUrl else viewerUrl sans query)", "file_bearing": true},
+    {"kind": "gradebook", "locator": "/learn/api/v1/courses/_570160_1/gradebook/grades (8 columns, all rolled over, no content links)", "file_bearing": false},
+    {"kind": "announcements", "locator": "/learn/api/v1/courses/_570160_1/announcements (1 so far)", "file_bearing": false},
+    {"kind": "calendar", "locator": "/learn/api/v1/calendars/calendarItems (course schedule array empty; dates live in schedule docx)", "file_bearing": false},
+    {"kind": "groups", "locator": "no Blackboard groups tool observed; teams assigned in class + roster xlsx (Information / Class Roster)", "file_bearing": true},
+    {"kind": "attempts", "locator": "none: all submissions are in-class presentations (submission=in_class)", "file_bearing": false},
+    {"kind": "lti", "locator": "Content / Ethics Case Review (Kaltura entry 1_03tu7yy3)", "file_bearing": false}
+  ],
+  "course_fields": [
+    {"name": "ethics_group", "source": "courses.group_notes / roster xlsx", "value": "Ethics Case Group #2", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "major_case_group", "source": "courses.group_notes / roster xlsx", "value": "Major Case Group #3", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "ethics_case_assigned", "source": "IST466 Ethics Cases Spring 2026.docx (bb_file 21) + HBR case PDFs (bb_files 48-57)", "value": null, "confidence": "n/a", "stack_must_confirm": true},
+    {"name": "ethics_team_members", "source": "roster xlsx (bb_files 35/37)", "value": null, "confidence": "n/a", "stack_must_confirm": true},
+    {"name": "attendance_counted_dates", "source": "schedule docx starred cells (15 classes)", "value": ["2026-08-27", "2026-09-15", "2026-09-24", "2026-09-29", "2026-10-01", "2026-10-29", "2026-11-03", "2026-12-05"], "confidence": "tentative", "stack_must_confirm": false, "note": "only 8 starred so far in v. Aug 31; schedule says 15"},
+    {"name": "ethics_practice_date", "source": "schedule wk3", "value": "2026-09-10", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "ethics_presentation_date", "source": "schedule wk5", "value": "2026-09-24", "confidence": "confirmed", "stack_must_confirm": false},
+    {"name": "major_case_1_presentation_slot", "source": "schedule wk8 (10/20 or 10/22, doc says MON/WEDS)", "value": null, "confidence": "n/a", "stack_must_confirm": true},
+    {"name": "major_case_2_presentation_slot", "source": "schedule wk12 (11/17 or 11/19)", "value": null, "confidence": "n/a", "stack_must_confirm": true}
+  ],
+  "file_manifest": [
+    {"bb_file_id": 39, "content_id": "_12939678_1", "file_name": "IST466M3 Fall2026 Syllabus.docx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939678-dt-content-rid-164989209_1/xid-164989209_1", "download_method": "direct_url", "bucket": "syllabus_policy", "week_no": null, "assignment_id": null, "priority": 1, "expected_mime": "docx"},
+    {"bb_file_id": 33, "content_id": "_12939664_1", "file_name": "Student Policies and Services - Syllabus appendix August 2026 .docx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939664-dt-content-rid-164573570_1/xid-164573570_1", "download_method": "direct_url", "bucket": "syllabus_policy", "week_no": null, "assignment_id": null, "priority": 1, "expected_mime": "docx"},
+    {"bb_file_id": 40, "content_id": "_12939679_1", "file_name": "IST466M3 Schedule Fall2026Wk2xy.docx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939679-dt-content-rid-165590846_1/xid-165590846_1", "download_method": "direct_url", "bucket": "schedule", "week_no": null, "assignment_id": null, "priority": 1, "expected_mime": "docx", "note": "URL refreshed (rid 165416763 -> 165590846, modified 9/3 15:32Z); file renamed Wk2x -> Wk2xy"},
+    {"bb_file_id": 16, "content_id": "_12939631_1", "file_name": "IST466M3 Schedule Fall2026-Wk2x.docx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939631-dt-content-rid-165607165_1/xid-165607165_1", "download_method": "direct_url", "bucket": "schedule", "week_no": null, "assignment_id": null, "priority": 1, "expected_mime": "docx", "note": "URL refreshed (rid 165342909 -> 165607165, modified 9/3 17:50Z); hand copy 'IST466M3 Schedule Fall2026-Wk2.docx' in course context is the older Aug 31 version"},
+    {"bb_file_id": 34, "content_id": "_12939668_1", "file_name": "Synchrony_Cuse Capstone_Fall2026.pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939668-dt-content-rid-165493880_1/xid-165493880_1", "download_method": "direct_url", "bucket": "project_materials", "week_no": null, "assignment_id": "IST.466/major-project-1-synchrony", "priority": 2, "expected_mime": "pdf"},
+    {"bb_file_id": 21, "content_id": "_12939666_1", "file_name": "IST466 Ethics Cases Spring 2026.docx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939666-dt-content-rid-164408647_1/xid-164408647_1", "download_method": "direct_url", "bucket": "project_materials", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 2, "expected_mime": "docx"},
+    {"bb_file_id": 20, "content_id": "_12939655_1", "file_name": "IST466_Rubrics for Ethics Cases).pptx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939655-dt-content-rid-164408645_1/xid-164408645_1", "download_method": "direct_url", "bucket": "assignment_spec", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 2, "expected_mime": "pptx"},
+    {"bb_file_id": 15, "content_id": "_12939625_1", "file_name": "Ethics Criteria.pptx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939625-dt-content-rid-164408635_1/xid-164408635_1", "download_method": "direct_url", "bucket": "assignment_spec", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 2, "expected_mime": "pptx", "dedupe_group": "ethics-criteria"},
+    {"bb_file_id": 17, "content_id": "_12939632_1", "file_name": "Ethics Criteria.pptx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939632-dt-content-rid-164408642_1/xid-164408642_1", "download_method": "direct_url", "bucket": "assignment_spec", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 2, "expected_mime": "pptx", "dedupe_group": "ethics-criteria"},
+    {"bb_file_id": 36, "content_id": "_12939671_1", "file_name": "Ethics vs IST466_Fall 2026_M3.pptx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939671-dt-content-rid-164981623_1/xid-164981623_1", "download_method": "direct_url", "bucket": "assignment_spec", "week_no": null, "assignment_id": "IST.466/ethics-vs-activity", "priority": 2, "expected_mime": "pptx", "dedupe_group": "ethics-vs-deck"},
+    {"bb_file_id": 38, "content_id": "_12939677_1", "file_name": "Ethics vs IST466_Fall 2026.pptx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939677-dt-content-rid-164409023_1/xid-164409023_1", "download_method": "direct_url", "bucket": "assignment_spec", "week_no": null, "assignment_id": "IST.466/ethics-vs-activity", "priority": 2, "expected_mime": "pptx", "dedupe_group": "ethics-vs-deck", "note": "was source_url 'undefined'; viewer-only embed (linkName 'Ethics vs IST466_Spring 2025.pptx'), URL recovered from viewerUrl"},
+    {"bb_file_id": 18, "content_id": "_12939643_1", "file_name": "LectureM3_IST466Fall 2026  (1).pptx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939643-dt-content-rid-164820488_1/xid-164820488_1", "download_method": "direct_url", "bucket": "lecture_slides", "week_no": 1, "assignment_id": null, "priority": 3, "expected_mime": "pptx", "dedupe_group": "intro-deck"},
+    {"bb_file_id": 19, "content_id": "_12939654_1", "file_name": "LectureM3_IST466Fall 2026 (2).pptx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939654-dt-content-rid-164989901_1/xid-164989901_1", "download_method": "direct_url", "bucket": "lecture_slides", "week_no": 1, "assignment_id": null, "priority": 3, "expected_mime": "pptx", "dedupe_group": "intro-deck", "note": "hand copy already in course context/IST.466"},
+    {"bb_file_id": 35, "content_id": "_12939669_1", "file_name": "IST466_M3Class_Fall2026Roster_Wk2_New.xlsx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939669-dt-content-rid-165140327_1/xid-165140327_1", "download_method": "direct_url", "bucket": "admin", "week_no": null, "assignment_id": null, "priority": 2, "expected_mime": "xlsx", "dedupe_group": "roster"},
+    {"bb_file_id": 37, "content_id": "_12939674_1", "file_name": "IST466_M3Class_Fall2026Roster_Wk2xy.xlsx", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939674-dt-content-rid-165420713_1/xid-165420713_1", "download_method": "direct_url", "bucket": "admin", "week_no": null, "assignment_id": null, "priority": 2, "expected_mime": "xlsx", "dedupe_group": "roster"},
+    {"bb_file_id": 48, "content_id": "_12939680_1", "file_name": "HBR1-An Intro to Money Laundering (1) (2).pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409032_1/xid-164409032_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 49, "content_id": "_12939680_1", "file_name": "HBR2-Ethics Across Cultures (3).pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409035_1/xid-164409035_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 50, "content_id": "_12939680_1", "file_name": "HBR3- Apple vs. The FBI (3).pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409036_1/xid-164409036_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 51, "content_id": "_12939680_1", "file_name": "HBR4-Cyber Attack athe Univ. of Calgary (1).pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409037_1/xid-164409037_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 52, "content_id": "_12939680_1", "file_name": "HBR5-Walmarts Blockchain Quest (4).pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409039_1/xid-164409039_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 53, "content_id": "_12939680_1", "file_name": "HBR6- Handling a Whistle-Blowing Report (3).pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409040_1/xid-164409040_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 54, "content_id": "_12939680_1", "file_name": "HBR7-IT and the Board of Directors (2).pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409041_1/xid-164409041_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 55, "content_id": "_12939680_1", "file_name": "HBR8-What It Means To Be  a Moral Leader (1).pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409034_1/xid-164409034_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 56, "content_id": "_12939680_1", "file_name": "HBR9-Amazon Whole Foods Deal.pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409033_1/xid-164409033_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true},
+    {"bb_file_id": 57, "content_id": "_12939680_1", "file_name": "HBR10-Volkswagon Adapting in the Age of AI.pdf", "source_url": "https://blackboard.syracuse.edu/bbcswebdav/pid-12939680-dt-content-rid-164409038_1/xid-164409038_1", "download_method": "direct_url", "bucket": "readings", "week_no": null, "assignment_id": "IST.466/ethics-team-2-presentation", "priority": 3, "expected_mime": "pdf", "new_in_v1": true}
+  ],
+  "dedupe_rule": "Pairs sharing dedupe_group are downloaded both, hashed; one stored copy per distinct sha256, the other row marked duplicate in notes (no storage/local copy).",
+  "gaps": [
+    {"what": "Grading method, component points/weights, letter scale, late/AI policy", "owner": "blackboard_pull", "closes_with": "bb_file_id 39 (syllabus docx)"},
+    {"what": "Which HBR case is Ethics Group #2's, and team members", "owner": "blackboard_pull", "closes_with": "bb_file_id 21 + roster 37; else stack"},
+    {"what": "Schedule revised twice on 9/3 (Wk2x, Wk2xy) after sessions were loaded from the Aug 31 version; diff and update sessions", "owner": "blackboard_pull", "closes_with": "bb_file_ids 16, 40"},
+    {"what": "Schedule date anomalies: 9/27 (Sun) for Tue 9/29; 10/20 & 10/22 labeled MON/WEDS; 12/5 (Sat) for Ethics 9 & 10; week 15 missing", "owner": "stack"},
+    {"what": "Major Case Group #3 presentation slots (10/20 vs 10/22; 11/17 vs 11/19)", "owner": "wait"},
+    {"what": "Gradebook columns are all rolled over (2021-2022 due dates, 'Zomatoes' name, duplicate Attendance 150 + 100); points may not match this year's syllabus", "owner": "blackboard_pull"},
+    {"what": "Kaltura 'Ethics Case Review' video (Content) is link-only", "owner": "wait"},
+    {"what": "'Letter of Gratitude' (12/10) details unknown", "owner": "wait"}
+  ]
+}

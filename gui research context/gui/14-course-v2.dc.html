@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- GUI REFERENCE · Course page v2 (current). Nav 1c + sub-bar, per-course tracker, week rail 6b. Styling pending. See README.md in this folder. -->
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/styles.css">
+<script src="../_ds/nocturne-e7553947-7d62-4a5a-b1f2-acc8fd7e68db/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)} a{color:var(--color-accent)} a:hover{color:var(--color-accent-400)}
+.nv{display:flex;align-items:center;gap:22px;padding:10px 28px;background:var(--color-surface);font-size:13.5px}.nv a{color:var(--color-text);text-decoration:none;padding:6px 2px}.nv a:hover{color:var(--color-accent)}.ic{all:unset;width:32px;height:32px;display:grid;place-items:center;border-radius:var(--radius-md);color:var(--color-neutral-200);position:relative;cursor:pointer}.ic:hover{background:color-mix(in srgb,var(--color-text) 7%,transparent)}.ic:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ic svg{width:18px;height:18px;fill:currentColor}.bd{position:absolute;top:3px;right:3px;font-size:9px;padding:0 4px;border-radius:7px;background:var(--color-accent-800);color:var(--color-accent-100);line-height:14px}.dd{position:absolute;z-index:6;background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg),0 0 0 1px var(--color-divider);display:flex;flex-direction:column;overflow:hidden}.dd a{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:13px;color:var(--color-text);text-decoration:none}.dd a:hover{background:color-mix(in srgb,var(--color-text) 7%,transparent)}.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-neutral-400)}.k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--color-neutral-500)}.tag,.btn{white-space:nowrap;flex:none}.trk::-webkit-scrollbar{display:none}.rule{background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat bottom / 100% 1px}
+.wk{all:unset;cursor:pointer;width:28px;height:22px;display:grid;place-items:center;border-radius:4px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--color-neutral-300)}.wk:hover{background:color-mix(in srgb,var(--color-text) 8%,transparent)}.wk:focus-visible{outline:2px solid var(--color-accent);outline-offset:1px}
+.it{display:flex;flex-direction:row;gap:12px;padding:10px 12px;text-decoration:none;color:inherit;align-items:flex-start;border-radius:var(--radius-lg);background:var(--color-surface)}.it:hover{box-shadow:var(--shadow-sm)}.av{width:34px;height:34px;flex:none;display:grid;place-items:center;font-size:11px}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+<div style="position:sticky;top:0;z-index:5;box-shadow:inset 0 -1px 0 var(--color-divider)">
+<nav class="nv"><a href="13-home-v2.dc.html" style="display:flex;align-items:center;gap:9px;font-family:var(--font-heading);font-weight:500;font-size:16px;margin-right:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--color-accent);box-shadow:0 0 10px var(--color-accent)"></span>bb2dash</a><a href="13-home-v2.dc.html">Home</a><a href="07-planner.dc.html">Planner</a><a href="05-grades.dc.html">Grades</a><a href="08-materials.dc.html">Materials</a>
+  <span style="margin-left:auto;display:flex;gap:4px;align-items:center;position:relative">
+    <button class="ic" onClick="{{ toggleCourses }}" title="Courses" style="color:{{ coursesColor }};background:{{ coursesBg }}"><svg viewBox="0 0 256 256"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></button>
+    <a href="13-home-v2.dc.html" class="ic" title="Announcements" style="padding:0"><svg viewBox="0 0 256 256"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg><span class="bd">3</span></a>
+    <button class="ic" title="Stack · account"><svg viewBox="0 0 256 256"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg></button>
+    <div class="dd" style="right:72px;top:40px;width:300px;display:{{ coursesDisplay }}">
+      <a href="14-course-v2.dc.html"><span class="mono" style="width:54px">ECN 304</span><span style="flex:1">Econ of Social Issues</span></a>
+      <a href="14-course-v2.dc.html"><span class="mono" style="width:54px">GEO 103</span><span style="flex:1">Environment &amp; Society</span><span class="mono">1</span></a>
+      <a href="14-course-v2.dc.html" style="background:var(--color-accent-900);color:var(--color-accent)"><span class="mono" style="width:54px">IST 323</span><span style="flex:1">Intro to Cybersecurity</span><span class="k" style="color:var(--color-accent)">open</span></a>
+      <a href="14-course-v2.dc.html"><span class="mono" style="width:54px">IST 352</span><span style="flex:1">Info Analysis of Org Sys</span><span class="mono">1</span></a>
+      <a href="14-course-v2.dc.html"><span class="mono" style="width:54px">IST 466</span><span style="flex:1">IM&amp;T Capstone</span><span class="mono">1</span></a>
+      <a href="14-course-v2.dc.html"><span class="mono" style="width:54px">IST 471</span><span style="flex:1">Internship</span><span class="mono">2</span></a>
+    </div>
+  </span>
+</nav>
+<div style="display:flex;align-items:center;gap:4px;padding:0 28px;background:var(--color-surface);font-size:13px"><span class="mono" style="color:var(--color-accent);margin-right:8px">IST 323</span><span style="color:var(--color-neutral-300);margin-right:8px;font-size:13px">Intro to Cybersecurity</span><span style="padding:8px 10px;color:var(--color-accent);box-shadow:inset 0 -2px 0 var(--color-accent)">Stream</span><a href="06-course-grades.dc.html" style="padding:8px 10px;color:var(--color-text);text-decoration:none">Grades</a><a href="08-materials.dc.html" style="padding:8px 10px;color:var(--color-text);text-decoration:none">Materials</a><a href="11-course-info.dc.html" style="padding:8px 10px;color:var(--color-text);text-decoration:none">Info</a><span style="margin-left:auto;display:flex;gap:10px;align-items:center;font-size:11px;color:var(--color-neutral-400)"><span>MW 3:45–5:05 · Hinds 010 · Croad</span><a href="https://blackboard.syracuse.edu/ultra/courses/_571529_1/outline" class="btn btn-ghost" style="font-size:11px;padding:3px 9px">Blackboard</a></span></div>
+</div>
+<main style="flex:1;padding:18px 36px 40px;display:grid;grid-template-columns:44px minmax(0,1fr);gap:18px;max-width:1240px;width:100%;box-sizing:border-box;align-items:start">
+  <div style="position:sticky;top:98px;display:flex;flex-direction:column;gap:2px;align-items:center">
+    <span class="k" style="margin-bottom:4px">wk</span>
+    <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="16"><button class="wk" onClick="{{ w.pick }}" title="{{ w.range }}" style="background:{{ w.bg }};color:{{ w.fg }};box-shadow:{{ w.ring }}">{{ w.n }}</button></sc-for>
+    <span style="font-size:9px;color:var(--color-neutral-500);text-align:center;margin-top:6px;line-height:1.3">ring = graded due</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+    <section style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:baseline;gap:10px"><h2 style="font-size:17px;margin:0">Upcoming work</h2><span class="text-muted" style="font-size:12px;white-space:nowrap">IST 323 · {{ totalN }} items · {{ totalEff }} effort pts · 8 weeks</span><span style="margin-left:auto;display:flex;gap:4px"><button class="btn btn-ghost" onClick="{{ scrollPrev }}" style="font-size:12px;padding:3px 9px" title="Earlier">◂</button><button class="btn btn-ghost" onClick="{{ scrollNext }}" style="font-size:12px;padding:3px 9px" title="Later">▸</button></span></div>
+      <div ref="{{ trackRef }}" class="trk" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px;align-items:flex-end">
+        <sc-for list="{{ days }}" as="d" hint-placeholder-count="14">
+          <button onClick="{{ d.pick }}" style="all:unset;cursor:pointer;flex:none;width:calc(100% / 14);min-width:56px;box-sizing:border-box;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px 3px;border-radius:var(--radius-md);background:{{ d.colBg }};box-shadow:{{ d.ring }};border-left:{{ d.weekStart }}" style-hover="background:color-mix(in srgb,var(--color-text) 6%,transparent)" style-focus="outline:2px solid var(--color-accent);outline-offset:-2px">
+            <span class="k" style="height:12px;color:var(--color-neutral-400)">{{ d.monLabel }}</span>
+            <span style="font-size:11px;color:var(--color-neutral-300);height:14px">{{ d.countLabel }}</span>
+            <span style="display:flex;flex-direction:column-reverse;gap:1px;height:84px;width:100%"><sc-for list="{{ d.segs }}" as="s" hint-placeholder-count="0"><span style="display:block;width:100%;border-radius:2px;height:{{ s.h }}px;background:{{ s.bg }}"></span></sc-for></span>
+            <span style="font-size:11px;color:{{ d.dayColor }};white-space:nowrap">{{ d.dowLabel }}</span><span class="mono" style="font-size:10px">{{ d.dn }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div class="card" style="gap:0;padding:6px 14px 4px">
+        <div style="display:flex;align-items:baseline;gap:10px;padding:6px 0 8px"><span style="font-size:14px">{{ selLabel }}</span><span class="text-muted" style="font-size:12px">{{ selCount }} due · {{ selEffort }} effort pts</span></div>
+        <sc-for list="{{ selItems }}" as="it" hint-placeholder-count="2">
+          <a href="04-assignment.dc.html" style="display:grid;grid-template-columns:22px 1fr 120px 150px 96px;gap:12px;align-items:center;padding:8px 0;text-decoration:none;color:inherit;font-size:13px;white-space:nowrap;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent) no-repeat top / 100% 1px"><span style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:4px;font-size:10px;background:{{ it.bg }};color:{{ it.fg }}">{{ it.g }}</span><span style="display:flex;gap:8px;align-items:center;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis">{{ it.title }}</span><span style="font-size:9px;color:var(--color-accent);border:1px solid var(--color-accent-700);border-radius:4px;padding:0 4px;display:{{ it.sampleDisplay }}">sample</span></span><span style="font-size:12px;color:var(--color-neutral-400)">{{ it.time }}</span><span class="mono">{{ it.effLabel }} · start {{ it.startBy }}</span><span class="tag tag-neutral" style="font-size:10px;justify-content:center">{{ it.status }}</span></a>
+        </sc-for>
+        <div style="padding:10px 0 8px;font-size:12.5px;color:var(--color-neutral-500);display:{{ emptyDisplay }}">Nothing due for IST 323 this day.</div>
+      </div>
+    </section>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="seg"><label class="seg-opt"><input type="radio" name="lane" checked><span>Both lanes</span></label><label class="seg-opt"><input type="radio" name="lane"><span>Lectures</span></label><label class="seg-opt"><input type="radio" name="lane"><span>Assignments</span></label></div>
+      <span style="font-size:12px;color:var(--color-neutral-400)">{{ modeLabel }}</span>
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center"><button class="btn btn-ghost" onClick="{{ showAll }}" style="font-size:12px;display:{{ showAllDisplay }}">Show weeks 1–16</button><button class="btn btn-ghost" onClick="{{ showCurrent }}" style="font-size:12px;display:{{ showCurrentDisplay }}">Back to current</button><span class="tag tag-outline" style="font-size:10px">Mockup 14 · Course v2</span></span>
+    </div>
+    <div class="rule" style="display:grid;grid-template-columns:72px minmax(0,1fr) minmax(0,1fr);gap:14px;padding-bottom:6px">
+      <span></span>
+      <div style="display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent)">Lecture materials<span style="color:var(--color-neutral-500);letter-spacing:0;text-transform:none">sessions · readings · files</span></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-300)">Assignment materials<span style="color:var(--color-neutral-500);letter-spacing:0;text-transform:none">due · points · status</span></div>
+    </div>
+    <button onClick="{{ showAll }}" style="all:unset;cursor:pointer;display:{{ earlierDisplay }};justify-content:center;padding:7px;font-size:11.5px;color:var(--color-neutral-400);border-radius:var(--radius-md);border:1px dashed var(--color-neutral-700);white-space:nowrap" style-hover="color:var(--color-accent);border-color:var(--color-accent-700)">↑ {{ earlierLabel }}</button>
+    <sc-for list="{{ visibleWeeks }}" as="w" hint-placeholder-count="3">
+      <div class="rule" style="display:grid;grid-template-columns:72px minmax(0,1fr) minmax(0,1fr);gap:14px;padding:14px 0 16px">
+        <div style="display:flex;flex-direction:column;gap:2px;padding-top:6px"><span style="font-size:12px;color:{{ w.labelColor }}">Week {{ w.n }}</span><span style="font-size:11px;color:var(--color-neutral-500)">{{ w.range }}</span><span class="tag tag-accent" style="font-size:9px;padding:1px 6px;width:fit-content;margin-top:4px;display:{{ w.nowDisplay }}">this week</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ w.lectures }}" as="l" hint-placeholder-count="2"><a href="03-lecture.dc.html" class="it" style="opacity:{{ w.opacity }}"><span class="av" style="border-radius:50%;border:1px solid var(--color-accent-700);color:var(--color-accent)">L</span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><div style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-500)"><span>{{ l.date }}</span><span style="color:var(--color-accent)">{{ l.tag }}</span></div><div style="font-size:13.5px">{{ l.title }}</div><div style="font-size:11.5px;color:var(--color-neutral-400)">{{ l.meta }}</div></div></a></sc-for>
+          <div style="font-size:11.5px;color:var(--color-neutral-600);padding:8px 12px;display:{{ w.noLecDisplay }}">No session</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ w.assignments }}" as="a" hint-placeholder-count="2"><a href="04-assignment.dc.html" class="it" style="opacity:{{ w.opacity }}"><span class="av" style="border-radius:var(--radius-sm);background:{{ a.bg }};color:{{ a.fg }}">{{ a.g }}</span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><div style="display:flex;gap:8px;font-size:11px;color:var(--color-neutral-500);align-items:center"><span>{{ a.date }}</span><span class="tag tag-neutral" style="margin-left:auto;font-size:10px">{{ a.status }}</span></div><div style="font-size:13.5px">{{ a.title }}</div><div style="font-size:11.5px;color:var(--color-neutral-400)">{{ a.meta }}</div></div></a></sc-for>
+          <div style="font-size:11.5px;color:var(--color-neutral-600);padding:8px 12px;display:{{ w.noAsgDisplay }}">Nothing due</div>
+        </div>
+      </div>
+    </sc-for>
+    <div style="text-align:center;font-size:11px;color:var(--color-neutral-600);padding:6px">{{ tailLabel }}</div>
+    <footer style="display:flex;gap:18px;font-size:11.5px;color:var(--color-neutral-500);padding-top:8px"><span style="color:var(--color-neutral-400)">MVP notes</span><span>Nav 1c + week rail 6b. "Current" anchors to <code>sessions.week_no</code> of today; earlier weeks load above.</span><span>Rail rings come from <code>assignments.points_possible &gt; 0</code>.</span></footer>
+  </div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { mode: 'current', courses: false, from: 2, sel: 6 };
+  trackRef = React.createRef();
+  scrollTrack(dir) { const el = this.trackRef.current; if (el) el.scrollBy({left: dir * el.clientWidth, behavior: 'smooth'}); }
+  renderVals() {
+    const EFF = {reading:1, form:1, discussion:1.5, homework:2, quiz:3, lab:4, presentation:4, project:6, exam:8};
+    const CAT = {reading:'reading', form:'assignment', discussion:'assignment', homework:'assignment', lab:'assignment', quiz:'quiz', presentation:'project', project:'project', exam:'exam'};
+    const GG = {reading:'R', assignment:'A', quiz:'Q', project:'P', exam:'E'};
+    const BGc = {reading:'var(--color-neutral-800)', assignment:'var(--color-accent-900)', quiz:'var(--color-accent-800)', project:'var(--color-accent-700)', exam:'var(--color-accent-500)'};
+    const FGc = {reading:'var(--color-neutral-200)', assignment:'var(--color-accent-200)', quiz:'var(--color-accent-100)', project:'var(--color-accent-100)', exam:'var(--color-bg)'};
+    const rawItems = [
+      {d:6, title:'Quiz #1 — Chap 1', type:'quiz', time:'3:45p', status:'not started'},
+      {d:6, title:'Quiz #2 — Chap 2.1–2.7', type:'quiz', time:'3:45p', status:'not started'},
+      {d:6, title:'Presentation Choice — topic + date', type:'form', time:'3:45p', status:'planned'},
+      {d:6, title:'Chap 3.1–3.3 (Cryptography 1)', type:'reading', time:'before class', status:'not started', sample:true},
+      {d:11, title:'Exam #1 — weeks 1–3', type:'exam', time:'3:45p · in class', status:'not started'},
+      {d:11, title:'Inclusive Access textbook opt-out', type:'form', time:'deadline', status:'planned'},
+      {d:13, title:'Quiz #3 — Cryptography 1', type:'quiz', time:'3:45p', status:'not started'},
+      {d:13, title:'Chap 3.4–3.9 (Cryptography 2)', type:'reading', time:'before class', status:'not started', sample:true},
+      {d:18, title:'Chap 3.10–3.11 (protocols)', type:'reading', time:'before class', status:'not started', sample:true},
+      {d:20, title:'Quiz #4 — Cryptography 2', type:'quiz', time:'3:45p', status:'not started'},
+      {d:25, title:'Chap 5 (access control)', type:'reading', time:'before class', status:'not started', sample:true},
+      {d:27, title:'Quiz #5 — Protocols', type:'quiz', time:'3:45p', status:'not started'},
+      {d:29, title:'Lab #1 report', type:'lab', time:'11:59p', status:'not started'},
+      {d:32, title:'Chap 4 (secure networks)', type:'reading', time:'before class', status:'not started', sample:true},
+      {d:34, title:'Quiz #6 — Access control', type:'quiz', time:'3:45p', status:'not started'},
+      {d:39, title:'Exam #2 — weeks 4–7', type:'exam', time:'3:45p · in class', status:'not started'},
+      {d:41, title:'Lab #2 report', type:'lab', time:'11:59p', status:'not started'},
+      {d:55, title:'Quiz #7', type:'quiz', time:'3:45p', status:'not started'},
+    ];
+    const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const items = rawItems.map(x => { const cat = CAT[x.type]; return {...x, g: GG[cat], bg: BGc[cat], fg: FGc[cat], eff: EFF[x.type]}; });
+    const selD = this.state.sel;
+    const days = Array.from({length: 56}, (_, i) => {
+      const dt = new Date(2026, 8, 3 + i); const its = items.filter(x => x.d === i); const effort = its.reduce((a, b) => a + b.eff, 0);
+      const isSel = i === selD, wk = dt.getDay() === 0 || dt.getDay() === 6;
+      return { i, dn: dt.getDate(), n: its.length, effort, items: its, dt,
+        segs: its.map(x => ({h: x.eff * 7, bg: x.bg})), countLabel: its.length ? String(its.length) : '',
+        colBg: isSel ? 'var(--color-accent-900)' : 'transparent', ring: isSel ? 'inset 0 0 0 1px var(--color-accent)' : 'none',
+        dayColor: isSel ? 'var(--color-accent)' : (wk ? 'var(--color-neutral-600)' : (i === 0 ? 'var(--color-accent-300)' : 'var(--color-neutral-300)')),
+        dowLabel: i === 0 ? 'Today' : DOW[dt.getDay()], monLabel: dt.getDate() === 1 || i === 0 ? MON[dt.getMonth()] : '',
+        weekStart: dt.getDay() === 1 ? '1px solid var(--color-divider)' : '1px solid transparent',
+        pick: () => this.setState({sel: i}) };
+    });
+    const sd = days[selD];
+    const selItems = sd.items.map(x => { const lead = Math.max(0, Math.ceil(x.eff / 2) - 1); const st = new Date(2026, 8, 3 + x.d - lead); return {...x, startBy: lead ? DOW[st.getDay()] + ' ' + (st.getMonth() + 1) + '/' + st.getDate() : 'day of', effLabel: x.eff + ' pt', sampleDisplay: x.sample ? 'inline' : 'none'}; });
+    const trackVals = { days, selItems, selLabel: sd.dowLabel === 'Today' ? 'Today, ' + MON[sd.dt.getMonth()] + ' ' + sd.dn : DOW[sd.dt.getDay()] + ', ' + MON[sd.dt.getMonth()] + ' ' + sd.dn, selCount: sd.n, selEffort: sd.effort, emptyDisplay: sd.n ? 'none' : 'block',
+      totalN: items.length, totalEff: items.reduce((a, b) => a + b.eff, 0), trackRef: this.trackRef, scrollPrev: () => this.scrollTrack(-1), scrollNext: () => this.scrollTrack(1) };
+    const BG = {A:'var(--color-accent-900)', Q:'var(--color-accent-800)', P:'var(--color-accent-700)', E:'var(--color-accent-500)', L:'var(--color-neutral-800)'};
+    const FG = {A:'var(--color-accent-200)', Q:'var(--color-accent-100)', P:'var(--color-accent-100)', E:'var(--color-bg)', L:'var(--color-neutral-200)'};
+    const W = [
+      {n:1, range:'Aug 24 – 28', lectures:[{date:'Mon 8/24', title:'Introduction and Course Overview', meta:'Syllabus · course intro deck · Assignment #1 given'},{date:'Wed 8/26', title:'Security properties & the threat environment', meta:'Chap 1 · 1 file'}], assignments:[{date:'Fri 8/28', g:'A', title:'Assignment #1 — intro survey', meta:'Blackboard', status:'submitted'}]},
+      {n:2, range:'Aug 31 – Sep 4', lectures:[{date:'Mon 8/31', title:'Planning & policy · Final Project packets assigned', meta:'Packet A, Meridian Pharmacy · 3 files', tag:'quiz #1 graded 10/10'},{date:'Wed 9/2', title:'Risk management · Week 2', meta:'Hinds 010 · 2 files on Blackboard'}], assignments:[{date:'Wed 9/2 · in class', g:'Q', title:'Knowledge check (in class)', meta:'unscored', status:'graded'}]},
+      {n:3, range:'Sep 7 – 11', lectures:[{date:'Mon 9/7', title:'Labor Day — no class', meta:''},{date:'Wed 9/9', title:'Cryptography 1 · Lab #1 in-class session', meta:'Chap 3.1–3.3 · J&B Learning environment · lab manual', tag:'lab'}], assignments:[{date:'Wed 9/9 · 3:45p', g:'Q', title:'Quiz #1 — Chap 1', meta:'Blackboard · 3 attempts · moved to 9/9 in v1.3.1', status:'not started'},{date:'Wed 9/9 · 3:45p', g:'Q', title:'Quiz #2 — Chap 2.1–2.7', meta:'Blackboard · 3 attempts', status:'not started'},{date:'Wed 9/9', g:'A', title:'Presentation Choice — topic + date', meta:'first come, first served', status:'planned'}], graded:true},
+      {n:4, range:'Sep 14 – 18', lectures:[{date:'Mon 9/14', title:'Exam #1 — in class, online', meta:'Weeks 1–3 · 40–50 MC/TF + 1–2 short essay', tag:'exam'},{date:'Wed 9/16', title:'Cryptography 2', meta:'Chap 3.4–3.9'}], assignments:[{date:'Mon 9/14 · 3:45p', g:'E', title:'Exam #1', meta:'10 pts', status:'not started'},{date:'Wed 9/16 · 3:45p', g:'Q', title:'Quiz #3 — Cryptography 1', meta:'Blackboard', status:'not started'}], graded:true},
+      {n:5, range:'Sep 21 – 25', lectures:[{date:'Mon 9/21', title:'Internet security protocols', meta:'Chap 3.10–3.11'},{date:'Wed 9/23', title:'Lab #2 in-class session', meta:'Report due 10/14', tag:'lab'}], assignments:[{date:'Wed 9/23 · 3:45p', g:'Q', title:'Quiz #4 — Cryptography 2', meta:'Blackboard', status:'not started'}]},
+      {n:6, range:'Sep 28 – Oct 2', lectures:[{date:'Mon 9/28', title:'Access control', meta:'Chap 5'},{date:'Wed 9/30', title:'Access control 2', meta:'Chap 5'}], assignments:[{date:'Wed 9/30 · 3:45p', g:'Q', title:'Quiz #5 — Protocols', meta:'Blackboard', status:'not started'},{date:'Fri 10/2', g:'A', title:'Lab #1 report', meta:'Blackboard · 5 pts', status:'not started'}], graded:true},
+      {n:7, range:'Oct 5 – 9', lectures:[{date:'Mon 10/5', title:'Secure networks', meta:'Chap 4'},{date:'Wed 10/7', title:'Secure networks 2', meta:'Chap 4'}], assignments:[{date:'Wed 10/7 · 3:45p', g:'Q', title:'Quiz #6', meta:'Blackboard', status:'not started'}], graded:true},
+      {n:8, range:'Oct 12 – 16', lectures:[{date:'Mon 10/12', title:'Exam #2 — in class, online', meta:'Weeks 4–7', tag:'exam'},{date:'Wed 10/14', title:'Firewalls', meta:'Chap 6'}], assignments:[{date:'Mon 10/12', g:'E', title:'Exam #2', meta:'10 pts', status:'not started'},{date:'Wed 10/14', g:'A', title:'Lab #2 report', meta:'5 pts', status:'not started'}], graded:true},
+      {n:9, range:'Oct 19 – 23', lectures:[{date:'Mon 10/19', title:'Host hardening', meta:'Chap 7'},{date:'Wed 10/21', title:'Lab #3 in-class session', meta:'', tag:'lab'}], assignments:[]},
+      {n:10, range:'Oct 26 – 30', lectures:[{date:'Mon 10/26', title:'Application security', meta:'Chap 8'},{date:'Wed 10/28', title:'Student presentations 1', meta:'', tag:'presentations'}], assignments:[{date:'Wed 10/28', g:'Q', title:'Quiz #7', meta:'Blackboard', status:'not started'}], graded:true},
+      {n:11, range:'Nov 2 – 6', lectures:[{date:'Mon 11/2', title:'Data protection', meta:'Chap 9'},{date:'Wed 11/4', title:'Student presentations 2', meta:'', tag:'presentations'}], assignments:[{date:'Fri 11/6', g:'A', title:'Lab #3 report', meta:'5 pts', status:'not started'}]},
+      {n:12, range:'Nov 9 – 13', lectures:[{date:'Mon 11/9', title:'Exam #3 prep · incident response', meta:'Chap 10'},{date:'Wed 11/11', title:'Student presentations 3', meta:'', tag:'presentations'}], assignments:[{date:'Wed 11/11', g:'Q', title:'Quiz #8', meta:'Blackboard', status:'not started'}], graded:true},
+      {n:13, range:'Nov 16 – 20', lectures:[{date:'Mon 11/16', title:'Final project workshop', meta:'Packet A · Meridian Pharmacy'},{date:'Wed 11/18', title:'Student presentations 4', meta:'', tag:'presentations'}], assignments:[{date:'Wed 11/18', g:'Q', title:'Quiz #9', meta:'Blackboard', status:'not started'}]},
+      {n:14, range:'Nov 23 – 27', lectures:[{date:'Mon 11/23', title:'Thanksgiving break — no class', meta:''}], assignments:[], },
+      {n:15, range:'Nov 30 – Dec 4', lectures:[{date:'Mon 11/30', title:'Final project Q&A', meta:''},{date:'Wed 12/2', title:'Final project presentations', meta:'', tag:'presentations'}], assignments:[{date:'Wed 12/2', g:'P', title:'Final Project — Packet A', meta:'30 pts · report + appendix', status:'in progress'},{date:'Wed 12/2', g:'Q', title:'Quiz #10', meta:'Blackboard', status:'not started'}], graded:true},
+      {n:16, range:'Dec 7 – 11', lectures:[{date:'Mon 12/7', title:'Exam #3 + project defense', meta:'Weeks 8–15', tag:'exam'}], assignments:[{date:'Mon 12/7', g:'E', title:'Exam #3', meta:'10 pts', status:'not started'}], graded:true},
+    ];
+    const NOW = 2, s = this.state;
+    const from = s.mode === 'all' ? 1 : s.from;
+    const weeks = W.map(w => {
+      const isNow = w.n === NOW, shown = w.n >= from;
+      return {...w, range: w.range,
+        bg: isNow ? 'var(--color-accent)' : 'transparent',
+        fg: isNow ? 'var(--color-bg)' : (shown ? (w.graded ? 'var(--color-accent-300)' : 'var(--color-neutral-300)') : 'var(--color-neutral-600)'),
+        ring: w.graded && !isNow ? 'inset 0 0 0 1px var(--color-accent-800)' : 'none',
+        pick: () => this.setState({mode: w.n < NOW ? 'all' : 'current', from: Math.min(w.n, NOW)}),
+        labelColor: isNow ? 'var(--color-accent)' : 'var(--color-neutral-300)',
+        nowDisplay: isNow ? 'inline-flex' : 'none',
+        opacity: w.n < NOW ? '.6' : '1',
+        noLecDisplay: w.lectures.length ? 'none' : 'block', noAsgDisplay: w.assignments.length ? 'none' : 'block',
+        assignments: w.assignments.map(a => ({...a, bg: BG[a.g], fg: FG[a.g]})),
+        lectures: w.lectures.map(l => ({...l, tag: l.tag || ''})),
+      };
+    });
+    const visibleWeeks = s.mode === 'all' ? weeks : weeks.filter(w => w.n >= from).slice(0, 5);
+    const last = visibleWeeks[visibleWeeks.length - 1];
+    return {
+      ...trackVals, weeks, visibleWeeks,
+      modeLabel: s.mode === 'all' ? 'Weeks 1–16' : 'Current · anchored to week ' + NOW,
+      showAll: () => this.setState({mode: 'all', from: 1}),
+      showCurrent: () => this.setState({mode: 'current', from: NOW}),
+      showAllDisplay: s.mode === 'all' ? 'none' : 'inline-flex', showCurrentDisplay: s.mode === 'all' ? 'inline-flex' : 'none',
+      earlierDisplay: from > 1 ? 'flex' : 'none', earlierLabel: from > 1 ? 'scroll up for week ' + (from - 1) + ' · ' + W[from - 2].range : '',
+      toggleCourses: () => this.setState({courses: !s.courses}),
+      coursesDisplay: s.courses ? 'flex' : 'none', coursesColor: s.courses ? 'var(--color-accent)' : 'var(--color-neutral-200)', coursesBg: s.courses ? 'var(--color-accent-900)' : 'transparent',
+      tailLabel: last && last.n < 16 ? 'weeks ' + (last.n + 1) + ' – 16 continue ↓' : 'end of semester',
+    };
+  }
+}
+</script>
+</body>
+</html>
