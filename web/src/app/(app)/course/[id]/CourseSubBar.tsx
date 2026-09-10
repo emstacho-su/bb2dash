@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
   meetingPatterns,
   realRoomDispute,
@@ -9,16 +11,42 @@ import {
 import styles from './CourseSubBar.module.css';
 
 /**
- * Course sub-bar — Stream · Grades · Materials · Info, plus the merged meeting
- * pattern(s), room and a Blackboard link (GUI decision 1c). The tabs stay inert
- * until their panes exist (Grades/Materials/Info are other screens); Stream is
- * this page. Meeting time/room and the Blackboard link come from
- * `v_course_display`, which merges a course's shells (GEO 103 = lecture +
- * recitation → M/W lecture + F recitation).
+ * Course sub-bar — Stream · Classwork · Grades · Info, plus the merged meeting
+ * pattern(s), room and a Blackboard link (GUI decision 1c). Since Phase 8 the
+ * tabs are real routes: each is a <Link> into `course/[id]/<tab>` and the
+ * current one carries `aria-current="page"`, so the tab strip is navigable by
+ * keyboard and readable by a screen reader instead of being decoration.
+ *
+ * Meeting time/room and the Blackboard link come from `v_course_display`, which
+ * merges a course's shells (GEO 103 = lecture + recitation → M/W lecture +
+ * F recitation).
  */
-const TABS = ['Stream', 'Grades', 'Materials', 'Info'] as const;
+const TABS = [
+  { segment: 'stream', label: 'Stream' },
+  { segment: 'classwork', label: 'Classwork' },
+  { segment: 'grades', label: 'Grades' },
+  { segment: 'info', label: 'Info' },
+] as const;
+
+type TabSegment = (typeof TABS)[number]['segment'];
+
+/**
+ * Which tab the current URL is on. `/course/IST.323` (before the redirect to
+ * /stream lands) reads as Stream, and `classwork?view=timeline` is still
+ * Classwork — the query string does not change the tab.
+ */
+export function activeTabFor(pathname: string | null): TabSegment {
+  const segments = (pathname ?? '').split('/').filter(Boolean);
+  const last = segments[segments.length - 1];
+  const match = TABS.find((tab) => tab.segment === last);
+  return match ? match.segment : 'stream';
+}
 
 export function CourseSubBar({ courseId }: { courseId: string }) {
+  const pathname = usePathname();
+  const active = activeTabFor(pathname);
+  const base = `/course/${encodeURIComponent(courseId)}`;
+
   const { data: course, isPending, isError } = useCourseDisplay(courseId);
   const shellIds = course?.shell_ids ?? [];
   const { data: shells } = useCourseShells(shellIds);
@@ -33,10 +61,15 @@ export function CourseSubBar({ courseId }: { courseId: string }) {
 
   return (
     <nav className={styles.bar} aria-label="Course sections">
-      {TABS.map((tab, index) => (
-        <button key={tab} type="button" className={index === 0 ? styles.tabActive : styles.tab}>
-          {tab}
-        </button>
+      {TABS.map((tab) => (
+        <Link
+          key={tab.segment}
+          href={`${base}/${tab.segment}`}
+          className={tab.segment === active ? styles.tabActive : styles.tab}
+          aria-current={tab.segment === active ? 'page' : undefined}
+        >
+          {tab.label}
+        </Link>
       ))}
 
       <span className={styles.meta}>

@@ -215,7 +215,11 @@ export function fileTypeChip(mime: string | null, fileName: string | null): stri
  * Friendly title for a file. `bb_files` has no dedicated title column, so we
  * fall back to `file_name`, then to the basename of `storage_path`/`path`.
  */
-export function fileTitle(row: Pick<BbFileRow, 'file_name' | 'storage_path' | 'path'>): string {
+export function fileTitle(row: {
+  file_name: string | null;
+  storage_path: string | null;
+  path: string | null;
+}): string {
   if (row.file_name) return row.file_name;
   const source = row.storage_path ?? row.path ?? '';
   const base = source.split('/').pop();
@@ -225,7 +229,19 @@ export function fileTitle(row: Pick<BbFileRow, 'file_name' | 'storage_path' | 'p
 /** Where a file's bytes actually live — drives the honesty label (see below). */
 export type FileLocation = 'library' | 'disk' | 'source' | 'none';
 
-export function fileLocation(row: Pick<BbFileRow, 'storage_path' | 'local_path' | 'source_url'>): FileLocation {
+/**
+ * The three columns that decide whether a file can be opened. Declared
+ * structurally, not as a `Pick` of `bb_files`, because the Classwork tree
+ * (`v_content_tree`) carries only `storage_path` — it has no `source_url` or
+ * `local_path` column — and must still get the same honest answer.
+ */
+export interface FileRoutes {
+  storage_path: string | null;
+  local_path: string | null;
+  source_url: string | null;
+}
+
+export function fileLocation(row: FileRoutes): FileLocation {
   if (row.storage_path) return 'library';
   if (row.local_path) return 'disk';
   if (row.source_url) return 'source';
@@ -237,7 +253,7 @@ export function fileLocation(row: Pick<BbFileRow, 'storage_path' | 'local_path' 
  * recorded on the local disk (a `local_path`, no Storage bytes) reads
  * "recorded on disk" — NOT "on disk" — because the browser cannot open it.
  */
-export function fileHonesty(row: Pick<BbFileRow, 'storage_path' | 'local_path' | 'source_url'>): {
+export function fileHonesty(row: FileRoutes): {
   location: FileLocation;
   label: string;
   /** True when the browser has a route to actually open it. */
