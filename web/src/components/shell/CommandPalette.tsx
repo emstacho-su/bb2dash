@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { courseCode, useCourses } from '@/lib/queries';
 import {
   isKeywordMatch,
+  matchedPart,
   scrubSnippet,
   useSearch,
   type SearchMode,
@@ -247,7 +248,11 @@ function SearchBody({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ResultRow({
+/**
+ * One result. Exported for its unit test — the palette itself needs a router
+ * and a query client, and this row needs neither.
+ */
+export function ResultRow({
   result,
   active,
   onMouseEnter,
@@ -260,6 +265,8 @@ function ResultRow({
 }) {
   const scrubbed = useMemo(() => scrubSnippet(result.snippet), [result.snippet]);
   const keyword = isKeywordMatch(result);
+  // Which part of a long unit the snippet came from; null when it is the head.
+  const part = matchedPart(result);
   const pct = Number.isFinite(result.similarity) ? Math.round(result.similarity * 100) : null;
 
   const unit =
@@ -285,6 +292,14 @@ function ResultRow({
           ·
         </span>
         <span>{unit}</span>
+        {part != null && (
+          <span
+            className={styles.partHint}
+            title={`This unit is long enough to be embedded in parts; the passage below is from part ${part}.`}
+          >
+            part {part}
+          </span>
+        )}
         {keyword ? (
           <span
             className={styles.keywordBadge}
