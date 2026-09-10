@@ -1,8 +1,8 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-10**, Phase 7 retrieval polish
-> (`feat/retrieval-polish`, PR open) — matched-passage snippets, superseded-file filter,
-> `part_range` repair, first `web/` test suite. Convention: see root `CLAUDE.md`.
+> Updated upon each PR. Last update: **2026-09-10**, Phase 7 retrieval polish merged (PR #6),
+> Phase 6 closed out (sign-off + signups disabled), and **Requirements v2 + Phase 8/9 briefs**
+> landed in `docs/planning/60–62` (PR #7). Convention: see root `CLAUDE.md`.
 
 ## Where the product is
 
@@ -106,22 +106,31 @@ prod. **Do not re-apply 014–019.**
    uid sees zero, anon insert + `search` edge function both still work. **Signups still to be
    disabled** (item 3) before any public URL carries data.
 
-## Slotted for the future (backlog, rough priority order)
-1. Recurring crawl cadence (weekly + before class days) + `bb_raw` diffing into typed tables;
-   capture the Blackboard iCal feed URL for cheap due-date sync. A crawl should also set
-   `superseded_by` automatically when a content item's file is re-uploaded (022 did the
-   historical four by hand).
-2. Remaining near-duplicates outside the 022 scope: bb_files 17, 18/19, and IST.352 31/32/47
-   (three variants of "Introduction to SA&D - Part 1"). Needs a general supersede rule.
-3. Remaining data gaps: IST.323 Security-in-the-News group/date, IST.466 Group #3 slots,
-   OCR for the two image-only files.
-4. Test coverage beyond `queries.search.ts` in `web/` (Today/Course/Materials screens need a
-   router + query-client harness); widen the vitest coverage `include` as screens gain tests.
-5. Stored per-part `tsvector` on `bb_text_embeddings` (populated at embed time, backfilled from
-   `part_range`): the only real speed-up for the keyword-snippet part selection, which today
-   recomputes `to_tsvector` per covering part (hybrid at limit 12 ≈ 27 ms; fine, but grows with
-   the corpus). Do it when the palette feels slow, not before.
-6. Professional-side data (deferred by design).
+## What's next — Requirements v2 (`docs/planning/60_REQUIREMENTS_v2.md`)
+
+Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of clarification;
+`60_REQUIREMENTS_v2.md` (R-01..R-26) supersedes every earlier backlog. Phase order (§4 there):
+
+| Phase | Name | Brief | Status |
+|---|---|---|---|
+| 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | approved, not started |
+| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | approved, runs in parallel with 8 |
+| 10 | Grades and submissions | — | after 8 + 9 |
+| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | — | |
+| 12 | Electron shell | — | |
+| 13 | Styling pass | — | last |
+
+Migration ranges: Phase 8 = 026–029, Phase 9 = 030–039. Both phase branches cut from `main`
+(Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
+
+Phase 7 leftovers folded into the plan: automatic `superseded_by` on re-uploaded files and the
+remaining near-duplicates (bb_files 17, 18/19, IST.352 31/32/47) → Phase 9 `stage_files`;
+`web/` test coverage for Today/Course/Materials → Phase 8's workers add screen tests as they
+touch those screens; stored per-part `tsvector` on `bb_text_embeddings` → only when the palette
+feels slow, not before.
+
+**Open security item:** the `bb-files` Storage bucket is still `public: true` (verified
+2026-09-10). Phase 9 migration 030 flips it; Materials already uses signed URLs.
 
 ## Known issues / operational notes
 

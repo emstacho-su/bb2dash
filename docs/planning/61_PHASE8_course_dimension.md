@@ -6,8 +6,8 @@ Runs **in parallel with Phase 9** (`62_PHASE9_sync_loop.md`); the seam between t
 §Seams. Three Opus workers on isolated worktrees / branches cut from the phase branch; PM
 integrates.
 
-**Base.** Cut from `origin/feat/retrieval-polish` (main + Phase 7: migrations 021–025, the
-`web/` vitest harness). When the Phase 7 PR merges, the PM merges `main` into the phase branch.
+**Base.** Cut from `origin/main` (Phase 7 merged via PR #6: migrations 021–025, the `web/`
+vitest harness).
 
 **Migration numbers reserved for this phase: 026–029.** Phase 9 owns 030–039. Never take a number
 outside the range; if the phase needs more, ask the PM.

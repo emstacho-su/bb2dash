@@ -6,8 +6,7 @@ R-13, R-15, R-20 (crawler + table), R-26 (in-app) from `60_REQUIREMENTS_v2.md`. 
 seams frozen there. Two Opus workers on isolated worktrees / branches cut from the phase branch;
 PM integrates.
 
-**Base.** Cut from `origin/feat/retrieval-polish` (main + Phase 7). PM merges `main` in when the
-Phase 7 PR lands.
+**Base.** Cut from `origin/main` (Phase 7 merged via PR #6).
 
 **Migration numbers reserved for this phase: 030–039.** Phase 8 owns 026–029.
 
