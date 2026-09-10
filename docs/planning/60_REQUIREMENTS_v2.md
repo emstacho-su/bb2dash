@@ -280,7 +280,10 @@ open from the OneDrive mirror.
 
 ## 7. Where things go from here
 
-* Phase 8 and Phase 9 briefs at `docs/planning/51_PHASE8_course_dimension.md` and
-  `52_PHASE9_sync_loop.md`, each with a frozen contract citing R-numbers.
+* **Phase 6 closed 2026-09-10:** Stack gave visual sign-off on the deployed screens and disabled
+  signups in Supabase Auth. Still open and now owned by Phase 9 day one: the `bb-files` bucket is
+  `public: true` (verified 2026-09-10).
+* Phase 8 and Phase 9 briefs: `61_PHASE8_course_dimension.md`, `62_PHASE9_sync_loop.md`, each
+  with a frozen contract citing R-numbers. Migration ranges: Phase 8 = 026–029, Phase 9 = 030–039.
 * One DECISIONS row per §5 row at the phase that adopts it.
 * STATUS "Slotted for the future" is replaced by a pointer to §4 of this file.
