@@ -20,7 +20,7 @@ export type { Mode } from './config.js';
 /**
  * Where the excerpt came from (migration 021):
  *   - `fts_headline`  — ts_headline over the matched part (or the whole unit)
- *   - `vector_part`   — the head of the best-matching embedded part
+ *   - `vector_part`   — the head of the part the snippet was cut from
  *   - `unit_head`     — the head of the whole unit (no passage evidence)
  * A server that predates 021 sends nothing, which reads as `null`.
  */
@@ -53,7 +53,7 @@ export interface MaterialHit {
   similarity: number | null;
   /** ts_rank (fts only). */
   rank: number | null;
-  /** Which embedded part the excerpt came from. Null when the unit has no embedding. */
+  /** The part the snippet was cut from; null for a whole-unit snippet or an unembedded unit. */
   partNo: number | null;
   /** How the excerpt was produced. Null when the server predates migration 021. */
   snippetSource: SnippetSource | null;
@@ -159,6 +159,17 @@ export interface SupabaseClientOptions {
 }
 
 const SEARCH_PATH = '/functions/v1/search';
+
+/**
+ * PostgREST's own PGRST202 hint ("Perhaps you meant to call …") describes the
+ * overload it found, which sends the reader off to change the caller. The real
+ * fix is the migration the call was written for, and which one that is depends
+ * on what the request asked for.
+ */
+const MISSING_FUNCTION_HINT =
+  'No SQL function matched the call. Apply db/migrations/012_hybrid_similarity.sql (hybrid_search_file_text with p_min_similarity and a similarity column) and confirm the deployed search function matches supabase/functions/search/index.ts.';
+const MISSING_FUNCTION_HINT_SUPERSEDED =
+  'No SQL function matched the call. This request asked for include_superseded, which needs db/migrations/021_matched_snippets.sql (p_include_superseded on all three search functions) and the v4 search Edge Function. Apply 021 and redeploy, or drop include_superseded to search with the older signature.';
 /** Rendered course id for a file with no course mapping. */
 export const UNASSIGNED_COURSE = '(unassigned)';
 const TEXT_SELECT = 'id,unit_kind,unit_no,text,char_count,bb_files(id,file_name,course_id,bucket,path)';
@@ -187,15 +198,20 @@ export class SupabaseMaterialsClient implements MaterialsClient {
       limit: request.limit,
     };
     if (request.minSimilarity !== null) body['min_similarity'] = request.minSimilarity;
-    // Sent only when true: an older search function rejects unknown keys, and
-    // false is the server-side default anyway.
+    // Sent only when true, because false is already the server-side default:
+    // there is nothing to say, and saying it would make a v3 function forward a
+    // parameter its SQL functions do not have.
     if (request.includeSuperseded) body['include_superseded'] = true;
 
-    const raw = await this.#request(SEARCH_PATH, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const raw = await this.#request(
+      SEARCH_PATH,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      request.includeSuperseded ? MISSING_FUNCTION_HINT_SUPERSEDED : MISSING_FUNCTION_HINT,
+    );
 
     const parsed = searchBody.safeParse(raw);
     if (!parsed.success) {
@@ -268,7 +284,7 @@ export class SupabaseMaterialsClient implements MaterialsClient {
 
   // -------------------------------------------------------------- transport
 
-  async #request(path: string, init: RequestInit): Promise<unknown> {
+  async #request(path: string, init: RequestInit, missingFunctionHint = MISSING_FUNCTION_HINT): Promise<unknown> {
     const url = `${this.#url}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
@@ -317,7 +333,7 @@ export class SupabaseMaterialsClient implements MaterialsClient {
       }
     }
 
-    if (!response.ok) throw errorFor(response.status, path, payload);
+    if (!response.ok) throw errorFor(response.status, path, payload, missingFunctionHint);
     return payload;
   }
 }
@@ -356,7 +372,7 @@ function messageOf(cause: unknown): string {
 }
 
 /** Map an HTTP failure to an ApiError whose hint names the likely fix. */
-function errorFor(status: number, path: string, payload: unknown): ApiError {
+function errorFor(status: number, path: string, payload: unknown, missingFunctionHint: string): ApiError {
   const body = (payload ?? {}) as { error?: unknown; message?: unknown; msg?: unknown; code?: unknown; hint?: unknown; details?: unknown };
   const detail = [body.error, body.message, body.msg].find((v) => typeof v === 'string' && v.length > 0) as string | undefined;
   const code = typeof body.code === 'string' && body.code.length > 0 ? body.code : null;
@@ -367,11 +383,7 @@ function errorFor(status: number, path: string, payload: unknown): ApiError {
 
   let hint: string;
   if (code === 'PGRST202' || code === '42883') {
-    // PostgREST's own hint ("Perhaps you meant to call ...") describes the
-    // overload it found, which sends an operator to change the caller. The
-    // real fix is the migration the caller was written for.
-    hint =
-      'No SQL function matched the call. Apply db/migrations/012_hybrid_similarity.sql (hybrid_search_file_text with p_min_similarity and a similarity column) and confirm the deployed search function matches supabase/functions/search/index.ts.';
+    hint = missingFunctionHint;
   } else if (serverHint) {
     hint = serverHint;
   } else if (status === 401 || status === 403) {

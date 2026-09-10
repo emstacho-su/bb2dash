@@ -65,7 +65,7 @@ describe('search — the request', () => {
     expect(calls[0]!.body).not.toHaveProperty('min_similarity');
   });
 
-  it('omits include_superseded unless it is true (an older function rejects the key)', async () => {
+  it('omits include_superseded when it is false, because false is the server default', async () => {
     const { instance, calls } = client([{ status: 200, body: { results: [] } }]);
     await instance.search(request);
     expect(calls[0]!.body).not.toHaveProperty('include_superseded');
@@ -283,6 +283,15 @@ describe('review follow-ups', () => {
     const error = await instance.search(request).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).message).toContain('terminated');
+  });
+
+  it('PGRST202 names migration 021 when the request asked for include_superseded', async () => {
+    const { instance } = client([
+      { status: 500, body: { error: 'search failed (code PGRST202)', code: 'PGRST202', hint: 'Perhaps you meant to call public.hybrid_search_file_text(...)' } },
+    ]);
+    const error = await instance.search({ ...request, includeSuperseded: true }).catch((e: unknown) => e);
+    expect((error as ApiError).hint).toContain('021_matched_snippets');
+    expect((error as ApiError).hint).toContain('include_superseded');
   });
 
   it('PGRST202 names migration 012 even when PostgREST supplies its own overload hint', async () => {

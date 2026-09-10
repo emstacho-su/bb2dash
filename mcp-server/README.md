@@ -169,14 +169,19 @@ mistyped id (`IST323`) and an empty topic look identical otherwise.
 
 Every hit carries an `- excerpt:` line saying where the text below it came from:
 
-| Label | Meaning |
-| --- | --- |
-| `matched passage` | the passage that actually matched — `ts_headline` over the matching part, or the head of the best-matching embedded part |
-| `matched passage (part 3)` | the same, from part 3 of a multi-part unit; the part number is shown only from part 2 on |
-| `unit head — the start of the unit …` | no passage evidence, so only the head of the unit is shown; read the whole unit with `get_material_text` before concluding something is absent |
+The label depends on the mode first, because the three modes return different things:
 
-`matched passage` needs the deployed `search` function and migration 021. Against an older
-backend every hit reads as `unit head`, which is exactly what it is there.
+| Mode | Label | Meaning |
+| --- | --- | --- |
+| `fts` | `keyword headline over the whole unit` | `ts_headline` over the unit text; this mode does no part slicing |
+| `vector` | `full unit text` | the whole unit; `— part N matched` names the part the query vector was nearest to |
+| `hybrid` | `matched passage` | the passage the snippet was cut from — a headline over the matching part, or the head of that part |
+| `hybrid` | `matched passage (part 3)` | the same, cut from part 3; the part is named only from part 2 on |
+| `hybrid` | `unit head — the start of the unit …` | no passage evidence, so only the head of the unit is shown |
+| `hybrid` | `unit head (older server) …` | the response carried no `snippet_source`, i.e. the backend predates migration 021 |
+
+Where the label is not `matched passage`, read the whole unit with `get_material_text` before
+concluding something is absent from it.
 
 #### Superseded files
 
