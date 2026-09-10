@@ -1,10 +1,19 @@
-// bb2dash :: edge function `search`
+// bb2dash :: edge function `search`  (v3)
 // The hub's retrieval API over the harvested Blackboard corpus.
 //
-// POST { q: string, course?: string, mode?: 'fts'|'vector'|'hybrid', limit?: number }
+// POST { q: string, course?: string, mode?: 'fts'|'vector'|'hybrid', limit?: number,
+//        min_similarity?: number }
 //   fts     -> rpc search_file_text(q, p_course, p_limit)            [migration 010]
 //   vector  -> embed q with gte-small, rpc match_file_text(...)      [migration 011, vector(384)]
-//   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migration 011, RRF merge]
+//   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migration 012, RRF + floor]
+//
+// min_similarity (0..1, optional) is a cosine floor on the VECTOR evidence. Measured on this
+// corpus 2026-09-09: relevant hits 0.83-0.92, nonsense English 0.75-0.77, so 0.78 is the
+// recommended default for agent callers. It is not applied server-side by default — omit it and
+// v3 behaves exactly like v2 — because the Materials cmd-K overlay may prefer "always show
+// something". In hybrid mode it is forwarded to the SQL function, which gates only the vector
+// arm and still returns literal keyword hits (with their real similarity) below the floor. In
+// vector mode there is no keyword arm, so it simply filters the ranked list. fts ignores it.
 //
 // The query string is embedded RAW — no "{course} {bucket} — {file_name}: " context header.
 // That header is a corpus-side construct (see PLAN_EMBEDDING_POC.md, chunking policy); prefixing
@@ -18,6 +27,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const MODEL = "gte-small";
 const MODES = ["fts", "vector", "hybrid"] as const;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 100;
+// vector mode returns one row per embedded PART; over-fetch so that collapsing
+// to one row per unit and applying the floor still leaves `limit` units.
+const VECTOR_OVERFETCH = 4;
 type Mode = (typeof MODES)[number];
 
 const JSON_HEADERS = {
@@ -44,6 +58,31 @@ async function embed(q: string): Promise<number[]> {
   return Array.from(v as number[]);
 }
 
+/** Parse the optional floor. Returns null when absent, or an error string when malformed. */
+function parseMinSimilarity(raw: unknown): { value: number | null; error?: string } {
+  if (raw === undefined || raw === null) return { value: null };
+  // typeof, not Number(): `true`, "" and [] would otherwise coerce to a valid floor.
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0 || raw > 1) {
+    return { value: null, error: "min_similarity must be a number between 0 and 1" };
+  }
+  return { value: raw };
+}
+
+/** Parse the optional limit: a finite number, truncated and clamped to 1..MAX_LIMIT. */
+function parseLimit(raw: unknown): { value: number; error?: string } {
+  if (raw === undefined || raw === null) return { value: DEFAULT_LIMIT };
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return { value: DEFAULT_LIMIT, error: "limit must be a number" };
+  }
+  return { value: Math.min(MAX_LIMIT, Math.max(1, Math.trunc(raw))) };
+}
+
+/** Keep the best-ranked row per text unit. Rows arrive sorted by distance. */
+function bestPartPerUnit<T extends { text_id: number }>(rows: T[]): T[] {
+  const seen = new Set<number>();
+  return rows.filter((row) => (seen.has(row.text_id) ? false : (seen.add(row.text_id), true)));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: JSON_HEADERS });
   if (req.method !== "POST") {
@@ -52,7 +91,11 @@ Deno.serve(async (req: Request) => {
 
   let body: Record<string, unknown>;
   try {
-    body = await req.json();
+    const parsed: unknown = await req.json();
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return json({ error: "request body must be a JSON object" }, 400);
+    }
+    body = parsed as Record<string, unknown>;
   } catch {
     return json({ error: "request body must be JSON" }, 400);
   }
@@ -69,10 +112,13 @@ Deno.serve(async (req: Request) => {
     return json({ error: `invalid mode '${mode}'; expected one of ${MODES.join(", ")}` }, 400);
   }
 
-  const rawLimit = Number(body.limit ?? 10);
-  const limit = Number.isFinite(rawLimit)
-    ? Math.min(100, Math.max(1, Math.trunc(rawLimit)))
-    : 10;
+  const limitParsed = parseLimit(body.limit);
+  if (limitParsed.error) return json({ error: limitParsed.error }, 400);
+  const limit = limitParsed.value;
+
+  const floor = parseMinSimilarity(body.min_similarity);
+  if (floor.error) return json({ error: floor.error }, 400);
+  const minSimilarity = floor.value;
 
   try {
     let results: unknown[] = [];
@@ -90,34 +136,58 @@ Deno.serve(async (req: Request) => {
         query_embedding: await embed(q),
         p_model: MODEL,
         p_course: course,
-        p_limit: limit,
+        p_limit: Math.min(MAX_LIMIT * VECTOR_OVERFETCH, limit * VECTOR_OVERFETCH),
       });
       if (error) throw error;
-      results = data ?? [];
+      let rows = (data ?? []) as Array<{ text_id: number; similarity: number }>;
+      if (minSimilarity !== null) {
+        rows = rows.filter((r) => typeof r.similarity === "number" && r.similarity >= minSimilarity);
+      }
+      results = bestPartPerUnit(rows).slice(0, limit);
     } else {
-      const { data, error } = await supabase.rpc("hybrid_search_file_text", {
+      // p_min_similarity is sent only when set: postgrest-js serialises null, and
+      // an unknown named argument makes PostgREST fail overload resolution
+      // (PGRST202) against a database that has not applied migration 012 yet.
+      const args: Record<string, unknown> = {
         q,
         query_embedding: await embed(q),
         p_model: MODEL,
         p_course: course,
         p_limit: limit,
-      });
+      };
+      if (minSimilarity !== null) args.p_min_similarity = minSimilarity;
+      const { data, error } = await supabase.rpc("hybrid_search_file_text", args);
       if (error) throw error;
       results = data ?? [];
     }
 
-    return json({ mode, q, course, count: results.length, results });
+    return json({
+      mode,
+      q,
+      course,
+      min_similarity: minSimilarity,
+      count: results.length,
+      results,
+    });
   } catch (err) {
+    // Full detail goes to the function log; the caller gets the code and a short
+    // message, not SQL signatures, column names or PostgREST's overload hints.
     const e = err as { message?: string; code?: string; details?: string; hint?: string };
+    console.error("search failed", {
+      mode,
+      course,
+      message: e?.message ?? String(err),
+      code: e?.code ?? null,
+      details: e?.details ?? null,
+      hint: e?.hint ?? null,
+    });
     return json(
       {
         mode,
         q,
         course,
-        error: e?.message ?? String(err),
+        error: "search failed" + (e?.code ? ` (code ${e.code})` : ""),
         code: e?.code ?? null,
-        details: e?.details ?? null,
-        hint: e?.hint ?? null,
       },
       500,
     );

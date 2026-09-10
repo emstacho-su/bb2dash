@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+
+# Local secrets — never commit. The server reads them from its MCP env block.
+.env
+.env.*
+!.env.example
