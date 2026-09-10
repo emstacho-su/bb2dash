@@ -1,16 +1,16 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-10**, GUI v1 phase (`feat/gui-v1`, PR #4 open,
-> reconciled with the merged Retrieval-MCP phase on `main`).
-> Convention: see root `CLAUDE.md`. History of merged phases at the bottom.
+> Updated upon each PR. Last update: **2026-09-10**, GUI v1 phase MERGED to `main` (PR #4) and
+> deployed to Vercel; RLS hardened (W-9). Convention: see root `CLAUDE.md`.
 
 ## Where the product is
 
-**Backend foundation complete and live; GUI v1 built and build-green, pending live preview.**
+**Backend foundation complete and live; GUI v1 merged, deployed, and logged into.**
 The Blackboard → Supabase pipeline, typed warehouse, document corpus, and two-tier search API
-are all in prod. The Next.js hub app (`web/`) is written — all four v1 screens — and the full
-integrated tree passes `typecheck` + `build`, but has NOT yet been verified against live data
-(needs the Vercel preview, blocked on a Vercel project-create permission).
+are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is merged to `main`
+(PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
+has signed in successfully. RLS is owner-scoped (W-9, migration 020). Remaining to fully close:
+Stack's visual confirmation that screens render live data, and disabling signups.
 
 Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 
@@ -60,15 +60,16 @@ pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to
 names it 014–019. This is a name-level artifact, NOT drift — a rebuild in README order reproduces
 prod. **Do not re-apply 014–019.**
 
-## Remaining before the GUI phase merges
+## Remaining to fully close the GUI phase
 
-0. ~~Reconcile `feat/gui-v1` with main's Retrieval-MCP phase~~ — done 2026-09-10 (merge +
-   migration renumber; branch is up to date with `main`).
-1. **Stack: create the Vercel project** (connector 403s on project-create — permission/SAML on
-   Stack's side). Settings in `web/README.md`; preview only.
-2. **Deploy the preview** (I do this once the project exists) → **Stack visual sign-off** against
-   live data — the first real test, since the sandbox can't reach `*.supabase.co`.
-3. **Stack: disable signups** (Supabase Auth → Sign In / Providers).
+0. ~~Reconcile `feat/gui-v1` with main's Retrieval-MCP phase~~ — done 2026-09-10 (merge + renumber).
+0a. ~~Merge PR #4 to `main`~~ — done 2026-09-10 (`aef5dee`); `main` is the single source of truth.
+1. ~~Create the Vercel project~~ — done; deployed at `https://web-xi-ten-uy9xk6c6p0.vercel.app`
+   (Root Directory `web`, the two `NEXT_PUBLIC_` env vars). Owner has logged in.
+2. **Stack: visual sign-off** — confirm the Today/Course/Materials/search screens render live
+   data end-to-end (login works; this is the last unconfirmed link).
+3. **Stack: disable signups** (Supabase Auth → Sign In / Providers) before the URL is shared.
+   Also set Supabase Site URL to the Vercel origin for password-reset/confirmation email links.
 4. ~~**W-9: RLS hardening**~~ — **done 2026-09-10** (migration 020). The 21 permissive
    `authenticated using(true)` policies (STATUS earlier estimated ~25; the real count is 21) are
    now `auth.uid() = public.app_owner()`, plus `storage.objects` `bb_files_auth_all` owner-scoped
