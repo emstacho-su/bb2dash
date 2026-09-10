@@ -213,6 +213,12 @@
   border-radius: 50%;
   background: var(--color-accent);
 }
+
+/* Which embedded part the snippet came from. Muted: provenance, not a claim. */
+.partHint {
+  color: var(--color-neutral-500);
+}
+
 .keywordBadge {
   display: inline-flex;
   align-items: center;

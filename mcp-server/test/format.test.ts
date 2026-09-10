@@ -151,3 +151,53 @@ describe('sub-floor labels depend on how the row got here', () => {
     expect(out).toMatch(/no embedding/);
   });
 });
+
+describe('excerpt provenance (migrations 021/024)', () => {
+  function excerptLine(hit: Parameters<typeof makeHit>[0], mode: SearchContext['mode'] = 'hybrid'): string {
+    const out = formatSearchResults({ ...context, mode }, { hits: [makeHit(hit)], floorApplied: true });
+    return out.split('\n').find((line) => line.startsWith('- excerpt:')) ?? '';
+  }
+
+  it('describes the excerpt by mode first: fts is a headline over the whole unit', () => {
+    // snippet_source is 'fts_headline' in fts mode too, but nothing was sliced
+    // there — reading the source alone would claim a passage that does not exist.
+    expect(excerptLine({ snippetSource: 'fts_headline', partNo: 4 }, 'fts')).toBe(
+      '- excerpt: keyword headline over the whole unit',
+    );
+  });
+
+  it('describes a vector hit as the full unit text, naming the part that matched', () => {
+    expect(excerptLine({ snippetSource: 'vector_part', partNo: null }, 'vector')).toBe('- excerpt: full unit text');
+    expect(excerptLine({ snippetSource: 'vector_part', partNo: 3 }, 'vector')).toBe(
+      '- excerpt: full unit text — part 3 matched',
+    );
+  });
+
+  it('calls a hybrid fts_headline or vector_part excerpt the matched passage', () => {
+    expect(excerptLine({ snippetSource: 'fts_headline' })).toBe('- excerpt: matched passage');
+    expect(excerptLine({ snippetSource: 'vector_part' })).toBe('- excerpt: matched passage');
+  });
+
+  it('calls a hybrid unit_head excerpt the unit head and warns the match may be further in', () => {
+    const line = excerptLine({ snippetSource: 'unit_head' });
+    expect(line).toContain('unit head');
+    expect(line).not.toContain('matched passage');
+    expect(line).not.toContain('older server');
+    expect(line).toMatch(/further in/);
+  });
+
+  it('says the server is older when a hybrid row carries no snippet_source at all', () => {
+    const line = excerptLine({ snippetSource: null });
+    expect(line).toContain('unit head (older server)');
+    expect(line).toMatch(/further in/);
+  });
+
+  it('names the part when the snippet was cut from part 2 or later', () => {
+    expect(excerptLine({ snippetSource: 'vector_part', partNo: 3 })).toBe('- excerpt: matched passage (part 3)');
+  });
+
+  it('does not name part 1 or a whole-unit snippet — both are the head of the unit', () => {
+    expect(excerptLine({ snippetSource: 'fts_headline', partNo: 1 })).not.toContain('part');
+    expect(excerptLine({ snippetSource: 'fts_headline', partNo: null })).not.toContain('part');
+  });
+});

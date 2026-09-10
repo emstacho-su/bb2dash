@@ -15,6 +15,24 @@ const MAX_EXCERPT_CHARS = 1_500;
 const MAX_TEXT_CHARS = 20_000;
 const MAX_LISTED_COURSES = 20;
 
+/**
+ * Excerpt provenance. What the excerpt IS depends first on the mode:
+ *   - fts    — `ts_headline` over the whole unit; there is no part slicing.
+ *   - vector — the whole unit text, with `part_no` naming the part that matched.
+ *   - hybrid — migration 021 cuts the snippet from a part, and `snippet_source`
+ *     says which arm produced it.
+ * Reading `snippet_source` alone would mislabel the first two, so mode wins.
+ */
+const FTS_EXCERPT_LABEL = 'keyword headline over the whole unit';
+const VECTOR_EXCERPT_LABEL = 'full unit text';
+const MATCHED_PASSAGE_LABEL = 'matched passage';
+const UNIT_HEAD_LABEL = 'unit head';
+/** No `snippet_source` at all: a server that predates migration 021. */
+const UNIT_HEAD_OLDER_SERVER_LABEL = 'unit head (older server)';
+const UNIT_HEAD_NOTE = 'the start of the unit — the matching wording may be further in';
+/** Part 1 is the only part of a short unit; naming it adds noise. */
+const FIRST_LABELLED_PART = 2;
+
 /** PPTX extraction inlines the professor's speaker notes behind this marker. */
 const NOTES_MARKER = '[notes]';
 const NOTES_WARNING =
@@ -69,19 +87,48 @@ function formatSimilarity(
   return `${value} (below the ${floor} floor — surfaced by literal keyword match, not semantic similarity)`;
 }
 
+/** The part worth naming, or null when there is nothing useful to say. */
+function labelledPart(hit: MaterialHit): number | null {
+  return hit.partNo !== null && hit.partNo >= FIRST_LABELLED_PART ? hit.partNo : null;
+}
+
+/**
+ * Describe the excerpt below the hit: what it is in this mode, and which part of
+ * a multi-part unit it was cut from.
+ */
+function excerptLabel(hit: MaterialHit, mode: Mode): string {
+  if (mode === 'fts') return FTS_EXCERPT_LABEL;
+
+  const part = labelledPart(hit);
+  if (mode === 'vector') {
+    return part === null ? VECTOR_EXCERPT_LABEL : `${VECTOR_EXCERPT_LABEL} — part ${part} matched`;
+  }
+
+  switch (hit.snippetSource) {
+    case 'fts_headline':
+    case 'vector_part':
+      return part === null ? MATCHED_PASSAGE_LABEL : `${MATCHED_PASSAGE_LABEL} (part ${part})`;
+    case 'unit_head':
+      return `${UNIT_HEAD_LABEL} — ${UNIT_HEAD_NOTE}`;
+    default:
+      return `${UNIT_HEAD_OLDER_SERVER_LABEL} — ${UNIT_HEAD_NOTE}`;
+  }
+}
+
 function renderHit(hit: MaterialHit, index: number, context: SearchContext, floorApplied: boolean): string {
   const lines = [
     `### ${index + 1}. ${hit.fileName}`,
     `- course: ${hit.courseId}`,
     `- bucket: ${hit.bucket}`,
     `- unit: ${unitLabel(hit)}`,
-    `- text_id: ${hit.textId}${hit.partNo !== null ? ` (part ${hit.partNo})` : ''}`,
+    `- text_id: ${hit.textId}`,
     `- file_id: ${hit.fileId}`,
     `- similarity: ${formatSimilarity(hit.similarity, context.minSimilarity, context.mode, floorApplied)}`,
   ];
   if (hit.score !== null) lines.push(`- score: ${hit.score.toFixed(6)} (RRF, ordering only)`);
   if (hit.rank !== null) lines.push(`- rank: ${hit.rank} (ts_rank)`);
   if (hit.excerpt.includes(NOTES_MARKER)) lines.push(`- ${NOTES_WARNING}`);
+  lines.push(`- excerpt: ${excerptLabel(hit, context.mode)}`);
   lines.push('', truncate(hit.excerpt, MAX_EXCERPT_CHARS));
   return lines.join('\n');
 }

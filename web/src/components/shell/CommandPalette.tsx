@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { courseCode, useCourses } from '@/lib/queries';
 import {
   isKeywordMatch,
+  matchedPart,
   scrubSnippet,
   useSearch,
   type SearchMode,
@@ -247,7 +248,11 @@ function SearchBody({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ResultRow({
+/**
+ * One result. Exported for its unit test — the palette itself needs a router
+ * and a query client, and this row needs neither.
+ */
+export function ResultRow({
   result,
   active,
   onMouseEnter,
@@ -260,7 +265,16 @@ function ResultRow({
 }) {
   const scrubbed = useMemo(() => scrubSnippet(result.snippet), [result.snippet]);
   const keyword = isKeywordMatch(result);
-  const pct = Number.isFinite(result.similarity) ? Math.round(result.similarity * 100) : null;
+  // Which part of a long unit the snippet came from; null when it is the head.
+  const part = matchedPart(result);
+  // A unit with no embedding has no similarity at all; isKeywordMatch is true
+  // there, so the percentage branch is never reached with a null.
+  const similarity =
+    typeof result.similarity === 'number' && Number.isFinite(result.similarity)
+      ? result.similarity
+      : null;
+  const pct = similarity === null ? null : Math.round(similarity * 100);
+  const simTitle = similarity === null ? undefined : `Semantic similarity ${similarity.toFixed(3)}`;
 
   const unit =
     result.unit_no != null ? `${result.unit_kind} ${result.unit_no}` : result.unit_kind;
@@ -285,6 +299,14 @@ function ResultRow({
           ·
         </span>
         <span>{unit}</span>
+        {part != null && (
+          <span
+            className={styles.partHint}
+            title={`This unit is long enough to be embedded in parts; the passage below is from part ${part}.`}
+          >
+            part {part}
+          </span>
+        )}
         {keyword ? (
           <span
             className={styles.keywordBadge}
@@ -294,10 +316,7 @@ function ResultRow({
           </span>
         ) : (
           pct != null && (
-            <span
-              className={styles.simBadge}
-              title={`Semantic similarity ${result.similarity.toFixed(3)}`}
-            >
+            <span className={styles.simBadge} title={simTitle}>
               <span className={styles.simDot} aria-hidden="true" />
               {pct}% match
             </span>

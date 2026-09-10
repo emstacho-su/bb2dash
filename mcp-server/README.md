@@ -113,6 +113,7 @@ stdout is JSON-RPC only.
 | `mode` | `hybrid` \| `vector` \| `fts` | no | `hybrid` | `vector` returns full unit text; `fts` is keyword-only with no similarity. |
 | `limit` | integer 1–50 | no | 10 | |
 | `min_similarity` | number 0–1 | no | 0.78 | Floor on the semantic evidence. Never gates literal keyword hits. |
+| `include_superseded` | boolean | no | `false` | Include files a newer upload has superseded (several dated copies of one schedule / roster exist). Sent to the function only when `true`. |
 
 **Example** (real output, trimmed):
 
@@ -130,6 +131,7 @@ sets the ordering and is not a percentage.
 - file_id: 7
 - similarity: 0.9199
 - score: 0.039216 (RRF, ordering only)
+- excerpt: matched passage
 
 Information Security PropertiesThe CIA Triad …
 ```
@@ -162,6 +164,31 @@ header and labels sub-floor hits rather than removing them; the client works wit
 
 An empty result with a `course` filter lists the course ids that actually exist, because a
 mistyped id (`IST323`) and an empty topic look identical otherwise.
+
+#### What the excerpt is
+
+Every hit carries an `- excerpt:` line saying where the text below it came from:
+
+The label depends on the mode first, because the three modes return different things:
+
+| Mode | Label | Meaning |
+| --- | --- | --- |
+| `fts` | `keyword headline over the whole unit` | `ts_headline` over the unit text; this mode does no part slicing |
+| `vector` | `full unit text` | the whole unit; `— part N matched` names the part the query vector was nearest to |
+| `hybrid` | `matched passage` | the passage the snippet was cut from — a headline over the matching part, or the head of that part |
+| `hybrid` | `matched passage (part 3)` | the same, cut from part 3; the part is named only from part 2 on |
+| `hybrid` | `unit head — the start of the unit …` | no passage evidence, so only the head of the unit is shown |
+| `hybrid` | `unit head (older server) …` | the response carried no `snippet_source`, i.e. the backend predates migration 021 |
+
+Where the label is not `matched passage`, read the whole unit with `get_material_text` before
+concluding something is absent from it.
+
+#### Superseded files
+
+Blackboard holds several dated copies of some files (four `IST466M3 Schedule …` versions, two
+rosters). `bb_files.superseded_by` chains the stale ones to the current version, and search skips
+them unless `include_superseded` is `true`. Ask for them only to inspect the history — quoting a
+stale schedule is worse than finding nothing.
 
 #### Speaker notes
 

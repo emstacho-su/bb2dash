@@ -17,6 +17,16 @@ import { ApiError } from './errors.js';
 
 export type { Mode } from './config.js';
 
+/**
+ * Where the excerpt came from (migration 021):
+ *   - `fts_headline`  — ts_headline over the matched part (or the whole unit)
+ *   - `vector_part`   — the head of the part the snippet was cut from
+ *   - `unit_head`     — the head of the whole unit (no passage evidence)
+ * A server that predates 021 sends nothing, which reads as `null`.
+ */
+export const SNIPPET_SOURCES = ['fts_headline', 'vector_part', 'unit_head'] as const;
+export type SnippetSource = (typeof SNIPPET_SOURCES)[number];
+
 export interface SearchRequest {
   q: string;
   course: string | null;
@@ -24,6 +34,8 @@ export interface SearchRequest {
   limit: number;
   /** Cosine floor on vector evidence; null sends none. */
   minSimilarity: number | null;
+  /** Include files superseded by a newer version. Sent only when true. */
+  includeSuperseded: boolean;
 }
 
 /** One retrieval unit (a `bb_file_text` row), normalised across the three modes. */
@@ -41,9 +53,11 @@ export interface MaterialHit {
   similarity: number | null;
   /** ts_rank (fts only). */
   rank: number | null;
-  /** Which embedded part matched (vector only). */
+  /** The part the snippet was cut from; null for a whole-unit snippet or an unembedded unit. */
   partNo: number | null;
-  /** Snippet (hybrid, fts) or the full unit text (vector). */
+  /** How the excerpt was produced. Null when the server predates migration 021. */
+  snippetSource: SnippetSource | null;
+  /** Matched passage (hybrid, fts) or the full unit text (vector). */
   excerpt: string;
 }
 
@@ -97,6 +111,10 @@ const hitRow = z.object({
   similarity: z.number().nullish(),
   rank: z.number().nullish(),
   part_no: z.number().nullish(),
+  // Free-form on the wire on purpose: an older server omits it and a future one
+  // may add a label. Neither should turn a whole result set into an error, so
+  // the value is narrowed to the known set in normaliseHit.
+  snippet_source: z.string().nullish(),
   snippet: z.string().nullish(),
   text: z.string().nullish(),
 });
@@ -141,6 +159,17 @@ export interface SupabaseClientOptions {
 }
 
 const SEARCH_PATH = '/functions/v1/search';
+
+/**
+ * PostgREST's own PGRST202 hint ("Perhaps you meant to call …") describes the
+ * overload it found, which sends the reader off to change the caller. The real
+ * fix is the migration the call was written for, and which one that is depends
+ * on what the request asked for.
+ */
+const MISSING_FUNCTION_HINT =
+  'No SQL function matched the call. Apply db/migrations/012_hybrid_similarity.sql (hybrid_search_file_text with p_min_similarity and a similarity column) and confirm the deployed search function matches supabase/functions/search/index.ts.';
+const MISSING_FUNCTION_HINT_SUPERSEDED =
+  'No SQL function matched the call. This request asked for include_superseded, which needs db/migrations/021_matched_snippets.sql (p_include_superseded on all three search functions) and the v4 search Edge Function. Apply 021 and redeploy, or drop include_superseded to search with the older signature.';
 /** Rendered course id for a file with no course mapping. */
 export const UNASSIGNED_COURSE = '(unassigned)';
 const TEXT_SELECT = 'id,unit_kind,unit_no,text,char_count,bb_files(id,file_name,course_id,bucket,path)';
@@ -169,12 +198,20 @@ export class SupabaseMaterialsClient implements MaterialsClient {
       limit: request.limit,
     };
     if (request.minSimilarity !== null) body['min_similarity'] = request.minSimilarity;
+    // Sent only when true, because false is already the server-side default:
+    // there is nothing to say, and saying it would make a v3 function forward a
+    // parameter its SQL functions do not have.
+    if (request.includeSuperseded) body['include_superseded'] = true;
 
-    const raw = await this.#request(SEARCH_PATH, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const raw = await this.#request(
+      SEARCH_PATH,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      request.includeSuperseded ? MISSING_FUNCTION_HINT_SUPERSEDED : MISSING_FUNCTION_HINT,
+    );
 
     const parsed = searchBody.safeParse(raw);
     if (!parsed.success) {
@@ -247,7 +284,7 @@ export class SupabaseMaterialsClient implements MaterialsClient {
 
   // -------------------------------------------------------------- transport
 
-  async #request(path: string, init: RequestInit): Promise<unknown> {
+  async #request(path: string, init: RequestInit, missingFunctionHint = MISSING_FUNCTION_HINT): Promise<unknown> {
     const url = `${this.#url}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
@@ -296,7 +333,7 @@ export class SupabaseMaterialsClient implements MaterialsClient {
       }
     }
 
-    if (!response.ok) throw errorFor(response.status, path, payload);
+    if (!response.ok) throw errorFor(response.status, path, payload, missingFunctionHint);
     return payload;
   }
 }
@@ -316,8 +353,14 @@ function normaliseHit(row: z.infer<typeof hitRow>): MaterialHit {
     similarity: row.similarity ?? null,
     rank: row.rank ?? null,
     partNo: row.part_no ?? null,
+    snippetSource: toSnippetSource(row.snippet_source),
     excerpt: row.snippet ?? row.text ?? '',
   };
+}
+
+/** Narrow the wire value to the known set; anything else reads as absent. */
+function toSnippetSource(value: string | null | undefined): SnippetSource | null {
+  return SNIPPET_SOURCES.includes(value as SnippetSource) ? (value as SnippetSource) : null;
 }
 
 function isAbort(cause: unknown): boolean {
@@ -329,7 +372,7 @@ function messageOf(cause: unknown): string {
 }
 
 /** Map an HTTP failure to an ApiError whose hint names the likely fix. */
-function errorFor(status: number, path: string, payload: unknown): ApiError {
+function errorFor(status: number, path: string, payload: unknown, missingFunctionHint: string): ApiError {
   const body = (payload ?? {}) as { error?: unknown; message?: unknown; msg?: unknown; code?: unknown; hint?: unknown; details?: unknown };
   const detail = [body.error, body.message, body.msg].find((v) => typeof v === 'string' && v.length > 0) as string | undefined;
   const code = typeof body.code === 'string' && body.code.length > 0 ? body.code : null;
@@ -340,11 +383,7 @@ function errorFor(status: number, path: string, payload: unknown): ApiError {
 
   let hint: string;
   if (code === 'PGRST202' || code === '42883') {
-    // PostgREST's own hint ("Perhaps you meant to call ...") describes the
-    // overload it found, which sends an operator to change the caller. The
-    // real fix is the migration the caller was written for.
-    hint =
-      'No SQL function matched the call. Apply db/migrations/012_hybrid_similarity.sql (hybrid_search_file_text with p_min_similarity and a similarity column) and confirm the deployed search function matches supabase/functions/search/index.ts.';
+    hint = missingFunctionHint;
   } else if (serverHint) {
     hint = serverHint;
   } else if (status === 401 || status === 403) {

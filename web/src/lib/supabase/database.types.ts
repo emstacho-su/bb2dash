@@ -1968,6 +1968,7 @@ export type Database = {
       }
     }
     Functions: {
+      app_owner: { Args: never; Returns: string }
       bb_file_relpath: { Args: { p_file_id: number }; Returns: string }
       classify_bb_file: {
         Args: { p_mime: string; p_name: string; p_path: string }
@@ -1976,6 +1977,7 @@ export type Database = {
       hybrid_search_file_text: {
         Args: {
           p_course?: string
+          p_include_superseded?: boolean
           p_limit?: number
           p_min_similarity?: number
           p_model?: string
@@ -1988,9 +1990,11 @@ export type Database = {
           course_id: string
           file_id: number
           file_name: string
+          part_no: number
           score: number
           similarity: number
           snippet: string
+          snippet_source: string
           text_id: number
           unit_kind: string
           unit_no: number
@@ -1999,6 +2003,7 @@ export type Database = {
       match_file_text: {
         Args: {
           p_course?: string
+          p_include_superseded?: boolean
           p_limit?: number
           p_model: string
           query_embedding: string
@@ -2017,7 +2022,12 @@ export type Database = {
         }[]
       }
       search_file_text: {
-        Args: { p_course?: string; p_limit?: number; q: string }
+        Args: {
+          p_course?: string
+          p_include_superseded?: boolean
+          p_limit?: number
+          q: string
+        }
         Returns: {
           bucket: Database["public"]["Enums"]["file_bucket"]
           course_id: string
@@ -2369,4 +2379,3 @@ export const Constants = {
     },
   },
 } as const
-

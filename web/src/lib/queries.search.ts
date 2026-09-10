@@ -12,8 +12,13 @@
  * 2026-09-09; v3 on main is additive — same result columns, plus an optional
  * `min_similarity` request floor that is echoed back; we don't send it, so the
  * palette keeps the "always show something" behaviour and labels instead):
- *   POST {q, course?, mode?: 'fts'|'vector'|'hybrid' (default hybrid), limit?, min_similarity?}
+ *   POST {q, course?, mode?: 'fts'|'vector'|'hybrid' (default hybrid), limit?, min_similarity?,
+ *         include_superseded?}
  *   -> {mode, q, course, min_similarity, count, results: SearchResult[]}
+ *
+ * Phase 7 (`search` v4 + migration 021) adds `include_superseded` to the request
+ * and `part_no` / `snippet_source` to each result row. Both result fields are
+ * optional here so the app keeps working against the older deployed function.
  *
  * verify_jwt is on. We authenticate with the logged-in user's Supabase session
  * access token (a real project-signed JWT), NOT the hardcoded anon key — the
@@ -25,6 +30,15 @@ import { getSupabaseBrowserClient } from './supabase/client';
 import { supabaseAnonKey, supabaseUrl } from './supabase/env';
 
 export type SearchMode = 'fts' | 'vector' | 'hybrid';
+
+/**
+ * Where a result's snippet came from (migration 021 / `search` v4):
+ *   - `fts_headline` / `vector_part` — the passage that actually matched
+ *   - `unit_head` — only the start of the unit, no passage evidence
+ * A backend that predates 021 sends neither this nor `part_no`, so both are
+ * optional here and the UI degrades to what it showed before.
+ */
+export type SnippetSource = 'fts_headline' | 'vector_part' | 'unit_head';
 
 /** One row of the `search` function's `results` array. */
 export interface SearchResult {
@@ -38,9 +52,17 @@ export interface SearchResult {
   unit_no: number | null;
   /** RRF (hybrid) / rank (fts) / distance-derived (vector) rank score. */
   score: number;
-  /** Cosine similarity of the query vector to the unit. See SEMANTIC_SIMILARITY_MIN. */
-  similarity: number;
+  /**
+   * Cosine similarity of the query vector to the unit. Null when the unit has
+   * no embedding at all — it reached the result set through the keyword arm.
+   * See SEMANTIC_SIMILARITY_MIN.
+   */
+  similarity: number | null;
   snippet: string;
+  /** The part the snippet was cut from; null for a whole-unit snippet or an unembedded unit. */
+  part_no?: number | null;
+  /** How the snippet was produced. Absent on a pre-021 backend. */
+  snippet_source?: SnippetSource | null;
 }
 
 export interface SearchResponse {
@@ -77,7 +99,32 @@ export interface SearchResponse {
 export const SEMANTIC_SIMILARITY_MIN = 0.8;
 
 export function isKeywordMatch(result: Pick<SearchResult, 'similarity'>): boolean {
-  return typeof result.similarity === 'number' && result.similarity < SEMANTIC_SIMILARITY_MIN;
+  const { similarity } = result;
+  // No similarity at all: the unit has no embedding, so the keyword arm is the
+  // only way it could have got here. That is a keyword match by definition —
+  // never a semantic one, and never a percentage.
+  if (typeof similarity !== 'number' || !Number.isFinite(similarity)) return true;
+  return similarity < SEMANTIC_SIMILARITY_MIN;
+}
+
+/* ---------------------------------------------------------------------------
+ * Which part of a long unit matched
+ *
+ * A 4,000-character syllabus is embedded in parts; the snippet is now cut from
+ * the part that carries the match rather than the head of the unit, and
+ * `part_no` names that part — null when the snippet is the whole unit (the
+ * fallback headline) or the unit has no embedding. Part 1 IS the head, and
+ * short units only ever have one part, so naming it would be noise: the hint
+ * only means something from part 2 on.
+ * ------------------------------------------------------------------------ */
+
+export const FIRST_LABELLED_PART = 2;
+
+/** The part number worth showing, or null when there is nothing to say. */
+export function matchedPart(result: Pick<SearchResult, 'part_no'>): number | null {
+  const part = result.part_no;
+  if (typeof part !== 'number' || !Number.isFinite(part)) return null;
+  return part >= FIRST_LABELLED_PART ? part : null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -157,19 +204,51 @@ export interface SearchParams {
   course?: string | null;
   mode?: SearchMode;
   limit?: number;
+  /**
+   * Include files a newer upload has superseded (four dated copies of the same
+   * IST466 schedule exist). Not exposed in the UI — wired through so a caller
+   * can ask for the history deliberately.
+   */
+  includeSuperseded?: boolean;
+}
+
+/** `SearchParams` with every default resolved. Both the key and the request body build from this. */
+export interface ResolvedSearchParams {
+  q: string;
+  course: string | null;
+  mode: SearchMode;
+  limit: number;
+  includeSuperseded: boolean;
+}
+
+const DEFAULT_MODE: SearchMode = 'hybrid';
+const DEFAULT_LIMIT = 12;
+const DEFAULT_INCLUDE_SUPERSEDED = false;
+/** Below this the query is not worth an embedding round-trip. */
+const MIN_QUERY_CHARS = 2;
+
+/**
+ * One place the defaults live, so the query key and the request body can never
+ * describe different searches. Returns a new object; the input is untouched.
+ */
+export function resolveSearchParams(params: SearchParams): ResolvedSearchParams {
+  return {
+    q: params.q.trim(),
+    course: params.course?.trim() || null,
+    mode: params.mode ?? DEFAULT_MODE,
+    limit: params.limit ?? DEFAULT_LIMIT,
+    includeSuperseded: params.includeSuperseded ?? DEFAULT_INCLUDE_SUPERSEDED,
+  };
 }
 
 export const searchQueryKeys = {
   all: ['search'] as const,
-  run: (p: Required<Pick<SearchParams, 'q' | 'mode'>> & { course: string | null; limit: number }) =>
-    ['search', p.mode, p.course, p.limit, p.q] as const,
+  run: (p: ResolvedSearchParams) =>
+    ['search', p.mode, p.course, p.limit, p.includeSuperseded, p.q] as const,
 };
 
-async function runSearch(params: SearchParams, signal?: AbortSignal): Promise<SearchResponse> {
-  const q = params.q.trim();
-  const course = params.course?.trim() || null;
-  const mode: SearchMode = params.mode ?? 'hybrid';
-  const limit = params.limit ?? 12;
+async function runSearch(params: ResolvedSearchParams, signal?: AbortSignal): Promise<SearchResponse> {
+  const { q, course, mode, limit, includeSuperseded } = params;
 
   const supabase = getSupabaseBrowserClient();
   const {
@@ -190,7 +269,9 @@ async function runSearch(params: SearchParams, signal?: AbortSignal): Promise<Se
       Authorization: `Bearer ${token}`,
       apikey: supabaseAnonKey(),
     },
-    body: JSON.stringify({ q, course, mode, limit }),
+    // include_superseded rides along only when true: the deployed function
+    // defaults to false, and an older one has no such parameter at all.
+    body: JSON.stringify({ q, course, mode, limit, ...(includeSuperseded ? { include_superseded: true } : {}) }),
   });
 
   if (!res.ok) {
@@ -210,16 +291,12 @@ async function runSearch(params: SearchParams, signal?: AbortSignal): Promise<Se
 }
 
 export function searchOptions(params: SearchParams) {
-  const q = params.q.trim();
-  const course = params.course?.trim() || null;
-  const mode: SearchMode = params.mode ?? 'hybrid';
-  const limit = params.limit ?? 12;
+  const resolved = resolveSearchParams(params);
 
   return queryOptions({
-    queryKey: searchQueryKeys.run({ q, course, mode, limit }),
-    queryFn: ({ signal }) => runSearch({ q, course, mode, limit }, signal),
-    // ≥2 chars before we spend an embedding round-trip.
-    enabled: q.length >= 2,
+    queryKey: searchQueryKeys.run(resolved),
+    queryFn: ({ signal }) => runSearch(resolved, signal),
+    enabled: resolved.q.length >= MIN_QUERY_CHARS,
     // Keep the old list on screen while the next keystroke's query resolves.
     placeholderData: keepPreviousData,
     staleTime: 60 * 1000,

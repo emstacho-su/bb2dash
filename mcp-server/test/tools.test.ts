@@ -36,13 +36,35 @@ describe('search_materials — defaults and forwarding', () => {
       mode: 'hybrid',
       limit: 10,
       minSimilarity: 0.78,
+      includeSuperseded: false,
     });
   });
 
   it('forwards course, mode, limit and an explicit floor, trimming strings', async () => {
     const client = new FakeMaterialsClient([makeHit()]);
     await handleSearchMaterials(deps(client), { q: ' cia triad ', course: ' IST.323 ', mode: 'vector', limit: 4, min_similarity: 0.5 });
-    expect(client.searchCalls[0]).toEqual({ q: 'cia triad', course: 'IST.323', mode: 'vector', limit: 4, minSimilarity: 0.5 });
+    expect(client.searchCalls[0]).toEqual({
+      q: 'cia triad',
+      course: 'IST.323',
+      mode: 'vector',
+      limit: 4,
+      minSimilarity: 0.5,
+      includeSuperseded: false,
+    });
+  });
+
+  it('forwards include_superseded when the caller asks for superseded files', async () => {
+    const client = new FakeMaterialsClient([makeHit()]);
+    await handleSearchMaterials(deps(client), { q: 'schedule', include_superseded: true });
+    expect(client.searchCalls[0]!.includeSuperseded).toBe(true);
+  });
+
+  it('rejects a non-boolean include_superseded before calling the backend', async () => {
+    const client = new FakeMaterialsClient([makeHit()]);
+    const result = await handleSearchMaterials(deps(client), { q: 'schedule', include_superseded: 'yes' });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('include_superseded');
+    expect(client.searchCalls).toHaveLength(0);
   });
 
   it('clamps the limit to the configured maximum', async () => {

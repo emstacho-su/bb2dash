@@ -39,6 +39,13 @@ export const DEFAULT_TIMEOUT_MS = 30_000;
  */
 export const DEFAULT_MIN_SIMILARITY = 0.78;
 
+/**
+ * Superseded files (several dated copies of one schedule or roster) are hidden
+ * unless the caller asks for them: they crowd the top ranks with stale text.
+ * Migration 021 filters on `bb_files.superseded_by` before ranking.
+ */
+export const DEFAULT_INCLUDE_SUPERSEDED = false;
+
 export interface Config {
   readonly supabaseUrl: string;
   readonly serviceKey: string;

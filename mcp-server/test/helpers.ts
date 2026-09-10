@@ -35,7 +35,8 @@ export function makeHit(overrides: Partial<MaterialHit> = {}): MaterialHit {
     score: 0.019607,
     similarity: 0.8912,
     rank: null,
-    partNo: null,
+    partNo: 1,
+    snippetSource: 'fts_headline',
     excerpt: 'Risk assessment: identify assets, threats, vulnerabilities, and controls.',
     ...overrides,
   };

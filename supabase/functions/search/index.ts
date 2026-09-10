@@ -1,11 +1,24 @@
-// bb2dash :: edge function `search`  (v3)
+// bb2dash :: edge function `search`  (v4)
 // The hub's retrieval API over the harvested Blackboard corpus.
 //
 // POST { q: string, course?: string, mode?: 'fts'|'vector'|'hybrid', limit?: number,
-//        min_similarity?: number }
-//   fts     -> rpc search_file_text(q, p_course, p_limit)            [migration 010]
-//   vector  -> embed q with gte-small, rpc match_file_text(...)      [migration 011, vector(384)]
-//   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migration 012, RRF + floor]
+//        min_similarity?: number, include_superseded?: boolean }
+//   fts     -> rpc search_file_text(q, p_course, p_limit)            [migrations 010, 021]
+//   vector  -> embed q with gte-small, rpc match_file_text(...)      [migrations 011, 021]
+//   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migrations 012/013, 021]
+//
+// v4 (migrations 021 + 024) changes what the rows CONTAIN, not what this file computes. In
+// hybrid mode `snippet` is the matched passage rather than the head of the unit, and each row
+// carries `part_no` and `snippet_source` ('fts_headline' | 'vector_part' | 'unit_head').
+// `part_no` is THE PART THE SNIPPET WAS CUT FROM — for a keyword hit, the lowest-numbered
+// embedding part whose slice actually satisfies the tsquery; null when no part does (the
+// snippet is then a headline over the whole unit) and null for an unembedded unit. The SQL
+// function builds all of that; the rows are passed through untouched.
+//
+// include_superseded (boolean, default false) is the other v4 addition. bb_files.superseded_by
+// marks a document that a newer version replaced — four IST.466 schedule versions, two rosters.
+// By default all three modes hide those rows, so a query gets the one current document instead
+// of a rank list of near-identical drafts. Pass true only to search history deliberately.
 //
 // min_similarity (0..1, optional) is a cosine floor on the VECTOR evidence. Measured on this
 // corpus 2026-09-09: relevant hits 0.83-0.92, nonsense English 0.75-0.77, so 0.78 is the
@@ -68,6 +81,16 @@ function parseMinSimilarity(raw: unknown): { value: number | null; error?: strin
   return { value: raw };
 }
 
+/** Parse the optional superseded switch. Absent means false; a non-boolean is rejected. */
+function parseIncludeSuperseded(raw: unknown): { value: boolean; error?: string } {
+  if (raw === undefined || raw === null) return { value: false };
+  // typeof, not truthiness: "false" and 0 would otherwise silently mean something.
+  if (typeof raw !== "boolean") {
+    return { value: false, error: "include_superseded must be a boolean" };
+  }
+  return { value: raw };
+}
+
 /** Parse the optional limit: a finite number, truncated and clamped to 1..MAX_LIMIT. */
 function parseLimit(raw: unknown): { value: number; error?: string } {
   if (raw === undefined || raw === null) return { value: DEFAULT_LIMIT };
@@ -120,24 +143,38 @@ Deno.serve(async (req: Request) => {
   if (floor.error) return json({ error: floor.error }, 400);
   const minSimilarity = floor.value;
 
+  const superseded = parseIncludeSuperseded(body.include_superseded);
+  if (superseded.error) return json({ error: superseded.error }, 400);
+  const includeSuperseded = superseded.value;
+
+  // Optional RPC arguments are attached only when they carry a non-default value:
+  // postgrest-js serialises an explicit null, and an argument the deployed function
+  // does not declare makes PostgREST fail overload resolution (PGRST202) against a
+  // database that has not applied the matching migration yet — 012 for
+  // p_min_similarity, 021 for p_include_superseded.
+  const optional = (args: Record<string, unknown>): Record<string, unknown> =>
+    includeSuperseded ? { ...args, p_include_superseded: true } : args;
+
   try {
     let results: unknown[] = [];
 
     if (mode === "fts") {
-      const { data, error } = await supabase.rpc("search_file_text", {
-        q,
-        p_course: course,
-        p_limit: limit,
-      });
+      const { data, error } = await supabase.rpc(
+        "search_file_text",
+        optional({ q, p_course: course, p_limit: limit }),
+      );
       if (error) throw error;
       results = data ?? [];
     } else if (mode === "vector") {
-      const { data, error } = await supabase.rpc("match_file_text", {
-        query_embedding: await embed(q),
-        p_model: MODEL,
-        p_course: course,
-        p_limit: Math.min(MAX_LIMIT * VECTOR_OVERFETCH, limit * VECTOR_OVERFETCH),
-      });
+      const { data, error } = await supabase.rpc(
+        "match_file_text",
+        optional({
+          query_embedding: await embed(q),
+          p_model: MODEL,
+          p_course: course,
+          p_limit: Math.min(MAX_LIMIT * VECTOR_OVERFETCH, limit * VECTOR_OVERFETCH),
+        }),
+      );
       if (error) throw error;
       let rows = (data ?? []) as Array<{ text_id: number; similarity: number }>;
       if (minSimilarity !== null) {
@@ -145,16 +182,13 @@ Deno.serve(async (req: Request) => {
       }
       results = bestPartPerUnit(rows).slice(0, limit);
     } else {
-      // p_min_similarity is sent only when set: postgrest-js serialises null, and
-      // an unknown named argument makes PostgREST fail overload resolution
-      // (PGRST202) against a database that has not applied migration 012 yet.
-      const args: Record<string, unknown> = {
+      const args: Record<string, unknown> = optional({
         q,
         query_embedding: await embed(q),
         p_model: MODEL,
         p_course: course,
         p_limit: limit,
-      };
+      });
       if (minSimilarity !== null) args.p_min_similarity = minSimilarity;
       const { data, error } = await supabase.rpc("hybrid_search_file_text", args);
       if (error) throw error;

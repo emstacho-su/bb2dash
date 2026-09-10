@@ -22,8 +22,39 @@ cp .env.example .env.local     # then fill in the anon key
 npm run dev                    # http://localhost:3000
 ```
 
-Other scripts: `npm run build` (production build), `npm start` (serve the
-build), `npm run typecheck`.
+## Scripts
+
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | dev server on http://localhost:3000 |
+| `npm run build` | production build (also type-checks) |
+| `npm start` | serve the production build |
+| `npm run lint` | Next's ESLint pass |
+| `npm run typecheck` | `tsc --noEmit` over the app and the tests |
+| `npm test` | vitest, one run |
+| `npm run test:watch` | vitest in watch mode |
+| `npm run test:coverage` | vitest with a v8 coverage report |
+
+## Testing
+
+vitest + Testing Library (jsdom). Tests live in `web/test/`; `vitest.config.mts`
+carries the `@/` alias so they resolve the same modules the app does.
+
+Nothing in the suite touches the network. `fetch` is stubbed per test and
+`@/lib/supabase/client` is mocked, so the suite passes with no Supabase project,
+no keys and no session — which also means it can run in a sandboxed agent
+session that cannot reach `*.supabase.co`.
+
+What is covered today is the retrieval contract in `src/lib/queries.search.ts`
+— request body shape (including `include_superseded`, sent only when true),
+query keys, the `enabled` gate, error handling, snippet scrubbing, the 0.80
+keyword-match boundary and the part hint — plus the palette's `ResultRow`
+rendering in `test/CommandPalette.test.tsx`.
+
+`test:coverage` is scoped to `queries.search.ts` (currently ~98% statements,
+100% branches). The palette shell, the screens and the other query modules have
+no tests yet; widen `coverage.include` in `vitest.config.mts` as they gain some,
+rather than reporting a whole-app number that means nothing.
 
 ## Environment variables
 
@@ -72,6 +103,10 @@ src/
       database.types.ts     generated; regenerate after every migration
   styles/tokens.module.css  the `composes:` primitives feature modules build on
   proxy.ts                  Next 16's middleware convention; runs the guard
+test/
+  setup.ts                  jest-dom matchers + DOM cleanup between tests
+  factories.ts              search fixtures (no network, no live backend)
+  *.test.ts(x)              the suites `npm test` runs
 ```
 
 ## Conventions worth keeping

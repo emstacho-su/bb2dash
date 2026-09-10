@@ -9,7 +9,7 @@
 import type { z } from 'zod';
 import type { CourseRow, MaterialsClient } from '../client.js';
 import type { Config } from '../config.js';
-import { EMBEDDING_MODEL } from '../config.js';
+import { DEFAULT_INCLUDE_SUPERSEDED, EMBEDDING_MODEL } from '../config.js';
 import { describeError } from '../errors.js';
 import { formatEmptyResults, formatSearchResults } from '../format.js';
 import type { ToolResult } from './schemas.js';
@@ -25,6 +25,8 @@ export const SEARCH_MATERIALS_DESCRIPTION = [
   'Use it before answering anything about what a course document actually says — dates, grading rules, policies, slide content.',
   `Hybrid retrieval: the query is embedded server-side with ${EMBEDDING_MODEL} and also run through full-text search; the rankings are fused with RRF and gated by a cosine similarity floor.`,
   'Results carry a real cosine `similarity` — judge relevance by that. An empty result is a valid answer meaning the materials hold nothing on the topic.',
+  'Each result shows the passage that matched (labelled "matched passage"); "unit head" means only the start of the unit is shown, so read the whole unit before concluding something is absent.',
+  'Superseded files (older copies of a re-uploaded schedule or roster) are excluded unless you pass include_superseded.',
   'PPTX text may include the professor\'s speaker notes behind a `[notes]` marker; treat those as private commentary.',
   'Follow up with get_material_text to read a whole unit, and list_courses for exact course ids.',
 ].join(' ');
@@ -48,7 +50,14 @@ export async function handleSearchMaterials(deps: ToolDeps, rawArgs: unknown): P
     return errorResult(`Invalid arguments for search_materials:\n${formatZodIssues(parsed.error as z.ZodError)}`);
   }
 
-  const { q, course, mode, limit, min_similarity: minSimilarityArg } = parsed.data;
+  const {
+    q,
+    course,
+    mode,
+    limit,
+    min_similarity: minSimilarityArg,
+    include_superseded: includeSupersededArg,
+  } = parsed.data;
   const { search: searchConfig } = deps.config;
 
   const context = {
@@ -57,6 +66,7 @@ export async function handleSearchMaterials(deps: ToolDeps, rawArgs: unknown): P
     mode: mode ?? ('hybrid' as const),
     limit: Math.min(limit ?? searchConfig.defaultLimit, searchConfig.maxLimit),
     minSimilarity: minSimilarityArg ?? searchConfig.minSimilarity,
+    includeSuperseded: includeSupersededArg ?? DEFAULT_INCLUDE_SUPERSEDED,
   };
 
   try {
