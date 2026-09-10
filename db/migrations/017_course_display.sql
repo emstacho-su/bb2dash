@@ -1,4 +1,4 @@
--- bb2dash :: 015_course_display.sql
+-- bb2dash :: 017_course_display.sql
 -- Spec: docs/planning/21_D2_architecture_direction.md section 3.017, renumbered 017 -> 015 by
 -- docs/planning/40_RECONCILIATION_2026-09-09.md ("the migration DDL set, renumbered 012+").
 --

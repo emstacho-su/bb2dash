@@ -1,4 +1,4 @@
--- bb2dash :: 016_files_current.sql
+-- bb2dash :: 018_files_current.sql
 -- Spec: docs/planning/21_D2_architecture_direction.md section 3.018, renumbered 018 -> 016 by
 -- docs/planning/40_RECONCILIATION_2026-09-09.md.
 --

@@ -1,4 +1,4 @@
--- bb2dash :: 017_sync_contract.sql
+-- bb2dash :: 019_sync_contract.sql
 -- Spec: docs/planning/21_D2_architecture_direction.md section 3.010, renumbered 010 -> 017 by
 -- docs/planning/40_RECONCILIATION_2026-09-09.md ("sync contract ... minus the request_id FK").
 --

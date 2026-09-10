@@ -1,4 +1,4 @@
--- bb2dash :: 014_work_items.sql
+-- bb2dash :: 016_work_items.sql
 -- v_work_items: the one view every planner surface reads (21_D2 §3.016, renumbered per
 -- docs/planning/40_RECONCILIATION_2026-09-09.md), plus the suggested-start rule from
 -- 20_D1 §3.

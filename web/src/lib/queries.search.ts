@@ -9,9 +9,11 @@
  * error (TanStack turns it into `error`; the palette renders an error state).
  *
  * The function contract (verified live via pg_net against the deployed function,
- * 2026-09-09):
- *   POST {q, course?, mode?: 'fts'|'vector'|'hybrid' (default hybrid), limit?}
- *   -> {mode, q, course, count, results: SearchResult[]}
+ * 2026-09-09; v3 on main is additive — same result columns, plus an optional
+ * `min_similarity` request floor that is echoed back; we don't send it, so the
+ * palette keeps the "always show something" behaviour and labels instead):
+ *   POST {q, course?, mode?: 'fts'|'vector'|'hybrid' (default hybrid), limit?, min_similarity?}
+ *   -> {mode, q, course, min_similarity, count, results: SearchResult[]}
  *
  * verify_jwt is on. We authenticate with the logged-in user's Supabase session
  * access token (a real project-signed JWT), NOT the hardcoded anon key — the
@@ -45,6 +47,8 @@ export interface SearchResponse {
   mode: SearchMode;
   q: string;
   course: string | null;
+  /** v3: the vector floor applied server-side; null when the caller sent none (we don't). */
+  min_similarity?: number | null;
   count: number;
   results: SearchResult[];
 }

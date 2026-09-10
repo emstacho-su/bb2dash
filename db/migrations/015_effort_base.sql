@@ -1,4 +1,4 @@
--- bb2dash :: 013_effort_base.sql
+-- bb2dash :: 015_effort_base.sql
 -- The effort model's reference data and primitives (20_D1 §3, 21_D2 §3.015,
 -- renumbered per docs/planning/40_RECONCILIATION_2026-09-09.md).
 --

@@ -1,4 +1,4 @@
--- bb2dash :: 012_planner_columns.sql
+-- bb2dash :: 014_planner_columns.sql
 -- Planner-owned column for the effort model (21_D2 §3.014, renumbered per
 -- docs/planning/40_RECONCILIATION_2026-09-09.md).
 --

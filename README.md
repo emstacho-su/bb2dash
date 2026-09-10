@@ -18,8 +18,15 @@ psql "$DATABASE_URL" -f db/migrations/001_schema.sql -f db/migrations/002_raw_la
   -f db/migrations/004_bb_identifiers.sql -f db/migrations/005_file_corpus.sql \
   -f db/migrations/006_course_maps.sql -f db/migrations/007_text_anon_insert.sql \
   -f db/migrations/008_file_layout.sql -f db/migrations/009_upcoming_excludes_missed.sql \
-  -f db/migrations/010_search_layer.sql
+  -f db/migrations/010_search_layer.sql -f db/migrations/011_gte_small.sql \
+  -f db/migrations/012_hybrid_similarity.sql -f db/migrations/013_hybrid_similarity_single_source.sql \
+  -f db/migrations/014_planner_columns.sql -f db/migrations/015_effort_base.sql \
+  -f db/migrations/016_work_items.sql -f db/migrations/017_course_display.sql \
+  -f db/migrations/018_files_current.sql -f db/migrations/019_sync_contract.sql
 ```
+Migrations are additive and numbered; the repo file is byte-identical to what was applied to prod.
+Prod's `schema_migrations` records 014–019 under their pre-reconciliation names (012–017) — a
+name-level artifact, not drift; see `docs/planning/41_RECONCILIATION_gui_vs_retrieval-mcp.md`.
 
 ## Ingest
 Open Blackboard in Claude's built-in browser, log in, then in page context:
