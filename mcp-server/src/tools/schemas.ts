@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { DEFAULT_MIN_SIMILARITY, MAX_LIMIT, MODES } from '../config.js';
+import { DEFAULT_INCLUDE_SUPERSEDED, DEFAULT_MIN_SIMILARITY, MAX_LIMIT, MODES } from '../config.js';
 
 export const MAX_QUERY_CHARS = 2_000;
 export const MAX_COURSE_CHARS = 64;
@@ -45,6 +45,12 @@ export const searchMaterialsShape = {
     .optional()
     .describe(
       `Cosine floor on the semantic evidence. Default ${DEFAULT_MIN_SIMILARITY}: on this corpus relevant material scores 0.83-0.92 and unrelated 0.75-0.77, so the default correctly returns nothing for an off-topic question. Lower it (e.g. 0.6) to widen the net. Literal keyword matches are never gated by it.`,
+    ),
+  include_superseded: z
+    .boolean()
+    .optional()
+    .describe(
+      `Include files that a newer upload has superseded — several dated copies of the same schedule or roster exist. Default ${DEFAULT_INCLUDE_SUPERSEDED}: only the current version of each file is searched. Set true only to look at the history deliberately.`,
     ),
 } as const;
 

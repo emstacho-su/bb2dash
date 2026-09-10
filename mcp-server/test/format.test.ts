@@ -151,3 +151,38 @@ describe('sub-floor labels depend on how the row got here', () => {
     expect(out).toMatch(/no embedding/);
   });
 });
+
+describe('excerpt provenance (migration 021)', () => {
+  function excerptLine(hit: Parameters<typeof makeHit>[0]): string {
+    const out = formatSearchResults(context, { hits: [makeHit(hit)], floorApplied: true });
+    return out.split('\n').find((line) => line.startsWith('- excerpt:')) ?? '';
+  }
+
+  it('calls an fts_headline excerpt the matched passage', () => {
+    expect(excerptLine({ snippetSource: 'fts_headline' })).toBe('- excerpt: matched passage');
+  });
+
+  it('calls a vector_part excerpt the matched passage', () => {
+    expect(excerptLine({ snippetSource: 'vector_part' })).toBe('- excerpt: matched passage');
+  });
+
+  it('calls a unit_head excerpt the unit head and warns the match may be further in', () => {
+    const line = excerptLine({ snippetSource: 'unit_head' });
+    expect(line).toContain('unit head');
+    expect(line).not.toContain('matched passage');
+    expect(line).toMatch(/further in/);
+  });
+
+  it('treats an absent snippet_source (older server) as a unit head', () => {
+    expect(excerptLine({ snippetSource: null })).toContain('unit head');
+  });
+
+  it('names the part when the excerpt came from part 2 or later', () => {
+    expect(excerptLine({ snippetSource: 'vector_part', partNo: 3 })).toBe('- excerpt: matched passage (part 3)');
+  });
+
+  it('does not name part 1 or a missing part — both are the whole unit', () => {
+    expect(excerptLine({ snippetSource: 'fts_headline', partNo: 1 })).not.toContain('part');
+    expect(excerptLine({ snippetSource: 'fts_headline', partNo: null })).not.toContain('part');
+  });
+});

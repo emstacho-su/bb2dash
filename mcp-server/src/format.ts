@@ -15,6 +15,18 @@ const MAX_EXCERPT_CHARS = 1_500;
 const MAX_TEXT_CHARS = 20_000;
 const MAX_LISTED_COURSES = 20;
 
+/**
+ * Excerpt provenance (migration 021). `fts_headline` / `vector_part` are the
+ * passage that actually matched; `unit_head` (and an older server, which sends
+ * no source at all) is only the start of the unit, so "not in the excerpt" does
+ * not mean "not in the unit" there.
+ */
+const MATCHED_PASSAGE_LABEL = 'matched passage';
+const UNIT_HEAD_LABEL = 'unit head';
+const UNIT_HEAD_NOTE = 'the start of the unit — the matching wording may be further in';
+/** Part 1 is the only part of a short unit; naming it adds noise. */
+const FIRST_LABELLED_PART = 2;
+
 /** PPTX extraction inlines the professor's speaker notes behind this marker. */
 const NOTES_MARKER = '[notes]';
 const NOTES_WARNING =
@@ -69,19 +81,31 @@ function formatSimilarity(
   return `${value} (below the ${floor} floor — surfaced by literal keyword match, not semantic similarity)`;
 }
 
+/**
+ * Describe the excerpt below the hit: whether it is the matched passage or just
+ * the head of the unit, and which part of a multi-part unit it came from.
+ */
+function excerptLabel(hit: MaterialHit): string {
+  const matched = hit.snippetSource === 'fts_headline' || hit.snippetSource === 'vector_part';
+  const part =
+    hit.partNo !== null && hit.partNo >= FIRST_LABELLED_PART ? ` (part ${hit.partNo})` : '';
+  return matched ? `${MATCHED_PASSAGE_LABEL}${part}` : `${UNIT_HEAD_LABEL}${part} — ${UNIT_HEAD_NOTE}`;
+}
+
 function renderHit(hit: MaterialHit, index: number, context: SearchContext, floorApplied: boolean): string {
   const lines = [
     `### ${index + 1}. ${hit.fileName}`,
     `- course: ${hit.courseId}`,
     `- bucket: ${hit.bucket}`,
     `- unit: ${unitLabel(hit)}`,
-    `- text_id: ${hit.textId}${hit.partNo !== null ? ` (part ${hit.partNo})` : ''}`,
+    `- text_id: ${hit.textId}`,
     `- file_id: ${hit.fileId}`,
     `- similarity: ${formatSimilarity(hit.similarity, context.minSimilarity, context.mode, floorApplied)}`,
   ];
   if (hit.score !== null) lines.push(`- score: ${hit.score.toFixed(6)} (RRF, ordering only)`);
   if (hit.rank !== null) lines.push(`- rank: ${hit.rank} (ts_rank)`);
   if (hit.excerpt.includes(NOTES_MARKER)) lines.push(`- ${NOTES_WARNING}`);
+  lines.push(`- excerpt: ${excerptLabel(hit)}`);
   lines.push('', truncate(hit.excerpt, MAX_EXCERPT_CHARS));
   return lines.join('\n');
 }

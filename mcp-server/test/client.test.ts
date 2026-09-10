@@ -27,6 +27,8 @@ const hybridRow = {
   unit_no: 28,
   score: 0.0196078431372549,
   similarity: 0.8912,
+  part_no: 1,
+  snippet_source: 'fts_headline',
   snippet: 'Risk assessment: identify assets…',
 };
 
@@ -36,6 +38,7 @@ const request = {
   mode: 'hybrid' as const,
   limit: 3,
   minSimilarity: 0.78,
+  includeSuperseded: false,
 };
 
 describe('search — the request', () => {
@@ -61,6 +64,18 @@ describe('search — the request', () => {
     await instance.search({ ...request, minSimilarity: null });
     expect(calls[0]!.body).not.toHaveProperty('min_similarity');
   });
+
+  it('omits include_superseded unless it is true (an older function rejects the key)', async () => {
+    const { instance, calls } = client([{ status: 200, body: { results: [] } }]);
+    await instance.search(request);
+    expect(calls[0]!.body).not.toHaveProperty('include_superseded');
+  });
+
+  it('sends include_superseded: true when asked for the superseded history', async () => {
+    const { instance, calls } = client([{ status: 200, body: { results: [] } }]);
+    await instance.search({ ...request, includeSuperseded: true });
+    expect(calls[0]!.body).toMatchObject({ include_superseded: true });
+  });
 });
 
 describe('search — normalising the three result shapes', () => {
@@ -81,18 +96,47 @@ describe('search — normalising the three result shapes', () => {
         score: 0.0196078431372549,
         similarity: 0.8912,
         rank: null,
-        partNo: null,
+        partNo: 1,
+        snippetSource: 'fts_headline',
         excerpt: 'Risk assessment: identify assets…',
       },
     ]);
   });
 
   it('maps a vector row (similarity + full text + part_no) and flags a missing similarity', async () => {
-    const vectorRow = { ...hybridRow, score: undefined, snippet: undefined, part_no: 2, text: 'Full slide text.' };
+    const vectorRow = {
+      ...hybridRow,
+      score: undefined,
+      snippet: undefined,
+      part_no: 2,
+      snippet_source: 'vector_part',
+      text: 'Full slide text.',
+    };
     const { instance } = client([{ status: 200, body: { results: [vectorRow] } }]);
     const result = await instance.search({ ...request, mode: 'vector' });
 
-    expect(result.hits[0]).toMatchObject({ partNo: 2, excerpt: 'Full slide text.', score: null, similarity: 0.8912 });
+    expect(result.hits[0]).toMatchObject({
+      partNo: 2,
+      snippetSource: 'vector_part',
+      excerpt: 'Full slide text.',
+      score: null,
+      similarity: 0.8912,
+    });
+  });
+
+  it('reads part_no and snippet_source as absent when an older function omits them', async () => {
+    const oldRow = { ...hybridRow, part_no: undefined, snippet_source: undefined };
+    const { instance } = client([{ status: 200, body: { results: [oldRow] } }]);
+    const result = await instance.search(request);
+    expect(result.hits[0]).toMatchObject({ partNo: null, snippetSource: null });
+  });
+
+  it('narrows an unrecognised snippet_source to null instead of failing the whole set', async () => {
+    const futureRow = { ...hybridRow, snippet_source: 'lexical_rerank_v9' };
+    const { instance } = client([{ status: 200, body: { results: [futureRow] } }]);
+    const result = await instance.search(request);
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0]!.snippetSource).toBeNull();
   });
 
   it('maps an fts row (rank + headline snippet, no similarity)', async () => {

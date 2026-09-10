@@ -17,6 +17,16 @@ import { ApiError } from './errors.js';
 
 export type { Mode } from './config.js';
 
+/**
+ * Where the excerpt came from (migration 021):
+ *   - `fts_headline`  — ts_headline over the matched part (or the whole unit)
+ *   - `vector_part`   — the head of the best-matching embedded part
+ *   - `unit_head`     — the head of the whole unit (no passage evidence)
+ * A server that predates 021 sends nothing, which reads as `null`.
+ */
+export const SNIPPET_SOURCES = ['fts_headline', 'vector_part', 'unit_head'] as const;
+export type SnippetSource = (typeof SNIPPET_SOURCES)[number];
+
 export interface SearchRequest {
   q: string;
   course: string | null;
@@ -24,6 +34,8 @@ export interface SearchRequest {
   limit: number;
   /** Cosine floor on vector evidence; null sends none. */
   minSimilarity: number | null;
+  /** Include files superseded by a newer version. Sent only when true. */
+  includeSuperseded: boolean;
 }
 
 /** One retrieval unit (a `bb_file_text` row), normalised across the three modes. */
@@ -41,9 +53,11 @@ export interface MaterialHit {
   similarity: number | null;
   /** ts_rank (fts only). */
   rank: number | null;
-  /** Which embedded part matched (vector only). */
+  /** Which embedded part the excerpt came from. Null when the unit has no embedding. */
   partNo: number | null;
-  /** Snippet (hybrid, fts) or the full unit text (vector). */
+  /** How the excerpt was produced. Null when the server predates migration 021. */
+  snippetSource: SnippetSource | null;
+  /** Matched passage (hybrid, fts) or the full unit text (vector). */
   excerpt: string;
 }
 
@@ -97,6 +111,10 @@ const hitRow = z.object({
   similarity: z.number().nullish(),
   rank: z.number().nullish(),
   part_no: z.number().nullish(),
+  // Free-form on the wire on purpose: an older server omits it and a future one
+  // may add a label. Neither should turn a whole result set into an error, so
+  // the value is narrowed to the known set in normaliseHit.
+  snippet_source: z.string().nullish(),
   snippet: z.string().nullish(),
   text: z.string().nullish(),
 });
@@ -169,6 +187,9 @@ export class SupabaseMaterialsClient implements MaterialsClient {
       limit: request.limit,
     };
     if (request.minSimilarity !== null) body['min_similarity'] = request.minSimilarity;
+    // Sent only when true: an older search function rejects unknown keys, and
+    // false is the server-side default anyway.
+    if (request.includeSuperseded) body['include_superseded'] = true;
 
     const raw = await this.#request(SEARCH_PATH, {
       method: 'POST',
@@ -316,8 +337,14 @@ function normaliseHit(row: z.infer<typeof hitRow>): MaterialHit {
     similarity: row.similarity ?? null,
     rank: row.rank ?? null,
     partNo: row.part_no ?? null,
+    snippetSource: toSnippetSource(row.snippet_source),
     excerpt: row.snippet ?? row.text ?? '',
   };
+}
+
+/** Narrow the wire value to the known set; anything else reads as absent. */
+function toSnippetSource(value: string | null | undefined): SnippetSource | null {
+  return SNIPPET_SOURCES.includes(value as SnippetSource) ? (value as SnippetSource) : null;
 }
 
 function isAbort(cause: unknown): boolean {
