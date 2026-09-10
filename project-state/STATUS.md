@@ -120,5 +120,12 @@ prod. **Do not re-apply 014–019.**
   say was removed on 9/8 — the crawl ran earlier that day. Harmless; the next crawl clears it.
 * Hybrid `snippet` length is a word budget (`MaxWords=40`, two fragments), not a char budget:
   observed 81–791 chars. Clients truncate for display.
+* **Latent (0 instances today):** a matched-passage snippet cut from part ≥2 of a PPTX unit
+  would start *after* the `[notes]` marker, and both client scrubbers are marker-based, so
+  speaker notes could surface unlabeled. Checked 2026-09-10: 51 units carry `[notes]`, none is
+  multi-part. Fix before it can happen (next migration touching 021): have
+  `hybrid_search_file_text` clip `part_slice` at the first `[notes]` position when the marker
+  precedes the slice, or return a `has_notes` flag the clients label from. The ingest cadence
+  work (backlog 1) should re-run the check after every crawl.
 * Function search-path advisor warnings (pre-existing pattern) on the search RPCs.
 * Never ship the service key to a browser; anon key is insert-only by design.
