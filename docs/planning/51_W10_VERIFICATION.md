@@ -495,3 +495,81 @@ mode likewise: no markup in any of the smokes below.
    not imply the percentage describes the excerpt.
 4. §7 item 1 of the main document still stands: `fts_headline` snippets are governed by a word
    budget, not a character budget, and can exceed ~400 chars.
+
+---
+
+# Appendix B — Round 3 (migration `025_snippet_part_rank`)
+
+Applied to prod as `025_snippet_part_rank`, version `20260910220804`; repo file byte-identical
+(11,525 B, md5 `554dfdcc9a277ca2230463888d65952f`). `create or replace` — argument list and
+return type unchanged from 021/024, so no drop, no PostgREST churn, no client change. Only
+`hybrid_search_file_text` moved; `search_file_text` and `match_file_text` were not touched, and
+no edge function was redeployed (nothing in either header changed).
+
+## B1. The rule
+
+024 broke ties among covering parts by `part_no`, which is arbitrary. 025 orders them by
+relevance instead:
+
+1. highest `ts_rank(to_tsvector('english', slice), websearch_to_tsquery('english', q))`
+2. tie → the vector-best part, when that part is itself covering
+3. still tied → lowest `part_no` (keeps the choice deterministic)
+
+`coalesce(e.part_no = vb.part_no, false) desc` implements rule 2: the raw comparison is NULL for
+an unembedded unit and `DESC` sorts NULLs first in Postgres, which would have handed the tie to
+the wrong row. The whole-unit fallback is unchanged — no covering part still means a headline
+over the unit (before a `[notes]` marker if present) and `part_no = null`.
+
+## B2. Acceptance
+
+Text 521 (IST.323 syllabus, 16 parts), `q = 'final exam date'`. Its three covering parts:
+
+| part | `ts_rank` of slice | slice head |
+|---|---|---|
+| **16** | **0.6146** | `… Scheduled Final Exam Day 12/15/26 …` |
+| 12 | 0.1724 | `…llabus. This document can be found on Blackboard…` |
+| 8 | 0.0088 | `…t. You must disclose how, in a required appendix…` |
+
+| | 021 | 024 | 025 |
+|---|---|---|---|
+| part returned | 16 (by luck — best *vector* part) | 8 (lowest covering) | **16 (highest-ranking covering)** |
+
+Through the deployed edge function, `{"q":"final exam date","limit":12}` → HTTP 200:
+
+```
+t521  part=16  fts_headline
+"Exam #3 + Final Project Defense | -Lab #4 Due\nScheduled Final Exam Day 12/15/26 | No fin…"
+```
+
+The cover check is unaffected — `{"q":"attendance policy","limit":20}`, same SQL as A1:
+
+| | 024 | 025 |
+|---|---|---|
+| `fts_headline` rows | 10 | 10 |
+| …whose snippet fails the tsquery | **0** | **0** |
+| …whole-unit fallback (`part_no null`) | 4 | 4 |
+
+Parts chosen moved only where a better-ranking covering part existed: text 1 went p4 → **p6**,
+everything else is unchanged (`3:whole, 101:p4, 211:whole, 213:p1, 277:p1, 305:whole, 372:p1,
+521:whole, 522:p6`).
+
+## B3. Timing
+
+`explain (analyze, buffers)` on
+`hybrid_search_file_text('final exam date', <probe>, 'gte-small', null, 12)`, same probe vector
+as A4 (stored embedding of text 277 part 1), warm runs:
+
+| | 024 | 025 |
+|---|---|---|
+| execution time | 21.9 ms | **27.4 ms** (+25%) |
+| shared buffer hits | 4,189 | 4,259 |
+
+**Under the ~60 ms ceiling**, so no escalation. The increase is structural and expected: rule 1
+needs a rank for every covering part, so the lateral can no longer stop at the first match the
+way 024's `Limit`-over-ordered-index-scan did — it scans the unit's parts and sorts. Buffers
+barely moved (+70) because the same pages were already being read; the extra cost is CPU in
+`to_tsvector` and `ts_rank`.
+
+Per the PM's instruction, a stored per-part `tsvector` — the real fix, which would collapse both
+the cover test and the rank to an indexed lookup — is **not** in this phase and is recorded as
+backlog.
