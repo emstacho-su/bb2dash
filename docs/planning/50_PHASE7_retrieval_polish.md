@@ -119,3 +119,59 @@ Merge both worker branches into `feat/retrieval-polish`; regenerate `web/src/lib
 database.types.ts`; run typecheck/build/test in `web/` and `mcp-server/`; live smoke of ⌘K + MCP
 against prod; `/code-review` + `/security-review`; update STATUS + DECISIONS; open the PR; stop
 at "ready when you say so" — Stack merges.
+
+## Round 2 — code-review fixes (2026-09-10, after integration)
+
+`/code-review` (high) against `main` confirmed these against prod. Contract additions:
+
+### Migration `024_snippet_fixes.sql` (W-10) — `create or replace`, same signatures/return types
+
+1. **Snippet part must contain the keyword.** For `via_fts` rows, the snippet part is the
+   lowest-`part_no` embedding part whose slice satisfies
+   `to_tsvector('english', slice) @@ websearch_to_tsquery('english', q)`. If no part does,
+   run `ts_headline` over the whole unit text. `part_no` now means "the part the snippet was cut
+   from": null for the whole-unit fallback and for unembedded units. `similarity` is unchanged
+   (still from `vec_best`). `snippet_source` stays `'fts_headline'` in both cases.
+   Live check on prod found 9 of 11 `fts_headline` rows for `q='attendance policy'` whose
+   headline did NOT satisfy the tsquery (e.g. text_id 521, part 13). After 024: zero.
+2. **No torn leading word.** When a slice does not start at offset 0 and the character before
+   it is not whitespace, drop the leading partial token (`regexp_replace(slice, '^\S+\s+', '')`).
+   Prod sample: 10 of 12 part≥2 slices started mid-word.
+3. **Speaker notes stay labelled.** Let `P = position('[notes]' in t.text)` (1-based). For
+   slice-based snippets: if `P > 0` and `P < lower(part_range) + 1`, prefix the snippet with
+   `'[notes] '` so both clients' marker-based scrubbers label it. For the whole-unit headline
+   fallback: if `P > 0`, run `ts_headline` over `left(t.text, P - 1)` only. Latent today
+   (0 multi-part units carry `[notes]`) — fix it in the same migration family that created it.
+4. **Limit before the joins.** Apply `order by sc desc, tid limit p_limit` inside `fused`
+   (ordering is fully determined by `(sc, text_id)`, so results are identical), then join.
+   Prod EXPLAIN: 16.3 ms / 5,599 buffers → 7.8 ms / 2,683.
+5. **`search_file_text` headline is plain text** too: add `StartSel="", StopSel=""` to its
+   option string. The palette's Keyword mode currently renders literal `<b>` tags.
+
+Verification appended to `51_W10_VERIFICATION.md`: the `attendance policy` cover check
+(count of `fts_headline` rows whose snippet fails the tsquery, before/after), a torn-word sample
+before/after, the EXPLAIN numbers, and a synthetic `[notes]` check run inside a rolled-back
+transaction (insert a long two-part unit with a marker in part 1, assert the prefix, rollback).
+Edge functions: unchanged unless a comment needs the new `part_no` meaning (then redeploy,
+byte-identical).
+
+### Clients (W-11)
+
+6. `mcp-server/src/format.ts`: the excerpt label depends on **mode**, not only
+   `snippet_source`: `fts` → "keyword headline over the whole unit"; `vector` → "full unit text";
+   `hybrid` → by `snippet_source` (`fts_headline`/`vector_part` → "matched passage",
+   `unit_head` → "unit head", absent → "unit head (older server)"). Fix the test at
+   `format.test.ts` that locks in the wrong label.
+7. `web/src/lib/queries.search.ts`: `similarity: number | null`; `isKeywordMatch` returns true
+   for `null` (an unembedded unit can only be a keyword hit); the palette shows the "keyword
+   match" badge and no percentage. Remove the `undefined as unknown as number` cast from the test.
+8. `mcp-server/src/client.ts`: correct the comment/test name ("older function rejects unknown
+   keys" is false — it ignores them; the real reason is that false is the server default). The
+   PGRST202 hint names `021_matched_snippets.sql` when the request carried
+   `include_superseded`, otherwise 012 as today.
+9. `web/vitest.config.ts` → `web/vitest.config.mts` (kills the Vite CJS-loader warning that
+   becomes a hard failure on the next Vite major). Update README references.
+10. `part_no` semantics per item 1: clients already null-tolerant; update any doc string that
+    says "best part" to "part the snippet was cut from".
+
+Not fixing this phase (recorded): the unreachable `unit_head` arm stays as a defensive branch.
