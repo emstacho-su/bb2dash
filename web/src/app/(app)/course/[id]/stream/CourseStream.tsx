@@ -32,6 +32,7 @@ import { scrubSnippet } from '@/lib/queries.search';
 import { useSetItemStatus, type WorkItem as TrackerWorkItem } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
 import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
+import { DEFAULT_HORIZON_DAYS, DEFAULT_VISIBLE_DAYS } from '@/components/tracker/anchor';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseStream.module.css';
 
@@ -173,8 +174,8 @@ export function CourseStream({ courseId }: { courseId: string }) {
 
       <UpcomingTracker
         items={trackerItems}
-        horizonDays={56}
-        visibleDays={14}
+        horizonDays={DEFAULT_HORIZON_DAYS}
+        visibleDays={DEFAULT_VISIBLE_DAYS}
         title={`Upcoming work · ${display.data.code}`}
         onStatusChange={handleStatus}
         pendingItemId={setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null}
