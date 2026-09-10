@@ -12,8 +12,8 @@ are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is mer
 (PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
 has signed in successfully. RLS is owner-scoped (W-9, migration 020). Search now returns the
 passage that matched (not the unit head) and hides superseded document versions by default
-(Phase 7, live in prod). Still open from Phase 6: Stack's visual confirmation that screens
-render live data, and disabling signups.
+(Phase 7, live in prod). Phase 6 is fully closed: Stack signed off the live screens and
+disabled signups on 2026-09-10.
 
 Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 
@@ -87,16 +87,17 @@ pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to
 names it 014–019. This is a name-level artifact, NOT drift — a rebuild in README order reproduces
 prod. **Do not re-apply 014–019.**
 
-## Remaining to fully close the GUI phase
+## GUI phase close-out (all done)
 
 0. ~~Reconcile `feat/gui-v1` with main's Retrieval-MCP phase~~ — done 2026-09-10 (merge + renumber).
 0a. ~~Merge PR #4 to `main`~~ — done 2026-09-10 (`aef5dee`); `main` is the single source of truth.
 1. ~~Create the Vercel project~~ — done; deployed at `https://web-xi-ten-uy9xk6c6p0.vercel.app`
    (Root Directory `web`, the two `NEXT_PUBLIC_` env vars). Owner has logged in.
-2. **Stack: visual sign-off** — confirm the Today/Course/Materials/search screens render live
-   data end-to-end (login works; this is the last unconfirmed link).
-3. **Stack: disable signups** (Supabase Auth → Sign In / Providers) before the URL is shared.
-   Also set Supabase Site URL to the Vercel origin for password-reset/confirmation email links.
+2. ~~**Stack: visual sign-off**~~ — **done 2026-09-10**: Stack confirmed the Today/Course/
+   Materials/search screens render live data end-to-end.
+3. ~~**Stack: disable signups**~~ — **done 2026-09-10** per Stack (a dashboard setting, not
+   visible from SQL, so not independently verified here). Site URL → the Vercel origin for
+   password-reset/confirmation links: set at the same time if not already.
 4. ~~**W-9: RLS hardening**~~ — **done 2026-09-10** (migration 020). The 21 permissive
    `authenticated using(true)` policies (STATUS earlier estimated ~25; the real count is 21) are
    now `auth.uid() = public.app_owner()`, plus `storage.objects` `bb_files_auth_all` owner-scoped
