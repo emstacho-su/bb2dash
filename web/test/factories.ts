@@ -2,7 +2,7 @@
     No test hits the network. */
 
 import type { SearchResponse, SearchResult } from '@/lib/queries.search';
-import type { WorkItem } from '@/lib/queries.today';
+import type { CourseDisplay, WorkItem } from '@/lib/queries.today';
 
 export function makeResult(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
@@ -77,6 +77,21 @@ export function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
     suggested_start: null,
     undated: false,
     confidence: 'confirmed',
+    ...overrides,
+  };
+}
+
+/** One row of `v_course_display`, as the Home course card reads it. */
+export function makeCourseDisplay(overrides: Partial<CourseDisplay> = {}): CourseDisplay {
+  return {
+    display_id: 'IST.323',
+    code: 'IST 323',
+    title: 'Intro to Cybersecurity',
+    shell_ids: ['IST.323'],
+    meetings: [{ day: 1, start: '15:45:00', end: '17:05:00', room: 'Hinds Hall 010' }],
+    room_disputed: false,
+    bb_url: 'https://blackboard.syracuse.edu/course/IST323',
+    card_note: null,
     ...overrides,
   };
 }

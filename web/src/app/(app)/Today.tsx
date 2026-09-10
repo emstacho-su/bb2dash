@@ -267,9 +267,12 @@ export function Today() {
 
 /* ---------------------------------------------------------------------------
  * Course card
+ *
+ * Exported for its unit test: it is a pure render over the rows it is handed,
+ * with no hooks of its own.
  * ------------------------------------------------------------------------ */
 
-function CourseCard({
+export function CourseCard({
   course,
   items,
   todayKey,
@@ -287,6 +290,7 @@ function CourseCard({
   weekSundayKey: string;
 }) {
   const meetingLines = formatMeetings(course.meetings);
+  const note = course.card_note?.trim() ?? '';
 
   // Next due: earliest due_on from today forward, within the card's horizon.
   const upcoming = items
@@ -321,6 +325,13 @@ function CourseCard({
         <span className={styles.courseMeet}>
           {meetingLines.length ? meetingLines.join('  ·  ') : 'no scheduled meetings'}
         </span>
+        {/* R-04: Stack's own one-line note. Nothing is rendered when he has not
+            written one — an empty row would read as missing data. */}
+        {note && (
+          <span className={styles.courseNote} title={note}>
+            {note}
+          </span>
+        )}
         <div className={styles.courseStats}>
           <div className={styles.stat}>
             <span className={tokens.kicker}>

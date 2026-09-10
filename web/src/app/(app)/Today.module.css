@@ -138,6 +138,14 @@
   font-size: var(--text-sm);
   color: var(--color-neutral-400);
 }
+/* R-04 course-card note — one line, ellipsised; the full text is the title. */
+.courseNote {
+  font-size: var(--text-sm);
+  color: var(--color-neutral-300);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .courseStats {
   display: flex;
   gap: var(--space-8);
