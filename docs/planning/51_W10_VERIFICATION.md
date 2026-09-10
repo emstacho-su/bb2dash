@@ -343,3 +343,155 @@ Stack wants the warning gone. No RLS policy was touched.
 
 `web/` and `mcp-server/` are W-11's. `database.types.ts` regeneration is the PM's at
 integration. RLS policies were not touched. No new migration edits 001–020.
+
+---
+
+# Appendix A — Round 2 (migration `024_snippet_fixes`)
+
+Contract: `50_PHASE7_retrieval_polish.md` § "Round 2 — code-review fixes", items 1–5.
+Applied to prod as `024_snippet_fixes` (version `20260910220004`); `search` redeployed as
+function version 5 (header comment only — the new `part_no` meaning). Repo files byte-identical.
+Argument lists and return types are unchanged from 021, so `create or replace` was sufficient:
+no drop, no PostgREST churn, no client-visible signature change.
+
+## A1. Item 1 — the snippet part must contain the keyword
+
+Measured through the deployed edge function (driven by `net.http_post`, read back from
+`net._http_response`, so the snippets never leave the database), request
+`{"q":"attendance policy","limit":20}`, then in SQL:
+
+```sql
+count(*) filter (where src = 'fts_headline'
+  and not (to_tsvector('english', snippet) @@ websearch_to_tsquery('english','attendance policy')))
+```
+
+| | before (021) | after (024) |
+|---|---|---|
+| `fts_headline` rows | 10 | 10 |
+| …whose snippet fails the tsquery | **5** | **0** |
+| …falling back to the whole-unit headline (`part_no is null`) | 0 | 4 |
+| `vector_part` rows | 10 | 10 |
+
+The five failures were text 3 p5, 211 p2, 305 p4, 521 p11, 522 p7. After 024: text 3, 211, 305
+and 521 have **no** part whose slice satisfies `attend & polici`, so they headline the whole unit
+and report `part_no = null`; 522 moved from p7 to **p6**, a part that does cover the query. Text 1
+moved p7 → p4. Confirmed directly for text 521 — an ordered index scan over its 16 parts returns
+zero covering parts (`Rows Removed by Join Filter: 16`).
+
+The contract quotes "9 of 11" from the reviewer's run; the reproducible figure on the state 024
+was applied to is 5 of 10 at `limit: 20`. The number that matters is the same either way:
+**after 024 it is 0**, and the check above is the one to re-run.
+
+## A2. Item 2 — no torn leading word
+
+Corpus-wide, over all 661 `part_no >= 2` slices:
+
+| | count |
+|---|---|
+| slices whose preceding character is not whitespace (flagged torn) | 462 |
+| …where 024 actually drops a leading partial token | **374** |
+| …flagged but already starting with whitespace (regex is a no-op) | 88 |
+| slices starting after whitespace (untouched) | 199 |
+
+Samples, with the guard applied exactly as the function applies it:
+
+| text | part | char before | torn? | 021 head | 024 head |
+|---|---|---|---|---|---|
+| 1 | 4 | `e` | yes | `ms Analysis and Design, 10th Edition, Pearso` | `Analysis and Design, 10th Edition, Pearson +` |
+| 101 | 4 | `t` | yes | `s to teams that finish in sixth place in eac` | `to teams that finish in sixth place in each` |
+| 211 | 2 | *(space)* | no | `step to earning these points. If you must mi` | *unchanged* |
+| 3 | 5 | `r` | yes | `\| Group 10 \| Student-Faculty Learning Align` | *unchanged (slice already opens on whitespace)* |
+| 522 | 6 | `s` | yes | `only:\nCourse tags highlight the connection` | *unchanged (same reason)* |
+
+Text 211 is the control: its slice starts after a space, the guard is false, nothing is trimmed.
+The 88 "flagged but unchanged" slices are the same shape as texts 3 and 522 — the previous word
+ended exactly on the boundary and the slice opens with whitespace, so there is no partial token
+for the regex to remove. Harmless.
+
+## A3. Item 3 — speaker notes stay labelled (synthetic, inside a rolled-back transaction)
+
+No multi-part unit in the corpus carries a `[notes]` marker today, so the fixture is synthetic:
+two `bb_file_text` rows inserted, queried, and rolled back.
+
+**A — slice-based snippet from a part that starts after the marker.** Unit: 50 chars of body,
+then `[notes] `, then filler, with the search term only past offset 1500. Embeddings `[0,1500)`
+and `[1300, len)`. Query `zzqqxx`, `p_min_similarity = 1.1` (empties the vector arm so only the
+FTS path runs).
+
+```
+part_no = 2   snippet_source = fts_headline
+snippet = "[notes] text note filler text note filler text … zzqqxx tail fil…"
+```
+
+The `[notes] ` prefix is present, the part chosen is the one carrying the term, and the slice's
+torn leading token was dropped (part 2 starts at offset 1300, mid-word).
+
+**B — whole-unit fallback must not headline across the marker.** Unit: `lead zzwwvv
+beforemarker` padded to 50 chars, then `[notes] `, then 40 repetitions of
+`postmarkerword zzwwvv `. No embeddings. Query `zzwwvv`:
+
+```
+part_no = null   snippet_source = fts_headline
+snippet = "lead zzwwvv beforemarker"
+```
+
+The headline is drawn only from `left(text, notes_at - 1)`; `postmarkerword` never appears.
+
+## A4. Item 4 — limit before the joins
+
+`explain (analyze, buffers)` on
+`hybrid_search_file_text('attendance policy', <probe>, 'gte-small', null, 10)`, where `<probe>`
+is the stored embedding of text 277 part 1 — a real in-distribution vector, identical before and
+after, since the query embedding itself is not reachable from SQL. Warm runs:
+
+| | 021 | 024 |
+|---|---|---|
+| shared buffer hits | 5,210 | **4,284** (−18%) |
+| execution time | 22.1 ms | **35.4 ms** (+60%) |
+
+Buffers fell as predicted — the joins, slicing and headline work now run 10 times rather than
+once per fused candidate. **Wall time went up, not down.** The contract's 16.3 → 7.8 ms was item
+4 measured on its own; item 1 adds work that did not exist in 021: for every `via_fts` row, an
+ordered scan over the unit's parts computing `to_tsvector` on each slice until one matches. The
+worst case is a unit where nothing matches — text 521 costs ~5.5 ms alone for its 16 parts. The
+plan is already the cheap shape (`Limit` over a `Nested Loop` driven by the
+`(text_id, model, part_no)` unique index, so it stops at the first covering part); what remains
+is the cost of the `to_tsvector` calls themselves. Making those cheaper means storing a per-part
+tsvector, which is a schema change nobody asked for. Flagging the trade, not making it: 35 ms of
+database time still sits well inside the edge function's own embedding latency.
+
+## A5. Item 5 — `search_file_text` returns plain text
+
+```sql
+select text_id, snippet ~ '<b>|</b>' as has_markup from search_file_text('attendance policy', null, 5);
+```
+
+All five rows `has_markup = false`; e.g. text 277 → `Attendance Policy\nAttendance in classes is
+expected in all courses`. Through the edge function,
+`{"q":"attendance policy","mode":"fts","limit":3}` → HTTP 200, no `<b>` in any snippet. Hybrid
+mode likewise: no markup in any of the smokes below.
+
+## A6. Round-2 edge smoke
+
+| request | HTTP | note |
+|---|---|---|
+| `{"q":"final exam date","limit":5}` | 200 | t521 → part 8; t101 → `part_no: null` (whole-unit) |
+| `{"q":"attendance policy","limit":5}` | 200 | 0 rows fail the cover check |
+| `{"q":"IST466 class schedule","limit":5,"include_superseded":true}` | 200 | files 16, 58, 40, 66 all present — 021's filter still works |
+| `{"q":"attendance policy","mode":"fts","limit":3}` | 200 | plain text, no markup |
+
+## A7. Open questions from round 2
+
+1. **"Lowest covering part" is deterministic, not most-relevant.** For `final exam date`, text
+   521 now answers with part **8** (`exams throughout the semester…`) where 021 answered with
+   part **16** (`Scheduled Final Exam Day 12/15/26`) — the better passage, arrived at by luck
+   rather than by rule. Both parts satisfy the tsquery; the contract picks the lowest part
+   number. If the palette wants the *best* covering part, the rule needs a tiebreak (ts_rank
+   over the slice, or the covering part closest to the query vector). Worth a round-3 decision.
+2. **Wall time regressed** — see A4. Recorded, not fixed.
+3. `similarity` is deliberately still `vec_best`-derived, so it no longer necessarily describes
+   the part the snippet came from. That is what the contract asked for and it keeps the number
+   comparable across rows, but the two fields now answer different questions; the clients should
+   not imply the percentage describes the excerpt.
+4. §7 item 1 of the main document still stands: `fts_headline` snippets are governed by a word
+   budget, not a character budget, and can exceed ~400 chars.

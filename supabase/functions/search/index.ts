@@ -7,11 +7,13 @@
 //   vector  -> embed q with gte-small, rpc match_file_text(...)      [migrations 011, 021]
 //   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migrations 012/013, 021]
 //
-// v4 (migration 021) changes what the rows CONTAIN, not what this file computes. In hybrid mode
-// `snippet` is now the matched passage rather than the head of the unit, and each row carries
-// `part_no` (which embedding part matched, null when the unit is unembedded) and
-// `snippet_source` ('fts_headline' | 'vector_part' | 'unit_head'). The SQL function builds all
-// of that; the rows are passed through untouched.
+// v4 (migrations 021 + 024) changes what the rows CONTAIN, not what this file computes. In
+// hybrid mode `snippet` is the matched passage rather than the head of the unit, and each row
+// carries `part_no` and `snippet_source` ('fts_headline' | 'vector_part' | 'unit_head').
+// `part_no` is THE PART THE SNIPPET WAS CUT FROM — for a keyword hit, the lowest-numbered
+// embedding part whose slice actually satisfies the tsquery; null when no part does (the
+// snippet is then a headline over the whole unit) and null for an unembedded unit. The SQL
+// function builds all of that; the rows are passed through untouched.
 //
 // include_superseded (boolean, default false) is the other v4 addition. bb_files.superseded_by
 // marks a document that a newer version replaced — four IST.466 schedule versions, two rosters.
