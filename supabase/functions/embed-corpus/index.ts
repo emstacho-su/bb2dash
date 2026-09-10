@@ -15,6 +15,13 @@
 //                                records the raw-text char offsets.
 // The header is NOT counted in part_range — ranges are offsets into bb_file_text.text.
 //
+// Those offsets are CODE POINTS, because that is what reads them back: Postgres char_length()
+// and substring() count code points, while a JS string's .length and .slice() count UTF-16 code
+// UNITS. The two differ by one per astral-plane character — an emoji in a syllabus — which JS
+// stores as a surrogate pair. Chunking therefore runs over Array.from(text), never over the
+// string itself. Getting this wrong stored part_range [0,112) on a 111-char unit and would have
+// shifted every part after an emoji in a long one (see db/migrations/023_part_range_repair.sql).
+//
 // CPU budget: gte-small inference is the dominant cost and the edge worker is killed
 // (WORKER_RESOURCE_LIMIT / HTTP 546) well before a long unit's parts are all embedded.
 // So work is tracked and resumed at PART granularity: each part is inserted as soon as
@@ -51,39 +58,50 @@ type Unit = {
 
 type Part = { part_no: number; start: number; end: number };
 
-/** Find the end offset for a part starting at `start`, preferring natural boundaries. */
-function findCut(raw: string, start: number): number {
-  const hardEnd = Math.min(start + PART_TARGET, raw.length);
-  if (hardEnd >= raw.length) return raw.length;
-  const win = raw.slice(start, hardEnd);
+/** The text as an array of code points — the unit part_range is measured in. */
+function codePoints(text: string): string[] {
+  return Array.from(text);
+}
+
+/**
+ * Find the end offset for a part starting at `start`, preferring natural boundaries.
+ * `cps` is the unit's text as code points; every offset here is a code-point offset.
+ */
+function findCut(cps: string[], start: number): number {
+  const hardEnd = Math.min(start + PART_TARGET, cps.length);
+  if (hardEnd >= cps.length) return cps.length;
+  const win = hardEnd - start; // window length, in code points
 
   // 1. paragraph boundary
-  const para = win.lastIndexOf("\n\n");
-  if (para >= MIN_CUT) return start + para + 2;
+  for (let i = win - 2; i >= MIN_CUT; i--) {
+    if (cps[start + i] === "\n" && cps[start + i + 1] === "\n") return start + i + 2;
+  }
 
   // 2. sentence boundary: . ! ? followed by whitespace/end
-  for (let i = win.length - 1; i >= MIN_CUT; i--) {
-    const c = win[i];
+  for (let i = win - 1; i >= MIN_CUT; i--) {
+    const c = cps[start + i];
     if (c === "." || c === "!" || c === "?") {
-      const next = win[i + 1];
+      const next = i + 1 < win ? cps[start + i + 1] : undefined;
       if (next === undefined || /\s/.test(next)) return start + i + 1;
     }
   }
 
   // 3. any newline
-  const nl = win.lastIndexOf("\n");
-  if (nl >= MIN_CUT) return start + nl + 1;
+  for (let i = win - 1; i >= MIN_CUT; i--) {
+    if (cps[start + i] === "\n") return start + i + 1;
+  }
 
   // 4. any whitespace
-  const sp = win.lastIndexOf(" ");
-  if (sp >= MIN_CUT) return start + sp + 1;
+  for (let i = win - 1; i >= MIN_CUT; i--) {
+    if (cps[start + i] === " ") return start + i + 1;
+  }
 
   // 5. hard cut
   return hardEnd;
 }
 
-function chunk(raw: string): Part[] {
-  const len = raw.length;
+function chunk(cps: string[]): Part[] {
+  const len = cps.length;
   if (len === 0) return [];
   if (len <= SINGLE_PART_MAX) return [{ part_no: 1, start: 0, end: len }];
 
@@ -91,7 +109,7 @@ function chunk(raw: string): Part[] {
   let start = 0;
   let partNo = 1;
   while (start < len) {
-    const end = findCut(raw, start);
+    const end = findCut(cps, start);
     parts.push({ part_no: partNo++, start, end });
     if (end >= len) break;
     const next = end - PART_OVERLAP;
@@ -186,7 +204,7 @@ Deno.serve(async (req: Request) => {
         totalUnits++;
         const id = r.id as number;
         const text = (r.text as string) ?? "";
-        const parts = chunk(text);
+        const parts = chunk(codePoints(text));
         totalParts += parts.length;
         if (parts.length === 0) {
           scanFailed.push({ text_id: id, error: "unit has empty text" });
@@ -254,8 +272,11 @@ Deno.serve(async (req: Request) => {
           continue;
         }
         const head = header(u);
+        // Slice from the same code-point array the offsets were computed against,
+        // so the text embedded is exactly the text part_range points at.
+        const cps = codePoints(u.text);
         for (const p of job.parts) {
-          const input = head + u.text.slice(p.start, p.end);
+          const input = head + cps.slice(p.start, p.end).join("");
           const vec: number[] = await session.run(input, {
             mean_pool: true,
             normalize: true,
