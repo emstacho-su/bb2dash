@@ -52,10 +52,14 @@ export interface SearchResult {
   unit_no: number | null;
   /** RRF (hybrid) / rank (fts) / distance-derived (vector) rank score. */
   score: number;
-  /** Cosine similarity of the query vector to the unit. See SEMANTIC_SIMILARITY_MIN. */
-  similarity: number;
+  /**
+   * Cosine similarity of the query vector to the unit. Null when the unit has
+   * no embedding at all — it reached the result set through the keyword arm.
+   * See SEMANTIC_SIMILARITY_MIN.
+   */
+  similarity: number | null;
   snippet: string;
-  /** Which embedded part the snippet came from; null when the unit has no embedding. */
+  /** The part the snippet was cut from; null for a whole-unit snippet or an unembedded unit. */
   part_no?: number | null;
   /** How the snippet was produced. Absent on a pre-021 backend. */
   snippet_source?: SnippetSource | null;
@@ -95,16 +99,23 @@ export interface SearchResponse {
 export const SEMANTIC_SIMILARITY_MIN = 0.8;
 
 export function isKeywordMatch(result: Pick<SearchResult, 'similarity'>): boolean {
-  return typeof result.similarity === 'number' && result.similarity < SEMANTIC_SIMILARITY_MIN;
+  const { similarity } = result;
+  // No similarity at all: the unit has no embedding, so the keyword arm is the
+  // only way it could have got here. That is a keyword match by definition —
+  // never a semantic one, and never a percentage.
+  if (typeof similarity !== 'number' || !Number.isFinite(similarity)) return true;
+  return similarity < SEMANTIC_SIMILARITY_MIN;
 }
 
 /* ---------------------------------------------------------------------------
  * Which part of a long unit matched
  *
- * A 4,000-character syllabus is embedded in parts; the snippet now comes from
- * the part that matched rather than the head of the unit. Part 1 IS the head,
- * and short units only ever have one part, so naming it would be noise — the
- * hint only means something from part 2 on.
+ * A 4,000-character syllabus is embedded in parts; the snippet is now cut from
+ * the part that carries the match rather than the head of the unit, and
+ * `part_no` names that part — null when the snippet is the whole unit (the
+ * fallback headline) or the unit has no embedding. Part 1 IS the head, and
+ * short units only ever have one part, so naming it would be noise: the hint
+ * only means something from part 2 on.
  * ------------------------------------------------------------------------ */
 
 export const FIRST_LABELLED_PART = 2;

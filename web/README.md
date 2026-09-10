@@ -37,7 +37,7 @@ npm run dev                    # http://localhost:3000
 
 ## Testing
 
-vitest + Testing Library (jsdom). Tests live in `web/test/`; `vitest.config.ts`
+vitest + Testing Library (jsdom). Tests live in `web/test/`; `vitest.config.mts`
 carries the `@/` alias so they resolve the same modules the app does.
 
 Nothing in the suite touches the network. `fetch` is stubbed per test and
@@ -53,7 +53,7 @@ rendering in `test/CommandPalette.test.tsx`.
 
 `test:coverage` is scoped to `queries.search.ts` (currently ~98% statements,
 100% branches). The palette shell, the screens and the other query modules have
-no tests yet; widen `coverage.include` in `vitest.config.ts` as they gain some,
+no tests yet; widen `coverage.include` in `vitest.config.mts` as they gain some,
 rather than reporting a whole-app number that means nothing.
 
 ## Environment variables

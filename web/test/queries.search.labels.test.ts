@@ -85,8 +85,10 @@ describe('isKeywordMatch — the 0.80 boundary', () => {
     expect(isKeywordMatch({ similarity: 0.9 })).toBe(false);
   });
 
-  it('is false when the row carries no similarity at all', () => {
-    expect(isKeywordMatch({ similarity: undefined as unknown as number })).toBe(false);
+  it('is true when the row carries no similarity — an unembedded unit is a keyword hit', () => {
+    // The wire shape for a unit with no embedding: hybrid_search_file_text
+    // returns the row with a null similarity, not a missing field.
+    expect(isKeywordMatch({ similarity: null })).toBe(true);
   });
 });
 

@@ -71,6 +71,12 @@ describe('ResultRow — how the hit was matched', () => {
     expect(screen.getByText('89% match')).toBeInTheDocument();
     expect(screen.queryByText('keyword match')).toBeNull();
   });
+
+  it('badges an unembedded unit (null similarity) as a keyword match, with no percentage', () => {
+    renderRow({ similarity: null });
+    expect(screen.getByText('keyword match')).toBeInTheDocument();
+    expect(screen.queryByText(/% match/)).toBeNull();
+  });
 });
 
 describe('ResultRow — snippet safety', () => {

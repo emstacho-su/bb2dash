@@ -267,7 +267,14 @@ export function ResultRow({
   const keyword = isKeywordMatch(result);
   // Which part of a long unit the snippet came from; null when it is the head.
   const part = matchedPart(result);
-  const pct = Number.isFinite(result.similarity) ? Math.round(result.similarity * 100) : null;
+  // A unit with no embedding has no similarity at all; isKeywordMatch is true
+  // there, so the percentage branch is never reached with a null.
+  const similarity =
+    typeof result.similarity === 'number' && Number.isFinite(result.similarity)
+      ? result.similarity
+      : null;
+  const pct = similarity === null ? null : Math.round(similarity * 100);
+  const simTitle = similarity === null ? undefined : `Semantic similarity ${similarity.toFixed(3)}`;
 
   const unit =
     result.unit_no != null ? `${result.unit_kind} ${result.unit_no}` : result.unit_kind;
@@ -309,10 +316,7 @@ export function ResultRow({
           </span>
         ) : (
           pct != null && (
-            <span
-              className={styles.simBadge}
-              title={`Semantic similarity ${result.similarity.toFixed(3)}`}
-            >
+            <span className={styles.simBadge} title={simTitle}>
               <span className={styles.simDot} aria-hidden="true" />
               {pct}% match
             </span>

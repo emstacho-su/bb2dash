@@ -9,6 +9,9 @@
  *
  * `@/` must match the `paths` entry in tsconfig.json or the tests resolve
  * different modules from the app.
+ *
+ * `.mts`, not `.ts`: this package is CommonJS, and Vite's native config loader
+ * (the coming default) cannot load ESM syntax out of a file it treats as CJS.
  */
 
 import { fileURLToPath } from 'node:url';
