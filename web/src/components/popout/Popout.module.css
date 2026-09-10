@@ -1,0 +1,292 @@
+/* Route-driven popouts (R-05) — artboards 03-lecture / 04-assignment, ported to
+   the top-nav shell. Layout + interaction only; every colour, radius and spacing
+   value is a token from globals.css. Reusable primitives (card, tag, kicker,
+   mono, glyph, buttons) come from tokens.module.css via the TSX. */
+
+/* — surface ————————————————————————————————————————————————————————— */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: var(--space-8) var(--space-4);
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
+  backdrop-filter: blur(2px);
+}
+.panel {
+  position: relative;
+  width: min(760px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-divider);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+.panel:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.close {
+  all: unset;
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--color-neutral-400);
+}
+.close:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.close:focus-visible {
+  outline: 2px solid var(--color-accent);
+}
+
+/* — head ———————————————————————————————————————————————————————————— */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-right: var(--space-8);
+}
+.title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg);
+  margin: 0;
+}
+.subTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-400);
+}
+
+/* — fact grid ——————————————————————————————————————————————————————— */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  box-shadow: inset 0 1px 0 var(--color-divider), inset 0 -1px 0 var(--color-divider);
+}
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.factValue {
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+}
+.factNote {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+}
+
+/* — sections ———————————————————————————————————————————————————————— */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.blockHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.prose {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--color-neutral-200);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.missing {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-500);
+}
+
+/* — series strip (T-11) ——————————————————————————————————————————— */
+.series {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.seriesItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  min-width: 116px;
+}
+.seriesItemCurrent {
+  border-color: var(--color-accent);
+}
+.seriesTitle {
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seriesMeta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-neutral-400);
+}
+
+/* — lists (readings, files) ————————————————————————————————————————— */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.listRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.listRow + .listRow {
+  box-shadow: inset 0 1px 0 var(--color-divider);
+}
+.listMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.listTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.listMeta {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+}
+
+/* — planner block ——————————————————————————————————————————————————— */
+.planner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+.plannerWide {
+  grid-column: 1 / -1;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.fieldLabel {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+.control {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+}
+.control:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.control:focus-visible {
+  border-color: var(--color-accent);
+  outline: none;
+}
+.control:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.textArea {
+  composes: control;
+  min-height: 68px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.saveState {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+  margin-left: auto;
+}
+.saveError {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+}
+
+/* — footer ——————————————————————————————————————————————————————————— */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-top: var(--space-3);
+  box-shadow: inset 0 1px 0 var(--color-divider);
+}
+.footerNote {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+}
+.footerLinks {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* — states ——————————————————————————————————————————————————————————— */
+.state {
+  font-size: var(--text-sm);
+  color: var(--color-neutral-400);
+  padding: var(--space-4) 0;
+}
+.problem {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 620px) {
+  .backdrop {
+    padding: var(--space-4) var(--space-2);
+  }
+  .panel {
+    padding: var(--space-4);
+  }
+}

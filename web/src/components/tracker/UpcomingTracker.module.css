@@ -1,0 +1,251 @@
+/* Upcoming-work tracker (R-02 / R-03).
+
+   Moved verbatim out of Today.module.css when the tracker became a shared
+   component, with one change: the column width reads `--tracker-columns`
+   (set by the TSX) instead of the hard-coded 14, so a course page can show a
+   different number of days without a second stylesheet.
+
+   Layout + interaction only; every colour, radius and spacing value is a token
+   from globals.css. Reusable primitives (card, mono, glyph) come from
+   tokens.module.css via the TSX. */
+
+/* — section shell —————————————————————————————————————————————————— */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.h2 {
+  font-size: var(--text-lg);
+  margin: 0;
+}
+.sub {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+.legend {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+  flex-wrap: wrap;
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* — ◂ ▸ pager ——————————————————————————————————————————————————————— */
+.pager {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* — tracker ————————————————————————————————————————————————————————— */
+.tracker {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: var(--space-1);
+  align-items: flex-end;
+}
+.tracker::-webkit-scrollbar {
+  display: none;
+}
+.day {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  width: calc(100% / var(--tracker-columns, 14));
+  min-width: 54px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 4px;
+  border-radius: var(--radius-md);
+  border-left: 1px solid transparent;
+}
+.day:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+.day:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.daySelected {
+  background: var(--color-accent-900);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.daySelected:hover {
+  background: var(--color-accent-900);
+}
+.dayMonday {
+  border-left: 1px solid var(--color-divider);
+}
+.monthLabel {
+  height: 13px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-neutral-400);
+}
+.dayCount {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-300);
+  height: 14px;
+}
+.barArea {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+  height: 120px;
+  width: 100%;
+  justify-content: flex-start;
+}
+.seg {
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+}
+.segReading {
+  background: var(--type-reading-bg);
+}
+.segAssignment {
+  background: var(--type-assignment-bg);
+}
+.segQuiz {
+  background: var(--type-quiz-bg);
+}
+.segProject {
+  background: var(--type-project-bg);
+}
+.segExam {
+  background: var(--type-exam-bg);
+}
+.dowLabel {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-300);
+  white-space: nowrap;
+}
+.dowWeekend {
+  color: var(--color-neutral-600);
+}
+.dowToday {
+  color: var(--color-accent);
+}
+.dateNum {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-neutral-400);
+}
+.windowSummary {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+  padding: 0 4px;
+  flex-wrap: wrap;
+}
+
+/* — detail panel ——————————————————————————————————————————————————— */
+.detail {
+  padding: var(--space-2) var(--space-4);
+  gap: 0;
+}
+.detailHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-2) 0 var(--space-3);
+  flex-wrap: wrap;
+}
+.detailTitle {
+  font-size: var(--text-md);
+}
+.detailHint {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+}
+.detailRow {
+  display: grid;
+  grid-template-columns: 22px 66px minmax(0, 1fr) 150px 150px 128px;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-3) 0;
+  font-size: var(--text-base);
+}
+.detailRow + .detailRow {
+  box-shadow: inset 0 1px 0 var(--color-divider);
+}
+.titleCell {
+  min-width: 0;
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.titleText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Opens the assignment popout (?item=). Underlined only on hover so the detail
+   panel keeps reading as a table rather than a list of links. */
+.titleLink {
+  composes: titleText;
+  color: inherit;
+  text-decoration: none;
+}
+.titleLink:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.titleLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.timeCell {
+  font-size: var(--text-sm);
+  color: var(--color-neutral-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.effortCell {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-neutral-400);
+  white-space: nowrap;
+}
+.overrideTag {
+  color: var(--color-accent);
+}
+.detailEmpty {
+  padding: var(--space-4) 0;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-500);
+}
+
+@media (max-width: 820px) {
+  .detailRow {
+    grid-template-columns: 22px 60px minmax(0, 1fr) 120px;
+  }
+  .detailRow .timeCell {
+    display: none;
+  }
+}

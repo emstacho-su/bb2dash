@@ -4,9 +4,9 @@
  * Today (Home) — artboard 13-home-v2.
  *
  * Structure & interactions are the spec; the Nocturne skin is a placeholder.
- *   1. 14-day horizontal effort tracker (bar = Σ effort/day, segments tinted by
- *      assignment-type ramp, Monday ruled, month label on the 1st). Click a day
- *      to fill the detail panel.
+ *   1. Horizontal effort tracker — now the shared `<UpcomingTracker>` component
+ *      (`@/components/tracker`), fed a 56-day window so its ◂ ▸ paging has
+ *      somewhere to go. Unpaged it shows the same 14 days it always did.
  *   2. Undated tray (v_work_items where undated = true).
  *   3. Status quick-edit (T-06) writing assignment_progress / reading_progress.
  *   4. Last-sync line (reconciled form of the old Needs-attention row).
@@ -16,15 +16,11 @@
  * shows "—" or an empty state; nothing is invented.
  */
 
-import { useState } from 'react';
+import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import styles from './Today.module.css';
 import {
   courseCodeFromId,
-  effortLabel,
-  STATUS_LABEL,
-  STATUS_OPTIONS,
-  toNumber,
   useCourseDisplay,
   useLastSync,
   useSetItemStatus,
@@ -37,18 +33,33 @@ import {
   type WorkItem,
 } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
+import { itemQuery } from '@/lib/queries.popout';
+import { StatusSelect } from '@/components/tracker/StatusSelect';
+import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
+import {
+  DEFAULT_HORIZON_DAYS,
+  DEFAULT_VISIBLE_DAYS,
+  addDays,
+  isoDate,
+  parseDateOnly,
+} from '@/components/tracker/anchor';
 
 /* ---------------------------------------------------------------------------
  * Constants & small pure helpers
  * ------------------------------------------------------------------------ */
 
-const TRACKER_DAYS = 14;
-const BAR_AREA_PX = 120;
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 const STRIP_LABELS = ['M', 'T', 'W', 'T', 'F'] as const;
 /** Order the typed next-due counts most-effortful first. */
 const CATEGORY_ORDER: WorkCategory[] = ['exam', 'project', 'quiz', 'assignment', 'reading'];
+
+/**
+ * A course card's "Next due" summarises the same stretch of days the tracker
+ * shows unpaged. The fetch now runs 56 days out for the tracker's ◂ ▸ paging;
+ * without this bound the card would silently start reporting dates eight weeks
+ * away, which is a different claim from the one the card has been making.
+ */
+const CARD_HORIZON_DAYS = DEFAULT_VISIBLE_DAYS;
 
 const GLYPH_CLASS: Record<WorkCategory, string> = {
   reading: tokens.glyphReading,
@@ -56,18 +67,6 @@ const GLYPH_CLASS: Record<WorkCategory, string> = {
   quiz: tokens.glyphQuiz,
   project: tokens.glyphProject,
   exam: tokens.glyphExam,
-};
-const SEG_CLASS: Record<WorkCategory, string> = {
-  reading: styles.segReading,
-  assignment: styles.segAssignment,
-  quiz: styles.segQuiz,
-  project: styles.segProject,
-  exam: styles.segExam,
-};
-const SUBMISSION_LABEL: Record<string, string> = {
-  in_class: 'in class',
-  blackboard: 'Blackboard',
-  email: 'email',
 };
 
 /** 'HH:MM:SS' -> '3:45' or '5:05p' (meridiem only when asked). */
@@ -80,18 +79,6 @@ function clockFromHms(hms: string, meridiem: boolean): string {
 
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-function addDays(d: Date, n: number): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-}
-/** Local-time 'YYYY-MM-DD' — matches how Postgres date columns come back. */
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-/** Parse a 'YYYY-MM-DD' date column into a local Date (no TZ shift). */
-function parseDateOnly(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
 }
 
 function relativeTime(iso: string): string {
@@ -108,24 +95,6 @@ function relativeTime(iso: string): string {
   if (days === 1) return 'yesterday';
   if (days < 30) return `${days} days ago`;
   return new Date(iso).toLocaleDateString();
-}
-
-/** The detail-panel "time" cell: clock if we have one, else the rule/mode. */
-function itemTimeText(it: WorkItem): string {
-  if (it.due_at) {
-    return new Date(it.due_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-  if (it.due_rule) return it.due_rule;
-  if (it.submission && SUBMISSION_LABEL[it.submission]) return SUBMISSION_LABEL[it.submission];
-  return '—';
-}
-
-/** "start Sun 9/28", "day of", or '' when there is no suggested start. */
-function suggestedStartText(it: WorkItem): string {
-  if (!it.suggested_start) return '';
-  if (it.due_on && it.suggested_start === it.due_on) return 'day of';
-  const s = parseDateOnly(it.suggested_start);
-  return `start ${DOW[s.getDay()]} ${s.getMonth() + 1}/${s.getDate()}`;
 }
 
 /** Group meetings that share time+room and label the days: "MW 3:45–5:05p · Hinds Hall 010". */
@@ -146,51 +115,19 @@ function formatMeetings(meetings: CourseMeeting[] | null): string[] {
 }
 
 /* ---------------------------------------------------------------------------
- * Status quick-edit control (T-06)
- * ------------------------------------------------------------------------ */
-
-function StatusSelect({
-  item,
-  onChange,
-  pending,
-}: {
-  item: WorkItem;
-  onChange: (item: WorkItem, status: ProgressStatus) => void;
-  pending: boolean;
-}) {
-  return (
-    <select
-      className={styles.statusSelect}
-      value={item.status}
-      disabled={pending}
-      aria-label={`Status for ${item.title}`}
-      onChange={(e) => onChange(item, e.target.value as ProgressStatus)}
-    >
-      {STATUS_OPTIONS.map((s) => (
-        <option key={s} value={s}>
-          {STATUS_LABEL[s]}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-/* ---------------------------------------------------------------------------
  * Screen
  * ------------------------------------------------------------------------ */
 
 export function Today() {
-  const [selected, setSelected] = useState(0); // 0 = today
-
   const today = startOfDay(new Date());
   const dow = today.getDay();
   const weekMonday = addDays(today, dow === 0 ? -6 : 1 - dow);
   const weekSunday = addDays(weekMonday, 6);
-  const trackerEnd = addDays(today, TRACKER_DAYS - 1);
+  const horizonEnd = addDays(today, DEFAULT_HORIZON_DAYS - 1);
 
   // Fetch from the Monday of this week (so the course-card week strip is whole)
-  // through the end of the 14-day tracker horizon.
-  const windowQ = useWorkItemsWindow(isoDate(weekMonday), isoDate(trackerEnd));
+  // through the end of the tracker's 56-day paging horizon.
+  const windowQ = useWorkItemsWindow(isoDate(weekMonday), isoDate(horizonEnd));
   const undatedQ = useUndatedWorkItems();
   const coursesQ = useCourseDisplay();
   const termQ = useTerm();
@@ -206,26 +143,7 @@ export function Today() {
   const weekMondayKey = isoDate(weekMonday);
   const weekSundayKey = isoDate(weekSunday);
   const todayKey = isoDate(today);
-
-  // 14 tracker columns from today.
-  const days = Array.from({ length: TRACKER_DAYS }, (_, i) => {
-    const date = addDays(today, i);
-    const key = isoDate(date);
-    const dItems = items.filter((x) => x.due_on === key);
-    return {
-      i,
-      date,
-      key,
-      items: dItems,
-      effort: dItems.reduce((a, b) => a + toNumber(b.effort), 0),
-    };
-  });
-  const maxEffort = Math.max(1, ...days.map((d) => d.effort));
-  const scale = BAR_AREA_PX / maxEffort;
-  const selectedDay = days[selected] ?? days[0];
-
-  const windowItemCount = days.reduce((a, d) => a + d.items.length, 0);
-  const windowEffort = days.reduce((a, d) => a + d.effort, 0);
+  const cardHorizonKey = isoDate(addDays(today, CARD_HORIZON_DAYS - 1));
 
   const failed = windowQ.error ?? undatedQ.error ?? coursesQ.error;
 
@@ -267,120 +185,12 @@ export function Today() {
         </p>
       )}
 
-      {/* ---- 1. Upcoming-work effort tracker ---- */}
-      <section className={styles.section}>
-        <div className={styles.sectionHead}>
-          <h2 className={styles.h2}>Upcoming work</h2>
-          <span className={styles.sub}>
-            {windowQ.isPending
-              ? 'loading…'
-              : `${windowItemCount} item${windowItemCount === 1 ? '' : 's'} · ${effortLabel(windowEffort)} · next 14 days`}
-          </span>
-          <span className={styles.legend}>
-            <span className={styles.legendItem}>
-              <span className={tokens.glyphReading}>R</span>reading
-            </span>
-            <span className={styles.legendItem}>
-              <span className={tokens.glyphAssignment}>A</span>assignment
-            </span>
-            <span className={styles.legendItem}>
-              <span className={tokens.glyphQuiz}>Q</span>quiz
-            </span>
-            <span className={styles.legendItem}>
-              <span className={tokens.glyphProject}>P</span>project
-            </span>
-            <span className={styles.legendItem}>
-              <span className={tokens.glyphExam}>E</span>exam
-            </span>
-          </span>
-        </div>
-
-        <div className={styles.tracker} role="tablist" aria-label="Effort by day">
-          {days.map((d) => {
-            const isMonday = d.date.getDay() === 1;
-            const isToday = d.i === 0;
-            const isWeekend = d.date.getDay() === 0 || d.date.getDay() === 6;
-            const showMonth = d.date.getDate() === 1 || d.i === 0;
-            const dowClass = isToday ? styles.dowToday : isWeekend ? styles.dowWeekend : '';
-            return (
-              <button
-                key={d.key}
-                type="button"
-                role="tab"
-                aria-selected={d.i === selected}
-                onClick={() => setSelected(d.i)}
-                className={[
-                  styles.day,
-                  d.i === selected ? styles.daySelected : '',
-                  isMonday ? styles.dayMonday : '',
-                ].join(' ')}
-              >
-                <span className={styles.monthLabel}>{showMonth ? MON[d.date.getMonth()] : ''}</span>
-                <span className={styles.dayCount}>{d.items.length || ''}</span>
-                <span className={styles.barArea}>
-                  {d.items.map((it) => (
-                    <span
-                      key={`${it.item_kind}:${it.item_id}`}
-                      className={`${styles.seg} ${SEG_CLASS[it.category]}`}
-                      style={{ height: `${Math.max(3, toNumber(it.effort) * scale)}px` }}
-                      title={`${it.title} · ${effortLabel(toNumber(it.effort))}`}
-                    />
-                  ))}
-                </span>
-                <span className={`${styles.dowLabel} ${dowClass}`}>{isToday ? 'Today' : DOW[d.date.getDay()]}</span>
-                <span className={styles.dateNum}>{d.date.getDate()}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className={styles.windowSummary}>
-          <span>
-            Window · {MON[today.getMonth()]} {today.getDate()} – {MON[trackerEnd.getMonth()]} {trackerEnd.getDate()}
-          </span>
-          <span>line = Monday · click a day for detail</span>
-        </div>
-
-        {/* detail panel */}
-        <div className={`${tokens.card} ${styles.detail}`}>
-          <div className={styles.detailHead}>
-            <span className={styles.detailTitle}>
-              {selectedDay.i === 0 ? 'Today' : DOW[selectedDay.date.getDay()]}, {MON[selectedDay.date.getMonth()]}{' '}
-              {selectedDay.date.getDate()}
-            </span>
-            <span className={styles.sub}>
-              {selectedDay.items.length} due · {effortLabel(selectedDay.effort)}
-            </span>
-            <span className={styles.detailHint}>status is click-to-edit</span>
-          </div>
-
-          {selectedDay.items.map((it) => {
-            const start = suggestedStartText(it);
-            return (
-              <div key={`${it.item_kind}:${it.item_id}`} className={styles.detailRow}>
-                <span className={GLYPH_CLASS[it.category]}>{it.glyph}</span>
-                <span className={tokens.mono}>{courseCodeFromId(it.course_id)}</span>
-                <span className={styles.titleCell}>
-                  <span className={styles.titleText}>{it.title}</span>
-                </span>
-                <span className={styles.timeCell} title={itemTimeText(it)}>
-                  {itemTimeText(it)}
-                </span>
-                <span className={styles.effortCell}>
-                  {effortLabel(toNumber(it.effort))}
-                  {start ? ` · ${start}` : ''}
-                  {it.is_override ? <span className={styles.overrideTag}> · override</span> : ''}
-                </span>
-                <StatusSelect item={it} onChange={handleStatus} pending={pendingId === it.item_id} />
-              </div>
-            );
-          })}
-
-          {selectedDay.items.length === 0 && (
-            <div className={styles.detailEmpty}>Nothing due — a good day to start on what&apos;s coming.</div>
-          )}
-        </div>
-      </section>
+      {/* ---- 1. Upcoming-work effort tracker (shared component) ---- */}
+      <UpcomingTracker
+        items={items}
+        onStatusChange={handleStatus}
+        pendingItemId={pendingId}
+      />
 
       {/* ---- 4. Last-sync line (reconciled Needs-attention) ---- */}
       <div className={styles.syncRow}>
@@ -409,7 +219,17 @@ export function Today() {
             <div key={`${it.item_kind}:${it.item_id}`} className={styles.undatedRow}>
               <span className={GLYPH_CLASS[it.category]}>{it.glyph}</span>
               <span className={tokens.mono}>{courseCodeFromId(it.course_id)}</span>
-              <span className={styles.titleText}>{it.title}</span>
+              {it.item_kind === 'assignment' ? (
+                <Link
+                  className={styles.titleLink}
+                  href={itemQuery({ kind: 'assignment', id: it.item_id })}
+                  scroll={false}
+                >
+                  {it.title}
+                </Link>
+              ) : (
+                <span className={styles.titleText}>{it.title}</span>
+              )}
               <StatusSelect item={it} onChange={handleStatus} pending={pendingId === it.item_id} />
             </div>
           ))}
@@ -432,6 +252,7 @@ export function Today() {
               course={course}
               items={items.filter((it) => course.shell_ids.includes(it.course_id))}
               todayKey={todayKey}
+              cardHorizonKey={cardHorizonKey}
               weekMonday={weekMonday}
               weekMondayKey={weekMondayKey}
               weekSundayKey={weekSundayKey}
@@ -446,12 +267,16 @@ export function Today() {
 
 /* ---------------------------------------------------------------------------
  * Course card
+ *
+ * Exported for its unit test: it is a pure render over the rows it is handed,
+ * with no hooks of its own.
  * ------------------------------------------------------------------------ */
 
-function CourseCard({
+export function CourseCard({
   course,
   items,
   todayKey,
+  cardHorizonKey,
   weekMonday,
   weekMondayKey,
   weekSundayKey,
@@ -459,15 +284,17 @@ function CourseCard({
   course: CourseDisplay;
   items: WorkItem[];
   todayKey: string;
+  cardHorizonKey: string;
   weekMonday: Date;
   weekMondayKey: string;
   weekSundayKey: string;
 }) {
   const meetingLines = formatMeetings(course.meetings);
+  const note = course.card_note?.trim() ?? '';
 
-  // Next due: earliest due_on from today forward within the fetched horizon.
+  // Next due: earliest due_on from today forward, within the card's horizon.
   const upcoming = items
-    .filter((it) => it.due_on && it.due_on >= todayKey)
+    .filter((it) => it.due_on && it.due_on >= todayKey && it.due_on <= cardHorizonKey)
     .sort((a, b) => (a.due_on! < b.due_on! ? -1 : a.due_on! > b.due_on! ? 1 : 0));
   const nextDate = upcoming[0]?.due_on ?? null;
   const nextDayItems = nextDate ? upcoming.filter((it) => it.due_on === nextDate) : [];
@@ -498,6 +325,13 @@ function CourseCard({
         <span className={styles.courseMeet}>
           {meetingLines.length ? meetingLines.join('  ·  ') : 'no scheduled meetings'}
         </span>
+        {/* R-04: Stack's own one-line note. Nothing is rendered when he has not
+            written one — an empty row would read as missing data. */}
+        {note && (
+          <span className={styles.courseNote} title={note}>
+            {note}
+          </span>
+        )}
         <div className={styles.courseStats}>
           <div className={styles.stat}>
             <span className={tokens.kicker}>

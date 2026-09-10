@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import Link from 'next/link';
 import { courseCode, useCourses, type CourseSummary } from '@/lib/queries';
+import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
 import {
   BUCKET_ORDER,
   bucketLabel,
-  createSignedFileUrl,
   fileHonesty,
   fileTitle,
   fileTypeChip,
@@ -20,58 +21,6 @@ import {
 } from '@/lib/queries.materials';
 import tokens from '@/styles/tokens.module.css';
 import styles from './Materials.module.css';
-
-/* ---------------------------------------------------------------------------
- * Open-in-new-tab button for a stored file (mints a signed URL at click time).
- * Opens the tab synchronously inside the click gesture so pop-up blockers
- * allow it, then points it at the signed URL once Storage responds.
- * ------------------------------------------------------------------------ */
-
-function OpenStoredButton({
-  storagePath,
-  label = 'Open',
-  className,
-}: {
-  storagePath: string;
-  label?: string;
-  className: string;
-}) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleOpen() {
-    setError(null);
-    setPending(true);
-    const tab = window.open('about:blank', '_blank');
-    try {
-      const url = await createSignedFileUrl(storagePath);
-      if (tab) {
-        tab.location.href = url;
-      } else {
-        // Pop-up was blocked before we could await — try a direct open.
-        window.open(url, '_blank', 'noopener,noreferrer');
-      }
-    } catch (err) {
-      tab?.close();
-      setError(err instanceof Error ? err.message : 'Could not open file');
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <span className={styles.action}>
-      <button type="button" className={className} onClick={handleOpen} disabled={pending}>
-        {pending ? 'Opening…' : label}
-      </button>
-      {error && (
-        <span className={styles.rowError} role="alert">
-          {error}
-        </span>
-      )}
-    </span>
-  );
-}
 
 /* ---------------------------------------------------------------------------
  * A single file row (design cue: 03-lecture / 04-assignment material popouts).
@@ -322,6 +271,10 @@ function CourseBlock({ data }: { data: CourseData }) {
           <span className={styles.courseCount}>
             {totalItems} {totalItems === 1 ? 'item' : 'items'}
           </span>
+          {/* R-06: the same materials, in the folder tree Blackboard put them in. */}
+          <Link className={styles.bbLink} href={`/course/${course.id}/classwork`}>
+            Open in Classwork →
+          </Link>
           {course.bb_url && (
             <a className={styles.bbLink} href={course.bb_url} target="_blank" rel="noreferrer">
               Blackboard ↗

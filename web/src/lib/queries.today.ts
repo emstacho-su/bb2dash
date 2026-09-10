@@ -94,6 +94,15 @@ export interface CourseDisplay {
   meetings: CourseMeeting[] | null;
   room_disputed: boolean;
   bb_url: string | null;
+  /**
+   * `courses.card_note` (R-04), carried through the recreated view by Phase 8
+   * migration 028. Owner-written, so it may be null or empty — the card renders
+   * nothing at all in that case rather than a blank line.
+   *
+   * PM: regenerate database.types.ts at integration and replace this whole
+   * interface with `Views<'v_course_display'>`.
+   */
+  card_note: string | null;
 }
 
 /** The active term (for the "Week N of 16" kicker). */
@@ -182,7 +191,9 @@ export function courseDisplayOptions() {
       const supabase = untypedClient();
       const { data, error } = await supabase
         .from('v_course_display')
-        .select('display_id, code, title, shell_ids, meetings, room_disputed, bb_url')
+        // card_note arrives with migration 028 (W-12); this query depends on
+        // that migration being applied first — see the merge order in the brief.
+        .select('display_id, code, title, shell_ids, meetings, room_disputed, bb_url, card_note')
         .order('display_id', { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as CourseDisplay[];
