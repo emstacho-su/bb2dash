@@ -67,26 +67,36 @@ Views: `v_upcoming` (not-yet-due, not finished), `v_overdue` (past due, still op
 `v_course_corpus` (files/stored/with-text per course+bucket), `v_course_map_latest`,
 `v_file_layout` (canonical storage/local paths + needs_move), `v_embedding_status`.
 
-## Search layer (migration 010)
+## Search layer (migrations 010–013, 021)
 
 Two retrieval tiers over the corpus, both scoped by course when wanted:
 
 * **Full-text** — generated `tsvector` + GIN on `bb_file_text.text`, `bb_content` (title+body),
-  `announcements` (title+body). Query with `search_file_text(q, course, limit)` → ranked hits
-  with bucket/file context and a highlighted snippet. Live now.
+  `announcements` (title+body). Query with `search_file_text(q, course, limit,
+  include_superseded)` → ranked hits with bucket/file context and a highlighted snippet.
 * **Vector** — `bb_text_embeddings` holds `vector(384)` (gte-small, migration 011) per
   `(text_id, model, part_no)` with an HNSW cosine index. Fully populated: 534 units →
   1,195 rows. Corpus chunks are embedded with a `"{course} {bucket} — {file_name}: "` context
   header; queries are embedded raw. Query with `match_file_text(query_embedding, model,
-  course, limit)` or, preferred, `hybrid_search_file_text(q, query_embedding, ...)` (RRF over
-  FTS + vector, deduped to one row per text unit).
+  course, limit, include_superseded)` or, preferred, `hybrid_search_file_text(q,
+  query_embedding, ...)` (RRF over FTS + vector, deduped to one row per text unit).
+* **`part_range`** is a 0-based half-open range of CHARACTERS (code points, matching Postgres
+  `char_length`/`substring` — not JS UTF-16 units) into `bb_file_text.text`, excluding the
+  context header. It is the slice that was embedded, and the slice a snippet is cut from.
+* **Snippets (021)** — `hybrid_search_file_text` returns the MATCHED PASSAGE, plain text with
+  no markup, plus `part_no` (which part matched; null when unembedded) and `snippet_source`:
+  `fts_headline` (ts_headline over the best part's slice), `vector_part` (that slice's head),
+  `unit_head` (defensive fallback).
+* **Superseded files (018 + 021 + 022)** — `bb_files.superseded_by` points at the newer version;
+  all three functions take `p_include_superseded boolean default false` and drop those rows
+  before ranking. 4 of 64 files are superseded (IST.466 schedules 58 → 16 → 66, 40 → 66;
+  roster 35 → 37); `v_bb_files_current` is the 60 chain heads.
 * **Edge functions** (`supabase/functions/`): `embed-corpus` (batch embedder, part-level
-  resume, `max_parts`/`skip_parts` fan-out controls) and `search` (the hub's retrieval API:
-  `{q, course?, mode: fts|vector|hybrid, limit?}`). **Hub default mode = hybrid** per
-  `EVAL_EMBEDDING_POC.md` (hybrid/vector hit@1 9/10 vs FTS 1/10 on conversational queries).
-  Known issues: returned text is the unit head, not the matched part's slice (`part_range` is
-  stored but unused — top UI follow-up); one cosmetic `part_range` off-by-one on text 276
-  (UTF-16 vs char counting); near-duplicate schedule file versions crowd top ranks.
+  resume, `max_parts`/`skip_parts` fan-out controls) and `search` v4 (the hub's retrieval API:
+  `{q, course?, mode: fts|vector|hybrid, limit?, min_similarity?, include_superseded?}`).
+  **Hub default mode = hybrid** per `EVAL_EMBEDDING_POC.md` (hybrid/vector hit@1 9/10 vs FTS
+  1/10 on conversational queries). Evidence for the 021–023 round:
+  `docs/planning/51_W10_VERIFICATION.md`.
 
 ## Enums
 
