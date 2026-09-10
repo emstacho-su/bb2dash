@@ -58,4 +58,6 @@ browser pass; keep it in `.env` / `sync_runs.notes`, never in the repo.
 - `DATA_SYNTAX.md` — data dictionary, enums, ID conventions, phase-2 capture checklist
 - `db/migrations/001_schema.sql` — schema
 - `db/seed/002..004_*.sql` — syllabus seeds (reproducible)
+- `db/migrations/012_hybrid_similarity.sql` (+ `013` cleanup) — hybrid RRF gains a `p_min_similarity` floor (vector arm only) and a real `similarity` column; callers default to 0.78. `supabase/functions/search` v3 forwards it; `mcp-server/` is the Claude Code retrieval client (see its README).
+- `db/migrations/014..019_*.sql` — GUI v1 phase: planner columns, effort base, work items, course display, files_current, sync contract (renumbered from 012–017 after the retrieval-MCP merge; see `docs/planning/41_RECONCILIATION_gui_vs_retrieval-mcp.md`).
 - gui research context/gui/ — GUI layout reference (Home v2, Course v2, plan, options); see gui research context/gui/README.md. Styling pending; gui research context/_ds is the placeholder skin (must stay a sibling of gui/ — pages load it via ../_ds/).
