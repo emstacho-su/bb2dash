@@ -18,11 +18,16 @@
  * parent, or omit both and the component keeps its own state. All the date
  * maths lives in ./anchor.ts, which has no React in it.
  *
+ * An assignment row in the detail panel links to `?item=assignment:<id>`, which
+ * the (app) layout turns into the popout — a relative query href, so the tracker
+ * never has to read the router.
+ *
  * Honesty: every figure is Σ over the rows the caller passed. A day with no
  * rows says so; nothing is invented.
  */
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import {
   courseCodeFromId,
@@ -32,6 +37,7 @@ import {
   type WorkItem,
 } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
+import { itemQuery } from '@/lib/queries.popout';
 import { StatusSelect } from './StatusSelect';
 import {
   DEFAULT_HORIZON_DAYS,
@@ -298,7 +304,17 @@ export function UpcomingTracker({
               <span className={GLYPH_CLASS[item.category]}>{item.glyph}</span>
               <span className={tokens.mono}>{courseCodeFromId(item.course_id)}</span>
               <span className={styles.titleCell}>
-                <span className={styles.titleText}>{item.title}</span>
+                {item.item_kind === 'assignment' ? (
+                  <Link
+                    className={styles.titleLink}
+                    href={itemQuery({ kind: 'assignment', id: item.item_id })}
+                    scroll={false}
+                  >
+                    {item.title}
+                  </Link>
+                ) : (
+                  <span className={styles.titleText}>{item.title}</span>
+                )}
               </span>
               <span className={styles.timeCell} title={itemTimeText(item)}>
                 {itemTimeText(item)}

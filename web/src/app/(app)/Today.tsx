@@ -16,6 +16,7 @@
  * shows "—" or an empty state; nothing is invented.
  */
 
+import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import styles from './Today.module.css';
 import {
@@ -32,6 +33,7 @@ import {
   type WorkItem,
 } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
+import { itemQuery } from '@/lib/queries.popout';
 import { StatusSelect } from '@/components/tracker/StatusSelect';
 import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
 import {
@@ -217,7 +219,17 @@ export function Today() {
             <div key={`${it.item_kind}:${it.item_id}`} className={styles.undatedRow}>
               <span className={GLYPH_CLASS[it.category]}>{it.glyph}</span>
               <span className={tokens.mono}>{courseCodeFromId(it.course_id)}</span>
-              <span className={styles.titleText}>{it.title}</span>
+              {it.item_kind === 'assignment' ? (
+                <Link
+                  className={styles.titleLink}
+                  href={itemQuery({ kind: 'assignment', id: it.item_id })}
+                  scroll={false}
+                >
+                  {it.title}
+                </Link>
+              ) : (
+                <span className={styles.titleText}>{it.title}</span>
+              )}
               <StatusSelect item={it} onChange={handleStatus} pending={pendingId === it.item_id} />
             </div>
           ))}
