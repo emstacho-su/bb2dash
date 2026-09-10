@@ -20,12 +20,12 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 | Layer | State |
 |---|---|
 | Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js`; per-course maps at v2+; last pull 2026-09-08 |
-| Typed warehouse | migrations 001–023 (repo numbering; see note below); 7 courses, 66 assignments, 145 sessions, planner tables |
+| Typed warehouse | migrations 001–025 (repo numbering; see note below); 7 courses, 66 assignments, 145 sessions, planner tables |
 | Effort model | migration 015 `effort_base` (19 types) + 016 `v_work_items` (152 items, effort + source) |
 | Document corpus | 64 files (100% in Storage + local mirror + sha256), 534 text units extracted; 4 stale IST.466 files marked `superseded_by` (migration 022) → `v_bb_files_current` = 60 |
 | Search: FTS | tsvector+GIN on file text / content / announcements; `search_file_text(…, p_include_superseded)` |
-| Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021) |
-| Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v4** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`) |
+| Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
+| Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
 | GUI (`web/`) | Next.js 16 + TS, Supabase Auth, 4 screens (Today, Course, Materials, ⌘K search); deployed to Vercel; ⌘K shows `part N` on multi-part hits; **vitest harness** (39 tests, `queries.search.ts` ≥97% covered) |
 | Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
@@ -69,9 +69,17 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    **023** `part_range_repair`: clamps the one overrun (text 276, an astral-plane emoji) and
    asserts the invariant. `embed-corpus` v5 chunks over code points (root cause). `search` v4
    accepts `include_superseded`. MCP server + ⌘K palette consume the new fields; `web/` gets its
-   first test harness (vitest + Testing Library). Live-verified: "final exam date" on the 16-part
-   IST.323 syllabus now returns part 16 ("Scheduled Final Exam Day 12/15/26") instead of the
-   instructor's office hours; superseded schedules absent by default, present with the flag.
+   first test harness (vitest + Testing Library). `/code-review` (high) then confirmed against
+   prod that 021 cut keyword-arm snippets from the *vector-best* part, which often did not contain
+   the keyword (5 of 10 rows for "attendance policy"); **024** `snippet_fixes` picks a part whose
+   slice covers the tsquery (whole-unit headline otherwise; `part_no` = the part the snippet was
+   cut from, null for the fallback), trims torn leading words, keeps `[notes]` labelled when the
+   marker precedes the slice, limits before the joins, and makes the keyword-mode headline plain
+   text; **025** `snippet_part_rank` ranks covering parts by `ts_rank` (vector-best part breaks
+   ties). `/security-review`: no findings. Live-verified after 025: "final exam date" on the
+   16-part IST.323 syllabus returns part 16 ("Scheduled Final Exam Day 12/15/26") instead of the
+   instructor's office hours; "attendance policy" has 0 of 10 snippets missing the keyword;
+   superseded schedules absent by default, present with the flag. Tests: web 40, mcp-server 88.
 
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's
@@ -108,7 +116,11 @@ prod. **Do not re-apply 014–019.**
    OCR for the two image-only files.
 4. Test coverage beyond `queries.search.ts` in `web/` (Today/Course/Materials screens need a
    router + query-client harness); widen the vitest coverage `include` as screens gain tests.
-5. Professional-side data (deferred by design).
+5. Stored per-part `tsvector` on `bb_text_embeddings` (populated at embed time, backfilled from
+   `part_range`): the only real speed-up for the keyword-snippet part selection, which today
+   recomputes `to_tsvector` per covering part (hybrid at limit 12 ≈ 27 ms; fine, but grows with
+   the corpus). Do it when the palette feels slow, not before.
+6. Professional-side data (deferred by design).
 
 ## Known issues / operational notes
 
@@ -120,12 +132,12 @@ prod. **Do not re-apply 014–019.**
   say was removed on 9/8 — the crawl ran earlier that day. Harmless; the next crawl clears it.
 * Hybrid `snippet` length is a word budget (`MaxWords=40`, two fragments), not a char budget:
   observed 81–791 chars. Clients truncate for display.
-* **Latent (0 instances today):** a matched-passage snippet cut from part ≥2 of a PPTX unit
-  would start *after* the `[notes]` marker, and both client scrubbers are marker-based, so
-  speaker notes could surface unlabeled. Checked 2026-09-10: 51 units carry `[notes]`, none is
-  multi-part. Fix before it can happen (next migration touching 021): have
-  `hybrid_search_file_text` clip `part_slice` at the first `[notes]` position when the marker
-  precedes the slice, or return a `has_notes` flag the clients label from. The ingest cadence
-  work (backlog 1) should re-run the check after every crawl.
+* A matched-passage snippet cut from part ≥2 of a PPTX unit would start *after* the `[notes]`
+  marker; since 024 the function prefixes `[notes] ` to such a snippet (and the whole-unit
+  fallback headlines only the text before the marker) so the marker-based client scrubbers
+  still label it. Verified on synthetic fixtures only — 51 units carry `[notes]` today and none
+  is multi-part. The ingest cadence work (backlog 1) should re-run that check after every crawl.
+* Hybrid keyword snippets recompute `to_tsvector` per covering part at query time: 27 ms at
+  limit 12 on the 534-unit corpus. See backlog 5 for the stored-tsvector fix.
 * Function search-path advisor warnings (pre-existing pattern) on the search RPCs.
 * Never ship the service key to a browser; anon key is insert-only by design.
