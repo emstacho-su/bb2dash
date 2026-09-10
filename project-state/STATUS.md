@@ -17,7 +17,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 | Layer | State |
 |---|---|
 | Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js`; per-course maps at v2+; last pull 2026-09-08 |
-| Typed warehouse | migrations 001–019 (repo numbering; see note below); 7 courses, 66 assignments, 145 sessions, planner tables |
+| Typed warehouse | migrations 001–020 (repo numbering; see note below); 7 courses, 66 assignments, 145 sessions, planner tables |
 | Effort model | migration 015 `effort_base` (19 types) + 016 `v_work_items` (152 items, effort + source) |
 | Document corpus | 64 files (100% in Storage + local mirror + sha256), 534 text units extracted |
 | Search: FTS | tsvector+GIN on file text / content / announcements; `search_file_text()` |
@@ -25,7 +25,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 | Edge functions | `embed-corpus` (resume-safe batch embedder), `search` **v3** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` / `get_material_text` / `list_courses` (merged, PR #5) |
 | GUI (`web/`) | Next.js 16 + TS, Supabase Auth, 4 screens (Today, Course, Materials, ⌘K search); build-green, not yet previewed |
-| Auth | one user (`emstacho@syr.edu`) created; signups NOT yet disabled; RLS still permissive (W-9 pending) |
+| Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
 
 ## What has been done (by phase)
 
@@ -69,9 +69,13 @@ prod. **Do not re-apply 014–019.**
 2. **Deploy the preview** (I do this once the project exists) → **Stack visual sign-off** against
    live data — the first real test, since the sandbox can't reach `*.supabase.co`.
 3. **Stack: disable signups** (Supabase Auth → Sign In / Providers).
-4. **W-9: RLS hardening** — rewrite the 25 permissive `authenticated using(true)` policies to
-   `auth.uid() = app_owner()`. Deliberately sequenced AFTER the permissive-RLS preview so a
-   policy bug can't be mistaken for a screen bug. Required before any public URL carries data.
+4. ~~**W-9: RLS hardening**~~ — **done 2026-09-10** (migration 020). The 21 permissive
+   `authenticated using(true)` policies (STATUS earlier estimated ~25; the real count is 21) are
+   now `auth.uid() = public.app_owner()`, plus `storage.objects` `bb_files_auth_all` owner-scoped
+   (bucket + owner). `app_owner()` resolves the owner **by email** (recreation-proof). The five
+   anon INSERT-only paths and service_role are untouched. Verified: owner sees all rows, any other
+   uid sees zero, anon insert + `search` edge function both still work. **Signups still to be
+   disabled** (item 3) before any public URL carries data.
 
 ## Slotted for the future (backlog, rough priority order)
 1. Matched-passage snippets — `search` returns the unit head, not the matched part;
