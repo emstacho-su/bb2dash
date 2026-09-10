@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
 import { courseCode, useCourses, type CourseSummary } from '@/lib/queries';
 import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
 import {
@@ -270,6 +271,10 @@ function CourseBlock({ data }: { data: CourseData }) {
           <span className={styles.courseCount}>
             {totalItems} {totalItems === 1 ? 'item' : 'items'}
           </span>
+          {/* R-06: the same materials, in the folder tree Blackboard put them in. */}
+          <Link className={styles.bbLink} href={`/course/${course.id}/classwork`}>
+            Open in Classwork →
+          </Link>
           {course.bb_url && (
             <a className={styles.bbLink} href={course.bb_url} target="_blank" rel="noreferrer">
               Blackboard ↗
