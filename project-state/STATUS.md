@@ -1,8 +1,8 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-10**, Phase 7 retrieval polish
-> (`feat/retrieval-polish`, PR open) — matched-passage snippets, superseded-file filter,
-> `part_range` repair, first `web/` test suite. Convention: see root `CLAUDE.md`.
+> Updated upon each PR. Last update: **2026-09-10**, Phase 7 retrieval polish merged (PR #6),
+> Phase 6 closed out (sign-off + signups disabled), and **Requirements v2 + Phase 8/9 briefs**
+> landed in `docs/planning/60–62` (PR #7). Convention: see root `CLAUDE.md`.
 
 ## Where the product is
 
@@ -12,8 +12,8 @@ are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is mer
 (PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
 has signed in successfully. RLS is owner-scoped (W-9, migration 020). Search now returns the
 passage that matched (not the unit head) and hides superseded document versions by default
-(Phase 7, live in prod). Still open from Phase 6: Stack's visual confirmation that screens
-render live data, and disabling signups.
+(Phase 7, live in prod). Phase 6 is fully closed: Stack signed off the live screens and
+disabled signups on 2026-09-10.
 
 Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 
@@ -87,16 +87,17 @@ pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to
 names it 014–019. This is a name-level artifact, NOT drift — a rebuild in README order reproduces
 prod. **Do not re-apply 014–019.**
 
-## Remaining to fully close the GUI phase
+## GUI phase close-out (all done)
 
 0. ~~Reconcile `feat/gui-v1` with main's Retrieval-MCP phase~~ — done 2026-09-10 (merge + renumber).
 0a. ~~Merge PR #4 to `main`~~ — done 2026-09-10 (`aef5dee`); `main` is the single source of truth.
 1. ~~Create the Vercel project~~ — done; deployed at `https://web-xi-ten-uy9xk6c6p0.vercel.app`
    (Root Directory `web`, the two `NEXT_PUBLIC_` env vars). Owner has logged in.
-2. **Stack: visual sign-off** — confirm the Today/Course/Materials/search screens render live
-   data end-to-end (login works; this is the last unconfirmed link).
-3. **Stack: disable signups** (Supabase Auth → Sign In / Providers) before the URL is shared.
-   Also set Supabase Site URL to the Vercel origin for password-reset/confirmation email links.
+2. ~~**Stack: visual sign-off**~~ — **done 2026-09-10**: Stack confirmed the Today/Course/
+   Materials/search screens render live data end-to-end.
+3. ~~**Stack: disable signups**~~ — **done 2026-09-10** per Stack (a dashboard setting, not
+   visible from SQL, so not independently verified here). Site URL → the Vercel origin for
+   password-reset/confirmation links: set at the same time if not already.
 4. ~~**W-9: RLS hardening**~~ — **done 2026-09-10** (migration 020). The 21 permissive
    `authenticated using(true)` policies (STATUS earlier estimated ~25; the real count is 21) are
    now `auth.uid() = public.app_owner()`, plus `storage.objects` `bb_files_auth_all` owner-scoped
@@ -105,22 +106,31 @@ prod. **Do not re-apply 014–019.**
    uid sees zero, anon insert + `search` edge function both still work. **Signups still to be
    disabled** (item 3) before any public URL carries data.
 
-## Slotted for the future (backlog, rough priority order)
-1. Recurring crawl cadence (weekly + before class days) + `bb_raw` diffing into typed tables;
-   capture the Blackboard iCal feed URL for cheap due-date sync. A crawl should also set
-   `superseded_by` automatically when a content item's file is re-uploaded (022 did the
-   historical four by hand).
-2. Remaining near-duplicates outside the 022 scope: bb_files 17, 18/19, and IST.352 31/32/47
-   (three variants of "Introduction to SA&D - Part 1"). Needs a general supersede rule.
-3. Remaining data gaps: IST.323 Security-in-the-News group/date, IST.466 Group #3 slots,
-   OCR for the two image-only files.
-4. Test coverage beyond `queries.search.ts` in `web/` (Today/Course/Materials screens need a
-   router + query-client harness); widen the vitest coverage `include` as screens gain tests.
-5. Stored per-part `tsvector` on `bb_text_embeddings` (populated at embed time, backfilled from
-   `part_range`): the only real speed-up for the keyword-snippet part selection, which today
-   recomputes `to_tsvector` per covering part (hybrid at limit 12 ≈ 27 ms; fine, but grows with
-   the corpus). Do it when the palette feels slow, not before.
-6. Professional-side data (deferred by design).
+## What's next — Requirements v2 (`docs/planning/60_REQUIREMENTS_v2.md`)
+
+Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of clarification;
+`60_REQUIREMENTS_v2.md` (R-01..R-26) supersedes every earlier backlog. Phase order (§4 there):
+
+| Phase | Name | Brief | Status |
+|---|---|---|---|
+| 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | approved, not started |
+| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | approved, runs in parallel with 8 |
+| 10 | Grades and submissions | — | after 8 + 9 |
+| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | — | |
+| 12 | Electron shell | — | |
+| 13 | Styling pass | — | last |
+
+Migration ranges: Phase 8 = 026–029, Phase 9 = 030–039. Both phase branches cut from `main`
+(Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
+
+Phase 7 leftovers folded into the plan: automatic `superseded_by` on re-uploaded files and the
+remaining near-duplicates (bb_files 17, 18/19, IST.352 31/32/47) → Phase 9 `stage_files`;
+`web/` test coverage for Today/Course/Materials → Phase 8's workers add screen tests as they
+touch those screens; stored per-part `tsvector` on `bb_text_embeddings` → only when the palette
+feels slow, not before.
+
+**Open security item:** the `bb-files` Storage bucket is still `public: true` (verified
+2026-09-10). Phase 9 migration 030 flips it; Materials already uses signed URLs.
 
 ## Known issues / operational notes
 
