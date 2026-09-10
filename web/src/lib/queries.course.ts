@@ -18,9 +18,33 @@
  *   - bb_files          harvested files, counted per session
  */
 
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables, Views } from './queries';
+import {
+  normalizeCardNote,
+  type CourseNotes,
+  type CourseStreamRow,
+  type ContentTreeRow,
+} from './course-dimension';
+
+/**
+ * `v_course_stream`, `v_content_tree` and `courses.card_note` arrive with
+ * migrations 026-028 (worker W-12) and are therefore not in the generated
+ * `database.types.ts` yet, so the typed client rejects them. Read and write
+ * those three through an un-narrowed client, exactly as `queries.today.ts` does
+ * for `v_work_items`; the rows are pinned to the interfaces below, transcribed
+ * from the frozen column lists in `docs/planning/61_PHASE8_course_dimension.md`.
+ */
+function untypedClient(): SupabaseClient {
+  return getSupabaseBrowserClient() as unknown as SupabaseClient;
+}
 
 export type CourseDisplay = Views<'v_course_display'>;
 export type WorkItem = Views<'v_work_items'>;
@@ -59,6 +83,10 @@ export const courseQueryKeys = {
   workItems: (shellIds: string[]) => ['course-work-items', shellKey(shellIds)] as const,
   gradingScheme: (shellIds: string[]) => ['course-grading-scheme', shellKey(shellIds)] as const,
   sessionFiles: (shellIds: string[]) => ['course-session-files', shellKey(shellIds)] as const,
+  stream: (shellIds: string[]) => ['course-stream', shellKey(shellIds)] as const,
+  contentTree: (shellIds: string[]) => ['course-content-tree', shellKey(shellIds)] as const,
+  staff: (shellIds: string[]) => ['course-staff', shellKey(shellIds)] as const,
+  notes: (shellIds: string[]) => ['course-notes', shellKey(shellIds)] as const,
 } as const;
 
 /* ---------------------------------------------------------------------------
@@ -372,3 +400,194 @@ export function isZeroToleranceAiPolicy(policy: string | null | undefined): bool
   if (!policy) return false;
   return /zero[\s-]?tolerance/i.test(policy);
 }
+
+/* ===========================================================================
+ * Phase 8 — course dimension (stream, classwork tree, staff, card note)
+ *
+ * The row types and the pure grouping helpers live in `course-dimension.ts`
+ * (the relations land with migrations 026-028, so their shapes are still
+ * hand-declared). They are re-exported here so screens have one import.
+ * ======================================================================== */
+
+export type {
+  ContentFile,
+  ContentNode,
+  ContentTreeRow,
+  CourseNotes,
+  CourseStreamMeta,
+  CourseStreamRow,
+  StreamDay,
+  StreamPostKind,
+  StreamRefKind,
+} from './course-dimension';
+export {
+  CARD_NOTE_MAX_LENGTH,
+  COURSE_TIME_ZONE,
+  DUE_WINDOW_DAYS,
+  NOT_RECORDED,
+  courseToday,
+  filterStreamRows,
+  groupContentTree,
+  groupStreamByDay,
+  isFolderNode,
+  normalizeCardNote,
+  orNotRecorded,
+  streamDayKey,
+  ultraStateLabel,
+} from './course-dimension';
+
+/** The staff columns the Info tab shows. */
+export type CourseStaff = Pick<
+  Tables<'course_staff'>,
+  'id' | 'course_id' | 'name' | 'role' | 'email' | 'office' | 'office_hours'
+>;
+
+const STREAM_COLUMNS = 'course_id, post_kind, posted_at, ref_kind, ref_id, title, body, meta';
+
+const CONTENT_TREE_COLUMNS =
+  'course_id, content_id, parent_id, bb_item_id, path, depth, title, item_kind, bb_type, ' +
+  'state, url, modified_at, assignment_id, file_id, file_name, storage_path, bucket';
+
+const COURSE_STAFF_COLUMNS = 'id, course_id, name, role, email, office, office_hours';
+
+/* ---------------------------------------------------------------------------
+ * Phase 8 queries
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The Stream feed for a display course: every post across its shells, newest
+ * first. The +/-14-day window on `assignment_due` rows is a client filter (see
+ * `filterStreamRows`) so the same fetch can also feed a wider view later.
+ */
+export function courseStreamOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.stream(shellIds),
+    queryFn: async (): Promise<CourseStreamRow[]> => {
+      const supabase = untypedClient();
+      const { data, error } = await supabase
+        .from('v_course_stream')
+        .select(STREAM_COLUMNS)
+        .in('course_id', shellIds)
+        .order('posted_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as CourseStreamRow[];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Blackboard's own folder tree for a display course, ordered by `path` — which
+ * puts a folder ahead of its children by construction. A node with several
+ * files yields several rows; `groupContentTree` folds them back together.
+ */
+export function contentTreeOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.contentTree(shellIds),
+    queryFn: async (): Promise<ContentTreeRow[]> => {
+      const supabase = untypedClient();
+      const { data, error } = await supabase
+        .from('v_content_tree')
+        .select(CONTENT_TREE_COLUMNS)
+        .in('course_id', shellIds)
+        .order('path', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as ContentTreeRow[];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 15 * 60 * 1000,
+  });
+}
+
+/** Instructors and TAs recorded for the display course's shells. */
+export function courseStaffOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.staff(shellIds),
+    queryFn: async (): Promise<CourseStaff[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('course_staff')
+        .select(COURSE_STAFF_COLUMNS)
+        .in('course_id', shellIds)
+        .order('role', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
+/**
+ * `group_notes` (synced, verbatim) and `card_note` (Stack's own one-liner) for
+ * the shells. Kept out of `courseShellsOptions` on purpose: `card_note` lands
+ * with migration 028, so while the column is missing this query fails on its
+ * own instead of taking the sub-bar down with it.
+ */
+export function courseNotesOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.notes(shellIds),
+    queryFn: async (): Promise<CourseNotes[]> => {
+      const supabase = untypedClient();
+      const { data, error } = await supabase
+        .from('courses')
+        .select('id, group_notes, card_note')
+        .in('id', shellIds);
+      if (error) throw error;
+      return (data ?? []) as unknown as CourseNotes[];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
+export function useCourseStream(shellIds: string[]) {
+  return useQuery(courseStreamOptions(shellIds));
+}
+export function useContentTree(shellIds: string[]) {
+  return useQuery(contentTreeOptions(shellIds));
+}
+export function useCourseStaff(shellIds: string[]) {
+  return useQuery(courseStaffOptions(shellIds));
+}
+export function useCourseNotes(shellIds: string[]) {
+  return useQuery(courseNotesOptions(shellIds));
+}
+
+/* ---------------------------------------------------------------------------
+ * Card note (R-04) — the one writable field on the course page
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Write the course card note. `courseId` is a single shell id — the display
+ * course's parent shell (`v_course_display.display_id`), which is where the
+ * Home card reads it from. Returns the value actually stored so the caller can
+ * show the normalized text without a refetch.
+ */
+export async function updateCardNote(
+  courseId: string,
+  note: string | null,
+): Promise<string | null> {
+  if (!courseId) throw new Error('updateCardNote: courseId is required');
+  const value = normalizeCardNote(note);
+  const supabase = untypedClient();
+  const { error } = await supabase.from('courses').update({ card_note: value }).eq('id', courseId);
+  if (error) throw error;
+  return value;
+}
+
+/** Mutation wrapper: writes the note, then refreshes the notes + card queries. */
+export function useUpdateCardNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, note }: { courseId: string; note: string | null }) =>
+      updateCardNote(courseId, note),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['course-notes'] });
+      void queryClient.invalidateQueries({ queryKey: ['course-display'] });
+    },
+  });
+}
+
