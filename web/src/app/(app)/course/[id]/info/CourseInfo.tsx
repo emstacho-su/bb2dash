@@ -13,16 +13,16 @@
  * recorded. The one writable thing here is the card note.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CARD_NOTE_MAX_LENGTH,
   meetingPatterns,
   normalizeCardNote,
   orNotRecorded,
+  validateCardNote,
   realRoomDispute,
   useCourseDisplay,
   useCourseGradingScheme,
-  useCourseNotes,
   useCourseShells,
   useCourseStaff,
   useUpdateCardNote,
@@ -82,7 +82,20 @@ export function StaffRow({ person }: { person: CourseStaff }) {
   );
 }
 
-/** The card note: one line of plain text, capped, saved on blur. */
+/**
+ * The card note: one line of plain text, saved on blur.
+ *
+ * Three rules, each one a bug that was here:
+ *
+ *   - The draft is re-seeded only when `stored` actually changes, and only
+ *     while the owner is neither typing nor waiting on a save. Re-seeding on
+ *     every render of the still-old prop put the previous note back under the
+ *     cursor the moment the save started.
+ *   - An edit-free blur writes nothing. Blur alone is not an edit, and the
+ *     round trip it used to cause could shorten a perfectly legal stored note.
+ *   - A failed save keeps the draft. The typed text is the only copy of it;
+ *     the error says what happened and the field stays editable for a retry.
+ */
 export function CardNoteField({
   courseId,
   stored,
@@ -94,22 +107,50 @@ export function CardNoteField({
 }) {
   const [draft, setDraft] = useState(stored ?? '');
   const [dirty, setDirty] = useState(false);
+  const [tooLong, setTooLong] = useState<string | null>(null);
   const save = useUpdateCardNote();
+  const seeded = useRef(stored);
 
-  // Adopt a newly loaded / externally changed note, but never clobber typing.
   useEffect(() => {
-    if (!dirty) setDraft(stored ?? '');
-  }, [stored, dirty]);
+    if (seeded.current === stored) return;
+    seeded.current = stored;
+    if (dirty || save.isPending) return;
+    setDraft(stored ?? '');
+  }, [stored, dirty, save.isPending]);
 
   function commit() {
-    setDirty(false);
-    const next = normalizeCardNote(draft);
-    setDraft(next ?? '');
-    if (next === (stored ?? null)) return; // nothing changed — no write
-    save.mutate({ courseId, note: next });
+    if (!dirty) return;
+
+    let next: string | null;
+    try {
+      next = validateCardNote(draft);
+    } catch (error) {
+      // Keep the draft and stay dirty: the owner decides what to cut.
+      setTooLong(error instanceof Error ? error.message : 'That note cannot be saved.');
+      return;
+    }
+    setTooLong(null);
+
+    // Normalized-to-normalized: whitespace the owner did not mean is not an edit.
+    if (next === normalizeCardNote(stored)) {
+      setDirty(false);
+      setDraft(next ?? '');
+      return;
+    }
+
+    save.mutate(
+      { courseId, note: next },
+      {
+        onSuccess: (savedValue) => {
+          setDirty(false);
+          setDraft(savedValue ?? '');
+        },
+      },
+    );
   }
 
   const remaining = CARD_NOTE_MAX_LENGTH - draft.length;
+  const problem = tooLong ?? (save.isError ? `Could not save the note: ${save.error.message}` : null);
 
   return (
     <div className={styles.note}>
@@ -126,6 +167,7 @@ export function CardNoteField({
         placeholder="No note yet"
         onChange={(e) => {
           setDirty(true);
+          setTooLong(null);
           setDraft(e.target.value);
         }}
         onBlur={commit}
@@ -133,9 +175,9 @@ export function CardNoteField({
       <span className={styles.noteMeta}>
         {save.isPending ? 'saving…' : `${remaining} character${remaining === 1 ? '' : 's'} left`}
       </span>
-      {save.isError && (
+      {problem && (
         <span className={styles.noteError} role="alert">
-          Could not save the note: {save.error.message}
+          {problem}
         </span>
       )}
     </div>
@@ -148,17 +190,18 @@ export function CourseInfo({ courseId }: { courseId: string }) {
   const display = useCourseDisplay(courseId);
   const shellIds = useMemo(() => display.data?.shell_ids ?? [], [display.data]);
 
-  const shells = useCourseShells(shellIds);
+  // One cache of `courses` rows carries the locations, the group notes and the
+  // card note — they are all columns of the same shell.
+  const shellsQ = useCourseShells(shellIds);
   const staffQ = useCourseStaff(shellIds);
   const schemeQ = useCourseGradingScheme(shellIds);
-  const notesQ = useCourseNotes(shellIds);
   const filesQ = useCurrentFiles();
 
   const course = display.data ?? null;
   const patterns = course ? meetingPatterns(course.meetings) : [];
   const disputed =
-    course && shells.data
-      ? realRoomDispute(course.room_disputed, course.meetings, shells.data.map((s) => s.location))
+    course && shellsQ.data
+      ? realRoomDispute(course.room_disputed, course.meetings, shellsQ.data.map((s) => s.location))
       : false;
 
   /** The syllabus file(s) this course has on file, if any. */
@@ -177,13 +220,13 @@ export function CourseInfo({ courseId }: { courseId: string }) {
    * `group_notes` is recorded per shell; show every shell that has one so a
    * merged course does not silently drop the recitation's note.
    */
-  const groupNotes = (notesQ.data ?? []).filter((row) => (row.group_notes ?? '').trim() !== '');
+  const groupNotes = (shellsQ.data ?? []).filter((row) => (row.group_notes ?? '').trim() !== '');
 
   // The card note is written on the display course's parent shell — the same row
   // `v_course_display` reads it from for the Home card.
   const noteShellId = course?.display_id ?? null;
   const storedNote =
-    (notesQ.data ?? []).find((row) => row.id === noteShellId)?.card_note ?? null;
+    (shellsQ.data ?? []).find((row) => row.id === noteShellId)?.card_note ?? null;
 
   if (display.isPending) return <p className={styles.state}>Loading course…</p>;
   if (display.isError) return <p className={styles.state}>Could not load this course.</p>;
@@ -287,8 +330,8 @@ export function CourseInfo({ courseId }: { courseId: string }) {
       </Section>
 
       <Section title="Groups" caption={GROUPS_CAPTION}>
-        {notesQ.isPending && <p className={styles.state}>loading…</p>}
-        {!notesQ.isPending && groupNotes.length === 0 && (
+        {shellsQ.isPending && <p className={styles.state}>loading…</p>}
+        {!shellsQ.isPending && groupNotes.length === 0 && (
           <p className={styles.state}>No group assignment is recorded for this course.</p>
         )}
         {groupNotes.map((row) => (
@@ -299,15 +342,15 @@ export function CourseInfo({ courseId }: { courseId: string }) {
       </Section>
 
       <Section title="Card note">
-        {notesQ.isError ? (
+        {shellsQ.isError ? (
           <p className={styles.state} role="alert">
-            Could not load the note: {notesQ.error.message}
+            Could not load the note: {shellsQ.error.message}
           </p>
         ) : (
           <CardNoteField
             courseId={noteShellId ?? courseId}
             stored={storedNote}
-            disabled={notesQ.isPending || !noteShellId}
+            disabled={shellsQ.isPending || !noteShellId}
           />
         )}
       </Section>

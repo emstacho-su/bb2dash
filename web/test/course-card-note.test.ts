@@ -21,7 +21,7 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: spies.from }),
 }));
 
-const { updateCardNote, normalizeCardNote, CARD_NOTE_MAX_LENGTH } = await import(
+const { updateCardNote, normalizeCardNote, validateCardNote, CARD_NOTE_MAX_LENGTH } = await import(
   '@/lib/queries.course'
 );
 
@@ -51,10 +51,17 @@ describe('updateCardNote — the request it sends', () => {
     expect(spies.update).toHaveBeenCalledWith({ card_note: null });
   });
 
-  it('caps the note at the column contract before it leaves the browser', async () => {
-    const sent = await updateCardNote('IST.323', 'x'.repeat(400));
-    expect(sent).toHaveLength(CARD_NOTE_MAX_LENGTH);
-    expect(spies.update).toHaveBeenCalledWith({ card_note: 'x'.repeat(CARD_NOTE_MAX_LENGTH) });
+  it('refuses a note past the column cap instead of silently shortening it', async () => {
+    await expect(updateCardNote('IST.323', 'x'.repeat(400))).rejects.toThrow(
+      /limited to 280 characters/,
+    );
+    expect(spies.update).not.toHaveBeenCalled();
+  });
+
+  it('sends a note that is exactly as long as the column allows', async () => {
+    const note = 'x'.repeat(CARD_NOTE_MAX_LENGTH);
+    await expect(updateCardNote('IST.323', note)).resolves.toBe(note);
+    expect(spies.update).toHaveBeenCalledWith({ card_note: note });
   });
 
   it('returns the value actually stored', async () => {
@@ -88,8 +95,36 @@ describe('normalizeCardNote — one line of plain text', () => {
     expect(normalizeCardNote(undefined)).toBeNull();
   });
 
-  it('caps at 200 characters', () => {
-    expect(normalizeCardNote('y'.repeat(500))).toHaveLength(200);
-    expect(CARD_NOTE_MAX_LENGTH).toBe(200);
+  it('never shortens what it was handed', () => {
+    // The cap belongs to validateCardNote. Slicing here used to rewrite a legal
+    // 250-character stored note down to 200 on an edit-free blur.
+    expect(normalizeCardNote('y'.repeat(500))).toHaveLength(500);
+    expect(normalizeCardNote('y'.repeat(250))).toHaveLength(250);
+  });
+});
+
+describe('validateCardNote — the column cap, mirrored honestly', () => {
+  it('uses the same 280 the migration-028 check constraint enforces', () => {
+    expect(CARD_NOTE_MAX_LENGTH).toBe(280);
+  });
+
+  it('passes anything up to the cap through unchanged', () => {
+    const note = 'z'.repeat(CARD_NOTE_MAX_LENGTH);
+    expect(validateCardNote(note)).toBe(note);
+    expect(validateCardNote('  Ethics case group 3  ')).toBe('Ethics case group 3');
+    expect(validateCardNote(null)).toBeNull();
+  });
+
+  it('refuses a longer one, and says how long it is', () => {
+    expect(() => validateCardNote('z'.repeat(281))).toThrow(
+      'The note is limited to 280 characters — this one is 281.',
+    );
+  });
+
+  it('counts the note after normalizing, not before', () => {
+    // 284 raw, 280 once the run of spaces collapses to one — legal.
+    const padded = `${'z'.repeat(278)}     z`;
+    expect(padded).toHaveLength(284);
+    expect(validateCardNote(padded)).toHaveLength(280);
   });
 });

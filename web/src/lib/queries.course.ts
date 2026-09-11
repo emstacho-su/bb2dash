@@ -24,28 +24,29 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables, Views } from './queries';
 import { COURSE_WORK_ITEMS_KEY } from './progress-cache';
 import {
   normalizeCardNote,
-  type CourseNotes,
+  validateCardNote,
   type CourseStreamRow,
   type ContentTreeRow,
 } from './course-dimension';
 
 /**
- * `v_course_stream`, `v_content_tree` and `courses.card_note` arrive with
- * migrations 026-028 (worker W-12) and are therefore not in the generated
- * `database.types.ts` yet, so the typed client rejects them. Read and write
- * those three through an un-narrowed client, exactly as `queries.today.ts` does
- * for `v_work_items`; the rows are pinned to the interfaces below, transcribed
- * from the frozen column lists in `docs/planning/61_PHASE8_course_dimension.md`.
+ * `v_course_stream`, `v_content_tree` and `courses.card_note` landed with
+ * migrations 026-028 and `database.types.ts` was regenerated at Phase 8
+ * integration, so every query here uses the ordinary typed client.
+ *
+ * The two view row types stay hand-narrowed (`CourseStreamRow`,
+ * `ContentTreeRow` in `course-dimension.ts`): Postgres reports no not-null
+ * constraints on a view, so the generated row types make every column
+ * nullable, and the frozen contract in
+ * `docs/planning/61_PHASE8_course_dimension.md` is stricter than that. Each of
+ * those two reads therefore carries one documented cast at the call site — no
+ * field is reshaped, and nothing else in this module needs one.
  */
-function untypedClient(): SupabaseClient {
-  return getSupabaseBrowserClient() as unknown as SupabaseClient;
-}
 
 export type CourseDisplay = Views<'v_course_display'>;
 export type WorkItem = Views<'v_work_items'>;
@@ -60,6 +61,20 @@ export type MeetingSlot = {
   end: string | null;
   room: string | null;
 };
+
+/**
+ * The shell columns the course screens read: the room-dispute check needs
+ * `location`, the week rail needs `term_id`, and the Info tab needs both notes.
+ * One query, one cache — `card_note` used to be fetched separately because it
+ * arrived in a later migration than this query; that migration is applied, so
+ * the split only bought a second copy of the same `courses` rows.
+ */
+export type CourseShell = Pick<
+  Tables<'courses'>,
+  'id' | 'location' | 'term_id' | 'kind' | 'group_notes' | 'card_note'
+>;
+
+const COURSE_SHELL_COLUMNS = 'id, location, term_id, kind, group_notes, card_note';
 
 /** The `session_id`-bearing subset of bb_files the panel needs. */
 export type SessionFile = Pick<
@@ -87,7 +102,6 @@ export const courseQueryKeys = {
   stream: (shellIds: string[]) => ['course-stream', shellKey(shellIds)] as const,
   contentTree: (shellIds: string[]) => ['course-content-tree', shellKey(shellIds)] as const,
   staff: (shellIds: string[]) => ['course-staff', shellKey(shellIds)] as const,
-  notes: (shellIds: string[]) => ['course-notes', shellKey(shellIds)] as const,
 } as const;
 
 /* ---------------------------------------------------------------------------
@@ -118,15 +132,19 @@ export function courseDisplayOptions(courseId: string) {
   });
 }
 
-/** The underlying shells — locations (for the room-dispute check) + term_id. */
+/**
+ * The underlying shells: locations (for the room-dispute check), term_id, and
+ * the two free-text notes the Info tab renders — `group_notes` (synced,
+ * verbatim) and `card_note` (Stack's own one-liner, R-04).
+ */
 export function courseShellsOptions(shellIds: string[]) {
   return queryOptions({
     queryKey: courseQueryKeys.shells(shellIds),
-    queryFn: async (): Promise<Pick<Tables<'courses'>, 'id' | 'location' | 'term_id' | 'kind'>[]> => {
+    queryFn: async (): Promise<CourseShell[]> => {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('courses')
-        .select('id, location, term_id, kind')
+        .select(COURSE_SHELL_COLUMNS)
         .in('id', shellIds);
       if (error) throw error;
       return data ?? [];
@@ -414,7 +432,6 @@ export type {
   ContentFile,
   ContentNode,
   ContentTreeRow,
-  CourseNotes,
   CourseStreamMeta,
   CourseStreamRow,
   StreamDay,
@@ -435,6 +452,7 @@ export {
   orNotRecorded,
   streamDayKey,
   ultraStateLabel,
+  validateCardNote,
 } from './course-dimension';
 
 /** The staff columns the Info tab shows. */
@@ -464,13 +482,14 @@ export function courseStreamOptions(shellIds: string[]) {
   return queryOptions({
     queryKey: courseQueryKeys.stream(shellIds),
     queryFn: async (): Promise<CourseStreamRow[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_course_stream')
         .select(STREAM_COLUMNS)
         .in('course_id', shellIds)
         .order('posted_at', { ascending: false });
       if (error) throw error;
+      // Narrowed to the frozen contract — see the module header.
       return (data ?? []) as unknown as CourseStreamRow[];
     },
     enabled: shellIds.length > 0,
@@ -487,13 +506,14 @@ export function contentTreeOptions(shellIds: string[]) {
   return queryOptions({
     queryKey: courseQueryKeys.contentTree(shellIds),
     queryFn: async (): Promise<ContentTreeRow[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_content_tree')
         .select(CONTENT_TREE_COLUMNS)
         .in('course_id', shellIds)
         .order('path', { ascending: true });
       if (error) throw error;
+      // Narrowed to the frozen contract — see the module header.
       return (data ?? []) as unknown as ContentTreeRow[];
     },
     enabled: shellIds.length > 0,
@@ -521,29 +541,6 @@ export function courseStaffOptions(shellIds: string[]) {
   });
 }
 
-/**
- * `group_notes` (synced, verbatim) and `card_note` (Stack's own one-liner) for
- * the shells. Kept out of `courseShellsOptions` on purpose: `card_note` lands
- * with migration 028, so while the column is missing this query fails on its
- * own instead of taking the sub-bar down with it.
- */
-export function courseNotesOptions(shellIds: string[]) {
-  return queryOptions({
-    queryKey: courseQueryKeys.notes(shellIds),
-    queryFn: async (): Promise<CourseNotes[]> => {
-      const supabase = untypedClient();
-      const { data, error } = await supabase
-        .from('courses')
-        .select('id, group_notes, card_note')
-        .in('id', shellIds);
-      if (error) throw error;
-      return (data ?? []) as unknown as CourseNotes[];
-    },
-    enabled: shellIds.length > 0,
-    staleTime: 30 * 60 * 1000,
-  });
-}
-
 export function useCourseStream(shellIds: string[]) {
   return useQuery(courseStreamOptions(shellIds));
 }
@@ -552,9 +549,6 @@ export function useContentTree(shellIds: string[]) {
 }
 export function useCourseStaff(shellIds: string[]) {
   return useQuery(courseStaffOptions(shellIds));
-}
-export function useCourseNotes(shellIds: string[]) {
-  return useQuery(courseNotesOptions(shellIds));
 }
 
 /* ---------------------------------------------------------------------------
@@ -572,22 +566,94 @@ export async function updateCardNote(
   note: string | null,
 ): Promise<string | null> {
   if (!courseId) throw new Error('updateCardNote: courseId is required');
-  const value = normalizeCardNote(note);
-  const supabase = untypedClient();
+  const value = validateCardNote(note);
+  const supabase = getSupabaseBrowserClient();
   const { error } = await supabase.from('courses').update({ card_note: value }).eq('id', courseId);
   if (error) throw error;
   return value;
 }
 
-/** Mutation wrapper: writes the note, then refreshes the notes + card queries. */
+/** The two caches that carry a course's `card_note`. */
+const CARD_NOTE_CACHE_KEYS: readonly (readonly unknown[])[] = [
+  ['course-shells'],
+  ['course-display'],
+];
+
+/** A cached row that may carry the note, whichever query it came from. */
+interface CardNoteRow {
+  id?: string;
+  display_id?: string;
+  card_note?: string | null;
+}
+
+/** True when this cached row is the shell the note is being written to. */
+function isNoteRow(row: CardNoteRow | null | undefined, courseId: string): boolean {
+  if (!row || typeof row !== 'object') return false;
+  return row.id === courseId || row.display_id === courseId;
+}
+
+/**
+ * Patch one cache entry, whichever shape it holds: `courseShellsOptions` and
+ * the Home card's `courseDisplayOptions` cache lists of rows, the course page's
+ * `courseDisplayOptions(courseId)` caches a single row.
+ */
+function patchCardNoteEntry(
+  entry: CardNoteRow[] | CardNoteRow | null | undefined,
+  courseId: string,
+  value: string | null,
+): CardNoteRow[] | CardNoteRow | null | undefined {
+  if (Array.isArray(entry)) {
+    return entry.map((row) => (isNoteRow(row, courseId) ? { ...row, card_note: value } : row));
+  }
+  if (isNoteRow(entry, courseId)) return { ...(entry as CardNoteRow), card_note: value };
+  return entry;
+}
+
+/**
+ * Mutation wrapper: writes the note and patches both caches that carry it
+ * immediately.
+ *
+ * The optimistic patch is what keeps the Info-tab input steady. Without it the
+ * field's `stored` prop stayed on the old value for the whole round trip, and
+ * the re-seed effect put that old value back under the owner's cursor. On
+ * failure every cache goes back to what it held and the field keeps the draft,
+ * so the typed text is never lost to a failed save.
+ */
 export function useUpdateCardNote() {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({ courseId, note }: { courseId: string; note: string | null }) =>
       updateCardNote(courseId, note),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['course-notes'] });
-      void queryClient.invalidateQueries({ queryKey: ['course-display'] });
+
+    onMutate: async ({ courseId, note }: { courseId: string; note: string | null }) => {
+      const value = normalizeCardNote(note);
+      const previous: [readonly unknown[], unknown][] = [];
+
+      for (const queryKey of CARD_NOTE_CACHE_KEYS) {
+        await queryClient.cancelQueries({ queryKey });
+        for (const [key, entry] of queryClient.getQueriesData<CardNoteRow[] | CardNoteRow>({
+          queryKey,
+        })) {
+          previous.push([key, entry]);
+          if (entry === undefined) continue;
+          queryClient.setQueryData(key, patchCardNoteEntry(entry, courseId, value));
+        }
+      }
+
+      return { previous };
+    },
+
+    onError: (_error, _variables, context) => {
+      context?.previous.forEach(([key, entry]) => {
+        queryClient.setQueryData(key, entry);
+      });
+    },
+
+    onSettled: () => {
+      for (const queryKey of CARD_NOTE_CACHE_KEYS) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 }

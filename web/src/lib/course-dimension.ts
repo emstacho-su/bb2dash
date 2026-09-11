@@ -74,21 +74,21 @@ export interface ContentTreeRow {
   bucket: string | null;
 }
 
-/** The two free-text notes the Info tab renders (`card_note` is migration 028). */
-// `card_note` is on the generated `courses` row type since migration 028; this pick stays narrow.
-export interface CourseNotes {
-  id: string;
-  group_notes: string | null;
-  card_note: string | null;
-}
-
-/** Hard cap on the note. It is one line on a card, not a notes field. */
-export const CARD_NOTE_MAX_LENGTH = 200;
+/**
+ * Hard cap on the note — the same 280 the column's check constraint enforces
+ * (migration 028). It has to be the same number: a smaller cap here would
+ * quietly shorten a note the database is perfectly happy with.
+ */
+export const CARD_NOTE_MAX_LENGTH = 280;
 
 /**
- * Plain text, one line, capped. Line breaks and tabs collapse to spaces, runs
- * of whitespace collapse to one, and an empty note is stored as NULL rather
- * than '' so "no note" has a single representation.
+ * Plain text, one line. Line breaks and tabs collapse to spaces, runs of
+ * whitespace collapse to one, and an empty note is NULL rather than '' so
+ * "no note" has a single representation.
+ *
+ * No cap is applied here: normalizing and truncating are different decisions,
+ * and silently returning a shorter note than it was handed made an edit-free
+ * blur rewrite a stored note. Use `validateCardNote` before writing.
  */
 export function normalizeCardNote(raw: string | null | undefined): string | null {
   if (raw == null) return null;
@@ -96,8 +96,23 @@ export function normalizeCardNote(raw: string | null | undefined): string | null
     .replace(/[\r\n\t\v\f]+/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim();
-  if (flat === '') return null;
-  return flat.slice(0, CARD_NOTE_MAX_LENGTH);
+  return flat === '' ? null : flat;
+}
+
+/**
+ * The note as it may be stored: normalized, and refused outright when it is
+ * past the column's cap. Throwing (rather than slicing) is the boundary rule
+ * the planner block already follows — the caller shows the message and the
+ * owner decides what to cut, instead of losing the tail without being told.
+ */
+export function validateCardNote(raw: string | null | undefined): string | null {
+  const note = normalizeCardNote(raw);
+  if (note !== null && note.length > CARD_NOTE_MAX_LENGTH) {
+    throw new Error(
+      `The note is limited to ${CARD_NOTE_MAX_LENGTH} characters — this one is ${note.length}.`,
+    );
+  }
+  return note;
 }
 
 /* ---------------------------------------------------------------------------
