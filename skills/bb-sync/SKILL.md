@@ -76,6 +76,20 @@ call it done.
 
 Record the `run_id`. Report the per-course log line by line.
 
+## Step 3a — Register the run id, immediately (authorises the fold)
+
+The scheduled transform folds **only** crawls whose `run_id` sits on an owner-claimed request
+(`agent_requests.run_id`, migration 035). An unregistered crawl is quarantined, never folded.
+Do this the moment `bb.runAll` returns, before anything else:
+
+```sql
+update agent_requests set run_id = $run_id where id = $1 and state = 'claimed';
+```
+
+REST equivalent with the owner's JWT: `PATCH /rest/v1/agent_requests?id=eq.<id>` with body
+`{"run_id":"<uuid>"}`. If this update touches no row, stop and report: the request is no longer
+claimed and the crawl will be quarantined by the next tick (harmless, but nothing lands).
+
 ## Step 4 — Wait for the transform
 
 The cron picks the run up within two minutes. Poll every 30 seconds, up to ten minutes:
@@ -102,6 +116,9 @@ update agent_requests
        result = jsonb_build_object('run_id', $run_id, 'status', $status)
  where id = $1;
 ```
+
+Never leave a request `claimed`: a stale claim holds the tick's quarantine grace window open
+(migration 039) for up to 30 minutes and delays the bookkeeping of any other crawl.
 
 ## Step 6 — Report to Stack, in plain language
 
