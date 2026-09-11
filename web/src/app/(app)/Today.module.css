@@ -258,22 +258,6 @@
   cursor: progress;
 }
 
-/* — last-sync line ————————————————————————————————————————————————— */
-.syncRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  font-size: var(--text-base);
-}
-.syncRowMeta {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--color-neutral-500);
-}
-
 /* — course cards ——————————————————————————————————————————————————— */
 .courseGrid {
   display: grid;

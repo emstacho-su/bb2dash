@@ -9,7 +9,7 @@
  *      to fill the detail panel.
  *   2. Undated tray (v_work_items where undated = true).
  *   3. Status quick-edit (T-06) writing assignment_progress / reading_progress.
- *   4. Last-sync line (reconciled form of the old Needs-attention row).
+ *   4. Needs-attention row (typed counts + freshness, expands to the top five).
  *   5. 2-up course cards, NO grade line (no gradebook this term — honesty rule).
  *
  * Every figure traces to a v_work_items / v_course_display row. Missing data
@@ -26,7 +26,6 @@ import {
   STATUS_OPTIONS,
   toNumber,
   useCourseDisplay,
-  useLastSync,
   useSetItemStatus,
   useTerm,
   useUndatedWorkItems,
@@ -37,6 +36,7 @@ import {
   type WorkItem,
 } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
+import { NeedsAttentionRow } from './NeedsAttention';
 
 /* ---------------------------------------------------------------------------
  * Constants & small pure helpers
@@ -92,22 +92,6 @@ function isoDate(d: Date): string {
 function parseDateOnly(s: string): Date {
   const [y, m, d] = s.split('-').map(Number);
   return new Date(y, m - 1, d);
-}
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return '—';
-  const secs = Math.round((Date.now() - then) / 1000);
-  if (secs < 0) return 'just now';
-  if (secs < 60) return 'just now';
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`;
-  const days = Math.round(hours / 24);
-  if (days === 1) return 'yesterday';
-  if (days < 30) return `${days} days ago`;
-  return new Date(iso).toLocaleDateString();
 }
 
 /** The detail-panel "time" cell: clock if we have one, else the rule/mode. */
@@ -194,7 +178,6 @@ export function Today() {
   const undatedQ = useUndatedWorkItems();
   const coursesQ = useCourseDisplay();
   const termQ = useTerm();
-  const syncQ = useLastSync();
   const setStatus = useSetItemStatus();
 
   const pendingId = setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null;
@@ -382,17 +365,8 @@ export function Today() {
         </div>
       </section>
 
-      {/* ---- 4. Last-sync line (reconciled Needs-attention) ---- */}
-      <div className={styles.syncRow}>
-        <span>Data sync</span>
-        <span className={styles.syncRowMeta}>
-          {syncQ.isPending
-            ? 'checking…'
-            : syncQ.data
-              ? `last synced ${relativeTime(syncQ.data)}`
-              : 'no sync recorded yet'}
-        </span>
-      </div>
+      {/* ---- 4. Needs-attention row (Phase 9; replaces the last-sync line) ---- */}
+      <NeedsAttentionRow />
 
       {/* ---- 2. Undated tray ---- */}
       <section className={styles.section}>
