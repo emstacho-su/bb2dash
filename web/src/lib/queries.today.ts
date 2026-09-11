@@ -99,8 +99,8 @@ export interface CourseDisplay {
    * migration 028. Owner-written, so it may be null or empty — the card renders
    * nothing at all in that case rather than a blank line.
    *
-   * PM: regenerate database.types.ts at integration and replace this whole
-   * interface with `Views<'v_course_display'>`.
+   * database.types.ts was regenerated at Phase 8 integration; this interface stays
+   * narrower than the all-nullable generated `Views<'v_course_display'>` on purpose.
    */
   card_note: string | null;
 }

@@ -29,7 +29,7 @@ import {
   type CourseStaff,
 } from '@/lib/queries.course';
 import { fileTitle, useCurrentFiles, type BbFileRow } from '@/lib/queries.materials';
-import { OpenStoredButton } from '@/components/files/OpenStoredButton';
+import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseInfo.module.css';
 

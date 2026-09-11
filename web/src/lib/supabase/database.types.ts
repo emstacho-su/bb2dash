@@ -14,8 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_requests: {
+        Row: {
+          claimed_at: string | null
+          claimed_by: string | null
+          created_at: string
+          finished_at: string | null
+          id: number
+          kind: string
+          note: string | null
+          params: Json
+          result: Json | null
+          scope: string | null
+          state: string
+          sync_run_id: number | null
+        }
+        Insert: {
+          claimed_at?: string | null
+          claimed_by?: string | null
+          created_at?: string
+          finished_at?: string | null
+          id?: never
+          kind: string
+          note?: string | null
+          params?: Json
+          result?: Json | null
+          scope?: string | null
+          state?: string
+          sync_run_id?: number | null
+        }
+        Update: {
+          claimed_at?: string | null
+          claimed_by?: string | null
+          created_at?: string
+          finished_at?: string | null
+          id?: never
+          kind?: string
+          note?: string | null
+          params?: Json
+          result?: Json | null
+          scope?: string | null
+          state?: string
+          sync_run_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_requests_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
+          author: string | null
           bb_item_id: string | null
           body: string | null
           captured_at: string
@@ -23,10 +77,13 @@ export type Database = {
           fts: unknown
           id: number
           is_read: boolean | null
+          modified_at: string | null
           posted_at: string | null
+          read_at: string | null
           title: string | null
         }
         Insert: {
+          author?: string | null
           bb_item_id?: string | null
           body?: string | null
           captured_at?: string
@@ -34,10 +91,13 @@ export type Database = {
           fts?: unknown
           id?: never
           is_read?: boolean | null
+          modified_at?: string | null
           posted_at?: string | null
+          read_at?: string | null
           title?: string | null
         }
         Update: {
+          author?: string | null
           bb_item_id?: string | null
           body?: string | null
           captured_at?: string
@@ -45,7 +105,9 @@ export type Database = {
           fts?: unknown
           id?: never
           is_read?: boolean | null
+          modified_at?: string | null
           posted_at?: string | null
+          read_at?: string | null
           title?: string | null
         }
         Relationships: [
@@ -286,6 +348,95 @@ export type Database = {
           },
         ]
       }
+      attention_items: {
+        Row: {
+          applied_at: string | null
+          course_id: string | null
+          entity: string | null
+          field: string | null
+          from_value: Json | null
+          id: number
+          kind: string
+          question: string
+          raised_at: string
+          raised_by: number | null
+          ref: string | null
+          resolution: Json | null
+          resolution_note: string | null
+          resolved_at: string | null
+          state: string
+          suggested: Json | null
+          to_value: Json | null
+        }
+        Insert: {
+          applied_at?: string | null
+          course_id?: string | null
+          entity?: string | null
+          field?: string | null
+          from_value?: Json | null
+          id?: never
+          kind: string
+          question: string
+          raised_at?: string
+          raised_by?: number | null
+          ref?: string | null
+          resolution?: Json | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          state?: string
+          suggested?: Json | null
+          to_value?: Json | null
+        }
+        Update: {
+          applied_at?: string | null
+          course_id?: string | null
+          entity?: string | null
+          field?: string | null
+          from_value?: Json | null
+          id?: never
+          kind?: string
+          question?: string
+          raised_at?: string
+          raised_by?: number | null
+          ref?: string | null
+          resolution?: Json | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          state?: string
+          suggested?: Json | null
+          to_value?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attention_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attention_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "attention_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "attention_items_raised_by_fkey"
+            columns: ["raised_by"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bb_content: {
         Row: {
           assignment_id: string | null
@@ -401,6 +552,13 @@ export type Database = {
             referencedRelation: "bb_content"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "bb_content_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "v_content_tree"
+            referencedColumns: ["content_id"]
+          },
         ]
       }
       bb_file_text: {
@@ -448,6 +606,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_bb_files_current"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_file_text_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "v_content_tree"
+            referencedColumns: ["file_id"]
           },
           {
             foreignKeyName: "bb_file_text_file_id_fkey"
@@ -623,6 +788,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_bb_files_current"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_files_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "v_content_tree"
+            referencedColumns: ["file_id"]
           },
           {
             foreignKeyName: "bb_files_superseded_by_fkey"
@@ -823,6 +995,7 @@ export type Database = {
           bb_id: string | null
           bb_membership_id: string | null
           bb_url: string | null
+          card_note: string | null
           created_at: string
           credits: number | null
           group_notes: string | null
@@ -850,6 +1023,7 @@ export type Database = {
           bb_id?: string | null
           bb_membership_id?: string | null
           bb_url?: string | null
+          card_note?: string | null
           created_at?: string
           credits?: number | null
           group_notes?: string | null
@@ -877,6 +1051,7 @@ export type Database = {
           bb_id?: string | null
           bb_membership_id?: string | null
           bb_url?: string | null
+          card_note?: string | null
           created_at?: string
           credits?: number | null
           group_notes?: string | null
@@ -1658,8 +1833,101 @@ export type Database = {
             foreignKeyName: "bb_files_superseded_by_fkey"
             columns: ["superseded_by"]
             isOneToOne: false
+            referencedRelation: "v_content_tree"
+            referencedColumns: ["file_id"]
+          },
+          {
+            foreignKeyName: "bb_files_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
             referencedRelation: "v_file_layout"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_content_tree: {
+        Row: {
+          assignment_id: string | null
+          bb_item_id: string | null
+          bb_type: string | null
+          bucket: string | null
+          content_id: number | null
+          course_id: string | null
+          depth: number | null
+          file_id: number | null
+          file_name: string | null
+          item_kind: string | null
+          modified_at: string | null
+          parent_id: number | null
+          path: string | null
+          state: string | null
+          storage_path: string | null
+          title: string | null
+          url: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_effort"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_upcoming"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_content_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_content_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_content_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_content_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "bb_content"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_content_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "v_content_tree"
+            referencedColumns: ["content_id"]
           },
         ]
       }
@@ -1677,6 +1945,7 @@ export type Database = {
       v_course_display: {
         Row: {
           bb_url: string | null
+          card_note: string | null
           code: string | null
           display_id: string | null
           meetings: Json | null
@@ -1724,6 +1993,19 @@ export type Database = {
           med: number | null
           n: number | null
           qualifies: boolean | null
+        }
+        Relationships: []
+      }
+      v_course_stream: {
+        Row: {
+          body: string | null
+          course_id: string | null
+          meta: Json | null
+          post_kind: string | null
+          posted_at: string | null
+          ref_id: string | null
+          ref_kind: string | null
+          title: string | null
         }
         Relationships: []
       }
@@ -1969,6 +2251,15 @@ export type Database = {
     }
     Functions: {
       app_owner: { Args: never; Returns: string }
+      bb_content_detail_merge: {
+        Args: {
+          p_new: Json
+          p_new_item_id: string
+          p_old: Json
+          p_old_item_id: string
+        }
+        Returns: Json
+      }
       bb_file_relpath: { Args: { p_file_id: number }; Returns: string }
       classify_bb_file: {
         Args: { p_mime: string; p_name: string; p_path: string }
@@ -2040,6 +2331,7 @@ export type Database = {
           unit_no: number
         }[]
       }
+      stage_content: { Args: { p_run_id: string }; Returns: Json }
       suggested_start: {
         Args: { p_course_id: string; p_due: string; p_effort: number }
         Returns: string

@@ -38,7 +38,8 @@ export type StreamPostKind = 'announcement' | 'material' | 'assignment_posted' |
 export type StreamRefKind = 'announcement' | 'bb_file' | 'bb_content' | 'assignment';
 
 /** One row of `v_course_stream` (migration 027). */
-// PM: replace with generated Views<'v_course_stream'> at integration
+// Narrower than the generated Views<'v_course_stream'> on purpose: generated view types are
+// all-nullable; this interface is the contract in 61_PHASE8 §Stream and is asserted at the call site.
 export interface CourseStreamRow {
   course_id: string;
   post_kind: StreamPostKind;
@@ -51,7 +52,7 @@ export interface CourseStreamRow {
 }
 
 /** One row of `v_content_tree` (migration 027) — a node, or a node x file pair. */
-// PM: replace with generated Views<'v_content_tree'> at integration
+// Narrower than the generated Views<'v_content_tree'> on purpose (same reason as above).
 export interface ContentTreeRow {
   course_id: string;
   content_id: number;
@@ -74,7 +75,7 @@ export interface ContentTreeRow {
 }
 
 /** The two free-text notes the Info tab renders (`card_note` is migration 028). */
-// PM: `card_note` joins the generated `courses` row type at integration
+// `card_note` is on the generated `courses` row type since migration 028; this pick stays narrow.
 export interface CourseNotes {
   id: string;
   group_notes: string | null;
