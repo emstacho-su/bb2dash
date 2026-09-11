@@ -12,7 +12,7 @@
  * Unknowns read "not recorded" rather than being hidden or filled in.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import { courseCodeFromId, STATUS_LABEL, STATUS_OPTIONS } from '@/lib/queries.today';
@@ -30,6 +30,11 @@ import {
   type PlannerPatch,
 } from '@/lib/queries.popout';
 import { DOW_LABELS, MONTH_LABELS, parseDateOnly } from '@/components/tracker/anchor';
+import {
+  QueryState,
+  isQueryUnresolved,
+  queryStateText,
+} from '@/components/shared/QueryState';
 import styles from './Popout.module.css';
 
 const NOT_RECORDED = 'not recorded';
@@ -83,6 +88,31 @@ function formFrom(progress: AssignmentProgress | null | undefined): PlannerForm 
   };
 }
 
+const PLANNER_FIELDS = ['planned_start', 'planned_finish', 'est_minutes', 'notes'] as const;
+
+/**
+ * Take the server's values for every field the owner has not touched since
+ * their last commit, and keep the owner's text for the ones they have.
+ *
+ * Returns `current` itself when nothing moved, so a refetch that changes
+ * nothing does not re-render the form.
+ */
+export function mergePlannerForm(
+  current: PlannerForm,
+  server: PlannerForm,
+  dirtyFields: ReadonlySet<keyof PlannerForm>,
+): PlannerForm {
+  let changed = false;
+  const merged: PlannerForm = { ...current };
+  for (const key of PLANNER_FIELDS) {
+    if (dirtyFields.has(key)) continue;
+    if (merged[key] === server[key]) continue;
+    merged[key] = server[key];
+    changed = true;
+  }
+  return changed ? merged : current;
+}
+
 export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
   const assignmentQ = useAssignment(assignmentId);
   const progressQ = useAssignmentProgress(assignmentId);
@@ -98,37 +128,72 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
   const [form, setForm] = useState<PlannerForm>(EMPTY_FORM);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Seed the form once the row lands, and again if the popout switches items.
+  /** Fields edited since their last successful commit — the server may not overwrite these. */
+  const dirtyFields = useRef<Set<keyof PlannerForm>>(new Set());
+  const seededFor = useRef<string | null>(null);
+
+  /**
+   * Seed the form when the popout switches items, and afterwards merge the
+   * server's values only into fields nobody is typing in.
+   *
+   * Replacing the whole form on every `progressQ.data` identity change wiped
+   * whatever was being typed: a blur commit invalidates the row, the refetch
+   * returns a new object, and the effect ran again with it.
+   */
   useEffect(() => {
-    setForm(formFrom(progressQ.data));
-    setSaveError(null);
+    if (seededFor.current !== assignmentId) {
+      seededFor.current = assignmentId;
+      dirtyFields.current = new Set();
+      setForm(formFrom(progressQ.data));
+      setSaveError(null);
+      return;
+    }
+    const server = formFrom(progressQ.data);
+    setForm((current) => mergePlannerForm(current, server, dirtyFields.current));
   }, [assignmentId, progressQ.data]);
+
+  /** Record that the owner has changed a field, then hold the new text. */
+  function editField<K extends keyof PlannerForm>(key: K, value: string) {
+    dirtyFields.current.add(key);
+    setForm((f) => ({ ...f, [key]: value }));
+  }
 
   const progress = progressQ.data ?? null;
   const status = progress?.status ?? 'not_started';
   const priority = progress?.priority ?? 'normal';
 
-  function commit(patch: PlannerPatch) {
+  function commit(patch: PlannerPatch, onSaved?: () => void) {
     setSaveError(null);
     save.mutate(
       { assignmentId, patch },
-      { onError: (error) => setSaveError(error instanceof Error ? error.message : 'Save failed.') },
+      {
+        onSuccess: () => onSaved?.(),
+        onError: (error) => setSaveError(error instanceof Error ? error.message : 'Save failed.'),
+      },
     );
   }
 
-  /** Send a field only when it actually changed, so a blur is not a write. */
+  /**
+   * Send a field only when it actually changed, so a blur is not a write. The
+   * field stops being dirty once the write has landed — until then the server's
+   * copy is the stale one and must not be merged back over it.
+   */
   function commitField<K extends keyof PlannerForm>(key: K, current: string) {
     const saved = formFrom(progress)[key];
-    if (current === saved) return;
+    if (current === saved) {
+      dirtyFields.current.delete(key);
+      return;
+    }
+    const settle = () => dirtyFields.current.delete(key);
     if (key === 'est_minutes') {
-      commit({ est_minutes: current === '' ? null : Number(current) });
+      commit({ est_minutes: current === '' ? null : Number(current) }, settle);
       return;
     }
     if (key === 'notes') {
-      commit({ notes: current });
+      commit({ notes: current }, settle);
       return;
     }
-    commit({ [key]: current === '' ? null : current } as PlannerPatch);
+    commit({ [key]: current === '' ? null : current } as PlannerPatch, settle);
   }
 
   if (assignmentQ.isPending) {
@@ -150,7 +215,12 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
   const series = seriesQ.data ?? [];
   const course = courseQ.data ?? null;
   const clock = formatClock(assignment.due_at);
+  // The planner block is the owner's own row. Until it has actually been read
+  // there is nothing to edit: an enabled empty form would invite a write that
+  // silently replaces planner state the screen never managed to load.
+  const plannerUnavailable = isQueryUnresolved(progressQ);
   const pending = save.isPending;
+  const controlsDisabled = pending || plannerUnavailable;
 
   return (
     <>
@@ -190,11 +260,12 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
             {assignment.points_possible == null ? NOT_RECORDED : assignment.points_possible}
           </span>
           <span className={styles.factNote}>
-            {component
-              ? `${component.name}${component.points != null ? ` · ${component.points} pts` : ''}${
-                  component.weight_pct != null ? ` · ${component.weight_pct}% of the grade` : ''
-                }`
-              : 'no grade component recorded'}
+            {queryStateText(componentQ, 'the grade component') ??
+              (component
+                ? `${component.name}${component.points != null ? ` · ${component.points} pts` : ''}${
+                    component.weight_pct != null ? ` · ${component.weight_pct}% of the grade` : ''
+                  }`
+                : 'no grade component recorded')}
           </span>
         </div>
         <div className={styles.fact}>
@@ -242,7 +313,9 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
 
       <section className={styles.block}>
         <span className={tokens.kicker}>Late policy</span>
-        {scheme?.late_policy ? (
+        {isQueryUnresolved(schemeQ) ? (
+          <QueryState query={schemeQ} of="the late policy" className={styles.missing} />
+        ) : scheme?.late_policy ? (
           <p className={styles.prose}>{scheme.late_policy}</p>
         ) : (
           <p className={styles.missing}>No late policy is recorded for this course.</p>
@@ -251,7 +324,9 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
 
       <section className={styles.block}>
         <span className={tokens.kicker}>AI policy</span>
-        {scheme?.ai_policy ? (
+        {isQueryUnresolved(schemeQ) ? (
+          <QueryState query={schemeQ} of="the AI policy" className={styles.missing} />
+        ) : scheme?.ai_policy ? (
           <p className={styles.prose}>{scheme.ai_policy}</p>
         ) : (
           <p className={styles.missing}>No AI policy is recorded for this course.</p>
@@ -265,7 +340,10 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
             assignment_progress · yours, never overwritten by a sync
           </span>
           <span className={styles.saveState}>
-            {pending ? 'saving…' : progress ? 'saved' : 'not planned yet'}
+            {pending
+              ? 'saving…'
+              : (queryStateText(progressQ, 'your plan') ??
+                (progress ? 'saved' : 'not planned yet'))}
           </span>
         </div>
 
@@ -281,7 +359,7 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
             <select
               className={styles.control}
               value={status}
-              disabled={pending}
+              disabled={controlsDisabled}
               onChange={(e) => commit({ status: e.target.value as AssignmentProgress['status'] })}
             >
               {STATUS_OPTIONS.map((option) => (
@@ -297,7 +375,7 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
             <select
               className={styles.control}
               value={priority}
-              disabled={pending}
+              disabled={controlsDisabled}
               onChange={(e) =>
                 commit({ priority: e.target.value as AssignmentProgress['priority'] })
               }
@@ -316,8 +394,8 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
               className={styles.control}
               type="date"
               value={form.planned_start}
-              disabled={pending}
-              onChange={(e) => setForm((f) => ({ ...f, planned_start: e.target.value }))}
+              disabled={controlsDisabled}
+              onChange={(e) => editField('planned_start', e.target.value)}
               onBlur={(e) => commitField('planned_start', e.target.value)}
             />
           </label>
@@ -328,8 +406,8 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
               className={styles.control}
               type="date"
               value={form.planned_finish}
-              disabled={pending}
-              onChange={(e) => setForm((f) => ({ ...f, planned_finish: e.target.value }))}
+              disabled={controlsDisabled}
+              onChange={(e) => editField('planned_finish', e.target.value)}
               onBlur={(e) => commitField('planned_finish', e.target.value)}
             />
           </label>
@@ -343,8 +421,8 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
               step={5}
               inputMode="numeric"
               value={form.est_minutes}
-              disabled={pending}
-              onChange={(e) => setForm((f) => ({ ...f, est_minutes: e.target.value }))}
+              disabled={controlsDisabled}
+              onChange={(e) => editField('est_minutes', e.target.value)}
               onBlur={(e) => commitField('est_minutes', e.target.value)}
             />
           </label>
@@ -354,8 +432,8 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
             <textarea
               className={styles.textArea}
               value={form.notes}
-              disabled={pending}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              disabled={controlsDisabled}
+              onChange={(e) => editField('notes', e.target.value)}
               onBlur={(e) => commitField('notes', e.target.value)}
             />
           </label>
