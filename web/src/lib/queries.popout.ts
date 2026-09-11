@@ -9,8 +9,9 @@
  *
  * The one write here — the planner block — follows the same pattern as
  * `useSetItemStatus` in `queries.today.ts`: upsert into `assignment_progress`
- * (never into `assignments`, which a Blackboard sync owns), patch the cached
- * work-item lists optimistically, roll back on error, invalidate on settle.
+ * (never into `assignments`, which a Blackboard sync owns), then patch, roll
+ * back and invalidate through the shared fan-out in `progress-cache.ts`, which
+ * knows every cache the same fact is read from.
  */
 
 import {
@@ -21,7 +22,14 @@ import {
 } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables, Views } from './queries';
-import { todayKeys, type WorkItem } from './queries.today';
+import {
+  SERIES_KEY,
+  assignmentProgressKey,
+  cancelProgressQueries,
+  invalidateProgressCaches,
+  patchProgressCaches,
+  restoreProgressCaches,
+} from './progress-cache';
 
 export type Assignment = Tables<'assignments'>;
 export type AssignmentProgress = Tables<'assignment_progress'>;
@@ -102,11 +110,11 @@ export function itemQuery(target: PopoutTarget): string {
 
 export const popoutKeys = {
   assignment: (id: string) => ['popout', 'assignment', id] as const,
-  progress: (id: string) => ['popout', 'assignment-progress', id] as const,
+  progress: (id: string) => assignmentProgressKey(id),
   component: (id: number) => ['popout', 'grade-component', id] as const,
   scheme: (courseId: string) => ['popout', 'grading-scheme', courseId] as const,
   series: (courseId: string, seriesKey: string) =>
-    ['popout', 'series', courseId, seriesKey] as const,
+    [...SERIES_KEY, courseId, seriesKey] as const,
   session: (id: number) => ['popout', 'session', id] as const,
   sessionReadings: (courseId: string, forDate: string) =>
     ['popout', 'session-readings', courseId, forDate] as const,
@@ -435,53 +443,22 @@ export function useSavePlanner() {
     },
 
     onMutate: async ({ assignmentId, patch }: PlannerWrite) => {
-      await queryClient.cancelQueries({ queryKey: popoutKeys.progress(assignmentId) });
-      const previousProgress = queryClient.getQueryData<AssignmentProgress | null>(
-        popoutKeys.progress(assignmentId),
-      );
-      if (previousProgress) {
-        queryClient.setQueryData<AssignmentProgress>(popoutKeys.progress(assignmentId), {
-          ...previousProgress,
-          ...patch,
-        });
-      }
-
-      // A status change also shows in every cached tracker/tray list.
-      let previousWork: [readonly unknown[], WorkItem[] | undefined][] = [];
-      if (patch.status) {
-        await queryClient.cancelQueries({ queryKey: todayKeys.work() });
-        previousWork = queryClient.getQueriesData<WorkItem[]>({ queryKey: todayKeys.work() });
-        for (const [key, list] of previousWork) {
-          if (!list) continue;
-          queryClient.setQueryData<WorkItem[]>(
-            key,
-            list.map((row) =>
-              row.item_kind === 'assignment' && row.item_id === assignmentId
-                ? { ...row, status: patch.status! }
-                : row,
-            ),
-          );
-        }
-      }
-
-      return { previousProgress, previousWork };
+      const target = { item_kind: 'assignment', item_id: assignmentId } as const;
+      await cancelProgressQueries(queryClient, target);
+      // The planner row takes the whole patch; the work-item lists only carry
+      // `status`, and `patchProgressCaches` leaves them alone without one.
+      return { snapshot: patchProgressCaches(queryClient, target, patch) };
     },
 
-    onError: (_error, variables, context) => {
-      if (context?.previousProgress !== undefined) {
-        queryClient.setQueryData(
-          popoutKeys.progress(variables.assignmentId),
-          context.previousProgress,
-        );
-      }
-      context?.previousWork.forEach(([key, list]) => {
-        queryClient.setQueryData(key, list);
-      });
+    onError: (_error, _variables, context) => {
+      restoreProgressCaches(queryClient, context?.snapshot);
     },
 
     onSettled: (_data, _error, variables) => {
-      void queryClient.invalidateQueries({ queryKey: popoutKeys.progress(variables.assignmentId) });
-      void queryClient.invalidateQueries({ queryKey: todayKeys.work() });
+      invalidateProgressCaches(queryClient, {
+        item_kind: 'assignment',
+        item_id: variables.assignmentId,
+      });
     },
   });
 }

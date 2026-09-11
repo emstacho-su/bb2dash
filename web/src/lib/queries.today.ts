@@ -24,6 +24,13 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { ProgressStatus } from './queries';
+import {
+  WORK_ITEMS_KEY,
+  cancelProgressQueries,
+  invalidateProgressCaches,
+  patchProgressCaches,
+  restoreProgressCaches,
+} from './progress-cache';
 
 /**
  * The generated Database type predates `v_work_items` and `v_course_display`
@@ -119,9 +126,9 @@ export interface Term {
 
 export const todayKeys = {
   /** All work-item queries share this prefix so one invalidate covers them. */
-  work: () => ['work-items'] as const,
-  workWindow: (from: string, to: string) => ['work-items', 'window', from, to] as const,
-  undated: () => ['work-items', 'undated'] as const,
+  work: () => WORK_ITEMS_KEY,
+  workWindow: (from: string, to: string) => [...WORK_ITEMS_KEY, 'window', from, to] as const,
+  undated: () => [...WORK_ITEMS_KEY, 'undated'] as const,
   courseDisplay: () => ['course-display'] as const,
   term: () => ['term'] as const,
   lastSync: () => ['last-sync'] as const,
@@ -310,8 +317,11 @@ interface StatusPatch {
  * items have no progress row yet; the tables' defaults fill priority/updated_at
  * on insert, and we stamp `updated_at` so an update refreshes it too.
  *
- * Optimistic: every cached work-item list is patched immediately, rolled back
- * on error, and the whole `['work-items']` subtree is invalidated on settle.
+ * Optimistic: every cache that holds this item — Home's lists, the course
+ * Stream's list, the popout's series strip and its planner row — is patched
+ * immediately, rolled back on error and invalidated on settle. The fan-out
+ * lives in `progress-cache.ts` so this mutation and `useSavePlanner` cannot
+ * drift apart again.
  */
 export function useSetItemStatus() {
   const queryClient = useQueryClient();
@@ -339,30 +349,20 @@ export function useSetItemStatus() {
     },
 
     onMutate: async ({ item, status }: StatusPatch) => {
-      await queryClient.cancelQueries({ queryKey: todayKeys.work() });
-      const previous = queryClient.getQueriesData<WorkItem[]>({ queryKey: todayKeys.work() });
-      for (const [key, list] of previous) {
-        if (!list) continue;
-        queryClient.setQueryData<WorkItem[]>(
-          key,
-          list.map((row) =>
-            row.item_kind === item.item_kind && row.item_id === item.item_id
-              ? { ...row, status }
-              : row,
-          ),
-        );
-      }
-      return { previous };
+      const target = { item_kind: item.item_kind, item_id: item.item_id };
+      await cancelProgressQueries(queryClient, target);
+      return { snapshot: patchProgressCaches(queryClient, target, { status }) };
     },
 
     onError: (_err, _vars, context) => {
-      context?.previous.forEach(([key, list]) => {
-        queryClient.setQueryData(key, list);
-      });
+      restoreProgressCaches(queryClient, context?.snapshot);
     },
 
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: todayKeys.work() });
+    onSettled: (_data, _error, { item }) => {
+      invalidateProgressCaches(queryClient, {
+        item_kind: item.item_kind,
+        item_id: item.item_id,
+      });
     },
   });
 }

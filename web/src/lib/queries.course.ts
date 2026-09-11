@@ -27,6 +27,7 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables, Views } from './queries';
+import { COURSE_WORK_ITEMS_KEY } from './progress-cache';
 import {
   normalizeCardNote,
   type CourseNotes,
@@ -80,7 +81,7 @@ export const courseQueryKeys = {
   shells: (shellIds: string[]) => ['course-shells', shellKey(shellIds)] as const,
   term: (termId: string) => ['term', termId] as const,
   sessions: (shellIds: string[]) => ['course-sessions', shellKey(shellIds)] as const,
-  workItems: (shellIds: string[]) => ['course-work-items', shellKey(shellIds)] as const,
+  workItems: (shellIds: string[]) => [...COURSE_WORK_ITEMS_KEY, shellKey(shellIds)] as const,
   gradingScheme: (shellIds: string[]) => ['course-grading-scheme', shellKey(shellIds)] as const,
   sessionFiles: (shellIds: string[]) => ['course-session-files', shellKey(shellIds)] as const,
   stream: (shellIds: string[]) => ['course-stream', shellKey(shellIds)] as const,
