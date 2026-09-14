@@ -113,10 +113,12 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 
 | Phase | Name | Brief | Status |
 |---|---|---|---|
-| 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | approved, not started |
-| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | approved, runs in parallel with 8 |
-| 10 | Grades and submissions | — | after 8 + 9 |
-| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | — | |
+| 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | **PR #8 open** (integrated, reviewed), awaiting Stack |
+| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | integrated on `feat/sync-loop` (migrations 030–040 live); PR after 8 merges |
+| 10 | Grades and submissions | — | after 8 + 9; two PRs (10a screens/mirror/submissions, 10b model + what-if) |
+| V-1 | Grading schema validation (stream, Stack + a materials-only session) | `63_GRADING_VALIDATION.md`, `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | added 2026-09-14; parallel with 10a; gate for 10b. Launch: `scripts/validate-grading.ps1` |
+| V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14; parallel with 10a |
+| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | — | can pair with 10a |
 | 12 | Electron shell | — | |
 | 13 | Styling pass | — | last |
 
