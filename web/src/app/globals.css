@@ -104,7 +104,7 @@
      on the left (the Google Classroom convention), `row-reverse` puts it on the
      right. The shell row, the overlay drawer and the rail's own hairline all
      read it as a flex-direction, so one value moves all three. */
-  --sidebar-side: row;
+  --sidebar-side: row-reverse; /* row = left, row-reverse = right (Stack, 2026-09-14) */
   --sidebar-width: 260px;
 
   /* — assignment-type ramp (effort tracker glyph + segment tints, T-15) —
