@@ -1,0 +1,231 @@
+# bb2dash — Orchestrator context
+
+> The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-14** (PR #9).
+> If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
+
+## 0. Roles and the working arrangement
+
+* **Stack** is the product manager. He makes product calls, merges PRs, and reviews anything
+  visual. He does not want to be asked mid-phase for routine decisions.
+* **The PM session** (this Claude Code session, Fable) is the project manager: it reads state,
+  defines the phase, writes the brief and frozen contract, spawns Opus execution subagents, and
+  integrates. It never merges to `main`.
+* **Opus workers** build. One per work stream, each on its own branch in its own git worktree
+  (`C:/Users/estac/projects/bb2dash-wt-<name>`), cut from the phase branch. They commit and
+  push to their branch; the PM merges into the phase branch.
+* Other Claude sessions may be active on the repo and on prod at the same time. Fetch before
+  acting, never force-push, and treat any worktree or branch you did not create as someone
+  else's until proven otherwise.
+
+## 1. Where the product is (one screen)
+
+Backend foundation live; GUI v1 merged and deployed to Vercel; retrieval polished (Phase 7).
+Prod is Supabase `goultdzqcavefcgnifdy`; migrations 001–025 on `main`, 030–040 live from the
+in-flight Phase 9 branch. The materials MCP server (`mcp-server/`) is registered at user scope
+and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
+
+| Phase | Name | State | PR | Migrations |
+|---|---|---|---|---|
+| 1 | Data syntax + syllabus seed | merged (pre-repo, Sep 2) | — | 001 |
+| 2 | Blackboard capture | merged (pre-repo, Sep 2–3) | — | 002–004 |
+| 3 | Audit + search schema (FTS) | merged Sep 9 | #1 | 005–010 |
+| 4 | Embedding POC (gte-small, hybrid) | merged Sep 9 | #2 | 011 |
+| 5 | Retrieval MCP | merged Sep 9 | #5 | 012–013 |
+| 6 | GUI v1 (Next.js on Vercel, 4 screens, RLS) | merged Sep 10; signed off Sep 10 | #4 | 014–020 |
+| 7 | Retrieval polish (matched snippets, superseded filter, web tests) | merged Sep 10 | #6 | 021–025 |
+| — | Requirements v2 + Phase 8/9 briefs; Phase 6 close-out | merged Sep 14 | #7 | — |
+| 8 | Course dimension (Stream / Classwork / Info, popouts, tracker paging) | **PR open, awaiting Stack** | #8 | 026–029 |
+| 9 | Sync loop (automated transform, Inbox, bucket private) | integrated on `feat/sync-loop`; PR after 8 merges | — | 030–040 |
+| — | V-1 + R-27 briefs, Phase 10 split | PR open | #9 | — |
+| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | planned | — | reserve 041–059 |
+| 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | same range |
+| 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | planned; pairs with 10a | — | reserve 060–069 |
+| V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | one data migration in 10's range |
+| V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
+| 12 | Electron shell | planned; after the web app is stable | — | — |
+| 13 | Styling pass | planned; last | — | — |
+
+## 2. Execution order and what each phase hands to the next
+
+```
+ 1 → 2 → 3 → 4 ─┬─ 5 (search v3, mcp-server) ─┐
+                └─ 6 (web/, RLS)  ─────────────┴─ 7 (search v5, web tests)
+                                                    │
+                                    ┌───────────────┴───────────────┐
+                                    8 (popout, tabs)         9 (transform, announcements)
+                                    │                              │
+                       ┌────────────┴──────────────┬───────────────┘
+                     10a (mirror, screens, subs)   11 (planner, calendar, bell)
+                       │  ▲ gated by V-1                │
+                     10b (model, what-if)               │
+                       └────────────┬───────────────────┘
+                                   12 (Electron)  →  13 (Styling)
+   side streams beside 10a / 11:  V-1 grading validation · V-2 session archival (harness)
+```
+
+Rules that fall out of the graph:
+
+1. **Merge 8 before 9.** Phase 9's transform driver calls Phase 8's `stage_content`; 9 rebases on
+   `main` after 8 lands, re-runs its suites, opens its PR. Its migrations are already live, so
+   the rebase is repo-only.
+2. **10 is two PRs.** 10a ships as soon as 8 and 9 are on `main`. 10b waits for real scores
+   (late October) and for V-1's sign-off; it must not hold 10a open.
+3. **11, V-1 and V-2 run beside 10a** the way 8 ran beside 9: frozen seams, disjoint migration
+   ranges, separate worktrees. V-1 is Stack's time, one course per sitting. V-2 touches only the
+   harness repo.
+4. **12 and 13 are sequential, small, and after week 11's exams.** Neither pays off inside the
+   term.
+5. **Reserve migration ranges with slack.** Phase 9 was given 030–039 and used 040.
+
+Term calendar: week 1 = Aug 24. Weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week 14
+is Thanksgiving; Nov 30 – Dec 13 is a code freeze. Phases 8–10 are the ones that pay off in
+the term.
+
+## 3. The per-phase cycle (what a PM session actually does)
+
+1. **Read state.** STATUS, DECISIONS, the open PRs (`gh pr list`), `git worktree list`,
+   `git fetch` — and compare `origin/main` with the local checkout. Assume another session may
+   have moved things.
+2. **Define the phase.** Pick from §1 in order unless Stack says otherwise. Write
+   `docs/planning/NN_PHASE<n>_<name>.md`: why, a **frozen contract** (routes, views, RPC
+   signatures, return columns, request fields, file names), the worker list with branch and
+   worktree names, seams with any parallel phase, out-of-scope, integration steps, and the
+   reserved migration range. Cite R-numbers from `60_REQUIREMENTS_v2.md`.
+3. **Branch and worktrees.** `feat/<phase>` off `main`, pushed. One `feat/<phase>-<stream>`
+   branch + worktree per worker, cut from the phase branch after the brief is committed.
+4. **Spawn Opus workers** (`Agent`, `model: "opus"`, one per stream) with the brief path, the
+   rules below, and a report format capped at ~300 words. Workers apply additive migrations to
+   prod via `apply_migration` under the file's name, dry-run first in `begin; … rollback;`,
+   keep the repo file byte-identical, and never touch earlier migrations. Workers never touch
+   `project-state/`.
+5. **Integrate.** Merge worker branches into the phase branch; regenerate
+   `web/src/lib/supabase/database.types.ts` when an RPC signature changed; `npm ci` if deps
+   changed; run typecheck + build + tests in `web/` and `mcp-server/`; live smoke against prod
+   (curl to the edge function, the `bb2dash` MCP tools).
+6. **Gates.** `/code-review main high` and `/security-review`. Confirmed findings go back to
+   the same workers as a numbered "round 2" section appended to the brief; re-integrate.
+7. **Docs + PR.** Update STATUS, DECISIONS and this file in the same PR; open it with `gh pr
+   create`; anything visual gets a Vercel preview for Stack. **Stop at "ready when you say so."**
+8. **After the merge** (only on Stack's word): switch the checkout to `main`, remove the phase's
+   worktrees and branches, update memory.
+
+Environment facts that bite: this machine is Stack's Windows laptop, not a sandbox — curl to
+`*.supabase.co` works here (cloud sessions must use `pg_net`). Native binaries need `C:/…`
+paths, not `/c/…`. Repo files are CRLF on checkout; edit with tools that preserve endings.
+The `bb2dash` MCP server runs with the service key from `~/.claude.json`; never copy it into
+the repo.
+
+## 4. Open items that are Stack's, not the PM's
+
+* Merge PR #8 (Phase 8), then PR #9 (docs), then Phase 9's PR once it opens.
+* Say when to start V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and V-2.
+* Answer V-1's *ask the professor* items as they come up.
+
+## 5. Context the orchestrator reviews at session start
+
+Read in this order. Each line says what the file is for and what to look for.
+
+| # | File | Why it matters now |
+|---|---|---|
+| 1 | `project-state/STATUS.md` | Where the product is, what shipped last, the "What's next" table with live PR numbers. Diff its header date against `git log -1 origin/main` to see if another session moved `main`. |
+| 2 | `project-state/DECISIONS.md` (tail ~15 rows) | The newest decisions: worker branches per stream, matched-passage rules, the accepted query-time trade-off, `[notes]` handling, Phase 10 split. Do not relitigate silently. |
+| 3 | `docs/planning/60_REQUIREMENTS_v2.md` §3–§4 | The R-numbers every brief cites, the confirmed phase order, the reversals that each need a DECISIONS row when adopted, and §6.2's residual assumptions (PM's calls Stack has not contradicted). |
+| 4 | `docs/planning/61_PHASE8_course_dimension.md`, `62_PHASE9_sync_loop.md` | The two in-flight contracts and their frozen seam (`stage_content`). Needed to judge the 8-then-9 merge order and any conflict at rebase time. |
+| 5 | `docs/planning/63_GRADING_VALIDATION.md` + `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | V-1's method and the claim under test; §4 of the export is the seed question list. The export is a snapshot — regenerate it if `grading_schemes` changed. |
+| 6 | `docs/planning/66_SESSION_ARCHIVAL_RAG.md` | R-27 contract for the harness work: frozen frontmatter fields, two-PR split, acceptance. Implementation lives in `~/agentic-harness`. |
+| 7 | `docs/planning/50_PHASE7_retrieval_polish.md` + `51_W10_VERIFICATION.md` | The template for a brief with a round-2 fix section, and what a worker verification note should contain (before/after evidence, md5 of applied migrations, advisor diff). Copy the shape. |
+| 8 | `CLAUDE.md` (repo root) | The SOP: branches, one PR per phase, migrations byte-identical, visual sign-off, no service key client-side. Overrides habits. |
+| 9 | `DATA_SYNTAX.md` §search layer | Current meaning of `part_range`, `snippet_source`, supersession chains — the retrieval contract clients depend on. |
+| 10 | `web/README.md` | Scripts (`typecheck`, `build`, `test`), the type-regeneration step, the `queries.*.ts` convention. |
+| 11 | `mcp-server/README.md` | How the materials server is registered and run; the `include_superseded` and excerpt-label semantics. |
+| 12 | `gh pr list --state open` · `git worktree list` · `git branch -r` | Live state that no document captures: which phases are in a PR, which worktrees exist (foreign ones stay untouched), which branches other sessions pushed. |
+| 13 | Auto-memory `MEMORY.md` for this project | Session-scoped facts: the PM/worker arrangement, the session-capture collection gap, the MCP path fix. Verify any path or flag it names still exists before relying on it. |
+| 14 | `~/.claude/plans/abundant-gathering-wirth.md` | The harness plan; V-2 is its Phase 6b in effect. Read only when V-2 is the phase at hand. |
+
+Not to read at start: `docs/planning/10_–31_*` (superseded by Requirements v2), `30_PHASED_PLAN.md`
+(Docker-era plan; only its term calendar survives, copied above), the eval/POC docs
+(`EVAL_EMBEDDING_POC.md`, `PLAN_EMBEDDING_POC.md`) unless retrieval quality is the topic.
+
+## 6. Session prompts, one per phase (copy-paste; added 2026-09-14)
+
+Every bb2dash prompt starts with `/bb2dash-pm` so the session loads this file and runs the
+live-state checks before acting. Run one phase per session. Where a brief does not exist yet,
+the session writes it and stops for Stack's answers before spawning workers (SOP: substantial
+new scope is verified before development begins).
+
+**After PR #8 merges — Phase 9 hand-in**
+
+> `/bb2dash-pm` Phase 9 (sync loop) is integrated on `feat/sync-loop` but has no PR. Merge
+> `origin/main` into it (Phase 8 just landed; the seam is `stage_content`), resolve conflicts
+> in favour of the frozen contract in `62_PHASE9_sync_loop.md`, regenerate `database.types.ts`,
+> run typecheck/build/tests in `web/` and `mcp-server/`, live-smoke the transform driver and
+> Inbox against prod, run `/code-review main high` and `/security-review`, update STATUS,
+> DECISIONS and ORCHESTRATOR, and open the Phase 9 PR. Do not merge it.
+
+**Phase 10a — grades: mirror, screens, submissions**
+
+> `/bb2dash-pm` Start Phase 10a (R-10 gradebook mirror, R-11 Grades screens, R-17 submission
+> pull-back, R-18 upload drop zone). Write `docs/planning/67_PHASE10A_grades.md` with a frozen
+> contract, migration range 041–059, and the seams with Phase 11 and V-1 (V-1 owns
+> `grading_schemes`/`grade_components` data; 10a reads them, never writes). Put your open
+> questions to me and wait for my answers. Then branch `feat/grades-10a` off `main`, create the
+> worker worktrees, and spawn Opus workers. Stop at the PR.
+
+**Phase 10b — grades: methodology model + what-if** (after October scores and V-1 sign-off)
+
+> `/bb2dash-pm` Start Phase 10b (R-12 methodology model and what-if). Preconditions: 10a is on
+> `main`, `bb_gradebook` holds more than ten non-attendance scores, and
+> `65_GRADING_VALIDATION_SUMMARY.md` shows every course signed off with its reconciliation
+> migration applied. Verify all three and stop if any fails. Then write
+> `docs/planning/68_PHASE10B_grade_model.md`, ask your open questions, wait, and build the way
+> 10a was built. Every computed figure is labelled as a model; IST.471 shows not-computable.
+
+**Phase 11 — planner and calendar** (in parallel with 10a)
+
+> `/bb2dash-pm` Start Phase 11 (R-19 planner week grid, R-25 push-only Google Calendar sync,
+> R-20 bell + Announcements page, R-16 data gaps). Write `docs/planning/69_PHASE11_planner.md`
+> with a frozen contract and migration range 060–069; Phase 10a is running in parallel on
+> `feat/grades-10a`, so declare the seams (announcements table from Phase 9, popout from
+> Phase 8) and touch nothing under 10a's range. Google OAuth for the single user is server-side
+> with the token in Supabase Vault — list the setup steps I must do myself. Ask your open
+> questions, wait, then branch `feat/planner-11`, spawn workers, stop at the PR.
+
+**V-1 — grading schema validation** (Stack's sitting; not a PM session)
+
+> From the repo root in PowerShell: `.\scripts\validate-grading.ps1 IST.323` — one course per
+> sitting, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103 (lecture + recitation),
+> IST.471. The script supplies the session's prompt; you answer its open rows. When all seven
+> verdict files exist, run a PM session with: `/bb2dash-pm` V-1 is complete; read
+> `65_GRADING_VALIDATION_SUMMARY.md`, write the reconciliation data migration in Phase 10's
+> range, apply it, and open a small PR.
+
+**V-2 — session archival and RAG hand-off** (a session in `~/agentic-harness`, not bb2dash)
+
+> You are the PM for stream V-2 of bb2dash, working in `C:/Users/estac/agentic-harness`. Read
+> `C:/Users/estac/projects/bb2dash/docs/planning/66_SESSION_ARCHIVAL_RAG.md` in full — it is the
+> frozen contract (R-27) — then this repo's `README.md`, `docs/ingestion.md`,
+> `docs/retrieval.md`, `~/.claude/hooks/session-capture.mjs`, and a sample note under the vault's
+> `projects/bb2dash-retrieval/sessions/`. Confirm the five gaps in the brief still hold. Two
+> Opus workers on their own branches and worktrees: W-H1 hook + vault (`feat/session-context`)
+> and W-H2 pipeline + retrieval (`feat/ingest-on-capture`). The frontmatter field names in the
+> brief are frozen. Tests must not drop below 261. Migrations to `harness-memory` are applied
+> under the file's name and kept byte-identical. Open one PR per worker; do not merge.
+
+**Phase 12 — Electron shell** (after 10a and 11 are on `main`)
+
+> `/bb2dash-pm` Start Phase 12 (R-23 Electron shell, R-26 desktop notifications). Write
+> `docs/planning/70_PHASE12_electron.md`: a new `desktop/` package that loads the deployed web
+> app, zero renderer changes, jobs = mirror files to `course context/<course>/<bucket>/`,
+> desktop notifications, Sync button that opens Windows Terminal with the sync command ready;
+> no crawl, no `shell.openPath` from the mirror, no installer. Ask your open questions
+> (launch-at-login default, notification sources), wait, then branch `feat/electron-12`, spawn
+> workers, stop at the PR with an unpacked build I can run.
+
+**Phase 13 — styling pass** (last, after every screen exists)
+
+> `/bb2dash-pm` Start Phase 13 (R-21 styling). First list every screen and component in `web/`
+> and confirm none is a stub. Propose three visual directions as a design canvas for me to pick
+> from; wait. Then write `docs/planning/71_PHASE13_styling.md`, branch `feat/styling-13`, and
+> spawn workers: CSS custom properties only, no Tailwind, no layout changes, no new
+> dependencies. Vercel preview before the PR; stop there.

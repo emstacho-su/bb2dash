@@ -206,15 +206,34 @@ new view, L a new ingest path / table / engine.
   webview or crawl inside Electron. Unpacked build + shortcut, no installer. Effort M+.
 * **R-24 Professional-side stub: dropped.** Never. IST.471's hours log (T-09) is also out.
 
+### 3.6 Validation and memory streams (added 2026-09-14)
+
+* **R-27 Session archival, context tagging, RAG hand-off.** Every Claude Code session is
+  captured to the vault under its **repository** (not its worktree folder), one note per
+  session id, marked `active` / `concluded` / `superseded` with resume chains linked, and tagged
+  with relational context derived by the hook: repo, branch, worktree, commits, PRs, phase,
+  parent/child agent sessions, memory files, docs touched, curated area/activity tags. The
+  ingest pipeline runs per note from the capture hook plus a nightly reconcile; `rag.search`
+  filters on the new metadata. Lives in `~/agentic-harness`. Brief: `66_SESSION_ARCHIVAL_RAG.md`.
+  Effort M (hook + vault migration) + M (pipeline + retrieval).
+* **V-1 Grading schema validation** (a stream, not a requirement — it produces data
+  corrections, not features): validate `grading_schemes` / `grade_components` /
+  `assignments.component_id` course by course with Stack, in a session confined to the
+  materials corpus. Prerequisite for R-12. Brief: `63_GRADING_VALIDATION.md`; claim under test:
+  `64_GRADING_SCHEMA_EXPORT_2026-09-14.md`. Effort M, mostly Stack's review time.
+
 ## 4. Phase plan (confirmed order)
 
-One PR per phase, per SOP. Phases 8 and 9 run in parallel on two workers.
+One PR per phase, per SOP. Phases 8 and 9 run in parallel on two workers; the Phase 10/11 sprint
+adds two parallel streams, V-1 and V-2 (2026-09-14).
 
 | Phase | Name | Requirements | Notes |
 |---|---|---|---|
 | 8 | Course dimension | R-01 (Stream w/o diffs, Classwork, Info), R-02, R-03, R-04, R-05 (w/o submission block), R-06, R-22 | Content transform re-run + title fix is the first task. Stream's announcements need R-20's crawler field; ship Stream with what `announcements` holds today. |
 | 9 | Sync loop | R-07, R-08, R-09, R-13, R-15, R-20 (crawler + table), R-26 (in-app) | In parallel with 8; touches db/, ingest/, edge functions, one Inbox screen. |
-| 10 | Grades and submissions | R-10, R-11, R-17, R-18, then R-12 | Needs 8's popout and 9's transform. R-12 last, once October scores exist. |
+| 10 | Grades and submissions | R-10, R-11, R-17, R-18, then R-12 | Needs 8's popout and 9's transform. Two PRs: 10a (R-10, R-11, R-17, R-18) and 10b (R-12) once October scores exist **and V-1 has signed off the schema**. |
+| V-1 | Grading schema validation (stream) | see §3.6 | Parallel with 10a/11; COLLABORATE (Stack reviews each course). Output: `65_GRADING_VALIDATION_*.md` + one data migration in Phase 10's range. Gate for 10b. |
+| V-2 | Session archival + RAG hand-off (stream) | R-27 | Parallel with 10a/11; two PRs in `~/agentic-harness`. No bb2dash code. |
 | 11 | Planner and calendar | R-19, R-25, R-20 (bell + page), R-16 | Independent of grades; can pair with 10. |
 | 12 | Electron shell | R-23, R-26 (desktop) | After the web app is stable. No renderer changes. |
 | 13 | Styling | R-21 | Last. |
