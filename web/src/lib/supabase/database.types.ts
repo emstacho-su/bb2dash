@@ -2319,6 +2319,25 @@ export type Database = {
     }
     Functions: {
       app_owner: { Args: never; Returns: string }
+      apply_resolutions: { Args: never; Returns: Json }
+      attention_answered: {
+        Args: {
+          p_course_id: string
+          p_field: string
+          p_kind: string
+          p_ref: string
+        }
+        Returns: boolean
+      }
+      attention_keep_stands: {
+        Args: {
+          p_course_id: string
+          p_field: string
+          p_ref: string
+          p_to: Json
+        }
+        Returns: boolean
+      }
       bb_abs_url: { Args: { p_url: string }; Returns: string }
       bb_assignment_type: {
         Args: { p_name: string }
@@ -2372,6 +2391,7 @@ export type Database = {
           unit_no: number
         }[]
       }
+      ical_collect: { Args: never; Returns: Json }
       ical_poll: { Args: never; Returns: Json }
       match_file_text: {
         Args: {

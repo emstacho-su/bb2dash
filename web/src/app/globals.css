@@ -100,6 +100,13 @@
   --nav-height: 52px;
   --content-max: 1240px;
 
+  /* Course sidebar. THIS is the token that flips the side: `row` puts the rail
+     on the left (the Google Classroom convention), `row-reverse` puts it on the
+     right. The shell row, the overlay drawer and the rail's own hairline all
+     read it as a flex-direction, so one value moves all three. */
+  --sidebar-side: row-reverse; /* row = left, row-reverse = right (Stack, 2026-09-14) */
+  --sidebar-width: 260px;
+
   /* — assignment-type ramp (effort tracker glyph + segment tints, T-15) —
      reading · assignment · quiz · project · exam, darkest to brightest. */
   --type-reading-bg: var(--color-neutral-800);

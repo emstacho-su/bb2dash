@@ -1,13 +1,13 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-11**, Phase 9 sync loop (`feat/sync-loop`, PR
-> open) — automated transform on pg_cron, Inbox with resolution notes, Sync button, `bb-files`
-> bucket private, every view security_invoker; migrations 030–044 live. Convention: see root
-> `CLAUDE.md`.
+> Updated upon each PR. Last update: **2026-09-14**, Phase 8 merged (PR #8: Classroom-style
+> course page, tracker paging, popouts, courses sidebar) and Phase 9 sync loop open as PR #10
+> (automated transform on pg_cron, Inbox, Sync button, private bucket, every view
+> security_invoker; migrations 026–044 live). Convention: see root `CLAUDE.md`.
 
 ## Where the product is
 
-**Backend foundation complete and live; GUI v1 merged and deployed; retrieval polished.**
+**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8, PR open).**
 The Blackboard → Supabase pipeline, typed warehouse, document corpus, and two-tier search API
 are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is merged to `main`
 (PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
@@ -28,7 +28,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 | Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
 | Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
-| GUI (`web/`) | Next.js 16 + TS, Supabase Auth, screens: Today (needs-attention row from `v_sync_status`), Course, Materials, ⌘K search, **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list; vitest 108 tests |
+| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list; vitest 342 tests |
 | Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
 
 ## What has been done (by phase)
@@ -81,7 +81,24 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    16-part IST.323 syllabus returns part 16 ("Scheduled Final Exam Day 12/15/26") instead of the
    instructor's office hours; "attendance policy" has 0 of 10 snippets missing the keyword;
    superseded schedules absent by default, present with the flag. Tests: web 40, mcp-server 88.
-9. **Phase 9 — Sync loop** (`feat/sync-loop`, PR open, 2026-09-10/11): two Opus workers (W-15 db +
+8. **Phase 8 — Course dimension** (PR #8, **merged 2026-09-14**): three Opus
+   workers (W-12 db, W-13 tabs, W-14 shared) on worker branches, PM-integrated. Migrations
+   **026–029**: `stage_content(run_id)` (idempotent fold of `bb_raw` content into `bb_content`,
+   title fallback for `ultraDocumentBody`, run once → 11 junk titles down to 1), `v_course_stream`
+   + `v_content_tree` (security_invoker, anon revoked), `courses.card_note` (280-char check) with
+   `v_course_display` recreated as security_invoker, `stage_content` off the REST surface. Web:
+   `/course/[id]/{stream,classwork,grades,info}` routes, `UpcomingTracker` extracted with 56/14
+   paging, route-driven popouts (`?item=assignment:<id>` / `session:<id>`), Home card note,
+   Materials → Classwork link. `database.types.ts` regenerated. Review round: 10 findings fixed
+   (cache fan-out for status edits, card-note draft/280 cap, planner form no longer wiped
+   mid-type, tree nests by `parent_id`, tracker loading/error states, guarded queries, midnight
+   roll-over, typed client, one `FileOpenAction` ladder); security review clean. Stack's preview review: the
+   content column left a gap on the right (1240px cap, uncentered) → ☰ pop-down replaced by a
+   courses sidebar, main fills the width; vitest 265 tests. Findings routed to Phase 9:
+   `bb_raw.bb_course_id` is `courses.bb_id` (not `bb_course_id`); every view from 001–025 runs
+   as owner and bypasses RLS (fix = migration in Phase 9's range). Parked: IST.466 publishes two
+   identical folder paths; the `(course_id, path)` key keeps one (5 rows counted as duplicates).
+9. **Phase 9 — Sync loop** (`feat/sync-loop`, PR #10 open, 2026-09-10/14): two Opus workers (W-15 db +
    scheduler, W-16 web + ingest), PM-integrated. Migrations **030–039**: bucket private (030),
    `attention_items` + seeds (031), `agent_requests` (032), announcements `author`/`read_at`/
    `modified_at` (033), SQL transform stages `stage_courses/assignments/announcements/files/gaps`
@@ -134,10 +151,12 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 
 | Phase | Name | Brief | Status |
 |---|---|---|---|
-| 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | approved, not started |
-| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | approved, runs in parallel with 8 |
-| 10 | Grades and submissions | — | after 8 + 9 |
-| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | — | |
+| 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | **merged** (PR #8, 2026-09-14) — courses sidebar on the right added after Stack's preview review |
+| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | **PR #10 open** (migrations 030–044 live, reviewed); Stack adds planning docs before merge |
+| 10 | Grades and submissions | — | after 8 + 9; two PRs (10a screens/mirror/submissions, 10b model + what-if) |
+| V-1 | Grading schema validation (stream, Stack + a materials-only session) | `63_GRADING_VALIDATION.md`, `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | added 2026-09-14; parallel with 10a; gate for 10b. Launch: `scripts/validate-grading.ps1` |
+| V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14; parallel with 10a |
+| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | — | can pair with 10a |
 | 12 | Electron shell | — | |
 | 13 | Styling pass | — | last |
 
@@ -157,6 +176,9 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
 
 ## Known issues / operational notes
 
+* IST.466 publishes two sibling content branches with identical `path`s; `bb_content`'s
+  `(course_id, path)` key holds one, so Classwork shows one branch. Needs a key change
+  (`bb_item_id`-based) in a later phase.
 * **Merge Phase 8 before Phase 9.** Migration 036 asserts every public view is
   `security_invoker`; `v_course_display` gets that from Phase 8's 028. Prod holds both already;
   the rule keeps a fresh replay of `db/migrations` in README order working.

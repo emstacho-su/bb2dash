@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { clearPersistedQueryCache } from '@/lib/query-provider';
-import { courseCode, useCourses } from '@/lib/queries';
+import { SIDEBAR_ID } from '@/lib/sidebar-preference';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { BellIcon, HamburgerIcon, SearchIcon, UserIcon } from './icons';
 import { ActivityMenu } from './ActivityMenu';
+import { useSidebar } from './SidebarProvider';
 import { SyncButton } from './SyncButton';
 import { usePopover } from './usePopover';
 import styles from './TopNav.module.css';
@@ -18,12 +19,14 @@ import styles from './TopNav.module.css';
  *   bb2dash mark · Home · Planner · Inbox · Grades · Materials
  *   … cmd-K affordance · Sync … ☰ Courses · activity · bell · user
  *
- * The left rail is retired. Courses open from ☰ as a pop-down list and go
- * straight to the course page.
+ * ☰ no longer opens a pop-down list: it toggles the course sidebar below the
+ * bar (`CourseSidebar`). The pop-down capped the content column at
+ * `--content-max` for nothing and left a gap on wide windows; the rail uses
+ * that space instead. Its open/closed highlight comes from
+ * `html[data-sidebar]` rather than React state, so it is right on frame one.
  *
- * Phase 9 added three things: the Inbox link (between Planner and Grades, per
- * the brief), the Sync button next to ⌘K, and the Activity pop-down beside the
- * still-disabled announcement bell.
+ * Phase 9 added the Inbox link (between Planner and Grades), the Sync button
+ * next to ⌘K, and the Activity pop-down beside the still-disabled announcement bell.
  */
 
 const NAV_LINKS = [
@@ -38,14 +41,11 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const courses = usePopover<HTMLSpanElement>();
   const user = usePopover<HTMLSpanElement>();
+  const sidebar = useSidebar();
 
-  const coursesQuery = useCourses();
-
-  // Close the pop-downs on navigation.
+  // Close the user menu on navigation.
   useEffect(() => {
-    courses.close();
     user.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
@@ -97,47 +97,22 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
       <SyncButton />
 
       <span className={styles.right}>
-        {/* ☰ Courses pop-down */}
-        <span ref={courses.ref} style={{ display: 'contents' }}>
-          <button
-            type="button"
-            className={courses.open ? styles.icOpen : styles.ic}
-            onClick={() => {
-              user.close();
-              courses.toggle();
-            }}
-            aria-expanded={courses.open}
-            aria-haspopup="menu"
-            title="Courses"
-          >
-            <HamburgerIcon />
-            <span className="sr-only">Courses</span>
-          </button>
-
-          {courses.open && (
-            <div className={styles.ddCourses} role="menu">
-              <div className={styles.ddHead}>Courses</div>
-              {coursesQuery.isPending && <div className={styles.ddNote}>Loading…</div>}
-              {coursesQuery.isError && (
-                <div className={styles.ddNote}>Could not load courses. Check the connection and retry.</div>
-              )}
-              {coursesQuery.data?.length === 0 && (
-                <div className={styles.ddNote}>No courses yet — run a Blackboard sync.</div>
-              )}
-              {coursesQuery.data?.map((course) => (
-                <Link
-                  key={course.id}
-                  href={`/course/${encodeURIComponent(course.id)}`}
-                  className={styles.ddRow}
-                  role="menuitem"
-                >
-                  <span className={styles.ddCode}>{courseCode(course)}</span>
-                  <span className={styles.ddTitle}>{course.title_short}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </span>
+        {/* ☰ — the course sidebar toggle */}
+        <button
+          type="button"
+          ref={sidebar.toggleRef}
+          className={styles.icToggle}
+          onClick={() => {
+            user.close();
+            sidebar.toggle();
+          }}
+          aria-expanded={sidebar.open}
+          aria-controls={SIDEBAR_ID}
+          title="Courses sidebar"
+        >
+          <HamburgerIcon />
+          <span className="sr-only">Courses sidebar</span>
+        </button>
 
         {/* Activity — what the last syncs changed (R-26 web half). */}
         <ActivityMenu />
@@ -156,10 +131,7 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
           <button
             type="button"
             className={user.open ? styles.icOpen : styles.ic}
-            onClick={() => {
-              courses.close();
-              user.toggle();
-            }}
+            onClick={() => user.toggle()}
             aria-expanded={user.open}
             aria-haspopup="menu"
             title="Account"

@@ -7,12 +7,13 @@
  * `xOptions()` returning queryOptions, a `useX()` hook, throw on error, no
  * fabricated fallbacks) and imports the shared enum types from it.
  *
- * ROW TYPES. The generated `database.types.ts` predates migrations 014/015/017,
- * so it does not yet describe `v_work_items`, `v_course_display` or `terms`.
- * The shapes below are transcribed verbatim from the live schema
- * (information_schema on project goultdzqcavefcgnifdy, 2026-09-09) so the
- * screen stays fully typed. When database.types.ts is regenerated these should
- * be replaced with `Views<'v_work_items'>` etc. — see the note in the report.
+ * ROW TYPES. `v_work_items` and `v_course_display` are both in the regenerated
+ * `database.types.ts`, so every read here uses the ordinary typed client. The
+ * `WorkItem` / `CourseDisplay` interfaces below stay hand-narrowed: Postgres
+ * reports no not-null constraints on a view, so the generated row types make
+ * every column nullable, while these shapes are transcribed from the live
+ * schema with the nullability the data actually has. Each read therefore
+ * carries one documented cast at its call site — no field is reshaped.
  */
 
 import {
@@ -21,23 +22,15 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { ProgressStatus } from './queries';
-
-/**
- * The generated Database type predates `v_work_items` and `v_course_display`
- * (migrations 014/015 were applied to prod but database.types.ts was not
- * regenerated), so the typed client rejects `.from('v_work_items')`. Read those
- * two views through an un-narrowed client until the types are regenerated; the
- * returned rows are pinned to the WorkItem / CourseDisplay interfaces below,
- * which are transcribed from the live schema. Every other relation this module
- * touches (terms, sync_runs, assignment_progress, reading_progress) is in the
- * generated types and uses the fully typed client.
- */
-function untypedClient(): SupabaseClient {
-  return getSupabaseBrowserClient() as unknown as SupabaseClient;
-}
+import {
+  WORK_ITEMS_KEY,
+  cancelProgressQueries,
+  invalidateProgressCaches,
+  patchProgressCaches,
+  restoreProgressCaches,
+} from './progress-cache';
 
 /* ---------------------------------------------------------------------------
  * Row types (transcribed from the live schema — see header)
@@ -94,6 +87,15 @@ export interface CourseDisplay {
   meetings: CourseMeeting[] | null;
   room_disputed: boolean;
   bb_url: string | null;
+  /**
+   * `courses.card_note` (R-04), carried through the recreated view by Phase 8
+   * migration 028. Owner-written, so it may be null or empty — the card renders
+   * nothing at all in that case rather than a blank line.
+   *
+   * database.types.ts was regenerated at Phase 8 integration; this interface stays
+   * narrower than the all-nullable generated `Views<'v_course_display'>` on purpose.
+   */
+  card_note: string | null;
 }
 
 /** The active term (for the "Week N of 16" kicker). */
@@ -110,9 +112,9 @@ export interface Term {
 
 export const todayKeys = {
   /** All work-item queries share this prefix so one invalidate covers them. */
-  work: () => ['work-items'] as const,
-  workWindow: (from: string, to: string) => ['work-items', 'window', from, to] as const,
-  undated: () => ['work-items', 'undated'] as const,
+  work: () => WORK_ITEMS_KEY,
+  workWindow: (from: string, to: string) => [...WORK_ITEMS_KEY, 'window', from, to] as const,
+  undated: () => [...WORK_ITEMS_KEY, 'undated'] as const,
   courseDisplay: () => ['course-display'] as const,
   term: () => ['term'] as const,
   lastSync: () => ['last-sync'] as const,
@@ -137,7 +139,7 @@ export function workItemsWindowOptions(from: string, to: string) {
   return queryOptions({
     queryKey: todayKeys.workWindow(from, to),
     queryFn: async (): Promise<WorkItem[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_work_items')
         .select(WORK_ITEM_COLUMNS)
@@ -159,7 +161,7 @@ export function undatedWorkItemsOptions() {
   return queryOptions({
     queryKey: todayKeys.undated(),
     queryFn: async (): Promise<WorkItem[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_work_items')
         .select(WORK_ITEM_COLUMNS)
@@ -179,10 +181,10 @@ export function courseDisplayOptions() {
   return queryOptions({
     queryKey: todayKeys.courseDisplay(),
     queryFn: async (): Promise<CourseDisplay[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_course_display')
-        .select('display_id, code, title, shell_ids, meetings, room_disputed, bb_url')
+        .select('display_id, code, title, shell_ids, meetings, room_disputed, bb_url, card_note')
         .order('display_id', { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as CourseDisplay[];
@@ -299,8 +301,11 @@ interface StatusPatch {
  * items have no progress row yet; the tables' defaults fill priority/updated_at
  * on insert, and we stamp `updated_at` so an update refreshes it too.
  *
- * Optimistic: every cached work-item list is patched immediately, rolled back
- * on error, and the whole `['work-items']` subtree is invalidated on settle.
+ * Optimistic: every cache that holds this item — Home's lists, the course
+ * Stream's list, the popout's series strip and its planner row — is patched
+ * immediately, rolled back on error and invalidated on settle. The fan-out
+ * lives in `progress-cache.ts` so this mutation and `useSavePlanner` cannot
+ * drift apart again.
  */
 export function useSetItemStatus() {
   const queryClient = useQueryClient();
@@ -328,30 +333,20 @@ export function useSetItemStatus() {
     },
 
     onMutate: async ({ item, status }: StatusPatch) => {
-      await queryClient.cancelQueries({ queryKey: todayKeys.work() });
-      const previous = queryClient.getQueriesData<WorkItem[]>({ queryKey: todayKeys.work() });
-      for (const [key, list] of previous) {
-        if (!list) continue;
-        queryClient.setQueryData<WorkItem[]>(
-          key,
-          list.map((row) =>
-            row.item_kind === item.item_kind && row.item_id === item.item_id
-              ? { ...row, status }
-              : row,
-          ),
-        );
-      }
-      return { previous };
+      const target = { item_kind: item.item_kind, item_id: item.item_id };
+      await cancelProgressQueries(queryClient, target);
+      return { snapshot: patchProgressCaches(queryClient, target, { status }) };
     },
 
     onError: (_err, _vars, context) => {
-      context?.previous.forEach(([key, list]) => {
-        queryClient.setQueryData(key, list);
-      });
+      restoreProgressCaches(queryClient, context?.snapshot);
     },
 
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: todayKeys.work() });
+    onSettled: (_data, _error, { item }) => {
+      invalidateProgressCaches(queryClient, {
+        item_kind: item.item_kind,
+        item_id: item.item_id,
+      });
     },
   });
 }
