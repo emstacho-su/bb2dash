@@ -135,6 +135,22 @@ transform) → mark the request `done` with the run id → report `summary.chang
 re-run')`. `CADENCE_RUNBOOK.md`: step 3 struck through (automated), step 5 struck through
 (automated), step 4 kept and labelled manual-until-Electron.
 
+## MVP (Stack's words, 2026-09-14 — `70_MVP_INDEX.md` §1.2)
+
+I run a crawl. Without touching anything else, the transform runs, the Inbox fills with the
+items that need me, and Home shows when the data was last synced and how fresh each part is. I
+open the Inbox, resolve one item, and write why. Nothing I wrote in the planner is overwritten.
+
+## Definition of done
+
+_Pending research (R-9 report) — filled in PR #11. Stack's check before merging PR #10: **one
+real crawl end-to-end** on the preview — crawl → automatic transform → Inbox items and Home
+freshness line → resolve one item with a why._
+
+## Task loops
+
+_Pending research (R-9 report) — filled in PR #11._
+
 ## Workers
 
 ### W-15 — database + scheduler (branch `feat/sync-loop-db`, worktree `bb2dash-wt-sl-db`)
