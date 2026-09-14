@@ -28,7 +28,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 | Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
 | Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
-| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts; vitest 158 tests |
+| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts; **courses sidebar** (☰ toggles it; left, `--sidebar-side` flips; overlay drawer under 1024px; the main column fills the width); vitest 265 tests |
 | Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
 
 ## What has been done (by phase)
@@ -92,8 +92,9 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    Materials → Classwork link. `database.types.ts` regenerated. Review round: 10 findings fixed
    (cache fan-out for status edits, card-note draft/280 cap, planner form no longer wiped
    mid-type, tree nests by `parent_id`, tracker loading/error states, guarded queries, midnight
-   roll-over, typed client, one `FileOpenAction` ladder); security review clean; vitest 234
-   tests. Findings routed to Phase 9:
+   roll-over, typed client, one `FileOpenAction` ladder); security review clean. Stack's preview review: the
+   content column left a gap on the right (1240px cap, uncentered) → ☰ pop-down replaced by a
+   courses sidebar, main fills the width; vitest 265 tests. Findings routed to Phase 9:
    `bb_raw.bb_course_id` is `courses.bb_id` (not `bb_course_id`); every view from 001–025 runs
    as owner and bypasses RLS (fix = migration in Phase 9's range). Parked: IST.466 publishes two
    identical folder paths; the `(course_id, path)` key keeps one (5 rows counted as duplicates).
