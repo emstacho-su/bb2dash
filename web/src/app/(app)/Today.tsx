@@ -35,6 +35,7 @@ import {
 import type { ProgressStatus } from '@/lib/queries';
 import { itemQuery } from '@/lib/queries.popout';
 import { StatusSelect } from '@/components/tracker/StatusSelect';
+import { isQueryLoading } from '@/components/shared/QueryState';
 import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
 import {
   DEFAULT_HORIZON_DAYS,
@@ -190,6 +191,8 @@ export function Today() {
         items={items}
         onStatusChange={handleStatus}
         pendingItemId={pendingId}
+        isPending={isQueryLoading(windowQ)}
+        error={windowQ.error}
       />
 
       {/* ---- 4. Last-sync line (reconciled Needs-attention) ---- */}

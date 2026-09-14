@@ -23,7 +23,9 @@
  * never has to read the router.
  *
  * Honesty: every figure is Σ over the rows the caller passed. A day with no
- * rows says so; nothing is invented.
+ * rows says so; nothing is invented. An empty `items` means "nothing is due"
+ * only once the caller's fetch has answered, so the caller passes `isPending`
+ * and `error` and the counts step aside until then.
  */
 
 import { useMemo, useState } from 'react';
@@ -77,6 +79,18 @@ export interface UpcomingTrackerProps {
   pendingItemId?: string | null;
   /** 'Upcoming work' | 'Upcoming work · IST 323'. */
   title?: string;
+  /**
+   * The caller's fetch has not answered yet. Additive to the frozen props (the
+   * brief allows optional additions) because `items = []` is indistinguishable
+   * from "nothing is due" here, and the tracker was reading out
+   * "0 items · 0h · next 14 days" and "Nothing due" over a request in flight.
+   *
+   * Pass TanStack's `isLoading` (`isPending && isFetching`), not `isPending`
+   * alone: a disabled query is pending for ever.
+   */
+  isPending?: boolean;
+  /** The caller's fetch failed. An error is never an empty day. */
+  error?: Error | null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -167,6 +181,8 @@ export function UpcomingTracker({
   onStatusChange,
   pendingItemId = null,
   title = 'Upcoming work',
+  isPending = false,
+  error = null,
 }: UpcomingTrackerProps) {
   const today = todayIso();
 
@@ -223,13 +239,29 @@ export function UpcomingTracker({
     ? `next ${columnCount} days`
     : `${columnCount} days from ${formatDay(view.firstIso)}`;
 
+  /**
+   * Nothing counted from `items` is a fact until the caller's fetch has
+   * answered. While it has not, the two sub-lines say so and the detail panel
+   * stays empty: "0 items · 0h" and "Nothing due" are claims about the term,
+   * and a request in flight supports neither.
+   */
+  const unresolved = isPending || error !== null;
+  const headSub = isPending
+    ? 'loading…'
+    : error !== null
+      ? 'could not load'
+      : `${windowItems} item${windowItems === 1 ? '' : 's'} · ${effortLabel(windowEffort)} · ${rangeHint}`;
+  const detailSub = unresolved
+    ? isPending
+      ? 'loading…'
+      : 'could not load'
+    : `${selectedItems.length} due · ${effortLabel(sumEffort(selectedItems))}`;
+
   return (
     <section className={styles.section}>
       <div className={styles.sectionHead}>
         <h2 className={styles.h2}>{title}</h2>
-        <span className={styles.sub}>
-          {`${windowItems} item${windowItems === 1 ? '' : 's'} · ${effortLabel(windowEffort)} · ${rangeHint}`}
-        </span>
+        <span className={styles.sub}>{headSub}</span>
         <span className={styles.legend}>
           {LEGEND.map((entry) => (
             <span key={entry.category} className={styles.legendItem}>
@@ -291,13 +323,17 @@ export function UpcomingTracker({
             {activeSelected === today ? 'Today' : DOW_LABELS[selectedDate.getDay()]},{' '}
             {MONTH_LABELS[selectedDate.getMonth()]} {selectedDate.getDate()}
           </span>
-          <span className={styles.sub}>
-            {selectedItems.length} due · {effortLabel(sumEffort(selectedItems))}
-          </span>
+          <span className={styles.sub}>{detailSub}</span>
           <span className={styles.detailHint}>status is click-to-edit</span>
         </div>
 
-        {selectedItems.map((item) => {
+        {error !== null && (
+          <div className={styles.detailEmpty} role="alert">
+            Could not load upcoming work: {error.message}
+          </div>
+        )}
+
+        {!unresolved && selectedItems.map((item) => {
           const start = suggestedStartText(item);
           return (
             <div key={`${item.item_kind}:${item.item_id}`} className={styles.detailRow}>
@@ -333,7 +369,7 @@ export function UpcomingTracker({
           );
         })}
 
-        {selectedItems.length === 0 && (
+        {!unresolved && selectedItems.length === 0 && (
           <div className={styles.detailEmpty}>
             Nothing due — a good day to start on what&apos;s coming.
           </div>

@@ -31,6 +31,7 @@ import { bucketLabel } from '@/lib/queries.materials';
 import { scrubSnippet } from '@/lib/queries.search';
 import { useSetItemStatus, type WorkItem as TrackerWorkItem } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
+import { isQueryLoading } from '@/components/shared/QueryState';
 import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
 import { DEFAULT_HORIZON_DAYS, DEFAULT_VISIBLE_DAYS } from '@/components/tracker/anchor';
 import tokens from '@/styles/tokens.module.css';
@@ -179,6 +180,8 @@ export function CourseStream({ courseId }: { courseId: string }) {
         title={`Upcoming work · ${display.data.code}`}
         onStatusChange={handleStatus}
         pendingItemId={setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null}
+        isPending={isQueryLoading(workItemsQ)}
+        error={workItemsQ.error}
       />
 
       <section className={styles.feed} aria-label="Course stream">

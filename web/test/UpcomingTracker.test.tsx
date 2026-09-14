@@ -224,3 +224,37 @@ describe('UpcomingTracker — controlled anchor and selection', () => {
     expect(screen.getByText('Window · Sep 10 – Sep 23')).toBeInTheDocument();
   });
 });
+
+describe('UpcomingTracker — a fetch that has not answered', () => {
+  it('says it is loading instead of counting an empty array', () => {
+    renderTracker({ items: [], isPending: true });
+
+    expect(screen.getAllByText('loading…')).toHaveLength(2); // head + detail panel
+    expect(screen.queryByText(/0 items · 0 pts · next 14 days/)).toBeNull();
+    expect(screen.queryByText(/0 due · 0 pts/)).toBeNull();
+    expect(screen.queryByText(/Nothing due/)).toBeNull();
+  });
+
+  it('still draws the calendar while loading, with no bars on it', () => {
+    renderTracker({ items: [], isPending: true });
+    expect(dayColumns()).toHaveLength(14);
+    expect(screen.getByText('Window · Sep 10 – Sep 23')).toBeInTheDocument();
+  });
+
+  it('names the failure rather than reporting a quiet fortnight', () => {
+    renderTracker({ items: [], error: new Error('network unreachable') });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not load upcoming work: network unreachable',
+    );
+    expect(screen.queryByText(/Nothing due/)).toBeNull();
+    expect(screen.queryByText(/0 items · 0 pts/)).toBeNull();
+    expect(screen.getAllByText('could not load')).toHaveLength(2);
+  });
+
+  it('counts normally once the fetch has answered', () => {
+    renderTracker({ isPending: false, error: null });
+    expect(screen.getByText('2 items · 5 pts · next 14 days')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
