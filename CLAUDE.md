@@ -5,6 +5,8 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
 
 ## Read first
 
+0. **PM sessions:** run `/bb2dash-pm` — it loads `project-state/ORCHESTRATOR.md` (phase map,
+   execution order, the per-phase cycle, and the ordered review list) before anything else.
 1. `project-state/STATUS.md` — where the product is, what's done, what's next. **Start here.**
 2. `project-state/DECISIONS.md` — why things are the way they are. Don't relitigate silently.
 3. `DATA_SYNTAX.md` — data dictionary, ID conventions, enums, search layer.
