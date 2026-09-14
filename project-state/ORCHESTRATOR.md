@@ -146,3 +146,86 @@ Read in this order. Each line says what the file is for and what to look for.
 Not to read at start: `docs/planning/10_–31_*` (superseded by Requirements v2), `30_PHASED_PLAN.md`
 (Docker-era plan; only its term calendar survives, copied above), the eval/POC docs
 (`EVAL_EMBEDDING_POC.md`, `PLAN_EMBEDDING_POC.md`) unless retrieval quality is the topic.
+
+## 6. Session prompts, one per phase (copy-paste; added 2026-09-14)
+
+Every bb2dash prompt starts with `/bb2dash-pm` so the session loads this file and runs the
+live-state checks before acting. Run one phase per session. Where a brief does not exist yet,
+the session writes it and stops for Stack's answers before spawning workers (SOP: substantial
+new scope is verified before development begins).
+
+**After PR #8 merges — Phase 9 hand-in**
+
+> `/bb2dash-pm` Phase 9 (sync loop) is integrated on `feat/sync-loop` but has no PR. Merge
+> `origin/main` into it (Phase 8 just landed; the seam is `stage_content`), resolve conflicts
+> in favour of the frozen contract in `62_PHASE9_sync_loop.md`, regenerate `database.types.ts`,
+> run typecheck/build/tests in `web/` and `mcp-server/`, live-smoke the transform driver and
+> Inbox against prod, run `/code-review main high` and `/security-review`, update STATUS,
+> DECISIONS and ORCHESTRATOR, and open the Phase 9 PR. Do not merge it.
+
+**Phase 10a — grades: mirror, screens, submissions**
+
+> `/bb2dash-pm` Start Phase 10a (R-10 gradebook mirror, R-11 Grades screens, R-17 submission
+> pull-back, R-18 upload drop zone). Write `docs/planning/67_PHASE10A_grades.md` with a frozen
+> contract, migration range 041–059, and the seams with Phase 11 and V-1 (V-1 owns
+> `grading_schemes`/`grade_components` data; 10a reads them, never writes). Put your open
+> questions to me and wait for my answers. Then branch `feat/grades-10a` off `main`, create the
+> worker worktrees, and spawn Opus workers. Stop at the PR.
+
+**Phase 10b — grades: methodology model + what-if** (after October scores and V-1 sign-off)
+
+> `/bb2dash-pm` Start Phase 10b (R-12 methodology model and what-if). Preconditions: 10a is on
+> `main`, `bb_gradebook` holds more than ten non-attendance scores, and
+> `65_GRADING_VALIDATION_SUMMARY.md` shows every course signed off with its reconciliation
+> migration applied. Verify all three and stop if any fails. Then write
+> `docs/planning/68_PHASE10B_grade_model.md`, ask your open questions, wait, and build the way
+> 10a was built. Every computed figure is labelled as a model; IST.471 shows not-computable.
+
+**Phase 11 — planner and calendar** (in parallel with 10a)
+
+> `/bb2dash-pm` Start Phase 11 (R-19 planner week grid, R-25 push-only Google Calendar sync,
+> R-20 bell + Announcements page, R-16 data gaps). Write `docs/planning/69_PHASE11_planner.md`
+> with a frozen contract and migration range 060–069; Phase 10a is running in parallel on
+> `feat/grades-10a`, so declare the seams (announcements table from Phase 9, popout from
+> Phase 8) and touch nothing under 10a's range. Google OAuth for the single user is server-side
+> with the token in Supabase Vault — list the setup steps I must do myself. Ask your open
+> questions, wait, then branch `feat/planner-11`, spawn workers, stop at the PR.
+
+**V-1 — grading schema validation** (Stack's sitting; not a PM session)
+
+> From the repo root in PowerShell: `.\scripts\validate-grading.ps1 IST.323` — one course per
+> sitting, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103 (lecture + recitation),
+> IST.471. The script supplies the session's prompt; you answer its open rows. When all seven
+> verdict files exist, run a PM session with: `/bb2dash-pm` V-1 is complete; read
+> `65_GRADING_VALIDATION_SUMMARY.md`, write the reconciliation data migration in Phase 10's
+> range, apply it, and open a small PR.
+
+**V-2 — session archival and RAG hand-off** (a session in `~/agentic-harness`, not bb2dash)
+
+> You are the PM for stream V-2 of bb2dash, working in `C:/Users/estac/agentic-harness`. Read
+> `C:/Users/estac/projects/bb2dash/docs/planning/66_SESSION_ARCHIVAL_RAG.md` in full — it is the
+> frozen contract (R-27) — then this repo's `README.md`, `docs/ingestion.md`,
+> `docs/retrieval.md`, `~/.claude/hooks/session-capture.mjs`, and a sample note under the vault's
+> `projects/bb2dash-retrieval/sessions/`. Confirm the five gaps in the brief still hold. Two
+> Opus workers on their own branches and worktrees: W-H1 hook + vault (`feat/session-context`)
+> and W-H2 pipeline + retrieval (`feat/ingest-on-capture`). The frontmatter field names in the
+> brief are frozen. Tests must not drop below 261. Migrations to `harness-memory` are applied
+> under the file's name and kept byte-identical. Open one PR per worker; do not merge.
+
+**Phase 12 — Electron shell** (after 10a and 11 are on `main`)
+
+> `/bb2dash-pm` Start Phase 12 (R-23 Electron shell, R-26 desktop notifications). Write
+> `docs/planning/70_PHASE12_electron.md`: a new `desktop/` package that loads the deployed web
+> app, zero renderer changes, jobs = mirror files to `course context/<course>/<bucket>/`,
+> desktop notifications, Sync button that opens Windows Terminal with the sync command ready;
+> no crawl, no `shell.openPath` from the mirror, no installer. Ask your open questions
+> (launch-at-login default, notification sources), wait, then branch `feat/electron-12`, spawn
+> workers, stop at the PR with an unpacked build I can run.
+
+**Phase 13 — styling pass** (last, after every screen exists)
+
+> `/bb2dash-pm` Start Phase 13 (R-21 styling). First list every screen and component in `web/`
+> and confirm none is a stub. Propose three visual directions as a design canvas for me to pick
+> from; wait. Then write `docs/planning/71_PHASE13_styling.md`, branch `feat/styling-13`, and
+> spawn workers: CSS custom properties only, no Tailwind, no layout changes, no new
+> dependencies. Vercel preview before the PR; stop there.
