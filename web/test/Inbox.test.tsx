@@ -20,7 +20,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-const { InboxView, answerTypeFor, sourceText } = await import('@/app/(app)/inbox/Inbox');
+const { InboxView, answerTypeFor, failureText, sourceText } = await import('@/app/(app)/inbox/Inbox');
 const { normalizeSyncStatus } = await import('@/lib/queries.sync');
 
 const status = normalizeSyncStatus(makeSyncStatusRow());
@@ -245,5 +245,58 @@ describe('Inbox — pure helpers', () => {
     expect(
       sourceText(makeAttentionItem({ entity: null, ref: null, field: null, raised_by: null })),
     ).toBe('raised by the transform');
+  });
+});
+
+describe('Inbox — a failed resolve', () => {
+  /** `resolve.mutate` never throws; the failure arrives as the mutation's error. */
+  function renderWithFailure(error: Error | null, errorId: number | null) {
+    const onResolve = vi.fn();
+    render(
+      <InboxView
+        items={[makeAttentionItem({ id: 7 }), makeAttentionItem({ id: 8, question: 'Other row.' })]}
+        status={status}
+        pendingId={null}
+        resolveError={error}
+        resolveErrorId={errorId}
+        onResolve={onResolve}
+      />,
+    );
+    return onResolve;
+  }
+
+  it('shows the database message on the row it came from, and nowhere else', () => {
+    renderWithFailure(
+      new Error('new row violates row-level security policy for table "attention_items"'),
+      7,
+    );
+
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].textContent).toContain('row-level security');
+    expect(alerts[0].textContent).toContain('not saved');
+  });
+
+  it('leaves the controls live so the answer can be sent again', () => {
+    const onResolve = renderWithFailure(new Error('network error'), 7);
+
+    const keepMine = screen.getAllByRole('button', { name: 'Keep mine' })[0];
+    expect(keepMine).not.toBeDisabled();
+
+    fireEvent.click(keepMine);
+    expect(onResolve).toHaveBeenCalledWith({ id: 7, kind: 'conflict', accept: 'keep', note: '' });
+  });
+
+  it('says nothing when the last resolve went through', () => {
+    renderWithFailure(null, null);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('renders a PostgrestError, which is not an Error instance, and never "undefined"', () => {
+    expect(failureText({ message: 'permission denied for table attention_items' })).toBe(
+      'permission denied for table attention_items',
+    );
+    expect(failureText({})).toBe('the database rejected the change');
+    expect(failureText(null)).toBe('the database rejected the change');
   });
 });

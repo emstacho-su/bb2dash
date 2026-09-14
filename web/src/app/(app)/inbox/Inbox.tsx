@@ -56,6 +56,20 @@ export function answerTypeFor(item: Pick<AttentionItem, 'field'>): 'text' | 'dat
   return /(^|_)(date|due|start|end|deadline)($|_)|_at$|_date$/i.test(field) ? 'date' : 'text';
 }
 
+/**
+ * What to show Stack when a resolve fails. Supabase hands back a PostgrestError
+ * — a plain object with `message`, not an `Error` — so this never assumes an
+ * instance, and never renders "undefined" at him.
+ */
+export function failureText(err: unknown): string {
+  if (typeof err === 'string' && err.trim().length > 0) return err;
+  if (err !== null && typeof err === 'object') {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim().length > 0) return message;
+  }
+  return 'the database rejected the change';
+}
+
 /** "assignment · IST.323 quiz-2 · due_at" — where the question came from. */
 export function sourceText(item: AttentionItem): string {
   const parts = [item.entity, item.ref, item.field].filter(
@@ -81,6 +95,11 @@ export default function Inbox() {
       loading={itemsQuery.isPending}
       error={itemsQuery.error ?? statusQuery.error ?? null}
       pendingId={resolve.isPending ? (resolve.variables?.id ?? null) : null}
+      // A failed resolve belongs to the row it was sent from. `resolve.variables`
+      // still holds that row's input after the mutation settles, so the error is
+      // rendered under the control Stack pressed and nowhere else.
+      resolveError={resolve.error ?? null}
+      resolveErrorId={resolve.error ? (resolve.variables?.id ?? null) : null}
       onResolve={(input) => resolve.mutate(input)}
     />
   );
@@ -96,6 +115,9 @@ export interface InboxViewProps {
   loading?: boolean;
   error?: Error | null;
   pendingId?: number | null;
+  /** A failed resolve, shown on the row it came from. */
+  resolveError?: Error | null;
+  resolveErrorId?: number | null;
   onResolve: (input: ResolveInput) => void;
 }
 
@@ -105,6 +127,8 @@ export function InboxView({
   loading = false,
   error = null,
   pendingId = null,
+  resolveError = null,
+  resolveErrorId = null,
   onResolve,
 }: InboxViewProps) {
   const [showDismissed, setShowDismissed] = useState(false);
@@ -158,6 +182,7 @@ export function InboxView({
               key={item.id}
               item={item}
               pending={pendingId === item.id}
+              failure={resolveErrorId === item.id ? resolveError : null}
               onResolve={onResolve}
             />
           ))}
@@ -176,7 +201,13 @@ export function InboxView({
           </button>
           {showDismissed &&
             dismissed.map((item) => (
-              <InboxRow key={item.id} item={item} pending={false} onResolve={onResolve} />
+              <InboxRow
+                key={item.id}
+                item={item}
+                pending={false}
+                failure={resolveErrorId === item.id ? resolveError : null}
+                onResolve={onResolve}
+              />
             ))}
         </section>
       )}
@@ -203,15 +234,17 @@ function StateChip({ item }: { item: AttentionItem }) {
 export function InboxRow({
   item,
   pending,
+  failure = null,
   onResolve,
 }: {
   item: AttentionItem;
   pending: boolean;
+  /** The resolve that failed for this row, if the last one did. */
+  failure?: Error | null;
   onResolve: (input: ResolveInput) => void;
 }) {
   const [note, setNote] = useState('');
   const [answer, setAnswer] = useState('');
-  const [problem, setProblem] = useState<string | null>(null);
 
   const answerType = answerTypeFor(item);
   const done = item.state !== 'open';
@@ -223,14 +256,14 @@ export function InboxRow({
     item.kind === 'stack_must_confirm' || item.kind === 'missing' ? item.kind : null;
   const dismissKind = item.kind === 'deadline' || item.kind === 'data_gap' ? item.kind : null;
 
-  /** One place where a control's payload is handed up, so failures show inline. */
+  /**
+   * One place where a control's payload is handed up. There is no try/catch
+   * here on purpose: `onResolve` is `mutate`, which never throws — it hands the
+   * failure to the mutation's `error`, which arrives back as `failure` and is
+   * rendered below. A catch here would only ever swallow a render-time bug.
+   */
   function send(input: ResolveInput) {
-    try {
-      setProblem(null);
-      onResolve(input);
-    } catch (err) {
-      setProblem(err instanceof Error ? err.message : String(err));
-    }
+    onResolve(input);
   }
 
   return (
@@ -345,9 +378,10 @@ export function InboxRow({
         </div>
       )}
 
-      {problem && (
+      {failure && (
         <p className={styles.problem} role="alert">
-          {problem}
+          That answer was not saved: {failureText(failure)}. The controls are still live — try
+          again.
         </p>
       )}
     </article>

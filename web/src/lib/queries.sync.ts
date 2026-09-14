@@ -662,7 +662,20 @@ export function agentRequestOptions(id: number | null) {
   });
 }
 
-/** Flatten the latest runs' `summary.changes` into Activity lines, newest first. */
+/**
+ * Flatten the latest runs' `summary.changes` into Activity lines, newest first.
+ *
+ * Two kinds of `sync_runs` row are not activity and are filtered out in the
+ * request, so they cannot eat the `limit` and push real changes off the list:
+ *   * `source = 'ical'` — the daily calendar poll. It writes a row every day
+ *     whether or not a feed URL is even set, and none of it is a change Stack
+ *     made or needs to see.
+ *   * `scope = 'unregistered'` — a quarantined crawl (migration 035). Anyone
+ *     holding the publishable key can post to `bb_raw` and cause one, so these
+ *     rows are attacker-influenced and must never light the Activity badge.
+ * `scope` is nullable, and `scope <> 'unregistered'` is NULL — not true — for a
+ * null scope, so the filter is written as "null OR not unregistered".
+ */
 export function activityOptions(limit = 8) {
   return queryOptions({
     queryKey: syncKeys.activity(limit),
@@ -670,7 +683,9 @@ export function activityOptions(limit = 8) {
       const supabase = untypedClient();
       const { data, error } = await supabase
         .from('sync_runs')
-        .select('id, ran_at, started_at, finished_at, status, summary')
+        .select('id, ran_at, started_at, finished_at, status, summary, source, scope')
+        .neq('source', 'ical')
+        .or('scope.is.null,scope.neq.unregistered')
         .order('id', { ascending: false })
         .limit(limit);
       if (error) throw error;
@@ -680,12 +695,22 @@ export function activityOptions(limit = 8) {
   });
 }
 
-/** Pure: rows of `sync_runs` to Activity lines, newest run first. */
+/** A run that is not activity: the daily calendar poll, or a quarantined crawl. */
+export function isActivityNoise(row: Record<string, unknown>): boolean {
+  return row.source === 'ical' || row.scope === 'unregistered';
+}
+
+/**
+ * Pure: rows of `sync_runs` to Activity lines, newest run first. The same two
+ * noise kinds the request filters are dropped again here, so a row that reaches
+ * this function by any other route still never renders.
+ */
 export function activityEntries(rows: readonly unknown[]): ActivityEntry[] {
   const out: ActivityEntry[] = [];
   for (const row of rows) {
     const raw = asRecord(row);
     if (!raw || typeof raw.id !== 'number') continue;
+    if (isActivityNoise(raw)) continue;
     const runId = raw.id;
     const status = raw.status;
     const at = asTextOrNull(raw.finished_at) ?? asTextOrNull(raw.ran_at) ?? asTextOrNull(raw.started_at);
