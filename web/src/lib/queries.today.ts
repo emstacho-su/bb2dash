@@ -7,12 +7,13 @@
  * `xOptions()` returning queryOptions, a `useX()` hook, throw on error, no
  * fabricated fallbacks) and imports the shared enum types from it.
  *
- * ROW TYPES. The generated `database.types.ts` predates migrations 014/015/017,
- * so it does not yet describe `v_work_items`, `v_course_display` or `terms`.
- * The shapes below are transcribed verbatim from the live schema
- * (information_schema on project goultdzqcavefcgnifdy, 2026-09-09) so the
- * screen stays fully typed. When database.types.ts is regenerated these should
- * be replaced with `Views<'v_work_items'>` etc. — see the note in the report.
+ * ROW TYPES. `v_work_items` and `v_course_display` are both in the regenerated
+ * `database.types.ts`, so every read here uses the ordinary typed client. The
+ * `WorkItem` / `CourseDisplay` interfaces below stay hand-narrowed: Postgres
+ * reports no not-null constraints on a view, so the generated row types make
+ * every column nullable, while these shapes are transcribed from the live
+ * schema with the nullability the data actually has. Each read therefore
+ * carries one documented cast at its call site — no field is reshaped.
  */
 
 import {
@@ -21,7 +22,6 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { ProgressStatus } from './queries';
 import {
@@ -31,20 +31,6 @@ import {
   patchProgressCaches,
   restoreProgressCaches,
 } from './progress-cache';
-
-/**
- * The generated Database type predates `v_work_items` and `v_course_display`
- * (migrations 014/015 were applied to prod but database.types.ts was not
- * regenerated), so the typed client rejects `.from('v_work_items')`. Read those
- * two views through an un-narrowed client until the types are regenerated; the
- * returned rows are pinned to the WorkItem / CourseDisplay interfaces below,
- * which are transcribed from the live schema. Every other relation this module
- * touches (terms, sync_runs, assignment_progress, reading_progress) is in the
- * generated types and uses the fully typed client.
- */
-function untypedClient(): SupabaseClient {
-  return getSupabaseBrowserClient() as unknown as SupabaseClient;
-}
 
 /* ---------------------------------------------------------------------------
  * Row types (transcribed from the live schema — see header)
@@ -153,7 +139,7 @@ export function workItemsWindowOptions(from: string, to: string) {
   return queryOptions({
     queryKey: todayKeys.workWindow(from, to),
     queryFn: async (): Promise<WorkItem[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_work_items')
         .select(WORK_ITEM_COLUMNS)
@@ -175,7 +161,7 @@ export function undatedWorkItemsOptions() {
   return queryOptions({
     queryKey: todayKeys.undated(),
     queryFn: async (): Promise<WorkItem[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_work_items')
         .select(WORK_ITEM_COLUMNS)
@@ -195,11 +181,9 @@ export function courseDisplayOptions() {
   return queryOptions({
     queryKey: todayKeys.courseDisplay(),
     queryFn: async (): Promise<CourseDisplay[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_course_display')
-        // card_note arrives with migration 028 (W-12); this query depends on
-        // that migration being applied first — see the merge order in the brief.
         .select('display_id, code, title, shell_ids, meetings, room_disputed, bb_url, card_note')
         .order('display_id', { ascending: true });
       if (error) throw error;
