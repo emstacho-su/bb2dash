@@ -6,11 +6,14 @@
  * Sections in the order the contract fixes them: Staff · Meetings · Policies ·
  * Syllabus · Groups · Card note · Blackboard link.
  *
- * Two rules run through the whole pane. Nothing is blank: a field with no value
- * reads "not recorded", so a missing office hour is visibly missing rather than
- * looking like a rendering bug. And nothing synced is paraphrased: the AI and
- * late policies, and the group notes, are printed exactly as they were
- * recorded. The one writable thing here is the card note.
+ * Three rules run through the whole pane. Nothing is blank: a field with no
+ * value reads "not recorded", so a missing office hour is visibly missing
+ * rather than looking like a rendering bug. Nothing synced is paraphrased: the
+ * AI and late policies, and the group notes, are printed exactly as they were
+ * recorded. And "not recorded" is a claim about the course, so it waits for the
+ * query that would support it — every section guards its own with `QueryState`
+ * (there is no error boundary in this app). The one writable thing here is the
+ * card note.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -30,6 +33,7 @@ import {
 } from '@/lib/queries.course';
 import { fileTitle, useCurrentFiles, type BbFileRow } from '@/lib/queries.materials';
 import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
+import { QueryState, isQueryLoading, isQueryUnresolved } from '@/components/shared/QueryState';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseInfo.module.css';
 
@@ -240,13 +244,8 @@ export function CourseInfo({ courseId }: { courseId: string }) {
       <h1 className="sr-only">{course.code} — Info</h1>
 
       <Section title="Staff">
-        {staffQ.isPending && <p className={styles.state}>loading…</p>}
-        {staffQ.isError && (
-          <p className={styles.state} role="alert">
-            Could not load staff: {staffQ.error.message}
-          </p>
-        )}
-        {!staffQ.isPending && (staffQ.data?.length ?? 0) === 0 && (
+        <QueryState query={staffQ} of="the staff" className={styles.state} />
+        {!isQueryUnresolved(staffQ) && (staffQ.data?.length ?? 0) === 0 && (
           <p className={styles.state}>No staff are recorded for this course.</p>
         )}
         {(staffQ.data ?? []).map((person) => (
@@ -275,40 +274,47 @@ export function CourseInfo({ courseId }: { courseId: string }) {
       </Section>
 
       <Section title="Policies">
-        <div className={styles.policy}>
-          <span className={styles.policyLabel}>AI policy</span>
-          {scheme?.ai_policy ? (
-            <p className={styles.verbatim}>{scheme.ai_policy}</p>
-          ) : (
-            <p className={styles.state}>not recorded</p>
-          )}
-        </div>
-        <div className={styles.policy}>
-          <span className={styles.policyLabel}>Late policy</span>
-          {scheme?.late_policy ? (
-            <p className={styles.verbatim}>{scheme.late_policy}</p>
-          ) : (
-            <p className={styles.state}>not recorded</p>
-          )}
-        </div>
-        {letterScale && typeof letterScale === 'object' && !Array.isArray(letterScale) && (
-          <div className={styles.policy}>
-            <span className={styles.policyLabel}>Letter scale</span>
-            <dl className={styles.fields}>
-              {Object.entries(letterScale as Record<string, unknown>).map(([grade, cutoff]) => (
-                <div key={grade} className={styles.field}>
-                  <dt className={styles.fieldLabel}>{grade}</dt>
-                  <dd className={styles.fieldValue}>{String(cutoff)}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
+        {/* "not recorded" here would mean the professor set no policy. Until the
+            scheme query answers, all we know is that we do not know. */}
+        <QueryState query={schemeQ} of="the policies" className={styles.state} />
+        {!isQueryUnresolved(schemeQ) && (
+          <>
+            <div className={styles.policy}>
+              <span className={styles.policyLabel}>AI policy</span>
+              {scheme?.ai_policy ? (
+                <p className={styles.verbatim}>{scheme.ai_policy}</p>
+              ) : (
+                <p className={styles.state}>not recorded</p>
+              )}
+            </div>
+            <div className={styles.policy}>
+              <span className={styles.policyLabel}>Late policy</span>
+              {scheme?.late_policy ? (
+                <p className={styles.verbatim}>{scheme.late_policy}</p>
+              ) : (
+                <p className={styles.state}>not recorded</p>
+              )}
+            </div>
+            {letterScale && typeof letterScale === 'object' && !Array.isArray(letterScale) && (
+              <div className={styles.policy}>
+                <span className={styles.policyLabel}>Letter scale</span>
+                <dl className={styles.fields}>
+                  {Object.entries(letterScale as Record<string, unknown>).map(([grade, cutoff]) => (
+                    <div key={grade} className={styles.field}>
+                      <dt className={styles.fieldLabel}>{grade}</dt>
+                      <dd className={styles.fieldValue}>{String(cutoff)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+          </>
         )}
       </Section>
 
       <Section title="Syllabus">
-        {filesQ.isPending && <p className={styles.state}>loading…</p>}
-        {!filesQ.isPending && syllabus.length === 0 && (
+        <QueryState query={filesQ} of="the file library" className={styles.state} />
+        {!isQueryUnresolved(filesQ) && syllabus.length === 0 && (
           <p className={styles.state}>No syllabus file has been pulled for this course.</p>
         )}
         {syllabus.map((file) => (
@@ -330,8 +336,8 @@ export function CourseInfo({ courseId }: { courseId: string }) {
       </Section>
 
       <Section title="Groups" caption={GROUPS_CAPTION}>
-        {shellsQ.isPending && <p className={styles.state}>loading…</p>}
-        {!shellsQ.isPending && groupNotes.length === 0 && (
+        <QueryState query={shellsQ} of="the group notes" className={styles.state} />
+        {!isQueryUnresolved(shellsQ) && groupNotes.length === 0 && (
           <p className={styles.state}>No group assignment is recorded for this course.</p>
         )}
         {groupNotes.map((row) => (
@@ -350,7 +356,7 @@ export function CourseInfo({ courseId }: { courseId: string }) {
           <CardNoteField
             courseId={noteShellId ?? courseId}
             stored={storedNote}
-            disabled={shellsQ.isPending || !noteShellId}
+            disabled={isQueryLoading(shellsQ) || !noteShellId}
           />
         )}
       </Section>

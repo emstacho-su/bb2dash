@@ -10,6 +10,10 @@
  * A file with stored bytes opens through a signed URL; one that only has a
  * source URL opens that; one recorded on disk only says so rather than
  * offering a link that would fail.
+ *
+ * "No readings are recorded" and "No files are pinned" are claims about the
+ * course, so neither may stand in for a query that is still running or that
+ * failed — both sections, and the counts in the sub-title, guard themselves.
  */
 
 import Link from 'next/link';
@@ -18,6 +22,12 @@ import { courseCodeFromId } from '@/lib/queries.today';
 import { bucketLabel, fileTypeChip, formatBytes } from '@/lib/queries.materials';
 import { useSession, useSessionFiles, useSessionReadings } from '@/lib/queries.popout';
 import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
+import {
+  QueryState,
+  isQueryLoading,
+  isQueryUnresolved,
+  type QueryLike,
+} from '@/components/shared/QueryState';
 import { DOW_LABELS, MONTH_LABELS, parseDateOnly } from '@/components/tracker/anchor';
 import styles from './Popout.module.css';
 
@@ -26,6 +36,17 @@ function formatDate(iso: string | null): string {
   if (!iso) return 'not recorded';
   const d = parseDateOnly(iso);
   return `${DOW_LABELS[d.getDay()]} · ${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`;
+}
+
+/**
+ * "3 readings" for the sub-title — but a count is a fact, and a query that has
+ * not answered supports no fact. "0 readings" is exactly the wrong thing to say
+ * about one that is still loading or that failed.
+ */
+export function countText(query: QueryLike, count: number, noun: string): string {
+  if (isQueryLoading(query)) return `${noun}s loading…`;
+  if (query.isError) return `${noun}s unavailable`;
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
 export function SessionPopout({ sessionId }: { sessionId: number }) {
@@ -69,13 +90,9 @@ export function SessionPopout({ sessionId }: { sessionId: number }) {
         <div className={styles.subTitle}>
           <span>{formatDate(session.session_date)}</span>
           <span>·</span>
-          <span>
-            {files.length} material{files.length === 1 ? '' : 's'}
-          </span>
+          <span>{countText(filesQ, files.length, 'material')}</span>
           <span>·</span>
-          <span>
-            {readings.length} reading{readings.length === 1 ? '' : 's'}
-          </span>
+          <span>{countText(readingsQ, readings.length, 'reading')}</span>
         </div>
       </div>
 
@@ -89,9 +106,14 @@ export function SessionPopout({ sessionId }: { sessionId: number }) {
       <section className={styles.block}>
         <div className={styles.blockHead}>
           <span className={tokens.kicker}>Readings for this date</span>
-          {readingsQ.isPending && <span className={styles.footerNote}>loading…</span>}
+          <QueryState
+            query={readingsQ}
+            of="the readings"
+            className={styles.footerNote}
+            as="span"
+          />
         </div>
-        {readings.length === 0 && !readingsQ.isPending ? (
+        {readings.length === 0 && !isQueryUnresolved(readingsQ) ? (
           <p className={styles.missing}>No readings are recorded for {formatDate(session.session_date)}.</p>
         ) : (
           <div className={styles.list}>
@@ -128,9 +150,9 @@ export function SessionPopout({ sessionId }: { sessionId: number }) {
       <section className={styles.block}>
         <div className={styles.blockHead}>
           <span className={tokens.kicker}>Files pinned to this session</span>
-          {filesQ.isPending && <span className={styles.footerNote}>loading…</span>}
+          <QueryState query={filesQ} of="the files" className={styles.footerNote} as="span" />
         </div>
-        {files.length === 0 && !filesQ.isPending ? (
+        {files.length === 0 && !isQueryUnresolved(filesQ) ? (
           <p className={styles.missing}>No files are pinned to this session.</p>
         ) : (
           <div className={styles.list}>
