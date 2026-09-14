@@ -1,12 +1,13 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-10**, Phase 7 retrieval polish merged (PR #6),
-> Phase 6 closed out (sign-off + signups disabled), and **Requirements v2 + Phase 8/9 briefs**
-> landed in `docs/planning/60–62` (PR #7). Convention: see root `CLAUDE.md`.
+> Updated upon each PR. Last update: **2026-09-10**, Phase 8 course dimension
+> (`feat/course-dimension`, PR open) — Google Classroom-style course page (Stream · Classwork ·
+> Grades · Info), 8-week tracker paging, assignment/session popouts, card notes; migrations
+> 026–029 live. Convention: see root `CLAUDE.md`.
 
 ## Where the product is
 
-**Backend foundation complete and live; GUI v1 merged and deployed; retrieval polished.**
+**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8, PR open).**
 The Blackboard → Supabase pipeline, typed warehouse, document corpus, and two-tier search API
 are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is merged to `main`
 (PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
@@ -27,7 +28,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 | Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
 | Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
-| GUI (`web/`) | Next.js 16 + TS, Supabase Auth, 4 screens (Today, Course, Materials, ⌘K search); deployed to Vercel; ⌘K shows `part N` on multi-part hits; **vitest harness** (39 tests, `queries.search.ts` ≥97% covered) |
+| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts; vitest 158 tests |
 | Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
 
 ## What has been done (by phase)
@@ -80,6 +81,22 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    16-part IST.323 syllabus returns part 16 ("Scheduled Final Exam Day 12/15/26") instead of the
    instructor's office hours; "attendance policy" has 0 of 10 snippets missing the keyword;
    superseded schedules absent by default, present with the flag. Tests: web 40, mcp-server 88.
+8. **Phase 8 — Course dimension** (`feat/course-dimension`, PR open, 2026-09-10): three Opus
+   workers (W-12 db, W-13 tabs, W-14 shared) on worker branches, PM-integrated. Migrations
+   **026–029**: `stage_content(run_id)` (idempotent fold of `bb_raw` content into `bb_content`,
+   title fallback for `ultraDocumentBody`, run once → 11 junk titles down to 1), `v_course_stream`
+   + `v_content_tree` (security_invoker, anon revoked), `courses.card_note` (280-char check) with
+   `v_course_display` recreated as security_invoker, `stage_content` off the REST surface. Web:
+   `/course/[id]/{stream,classwork,grades,info}` routes, `UpcomingTracker` extracted with 56/14
+   paging, route-driven popouts (`?item=assignment:<id>` / `session:<id>`), Home card note,
+   Materials → Classwork link. `database.types.ts` regenerated. Review round: 10 findings fixed
+   (cache fan-out for status edits, card-note draft/280 cap, planner form no longer wiped
+   mid-type, tree nests by `parent_id`, tracker loading/error states, guarded queries, midnight
+   roll-over, typed client, one `FileOpenAction` ladder); security review clean; vitest 234
+   tests. Findings routed to Phase 9:
+   `bb_raw.bb_course_id` is `courses.bb_id` (not `bb_course_id`); every view from 001–025 runs
+   as owner and bypasses RLS (fix = migration in Phase 9's range). Parked: IST.466 publishes two
+   identical folder paths; the `(course_id, path)` key keeps one (5 rows counted as duplicates).
 
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's
@@ -113,8 +130,8 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 
 | Phase | Name | Brief | Status |
 |---|---|---|---|
-| 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | approved, not started |
-| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | approved, runs in parallel with 8 |
+| 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | **built, PR open** — Stack to review the preview |
+| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private, views → security_invoker) | `62_PHASE9_sync_loop.md` | in progress (W-15 db, W-16 web done) |
 | 10 | Grades and submissions | — | after 8 + 9 |
 | 11 | Planner + Google Calendar push, announcements bell/page, data gaps | — | |
 | 12 | Electron shell | — | |
@@ -129,10 +146,14 @@ remaining near-duplicates (bb_files 17, 18/19, IST.352 31/32/47) → Phase 9 `st
 touch those screens; stored per-part `tsvector` on `bb_text_embeddings` → only when the palette
 feels slow, not before.
 
-**Open security item:** the `bb-files` Storage bucket is still `public: true` (verified
-2026-09-10). Phase 9 migration 030 flips it; Materials already uses signed URLs.
+**Security:** the `bb-files` bucket was flipped private by Phase 9 migration 030 (applied
+2026-09-10, anonymous GET now 400). Still open until Phase 9 merges: views 001–025 bypass RLS.
 
 ## Known issues / operational notes
+
+* IST.466 publishes two sibling content branches with identical `path`s; `bb_content`'s
+  `(course_id, path)` key holds one, so Classwork shows one branch. Needs a key change
+  (`bb_item_id`-based) in a later phase.
 
 * Sandboxed Claude sessions cannot reach `*.supabase.co` (org egress policy) — invoke edge
   functions server-side via `pg_net` (`net.http_post`); pg_net is enabled and load-bearing.
