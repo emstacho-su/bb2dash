@@ -190,9 +190,6 @@ export function UpcomingTracker({
   const [ownAnchor, setOwnAnchor] = useState(today);
   const [ownSelected, setOwnSelected] = useState(today);
   const activeAnchor = anchor ?? ownAnchor;
-  const activeSelected = isValidIsoDate(selectedDay ?? ownSelected)
-    ? (selectedDay ?? ownSelected)
-    : today;
 
   const spec = { anchor: activeAnchor, today, horizonDays, visibleDays };
   const view = useMemo(
@@ -200,6 +197,27 @@ export function UpcomingTracker({
     [activeAnchor, today, horizonDays, visibleDays],
   );
   const byDay = useMemo(() => groupByDueDate(items), [items]);
+
+  /**
+   * The selection is *derived* into the window, never merely stored.
+   *
+   * `today` is recomputed every render but the two `useState` seeds are not, so
+   * a tab left open across midnight — and `refetchOnWindowFocus` means it does
+   * get re-rendered — held yesterday. `clampAnchor` moved the window forward on
+   * its own; the selection did not, so no column was highlighted and the panel
+   * below went on describing yesterday's work under yesterday's heading.
+   *
+   * Clamping here rather than in an effect means there is never a render in
+   * which the panel and the columns disagree — and it covers the same case for
+   * a controlled `selectedDay` the parent has not caught up on.
+   */
+  const requestedSelected = selectedDay ?? ownSelected;
+  const activeSelected =
+    isValidIsoDate(requestedSelected) &&
+    requestedSelected >= view.firstIso &&
+    requestedSelected <= view.lastIso
+      ? requestedSelected
+      : view.firstIso;
 
   function moveAnchor(pages: number) {
     const next = pageAnchor(spec, pages);

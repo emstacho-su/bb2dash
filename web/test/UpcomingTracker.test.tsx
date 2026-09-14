@@ -258,3 +258,44 @@ describe('UpcomingTracker — a fetch that has not answered', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+describe('UpcomingTracker — a tab left open across midnight', () => {
+  it('moves the selection into the new window instead of describing yesterday', () => {
+    const { rerender } = renderTracker();
+
+    // Thursday Sep 10: today's column is selected and today's work is listed.
+    expect(screen.getByText('Today, Sep 10')).toBeInTheDocument();
+    expect(screen.getByText('Reading for today')).toBeInTheDocument();
+    expect(dayColumns()[0]).toHaveAttribute('aria-selected', 'true');
+
+    // The clock rolls over; a window-focus refetch re-renders the same instance.
+    vi.setSystemTime(new Date(2026, 8, 11, 0, 30, 0));
+    rerender(<UpcomingTracker items={ITEMS} onStatusChange={vi.fn()} />);
+
+    const columns = dayColumns();
+    expect(within(columns[0]).getByText('Today')).toBeInTheDocument();
+    expect(within(columns[0]).getByText('11')).toBeInTheDocument();
+
+    // The panel follows the window: Sep 11, not Sep 10.
+    expect(screen.getByText('Today, Sep 11')).toBeInTheDocument();
+    expect(screen.queryByText('Thu, Sep 10')).toBeNull();
+    expect(screen.queryByText('Reading for today')).toBeNull();
+
+    // And exactly one column is still selected — the new first day.
+    expect(columns.filter((c) => c.getAttribute('aria-selected') === 'true')).toHaveLength(1);
+    expect(columns[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('keeps a selection that is still inside the window after the roll-over', () => {
+    const { rerender } = renderTracker();
+    fireEvent.click(dayColumns()[4]); // Mon Sep 14
+    expect(screen.getByText('Lab #1 report')).toBeInTheDocument();
+
+    vi.setSystemTime(new Date(2026, 8, 11, 0, 30, 0));
+    rerender(<UpcomingTracker items={ITEMS} onStatusChange={vi.fn()} />);
+
+    // Sep 14 is still on screen, so the owner's choice stands.
+    expect(screen.getByText('Mon, Sep 14')).toBeInTheDocument();
+    expect(screen.getByText('Lab #1 report')).toBeInTheDocument();
+  });
+});
