@@ -3,12 +3,14 @@
 /**
  * Course Classwork (Phase 8, R-01) — Blackboard's own folder tree.
  *
- * `v_content_tree` is read in `path` order, which puts a folder ahead of its
- * children by construction, and folded to one node per `content_id` (a node
- * with several files arrives as several rows). Each node shows the Ultra
- * progress chip Blackboard recorded, and every file underneath it uses the
- * Materials screen's Open ladder — a signed-URL open when the bytes are in the
- * library, an honest label when they are not.
+ * `v_content_tree` rows are folded to one node per `content_id` (a node with
+ * several files arrives as several rows) and nested on `parent_id`, then
+ * rendered by recursing through the tree — not as a flat list indented by a
+ * path depth, which drew the wrong nesting whenever a sibling's title extended
+ * another's. Each node shows the Ultra progress chip Blackboard recorded, and
+ * every file underneath it uses the Materials screen's Open ladder — a
+ * signed-URL open when the bytes are in the library, an honest label when they
+ * are not.
  *
  * The old week-rail timeline still lives at `?view=timeline`; the page routes
  * to it, and the link back to it sits in this pane's header.
@@ -17,7 +19,8 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import {
-  groupContentTree,
+  buildContentTree,
+  flattenContentTree,
   isFolderNode,
   ultraStateLabel,
   useContentTree,
@@ -30,11 +33,17 @@ import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseClasswork.module.css';
 
-/** Indentation stops at four levels so a deep tree stays readable. */
+/**
+ * Indentation stops at four levels so a deep tree stays readable.
+ *
+ * `depth` is the 0-based recursion depth — a root is flush, its children are
+ * one step in. (It used to be the row's 1-based `depth` column, which is why
+ * the subtraction was here.)
+ */
 const MAX_INDENT_DEPTH = 4;
 
 function indentFor(depth: number): number {
-  return Math.min(Math.max(depth - 1, 0), MAX_INDENT_DEPTH);
+  return Math.min(Math.max(depth, 0), MAX_INDENT_DEPTH);
 }
 
 /* -- a file under a content node ------------------------------------------- */
@@ -83,38 +92,52 @@ export function contentKindLabel(node: Pick<ContentNode, 'itemKind' | 'bbType'>)
 
 /* -- one content node ------------------------------------------------------ */
 
-export function ClassworkNode({ node }: { node: ContentNode }) {
+/**
+ * One node and everything under it.
+ *
+ * `depth` is the recursion depth, not the row's `depth` column: an item whose
+ * parent is in another shell (or outside this fetch) renders as a root here,
+ * and indenting it by its path depth would leave it floating under nothing.
+ */
+export function ClassworkNode({ node, depth = 0 }: { node: ContentNode; depth?: number }) {
   const folder = isFolderNode(node);
   const state = ultraStateLabel(node.state);
   // A folder announces itself by its heading; only leaf items need the kind said.
   const kindLabel = folder ? null : contentKindLabel(node);
 
   return (
-    <div
-      className={folder ? styles.folder : styles.item}
-      style={{ marginLeft: `calc(var(--space-6) * ${indentFor(node.depth)})` }}
-      data-content-id={node.contentId}
-      data-folder={folder ? 'true' : 'false'}
-    >
-      <div className={styles.nodeHead}>
-        <span className={folder ? styles.folderTitle : styles.itemTitle}>{node.title}</span>
-        {kindLabel && <span className={styles.kind}>{kindLabel}</span>}
-        {state && <span className={styles.stateChip}>{state}</span>}
-        {node.url && (
-          <a className={styles.bbLink} href={node.url} target="_blank" rel="noreferrer">
-            Blackboard ↗
-          </a>
+    <>
+      <div
+        className={folder ? styles.folder : styles.item}
+        style={{ marginLeft: `calc(var(--space-6) * ${indentFor(depth)})` }}
+        data-content-id={node.contentId}
+        data-depth={depth}
+        data-folder={folder ? 'true' : 'false'}
+      >
+        <div className={styles.nodeHead}>
+          <span className={folder ? styles.folderTitle : styles.itemTitle}>{node.title}</span>
+          {kindLabel && <span className={styles.kind}>{kindLabel}</span>}
+          {state && <span className={styles.stateChip}>{state}</span>}
+          {node.url && (
+            <a className={styles.bbLink} href={node.url} target="_blank" rel="noreferrer">
+              Blackboard ↗
+            </a>
+          )}
+        </div>
+
+        {node.files.length > 0 && (
+          <div className={styles.files}>
+            {node.files.map((file) => (
+              <ClassworkFileRow key={file.fileId} file={file} nodeUrl={node.url} />
+            ))}
+          </div>
         )}
       </div>
 
-      {node.files.length > 0 && (
-        <div className={styles.files}>
-          {node.files.map((file) => (
-            <ClassworkFileRow key={file.fileId} file={file} nodeUrl={node.url} />
-          ))}
-        </div>
-      )}
-    </div>
+      {node.children.map((child) => (
+        <ClassworkNode key={child.contentId} node={child} depth={depth + 1} />
+      ))}
+    </>
   );
 }
 
@@ -125,7 +148,8 @@ export function CourseClasswork({ courseId }: { courseId: string }) {
   const shellIds = useMemo(() => display.data?.shell_ids ?? [], [display.data]);
   const treeQ = useContentTree(shellIds);
 
-  const nodes = useMemo(() => groupContentTree(treeQ.data ?? []), [treeQ.data]);
+  const roots = useMemo(() => buildContentTree(treeQ.data ?? []), [treeQ.data]);
+  const nodes = useMemo(() => flattenContentTree(roots), [roots]);
 
   if (display.isPending) return <p className={styles.state}>Loading course…</p>;
   if (display.isError) return <p className={styles.state}>Could not load this course.</p>;
@@ -164,7 +188,7 @@ export function CourseClasswork({ courseId }: { courseId: string }) {
       )}
 
       <div className={styles.tree}>
-        {nodes.map((node) => (
+        {roots.map((node) => (
           <ClassworkNode key={node.contentId} node={node} />
         ))}
       </div>

@@ -214,15 +214,16 @@ export interface ContentNode {
   modifiedAt: string | null;
   assignmentId: string | null;
   files: ContentFile[];
+  /** The nodes whose `parentId` is this node's `contentId`, in sibling order. */
+  children: ContentNode[];
 }
 
 /**
  * Fold `v_content_tree` rows into one node per `content_id`, collecting the
- * file rows. Ordered by `path`, which is the contract's ordering: a folder
- * sorts ahead of its children because a child's path extends the parent's.
- * Duplicate file ids under one node are collapsed.
+ * file rows. Duplicate file ids under one node are collapsed. No ordering and
+ * no parent links yet — `buildContentTree` does that.
  */
-export function groupContentTree(rows: ContentTreeRow[]): ContentNode[] {
+function foldContentRows(rows: ContentTreeRow[]): Map<number, ContentNode> {
   const nodes = new Map<number, ContentNode>();
   const seenFiles = new Map<number, Set<number>>();
 
@@ -242,6 +243,7 @@ export function groupContentTree(rows: ContentTreeRow[]): ContentNode[] {
         modifiedAt: row.modified_at,
         assignmentId: row.assignment_id,
         files: [],
+        children: [],
       };
       nodes.set(row.content_id, node);
       seenFiles.set(row.content_id, new Set());
@@ -260,7 +262,82 @@ export function groupContentTree(rows: ContentTreeRow[]): ContentNode[] {
     }
   }
 
-  return [...nodes.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return nodes;
+}
+
+/**
+ * Sibling order: by title, the way a person reads a list of them. `numeric`
+ * keeps "Unit 2" ahead of "Unit 10" — a code-point sort puts "Unit 10" first
+ * because '1' < '2'. Ties fall back to `content_id` so the order is stable.
+ */
+function compareSiblings(a: ContentNode, b: ContentNode): number {
+  const byTitle = (a.title ?? '').localeCompare(b.title ?? '', undefined, { numeric: true });
+  return byTitle !== 0 ? byTitle : a.contentId - b.contentId;
+}
+
+/**
+ * Build the real folder tree out of `v_content_tree` rows.
+ *
+ * Nesting comes from `parent_id`, which every row carries. The previous
+ * ordering — a code-point sort of the ' / '-joined `path` — only *looked* like
+ * a tree: it put 'Week 1 - Overview' between 'Week 1' and 'Week 1 / Slides'
+ * (because '-' sorts below '/'), so Slides appeared to hang off the Overview.
+ *
+ * A node whose parent is not in the row set (a different shell, a filtered
+ * fetch) is a root rather than a node that vanishes. If Blackboard ever hands
+ * back a parent cycle, the nodes caught in it are appended as roots instead of
+ * recursing for ever.
+ */
+export function buildContentTree(rows: ContentTreeRow[]): ContentNode[] {
+  const nodes = foldContentRows(rows);
+
+  const roots: ContentNode[] = [];
+  for (const node of nodes.values()) {
+    const parent = node.parentId == null ? undefined : nodes.get(node.parentId);
+    if (parent && parent !== node) parent.children.push(node);
+    else roots.push(node);
+  }
+
+  roots.sort(compareSiblings);
+  for (const node of nodes.values()) node.children.sort(compareSiblings);
+
+  // Anything unreachable from a root is in a cycle; surface it rather than
+  // dropping it on the floor.
+  const reachable = new Set<number>();
+  const stack = [...roots];
+  while (stack.length > 0) {
+    const node = stack.pop() as ContentNode;
+    if (reachable.has(node.contentId)) continue;
+    reachable.add(node.contentId);
+    stack.push(...node.children);
+  }
+  const orphaned = [...nodes.values()]
+    .filter((node) => !reachable.has(node.contentId))
+    .sort(compareSiblings);
+
+  return [...roots, ...orphaned];
+}
+
+/** The tree as a depth-first list: each node immediately before its children. */
+export function flattenContentTree(roots: ContentNode[]): ContentNode[] {
+  const flat: ContentNode[] = [];
+  const seen = new Set<number>();
+  const walk = (node: ContentNode) => {
+    if (seen.has(node.contentId)) return;
+    seen.add(node.contentId);
+    flat.push(node);
+    for (const child of node.children) walk(child);
+  };
+  for (const root of roots) walk(root);
+  return flat;
+}
+
+/**
+ * The folded nodes in the order they are read: depth-first through the tree,
+ * so a folder is immediately followed by what is inside it.
+ */
+export function groupContentTree(rows: ContentTreeRow[]): ContentNode[] {
+  return flattenContentTree(buildContentTree(rows));
 }
 
 /** True when a content node is a container rather than a leaf item. */
