@@ -147,7 +147,7 @@ brief (`62`, `63`, `66`, `67`, `68`, `69`, `80`, `81`) and indexed in
 `docs/planning/70_MVP_INDEX.md`, whose §5 lists the open questions Stack answers when each
 phase's PM session freezes its Contract. Research behind them: `docs/planning/research/`.
 
-Migration ranges: Phase 8 = 026–029, Phase 9 = 030–040 (overran by one), Phase 10 = 041–059,
+Migration ranges: Phase 8 = 026–029, Phase 9 = 030–044 (030–040 plus its review-fix round 041–044), Phase 10 = 045–059,
 Phase 11 = 060–069, Phase 12 = 070–079 if needed. Both phase branches cut from `main`
 (Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
 
