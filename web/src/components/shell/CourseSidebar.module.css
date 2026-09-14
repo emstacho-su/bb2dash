@@ -1,0 +1,179 @@
+/* Course rail — the ☰ pop-down, folded into a sidebar (Phase 8 follow-up).
+
+   Every "which side is it on?" rule below reads --sidebar-side (globals.css) as
+   a flex-direction. `row` = left, `row-reverse` = right, and that one value
+   moves the in-flow rail, the drawer and the hairline together.
+
+   Open/closed is driven by html[data-sidebar], stamped before first paint by
+   the boot script in src/lib/sidebar-preference.ts and owned by React after
+   mount. Keeping it in CSS rather than in a class name is what makes the rail
+   correct on the very first frame. */
+
+/* In flow the wrapper is not a box at all — the rail and the main column are
+   siblings in the shell row. Below the breakpoint it becomes the drawer. */
+.wrap {
+  display: contents;
+}
+
+.rail {
+  flex: none;
+  width: var(--sidebar-width);
+  position: sticky;
+  top: var(--nav-height);
+  height: calc(100dvh - var(--nav-height));
+  background: var(--color-surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: var(--sidebar-side);
+  /* Pin the content to the content edge so collapsing clips the outer edge —
+     it reads as a slide rather than a squash, on either side. */
+  justify-content: flex-end;
+  transition: width 180ms ease;
+}
+
+.rail:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+:global(html[data-sidebar='closed']) .rail {
+  width: 0;
+}
+
+/* The hairline on the content edge. As the rail's last flex item it follows
+   --sidebar-side automatically: right edge for a left rail, left for a right. */
+.rail::after {
+  content: '';
+  flex: none;
+  width: 1px;
+  background: var(--color-divider);
+}
+
+.inner {
+  flex: none;
+  width: calc(var(--sidebar-width) - 1px);
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) 0 var(--space-8);
+}
+
+.head {
+  margin: 0;
+  padding: 6px 14px 8px;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+.row:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.rowCurrent {
+  composes: row;
+  background: var(--color-hover);
+  color: var(--color-accent);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.rowCurrent:hover {
+  color: var(--color-accent);
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-neutral-400);
+  width: 58px;
+  flex: none;
+}
+.rowCurrent .code {
+  color: var(--color-accent-2);
+}
+
+.title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note {
+  margin: 0;
+  padding: 10px 14px 14px;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-500);
+}
+
+.scrim {
+  all: unset;
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Drawer mode. Below the breakpoint the wrapper becomes a fixed row under the
+   top bar: rail on --sidebar-side, scrim filling whatever is left.
+   ------------------------------------------------------------------------ */
+@media (max-width: 1023.98px) {
+  .wrap {
+    display: flex;
+    flex-direction: var(--sidebar-side);
+    position: fixed;
+    inset: var(--nav-height) 0 0;
+    z-index: 25;
+  }
+
+  .rail {
+    position: static;
+    height: auto;
+    box-shadow: var(--shadow-md);
+  }
+
+  .scrim {
+    display: block;
+    flex: 1;
+    background: rgba(0, 0, 0, 0.5);
+    cursor: default;
+    transition: opacity 180ms ease;
+  }
+
+  :global(html[data-sidebar='closed']) .wrap {
+    pointer-events: none;
+  }
+  :global(html[data-sidebar='closed']) .scrim {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail,
+  .scrim {
+    transition: none;
+  }
+}
