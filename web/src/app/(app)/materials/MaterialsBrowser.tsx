@@ -1,11 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import Link from 'next/link';
 import { courseCode, useCourses, type CourseSummary } from '@/lib/queries';
+import { FileOpenAction } from '@/components/materials/FileOpenAction';
+// The reading ladder is a different ladder (resolveReadingRoute); it still
+// drives the stored-file button directly.
+import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
 import {
   BUCKET_ORDER,
   bucketLabel,
-  createSignedFileUrl,
   fileHonesty,
   fileTitle,
   fileTypeChip,
@@ -20,58 +24,6 @@ import {
 } from '@/lib/queries.materials';
 import tokens from '@/styles/tokens.module.css';
 import styles from './Materials.module.css';
-
-/* ---------------------------------------------------------------------------
- * Open-in-new-tab button for a stored file (mints a signed URL at click time).
- * Opens the tab synchronously inside the click gesture so pop-up blockers
- * allow it, then points it at the signed URL once Storage responds.
- * ------------------------------------------------------------------------ */
-
-function OpenStoredButton({
-  storagePath,
-  label = 'Open',
-  className,
-}: {
-  storagePath: string;
-  label?: string;
-  className: string;
-}) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleOpen() {
-    setError(null);
-    setPending(true);
-    const tab = window.open('about:blank', '_blank');
-    try {
-      const url = await createSignedFileUrl(storagePath);
-      if (tab) {
-        tab.location.href = url;
-      } else {
-        // Pop-up was blocked before we could await — try a direct open.
-        window.open(url, '_blank', 'noopener,noreferrer');
-      }
-    } catch (err) {
-      tab?.close();
-      setError(err instanceof Error ? err.message : 'Could not open file');
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <span className={styles.action}>
-      <button type="button" className={className} onClick={handleOpen} disabled={pending}>
-        {pending ? 'Opening…' : label}
-      </button>
-      {error && (
-        <span className={styles.rowError} role="alert">
-          {error}
-        </span>
-      )}
-    </span>
-  );
-}
 
 /* ---------------------------------------------------------------------------
  * A single file row (design cue: 03-lecture / 04-assignment material popouts).
@@ -104,46 +56,9 @@ function FileRow({ file }: { file: BbFileRow }) {
         <span className={styles.rowMeta}>{meta.join(' · ')}</span>
       </span>
 
-      <span className={honestyTagClass(honesty.location)} title={honestyTitle(honesty.location)}>
-        {honesty.label}
-      </span>
-
-      {honesty.location === 'library' && file.storage_path ? (
-        <OpenStoredButton storagePath={file.storage_path} className={tokens.btnPrimary} />
-      ) : honesty.location === 'source' && file.source_url ? (
-        <span className={styles.action}>
-          <a className={tokens.btnPrimary} href={file.source_url} target="_blank" rel="noreferrer">
-            Open ↗
-          </a>
-        </span>
-      ) : (
-        <span className={styles.action}>
-          <button type="button" className={tokens.btnSecondary} disabled title={honesty.label}>
-            {honesty.location === 'disk' ? 'On disk only' : 'No route'}
-          </button>
-        </span>
-      )}
+      <FileOpenAction routes={file} showLabel />
     </div>
   );
-}
-
-function honestyTagClass(location: string): string {
-  if (location === 'library') return tokens.tagAccent;
-  if (location === 'source') return tokens.tagOutline;
-  return tokens.tagNeutral;
-}
-
-function honestyTitle(location: string): string {
-  switch (location) {
-    case 'library':
-      return 'Bytes stored in the bb-files bucket — opens a signed link.';
-    case 'source':
-      return 'No stored copy; opens the original source URL.';
-    case 'disk':
-      return 'Recorded in the local mirror only — no online copy to open here.';
-    default:
-      return 'No storage, source URL or local copy recorded.';
-  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -322,6 +237,10 @@ function CourseBlock({ data }: { data: CourseData }) {
           <span className={styles.courseCount}>
             {totalItems} {totalItems === 1 ? 'item' : 'items'}
           </span>
+          {/* R-06: the same materials, in the folder tree Blackboard put them in. */}
+          <Link className={styles.bbLink} href={`/course/${course.id}/classwork`}>
+            Open in Classwork →
+          </Link>
           {course.bb_url && (
             <a className={styles.bbLink} href={course.bb_url} target="_blank" rel="noreferrer">
               Blackboard ↗

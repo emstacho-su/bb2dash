@@ -1,27 +1,13 @@
-import type { Metadata } from 'next';
-import { CourseSubBar } from './CourseSubBar';
-import { CourseScreen } from './CourseScreen';
-
-export const metadata: Metadata = {
-  title: 'Course · bb2dash',
-};
+import { redirect } from 'next/navigation';
 
 /**
- * Course page (screen W-6, artboard 14-course-v2): the course sub-bar, a verbatim
- * AI-policy block, the sticky week rail 1–16 and the Lecture vs Assignment lanes.
- * The sub-bar leads (GUI decision 1c) so there is no separate page header; the
- * screen renders an sr-only <h1> for the document outline.
+ * `/course/[id]` has no content of its own — Stream is the course's front page
+ * (Phase 8 route table), so the bare course URL redirects there. The id segment
+ * is passed through exactly as it arrived so its encoding survives the hop.
  *
  * Next 16: `params` is a promise.
  */
 export default async function CoursePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const courseId = decodeURIComponent(id);
-
-  return (
-    <>
-      <CourseSubBar courseId={courseId} />
-      <CourseScreen courseId={courseId} />
-    </>
-  );
+  redirect(`/course/${id}/stream`);
 }

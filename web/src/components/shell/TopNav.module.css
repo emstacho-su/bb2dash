@@ -94,6 +94,17 @@
   background: var(--color-hover);
 }
 
+/* The ☰ sidebar toggle. Its lit state is driven by the same attribute the rail
+   reads, not by React state, so the first paint after a reload already shows
+   the remembered state. */
+.icToggle {
+  composes: ic;
+}
+:global(html[data-sidebar='open']) .icToggle {
+  color: var(--color-accent);
+  background: var(--color-hover);
+}
+
 .icDisabled {
   composes: ic;
   color: var(--color-neutral-600);
@@ -112,14 +123,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.ddCourses {
-  composes: dd;
-  right: 72px;
-  width: 300px;
-  max-height: 70vh;
-  overflow-y: auto;
 }
 
 .ddUser {
@@ -157,27 +160,6 @@
 .ddRow:hover {
   background: var(--color-hover);
   color: var(--color-text);
-}
-
-.ddCode {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-neutral-400);
-  width: 58px;
-  flex: none;
-}
-
-.ddTitle {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ddNote {
-  padding: 10px 12px 14px;
-  font-size: var(--text-sm);
-  color: var(--color-neutral-500);
 }
 
 .ddIdentity {
@@ -248,8 +230,4 @@
   }
   .links { gap: var(--space-4); }
   .cmdk { display: none; }
-  .ddCourses {
-    right: 0;
-    width: min(300px, calc(100vw - 28px));
-  }
 }
