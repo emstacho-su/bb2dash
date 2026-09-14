@@ -18,9 +18,35 @@
  *   - bb_files          harvested files, counted per session
  */
 
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables, Views } from './queries';
+import { COURSE_WORK_ITEMS_KEY } from './progress-cache';
+import {
+  normalizeCardNote,
+  validateCardNote,
+  type CourseStreamRow,
+  type ContentTreeRow,
+} from './course-dimension';
+
+/**
+ * `v_course_stream`, `v_content_tree` and `courses.card_note` landed with
+ * migrations 026-028 and `database.types.ts` was regenerated at Phase 8
+ * integration, so every query here uses the ordinary typed client.
+ *
+ * The two view row types stay hand-narrowed (`CourseStreamRow`,
+ * `ContentTreeRow` in `course-dimension.ts`): Postgres reports no not-null
+ * constraints on a view, so the generated row types make every column
+ * nullable, and the frozen contract in
+ * `docs/planning/61_PHASE8_course_dimension.md` is stricter than that. Each of
+ * those two reads therefore carries one documented cast at the call site — no
+ * field is reshaped, and nothing else in this module needs one.
+ */
 
 export type CourseDisplay = Views<'v_course_display'>;
 export type WorkItem = Views<'v_work_items'>;
@@ -35,6 +61,20 @@ export type MeetingSlot = {
   end: string | null;
   room: string | null;
 };
+
+/**
+ * The shell columns the course screens read: the room-dispute check needs
+ * `location`, the week rail needs `term_id`, and the Info tab needs both notes.
+ * One query, one cache — `card_note` used to be fetched separately because it
+ * arrived in a later migration than this query; that migration is applied, so
+ * the split only bought a second copy of the same `courses` rows.
+ */
+export type CourseShell = Pick<
+  Tables<'courses'>,
+  'id' | 'location' | 'term_id' | 'kind' | 'group_notes' | 'card_note'
+>;
+
+const COURSE_SHELL_COLUMNS = 'id, location, term_id, kind, group_notes, card_note';
 
 /** The `session_id`-bearing subset of bb_files the panel needs. */
 export type SessionFile = Pick<
@@ -56,9 +96,12 @@ export const courseQueryKeys = {
   shells: (shellIds: string[]) => ['course-shells', shellKey(shellIds)] as const,
   term: (termId: string) => ['term', termId] as const,
   sessions: (shellIds: string[]) => ['course-sessions', shellKey(shellIds)] as const,
-  workItems: (shellIds: string[]) => ['course-work-items', shellKey(shellIds)] as const,
+  workItems: (shellIds: string[]) => [...COURSE_WORK_ITEMS_KEY, shellKey(shellIds)] as const,
   gradingScheme: (shellIds: string[]) => ['course-grading-scheme', shellKey(shellIds)] as const,
   sessionFiles: (shellIds: string[]) => ['course-session-files', shellKey(shellIds)] as const,
+  stream: (shellIds: string[]) => ['course-stream', shellKey(shellIds)] as const,
+  contentTree: (shellIds: string[]) => ['course-content-tree', shellKey(shellIds)] as const,
+  staff: (shellIds: string[]) => ['course-staff', shellKey(shellIds)] as const,
 } as const;
 
 /* ---------------------------------------------------------------------------
@@ -89,15 +132,19 @@ export function courseDisplayOptions(courseId: string) {
   });
 }
 
-/** The underlying shells — locations (for the room-dispute check) + term_id. */
+/**
+ * The underlying shells: locations (for the room-dispute check), term_id, and
+ * the two free-text notes the Info tab renders — `group_notes` (synced,
+ * verbatim) and `card_note` (Stack's own one-liner, R-04).
+ */
 export function courseShellsOptions(shellIds: string[]) {
   return queryOptions({
     queryKey: courseQueryKeys.shells(shellIds),
-    queryFn: async (): Promise<Pick<Tables<'courses'>, 'id' | 'location' | 'term_id' | 'kind'>[]> => {
+    queryFn: async (): Promise<CourseShell[]> => {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('courses')
-        .select('id, location, term_id, kind')
+        .select(COURSE_SHELL_COLUMNS)
         .in('id', shellIds);
       if (error) throw error;
       return data ?? [];
@@ -372,3 +419,244 @@ export function isZeroToleranceAiPolicy(policy: string | null | undefined): bool
   if (!policy) return false;
   return /zero[\s-]?tolerance/i.test(policy);
 }
+
+/* ===========================================================================
+ * Phase 8 — course dimension (stream, classwork tree, staff, card note)
+ *
+ * The row types and the pure grouping helpers live in `course-dimension.ts`
+ * (the relations land with migrations 026-028, so their shapes are still
+ * hand-declared). They are re-exported here so screens have one import.
+ * ======================================================================== */
+
+export type {
+  ContentFile,
+  ContentNode,
+  ContentTreeRow,
+  CourseStreamMeta,
+  CourseStreamRow,
+  StreamDay,
+  StreamPostKind,
+  StreamRefKind,
+} from './course-dimension';
+export {
+  CARD_NOTE_MAX_LENGTH,
+  COURSE_TIME_ZONE,
+  DUE_WINDOW_DAYS,
+  NOT_RECORDED,
+  buildContentTree,
+  courseToday,
+  filterStreamRows,
+  flattenContentTree,
+  groupContentTree,
+  groupStreamByDay,
+  isFolderNode,
+  normalizeCardNote,
+  orNotRecorded,
+  streamDayKey,
+  ultraStateLabel,
+  validateCardNote,
+} from './course-dimension';
+
+/** The staff columns the Info tab shows. */
+export type CourseStaff = Pick<
+  Tables<'course_staff'>,
+  'id' | 'course_id' | 'name' | 'role' | 'email' | 'office' | 'office_hours'
+>;
+
+const STREAM_COLUMNS = 'course_id, post_kind, posted_at, ref_kind, ref_id, title, body, meta';
+
+const CONTENT_TREE_COLUMNS =
+  'course_id, content_id, parent_id, bb_item_id, path, depth, title, item_kind, bb_type, ' +
+  'state, url, modified_at, assignment_id, file_id, file_name, storage_path, bucket';
+
+const COURSE_STAFF_COLUMNS = 'id, course_id, name, role, email, office, office_hours';
+
+/* ---------------------------------------------------------------------------
+ * Phase 8 queries
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The Stream feed for a display course: every post across its shells, newest
+ * first. The +/-14-day window on `assignment_due` rows is a client filter (see
+ * `filterStreamRows`) so the same fetch can also feed a wider view later.
+ */
+export function courseStreamOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.stream(shellIds),
+    queryFn: async (): Promise<CourseStreamRow[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('v_course_stream')
+        .select(STREAM_COLUMNS)
+        .in('course_id', shellIds)
+        .order('posted_at', { ascending: false });
+      if (error) throw error;
+      // Narrowed to the frozen contract — see the module header.
+      return (data ?? []) as unknown as CourseStreamRow[];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Blackboard's own folder tree for a display course, ordered by `path` — which
+ * puts a folder ahead of its children by construction. A node with several
+ * files yields several rows; `groupContentTree` folds them back together.
+ */
+export function contentTreeOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.contentTree(shellIds),
+    queryFn: async (): Promise<ContentTreeRow[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('v_content_tree')
+        .select(CONTENT_TREE_COLUMNS)
+        .in('course_id', shellIds)
+        .order('path', { ascending: true });
+      if (error) throw error;
+      // Narrowed to the frozen contract — see the module header.
+      return (data ?? []) as unknown as ContentTreeRow[];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 15 * 60 * 1000,
+  });
+}
+
+/** Instructors and TAs recorded for the display course's shells. */
+export function courseStaffOptions(shellIds: string[]) {
+  return queryOptions({
+    queryKey: courseQueryKeys.staff(shellIds),
+    queryFn: async (): Promise<CourseStaff[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('course_staff')
+        .select(COURSE_STAFF_COLUMNS)
+        .in('course_id', shellIds)
+        .order('role', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: shellIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
+export function useCourseStream(shellIds: string[]) {
+  return useQuery(courseStreamOptions(shellIds));
+}
+export function useContentTree(shellIds: string[]) {
+  return useQuery(contentTreeOptions(shellIds));
+}
+export function useCourseStaff(shellIds: string[]) {
+  return useQuery(courseStaffOptions(shellIds));
+}
+
+/* ---------------------------------------------------------------------------
+ * Card note (R-04) — the one writable field on the course page
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Write the course card note. `courseId` is a single shell id — the display
+ * course's parent shell (`v_course_display.display_id`), which is where the
+ * Home card reads it from. Returns the value actually stored so the caller can
+ * show the normalized text without a refetch.
+ */
+export async function updateCardNote(
+  courseId: string,
+  note: string | null,
+): Promise<string | null> {
+  if (!courseId) throw new Error('updateCardNote: courseId is required');
+  const value = validateCardNote(note);
+  const supabase = getSupabaseBrowserClient();
+  const { error } = await supabase.from('courses').update({ card_note: value }).eq('id', courseId);
+  if (error) throw error;
+  return value;
+}
+
+/** The two caches that carry a course's `card_note`. */
+const CARD_NOTE_CACHE_KEYS: readonly (readonly unknown[])[] = [
+  ['course-shells'],
+  ['course-display'],
+];
+
+/** A cached row that may carry the note, whichever query it came from. */
+interface CardNoteRow {
+  id?: string;
+  display_id?: string;
+  card_note?: string | null;
+}
+
+/** True when this cached row is the shell the note is being written to. */
+function isNoteRow(row: CardNoteRow | null | undefined, courseId: string): boolean {
+  if (!row || typeof row !== 'object') return false;
+  return row.id === courseId || row.display_id === courseId;
+}
+
+/**
+ * Patch one cache entry, whichever shape it holds: `courseShellsOptions` and
+ * the Home card's `courseDisplayOptions` cache lists of rows, the course page's
+ * `courseDisplayOptions(courseId)` caches a single row.
+ */
+function patchCardNoteEntry(
+  entry: CardNoteRow[] | CardNoteRow | null | undefined,
+  courseId: string,
+  value: string | null,
+): CardNoteRow[] | CardNoteRow | null | undefined {
+  if (Array.isArray(entry)) {
+    return entry.map((row) => (isNoteRow(row, courseId) ? { ...row, card_note: value } : row));
+  }
+  if (isNoteRow(entry, courseId)) return { ...(entry as CardNoteRow), card_note: value };
+  return entry;
+}
+
+/**
+ * Mutation wrapper: writes the note and patches both caches that carry it
+ * immediately.
+ *
+ * The optimistic patch is what keeps the Info-tab input steady. Without it the
+ * field's `stored` prop stayed on the old value for the whole round trip, and
+ * the re-seed effect put that old value back under the owner's cursor. On
+ * failure every cache goes back to what it held and the field keeps the draft,
+ * so the typed text is never lost to a failed save.
+ */
+export function useUpdateCardNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ courseId, note }: { courseId: string; note: string | null }) =>
+      updateCardNote(courseId, note),
+
+    onMutate: async ({ courseId, note }: { courseId: string; note: string | null }) => {
+      const value = normalizeCardNote(note);
+      const previous: [readonly unknown[], unknown][] = [];
+
+      for (const queryKey of CARD_NOTE_CACHE_KEYS) {
+        await queryClient.cancelQueries({ queryKey });
+        for (const [key, entry] of queryClient.getQueriesData<CardNoteRow[] | CardNoteRow>({
+          queryKey,
+        })) {
+          previous.push([key, entry]);
+          if (entry === undefined) continue;
+          queryClient.setQueryData(key, patchCardNoteEntry(entry, courseId, value));
+        }
+      }
+
+      return { previous };
+    },
+
+    onError: (_error, _variables, context) => {
+      context?.previous.forEach(([key, entry]) => {
+        queryClient.setQueryData(key, entry);
+      });
+    },
+
+    onSettled: () => {
+      for (const queryKey of CARD_NOTE_CACHE_KEYS) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+}
+

@@ -1,0 +1,28 @@
+/* Grades tab — placeholder pane until Phase 10. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  padding-block: var(--space-4);
+}
+
+.pane {
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 60ch;
+}
+
+.headline {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg);
+  color: var(--color-text);
+}
+
+.body {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--color-neutral-400);
+}
