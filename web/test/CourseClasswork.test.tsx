@@ -19,7 +19,9 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ auth: { getSession: vi.fn() } }),
 }));
 
-const { ClassworkNode } = await import('@/app/(app)/course/[id]/classwork/CourseClasswork');
+const { ClassworkNode, ClassworkFileRow } = await import(
+  '@/app/(app)/course/[id]/classwork/CourseClasswork'
+);
 const { buildContentTree } = await import('@/lib/course-dimension');
 
 function renderTree(rows: ContentTreeRow[]) {
@@ -81,5 +83,32 @@ describe('ClassworkNode — reading order follows the tree', () => {
 
     expect(drawnNodes()).toEqual([{ id: '9', depth: '0' }]);
     expect(screen.getByText('Handout')).toBeInTheDocument();
+  });
+});
+
+describe('ClassworkFileRow — the shared Open ladder', () => {
+  const stored = { fileId: 1, fileName: 'Lecture3.pptx', storagePath: 'IST.323/Lecture3.pptx', bucket: 'lecture_slides' };
+  const notStored = { fileId: 2, fileName: 'Handout.pdf', storagePath: null, bucket: null };
+
+  it('opens a stored file through the signed-URL button', () => {
+    render(<ClassworkFileRow file={stored} nodeUrl={null} />);
+    expect(screen.getByText('In library')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open' })).toBeEnabled();
+  });
+
+  it("says 'not stored', never 'no route' — this view cannot see a source link", () => {
+    render(<ClassworkFileRow file={notStored} nodeUrl={null} />);
+    // Twice over: the honesty tag, and the dead-end control beside it.
+    expect(screen.getAllByText('Not stored')).toHaveLength(2);
+    expect(screen.queryByText('No route')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Not stored' })).toBeDisabled();
+  });
+
+  it("offers the item's own Blackboard page when the bytes are not in the library", () => {
+    render(<ClassworkFileRow file={notStored} nodeUrl="https://blackboard.syracuse.edu/item/42" />);
+    expect(screen.getByRole('link', { name: 'In Blackboard ↗' })).toHaveAttribute(
+      'href',
+      'https://blackboard.syracuse.edu/item/42',
+    );
   });
 });

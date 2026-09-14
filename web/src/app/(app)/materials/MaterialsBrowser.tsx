@@ -3,6 +3,9 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { courseCode, useCourses, type CourseSummary } from '@/lib/queries';
+import { FileOpenAction } from '@/components/materials/FileOpenAction';
+// The reading ladder is a different ladder (resolveReadingRoute); it still
+// drives the stored-file button directly.
 import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
 import {
   BUCKET_ORDER,
@@ -53,46 +56,9 @@ function FileRow({ file }: { file: BbFileRow }) {
         <span className={styles.rowMeta}>{meta.join(' · ')}</span>
       </span>
 
-      <span className={honestyTagClass(honesty.location)} title={honestyTitle(honesty.location)}>
-        {honesty.label}
-      </span>
-
-      {honesty.location === 'library' && file.storage_path ? (
-        <OpenStoredButton storagePath={file.storage_path} className={tokens.btnPrimary} />
-      ) : honesty.location === 'source' && file.source_url ? (
-        <span className={styles.action}>
-          <a className={tokens.btnPrimary} href={file.source_url} target="_blank" rel="noreferrer">
-            Open ↗
-          </a>
-        </span>
-      ) : (
-        <span className={styles.action}>
-          <button type="button" className={tokens.btnSecondary} disabled title={honesty.label}>
-            {honesty.location === 'disk' ? 'On disk only' : 'No route'}
-          </button>
-        </span>
-      )}
+      <FileOpenAction routes={file} showLabel />
     </div>
   );
-}
-
-function honestyTagClass(location: string): string {
-  if (location === 'library') return tokens.tagAccent;
-  if (location === 'source') return tokens.tagOutline;
-  return tokens.tagNeutral;
-}
-
-function honestyTitle(location: string): string {
-  switch (location) {
-    case 'library':
-      return 'Bytes stored in the bb-files bucket — opens a signed link.';
-    case 'source':
-      return 'No stored copy; opens the original source URL.';
-    case 'disk':
-      return 'Recorded in the local mirror only — no online copy to open here.';
-    default:
-      return 'No storage, source URL or local copy recorded.';
-  }
 }
 
 /* ---------------------------------------------------------------------------

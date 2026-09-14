@@ -32,7 +32,7 @@ import {
   type CourseStaff,
 } from '@/lib/queries.course';
 import { fileTitle, useCurrentFiles, type BbFileRow } from '@/lib/queries.materials';
-import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
+import { FileOpenAction } from '@/components/materials/FileOpenAction';
 import { QueryState, isQueryLoading, isQueryUnresolved } from '@/components/shared/QueryState';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseInfo.module.css';
@@ -320,17 +320,7 @@ export function CourseInfo({ courseId }: { courseId: string }) {
         {syllabus.map((file) => (
           <div key={file.id} className={styles.fileRow}>
             <span className={styles.fileName}>{fileTitle(file)}</span>
-            {file.storage_path ? (
-              <OpenStoredButton storagePath={file.storage_path} className={tokens.btnPrimary} />
-            ) : file.source_url ? (
-              <a className={tokens.btnPrimary} href={file.source_url} target="_blank" rel="noreferrer">
-                Open ↗
-              </a>
-            ) : (
-              <button type="button" className={tokens.btnSecondary} disabled>
-                No route
-              </button>
-            )}
+            <FileOpenAction routes={file} />
           </div>
         ))}
       </Section>

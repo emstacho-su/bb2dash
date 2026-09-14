@@ -21,7 +21,7 @@ import tokens from '@/styles/tokens.module.css';
 import { courseCodeFromId } from '@/lib/queries.today';
 import { bucketLabel, fileTypeChip, formatBytes } from '@/lib/queries.materials';
 import { useSession, useSessionFiles, useSessionReadings } from '@/lib/queries.popout';
-import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
+import { FileOpenAction } from '@/components/materials/FileOpenAction';
 import {
   QueryState,
   isQueryLoading,
@@ -167,22 +167,7 @@ export function SessionPopout({ sessionId }: { sessionId: number }) {
                     {bucketLabel(file.bucket)} · {formatBytes(file.bytes)}
                   </span>
                 </span>
-                {file.storage_path ? (
-                  <OpenStoredButton storagePath={file.storage_path} className={tokens.btnPrimary} />
-                ) : file.source_url ? (
-                  <a
-                    className={tokens.btnSecondary}
-                    href={file.source_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open ↗
-                  </a>
-                ) : (
-                  <span className={styles.footerNote}>
-                    {file.local_path ? 'on disk only' : 'no route'}
-                  </span>
-                )}
+                <FileOpenAction routes={file} />
               </div>
             ))}
           </div>

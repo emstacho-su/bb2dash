@@ -227,31 +227,78 @@ export function fileTitle(row: {
 }
 
 /** Where a file's bytes actually live — drives the honesty label (see below). */
-export type FileLocation = 'library' | 'disk' | 'source' | 'none';
+export type FileLocation = 'library' | 'disk' | 'source' | 'unknown' | 'none';
+
+/**
+ * A route column the caller cannot see, as distinct from one that is recorded
+ * empty. `v_content_tree` projects `storage_path` and nothing else, so the
+ * Classwork tree knows whether a file is stored but knows nothing at all about
+ * a source URL or a local mirror. Passing `null` for those would have the tree
+ * assert "No route" over a file that may well have one; passing
+ * `UNKNOWN_ROUTE` says only what the view actually carries.
+ *
+ * A symbol rather than the string 'unknown' so it can never collide with a
+ * real path.
+ */
+export const UNKNOWN_ROUTE: unique symbol = Symbol('unknown-route');
+
+/** A route column: a path, recorded-empty, or not visible from here. */
+export type RouteValue = string | null | typeof UNKNOWN_ROUTE;
 
 /**
  * The three columns that decide whether a file can be opened. Declared
- * structurally, not as a `Pick` of `bb_files`, because the Classwork tree
- * (`v_content_tree`) carries only `storage_path` — it has no `source_url` or
- * `local_path` column — and must still get the same honest answer.
+ * structurally, not as a `Pick` of `bb_files`, so both a full `bb_files` row
+ * and the Classwork tree's partial view can be answered by the same function.
  */
 export interface FileRoutes {
-  storage_path: string | null;
-  local_path: string | null;
-  source_url: string | null;
+  storage_path: RouteValue;
+  local_path: RouteValue;
+  source_url: RouteValue;
+}
+
+/** A route we can actually use: a non-empty recorded path. */
+function routePath(value: RouteValue): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/** True when the caller could not see this column at all. */
+function isUnknownRoute(value: RouteValue): boolean {
+  return value === UNKNOWN_ROUTE;
+}
+
+/** The stored path, or null — the one route that opens through Storage. */
+export function storedPath(row: FileRoutes): string | null {
+  return routePath(row.storage_path);
+}
+
+/** The external URL, or null. */
+export function sourceUrl(row: FileRoutes): string | null {
+  return routePath(row.source_url);
 }
 
 export function fileLocation(row: FileRoutes): FileLocation {
-  if (row.storage_path) return 'library';
-  if (row.local_path) return 'disk';
-  if (row.source_url) return 'source';
+  if (routePath(row.storage_path)) return 'library';
+  if (routePath(row.local_path)) return 'disk';
+  if (routePath(row.source_url)) return 'source';
+  // Nothing usable was found — but "nothing found" is only "no route" when
+  // every column was actually visible.
+  if (
+    isUnknownRoute(row.storage_path) ||
+    isUnknownRoute(row.local_path) ||
+    isUnknownRoute(row.source_url)
+  ) {
+    return 'unknown';
+  }
   return 'none';
 }
 
 /**
- * The honest availability label for a file. Critically: a file that is only
- * recorded on the local disk (a `local_path`, no Storage bytes) reads
- * "recorded on disk" — NOT "on disk" — because the browser cannot open it.
+ * The honest availability label for a file. Two distinctions matter here: a
+ * file that is only recorded on the local disk (a `local_path`, no Storage
+ * bytes) reads "recorded on disk" — NOT "on disk" — because the browser cannot
+ * open it; and a row whose other route columns were never fetched reads "Not
+ * stored", which claims only the absence this caller can actually see, rather
+ * than "No route", which claims there is nowhere else to look.
  */
 export function fileHonesty(row: FileRoutes): {
   location: FileLocation;
@@ -267,6 +314,8 @@ export function fileHonesty(row: FileRoutes): {
       return { location, label: 'Source link', openable: true };
     case 'disk':
       return { location, label: 'Recorded on disk', openable: false };
+    case 'unknown':
+      return { location, label: 'Not stored', openable: false };
     default:
       return { location, label: 'No route', openable: false };
   }

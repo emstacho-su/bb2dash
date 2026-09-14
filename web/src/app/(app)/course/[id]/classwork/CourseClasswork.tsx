@@ -8,9 +8,11 @@
  * rendered by recursing through the tree — not as a flat list indented by a
  * path depth, which drew the wrong nesting whenever a sibling's title extended
  * another's. Each node shows the Ultra progress chip Blackboard recorded, and
- * every file underneath it uses the Materials screen's Open ladder — a
- * signed-URL open when the bytes are in the library, an honest label when they
- * are not.
+ * every file underneath it goes through the shared `FileOpenAction` ladder — a
+ * signed-URL open when the bytes are in the library, the item's Blackboard page
+ * when they are not, and a label that claims only what this view can see (it
+ * carries `storage_path` alone, so "not stored" is honest and "no route" is
+ * not).
  *
  * The old week-rail timeline still lives at `?view=timeline`; the page routes
  * to it, and the link back to it sits in this pane's header.
@@ -28,8 +30,8 @@ import {
   type ContentFile,
   type ContentNode,
 } from '@/lib/queries.course';
-import { fileHonesty, fileTitle, fileTypeChip } from '@/lib/queries.materials';
-import { OpenStoredButton } from '@/components/materials/OpenStoredButton';
+import { UNKNOWN_ROUTE, fileTitle, fileTypeChip } from '@/lib/queries.materials';
+import { FileOpenAction } from '@/components/materials/FileOpenAction';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseClasswork.module.css';
 
@@ -49,11 +51,6 @@ function indentFor(depth: number): number {
 /* -- a file under a content node ------------------------------------------- */
 
 export function ClassworkFileRow({ file, nodeUrl }: { file: ContentFile; nodeUrl: string | null }) {
-  const honesty = fileHonesty({
-    storage_path: file.storagePath,
-    local_path: null,
-    source_url: null,
-  });
   const title = fileTitle({
     file_name: file.fileName,
     storage_path: file.storagePath,
@@ -67,18 +64,17 @@ export function ClassworkFileRow({ file, nodeUrl }: { file: ContentFile; nodeUrl
         {chip}
       </span>
       <span className={styles.fileName}>{title}</span>
-      <span className={honesty.openable ? tokens.tagAccent : tokens.tagNeutral}>{honesty.label}</span>
-      {file.storagePath ? (
-        <OpenStoredButton storagePath={file.storagePath} className={tokens.btnPrimary} />
-      ) : nodeUrl ? (
-        <a className={tokens.btnSecondary} href={nodeUrl} target="_blank" rel="noreferrer">
-          In Blackboard ↗
-        </a>
-      ) : (
-        <button type="button" className={tokens.btnSecondary} disabled title={honesty.label}>
-          No route
-        </button>
-      )}
+      {/* `v_content_tree` projects storage_path and nothing else, so the other
+          two routes are unknown here rather than absent — see UNKNOWN_ROUTE. */}
+      <FileOpenAction
+        routes={{
+          storage_path: file.storagePath,
+          local_path: UNKNOWN_ROUTE,
+          source_url: UNKNOWN_ROUTE,
+        }}
+        blackboardUrl={nodeUrl}
+        showLabel
+      />
     </div>
   );
 }
