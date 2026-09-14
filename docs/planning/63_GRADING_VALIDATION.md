@@ -98,6 +98,58 @@ rank weights, parent), every assignment's component link and points, and the ari
 - [ ] `confidence = confirmed` on a row now means "checked against the materials on <date>",
       and the `notes` say where.
 
+## Definition of done
+
+Source: Stack's answers (`70_MVP_INDEX.md` §1.5) + research `research/75_RESEARCH_v1_grading_validation.md` §5.
+Supersedes the Acceptance list above where they overlap.
+
+- [ ] **Stack's acceptance:** he has sat every course (seven verdict files; GEO lecture +
+      recitation may share one), answered every open row and every question-block item, and the
+      summary reads back to him correctly.
+- [ ] Every row has a `verdict`; every non-`matches` row has `call`, `reason_code`, `why`,
+      `decided_on`. `differs` rows with no Stack call = **0**.
+- [ ] Every row not `not_in_materials` carries `bb_file` id + unit + verbatim quote; three rows
+      per course spot-checked by the PM via `search_materials`.
+- [ ] Each verdict file ends with a **machine block** (YAML with the same rows: target / stored /
+      materials / citation / verdict / call / reason_code / why / decided_on / `recheck` SQL);
+      it parses; row ids are unique. This is what lets a later automated pass re-check without
+      re-reading prose.
+- [ ] All ten §4 export questions answered or marked `PROF_TO_CONFIRM`.
+- [ ] Questions block per course: each question has an answer or a recorded default, and a
+      DECISIONS row where it sets policy (no-total courses, OCR files, classification).
+- [ ] SQL invariants shipped as `db/tests/grading_invariants.sql` and run **before and after**
+      the reconciliation migration (both outputs pasted in the PR): `weighted_pct` courses —
+      top-level `sum(weight_pct) = 100`; `points` courses — `sum(points) = total_points`;
+      children sum to their parent; no assignment with `points_possible > 0` and a null
+      `component_id` unless marked ungraded; every `component_id` resolves to a component of
+      the same course; `confidence = 'confirmed'` implies `notes` holds a `bb_file:` citation
+      and a `verified_on` date.
+- [ ] `0NN_grading_reconciliation.sql` applied to prod, repo file byte-identical; rows Stack
+      answered from memory are `STACK_OVERRIDE` + `confirmed` with his why; `ask_professor`
+      rows stay `tentative`.
+- [ ] `65_GRADING_VALIDATION_SUMMARY.md`: verdict counts, corrections as plain statements, open
+      professor questions with status, answered logic questions → DECISIONS rows.
+- [ ] SOP gates for the closing PR: `/code-review` on the migration; STATUS + DECISIONS +
+      ORCHESTRATOR updated.
+
+## Task loops
+
+| # | task | executable check | demo line (Stack) | owner |
+|---|---|---|---|---|
+| 1 | `db/tests/grading_invariants.sql` + baseline run on the export | SQL runs; failures listed (non-zero expected at start) | — | PM session |
+| 2 | Verdict-file template with the machine block | a fixture verdict parses as YAML; row ids unique | — | PM session |
+| 3–9 | One sitting per course (IST.323, IST.466, IST.352, ECN.304, GEO.103, IST.471) | verdict file complete; 0 undecided `differs`; questions block answered; three citations spot-checked | "I sat the course and made every call" | Stack + confined session |
+| 10 | Summary | counts reconcile to the seven files; every correction is a plain statement | "the summary reads right" | PM session |
+| 11 | Reconciliation migration | dry-run in rollback; applied; byte-identical | — | PM session |
+| 12 | Invariants re-run after the migration | all green; pasted | — | PM session |
+| 13 | DECISIONS rows from the questions blocks; closing PR | gates | — | PM session |
+
+Open questions from the research, for Stack (also in `70_MVP_INDEX.md` §5): keep the YAML
+machine block (recommended; it enables the automated re-check) or markdown only; `verified_on`
+as a new column or inside `notes`; rows answered from memory as `STACK_OVERRIDE` + `confirmed`
+or `tentative` until a document backs them; run the invariants by hand or wire them into the
+sync so they re-check every term.
+
 ## Launching the session
 
 ```powershell

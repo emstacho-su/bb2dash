@@ -50,11 +50,60 @@ Must specify:
 
 ## Definition of done
 
-_Pending research (R-12 report) — filled in PR #11._
+Source: Stack's answers (`70_MVP_INDEX.md` §1.7) + research `research/77_RESEARCH_phase12_electron.md` §5.
+
+- [ ] **Stack's acceptance script (on his laptop, from the unpacked build):** (1) double-click
+      the shortcut: bb2dash opens in its own window with its own taskbar button, signed in;
+      (2) double-click again: the same window is focused, no second process; (3) close and
+      reopen: still signed in; (4) trigger a sync and receive one "sync landed with N changes"
+      toast with the right N; (5) receive a "grade posted" and a "due tomorrow" toast naming
+      course + item, and clicking each raises the window on the right screen; (6) the Sync button
+      opens Windows Terminal in the repo with the sync command prefilled. All six ticked.
+- [ ] Single instance: launching twice focuses the existing window; one taskbar button, one
+      process (Playwright-for-Electron test).
+- [ ] Test asserts `webPreferences`: `nodeIntegration` off, `contextIsolation` on, `sandbox` on;
+      external links open in the default browser; `will-navigate` allowlist enforced.
+- [ ] Session persistence: Supabase auth cookies carry a Max-Age (Electron's cookie store keeps
+      only persistent cookies across restarts and is not DPAPI-encrypted); any main-held token
+      round-trips through `safeStorage`; no token in the renderer or logs.
+- [ ] Notification source is a main-process **poller** with a stable-key / `lastSeenAt`
+      watermark on disk (Realtime is for on-screen data, not background events, and sockets die
+      across sleep); restarting the poller fires no duplicate toast (watermark test).
+- [ ] The three toasts fire once each with the correct payload (test hook asserts); toasts are
+      click-only for the MVP (action buttons need a ToastActivatorCLSID shortcut); a correct
+      AppUserModelID is set (otherwise toasts fail silently).
+- [ ] Sync button opens Windows Terminal (`wt.exe`), cwd = repo, `claude "/bb-sync <id>"`
+      prefilled; a malformed id is rejected before spawn (test).
+- [ ] Playwright-for-Electron suite green; reducer unit tests ≥ 80 %.
+- [ ] Clean-profile Windows 11 smoke: the SmartScreen path screenshotted; the app runs after
+      "Run anyway"; shortcut-creation steps written in `desktop/README.md`.
+- [ ] Absent by inspection (grep): no crawl, no `shell.openPath`, no download interception, no
+      auto-updater, no mirror code in the MVP.
+- [ ] SOP gates: `/code-review main high` HIGH cleared; `/security-review` over the IPC
+      surface, the spawn, and token storage; STATUS + DECISIONS + ORCHESTRATOR updated.
 
 ## Task loops
 
-_Pending research (R-12 report) — filled in PR #11._
+| # | task | executable check | demo line (Stack) | owner |
+|---|---|---|---|---|
+| 1 | Freeze the Contract; put the open questions to Stack | answers recorded | — | PM session |
+| 2 | `desktop/` package, window, single-instance lock, AppUserModelID | Playwright: second launch focuses; one process | "one icon, one window" | W-23 |
+| 3 | Secure `webPreferences` + navigation allowlist | test asserts flags; external link opens browser | — | W-23 |
+| 4 | Session persistence (cookie Max-Age, `safeStorage`) | restart test: still signed in; no token in logs | "I reopen and I am still in" | W-23 |
+| 5 | Sync button → `wt.exe` with prefilled command, `agent_requests` row first | spawn test with id validation | "the terminal opens with the command ready" | W-23 |
+| 6 | Poller + watermark on disk | unit tests: dedup across restart | — | W-24 |
+| 7 | Toast: sync landed with N | test hook asserts payload once | "I get told when a sync lands" | W-24 |
+| 8 | Toasts: grade posted, due tomorrow (clock trigger) | tests; click raises the right screen | "I get told about a grade and a due item" | W-24 |
+| 9 | Unpacked build + README + clean-profile smoke | build artefact runs; SmartScreen screenshot | — | W-23 |
+| 10 | Gates + docs | SOP list | — | PM session |
+| 11 | **Stack's acceptance script** | — | the six steps above | Stack |
+| 12 | Post-MVP: file mirror | hash-verified copies under `course context/`; never writes elsewhere (test) | "new files show up in OneDrive" | W-23 |
+
+Open questions from the research, for Stack (also in `70_MVP_INDEX.md` §5): launch at login in
+or out (R-23 lists it, the MVP answer did not); does the poller reuse the web session or hold its
+own token; poll interval, and does polling continue while the window is closed (tray icon or
+window-only); quiet hours for "due tomorrow" or rely on Focus Assist; click-only toasts for the
+MVP (recommended).
 
 ## Post-MVP task (same phase, after the MVP is signed off)
 

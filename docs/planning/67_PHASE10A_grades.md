@@ -70,11 +70,69 @@ shapes, file names), puts open questions to Stack, and waits for answers. It mus
 
 ## Definition of done
 
-_Pending research (R-10a report) — filled in PR #11._
+Source: Stack's answers (`70_MVP_INDEX.md` §1.3) + research `research/72_RESEARCH_phase10a_grades.md` §5.
+
+- [ ] **Stack's acceptance script (on the preview):** (1) open `/grades` and see every course,
+      each with Blackboard's total "as of <seen_at>" or exactly "Blackboard publishes no total";
+      (2) open one course tab and compare one real item row (score, possible, seen_at, feedback,
+      submission status) side by side with the same row in Blackboard; (3) open that item's
+      popout, see submitted/not-submitted with the timestamp and attempt N of M, and download
+      the pulled-back file; (4) drop a file on an assignment, find it in Materials under
+      `my_submissions` labelled "Staged — attach in Blackboard ↗"; (5) confirm no number
+      anywhere on these screens was computed by bb2dash. All five ticked.
+- [ ] Fixture `bb_raw` gradebook + attempts payloads committed for ≥ 3 courses;
+      `stage_gradebook` and `stage_attempts` tests green against them.
+- [ ] Idempotency: re-running each stage on the same `run_id` adds zero rows (SQL assertion).
+- [ ] Reconciliation SQL in the verification note: per course, gradebook column count in
+      `bb_raw` == count in `v_gradebook_latest`, and every `effectiveScore` matches its source.
+- [ ] Three distinct empty states, each with a renderer test: no published total / item
+      ungraded (`—`, never 0) / never synced.
+- [ ] Attendance and non-total `isCalc` columns excluded from item rows; SQL count assertion.
+- [ ] Feedback renders in full when expanded and is HTML-escaped; fixture test with markup.
+- [ ] Attempt files use the two-call pattern (attempt files metadata → per-file download);
+      pulled-back files land under `my_submissions` with a `bb_files` row carrying
+      `assignment_id` and `classified_by = 'blackboard'`; SQL + screenshot.
+- [ ] Drop zone produces a Storage object + `bb_files` row (`classified_by = 'stack'`,
+      `bucket = 'my_submissions'`) visible in Materials within one refresh.
+- [ ] No control anywhere reads "Submit" (grep assertion over `web/src`); the staged-file label
+      is the only call to action.
+- [ ] sha256 comparison renders one of matches / differs / no submitted copy yet; unit test on
+      all three branches.
+- [ ] RLS: owner-only insert on `my_submissions` paths; anon sees 0 rows of `bb_gradebook` /
+      `bb_attempts`; no service key in the client bundle (grep assertion).
+- [ ] Crawler: attempts endpoint added, `slim()` keeps `dueDate`, `points`,
+      `gradebookColumnId`, `attemptsAllowed`; `bb_raw` envelope version bumped; a real crawl
+      lands both payloads (verification note).
+- [ ] SOP gates: typecheck/build/test green in `web/` and `mcp-server/`; `/code-review main
+      high` HIGH cleared; `/security-review`; STATUS + DECISIONS + ORCHESTRATOR updated; Vercel
+      preview posted.
 
 ## Task loops
 
-_Pending research (R-10a report) — filled in PR #11._
+| # | task | executable check | demo line (Stack) | owner |
+|---|---|---|---|---|
+| 1 | Freeze the Contract section; put open questions to Stack | Stack's answers recorded in the brief | — | PM session |
+| 2 | Crawler: attempts endpoint + widened `slim()` + envelope version | real crawl → `bb_raw` holds gradebook + attempts payloads | — | W-17 |
+| 3 | Fixtures: ≥ 3 courses' gradebook + attempts payloads | files committed; loader test parses them | — | W-17 |
+| 4 | `bb_gradebook` (041) + `stage_gradebook` | stage test green on fixtures; idempotency SQL = 0 new rows | — | W-17 |
+| 5 | Views `v_gradebook_latest`, `v_assignment_grade`, `v_course_grade` (042) | reconciliation SQL: counts and `effectiveScore` match `bb_raw` | — | W-17 |
+| 6 | `bb_attempts` (043) + `stage_attempts` + file pull-back into Storage | stage test; SQL: `bb_files` rows with `assignment_id`; a signed URL downloads | — | W-17 |
+| 7 | Register both stages with the Phase 9 driver | `sync_stage_runs` rows appear after a run | — | W-17 |
+| 8 | `queries.grades.ts` + regenerated types | typecheck; query tests with fixtures | — | W-18 |
+| 9 | `/grades` global page | RTL tests: total-with-date, no-total, never-synced states | "every course, Blackboard's number or the honest empty state" | W-18 |
+| 10 | `/course/[id]/grades` tab (replaces the placeholder) | RTL tests: item rows, `—` for null, feedback expand + escaping | "one row matches Blackboard side by side" | W-18 |
+| 11 | Popout submission block | RTL tests: status/timestamp/attempt N of M, file list, sha256 three branches | "I download what I actually submitted" | W-18 |
+| 12 | Upload drop zone + RLS | RTL test; SQL: owner-only insert; Materials shows the row | "I stage a file and see it in Materials" | W-18 |
+| 13 | "No Submit control" + "no computed numbers" audits | grep assertions in tests | — | PM session |
+| 14 | Live smoke on prod | curl/SQL: a real gradebook row visible on `/grades` with its `seen_at` | — | PM session |
+| 15 | Gates + docs + preview | SOP list | — | PM session |
+| 16 | **Stack's acceptance script** | — | the five steps above | Stack |
+
+Open questions from the research, for Stack (also in `70_MVP_INDEX.md` §5): show Blackboard's
+submission confirmation number on the row if the attempts payload carries it; global `/grades`
+ordered by course or as one flat newest-graded-first list; a row with feedback but no score reads
+"returned, ungraded" or stays "submitted"; once R-17 pulls a matching submitted copy, does the
+staged file stay, get marked superseded, or disappear.
 
 ## Out of scope
 

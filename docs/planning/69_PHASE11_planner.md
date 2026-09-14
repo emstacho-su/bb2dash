@@ -62,11 +62,72 @@ both phases.
 
 ## Definition of done
 
-_Pending research (R-11 report) — filled in PR #11._
+Source: Stack's answers (`70_MVP_INDEX.md` §1.6) + research `research/74_RESEARCH_phase11_planner.md` §5.
+
+- [ ] **Stack's acceptance script (on the preview + his Google Calendar):** (1) open `/planner`:
+      this week's class blocks with rooms at the right times, due items on their days, today
+      marked, header names the week; (2) `◂ ▸` moves a week each way; (3) change a due item's
+      status inline and see it update without reload; (4) open Google Calendar and find the
+      "bb2dash" calendar with every assignment/quiz/exam due date and no class meetings; (5) the
+      PM changes one due date on prod and Stack sees exactly one event move; (6) the bell shows a
+      count, opening it lists unread first and clears the count, "See all" opens the
+      Announcements page. All six ticked.
+- [ ] Grid renders `meetings` with room at wall-clock position (America/New_York) for the
+      anchor week; date-only due items in the all-day band, timed ones in position.
+- [ ] Status quick-edit writes `assignment_progress` and never a fact table; the row updates
+      without reload (RTL test).
+- [ ] Vitest: five fixture weeks green, including spring-forward and fall-back; an empty week
+      renders an empty state.
+- [ ] No drag, no work-window lane, no day view (grep for handlers).
+- [ ] OAuth: consent screen is **not** External + Testing (Internal under the Syracuse Workspace
+      org, or published) so the refresh token is not revoked after 7 days; token in Supabase
+      Vault, never in the repo or browser bundle (grep assertion). Stack's one-time setup steps
+      are listed in the brief and done.
+- [ ] A dedicated `bb2dash` calendar is created on first run and its id persisted; the push
+      never writes `primary`.
+- [ ] Event ids are deterministic and base32hex-safe (`'bb' || left(sha256_hex(assignment_id), 32)`);
+      every event carries `privateExtendedProperty app=bb2dash`; the whole set is recoverable
+      from Google by that property.
+- [ ] Idempotency proof: a re-run with unchanged data issues zero writes and the Google-side
+      count is unchanged (log + count in the verification note).
+- [ ] Date change → exactly one `patch`; assignment removed → exactly one `delete`; both demoed
+      live and asserted in tests against a mocked Calendar client.
+- [ ] Meetings are not pushed (test: zero meeting-typed events).
+- [ ] Bell: badge = unread count from `v_announcements_unread`; opening the dropdown stamps
+      `seen_at` and clears the badge; rows stay distinguishable afterwards (RTL test).
+- [ ] Announcements page lists all courses newest-first with course · author · date and
+      survives reload with the badge at zero.
+- [ ] R-16: the two group-item dates recorded with `source` / `confidence`, or explicitly left
+      `tentative` with a note.
+- [ ] SOP gates: typecheck/build/test green; `/code-review main high` HIGH cleared;
+      `/security-review` (OAuth token handling in scope); STATUS + DECISIONS + ORCHESTRATOR
+      updated; Vercel preview posted.
 
 ## Task loops
 
-_Pending research (R-11 report) — filled in PR #11._
+| # | task | executable check | demo line (Stack) | owner |
+|---|---|---|---|---|
+| 1 | Freeze the Contract; put open questions to Stack; list his Google setup steps | answers recorded; steps done by Stack | — | PM session |
+| 2 | Meeting-pattern expansion + week window (`queries.planner.ts`) | vitest: five fixture weeks incl. DST | — | W-22 |
+| 3 | `/planner` grid, today marker, ◂ ▸, empty state | RTL tests per state | "my week, with rooms" | W-22 |
+| 4 | Status quick-edit reuse | RTL test; SQL: only `assignment_progress` written | "I tick an item on the grid" | W-22 |
+| 5 | `calendar_events` table (060) + RLS | SQL: owner-only; unique per assignment | — | W-21 |
+| 6 | OAuth + Vault wiring | function reads the token from Vault; no token in repo/bundle (grep) | — | W-21 |
+| 7 | `calendar-push` function: create calendar, upsert by deterministic id, extended property | mocked-client tests: insert/patch/delete counts | — | W-21 |
+| 8 | Driver job registration | `sync_stage_runs` row per push run | — | W-21 |
+| 9 | Idempotency + change/delete proofs on prod | log shows 0 writes on re-run; 1 patch / 1 delete on change | "I change a date and the event moves" | W-21 |
+| 10 | `announcements.seen_at` + `v_announcements_unread` (061) | SQL view test | — | W-21 |
+| 11 | Bell + dropdown + mark-seen-on-open | RTL tests | "the bell count clears when I open it" | W-22 |
+| 12 | `/announcements` page | RTL test; reload keeps the badge at zero | "every course's announcements in one list" | W-22 |
+| 13 | R-16 group-item dates | SQL: rows carry `source` / `confidence` | — | W-21 |
+| 14 | Gates + docs + preview | SOP list | — | PM session |
+| 15 | **Stack's acceptance script** | — | the six steps above | Stack |
+
+Open questions from the research, for Stack (also in `70_MVP_INDEX.md` §5): one `bb2dash`
+calendar or one per course; an all-day event on the due date or a timed 30-minute event ending
+at `due_at`; delete an event the moment an assignment vanishes from a crawl, or after two
+consecutive absences; does opening the Announcements page also clear the badge, or only the
+dropdown.
 
 ## Out of scope
 

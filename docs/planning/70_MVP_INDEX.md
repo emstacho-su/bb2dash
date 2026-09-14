@@ -6,7 +6,7 @@ development resumes. It fixes, for every remaining phase and stream, (a) the exp
 Each lands as a fixed section in the phase's brief; this file indexes them and holds the
 cross-cutting rules and the research that informed them.
 
-Status: **§1 answers recorded; §2 research NOT started (Stack's go required); §3–§4 pending.**
+Status: **§1 answers recorded; §2 research done (seven reports in `research/`); §3 applied to every brief; §4 complete; §5 lists the open questions Stack answers before each phase starts.**
 
 ## 1. Stack's answers (questionnaire of 2026-09-14, seven rounds)
 
@@ -95,7 +95,7 @@ Recorded verbatim in intent. Where an answer changes Requirements v2, the change
 | §4 Phase 10 row | one PR | 10a / 10b, as already recorded in PR #9 |
 | V-1 | grading reconciliation only | + a per-course **questions step** (logic questions, OCR files, classification) |
 
-## 2. Research plan (waiting for Stack's go)
+## 2. Research plan (executed 2026-09-14)
 
 One Opus researcher per phase/stream, ~30 minutes, read-only web research, no repo changes.
 Each writes `docs/planning/research/7N_RESEARCH_<phase>.md` (≤ 900 words) with:
@@ -143,13 +143,49 @@ Each task: check → build → verify → repeat until the check passes; no task
 
 ## 4. Status of the briefs
 
-| Brief | Exists | MVP/DoD/loops section |
-|---|---|---|
-| `62_PHASE9_sync_loop.md` | yes | pending |
-| `67_PHASE10A_grades.md` | no — created in this PR | pending |
-| `68_PHASE10B_grade_model.md` | no — created in this PR | pending |
-| `69_PHASE11_planner.md` | no — created in this PR | pending |
-| `63_GRADING_VALIDATION.md` (V-1) | yes | pending (+ questions step) |
-| `66_SESSION_ARCHIVAL_RAG.md` (V-2) | yes | pending |
-| `80_PHASE12_electron.md` | no — created in this PR | pending |
-| `81_PHASE13_styling.md` | no — DoD only, direction later | pending |
+| Brief | Research | MVP | DoD | Task loops |
+|---|---|---|---|---|
+| `62_PHASE9_sync_loop.md` | `research/79_RESEARCH_phase9_sync_loop.md` | ✓ | ✓ 14 items | ✓ 15 loops |
+| `67_PHASE10A_grades.md` | `research/72_RESEARCH_phase10a_grades.md` | ✓ | ✓ 14 items | ✓ 16 loops |
+| `68_PHASE10B_grade_model.md` | `research/73_RESEARCH_phase10b_grade_model.md` | ✓ | ✓ 15 items | ✓ 16 loops |
+| `69_PHASE11_planner.md` | `research/74_RESEARCH_phase11_planner.md` | ✓ | ✓ 15 items | ✓ 15 loops |
+| `63_GRADING_VALIDATION.md` (V-1) | `research/75_RESEARCH_v1_grading_validation.md` | ✓ (+ questions step) | ✓ 10 items | ✓ 13 loops |
+| `66_SESSION_ARCHIVAL_RAG.md` (V-2) | `research/76_RESEARCH_v2_session_archival.md` | ✓ | ✓ 15 items | ✓ 13 loops |
+| `80_PHASE12_electron.md` | `research/77_RESEARCH_phase12_electron.md` | ✓ | ✓ 11 items | ✓ 12 loops |
+| `81_PHASE13_styling.md` | none (direction decided later) | ✓ | ✓ 5 items | ✓ template loops |
+
+## 5. Open questions for Stack, collected from the research
+
+Each phase's PM session asks these before freezing its Contract (they are also at the end of each
+brief). Stack answers them then; nothing here blocks PR #11.
+
+**Phase 9 hand-in (ask before PR #10 merges):** freshness thresholds per stream (proposal:
+announcements warn 24 h / error 72 h; assignments 24 h / 7 d; files 7 d) · is the why-note
+required on Dismiss · are dismissed `data_gap` rows permanent or re-raised when the value
+changes · rollup vs hard cap if a crawl raises 200+ gap rows · does a failed `bb-sync` go to
+the Inbox or only a toast.
+
+**Phase 10a:** show Blackboard's submission confirmation number if the attempts payload carries
+it · global `/grades` by course or one flat newest-graded list · feedback-without-score reads
+"returned, ungraded" or "submitted" · staged file after the submitted copy is pulled: stays,
+superseded, or removed.
+
+**Phase 10b:** which courses use Blackboard's running-total setting (can Stack read it per
+course?) · IST.323 extra credit raises earned above 100 % or is clamped · target default A- or
+per course · a `tentative` component: compute with a badge or decline · projection opens on
+graded-so-far or zeros-on-the-rest.
+
+**Phase 11:** one calendar or one per course · all-day vs timed 30-minute due events · delete on
+first absence or after two crawls · does the Announcements page also clear the badge.
+
+**V-1:** YAML machine block (recommended) · `verified_on` column vs inside `notes` ·
+from-memory answers as `STACK_OVERRIDE` + `confirmed` or `tentative` · invariants by hand or
+wired into the sync.
+
+**V-2:** manual tags edited in the note (hook merges; recommended) or via a command · 5-tag cap ·
+resume after the sweep starts a new note (recommended) · class-session schema · cross-repo
+sessions as one note with `repos_touched`.
+
+**Phase 12:** launch at login in or out · poller reuses the web session or holds its own token ·
+poll interval and whether it runs with the window closed (tray?) · quiet hours for "due tomorrow"
+· click-only toasts (recommended).
