@@ -44,8 +44,9 @@ and info, saved in the proper locations, and the RAG pipeline then runs from the
 * Location: `vault/projects/<collection>/sessions/<session_id>.md` — **one note per session**,
   named by the full id, rewritten on every `SessionEnd` (the hook already de-duplicates by
   hash on the ingest side; the note is the single source).
-* A one-time migration moves the existing `bb2dash-retrieval` notes under `bb2dash` and
-  rewrites their `collection`.
+* A one-time migration moves the existing `bb2dash-retrieval` notes under `bb2dash`, rewrites
+  their `collection`, and **back-fills the R-27.3 tags from git history by date** (branch,
+  commits, PRs) where derivable; fields it cannot derive stay empty (Stack, 2026-09-14).
 
 ### R-27.2 Concluded-session identity
 
@@ -95,7 +96,8 @@ under `templates/`): area tags (`ingest`, `db`, `retrieval`, `gui`, `mcp`, `harn
 `validation`), and the phase tag. The hook applies area tags from the paths touched and the
 activity tags from transcript signals (a `gh pr create`, an `apply_migration`, a `/code-review`
 invocation). Anything it cannot classify gets `tags: [unclassified]` and lands in a weekly
-"untagged sessions" list the PM reviews; Stack never has to tag by hand.
+"untagged sessions" list the PM reviews. **Stack may append tags by hand in the note**; the
+hook never removes a manual tag on rewrite and ingest keeps them (Stack, 2026-09-14).
 
 ### R-27.5 The pipeline runs from there
 
@@ -127,6 +129,15 @@ invocation). Anything it cannot classify gets `tags: [unclassified]` and lands i
 - [ ] `docs/ingestion.md` and `docs/retrieval.md` in agentic-harness describe the new fields,
       the tag vocabulary, and the scheduler; `ingest` tests cover the new frontmatter and
       the `--only` flag (the suite is at 261 today; it must not drop).
+
+## Definition of done
+
+_Pending research (R-V2 report) — filled in PR #11. Stack's check: the acceptance list above,
+PM-verified (2026-09-14)._
+
+## Task loops
+
+_Pending research (R-V2 report) — filled in PR #11._
 
 ## Workers and PRs
 

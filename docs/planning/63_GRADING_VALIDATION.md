@@ -50,7 +50,14 @@ recitation together, IST.471)
    (value)*, *ask the professor*, *mark ungraded*. Record his answer **and his one-line why**
    next to the row (the same rule as the Phase 9 Inbox: reasons are what let the seed rules be
    tuned later).
-5. Write the verdict file. Stop. Do not start the next course until Stack says so.
+5. **Questions step (added 2026-09-14).** End the sitting with a `## Questions for Stack`
+   block in the verdict file: every logic question the schema alone cannot settle for this
+   course — how a course with no Blackboard calculated total should be shown, what to do with
+   an image-only file the corpus could not read (OCR), how a file should be classified to a
+   week or session, any component whose aggregation the materials describe ambiguously. One
+   row each: question, what the materials say, the session's suggested answer, Stack's answer,
+   his why. Stack answers inline; the summary collects them for DECISIONS rows.
+6. Write the verdict file. Stop. Do not start the next course until Stack says so.
 
 ### Reconciliation table (one per course, in `65_GRADING_VALIDATION_<course_id>.md`)
 
@@ -64,11 +71,15 @@ rank weights, parent), every assignment's component link and points, and the ari
 
 ### Output of the stream
 
-* Seven verdict files (GEO lecture + recitation may share one).
+* Seven verdict files (GEO lecture + recitation may share one), each ending with its
+  questions block.
 * `65_GRADING_VALIDATION_SUMMARY.md`: counts per verdict, the list of accepted corrections in
   plain statements ("IST.323/participation → component `participation`"; "IST.466 component
   `ethics_presentations` stays 100, rubric deck is superseded — Stack confirmed with prof on
-  <date>"), and the list of *ask the professor* items with their status.
+  <date>"), and the list of *ask the professor* items with their status. Rule (Stack,
+  2026-09-14): **decide from the materials**; Stack may ask the professor himself and override
+  the row later; an unresolved row stays `tentative`. The summary also collects every answered
+  question from the per-course blocks for the PM to turn into DECISIONS rows.
 * The PM stream turns accepted corrections into **one data migration**
   (`0NN_grading_reconciliation.sql`, number from the Phase 10 range) that updates the rows,
   sets `source = 'syllabus'` or `'blackboard'` as appropriate, `confidence = 'confirmed'`, and

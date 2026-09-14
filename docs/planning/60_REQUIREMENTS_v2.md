@@ -137,8 +137,10 @@ new view, L a new ingest path / table / engine.
   supersedes orig 4.6's gate and D3 failure mode 9). Effort S (already mostly shipped).
 * **R-15 Sync reminders, none.** Stack triggers syncs; no schedule, no nag. The iCal feed URL
   is still captured if found, polled by a job that logs skipped while blank. Effort S.
-* **R-16 Data gaps:** IST.323 Security-in-the-News group/date, IST.466 Group #3 slots, OCR for
-  the two image-only files, `bb_files.week_no`/`session_id` classification pass. Effort M.
+* **R-16 Data gaps:** IST.323 Security-in-the-News group/date and IST.466 Group #3 slots stay
+  in Phase 11 (the planner needs the dates). **OCR for the two image-only files and the
+  `bb_files.week_no`/`session_id` classification pass move to V-1's questions step** (Stack,
+  2026-09-14). Effort M.
 * **R-26 Desktop notifications** (via R-23): sync landed with N changes, grade posted, item due
   tomorrow. Web app shows the same as an in-app toast/list. Effort S.
 
@@ -154,11 +156,15 @@ new view, L a new ingest path / table / engine.
   (a) Blackboard's total, labelled "Blackboard's number, as of <date>"; (b) our computed
   standing from R-12, labelled as a model, with the delta to (a) explained; (c) what-if
   projection; (d) per-item rows: score, possible, date seen, feedback, submission status,
-  score changes over time. IST.471 shows an explicit not-computable state. Not on Home cards.
-  Effort M.
+  score changes over time. Not on Home cards. **Split (2026-09-14): (a) + (d) without the
+  score-change history ship in Phase 10a; (b) + (c) and the history ship in 10b.** A course with
+  no Blackboard calculated total shows "Blackboard publishes no total" until V-1's questions
+  step decides otherwise. Effort M.
 * **R-12 Methodology model + what-if.** Applies `grading_schemes` / `grade_components` rules to
   mirrored scores: `manual`, `single`, `sum`, `average_drop_lowest`, `rank_weighted`,
-  `normalized`; declines gracefully on `manual` components and IST.471. What-if: enter
+  `normalized`. **Courses whose method the model cannot compute (IST.471 qualitative, `manual`
+  components) show only Blackboard's number — no model, no partial** (Stack, 2026-09-14).
+  What-if: enter
   hypothetical scores for ungraded items, see projected standing and what is needed on remaining
   work to reach a target. Effort L. Ships after R-10 holds real October scores.
 * **R-17 Submission pull-back.** Add the attempts endpoint
@@ -171,8 +177,8 @@ new view, L a new ingest path / table / engine.
   Effort L (new ingest path).
 * **R-18 Assignment upload (pre-submission).** Drop a file on an assignment (popout or Classwork
   row) → Storage `bb-files` under `my_submissions` → `bb_files` row with `assignment_id`,
-  `classified_by = 'stack'`, `bucket = 'my_submissions'` → mirrored to
-  `course context/<course>/my_submissions/` by R-23 → visible in Materials and the popout with an
+  `classified_by = 'stack'`, `bucket = 'my_submissions'` → visible in Materials and the popout with an
+  (mirroring to `course context/<course>/my_submissions/` follows R-23's post-MVP mirror task) 
   "attach in Blackboard ↗" link. After R-17 pulls the submitted copy, the popout shows whether
   the staged file matches (sha256) or differs. Effort M.
 
@@ -182,12 +188,13 @@ new view, L a new ingest path / table / engine.
   placed on their days; `◂ ▸` by week; today highlighted. No work-window lane, no day view.
   Effort M.
 * **R-25 Google Calendar push.** One bb2dash calendar in Stack's Google account: an event per
-  assignment/quiz/exam due date and recurring events per course meeting pattern; updated when
-  dates change, deleted when items vanish. Push only; nothing read back. Needs Google OAuth for
+  assignment/quiz/exam due date; updated when dates change, deleted when items vanish.
+  **Due dates only** — class meetings are not pushed (Stack, 2026-09-14; supersedes §6.2 #1). Push only; nothing read back. Needs Google OAuth for
   the one user (server-side, token in Supabase Vault or an Edge function secret). Effort M.
 * **R-20 Announcements.** Crawler captures the creator field; `announcements.read_at`; course
   Stream posts (R-01); top-bar bell with unread badge → dropdown (unread first, course · author ·
-  date, mark all read) → all-courses Announcements page. Effort M.
+  date, mark all read) → all-courses Announcements page. **Opening the dropdown marks its items
+  seen** (badge clears); no per-item read tracking in the MVP (Stack, 2026-09-14). Effort M.
 * **R-21 Styling pass — last.** After every screen in this file exists: replace the Nocturne
   placeholder with a signed-off system, CSS custom properties only. Direction chosen then.
 * **R-22 Small D1 items** folded into the tabs above: office hours (Info), content progress and
@@ -204,6 +211,8 @@ new view, L a new ingest path / table / engine.
   with `claude "/bb-sync <id>"` ready. Materials open via `shell.openExternal` on the signed
   URL. **No** `shell.openPath` from the mirror, **no** download interception, **no** Blackboard
   webview or crawl inside Electron. Unpacked build + shortcut, no installer. Effort M+.
+  **MVP (Stack, 2026-09-14): the shell, desktop notifications for all three R-26 triggers, and
+  the Sync button. The file mirror (a) is a post-MVP task in the same phase.**
 * **R-24 Professional-side stub: dropped.** Never. IST.471's hours log (T-09) is also out.
 
 ### 3.6 Validation and memory streams (added 2026-09-14)
@@ -220,7 +229,9 @@ new view, L a new ingest path / table / engine.
   corrections, not features): validate `grading_schemes` / `grade_components` /
   `assignments.component_id` course by course with Stack, in a session confined to the
   materials corpus. Prerequisite for R-12. Brief: `63_GRADING_VALIDATION.md`; claim under test:
-  `64_GRADING_SCHEMA_EXPORT_2026-09-14.md`. Effort M, mostly Stack's review time.
+  `64_GRADING_SCHEMA_EXPORT_2026-09-14.md`. **Each sitting ends with a per-course questions
+  block** for logic questions the schema alone cannot settle (no-total courses, the two OCR-only
+  files, week/session classification); Stack answers inline. Effort M, mostly Stack's review time.
 
 ## 4. Phase plan (confirmed order)
 

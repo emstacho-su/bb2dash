@@ -1,4 +1,4 @@
-# MVP, definition of done, and task loops — index (PR #10)
+# MVP, definition of done, and task loops — index (PR #11)
 
 Date: 2026-09-14. PM: the Fable session. Product manager: Stack. This is the last docs PR before
 development resumes. It fixes, for every remaining phase and stream, (a) the explicit MVP,
@@ -151,5 +151,5 @@ Each task: check → build → verify → repeat until the check passes; no task
 | `69_PHASE11_planner.md` | no — created in this PR | pending |
 | `63_GRADING_VALIDATION.md` (V-1) | yes | pending (+ questions step) |
 | `66_SESSION_ARCHIVAL_RAG.md` (V-2) | yes | pending |
-| `70_PHASE12_electron.md` | no — created in this PR | pending |
-| `71_PHASE13_styling.md` | no — DoD only, direction later | pending |
+| `80_PHASE12_electron.md` | no — created in this PR | pending |
+| `81_PHASE13_styling.md` | no — DoD only, direction later | pending |
