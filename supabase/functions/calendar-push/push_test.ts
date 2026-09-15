@@ -14,9 +14,9 @@
 //   3. one date changed, one row deleted   -> exactly one patch and one delete
 //   4. one Blackboard-linked item absent   -> exactly that event deleted, syllabus-only left
 //
-// The event_at rule and the in_workload filter live in SQL (migration 060's
-// v_calendar_push_items), so the authoritative test for them is the fixture transaction recorded
-// in docs/planning/69a_W21_VERIFICATION.md §4. The instants below are that transaction's actual
+// The event_at rule, the in_workload filter and absent_from_blackboard live in SQL (migrations
+// 060 and 065, v_calendar_push_items), so the authoritative test for them is the fixture
+// transaction recorded in docs/planning/69a_W21_VERIFICATION.md §4. The instants below are its
 // output, and the assertions here prove the TypeScript side does not move them: a date-only exam
 // keeps its class-start instant and a date-only quiz its 23:59, on both sides of the 2026-11-01
 // fall-back, and a meeting- or attendance-typed row never reaches the pusher at all.
