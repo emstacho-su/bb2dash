@@ -53,13 +53,7 @@ export function AnnouncementsList() {
     <section className={styles.screen} aria-label="Announcements">
       <div className={styles.headLine}>
         <span className={styles.sub}>
-          {announcements.isPending
-            ? 'loading…'
-            : announcements.isError
-              ? 'could not load'
-              : `${cards.length} announcement${cards.length === 1 ? '' : 's'}${
-                  unreadCount > 0 ? ` · ${unreadCount} new` : ''
-                }`}
+          {summaryLine(announcements.isPending, announcements.isError, cards.length, unreadCount)}
         </span>
       </div>
 
@@ -80,6 +74,19 @@ export function AnnouncementsList() {
       </div>
     </section>
   );
+}
+
+/** The count line. A number is only a fact once the query has answered. */
+export function summaryLine(
+  pending: boolean,
+  failed: boolean,
+  total: number,
+  unread: number,
+): string {
+  if (pending) return 'loading…';
+  if (failed) return 'could not load';
+  const counted = `${total} announcement${total === 1 ? '' : 's'}`;
+  return unread > 0 ? `${counted} · ${unread} new` : counted;
 }
 
 export function AnnouncementRow({ card }: { card: AnnouncementCard }) {

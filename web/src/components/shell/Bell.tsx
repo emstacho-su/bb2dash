@@ -27,6 +27,7 @@ import {
   bellRows,
   useUnreadAnnouncements,
   useUnreadSnapshot,
+  type AnnouncementCard,
 } from '@/lib/queries.announcements';
 import { BellIcon } from './icons';
 import { usePopover } from './usePopover';
@@ -74,46 +75,72 @@ export function Bell() {
       </button>
 
       {popover.open && (
-        <div className={styles.panel} role="menu" aria-label="Announcements">
-          <div className={styles.head}>Announcements</div>
-
-          {list.isPending && <div className={styles.note}>Loading…</div>}
-          {list.isError && (
-            <div className={styles.note} role="alert">
-              Could not load announcements: {list.error.message}
-            </div>
-          )}
-          {list.isSuccess && rows.length === 0 && (
-            <div className={styles.note}>No announcements have been posted yet.</div>
-          )}
-
-          {rows.map((row) => (
-            <Link
-              key={row.id}
-              href={`/course/${row.courseId}/stream`}
-              className={styles.row}
-              role="menuitem"
-              onClick={() => popover.close()}
-            >
-              <span
-                className={row.unread ? styles.dotUnread : styles.dot}
-                aria-hidden="true"
-                data-unread={String(row.unread)}
-              />
-              <span className={styles.rowBody}>
-                <span className={styles.meta}>{row.meta}</span>
-                <span className={row.unread ? styles.titleUnread : styles.title}>{row.title}</span>
-              </span>
-            </Link>
-          ))}
-
-          <div className={styles.footer}>
-            <Link href="/announcements" className={styles.seeAll} onClick={() => popover.close()}>
-              See all
-            </Link>
-          </div>
-        </div>
+        <BellPanel
+          rows={rows}
+          state={list.isPending ? 'loading' : list.isError ? list.error.message : 'ready'}
+          onNavigate={popover.close}
+        />
       )}
     </span>
+  );
+}
+
+/** The pop-down itself: a state line, the rows, and "See all". */
+function BellPanel({
+  rows,
+  state,
+  onNavigate,
+}: {
+  rows: AnnouncementCard[];
+  /** 'loading' | 'ready' | an error message. */
+  state: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <div className={styles.panel} role="menu" aria-label="Announcements">
+      <div className={styles.head}>Announcements</div>
+
+      {state === 'loading' && <div className={styles.note}>Loading…</div>}
+      {state !== 'loading' && state !== 'ready' && (
+        <div className={styles.note} role="alert">
+          Could not load announcements: {state}
+        </div>
+      )}
+      {state === 'ready' && rows.length === 0 && (
+        <div className={styles.note}>No announcements have been posted yet.</div>
+      )}
+
+      {rows.map((row) => (
+        <BellRow key={row.id} row={row} onNavigate={onNavigate} />
+      ))}
+
+      <div className={styles.footer}>
+        <Link href="/announcements" className={styles.seeAll} onClick={onNavigate}>
+          See all
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/** One announcement: its unread dot, `course · author · date`, and its title. */
+function BellRow({ row, onNavigate }: { row: AnnouncementCard; onNavigate: () => void }) {
+  return (
+    <Link
+      href={`/course/${row.courseId}/stream`}
+      className={styles.row}
+      role="menuitem"
+      onClick={onNavigate}
+    >
+      <span
+        className={row.unread ? styles.dotUnread : styles.dot}
+        aria-hidden="true"
+        data-unread={String(row.unread)}
+      />
+      <span className={styles.rowBody}>
+        <span className={styles.meta}>{row.meta}</span>
+        <span className={row.unread ? styles.titleUnread : styles.title}>{row.title}</span>
+      </span>
+    </Link>
   );
 }
