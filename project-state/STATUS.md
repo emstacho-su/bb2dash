@@ -1,13 +1,13 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-14**, Phase 8 merged (PR #8: Classroom-style
-> course page, tracker paging, popouts, courses sidebar) and Phase 9 sync loop open as PR #10
-> (automated transform on pg_cron, Inbox, Sync button, private bucket, every view
-> security_invoker; migrations 026–044 live). Convention: see root `CLAUDE.md`.
+> Updated upon each PR. Last update: **2026-09-15**, Phase 9 sync loop merged (PR #10: automated
+> transform on pg_cron, Inbox, Sync button, private bucket, every view security_invoker;
+> migrations 026–045 live; Stack signed off after the first live end-to-end sync). Phase 8
+> merged 2026-09-14 (PR #8). Convention: see root `CLAUDE.md`.
 
 ## Where the product is
 
-**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8, PR open).**
+**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8); sync loop live (Phase 9).**
 The Blackboard → Supabase pipeline, typed warehouse, document corpus, and two-tier search API
 are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is merged to `main`
 (PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
