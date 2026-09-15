@@ -118,7 +118,7 @@ end $$;
 -- 3. The file catalogue
 -- =============================================================================================
 do $$
-declare v_run uuid; f bb_files%rowtype; n int;
+declare v_run uuid; f bb_files%rowtype; n int; v_keys int;
 begin
   select run_id into v_run from _fx;
 
@@ -137,7 +137,9 @@ begin
   end if;
   if f.text_status <> 'na' then raise exception 'FAIL text_status = %', f.text_status; end if;
   if f.classification_confidence <> 1 then raise exception 'FAIL classification_confidence = %', f.classification_confidence; end if;
-  if bb_file_relpath(f.id) <> 'IST.323/my_submissions/quiz-01/quiz1-attempt1.pdf' then
+  -- Migration 052: a pulled-back file keys under its own attempt folder, so it can never land on
+  -- the key of a file Stack staged under the same name, nor on an earlier attempt's copy.
+  if bb_file_relpath(f.id) <> 'IST.323/my_submissions/quiz-01/attempt-81000011/quiz1-attempt1.pdf' then
     raise exception 'FAIL relpath = %', bb_file_relpath(f.id);
   end if;
 
@@ -147,8 +149,16 @@ begin
   if f.assignment_id is not null then
     raise exception 'FAIL an ambiguous column filed its submission under %', f.assignment_id;
   end if;
-  if bb_file_relpath(f.id) <> 'IST.323/my_submissions/fp-proposal.docx' then
+  if bb_file_relpath(f.id) <> 'IST.323/my_submissions/attempt-81000041/fp-proposal.docx' then
     raise exception 'FAIL relpath = %', bb_file_relpath(f.id);
+  end if;
+
+  -- Every catalogued submission file has its own key. Before 052 the two Quiz #1 attempts shared
+  -- one, and a staged file of the same name shared it too.
+  select count(*), count(distinct bb_file_relpath(id)) into n, v_keys
+    from bb_files where run_id = v_run and bucket = 'my_submissions';
+  if n <> v_keys then
+    raise exception 'FAIL % submission file(s) share only % distinct Storage key(s)', n, v_keys;
   end if;
 
   -- An attempt with no files produces no catalog row, and is still mirrored as an attempt.
@@ -212,6 +222,17 @@ begin
     raise exception 'FAIL attempts_allowed = %, expected 3 from the gradebook column', allowed;
   end if;
 
+  -- Migration 055: attempts_allowed is a real ceiling, not a copy of multiple_attempts.
+  -- _3598132_1 has multipleAttempts 0 and attemptsLeft -1 - unlimited. Before 055 this read 0 and
+  -- the popout would have said "Attempt 1 of 0".
+  select attempts_allowed into allowed from v_assignment_attempts where column_id = '_3598132_1';
+  if allowed is distinct from -1 then
+    raise exception 'FAIL an unlimited column reports attempts_allowed = %, expected -1', allowed;
+  end if;
+  if exists (select 1 from v_assignment_attempts where attempts_allowed = 0) then
+    raise exception 'FAIL a row reports attempts_allowed = 0, which is not a ceiling';
+  end if;
+
   -- The ambiguous column is linked to TWO assignments, so its single attempt appears once under
   -- each - and is attempt 1 under each. Numbering by column alone would have called the second
   -- one "attempt 2 of 1".
@@ -266,7 +287,20 @@ begin
     when raise_exception then raise;
   end;
 
-  -- The staged path is the one the constraint allows.
+  -- 052 closed the NULL hole: with BOTH columns null, 049's check evaluated to NULL and passed.
+  begin
+    insert into bb_files (bb_course_id, course_id, file_name, source_url, bucket,
+                          classification_confidence, text_status)
+    values ('_571529_1', 'IST.323', 'both-null.pdf', null, 'my_submissions', 1, 'na');
+    raise exception 'FAIL bb_files accepted a row with neither a source_url nor a classifier';
+  exception
+    when check_violation then null;
+    when raise_exception then raise;
+  end;
+
+  -- The staged path is the one the constraint allows, and 052 left its key exactly where it was:
+  -- attempt_id is null on a staged row, so no attempt segment, and W-18's client-side
+  -- submissionRelPath stays correct.
   insert into bb_files (bb_course_id, course_id, file_name, source_url, bucket,
                         classified_by, classification_confidence, text_status, assignment_id, notes)
   values ('_571529_1', 'IST.323', 'my-draft.docx', null, 'my_submissions', 'stack', 1, 'na',
@@ -274,6 +308,13 @@ begin
   select bb_file_relpath(id) = 'IST.323/my_submissions/quiz-01/my-draft.docx' into ok
     from bb_files where file_name = 'my-draft.docx';
   if not ok then raise exception 'FAIL a staged file did not key to its assignment folder'; end if;
+
+  -- And it does not collide with the attempt file of the same assignment.
+  if exists (select 1 from bb_files a join bb_files b on a.id < b.id
+                                     and bb_file_relpath(a.id) = bb_file_relpath(b.id)
+              where a.bucket = 'my_submissions' and b.bucket = 'my_submissions') then
+    raise exception 'FAIL two my_submissions rows compute the same Storage key';
+  end if;
 end $$;
 
 -- The narrowed anon INSERT policy, asserted on its own text rather than by attempting an insert

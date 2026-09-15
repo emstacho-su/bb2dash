@@ -510,6 +510,180 @@ points (migration 034), and synthesising one here would put a made-up date on th
 * `database.types.ts` needs regenerating: five new views and two new tables.
 * The Activity feed's new sentences come from stage counts, so they appear on the first sync that
   posts grades — no further change needed.
-* Migrations 052–058 are still free for fix rounds; 059 is V-1's.
+* Migrations 057–058 are still free for fix rounds; 059 is V-1's. (052–056 were taken by round 2; see §12.)
 * The two SQL test files are safe to re-run against prod at any time: they load under a fixture run
   id, assert, and roll back. They were each run once for this note and left nothing behind.
+
+---
+
+## 12. Round 2 — review fixes (2026-09-15)
+
+`/code-review main high` on the integrated phase branch plus the PM's manual security pass returned
+seven findings for W-17. All seven are fixed. Migrations 046–051 were not touched: every SQL change
+is a new migration that `create or replace`s from the **live** definition, read out of prod
+immediately before writing the file.
+
+### 12.1 What shipped
+
+| File | Applied as | Prod version | md5 (git blob = prod `statements`) |
+|---|---|---|---|
+| `db/migrations/052_submission_relpath_and_check.sql` | `052_submission_relpath_and_check` | `20260915182152` | `2b629bef3afbf4ef24a5195bfac6f768` |
+| `db/migrations/053_stage_files_skip_submissions.sql` | `053_stage_files_skip_submissions` | `20260915182555` | `6678b974fc351811343edfe1ad321ea0` |
+| `db/migrations/054_stage_gaps_skip_submissions.sql` | `054_stage_gaps_skip_submissions` | `20260915182749` | `e3756678ce0950b5e0ec6c096778dffa` |
+| `db/migrations/055_attempts_allowed_and_dates.sql` | `055_attempts_allowed_and_dates` | `20260915183147` | `4721e575e1e2dd68df2404aeb1b21bc2` |
+| `db/migrations/056_stage_gradebook_newest_guard.sql` | `056_stage_gradebook_newest_guard` | `20260915183443` | `cbc98a1b95a9c6d67bc8c44aae446c07` |
+
+Plus, with no migration: `ingest/bb_crawler.js` (R2-1), `skills/bb-sync/SKILL.md` (R2-1 and the
+non-SQL halves of R2-2 and R2-4), and both `db/tests/phase10a_*.sql` files.
+
+057–058 are still free; 059 is V-1's.
+
+### 12.2 Each finding, and the check that proves it
+
+**R2-1 — register-before-crawl reopened a hole in the tick.** `transform_tick` (044) folds a
+*registered* run as soon as one of its `bb_raw` rows is more than three minutes old, with no
+completeness check — the calendar row is one of two triggers, not a requirement. A slow version-3
+crawl (attempts probe plus a full-item GET per assessment) registered up front could be folded with
+one course landed, and `run_transform`'s idempotence would then drop the other six permanently.
+`skills/bb-sync/SKILL.md` is back to registering immediately **after** `bb.runAll` returns, under
+039's grace window; both the skill and the crawler header state that register-first becomes correct
+only when the tick requires the `calendar` row for a registered run — a Phase 9 driver change.
+`runAll` keeps `runId` for that change and for tests, and now validates it.
+
+> **Check.** `assertRunId` accepts a uuid (either case), treats null/undefined as "generate one",
+> and throws on `''`, `'not-a-uuid'`, an unhyphenated uuid, a number, an object, an array and a
+> boolean. `runAll({ runId: 'not-a-uuid' })` rejects with `fetch` stubbed to throw — and `fetch` is
+> never called, so the failure lands before seven courses have been crawled.
+> `web/test/crawler.attempts.test.ts`: **35 tests, green** (30 before, 5 new).
+
+**R2-2 — Storage key collision, and 049's NULL hole.** A staged file and a pulled-back attempt file
+of the same name computed the same key; step 4b treated the resulting 409 as "done" and pointed the
+Blackboard row at Stack's draft. `bb_file_relpath` (from the live 008 definition) now inserts
+`attempt-<digits of attempt_id>/` before the file name when `bucket = 'my_submissions'` and
+`attempt_id` is not null. Staged rows keep their key exactly, so W-18's client-side
+`submissionRelPath` needs no change. The same migration tightens the check to
+`source_url is not null or coalesce(classified_by::text,'') = 'stack'`. Step 4b now refuses a 409
+and reports the row instead of claiming success.
+
+> **Checks, all in one rolled-back transaction.** `v_file_layout.needs_move` = **0** across all 74
+> existing rows, before and after. Four synthetic submission rows — two attempts of `Report.docx`,
+> one staged `Report.docx`, one unlinked — produce **four distinct keys**:
+> `IST.323/my_submissions/quiz-01/attempt-81000011/Report.docx`,
+> `…/attempt-81000021/Report.docx`, `IST.323/my_submissions/quiz-01/Report.docx` (staged,
+> unchanged) and `IST.323/my_submissions/attempt-81000031/loose.pdf`. An insert with both
+> `source_url` and `classified_by` null is **refused with `check_violation`** (049's version
+> accepted it).
+
+**R2-3 — `stage_files` marked every submission file missing.** Its `_bb_refs` comes from
+`payload->'content'`; an attempt's download URL lives in `payload->'attempts'`, which it never
+reads, and its mark-missing step only protected `classified_by = 'stack'`. So the same fold that
+catalogued a submission stamped it `missing_since_run`, and the Activity feed said "N file(s) are
+no longer in Blackboard". `bucket <> 'my_submissions'` added to the mark-missing predicate and to
+the "seen again" clear.
+
+> **Check — before and after in one transaction**, against the real run `bf2f81e5` with two
+> injected rows (a pulled-back submission, a vanished lecture deck). Live 043: `marked_missing`
+> **2**, both stamped. 053: `marked_missing` **1**, only the lecture deck — the submission
+> untouched.
+
+**R2-4 — `stage_gaps` raised an Inbox item for a file step 4b was about to pull.** It runs last in
+the same `run_transform` transaction where `stage_attempts` has just created those rows with a null
+`storage_path` by design, and Phase 9's rule is that a gap is never auto-dismissed. Excluded
+`bucket = 'my_submissions' and attempt_id is not null`; a file Stack *staged* keeps the gap, since
+its bytes going missing is a real problem.
+
+> **Check.** Three byte-less rows (pulled-back, staged, course file). Live 041 raised **3**; 054
+> raised **2** — the pulled-back one excluded, the other two unchanged, stage `ok`.
+
+**R2-5 — "Attempt 2 of 0".** `attempts_allowed` was `multiple_attempts`, which is 0 for a single
+attempt, while unlimited lives in `attempts_left = -1`. 17 of the 45 live columns carry
+`attemptsLeft = -1` with `multipleAttempts = 0`, so this was going to be wrong on most rows Stack
+looked at.
+
+> **Check.** ECN.304 `Attendance` (0, −1) → **−1**; IST.323 Quiz #1 (3, 2) → **3**; IST.471
+> Assignment 2 (1, 0) → **1**. The SQL suite also asserts that no row anywhere reports
+> `attempts_allowed = 0`. A column with no gradebook row at all reports **null** rather than "of 1"
+> — the branch the bare rule needed, and the same answer W-18's `attemptsAllowed(null, null)` gives.
+
+**R2-6 — one bad date could cost the whole run's attempts.** `created` / `submitted` / `modified`
+were bare `::timestamptz` inside the stage's single exception block. Now 026's pattern; `score` is
+hardened the same way for the same reason.
+
+> **Check.** `created: 1757900000000` → `2025-09-15T01:33:20Z`; `submitted: "not a date"` → null;
+> `score: "8"` → `8.000`; `score: "eight"` → null. All three grafted attempts inserted, stage `ok`.
+
+**R2-7 — `scores_changed` narrated an out-of-order fold.** No newest-run guard, while 039 folds
+oldest-first and crawls can be registered late. Now 043's predicate: the two counts are computed
+only when this run is the newest *registered* crawl, else 0 / 0 with `older_run: true`. The rows are
+still inserted — an older crawl is good history, it just does not get to narrate.
+
+> **Check — before and after on the real 2026-09-02 crawl**, replayed after the 9/14 one. Live 046:
+> `scores_changed` **7**, and `sync_change_lines` produced **"7 score(s) changed"**. 056:
+> `scores_changed` **0**, `older_run` **true**, `sync_change_lines` → **"Nothing changed"**. The
+> newest crawl still reports normally (`older_run: false`).
+
+### 12.3 Test runs
+
+```
+phase10a_stage_gradebook: PASS   gradebook_rows 85 · latest_rows 45
+                                 kinds {"item": 38, "total": 1, "letter": 1, "attendance": 5}
+phase10a_stage_attempts:  PASS   attempt_rows 4 · pulled_back_files 3 · view_rows 5
+```
+
+Both suites now carry the round-2 assertions: the `attempt-<digits>/` keys, "no two
+`my_submissions` rows share a key", the both-null refusal, `attempts_allowed = -1` for an unlimited
+column and never 0, `older_run` false on the newest crawl, and a new gradebook section 5b that
+replays the older fixture crawl and proves it reports 0 / 0 with `older_run: true` and that the
+Activity feed says "Nothing changed".
+
+**How they were run, precisely.** No `psql` connection is available to this session, so both were
+executed by pasting the committed loader and test bodies into one `execute_sql` call each, inside
+the transaction the loader opens, ending in `rollback`. The gradebook run used the committed loader
+verbatim with the assertion bodies transcribed (comments and failure-message wording condensed to
+fit one call); the attempts run used the committed assertion bodies verbatim against an abridged
+copy of the same fixture JSON (only fields no assertion reads were trimmed). Every line of both
+committed files has been executed verbatim across the two rounds, but **neither file has been run
+end-to-end from disk in a single invocation** — `cat db/tests/phase10a_load_fixtures.sql
+db/tests/phase10a_stage_gradebook.sql | psql "$DATABASE_URL"` (and the same for the attempts file)
+is a two-minute integration check worth doing wherever a psql connection is to hand.
+
+`npm test` in `web/`: **513 tests in 37 files, all passing** — the whole integrated phase branch,
+W-18's suites included.
+
+Prod was re-read after both runs: no fixture row survived in `bb_raw`, `agent_requests`,
+`sync_runs`, `bb_gradebook`, `bb_attempts` or `bb_files`, and nothing was committed.
+
+### 12.4 Advisor diff (round 1 end → round 2 end)
+
+| lint | before | after | note |
+|---|---|---|---|
+| `function_search_path_mutable` (WARN) | 7 | **7** | unchanged; `bb_file_relpath` is one of the seven and 052 deliberately left it alone — see below |
+| `authenticated_security_definer_function_executable` (WARN) | 1 | **2** | **not this phase's** — see below |
+| `auth_leaked_password_protection` (WARN) | 1 | 1 | unchanged |
+| `unindexed_foreign_keys` (INFO) | 14 | 14 | unchanged |
+| `auth_rls_initplan` (WARN) | 21 | 21 | unchanged |
+| `unused_index` (INFO) | 7 | **5** | two of the three indexes 046/050 added are now used and have dropped off; `bb_attempts_sync_run_idx` remains, on a table with no rows yet |
+
+**The second `authenticated_security_definer_function_executable` finding is not from 10a.** It is
+`public.calendar_push_now()`, created by **`062_calendar_push_tick`** (`20260915145422`) — Phase
+11's range, applied to the same prod database while this round was in flight. It is flagged here
+because it is the only new security finding on the project and someone should own it: `app_owner`
+is the long-standing deliberate exception (DECISIONS, 2026-09-10); this one has not been assessed.
+Every function migrations 046–056 touch is `service_role` only and none of them appears.
+
+**Why 052 did not add `set search_path` to `bb_file_relpath`.** It is one of the seven pre-existing
+lint-0011 findings, it predates this phase, and changing it inside a fix for a Storage-key collision
+would move an advisor count for an unrelated reason. All seven belong in one migration of their own.
+
+### 12.5 Left open after round 2
+
+* **bb-sync step 4b still has not run.** It needs a logged-in tab and a real submission file, so it
+  runs for the first time in Stack's acceptance script. Round 2 changed two of its rules (a 409 is
+  never "done"; it is now the only place a stuck submission file is reported, since 054 stops the
+  transform raising an Inbox gap), which makes that first run the check for both.
+* **The attempts key names are still unverified**, exactly as §10a describes. Nothing in round 2
+  changed that; 055 only made an unreadable value cheaper — it drops one field instead of the run.
+* **A `numeric(9,3)` overflow can still fail `stage_attempts`** (a score ≥ 10^6). Clamping would
+  mean inventing a number; the stage records it honestly as a failed stage with its message. If a
+  real payload ever does it, the column type is the fix.
+* **Neither SQL suite has been run end-to-end from disk in one invocation** — see §12.3.

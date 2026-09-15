@@ -63,41 +63,44 @@ running a second crawl. With no id at all, insert one first
 (`insert into agent_requests (kind, scope, state) values ('sync','all','claimed')`) so the run is
 still auditable.
 
-## Step 3 — Register the run id, then crawl
+## Step 3 — Crawl
 
-The scheduled transform folds **only** crawls whose `run_id` sits on an owner-claimed request
-(`agent_requests.run_id`, migration 035). An unregistered crawl is quarantined, never folded. Since
-crawler version 3 `runAll` accepts the id, so registration comes **first** and the window where a
-crawl exists that nobody has claimed never opens.
-
-Generate the id, write it, and only then crawl:
-
-```sql
-update agent_requests set run_id = '<uuid you generated>'
- where id = $1 and state = 'claimed'
-returning id, run_id;
-```
-
-No row back means the request is no longer claimed: stop and report, rather than crawling into a
-run that will be quarantined. REST equivalent with the owner's JWT:
-`PATCH /rest/v1/agent_requests?id=eq.<id>` with body `{"run_id":"<uuid>"}`.
-
-Then, in the logged-in tab:
+In the logged-in tab:
 
 ```js
-const { run_id, log } = await bb.runAll({ termName: 'Fall 2026', runId: '<the same uuid>' });
+const { run_id, log } = await bb.runAll({ termName: 'Fall 2026' });
 ```
 
-One `bb_raw` row per course plus a memberships row and a calendar row, all under that `run_id`.
-PASS: 7 course rows and the calendar row, every POST status 201, and `run_id` equal to the uuid you
-registered. The calendar row is posted last and is what the transform's crawl-complete detection
-looks for, so **never** interrupt a run part-way and call it done.
+One `bb_raw` row per course plus a memberships row and a calendar row, all under one new `run_id`.
+PASS: 7 course rows and the calendar row, every POST status 201. The calendar row is posted last and
+is what the transform's crawl-complete detection looks for, so **never** interrupt a run part-way and
+call it done.
 
-Report the per-course log line by line.
+Record the `run_id`. Report the per-course log line by line.
 
-*(An older crawler build generated the id inside `runAll` and could only be registered afterwards.
-If `bb.runAll` ignores `runId` — check that the returned `run_id` is the one you passed — the tab is
-running that build: register immediately after it returns instead, and say so in the report.)*
+**Do not pass `runId` and register before the crawl.** `runAll` accepts one, and registering first
+is the order the authorisation rule would prefer — but it is not safe yet, and the reason is in the
+driver: `transform_tick` (migration 044) folds a **registered** run as soon as one of its `bb_raw`
+rows is more than three minutes old, with no completeness check. Register first, and a slow crawl
+(version 3 adds an attempts probe and a full-item GET per assessment) can be folded with one course
+landed; `run_transform` is idempotent, so the remaining six are then dropped for good. Register-first
+becomes correct the moment the tick requires the `calendar` row for a registered run — a Phase 9
+driver change, not this phase's. Until then step 3a below is the order, and migration 039's grace
+window covers the gap exactly as it always has.
+
+## Step 3a — Register the run id, immediately (authorises the fold)
+
+The scheduled transform folds **only** crawls whose `run_id` sits on an owner-claimed request
+(`agent_requests.run_id`, migration 035). An unregistered crawl is quarantined, never folded.
+Do this the moment `bb.runAll` returns, before anything else:
+
+```sql
+update agent_requests set run_id = $run_id where id = $1 and state = 'claimed';
+```
+
+REST equivalent with the owner's JWT: `PATCH /rest/v1/agent_requests?id=eq.<id>` with body
+`{"run_id":"<uuid>"}`. If this update touches no row, stop and report: the request is no longer
+claimed and the crawl will be quarantined by the next tick (harmless, but nothing lands).
 
 ## Step 4 — Wait for the transform
 
@@ -142,11 +145,18 @@ None → say "no new submission files" and go to step 5. Otherwise, for each row
    scratch directory. A 401/403 means the session died mid-sync — stop, report it, and leave the row
    alone; the next sync picks it up because `storage_path` is still null.
 2. **sha256** the saved file, and record its byte count and Content-Type.
-3. **Upload** to Storage at `bb_file_relpath(id)`:
-   `POST /storage/v1/object/bb-files/<relpath>` with `apikey` + `Authorization: Bearer` (the
-   publishable key — never the service key) and the real Content-Type, and **no `x-upsert`**: anon
-   is insert-only, so a changed file gets a new key rather than overwriting one. A 409 means the key
-   already holds bytes; treat that as done and carry on to the row update.
+3. **Upload** to Storage at `bb_file_relpath(id)` — which since migration 052 carries an
+   `attempt-<digits>/` segment for a pulled-back file, so it can never land on the key of a file
+   Stack staged under the same name. `POST /storage/v1/object/bb-files/<relpath>` with `apikey` +
+   `Authorization: Bearer` (the publishable key — never the service key) and the real Content-Type,
+   and **no `x-upsert`**: anon is insert-only, so a changed file gets a new key rather than
+   overwriting one.
+
+   **A 409 is not "done".** It means something already occupies that key, and this step does not
+   know what — so it must not point a Blackboard row at bytes it did not write. Leave
+   `storage_path` null, name the row in the report (course, file, relpath, "Storage key already
+   occupied"), and move on. The next sync retries it; a human decides whether the object there is
+   the same file.
 4. **Mirror** to `course context/<relpath>` (PowerShell `Move-Item`, creating directories) so the
    local tree matches the bucket, exactly as step 4 of the runbook does for course files.
 5. **Update the row** — this is what makes it visible in Materials and the popout:
@@ -168,7 +178,12 @@ Rules that apply to this step and no other:
   `source_url` and are never touched here.
 - Never `insert` a `bb_files` row from this step. `stage_attempts` is the only writer of submission
   catalog rows; this step only fills in bytes on rows it already created.
-- Report the count in step 6 as "N submitted file(s) now downloadable", and name any that failed.
+- Report the count in step 6 as "N submitted file(s) now downloadable", **and name every row you
+  could not pull, with the reason** (session expired, 409 on the Storage key, download failed).
+  Since migration 054 the transform no longer raises an Inbox `data_gap` for a submission file
+  whose bytes have not arrived — it would fire in the same transaction that catalogued it and
+  nothing would ever clear it — so this summary line is the only place a stuck submission file is
+  reported. Do not skip it when the count is zero: say "all N pulled".
 
 ## Step 5 — Close the request
 

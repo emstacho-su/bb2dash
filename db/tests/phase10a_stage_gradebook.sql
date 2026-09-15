@@ -261,6 +261,10 @@ begin
   if (c->>'scores_new')::int <> 1 then
     raise exception 'FAIL scores_new = %, expected exactly 1 (Quiz #3, null -> 7)', c->>'scores_new';
   end if;
+  -- Migration 056: this crawl IS the newest registered one, so it is entitled to report movement.
+  if (c->>'older_run')::boolean then
+    raise exception 'FAIL the newest registered crawl reported older_run = true';
+  end if;
 
   -- The newest run wins in the view, and the older row is still there: this is a mirror with a
   -- history, not a table that gets overwritten.
@@ -270,6 +274,37 @@ begin
        where column_id = '_3560530_1' and run_id in (select run_id from _fx)) <> 2 then
     raise exception 'FAIL Quiz #1 has % fixture row(s); both crawls should be kept',
       (select count(*) from bb_gradebook where column_id = '_3560530_1' and run_id in (select run_id from _fx));
+  end if;
+end $$;
+
+-- =============================================================================================
+-- 5b. An OLDER crawl replayed after a newer one narrates nothing (migration 056, R2-7)
+-- =============================================================================================
+-- Fixture crawl #1 is now a day older than crawl #2, which is already in the mirror. Folding it
+-- again must not report "N score(s) changed": every value it carries differs from the newer rows,
+-- and 039 folds oldest-first, so without the guard a replay would announce that Stack's grades
+-- moved when all that happened was an out-of-order fold. The rows themselves are still history and
+-- are still kept.
+do $$
+declare v_sync bigint; c jsonb;
+begin
+  select sync_run_id into v_sync from _fx where run_id = '00000000-10a0-4000-8000-000000000001';
+  c := stage_gradebook('00000000-10a0-4000-8000-000000000001'::uuid, v_sync)->'counts';
+
+  if not (c->>'older_run')::boolean then
+    raise exception 'FAIL an out-of-order replay did not report older_run = true';
+  end if;
+  if (c->>'scores_changed')::int <> 0 or (c->>'scores_new')::int <> 0 then
+    raise exception 'FAIL an older crawl reported scores_new = % / scores_changed = %, expected 0 / 0',
+      c->>'scores_new', c->>'scores_changed';
+  end if;
+  if sync_change_lines(jsonb_build_object('gradebook', c)) <> jsonb_build_array('Nothing changed') then
+    raise exception 'FAIL the Activity feed would still narrate an out-of-order replay: %',
+      sync_change_lines(jsonb_build_object('gradebook', c));
+  end if;
+  -- It is a replay of a run already folded, so nothing new is inserted either.
+  if (c->>'inserted')::int <> 0 then
+    raise exception 'FAIL the replay inserted % row(s)', c->>'inserted';
   end if;
 end $$;
 
@@ -292,7 +327,9 @@ begin
 
   select count(*) into n from sync_stage_runs
    where sync_run_id in (select sync_run_id from _fx) and stage = 'gradebook';
-  if n <> 3 then raise exception 'FAIL % gradebook stage row(s) recorded, expected 3 (two calls on run 1, one on run 2)', n; end if;
+  if n <> 4 then
+    raise exception 'FAIL % gradebook stage row(s) recorded, expected 4 (two calls on run 1, one on run 2, one replay of run 1)', n;
+  end if;
 end $$;
 
 -- =============================================================================================
