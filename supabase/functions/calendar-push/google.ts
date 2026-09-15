@@ -51,8 +51,22 @@ export function colourIdForCourse(courseId: string): string {
 /** The calendar every event is written in. Google resolves the instant from dateTime's offset. */
 export const EVENT_TIME_ZONE = "America/New_York";
 
-/** Where a click on an event lands: the bb2dash popout for that assignment. */
-export const ITEM_LINK_BASE = "https://web-xi-ten-uy9xk6c6p0.vercel.app/?item=assignment:";
+/**
+ * Where a click on an event lands: the bb2dash popout for that assignment.
+ *
+ * The origin is read per run from app_settings.web_base_url (migration 066), not baked in
+ * here: it is part of the canonical body and therefore part of content_hash, so the day the
+ * deployment moves every event needs a patch - and with the hostname in this file that would
+ * also need a code change and a redeploy first. The constant below is only the value the
+ * column defaults to and the value the tests pin.
+ */
+export const DEFAULT_WEB_BASE_URL = "https://web-xi-ten-uy9xk6c6p0.vercel.app";
+
+/** Trailing slashes are stripped so a link never comes out as `...//?item=`. */
+export function itemLink(webBaseUrl: string, assignmentId: string): string {
+  const origin = (webBaseUrl || DEFAULT_WEB_BASE_URL).replace(/\/+$/, "");
+  return `${origin}/?item=assignment:${assignmentId}`;
+}
 
 export const MANAGED_NOTICE =
   "Managed by bb2dash — edits here are overwritten on the next push.";
@@ -172,11 +186,11 @@ function pointsLine(points: number | string | null): string | null {
   return `Points: ${String(n)}`;
 }
 
-export function buildDescription(item: PushItem): string {
+export function buildDescription(item: PushItem, webBaseUrl: string): string {
   const lines = [`Type: ${item.type}`];
   const points = pointsLine(item.points_possible);
   if (points) lines.push(points);
-  lines.push(ITEM_LINK_BASE + item.assignment_id);
+  lines.push(itemLink(webBaseUrl, item.assignment_id));
   lines.push("");
   lines.push(MANAGED_NOTICE);
   return lines.join("\n");
@@ -186,12 +200,16 @@ export function buildDescription(item: PushItem): string {
  * Q2: a zero-length timed event sitting exactly at the due instant, which is what a deadline is.
  * start === end is legal in the Calendar API and renders as a marker rather than a block.
  */
-export function buildEventBody(item: PushItem, eventId: string): CalendarEventBody {
+export function buildEventBody(
+  item: PushItem,
+  eventId: string,
+  webBaseUrl: string,
+): CalendarEventBody {
   const at: EventDateTime = { dateTime: toRfc3339(item.event_at), timeZone: EVENT_TIME_ZONE };
   return {
     id: eventId,
     summary: `${item.course_code} · ${item.title}`,
-    description: buildDescription(item),
+    description: buildDescription(item, webBaseUrl),
     start: at,
     end: { ...at },
     colorId: colourIdForCourse(item.course_id),

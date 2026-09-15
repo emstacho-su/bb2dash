@@ -8,6 +8,12 @@ Everything below was captured against prod. The live three-run proof against Sta
 account is **deferred** — he has not finished the one-time setup — and its exact commands are in
 §9.
 
+**Round 2 and round 2b (2026-09-15, after PM integration and `/code-review main high`).**
+R2-1 was a real defect in the Contract's `absent_from_blackboard` rule, fixed by migration
+`065_absent_from_crawl_capture` (§4.1). R2b-2, R2b-3, R2b-6 and R2b-7 are fixed by
+`066_calendar_push_lock_and_dirty` (§4.2) and by `calendar-push` v2; R2b-5 and R2b-8 are in the
+function alone. R2-2 and R2-3 are decisions with no code change (§11 and §3).
+
 ## 1. What shipped
 
 | Artefact | Applied / deployed as | Version | md5 |
@@ -17,7 +23,9 @@ account is **deferred** — he has not finished the one-time setup — and its e
 | `db/migrations/062_calendar_push_tick.sql` | `062_calendar_push_tick` | `20260915145422` | `efdc71e10d5950b3122504d027f9504b` |
 | `db/migrations/063_announcements_seen.sql` | `063_announcements_seen` | `20260915144228` | `8876d49ba7bd263483fad308c98dad93` |
 | `db/migrations/064_calendar_secrets.sql` | `064_calendar_secrets` | `20260915145613` | `cca5b6113c402fc0e8a0b5b95f0b3754` |
-| `supabase/functions/calendar-push/{index,google,push}.ts` | edge function `calendar-push` | v1, `verify_jwt = false` | see §1.2 |
+| `db/migrations/065_absent_from_crawl_capture.sql` (round 2) | `065_absent_from_crawl_capture` | `20260915152248` | `0e289efa72ad248240f73da94704e1d7` |
+| `db/migrations/066_calendar_push_lock_and_dirty.sql` (round 2b) | `066_calendar_push_lock_and_dirty` | `20260915180429` | `58474bc5d575f4b95622da886d6bb386` |
+| `supabase/functions/calendar-push/{index,google,push}.ts` | edge function `calendar-push` | **v2**, `verify_jwt = false` | see §1.2 |
 | `scripts/google-consent.mjs` | not run — Stack runs it | — | — |
 
 **063 was applied and pushed first** (14:42 UTC), before 060–062 and 064, because W-22's bell
@@ -29,12 +37,13 @@ Each migration was dry-run inside `begin; … rollback;` through `execute_sql` b
 under the same name as the file. The column above is `md5` of the repo file's **git blob** (LF),
 and it equals `md5(statements[1] || chr(10))` read back from
 `supabase_migrations.schema_migrations` — `apply_migration` stores the statement without its
-trailing newline, so the newline is added back for the comparison. Verified for all five:
+trailing newline, so the newline is added back for the comparison. Verified for all seven:
 
 ```sql
 select name, md5(statements[1] || chr(10)) from supabase_migrations.schema_migrations
  where name in ('060_calendar_events','061_calendar_push_state','062_calendar_push_tick',
-                '063_announcements_seen','064_calendar_secrets');
+                '063_announcements_seen','064_calendar_secrets',
+                '065_absent_from_crawl_capture','066_calendar_push_lock_and_dirty');
 ```
 
 The working tree carries CRLF (`core.autocrlf = true`); the git blob and the applied SQL are both
@@ -42,18 +51,19 @@ LF, exactly as W-10 recorded for Phase 7.
 
 ### 1.2 The edge function's sources are the deployed sources
 
-| File | git blob md5 (LF) |
-|---|---|
-| `supabase/functions/calendar-push/index.ts` | `d5f8f72da83940e5a68f12cb7afc500a` |
-| `supabase/functions/calendar-push/google.ts` | `9674eccc5b1d1ae3866f25d94e83b4d7` |
-| `supabase/functions/calendar-push/push.ts` | `b4ffe47015cd6cf3607a72f890a8886c` |
+| File | git blob md5 (LF), v1 | git blob md5 (LF), **v2** |
+|---|---|---|
+| `supabase/functions/calendar-push/index.ts` | `d5f8f72da83940e5a68f12cb7afc500a` | `6c3e8712d58f71e60a34ee5c6feee1a4` |
+| `supabase/functions/calendar-push/google.ts` | `9674eccc5b1d1ae3866f25d94e83b4d7` | `222fa60d959c6b994d81f6ac092fa173` |
+| `supabase/functions/calendar-push/push.ts` | `b4ffe47015cd6cf3607a72f890a8886c` | `8ea3ae9bd98feeb49f712c3d04d24012` |
 
-Deployed as `calendar-push` v1, `verify_jwt: false`, entrypoint `index.ts`,
-`ezbr_sha256 104eb0228d3f1a20d6e7f4f6a5c2a8f8290b7ef52dea55ed3cf593f8c5a8a092`. The deployed
-content was read back with `get_edge_function` and compared with the repo files; the first
-upload differed from the repo in two characters (an `—` and a `·` escape that the
-deploy path had already unescaped), and the repo files were changed to the literal characters so
-that the two are identical. `push_test.ts` is not deployed.
+Deployed as `calendar-push` **v2**, `verify_jwt: false`, entrypoint `index.ts`,
+`ezbr_sha256 5c8ba43efb379c28ea939891bd49588d5681d53efaa3431ebf2acec97efe468c`
+(v1 was `104eb0228d3f1a20d6e7f4f6a5c2a8f8290b7ef52dea55ed3cf593f8c5a8a092`). Both deployments
+were read back with `get_edge_function` and compared with the repo files. On v1 the upload
+differed in two characters (an `—` and a `·` escape the deploy path had already
+unescaped) and the repo files were changed to the literal characters; v2 matched the blobs
+above with no correction needed. `push_test.ts` is not deployed.
 
 ## 2. Objects, grants and RLS on prod
 
@@ -113,6 +123,10 @@ surface are `service_role` only.
 | `auth_rls_initplan` (WARN) | 21 | 21 | both new policies use 038's `(select auth.uid()) = (select public.app_owner())` form, so neither is flagged |
 | `unused_index` (INFO) | 5 | 7 | the two additions are `bb_attempts_latest_idx` and `bb_attempts_sync_run_idx` — **Phase 10a's**, not W-21's; no index was created by 060–064 |
 
+Re-run after 065 and after 066: **identical on both axes**. 065 recreates one view; 066 adds two
+columns and recreates one view and one function, creating no policy, no index and no new
+function, so there was nothing new for either linter to find.
+
 ## 4. SQL proof: `event_at`, the `in_workload` filter, `absent_from_blackboard`
 
 Executable check for task loop 5, run inside `begin; … rollback;` against prod. Nine fixture
@@ -137,10 +151,82 @@ lets Postgres resolve the instant. Meetings and attendance never reach the pushe
 `effort_base.in_workload` is false for `meeting`, `attendance` and `participation`, and the view
 filters on `v_work_items.in_workload`.
 
-Live counts on prod, after 060: `v_calendar_push_items` returns **64** rows, **22** of them
-`absent_from_blackboard` (they will not be pushed, and any event they already had would be
-deleted). `v_announcements_unread` returns **12** of 16 announcements — the other four carry
-Blackboard's own `is_read`.
+Both `bb-*` fixtures give the same answer under the corrected rule of §4.1, and the whole table
+was re-run inside the round-2 and round-2b fixture transactions unchanged.
+
+Live counts on prod, **after 066**: `v_calendar_push_items` returns **64** rows, **2** of them
+`absent_from_blackboard` (before 065 it was 22 — see §4.1). `v_announcements_unread` returns
+**12** of 16 announcements — the other four carry Blackboard's own `is_read`.
+
+### 4.1 Round 2 (R2-1): `absent_from_blackboard` compares against the crawl's `captured_at`
+
+Confirmed on prod before fixing. `stage_assignments` stamps `bb_last_seen` with the **crawl
+row's** `captured_at`, while 060 compared it with the **fold's** `sync_runs.started_at`. For the
+2026-09-14 crawl those are:
+
+| clock | value |
+|---|---|
+| `bb_raw.captured_at`, per course | 17:19:20 – 17:19:31 |
+| `sync_runs.started_at`, the fold | 17:22:00 |
+
+Roughly three minutes apart and always in the same direction, so `bb_last_seen < started_at` was
+true for every item the crawl had seen: the test had no discriminating power. Measured before
+the fix, **22 of 64** push-set rows were "absent" while every one of them was in the newest
+crawl's payload — the first live push would have deleted 22 of Stack's events.
+
+065 recreates the view (same columns, `security_invoker = true`, anon revoked) comparing
+`bb_last_seen` with the `captured_at` of the `bb_raw` row (`kind = 'course'`,
+`bb_course_id = courses.bb_id`) belonging to the newest folded run. After 065: **2 of 64**.
+
+Fixture transaction (rolled back), a newer folded crawl covering IST.323 only and differing from
+the older one by a single gradebook column:
+
+| fixture | course | `bb_item_id` | `bb_last_seen` | `absent_from_blackboard` |
+|---|---|---|---|---|
+| `ZZ.r2/seen-in-new` | IST.323 (in the new crawl) | set | = the new crawl's `captured_at` | false |
+| `ZZ.r2/missed-by-new` | IST.323 (in the new crawl) | set | 12 days older | **true** — the only one |
+| `ZZ.r2/syllabus-only` | IST.323 (in the new crawl) | null | null | false |
+| `ZZ.r2/other-course` | IST.352 (**not** in that crawl) | set | 12 days older | false |
+
+The five `event_at` cases and the two `in_workload` exclusions of §4 were inserted in the same
+transaction and came back unchanged.
+
+**Why 2 and not 0.** The PM's round-2 note expected zero absent rows today; the measurement is
+two, and they are the same Blackboard item twice over. `IST.323/fp-proposal` and
+`IST.323/fp-log-final` carry the *same* `bb_item_id` (`_12983388_1`) and the *same*
+`bb_column_id` (`_3569973_1`). That item is in the newest crawl's payload — checked directly
+against `bb_raw` — but `stage_assignments` re-stamped neither row, so both still hold
+`bb_last_seen` from 2026-09-02 and the corrected rule calls them absent. The consequence is
+conservative rather than destructive: those two never enter the desired set, so no event is
+created for them and none exists to delete. It is a duplicate-`bb_item_id` question for Phase
+9's staging, which Phase 11 does not edit, and it is listed in §12 for the PM.
+
+No `push_test.ts` fixture encoded the old rule — `absent_from_blackboard` reaches the pusher as
+a plain boolean column — so only the file's header comment changed, to cite 060 and 065.
+
+### 4.2 Round 2b: the lock, the dirty flag and the weekday convention (migration 066)
+
+One rolled-back fixture transaction proves all four database-side items. Steps and results:
+
+| # | step | result |
+|---|---|---|
+| A | the view after 066 | 64 rows, 2 absent — unchanged by the weekday fix |
+| B | **R2b-6** a date-only exam on Sunday 2026-11-08, with an IST.323 Sunday meeting at 10:00 | `event_at` = **2026-11-08 10:00** New York. Under 060/065's `extract(isodow)` the join found nothing and it would have been 23:59 |
+| C | **R2b-2** `calendar_push_tick()` fires | `fired: true`; `gcal_dirty` **false**, `gcal_push_request_id` set, `gcal_push_run_id` = 6 |
+| D | **R2b-2** a transform-shaped write to `assignments` while that run is in flight | `gcal_dirty` **true** again — the change survives instead of being erased at the end of the run |
+| E | **R2b-3** a *manual* run (id 7) finishing: exactly the two statements `finish()` issues, the second scoped `where gcal_push_run_id = 7` | the lock is untouched: `gcal_push_run_id` still 6, request id still set |
+| F | **R2b-3** the request ages 31 minutes and the tick reaps | `reaped: 1`; run **6** `failed`, manual run **7** still `running`, and a fresh scheduled run 8 fires because the reaper re-raised `gcal_dirty` |
+
+R2b-6 is a latent-Sunday fix, not a change to any current row: `extract(dow)` and
+`extract(isodow)` agree Monday (1) through Saturday (6) and differ only on Sunday (0 vs 7), and
+no course in the Fall 2026 seed meets on a Sunday. The schema convention is `0 = Sunday`
+(migration 001's `check (day_of_week between 0 and 6)`, DATA_SYNTAX.md, the seed and
+`web/src/lib/planner-week.ts`), so 060's comment claiming ISO was simply wrong and is corrected
+in the recreated view.
+
+R2b-7's column, `app_settings.web_base_url`, is `not null default
+'https://web-xi-ten-uy9xk6c6p0.vercel.app'` with a shape check (`^https?://[^/[:space:]]+$`), so
+a trailing slash or a stray space cannot reach the event body. The function reads it per run.
 
 `calendar_event_id('IST.323/quiz-03')` on prod = `bb3c534b09739b13428eb1df69e0e61877`: 34
 characters, matching `^bb[0-9a-v]{32}$`, i.e. inside Google's base32hex id charset. The
@@ -149,7 +235,8 @@ TypeScript `calendarEventId()` asserts the identical value (§6).
 ## 5. `calendar_push_tick` behaviour
 
 Four branches exercised in a rolled-back transaction before 062 was applied, each returning the
-documented shape:
+documented shape. Migration 066 later changed *when* the flag and the lock move, not these
+four answers — see §4.2 steps C–F for the 066 behaviour:
 
 | state | result |
 |---|---|
@@ -195,7 +282,10 @@ $ node --test supabase/functions/calendar-push/push_test.ts
 ✔ isRateLimited tells a quota 403 from an ordinary one
 ✔ the push refuses to write to 'primary' or to an empty calendar id
 ✔ a delete that comes back 404 still counts as deleted
-ℹ tests 17   pass 17   fail 0
+✔ repointing the calendar deletes on the old id and inserts on the new          [R2b-5]
+✔ an orphan Google refuses to delete is retried next run, not re-created         [R2b-5]
+✔ the bb2dash link uses the injected origin, trailing slash and all              [R2b-7]
+ℹ tests 20   pass 20   fail 0
 
 $ node --test scripts/google-consent.test.mjs
 ✔ the authorisation URL asks for an offline grant and forces the consent screen
@@ -209,9 +299,14 @@ $ node --test scripts/google-consent.test.mjs
 ℹ tests 8   pass 8   fail 0
 ```
 
-25 tests, all green, no network and no database. The four numbered runs use a fake Google client
-that records every call and an in-memory mirror that is carried from run to run, so "zero writes
-on a re-run" is asserted as `deepEqual(calls, [])` rather than as a count.
+**28 tests, all green**, no network and no database (25 before round 2b). The four numbered runs
+use a fake Google client that records every call — and, since round 2b, which calendar each call
+was addressed to — plus an in-memory mirror carried from run to run, so "zero writes on a
+re-run" is asserted as `deepEqual(calls, [])` rather than as a count, and the repoint test
+asserts the exact call ORDER (four deletes on the old calendar, then four inserts on the new).
+
+R2b-2 and R2b-3 are database behaviour, not TypeScript: their executable checks are steps C–F of
+the fixture transaction in §4.2, which issue the same two statements `finish()` does.
 
 Node prints one `MODULE_TYPELESS_PACKAGE_JSON` warning per run; adding a `package.json` inside
 `supabase/functions/` to silence it would change what the Deno bundler sees, so the warning is
@@ -288,9 +383,9 @@ select count(*) as desired_rows from v_calendar_push_items where not absent_from
 ```
 
 Expect `status = 'ok'`, `counts.inserted = counts.scanned - <absent rows>`, `counts.unchanged =
-0`, `counts.failed = 0`, and `mirror_rows = desired_rows`. As of 2026-09-15 that is **42**
-(64 view rows less 22 absent) — re-read both numbers at the time, a sync in between will move
-them.
+0`, `counts.failed = 0`, and `mirror_rows = desired_rows`. As of 2026-09-15, after 065/066,
+that is **62** (64 view rows less the 2 absent of §4.1) — re-read both numbers at the time, a
+sync in between will move them.
 
 ### 9.2 Run 2 — idempotency
 
@@ -383,22 +478,40 @@ run 2's all-zero write counts is the idempotency proof the definition of done as
    is what the run looked at. `inserted + patched + unchanged` therefore sums to
    `scanned − absent`, and `deleted` is counted separately over the mirror.
 
-## 11. One thing for the PM to decide (not a defect)
+Round 2b added two more decisions worth naming, neither of them a departure from the brief:
+
+8. **`finish()` writes app_settings in two statements.** The brief says the lock is released
+   only `where gcal_push_run_id = <this run>`. Scoping the WHOLE update that way would also
+   suppress `gcal_last_status` for a manual run, which holds no lock and is exactly the run the
+   PM watches during the acceptance script. So the outcome fields are written unconditionally
+   and the lock release is a second, narrower statement.
+9. **A failed orphan removal also skips that item's insert for the run** (R2b-5). The brief says
+   to remove the row from its old calendar and let the item be re-inserted into the new one. If
+   the removal fails, re-inserting anyway would overwrite the mirror row that records where the
+   old event lives — the event would be stranded on the old calendar forever. The item is
+   skipped instead, the run is `partial`, `gcal_dirty` stays set, and the next run retries both
+   halves.
+
+## 11. The reading-typed rows (R2-2, decided: no change)
 
 Q6 says "every dated `assignments` row whose `v_work_items.in_workload` is true; readings and
-attendance are too noisy". `in_workload` is false for `meeting`, `attendance` and `participation`
-but **true for `reading`**, and the `readings` table is a different arm of `v_work_items` that
-this view never touches. So five *assignments* rows typed `reading` (IST.352's "Reading -
-Chapter N" gradebook items) are currently in the desired set and will be pushed.
+attendance are too noisy". `in_workload` is false for `meeting`, `attendance` and
+`participation` but **true for `reading`**, and the syllabus `readings` table is a different arm
+of `v_work_items` that this view never touches. Five *assignments* rows typed `reading`
+(IST.352's "Reading - Chapter N" gradebook items, with real 11:59 PM due times) are therefore in
+the desired set.
 
-That is the Contract's operative rule applied faithfully, and those five are real graded items
-rather than syllabus reading assignments — but if Stack wants them off the calendar it is a
-one-line `and a.type <> 'reading'` in the view, and 065–069 are reserved for exactly this kind of
-review-round fix. Flagged rather than decided.
+W-21 raised this in round 1. The PM's round-2 answer (R2-2) is that they stay: Stack's "readings
+are too noisy" meant the syllabus `readings` table, which is already excluded, and these five
+are graded Blackboard items. No change to the view.
 
 ## 12. What is still open
 
 - Stack's setup step 4 (`node scripts/google-consent.mjs`) — Vault holds no secrets yet.
+- **Duplicate `bb_item_id`** (§4.1): `IST.323/fp-proposal` and `IST.323/fp-log-final` share
+  `_12983388_1` / `_3569973_1`, `stage_assignments` re-stamps neither, and both are therefore
+  reported absent and will not be pushed. A Phase 9 staging question; Phase 11 does not edit
+  Phase 9 functions.
 - The PM flips `gcal_enabled = true` afterwards and walks §9.1–9.4.
 - `web/src/lib/supabase/database.types.ts` is regenerated by the PM at integration; W-21 did not
   touch `web/`.
