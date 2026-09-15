@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-14** (PR #11, MVP/DoD).
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-15** (Phase 11 PR).
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement
@@ -38,10 +38,10 @@ and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
 | 8 | Course dimension (Stream / Classwork / Info, popouts, tracker paging) | merged Sep 14 | #8 | 026–029 |
 | 9 | Sync loop (automated transform, Inbox, bucket private) | merged Sep 15 | #10 | 030–045 |
 | — | V-1 + R-27 briefs, Phase 10 split, ORCHESTRATOR + `/bb2dash-pm` | merged Sep 14 | #9 | — |
-| — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | **PR open** | #11 | — |
-| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | planned | — | reserve 046–059 (Phase 9 and its fixes took 030–045) |
+| — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | merged Sep 15 | #11 | — |
+| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | **in flight** on `feat/grades-10a` (own PM session, main checkout) | — | 046–059 (046–051 live) |
 | 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | same range |
-| 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | planned; pairs with 10a | — | reserve 060–069 |
+| 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | **PR open**; calendar push live and proven | #12 | 060–069 (060–066 live) |
 | V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | one data migration in 10's range |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell | planned; after the web app is stable | — | — |
@@ -111,6 +111,13 @@ the term.
 8. **After the merge** (only on Stack's word): switch the checkout to `main`, remove the phase's
    worktrees and branches, update memory.
 
+**Two PM sessions at once (learned 2026-09-15):** when another phase's PM session owns the main
+checkout (`C:/Users/estac/projects/bb2dash`), cut the phase branch as its own worktree
+(`bb2dash-wt-<phase>`) straight from `origin/main` and never commit in the shared checkout. Each
+session regenerates `database.types.ts` for its own PR; the second to merge regenerates again.
+Vercel is GitHub-linked, so every pushed branch already has a preview at
+`web-git-<branch>-emstacho-sus-projects.vercel.app` (behind Vercel SSO: Stack opens it signed in).
+
 Environment facts that bite: this machine is Stack's Windows laptop, not a sandbox — curl to
 `*.supabase.co` works here (cloud sessions must use `pg_net`). Native binaries need `C:/…`
 paths, not `/c/…`. Repo files are CRLF on checkout; edit with tools that preserve endings.
@@ -119,7 +126,8 @@ the repo.
 
 ## 4. Open items that are Stack's, not the PM's
 
-* Merge PR #11 (MVP/DoD docs). Then the sprint starts from `main`: 10a, 11, V-1, V-2 in parallel.
+* Phase 11: walk the six-step acceptance script on the preview (the calendar half is already
+  live in `emstacho@g.syr.edu`); say when to merge PR #12.
 * Say when to start V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and V-2.
 * Answer V-1's *ask the professor* items as they come up.
 

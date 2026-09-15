@@ -139,6 +139,13 @@ export type Database = {
             foreignKeyName: "announcements_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "announcements_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
           },
@@ -146,6 +153,15 @@ export type Database = {
       }
       app_settings: {
         Row: {
+          gcal_calendar_id: string | null
+          gcal_dirty: boolean
+          gcal_enabled: boolean
+          gcal_last_error: string | null
+          gcal_last_push_at: string | null
+          gcal_last_status: string | null
+          gcal_push_request_id: number | null
+          gcal_push_requested_at: string | null
+          gcal_push_run_id: number | null
           ical_last_error: string | null
           ical_last_status: number | null
           ical_request_id: number | null
@@ -153,8 +169,18 @@ export type Database = {
           ical_url: string | null
           id: boolean
           updated_at: string
+          web_base_url: string
         }
         Insert: {
+          gcal_calendar_id?: string | null
+          gcal_dirty?: boolean
+          gcal_enabled?: boolean
+          gcal_last_error?: string | null
+          gcal_last_push_at?: string | null
+          gcal_last_status?: string | null
+          gcal_push_request_id?: number | null
+          gcal_push_requested_at?: string | null
+          gcal_push_run_id?: number | null
           ical_last_error?: string | null
           ical_last_status?: number | null
           ical_request_id?: number | null
@@ -162,8 +188,18 @@ export type Database = {
           ical_url?: string | null
           id?: boolean
           updated_at?: string
+          web_base_url?: string
         }
         Update: {
+          gcal_calendar_id?: string | null
+          gcal_dirty?: boolean
+          gcal_enabled?: boolean
+          gcal_last_error?: string | null
+          gcal_last_push_at?: string | null
+          gcal_last_status?: string | null
+          gcal_push_request_id?: number | null
+          gcal_push_requested_at?: string | null
+          gcal_push_run_id?: number | null
           ical_last_error?: string | null
           ical_last_status?: number | null
           ical_request_id?: number | null
@@ -171,6 +207,7 @@ export type Database = {
           ical_url?: string | null
           id?: boolean
           updated_at?: string
+          web_base_url?: string
         }
         Relationships: []
       }
@@ -238,8 +275,29 @@ export type Database = {
             foreignKeyName: "assignment_progress_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: true
+            referencedRelation: "v_assignment_attempts"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "assignment_progress_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: true
             referencedRelation: "v_assignment_effort"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_progress_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: true
+            referencedRelation: "v_assignment_grade"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "assignment_progress_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: true
+            referencedRelation: "v_calendar_push_items"
+            referencedColumns: ["assignment_id"]
           },
           {
             foreignKeyName: "assignment_progress_assignment_id_fkey"
@@ -383,6 +441,13 @@ export type Database = {
             foreignKeyName: "assignments_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
           },
@@ -465,6 +530,13 @@ export type Database = {
             foreignKeyName: "attention_items_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "attention_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
           },
@@ -478,6 +550,115 @@ export type Database = {
           {
             foreignKeyName: "attention_items_raised_by_fkey"
             columns: ["raised_by"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bb_attempts: {
+        Row: {
+          attempt_id: string
+          column_id: string
+          course_id: string
+          created_bb: string | null
+          exempt: boolean | null
+          feedback: string | null
+          files: Json
+          id: number
+          modified_bb: string | null
+          raw: Json
+          receipt: string | null
+          run_id: string
+          score: number | null
+          seen_at: string
+          status: string | null
+          student_comments: string | null
+          student_submission: string | null
+          submitted_bb: string | null
+          sync_run_id: number | null
+        }
+        Insert: {
+          attempt_id: string
+          column_id: string
+          course_id: string
+          created_bb?: string | null
+          exempt?: boolean | null
+          feedback?: string | null
+          files?: Json
+          id?: never
+          modified_bb?: string | null
+          raw: Json
+          receipt?: string | null
+          run_id: string
+          score?: number | null
+          seen_at: string
+          status?: string | null
+          student_comments?: string | null
+          student_submission?: string | null
+          submitted_bb?: string | null
+          sync_run_id?: number | null
+        }
+        Update: {
+          attempt_id?: string
+          column_id?: string
+          course_id?: string
+          created_bb?: string | null
+          exempt?: boolean | null
+          feedback?: string | null
+          files?: Json
+          id?: never
+          modified_bb?: string | null
+          raw?: Json
+          receipt?: string | null
+          run_id?: string
+          score?: number | null
+          seen_at?: string
+          status?: string | null
+          student_comments?: string | null
+          student_submission?: string | null
+          submitted_bb?: string | null
+          sync_run_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bb_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_sync_run_id_fkey"
+            columns: ["sync_run_id"]
             isOneToOne: false
             referencedRelation: "v_sync_status"
             referencedColumns: ["id"]
@@ -554,8 +735,29 @@ export type Database = {
             foreignKeyName: "bb_content_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: false
+            referencedRelation: "v_assignment_attempts"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
             referencedRelation: "v_assignment_effort"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_grade"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_calendar_push_items"
+            referencedColumns: ["assignment_id"]
           },
           {
             foreignKeyName: "bb_content_assignment_id_fkey"
@@ -583,6 +785,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_content_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -673,6 +882,7 @@ export type Database = {
       bb_files: {
         Row: {
           assignment_id: string | null
+          attempt_id: string | null
           bb_course_id: string
           bb_modified_at: string | null
           bucket: Database["public"]["Enums"]["file_bucket"]
@@ -694,7 +904,7 @@ export type Database = {
           run_id: string | null
           session_id: number | null
           sha256: string | null
-          source_url: string
+          source_url: string | null
           storage_path: string | null
           superseded_by: number | null
           text_status: Database["public"]["Enums"]["text_status"]
@@ -702,6 +912,7 @@ export type Database = {
         }
         Insert: {
           assignment_id?: string | null
+          attempt_id?: string | null
           bb_course_id: string
           bb_modified_at?: string | null
           bucket?: Database["public"]["Enums"]["file_bucket"]
@@ -723,7 +934,7 @@ export type Database = {
           run_id?: string | null
           session_id?: number | null
           sha256?: string | null
-          source_url: string
+          source_url?: string | null
           storage_path?: string | null
           superseded_by?: number | null
           text_status?: Database["public"]["Enums"]["text_status"]
@@ -731,6 +942,7 @@ export type Database = {
         }
         Update: {
           assignment_id?: string | null
+          attempt_id?: string | null
           bb_course_id?: string
           bb_modified_at?: string | null
           bucket?: Database["public"]["Enums"]["file_bucket"]
@@ -752,7 +964,7 @@ export type Database = {
           run_id?: string | null
           session_id?: number | null
           sha256?: string | null
-          source_url?: string
+          source_url?: string | null
           storage_path?: string | null
           superseded_by?: number | null
           text_status?: Database["public"]["Enums"]["text_status"]
@@ -770,8 +982,29 @@ export type Database = {
             foreignKeyName: "bb_files_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: false
+            referencedRelation: "v_assignment_attempts"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
             referencedRelation: "v_assignment_effort"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_grade"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_calendar_push_items"
+            referencedColumns: ["assignment_id"]
           },
           {
             foreignKeyName: "bb_files_assignment_id_fkey"
@@ -799,6 +1032,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_files_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -848,6 +1088,160 @@ export type Database = {
             columns: ["superseded_by"]
             isOneToOne: false
             referencedRelation: "v_file_layout"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bb_gradebook: {
+        Row: {
+          aggregation: string | null
+          attempts_left: number | null
+          calc_type: string | null
+          category_id: string | null
+          column_id: string
+          column_kind: string
+          content_id: string | null
+          course_id: string
+          display_grade: string | null
+          display_score: number | null
+          due_at: string | null
+          effective_score: number | null
+          feedback: string | null
+          grades_released: boolean | null
+          id: number
+          is_calc: boolean
+          is_exempt: boolean | null
+          is_override: boolean | null
+          is_total: boolean
+          last_attempt_created: string | null
+          last_attempt_score: number | null
+          last_attempt_status: string | null
+          last_attempt_submitted: string | null
+          manual_score: number | null
+          multiple_attempts: number | null
+          name: string
+          position: number | null
+          possible: number | null
+          raw: Json
+          run_id: string
+          seen_at: string
+          submission_status: string | null
+          sync_run_id: number | null
+          visible: boolean | null
+        }
+        Insert: {
+          aggregation?: string | null
+          attempts_left?: number | null
+          calc_type?: string | null
+          category_id?: string | null
+          column_id: string
+          column_kind: string
+          content_id?: string | null
+          course_id: string
+          display_grade?: string | null
+          display_score?: number | null
+          due_at?: string | null
+          effective_score?: number | null
+          feedback?: string | null
+          grades_released?: boolean | null
+          id?: never
+          is_calc?: boolean
+          is_exempt?: boolean | null
+          is_override?: boolean | null
+          is_total?: boolean
+          last_attempt_created?: string | null
+          last_attempt_score?: number | null
+          last_attempt_status?: string | null
+          last_attempt_submitted?: string | null
+          manual_score?: number | null
+          multiple_attempts?: number | null
+          name: string
+          position?: number | null
+          possible?: number | null
+          raw: Json
+          run_id: string
+          seen_at: string
+          submission_status?: string | null
+          sync_run_id?: number | null
+          visible?: boolean | null
+        }
+        Update: {
+          aggregation?: string | null
+          attempts_left?: number | null
+          calc_type?: string | null
+          category_id?: string | null
+          column_id?: string
+          column_kind?: string
+          content_id?: string | null
+          course_id?: string
+          display_grade?: string | null
+          display_score?: number | null
+          due_at?: string | null
+          effective_score?: number | null
+          feedback?: string | null
+          grades_released?: boolean | null
+          id?: never
+          is_calc?: boolean
+          is_exempt?: boolean | null
+          is_override?: boolean | null
+          is_total?: boolean
+          last_attempt_created?: string | null
+          last_attempt_score?: number | null
+          last_attempt_status?: string | null
+          last_attempt_submitted?: string | null
+          manual_score?: number | null
+          multiple_attempts?: number | null
+          name?: string
+          position?: number | null
+          possible?: number | null
+          raw?: Json
+          run_id?: string
+          seen_at?: string
+          submission_status?: string | null
+          sync_run_id?: number | null
+          visible?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bb_gradebook_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
             referencedColumns: ["id"]
           },
         ]
@@ -920,6 +1314,72 @@ export type Database = {
           },
         ]
       }
+      calendar_events: {
+        Row: {
+          assignment_id: string
+          calendar_id: string
+          content_hash: string
+          etag: string | null
+          event_id: string
+          last_error: string | null
+          last_pushed_at: string
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          assignment_id: string
+          calendar_id: string
+          content_hash: string
+          etag?: string | null
+          event_id: string
+          last_error?: string | null
+          last_pushed_at?: string
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          assignment_id?: string
+          calendar_id?: string
+          content_hash?: string
+          etag?: string | null
+          event_id?: string
+          last_error?: string | null
+          last_pushed_at?: string
+          state?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      calendar_push_runs: {
+        Row: {
+          counts: Json
+          error: string | null
+          finished_at: string | null
+          id: number
+          started_at: string
+          status: string
+          trigger: string
+        }
+        Insert: {
+          counts?: Json
+          error?: string | null
+          finished_at?: string | null
+          id?: never
+          started_at?: string
+          status?: string
+          trigger: string
+        }
+        Update: {
+          counts?: Json
+          error?: string | null
+          finished_at?: string | null
+          id?: never
+          started_at?: string
+          status?: string
+          trigger?: string
+        }
+        Relationships: []
+      }
       course_maps: {
         Row: {
           course_id: string
@@ -958,6 +1418,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "course_maps_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -1022,6 +1489,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "course_staff_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -1131,6 +1605,13 @@ export type Database = {
             columns: ["parent_course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "courses_parent_course_id_fkey"
+            columns: ["parent_course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -1247,6 +1728,13 @@ export type Database = {
             foreignKeyName: "grade_components_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "grade_components_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
           },
@@ -1315,6 +1803,13 @@ export type Database = {
             foreignKeyName: "grading_schemes_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: true
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "grading_schemes_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: true
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
           },
@@ -1370,6 +1865,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "meetings_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -1472,6 +1974,13 @@ export type Database = {
             foreignKeyName: "readings_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "readings_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
           },
@@ -1527,6 +2036,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "sessions_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -1633,6 +2149,13 @@ export type Database = {
             foreignKeyName: "sync_stage_runs_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "sync_stage_runs_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
           },
@@ -1678,6 +2201,100 @@ export type Database = {
       }
     }
     Views: {
+      v_announcements_unread: {
+        Row: {
+          author: string | null
+          course: string | null
+          course_id: string | null
+          id: number | null
+          modified_at: string | null
+          posted_at: string | null
+          read_at: string | null
+          title: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcements_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcements_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "announcements_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "announcements_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+        ]
+      }
+      v_assignment_attempts: {
+        Row: {
+          assignment_id: string | null
+          attempt_id: string | null
+          attempt_no: number | null
+          attempts_allowed: number | null
+          column_id: string | null
+          course_id: string | null
+          created_bb: string | null
+          exempt: boolean | null
+          feedback: string | null
+          files: Json | null
+          modified_bb: string | null
+          receipt: string | null
+          score: number | null
+          seen_at: string | null
+          status: string | null
+          student_comments: string | null
+          student_submission: string | null
+          submitted_bb: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+        ]
+      }
       v_assignment_effort: {
         Row: {
           category: string | null
@@ -1712,8 +2329,168 @@ export type Database = {
             foreignKeyName: "assignments_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
+          },
+        ]
+      }
+      v_assignment_grade: {
+        Row: {
+          aggregation: string | null
+          assignment_id: string | null
+          attempts_left: number | null
+          calc_type: string | null
+          category_id: string | null
+          column_id: string | null
+          column_kind: string | null
+          content_id: string | null
+          counts_toward_grade: boolean | null
+          course_id: string | null
+          display_grade: string | null
+          display_score: number | null
+          due_at: string | null
+          effective_score: number | null
+          feedback: string | null
+          gradebook_id: number | null
+          grades_released: boolean | null
+          is_calc: boolean | null
+          is_exempt: boolean | null
+          is_override: boolean | null
+          is_total: boolean | null
+          last_attempt_created: string | null
+          last_attempt_score: number | null
+          last_attempt_status: string | null
+          last_attempt_submitted: string | null
+          linked_assignments: number | null
+          manual_score: number | null
+          multiple_attempts: number | null
+          name: string | null
+          points_possible: number | null
+          position: number | null
+          possible: number | null
+          run_id: string | null
+          seen_at: string | null
+          submission_status: string | null
+          sync_run_id: number | null
+          title: string | null
+          type: Database["public"]["Enums"]["assignment_type"] | null
+          visible: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_attempts_latest: {
+        Row: {
+          attempt_id: string | null
+          column_id: string | null
+          course_id: string | null
+          created_bb: string | null
+          exempt: boolean | null
+          feedback: string | null
+          files: Json | null
+          id: number | null
+          modified_bb: string | null
+          receipt: string | null
+          run_id: string | null
+          score: number | null
+          seen_at: string | null
+          status: string | null
+          student_comments: string | null
+          student_submission: string | null
+          submitted_bb: string | null
+          sync_run_id: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bb_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_attempts_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1817,8 +2594,29 @@ export type Database = {
             foreignKeyName: "bb_files_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: false
+            referencedRelation: "v_assignment_attempts"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
             referencedRelation: "v_assignment_effort"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_grade"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_calendar_push_items"
+            referencedColumns: ["assignment_id"]
           },
           {
             foreignKeyName: "bb_files_assignment_id_fkey"
@@ -1846,6 +2644,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_files_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -1899,6 +2704,51 @@ export type Database = {
           },
         ]
       }
+      v_calendar_push_items: {
+        Row: {
+          absent_from_blackboard: boolean | null
+          assignment_id: string | null
+          course_code: string | null
+          course_id: string | null
+          due_at: string | null
+          due_date: string | null
+          event_at: string | null
+          points_possible: number | null
+          status: string | null
+          title: string | null
+          type: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+        ]
+      }
       v_content_tree: {
         Row: {
           assignment_id: string | null
@@ -1931,8 +2781,29 @@ export type Database = {
             foreignKeyName: "bb_content_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: false
+            referencedRelation: "v_assignment_attempts"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
             referencedRelation: "v_assignment_effort"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_grade"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_content_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_calendar_push_items"
+            referencedColumns: ["assignment_id"]
           },
           {
             foreignKeyName: "bb_content_assignment_id_fkey"
@@ -1960,6 +2831,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_content_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -2009,6 +2887,23 @@ export type Database = {
         }
         Relationships: []
       }
+      v_course_grade: {
+        Row: {
+          course_id: string | null
+          gradebook_seen_at: string | null
+          graded_item_count: number | null
+          has_gradebook: boolean | null
+          has_total: boolean | null
+          item_count: number | null
+          total_column_id: string | null
+          total_display_grade: string | null
+          total_effective_score: number | null
+          total_name: string | null
+          total_possible: number | null
+          total_seen_at: string | null
+        }
+        Relationships: []
+      }
       v_course_map_latest: {
         Row: {
           course_id: string | null
@@ -2029,6 +2924,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "course_maps_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -2099,6 +3001,13 @@ export type Database = {
             foreignKeyName: "bb_files_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_files_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
           },
@@ -2159,8 +3068,29 @@ export type Database = {
             foreignKeyName: "bb_files_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: false
+            referencedRelation: "v_assignment_attempts"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
             referencedRelation: "v_assignment_effort"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_grade"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "bb_files_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "v_calendar_push_items"
+            referencedColumns: ["assignment_id"]
           },
           {
             foreignKeyName: "bb_files_assignment_id_fkey"
@@ -2194,8 +3124,99 @@ export type Database = {
             foreignKeyName: "bb_files_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_files_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
+          },
+        ]
+      }
+      v_gradebook_latest: {
+        Row: {
+          aggregation: string | null
+          assignment_id: string | null
+          attempts_left: number | null
+          calc_type: string | null
+          category_id: string | null
+          column_id: string | null
+          column_kind: string | null
+          content_id: string | null
+          counts_toward_grade: boolean | null
+          course_id: string | null
+          display_grade: string | null
+          display_score: number | null
+          due_at: string | null
+          effective_score: number | null
+          feedback: string | null
+          grades_released: boolean | null
+          id: number | null
+          is_calc: boolean | null
+          is_exempt: boolean | null
+          is_override: boolean | null
+          is_total: boolean | null
+          last_attempt_created: string | null
+          last_attempt_score: number | null
+          last_attempt_status: string | null
+          last_attempt_submitted: string | null
+          linked_assignments: number | null
+          manual_score: number | null
+          multiple_attempts: number | null
+          name: string | null
+          position: number | null
+          possible: number | null
+          run_id: string | null
+          seen_at: string | null
+          submission_status: string | null
+          sync_run_id: number | null
+          visible: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bb_gradebook_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_gradebook_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2223,6 +3244,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -2276,6 +3304,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
             referencedColumns: ["course_id"]
           },
           {
@@ -2361,6 +3396,20 @@ export type Database = {
         Args: { p_identifier: string }
         Returns: Database["public"]["Enums"]["staff_role"]
       }
+      calendar_event_id: { Args: { p_assignment_id: string }; Returns: string }
+      calendar_push_now: { Args: never; Returns: undefined }
+      calendar_push_tick: { Args: never; Returns: Json }
+      calendar_secret_set: {
+        Args: { p_name: string; p_value: string }
+        Returns: undefined
+      }
+      calendar_secrets: {
+        Args: never
+        Returns: {
+          name: string
+          secret: string
+        }[]
+      }
       classify_bb_file: {
         Args: { p_mime: string; p_name: string; p_path: string }
         Returns: Database["public"]["Enums"]["file_bucket"]
@@ -2393,6 +3442,7 @@ export type Database = {
       }
       ical_collect: { Args: never; Returns: Json }
       ical_poll: { Args: never; Returns: Json }
+      mark_announcements_seen: { Args: never; Returns: number }
       match_file_text: {
         Args: {
           p_course?: string
@@ -2460,6 +3510,10 @@ export type Database = {
         Args: { p_run_id: string; p_sync_run_id: number }
         Returns: Json
       }
+      stage_attempts: {
+        Args: { p_run_id: string; p_sync_run_id: number }
+        Returns: Json
+      }
       stage_content: { Args: { p_run_id: string }; Returns: Json }
       stage_courses: {
         Args: { p_run_id: string; p_sync_run_id: number }
@@ -2470,6 +3524,10 @@ export type Database = {
         Returns: Json
       }
       stage_gaps: {
+        Args: { p_run_id: string; p_sync_run_id: number }
+        Returns: Json
+      }
+      stage_gradebook: {
         Args: { p_run_id: string; p_sync_run_id: number }
         Returns: Json
       }
@@ -2510,7 +3568,7 @@ export type Database = {
         | "attendance"
         | "participation"
         | "other"
-      classifier: "rule" | "agent" | "stack"
+      classifier: "rule" | "agent" | "stack" | "blackboard"
       confidence_level: "confirmed" | "tentative" | "inferred"
       course_kind:
         | "lecture"
@@ -2736,7 +3794,7 @@ export const Constants = {
         "participation",
         "other",
       ],
-      classifier: ["rule", "agent", "stack"],
+      classifier: ["rule", "agent", "stack", "blackboard"],
       confidence_level: ["confirmed", "tentative", "inferred"],
       course_kind: [
         "lecture",

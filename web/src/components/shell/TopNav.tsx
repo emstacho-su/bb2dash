@@ -6,8 +6,9 @@ import { useEffect } from 'react';
 import { clearPersistedQueryCache } from '@/lib/query-provider';
 import { SIDEBAR_ID } from '@/lib/sidebar-preference';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
-import { BellIcon, HamburgerIcon, SearchIcon, UserIcon } from './icons';
+import { HamburgerIcon, SearchIcon, UserIcon } from './icons';
 import { ActivityMenu } from './ActivityMenu';
+import { Bell } from './Bell';
 import { useSidebar } from './SidebarProvider';
 import { SyncButton } from './SyncButton';
 import { usePopover } from './usePopover';
@@ -26,7 +27,8 @@ import styles from './TopNav.module.css';
  * `html[data-sidebar]` rather than React state, so it is right on frame one.
  *
  * Phase 9 added the Inbox link (between Planner and Grades), the Sync button
- * next to ⌘K, and the Activity pop-down beside the still-disabled announcement bell.
+ * next to ⌘K, and the Activity pop-down. Phase 11 replaced the disabled bell
+ * placeholder with the real one (`Bell.tsx`).
  */
 
 const NAV_LINKS = [
@@ -117,14 +119,8 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         {/* Activity — what the last syncs changed (R-26 web half). */}
         <ActivityMenu />
 
-        {/* Bell — placeholder this term (announcements screen is not in MVP scope). */}
-        <span
-          className={styles.icDisabled}
-          title="Announcements — not wired up this term"
-          aria-disabled="true"
-        >
-          <BellIcon />
-        </span>
+        {/* Announcements — unread badge, dropdown, "See all" (R-20). */}
+        <Bell />
 
         {/* User menu */}
         <span ref={user.ref} style={{ display: 'contents' }}>
