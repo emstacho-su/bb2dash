@@ -378,6 +378,7 @@ describes, left in the log on purpose.
 | **12** | scheduled | `ECN.304/exam-1` due_date +1 day; `ECN.304/exam-2` due_date set null | scanned 63, **patched 1**, **deleted 1**, unchanged 60 | `ok` |
 | **13** | scheduled | both facts restored | scanned 64, **patched 2**, inserted 0, unchanged 60 | `ok` |
 | **14** | scheduled | v3 deployed (R3-1 repair) | scanned 64, **patched 62**, inserted 0, deleted 0, failed 0 | `ok` |
+| **15** | scheduled | nothing (re-run after the repair) | scanned 64, inserted 0, patched 0, deleted 0, **unchanged 62** | `ok` |
 
 Runs 10–12 are the definition of done's three proofs: N inserts on an empty mirror, **zero
 Google writes** on a re-run of unchanged data, and exactly one patch plus one delete after one
@@ -523,8 +524,9 @@ Run 14: `ok`, scanned 64, **patched 62**, inserted 0, deleted 0, failed 0, finis
 `gcal_push_run_id` both null) and `gcal_dirty` false. That is the predicted one-time re-patch,
 and it doubles as the repair: the Google-side count went **61 → 62**.
 
-No further re-patch follows. The hash moved once, with this deployment; the next unchanged run
-is back to zero writes.
+No further re-patch follows, and that was checked rather than assumed: **run 15**, fired
+immediately after with nothing changed, reported scanned 64, **unchanged 62** and zero writes.
+The hash moved once, with this deployment, and idempotency is intact on the other side of it.
 
 ## 10. Deviations from the Contract, and why
 
