@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mutateAsync = vi.fn();
 const createState = { isPending: false, isError: false, error: null as Error | null };
 const requestState = { data: null as { state: string } | null };
+const openState = { data: null as { id: number; state: string } | null };
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn() }),
@@ -24,6 +25,7 @@ vi.mock('@/lib/queries.sync', async (importOriginal) => {
     ...actual,
     useCreateAgentRequest: () => ({ mutateAsync, ...createState }),
     useAgentRequest: () => requestState,
+    useOpenSyncRequest: () => openState,
   };
 });
 
@@ -37,6 +39,7 @@ beforeEach(() => {
   createState.isError = false;
   createState.error = null;
   requestState.data = null;
+  openState.data = null;
   writeText.mockResolvedValue(undefined);
   Object.defineProperty(globalThis.navigator, 'clipboard', {
     value: { writeText },
@@ -93,5 +96,34 @@ describe('Sync button — the request state', () => {
     createState.error = new Error('row-level security');
     render(<SyncButton />);
     expect(screen.getByRole('alert').textContent).toContain('row-level security');
+  });
+});
+
+describe('Sync button — one open request at a time', () => {
+  it('re-copies the open request instead of filing a second one', async () => {
+    openState.data = { id: 8, state: 'queued' };
+    render(<SyncButton />);
+
+    screen.getByRole('button', { name: /sync requested/ }).click();
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText).toHaveBeenCalledWith('claude "/bb-sync 8"');
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(await screen.findByText('claude "/bb-sync 8"')).toBeInTheDocument();
+  });
+
+  it('shows a claimed request found on load as syncing, before this tab filed anything', () => {
+    openState.data = { id: 8, state: 'claimed' };
+    render(<SyncButton />);
+    expect(screen.getByRole('button', { name: /syncing…/ })).toBeInTheDocument();
+  });
+
+  it('files a new request once nothing is open', async () => {
+    mutateAsync.mockResolvedValue({ id: 11, state: 'queued' });
+    render(<SyncButton />);
+    screen.getByRole('button', { name: /Sync/ }).click();
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(writeText).toHaveBeenCalledWith('claude "/bb-sync 11"');
   });
 });

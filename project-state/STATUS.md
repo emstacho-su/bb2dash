@@ -110,7 +110,11 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    stand until Blackboard's value changes, `applied_at` only when a fact was written,
    missing-file marker measured across registered crawls and reversible, `ical_collect()` on
    every tick (pg_net ttl is 6 h), `apply_resolutions()` run by transform requests, Activity
-   list filters ical and quarantine rows, Inbox shows resolve errors. `bb_url` still null:
+   list filters ical and quarantine rows, Inbox shows resolve errors. Live sync 2026-09-14 (run 35:
+   7 courses, 17 items raised, answers applied by a transform request within one tick) found two
+   follow-ups, fixed in-PR: **045** `question_date_text` (date-only due dates in conflict text
+   printed a day early) and the Sync button reuses an open `sync` request instead of filing a
+   second one (the tick never closes `kind = sync` rows). `bb_url` still null:
    assessment items carry no `detail` in the crawl (crawler change, later). First fold of the 9/8 and 9/2 crawls: 93 attention rows
    (conflict 11, data_gap 14, missing 16, stack_must_confirm 52), zero duplicates on replay, a
    resolution applied end-to-end in all three shapes. Web: Inbox, needs-attention row, Sync

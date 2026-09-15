@@ -197,6 +197,7 @@ export const syncKeys = {
   attention: (state?: AttentionState) => ['attention-items', state ?? 'all'] as const,
   attentionAll: () => ['attention-items'] as const,
   agentRequest: (id: number) => ['agent-request', id] as const,
+  openSyncRequest: () => ['agent-request', 'open-sync'] as const,
   activity: (limit: number) => ['activity', limit] as const,
 } as const;
 
@@ -663,6 +664,35 @@ export function agentRequestOptions(id: number | null) {
 }
 
 /**
+ * The newest `sync` request nobody has finished yet (`queued` or `claimed`), or
+ * null. The Sync button reads this before filing: the tick never touches
+ * `kind = 'sync'` rows, so a second press while one is still open would leave
+ * an orphan queued forever (requests 8 and 9 on 2026-09-14). While one is open
+ * the button re-copies that request's command instead of inserting another.
+ */
+export function openSyncRequestOptions() {
+  return queryOptions({
+    queryKey: syncKeys.openSyncRequest(),
+    queryFn: async (): Promise<AgentRequest | null> => {
+      const supabase = untypedClient();
+      const { data, error } = await supabase
+        .from('agent_requests')
+        .select(AGENT_REQUEST_COLUMNS)
+        .eq('kind', 'sync')
+        .in('state', ['queued', 'claimed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as unknown as AgentRequest | null;
+    },
+    // Same cadence as agentRequestOptions: only a Claude session moves these rows.
+    refetchInterval: (query) => (query.state.data ? 10 * 1000 : false),
+    staleTime: 0,
+  });
+}
+
+/**
  * Flatten the latest runs' `summary.changes` into Activity lines, newest first.
  *
  * Two kinds of `sync_runs` row are not activity and are filtered out in the
@@ -812,6 +842,10 @@ export function useAgentRequest(id: number | null) {
   return useQuery(agentRequestOptions(id));
 }
 
+export function useOpenSyncRequest() {
+  return useQuery(openSyncRequestOptions());
+}
+
 export function useActivity(limit = 8) {
   return useQuery(activityOptions(limit));
 }
@@ -828,7 +862,13 @@ export function useResolveAttentionItem() {
   });
 }
 
-/** File an agent request (the Sync button). */
+/** File an agent request (the Sync button), then refresh the open-request check. */
 export function useCreateAgentRequest() {
-  return useMutation({ mutationFn: createAgentRequest });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createAgentRequest,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: syncKeys.openSyncRequest() });
+    },
+  });
 }

@@ -14,6 +14,11 @@
  * The clipboard is best-effort by design: it is denied outside a secure context
  * and in some embedded views, so the command is always shown in the toast as
  * well. A button that silently copies nothing is worse than one that says so.
+ *
+ * One open request at a time. The tick never touches `kind = 'sync'` rows, so a
+ * second press while one is queued or claimed would leave an orphan that nothing
+ * ever closes. While a sync request is open (this tab's or any other's), pressing
+ * the button re-copies that request's command instead of filing a new row.
  */
 
 import { useEffect, useState } from 'react';
@@ -22,6 +27,7 @@ import {
   syncCommand,
   useAgentRequest,
   useCreateAgentRequest,
+  useOpenSyncRequest,
   type AgentRequestState,
 } from '@/lib/queries.sync';
 import styles from './SyncButton.module.css';
@@ -44,7 +50,9 @@ export function SyncButton() {
   const [toast, setToast] = useState<{ command: string; copied: boolean } | null>(null);
 
   const request = useAgentRequest(requestId);
-  const state = request.data?.state ?? null;
+  const open = useOpenSyncRequest();
+  const openRequest = open.data ?? null;
+  const state = request.data?.state ?? openRequest?.state ?? null;
 
   // The toast is transient; the request state below the button is not.
   useEffect(() => {
@@ -53,13 +61,21 @@ export function SyncButton() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  async function showCommand(id: number) {
+    const command = syncCommand(id);
+    const copied = await copyToClipboard(command);
+    setRequestId(id);
+    setToast({ command, copied });
+  }
+
   async function requestSync() {
+    if (openRequest) {
+      await showCommand(openRequest.id);
+      return;
+    }
     try {
       const row = await create.mutateAsync({ kind: 'sync', scope: 'all' });
-      const command = syncCommand(row.id);
-      const copied = await copyToClipboard(command);
-      setRequestId(row.id);
-      setToast({ command, copied });
+      await showCommand(row.id);
     } catch {
       // The mutation's own error is rendered below; nothing to swallow here.
       setToast(null);
