@@ -222,7 +222,11 @@ export function announcementCourseLabel(
   return row.courses?.title_short?.trim() || row.course_id;
 }
 
-/** 'Sep 12', read in the term's zone so the day never shifts under a reader. */
+/**
+ * 'Sep 12', read in `COURSE_TIME_ZONE` so the day never shifts under a reader.
+ * The zone constant is `course-dimension.ts`'s, the one the Stream groups by —
+ * there is one course timezone in this app, not three copies of a string.
+ */
 export function formatAnnouncementDate(postedAt: string | null | undefined): string {
   const clock = newYorkWallClock(postedAt);
   if (!clock) return DATE_NOT_RECORDED;
