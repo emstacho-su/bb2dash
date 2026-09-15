@@ -11,14 +11,8 @@
  * mark: something Stack already opened over there is not new to him, and
  * `v_announcements_unread` excludes it.
  *
- * TYPES PENDING REGENERATION. Migration 063 (`v_announcements_unread` and
- * `mark_announcements_seen()`) is applied on the parallel Phase 11 database
- * branch; `src/lib/supabase/database.types.ts` does not know either of them
- * yet and the PM regenerates it at integration. Until then the view and the
- * RPC are typed by the hand-narrowed interfaces below and reached through one
- * documented cast (`pendingTypesClient`), the same way `queries.today.ts`
- * hand-narrows its view rows. `announcements` and `courses` are in the
- * generated types already, so the list query uses the ordinary typed client.
+ * `v_announcements_unread` and `mark_announcements_seen()` come from migration 063
+ * and are in the generated `database.types.ts`.
  */
 
 import {
@@ -65,34 +59,6 @@ const ANNOUNCEMENT_COLUMNS =
   'courses(id, title_short)';
 
 /* ---------------------------------------------------------------------------
- * The 063 boundary — one cast, removed when the PM regenerates the types
- * ------------------------------------------------------------------------ */
-
-interface PendingResult<T> {
-  data: T | null;
-  error: { message: string } | null;
-}
-
-interface PendingQuery<T> extends PromiseLike<PendingResult<T[]>> {
-  select(columns: string): PendingQuery<T>;
-  order(column: string, options: { ascending: boolean; nullsFirst?: boolean }): PendingQuery<T>;
-}
-
-interface PendingClient {
-  from<T>(relation: string): PendingQuery<T>;
-  rpc(fn: string): PromiseLike<PendingResult<number>>;
-}
-
-/**
- * The browser client, narrowed to the two 063 objects the generated types do
- * not carry yet. Delete this and its callers' casts once `database.types.ts`
- * is regenerated — nothing else in the app should reach for it.
- */
-function pendingTypesClient(): PendingClient {
-  return getSupabaseBrowserClient() as unknown as PendingClient;
-}
-
-/* ---------------------------------------------------------------------------
  * Cache keys
  * ------------------------------------------------------------------------ */
 
@@ -112,12 +78,15 @@ export function unreadOptions() {
   return queryOptions({
     queryKey: announcementKeys.unread(),
     queryFn: async (): Promise<UnreadAnnouncement[]> => {
-      const { data, error } = await pendingTypesClient()
-        .from<UnreadAnnouncement>('v_announcements_unread')
+      const { data, error } = await getSupabaseBrowserClient()
+        .from('v_announcements_unread')
         .select(UNREAD_COLUMNS)
         .order('posted_at', { ascending: false, nullsFirst: false });
       if (error) throw new Error(error.message);
-      return data ?? [];
+      // The generator types every view column as nullable; `id` and `course_id`
+      // are the announcement's primary key and a NOT NULL column, so the narrow
+      // interface is the truthful one (same reading as `CourseDisplay` in queries.today.ts).
+      return (data ?? []) as UnreadAnnouncement[];
     },
     staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
@@ -168,7 +137,7 @@ export function useMarkAnnouncementsSeen() {
 
   return useMutation({
     mutationFn: async (): Promise<number> => {
-      const { data, error } = await pendingTypesClient().rpc('mark_announcements_seen');
+      const { data, error } = await getSupabaseBrowserClient().rpc('mark_announcements_seen');
       if (error) throw new Error(error.message);
       return data ?? 0;
     },
