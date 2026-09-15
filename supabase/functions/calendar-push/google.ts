@@ -100,6 +100,19 @@ export interface EventDateTime {
 
 export interface CalendarEventBody {
   id: string;
+  /**
+   * R3-1. Deleting an event does not free its id: Google keeps the row in status
+   * "cancelled", invisible in the UI and absent from events.list. When the same assignment
+   * comes back, insert answers 409 and the fallback patches that cancelled row - and a patch
+   * that says nothing about status LEAVES IT CANCELLED. The event exists, the mirror says it
+   * was pushed, and Stack never sees it. Observed live: 62 mirror rows, 61 events on Google.
+   *
+   * Carrying status in the canonical body means every patch, whatever prompted it, restores
+   * the event. It is in the hash on purpose: the alternative (adding status only on the 409
+   * path) fixes the one case we thought of and leaves every other patch able to resurrect the
+   * bug. Cost is a single re-patch of the whole set the first time this ships.
+   */
+  status: "confirmed";
   summary: string;
   description: string;
   start: EventDateTime;
@@ -208,6 +221,7 @@ export function buildEventBody(
   const at: EventDateTime = { dateTime: toRfc3339(item.event_at), timeZone: EVENT_TIME_ZONE };
   return {
     id: eventId,
+    status: "confirmed",
     summary: `${item.course_code} · ${item.title}`,
     description: buildDescription(item, webBaseUrl),
     start: at,
