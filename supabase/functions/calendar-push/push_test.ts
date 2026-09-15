@@ -31,14 +31,19 @@ import {
   type CalendarEventBody,
   colourIdForCourse,
   contentHash,
+  DEFAULT_WEB_BASE_URL,
   type GoogleCalendar,
   type GoogleResult,
+  itemLink,
   type PushItem,
   stableStringify,
 } from "./google.ts";
 import { isRateLimited, type MirrorRow, type MirrorStore, runPush } from "./push.ts";
 
 const CALENDAR = "bb2dash-test@group.calendar.google.com";
+const OLD_CALENDAR = "previous-calendar@group.calendar.google.com";
+/** Deliberately not the production origin: the tests must fail if it gets baked back in. */
+const WEB_BASE = "https://bb2dash.test";
 
 // ------------------------------------------------------------------------------------------
 // Fixtures. event_at values are verbatim from the SQL fixture transaction (verification §4).
@@ -105,6 +110,8 @@ function baseDesired(): PushItem[] {
 interface Call {
   op: "insert" | "patch" | "delete" | "list";
   id: string;
+  /** R2b-5: which calendar the call was addressed to, not just which event. */
+  calendarId: string;
 }
 
 function fakeGoogle(
@@ -124,20 +131,20 @@ function fakeGoogle(
   return {
     calls,
     client: {
-      insert(_calendarId, body) {
-        calls.push({ op: "insert", id: body.id });
+      insert(calendarId, body) {
+        calls.push({ op: "insert", id: body.id, calendarId });
         return Promise.resolve(next("insert", ok(200, '"inserted"')));
       },
-      patch(_calendarId, eventId) {
-        calls.push({ op: "patch", id: eventId });
+      patch(calendarId, eventId) {
+        calls.push({ op: "patch", id: eventId, calendarId });
         return Promise.resolve(next("patch", ok(200, '"patched"')));
       },
-      remove(_calendarId, eventId) {
-        calls.push({ op: "delete", id: eventId });
+      remove(calendarId, eventId) {
+        calls.push({ op: "delete", id: eventId, calendarId });
         return Promise.resolve(next("delete", ok(204, null)));
       },
-      list() {
-        calls.push({ op: "list", id: "" });
+      list(calendarId) {
+        calls.push({ op: "list", id: "", calendarId });
         return Promise.resolve({ status: 200, ids: [], error: null });
       },
     },
@@ -183,6 +190,7 @@ test("run 1: an empty mirror inserts one event per desired item", async () => {
 
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired,
     mirror: [],
     google: google.client,
@@ -221,6 +229,7 @@ test("run 2: the same data again issues zero Google calls", async () => {
 
   await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired,
     mirror: [],
     google: first.client,
@@ -231,6 +240,7 @@ test("run 2: the same data again issues zero Google calls", async () => {
   const second = fakeGoogle();
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: baseDesired(),
     mirror: [...rows.values()],
     google: second.client,
@@ -252,6 +262,7 @@ test("run 3: one date change patches one event, one removed row deletes one", as
   const { store, rows } = memoryStore();
   await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: baseDesired(),
     mirror: [],
     google: fakeGoogle().client,
@@ -271,6 +282,7 @@ test("run 3: one date change patches one event, one removed row deletes one", as
   const google = fakeGoogle();
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired,
     mirror: [...rows.values()],
     google: google.client,
@@ -307,6 +319,7 @@ test("run 4: an absent Blackboard item is deleted, syllabus-only items are left 
   const desired = baseDesired();
   await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired,
     mirror: [],
     google: fakeGoogle().client,
@@ -325,6 +338,7 @@ test("run 4: an absent Blackboard item is deleted, syllabus-only items are left 
   const google = fakeGoogle();
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: afterCrawl,
     mirror: [...rows.values()],
     google: google.client,
@@ -359,7 +373,7 @@ test("event ids are deterministic and match migration 060's calendar_event_id()"
 
 test("every event carries app=bb2dash, the course code first, and zero length", () => {
   for (const source of baseDesired()) {
-    const body = buildEventBody(source, "bbdeadbeef");
+    const body = buildEventBody(source, "bbdeadbeef", WEB_BASE);
     assert.equal(body.extendedProperties.private.app, APP_PROPERTY);
     assert.equal(body.extendedProperties.private.assignment_id, source.assignment_id);
     assert.ok(body.summary.startsWith(source.course_code + " · "));
@@ -402,7 +416,11 @@ test("event_at survives as the instant the view computed, on both sides of the f
     ["exam", "2026-11-08T04:59:00+00:00", "2026-11-08T04:59:00Z"], // Saturday: no meeting, 23:59
   ];
   for (const [type, eventAt, expected] of cases) {
-    const body = buildEventBody(item({ assignment_id: "x", type, event_at: eventAt }), "bbx");
+    const body = buildEventBody(
+      item({ assignment_id: "x", type, event_at: eventAt }),
+      "bbx",
+      WEB_BASE,
+    );
     assert.equal(body.start.dateTime, expected);
     assert.equal(body.end.dateTime, expected);
   }
@@ -417,6 +435,7 @@ test("a meeting- or attendance-typed row never reaches the pusher", async () => 
   const { store } = memoryStore();
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: [],
     mirror: [],
     google: google.client,
@@ -428,7 +447,7 @@ test("a meeting- or attendance-typed row never reaches the pusher", async () => 
 });
 
 test("the content hash ignores key order but not values", async () => {
-  const body = buildEventBody(baseDesired()[0], "bbx");
+  const body = buildEventBody(baseDesired()[0], "bbx", WEB_BASE);
   const reordered = JSON.parse(
     JSON.stringify({ reminders: body.reminders, ...body }),
   ) as CalendarEventBody;
@@ -448,6 +467,7 @@ test("an insert that collides (409) falls back to patch", async () => {
   const { store, rows } = memoryStore();
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: [baseDesired()[0]],
     mirror: [],
     google: google.client,
@@ -464,6 +484,7 @@ test("a patch for an event Google no longer holds (404) re-inserts it", async ()
   const { store, rows } = memoryStore();
   await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: [baseDesired()[0]],
     mirror: [],
     google: fakeGoogle().client,
@@ -475,6 +496,7 @@ test("a patch for an event Google no longer holds (404) re-inserts it", async ()
   const google = fakeGoogle({ patch: [{ status: 404, etag: null, error: "HTTP 404: notFound" }] });
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: moved,
     mirror: [...rows.values()],
     google: google.client,
@@ -502,6 +524,7 @@ test("a rate limit is retried 1s / 2s / 4s and then given up on", async () => {
   const a = memoryStore();
   const first = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: [baseDesired()[0]],
     mirror: [],
     google: recovers.client,
@@ -517,6 +540,7 @@ test("a rate limit is retried 1s / 2s / 4s and then given up on", async () => {
   const b = memoryStore();
   const second = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: [baseDesired()[0]],
     mirror: [],
     google: persists.client,
@@ -537,6 +561,7 @@ test("a permanent 403 is not retried", async () => {
   const { store } = memoryStore();
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: [baseDesired()[0]],
     mirror: [],
     google: google.client,
@@ -573,6 +598,7 @@ test("the push refuses to write to 'primary' or to an empty calendar id", async 
       () =>
         runPush({
           calendarId,
+          webBaseUrl: WEB_BASE,
           desired: baseDesired(),
           mirror: [],
           google: fakeGoogle().client,
@@ -588,6 +614,7 @@ test("a delete that comes back 404 still counts as deleted", async () => {
   const { store, rows } = memoryStore();
   await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: [baseDesired()[0]],
     mirror: [],
     google: fakeGoogle().client,
@@ -598,6 +625,7 @@ test("a delete that comes back 404 still counts as deleted", async () => {
   const google = fakeGoogle({ delete: [{ status: 404, etag: null, error: "HTTP 404: notFound" }] });
   const result = await runPush({
     calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
     desired: [],
     mirror: [...rows.values()],
     google: google.client,
@@ -607,4 +635,114 @@ test("a delete that comes back 404 still counts as deleted", async () => {
   assert.equal(result.counts.deleted, 1);
   assert.equal(result.counts.failed, 0);
   assert.equal(rows.size, 0);
+});
+
+// ------------------------------------------------------------------------------------------
+// R2b-5 — the calendar was repointed
+// ------------------------------------------------------------------------------------------
+
+test("repointing the calendar deletes on the old id and inserts on the new", async () => {
+  const { store, rows } = memoryStore();
+  await runPush({
+    calendarId: OLD_CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: baseDesired(),
+    mirror: [],
+    google: fakeGoogle().client,
+    store,
+    sleep: noSleep,
+  });
+  const onOldCalendar = [...rows.values()];
+  assert.equal(onOldCalendar.length, 4);
+  assert.ok(onOldCalendar.every((row) => row.calendar_id === OLD_CALENDAR));
+
+  const google = fakeGoogle();
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: baseDesired(),
+    mirror: onOldCalendar,
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+
+  assert.deepEqual(result.counts, {
+    scanned: 4,
+    inserted: 4,
+    patched: 0,
+    deleted: 4,
+    unchanged: 0,
+    failed: 0,
+  });
+  // Order matters: the old events come off before the new ones go on, or the mirror rows that
+  // say where the old ones live are overwritten first.
+  assert.deepEqual(
+    google.calls.map((c) => c.op),
+    ["delete", "delete", "delete", "delete", "insert", "insert", "insert", "insert"],
+  );
+  assert.deepEqual(
+    google.calls.map((c) => c.calendarId),
+    [OLD_CALENDAR, OLD_CALENDAR, OLD_CALENDAR, OLD_CALENDAR, CALENDAR, CALENDAR, CALENDAR, CALENDAR],
+  );
+  assert.equal(rows.size, 4);
+  assert.ok([...rows.values()].every((row) => row.calendar_id === CALENDAR));
+});
+
+test("an orphan Google refuses to delete is retried next run, not re-created", async () => {
+  const { store, rows } = memoryStore();
+  await runPush({
+    calendarId: OLD_CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: [baseDesired()[0]],
+    mirror: [],
+    google: fakeGoogle().client,
+    store,
+    sleep: noSleep,
+  });
+
+  const google = fakeGoogle({
+    delete: [{ status: 500, etag: null, error: "HTTP 500: backendError" }],
+  });
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: [baseDesired()[0]],
+    mirror: [...rows.values()],
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+
+  assert.deepEqual(google.calls.map((c) => c.op), ["delete"]);
+  assert.equal(result.counts.failed, 1);
+  assert.equal(result.counts.inserted, 0);
+  assert.equal(result.status, "partial");
+  assert.equal(
+    rows.get("IST.323/exam-2")?.calendar_id,
+    OLD_CALENDAR,
+    "the row must keep pointing at the old calendar so the next run can retry the delete",
+  );
+});
+
+// ------------------------------------------------------------------------------------------
+// R2b-7 — the web origin is configuration, not code
+// ------------------------------------------------------------------------------------------
+
+test("the bb2dash link uses the injected origin, trailing slash and all", async () => {
+  const source = baseDesired()[0];
+  const plain = buildEventBody(source, "bbx", "https://bb2dash.example");
+  assert.ok(
+    plain.description.includes("https://bb2dash.example/?item=assignment:" + source.assignment_id),
+  );
+
+  const slashed = buildEventBody(source, "bbx", "https://bb2dash.example/");
+  assert.equal(slashed.description, plain.description, "a trailing slash must not change the link");
+
+  assert.equal(itemLink("", "IST.323/quiz-03"), DEFAULT_WEB_BASE_URL + "/?item=assignment:IST.323/quiz-03");
+
+  // The origin is inside the canonical body, which is why it must be configuration: moving the
+  // deployment moves every content_hash and therefore patches every event exactly once.
+  const elsewhere = buildEventBody(source, "bbx", "https://bb2dash.other");
+  assert.notEqual(await contentHash(plain), await contentHash(elsewhere));
 });

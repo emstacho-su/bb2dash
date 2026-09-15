@@ -15,7 +15,10 @@
 // all; an item whose hash moved is patched. A mirror row with no matching desired item is
 // deleted from Google and then from the mirror — that covers a deleted assignment, an
 // assignment that lost its date, one that left the workload, and one the newest Blackboard crawl
-// stopped reporting (Q3), because all four leave v_calendar_push_items the same way.
+// stopped reporting (Q3), because all four leave v_calendar_push_items the same way. A fifth
+// case runs before all of them: a mirror row pointing at a calendar that is no longer the
+// configured one is deleted from THAT calendar and dropped, so the item is re-created on the
+// new one instead of being abandoned on the old.
 
 import {
   buildEventBody,
@@ -61,6 +64,8 @@ export interface RunPushDeps {
   mirror: MirrorRow[];
   google: GoogleCalendar;
   store: MirrorStore;
+  /** app_settings.web_base_url: the origin of each event's "open in bb2dash" link (066). */
+  webBaseUrl: string;
   /** Injected so the back-off costs nothing in tests. */
   sleep?: (ms: number) => Promise<void>;
 }
@@ -106,7 +111,7 @@ function isMissing(result: GoogleResult): boolean {
 }
 
 export async function runPush(deps: RunPushDeps): Promise<RunPushResult> {
-  const { calendarId, desired, mirror, google, store } = deps;
+  const { calendarId, desired, mirror, google, store, webBaseUrl } = deps;
   const sleep = deps.sleep ?? realSleep;
 
   if (!calendarId || calendarId === "primary") {
@@ -131,9 +136,38 @@ export async function runPush(deps: RunPushDeps): Promise<RunPushResult> {
   const wantedIds = new Set(wanted.map((item) => item.assignment_id));
   const byAssignment = new Map(mirror.map((row) => [row.assignment_id, row]));
 
+  // R2b-5. A mirror row written to a DIFFERENT calendar is an orphan: Stack repointed
+  // app_settings.gcal_calendar_id and that event is still sitting on the old calendar where
+  // nothing will ever touch it again. It has to come off the old calendar BEFORE the desired
+  // pass, because that pass re-inserts the same item into the new calendar and overwrites its
+  // mirror row - doing it the other way round would destroy the only record of where the old
+  // event is. An orphan whose removal fails keeps its row AND its item is skipped this run, so
+  // the record survives for the next one to retry.
+  const skip = new Set<string>();
+  for (const row of mirror) {
+    if (row.calendar_id === calendarId) continue;
+
+    await store.markDeleting(row.assignment_id);
+    const result = await withBackoff(() => google.remove(row.calendar_id, row.event_id), sleep);
+
+    if (result.error && !isMissing(result)) {
+      counts.failed += 1;
+      errors.push(`${row.assignment_id}: on the previous calendar: ${result.error}`);
+      await store.saveFailure(row.assignment_id, result.error);
+      skip.add(row.assignment_id);
+      continue;
+    }
+
+    counts.deleted += 1;
+    await store.remove(row.assignment_id);
+    byAssignment.delete(row.assignment_id);
+  }
+
   for (const item of wanted) {
+    if (skip.has(item.assignment_id)) continue;
+
     const eventId = await calendarEventId(item.assignment_id);
-    const body = buildEventBody(item, eventId);
+    const body = buildEventBody(item, eventId, webBaseUrl);
     const hash = await contentHash(body);
     const existing = byAssignment.get(item.assignment_id);
 
@@ -174,6 +208,8 @@ export async function runPush(deps: RunPushDeps): Promise<RunPushResult> {
   }
 
   for (const row of mirror) {
+    // Rows on another calendar were dealt with by the orphan pass above.
+    if (row.calendar_id !== calendarId) continue;
     if (wantedIds.has(row.assignment_id)) continue;
 
     await store.markDeleting(row.assignment_id);
