@@ -6,10 +6,16 @@ Blackboard sessions expire overnight, so the task's first action is always a log
 is on NetID / microsoftonline, it stops and reports SESSION EXPIRED instead of guessing.
 
 **Status after Phase 9 (2026-09-10): steps 3, 5 and 6 are automated and struck through below.**
-Steps 1 and 2 are cheap checks a human or a session still runs; step 4 stays manual until Electron.
-The whole loop is now: Stack presses Sync in the app → `claude "/bb-sync <id>"` runs steps 1–2 →
-`transform_tick()` on pg_cron does step 3 and step 5 → `bb-sync` does step 6. See
+Steps 1 and 2 are cheap checks a human or a session still runs; step 4 stays manual until Electron
+for COURSE files. The whole loop is now: Stack presses Sync in the app → `claude "/bb-sync <id>"`
+runs steps 1–2 → `transform_tick()` on pg_cron does step 3 and step 5 → `bb-sync` does step 6. See
 `skills/bb-sync/SKILL.md`.
+
+**Phase 10a (2026-09-15) carved one exception out of step 4.** Submission files — the bytes
+Blackboard holds for what Stack actually handed in — are pulled by `bb-sync` step 4b while the
+logged-in tab is still alive, because nothing else can reach them. They are the `bb_files` rows with
+`bucket = 'my_submissions'`, `classified_by = 'blackboard'` and `storage_path is null`, catalogued
+by `stage_attempts` (migration 050). Course files are untouched by that and still wait for Electron.
 
 ## Inputs
 - Logged-in Blackboard tab (built-in browser, tab `seed`) with `installCrawler` from
@@ -49,7 +55,9 @@ The whole loop is now: Stack presses Sync in the app → `claude "/bb-sync <id>"
    - ~~Calendar: new items → sessions/assignments as appropriate.~~ → the calendar row is what marks a
      crawl complete; `ical_poll()` is scheduled daily and is skipped while `app_settings.ical_url` is
      blank.
-4. **Pull new files. MANUAL — until Electron.** This is the one step no automation replaces yet:
+4. **Pull new COURSE files. MANUAL — until Electron.** (Submission files are not this step: they are
+   `bb-sync` step 4b, which runs inside the sync while the Blackboard session is still open.)
+   This is the one step no automation replaces yet:
    `bbcswebdav` URLs 302 to a cross-origin CDN with no CORS, so bytes cannot be fetched from page JS,
    and a browser download needs a real browser. `bb.downloadAll(urls)` in ONE call; claim `<uuid>.tmp`
    by size + magic + text; PowerShell move into `course context/<relpath>`; stage → sha256 → Storage

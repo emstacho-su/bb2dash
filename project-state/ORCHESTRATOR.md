@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-14** (PR #11, MVP/DoD).
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-15** (Phase 10a PR).
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement
@@ -17,13 +17,21 @@
 * Other Claude sessions may be active on the repo and on prod at the same time. Fetch before
   acting, never force-push, and treat any worktree or branch you did not create as someone
   else's until proven otherwise.
+* **The shared checkout `C:/Users/estac/projects/bb2dash` stays on `main` and is never branched
+  or committed in.** A PM session creates its phase branch as its own worktree
+  (`git worktree add C:/Users/estac/projects/bb2dash-wt-<phase> -b feat/<phase> origin/main`)
+  and edits the brief there. On 2026-09-15 two PM sessions edited two briefs in that one
+  working tree inside 25 seconds; nothing was lost only because one of them checked
+  `git status` first.
 
 ## 1. Where the product is (one screen)
 
-Backend foundation live; GUI v1 merged and deployed to Vercel; retrieval polished (Phase 7).
-Prod is Supabase `goultdzqcavefcgnifdy`; migrations 001–025 on `main`, 030–040 live from the
-in-flight Phase 9 branch. The materials MCP server (`mcp-server/`) is registered at user scope
-and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
+Backend foundation live; GUI v1 merged and deployed to Vercel; retrieval polished (Phase 7);
+Classroom-style course page (Phase 8); automated sync loop with Inbox (Phase 9). Prod is
+Supabase `goultdzqcavefcgnifdy`; migrations 001–045 on `main` and live. The materials MCP
+server (`mcp-server/`) is registered at user scope and points at
+`C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`. The 10a / 11 / V-1 / V-2 sprint
+started 2026-09-15 from `main` at `570a869`.
 
 | Phase | Name | State | PR | Migrations |
 |---|---|---|---|---|
@@ -38,11 +46,11 @@ and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
 | 8 | Course dimension (Stream / Classwork / Info, popouts, tracker paging) | merged Sep 14 | #8 | 026–029 |
 | 9 | Sync loop (automated transform, Inbox, bucket private) | merged Sep 15 | #10 | 030–045 |
 | — | V-1 + R-27 briefs, Phase 10 split, ORCHESTRATOR + `/bb2dash-pm` | merged Sep 14 | #9 | — |
-| — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | **PR open** | #11 | — |
-| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | planned | — | reserve 046–059 (Phase 9 and its fixes took 030–045) |
-| 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | same range |
-| 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | planned; pairs with 10a | — | reserve 060–069 |
-| V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | one data migration in 10's range |
+| — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | merged Sep 15 | #11 | — |
+| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | **PR open** (`feat/grades-10a`; contract frozen Sep 15, Stack's ten answers in the brief; round 2 = 052–056) | see STATUS | 046–056 (057–058 slack) |
+| 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | 057–058 then a new range after 069 if needed |
+| 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | in progress in a parallel PM session (`feat/planner-11`) | — | 060–069 |
+| V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | **059** (held; 10a never takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell | planned; after the web app is stable | — | — |
 | 13 | Styling pass | planned; last | — | — |
@@ -93,8 +101,11 @@ the term.
    signatures, return columns, request fields, file names), the worker list with branch and
    worktree names, seams with any parallel phase, out-of-scope, integration steps, and the
    reserved migration range. Cite R-numbers from `60_REQUIREMENTS_v2.md`.
-3. **Branch and worktrees.** `feat/<phase>` off `main`, pushed. One `feat/<phase>-<stream>`
-   branch + worktree per worker, cut from the phase branch after the brief is committed.
+3. **Branch and worktrees.** `feat/<phase>` off `origin/main` **as its own worktree**
+   (`bb2dash-wt-<phase>`), pushed; the brief is committed there, never in the shared checkout.
+   One `feat/<phase>-<stream>` branch + worktree per worker, cut from the phase branch after
+   the brief is committed. Park any brief draft in the session scratchpad until the worktree
+   exists.
 4. **Spawn Opus workers** (`Agent`, `model: "opus"`, one per stream) with the brief path, the
    rules below, and a report format capped at ~300 words. Workers apply additive migrations to
    prod via `apply_migration` under the file's name, dry-run first in `begin; … rollback;`,
@@ -119,8 +130,11 @@ the repo.
 
 ## 4. Open items that are Stack's, not the PM's
 
-* Merge PR #11 (MVP/DoD docs). Then the sprint starts from `main`: 10a, 11, V-1, V-2 in parallel.
-* Say when to start V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and V-2.
+* Phase 10a: walk the acceptance script on the Vercel preview, starting with step (0) — one
+  real sync with the new crawler (`/bb-sync <id>` from a logged-in tab; the only crawl of the
+  phase, it needs your Duo push). Then merge on your word.
+* Say when to start V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and V-2. V-1's
+  reconciliation migration is `059_grading_reconciliation.sql`.
 * Answer V-1's *ask the professor* items as they come up.
 
 ## 5. Context the orchestrator reviews at session start

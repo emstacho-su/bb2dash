@@ -122,6 +122,18 @@ export function validateCardNote(raw: string | null | undefined): string | null 
 /** The course timezone. Every date the UI groups by is a New York calendar day. */
 export const COURSE_TIME_ZONE = 'America/New_York';
 
+/**
+ * A stable, order-independent cache key for a set of shells.
+ *
+ * A display course's `shell_ids` can arrive in either order and every query
+ * keyed on them must land on one cache entry. It lives here, in the pure
+ * module, because both `queries.course.ts` and `queries.grades.ts` key on the
+ * same set and two copies of this rule would eventually disagree.
+ */
+export function shellCacheKey(shellIds: readonly string[]): string {
+  return [...shellIds].sort().join('+');
+}
+
 /** A timestamptz -> the 'YYYY-MM-DD' New York day it falls on. */
 export function streamDayKey(postedAt: string): string {
   // en-CA renders ISO-ordered Y-M-D.
@@ -202,6 +214,12 @@ export interface ContentFile {
 
 /** One Blackboard content item, with every file that joined to it. */
 export interface ContentNode {
+  /**
+   * The shell the item lives in. A display course can span two shells (GEO 103
+   * is lecture + recitation), so a node must carry its own `course_id` rather
+   * than inherit the route's — a file staged against it is filed under this id.
+   */
+  courseId: string;
   contentId: number;
   parentId: number | null;
   path: string;
@@ -231,6 +249,7 @@ function foldContentRows(rows: ContentTreeRow[]): Map<number, ContentNode> {
     let node = nodes.get(row.content_id);
     if (!node) {
       node = {
+        courseId: row.course_id,
         contentId: row.content_id,
         parentId: row.parent_id,
         path: row.path,

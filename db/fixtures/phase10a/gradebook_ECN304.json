@@ -1,0 +1,82 @@
+{
+  "run_id": "bf2f81e5-ea4c-4b64-bc43-129fd53d4616",
+  "kind": "course",
+  "bb_course_id": "_572517_1",
+  "course_id": "ECN.304",
+  "captured_at": "2026-09-14T17:19:21.002817+00:00",
+  "payload": {
+    "crawler": { "version": 3 },
+    "course": {
+      "id": "_572517_1",
+      "name": "ECN.304.M001.FALL26.The Economics of Social Issues",
+      "courseId": "19406.1271",
+      "modified": "2026-08-17T23:33:57.585Z"
+    },
+    "gradebook": [
+      {
+        "due": null,
+        "calc": "NON_CALCULATED",
+        "name": "Attendance",
+        "score": null,
+        "isCalc": false,
+        "formula": null,
+        "visible": true,
+        "columnId": "_3598937_1",
+        "feedback": null,
+        "isExempt": false,
+        "position": 3,
+        "possible": 100,
+        "contentId": null,
+        "categoryId": "_5690592_1",
+        "aggregation": "LAST",
+        "description": null,
+        "lastAttempt": {
+          "score": 83.33333,
+          "status": "COMPLETED",
+          "submitted": "2026-08-25T19:45:16.055Z"
+        },
+        "manualScore": null,
+        "attemptsLeft": -1,
+        "displayGrade": {
+          "score": 83.33333,
+          "isOverride": false,
+          "requiresSchemaKnowledgeToDisplay": true
+        },
+        "effectiveScore": 83.33333,
+        "gradesReleased": true,
+        "multipleAttempts": 0,
+        "submissionStatus": "NO_STATUS"
+      },
+      {
+        "due": "2026-09-03T21:16:59.532Z",
+        "calc": "NON_CALCULATED",
+        "name": "Quiz 1",
+        "score": null,
+        "isCalc": false,
+        "formula": null,
+        "visible": true,
+        "columnId": "_3607818_1",
+        "feedback": null,
+        "isExempt": false,
+        "position": 4,
+        "possible": 10,
+        "contentId": null,
+        "categoryId": null,
+        "aggregation": "LAST",
+        "description": null,
+        "lastAttempt": null,
+        "manualScore": 9,
+        "attemptsLeft": -1,
+        "displayGrade": {
+          "score": 9,
+          "isOverride": true,
+          "requiresSchemaKnowledgeToDisplay": false
+        },
+        "effectiveScore": 9,
+        "gradesReleased": true,
+        "multipleAttempts": 0,
+        "submissionStatus": "NO_STATUS"
+      }
+    ]
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "_note": "SYNTHETIC. No crawl on record carries an `attempts` key - the probe ships with crawler version 3 and has never run against a live Blackboard session (Stack's MFA is required; it is step 0 of his acceptance script). This payload is hand-built in the frozen Contract shape so stage_attempts can be tested before that crawl. The column ids, course and assignment links are real (run bf2f81e5, IST.323); the attempts, files and receipts are invented. `keys` carries a PLAUSIBLE, UNVERIFIED list of Blackboard's raw attempt key names - the live crawl is what settles it.",
+  "run_id": "00000000-10a0-4000-8000-000000000001",
+  "kind": "course",
+  "bb_course_id": "_571529_1",
+  "course_id": "IST.323",
+  "captured_at": "2026-09-14T17:19:23.154459+00:00",
+  "payload": {
+    "crawler": { "version": 3 },
+    "course": {
+      "id": "_571529_1",
+      "name": "IST.323.M002.FALL26.Intro to Cybersecurity",
+      "courseId": "15803.1271",
+      "modified": "2026-08-18T15:15:54.974Z"
+    },
+    "attempts": [
+      {
+        "columnId": "_3560530_1",
+        "contentId": "_12928186_1",
+        "endpoint": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3560530_1/attempts?userId=_21025199_1&limit=100",
+        "status": 200,
+        "results": [
+          {
+            "id": "_8100001_1",
+            "status": "COMPLETED",
+            "created": "2026-08-31T22:14:11.000Z",
+            "modified": "2026-09-01T14:22:03.000Z",
+            "submitted": "2026-08-31T22:51:49.847Z",
+            "score": 8,
+            "feedback": "Solid first pass. Re-read the section on key length.",
+            "studentComments": null,
+            "studentSubmission": "Answers attached.",
+            "exempt": false,
+            "receipt": "0f2a7c91",
+            "files": [
+              {
+                "id": "_4400001_1",
+                "name": "quiz1-attempt1.pdf",
+                "size": 184213,
+                "downloadUrl": "https://blackboard.syracuse.edu/learn/api/v1/courses/_571529_1/gradebook/attempts/_8100001_1/files/_4400001_1/download"
+              }
+            ],
+            "keys": [
+              "id", "status", "createdDate", "modifiedDate", "attemptDate", "score", "feedback",
+              "studentComments", "studentSubmission", "exempt", "groupAttemptId", "userId",
+              "columnId", "displayGrade"
+            ]
+          },
+          {
+            "id": "_8100002_1",
+            "status": "NEEDS_GRADING",
+            "created": "2026-09-02T11:00:00.000Z",
+            "modified": "2026-09-02T11:31:00.000Z",
+            "submitted": "2026-09-02T11:30:44.000Z",
+            "score": null,
+            "feedback": null,
+            "studentComments": "Resubmitting with the appendix I left out.",
+            "studentSubmission": null,
+            "exempt": false,
+            "receipt": null,
+            "files": [
+              {
+                "id": "_4400002_1",
+                "name": "quiz1-attempt2.pdf",
+                "size": 190001,
+                "downloadUrl": "https://blackboard.syracuse.edu/learn/api/v1/courses/_571529_1/gradebook/attempts/_8100002_1/files/_4400002_1/download"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "columnId": "_3598132_1",
+        "contentId": "_13145817_1",
+        "endpoint": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3598132_1/attempts?userId=_21025199_1&limit=100",
+        "status": 200,
+        "results": [
+          {
+            "id": "_8100003_1",
+            "status": "COMPLETED",
+            "created": "2026-09-14T05:10:02.000Z",
+            "modified": "2026-09-14T05:14:00.000Z",
+            "submitted": "2026-09-14T05:13:57.206Z",
+            "score": 0,
+            "feedback": "<b>Received</b> & recorded -- see the rubric <a href=\"#\">here</a>.",
+            "studentComments": null,
+            "studentSubmission": "Topic: supply-chain attacks",
+            "exempt": false,
+            "receipt": "a91c33be",
+            "files": [],
+            "keys": [
+              "id", "status", "createdDate", "modifiedDate", "attemptDate", "score", "feedback",
+              "studentComments", "studentSubmission", "exempt"
+            ]
+          }
+        ]
+      },
+      {
+        "columnId": "_3569973_1",
+        "contentId": "_12983388_1",
+        "endpoint": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3569973_1/attempts?userId=_21025199_1&limit=100",
+        "status": 200,
+        "results": [
+          {
+            "id": "_8100004_1",
+            "status": "IN_PROGRESS",
+            "created": "2026-09-13T19:02:00.000Z",
+            "modified": "2026-09-13T19:40:00.000Z",
+            "submitted": null,
+            "score": null,
+            "feedback": null,
+            "studentComments": null,
+            "studentSubmission": null,
+            "exempt": false,
+            "receipt": null,
+            "files": [
+              {
+                "id": "_4400003_1",
+                "name": "fp-proposal.docx",
+                "size": 41022,
+                "downloadUrl": "https://blackboard.syracuse.edu/learn/api/v1/courses/_571529_1/gradebook/attempts/_8100004_1/files/_4400003_1/download"
+              }
+            ],
+            "keys": [
+              "id", "status", "createdDate", "modifiedDate", "score", "feedback", "exempt"
+            ]
+          }
+        ]
+      },
+      {
+        "columnId": "_3560541_1",
+        "contentId": "_12928193_1",
+        "endpoint": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3560541_1/attempts?userId=_21025199_1&limit=100",
+        "status": 403,
+        "results": []
+      }
+    ]
+  }
+}

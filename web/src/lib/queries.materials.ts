@@ -152,6 +152,9 @@ export const BUCKET_ORDER: FileBucket[] = [
   'assignment_spec',
   'lab_materials',
   'project_materials',
+  // Phase 10a: what Stack submitted (pulled back out of Blackboard) and what he
+  // has staged here ready to attach. Listed after the course's own materials.
+  'my_submissions',
   'admin',
 ];
 

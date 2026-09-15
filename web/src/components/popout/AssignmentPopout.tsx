@@ -4,10 +4,14 @@
  * Assignment popout (R-05) — artboard 04-assignment, ported to the top-nav shell.
  *
  * What it shows: the synced facts, the grade component the item counts toward,
- * the rest of its series, the late and AI policies verbatim, and the planner
- * block Stack owns. What it does NOT show this phase: any score, and any
- * submission/upload block — both arrive with Phase 10's gradebook, and inventing
- * either would break the project's honesty rule.
+ * the rest of its series, the late and AI policies verbatim, the planner block
+ * Stack owns, and — since Phase 10a — the submission block: Blackboard's
+ * submission status, the attempts it recorded, the files that actually went in,
+ * and the drop zone for staging one to attach.
+ *
+ * What it still does NOT show: any score. The popout is about the work, not the
+ * mark (Requirements §6.2 #4, Stack's answer 6); scores live on the Grades
+ * screens.
  *
  * Unknowns read "not recorded" rather than being hidden or filled in.
  */
@@ -35,6 +39,7 @@ import {
   isQueryUnresolved,
   queryStateText,
 } from '@/components/shared/QueryState';
+import { SubmissionBlock } from './SubmissionBlock';
 import styles from './Popout.module.css';
 
 const NOT_RECORDED = 'not recorded';
@@ -440,10 +445,14 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
         </div>
       </section>
 
+      {/* Its own <section>; the popout's `.block` spacing lives inside it. */}
+      <SubmissionBlock
+        assignmentId={assignmentId}
+        courseId={assignment.course_id}
+        blackboardUrl={course?.bb_url ?? null}
+      />
+
       <div className={styles.footer}>
-        <span className={styles.footerNote}>
-          Scores and submission status arrive with the gradebook (Phase 10).
-        </span>
         <span className={styles.footerLinks}>
           <Link className={tokens.btnGhost} href={`/course/${assignment.course_id}/grades`}>
             Grades →

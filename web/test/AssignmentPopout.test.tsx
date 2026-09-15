@@ -89,6 +89,29 @@ vi.mock('@/lib/queries', async (importOriginal) => {
   return { ...actual, useCourse: () => hooks.course };
 });
 
+/**
+ * Phase 10a mounted the submission block inside the popout. Its three reads and
+ * its one mutation are stubbed here: they are covered by
+ * `SubmissionBlock.test.tsx`, and a real `useMutation` would want a
+ * QueryClientProvider this file deliberately does not have.
+ */
+vi.mock('@/lib/queries.grades', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries.grades')>();
+  return {
+    ...actual,
+    useAssignmentGrade: () => stub(null),
+    useAssignmentAttempts: () => stub([]),
+    useSubmissionFiles: () => stub([]),
+  };
+});
+vi.mock('@/lib/queries.submissions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries.submissions')>();
+  return {
+    ...actual,
+    useStageUpload: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  };
+});
+
 const { AssignmentPopout } = await import('@/components/popout/AssignmentPopout');
 
 const mutate = vi.fn();
