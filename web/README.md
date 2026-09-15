@@ -49,12 +49,19 @@ What is covered today is the retrieval contract in `src/lib/queries.search.ts`
 — request body shape (including `include_superseded`, sent only when true),
 query keys, the `enabled` gate, error handling, snippet scrubbing, the 0.80
 keyword-match boundary and the part hint — plus the palette's `ResultRow`
-rendering in `test/CommandPalette.test.tsx`.
+rendering in `test/CommandPalette.test.tsx`, and the gradebook contract in
+`src/lib/queries.grades.ts`: the four view reads, every pure helper on every
+branch, and the exact `bb_files` row a staged submission writes.
 
-`test:coverage` is scoped to `queries.search.ts` (currently ~98% statements,
-100% branches). The palette shell, the screens and the other query modules have
-no tests yet; widen `coverage.include` in `vitest.config.mts` as they gain some,
-rather than reporting a whole-app number that means nothing.
+`test/audits.test.ts` scans the whole of `src/` on every run for two things
+that must never appear: a control whose label reads "Submit" (bb2dash cannot
+submit to Blackboard, and no button may imply it can) and a `service_role` or
+`sb_secret` credential.
+
+`test:coverage` is scoped to `queries.search.ts`, `queries.sync.ts` and
+`queries.grades.ts`. The palette shell, the screens and the other query modules
+have no coverage target yet; widen `coverage.include` in `vitest.config.mts` as
+they gain one, rather than reporting a whole-app number that means nothing.
 
 ## Environment variables
 
@@ -89,7 +96,7 @@ src/
       layout.tsx            server-side auth guard + top bar + ⌘K mount
       page.tsx              / — Today            (screen: W-5)
       planner/              /planner             (spec T-17, unassigned)
-      grades/               /grades              (blocked on real gradebook data)
+      grades/               /grades              (screen: W-18, Phase 10a)
       materials/            /materials           (screen: W-7)
       course/[id]/          /course/IST.323      (screen: W-6)
   components/shell/         TopNav, courses pop-down, user menu, CommandPalette

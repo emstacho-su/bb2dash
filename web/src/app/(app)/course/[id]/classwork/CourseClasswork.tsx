@@ -32,6 +32,7 @@ import {
 } from '@/lib/queries.course';
 import { UNKNOWN_ROUTE, fileTitle, fileTypeChip } from '@/lib/queries.materials';
 import { FileOpenAction } from '@/components/materials/FileOpenAction';
+import { UploadDropZone } from '@/components/grades/UploadDropZone';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseClasswork.module.css';
 
@@ -118,6 +119,17 @@ export function ClassworkNode({ node, depth = 0 }: { node: ContentNode; depth?: 
             <a className={styles.bbLink} href={node.url} target="_blank" rel="noreferrer">
               Blackboard ↗
             </a>
+          )}
+          {/* R-18: a node Blackboard links to an assignment can take a staged
+              file. It is filed under the node's own shell, not the route's —
+              a display course can span two shells. */}
+          {node.assignmentId && (
+            <UploadDropZone
+              courseId={node.courseId}
+              assignmentId={node.assignmentId}
+              compact
+              label="Stage a file"
+            />
           )}
         </div>
 

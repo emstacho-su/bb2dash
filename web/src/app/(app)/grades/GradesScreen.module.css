@@ -1,10 +1,9 @@
-/* Course Grades tab (Phase 10a). Tokens only. */
+/* /grades (Phase 10a). Tokens only. */
 
 .screen {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding-block: var(--space-4);
+  gap: var(--space-6);
 }
 
 .state {

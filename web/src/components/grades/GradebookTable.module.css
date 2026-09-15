@@ -1,0 +1,155 @@
+/* Gradebook table (Phase 10a). Tokens only — see tokens.module.css. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+
+.table thead th {
+  text-align: left;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.row > th,
+.row > td {
+  padding: var(--space-3);
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.nameCell {
+  text-align: left;
+  font-weight: 400;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.itemName,
+.itemLink {
+  color: var(--color-text);
+}
+
+.itemLink {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.itemLink:hover {
+  text-decoration: underline;
+}
+
+.note {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.submissionCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+}
+
+.scoreCell {
+  white-space: nowrap;
+}
+
+.score {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.seenCell {
+  white-space: nowrap;
+}
+
+/* — feedback ————————————————————————————————————————————————————————— */
+
+.feedbackRow > td {
+  padding: 0 var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.feedback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.feedbackToggle {
+  composes: btnGhost from '@/styles/tokens.module.css';
+  align-self: flex-start;
+  font-size: var(--text-xs);
+  padding: 0;
+}
+
+/* The instructor's own words: their line breaks are kept, their markup is not
+   markup — React escapes it, and pre-wrap only affects whitespace. */
+.feedbackText {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-neutral-300);
+  max-width: 72ch;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.feedbackTextOpen {
+  composes: feedbackText;
+  display: block;
+  -webkit-line-clamp: none;
+  overflow: visible;
+}
+
+/* — the collapsed bookkeeping group ——————————————————————————————————— */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.groupToggle {
+  composes: btnSecondary from '@/styles/tokens.module.css';
+  align-self: flex-start;
+  font-size: var(--text-sm);
+}
+
+.empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  max-width: 62ch;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
