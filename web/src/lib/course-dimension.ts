@@ -202,6 +202,12 @@ export interface ContentFile {
 
 /** One Blackboard content item, with every file that joined to it. */
 export interface ContentNode {
+  /**
+   * The shell the item lives in. A display course can span two shells (GEO 103
+   * is lecture + recitation), so a node must carry its own `course_id` rather
+   * than inherit the route's — a file staged against it is filed under this id.
+   */
+  courseId: string;
   contentId: number;
   parentId: number | null;
   path: string;
@@ -231,6 +237,7 @@ function foldContentRows(rows: ContentTreeRow[]): Map<number, ContentNode> {
     let node = nodes.get(row.content_id);
     if (!node) {
       node = {
+        courseId: row.course_id,
         contentId: row.content_id,
         parentId: row.parent_id,
         path: row.path,

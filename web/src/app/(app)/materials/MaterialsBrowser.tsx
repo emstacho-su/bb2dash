@@ -22,6 +22,7 @@ import {
   type ReadingRoute,
   type ReadingRow,
 } from '@/lib/queries.materials';
+import { STAGED_LABEL, submissionOrigin } from '@/lib/queries.grades';
 import tokens from '@/styles/tokens.module.css';
 import styles from './Materials.module.css';
 
@@ -29,10 +30,13 @@ import styles from './Materials.module.css';
  * A single file row (design cue: 03-lecture / 04-assignment material popouts).
  * ------------------------------------------------------------------------ */
 
-function FileRow({ file }: { file: BbFileRow }) {
+function FileRow({ file, blackboardUrl = null }: { file: BbFileRow; blackboardUrl?: string | null }) {
   const honesty = fileHonesty(file);
   const title = fileTitle(file);
   const chip = fileTypeChip(file.mime_type, file.file_name);
+  // R-18: a file Stack staged here carries the one call to action it can
+  // honestly carry — bb2dash cannot submit it, Blackboard can.
+  const origin = submissionOrigin(file);
 
   const meta: string[] = [];
   if (file.week_no != null) meta.push(`Week ${file.week_no}`);
@@ -54,7 +58,27 @@ function FileRow({ file }: { file: BbFileRow }) {
           {file.notes && <span className={styles.noteMark} title={file.notes} aria-label="has a note">·note</span>}
         </span>
         <span className={styles.rowMeta}>{meta.join(' · ')}</span>
+        {origin === 'staged' &&
+          (blackboardUrl ? (
+            <a
+              className={styles.rowReason}
+              href={blackboardUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="bb2dash cannot submit for you — open Blackboard and attach it there."
+            >
+              {STAGED_LABEL}
+            </a>
+          ) : (
+            <span className={styles.rowReason}>{STAGED_LABEL}</span>
+          ))}
       </span>
+
+      {origin === 'pulled_back' && (
+        <span className={tokens.tagAccent} title="Pulled back out of Blackboard by a sync.">
+          submitted copy
+        </span>
+      )}
 
       <FileOpenAction routes={file} showLabel />
     </div>
@@ -179,7 +203,7 @@ function ReadingsSection({ data }: { data: CourseData }) {
         return <ReadingRowView key={`r-${reading.id}`} reading={reading} route={route} />;
       })}
       {data.orphanReadingFiles.map((file) => (
-        <FileRow key={`f-${file.id}`} file={file} />
+        <FileRow key={`f-${file.id}`} file={file} blackboardUrl={bbUrl} />
       ))}
     </BucketSection>
   );
@@ -199,7 +223,7 @@ function CourseBlock({ data }: { data: CourseData }) {
     return (
       <BucketSection key={bucket} label={bucketLabel(bucket)} count={files.length}>
         {files.map((file) => (
-          <FileRow key={file.id} file={file} />
+          <FileRow key={file.id} file={file} blackboardUrl={course.bb_url ?? null} />
         ))}
       </BucketSection>
     );
@@ -219,7 +243,7 @@ function CourseBlock({ data }: { data: CourseData }) {
       sections.push(
         <BucketSection key={`other-${bucket}`} label={bucketLabel(bucket)} count={files.length}>
           {files.map((file) => (
-            <FileRow key={file.id} file={file} />
+            <FileRow key={file.id} file={file} blackboardUrl={course.bb_url ?? null} />
           ))}
         </BucketSection>,
       );
