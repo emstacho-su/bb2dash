@@ -21,7 +21,7 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables } from './queries';
-import type { MeetingPattern, SessionRow } from './planner-week';
+import type { MeetingPattern } from './planner-week';
 
 /* ---------------------------------------------------------------------------
  * Row types
@@ -41,20 +41,23 @@ export type PlannerMeetingRow = Pick<
   | 'location'
   | 'starts_on'
   | 'ends_on'
-  | 'confidence'
 > & { courses: MeetingCourse | null };
 
-/** One `sessions` row in the visible week — the block's topic comes from here. */
+/**
+ * One `sessions` row in the visible week — the block's topic comes from here.
+ * Exactly the three columns the grid reads, which makes it the same shape as
+ * the pure module's `SessionRow`; the rows go straight to `expandMeetings`.
+ */
 export type PlannerSessionRow = Pick<
   Tables<'sessions'>,
-  'id' | 'course_id' | 'session_date' | 'topic' | 'kind' | 'week_no'
+  'course_id' | 'session_date' | 'topic'
 >;
 
 const MEETING_COLUMNS =
   'id, course_id, day_of_week, start_time, end_time, location, starts_on, ends_on, ' +
-  'confidence, courses(id, title_short, subject, number)';
+  'courses(id, title_short, subject, number)';
 
-const SESSION_COLUMNS = 'id, course_id, session_date, topic, kind, week_no';
+const SESSION_COLUMNS = 'course_id, session_date, topic';
 
 /* ---------------------------------------------------------------------------
  * Cache keys
@@ -144,26 +147,10 @@ export function meetingCourseCode(row: PlannerMeetingRow): string {
   return row.course_id;
 }
 
-/** `meetings` rows as the pure week module wants them. */
+/**
+ * `meetings` rows as the pure week module wants them: the row as selected,
+ * plus the course code resolved from the embedded course.
+ */
 export function toMeetingPatterns(rows: readonly PlannerMeetingRow[]): MeetingPattern[] {
-  return rows.map((row) => ({
-    id: row.id,
-    course_id: row.course_id,
-    day_of_week: row.day_of_week,
-    start_time: row.start_time,
-    end_time: row.end_time,
-    location: row.location,
-    starts_on: row.starts_on,
-    ends_on: row.ends_on,
-    course_code: meetingCourseCode(row),
-  }));
-}
-
-/** `sessions` rows as the pure week module wants them. */
-export function toSessionRows(rows: readonly PlannerSessionRow[]): SessionRow[] {
-  return rows.map((row) => ({
-    course_id: row.course_id,
-    session_date: row.session_date,
-    topic: row.topic,
-  }));
+  return rows.map((row) => ({ ...row, course_code: meetingCourseCode(row) }));
 }

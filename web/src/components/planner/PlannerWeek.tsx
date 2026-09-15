@@ -57,12 +57,7 @@ import {
   type PlacedItem,
   type PlacedMeeting,
 } from '@/lib/planner-week';
-import {
-  toMeetingPatterns,
-  toSessionRows,
-  useMeetings,
-  useSessionsForWeek,
-} from '@/lib/queries.planner';
+import { toMeetingPatterns, useMeetings, useSessionsForWeek } from '@/lib/queries.planner';
 import styles from './PlannerWeek.module.css';
 
 /* ---------------------------------------------------------------------------
@@ -114,7 +109,7 @@ export function PlannerWeek() {
       expandMeetings(
         toMeetingPatterns(meetingsQuery.data ?? []),
         view,
-        toSessionRows(sessionsQuery.data ?? []),
+        sessionsQuery.data ?? [],
       ),
     [meetingsQuery.data, sessionsQuery.data, view],
   );
