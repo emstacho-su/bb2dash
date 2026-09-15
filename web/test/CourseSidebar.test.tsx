@@ -32,6 +32,11 @@ vi.mock('next/navigation', () => ({
   usePathname: () => stub.pathname,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
+// Phase 9 put the Sync button and the Activity menu in the top bar; both need a query
+// client and a Supabase client this test does not set up. The sidebar is what is under
+// test, so stub them out.
+vi.mock('@/components/shell/SyncButton', () => ({ SyncButton: () => null }));
+vi.mock('@/components/shell/ActivityMenu', () => ({ ActivityMenu: () => null }));
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ auth: { getSession: vi.fn(), signOut: vi.fn() } }),
 }));

@@ -7,26 +7,32 @@ import { clearPersistedQueryCache } from '@/lib/query-provider';
 import { SIDEBAR_ID } from '@/lib/sidebar-preference';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { BellIcon, HamburgerIcon, SearchIcon, UserIcon } from './icons';
+import { ActivityMenu } from './ActivityMenu';
 import { useSidebar } from './SidebarProvider';
+import { SyncButton } from './SyncButton';
 import { usePopover } from './usePopover';
 import styles from './TopNav.module.css';
 
 /**
  * The persistent top bar — GUI decision 1c.
  *
- *   bb2dash mark · Home · Planner · Grades · Materials
- *   … cmd-K affordance … ☰ Courses · bell · user
+ *   bb2dash mark · Home · Planner · Inbox · Grades · Materials
+ *   … cmd-K affordance · Sync … ☰ Courses · activity · bell · user
  *
  * ☰ no longer opens a pop-down list: it toggles the course sidebar below the
  * bar (`CourseSidebar`). The pop-down capped the content column at
  * `--content-max` for nothing and left a gap on wide windows; the rail uses
  * that space instead. Its open/closed highlight comes from
  * `html[data-sidebar]` rather than React state, so it is right on frame one.
+ *
+ * Phase 9 added the Inbox link (between Planner and Grades), the Sync button
+ * next to ⌘K, and the Activity pop-down beside the still-disabled announcement bell.
  */
 
 const NAV_LINKS = [
   { href: '/', label: 'Home' },
   { href: '/planner', label: 'Planner' },
+  { href: '/inbox', label: 'Inbox' },
   { href: '/grades', label: 'Grades' },
   { href: '/materials', label: 'Materials' },
 ] as const;
@@ -88,6 +94,8 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         <span className={styles.kbd}>⌘K</span>
       </button>
 
+      <SyncButton />
+
       <span className={styles.right}>
         {/* ☰ — the course sidebar toggle */}
         <button
@@ -105,6 +113,9 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
           <HamburgerIcon />
           <span className="sr-only">Courses sidebar</span>
         </button>
+
+        {/* Activity — what the last syncs changed (R-26 web half). */}
+        <ActivityMenu />
 
         {/* Bell — placeholder this term (announcements screen is not in MVP scope). */}
         <span

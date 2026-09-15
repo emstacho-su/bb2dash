@@ -25,6 +25,7 @@ export type Database = {
           note: string | null
           params: Json
           result: Json | null
+          run_id: string | null
           scope: string | null
           state: string
           sync_run_id: number | null
@@ -39,6 +40,7 @@ export type Database = {
           note?: string | null
           params?: Json
           result?: Json | null
+          run_id?: string | null
           scope?: string | null
           state?: string
           sync_run_id?: number | null
@@ -53,6 +55,7 @@ export type Database = {
           note?: string | null
           params?: Json
           result?: Json | null
+          run_id?: string | null
           scope?: string | null
           state?: string
           sync_run_id?: number | null
@@ -63,6 +66,13 @@ export type Database = {
             columns: ["sync_run_id"]
             isOneToOne: false
             referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_requests_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
             referencedColumns: ["id"]
           },
         ]
@@ -133,6 +143,36 @@ export type Database = {
             referencedColumns: ["course_id"]
           },
         ]
+      }
+      app_settings: {
+        Row: {
+          ical_last_error: string | null
+          ical_last_status: number | null
+          ical_request_id: number | null
+          ical_requested_at: string | null
+          ical_url: string | null
+          id: boolean
+          updated_at: string
+        }
+        Insert: {
+          ical_last_error?: string | null
+          ical_last_status?: number | null
+          ical_request_id?: number | null
+          ical_requested_at?: string | null
+          ical_url?: string | null
+          id?: boolean
+          updated_at?: string
+        }
+        Update: {
+          ical_last_error?: string | null
+          ical_last_status?: number | null
+          ical_request_id?: number | null
+          ical_requested_at?: string | null
+          ical_url?: string | null
+          id?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       assignment_progress: {
         Row: {
@@ -433,6 +473,13 @@ export type Database = {
             columns: ["raised_by"]
             isOneToOne: false
             referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attention_items_raised_by_fkey"
+            columns: ["raised_by"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
             referencedColumns: ["id"]
           },
         ]
@@ -1596,6 +1643,13 @@ export type Database = {
             referencedRelation: "sync_runs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sync_stage_runs_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
+            referencedColumns: ["id"]
+          },
         ]
       }
       terms: {
@@ -2180,6 +2234,20 @@ export type Database = {
           },
         ]
       }
+      v_sync_status: {
+        Row: {
+          finished_at: string | null
+          freshness: Json | null
+          id: number | null
+          open_attention: Json | null
+          run_id: string | null
+          started_at: string | null
+          status: string | null
+          summary: Json | null
+          trigger: string | null
+        }
+        Relationships: []
+      }
       v_upcoming: {
         Row: {
           confidence: Database["public"]["Enums"]["confidence_level"] | null
@@ -2251,6 +2319,30 @@ export type Database = {
     }
     Functions: {
       app_owner: { Args: never; Returns: string }
+      apply_resolutions: { Args: never; Returns: Json }
+      attention_answered: {
+        Args: {
+          p_course_id: string
+          p_field: string
+          p_kind: string
+          p_ref: string
+        }
+        Returns: boolean
+      }
+      attention_keep_stands: {
+        Args: {
+          p_course_id: string
+          p_field: string
+          p_ref: string
+          p_to: Json
+        }
+        Returns: boolean
+      }
+      bb_abs_url: { Args: { p_url: string }; Returns: string }
+      bb_assignment_type: {
+        Args: { p_name: string }
+        Returns: Database["public"]["Enums"]["assignment_type"]
+      }
       bb_content_detail_merge: {
         Args: {
           p_new: Json
@@ -2260,7 +2352,15 @@ export type Database = {
         }
         Returns: Json
       }
+      bb_date_in_term: { Args: { p_ts: string }; Returns: boolean }
       bb_file_relpath: { Args: { p_file_id: number }; Returns: string }
+      bb_jarray: { Args: { p: Json }; Returns: Json }
+      bb_resolve_course: { Args: { p_bb_course_id: string }; Returns: string }
+      bb_slug: { Args: { p_text: string }; Returns: string }
+      bb_staff_role: {
+        Args: { p_identifier: string }
+        Returns: Database["public"]["Enums"]["staff_role"]
+      }
       classify_bb_file: {
         Args: { p_mime: string; p_name: string; p_path: string }
         Returns: Database["public"]["Enums"]["file_bucket"]
@@ -2291,6 +2391,8 @@ export type Database = {
           unit_no: number
         }[]
       }
+      ical_collect: { Args: never; Returns: Json }
+      ical_poll: { Args: never; Returns: Json }
       match_file_text: {
         Args: {
           p_course?: string
@@ -2312,6 +2414,25 @@ export type Database = {
           unit_no: number
         }[]
       }
+      raise_attention: {
+        Args: {
+          p_course_id: string
+          p_entity: string
+          p_field: string
+          p_from: Json
+          p_kind: string
+          p_question: string
+          p_ref: string
+          p_suggested: Json
+          p_sync_run_id: number
+          p_to: Json
+        }
+        Returns: boolean
+      }
+      run_transform: {
+        Args: { p_run_id: string; p_trigger?: string }
+        Returns: number
+      }
       search_file_text: {
         Args: {
           p_course?: string
@@ -2331,11 +2452,33 @@ export type Database = {
           unit_no: number
         }[]
       }
+      stage_announcements: {
+        Args: { p_run_id: string; p_sync_run_id: number }
+        Returns: Json
+      }
+      stage_assignments: {
+        Args: { p_run_id: string; p_sync_run_id: number }
+        Returns: Json
+      }
       stage_content: { Args: { p_run_id: string }; Returns: Json }
+      stage_courses: {
+        Args: { p_run_id: string; p_sync_run_id: number }
+        Returns: Json
+      }
+      stage_files: {
+        Args: { p_run_id: string; p_sync_run_id: number }
+        Returns: Json
+      }
+      stage_gaps: {
+        Args: { p_run_id: string; p_sync_run_id: number }
+        Returns: Json
+      }
       suggested_start: {
         Args: { p_course_id: string; p_due: string; p_effort: number }
         Returns: string
       }
+      sync_change_lines: { Args: { p_stages: Json }; Returns: Json }
+      transform_tick: { Args: never; Returns: Json }
     }
     Enums: {
       aggregation_rule:

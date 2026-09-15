@@ -180,3 +180,27 @@ owner-writable via RLS; resolution inputs validated; `security definer` function
 `search_path`); update STATUS + DECISIONS (records: bucket private; pg_cron enabled and why;
 transform-in-SQL over an edge function; resolution "why" notes); open the PR; stop at "ready
 when you say so".
+
+## Round 2 — code-review fixes (2026-09-14)
+
+`/code-review` of the integrated phase branch found nine confirmed bugs. Workers W-18a and W-18b
+fixed them on `feat/sync-loop-fixes`; migration numbers **041–045 were reserved for this round**
+and 041–044 were used. 001–040 stayed byte-frozen. Evidence for every line below, with the exact
+queries, is in `docs/planning/65_W18_VERIFICATION.md`.
+
+| Migration | Finding | The rule it changes |
+|---|---|---|
+| `041_attention_dedupe_open_only.sql` | F1, F3-raise | The `attention_items` dedupe key is **partial on `state = 'open'`**, not a full index including `state`. One open row per (kind, course, ref, field); answered rows are history, so the same question can be asked and answered any number of times — the full index made the *second* resolution of a recurring question fail with 23505. With it, two do-not-re-ask rules: a `missing` / `data_gap` key that already carries any non-open row is never raised again (dismissing a gap does not fill it, so every fold would otherwise refill the Inbox), and a `conflict` settled with "Keep mine" is not re-raised while Blackboard's `to_value` is unchanged. |
+| `042_apply_resolutions.sql` | F2, F3-apply, F6, F8 | Applying answers is **`apply_resolutions()`**, a function of its own, not step 0 inside `stage_assignments` — so a queued `transform` request can apply answers with no crawl to fold. `applied_at` is stamped **only when a fact was actually written**; an answer nothing can apply stays resolved with `applied_at` null and the Inbox chip keeps saying "answered, applies on next sync" (the kinds that means today are listed in the migration header). Each conflict site asks `attention_keep_stands()` before raising, so "Keep mine" is not re-asked and is counted as `conflicts_settled`. `assignments.bb_url` is read from `coalesce(url, detail.url, detail.file.url)`, which is where the crawler's `slim()` actually puts a link. |
+| `043_stage_files_missing_marker.sql` | F4 | "Only the newest crawl may declare files missing" is measured across **crawls the owner registered** (`agent_requests.run_id` joined to `bb_raw`'s `max(captured_at)`), not across runs that already have a `sync_runs` row — an unfolded crawl has none, so with two crawls pending the older one was treated as the newest. And `missing_since_run` is **no longer one-way**: a later crawl that sees the file strips the marker and the note that carried it (`missing_cleared`), so a crawl truncated mid-walk does not condemn a live file forever. |
+| `044_ical_collect_and_drain.sql` | F5, F8-drain | Collecting the calendar feed's body is **`ical_collect()`, called from every `transform_tick`** (every 2 minutes), because pg_net deletes responses after `pg_net.ttl` — 6 hours here — so the daily two-phase `ical_poll` could never find yesterday's body. `ical_poll` stays the daily requester. The drain calls `apply_resolutions()` for a `kind = 'transform'` request and reports its counts plus `folded_a_new_crawl` in `agent_requests.result`, so pressing Sync applies answered items whether or not there is a new crawl. |
+
+Two web fixes ride with them, no migration:
+
+* **F7** — `activityOptions` filters `source <> 'ical'` and `scope is null or scope <> 'unregistered'`
+  in the request, and `activityEntries` drops both again. The daily calendar poll and quarantined
+  crawls (which anyone with the publishable key can cause) are not activity and must not light the
+  unseen badge.
+* **F9** — `InboxRow` no longer wraps `onResolve` in a try/catch that could never fire (`mutate`
+  does not throw). The mutation's error is passed to the row it came from and rendered in the
+  `role="alert"` paragraph, controls left enabled so the answer can be sent again.
