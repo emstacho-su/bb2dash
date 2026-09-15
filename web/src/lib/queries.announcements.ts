@@ -189,6 +189,18 @@ export const TITLE_NOT_RECORDED = 'untitled announcement';
 /** What an announcement with no posted date says. */
 export const DATE_NOT_RECORDED = 'date not recorded';
 
+/**
+ * Is this row still unseen?
+ *
+ * The same predicate `v_announcements_unread` (063) uses, so the bell's badge,
+ * the dropdown and the `/announcements` page never disagree about what is new:
+ * `read_at` is bb2dash's own seen mark, and `is_read` is Blackboard's — an
+ * announcement Stack already opened over there is not new to him here.
+ */
+export function isUnreadRow(row: Pick<AnnouncementRow, 'read_at' | 'is_read'>): boolean {
+  return row.read_at === null && row.is_read !== true;
+}
+
 /** 'IST 323' — the joined `title_short`, or the course id when the join is empty. */
 export function announcementCourseLabel(
   row: Pick<AnnouncementRow, 'course_id' | 'courses'>,

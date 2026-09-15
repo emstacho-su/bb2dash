@@ -33,7 +33,19 @@ export default defineConfig({
       // shell — keyboard plumbing, debounce, router navigation — is not, and
       // counting it would report a number that describes nothing. Widen this
       // list as screens get covered, rather than lowering the bar.
-      include: ['src/lib/queries.search.ts', 'src/lib/queries.sync.ts'],
+      //
+      // Phase 11 added the planner week grid and the announcements bell/page;
+      // all six modules have suites in test/ that drive them end to end.
+      include: [
+        'src/lib/queries.search.ts',
+        'src/lib/queries.sync.ts',
+        'src/lib/planner-week.ts',
+        'src/lib/queries.planner.ts',
+        'src/lib/queries.announcements.ts',
+        'src/components/planner/PlannerWeek.tsx',
+        'src/components/shell/Bell.tsx',
+        'src/components/announcements/AnnouncementsList.tsx',
+      ],
     },
   },
 });
