@@ -15,6 +15,7 @@
  * and are in the generated `database.types.ts`.
  */
 
+import { useEffect, useRef, useState } from 'react';
 import {
   queryOptions,
   useMutation,
@@ -145,6 +146,50 @@ export function useMarkAnnouncementsSeen() {
       void queryClient.invalidateQueries({ queryKey: announcementKeys.all() });
     },
   });
+}
+
+/** The snapshot while nothing is being read. One shared instance, so the
+ *  "nothing yet" state never re-renders a consumer by identity alone. */
+const NO_UNREAD: ReadonlySet<number> = new Set<number>();
+
+/**
+ * The seen-once mechanism both readers need, in one place.
+ *
+ * Opening the bell, or arriving on `/announcements`, does two things at the
+ * same moment: it remembers which rows were unread, and it stamps `read_at` on
+ * all of them. Doing only the second would clear the badge and erase the one
+ * thing the reader opened it for, so the unread marks on screen come from the
+ * snapshot, never from the rows' live `read_at`.
+ *
+ * `ids` is `undefined` until the caller's own fetch has **succeeded** — that is
+ * the gate. A failed fetch passes `undefined` and nothing is marked: posts must
+ * never be stamped as read without having been shown.
+ *
+ * `active` is the bell's open state; a screen that is simply visited passes
+ * `true`. Going inactive forgets the snapshot, so the next activation reads the
+ * real state again.
+ */
+export function useUnreadSnapshot(
+  active: boolean,
+  ids: readonly number[] | undefined,
+): ReadonlySet<number> {
+  const { mutate: markSeen } = useMarkAnnouncementsSeen();
+  const [snapshot, setSnapshot] = useState<ReadonlySet<number>>(NO_UNREAD);
+  const handled = useRef(false);
+
+  useEffect(() => {
+    if (!active) {
+      handled.current = false;
+      setSnapshot(NO_UNREAD);
+      return;
+    }
+    if (handled.current || ids === undefined) return;
+    handled.current = true;
+    setSnapshot(new Set(ids));
+    markSeen();
+  }, [active, ids, markSeen]);
+
+  return snapshot;
 }
 
 /* ---------------------------------------------------------------------------

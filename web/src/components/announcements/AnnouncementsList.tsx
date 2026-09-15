@@ -15,43 +15,37 @@
  * the one thing the page was opened to show.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { scrubSnippet } from '@/lib/queries.search';
 import {
   isUnreadRow,
   toAnnouncementCard,
   useAllAnnouncements,
-  useMarkAnnouncementsSeen,
+  useUnreadSnapshot,
   type AnnouncementCard,
 } from '@/lib/queries.announcements';
 import styles from './AnnouncementsList.module.css';
 
 export function AnnouncementsList() {
   const announcements = useAllAnnouncements();
-  const markSeen = useMarkAnnouncementsSeen();
-
-  /** Which rows were unread when the list first landed. null = not landed yet. */
-  const [unreadOnArrival, setUnreadOnArrival] = useState<ReadonlySet<number> | null>(null);
-  const markedThisVisit = useRef(false);
-
   const rows = announcements.data ?? [];
   const landed = announcements.isSuccess;
 
-  useEffect(() => {
-    if (!landed || unreadOnArrival !== null) return;
-    setUnreadOnArrival(new Set(rows.filter(isUnreadRow).map((row) => row.id)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landed, unreadOnArrival]);
-
-  useEffect(() => {
-    if (!landed || markedThisVisit.current) return;
-    markedThisVisit.current = true;
-    markSeen.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landed]);
+  /**
+   * `undefined` until the list has landed, so a failed fetch stamps nothing.
+   * The screen is always "active": visiting it is what marks everything seen.
+   */
+  const unreadIds = useMemo(
+    () =>
+      announcements.isSuccess
+        ? (announcements.data ?? []).filter(isUnreadRow).map((row) => row.id)
+        : undefined,
+    [announcements.isSuccess, announcements.data],
+  );
+  const unreadOnArrival = useUnreadSnapshot(true, unreadIds);
 
   const cards: AnnouncementCard[] = rows.map((row) =>
-    toAnnouncementCard(row, unreadOnArrival?.has(row.id) ?? false),
+    toAnnouncementCard(row, unreadOnArrival.has(row.id)),
   );
   const unreadCount = cards.filter((card) => card.unread).length;
 

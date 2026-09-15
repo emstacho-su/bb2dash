@@ -19,14 +19,14 @@
  * is what runs on every screen.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
   allAnnouncementsOptions,
   bellRows,
-  useMarkAnnouncementsSeen,
   useUnreadAnnouncements,
+  useUnreadSnapshot,
 } from '@/lib/queries.announcements';
 import { BellIcon } from './icons';
 import { usePopover } from './usePopover';
@@ -39,34 +39,17 @@ export function Bell() {
   const popover = usePopover<HTMLSpanElement>();
   const unread = useUnreadAnnouncements();
   const list = useQuery({ ...allAnnouncementsOptions(), enabled: popover.open });
-  const markSeen = useMarkAnnouncementsSeen();
 
-  /** Which rows were unread when the dropdown opened. Empty while it is shut. */
-  const [unreadAtOpen, setUnreadAtOpen] = useState<ReadonlySet<number>>(() => new Set<number>());
-  const markedThisOpen = useRef(false);
-
-  // Snapshot on open, clear on close. Deliberately keyed on `open` alone: the
-  // snapshot must not move when `unread` refetches while the panel is up.
-  useEffect(() => {
-    if (popover.open) {
-      setUnreadAtOpen(new Set((unread.data ?? []).map((row) => row.id)));
-      markedThisOpen.current = false;
-    } else {
-      setUnreadAtOpen(new Set<number>());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popover.open]);
-
-  // Mark seen once, after the list has *succeeded* — never before there is
-  // something on screen to have been seen. A failed fetch must not stamp
-  // `read_at`: those posts would be marked as read without ever being shown,
-  // and nothing would surface them again.
-  useEffect(() => {
-    if (!popover.open || markedThisOpen.current || !list.isSuccess) return;
-    markedThisOpen.current = true;
-    markSeen.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popover.open, list.isSuccess]);
+  /**
+   * `undefined` until the list has *succeeded* — that is what gates the whole
+   * seen-once step. A failed list fetch leaves it undefined, so nothing is
+   * stamped as read that was never shown.
+   */
+  const unreadIds = useMemo(
+    () => (list.isSuccess ? (unread.data ?? []).map((row) => row.id) : undefined),
+    [list.isSuccess, unread.data],
+  );
+  const unreadAtOpen = useUnreadSnapshot(popover.open, unreadIds);
 
   const badge = unread.data?.length ?? 0;
   const rows = bellRows(list.data ?? [], unreadAtOpen, DROPDOWN_LIMIT);
