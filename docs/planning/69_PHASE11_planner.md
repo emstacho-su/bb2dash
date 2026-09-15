@@ -451,6 +451,66 @@ are too noisy" (Q6) referred to the syllabus `readings` table, which is excluded
 **R2-3 (accepted, no change).** Advisor WARN `authenticated_security_definer_function_executable` on
 `calendar_push_now()` is the Contract's design (owner-guarded inside, same pattern as `app_owner()`).
 
+### Round 2b — code review findings (2026-09-15, `/code-review main high`, partial run; PM-verified)
+
+The review's angle finders reported before the session's usage limit cut the run; the PM verified
+each item below against the code before assigning it. Migrations for this round: 065 (R2-1 +
+R2b-6), 066 (R2b-2, R2b-3, R2b-7).
+
+**W-21 (db + calendar):**
+
+* **R2b-2 (high) `gcal_dirty` lost mid-run.** The flag is cleared at the end of a successful
+  run, so a change that lands while the push is in flight (the transform tick runs on the
+  alternate minute; a push can take 55 s) is erased. Fix in 066: `calendar_push_tick()` clears
+  `gcal_dirty` in the same UPDATE that records the request; `finish()` sets it back to true only
+  on `partial` / `failed`. Test: a change during the run leaves the flag set.
+* **R2b-3 (high) the in-flight lock is global.** `finish()` nulls `gcal_push_request_id` for
+  every run, including a manual one that never held it, and the reaper fails every `running`
+  row. Fix in 066: add `app_settings.gcal_push_run_id bigint`; the tick records it with the
+  request id; `finish()` clears request id + run id only `where gcal_push_run_id = <this run>`;
+  the reaper fails only that run's row. Test: a manual run finishing mid-flight leaves the lock.
+* **R2b-5 (high) calendar switch orphans old events.** A `calendar_events` row whose
+  `calendar_id` differs from the current `gcal_calendar_id` must be treated as an orphan in the
+  delete pass (`google.remove(row.calendar_id, row.event_id)`, then re-insert into the new
+  calendar). Test in `push_test.ts`: repoint the calendar → N deletes on the old id, N inserts on
+  the new.
+* **R2b-6 (medium) weekday convention.** 060 joins `mm.day_of_week = extract(isodow …)` and its
+  comment claims ISO weekdays; the schema convention is `0 = Sunday` (001, DATA_SYNTAX, seed,
+  `planner-week.ts`). Use `extract(dow …)` in 065's view recreation and fix the comment.
+* **R2b-7 (medium) deployment URLs baked into code.** `ITEM_LINK_BASE` in `google.ts` hardcodes
+  the Vercel hostname into every description (and hash). Add `app_settings.web_base_url text not
+  null default 'https://web-xi-ten-uy9xk6c6p0.vercel.app'` in 066 and read it per run. The tick's
+  function URL keeps the project ref literal (the ref is the project's identity), documented.
+* **R2b-8 (medium) silent catches in `index.ts`.** `loadSecrets()` failure → 401 with no log;
+  `finish()` failure in the catch → swallowed; malformed JSON body → treated as absent and a new
+  `manual` run opened. Fix: `console.error` with context on the first two (no secrets in the
+  message); malformed JSON → 400 without opening a run. Fold the repeated "finish + return
+  failed" two-liner into one `abortRun()` helper; name the `2000` / `500` / `20` truncation
+  limits as constants.
+
+**W-22 (web):**
+
+* **R2b-4 (high) bell marks seen after a failed list fetch.** `listResolved = isSuccess ||
+  isError` gates the RPC, so a 500 on the list still stamps `read_at` on everything and those
+  posts are never surfaced again. Gate on `isSuccess` only; the "failed fetch" test asserts the
+  RPC was not called.
+* **R2b-9 (medium) `PlannerWeek()` is 238 lines.** Extract `usePlannerWeekData(view)` (queries +
+  memos → `{placedMeetings, placedItems, blocksByDay, bandByDay, loading, error}`) and split the
+  JSX into `WeekHeader`, `AllDayBand`, `DayColumn`, each under 50 lines. One `ItemContent`
+  shared by `ItemBody` and `ItemChip`; `GridBlock` as a discriminated union (removes the dead
+  `: null` branch).
+* **R2b-10 (medium) duplicated snapshot-then-mark-seen mechanism** in `Bell.tsx` and
+  `AnnouncementsList.tsx`, four `eslint-disable` lines. One shared hook
+  `useUnreadSnapshot(active, ids)` in `queries.announcements.ts` (or `hooks/`), no eslint
+  suppressions.
+* **R2b-11 (low) `NEW_YORK_TZ` duplicates `COURSE_TIME_ZONE`** from `course-dimension.ts`;
+  import it. **R2b-12 (low)** `queries.planner.ts`: drop the no-op `toSessionRows`, select only
+  the columns the grid reads, write `toMeetingPatterns` as a spread.
+
+**PM:** CLAUDE.md gotcha line now says `calendar-push` is the one function with `verify_jwt`
+off. Not adopted: removing `GoogleCalendar.list()` (the verification note's Google-side count
+uses it) and dropping `etag` (harmless column, no reader yet).
+
 ## Out of scope
 
 Meeting events in Google Calendar, two-way sync, day view, drag-to-reschedule, per-item read
