@@ -243,21 +243,23 @@ attendance, and `event_at` resolves a date-only exam to class start and a date-o
 
 ### One-time setup Stack does himself (before W-21's live proof)
 
-1. **Account: `emstacho@g.syr.edu`** (Q5). Sign in to Google Cloud Console as that account
-   and try to create the project **inside the Syracuse University organisation**; if that
-   works, set the consent screen's user type to **Internal** (no verification, no 7-day token
-   expiry). If SU blocks project creation for students, create the project with no
-   organisation instead and set the consent screen to **External** and **publish it to
-   Production** (never leave it in Testing: Google revokes a Testing app's refresh tokens after
-   7 days). `calendar.events` is a sensitive scope, so an unverified External app shows a
-   "Google hasn't verified this app" screen once; Advanced → Continue is fine for your own
-   account. One more SU-specific risk: a Workspace admin can block unverified third-party apps
-   for the whole domain. If the consent page says the app is blocked by your administrator,
-   stop and tell the PM; the fallback is a personal Google account for the calendar.
-2. In [Google Cloud Console](https://console.cloud.google.com/): create a project `bb2dash`
-   (or reuse one), **enable the Google Calendar API**, configure the OAuth consent screen as
-   above with scope `https://www.googleapis.com/auth/calendar.events`, then create an OAuth
-   client of type **Desktop app**. Keep the client id and client secret to hand (they go into
+1. **Account: `emstacho@g.syr.edu` owns the calendar; the Cloud project is owned by his
+   personal Gmail.** (Q5; found 2026-09-15: SU's Workspace does not let a student create a
+   Cloud project inside the SU organisation, and a Workspace account has no "no organisation"
+   option.) So: sign in to Google Cloud Console as `estack318@gmail.com`, create the project
+   there (no organisation), set the consent screen to **External**, add `emstacho@g.syr.edu`
+   as a test user, then **publish to Production** (never leave it in Testing: Google revokes a
+   Testing app's refresh tokens after 7 days). At consent time (step 4) choose the
+   `emstacho@g.syr.edu` account: the app is owned by the Gmail project but the token is the SU
+   account's, so events land in the SU calendar. `calendar.events` is a sensitive scope, so an
+   unverified app shows a "Google hasn't verified this app" screen once; Advanced → Continue.
+   **If the consent page says the app is blocked by your administrator**, SU blocks unverified
+   third-party apps: create the `bb2dash` calendar in the Gmail account instead, authorise with
+   the Gmail account, and share the calendar to `emstacho@g.syr.edu`; tell the PM, who records
+   that calendar id.
+2. In that project: **enable the Google Calendar API**, give the consent screen the scope
+   `https://www.googleapis.com/auth/calendar.events`, then create an OAuth client of type
+   **Desktop app**. Keep the client id and client secret to hand (they go into
    Vault, not the repo).
 3. In Google Calendar (the same account): **create a calendar named `bb2dash`**, open its
    settings → *Integrate calendar* → copy the **Calendar ID** (`…@group.calendar.google.com`).
