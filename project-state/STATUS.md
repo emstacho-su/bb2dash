@@ -164,7 +164,15 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 12 | Electron shell | — | |
 | 13 | Styling pass | — | last |
 
-Migration ranges: Phase 8 = 026–029, Phase 9 = 030–039. Both phase branches cut from `main`
+**MVP, definition of done, task loops (2026-09-14, PR #11):** every remaining phase and stream
+now has an explicit MVP in Stack's words, a DoD checklist (SOP gates + his acceptance script +
+research-derived items), and a looped task table with an executable check per task — in each
+brief (`62`, `63`, `66`, `67`, `68`, `69`, `80`, `81`) and indexed in
+`docs/planning/70_MVP_INDEX.md`, whose §5 lists the open questions Stack answers when each
+phase's PM session freezes its Contract. Research behind them: `docs/planning/research/`.
+
+Migration ranges: Phase 8 = 026–029, Phase 9 = 030–045 (030–040 plus its review-fix rounds 041–045), Phase 10 = 046–059,
+Phase 11 = 060–069, Phase 12 = 070–079 if needed. Both phase branches cut from `main`
 (Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
 
 Phase 7 leftovers folded into the plan: automatic `superseded_by` on re-uploaded files and the

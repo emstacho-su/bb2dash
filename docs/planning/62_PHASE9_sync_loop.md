@@ -135,6 +135,80 @@ transform) → mark the request `done` with the run id → report `summary.chang
 re-run')`. `CADENCE_RUNBOOK.md`: step 3 struck through (automated), step 5 struck through
 (automated), step 4 kept and labelled manual-until-Electron.
 
+## MVP (Stack's words, 2026-09-14 — `70_MVP_INDEX.md` §1.2)
+
+I run a crawl. Without touching anything else, the transform runs, the Inbox fills with the
+items that need me, and Home shows when the data was last synced and how fresh each part is. I
+open the Inbox, resolve one item, and write why. Nothing I wrote in the planner is overwritten.
+
+## Definition of done
+
+Source: Stack's answers (`70_MVP_INDEX.md` §1.1–1.2) + research `research/79_RESEARCH_phase9_sync_loop.md` §5.
+Phase 9 is already integrated; these are the checks the hand-in session must show green in
+`64_W15_VERIFICATION.md` (or a `64b` addendum) before the PR is ready.
+
+- [ ] **Stack's acceptance script (on the preview):** Sync button → `/bb-sync <id>` in a
+      logged-in Blackboard tab → transform runs itself, no manual SQL → Inbox shows the new
+      items → Home shows the freshness line → resolve one item with a why. All five ticked by Stack.
+- [ ] Replay is a no-op: `run_transform` twice on one `run_id` → same `sync_runs.id`,
+      `attention_items` count unchanged, 0 rows updated (SQL in the note).
+- [ ] Out-of-order replay: replaying the 9/2 run after the newest raises no duplicate rows and
+      updates no `confidence = 'confirmed'` row.
+- [ ] Every stage writes exactly one `sync_stage_runs` row even when it throws: force one stage
+      to fail → run `partial`, that stage `failed` with `error`, the others `ok`.
+- [ ] Conflict round trip, screenshotted: raised with `field/from_value/to_value` → "Accept
+      Blackboard" + note → chip "answered, applies on next sync" → next run sets `applied_at`,
+      writes the value with `confidence = 'confirmed'`, chip clears.
+- [ ] `resolution_note` persists for all four resolve controls, Dismiss included (request-body
+      unit test + SQL showing non-null notes).
+- [ ] `v_sync_status` returns per-stream `{last_seen_at, state}`; fixture test covers
+      `fresh` / `stale` / `never`; `never` renders "never synced", not a zero.
+- [ ] `ok` / `partial` / `failed` runs render distinct copy; `partial` names the failed stage.
+- [ ] Scheduler heartbeat visible on Home; a >10-minute-old tick renders the warning;
+      `cron.job` + `cron.job_run_details` pasted in the note.
+- [ ] Reaper: insert `running` with `started_at = now() - 31 min`, call `transform_tick()`,
+      assert `status = 'failed'`, `notes = 'interrupted (reaped)'`.
+- [ ] Noise budget after the real crawl: open `attention_items` ≤ 60, `data_gap` rolled up to
+      one row per `(kind, course_id)`; counting query in the note.
+- [ ] No fabricated numbers: every number on Inbox/Home traces to `v_sync_status` or
+      `attention_items` (grep for literals in the note). CSS Modules only.
+- [ ] Security: anon client sees 0 rows on `attention_items`, `agent_requests`, `app_settings`;
+      every `security definer` function has a fixed `search_path`; unauthenticated GET of a
+      `bb-files` object returns 400/403 and Materials Open still works.
+- [ ] SOP gates: typecheck/build/test green in `web/` and `mcp-server/`; `/code-review main
+      high` HIGH cleared; `/security-review`; STATUS + DECISIONS + ORCHESTRATOR updated in the
+      same PR; Vercel preview posted.
+
+## Task loops
+
+Each loop: run the check → if red, fix → re-run until green → write the evidence line. Owner
+is the hand-in session (or the W-15/W-16 worker it re-spawns for a fix).
+
+| # | task | executable check | demo line (Stack) | owner |
+|---|---|---|---|---|
+| 1 | Rebase `feat/sync-loop` on `main` (Phase 8 in), regenerate types | typecheck + build + tests green in both packages | — | hand-in session |
+| 2 | Replay idempotency | SQL: two `run_transform` calls on one `run_id` → identical counts | — | W-15 |
+| 3 | Out-of-order replay | SQL: 0 rows with `updated_at > $t` on confirmed rows | — | W-15 |
+| 4 | Stage failure isolation | forced-fail fixture → `partial` + one `failed` stage row | "a failed stage is named on Home" | W-15 |
+| 5 | Conflict round trip | Playwright/RTL test through resolve → next run → `applied_at` set | "I accept Blackboard's value and it applies next sync" | W-16 |
+| 6 | Resolution note on every control | unit test + SQL non-null | "I write why on a dismiss" | W-16 |
+| 7 | Freshness states | fixture test `fresh/stale/never`; screenshot of `never` | "Home says when each part last synced" | W-16 |
+| 8 | Run-status copy | fixture test for `ok/partial/failed` | — | W-16 |
+| 9 | Heartbeat | fixture >10 min → warning; `cron.job_run_details` pasted | "Home tells me if the scheduler stopped" | W-15 |
+| 10 | Reaper | SQL assertion on the reaped row | — | W-15 |
+| 11 | Noise budget | counting query ≤ 60 open, gaps rolled up | "the Inbox is readable after a real crawl" | W-15 |
+| 12 | No literals audit | grep report in the note | — | hand-in session |
+| 13 | Security checks | anon-client SQL, search_path query, curl on a bucket object | — | hand-in session |
+| 14 | Gates + docs + preview | the SOP list above | — | hand-in session |
+| 15 | **Stack's real crawl** | — | the five-step acceptance script | Stack |
+
+Open questions from the research, for Stack before the hand-in (also collected in
+`70_MVP_INDEX.md` §5): freshness thresholds per stream (proposal: announcements warn 24 h /
+error 72 h; assignments 24 h / 7 d; files 7 d); is the why-note required on Dismiss; are
+dismissed `data_gap` rows permanent or re-raised when Blackboard's value changes; rollup vs hard
+cap if a crawl raises 200+ gap rows; does a failed `bb-sync` (session expired) go to the Inbox
+or only to a toast.
+
 ## Workers
 
 ### W-15 — database + scheduler (branch `feat/sync-loop-db`, worktree `bb2dash-wt-sl-db`)

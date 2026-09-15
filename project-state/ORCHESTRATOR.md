@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-14** (PR #9).
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-14** (PR #11, MVP/DoD).
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement
@@ -35,10 +35,11 @@ and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
 | 6 | GUI v1 (Next.js on Vercel, 4 screens, RLS) | merged Sep 10; signed off Sep 10 | #4 | 014–020 |
 | 7 | Retrieval polish (matched snippets, superseded filter, web tests) | merged Sep 10 | #6 | 021–025 |
 | — | Requirements v2 + Phase 8/9 briefs; Phase 6 close-out | merged Sep 14 | #7 | — |
-| 8 | Course dimension (Stream / Classwork / Info, popouts, tracker paging) | **PR open, awaiting Stack** | #8 | 026–029 |
-| 9 | Sync loop (automated transform, Inbox, bucket private) | integrated on `feat/sync-loop`; PR after 8 merges | — | 030–040 |
-| — | V-1 + R-27 briefs, Phase 10 split | PR open | #9 | — |
-| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | planned | — | reserve 041–059 |
+| 8 | Course dimension (Stream / Classwork / Info, popouts, tracker paging) | merged Sep 14 | #8 | 026–029 |
+| 9 | Sync loop (automated transform, Inbox, bucket private) | merged Sep 15 | #10 | 030–045 |
+| — | V-1 + R-27 briefs, Phase 10 split, ORCHESTRATOR + `/bb2dash-pm` | merged Sep 14 | #9 | — |
+| — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | **PR open** | #11 | — |
+| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | planned | — | reserve 046–059 (Phase 9 and its fixes took 030–045) |
 | 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | same range |
 | 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | planned; pairs with 10a | — | reserve 060–069 |
 | V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | one data migration in 10's range |
@@ -76,7 +77,7 @@ Rules that fall out of the graph:
    harness repo.
 4. **12 and 13 are sequential, small, and after week 11's exams.** Neither pays off inside the
    term.
-5. **Reserve migration ranges with slack.** Phase 9 was given 030–039 and used 040.
+5. **Reserve migration ranges with slack.** Phase 9 was given 030–039 and used 030–045 (its review-fix rounds took 041–045), so Phase 10 starts at **046**.
 
 Term calendar: week 1 = Aug 24. Weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week 14
 is Thanksgiving; Nov 30 – Dec 13 is a code freeze. Phases 8–10 are the ones that pay off in
@@ -118,7 +119,7 @@ the repo.
 
 ## 4. Open items that are Stack's, not the PM's
 
-* Merge PR #8 (Phase 8), then PR #9 (docs), then Phase 9's PR once it opens.
+* Merge PR #11 (MVP/DoD docs). Then the sprint starts from `main`: 10a, 11, V-1, V-2 in parallel.
 * Say when to start V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and V-2.
 * Answer V-1's *ask the professor* items as they come up.
 
@@ -134,6 +135,7 @@ Read in this order. Each line says what the file is for and what to look for.
 | 4 | `docs/planning/61_PHASE8_course_dimension.md`, `62_PHASE9_sync_loop.md` | The two in-flight contracts and their frozen seam (`stage_content`). Needed to judge the 8-then-9 merge order and any conflict at rebase time. |
 | 5 | `docs/planning/63_GRADING_VALIDATION.md` + `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | V-1's method and the claim under test; §4 of the export is the seed question list. The export is a snapshot — regenerate it if `grading_schemes` changed. |
 | 6 | `docs/planning/66_SESSION_ARCHIVAL_RAG.md` | R-27 contract for the harness work: frozen frontmatter fields, two-PR split, acceptance. Implementation lives in `~/agentic-harness`. |
+| 6a | `docs/planning/70_MVP_INDEX.md` + `research/7N_*.md` | Stack's MVP/DoD answers per phase and the comparables research behind each brief's DoD checklist and task loops. |
 | 7 | `docs/planning/50_PHASE7_retrieval_polish.md` + `51_W10_VERIFICATION.md` | The template for a brief with a round-2 fix section, and what a worker verification note should contain (before/after evidence, md5 of applied migrations, advisor diff). Copy the shape. |
 | 8 | `CLAUDE.md` (repo root) | The SOP: branches, one PR per phase, migrations byte-identical, visual sign-off, no service key client-side. Overrides habits. |
 | 9 | `DATA_SYNTAX.md` §search layer | Current meaning of `part_range`, `snippet_source`, supersession chains — the retrieval contract clients depend on. |
@@ -166,8 +168,7 @@ new scope is verified before development begins).
 **Phase 10a — grades: mirror, screens, submissions**
 
 > `/bb2dash-pm` Start Phase 10a (R-10 gradebook mirror, R-11 Grades screens, R-17 submission
-> pull-back, R-18 upload drop zone). Write `docs/planning/67_PHASE10A_grades.md` with a frozen
-> contract, migration range 041–059, and the seams with Phase 11 and V-1 (V-1 owns
+> pull-back, R-18 upload drop zone). Complete the **Contract** section of `docs/planning/67_PHASE10A_grades.md` (MVP, DoD and task loops are already frozen there; migration range 041–059), and the seams with Phase 11 and V-1 (V-1 owns
 > `grading_schemes`/`grade_components` data; 10a reads them, never writes). Put your open
 > questions to me and wait for my answers. Then branch `feat/grades-10a` off `main`, create the
 > worker worktrees, and spawn Opus workers. Stop at the PR.
@@ -177,15 +178,15 @@ new scope is verified before development begins).
 > `/bb2dash-pm` Start Phase 10b (R-12 methodology model and what-if). Preconditions: 10a is on
 > `main`, `bb_gradebook` holds more than ten non-attendance scores, and
 > `65_GRADING_VALIDATION_SUMMARY.md` shows every course signed off with its reconciliation
-> migration applied. Verify all three and stop if any fails. Then write
+> migration applied. Verify all three and stop if any fails. Then complete the Contract section of
 > `docs/planning/68_PHASE10B_grade_model.md`, ask your open questions, wait, and build the way
 > 10a was built. Every computed figure is labelled as a model; IST.471 shows not-computable.
 
 **Phase 11 — planner and calendar** (in parallel with 10a)
 
 > `/bb2dash-pm` Start Phase 11 (R-19 planner week grid, R-25 push-only Google Calendar sync,
-> R-20 bell + Announcements page, R-16 data gaps). Write `docs/planning/69_PHASE11_planner.md`
-> with a frozen contract and migration range 060–069; Phase 10a is running in parallel on
+> R-20 bell + Announcements page, R-16 data gaps). Complete the Contract section of `docs/planning/69_PHASE11_planner.md`
+> (MVP, DoD and task loops are frozen there; migration range 060–069); Phase 10a is running in parallel on
 > `feat/grades-10a`, so declare the seams (announcements table from Phase 9, popout from
 > Phase 8) and touch nothing under 10a's range. Google OAuth for the single user is server-side
 > with the token in Supabase Vault — list the setup steps I must do myself. Ask your open
@@ -214,8 +215,8 @@ new scope is verified before development begins).
 
 **Phase 12 — Electron shell** (after 10a and 11 are on `main`)
 
-> `/bb2dash-pm` Start Phase 12 (R-23 Electron shell, R-26 desktop notifications). Write
-> `docs/planning/70_PHASE12_electron.md`: a new `desktop/` package that loads the deployed web
+> `/bb2dash-pm` Start Phase 12 (R-23 Electron shell, R-26 desktop notifications). Complete the Contract section of
+> `docs/planning/80_PHASE12_electron.md`: a new `desktop/` package that loads the deployed web
 > app, zero renderer changes, jobs = mirror files to `course context/<course>/<bucket>/`,
 > desktop notifications, Sync button that opens Windows Terminal with the sync command ready;
 > no crawl, no `shell.openPath` from the mirror, no installer. Ask your open questions
@@ -226,6 +227,6 @@ new scope is verified before development begins).
 
 > `/bb2dash-pm` Start Phase 13 (R-21 styling). First list every screen and component in `web/`
 > and confirm none is a stub. Propose three visual directions as a design canvas for me to pick
-> from; wait. Then write `docs/planning/71_PHASE13_styling.md`, branch `feat/styling-13`, and
+> from; wait. Then complete `docs/planning/81_PHASE13_styling.md`, branch `feat/styling-13`, and
 > spawn workers: CSS custom properties only, no Tailwind, no layout changes, no new
 > dependencies. Vercel preview before the PR; stop there.

@@ -44,8 +44,9 @@ and info, saved in the proper locations, and the RAG pipeline then runs from the
 * Location: `vault/projects/<collection>/sessions/<session_id>.md` — **one note per session**,
   named by the full id, rewritten on every `SessionEnd` (the hook already de-duplicates by
   hash on the ingest side; the note is the single source).
-* A one-time migration moves the existing `bb2dash-retrieval` notes under `bb2dash` and
-  rewrites their `collection`.
+* A one-time migration moves the existing `bb2dash-retrieval` notes under `bb2dash`, rewrites
+  their `collection`, and **back-fills the R-27.3 tags from git history by date** (branch,
+  commits, PRs) where derivable; fields it cannot derive stay empty (Stack, 2026-09-14).
 
 ### R-27.2 Concluded-session identity
 
@@ -95,7 +96,8 @@ under `templates/`): area tags (`ingest`, `db`, `retrieval`, `gui`, `mcp`, `harn
 `validation`), and the phase tag. The hook applies area tags from the paths touched and the
 activity tags from transcript signals (a `gh pr create`, an `apply_migration`, a `/code-review`
 invocation). Anything it cannot classify gets `tags: [unclassified]` and lands in a weekly
-"untagged sessions" list the PM reviews; Stack never has to tag by hand.
+"untagged sessions" list the PM reviews. **Stack may append tags by hand in the note**; the
+hook never removes a manual tag on rewrite and ingest keeps them (Stack, 2026-09-14).
 
 ### R-27.5 The pipeline runs from there
 
@@ -127,6 +129,67 @@ invocation). Anything it cannot classify gets `tags: [unclassified]` and lands i
 - [ ] `docs/ingestion.md` and `docs/retrieval.md` in agentic-harness describe the new fields,
       the tag vocabulary, and the scheduler; `ingest` tests cover the new frontmatter and
       the `--only` flag (the suite is at 261 today; it must not drop).
+
+## Definition of done
+
+Source: Stack's answers (`70_MVP_INDEX.md` §1, V-2) + research `research/76_RESEARCH_v2_session_archival.md` §5.
+Stack's check is this list, PM-verified, with the evidence pasted in the two harness PRs.
+
+- [ ] One note per session id for all Phase 7–9 sessions under `vault/projects/bb2dash/sessions/`;
+      `bb2dash-retrieval/` gone. Check: file count == distinct `session_id`.
+- [ ] Every session note carries `repo`, `branch`, `phase`, `status`, `schema_version`. Check:
+      SQL over `rag.documents` returns zero nulls where the document type is `session`.
+- [ ] `collection` comes from the git remote; folder fallback flagged. Check: worktree fixture test.
+- [ ] Every tag is in `docs/tags.md` or exactly `unclassified`; manual tags survive a rewrite
+      because the hook **merges** frontmatter. Check: set-difference assertion in the suite and
+      over the live store; merge test.
+- [ ] No note exceeds 5 hook-applied tags (manual tags uncapped). Check: array-length SQL.
+- [ ] End → resume → end yields one `concluded` note, chain intact, earlier note `superseded`.
+      Check: the resume fixture's golden frontmatter. Status never regresses (a stale
+      `SessionEnd` replayed over a `concluded` note is a no-op); a resume after the 24 h sweep
+      starts a **new** note with `resumed_from`.
+- [ ] Hook stays in budget on the largest fixture (< 1,200 ms; the log records ms) and never
+      writes a credential (redaction test over a fixture seeded with a JWT, an `sb_` key and a
+      connection string).
+- [ ] Ending a session updates `rag` within a minute, no manual step. Check: end a real
+      session, `search_context` a phrase from it; the log shows the `--only` run.
+- [ ] `ingest --only` on an unchanged note performs zero embeddings (second-run test).
+- [ ] `filter_metadata` on `repo` + `phase` returns the Phase 7 PM session and both workers,
+      workers carrying `parent_session` (the brief's acceptance query, as a test).
+- [ ] `include_superseded=false` is the MCP default (two calls differing only in the flag return
+      different counts).
+- [ ] GIN index on `documents.metadata` exists and is used by both RRF arms (`EXPLAIN` shows a
+      bitmap index scan; filtered results still reach `match_count`).
+- [ ] Back-fill: the moved notes carry git-derived `branch` / `commits` / `prs` where derivable;
+      underivable fields empty, not guessed.
+- [ ] Nightly reconcile registered, last success < 36 h (health query); `docs/ingestion.md`,
+      `docs/retrieval.md`, `docs/tags.md` updated; `uv run pytest` ≥ 261 green.
+- [ ] Both harness PRs pass `/code-review` and `/security-review`; the migration to
+      `harness-memory` is byte-identical.
+
+## Task loops
+
+| # | task | executable check | demo line (Stack) | owner |
+|---|---|---|---|---|
+| 1 | Fixture transcripts (main checkout, worktree, resume chain, subagent) + golden frontmatter | harness runs; goldens diff-clean | — | W-H1 |
+| 2 | Collection from git remote + worktree resolution | fixture test | — | W-H1 |
+| 3 | Frontmatter schema v2 (R-27.2 / 27.3), merge-not-rewrite | golden tests; a manual tag survives | — | W-H1 |
+| 4 | Tag vocabulary + classifier + `unclassified` list | set-difference test; weekly list generated | — | W-H1 |
+| 5 | Resume chain + status ratchet | end/resume/end fixture; stale replay is a no-op | — | W-H1 |
+| 6 | Redaction + budget | credential fixture; timing assertion | — | W-H1 |
+| 7 | One-time migration of existing notes + git back-fill | file count == session ids; three notes spot-checked | "my Phase 7 sessions are under bb2dash with their PRs" | W-H1 |
+| 8 | `ingest --only` | second-run zero-embed test | — | W-H2 |
+| 9 | Hook → detached ingest enqueue | end a session; log shows the run; rag returns the phrase | "I end a session and can search it a minute later" | W-H2 |
+| 10 | `rag.search` `filter_metadata` + GIN + superseded exclusion (migration) | EXPLAIN test; acceptance-query test | — | W-H2 |
+| 11 | MCP `search_context` inputs (`repo`, `phase`, `tags`, `include_superseded`) | tool tests; default-flag count test | — | W-H2 |
+| 12 | Nightly reconcile + 24 h sweep (Task Scheduler) | health query < 36 h; a stale active note gets concluded | — | W-H2 |
+| 13 | Docs + two PRs + gates | SOP list | — | PM session |
+
+Open questions from the research, for Stack (also in `70_MVP_INDEX.md` §5): manual tags edited
+into the note (hook merges frontmatter; recommended) or added by a command; the cap of 5 hook
+tags; a resume after the sweep starts a new note (recommended) rather than reopening; class
+sessions carry the same relational fields with `collection_source: folder`; cross-repo sessions
+stay one note with `repos_touched: []`.
 
 ## Workers and PRs
 
