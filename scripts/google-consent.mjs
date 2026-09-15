@@ -224,12 +224,22 @@ async function exchangeCode({ clientId, clientSecret, code, redirectUri, codeVer
   return payload.refresh_token;
 }
 
+/**
+ * Both service-key formats work: a legacy JWT (`eyJ…`) is also sent as a Bearer token, a new
+ * `sb_secret_…` key is not (the gateway rejects a non-JWT Bearer with 401 and the store step
+ * would fail after Google had already granted consent - seen live, 2026-09-15).
+ */
+export function serviceHeaders(serviceKey) {
+  return serviceKey.startsWith("eyJ")
+    ? { apikey: serviceKey, authorization: `Bearer ${serviceKey}` }
+    : { apikey: serviceKey };
+}
+
 async function postgrest(supabaseUrl, serviceKey, path, init) {
   const response = await fetch(`${supabaseUrl}${path}`, {
     ...init,
     headers: {
-      apikey: serviceKey,
-      authorization: `Bearer ${serviceKey}`,
+      ...serviceHeaders(serviceKey),
       "content-type": "application/json",
       ...(init.headers ?? {}),
     },

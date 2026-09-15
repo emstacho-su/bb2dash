@@ -20,6 +20,7 @@ import {
   pkcePair,
   readEnv,
   SCOPE,
+  serviceHeaders,
   SECRET_NAMES,
   TOKEN_ENDPOINT,
 } from "./google-consent.mjs";
@@ -131,4 +132,9 @@ test("readEnv names every missing variable and refuses the primary calendar", ()
   });
   assert.equal(config.clientId, "a");
   assert.equal(config.supabaseUrl, "https://example.supabase.co");
+});
+
+test("serviceHeaders: a legacy JWT key is also a Bearer, an sb_secret key is apikey only", () => {
+  assert.deepEqual(serviceHeaders("eyJabc"), { apikey: "eyJabc", authorization: "Bearer eyJabc" });
+  assert.deepEqual(serviceHeaders("sb_secret_abc"), { apikey: "sb_secret_abc" });
 });
