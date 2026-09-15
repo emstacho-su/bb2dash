@@ -14,7 +14,7 @@
  */
 
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 interface AttemptFile {
   id: string;
@@ -48,6 +48,8 @@ interface GradebookColumn {
 
 const require = createRequire(import.meta.url);
 const crawler = require('../../ingest/bb_crawler.js') as {
+  installCrawler: (o: Record<string, unknown>) => { runAll: (o?: Record<string, unknown>) => Promise<unknown> };
+  assertRunId: (runId: unknown) => string | null;
   mapAttempt: (a: unknown, files?: unknown[], includeKeys?: boolean) => MappedAttempt | null;
   mapAttemptFile: (
     f: unknown,
@@ -67,6 +69,49 @@ const CTX = { courseId: '_571529_1', attemptId: '_8100001_1' };
 describe('the envelope version', () => {
   it('is 3 — the first versioned crawler payload', () => {
     expect(crawler.CRAWLER_VERSION).toBe(3);
+  });
+});
+
+describe('assertRunId — a caller-supplied run id is a uuid or nothing', () => {
+  const { assertRunId } = crawler;
+
+  it('accepts a uuid and hands it back unchanged', () => {
+    expect(assertRunId('bf2f81e5-ea4c-4b64-bc43-129fd53d4616')).toBe('bf2f81e5-ea4c-4b64-bc43-129fd53d4616');
+    expect(assertRunId('BF2F81E5-EA4C-4B64-BC43-129FD53D4616')).toBe('BF2F81E5-EA4C-4B64-BC43-129FD53D4616');
+  });
+
+  it('treats an absent id as "generate one"', () => {
+    expect(assertRunId(null)).toBeNull();
+    expect(assertRunId(undefined)).toBeNull();
+  });
+
+  it('throws on anything that is not a uuid, rather than fabricating one', () => {
+    for (const bad of ['', 'not-a-uuid', 'bf2f81e5ea4c4b64bc43129fd53d4616', 42, {}, ['x'], true]) {
+      expect(() => assertRunId(bad), JSON.stringify(bad)).toThrow(/must be a uuid/);
+    }
+  });
+
+  it('says why in the message, so a caller cannot mistake it for a transient failure', () => {
+    expect(() => assertRunId('nope')).toThrow(/fabricated id|nobody registered/);
+  });
+});
+
+describe('runAll — the guard runs before any request goes out', () => {
+  const install = () =>
+    crawler.installCrawler({ userId: '_21025199_1', supabaseUrl: 'https://example.invalid', anonKey: 'k' });
+
+  it('rejects a bad runId without touching the network', async () => {
+    const original = globalThis.fetch;
+    const fetchSpy = vi.fn(() => {
+      throw new Error('fetch must not be called when runId is invalid');
+    });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    try {
+      await expect(install().runAll({ runId: 'not-a-uuid' })).rejects.toThrow(/must be a uuid/);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });
 

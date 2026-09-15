@@ -55,10 +55,24 @@
  *    Until then a field Ultra does not expose stays absent rather than being invented; the
  *    gradebook column remains the source of truth for due dates and points (migration 034).
  *
+ * `runAll({ runId })` — WHY THE SKILL STILL REGISTERS AFTER THE CRAWL (round-2 review, R2-1)
+ *  `runAll` accepts a caller-supplied run id, and registering it BEFORE the crawl is the order the
+ *  authorisation rule wants. It is not safe yet, and the reason is in the driver, not here:
+ *  `transform_tick` (migration 044) folds a REGISTERED run as soon as one of its `bb_raw` rows is
+ *  more than three minutes old, with no completeness check — the calendar row is only one of two
+ *  triggers, not a requirement. Register first and a slow crawl (v3 adds an attempts probe and a
+ *  full-item GET per assessment, so it is slower than v2) can be folded with one course row
+ *  landed; `run_transform` is idempotent, so the remaining courses are then dropped for good.
+ *  So `skills/bb-sync/SKILL.md` registers the id immediately AFTER `runAll` returns, and
+ *  migration 039's grace window covers that gap exactly as it did before. Register-first becomes
+ *  correct the moment the tick requires the `calendar` row for a registered run — a Phase 9 driver
+ *  change, not this phase's. Until then `runId` is here for that change and for tests, and it is
+ *  validated as a uuid so a caller can never crawl under a fabricated id.
+ *
  * Testability: `strip`, `announcementAuthor`, `mapAnnouncement`, `mapAttempt`, `mapAttemptFile`,
- * `shouldProbeColumn` and `assessmentFields` are module-level pure functions, exported under a
- * CommonJS guard at the bottom so web/test can cover them. The guard is inert in a browser tab,
- * where this file is still pasted and run as-is.
+ * `shouldProbeColumn`, `assessmentFields` and `assertRunId` are module-level pure functions,
+ * exported under a CommonJS guard at the bottom so web/test can cover them. The guard is inert in
+ * a browser tab, where this file is still pasted and run as-is.
  */
 
 // Blackboard hands back HTML in a {displayText, rawText} envelope (or a bare string). Flatten it to
@@ -131,6 +145,24 @@ const mapAnnouncement = (a) => {
 
 /** Envelope version stamped on every course payload. Stages read a missing key as version 2. */
 const CRAWLER_VERSION = 3;
+
+/**
+ * A caller-supplied run id has to be a real uuid or nothing at all. `bb_raw.run_id` is a uuid
+ * column, so a malformed one would fail every POST after the crawl had already run; and silently
+ * substituting a generated id would be worse still — the caller would register one id while the
+ * payloads landed under another, and the crawl would be quarantined with no sign of why. Throw,
+ * before a single request goes out.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const assertRunId = (runId) => {
+  if (runId === undefined || runId === null) return null;
+  if (typeof runId !== 'string' || !UUID_RE.test(runId)) {
+    throw new Error(
+      `bb_crawler: runId must be a uuid, got ${JSON.stringify(runId)}. ` +
+      'Refusing to crawl — a fabricated id would land the payloads under a run nobody registered.');
+  }
+  return runId;
+};
 
 /**
  * Candidate key names for one attempt. NONE of these is verified: the internal attempts endpoint
@@ -396,12 +428,14 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
   const memberships = async () => { const m = await j(`/learn/api/v1/users/${userId}/memberships?expand=course.effectiveAvailability,course.permissions,courseRole&includeCount=true&limit=10000`); return (m.results || []).map(x => ({ id: x.course.id, name: x.course.name, courseId: x.course.courseId, termId: x.course.termId, termName: x.course.term?.name, uuid: x.course.uuid, role: x.role, membershipId: x.id, lastAccess: x.lastAccessDate })); };
   const calendar = async (since, until) => ({ calendars: (await j('/learn/api/v1/calendars?limit=10000')).results || [], items: (await j(`/learn/api/v1/calendars/calendarItems?since=${since}&until=${until}`)).results || [] });
   const post = async (run_id, kind, bb_course_id, payload) => fetch(`${supabaseUrl}/rest/v1/bb_raw`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ run_id, kind, bb_course_id, payload }) });
-  // `runId` lets the caller REGISTER the run before crawling: the scheduled transform folds only
-  // run ids that an owner-claimed agent_requests row carries (migration 035), and generating the
-  // id inside runAll meant the bb-sync skill could not write it until the crawl was over.
-  // Migration 039's grace window remains the fallback for a caller that passes nothing.
+  // `runId` lets a caller own the run id instead of learning it afterwards. It is NOT yet safe for
+  // the bb-sync skill to register before crawling — see the header: transform_tick folds a
+  // registered run on a three-minute idle with no completeness check, so a slow crawl would be
+  // folded half-done and the rest dropped. The skill still registers immediately after this
+  // returns, under migration 039's grace window. Validated first, so a bad id fails before any
+  // request goes out rather than after seven courses have been crawled.
   const runAll = async ({ termName = null, runId = null, since = '2026-08-01T04:00:00.000Z', until = '2027-01-15T04:00:00.000Z' } = {}) => {
-    const run_id = runId || crypto.randomUUID(); const mem = await memberships(); const mine = termName ? mem.filter(m => m.termName === termName) : mem;
+    const run_id = assertRunId(runId) || crypto.randomUUID(); const mem = await memberships(); const mine = termName ? mem.filter(m => m.termName === termName) : mem;
     const log = [['memberships', (await post(run_id, 'memberships', null, { results: mem })).status]];
     for (const m of mine) { const p = await crawl(m.id); log.push([m.name, (await post(run_id, 'course', m.id, p)).status]); }
     log.push(['calendar', (await post(run_id, 'calendar', null, await calendar(since, until))).status]);
@@ -422,6 +456,6 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
 // Under Node it exposes the pure mappers to the vitest suite in web/test.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { installCrawler, strip, personName, announcementAuthor, mapAnnouncement, AUTHOR_KEYS,
-    mapAttempt, mapAttemptFile, shouldProbeColumn, assessmentFields, pickKey,
+    mapAttempt, mapAttemptFile, shouldProbeColumn, assessmentFields, pickKey, assertRunId,
     ATTEMPT_FIELD_KEYS, ATTEMPT_FILE_KEYS, ASSESSMENT_FIELDS, CRAWLER_VERSION };
 }
