@@ -427,6 +427,30 @@ Source: Stack's answers (`70_MVP_INDEX.md` §1.6) + research `research/74_RESEAR
 | 14 | Gates + docs + preview | SOP list | — | PM session |
 | 15 | **Stack's acceptance script** | — | the six steps above | Stack |
 
+## Round 2 (PM integration, 2026-09-15)
+
+Confirmed against prod after merging both worker branches into `feat/planner-11`.
+
+**R2-1 (W-21, migration `065_absent_from_crawl_capture.sql`).** `v_calendar_push_items.absent_from_blackboard`
+is true for 22 of 64 push-set rows although every one of them is in the newest crawl's payload.
+Cause: the Contract said "`bb_last_seen < that run's started_at`", but `stage_assignments` stamps
+`bb_last_seen` with the crawl row's `captured_at` (17:19:29 on 2026-09-14) while `sync_runs.started_at`
+is the fold (17:22:00). The Contract was wrong, the implementation faithful. Fix: recreate the view so
+a row is absent iff `bb_item_id is not null` **and** the newest folded run has a `bb_raw` row
+(`kind = 'course'`, `bb_course_id = courses.bb_id`) **and** `bb_last_seen < that bb_raw row's
+captured_at` (an item seen in that crawl carries exactly that `captured_at`). Re-run §4 of
+`69a_W21_VERIFICATION.md`: expected 0 absent today; add a fixture case where an older crawl and a
+newer one differ by one column and assert only that column's row is absent. `push_test.ts` fixtures
+that encode the old rule change accordingly. Update the Contract paragraph above to the corrected
+rule.
+
+**R2-2 (decision, no change).** The five `reading`-typed `assignments` rows (IST.352 "Reading -
+Chapter N", graded Blackboard items with 11:59 PM due times) stay in the push set: Stack's "readings
+are too noisy" (Q6) referred to the syllabus `readings` table, which is excluded. Recorded in DECISIONS.
+
+**R2-3 (accepted, no change).** Advisor WARN `authenticated_security_definer_function_executable` on
+`calendar_push_now()` is the Contract's design (owner-guarded inside, same pattern as `app_owner()`).
+
 ## Out of scope
 
 Meeting events in Google Calendar, two-way sync, day view, drag-to-reschedule, per-item read
