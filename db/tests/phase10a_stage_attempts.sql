@@ -222,6 +222,17 @@ begin
     raise exception 'FAIL attempts_allowed = %, expected 3 from the gradebook column', allowed;
   end if;
 
+  -- Migration 055: attempts_allowed is a real ceiling, not a copy of multiple_attempts.
+  -- _3598132_1 has multipleAttempts 0 and attemptsLeft -1 - unlimited. Before 055 this read 0 and
+  -- the popout would have said "Attempt 1 of 0".
+  select attempts_allowed into allowed from v_assignment_attempts where column_id = '_3598132_1';
+  if allowed is distinct from -1 then
+    raise exception 'FAIL an unlimited column reports attempts_allowed = %, expected -1', allowed;
+  end if;
+  if exists (select 1 from v_assignment_attempts where attempts_allowed = 0) then
+    raise exception 'FAIL a row reports attempts_allowed = 0, which is not a ceiling';
+  end if;
+
   -- The ambiguous column is linked to TWO assignments, so its single attempt appears once under
   -- each - and is attempt 1 under each. Numbering by column alone would have called the second
   -- one "attempt 2 of 1".
