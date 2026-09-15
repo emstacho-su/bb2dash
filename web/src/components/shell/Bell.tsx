@@ -19,14 +19,15 @@
  * is what runs on every screen.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
   allAnnouncementsOptions,
   bellRows,
-  useMarkAnnouncementsSeen,
   useUnreadAnnouncements,
+  useUnreadSnapshot,
+  type AnnouncementCard,
 } from '@/lib/queries.announcements';
 import { BellIcon } from './icons';
 import { usePopover } from './usePopover';
@@ -39,33 +40,17 @@ export function Bell() {
   const popover = usePopover<HTMLSpanElement>();
   const unread = useUnreadAnnouncements();
   const list = useQuery({ ...allAnnouncementsOptions(), enabled: popover.open });
-  const markSeen = useMarkAnnouncementsSeen();
 
-  /** Which rows were unread when the dropdown opened. Empty while it is shut. */
-  const [unreadAtOpen, setUnreadAtOpen] = useState<ReadonlySet<number>>(() => new Set<number>());
-  const markedThisOpen = useRef(false);
-
-  // Snapshot on open, clear on close. Deliberately keyed on `open` alone: the
-  // snapshot must not move when `unread` refetches while the panel is up.
-  useEffect(() => {
-    if (popover.open) {
-      setUnreadAtOpen(new Set((unread.data ?? []).map((row) => row.id)));
-      markedThisOpen.current = false;
-    } else {
-      setUnreadAtOpen(new Set<number>());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popover.open]);
-
-  // Mark seen once, after the list has answered — never before there is
-  // something on screen to have been seen.
-  const listResolved = list.isSuccess || list.isError;
-  useEffect(() => {
-    if (!popover.open || markedThisOpen.current || !listResolved) return;
-    markedThisOpen.current = true;
-    markSeen.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popover.open, listResolved]);
+  /**
+   * `undefined` until the list has *succeeded* — that is what gates the whole
+   * seen-once step. A failed list fetch leaves it undefined, so nothing is
+   * stamped as read that was never shown.
+   */
+  const unreadIds = useMemo(
+    () => (list.isSuccess ? (unread.data ?? []).map((row) => row.id) : undefined),
+    [list.isSuccess, unread.data],
+  );
+  const unreadAtOpen = useUnreadSnapshot(popover.open, unreadIds);
 
   const badge = unread.data?.length ?? 0;
   const rows = bellRows(list.data ?? [], unreadAtOpen, DROPDOWN_LIMIT);
@@ -90,46 +75,72 @@ export function Bell() {
       </button>
 
       {popover.open && (
-        <div className={styles.panel} role="menu" aria-label="Announcements">
-          <div className={styles.head}>Announcements</div>
-
-          {list.isPending && <div className={styles.note}>Loading…</div>}
-          {list.isError && (
-            <div className={styles.note} role="alert">
-              Could not load announcements: {list.error.message}
-            </div>
-          )}
-          {list.isSuccess && rows.length === 0 && (
-            <div className={styles.note}>No announcements have been posted yet.</div>
-          )}
-
-          {rows.map((row) => (
-            <Link
-              key={row.id}
-              href={`/course/${row.courseId}/stream`}
-              className={styles.row}
-              role="menuitem"
-              onClick={() => popover.close()}
-            >
-              <span
-                className={row.unread ? styles.dotUnread : styles.dot}
-                aria-hidden="true"
-                data-unread={String(row.unread)}
-              />
-              <span className={styles.rowBody}>
-                <span className={styles.meta}>{row.meta}</span>
-                <span className={row.unread ? styles.titleUnread : styles.title}>{row.title}</span>
-              </span>
-            </Link>
-          ))}
-
-          <div className={styles.footer}>
-            <Link href="/announcements" className={styles.seeAll} onClick={() => popover.close()}>
-              See all
-            </Link>
-          </div>
-        </div>
+        <BellPanel
+          rows={rows}
+          state={list.isPending ? 'loading' : list.isError ? list.error.message : 'ready'}
+          onNavigate={popover.close}
+        />
       )}
     </span>
+  );
+}
+
+/** The pop-down itself: a state line, the rows, and "See all". */
+function BellPanel({
+  rows,
+  state,
+  onNavigate,
+}: {
+  rows: AnnouncementCard[];
+  /** 'loading' | 'ready' | an error message. */
+  state: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <div className={styles.panel} role="menu" aria-label="Announcements">
+      <div className={styles.head}>Announcements</div>
+
+      {state === 'loading' && <div className={styles.note}>Loading…</div>}
+      {state !== 'loading' && state !== 'ready' && (
+        <div className={styles.note} role="alert">
+          Could not load announcements: {state}
+        </div>
+      )}
+      {state === 'ready' && rows.length === 0 && (
+        <div className={styles.note}>No announcements have been posted yet.</div>
+      )}
+
+      {rows.map((row) => (
+        <BellRow key={row.id} row={row} onNavigate={onNavigate} />
+      ))}
+
+      <div className={styles.footer}>
+        <Link href="/announcements" className={styles.seeAll} onClick={onNavigate}>
+          See all
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/** One announcement: its unread dot, `course · author · date`, and its title. */
+function BellRow({ row, onNavigate }: { row: AnnouncementCard; onNavigate: () => void }) {
+  return (
+    <Link
+      href={`/course/${row.courseId}/stream`}
+      className={styles.row}
+      role="menuitem"
+      onClick={onNavigate}
+    >
+      <span
+        className={row.unread ? styles.dotUnread : styles.dot}
+        aria-hidden="true"
+        data-unread={String(row.unread)}
+      />
+      <span className={styles.rowBody}>
+        <span className={styles.meta}>{row.meta}</span>
+        <span className={row.unread ? styles.titleUnread : styles.title}>{row.title}</span>
+      </span>
+    </Link>
   );
 }

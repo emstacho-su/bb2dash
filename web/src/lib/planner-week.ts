@@ -39,6 +39,7 @@ import {
   parseDateOnly,
   shiftIso,
 } from '@/components/tracker/anchor';
+import { COURSE_TIME_ZONE } from './course-dimension';
 
 /* ---------------------------------------------------------------------------
  * Grid constants
@@ -55,9 +56,6 @@ export const PLANNER_SLOT_MINUTES = 30;
 /** 28 half-hour rows between 08:00 and 22:00. */
 export const PLANNER_SLOT_COUNT =
   (PLANNER_END_MINUTE - PLANNER_START_MINUTE) / PLANNER_SLOT_MINUTES;
-
-/** The zone the term is taught in. */
-export const NEW_YORK_TZ = 'America/New_York';
 
 /** What a meeting block says when `meetings.location` is null. */
 export const ROOM_NOT_RECORDED = 'room not recorded';
@@ -125,7 +123,7 @@ export interface WallClock {
 }
 
 const NEW_YORK_PARTS = new Intl.DateTimeFormat('en-US', {
-  timeZone: NEW_YORK_TZ,
+  timeZone: COURSE_TIME_ZONE,
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',

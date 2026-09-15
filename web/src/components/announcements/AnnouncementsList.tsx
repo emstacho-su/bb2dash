@@ -15,43 +15,37 @@
  * the one thing the page was opened to show.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { scrubSnippet } from '@/lib/queries.search';
 import {
   isUnreadRow,
   toAnnouncementCard,
   useAllAnnouncements,
-  useMarkAnnouncementsSeen,
+  useUnreadSnapshot,
   type AnnouncementCard,
 } from '@/lib/queries.announcements';
 import styles from './AnnouncementsList.module.css';
 
 export function AnnouncementsList() {
   const announcements = useAllAnnouncements();
-  const markSeen = useMarkAnnouncementsSeen();
-
-  /** Which rows were unread when the list first landed. null = not landed yet. */
-  const [unreadOnArrival, setUnreadOnArrival] = useState<ReadonlySet<number> | null>(null);
-  const markedThisVisit = useRef(false);
-
   const rows = announcements.data ?? [];
   const landed = announcements.isSuccess;
 
-  useEffect(() => {
-    if (!landed || unreadOnArrival !== null) return;
-    setUnreadOnArrival(new Set(rows.filter(isUnreadRow).map((row) => row.id)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landed, unreadOnArrival]);
-
-  useEffect(() => {
-    if (!landed || markedThisVisit.current) return;
-    markedThisVisit.current = true;
-    markSeen.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landed]);
+  /**
+   * `undefined` until the list has landed, so a failed fetch stamps nothing.
+   * The screen is always "active": visiting it is what marks everything seen.
+   */
+  const unreadIds = useMemo(
+    () =>
+      announcements.isSuccess
+        ? (announcements.data ?? []).filter(isUnreadRow).map((row) => row.id)
+        : undefined,
+    [announcements.isSuccess, announcements.data],
+  );
+  const unreadOnArrival = useUnreadSnapshot(true, unreadIds);
 
   const cards: AnnouncementCard[] = rows.map((row) =>
-    toAnnouncementCard(row, unreadOnArrival?.has(row.id) ?? false),
+    toAnnouncementCard(row, unreadOnArrival.has(row.id)),
   );
   const unreadCount = cards.filter((card) => card.unread).length;
 
@@ -59,13 +53,7 @@ export function AnnouncementsList() {
     <section className={styles.screen} aria-label="Announcements">
       <div className={styles.headLine}>
         <span className={styles.sub}>
-          {announcements.isPending
-            ? 'loading…'
-            : announcements.isError
-              ? 'could not load'
-              : `${cards.length} announcement${cards.length === 1 ? '' : 's'}${
-                  unreadCount > 0 ? ` · ${unreadCount} new` : ''
-                }`}
+          {summaryLine(announcements.isPending, announcements.isError, cards.length, unreadCount)}
         </span>
       </div>
 
@@ -86,6 +74,19 @@ export function AnnouncementsList() {
       </div>
     </section>
   );
+}
+
+/** The count line. A number is only a fact once the query has answered. */
+export function summaryLine(
+  pending: boolean,
+  failed: boolean,
+  total: number,
+  unread: number,
+): string {
+  if (pending) return 'loading…';
+  if (failed) return 'could not load';
+  const counted = `${total} announcement${total === 1 ? '' : 's'}`;
+  return unread > 0 ? `${counted} · ${unread} new` : counted;
 }
 
 export function AnnouncementRow({ card }: { card: AnnouncementCard }) {

@@ -135,7 +135,6 @@ const MEETINGS = [
     location: 'Hinds Hall 010',
     starts_on: '2026-08-24',
     ends_on: '2026-12-11',
-    confidence: 'confirmed',
     courses: { id: 'IST.323', title_short: 'Cybersecurity', subject: 'IST', number: '323' },
   },
   {
@@ -147,20 +146,12 @@ const MEETINGS = [
     location: null,
     starts_on: null,
     ends_on: null,
-    confidence: 'confirmed',
     courses: { id: 'ECN.304', title_short: 'Macro', subject: 'ECN', number: '304' },
   },
 ];
 
 const SESSIONS = [
-  {
-    id: 11,
-    course_id: 'IST.323',
-    session_date: '2026-09-16',
-    topic: 'Risk assessment',
-    kind: 'lecture',
-    week_no: 4,
-  },
+  { course_id: 'IST.323', session_date: '2026-09-16', topic: 'Risk assessment' },
 ];
 
 const WORK_ITEMS = [
