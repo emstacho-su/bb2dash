@@ -57,15 +57,16 @@ export function Bell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popover.open]);
 
-  // Mark seen once, after the list has answered — never before there is
-  // something on screen to have been seen.
-  const listResolved = list.isSuccess || list.isError;
+  // Mark seen once, after the list has *succeeded* — never before there is
+  // something on screen to have been seen. A failed fetch must not stamp
+  // `read_at`: those posts would be marked as read without ever being shown,
+  // and nothing would surface them again.
   useEffect(() => {
-    if (!popover.open || markedThisOpen.current || !listResolved) return;
+    if (!popover.open || markedThisOpen.current || !list.isSuccess) return;
     markedThisOpen.current = true;
     markSeen.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popover.open, listResolved]);
+  }, [popover.open, list.isSuccess]);
 
   const badge = unread.data?.length ?? 0;
   const rows = bellRows(list.data ?? [], unreadAtOpen, DROPDOWN_LIMIT);

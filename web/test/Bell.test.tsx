@@ -349,7 +349,7 @@ describe('Bell — the rows', () => {
     ).toBeInTheDocument();
   });
 
-  it('says a failed fetch failed', async () => {
+  it('says a failed fetch failed, and marks nothing seen', async () => {
     db.errors = { announcements: 'announcements are unreachable' };
     renderBell();
     fireEvent.click(bellButton());
@@ -357,5 +357,10 @@ describe('Bell — the rows', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Could not load announcements: announcements are unreachable',
     );
+
+    // Stamping `read_at` here would mark posts as read that were never shown,
+    // and nothing would ever surface them again.
+    expect(db.rpc).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId('bell-badge')).toHaveTextContent('2'));
   });
 });
