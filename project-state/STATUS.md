@@ -1,13 +1,14 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-15**, Phase 9 sync loop merged (PR #10: automated
-> transform on pg_cron, Inbox, Sync button, private bucket, every view security_invoker;
-> migrations 026–045 live; Stack signed off after the first live end-to-end sync). Phase 8
-> merged 2026-09-14 (PR #8). Convention: see root `CLAUDE.md`.
+> Updated upon each PR. Last update: **2026-09-15**, Phase 10a grades PR open (`feat/grades-10a`:
+> gradebook mirror `bb_gradebook` + `bb_attempts`, five grade views, `/grades` and the course
+> Grades tab, popout submission block, staged-upload drop zone, crawler v3 with the attempts
+> probe, bb-sync step 4b; migrations 046–056 live). Phase 9 merged 2026-09-15 (PR #10), Phase 8
+> 2026-09-14 (PR #8). Convention: see root `CLAUDE.md`.
 
 ## Where the product is
 
-**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8); sync loop live (Phase 9).**
+**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8); sync loop live (Phase 9); gradebook mirrored and shown as Blackboard's numbers (Phase 10a, PR open).**
 The Blackboard → Supabase pipeline, typed warehouse, document corpus, and two-tier search API
 are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is merged to `main`
 (PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
@@ -20,15 +21,16 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 
 | Layer | State |
 |---|---|
-| Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` (anon insert, unique per run/kind/shell); last pull 2026-09-08. Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
-| Typed warehouse | migrations 001–044 (repo numbering; see note below); 7 courses, 66+ assignments, 145 sessions, planner tables; `attention_items` (93 rows raised on first fold), `agent_requests`, `app_settings`; all 15 public views `security_invoker`, anon revoked |
+| Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` **v3** (anon insert, unique per run/kind/shell; `crawler.version = 3` envelope; attempts + attempt-files probe with a `keys` list; `runAll({ runId })`); last pull 2026-09-14 (run `bf2f81e5-…`, made with v2 — no `attempts` key yet). Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
+| Typed warehouse | migrations 001–056 (repo numbering; see note below); 7 courses, 66+ assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings`; **`bb_gradebook`** (append-per-run mirror, 45 rows from the 9/14 crawl, one `isCalc` total: IST.323 5/104), **`bb_attempts`** (empty until the first v3 crawl); 20 public views `security_invoker`, anon revoked |
+| Gradebook mirror (10a) | `stage_gradebook` + `stage_attempts` in `run_transform` after `stage_assignments`; `v_gradebook_latest` (`column_kind` item / attendance / total / calc_other / letter, `assignment_id`, `linked_assignments`, `counts_toward_grade`), `v_assignment_grade`, `v_course_grade`, `v_attempts_latest`, `v_assignment_attempts`; registered runs only; reconciliation 45/45 columns and scores against `bb_raw`; every figure carries `seen_at`, nothing summed |
 | Effort model | migration 015 `effort_base` (19 types) + 016 `v_work_items` (152 items, effort + source) |
 | Document corpus | 64 files (100% in Storage + local mirror + sha256), 534 text units extracted; 4 stale IST.466 files marked `superseded_by` (migration 022) → `v_bb_files_current` = 60 |
 | Search: FTS | tsvector+GIN on file text / content / announcements; `search_file_text(…, p_include_superseded)` |
 | Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
 | Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
-| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list; vitest 342 tests |
+| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list, **Grades** (`/grades` by course: "Blackboard's number, as of <seen_at>" / "Blackboard publishes no total" / "not synced yet"; item rows with status pill, `score / possible`, seen, feedback disclosure; uncounted attendance, letter and non-total calculated columns in a collapsed group), **course Grades tab** (same table for the course's shells), **popout submission block** (status, attempt N of M, pulled-back and staged files with a sha256 match chip; no score), **staged-upload drop zone** (popout + Classwork rows → Storage + `bb_files` row, "Staged in bb2dash — attach in Blackboard ↗"; no control reads "Submit"); vitest 508 tests |
 | Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
 
 ## What has been done (by phase)
@@ -114,7 +116,38 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    7 courses, 17 items raised, answers applied by a transform request within one tick) found two
    follow-ups, fixed in-PR: **045** `question_date_text` (date-only due dates in conflict text
    printed a day early) and the Sync button reuses an open `sync` request instead of filing a
-   second one (the tick never closes `kind = sync` rows). `bb_url` still null:
+   second one (the tick never closes `kind = sync` rows).
+10. **Phase 10a — Grades: mirror, screens, submissions** (`feat/grades-10a`, PR open, 2026-09-15;
+   brief + frozen contract + Stack's ten answers in `docs/planning/67_PHASE10A_grades.md`,
+   evidence in `66_W17_VERIFICATION.md`). Two Opus workers (W-17 db + ingest, W-18 web) on
+   their own branches and worktrees, PM-integrated from a phase worktree. Migrations **046–051**:
+   `bb_gradebook` + `stage_gradebook` (append per run, keyed `(run_id, course_id, column_id)`,
+   reads `effectiveScore`, classifies `column_kind`), the three gradebook views, `classifier`
+   gains `blackboard`, `bb_files.source_url` nullable + `attempt_id` + anon insert refuses
+   submissions, `bb_attempts` + `stage_attempts` + two attempt views (files catalogued into
+   `bb_files` under `my_submissions`, bytes pulled by bb-sync step 4b), `run_transform` gains the
+   two stages and the Activity feed three grade sentences. Live on the 9/14 crawl: 45 columns
+   mirrored, 7/7 courses reconcile by count and score, replay inserts 0. Crawler v3: attempts
+   endpoint with a `keys` probe, assessment-field probe (`detailSource`), versioned envelope,
+   `runId` on `runAll`; the key names stay unverified until Stack's acceptance crawl (every
+   login needs his Duo). Web: `queries.grades.ts` (tested helpers for every state), `/grades`,
+   course Grades tab, `GradebookTable`, `CourseGradeCard`, `SubmissionBlock`, `UploadDropZone`,
+   Materials shows staged rows; `database.types.ts` regenerated; typecheck/build green, vitest
+   508, mcp-server 88. Fixtures for 3 courses + a synthetic attempts payload under
+   `db/fixtures/phase10a/`; SQL tests under `db/tests/` roll back against prod. Review round
+   (`/code-review main high`, ten confirmed findings; the `/security-review` skill cannot launch
+   in this shell, so the PM's manual pass covered the upload path, RLS, grants, invoker views and
+   the 049 check): **052–056** — `bb_file_relpath` gives pulled-back files an `attempt-<id>/`
+   segment so they cannot collide with a staged file of the same name, and 049's check no longer
+   passes on two nulls (052); `stage_files` never marks a `my_submissions` row missing (053);
+   `stage_gaps` does not raise a gap for a pulled-back file whose bytes are still to come (054);
+   `v_assignment_attempts.attempts_allowed` encodes unlimited from `attempts_left = -1` and
+   `stage_attempts` parses attempt dates tolerantly (055); `stage_gradebook` counts score changes
+   only when the run is the newest crawl (056). Web: the popout's grade query filters on
+   `assignment_id` (the view has no `id` — a blocker caught before any preview), `attemptsAllowed`
+   helper, orphaned Storage objects removed on a failed insert, `useId` for the drop zone, the
+   staging code split into `queries.submissions.ts`, typed client throughout. bb-sync registers
+   `run_id` after the crawl again (register-first would let the tick fold a slow crawl partially). `bb_url` still null:
    assessment items carry no `detail` in the crawl (crawler change, later). First fold of the 9/8 and 9/2 crawls: 93 attention rows
    (conflict 11, data_gap 14, missing 16, stack_must_confirm 52), zero duplicates on replay, a
    resolution applied end-to-end in all three shapes. Web: Inbox, needs-attention row, Sync
@@ -156,11 +189,12 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | Phase | Name | Brief | Status |
 |---|---|---|---|
 | 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | **merged** (PR #8, 2026-09-14) — courses sidebar on the right added after Stack's preview review |
-| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | **PR #10 open** (migrations 030–044 live, reviewed); Stack adds planning docs before merge |
-| 10 | Grades and submissions | — | after 8 + 9; two PRs (10a screens/mirror/submissions, 10b model + what-if) |
+| 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | **merged** (PR #10, 2026-09-15) after Stack's first live end-to-end sync |
+| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, staged upload | `67_PHASE10A_grades.md` | **PR open** (`feat/grades-10a`, 2026-09-15; migrations 046–056 live). Stack's acceptance script starts with one real sync using crawler v3 |
+| 10b | Grades: methodology model + what-if | `68_PHASE10B_grade_model.md` | after October scores **and** V-1 sign-off; numbers from the 046–059 slack |
 | V-1 | Grading schema validation (stream, Stack + a materials-only session) | `63_GRADING_VALIDATION.md`, `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | added 2026-09-14; parallel with 10a; gate for 10b. Launch: `scripts/validate-grading.ps1` |
 | V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14; parallel with 10a |
-| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | — | can pair with 10a |
+| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **in progress** in a parallel PM session (`feat/planner-11`, migrations 060–069) |
 | 12 | Electron shell | — | |
 | 13 | Styling pass | — | last |
 
@@ -171,7 +205,8 @@ brief (`62`, `63`, `66`, `67`, `68`, `69`, `80`, `81`) and indexed in
 `docs/planning/70_MVP_INDEX.md`, whose §5 lists the open questions Stack answers when each
 phase's PM session freezes its Contract. Research behind them: `docs/planning/research/`.
 
-Migration ranges: Phase 8 = 026–029, Phase 9 = 030–045 (030–040 plus its review-fix rounds 041–045), Phase 10 = 046–059,
+Migration ranges: Phase 8 = 026–029, Phase 9 = 030–045 (030–040 plus its review-fix rounds 041–045), Phase 10 = 046–059
+(10a took 046–056; 057–058 slack; 10b takes its numbers after 059; **059 held for V-1's reconciliation**),
 Phase 11 = 060–069, Phase 12 = 070–079 if needed. Both phase branches cut from `main`
 (Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
 
@@ -182,11 +217,24 @@ touch those screens; stored per-part `tsvector` on `bb_text_embeddings` → only
 feels slow, not before.
 
 **Security:** `bb-files` bucket private (030, anonymous GET 400); all public views
-`security_invoker` with anon revoked (036); transform folds only owner-registered crawls (039).
+`security_invoker` with anon revoked (036); transform folds only owner-registered crawls (039);
+`bb_files` anon INSERT refuses `my_submissions` rows and any `classified_by` of `stack` or
+`blackboard` (049) — the Storage-side anon INSERT is deliberately unchanged (bytes with no
+catalogue row are invisible; the pull step uploads with the publishable key); `bb_gradebook` /
+`bb_attempts` owner-only, stage functions `service_role` only.
 Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's policies (wrap
 `auth.uid()` in `(select …)`), 7 pre-existing mutable search_path functions.
 
 ## Known issues / operational notes
+
+* **Attempts key names are unverified** until the first crawler-v3 sync (Stack's acceptance step
+  0). `bb_attempts.raw->'keys'` and `bb_content`'s `detailSource` probe name the real keys; the
+  candidate lists in `bb_crawler.js` are then cut to one name each
+  (`66_W17_VERIFICATION.md` §10). Until then `bb_attempts` is empty and the popout shows
+  Blackboard's `lastAttempt` timestamp only.
+* Mirrored scores are stored `numeric(9,3)`: ECN.304 Attendance 83.33333 renders as 83.333 (one
+  value of 45, third decimal of a percentage). Widening the column means recreating the five
+  views that depend on it; deferred unless a score needs to be bit-exact.
 
 * IST.466 publishes two sibling content branches with identical `path`s; `bb_content`'s
   `(course_id, path)` key holds one, so Classwork shows one branch. Needs a key change

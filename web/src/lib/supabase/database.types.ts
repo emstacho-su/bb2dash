@@ -161,6 +161,7 @@ export type Database = {
           gcal_last_status: string | null
           gcal_push_request_id: number | null
           gcal_push_requested_at: string | null
+          gcal_push_run_id: number | null
           ical_last_error: string | null
           ical_last_status: number | null
           ical_request_id: number | null
@@ -168,6 +169,7 @@ export type Database = {
           ical_url: string | null
           id: boolean
           updated_at: string
+          web_base_url: string
         }
         Insert: {
           gcal_calendar_id?: string | null
@@ -178,6 +180,7 @@ export type Database = {
           gcal_last_status?: string | null
           gcal_push_request_id?: number | null
           gcal_push_requested_at?: string | null
+          gcal_push_run_id?: number | null
           ical_last_error?: string | null
           ical_last_status?: number | null
           ical_request_id?: number | null
@@ -185,6 +188,7 @@ export type Database = {
           ical_url?: string | null
           id?: boolean
           updated_at?: string
+          web_base_url?: string
         }
         Update: {
           gcal_calendar_id?: string | null
@@ -195,6 +199,7 @@ export type Database = {
           gcal_last_status?: string | null
           gcal_push_request_id?: number | null
           gcal_push_requested_at?: string | null
+          gcal_push_run_id?: number | null
           ical_last_error?: string | null
           ical_last_status?: number | null
           ical_request_id?: number | null
@@ -202,6 +207,7 @@ export type Database = {
           ical_url?: string | null
           id?: boolean
           updated_at?: string
+          web_base_url?: string
         }
         Relationships: []
       }

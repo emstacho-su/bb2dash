@@ -47,8 +47,8 @@ started 2026-09-15 from `main` at `570a869`.
 | 9 | Sync loop (automated transform, Inbox, bucket private) | merged Sep 15 | #10 | 030–045 |
 | — | V-1 + R-27 briefs, Phase 10 split, ORCHESTRATOR + `/bb2dash-pm` | merged Sep 14 | #9 | — |
 | — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | merged Sep 15 | #11 | — |
-| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | **PR open** (`feat/grades-10a`; contract frozen Sep 15, Stack's ten answers in the brief) | see STATUS | 046–051 (052–058 review slack) |
-| 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | from the slack in 046–059 |
+| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | **PR open** (`feat/grades-10a`; contract frozen Sep 15, Stack's ten answers in the brief; round 2 = 052–056) | see STATUS | 046–056 (057–058 slack) |
+| 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | 057–058 then a new range after 069 if needed |
 | 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | in progress in a parallel PM session (`feat/planner-11`) | — | 060–069 |
 | V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | **059** (held; 10a never takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
