@@ -2,7 +2,7 @@
 
 > Updated upon each PR. Last update: **2026-09-15**, Phase 11 planner + calendar + bell **PR open**
 > (`feat/planner-11`: `/planner` week grid, Google Calendar push, announcements bell and page;
-> migrations 060–065 live; the live calendar proof waits on Stack's one-time Google consent).
+> migrations 060–066 live; the live calendar proof waits on Stack's one-time Google consent).
 > Phase 10a is in flight in parallel on `feat/grades-10a` (migrations 046–051 live). Phase 9
 > merged 2026-09-15 (PR #10), Phase 8 2026-09-14 (PR #8). Convention: see root `CLAUDE.md`.
 
@@ -22,12 +22,12 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 | Layer | State |
 |---|---|
 | Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` (anon insert, unique per run/kind/shell); last pull 2026-09-08. Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
-| Typed warehouse | migrations 001–045 on `main`, 046–051 (Phase 10a) and 060–065 (Phase 11) live from the in-flight branches (repo numbering; see note below); 7 courses, 80 assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings` (+ `gcal_*`), `calendar_events` mirror, `calendar_push_runs`, `v_calendar_push_items`, `v_announcements_unread`; every public view `security_invoker`, anon revoked |
+| Typed warehouse | migrations 001–045 on `main`, 046–051 (Phase 10a) and 060–066 (Phase 11) live from the in-flight branches (repo numbering; see note below); 7 courses, 80 assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings` (+ `gcal_*`, `web_base_url`), `calendar_events` mirror, `calendar_push_runs`, `v_calendar_push_items`, `v_announcements_unread`; every public view `security_invoker`, anon revoked |
 | Effort model | migration 015 `effort_base` (19 types) + 016 `v_work_items` (152 items, effort + source) |
 | Document corpus | 64 files (100% in Storage + local mirror + sha256), 534 text units extracted; 4 stale IST.466 files marked `superseded_by` (migration 022) → `v_bb_files_current` = 60 |
 | Search: FTS | tsvector+GIN on file text / content / announcements; `search_file_text(…, p_include_superseded)` |
 | Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
-| Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`), `calendar-push` **v1** (Google Calendar upsert/delete by deterministic event id; `verify_jwt` off, `x-push-secret` from Vault; fired by pg_cron `bb2dash-calendar-push` when `app_settings.gcal_dirty`) |
+| Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`), `calendar-push` **v2** (Google Calendar upsert/delete by deterministic event id; `verify_jwt` off, `x-push-secret` from Vault; fired by pg_cron `bb2dash-calendar-push` when `app_settings.gcal_dirty`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
 | GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list, **Planner** (`/planner?week=`, Mon–Sun week grid: class blocks with room + session topic, due items by New York wall clock, all-day band, today + now-line, quick-edit), **bell** (unread badge from `v_announcements_unread`; opening marks seen), **Announcements** (`/announcements`, all courses newest-first), public `/privacy` (for the Google consent screen); vitest 450 tests |
 | Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
@@ -127,7 +127,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 10. **Phase 11 — Planner, Google Calendar push, bell** (`feat/planner-11`, PR open, 2026-09-15; brief
    and frozen Contract in `docs/planning/69_PHASE11_planner.md`, evidence in `69a_W21_VERIFICATION.md`).
    Two Opus workers (W-21 db + calendar, W-22 web) on their own branches, PM-integrated in a separate
-   worktree because the main checkout was Phase 10a's. Migrations **060–065**: `calendar_events`
+   worktree because the main checkout was Phase 10a's. Migrations **060–066**: `calendar_events`
    mirror + `calendar_event_id()` + `v_calendar_push_items` (event instant resolved in SQL: `due_at`,
    else class start for a date-only project/exam/final_exam, else 11:59 PM New York; absence from
    the newest folded crawl computed per course) (060); `app_settings.gcal_*`, `calendar_push_runs`,
@@ -136,14 +136,18 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    (062); `v_announcements_unread` + `mark_announcements_seen()` over 033's `read_at` (063); Vault
    doors `calendar_secret_set` / `calendar_secrets`, service_role only (064); 065 corrects
    `absent_from_blackboard` to compare `bb_last_seen` with the crawl row's `captured_at` (the
-   Contract had said the fold's `started_at`, which flagged 22 of 64 items absent). Edge function
-   `calendar-push` v1 (fetch client, no SDK; insert / patch / delete diff against the mirror; zero
+   Contract had said the fold's `started_at`, which flagged 22 of 64 items absent) and uses the
+   schema's `0 = Sunday` weekday convention; 066 (code-review round) ties the in-flight lock to
+   the run (`gcal_push_run_id`), clears `gcal_dirty` when the tick picks the work up rather than
+   when the push ends (a change landing mid-push is no longer lost), and adds
+   `app_settings.web_base_url` for the event links. Edge function `calendar-push` v2 (fetch
+   client, no SDK; orphan rows whose `calendar_id` changed are deleted from the old calendar; insert / patch / delete diff against the mirror; zero
    writes when unchanged; `privateExtendedProperty app=bb2dash`; fixed `colorId` per course).
    `scripts/google-consent.mjs` (loopback OAuth, PKCE, stores four secrets through the RPC; Stack
    runs it once). Web: `/planner`, bell, `/announcements`, `/privacy`; `database.types.ts`
    regenerated. R-16 recorded the Inbox way: SITN presentation `2026-11-04 15:45` (Stack's choice,
    applied by a transform request); IST.466 Group #3 day within each presentation pair is not
-   published, rows stay tentative. Tests: web 450 (from 345), function 25 (`node --test`).
+   published, rows stay tentative. Tests: web 450 (from 345), function 28 (`node --test`). Push set today: 62 of 64 dated workload items; the two IST.323 final-project rows that share one Blackboard item are counted absent (see Known issues) and are not pushed.
    **Waiting on Stack:** Google Cloud project (under his Gmail; SU's Workspace blocks student
    projects), OAuth client, `node scripts/google-consent.mjs` choosing `emstacho@g.syr.edu`; then the
    PM flips `gcal_enabled` and records the three-run proof. Announcement `author` stays
@@ -186,7 +190,7 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 10 | Grades and submissions | `67_PHASE10A_grades.md` | 10a in flight on `feat/grades-10a` (046–051 live), parallel with 11; 10b after October scores + V-1 |
 | V-1 | Grading schema validation (stream, Stack + a materials-only session) | `63_GRADING_VALIDATION.md`, `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | added 2026-09-14; parallel with 10a; gate for 10b. Launch: `scripts/validate-grading.ps1` |
 | V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14; parallel with 10a |
-| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **PR open** (`feat/planner-11`, migrations 060–065 live); live calendar proof after Stack's consent step |
+| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **PR open** (`feat/planner-11`, migrations 060–066 live); live calendar proof after Stack's consent step |
 | 12 | Electron shell | — | |
 | 13 | Styling pass | — | last |
 
@@ -198,7 +202,7 @@ brief (`62`, `63`, `66`, `67`, `68`, `69`, `80`, `81`) and indexed in
 phase's PM session freezes its Contract. Research behind them: `docs/planning/research/`.
 
 Migration ranges: Phase 8 = 026–029, Phase 9 = 030–045 (030–040 plus its review-fix rounds 041–045), Phase 10 = 046–059,
-Phase 11 = 060–069 (060–065 used), Phase 12 = 070–079 if needed. Both phase branches cut from `main`
+Phase 11 = 060–069 (060–066 used), Phase 12 = 070–079 if needed. Both phase branches cut from `main`
 (Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
 
 Phase 7 leftovers folded into the plan: automatic `superseded_by` on re-uploaded files and the
@@ -213,6 +217,13 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
 `auth.uid()` in `(select …)`), 7 pre-existing mutable search_path functions.
 
 ## Known issues / operational notes
+
+* `IST.323/fp-proposal` and `IST.323/fp-log-final` share one `bb_item_id` / `bb_column_id`;
+  `stage_assignments` re-stamps neither row's `bb_last_seen`, so `v_calendar_push_items` counts
+  both absent and the calendar push skips them (conservative, nothing deleted). A Phase 9 staging
+  question for the next transform touch; details in `69a_W21_VERIFICATION.md` §4.1.
+* `calendar-push` is the one edge function with `verify_jwt` off; it authenticates the tick's
+  `x-push-secret` header. Nothing else should call it.
 
 * IST.466 publishes two sibling content branches with identical `path`s; `bb_content`'s
   `(course_id, path)` key holds one, so Classwork shows one branch. Needs a key change
