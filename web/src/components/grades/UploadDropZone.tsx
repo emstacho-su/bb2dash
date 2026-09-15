@@ -14,8 +14,8 @@
  * insert — is shown here in a `role="alert"`. Nothing is swallowed.
  */
 
-import { useRef, useState } from 'react';
-import { useStageUpload, MAX_UPLOAD_BYTES } from '@/lib/queries.grades';
+import { useId, useRef, useState } from 'react';
+import { useStageUpload, MAX_UPLOAD_BYTES } from '@/lib/queries.submissions';
 import tokens from '@/styles/tokens.module.css';
 import styles from './UploadDropZone.module.css';
 
@@ -47,7 +47,10 @@ export function UploadDropZone({
   const [error, setError] = useState<string | null>(null);
   const [staged, setStaged] = useState<string | null>(null);
 
-  const inputId = `stage-file-${assignmentId ?? courseId}`;
+  // `useId`, not the assignment id: the Classwork row and the popout for the
+  // same assignment can be mounted at once, and two inputs sharing an id means
+  // one label opens the other zone's file picker.
+  const inputId = useId();
 
   function send(files: FileList | readonly File[] | null) {
     setError(null);

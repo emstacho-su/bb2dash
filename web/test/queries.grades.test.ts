@@ -1,11 +1,13 @@
 /**
- * The gradebook contract layer: what it asks Supabase for, what its pure
- * helpers say, and exactly what row a staged file writes.
+ * The gradebook read layer: what it asks Supabase for, and what its pure
+ * helpers say. (The one write lives in `queries.submissions.test.ts`.)
  *
- * The four views land with migrations 047/050 and `database.types.ts` does not
- * know them yet, so nothing but this file watches the relation names, the
- * filters and the row shape. The client is a recording fake; nothing here
- * touches the network, Storage or a Supabase project.
+ * The row types are hand-narrowed to the Contract rather than taken from the
+ * generated ones, so nothing but this file watches the relation names, the
+ * filter columns and the ordering — and `v_assignment_grade` exposes its key as
+ * `assignment_id` with no `id` column at all, which is exactly the kind of
+ * drift these assertions exist to catch. The client is a recording fake;
+ * nothing here touches the network or a Supabase project.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,10 +34,6 @@ let nextResult: { data: unknown; error: unknown } = { data: [], error: null };
 /** Per-relation results, so one queryFn can read two relations in a row. */
 const resultsByRelation = new Map<string, { data: unknown; error: unknown }>();
 
-const uploads: { key: string; options: unknown }[] = [];
-const inserts: Record<string, unknown>[] = [];
-let uploadError: unknown = null;
-
 function fakeBuilder(relation: string) {
   const call: Call = { relation, columns: '', filters: [], orders: [] };
   const settle = () => resultsByRelation.get(relation) ?? nextResult;
@@ -44,10 +42,6 @@ function fakeBuilder(relation: string) {
     select(columns: string) {
       call.columns = columns;
       calls.push(call);
-      return builder;
-    },
-    insert(row: Record<string, unknown>) {
-      inserts.push(row);
       return builder;
     },
     eq(column: string, value: unknown) {
@@ -75,14 +69,6 @@ function fakeBuilder(relation: string) {
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
     from: (relation: string) => fakeBuilder(relation),
-    storage: {
-      from: () => ({
-        upload: (key: string, _file: unknown, options: unknown) => {
-          uploads.push({ key, options });
-          return Promise.resolve({ data: null, error: uploadError });
-        },
-      }),
-    },
     auth: { getSession: vi.fn() },
   }),
 }));
@@ -90,7 +76,7 @@ vi.mock('@/lib/supabase/client', () => ({
 const {
   assignmentAttemptsOptions,
   assignmentGradeOptions,
-  assignmentSlug,
+  attemptsAllowed,
   attemptsText,
   compareSha,
   courseGradeState,
@@ -100,16 +86,10 @@ const {
   isBookkeepingRow,
   isItemRow,
   pickCourseGrade,
-  sanitizeFileName,
   scoreText,
-  stageUpload,
   submissionFilesOptions,
   submissionLabel,
   submissionOrigin,
-  submissionRelPath,
-  validateUpload,
-  withCollisionSuffix,
-  MAX_UPLOAD_BYTES,
 } = await import('@/lib/queries.grades');
 
 /** Run an options object's queryFn; the fns here ignore their context. */
@@ -119,10 +99,7 @@ function run(options: { queryFn?: unknown }): Promise<unknown> {
 
 beforeEach(() => {
   calls.length = 0;
-  uploads.length = 0;
-  inserts.length = 0;
   resultsByRelation.clear();
-  uploadError = null;
   nextResult = { data: [], error: null };
 });
 
@@ -150,10 +127,11 @@ describe('the four view reads', () => {
     expect(gradebookLatestOptions(['IST.323']).enabled).toBe(true);
   });
 
-  it('reads v_assignment_grade by the assignment id', async () => {
+  it('reads v_assignment_grade by assignment_id — the view has no id column', async () => {
     await run(assignmentGradeOptions('IST.323/lab-1'));
     expect(calls[0].relation).toBe('v_assignment_grade');
-    expect(calls[0].filters).toEqual(['eq:id=IST.323/lab-1']);
+    expect(calls[0].filters).toEqual(['eq:assignment_id=IST.323/lab-1']);
+    expect(calls[0].filters.some((f) => f.startsWith('eq:id='))).toBe(false);
   });
 
   it('reads v_assignment_attempts in attempt order', async () => {
@@ -328,6 +306,30 @@ describe('compareSha', () => {
   });
 });
 
+describe('attemptsAllowed — two Blackboard columns, one ceiling', () => {
+  it('reads unlimited off attempts_left, not off multiple_attempts', () => {
+    expect(attemptsAllowed(0, -1)).toBe(-1);
+  });
+
+  it('takes a real ceiling from multiple_attempts', () => {
+    expect(attemptsAllowed(3, 2)).toBe(3);
+  });
+
+  it('treats multiple_attempts 0 as a single attempt, never as "no limit"', () => {
+    expect(attemptsAllowed(0, null)).toBe(1);
+    expect(attemptsAllowed(1, 4)).toBe(1);
+  });
+
+  it('says nothing when Blackboard recorded neither column', () => {
+    expect(attemptsAllowed(null, null)).toBeNull();
+    expect(attemptsAllowed(undefined, undefined)).toBeNull();
+  });
+
+  it('never renders "Attempt 2 of 1" for a real unlimited row', () => {
+    expect(attemptsText(2, attemptsAllowed(0, -1))).toBe('Attempt 2 (unlimited)');
+  });
+});
+
 describe('attemptsText', () => {
   it('counts an attempt against its ceiling', () => {
     expect(attemptsText(2, 3)).toBe('Attempt 2 of 3');
@@ -386,185 +388,5 @@ describe('submissionOrigin', () => {
     );
     expect(submissionOrigin({ bucket: 'my_submissions', classified_by: 'rule' })).toBe('other');
     expect(submissionOrigin({ bucket: 'lecture_slides', classified_by: 'stack' })).toBe('other');
-  });
-});
-
-/* ===========================================================================
- * Upload validation — the boundary
- * ======================================================================== */
-
-function fakeFile(name: string, size = 10, type = 'application/pdf'): File {
-  const file = new File(['x'], name, { type });
-  Object.defineProperty(file, 'size', { value: size });
-  return file;
-}
-
-describe('sanitizeFileName', () => {
-  it('replaces path separators so a name cannot move the object', () => {
-    expect(sanitizeFileName('../../etc/passwd')).toBe('.._.._etc_passwd');
-    expect(sanitizeFileName('a\\b.pdf')).toBe('a_b.pdf');
-  });
-
-  it('replaces control characters', () => {
-    expect(sanitizeFileName(`lab${String.fromCharCode(9)}1.pdf`)).toBe('lab_1.pdf');
-    expect(sanitizeFileName(`lab${String.fromCharCode(0)}1.pdf`)).toBe('lab_1.pdf');
-  });
-
-  it('caps the name at 180 characters, keeping the extension', () => {
-    const long = sanitizeFileName(`${'n'.repeat(400)}.pdf`);
-    expect(long).toHaveLength(180);
-    expect(long.endsWith('.pdf')).toBe(true);
-  });
-
-  it('refuses a name with nothing usable left', () => {
-    expect(() => sanitizeFileName('   ')).toThrow(/cannot be used/);
-    expect(() => sanitizeFileName(null)).toThrow(/no name/);
-  });
-});
-
-describe('withCollisionSuffix', () => {
-  it('leaves a free name alone', () => {
-    expect(withCollisionSuffix('lab1.pdf', ['other.pdf'])).toBe('lab1.pdf');
-  });
-
-  it('numbers a collision before the extension rather than overwriting', () => {
-    expect(withCollisionSuffix('lab1.pdf', ['lab1.pdf'])).toBe('lab1 (2).pdf');
-    expect(withCollisionSuffix('lab1.pdf', ['lab1.pdf', 'lab1 (2).pdf'])).toBe('lab1 (3).pdf');
-  });
-
-  it('compares names case-insensitively, as Storage keys are used', () => {
-    expect(withCollisionSuffix('Lab1.pdf', ['lab1.pdf'])).toBe('Lab1 (2).pdf');
-  });
-});
-
-describe('assignmentSlug / submissionRelPath', () => {
-  it('is Postgres split_part(assignment_id, \'/\', 2)', () => {
-    expect(assignmentSlug('IST.323/lab-1')).toBe('lab-1');
-    expect(assignmentSlug('IST.323/lab-1/extra')).toBe('lab-1');
-    expect(assignmentSlug('IST.323')).toBe('');
-    expect(assignmentSlug(null)).toBe('');
-  });
-
-  it('builds the same key bb_file_relpath builds', () => {
-    expect(submissionRelPath('IST.323', 'IST.323/lab-1', 'lab1.pdf')).toBe(
-      'IST.323/my_submissions/lab-1/lab1.pdf',
-    );
-    expect(submissionRelPath('IST.323', null, 'lab1.pdf')).toBe(
-      'IST.323/my_submissions/lab1.pdf',
-    );
-  });
-});
-
-describe('validateUpload', () => {
-  it('takes exactly one file', () => {
-    const file = fakeFile('lab1.pdf');
-    expect(validateUpload([file])).toBe(file);
-    expect(() => validateUpload([])).toThrow(/No file/);
-    expect(() => validateUpload(null)).toThrow(/No file/);
-    expect(() => validateUpload([file, fakeFile('b.pdf')])).toThrow(/One file at a time/);
-  });
-
-  it('refuses an empty file and one over 50 MB', () => {
-    expect(() => validateUpload([fakeFile('empty.pdf', 0)])).toThrow(/empty/);
-    expect(() => validateUpload([fakeFile('huge.zip', MAX_UPLOAD_BYTES + 1)])).toThrow(
-      /the limit is 50 MB/,
-    );
-    expect(validateUpload([fakeFile('just.zip', MAX_UPLOAD_BYTES)])).toBeTruthy();
-  });
-});
-
-/* ===========================================================================
- * The one write
- * ======================================================================== */
-
-describe('stageUpload — the row it writes', () => {
-  beforeEach(() => {
-    resultsByRelation.set('courses', {
-      data: { id: 'IST.323', bb_id: '_571529_1' },
-      error: null,
-    });
-    resultsByRelation.set('bb_files', { data: [], error: null });
-  });
-
-  async function stage(name = 'lab1.pdf') {
-    return stageUpload({
-      courseId: 'IST.323',
-      assignmentId: 'IST.323/lab-1',
-      files: [fakeFile(name, 12_345)],
-    });
-  }
-
-  it('uploads to bb_file_relpath, never overwriting', async () => {
-    await stage();
-    expect(uploads).toEqual([
-      {
-        key: 'IST.323/my_submissions/lab-1/lab1.pdf',
-        options: { upsert: false, contentType: 'application/pdf' },
-      },
-    ]);
-  });
-
-  it('writes exactly the Contract row', async () => {
-    const result = await stage();
-    expect(inserts).toHaveLength(1);
-    const row = inserts[0];
-
-    expect(row.bb_course_id).toBe('_571529_1');
-    expect(row.course_id).toBe('IST.323');
-    expect(row.file_name).toBe('lab1.pdf');
-    expect(row.mime_type).toBe('application/pdf');
-    expect(row.bytes).toBe(12_345);
-    expect(row.sha256).toBe(result.sha256);
-    expect(row.storage_path).toBe('bb-files/IST.323/my_submissions/lab-1/lab1.pdf');
-    expect(row.local_path).toBeNull();
-    expect(row.bucket).toBe('my_submissions');
-    expect(row.classified_by).toBe('stack');
-    expect(row.classification_confidence).toBe(1);
-    expect(row.assignment_id).toBe('IST.323/lab-1');
-    expect(row.text_status).toBe('na');
-    expect(row.source_url).toBeNull();
-    expect(row.downloaded_at).toEqual(expect.any(String));
-    expect(row.notes).toMatch(/^staged in bb2dash 20/);
-  });
-
-  it('hashes the bytes with sha256', async () => {
-    const result = await stage();
-    // 'x', the single byte every fake file carries.
-    expect(result.sha256).toBe(
-      '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881',
-    );
-  });
-
-  it('suffixes a name that is already taken rather than replacing it', async () => {
-    resultsByRelation.set('bb_files', { data: [{ file_name: 'lab1.pdf' }], error: null });
-    const result = await stage();
-    expect(result.fileName).toBe('lab1 (2).pdf');
-    expect(uploads[0].key).toBe('IST.323/my_submissions/lab-1/lab1 (2).pdf');
-  });
-
-  it('writes no row when Storage refused the object', async () => {
-    uploadError = new Error('The resource already exists');
-    await expect(stage()).rejects.toThrow('The resource already exists');
-    expect(inserts).toHaveLength(0);
-  });
-
-  it('refuses a course with no Blackboard id rather than guessing one', async () => {
-    resultsByRelation.set('courses', { data: { id: 'IST.323', bb_id: null }, error: null });
-    await expect(stage()).rejects.toThrow(/no Blackboard id recorded/);
-    expect(uploads).toHaveLength(0);
-    expect(inserts).toHaveLength(0);
-  });
-
-  it('never touches assignments, assignment_progress, bb_gradebook or bb_attempts', async () => {
-    await stage();
-    const relations = new Set(calls.map((call) => call.relation));
-    for (const forbidden of [
-      'assignments',
-      'assignment_progress',
-      'bb_gradebook',
-      'bb_attempts',
-    ]) {
-      expect(relations.has(forbidden)).toBe(false);
-    }
   });
 });

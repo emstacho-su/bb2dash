@@ -188,7 +188,9 @@ export function makeAssignmentGrade(
   const column = makeGradebookRow();
   return {
     ...column,
-    id: 'IST.323/lab-1',
+    // The view exposes `assignments.id` under this name and has no `id`
+    // column at all — 047 deviation 4.
+    assignment_id: 'IST.323/lab-1',
     course_id: 'IST.323',
     title: 'Lab #1',
     type: 'lab',
@@ -224,20 +226,6 @@ export function makeAttempt(
   };
 }
 
-/**
- * `classified_by` is cast on purpose: `'blackboard'` joins the `classifier`
- * enum in migration 048, so the generated enum does not carry it until the
- * types are regenerated at integration.
- */
-const BLACKBOARD = 'blackboard' as SubmissionFile['classified_by'];
-
-/**
- * Likewise `source_url`: migration 049 drops its NOT NULL so a staged upload
- * (which has no Blackboard URL) can be recorded. Until the types are
- * regenerated the generated row still types it `string`.
- */
-const NO_SOURCE_URL = null as unknown as SubmissionFile['source_url'];
-
 export function makeSubmissionFile(overrides: Partial<SubmissionFile> = {}): SubmissionFile {
   return {
     id: 501,
@@ -249,7 +237,7 @@ export function makeSubmissionFile(overrides: Partial<SubmissionFile> = {}): Sub
     storage_path: 'bb-files/IST.323/my_submissions/lab-1/lab1.pdf',
     source_url: 'https://blackboard.syracuse.edu/learn/api/v1/attempts/_9001_1/files/_f1_1/download',
     local_path: null,
-    classified_by: BLACKBOARD,
+    classified_by: 'blackboard',
     assignment_id: 'IST.323/lab-1',
     downloaded_at: SEEN_AT,
     notes: 'attempt file; bytes pulled by bb-sync step 4b',
@@ -264,7 +252,7 @@ export function makeStagedFile(overrides: Partial<SubmissionFile> = {}): Submiss
     file_name: 'lab1-final.pdf',
     sha256: 'b'.repeat(64),
     storage_path: 'bb-files/IST.323/my_submissions/lab-1/lab1-final.pdf',
-    source_url: NO_SOURCE_URL,
+    source_url: null,
     classified_by: 'stack',
     notes: 'staged in bb2dash 2026-09-15T12:00:00.000Z',
     ...overrides,

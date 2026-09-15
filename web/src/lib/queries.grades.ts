@@ -5,17 +5,14 @@
  * key namespace, `*Options()` returning `queryOptions`, throw on error, and no
  * fabricated fallbacks. Two things are specific to this module.
  *
- * ROW TYPES — `src/lib/supabase/database.types.ts` predates migrations 046-051,
- * so the typed client does not know `v_gradebook_latest`, `v_assignment_grade`,
- * `v_course_grade` or `v_assignment_attempts`, and still types
- * `bb_files.source_url` as NOT NULL (049 drops that). The four view row types
- * below are the frozen column lists from
- * `docs/planning/67_PHASE10A_grades.md` §047/§050 — hand-narrowed on purpose,
- * because Postgres reports no not-null constraint on a view and the generated
- * types would make every column nullable (the Phase 8 precedent, see
- * `queries.course.ts`). Each read goes through the same one documented cast to
- * an untyped client that `queries.materials.ts` uses for `v_bb_files_current`.
- * Regenerate the types after 046-051 land and the casts can be dropped.
+ * ROW TYPES — migrations 046-051 are applied and `database.types.ts` was
+ * regenerated, so every read here goes through the ordinary typed client. The
+ * four view row types below stay hand-narrowed to the frozen column lists in
+ * `docs/planning/67_PHASE10A_grades.md` §047/§050: Postgres reports no not-null
+ * constraint on a view, so the generated row types make every column nullable,
+ * and the Contract is stricter than that. Each of those reads therefore carries
+ * one documented cast at the call site — the Phase 8 precedent, see the header
+ * of `queries.course.ts`. No field is reshaped.
  *
  * HONESTY — every figure here is a Blackboard value with the `seen_at` of the
  * run that saw it. Nothing in this module sums, averages or projects anything:
@@ -23,21 +20,16 @@
  * renders `—`, never `0`. The three course states (`total`, `no_total`,
  * `never_synced`) are distinct and none of them is inferred from a score.
  *
- * WRITES — the only write in this file is the staged-submission upload: one
- * Storage object plus one `bb_files` row. `assignments`, `assignment_progress`,
- * `bb_gradebook` and `bb_attempts` are never written from the browser.
+ * READS ONLY — this module writes nothing. Staging a file (the one write in the
+ * Grades feature) lives in `queries.submissions.ts`; `assignments`,
+ * `assignment_progress`, `bb_gradebook` and `bb_attempts` are never written
+ * from the browser at all.
  */
 
-import {
-  queryOptions,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables } from './queries';
-import { BB_FILES_BUCKET, materialsKeys } from './queries.materials';
+import { COURSE_TIME_ZONE, shellCacheKey } from './course-dimension';
 
 /* ---------------------------------------------------------------------------
  * Row types — the frozen Contract column lists (see the module header)
@@ -99,15 +91,21 @@ export interface GradebookLatestRow {
  * (all null when the column has not been crawled).
  */
 export type AssignmentGradeRow = {
-  /** `assignments.id`. */
-  id: string;
+  /**
+   * `assignments.id`, exposed by the view under this name — 047 deviation 4.
+   * There is no `id` column on `v_assignment_grade`; filtering on one is a
+   * 42703 on every popout, which is how this was found.
+   */
+  assignment_id: string;
   course_id: string;
   title: string | null;
   type: string | null;
   points_possible: number | null;
 } & {
   /** Every gradebook column, nullable: the column may never have been crawled. */
-  [K in keyof Omit<GradebookLatestRow, 'course_id'>]: GradebookLatestRow[K] | null;
+  [K in keyof Omit<GradebookLatestRow, 'course_id' | 'assignment_id'>]:
+    | GradebookLatestRow[K]
+    | null;
 };
 
 /** One row of `v_course_grade` — one per `courses` row. Never a computed total. */
@@ -188,15 +186,10 @@ const SUBMISSION_FILE_COLUMNS =
  * Cache keys
  * ------------------------------------------------------------------------ */
 
-/** Stable, order-independent key for a set of shells (as `queries.course.ts`). */
-function shellKey(shellIds: readonly string[]): string {
-  return [...shellIds].sort().join('+');
-}
-
 export const gradesKeys = {
   courseGrades: () => ['grades', 'course-grades'] as const,
   gradebook: (shellIds: readonly string[]) =>
-    ['grades', 'gradebook', shellKey(shellIds)] as const,
+    ['grades', 'gradebook', shellCacheKey(shellIds)] as const,
   assignmentGrade: (assignmentId: string) =>
     ['grades', 'assignment-grade', assignmentId] as const,
   assignmentAttempts: (assignmentId: string) =>
@@ -204,16 +197,6 @@ export const gradesKeys = {
   submissionFiles: (assignmentId: string) =>
     ['grades', 'submission-files', assignmentId] as const,
 } as const;
-
-/**
- * The untyped client used for the four Phase 10a views and the `bb_files`
- * insert. See the module header: `database.types.ts` does not know the views
- * yet, and still types `source_url` NOT NULL. One place, one comment, so the
- * cast can be deleted in one edit once the types are regenerated.
- */
-function untypedClient(): SupabaseClient {
-  return getSupabaseBrowserClient() as unknown as SupabaseClient;
-}
 
 /* ---------------------------------------------------------------------------
  * Queries
@@ -224,13 +207,14 @@ export function courseGradesOptions() {
   return queryOptions({
     queryKey: gradesKeys.courseGrades(),
     queryFn: async (): Promise<CourseGradeRow[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_course_grade')
         .select('*')
         .order('course_id', { ascending: true });
       if (error) throw error;
-      return (data as CourseGradeRow[] | null) ?? [];
+      // Narrowed to the frozen Contract shape — see the module header.
+      return (data ?? []) as unknown as CourseGradeRow[];
     },
     // Gradebook rows only move when a Blackboard sync runs.
     staleTime: 5 * 60 * 1000,
@@ -242,7 +226,7 @@ export function gradebookLatestOptions(shellIds: readonly string[]) {
   return queryOptions({
     queryKey: gradesKeys.gradebook(shellIds),
     queryFn: async (): Promise<GradebookLatestRow[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_gradebook_latest')
         .select('*')
@@ -250,7 +234,7 @@ export function gradebookLatestOptions(shellIds: readonly string[]) {
         .order('course_id', { ascending: true })
         .order('position', { ascending: true, nullsFirst: false });
       if (error) throw error;
-      return (data as GradebookLatestRow[] | null) ?? [];
+      return (data ?? []) as unknown as GradebookLatestRow[];
     },
     enabled: shellIds.length > 0,
     staleTime: 5 * 60 * 1000,
@@ -262,14 +246,16 @@ export function assignmentGradeOptions(assignmentId: string | undefined) {
   return queryOptions({
     queryKey: gradesKeys.assignmentGrade(assignmentId ?? 'none'),
     queryFn: async (): Promise<AssignmentGradeRow | null> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_assignment_grade')
         .select('*')
-        .eq('id', assignmentId as string)
+        // `assignment_id`, not `id`: the view has no `id` column (047
+        // deviation 4), and filtering on one is a 42703 on every popout.
+        .eq('assignment_id', assignmentId as string)
         .maybeSingle();
       if (error) throw error;
-      return (data as AssignmentGradeRow | null) ?? null;
+      return (data ?? null) as unknown as AssignmentGradeRow | null;
     },
     enabled: Boolean(assignmentId),
     staleTime: 5 * 60 * 1000,
@@ -281,14 +267,14 @@ export function assignmentAttemptsOptions(assignmentId: string | undefined) {
   return queryOptions({
     queryKey: gradesKeys.assignmentAttempts(assignmentId ?? 'none'),
     queryFn: async (): Promise<AssignmentAttemptRow[]> => {
-      const supabase = untypedClient();
+      const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('v_assignment_attempts')
         .select('*')
         .eq('assignment_id', assignmentId as string)
         .order('attempt_no', { ascending: true });
       if (error) throw error;
-      return (data as AssignmentAttemptRow[] | null) ?? [];
+      return (data ?? []) as unknown as AssignmentAttemptRow[];
     },
     enabled: Boolean(assignmentId),
     staleTime: 5 * 60 * 1000,
@@ -367,9 +353,6 @@ export function scoreText(
   if (possible === null || possible === undefined || possible === '') return score;
   return `${score} / ${numberText(possible)}`;
 }
-
-/** The course time zone every date on these screens is read in. */
-export const COURSE_TIME_ZONE = 'America/New_York';
 
 /**
  * When we saw this figure — "Sep 14, 9:12 AM". Not when Blackboard produced it:
@@ -503,11 +486,35 @@ export const SHA_LABEL: Record<ShaComparison, string> = {
 };
 
 /**
+ * How many attempts an item allows, from the two columns Blackboard splits the
+ * answer across.
+ *
+ * `multiple_attempts` is 0 for a single-attempt item — NOT "no ceiling" — and
+ * unlimited is recorded separately as `attempts_left = -1`. Passing
+ * `multiple_attempts` straight to `attemptsText` therefore read "Attempt 2 of
+ * 1" on real rows. This is the same rule `v_assignment_attempts.attempts_allowed`
+ * encodes (migration 055), so a row that carries the view's value needs no
+ * second opinion; this function is only the fallback for a gradebook row read
+ * on its own.
+ *
+ * Null from both columns means Blackboard said nothing, and so do we.
+ */
+export function attemptsAllowed(
+  multipleAttempts: number | null | undefined,
+  attemptsLeft: number | null | undefined,
+): number | null {
+  if (multipleAttempts == null && attemptsLeft == null) return null;
+  if (attemptsLeft === -1) return -1;
+  if (multipleAttempts != null && multipleAttempts > 1) return multipleAttempts;
+  return 1;
+}
+
+/**
  * "Attempt 2 of 3" / "Attempt 1 (unlimited)" / "Attempt 1 of 1".
  *
- * `allowed` is `v_gradebook_latest.multiple_attempts`: 0 or 1 means a single
- * attempt, a negative value means unlimited, and null means Blackboard did not
- * say — in which case the count stands alone rather than inventing a ceiling.
+ * `allowed` is an `attemptsAllowed` value: a negative number means unlimited,
+ * 0 or 1 a single attempt, and null that Blackboard did not say — in which case
+ * the count stands alone rather than inventing a ceiling.
  */
 export function attemptsText(n: number, allowed: number | null | undefined): string {
   const attempt = `Attempt ${n}`;
@@ -560,249 +567,4 @@ export function isBookkeepingRow(
 ): boolean {
   if (row.column_kind === 'total') return false;
   return !isItemRow(row);
-}
-
-/* ---------------------------------------------------------------------------
- * Staging a file — validation at the boundary
- * ------------------------------------------------------------------------ */
-
-/** One file at a time, and no bigger than this. */
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-/** `bb_files.file_name` is the Storage key's last segment; keep it sane. */
-export const MAX_FILE_NAME_LENGTH = 180;
-
-/** Split a name into stem + extension, where the extension is short and real. */
-function splitExtension(fileName: string): { stem: string; ext: string } {
-  const dot = fileName.lastIndexOf('.');
-  if (dot <= 0 || dot === fileName.length - 1) return { stem: fileName, ext: '' };
-  const ext = fileName.slice(dot);
-  if (ext.length > 12) return { stem: fileName, ext: '' };
-  return { stem: fileName.slice(0, dot), ext };
-}
-
-/** Cap a name at MAX_FILE_NAME_LENGTH, keeping the extension. */
-function capFileName(fileName: string): string {
-  if (fileName.length <= MAX_FILE_NAME_LENGTH) return fileName;
-  const { stem, ext } = splitExtension(fileName);
-  return `${stem.slice(0, Math.max(1, MAX_FILE_NAME_LENGTH - ext.length))}${ext}`;
-}
-
-/**
- * The name a staged file is filed under: the original, with path separators and
- * control characters replaced by `_`, capped at 180 characters.
- *
- * The name becomes the last segment of a Storage key, so a '/' or a '\' in it
- * would silently move the object into another folder. Throws rather than
- * inventing a name when nothing usable is left.
- */
-export function sanitizeFileName(raw: string | null | undefined): string {
-  if (typeof raw !== 'string') throw new Error('That file has no name, so it was not staged.');
-  // Written as a code-point scan rather than a regex: a character class of
-  // control characters puts literal control bytes in this source file.
-  const cleaned = Array.from(raw)
-    .map((ch) => {
-      if (ch === '/' || ch === '\\') return '_';
-      const code = ch.codePointAt(0) ?? 0;
-      return code < 0x20 || code === 0x7f ? '_' : ch;
-    })
-    .join('')
-    .trim();
-  if (cleaned === '' || cleaned === '.' || cleaned === '..') {
-    throw new Error('That file name cannot be used, so it was not staged.');
-  }
-  return capFileName(cleaned);
-}
-
-/**
- * ` (2)`, ` (3)` … before the extension when the same assignment already has a
- * file by that name. Nothing is ever overwritten (the upload is `upsert: false`
- * as well, so a race loses the upload rather than the earlier file).
- */
-export function withCollisionSuffix(fileName: string, taken: readonly string[]): string {
-  const used = new Set(taken.map((name) => name.toLowerCase()));
-  if (!used.has(fileName.toLowerCase())) return fileName;
-  const { stem, ext } = splitExtension(fileName);
-  for (let n = 2; n <= 99; n += 1) {
-    const candidate = capFileName(`${stem} (${n})${ext}`);
-    if (!used.has(candidate.toLowerCase())) return candidate;
-  }
-  throw new Error(`There are already 99 files called "${fileName}" on this assignment.`);
-}
-
-/** Postgres `split_part(assignment_id, '/', 2)` — 'IST.323/lab-1' → 'lab-1'. */
-export function assignmentSlug(assignmentId: string | null | undefined): string {
-  if (typeof assignmentId !== 'string') return '';
-  return assignmentId.split('/')[1] ?? '';
-}
-
-/**
- * The Storage key inside the `bb-files` bucket, identical to what
- * `bb_file_relpath(id)` (migration 008) builds for the same row:
- * `<course>/my_submissions/<assignment-slug>/<file_name>`, or without the slug
- * segment when the column has no linked assignment.
- */
-export function submissionRelPath(
-  courseId: string,
-  assignmentId: string | null | undefined,
-  fileName: string,
-): string {
-  const slug = assignmentSlug(assignmentId);
-  return `${courseId}/my_submissions/${slug ? `${slug}/` : ''}${fileName}`;
-}
-
-/** Validate one dropped file at the boundary. Throws with a shovable message. */
-export function validateUpload(files: readonly File[] | FileList | null | undefined): File {
-  const list = files ? Array.from(files as ArrayLike<File>) : [];
-  if (list.length === 0) throw new Error('No file was dropped.');
-  if (list.length > 1) throw new Error('One file at a time, please — nothing was staged.');
-  const file = list[0];
-  if (file.size === 0) throw new Error('That file is empty, so it was not staged.');
-  if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error(
-      `That file is ${Math.round(file.size / (1024 * 1024))} MB; the limit is ${
-        MAX_UPLOAD_BYTES / (1024 * 1024)
-      } MB. Nothing was staged.`,
-    );
-  }
-  // Throws on an unusable name before anything is uploaded.
-  sanitizeFileName(file.name);
-  return file;
-}
-
-/** sha256 of the file's bytes, lowercase hex — the same digest Postgres stores. */
-export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) {
-    throw new Error('This browser cannot hash the file (crypto.subtle unavailable).');
-  }
-  const digest = await subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-export interface StageUploadInput {
-  /** The shell the file is filed under (`courses.id`). */
-  courseId: string;
-  /** The assignment it belongs to; null files it at the course's bucket root. */
-  assignmentId: string | null;
-  /** Exactly one file — a FileList or array is validated down to one. */
-  files: readonly File[] | FileList | null;
-}
-
-export interface StageUploadResult {
-  fileName: string;
-  storagePath: string;
-  sha256: string;
-  bytes: number;
-}
-
-/**
- * Stage a file against an assignment: one Storage object under
- * `my_submissions`, one `bb_files` row pointing at it.
- *
- * This does NOT submit anything to Blackboard and never claims to — the row it
- * writes is labelled "staged" everywhere it is shown, and Blackboard remains
- * the only place a submission actually happens. Nothing here touches
- * `assignments` or `assignment_progress`.
- *
- * Exported as a plain async function as well as a hook, so the exact row it
- * writes can be asserted directly in a test.
- */
-export async function stageUpload(input: StageUploadInput): Promise<StageUploadResult> {
-  const { courseId, assignmentId } = input;
-  if (!courseId) throw new Error('No course to stage this file against.');
-
-  const file = validateUpload(input.files);
-  const supabase = getSupabaseBrowserClient();
-
-  // `bb_files.bb_course_id` is the Blackboard shell id (`courses.bb_id`), and
-  // it is NOT NULL — a course without one cannot carry a file row, and saying
-  // so is better than writing a row under a guessed id.
-  const { data: course, error: courseError } = await supabase
-    .from('courses')
-    .select('id, bb_id')
-    .eq('id', courseId)
-    .maybeSingle();
-  if (courseError) throw courseError;
-  if (!course) throw new Error(`No course with id ${courseId}.`);
-  if (!course.bb_id) {
-    throw new Error(
-      `${courseId} has no Blackboard id recorded, so a submission cannot be filed against it.`,
-    );
-  }
-
-  // Existing names for this assignment decide the ` (2)` suffix.
-  const takenQuery = supabase
-    .from('bb_files')
-    .select('file_name')
-    .eq('course_id', courseId)
-    .eq('bucket', 'my_submissions')
-    .is('superseded_by', null);
-  const { data: existing, error: existingError } = await (assignmentId
-    ? takenQuery.eq('assignment_id', assignmentId)
-    : takenQuery.is('assignment_id', null));
-  if (existingError) throw existingError;
-
-  const fileName = withCollisionSuffix(
-    sanitizeFileName(file.name),
-    (existing ?? []).map((row) => row.file_name),
-  );
-  const relPath = submissionRelPath(courseId, assignmentId, fileName);
-  const storagePath = `${BB_FILES_BUCKET}/${relPath}`;
-
-  const bytes = await file.arrayBuffer();
-  const sha256 = await sha256Hex(bytes);
-
-  const { error: uploadError } = await supabase.storage
-    .from(BB_FILES_BUCKET)
-    .upload(relPath, file, {
-      upsert: false,
-      contentType: file.type || undefined,
-    });
-  if (uploadError) throw uploadError;
-
-  // See the module header: `source_url` is still typed NOT NULL by the
-  // generated types until 049 is applied and they are regenerated.
-  const stagedAt = new Date().toISOString();
-  const row = {
-    bb_course_id: course.bb_id,
-    course_id: courseId,
-    file_name: fileName,
-    mime_type: file.type || null,
-    bytes: file.size,
-    sha256,
-    storage_path: storagePath,
-    local_path: null,
-    bucket: 'my_submissions',
-    classified_by: 'stack',
-    classification_confidence: 1,
-    assignment_id: assignmentId,
-    text_status: 'na',
-    downloaded_at: stagedAt,
-    source_url: null,
-    notes: `staged in bb2dash ${stagedAt}`,
-  };
-  const { error: insertError } = await untypedClient().from('bb_files').insert(row);
-  if (insertError) throw insertError;
-
-  return { fileName, storagePath, sha256, bytes: file.size };
-}
-
-/** The mutation the drop zones use; invalidates every cache the row shows in. */
-export function useStageUpload() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: stageUpload,
-
-    onSuccess: (_result, variables) => {
-      void queryClient.invalidateQueries({ queryKey: materialsKeys.files() });
-      if (variables.assignmentId) {
-        void queryClient.invalidateQueries({
-          queryKey: gradesKeys.submissionFiles(variables.assignmentId),
-        });
-      }
-    },
-  });
 }
