@@ -2,7 +2,7 @@
 
 Date: 2026-09-14 (brief); PM session TBD. Product manager: Stack. Requirements: R-11 (b)+(c),
 R-12 from `60_REQUIREMENTS_v2.md`. Phase branch `feat/grades-10b`, one PR. Migration numbers
-from the **045–059** range, after 10a's.
+from the **046–059** range, after 10a's.
 
 **Preconditions (all three, verified by the PM session before anything else):**
 

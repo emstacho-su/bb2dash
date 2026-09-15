@@ -23,13 +23,84 @@
  *    page JS. Catalog them (bb_files) and download manually or via the Learn public API with a token.
  *  - Public REST (/learn/api/public/v1/...) also answers with the cookie; prefer it for anything
  *    documented, fall back to /learn/api/v1 for gradebook/grades and calendarItems.
+ *  - Announcements (/learn/api/v1/courses/{C}/announcements): the INTERNAL endpoint uses
+ *    `createdDate` / `modifiedDate`; the PUBLIC one uses `created` / `modified`. Do not mix them.
+ *    `modifiedDate` is proven against live payloads and feeds announcements.modified_at
+ *    (migration 033). The creator DISPLAY NAME key is NOT verified — see the TODO on
+ *    mapAnnouncement() below; the mapper tries every candidate and records the winner in
+ *    `authorSource`, so one query over bb_raw settles it after the first live crawl.
+ *
+ * Testability: `strip`, `announcementAuthor` and `mapAnnouncement` are module-level pure functions,
+ * exported under a CommonJS guard at the bottom so web/test can cover them. The guard is inert in a
+ * browser tab, where this file is still pasted and run as-is.
  */
-function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboard.syracuse.edu' }) {
-  const j = async (u) => { const r = await fetch(base + u, { credentials: 'include' }); if (!r.ok) return { __status: r.status }; return r.json(); };
-  const strip = (h) => { if (h == null) return null; if (typeof h === 'object') h = h.displayText || h.rawText || ''; h = String(h);
+
+// Blackboard hands back HTML in a {displayText, rawText} envelope (or a bare string). Flatten it to
+// readable plain text, or null when nothing is left. Module-level so the mappers below stay pure.
+const strip = (h) => { if (h == null) return null; if (typeof h === 'object') h = h.displayText || h.rawText || ''; h = String(h);
     return h.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d|tr)>/gi, '\n').replace(/<[^>]+>/g, '')
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
       .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() || null; };
+
+// A Blackboard user id looks like `_21025199_1`. Never show one of those as an author name.
+const isBbUserId = (v) => typeof v === 'string' && /^_\d+_\d+$/.test(v);
+
+// Pull a human name out of whatever a candidate field holds: a bare string, or a user object with
+// givenName/familyName (Ultra's usual shape), displayName, name or fullName.
+const personName = (v) => {
+  if (v == null) return null;
+  if (typeof v === 'string') return isBbUserId(v) || !v.trim() ? null : v.trim();
+  if (typeof v !== 'object') return null;
+  const u = v.user && typeof v.user === 'object' ? v.user : v;
+  const parts = [u.givenName, u.familyName].filter((x) => typeof x === 'string' && x.trim());
+  if (parts.length) return parts.join(' ').trim();
+  for (const k of ['displayName', 'name', 'fullName', 'userName']) {
+    if (typeof u[k] === 'string' && u[k].trim() && !isBbUserId(u[k])) return u[k].trim();
+  }
+  return null;
+};
+
+// TODO(verify on a live payload): the exact creator key of the INTERNAL announcements endpoint is
+// unconfirmed. No Blackboard session was available when this was written, and the endpoint is not in
+// Anthology's published REST schema (the PUBLIC schema exposes `creator` as a bare user id, not a
+// name). Candidates, in the order tried below. mapAnnouncement records the winning key in
+// `authorSource`, so after the first live crawl `select payload->'announcements' from bb_raw` names
+// the true key and this list can be cut to it. Until then an unknown shape yields author: null —
+// never a guess, and never a raw user id.
+const AUTHOR_KEYS = ['creator', 'createdBy', 'author', 'createdByUser', 'creatorFullName', 'postedBy', 'userName'];
+
+/** The creator display name of one announcement, plus which key supplied it. */
+const announcementAuthor = (a) => {
+  if (a == null || typeof a !== 'object') return { author: null, authorSource: null };
+  for (const key of AUTHOR_KEYS) {
+    const name = personName(a[key]);
+    if (name) return { author: name, authorSource: key };
+  }
+  return { author: null, authorSource: null };
+};
+
+/**
+ * One raw announcement -> the shape stage_announcements reads (migration 033). Pure: no fetch, no
+ * session, no globals. `modified` feeds announcements.modified_at and `author` feeds
+ * announcements.author; `isRead` keeps mirroring Blackboard's own read state.
+ */
+const mapAnnouncement = (a) => {
+  const { author, authorSource } = announcementAuthor(a);
+  return {
+    id: a.id,
+    title: a.title,
+    created: a.createdDate,
+    modified: a.modifiedDate,
+    start: a.startDateRestriction,
+    isRead: a.readStatus?.isRead ?? null,
+    author,
+    authorSource,
+    body: strip(a.body)?.slice(0, 4000),
+  };
+};
+
+function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboard.syracuse.edu' }) {
+  const j = async (u) => { const r = await fetch(base + u, { credentials: 'include' }); if (!r.ok) return { __status: r.status }; return r.json(); };
   const pageAll = async (u) => { let out = [], off = 0; for (;;) { const r = await j(u + (u.includes('?') ? '&' : '?') + `offset=${off}`); if (r.__status) return { error: r.__status, results: out }; out = out.concat(r.results || []); if (!r.paging || !r.paging.nextPage || !(r.results || []).length || off > 5000) break; off += r.results.length; } return { results: out }; };
   const typeOf = (c) => c.contentHandler?.id || Object.keys(c.contentDetail || {})[0] || null;
   const isContainer = (c) => c.hasChildren || /folder|lesson|learningmodule/i.test(typeOf(c) || '');
@@ -82,7 +153,7 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
     return { course: { id: C, name: detail.name, courseId: detail.courseId, modified: detail.modifiedDate },
       teachers: (teach.results || []).map(t => ({ name: `${t.user?.givenName || ''} ${t.user?.familyName || ''}`.trim(), email: t.user?.emailAddress || null, role: t.courseRole?.identifier, userId: t.userId })),
       schedule: sched.results || [],
-      announcements: (ann.results || []).map(a => ({ id: a.id, title: a.title, created: a.createdDate, modified: a.modifiedDate, start: a.startDateRestriction, isRead: a.readStatus?.isRead ?? null, body: strip(a.body)?.slice(0, 4000) })),
+      announcements: (ann.results || []).map(mapAnnouncement),
       gradeCategories: (cats.results || []).map(c => ({ id: c.id, title: c.title, weight: c.weight ?? null })),
       gradebook: await grades(C), content: await walk(C) }; };
   const memberships = async () => { const m = await j(`/learn/api/v1/users/${userId}/memberships?expand=course.effectiveAvailability,course.permissions,courseRole&includeCount=true&limit=10000`); return (m.results || []).map(x => ({ id: x.course.id, name: x.course.name, courseId: x.course.courseId, termId: x.course.termId, termName: x.course.term?.name, uuid: x.course.uuid, role: x.role, membershipId: x.id, lastAccess: x.lastAccessDate })); };
@@ -103,5 +174,11 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
   // Deep-scans the whole item (body + assessment instructions + any other string field), durable URLs only.
   const refreshEmbeds = async (C, contentIds) => { const out = {}; for (const id of contentIds) { const full = await j(`/learn/api/v1/courses/${C}/contents/${id}`);
       out[id] = full.__status ? { error: full.__status, files: [] } : { modified: full.modifiedDate, files: embedsDeep(full) }; } return out; };
-  return { j, strip, pageAll, walk, grades, crawl, memberships, calendar, post, runAll, downloadAll, refreshEmbeds, embedsDeep, durableUrl };
+  return { j, strip, pageAll, walk, grades, crawl, memberships, calendar, post, runAll, downloadAll, refreshEmbeds, embedsDeep, durableUrl, mapAnnouncement };
+}
+
+// Inert in a browser tab (no `module` there), so this file stays paste-and-run in the Ultra console.
+// Under Node it exposes the pure mappers to the vitest suite in web/test.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { installCrawler, strip, personName, announcementAuthor, mapAnnouncement, AUTHOR_KEYS };
 }

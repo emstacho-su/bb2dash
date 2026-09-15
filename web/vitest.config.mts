@@ -28,12 +28,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text'],
-      // Scoped to the module this harness actually covers. The palette's
+      // Scoped to the modules this harness actually covers. The palette's
       // ResultRow is tested (test/CommandPalette.test.tsx) but the palette
       // shell — keyboard plumbing, debounce, router navigation — is not, and
       // counting it would report a number that describes nothing. Widen this
       // list as screens get covered, rather than lowering the bar.
-      include: ['src/lib/queries.search.ts'],
+      include: ['src/lib/queries.search.ts', 'src/lib/queries.sync.ts'],
     },
   },
 });

@@ -3,7 +3,7 @@
 Date: 2026-09-14 (brief); PM session TBD. Product manager: Stack. Requirements: R-19, R-25, R-20
 (bell + page), R-16 (the two group-item dates only) from `60_REQUIREMENTS_v2.md`. Phase branch
 `feat/planner-11`, one PR. Runs **in parallel with Phase 10a, V-1 and V-2**. **Migration range
-060–069** (10a owns 045–059).
+060–069** (10a owns 046–059).
 
 **Base.** Cut from `main` after Phase 9 (PR #10) merges: the bell and Stream posts read Phase
 9's `announcements.author` / `read_at` / `modified_at` (migration 033).

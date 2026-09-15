@@ -1,13 +1,13 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-10**, Phase 8 course dimension
-> (`feat/course-dimension`, PR open) — Google Classroom-style course page (Stream · Classwork ·
-> Grades · Info), 8-week tracker paging, assignment/session popouts, card notes; migrations
-> 026–029 live. Convention: see root `CLAUDE.md`.
+> Updated upon each PR. Last update: **2026-09-15**, Phase 9 sync loop merged (PR #10: automated
+> transform on pg_cron, Inbox, Sync button, private bucket, every view security_invoker;
+> migrations 026–045 live; Stack signed off after the first live end-to-end sync). Phase 8
+> merged 2026-09-14 (PR #8). Convention: see root `CLAUDE.md`.
 
 ## Where the product is
 
-**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8, PR open).**
+**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8); sync loop live (Phase 9).**
 The Blackboard → Supabase pipeline, typed warehouse, document corpus, and two-tier search API
 are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is merged to `main`
 (PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
@@ -20,15 +20,15 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 
 | Layer | State |
 |---|---|
-| Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js`; per-course maps at v2+; last pull 2026-09-08 |
-| Typed warehouse | migrations 001–025 (repo numbering; see note below); 7 courses, 66 assignments, 145 sessions, planner tables |
+| Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` (anon insert, unique per run/kind/shell); last pull 2026-09-08. Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
+| Typed warehouse | migrations 001–044 (repo numbering; see note below); 7 courses, 66+ assignments, 145 sessions, planner tables; `attention_items` (93 rows raised on first fold), `agent_requests`, `app_settings`; all 15 public views `security_invoker`, anon revoked |
 | Effort model | migration 015 `effort_base` (19 types) + 016 `v_work_items` (152 items, effort + source) |
 | Document corpus | 64 files (100% in Storage + local mirror + sha256), 534 text units extracted; 4 stale IST.466 files marked `superseded_by` (migration 022) → `v_bb_files_current` = 60 |
 | Search: FTS | tsvector+GIN on file text / content / announcements; `search_file_text(…, p_include_superseded)` |
 | Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
 | Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
-| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts; **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px; the main column fills the width); vitest 265 tests |
+| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (placeholder until Phase 10) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list; vitest 342 tests |
 | Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
 
 ## What has been done (by phase)
@@ -81,7 +81,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    16-part IST.323 syllabus returns part 16 ("Scheduled Final Exam Day 12/15/26") instead of the
    instructor's office hours; "attendance policy" has 0 of 10 snippets missing the keyword;
    superseded schedules absent by default, present with the flag. Tests: web 40, mcp-server 88.
-8. **Phase 8 — Course dimension** (`feat/course-dimension`, PR open, 2026-09-10): three Opus
+8. **Phase 8 — Course dimension** (PR #8, **merged 2026-09-14**): three Opus
    workers (W-12 db, W-13 tabs, W-14 shared) on worker branches, PM-integrated. Migrations
    **026–029**: `stage_content(run_id)` (idempotent fold of `bb_raw` content into `bb_content`,
    title fallback for `ultraDocumentBody`, run once → 11 junk titles down to 1), `v_course_stream`
@@ -98,6 +98,30 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    `bb_raw.bb_course_id` is `courses.bb_id` (not `bb_course_id`); every view from 001–025 runs
    as owner and bypasses RLS (fix = migration in Phase 9's range). Parked: IST.466 publishes two
    identical folder paths; the `(course_id, path)` key keeps one (5 rows counted as duplicates).
+9. **Phase 9 — Sync loop** (`feat/sync-loop`, PR #10 open, 2026-09-10/14): two Opus workers (W-15 db +
+   scheduler, W-16 web + ingest), PM-integrated. Migrations **030–039**: bucket private (030),
+   `attention_items` + seeds (031), `agent_requests` (032), announcements `author`/`read_at`/
+   `modified_at` (033), SQL transform stages `stage_courses/assignments/announcements/files/gaps`
+   + `bb_resolve_course()` (034), `run_transform` / `transform_tick` / reaper / `ical_poll` /
+   `app_settings` / `v_sync_status` + pg_cron (035), **11 views → security_invoker** (036),
+   `stage_files` replay guard (037), advisor fixes (038), registered-run authorisation + `bb_raw`
+   unique index + quarantine grace (039), freshness view ignores skipped/quarantined rows (040,
+   post-security-review). Review round (041–044): open-only dedupe index, "Keep mine" answers
+   stand until Blackboard's value changes, `applied_at` only when a fact was written,
+   missing-file marker measured across registered crawls and reversible, `ical_collect()` on
+   every tick (pg_net ttl is 6 h), `apply_resolutions()` run by transform requests, Activity
+   list filters ical and quarantine rows, Inbox shows resolve errors. Live sync 2026-09-14 (run 35:
+   7 courses, 17 items raised, answers applied by a transform request within one tick) found two
+   follow-ups, fixed in-PR: **045** `question_date_text` (date-only due dates in conflict text
+   printed a day early) and the Sync button reuses an open `sync` request instead of filing a
+   second one (the tick never closes `kind = sync` rows). `bb_url` still null:
+   assessment items carry no `detail` in the crawl (crawler change, later). First fold of the 9/8 and 9/2 crawls: 93 attention rows
+   (conflict 11, data_gap 14, missing 16, stack_must_confirm 52), zero duplicates on replay, a
+   resolution applied end-to-end in all three shapes. Web: Inbox, needs-attention row, Sync
+   button, Activity (vitest 117 tests); crawler announcements mapper (creator key unverified until a live crawl);
+   `skills/bb-sync` (claim → crawl → register run_id → wait → close). Runbook steps 3 and 5
+   automated. Stopped/deferred: `stage_courses` never writes `meetings` (no schedule payload
+   shape seen yet); `announcements.author` null until the crawler key is confirmed live.
 
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's
@@ -147,7 +171,7 @@ brief (`62`, `63`, `66`, `67`, `68`, `69`, `80`, `81`) and indexed in
 `docs/planning/70_MVP_INDEX.md`, whose §5 lists the open questions Stack answers when each
 phase's PM session freezes its Contract. Research behind them: `docs/planning/research/`.
 
-Migration ranges: Phase 8 = 026–029, Phase 9 = 030–044 (030–040 plus its review-fix round 041–044), Phase 10 = 045–059,
+Migration ranges: Phase 8 = 026–029, Phase 9 = 030–045 (030–040 plus its review-fix rounds 041–045), Phase 10 = 046–059,
 Phase 11 = 060–069, Phase 12 = 070–079 if needed. Both phase branches cut from `main`
 (Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
 
@@ -157,14 +181,25 @@ remaining near-duplicates (bb_files 17, 18/19, IST.352 31/32/47) → Phase 9 `st
 touch those screens; stored per-part `tsvector` on `bb_text_embeddings` → only when the palette
 feels slow, not before.
 
-**Security:** the `bb-files` bucket was flipped private by Phase 9 migration 030 (applied
-2026-09-10, anonymous GET now 400). Still open until Phase 9 merges: views 001–025 bypass RLS.
+**Security:** `bb-files` bucket private (030, anonymous GET 400); all public views
+`security_invoker` with anon revoked (036); transform folds only owner-registered crawls (039).
+Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's policies (wrap
+`auth.uid()` in `(select …)`), 7 pre-existing mutable search_path functions.
 
 ## Known issues / operational notes
 
 * IST.466 publishes two sibling content branches with identical `path`s; `bb_content`'s
   `(course_id, path)` key holds one, so Classwork shows one branch. Needs a key change
   (`bb_item_id`-based) in a later phase.
+* **Merge Phase 8 before Phase 9.** Migration 036 asserts every public view is
+  `security_invoker`; `v_course_display` gets that from Phase 8's 028. Prod holds both already;
+  the rule keeps a fresh replay of `db/migrations` in README order working.
+
+* Migration 020's RLS policies call `auth.uid()` per row (advisor `auth_rls_initplan`, 21
+  policies); a later migration should rewrite them as `(select auth.uid()) = …`.
+* `bb_crawler.js` generates `run_id` inside `runAll`; the skill registers it right after the
+  crawl returns and migration 039's grace window covers the gap. A `runId` parameter on
+  `runAll` would let the skill register first (one-line change, next time the crawler is touched).
 
 * Sandboxed Claude sessions cannot reach `*.supabase.co` (org egress policy) — invoke edge
   functions server-side via `pg_net` (`net.http_post`); pg_net is enabled and load-bearing.

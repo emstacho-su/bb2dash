@@ -2,7 +2,7 @@
 
 Date: 2026-09-14 (brief); PM session TBD. Product manager: Stack. Requirements: R-10, R-11 (a)+(d),
 R-17, R-18 from `60_REQUIREMENTS_v2.md`. Phase branch `feat/grades-10a`, one PR. Runs **in
-parallel with Phase 11, V-1 and V-2**. **Migration range 045–059** (Phase 9's fix round took 041–044; Phase 11 owns 060–069).
+parallel with Phase 11, V-1 and V-2**. **Migration range 046–059** (Phase 9 and its fix rounds took 030–045; Phase 11 owns 060–069).
 
 **Base.** Cut from `main` after Phase 9 (PR #10) merges: 10a needs Phase 8's assignment popout
 and Phase 9's automated transform (`stage_*` driver, `sync_stage_runs`, `agent_requests`).
@@ -47,7 +47,7 @@ shapes, file names), puts open questions to Stack, and waits for answers. It mus
 * `bb_gradebook` (append-per-run history keyed by `run_id`, `column_id`; columns read from
   `effectiveScore` / `displayGrade.score` / `feedback` / `lastAttempt` / `submissionStatus`;
   attendance columns flagged; `isCalc` totals identified) and views `v_gradebook_latest`,
-  `v_assignment_grade`, `v_course_grade` (R-10). Migration numbers from 045.
+  `v_assignment_grade`, `v_course_grade` (R-10). Migration numbers from 046.
 * `bb_attempts` (attempt id, status, created, submitted, score, feedback, file refs) and the
   Storage path convention for pulled-back files (R-17); the crawler's new endpoint and the
   widened `slim()` keep-list (`dueDate`, `points`, `gradebookColumnId`, `attemptsAllowed`).
@@ -114,9 +114,9 @@ Source: Stack's answers (`70_MVP_INDEX.md` §1.3) + research `research/72_RESEAR
 | 1 | Freeze the Contract section; put open questions to Stack | Stack's answers recorded in the brief | — | PM session |
 | 2 | Crawler: attempts endpoint + widened `slim()` + envelope version | real crawl → `bb_raw` holds gradebook + attempts payloads | — | W-17 |
 | 3 | Fixtures: ≥ 3 courses' gradebook + attempts payloads | files committed; loader test parses them | — | W-17 |
-| 4 | `bb_gradebook` (045) + `stage_gradebook` | stage test green on fixtures; idempotency SQL = 0 new rows | — | W-17 |
-| 5 | Views `v_gradebook_latest`, `v_assignment_grade`, `v_course_grade` (046) | reconciliation SQL: counts and `effectiveScore` match `bb_raw` | — | W-17 |
-| 6 | `bb_attempts` (047) + `stage_attempts` + file pull-back into Storage | stage test; SQL: `bb_files` rows with `assignment_id`; a signed URL downloads | — | W-17 |
+| 4 | `bb_gradebook` (046) + `stage_gradebook` | stage test green on fixtures; idempotency SQL = 0 new rows | — | W-17 |
+| 5 | Views `v_gradebook_latest`, `v_assignment_grade`, `v_course_grade` (047) | reconciliation SQL: counts and `effectiveScore` match `bb_raw` | — | W-17 |
+| 6 | `bb_attempts` (048) + `stage_attempts` + file pull-back into Storage | stage test; SQL: `bb_files` rows with `assignment_id`; a signed URL downloads | — | W-17 |
 | 7 | Register both stages with the Phase 9 driver | `sync_stage_runs` rows appear after a run | — | W-17 |
 | 8 | `queries.grades.ts` + regenerated types | typecheck; query tests with fixtures | — | W-18 |
 | 9 | `/grades` global page | RTL tests: total-with-date, no-total, never-synced states | "every course, Blackboard's number or the honest empty state" | W-18 |

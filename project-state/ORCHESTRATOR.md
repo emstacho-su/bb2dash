@@ -36,10 +36,10 @@ and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
 | 7 | Retrieval polish (matched snippets, superseded filter, web tests) | merged Sep 10 | #6 | 021–025 |
 | — | Requirements v2 + Phase 8/9 briefs; Phase 6 close-out | merged Sep 14 | #7 | — |
 | 8 | Course dimension (Stream / Classwork / Info, popouts, tracker paging) | merged Sep 14 | #8 | 026–029 |
-| 9 | Sync loop (automated transform, Inbox, bucket private) | **PR open, awaiting Stack** (one real crawl end-to-end is his check) | #10 | 030–044 |
+| 9 | Sync loop (automated transform, Inbox, bucket private) | merged Sep 15 | #10 | 030–045 |
 | — | V-1 + R-27 briefs, Phase 10 split, ORCHESTRATOR + `/bb2dash-pm` | merged Sep 14 | #9 | — |
-| — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | PR open | #11 | — |
-| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | planned | — | reserve 045–059 (Phase 9 fixes took 041–044) |
+| — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | **PR open** | #11 | — |
+| 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | planned | — | reserve 046–059 (Phase 9 and its fixes took 030–045) |
 | 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | same range |
 | 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | planned; pairs with 10a | — | reserve 060–069 |
 | V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | one data migration in 10's range |
@@ -77,7 +77,7 @@ Rules that fall out of the graph:
    harness repo.
 4. **12 and 13 are sequential, small, and after week 11's exams.** Neither pays off inside the
    term.
-5. **Reserve migration ranges with slack.** Phase 9 was given 030–039 and used 030–044 (its review-fix round took 041–044), so Phase 10 starts at **045**.
+5. **Reserve migration ranges with slack.** Phase 9 was given 030–039 and used 030–045 (its review-fix rounds took 041–045), so Phase 10 starts at **046**.
 
 Term calendar: week 1 = Aug 24. Weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week 14
 is Thanksgiving; Nov 30 – Dec 13 is a code freeze. Phases 8–10 are the ones that pay off in
@@ -119,7 +119,7 @@ the repo.
 
 ## 4. Open items that are Stack's, not the PM's
 
-* Merge PR #10 (Phase 9) after the one-real-crawl check, then PR #11 (MVP/DoD docs).
+* Merge PR #11 (MVP/DoD docs). Then the sprint starts from `main`: 10a, 11, V-1, V-2 in parallel.
 * Say when to start V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and V-2.
 * Answer V-1's *ask the professor* items as they come up.
 
