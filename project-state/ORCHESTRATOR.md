@@ -41,7 +41,7 @@ and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
 | — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | merged Sep 15 | #11 | — |
 | 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | **in flight** on `feat/grades-10a` (own PM session, main checkout) | — | 046–059 (046–051 live) |
 | 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | same range |
-| 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | **PR open**; live calendar proof after Stack's consent step | — | 060–069 (060–066 live) |
+| 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | **PR open**; live calendar proof after Stack's consent step | #12 | 060–069 (060–066 live) |
 | V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | one data migration in 10's range |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell | planned; after the web app is stable | — | — |

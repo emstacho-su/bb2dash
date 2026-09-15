@@ -1,6 +1,6 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-15**, Phase 11 planner + calendar + bell **PR open**
+> Updated upon each PR. Last update: **2026-09-15**, Phase 11 planner + calendar + bell **PR #12 open**
 > (`feat/planner-11`: `/planner` week grid, Google Calendar push, announcements bell and page;
 > migrations 060–066 live; the live calendar proof waits on Stack's one-time Google consent).
 > Phase 10a is in flight in parallel on `feat/grades-10a` (migrations 046–051 live). Phase 9
@@ -124,7 +124,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    automated. Stopped/deferred: `stage_courses` never writes `meetings` (no schedule payload
    shape seen yet); `announcements.author` null until the crawler key is confirmed live.
 
-10. **Phase 11 — Planner, Google Calendar push, bell** (`feat/planner-11`, PR open, 2026-09-15; brief
+10. **Phase 11 — Planner, Google Calendar push, bell** (`feat/planner-11`, [PR #12](https://github.com/emstacho-su/bb2dash/pull/12) open, 2026-09-15; brief
    and frozen Contract in `docs/planning/69_PHASE11_planner.md`, evidence in `69a_W21_VERIFICATION.md`).
    Two Opus workers (W-21 db + calendar, W-22 web) on their own branches, PM-integrated in a separate
    worktree because the main checkout was Phase 10a's. Migrations **060–066**: `calendar_events`
@@ -190,7 +190,7 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 10 | Grades and submissions | `67_PHASE10A_grades.md` | 10a in flight on `feat/grades-10a` (046–051 live), parallel with 11; 10b after October scores + V-1 |
 | V-1 | Grading schema validation (stream, Stack + a materials-only session) | `63_GRADING_VALIDATION.md`, `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | added 2026-09-14; parallel with 10a; gate for 10b. Launch: `scripts/validate-grading.ps1` |
 | V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14; parallel with 10a |
-| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **PR open** (`feat/planner-11`, migrations 060–066 live); live calendar proof after Stack's consent step |
+| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **PR #12 open** (`feat/planner-11`, migrations 060–066 live); live calendar proof after Stack's consent step |
 | 12 | Electron shell | — | |
 | 13 | Styling pass | — | last |
 
