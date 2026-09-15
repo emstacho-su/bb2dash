@@ -29,6 +29,7 @@ import type { Tables, Views } from './queries';
 import { COURSE_WORK_ITEMS_KEY } from './progress-cache';
 import {
   normalizeCardNote,
+  shellCacheKey,
   validateCardNote,
   type CourseStreamRow,
   type ContentTreeRow,
@@ -86,10 +87,11 @@ export type SessionFile = Pick<
  * Cache keys
  * ------------------------------------------------------------------------ */
 
-/** Stable, greppable key for a set of shells (order-independent). */
-function shellKey(shellIds: string[]): string {
-  return [...shellIds].sort().join('+');
-}
+/**
+ * Stable, greppable key for a set of shells (order-independent). The rule lives
+ * in `course-dimension.ts` so the Grades layer keys on exactly the same string.
+ */
+const shellKey = shellCacheKey;
 
 export const courseQueryKeys = {
   display: (courseId: string) => ['course-display', courseId] as const,

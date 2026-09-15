@@ -82,6 +82,24 @@ describe('no control anywhere reads "Submit"', () => {
   });
 });
 
+describe('the Grades layer uses the typed client', () => {
+  /**
+   * `queries.grades.ts` and `queries.submissions.ts` read relations that did
+   * not exist in `database.types.ts` while Phase 10a was being built, and went
+   * through a cast to an untyped client to do it. 046-051 are applied and the
+   * types are regenerated, so that escape hatch is closed: a cast reappearing
+   * here means a column list nothing is checking.
+   */
+  it.each(['src/lib/queries.grades.ts', 'src/lib/queries.submissions.ts'])(
+    '%s casts the client to nothing',
+    (relative) => {
+      const source = read(join(SRC, '..', relative));
+      expect(source).not.toContain('as unknown as SupabaseClient');
+      expect(source).not.toContain('untypedClient');
+    },
+  );
+});
+
 describe('no service-role credential reaches the browser bundle', () => {
   it.each(['service_role', 'sb_secret'])('finds no "%s" anywhere under src/', (needle) => {
     const offenders = FILES.filter((file) => read(file).includes(needle));

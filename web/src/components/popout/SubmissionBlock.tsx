@@ -23,6 +23,7 @@
 import {
   SHA_LABEL,
   STAGED_LABEL,
+  attemptsAllowed,
   attemptsText,
   compareSha,
   formatSeenAt,
@@ -126,7 +127,10 @@ export function SubmissionBlock({
 
   const submission = submissionLabel(grade?.submission_status, grade?.last_attempt_status);
   const latest = attempts.length > 0 ? attempts[attempts.length - 1] : null;
-  const allowed = latest?.attempts_allowed ?? grade?.multiple_attempts ?? null;
+  // The view already encodes the ceiling (055); a gradebook row on its own
+  // splits it across two columns, which is what `attemptsAllowed` reconciles.
+  const allowed =
+    latest?.attempts_allowed ?? attemptsAllowed(grade?.multiple_attempts, grade?.attempts_left);
   const attemptCount = latest?.attempt_no ?? attempts.length;
 
   const pulledBack = files.filter((file) => submissionOrigin(file) === 'pulled_back');

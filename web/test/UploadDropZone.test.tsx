@@ -18,8 +18,8 @@ const state = vi.hoisted(() => ({ isPending: false }));
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn(), auth: { getSession: vi.fn() } }),
 }));
-vi.mock('@/lib/queries.grades', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/queries.grades')>();
+vi.mock('@/lib/queries.submissions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries.submissions')>();
   return {
     ...actual,
     useStageUpload: () => ({ mutate, isPending: state.isPending, isError: false, error: null }),
@@ -148,5 +148,43 @@ describe('UploadDropZone — what it says', () => {
     renderZone({ compact: true });
     expect(screen.queryByText(/Drop one file here/)).toBeNull();
     expect(input()).toBeInTheDocument();
+  });
+});
+
+describe('UploadDropZone — two zones for the same assignment', () => {
+  /**
+   * The Classwork row and the popout can both be on screen for one assignment.
+   * The input id used to be derived from the assignment id, so the two shared
+   * it and the second label opened the first zone's file picker.
+   */
+  function renderPair() {
+    return render(
+      <>
+        <UploadDropZone courseId="IST.323" assignmentId="IST.323/lab-1" compact />
+        <UploadDropZone courseId="IST.323" assignmentId="IST.323/lab-1" />
+      </>,
+    );
+  }
+
+  it('gives each input its own id', () => {
+    renderPair();
+    const inputs = screen.getAllByLabelText('Stage a file') as HTMLInputElement[];
+    expect(inputs).toHaveLength(2);
+    expect(inputs[0].id).not.toBe(inputs[1].id);
+    expect(inputs[0].id).toBeTruthy();
+  });
+
+  it('points each label at its own input', () => {
+    const { container } = renderPair();
+    const labels = [...container.querySelectorAll('label')];
+    const inputs = [...container.querySelectorAll('input')];
+    expect(labels.map((l) => l.getAttribute('for'))).toEqual(inputs.map((i) => i.id));
+  });
+
+  it('sends only the zone that was used', () => {
+    renderPair();
+    const inputs = screen.getAllByLabelText('Stage a file') as HTMLInputElement[];
+    fireEvent.change(inputs[1], { target: { files: [file()] } });
+    expect(mutate).toHaveBeenCalledTimes(1);
   });
 });

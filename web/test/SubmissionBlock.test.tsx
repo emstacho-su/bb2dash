@@ -47,6 +47,12 @@ vi.mock('@/lib/queries.grades', async (importOriginal) => {
     useAssignmentGrade: () => hooks.grade,
     useAssignmentAttempts: () => hooks.attempts,
     useSubmissionFiles: () => hooks.files,
+  };
+});
+vi.mock('@/lib/queries.submissions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries.submissions')>();
+  return {
+    ...actual,
     useStageUpload: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   };
 });
