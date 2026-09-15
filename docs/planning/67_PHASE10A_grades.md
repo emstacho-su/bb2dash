@@ -445,6 +445,45 @@ branch or `main`, and never touch `project-state/`.
   Materials bucket order, tests; `npm run typecheck && npm run build && npm test` green. Builds
   against fixtures until W-17's views are live, then live-checks against prod.
 
+## Round 2 — review fixes (2026-09-15)
+
+`/code-review main high` on the integrated phase branch (commit `214430a`) returned ten
+confirmed findings plus two cleanups; the PM's manual security pass (the `/security-review`
+skill cannot launch in this shell) added one. Migration numbers **052–056 are reserved for this
+round**; 057–058 stay free; 059 is V-1's. Each fix carries its executable check. Workers first
+`git merge origin/feat/grades-10a` into their own branch (it holds both merges and the
+regenerated `database.types.ts`), fix, prove, commit, push. 046–051 stay byte-frozen: every SQL
+change is a new migration that `create or replace`s from the **live** definition
+(`pg_get_functiondef`), dry-run in `begin; … rollback;`, applied under the file's name.
+
+### W-17 (database + ingest + skill)
+
+| # | Finding | Fix | Check |
+|---|---|---|---|
+| R2-1 | **Register-before-crawl makes the tick's 3-minute idle branch reachable mid-crawl** (`transform_tick`, 044, folds a registered run once one course row is older than 3 min, no completeness check); a slow v3 crawl gets folded with 1 of N courses and `run_transform`'s idempotence then drops the rest forever | `skills/bb-sync/SKILL.md`: go back to **register `run_id` immediately after `bb.runAll` returns** (039's grace window covers that gap, as before). Keep `runAll({ runId })` in the crawler but say in the skill and the crawler header why register-first must wait until the tick requires the `calendar` row for registered runs (a Phase 9-driver change, not this phase's). Also validate `runId` in `runAll` (uuid regex; a bad value → throw, never a fabricated id) | skill text; vitest on the uuid guard |
+| R2-2 | **Storage key collision**: a pulled-back attempt file and a staged file with the same name share `<course>/my_submissions/<slug>/<file>`; step 4b treats a 409 as done and points the Blackboard row at Stack's staged object | **052** `052_submission_relpath_and_check.sql`: `create or replace function bb_file_relpath` (from the live 008 definition) so a row with `bucket = 'my_submissions' and attempt_id is not null` gets an extra segment `attempt-<digits of attempt_id>/` before the file name; staged rows (`attempt_id` null) keep the current path so W-18's `submissionRelPath` stays correct. Same migration tightens 049's check to `source_url is not null or coalesce(classified_by::text,'') = 'stack'` (the PM's security finding: both-null passed a NULL check). Step 4b: a 409 is **never** "done" — refuse it and report the row | SQL: `bb_file_relpath` on a synthetic attempt row shows the segment; `v_file_layout.needs_move` is 0 for every existing row; insert with both null is refused |
+| R2-3 | **`stage_files` marks every pulled-back submission file `missing_since_run`** on the same fold (its mark-missing step only protects `classified_by = 'stack'`; attempt download URLs never appear in `_bb_refs`), and the Activity feed then says "N file(s) are no longer in Blackboard" | **053** `053_stage_files_skip_submissions.sql`: `create or replace stage_files` from the live (043) definition with `bucket <> 'my_submissions'` added to the mark-missing predicate and to `missing_cleared` | SQL test: fold a fixture run with attempts after a `my_submissions` row exists → `marked_missing` 0 for it, unchanged for a genuinely missing crawl file |
+| R2-4 | **`stage_gaps` raises a `data_gap` for every pulled-back file** in the very transaction that catalogued it (bytes arrive later from step 4b; nothing resolves the item) | **054** `054_stage_gaps_skip_submissions.sql`: from the live (041) definition, exclude `bucket = 'my_submissions' and attempt_id is not null` from the `storage_path` gap. Step 4b reports any file it could not pull in its summary line instead | SQL test: attempts fixture → 0 new `data_gap` rows for `bb_file` refs under `my_submissions` |
+| R2-5 | **`attempts_allowed` mis-encodes unlimited**: `v_assignment_attempts.attempts_allowed = multiple_attempts` (0 = single) while unlimited lives in `attempts_left = -1`; the popout shows "Attempt 2 of 1" on real data | **055** `055_attempts_allowed_and_dates.sql`: recreate `v_assignment_attempts` with `attempts_allowed = case when g.attempts_left = -1 then -1 when g.multiple_attempts > 1 then g.multiple_attempts else 1 end`; same file re-creates `stage_attempts` with **tolerant date parsing** (R2-6) | SQL: ECN.304 Attendance fixture (multipleAttempts 0, attemptsLeft -1) → `attempts_allowed = -1`; IST.323 Quiz (3, 2) → 3 |
+| R2-6 | **Bare `::timestamptz` on unverified attempt dates** inside one stage-wide exception block: one epoch-ms value fails the whole stage for the run | In 055: parse `created`/`submitted`/`modified` with 026's tolerant pattern (`jsonb_typeof = 'number'` → `to_timestamp(n/1000.0)`; strings only when they match `^\d{4}-\d{2}-\d{2}[T ]`; else null) so a bad value drops one field, not the stage | SQL test: a fixture attempt with `created: 1757900000000` and one with `"not a date"` → both rows inserted, fields null/converted, stage `ok` |
+| R2-7 | **`scores_changed` counts stale values on an out-of-order fold** (previous = newest row by `seen_at` from any other run, no newest-run guard; 043 already guards the same hazard for files) | **056** `056_stage_gradebook_newest_guard.sql`: re-create `stage_gradebook` from the live definition; compute `scores_new`/`scores_changed` only when this run is the newest registered crawl (043's predicate), else report both as 0 and add `older_run: true` to counts | SQL test: fold the 9/2 fixture after the 9/14 run → `scores_changed 0`, `older_run true` |
+| R2-8 | Verification note | Append `66_W17_VERIFICATION.md` §12 "Round 2" with each migration's prod version + md5, the test outputs above, and an advisor diff | note committed |
+
+### W-18 (web)
+
+| # | Finding | Fix | Check |
+|---|---|---|---|
+| R2-9 | **Blocker:** `assignmentGradeOptions` filters `v_assignment_grade` with `.eq('id', …)`; the view exposes `assignment_id` and has no `id` (047 deviation 4), so every popout's status line errors on prod | Filter on `assignment_id`; `AssignmentGradeRow` gets `assignment_id` instead of `id`; the request-shape test asserts `assignment_id=` | vitest; live smoke by the PM |
+| R2-10 | `attemptsText` gets `grade.multiple_attempts` as the fallback ceiling (0 = single) | Add `attemptsAllowed(multipleAttempts, attemptsLeft)` with the same rule as R2-5's view and use it for the fallback; the view's `attempts_allowed` is passed through untouched | unit test on (0,-1)→-1, (3,2)→3, (0,null)→1, (null,null)→null |
+| R2-11 | **Orphan Storage object on insert failure**: upload succeeds, `bb_files` insert throws, and the collision check (rows only) makes every retry 409 | On insert failure `storage.remove([relPath])` (best effort), then rethrow with the insert error; on a 409 from `upload`, include the Storage listing of `<course>/my_submissions/<slug>/` in the collision set and retry the suffix once | vitest: insert rejects → `remove` called with the key → error surfaced; 409 → suffix retried |
+| R2-12 | **Duplicate DOM id** ``stage-file-${assignmentId}`` when a Classwork row and the popout show the same assignment | `const inputId = useId()` | RTL: two zones for one assignment → distinct `htmlFor`/`id`, each label opens its own input |
+| R2-13 | `queries.grades.ts` is 808 lines (cap 800) and re-declares `COURSE_TIME_ZONE` / `shellKey` | Move the staging section (validation, sha256, `stageUpload`, `useStageUpload`) to `web/src/lib/queries.submissions.ts`; import the time zone and shell-key helpers from `course-dimension.ts` / `queries.course.ts` | typecheck; both files < 800 lines |
+| R2-14 | Types are regenerated on the phase branch | Drop `untypedClient()` and the fixture casts: read the five views and insert into `bb_files` through the typed client (`source_url: null`, `classified_by: 'blackboard'` are now in the generated types); rewrite the module header | typecheck with no `as unknown as SupabaseClient` left in `queries.grades.ts` / `queries.submissions.ts` (grep assertion) |
+
+Refuted by the reviewer and left alone: `assessmentFields` overwriting `slim()` keys (it only
+merges the four keys `slim()` never sets). Not taken: the duplicated linked-assignment rule in
+050 vs 047 (two views, one rule, both tested).
+
 ## Integration (PM)
 
 Merge worker branches; regenerate types; `npm ci` if deps changed; typecheck + build + tests in
