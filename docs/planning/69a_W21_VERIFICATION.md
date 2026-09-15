@@ -14,6 +14,12 @@ R2-1 was a real defect in the Contract's `absent_from_blackboard` rule, fixed by
 `066_calendar_push_lock_and_dirty` (§4.2) and by `calendar-push` v2; R2b-5 and R2b-8 are in the
 function alone. R2-2 and R2-3 are decisions with no code change (§11 and §3).
 
+**Round 3 (2026-09-15, from the live proof).** Stack finished the Google setup, the PM flipped
+`gcal_enabled`, and runs 1–4 went against his real calendar. Run 4 exposed R3-1: a deleted
+event keeps its id in Google's `cancelled` state, so the item's return patched a cancelled row
+and left it invisible — 62 mirror rows, 61 events. Fixed in `calendar-push` **v3** by carrying
+`status: "confirmed"` in the canonical body, and repaired live (§9).
+
 ## 1. What shipped
 
 | Artefact | Applied / deployed as | Version | md5 |
@@ -25,7 +31,7 @@ function alone. R2-2 and R2-3 are decisions with no code change (§11 and §3).
 | `db/migrations/064_calendar_secrets.sql` | `064_calendar_secrets` | `20260915145613` | `cca5b6113c402fc0e8a0b5b95f0b3754` |
 | `db/migrations/065_absent_from_crawl_capture.sql` (round 2) | `065_absent_from_crawl_capture` | `20260915152248` | `0e289efa72ad248240f73da94704e1d7` |
 | `db/migrations/066_calendar_push_lock_and_dirty.sql` (round 2b) | `066_calendar_push_lock_and_dirty` | `20260915180429` | `58474bc5d575f4b95622da886d6bb386` |
-| `supabase/functions/calendar-push/{index,google,push}.ts` | edge function `calendar-push` | **v2**, `verify_jwt = false` | see §1.2 |
+| `supabase/functions/calendar-push/{index,google,push}.ts` | edge function `calendar-push` | **v3**, `verify_jwt = false` | see §1.2 |
 | `scripts/google-consent.mjs` | not run — Stack runs it | — | — |
 
 **063 was applied and pushed first** (14:42 UTC), before 060–062 and 064, because W-22's bell
@@ -51,19 +57,24 @@ LF, exactly as W-10 recorded for Phase 7.
 
 ### 1.2 The edge function's sources are the deployed sources
 
-| File | git blob md5 (LF), v1 | git blob md5 (LF), **v2** |
-|---|---|---|
-| `supabase/functions/calendar-push/index.ts` | `d5f8f72da83940e5a68f12cb7afc500a` | `6c3e8712d58f71e60a34ee5c6feee1a4` |
-| `supabase/functions/calendar-push/google.ts` | `9674eccc5b1d1ae3866f25d94e83b4d7` | `222fa60d959c6b994d81f6ac092fa173` |
-| `supabase/functions/calendar-push/push.ts` | `b4ffe47015cd6cf3607a72f890a8886c` | `8ea3ae9bd98feeb49f712c3d04d24012` |
+| File | v1 | v2 | **v3** (git blob md5, LF) |
+|---|---|---|---|
+| `supabase/functions/calendar-push/index.ts` | `d5f8f72d…` | `6c3e8712d58f71e60a34ee5c6feee1a4` | unchanged from v2 |
+| `supabase/functions/calendar-push/google.ts` | `9674eccc…` | `222fa60d959c6b994d81f6ac092fa173` | `aca4de76c77cd75969905e00adb932f4` |
+| `supabase/functions/calendar-push/push.ts` | `b4ffe470…` | `8ea3ae9bd98feeb49f712c3d04d24012` | unchanged from v2 |
 
-Deployed as `calendar-push` **v2**, `verify_jwt: false`, entrypoint `index.ts`,
-`ezbr_sha256 5c8ba43efb379c28ea939891bd49588d5681d53efaa3431ebf2acec97efe468c`
-(v1 was `104eb0228d3f1a20d6e7f4f6a5c2a8f8290b7ef52dea55ed3cf593f8c5a8a092`). Both deployments
+v3 touches `google.ts` only (R3-1). `index.ts` keeps its `(v2)` banner on purpose: that line
+names the revision of *that file*, and the file did not change — re-uploading it to edit a
+comment would be another transcription pass over a live function for no behavioural gain.
+
+Deployed as `calendar-push` **v3**, `verify_jwt: false`, entrypoint `index.ts`,
+`ezbr_sha256 acec412f38b05c23cadf9e83183936be3be3635ef8cd6882cd385366aa5b92e7`
+(v2 `5c8ba43efb379c28ea939891bd49588d5681d53efaa3431ebf2acec97efe468c`,
+v1 `104eb0228d3f1a20d6e7f4f6a5c2a8f8290b7ef52dea55ed3cf593f8c5a8a092`). All three deployments
 were read back with `get_edge_function` and compared with the repo files. On v1 the upload
 differed in two characters (an `—` and a `·` escape the deploy path had already
-unescaped) and the repo files were changed to the literal characters; v2 matched the blobs
-above with no correction needed. `push_test.ts` is not deployed.
+unescaped) and the repo files were changed to the literal characters; v2 and v3 matched the
+blobs above with no correction needed. `push_test.ts` is not deployed.
 
 ## 2. Objects, grants and RLS on prod
 
@@ -285,7 +296,9 @@ $ node --test supabase/functions/calendar-push/push_test.ts
 ✔ repointing the calendar deletes on the old id and inserts on the new          [R2b-5]
 ✔ an orphan Google refuses to delete is retried next run, not re-created         [R2b-5]
 ✔ the bb2dash link uses the injected origin, trailing slash and all              [R2b-7]
-ℹ tests 20   pass 20   fail 0
+✔ an item deleted and then re-added is un-cancelled, not silently invisible      [R3-1]
+✔ every write carries status confirmed, insert and patch alike                   [R3-1]
+ℹ tests 22   pass 22   fail 0
 
 $ node --test scripts/google-consent.test.mjs
 ✔ the authorisation URL asks for an offline grant and forces the consent screen
@@ -296,10 +309,12 @@ $ node --test scripts/google-consent.test.mjs
 ✔ a fresh push secret is 256 random url-safe bits and never repeats
 ✔ the four secret names are exactly the ones migration 064 accepts
 ✔ readEnv names every missing variable and refuses the primary calendar
-ℹ tests 8   pass 8   fail 0
+✔ serviceHeaders: a legacy JWT key is also a Bearer, an sb_secret key is apikey only
+ℹ tests 9   pass 9   fail 0
 ```
 
-**28 tests, all green**, no network and no database (25 before round 2b). The four numbered runs
+**31 tests, all green**, no network and no database (25 after round 2, 28 after round 2b; the
+consent suite gained its ninth test from the PM's `sb_secret_` key-format fix). The four numbered runs
 use a fake Google client that records every call — and, since round 2b, which calendar each call
 was addressed to — plus an in-memory mirror carried from run to run, so "zero writes on a
 re-run" is asserted as `deepEqual(calls, [])` rather than as a count, and the repoint test
@@ -347,18 +362,31 @@ the client id (public by design) and never the client secret, which is asserted 
 PostgREST failures are reported as `METHOD path -> HTTP status` with no response body, because
 the body can echo the request.
 
-## 9. Live proof: pending Stack's Google setup
+## 9. Live proof — done, 2026-09-15
 
-**State on prod at the time of writing:** `gcal_enabled = false`, `gcal_dirty = false`,
-`gcal_calendar_id = c_2dd6f03f…@group.calendar.google.com` (already present — written outside
-this worktree, so Stack has created the calendar and someone has recorded its id), and
-`select count(*) from vault.decrypted_secrets` = **0**. So setup steps 1–3 look done and **step 4
-— `node scripts/google-consent.mjs` — has not been run**. Nothing can be pushed until it is; the
-tick says so in its own run row rather than failing silently.
+Stack completed the Google setup (`node scripts/google-consent.mjs`, four secrets in Vault) and
+the PM set `gcal_enabled = true`. Everything below happened against his real
+`c_2dd6f03f…@group.calendar.google.com` calendar. Run 9 is the pre-setup run the tick recorded
+as `failed` because the Vault secret was missing — exactly the visible-failure behaviour §5
+describes, left in the log on purpose.
 
-Runs 1–3 below are for the PM once Stack reports step 4 done. Each is a `calendar_push_now()`
-followed by reading the run row; the cron job fires within two minutes, or
-`select calendar_push_tick();` fires it at once.
+| run | trigger | what changed first | counts | status |
+|---|---|---|---|---|
+| 9 | scheduled | — (setup half done) | `{}` | `failed`: *calendar_push_secret is not in Vault* |
+| **10** | scheduled | nothing (first real push) | scanned 64, **inserted 62**, unchanged 0, deleted 0, failed 0 | `ok` |
+| **11** | scheduled | nothing | scanned 64, inserted 0, patched 0, deleted 0, **unchanged 62** | `ok` |
+| **12** | scheduled | `ECN.304/exam-1` due_date +1 day; `ECN.304/exam-2` due_date set null | scanned 63, **patched 1**, **deleted 1**, unchanged 60 | `ok` |
+| **13** | scheduled | both facts restored | scanned 64, **patched 2**, inserted 0, unchanged 60 | `ok` |
+| **14** | scheduled | v3 deployed (R3-1 repair) | scanned 64, **patched 62**, inserted 0, deleted 0, failed 0 | `ok` |
+| **15** | scheduled | nothing (re-run after the repair) | scanned 64, inserted 0, patched 0, deleted 0, **unchanged 62** | `ok` |
+
+Runs 10–12 are the definition of done's three proofs: N inserts on an empty mirror, **zero
+Google writes** on a re-run of unchanged data, and exactly one patch plus one delete after one
+date moved and one lost its date. Run 13 is where R3-1 surfaced — see §9.5. The SITN event is
+on the calendar at **2026-11-04T15:45 America/New_York** with `colorId 11` (IST.323, Tomato),
+which is R-16's date and §7's map, both confirmed by eye on Google.
+
+The commands below are the ones that were run, kept so the next person can repeat them.
 
 ### 9.0 Preconditions
 
@@ -383,9 +411,10 @@ select count(*) as desired_rows from v_calendar_push_items where not absent_from
 ```
 
 Expect `status = 'ok'`, `counts.inserted = counts.scanned - <absent rows>`, `counts.unchanged =
-0`, `counts.failed = 0`, and `mirror_rows = desired_rows`. As of 2026-09-15, after 065/066,
-that is **62** (64 view rows less the 2 absent of §4.1) — re-read both numbers at the time, a
-sync in between will move them.
+0`, `counts.failed = 0`, and `mirror_rows = desired_rows`.
+
+**Actual (run 10):** `ok`, scanned 64, inserted **62**, unchanged 0, deleted 0, failed 0;
+`mirror_rows` 62 = 64 view rows less the 2 absent of §4.1.
 
 ### 9.2 Run 2 — idempotency
 
@@ -397,6 +426,9 @@ select id, status, counts from calendar_push_runs order by id desc limit 1;
 
 Expect `status = 'ok'` and `counts` with `inserted = 0, patched = 0, deleted = 0` and
 `unchanged` equal to run 1's `inserted`. **Zero Google writes.**
+
+**Actual (run 11):** `ok`, scanned 64, inserted 0, patched 0, deleted 0, **unchanged 62**,
+failed 0. Not one Calendar API write.
 
 ### 9.3 Run 3 — one date change, one deletion
 
@@ -413,6 +445,11 @@ select id, status, counts from calendar_push_runs order by id desc limit 1;
 Expect exactly `patched = 1` and, for the undated/deleted row, `deleted = 1`, everything else
 `unchanged`. The `assignments_mark_calendar_dirty` trigger sets `gcal_dirty` on those updates by
 itself, so `calendar_push_now()` is belt and braces.
+
+**Actual (run 12):** `ok`, scanned **63** (the undated row left the view), **patched 1**,
+**deleted 1**, unchanged 60, failed 0. The two facts used were `ECN.304/exam-1` (due_date +1
+day) and `ECN.304/exam-2` (due_date set null); both were restored immediately afterwards, which
+is run 13.
 
 ### 9.4 The Google-side count
 
@@ -445,6 +482,51 @@ GET https://www.googleapis.com/calendar/v3/calendars/<calendar id>/events
 
 Record the count after run 1 and again after run 2; they must be identical, which together with
 run 2's all-zero write counts is the idempotency proof the definition of done asks for.
+
+**Actual:** **61** after run 13 against 62 mirror rows — the one-event gap that is R3-1 — and
+**62** after the v3 repair run 14, matching the mirror exactly.
+
+### 9.5 R3-1: a re-added item came back invisible, and the repair
+
+Run 13 restored the two facts run 12 had changed and reported **patched 2, inserted 0**, where
+**patched 1 + inserted 1** was expected: `ECN.304/exam-2` had been deleted from Google in run 12
+and should have been created afresh. It was patched instead, and the Google-side count stayed at
+61 while the mirror said 62.
+
+**Why.** Deleting a Google event does not free its id — the row survives with
+`status: "cancelled"`, invisible in the UI and excluded from `events.list`. When the assignment
+came back the mirror had forgotten it, so the pusher inserted; Google answered **409** because
+the cancelled id was still taken; the 409 fallback patched it; and a patch that says nothing
+about `status` leaves it cancelled. The mirror recorded a successful push of an event nobody can
+see. Nothing in the diff would ever have noticed: on the next run the hash matches and no call
+is made.
+
+**The fix (v3, `google.ts`).** `status: "confirmed"` is part of the canonical event body, so
+*every* write — insert, hash-change patch, 409 fallback — restores the event. The alternative,
+adding `status` only on the 409 path, keeps the hash stable but fixes exactly the one case we
+happened to think of; a cancelled event reached by any other patch would stay invisible. Putting
+it in the body costs **one** re-patch of the whole set, because every content hash moves once.
+
+Two tests cover it (§6): delete-then-re-add asserts the second run's fake client sees an insert
+answered 409 and then a patch whose body carries `status: "confirmed"`, and a second test
+asserts every body written by any path carries it.
+
+**The repair run**, fired by W-21 after deploying v3:
+
+```sql
+select calendar_push_now();
+select calendar_push_tick();     -- {"fired": true, "reaped": 0, "run_id": 14}
+select id, status, counts, finished_at from calendar_push_runs where id = 14;
+```
+
+Run 14: `ok`, scanned 64, **patched 62**, inserted 0, deleted 0, failed 0, finished in 33 s; all
+62 mirror rows `state = 'live'`; the lock released (`gcal_push_request_id` and
+`gcal_push_run_id` both null) and `gcal_dirty` false. That is the predicted one-time re-patch,
+and it doubles as the repair: the Google-side count went **61 → 62**.
+
+No further re-patch follows, and that was checked rather than assumed: **run 15**, fired
+immediately after with nothing changed, reported scanned 64, **unchanged 62** and zero writes.
+The hash moved once, with this deployment, and idempotency is intact on the other side of it.
 
 ## 10. Deviations from the Contract, and why
 
@@ -507,12 +589,13 @@ are graded Blackboard items. No change to the view.
 
 ## 12. What is still open
 
-- Stack's setup step 4 (`node scripts/google-consent.mjs`) — Vault holds no secrets yet.
+Done since round 1: Stack's setup step 4, the PM's `gcal_enabled = true`, and the whole of
+§9.1–9.5 — 62 events live on the calendar, Google-side count matching the mirror.
+
 - **Duplicate `bb_item_id`** (§4.1): `IST.323/fp-proposal` and `IST.323/fp-log-final` share
   `_12983388_1` / `_3569973_1`, `stage_assignments` re-stamps neither, and both are therefore
-  reported absent and will not be pushed. A Phase 9 staging question; Phase 11 does not edit
-  Phase 9 functions.
-- The PM flips `gcal_enabled = true` afterwards and walks §9.1–9.4.
+  reported absent and are not pushed — the two rows behind "scanned 64, 62 pushed". A Phase 9
+  staging question; Phase 11 does not edit Phase 9 functions.
 - `web/src/lib/supabase/database.types.ts` is regenerated by the PM at integration; W-21 did not
   touch `web/`.
 - R-16's two group-item dates are the PM's Inbox resolutions, not a migration (Contract § R-16).

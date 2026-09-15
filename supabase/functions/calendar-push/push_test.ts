@@ -112,6 +112,8 @@ interface Call {
   id: string;
   /** R2b-5: which calendar the call was addressed to, not just which event. */
   calendarId: string;
+  /** R3-1: the body Google was sent, so a test can assert it carries status confirmed. */
+  body?: CalendarEventBody;
 }
 
 function fakeGoogle(
@@ -132,11 +134,11 @@ function fakeGoogle(
     calls,
     client: {
       insert(calendarId, body) {
-        calls.push({ op: "insert", id: body.id, calendarId });
+        calls.push({ op: "insert", id: body.id, calendarId, body });
         return Promise.resolve(next("insert", ok(200, '"inserted"')));
       },
-      patch(calendarId, eventId) {
-        calls.push({ op: "patch", id: eventId, calendarId });
+      patch(calendarId, eventId, body) {
+        calls.push({ op: "patch", id: eventId, calendarId, body });
         return Promise.resolve(next("patch", ok(200, '"patched"')));
       },
       remove(calendarId, eventId) {
@@ -374,6 +376,7 @@ test("event ids are deterministic and match migration 060's calendar_event_id()"
 test("every event carries app=bb2dash, the course code first, and zero length", () => {
   for (const source of baseDesired()) {
     const body = buildEventBody(source, "bbdeadbeef", WEB_BASE);
+    assert.equal(body.status, "confirmed");
     assert.equal(body.extendedProperties.private.app, APP_PROPERTY);
     assert.equal(body.extendedProperties.private.assignment_id, source.assignment_id);
     assert.ok(body.summary.startsWith(source.course_code + " · "));
@@ -745,4 +748,92 @@ test("the bb2dash link uses the injected origin, trailing slash and all", async 
   // deployment moves every content_hash and therefore patches every event exactly once.
   const elsewhere = buildEventBody(source, "bbx", "https://bb2dash.other");
   assert.notEqual(await contentHash(plain), await contentHash(elsewhere));
+});
+
+// ------------------------------------------------------------------------------------------
+// R3-1 — an item that comes back after being deleted
+// ------------------------------------------------------------------------------------------
+
+test("an item deleted and then re-added is un-cancelled, not silently invisible", async () => {
+  const { store, rows } = memoryStore();
+  const only = baseDesired()[0];
+
+  // A. the item is pushed for the first time.
+  await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: [only],
+    mirror: [],
+    google: fakeGoogle().client,
+    store,
+    sleep: noSleep,
+  });
+  assert.equal(rows.size, 1);
+
+  // B. it leaves the desired set and the event is deleted. Google keeps the id, in status
+  //    "cancelled" — which is why C cannot simply insert it again.
+  const removed = fakeGoogle();
+  await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: [],
+    mirror: [...rows.values()],
+    google: removed.client,
+    store,
+    sleep: noSleep,
+  });
+  assert.deepEqual(removed.calls.map((c) => c.op), ["delete"]);
+  assert.equal(rows.size, 0);
+
+  // C. it comes back. The mirror has forgotten it, so the pusher inserts; Google answers 409
+  //    because the cancelled id is still taken, and the fallback patch has to say
+  //    status: "confirmed" or the event stays invisible for ever.
+  const back = fakeGoogle({ insert: [{ status: 409, etag: null, error: "HTTP 409: duplicate" }] });
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: [only],
+    mirror: [...rows.values()],
+    google: back.client,
+    store,
+    sleep: noSleep,
+  });
+
+  assert.deepEqual(back.calls.map((c) => c.op), ["insert", "patch"]);
+  const patched = back.calls[1];
+  assert.equal(patched.id, await calendarEventId(only.assignment_id));
+  assert.equal(patched.body?.status, "confirmed", "the 409 fallback must un-cancel the event");
+  assert.equal(result.counts.patched, 1);
+  assert.equal(result.counts.failed, 0);
+  assert.equal(rows.size, 1);
+});
+
+test("every write carries status confirmed, insert and patch alike", async () => {
+  const { store, rows } = memoryStore();
+  const first = fakeGoogle();
+  await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: baseDesired(),
+    mirror: [],
+    google: first.client,
+    store,
+    sleep: noSleep,
+  });
+
+  const moved = baseDesired().map((i) => ({ ...i, event_at: "2026-12-01T05:00:00+00:00" }));
+  const second = fakeGoogle();
+  await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: moved,
+    mirror: [...rows.values()],
+    google: second.client,
+    store,
+    sleep: noSleep,
+  });
+
+  const bodies = [...first.calls, ...second.calls].filter((c) => c.body);
+  assert.equal(bodies.length, 8);
+  assert.ok(bodies.every((c) => c.body?.status === "confirmed"));
 });
