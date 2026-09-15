@@ -141,10 +141,15 @@ export function readEnv(env = process.env) {
 // Side-effecting parts
 // ---------------------------------------------------------------------------------------------
 
-/** Best effort. The URL also goes to stderr, so a shell with no browser can finish by hand. */
+/**
+ * Best effort. The URL also goes to stderr, so a shell with no browser can finish by hand.
+ * On Windows the URL is handed to explorer.exe, never to `cmd /c start`: cmd treats every `&`
+ * in the query string as a command separator, so Google received only `client_id=…` and
+ * answered "Required parameter is missing: response_type" (seen live, 2026-09-15).
+ */
 function openBrowser(url) {
   const [command, args] = process.platform === "win32"
-    ? ["cmd", ["/c", "start", "", url]]
+    ? ["explorer.exe", [url]]
     : process.platform === "darwin"
     ? ["open", [url]]
     : ["xdg-open", [url]];
