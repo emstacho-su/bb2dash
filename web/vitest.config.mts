@@ -33,7 +33,11 @@ export default defineConfig({
       // shell — keyboard plumbing, debounce, router navigation — is not, and
       // counting it would report a number that describes nothing. Widen this
       // list as screens get covered, rather than lowering the bar.
-      include: ['src/lib/queries.search.ts', 'src/lib/queries.sync.ts'],
+      include: [
+        'src/lib/queries.search.ts',
+        'src/lib/queries.sync.ts',
+        'src/lib/queries.grades.ts',
+      ],
     },
   },
 });
