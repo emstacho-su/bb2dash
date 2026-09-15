@@ -445,13 +445,12 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
         </div>
       </section>
 
-      <section className={styles.block}>
-        <SubmissionBlock
-          assignmentId={assignmentId}
-          courseId={assignment.course_id}
-          blackboardUrl={course?.bb_url ?? null}
-        />
-      </section>
+      {/* Its own <section>; the popout's `.block` spacing lives inside it. */}
+      <SubmissionBlock
+        assignmentId={assignmentId}
+        courseId={assignment.course_id}
+        blackboardUrl={course?.bb_url ?? null}
+      />
 
       <div className={styles.footer}>
         <span className={styles.footerLinks}>

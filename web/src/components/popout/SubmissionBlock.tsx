@@ -134,7 +134,7 @@ export function SubmissionBlock({
   const submittedShas = pulledBack.map((file) => file.sha256);
 
   return (
-    <section className={styles.block}>
+    <section className={styles.block} aria-label="Submission">
       <div className={styles.head}>
         <span className={tokens.kicker}>Submission</span>
         <span className={styles.note}>
