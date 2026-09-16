@@ -468,9 +468,9 @@ Source: Stack's answers (`70_MVP_INDEX.md` §1.4 and the 2026-09-16 answers abov
       explanation and the zeros / best-case line; (3) type a hypothetical on an ungraded item, watch
       the standing move, reload, it is still there, revert the row, then Reset scenario; (4) pick a
       target letter and read the average needed, then one out of reach and one already secured;
-      (5) ECN.304: hypotheticals on Exam 1 and Exam 2 (placeholder rows) re-order the rank weights
-      and move the standing; (6) IST.466: Major Cases shows as left out, confirm one major-case
-      link with the picker and see it counted; (7) open a row's history. All seven ticked.
+      (5) ECN.304: percentage hypotheticals on Exam 1 and Exam 2 (placeholder rows, amendment A1)
+      re-order the rank weights and move the standing; (6) IST.466: Major Cases shows as left out, confirm both major-case
+      links with the picker and see Major Cases counted; (7) open a row's history. All seven ticked.
 - [ ] All live methods implemented (`weighted_pct`, `points` with `graded_out_of` and extra
       credit, `rank_weighted`, `average_drop_lowest`, `normalized`, `sum` with children, `single`,
       `average`, `manual` from linked scores); `qualitative` / `unknown` / unscored `manual` return
@@ -538,6 +538,24 @@ to the phase branch or `main`, and never touch `project-state/`.
   `51_W10_VERIFICATION.md`: migration versions + md5, SQL test output, RLS check, advisor diff).
   Until W-19 lands, container tests use a fake `projectCourse` returning typed `ModelResult`
   fixtures.
+
+## Round 1b — Contract amendments from the build (PM, 2026-09-16)
+
+W-20 finished first (migrations 057 `20260916202757`, 058 `20260916202956`, md5s match prod;
+`68a_W20_VERIFICATION.md`) and reported three things the frozen Contract could not deliver on
+today's data. `types.ts` and `labels.ts` do not change.
+
+| # | Finding | Amendment | Owner | Check |
+|---|---|---|---|---|
+| A1 | 21 placeholders have **no `possible`** (V-1's data): ECN.304 Exams 1–3, GEO 103 exams, IST.323 Quizzes 4–10, … They are bookkeeping, so they get no what-if cell and acceptance step 5 has nothing to type in | A placeholder with `possible` null, a **`confirmed`** link, and a component whose aggregation uses fractions only (`single`, `average`, `average_drop_lowest`, `rank_weighted`, `normalized`) takes a what-if **as a percentage**: the scenario stores `v` (`0 ≤ v ≤ 100`) under its key and the engine uses `f = v / 100`. Without a value it stays bookkeeping (the aggregation's slots already cover it). `sum` placeholders with no points (IST.323 `fp-packet`, IST.352 `term-project`) and unconfirmed series placeholders stay bookkeeping | W-19 engine, W-20 cell ("what if __ %") | L1: ECN.304 exams 90 / 70 typed → rank order and standing as hand-computed; `sum` placeholder with no points ignores a scenario value; RTL: percent cell on a pointless confirmed placeholder only, validation 0–100 |
+| A2 | The picker showed only on **scored** unlinked columns: IST.323's proposal column (tied to two rows) and IST.352 Project #2A / #3 cannot be linked before they are scored, so no what-if reaches them | The picker shows on every gradebook column with `possible > 0` that is **unlinked (scored or not)**, has an **unsure** link, or already has an **override** | W-20 | RTL: unscored unlinked column shows the picker; zero-point column does not |
+| A3 | A part stays left out while **any** counted item is unsure; IST.466 has two unsure major-case columns | Acceptance step (6) reads "confirm **both** major-case links and see Major Cases counted" | PM | brief text |
+
+Accepted as W-20 built them (the Contract was silent): `/grades` model data in
+`GradesModelScreen.tsx`; "Not graded" is an override and counts as confirmed; the picker also on
+columns Stack already linked, so a choice can be undone; a "Confirm link" button for an unsure
+link; a link write sends both `component_id` and `excluded`; 057 adds an index on `component_id`
+and `updated_at` triggers; display formatting and control labels in `grade-model-format.ts`.
 
 ## Integration (PM)
 
