@@ -21,7 +21,7 @@ const PERCENT_AGGREGATIONS: ReadonlySet<Aggregation> = new Set<Aggregation>([
   'rank_weighted',
   'normalized',
 ]);
-const PERCENT_POSSIBLE = 100;
+export const PERCENT_POSSIBLE = 100;
 
 /** An item that enters arithmetic: possible > 0, not exempt, not excluded. */
 export interface CountedItem {
@@ -50,7 +50,7 @@ export function isCounted(item: ItemInput): boolean {
   return !isBookkeeping(item) && !item.exempt && !item.excluded;
 }
 
-function realScoreOf(item: ItemInput): number | null {
+export function realScoreOf(item: ItemInput): number | null {
   return item.score !== null && Number.isFinite(item.score) ? item.score : null;
 }
 
@@ -110,10 +110,14 @@ function isPercentPlaceholder(
   scenario: Scenario,
   aggregationOf: ReadonlyMap<number, Aggregation>,
 ): boolean {
-  if (item.kind !== 'placeholder' || item.possible !== null || item.exempt || item.excluded) return false;
   const aggregation = item.componentId === null ? undefined : aggregationOf.get(item.componentId);
-  if (aggregation === undefined || !PERCENT_AGGREGATIONS.has(aggregation) || !isConfirmedLink(item)) return false;
-  return scenarioValueFor(item, PERCENT_POSSIBLE, scenario) !== null;
+  return takesPercentValue(item, aggregation) && scenarioValueFor(item, PERCENT_POSSIBLE, scenario) !== null;
+}
+
+/** A1's shape test, without the scenario: `aggregation` is the linked leaf component's, if any. */
+export function takesPercentValue(item: ItemInput, aggregation: Aggregation | undefined): boolean {
+  if (item.kind !== 'placeholder' || item.possible !== null || item.exempt || item.excluded) return false;
+  return aggregation !== undefined && PERCENT_AGGREGATIONS.has(aggregation) && isConfirmedLink(item);
 }
 
 /** Every counted item, in input order, with its effective score. */

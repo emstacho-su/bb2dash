@@ -8,10 +8,10 @@
 
 import { checkComputable, notComputed } from './checks';
 import { evaluateNode, flattenOutcomes, type NodeOutcome } from './evaluate';
-import { countedItems, itemsByComponent } from './items';
 import { letterForPct } from './letter';
 import { sum } from './math';
-import { buildForest, mutedCap, type ComponentNode, type ComputableMethod } from './tree';
+import { prepareItems } from './prepare';
+import { mutedCap, type ComponentNode, type ComputableMethod } from './tree';
 import type {
   ComponentInput,
   ComponentResult,
@@ -50,8 +50,7 @@ export interface CourseEvaluation {
 }
 
 export function prepareModel(input: ModelInput, scheme: SchemeInput, method: ComputableMethod): PreparedModel {
-  const byComponent = itemsByComponent(input.components, countedItems(input.items, input.scenario, input.components));
-  const roots = buildForest(method, input.components, byComponent);
+  const { roots } = prepareItems(input, input.scenario, method);
   const regular = roots.filter((root) => !root.extraCredit);
   const nominal = sum(regular.map((root) => root.nominalCap));
   const wholeCourse = method === 'weighted_pct' ? nominal : (scheme.gradedOutOf ?? scheme.totalPoints ?? nominal);

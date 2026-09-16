@@ -4,7 +4,8 @@
  * Pure and deterministic: no I/O, no clock, no mutation of its input. The
  * signatures are the frozen Contract (`docs/planning/68_PHASE10B_grade_model.md`
  * §Engine); the implementation lives in the modules beside this file:
- * `items.ts` (counted items, what-if values, placeholders), `tree.ts`
+ * `items.ts` (counted items, what-if values, placeholders), `prepare.ts` (the
+ * shared item preparation), `states.ts` (`itemStates`), `tree.ts`
  * (children, muting, capacity), `aggregations/` (one module per rule),
  * `evaluate.ts` + `project.ts` (projections and standings), `checks.ts`
  * (order of checks), `letter.ts`, `agreement.ts`, `solve.ts`.
@@ -15,6 +16,7 @@ import { unlinkedScoredKeys } from './items';
 import { letterForPct } from './letter';
 import { componentResults, evaluateCourse, standingsOf, usesHypotheticals } from './project';
 import { solve } from './solve';
+import { itemStatesOf } from './states';
 import type { ItemStates, ModelInput, ModelResult, SchemeInput, TargetResult } from './types';
 
 export * from './types';
@@ -42,8 +44,7 @@ export function letterFor(pct: number, scheme: SchemeInput): string | null {
   return letterForPct(pct, scheme);
 }
 
-/** Round 2 (R2-3/R2-4). Frozen signature; W-19 replaces the stub body. */
+/** Round 2 (R2-3/R2-4): what-if targets, muted components and dropped placeholders, from the engine's own preparation. */
 export function itemStates(input: ModelInput): ItemStates {
-  void input;
-  throw new Error('grade-model: itemStates not implemented (W-19 round 2)');
+  return itemStatesOf(input);
 }
