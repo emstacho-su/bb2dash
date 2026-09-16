@@ -12,8 +12,9 @@
  * read carries one documented cast to the hand-narrowed Contract shape.
  *
  * WRITES — exactly two tables, both Stack's own state from migration 057:
- * `grade_scenarios` (what-if values and the target letter) and
- * `grade_column_links` ("Counts toward…" / "Not graded"). Nothing here writes
+ * `grade_scenarios` (what-if values and the target letter, in
+ * `queries.grade-scenario.ts` since round 2) and `grade_column_links`
+ * ("Counts toward…" / "Not graded", here). Nothing here writes
  * `assignments`, `assignment_progress`, `bb_gradebook`, `grading_schemes` or
  * `grade_components`; `web/test/grade-model.audits.test.ts` greps for it.
  */
@@ -82,12 +83,20 @@ function toScenarioRow(row: {
   };
 }
 
-/** Group the bulk reads by scheme course, preserving each list's order. */
+/**
+ * Group the bulk reads by scheme course, preserving each list's order. One
+ * pass over a local map (R2-14: the spread-per-row reduce was quadratic), and a
+ * new object out — the input is never touched.
+ */
 export function groupByCourse<T>(rows: readonly T[], courseOf: (row: T) => string): Record<string, T[]> {
-  return rows.reduce<Record<string, T[]>>(
-    (acc, row) => ({ ...acc, [courseOf(row)]: [...(acc[courseOf(row)] ?? []), row] }),
-    {},
-  );
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const course = courseOf(row);
+    const list = groups.get(course);
+    if (list) list.push(row);
+    else groups.set(course, [row]);
+  }
+  return Object.fromEntries(groups);
 }
 
 /* ---------------------------------------------------------------------------
@@ -101,13 +110,12 @@ export function gradingSchemeOptions(schemeCourseId: string | null) {
     queryFn: async (): Promise<GradeSchemeBundle> => {
       const supabase = getSupabaseBrowserClient();
       const id = schemeCourseId as string;
-      const schemeRes = await supabase.from('grading_schemes').select(SCHEME_COLUMNS).eq('course_id', id).maybeSingle();
+      // The two reads are independent: in parallel (R2-14).
+      const [schemeRes, compRes] = await Promise.all([
+        supabase.from('grading_schemes').select(SCHEME_COLUMNS).eq('course_id', id).maybeSingle(),
+        supabase.from('grade_components').select(COMPONENT_COLUMNS).eq('course_id', id).order('id', { ascending: true }),
+      ]);
       if (schemeRes.error) throw schemeRes.error;
-      const compRes = await supabase
-        .from('grade_components')
-        .select(COMPONENT_COLUMNS)
-        .eq('course_id', id)
-        .order('id', { ascending: true });
       if (compRes.error) throw compRes.error;
       return { scheme: schemeRes.data ?? null, components: compRes.data ?? [] };
     },
@@ -200,21 +208,20 @@ export function gradingSchemesForCoursesOptions(ids: readonly string[]) {
     queryKey: gradeModelKeys.schemesFor(ids),
     queryFn: async (): Promise<Record<string, GradeSchemeBundle>> => {
       const supabase = getSupabaseBrowserClient();
-      const schemeRes = await supabase.from('grading_schemes').select(SCHEME_COLUMNS).in('course_id', ids as string[]);
+      const [schemeRes, compRes] = await Promise.all([
+        supabase.from('grading_schemes').select(SCHEME_COLUMNS).in('course_id', ids as string[]),
+        supabase
+          .from('grade_components')
+          .select(COMPONENT_COLUMNS)
+          .in('course_id', ids as string[])
+          .order('id', { ascending: true }),
+      ]);
       if (schemeRes.error) throw schemeRes.error;
-      const compRes = await supabase
-        .from('grade_components')
-        .select(COMPONENT_COLUMNS)
-        .in('course_id', ids as string[])
-        .order('id', { ascending: true });
       if (compRes.error) throw compRes.error;
-      const schemes: GradingSchemeRow[] = schemeRes.data ?? [];
+      const schemes = new Map<string, GradingSchemeRow>((schemeRes.data ?? []).map((s) => [s.course_id, s]));
       const components = groupByCourse<GradeComponentRow>(compRes.data ?? [], (c) => c.course_id);
       return Object.fromEntries(
-        ids.map((id) => [id, {
-          scheme: schemes.find((s) => s.course_id === id) ?? null,
-          components: components[id] ?? [],
-        }]),
+        ids.map((id) => [id, { scheme: schemes.get(id) ?? null, components: components[id] ?? [] }]),
       );
     },
     enabled: ids.length > 0,
@@ -292,103 +299,6 @@ export const useGradeScenariosForCourses = (ids: readonly string[]) =>
 /* ---------------------------------------------------------------------------
  * Writes
  * ------------------------------------------------------------------------ */
-
-export interface SaveScenarioVars {
-  /** The scheme course (GEO 103: the lecture shell). */
-  courseId: string;
-  itemScores: Readonly<Record<string, number>>;
-  targetLetter: string | null;
-}
-
-/**
- * Boundary check before a scenario write. The database refuses a non-number or
- * a negative score too (057's check); refusing here means the owner sees why
- * instead of a constraint name. The upper bound needs the item's possible, so
- * the what-if cell enforces it before it ever calls a save.
- */
-export function validateScenario(vars: SaveScenarioVars): SaveScenarioVars {
-  if (!vars.courseId) throw new Error('No course to save the scenario against.');
-  for (const [key, value] of Object.entries(vars.itemScores)) {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-      throw new Error(`The what-if value for ${key} must be a number of 0 or more.`);
-    }
-  }
-  const letter = vars.targetLetter?.trim() ?? null;
-  if (letter !== null && (letter.length < 1 || letter.length > 3)) {
-    throw new Error('A target letter is one to three characters.');
-  }
-  return { courseId: vars.courseId, itemScores: { ...vars.itemScores }, targetLetter: letter };
-}
-
-type ScenarioSnapshot = { key: readonly unknown[]; previous: GradeScenarioRow | null | undefined };
-
-/** Invalidate both scenario caches: this course's and /grades' bulk read. */
-function invalidateScenarios(queryClient: ReturnType<typeof useQueryClient>) {
-  void queryClient.invalidateQueries({ queryKey: ['grade-model', 'scenario'] });
-  void queryClient.invalidateQueries({ queryKey: ['grade-model', 'scenarios-for'] });
-}
-
-/**
- * Upsert the course's one scenario row. Optimistic: the cache takes the new
- * row at once, so the standing moves as soon as a value is committed (on blur
- * or Enter — the cell never calls this per keystroke), and a failed write puts
- * the previous row back.
- */
-export function useSaveScenario() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (vars: SaveScenarioVars): Promise<void> => {
-      const clean = validateScenario(vars);
-      const { error } = await getSupabaseBrowserClient()
-        .from('grade_scenarios')
-        .upsert(
-          { course_id: clean.courseId, item_scores: clean.itemScores, target_letter: clean.targetLetter },
-          { onConflict: 'course_id' },
-        );
-      if (error) throw error;
-    },
-    onMutate: async (vars: SaveScenarioVars): Promise<ScenarioSnapshot> => {
-      const key = gradeModelKeys.scenario(vars.courseId);
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<GradeScenarioRow | null>(key);
-      const next: GradeScenarioRow = {
-        course_id: vars.courseId,
-        item_scores: { ...vars.itemScores },
-        target_letter: vars.targetLetter,
-        updated_at: previous?.updated_at ?? new Date().toISOString(),
-      };
-      queryClient.setQueryData<GradeScenarioRow | null>(key, next);
-      return { key, previous };
-    },
-    onError: (_error, _vars, context) => {
-      if (context) queryClient.setQueryData(context.key, context.previous);
-    },
-    onSettled: () => invalidateScenarios(queryClient),
-  });
-}
-
-/** Delete the course's scenario row: every what-if value and the target letter. */
-export function useResetScenario() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ courseId }: { courseId: string }): Promise<void> => {
-      if (!courseId) throw new Error('No course to reset.');
-      const { error } = await getSupabaseBrowserClient().from('grade_scenarios').delete().eq('course_id', courseId);
-      if (error) throw error;
-    },
-    onMutate: async ({ courseId }: { courseId: string }): Promise<ScenarioSnapshot> => {
-      const key = gradeModelKeys.scenario(courseId);
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<GradeScenarioRow | null>(key);
-      queryClient.setQueryData<GradeScenarioRow | null>(key, null);
-      return { key, previous };
-    },
-    onError: (_error, _vars, context) => {
-      if (context) queryClient.setQueryData(context.key, context.previous);
-    },
-    onSettled: () => invalidateScenarios(queryClient),
-  });
-}
 
 export interface LinkColumnVars {
   /** The shell the column lives in — not the scheme course. */

@@ -4,15 +4,15 @@
  * real QueryClient and an in-memory Supabase stand-in whose `v_grade_model_items`
  * applies `grade_column_links` the way migration 058 does.
  *
- * The engine is the real one when W-19's implementation is present and the
- * Contract-shaped fake otherwise (`fake-grade-model.ts`); every assertion here
- * holds for both.
+ * The engine is the real one (round 2, R2-16): no fake stands in for it, so a
+ * missing or broken engine fails these tests instead of hiding behind one.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GradeModelItemRow } from '@/lib/grade-model-input';
+import type { GradeComponentRow, GradeModelItemRow, GradingSchemeRow } from '@/lib/grade-model-input';
+import type { GradebookLatestRow } from '@/lib/queries.grades';
 import { makeGradebookRow } from './factories.grades';
 import {
   ECN304_EXAM1_PLACEHOLDER,
@@ -34,6 +34,8 @@ interface LinkRow { course_id: string; column_id: string; component_id: number |
 const db = vi.hoisted(() => ({
   scenarios: new Map<string, ScenarioRow>(),
   links: new Map<string, LinkRow>(),
+  /** `relation:op` → the error message that write returns instead of succeeding. */
+  failures: new Map<string, string>(),
 }));
 
 /**
@@ -52,12 +54,36 @@ const ETHICS_PRACTICE_PLACEHOLDER: GradeModelItemRow = {
   name: 'Ethics Practice 2',
 };
 
-const BASE_ITEMS: GradeModelItemRow[] = [makeItem(), IST466_SYNCHRONY, IST466_LETTER_PLACEHOLDER, ETHICS_PRACTICE_PLACEHOLDER];
 const ETHICS_KEY = 'col:IST.466:_3562497_1';
+
+/** One course's rows, as the stand-in database serves them. */
+interface CourseFixture {
+  readonly id: string;
+  readonly code: string;
+  readonly scheme: GradingSchemeRow;
+  readonly components: readonly GradeComponentRow[];
+  readonly items: readonly GradeModelItemRow[];
+  readonly gradebook: readonly GradebookLatestRow[];
+}
+
+const IST466_FIXTURE: CourseFixture = {
+  id: 'IST.466',
+  code: 'IST 466',
+  scheme: IST466_SCHEME,
+  components: [...IST466_COMPONENTS, ETHICS_PRACTICE_2],
+  items: [makeItem(), IST466_SYNCHRONY, IST466_LETTER_PLACEHOLDER, ETHICS_PRACTICE_PLACEHOLDER],
+  gradebook: [
+    makeGradebookRow({ course_id: 'IST.466', column_id: '_3562497_1', name: 'Ethics Case Presentation', possible: 100, assignment_id: null }),
+    makeGradebookRow({ course_id: 'IST.466', column_id: '_3562496_1', name: 'Synchrony Major Case #1', possible: 150, assignment_id: null }),
+  ],
+};
+
+/** The course the tab is showing; each describe may swap it in its own beforeEach. */
+let course: CourseFixture = IST466_FIXTURE;
 
 /** 058's override rule, applied to the base rows. */
 function modelItems(): GradeModelItemRow[] {
-  return BASE_ITEMS.map((item) => {
+  return course.items.map((item) => {
     const link = item.column_id ? db.links.get(`${item.shell_course_id}:${item.column_id}`) : undefined;
     if (!link) return item;
     return {
@@ -74,8 +100,8 @@ type Filters = Record<string, string>;
 
 function read(relation: string, filters: Filters): unknown {
   switch (relation) {
-    case 'grading_schemes': return IST466_SCHEME;
-    case 'grade_components': return [...IST466_COMPONENTS, ETHICS_PRACTICE_2];
+    case 'grading_schemes': return course.scheme;
+    case 'grade_components': return course.components;
     case 'v_grade_model_items': return modelItems();
     case 'v_grade_model_total': return null;
     case 'v_gradebook_history': return [];
@@ -104,6 +130,8 @@ function builder(relation: string) {
   let payload: Record<string, unknown> | null = null;
   const settle = () => {
     if (op === 'select') return { data: read(relation, filters), error: null };
+    const failure = db.failures.get(`${relation}:${op}`);
+    if (failure) return { data: null, error: new Error(failure) };
     write(relation, op, payload, filters);
     return { data: null, error: null };
   };
@@ -125,7 +153,7 @@ function builder(relation: string) {
       return chain;
     },
     maybeSingle: () => Promise.resolve(settle()),
-    then: (resolve: (value: { data: unknown; error: null }) => unknown) => Promise.resolve(settle()).then(resolve),
+    then: (resolve: (value: { data: unknown; error: Error | null }) => unknown) => Promise.resolve(settle()).then(resolve),
   };
   return chain;
 }
@@ -138,16 +166,6 @@ vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock('@/lib/grade-model', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/grade-model')>();
-  const fake = await import('./fake-grade-model');
-  return {
-    ...actual,
-    projectCourse: fake.engineOrFake(actual.projectCourse, fake.fakeProjectCourse),
-    solveTarget: fake.engineOrFake(actual.solveTarget, fake.fakeSolveTarget),
-  };
-});
-
 /* ---------------------------------------------------------------------------
  * The 10a hooks the tab also calls, stubbed
  * ------------------------------------------------------------------------ */
@@ -156,22 +174,17 @@ function stub<T>(data: T) {
   return { data, isPending: false, isFetching: false, isError: false, error: null };
 }
 
-const GRADEBOOK = [
-  makeGradebookRow({ course_id: 'IST.466', column_id: '_3562497_1', name: 'Ethics Case Presentation', possible: 100, assignment_id: null }),
-  makeGradebookRow({ course_id: 'IST.466', column_id: '_3562496_1', name: 'Synchrony Major Case #1', possible: 150, assignment_id: null }),
-];
-
 vi.mock('@/lib/queries.course', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/queries.course')>();
   return {
     ...actual,
     useCourseDisplay: () =>
-      stub({ display_id: 'IST.466', code: 'IST 466', title: 'IM&T Capstone', shell_ids: ['IST.466'], meetings: null, room_disputed: false, bb_url: null, card_note: null }),
+      stub({ display_id: course.id, code: course.code, title: course.code, shell_ids: [course.id], meetings: null, room_disputed: false, bb_url: null, card_note: null }),
   };
 });
 vi.mock('@/lib/queries.grades', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/queries.grades')>();
-  return { ...actual, useCourseGrades: () => stub([]), useGradebookLatest: () => stub(GRADEBOOK) };
+  return { ...actual, useCourseGrades: () => stub([]), useGradebookLatest: () => stub(course.gradebook) };
 });
 
 const { CourseGrades } = await import('@/app/(app)/course/[id]/grades/CourseGrades');
@@ -181,7 +194,7 @@ function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <CourseGrades courseId="IST.466" />
+      <CourseGrades courseId={course.id} />
     </QueryClientProvider>,
   );
 }
@@ -193,8 +206,10 @@ function whatIfField(name: string): Promise<HTMLInputElement> {
 const MUTED_LINE = 'Left out: Two Major Case Studies (Synchrony, SU IT) — the link to the syllabus is unsure';
 
 beforeEach(() => {
+  course = IST466_FIXTURE;
   db.scenarios.clear();
   db.links.clear();
+  db.failures.clear();
 });
 
 describe('CourseGrades — the scenario persists', () => {
@@ -256,6 +271,43 @@ describe('CourseGrades — a percentage what-if (Round 1b A1)', () => {
   });
 });
 
+describe('CourseGrades — only the latest scenario action shows its error (R2-10)', () => {
+  const SAVED = { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: null, updated_at: 'x' };
+
+  it("a successful Reset clears a failed save's alert", async () => {
+    db.scenarios.set('IST.466', SAVED);
+    db.failures.set('grade_scenarios:upsert', 'network down');
+    mount();
+
+    const field = await whatIfField('Ethics Case Presentation');
+    fireEvent.change(field, { target: { value: '70' } });
+    fireEvent.blur(field);
+    expect(await screen.findByText('Could not save the scenario: network down')).toBeInTheDocument();
+
+    db.failures.clear();
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset scenario' }));
+    await waitFor(() => expect(db.scenarios.has('IST.466')).toBe(false));
+    await waitFor(() => expect(screen.queryByText(/Could not save the scenario/)).toBeNull());
+  });
+
+  it("a successful save clears a failed Reset's alert", async () => {
+    db.scenarios.set('IST.466', SAVED);
+    db.failures.set('grade_scenarios:delete', 'permission denied');
+    mount();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset scenario' }));
+    expect(await screen.findByText('Could not reset the scenario: permission denied')).toBeInTheDocument();
+
+    db.failures.clear();
+    const field = await whatIfField('Ethics Case Presentation');
+    await waitFor(() => expect(field.value).toBe('90'));
+    fireEvent.change(field, { target: { value: '80' } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(db.scenarios.get('IST.466')?.item_scores).toEqual({ [ETHICS_KEY]: 80 }));
+    await waitFor(() => expect(screen.queryByText(/Could not reset the scenario/)).toBeNull());
+  });
+});
+
 describe('CourseGrades — a link turns a muted part on', () => {
   it('confirming the unsure major-case link writes an override and un-mutes the part', async () => {
     db.scenarios.set('IST.466', { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: null, updated_at: 'x' });
@@ -294,5 +346,87 @@ describe('CourseGrades — honesty', () => {
       expect(node.parentElement?.closest('[data-model]')).not.toBeNull();
     }
     expect(count).toBeGreaterThan(0);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Round 2: cells, placeholder rows and muting come from itemStates()
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The live IST.323 lab shape (R2-2 / R2-4): a real "Lab #1" column that no rule
+ * is attached to yet, the four seeded lab placeholders, and a Final Project
+ * whose Running Log piece is muted by a tentative checkpoint column. Hand-graded
+ * participation is left out so the course can compute.
+ */
+const IST323_LAB_FIXTURE: CourseFixture = (() => {
+  const part = (over: Partial<GradeComponentRow>) =>
+    makeComponent({ course_id: 'IST.323', weight_pct: null, count_expected: 1, aggregation: 'single', ...over });
+  const labPlaceholder = (n: number, due: string) =>
+    makeItem({
+      scheme_course_id: 'IST.323', shell_course_id: 'IST.323', item_key: `asg:IST.323/lab-${n}`,
+      assignment_id: `IST.323/lab-${n}`, column_id: null, component_id: 16, name: `Lab #${n}`,
+      possible: 5, column_kind: 'placeholder', due_at: due, seen_at: null,
+    });
+  const piece = (over: Partial<GradeModelItemRow>) =>
+    makeItem({ scheme_course_id: 'IST.323', shell_course_id: 'IST.323', seen_at: null, ...over });
+  return {
+    id: 'IST.323',
+    code: 'IST 323',
+    scheme: { course_id: 'IST.323', method: 'points', total_points: 40, graded_out_of: 40, letter_scale: IST466_SCHEME.letter_scale },
+    components: [
+      part({ id: 14, code: 'final_project', name: 'Final Project: Security Program Proposal', points: 20, count_expected: null, aggregation: 'sum' }),
+      part({ id: 16, code: 'labs', name: 'Required Labs', points: 20, count_expected: 4, aggregation: 'sum' }),
+      part({ id: 18, code: 'fp_proposal', name: 'Final Project: Proposal', parent_id: 14, points: 11 }),
+      part({ id: 19, code: 'fp_log', name: 'Final Project: Running Log', parent_id: 14, points: 3, count_expected: 2, aggregation: 'sum' }),
+      part({ id: 20, code: 'fp_defense', name: 'Final Project: In-class Defense', parent_id: 14, points: 6 }),
+    ],
+    items: [
+      piece({ item_key: 'col:IST.323:_3560541_1', column_id: '_3560541_1', assignment_id: null, component_id: null, link_source: null, link_confidence: null, name: 'Lab #1: Performing a Ransomware Attack', possible: 5, score: 4 }),
+      labPlaceholder(1, '2026-09-24T03:59:00.000Z'),
+      labPlaceholder(2, '2026-10-15T03:59:00.000Z'),
+      labPlaceholder(3, '2026-12-01T04:59:00.000Z'),
+      labPlaceholder(4, '2026-12-08T04:59:00.000Z'),
+      piece({ item_key: 'col:IST.323:_3569947_1', column_id: '_3569947_1', component_id: 19, link_confidence: 'tentative', name: 'Log Checkpoint Assignment', possible: 1 }),
+      piece({ item_key: 'asg:IST.323/fp-log-final', column_id: null, column_kind: 'placeholder', component_id: 19, name: 'Running Log (final)', possible: 2 }),
+      piece({ item_key: 'asg:IST.323/fp-proposal', column_id: null, column_kind: 'placeholder', component_id: 18, name: 'Proposal', possible: 11 }),
+    ],
+    gradebook: [
+      makeGradebookRow({ course_id: 'IST.323', column_id: '_3560541_1', name: 'Lab #1: Performing a Ransomware Attack', possible: 5, effective_score: 4, assignment_id: null, counts_toward_grade: false }),
+      makeGradebookRow({ course_id: 'IST.323', column_id: '_3569947_1', name: 'Log Checkpoint Assignment', possible: 1, assignment_id: null }),
+    ],
+  };
+})();
+
+describe('CourseGrades — the engine decides cells and placeholder rows (R2-3w / R2-4 / R2-15)', () => {
+  beforeEach(() => {
+    course = IST323_LAB_FIXTURE;
+  });
+
+  it('after linking Lab #1, the seeded "Lab #1" placeholder is gone and "Lab #4" still has a cell', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (6)' }));
+    expect(await screen.findByText('Lab #1')).toBeInTheDocument();
+    expect(await whatIfField('Lab #4')).toBeInTheDocument();
+
+    const labRow = screen.getByText('Lab #1: Performing a Ransomware Attack').closest('tr') as HTMLElement;
+    const picker = within(labRow).getByRole('combobox') as HTMLSelectElement;
+    expect([...picker.options].map((o) => o.textContent)).not.toContain('Final Project: Security Program Proposal');
+    fireEvent.change(picker, { target: { value: '16' } });
+
+    await waitFor(() => expect(db.links.get('IST.323:_3560541_1')).toMatchObject({ component_id: 16, excluded: false }));
+    await waitFor(() => expect(screen.queryByText('Lab #1')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Not in Blackboard yet (5)' })).toBeInTheDocument();
+    expect(await whatIfField('Lab #4')).toBeInTheDocument();
+  });
+
+  it('a piece of a muted part has no cell; a sibling piece that is not muted keeps its cell', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (6)' }));
+    expect(await whatIfField('Proposal')).toBeInTheDocument();
+    const runningLog = screen.getByText('Running Log (final)').closest('tr') as HTMLElement;
+    expect(within(runningLog).queryByLabelText(/what if/)).toBeNull();
+    const checkpoint = screen.getByText('Log Checkpoint Assignment').closest('tr') as HTMLElement;
+    expect(within(checkpoint).queryByLabelText(/what if/)).toBeNull();
   });
 });

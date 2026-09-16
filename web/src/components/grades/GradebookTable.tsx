@@ -26,7 +26,12 @@
  *   history  both screens — a "history" disclosure on a row whose score moved.
  *   links    course tab only — the "Counts toward…" picker. A column Stack
  *            linked to a component by override also moves up among the item
- *            rows and carries 10a's "counts toward grade" tag.
+ *            rows and carries 10a's "counts toward grade" tag; one he marked
+ *            "Not graded" loses the tag and sits in the bookkeeping group,
+ *            whatever V-1's link says (round 2, R2-8).
+ *   overrides both screens — Stack's link choices without the picker, so
+ *            `/grades` places a row the same way the course tab does.
+ *            Defaults to `links.states`.
  *   footer   course tab only — the placeholder rows under the table.
  * None of them computes anything in this file; the standing lives in
  * `ModelStanding`.
@@ -38,7 +43,6 @@ import { itemQuery } from '@/lib/queries.popout';
 import {
   NO_VALUE,
   formatSeenAt,
-  isBookkeepingRow,
   isItemRow,
   scoreText,
   submissionLabel,
@@ -69,12 +73,31 @@ interface RowExtras {
   readonly whatIf?: WhatIfProps;
   readonly history?: ReadonlyMap<string, readonly GradebookHistoryRow[]>;
   readonly links?: GradebookLinksProps;
+  readonly overrides?: ReadonlyMap<string, LinkState>;
+}
+
+type Overrides = ReadonlyMap<string, LinkState> | undefined;
+
+function overrideFor(row: GradebookLatestRow, overrides: Overrides): LinkState | undefined {
+  const state = overrides?.get(columnItemKey(row.course_id, row.column_id));
+  return state?.override ? state : undefined;
 }
 
 /** A column Stack linked to a component: it counts, whatever V-1 says. */
-function isOverrideCounted(row: GradebookLatestRow, links: GradebookLinksProps | undefined): boolean {
-  const state = links?.states.get(columnItemKey(row.course_id, row.column_id));
-  return Boolean(state?.override && state.componentId !== null && !state.excluded);
+function isOverrideCounted(row: GradebookLatestRow, overrides: Overrides): boolean {
+  const state = overrideFor(row, overrides);
+  return Boolean(state && state.componentId !== null && !state.excluded);
+}
+
+/** A column Stack marked "Not graded": it counts toward nothing, whatever V-1 says (R2-8). */
+function isOverrideExcluded(row: GradebookLatestRow, overrides: Overrides): boolean {
+  return Boolean(overrideFor(row, overrides)?.excluded);
+}
+
+/** Among the items: 10a's rule or Stack's link, never when he said "Not graded". */
+function isPlacedAsItem(row: GradebookLatestRow, overrides: Overrides): boolean {
+  if (isOverrideExcluded(row, overrides)) return false;
+  return isItemRow(row) || isOverrideCounted(row, overrides);
 }
 
 /* -- feedback -------------------------------------------------------------- */
@@ -113,9 +136,10 @@ export function FeedbackDisclosure({ feedback, label }: { feedback: string; labe
 
 export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; extras?: RowExtras }) {
   const submission = submissionLabel(row.submission_status, row.last_attempt_status);
-  const overrideCounted = isOverrideCounted(row, extras.links);
+  const overrides = extras.overrides ?? extras.links?.states;
   const counted =
-    (row.column_kind === 'attendance' && row.counts_toward_grade === true) || overrideCounted;
+    !isOverrideExcluded(row, overrides)
+    && ((row.column_kind === 'attendance' && row.counts_toward_grade === true) || isOverrideCounted(row, overrides));
   const ambiguous = (row.linked_assignments ?? 0) > 1;
   const key = columnItemKey(row.course_id, row.column_id);
   const whatIfTarget = extras.whatIf?.targets.get(key);
@@ -233,6 +257,7 @@ export function GradebookTable({
   whatIf,
   history,
   links,
+  overrides,
   footer,
 }: {
   rows: GradebookLatestRow[];
@@ -244,19 +269,25 @@ export function GradebookTable({
   history?: ReadonlyMap<string, readonly GradebookHistoryRow[]>;
   /** Course tab only (Phase 10b). */
   links?: GradebookLinksProps;
+  /** Both screens (Phase 10b): Stack's link choices, for placement only; defaults to `links.states`. */
+  overrides?: ReadonlyMap<string, LinkState>;
   /** Course tab only (Phase 10b): rendered under the table groups. */
   footer?: ReactNode;
 }) {
   const [showBookkeeping, setShowBookkeeping] = useState(false);
 
+  const placement = overrides ?? links?.states;
   const { items, bookkeeping } = useMemo(
     () => ({
-      items: rows.filter((row) => isItemRow(row) || isOverrideCounted(row, links)),
-      bookkeeping: rows.filter((row) => isBookkeepingRow(row) && !isOverrideCounted(row, links)),
+      items: rows.filter((row) => isPlacedAsItem(row, placement)),
+      bookkeeping: rows.filter((row) => row.column_kind !== 'total' && !isPlacedAsItem(row, placement)),
     }),
-    [rows, links],
+    [rows, placement],
   );
-  const extras = useMemo<RowExtras>(() => ({ whatIf, history, links }), [whatIf, history, links]);
+  const extras = useMemo<RowExtras>(
+    () => ({ whatIf, history, links, overrides: placement }),
+    [whatIf, history, links, placement],
+  );
 
   if (rows.length === 0) {
     return footer ? (

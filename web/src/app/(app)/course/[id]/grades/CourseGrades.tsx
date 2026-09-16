@@ -83,6 +83,7 @@ export function CourseGrades({ courseId }: { courseId: string }) {
       >
         <ModelStanding
           result={model.run?.result ?? null}
+          components={model.run?.input?.components ?? []}
           error={model.loadError ?? model.run?.error ?? null}
           loading={model.loading}
         >
@@ -115,7 +116,13 @@ export function CourseGrades({ courseId }: { courseId: string }) {
             whatIf={actions.whatIf}
             history={model.history}
             links={actions.links}
-            footer={<PlaceholderRows items={model.items} whatIf={actions.whatIf} />}
+            footer={
+              <PlaceholderRows
+                items={model.items}
+                whatIf={actions.whatIf}
+                dropped={model.run?.states?.droppedPlaceholderKeys ?? []}
+              />
+            }
           />
         )}
       </CourseGradeCard>

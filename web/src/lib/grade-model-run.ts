@@ -8,8 +8,8 @@
  * shows in place of a standing — the rest of the page keeps working.
  */
 
-import { DEFAULT_TARGET_LETTER, projectCourse, solveTarget } from './grade-model';
-import type { ModelInput, ModelResult, TargetResult } from './grade-model/types';
+import { DEFAULT_TARGET_LETTER, itemStates, projectCourse, solveTarget } from './grade-model';
+import type { ItemStates, ModelInput, ModelResult, TargetResult } from './grade-model/types';
 import type { GradeModelItemRow, GradeModelTotalRow, GradeScenarioRow, GradeSchemeBundle } from './grade-model-input';
 import { toModelInput } from './grade-model-input';
 
@@ -23,15 +23,17 @@ function messageOf(error: unknown): string {
 export interface ModelRun {
   readonly input: ModelInput | null;
   readonly result: ModelResult | null;
+  /** The engine's per-item view: what-if targets, muted parts, dropped placeholders (R2-3). */
+  readonly states: ItemStates | null;
   readonly error: string | null;
 }
 
-/** `projectCourse`, with any exception turned into `error`. */
+/** `projectCourse` and `itemStates`, with any exception turned into `error`. */
 export function runModel(input: ModelInput): ModelRun {
   try {
-    return { input, result: projectCourse(input), error: null };
+    return { input, result: projectCourse(input), states: itemStates(input), error: null };
   } catch (error) {
-    return { input, result: null, error: `Could not compute the model: ${messageOf(error)}` };
+    return { input, result: null, states: null, error: `Could not compute the model: ${messageOf(error)}` };
   }
 }
 
@@ -70,6 +72,8 @@ export function pickTargetLetter(letters: readonly string[], saved: string | nul
 /** What the "Our model" container renders for one course. */
 export interface ModelStandingState {
   readonly result: ModelResult | null;
+  /** The scheme's components, for the wording (R2-12). Empty until the reads land. */
+  readonly components: ModelInput['components'];
   readonly error: string | null;
   readonly loading: boolean;
 }
@@ -82,6 +86,17 @@ export interface BulkModelRows {
   readonly scenarios: readonly GradeScenarioRow[] | undefined;
 }
 
+/** Items by scheme course, in one pass. */
+function groupItems(items: readonly GradeModelItemRow[]): ReadonlyMap<string, readonly GradeModelItemRow[]> {
+  const groups = new Map<string, GradeModelItemRow[]>();
+  for (const item of items) {
+    const list = groups.get(item.scheme_course_id);
+    if (list) list.push(item);
+    else groups.set(item.scheme_course_id, [item]);
+  }
+  return groups;
+}
+
 /**
  * One standing state per scheme course for `/grades`. A read that failed is an
  * error on every course (it is the same read); one still in flight is loading.
@@ -92,17 +107,21 @@ export function modelStandingStates(
   loadError: string | null,
 ): Record<string, ModelStandingState> {
   const ready = rows.schemes && rows.items && rows.totals && rows.scenarios;
+  // Indexed once, not searched once per course (R2-14).
+  const itemsBy = groupItems(rows.items ?? []);
+  const totalsBy = new Map((rows.totals ?? []).map((total) => [total.scheme_course_id, total]));
+  const scenariosBy = new Map((rows.scenarios ?? []).map((scenario) => [scenario.course_id, scenario]));
   return Object.fromEntries(
     schemeIds.map((id): [string, ModelStandingState] => {
-      if (loadError) return [id, { result: null, error: loadError, loading: false }];
-      if (!ready) return [id, { result: null, error: null, loading: true }];
+      if (loadError) return [id, { result: null, components: [], error: loadError, loading: false }];
+      if (!ready) return [id, { result: null, components: [], error: null, loading: true }];
       const run = runCourseModel({
         bundle: rows.schemes?.[id] ?? { scheme: null, components: [] },
-        items: (rows.items ?? []).filter((item) => item.scheme_course_id === id),
-        total: (rows.totals ?? []).find((total) => total.scheme_course_id === id) ?? null,
-        scenario: (rows.scenarios ?? []).find((scenario) => scenario.course_id === id) ?? null,
+        items: itemsBy.get(id) ?? [],
+        total: totalsBy.get(id) ?? null,
+        scenario: scenariosBy.get(id) ?? null,
       });
-      return [id, { result: run.result, error: run.error, loading: false }];
+      return [id, { result: run.result, components: run.input?.components ?? [], error: run.error, loading: false }];
     }),
   );
 }

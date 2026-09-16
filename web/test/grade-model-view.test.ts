@@ -29,96 +29,39 @@ const view = await import('@/lib/grade-model-view');
 const format = await import('@/lib/grade-model-format');
 const runner = await import('@/lib/grade-model-run');
 const { toModelInput } = await import('@/lib/grade-model-input');
+const { itemStates } = await import('@/lib/grade-model');
 
 function inputOf(items = [makeItem(), IST466_SYNCHRONY, IST466_LETTER_PLACEHOLDER]): ModelInput {
   return toModelInput(IST466_SCHEME, IST466_COMPONENTS, items, null, null);
 }
 
-describe('muting (answer 3, PM call 10)', () => {
-  it('mutes a component with a counted, unsure item and names it', () => {
+describe('whatIfCellTargets — the engine decides, the view only names (R2-3w / R2-15)', () => {
+  it('draws exactly the engine targets, labelled with each item name', () => {
     const input = inputOf();
-    expect([...view.mutedComponentIds(input)]).toEqual([24]);
-    expect(view.mutedComponentNames(input)).toEqual(['Two Major Case Studies (Synchrony, SU IT)']);
-  });
-
-  it('never mutes on a bookkeeping, exempt or "Not graded" item', () => {
-    const input = inputOf([
-      { ...IST466_SYNCHRONY, possible: 0 },
-      { ...IST466_SYNCHRONY, item_key: 'b', is_exempt: true },
-      { ...IST466_SYNCHRONY, item_key: 'c', excluded: true },
-      { ...IST466_SYNCHRONY, item_key: 'd', possible: null },
-    ]);
-    expect(view.mutedComponentIds(input).size).toBe(0);
-  });
-
-  it('an override is confirmed, so it un-mutes the part', () => {
-    const input = inputOf([{ ...IST466_SYNCHRONY, link_source: 'override', link_confidence: 'confirmed' }]);
-    expect(view.mutedComponentIds(input).size).toBe(0);
-  });
-});
-
-describe('whatIfTargets', () => {
-  it('offers ungraded, counted items of live components, placeholders included', () => {
-    const targets = view.whatIfTargets(inputOf());
-    expect([...targets.keys()]).toEqual(['col:IST.466:_3562497_1', 'asg:IST.466/letter-of-gratitude']);
-    expect(targets.get('asg:IST.466/letter-of-gratitude')).toEqual({
+    const cells = view.whatIfCellTargets(itemStates(input), input.items);
+    expect([...cells.keys()]).toEqual(itemStates(input).whatIfTargets.map((t) => t.key));
+    expect(cells.get('asg:IST.466/letter-of-gratitude')).toEqual({
       key: 'asg:IST.466/letter-of-gratitude', name: 'Letter of Gratitude', unit: 'points', possible: 100,
     });
+    // The unsure major case is muted by the engine, so it gets no cell.
+    expect(cells.has(IST466_SYNCHRONY.item_key)).toBe(false);
   });
 
-  it('offers nothing on a muted, graded, unlinked or hand-graded item', () => {
-    const manual = { ...IST466_COMPONENTS[1], id: 99, aggregation: 'manual' as const };
-    const input = toModelInput(IST466_SCHEME, [...IST466_COMPONENTS, manual], [
-      IST466_SYNCHRONY,
-      makeItem({ item_key: 'graded', score: 88 }),
-      makeItem({ item_key: 'unlinked', component_id: null, link_source: null, link_confidence: null }),
-      makeItem({ item_key: 'manual', component_id: 99 }),
-      makeItem({ item_key: 'orphan-component', component_id: 12345 }),
-    ], null, null);
-    expect(view.whatIfTargets(input).size).toBe(0);
-  });
-});
-
-describe('percentage what-if on a pointless placeholder (Round 1b A1)', () => {
-  const ECN_SCHEME = { ...IST466_SCHEME, course_id: 'ECN.304', method: 'weighted_pct' as const };
-  const component = (aggregation: string, id = 3) =>
-    ({ ...IST466_COMPONENTS[0], id, course_id: 'ECN.304', points: null, weight_pct: 75, aggregation }) as (typeof IST466_COMPONENTS)[number];
-
-  it.each(['single', 'average', 'average_drop_lowest', 'rank_weighted', 'normalized'])(
-    'offers a percent cell on a confirmed pointless placeholder of a %s part',
-    (aggregation) => {
-      const input = toModelInput(ECN_SCHEME, [component(aggregation)], [ECN304_EXAM1_PLACEHOLDER], null, null);
-      expect(view.whatIfTargets(input).get('asg:ECN.304/exam-1')).toEqual({
-        key: 'asg:ECN.304/exam-1', name: 'Exam 1', unit: 'percent', possible: 100,
-      });
-    },
-  );
-
-  it('offers none on a sum or manual part, an unsure link, or a pointless column', () => {
-    const input = toModelInput(
-      ECN_SCHEME,
-      [component('sum', 30), component('manual', 1), component('rank_weighted', 3)],
-      [
-        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'asg:IST.352/term-project', component_id: 30 },
-        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'asg:ECN.304/participation', component_id: 1 },
-        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'asg:ECN.304/quiz-series', link_confidence: 'inferred' },
-        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'col:ECN.304:x', column_kind: 'item', column_id: 'x' },
-        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'asg:ECN.304/zero', possible: 0 },
-      ],
-      null,
-      null,
-    );
-    expect(view.whatIfTargets(input).size).toBe(0);
+  it("carries a percent target's unit and 100 bound through unchanged", () => {
+    const exams = { ...IST466_COMPONENTS[0], id: 3, course_id: 'ECN.304', points: null, weight_pct: 100, aggregation: 'rank_weighted' as const, rank_weights: [30, 25, 20], count_expected: 3 };
+    const input = toModelInput({ ...IST466_SCHEME, course_id: 'ECN.304', method: 'weighted_pct' }, [exams], [ECN304_EXAM1_PLACEHOLDER], null, null);
+    const cells = view.whatIfCellTargets(itemStates(input), input.items);
+    expect(cells.get('asg:ECN.304/exam-1')).toEqual({ key: 'asg:ECN.304/exam-1', name: 'Exam 1', unit: 'percent', possible: 100 });
   });
 
-  it('never mutes a part: a pointless placeholder is not a counted item', () => {
-    const input = toModelInput(ECN_SCHEME, [component('rank_weighted')], [{ ...ECN304_EXAM1_PLACEHOLDER, link_confidence: 'inferred' }], null, null);
-    expect(view.mutedComponentIds(input).size).toBe(0);
+  it('falls back to the key for a target whose item is not in the list', () => {
+    const cells = view.whatIfCellTargets({ whatIfTargets: [{ key: 'asg:x', unit: 'points', max: 5 }] }, []);
+    expect(cells.get('asg:x')).toEqual({ key: 'asg:x', name: 'asg:x', unit: 'points', possible: 5 });
   });
 
-  it('keeps its saved percentage in the scenario handed to the engine', () => {
-    const input = toModelInput(ECN_SCHEME, [component('rank_weighted')], [ECN304_EXAM1_PLACEHOLDER], makeScenario({ course_id: 'ECN.304', item_scores: { 'asg:ECN.304/exam-1': 90 } }), null);
-    expect(input.scenario.itemScores).toEqual({ 'asg:ECN.304/exam-1': 90 });
+  it('draws nothing for a course the engine will not compute', () => {
+    const input = toModelInput({ ...IST466_SCHEME, method: 'qualitative' }, IST466_COMPONENTS, [makeItem()], makeScenario(), null);
+    expect(view.whatIfCellTargets(itemStates(input), input.items).size).toBe(0);
   });
 });
 
@@ -154,13 +97,14 @@ describe('linkStates (answer 2, PM call 9)', () => {
     expect(states.get('col:IST.352:kc')).toMatchObject({ override: true });
   });
 
-  it('lists a parent before its parts', () => {
+  it("offers leaf components only, a parent's parts where the parent sat (R2-1w)", () => {
     const options = view.linkOptions([
       { id: 18, name: 'Proposal', parentId: 14 },
       { id: 15, name: 'Exams', parentId: null },
       { id: 14, name: 'Final Project', parentId: null },
+      { id: 20, name: 'Defense', parentId: 14 },
     ]);
-    expect(options.map((o) => o.name)).toEqual(['Final Project', 'Proposal', 'Exams']);
+    expect(options.map((o) => o.name)).toEqual(['Proposal', 'Defense', 'Exams']);
   });
 });
 
@@ -216,8 +160,46 @@ describe('display rounding, once', () => {
 
   it('explains the headline from the component results, leaving muted parts out', () => {
     const { components } = makeComputed();
-    expect(format.explanationText(components)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
-    expect(format.explanationText([{ ...components[2], state: 'muted' }])).toBe('0 of 0 parts graded');
+    const parts = components.map((c) => ({ id: c.componentId, parentId: null, isExtraCredit: false }));
+    expect(format.explanationText(components, parts)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
+    expect(format.explanationText([{ ...components[2], state: 'muted' }], parts)).toBe('0 of 0 parts graded');
+  });
+
+  describe('IST.323 counts parts, not pieces (R2-12)', () => {
+    // grade_components for IST.323: Final Project (14) has three children; 17 is extra credit.
+    const IST323 = [
+      { id: 10, name: 'Class Participation', parentId: null, isExtraCredit: false },
+      { id: 11, name: 'Blackboard Quizzes', parentId: null, isExtraCredit: false },
+      { id: 12, name: 'Security in the News Group Presentation', parentId: null, isExtraCredit: false },
+      { id: 13, name: 'Individual Security Presentation', parentId: null, isExtraCredit: false },
+      { id: 14, name: 'Final Project: Security Program Proposal', parentId: null, isExtraCredit: false },
+      { id: 15, name: 'Exams', parentId: null, isExtraCredit: false },
+      { id: 16, name: 'Required Labs', parentId: null, isExtraCredit: false },
+      { id: 17, name: 'Extra Credit Lab', parentId: null, isExtraCredit: true },
+      { id: 18, name: 'Final Project: Proposal', parentId: 14, isExtraCredit: false },
+      { id: 19, name: 'Final Project: Running Log', parentId: 14, isExtraCredit: false },
+      { id: 20, name: 'Final Project: In-class Defense', parentId: 14, isExtraCredit: false },
+    ];
+    const results = (graded: number[], muted: number[] = []) =>
+      IST323.map((c) => ({
+        componentId: c.id, code: String(c.id), name: c.name,
+        state: muted.includes(c.id) ? 'muted' as const : graded.includes(c.id) ? 'graded' as const : 'ungraded' as const,
+        earned: 0, gradedCap: 0, cap: 0, usesHypothetical: false, capacityFromKnownItems: false,
+      }));
+
+    it('reads "of 7 parts", with children and extra credit not counted', () => {
+      expect(format.explanationText(results([11, 15, 17, 18]), IST323)).toBe('2 of 7 parts graded: Blackboard Quizzes, Exams');
+    });
+
+    it('names a muted parent once, not its pieces', () => {
+      const muted = results([], [14, 18, 19, 20]);
+      expect(format.mutedPartNames(muted, IST323)).toEqual(['Final Project: Security Program Proposal']);
+      expect(format.explanationText(muted, IST323)).toBe('0 of 6 parts graded');
+    });
+
+    it('names a lone muted piece when its parent is not muted', () => {
+      expect(format.mutedPartNames(results([], [19]), IST323)).toEqual(['Final Project: Running Log']);
+    });
   });
 
   it('writes a history line with the dash for "not graded yet"', () => {
@@ -254,8 +236,8 @@ describe('running the engine from a screen', () => {
     const computed = makeComputed();
     engine.project.mockReturnValue(computed);
     const empty = { schemes: undefined, items: undefined, totals: undefined, scenarios: undefined };
-    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': { result: null, error: null, loading: true } });
-    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({ 'IST.466': { result: null, error: 'Could not load x', loading: false } });
+    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': { result: null, components: [], error: null, loading: true } });
+    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({ 'IST.466': { result: null, components: [], error: 'Could not load x', loading: false } });
 
     const states = runner.modelStandingStates(
       ['IST.466', 'IST.471'],
@@ -267,7 +249,8 @@ describe('running the engine from a screen', () => {
       },
       null,
     );
-    expect(states['IST.466']).toEqual({ result: computed, error: null, loading: false });
+    expect(states['IST.466']).toMatchObject({ result: computed, error: null, loading: false });
+    expect(states['IST.466'].components.map((c) => c.id)).toEqual(IST466_COMPONENTS.map((c) => c.id));
     const firstInput = engine.project.mock.calls.at(-2)?.[0] as ModelInput;
     expect(firstInput.items.map((i) => i.key)).toEqual(['col:IST.466:_3562497_1']);
     expect(firstInput.scenario.itemScores).toEqual({ 'col:IST.466:_3562497_1': 90 });

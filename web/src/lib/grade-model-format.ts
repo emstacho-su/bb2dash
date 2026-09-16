@@ -12,7 +12,7 @@
  * component invents its own copy.
  */
 
-import type { Agreement, ComponentResult, Standing } from './grade-model/types';
+import type { Agreement, ComponentInput, ComponentResult, Standing } from './grade-model/types';
 import { COURSE_TIME_ZONE } from './course-dimension';
 
 /** What a missing figure looks like. Never `0`. */
@@ -55,16 +55,47 @@ export function agreementDeltaText(agreement: Pick<Agreement, 'delta' | 'unit'>)
   return agreement.unit === 'points' ? formatPoints(size) : size.toFixed(1);
 }
 
+/** The facts about a component the wording needs: where it sits, and whether it is extra credit. */
+export type PartComponent = Pick<ComponentInput, 'id' | 'parentId' | 'isExtraCredit'>;
+
 /**
- * "3 of 8 parts graded: quizzes, exams" — how the headline was computed, from
- * the engine's component results. A muted part is not counted among the parts;
- * `MUTED_TEXT` names it on its own line.
+ * "3 of 7 parts graded: quizzes, exams" — how the headline was computed, from
+ * the engine's component results. A *part* is a top-level, non-extra-credit
+ * component (round 2, R2-12): IST.323's three Final Project pieces are one part
+ * and its extra-credit lab is none, so the course reads "of 7 parts", not
+ * "of 11". A muted part is not counted; `MUTED_TEXT` names it on its own line.
  */
-export function explanationText(components: readonly ComponentResult[]): string {
-  const parts = components.filter((c) => c.state !== 'muted');
+export function explanationText(
+  results: readonly ComponentResult[],
+  components: readonly PartComponent[],
+): string {
+  const byId = new Map(components.map((c) => [c.id, c]));
+  const parts = results.filter((r) => {
+    const component = byId.get(r.componentId);
+    return component !== undefined && component.parentId === null && !component.isExtraCredit && r.state !== 'muted';
+  });
   const graded = parts.filter((c) => c.state === 'graded' || c.state === 'partly_graded');
   const head = `${graded.length} of ${parts.length} ${parts.length === 1 ? 'part' : 'parts'} graded`;
   return graded.length === 0 ? head : `${head}: ${graded.map((c) => c.name).join(', ')}`;
+}
+
+/**
+ * The muted components to name: each muted one whose parent is not muted too,
+ * so a muted part is named once, not once per piece (R2-12).
+ */
+export function mutedPartNames(
+  results: readonly ComponentResult[],
+  components: readonly PartComponent[],
+): string[] {
+  const parentOf = new Map(components.map((c) => [c.id, c.parentId]));
+  const muted = new Set(results.filter((r) => r.state === 'muted').map((r) => r.componentId));
+  return results
+    .filter((r) => muted.has(r.componentId))
+    .filter((r) => {
+      const parent = parentOf.get(r.componentId) ?? null;
+      return parent === null || !muted.has(parent);
+    })
+    .map((r) => r.name);
 }
 
 /** "2 scored Blackboard columns are not linked to a syllabus rule". */

@@ -21,6 +21,7 @@ const SRC = join(WEB, 'src');
 /** Everything Phase 10b adds, plus the three screens/tables it edits. */
 const PHASE_FILES = [
   'src/lib/queries.grade-model.ts',
+  'src/lib/queries.grade-scenario.ts',
   'src/lib/grade-model-input.ts',
   'src/lib/grade-model-view.ts',
   'src/lib/grade-model-format.ts',
@@ -88,7 +89,8 @@ describe('Phase 10b writes only its own two tables', () => {
   });
 
   it('sees the writes it allows, so the audit is not vacuous', () => {
-    const writes = chains(read('src/lib/queries.grade-model.ts'))
+    const writes = ['src/lib/queries.grade-model.ts', 'src/lib/queries.grade-scenario.ts']
+      .flatMap((relative) => chains(read(relative)))
       .filter((chain) => WRITE.test(chain.text))
       .map((chain) => chain.relation);
     expect(new Set(writes)).toEqual(new Set(['grade_scenarios', 'grade_column_links']));

@@ -20,13 +20,13 @@
 import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 import { WHAT_IF_LABEL } from '@/lib/grade-model/labels';
 import { PERCENT_SUFFIX, REVERT_WHAT_IF_LABEL, formatPoints } from '@/lib/grade-model-format';
-import { parseWhatIf, type WhatIfTarget } from '@/lib/grade-model-view';
+import { parseWhatIf, type WhatIfCellTarget } from '@/lib/grade-model-view';
 import styles from './GradeModel.module.css';
 
 /** What a table needs to offer what-if cells. */
 export interface WhatIfProps {
-  /** The items that may take a value (ungraded, counted, not muted, not manual). */
-  readonly targets: ReadonlyMap<string, WhatIfTarget>;
+  /** The items that may take a value: the engine's `itemStates().whatIfTargets`. */
+  readonly targets: ReadonlyMap<string, WhatIfCellTarget>;
   /** The saved scenario's values, by item key. */
   readonly values: Readonly<Record<string, number>>;
   /** Commit one value, or clear it with null. Called on blur / Enter, never per keystroke. */
@@ -44,7 +44,7 @@ export function WhatIfCell({
   onCommit,
   disabled = false,
 }: {
-  target: WhatIfTarget;
+  target: WhatIfCellTarget;
   value: number | undefined;
   onCommit: (key: string, value: number | null) => void;
   disabled?: boolean;

@@ -11,17 +11,17 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { useLinkColumn, useResetScenario, useSaveScenario } from '@/lib/queries.grade-model';
+import { useLinkColumn } from '@/lib/queries.grade-model';
+import { useResetScenario, useSaveScenario } from '@/lib/queries.grade-scenario';
 import { pickTargetLetter, runSolver } from '@/lib/grade-model-run';
 import {
   columnItemKey,
   linkOptions,
   linkStates,
-  whatIfTargets,
-  withItemScore,
+  whatIfCellTargets,
   type LinkState,
   type LinkTarget,
-  type WhatIfTarget,
+  type WhatIfCellTarget,
 } from '@/lib/grade-model-view';
 import type { TargetResult } from '@/lib/grade-model/types';
 import { queryErrorMessage } from '@/components/shared/QueryState';
@@ -49,15 +49,19 @@ export interface CourseModelActions {
   readonly scenarioError: string | null;
 }
 
-const NO_TARGETS: ReadonlyMap<string, WhatIfTarget> = new Map();
+const NO_TARGETS: ReadonlyMap<string, WhatIfCellTarget> = new Map();
 const NO_VALUES: Readonly<Record<string, number>> = {};
 
 export function useCourseModelActions(
   schemeCourseId: string | null,
   model: CourseGradeModel,
 ): CourseModelActions {
-  const save = useSaveScenario();
-  const reset = useResetScenario();
+  const save = useSaveScenario(schemeCourseId);
+  const reset = useResetScenario(schemeCourseId);
+  // Only the latest scenario action's error is shown (R2-10): starting a save
+  // clears a failed reset's alert, and starting a reset clears a failed save's.
+  const clearResetError = reset.reset;
+  const clearSaveError = save.reset;
   const link = useLinkColumn();
   const [linkKey, setLinkKey] = useState<string | null>(null);
 
@@ -67,15 +71,23 @@ export function useCourseModelActions(
   const saveMutate = save.mutate;
   const linkMutate = link.mutate;
 
+  // A save carries only its own change; the full row is built when it runs
+  // (R2-5), so two quick commits can never overwrite each other.
   const onCommit = useCallback(
     (key: string, value: number | null) => {
       if (!schemeCourseId) return;
-      saveMutate({ courseId: schemeCourseId, itemScores: withItemScore(values, key, value), targetLetter: savedLetter });
+      clearResetError();
+      saveMutate({ item: { key, value } });
     },
-    [schemeCourseId, saveMutate, values, savedLetter],
+    [schemeCourseId, saveMutate, clearResetError],
   );
 
-  const targets = useMemo(() => (input ? whatIfTargets(input) : NO_TARGETS), [input]);
+  // The engine decides which items take a value (R2-3w); this only names the cells.
+  const itemStatesNow = model.run?.states ?? null;
+  const targets = useMemo(
+    () => (itemStatesNow && input ? whatIfCellTargets(itemStatesNow, input.items) : NO_TARGETS),
+    [itemStatesNow, input],
+  );
   const whatIf = useMemo<WhatIfProps>(
     () => ({ targets, values, onCommit, disabled: !schemeCourseId }),
     [targets, values, onCommit, schemeCourseId],
@@ -109,9 +121,10 @@ export function useCourseModelActions(
   const onSelect = useCallback(
     (letter: string) => {
       if (!schemeCourseId) return;
-      saveMutate({ courseId: schemeCourseId, itemScores: values, targetLetter: letter });
+      clearResetError();
+      saveMutate({ targetLetter: letter });
     },
-    [schemeCourseId, saveMutate, values],
+    [schemeCourseId, saveMutate, clearResetError],
   );
 
   const scenarioError = save.isError
@@ -126,7 +139,9 @@ export function useCourseModelActions(
     solver: solved ? { ...solved, letters, selected, onSelect } : null,
     canReset: Boolean(schemeCourseId) && model.scenario !== null,
     onReset: () => {
-      if (schemeCourseId) reset.mutate({ courseId: schemeCourseId });
+      if (!schemeCourseId) return;
+      clearSaveError();
+      reset.mutate();
     },
     resetPending: reset.isPending,
     scenarioError,

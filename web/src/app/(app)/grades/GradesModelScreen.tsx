@@ -23,7 +23,7 @@ import {
   useGradingSchemesForCourses,
 } from '@/lib/queries.grade-model';
 import { modelStandingStates } from '@/lib/grade-model-run';
-import { historyByColumn } from '@/lib/grade-model-view';
+import { historyByColumn, linkStates } from '@/lib/grade-model-view';
 import { queryErrorMessage } from '@/components/shared/QueryState';
 import { GradesScreen, type GradesModelProps } from './GradesScreen';
 
@@ -56,16 +56,18 @@ export function GradesModelScreen() {
     [schemeIds, schemesQ.data, itemsQ.data, totalsQ.data, scenariosQ.data, loadError],
   );
   const history = useMemo(() => historyByColumn(historyQ.data ?? []), [historyQ.data]);
+  const overrides = useMemo(() => linkStates(itemsQ.data ?? []), [itemsQ.data]);
 
   const model = useMemo<GradesModelProps>(
     () => ({
       standings,
       history,
+      overrides,
       historyError: historyQ.isError
         ? `Could not load the score history: ${queryErrorMessage(historyQ.error)}`
         : null,
     }),
-    [standings, history, historyQ.isError, historyQ.error],
+    [standings, history, overrides, historyQ.isError, historyQ.error],
   );
 
   return <GradesScreen model={model} />;

@@ -8,7 +8,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LinkColumnControl, linkTargetFor, selectedLinkValue } from '@/components/grades/LinkColumnControl';
 import { GradebookTable } from '@/components/grades/GradebookTable';
-import { linkStates, type LinkState } from '@/lib/grade-model-view';
+import { linkOptions, linkStates, type LinkState } from '@/lib/grade-model-view';
 import { makeGradebookRow } from './factories.grades';
 import { IST466_SYNCHRONY, makeItem } from './factories.grade-model';
 
@@ -76,6 +76,40 @@ describe('LinkColumnControl', () => {
   });
 });
 
+describe("IST.323's picker offers leaf components only (R2-1w)", () => {
+  // grade_components for IST.323 as prod holds them: Final Project (14) has three children.
+  const IST323_COMPONENTS = [
+    { id: 10, name: 'Class Participation', parentId: null },
+    { id: 11, name: 'Blackboard Quizzes', parentId: null },
+    { id: 12, name: 'Security in the News Group Presentation', parentId: null },
+    { id: 13, name: 'Individual Security Presentation', parentId: null },
+    { id: 14, name: 'Final Project: Security Program Proposal', parentId: null },
+    { id: 15, name: 'Exams', parentId: null },
+    { id: 16, name: 'Required Labs', parentId: null },
+    { id: 17, name: 'Extra Credit Lab', parentId: null },
+    { id: 18, name: 'Final Project: Proposal', parentId: 14 },
+    { id: 19, name: 'Final Project: Running Log', parentId: 14 },
+    { id: 20, name: 'Final Project: In-class Defense', parentId: 14 },
+  ];
+
+  it('has no "Final Project: Security Program Proposal" and has its three parts', () => {
+    render(
+      <LinkColumnControl
+        state={{ ...UNLINKED, columnId: '_3569973_1' }}
+        options={linkOptions(IST323_COMPONENTS)}
+        columnName="Final Project - Proposal and Appendices"
+        onChange={vi.fn()}
+      />,
+    );
+    const names = [...select().options].map((o) => o.textContent);
+    expect(names).not.toContain('Final Project: Security Program Proposal');
+    expect(names).toEqual(expect.arrayContaining([
+      'Final Project: Proposal', 'Final Project: Running Log', 'Final Project: In-class Defense',
+    ]));
+    expect(names).toHaveLength(1 + 10 + 1);
+  });
+});
+
 describe('the picker in the gradebook table', () => {
   const lab = makeGradebookRow({ course_id: 'IST.323', column_id: '_3560541_1', name: 'Lab #1', effective_score: 4, counts_toward_grade: false });
   const quiz = makeGradebookRow({ course_id: 'IST.323', column_id: '_3560530_1', name: 'Quiz #1', effective_score: 10 });
@@ -112,6 +146,33 @@ describe('the picker in the gradebook table', () => {
     const picker = within(rowOf('Project Assignment #2A - Project Resources & Risks')).getByRole('combobox');
     expect((picker as HTMLSelectElement).value).toBe('');
     expect(within(rowOf('Knowledge Check - 09/09/2026')).queryByRole('combobox')).toBeNull();
+  });
+
+  it('puts a "Not graded" attendance column in the bookkeeping group with no tag, whatever V-1 says (R2-8)', () => {
+    const counted = { ...attendance, counts_toward_grade: true };
+    const excluded = [makeItem({
+      item_key: 'col:GEO.103.recitation:_3602445_1', shell_course_id: 'GEO.103.recitation', column_id: '_3602445_1',
+      score: 0, component_id: 5, link_source: 'override', link_confidence: 'confirmed', excluded: true,
+    })];
+    render(<GradebookTable rows={[quiz, counted]} links={{ states: linkStates(excluded), options: OPTIONS, onChange: vi.fn() }} />);
+
+    expect(screen.queryByText('Attendance')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Attendance and bookkeeping columns (1)' }));
+    const row = screen.getByText('Attendance').closest('tr') as HTMLElement;
+    expect(within(row).queryByText('counts toward grade')).toBeNull();
+    expect((within(row).getByRole('combobox') as HTMLSelectElement).value).toBe('not-graded');
+  });
+
+  it('places rows by read-only overrides too, as /grades does', () => {
+    const counted = { ...attendance, counts_toward_grade: true };
+    const excluded = [makeItem({
+      item_key: 'col:GEO.103.recitation:_3602445_1', shell_course_id: 'GEO.103.recitation', column_id: '_3602445_1',
+      link_source: 'override', link_confidence: 'confirmed', excluded: true,
+    })];
+    render(<GradebookTable rows={[quiz, counted]} overrides={linkStates(excluded)} />);
+    expect(screen.queryByText('counts toward grade')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Attendance and bookkeeping columns (1)' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).toBeNull();
   });
 
   it('moves an override-linked attendance column up among the items with the "counts toward grade" tag', () => {
