@@ -6,6 +6,12 @@
  * with Temporal's `compatible` rule, and it reports a fold or a gap so the form
  * can say so under the field. An all-day event shows an inclusive last day and
  * is stored with an exclusive end (K-3).
+ *
+ * EDITING KEEPS WHAT WAS SAVED (R2-4). A stored instant is only re-derived from
+ * its wall clock when that wall clock (or the zone, or all-day) was changed. An
+ * event saved at the *second* 01:30 of the 2026-11-01 fold reads back as 01:30,
+ * and re-converting 01:30 would pick the first one and move the event an hour
+ * although only its title was edited.
  */
 
 import {
@@ -34,6 +40,18 @@ export const DEFAULT_DURATION_MINUTES = 60;
 const DEFAULT_START = '09:00';
 const DEFAULT_END = '10:00';
 
+/** A saved row's instants and the wall clocks the form showed them as. */
+export interface StoredTimes {
+  allDay: boolean;
+  zone: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  starts_at: string;
+  ends_at: string;
+}
+
 export interface PlannerEventFormState {
   kind: PlannerEventKind;
   title: string;
@@ -51,6 +69,8 @@ export interface PlannerEventFormState {
   notes: string;
   done: boolean;
   courseId: string;
+  /** Edit mode: what was saved, so unchanged times keep their exact instants. */
+  stored: StoredTimes | null;
 }
 
 /** The form's own fields, which errors and notes are keyed on. */
@@ -89,7 +109,7 @@ function zoneFields(zone: string): Pick<PlannerEventFormState, 'zoneChoice' | 'c
     : { zoneChoice: OTHER_ZONE, customZone: zone };
 }
 
-const BLANK: Omit<PlannerEventFormState, 'startDate' | 'endDate' | 'allDay'> = {
+const BLANK: Omit<PlannerEventFormState, 'startDate' | 'endDate' | 'allDay' | 'stored'> = {
   kind: 'event',
   title: '',
   startTime: DEFAULT_START,
@@ -106,7 +126,7 @@ const BLANK: Omit<PlannerEventFormState, 'startDate' | 'endDate' | 'allDay'> = {
 /** A new event from a slot: that date, that start, +60 minutes, New York. */
 export function formStateFromPrefill(prefill: PlannerEventPrefill): PlannerEventFormState {
   if (prefill.allDay) {
-    return { ...BLANK, allDay: true, startDate: prefill.date, endDate: prefill.date };
+    return { ...BLANK, allDay: true, startDate: prefill.date, endDate: prefill.date, stored: null };
   }
   const endMinute = prefill.startMinute + DEFAULT_DURATION_MINUTES;
   const dayCarry = Math.floor(endMinute / (24 * 60));
@@ -117,6 +137,7 @@ export function formStateFromPrefill(prefill: PlannerEventPrefill): PlannerEvent
     startTime: clockText(prefill.startMinute),
     endDate: shiftIso(prefill.date, dayCarry),
     endTime: clockText(endMinute % (24 * 60)),
+    stored: null,
   };
 }
 
@@ -136,19 +157,37 @@ export function formStateFromRow(row: PlannerEventRow): PlannerEventFormState {
     courseId: row.course_id ?? '',
   } as const;
 
-  if (row.all_day) {
-    const dates = allDayDates(row);
-    const fallback = newYorkWallClock(row.starts_at)?.iso ?? '';
-    return {
-      ...base,
-      startDate: dates?.firstDay ?? fallback,
-      endDate: dates?.lastDay ?? fallback,
-    };
-  }
+  const shown = row.all_day ? allDayFields(row) : timedFields(row);
+  return {
+    ...base,
+    ...shown,
+    stored: {
+      ...shown,
+      allDay: row.all_day,
+      zone: row.time_zone,
+      starts_at: row.starts_at,
+      ends_at: row.ends_at,
+    },
+  };
+}
+
+type ShownTimes = Pick<PlannerEventFormState, 'startDate' | 'startTime' | 'endDate' | 'endTime'>;
+
+function allDayFields(row: PlannerEventRow): ShownTimes {
+  const dates = allDayDates(row);
+  const fallback = newYorkWallClock(row.starts_at)?.iso ?? '';
+  return {
+    startDate: dates?.firstDay ?? fallback,
+    startTime: DEFAULT_START,
+    endDate: dates?.lastDay ?? fallback,
+    endTime: DEFAULT_END,
+  };
+}
+
+function timedFields(row: PlannerEventRow): ShownTimes {
   const start = wallClockIn(row.starts_at, row.time_zone);
   const end = wallClockIn(row.ends_at, row.time_zone);
   return {
-    ...base,
     startDate: start?.date ?? '',
     startTime: start?.time ?? DEFAULT_START,
     endDate: end?.date ?? start?.date ?? '',
@@ -183,7 +222,8 @@ export type DraftResult =
   | { ok: true; draft: PlannerEventDraft; notes: FormErrors }
   | { ok: false; errors: FormErrors; notes: FormErrors };
 
-const FIELD_OF: Partial<Record<keyof PlannerEventDraft, FormField>> = {
+/** Which form field shows a validation message about a column. */
+export const FIELD_OF: Partial<Record<keyof PlannerEventDraft, FormField>> = {
   kind: 'kind',
   title: 'title',
   starts_at: 'start',
@@ -226,19 +266,42 @@ function instants(state: PlannerEventFormState, zone: string, errors: FormErrors
       errors.end = 'The last day cannot be before the first.';
       return null;
     }
+    const stored = unchangedStored(state, zone, true);
+    if (stored && state.startDate === stored.startDate && state.endDate === stored.endDate) {
+      return { starts_at: stored.starts_at, ends_at: stored.ends_at };
+    }
     const range = allDayInstants(state.startDate, state.endDate, zone);
     if (!range) errors.start = 'Choose real dates.';
     return range;
   }
 
-  const start = wallClockToInstant(state.startDate, state.startTime, zone);
-  const end = wallClockToInstant(state.endDate, state.endTime, zone);
-  if (!start) errors.start = 'Choose a start date and time.';
-  if (!end) errors.end = 'Choose an end date and time.';
-  if (!start || !end) return null;
-  notes.start = resolutionNote(state.startDate, state.startTime, zone, start);
-  notes.end = resolutionNote(state.endDate, state.endTime, zone, end);
-  return { starts_at: start.iso, ends_at: end.iso };
+  const stored = unchangedStored(state, zone, false);
+  const keepStart =
+    stored !== null && state.startDate === stored.startDate && state.startTime === stored.startTime;
+  const keepEnd =
+    stored !== null && state.endDate === stored.endDate && state.endTime === stored.endTime;
+
+  const start = keepStart ? null : wallClockToInstant(state.startDate, state.startTime, zone);
+  const end = keepEnd ? null : wallClockToInstant(state.endDate, state.endTime, zone);
+  if (!keepStart && !start) errors.start = 'Choose a start date and time.';
+  if (!keepEnd && !end) errors.end = 'Choose an end date and time.';
+  if (errors.start || errors.end) return null;
+  if (start) notes.start = resolutionNote(state.startDate, state.startTime, zone, start);
+  if (end) notes.end = resolutionNote(state.endDate, state.endTime, zone, end);
+  return {
+    starts_at: start?.iso ?? (stored as StoredTimes).starts_at,
+    ends_at: end?.iso ?? (stored as StoredTimes).ends_at,
+  };
+}
+
+/** The saved times, when the zone and the all-day switch are as they were saved. */
+function unchangedStored(
+  state: PlannerEventFormState,
+  zone: string,
+  allDay: boolean,
+): StoredTimes | null {
+  const stored = state.stored;
+  return stored !== null && stored.allDay === allDay && stored.zone === zone ? stored : null;
 }
 
 /** Convert once, validate once; errors come back keyed on the form's fields. */
