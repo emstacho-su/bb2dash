@@ -3,31 +3,41 @@
  *
  * Pure and deterministic: no I/O, no clock, no mutation of its input. The
  * signatures are the frozen Contract (`docs/planning/68_PHASE10B_grade_model.md`
- * §Engine); W-19 replaces the stub bodies and adds the implementation modules
- * beside this file.
+ * §Engine); the implementation lives in the modules beside this file:
+ * `items.ts` (counted items, what-if values, placeholders), `tree.ts`
+ * (children, muting, capacity), `aggregations/` (one module per rule),
+ * `evaluate.ts` + `project.ts` (projections and standings), `checks.ts`
+ * (order of checks), `letter.ts`, `agreement.ts`, `solve.ts`.
  */
 
+import { agreementFor } from './agreement';
+import { unlinkedScoredKeys } from './items';
+import { letterForPct } from './letter';
+import { componentResults, evaluateCourse, standingsOf, usesHypotheticals } from './project';
+import { solve } from './solve';
 import type { ModelInput, ModelResult, SchemeInput, TargetResult } from './types';
 
 export * from './types';
 
 export const DEFAULT_TARGET_LETTER = 'A-';
 
-const NOT_IMPLEMENTED = 'grade-model: not implemented (W-19)';
-
 export function projectCourse(input: ModelInput): ModelResult {
-  void input;
-  throw new Error(NOT_IMPLEMENTED);
+  const evaluation = evaluateCourse(input);
+  if (evaluation.state === 'not_computable') return evaluation;
+  return {
+    state: 'computed',
+    standings: standingsOf(evaluation),
+    components: componentResults(input.components, evaluation),
+    unlinkedScoredKeys: unlinkedScoredKeys(input.components, input.items),
+    usesHypotheticals: usesHypotheticals(evaluation),
+    agreement: agreementFor(input),
+  };
 }
 
 export function solveTarget(input: ModelInput, letter: string): TargetResult {
-  void input;
-  void letter;
-  throw new Error(NOT_IMPLEMENTED);
+  return solve(input, letter);
 }
 
 export function letterFor(pct: number, scheme: SchemeInput): string | null {
-  void pct;
-  void scheme;
-  throw new Error(NOT_IMPLEMENTED);
+  return letterForPct(pct, scheme);
 }
