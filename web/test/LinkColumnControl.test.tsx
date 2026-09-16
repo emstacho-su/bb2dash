@@ -148,6 +148,33 @@ describe('the picker in the gradebook table', () => {
     expect(within(rowOf('Knowledge Check - 09/09/2026')).queryByRole('combobox')).toBeNull();
   });
 
+  it('puts a "Not graded" attendance column in the bookkeeping group with no tag, whatever V-1 says (R2-8)', () => {
+    const counted = { ...attendance, counts_toward_grade: true };
+    const excluded = [makeItem({
+      item_key: 'col:GEO.103.recitation:_3602445_1', shell_course_id: 'GEO.103.recitation', column_id: '_3602445_1',
+      score: 0, component_id: 5, link_source: 'override', link_confidence: 'confirmed', excluded: true,
+    })];
+    render(<GradebookTable rows={[quiz, counted]} links={{ states: linkStates(excluded), options: OPTIONS, onChange: vi.fn() }} />);
+
+    expect(screen.queryByText('Attendance')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Attendance and bookkeeping columns (1)' }));
+    const row = screen.getByText('Attendance').closest('tr') as HTMLElement;
+    expect(within(row).queryByText('counts toward grade')).toBeNull();
+    expect((within(row).getByRole('combobox') as HTMLSelectElement).value).toBe('not-graded');
+  });
+
+  it('places rows by read-only overrides too, as /grades does', () => {
+    const counted = { ...attendance, counts_toward_grade: true };
+    const excluded = [makeItem({
+      item_key: 'col:GEO.103.recitation:_3602445_1', shell_course_id: 'GEO.103.recitation', column_id: '_3602445_1',
+      link_source: 'override', link_confidence: 'confirmed', excluded: true,
+    })];
+    render(<GradebookTable rows={[quiz, counted]} overrides={linkStates(excluded)} />);
+    expect(screen.queryByText('counts toward grade')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Attendance and bookkeeping columns (1)' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
   it('moves an override-linked attendance column up among the items with the "counts toward grade" tag', () => {
     render(<GradebookTable rows={[quiz, attendance]} links={{ states: linkStates(rows), options: OPTIONS, onChange: vi.fn() }} />);
     expect(screen.queryByRole('button', { name: /bookkeeping columns/ })).toBeNull();
