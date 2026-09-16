@@ -11,14 +11,14 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { useLinkColumn, useResetScenario, useSaveScenario } from '@/lib/queries.grade-model';
+import { useLinkColumn } from '@/lib/queries.grade-model';
+import { useResetScenario, useSaveScenario } from '@/lib/queries.grade-scenario';
 import { pickTargetLetter, runSolver } from '@/lib/grade-model-run';
 import {
   columnItemKey,
   linkOptions,
   linkStates,
   whatIfTargets,
-  withItemScore,
   type LinkState,
   type LinkTarget,
   type WhatIfTarget,
@@ -56,8 +56,8 @@ export function useCourseModelActions(
   schemeCourseId: string | null,
   model: CourseGradeModel,
 ): CourseModelActions {
-  const save = useSaveScenario();
-  const reset = useResetScenario();
+  const save = useSaveScenario(schemeCourseId);
+  const reset = useResetScenario(schemeCourseId);
   const link = useLinkColumn();
   const [linkKey, setLinkKey] = useState<string | null>(null);
 
@@ -67,12 +67,14 @@ export function useCourseModelActions(
   const saveMutate = save.mutate;
   const linkMutate = link.mutate;
 
+  // A save carries only its own change; the full row is built when it runs
+  // (R2-5), so two quick commits can never overwrite each other.
   const onCommit = useCallback(
     (key: string, value: number | null) => {
       if (!schemeCourseId) return;
-      saveMutate({ courseId: schemeCourseId, itemScores: withItemScore(values, key, value), targetLetter: savedLetter });
+      saveMutate({ item: { key, value } });
     },
-    [schemeCourseId, saveMutate, values, savedLetter],
+    [schemeCourseId, saveMutate],
   );
 
   const targets = useMemo(() => (input ? whatIfTargets(input) : NO_TARGETS), [input]);
@@ -109,9 +111,9 @@ export function useCourseModelActions(
   const onSelect = useCallback(
     (letter: string) => {
       if (!schemeCourseId) return;
-      saveMutate({ courseId: schemeCourseId, itemScores: values, targetLetter: letter });
+      saveMutate({ targetLetter: letter });
     },
-    [schemeCourseId, saveMutate, values],
+    [schemeCourseId, saveMutate],
   );
 
   const scenarioError = save.isError
@@ -126,7 +128,7 @@ export function useCourseModelActions(
     solver: solved ? { ...solved, letters, selected, onSelect } : null,
     canReset: Boolean(schemeCourseId) && model.scenario !== null,
     onReset: () => {
-      if (schemeCourseId) reset.mutate({ courseId: schemeCourseId });
+      if (schemeCourseId) reset.mutate();
     },
     resetPending: reset.isPending,
     scenarioError,

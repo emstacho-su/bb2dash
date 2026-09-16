@@ -298,58 +298,6 @@ function newClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
 }
 
-describe('validateScenario', () => {
-  it('refuses a negative or non-finite value and an over-long letter', () => {
-    expect(() => q.validateScenario({ courseId: 'X', itemScores: { a: -1 }, targetLetter: null })).toThrow(/0 or more/);
-    expect(() => q.validateScenario({ courseId: 'X', itemScores: { a: Number.NaN }, targetLetter: null })).toThrow();
-    expect(() => q.validateScenario({ courseId: 'X', itemScores: {}, targetLetter: 'A+++' })).toThrow(/one to three/);
-    expect(() => q.validateScenario({ courseId: '', itemScores: {}, targetLetter: null })).toThrow();
-  });
-});
-
-describe('useSaveScenario', () => {
-  it('upserts only grade_scenarios, keyed on course_id', async () => {
-    const client = newClient();
-    const { result } = renderHook(() => q.useSaveScenario(), { wrapper: wrapper(client) });
-    await act(() => result.current.mutateAsync({ courseId: 'IST.466', itemScores: { k: 90 }, targetLetter: 'B+' }));
-
-    expect(calls).toEqual([
-      expect.objectContaining({
-        relation: 'grade_scenarios',
-        op: 'upsert',
-        payload: { course_id: 'IST.466', item_scores: { k: 90 }, target_letter: 'B+' },
-        options: { onConflict: 'course_id' },
-      }),
-    ]);
-  });
-
-  it('shows the new scenario at once and puts the old one back when the write fails', async () => {
-    const client = newClient();
-    const key = q.gradeModelKeys.scenario('IST.466');
-    const before = makeScenario({ item_scores: { k: 10 } });
-    client.setQueryData(key, before);
-    results.set('grade_scenarios:upsert', { data: null, error: new Error('violates check constraint') });
-
-    const { result } = renderHook(() => q.useSaveScenario(), { wrapper: wrapper(client) });
-    act(() => result.current.mutate({ courseId: 'IST.466', itemScores: { k: 20 }, targetLetter: null }));
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(client.getQueryData(key)).toEqual(before);
-    expect(result.current.error?.message).toContain('violates check constraint');
-  });
-});
-
-describe('useResetScenario', () => {
-  it("deletes the course's one row and clears the cache", async () => {
-    const client = newClient();
-    client.setQueryData(q.gradeModelKeys.scenario('IST.466'), makeScenario({ item_scores: { k: 1 } }));
-    const { result } = renderHook(() => q.useResetScenario(), { wrapper: wrapper(client) });
-    await act(() => result.current.mutateAsync({ courseId: 'IST.466' }));
-
-    expect(calls).toEqual([expect.objectContaining({ relation: 'grade_scenarios', op: 'delete', filters: ['eq:course_id=IST.466'] })]);
-    expect(client.getQueryData(q.gradeModelKeys.scenario('IST.466'))).toBeNull();
-  });
-});
-
 describe('useLinkColumn', () => {
   async function link(target: Parameters<ReturnType<typeof q.useLinkColumn>['mutateAsync']>[0]['target']) {
     const client = newClient();

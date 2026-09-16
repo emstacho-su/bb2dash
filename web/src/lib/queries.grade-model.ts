@@ -12,8 +12,9 @@
  * read carries one documented cast to the hand-narrowed Contract shape.
  *
  * WRITES — exactly two tables, both Stack's own state from migration 057:
- * `grade_scenarios` (what-if values and the target letter) and
- * `grade_column_links` ("Counts toward…" / "Not graded"). Nothing here writes
+ * `grade_scenarios` (what-if values and the target letter, in
+ * `queries.grade-scenario.ts` since round 2) and `grade_column_links`
+ * ("Counts toward…" / "Not graded", here). Nothing here writes
  * `assignments`, `assignment_progress`, `bb_gradebook`, `grading_schemes` or
  * `grade_components`; `web/test/grade-model.audits.test.ts` greps for it.
  */
@@ -292,103 +293,6 @@ export const useGradeScenariosForCourses = (ids: readonly string[]) =>
 /* ---------------------------------------------------------------------------
  * Writes
  * ------------------------------------------------------------------------ */
-
-export interface SaveScenarioVars {
-  /** The scheme course (GEO 103: the lecture shell). */
-  courseId: string;
-  itemScores: Readonly<Record<string, number>>;
-  targetLetter: string | null;
-}
-
-/**
- * Boundary check before a scenario write. The database refuses a non-number or
- * a negative score too (057's check); refusing here means the owner sees why
- * instead of a constraint name. The upper bound needs the item's possible, so
- * the what-if cell enforces it before it ever calls a save.
- */
-export function validateScenario(vars: SaveScenarioVars): SaveScenarioVars {
-  if (!vars.courseId) throw new Error('No course to save the scenario against.');
-  for (const [key, value] of Object.entries(vars.itemScores)) {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-      throw new Error(`The what-if value for ${key} must be a number of 0 or more.`);
-    }
-  }
-  const letter = vars.targetLetter?.trim() ?? null;
-  if (letter !== null && (letter.length < 1 || letter.length > 3)) {
-    throw new Error('A target letter is one to three characters.');
-  }
-  return { courseId: vars.courseId, itemScores: { ...vars.itemScores }, targetLetter: letter };
-}
-
-type ScenarioSnapshot = { key: readonly unknown[]; previous: GradeScenarioRow | null | undefined };
-
-/** Invalidate both scenario caches: this course's and /grades' bulk read. */
-function invalidateScenarios(queryClient: ReturnType<typeof useQueryClient>) {
-  void queryClient.invalidateQueries({ queryKey: ['grade-model', 'scenario'] });
-  void queryClient.invalidateQueries({ queryKey: ['grade-model', 'scenarios-for'] });
-}
-
-/**
- * Upsert the course's one scenario row. Optimistic: the cache takes the new
- * row at once, so the standing moves as soon as a value is committed (on blur
- * or Enter — the cell never calls this per keystroke), and a failed write puts
- * the previous row back.
- */
-export function useSaveScenario() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (vars: SaveScenarioVars): Promise<void> => {
-      const clean = validateScenario(vars);
-      const { error } = await getSupabaseBrowserClient()
-        .from('grade_scenarios')
-        .upsert(
-          { course_id: clean.courseId, item_scores: clean.itemScores, target_letter: clean.targetLetter },
-          { onConflict: 'course_id' },
-        );
-      if (error) throw error;
-    },
-    onMutate: async (vars: SaveScenarioVars): Promise<ScenarioSnapshot> => {
-      const key = gradeModelKeys.scenario(vars.courseId);
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<GradeScenarioRow | null>(key);
-      const next: GradeScenarioRow = {
-        course_id: vars.courseId,
-        item_scores: { ...vars.itemScores },
-        target_letter: vars.targetLetter,
-        updated_at: previous?.updated_at ?? new Date().toISOString(),
-      };
-      queryClient.setQueryData<GradeScenarioRow | null>(key, next);
-      return { key, previous };
-    },
-    onError: (_error, _vars, context) => {
-      if (context) queryClient.setQueryData(context.key, context.previous);
-    },
-    onSettled: () => invalidateScenarios(queryClient),
-  });
-}
-
-/** Delete the course's scenario row: every what-if value and the target letter. */
-export function useResetScenario() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ courseId }: { courseId: string }): Promise<void> => {
-      if (!courseId) throw new Error('No course to reset.');
-      const { error } = await getSupabaseBrowserClient().from('grade_scenarios').delete().eq('course_id', courseId);
-      if (error) throw error;
-    },
-    onMutate: async ({ courseId }: { courseId: string }): Promise<ScenarioSnapshot> => {
-      const key = gradeModelKeys.scenario(courseId);
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<GradeScenarioRow | null>(key);
-      queryClient.setQueryData<GradeScenarioRow | null>(key, null);
-      return { key, previous };
-    },
-    onError: (_error, _vars, context) => {
-      if (context) queryClient.setQueryData(context.key, context.previous);
-    },
-    onSettled: () => invalidateScenarios(queryClient),
-  });
-}
 
 export interface LinkColumnVars {
   /** The shell the column lives in — not the scheme course. */
