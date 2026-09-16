@@ -12,7 +12,8 @@
  * component invents its own copy.
  */
 
-import type { Agreement, ComponentInput, ComponentResult, ModelResult, Standing } from './grade-model/types';
+import type { MutedPartArgs } from './grade-model/labels';
+import type { Agreement, ComponentInput, ComponentResult, ItemInput, ModelResult, Standing } from './grade-model/types';
 import { COURSE_TIME_ZONE } from './course-dimension';
 import { scoreNumberText } from './queries.grades';
 
@@ -95,6 +96,21 @@ export function explanationText(
   return whatIfOnly.length === 0 ? real : `${real} · what-if on ${whatIfOnly.map((c) => c.name).join(', ')}`;
 }
 
+/** Each muted component whose parent is not muted too. */
+function mutedPartResults(
+  results: readonly ComponentResult[],
+  components: readonly PartComponent[],
+): ComponentResult[] {
+  const parentOf = new Map(components.map((c) => [c.id, c.parentId]));
+  const muted = new Set(results.filter((r) => r.state === 'muted').map((r) => r.componentId));
+  return results
+    .filter((r) => muted.has(r.componentId))
+    .filter((r) => {
+      const parent = parentOf.get(r.componentId) ?? null;
+      return parent === null || !muted.has(parent);
+    });
+}
+
 /**
  * The muted components to name: each muted one whose parent is not muted too,
  * so a muted part is named once, not once per piece (R2-12).
@@ -103,15 +119,50 @@ export function mutedPartNames(
   results: readonly ComponentResult[],
   components: readonly PartComponent[],
 ): string[] {
+  return mutedPartResults(results, components).map((r) => r.name);
+}
+
+/** What a muted part's sentence needs to know about one model item. */
+export type PartItem = Pick<ItemInput, 'key' | 'name' | 'kind' | 'componentId'>;
+
+/** `componentId` is `ancestorId` or one of its pieces. A parent cycle ends the walk. */
+function isWithin(
+  componentId: number | null,
+  ancestorId: number,
+  parentOf: ReadonlyMap<number, number | null>,
+): boolean {
+  const seen = new Set<number>();
+  for (let id = componentId; id !== null && !seen.has(id); id = parentOf.get(id) ?? null) {
+    if (id === ancestorId) return true;
+    seen.add(id);
+  }
+  return false;
+}
+
+/**
+ * One `mutedText` entry per muted part (round 3, R3-3), named as
+ * `mutedPartNames` names them. Which items are unsure is the engine's
+ * `itemStates().unsureItemKeys`; this only sorts them by part: an item with a
+ * Blackboard column is confirmable with the picker, and a placeholder counts
+ * toward "not in Blackboard yet".
+ */
+export function mutedParts(
+  results: readonly ComponentResult[],
+  components: readonly PartComponent[],
+  items: readonly PartItem[],
+  unsureItemKeys: readonly string[],
+): MutedPartArgs[] {
   const parentOf = new Map(components.map((c) => [c.id, c.parentId]));
-  const muted = new Set(results.filter((r) => r.state === 'muted').map((r) => r.componentId));
-  return results
-    .filter((r) => muted.has(r.componentId))
-    .filter((r) => {
-      const parent = parentOf.get(r.componentId) ?? null;
-      return parent === null || !muted.has(parent);
-    })
-    .map((r) => r.name);
+  const unsureKeys = new Set(unsureItemKeys);
+  const unsure = items.filter((item) => unsureKeys.has(item.key));
+  return mutedPartResults(results, components).map((part) => {
+    const own = unsure.filter((item) => isWithin(item.componentId, part.componentId, parentOf));
+    return {
+      part: part.name,
+      confirmable: own.filter((item) => item.kind !== 'placeholder').map((item) => item.name),
+      notInBlackboard: own.filter((item) => item.kind === 'placeholder').length,
+    };
+  });
 }
 
 /** "2 scored Blackboard columns are not linked to a syllabus rule". */

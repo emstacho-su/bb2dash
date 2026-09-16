@@ -44,7 +44,7 @@ export function letterFor(pct: number, scheme: SchemeInput): string | null {
   return letterForPct(pct, scheme);
 }
 
-/** Round 2 (R2-3/R2-4): what-if targets, muted components and dropped placeholders, from the engine's own preparation. */
+/** Round 2 (R2-3/R2-4): what-if targets, muted components, dropped placeholders and (R3-3) unsure items, from the engine's own preparation. */
 export function itemStates(input: ModelInput): ItemStates {
   return itemStatesOf(input);
 }

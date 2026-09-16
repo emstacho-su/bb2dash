@@ -48,8 +48,28 @@ export function notComputableText(reason: NotComputableReason, names: readonly s
   }
 }
 
-export function mutedText(names: readonly string[]): string {
-  return `Left out: ${joinNames(names)} — the link to the syllabus is unsure`;
+/** One part left out because a link is unsure (Round 3, R3-3, PM-authorised). */
+export interface MutedPartArgs {
+  readonly part: string;
+  /** The part's unsure items that have a Blackboard column, by name: their link can be confirmed. */
+  readonly confirmable: readonly string[];
+  /** How many of the part's unsure items are placeholders: not in Blackboard yet. */
+  readonly notInBlackboard: number;
+}
+
+/**
+ * One sentence per muted part. A part with no unsure item listed cannot come
+ * from the engine's own states; it keeps the round-2 sentence rather than
+ * printing an empty list.
+ */
+export function mutedText({ part, confirmable, notInBlackboard }: MutedPartArgs): string {
+  const links = confirmable.length > 1 ? 'links' : 'link';
+  if (confirmable.length > 0 && notInBlackboard > 0) {
+    return `Left out: ${part} — confirm the unsure ${links} on ${joinNames(confirmable)}; ${notInBlackboard} more not in Blackboard yet`;
+  }
+  if (confirmable.length > 0) return `Left out: ${part} — confirm the unsure ${links} on ${joinNames(confirmable)}`;
+  if (notInBlackboard > 0) return `Left out: ${part} — its link is unsure and it isn't in Blackboard yet`;
+  return `Left out: ${part} — the link to the syllabus is unsure`;
 }
 
 export const DELTA_REASON_TEXT: Readonly<Record<DeltaReason, string>> = {

@@ -32,8 +32,9 @@ import {
   agreementDeltaText,
   agreementUnitText,
   explanationText,
-  mutedPartNames,
+  mutedParts,
   type PartComponent,
+  type PartItem,
   standingText,
   unlinkedCountText,
 } from '@/lib/grade-model-format';
@@ -61,13 +62,17 @@ function ComputedStanding({
   result,
   realResult,
   components,
+  items,
+  unsureItemKeys,
 }: {
   result: ComputedResult;
   realResult: ModelResult | null;
   components: readonly PartComponent[];
+  items: readonly PartItem[];
+  unsureItemKeys: readonly string[];
 }) {
   const { graded_so_far: graded, zeros_on_rest: zeros, best_case: best } = result.standings;
-  const muted = mutedPartNames(result.components, components);
+  const muted = mutedParts(result.components, components, items, unsureItemKeys);
 
   return (
     <>
@@ -81,7 +86,11 @@ function ComputedStanding({
         {standingText(best)}
       </p>
       <p className={styles.note}>{explanationText(result.components, realResult, components)}</p>
-      {muted.length > 0 && <p className={styles.note}>{mutedText(muted)}</p>}
+      {muted.map((part, index) => (
+        <p key={`${index}:${part.part}`} className={styles.note}>
+          {mutedText(part)}
+        </p>
+      ))}
       {result.agreement && <AgreementLine agreement={result.agreement} />}
       {result.unlinkedScoredKeys.length > 0 && (
         <p className={styles.note}>{unlinkedCountText(result.unlinkedScoredKeys.length)}</p>
@@ -94,6 +103,8 @@ export function ModelStanding({
   result,
   realResult,
   components,
+  items,
+  unsureItemKeys,
   error = null,
   loading = false,
   children,
@@ -104,6 +115,10 @@ export function ModelStanding({
   realResult: ModelResult | null;
   /** The scheme's components, so the wording counts parts, not pieces (R2-12). */
   components: readonly PartComponent[];
+  /** The model's items, so a part left out names the unsure items behind it (R3-3). */
+  items: readonly PartItem[];
+  /** The engine's `itemStates().unsureItemKeys`. */
+  unsureItemKeys: readonly string[];
   /** Why the model could not be computed or its rows could not be read. */
   error?: string | null;
   loading?: boolean;
@@ -124,7 +139,13 @@ export function ModelStanding({
       ) : result.state === 'not_computable' ? (
         <p className={styles.line}>{notComputableText(result.reason, result.unscoredManual)}</p>
       ) : (
-        <ComputedStanding result={result} realResult={realResult} components={components} />
+        <ComputedStanding
+          result={result}
+          realResult={realResult}
+          components={components}
+          items={items}
+          unsureItemKeys={unsureItemKeys}
+        />
       )}
       {children}
     </section>

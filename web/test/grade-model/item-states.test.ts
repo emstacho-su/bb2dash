@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { itemStates, projectCourse, type ItemInput, type ModelInput } from '@/lib/grade-model';
 import { component, item, modelInput, scheme } from './builders';
-import { fixtureFor, inputOf, stateOf } from './fixture-loader';
+import { fixtureFor, inputOf, loadFixtures, stateOf } from './fixture-loader';
 
 const fixtureInput = (course: string, state: string) => {
   const fixture = fixtureFor(course);
@@ -177,5 +177,63 @@ describe('itemStates().droppedPlaceholderKeys', () => {
     const course = modelInput({ components: single, items: rows });
     expect(itemStates(course).droppedPlaceholderKeys).toEqual([]);
     expect(itemStates({ ...course, scenario: { itemScores: { 'asg:exam': 50 } } }).droppedPlaceholderKeys).toEqual(['asg:exam']);
+  });
+});
+
+describe('itemStates().unsureItemKeys (Round 3, R3-3)', () => {
+  const MAJOR_CASE_2 = 'col:IST.466:_3562492_1';
+  const MAJOR_CASE_1 = 'col:IST.466:_3562496_1';
+  const AI_TEAM = 'asg:IST.466/ai-team-assignment';
+  const override = (course: ModelInput, key: string): ModelInput => ({
+    ...course,
+    items: course.items.map((row) => (row.key === key ? { ...row, linkSource: 'override' as const, linkConfidence: 'confirmed' as const } : row)),
+  });
+
+  it('IST.466 live: the two major-case columns and the AI Team placeholder, in input order', () => {
+    expect(itemStates(fixtureInput('IST.466', 'live_2026_09_16')).unsureItemKeys).toEqual([MAJOR_CASE_2, MAJOR_CASE_1, AI_TEAM]);
+  });
+
+  it('IST.466: after overriding one major case, only the other major case remains (AI Team is its own part)', () => {
+    const states = itemStates(override(fixtureInput('IST.466', 'live_2026_09_16'), MAJOR_CASE_1));
+    expect(states.unsureItemKeys).toEqual([MAJOR_CASE_2, AI_TEAM]);
+    expect(states.mutedComponentIds).toEqual([24, 36]);
+    const both = itemStates(override(override(fixtureInput('IST.466', 'live_2026_09_16'), MAJOR_CASE_1), MAJOR_CASE_2));
+    expect(both.unsureItemKeys).toEqual([AI_TEAM]);
+    expect(both.mutedComponentIds).toEqual([36]);
+  });
+
+  it('lists a muting placeholder, and nothing that cannot mute', () => {
+    // asg:fp-defense (tentative placeholder on a leaf) mutes; nothing else here is unsure and counted.
+    expect(itemStates(input).unsureItemKeys).toEqual(['asg:fp-defense']);
+    const unsureRows = new Set(['col:proposal', 'col:selection', 'col:exempt', 'col:excluded', 'col:zero', 'asg:IST.323/lab-1']);
+    const noisy = {
+      ...input,
+      items: input.items.map((row) => (unsureRows.has(row.key) ? { ...row, linkSource: 'assignment' as const, linkConfidence: 'tentative' as const } : row)),
+    };
+    // A column on a parent (R2-1), an unlinked one, exempt / excluded / zero-point columns: none is counted
+    // on a leaf, so none mutes. lab-1 is still dropped as surplus before it could mute Required Labs.
+    expect(itemStates(noisy).unsureItemKeys).toEqual(['asg:fp-defense']);
+    expect(itemStates(noisy).droppedPlaceholderKeys).toEqual(['asg:IST.323/lab-1']);
+  });
+
+  it('agrees with mutedComponentIds on every fixture state: each key sits on a muted part, each muted leaf has a key', () => {
+    for (const fixture of loadFixtures()) {
+      for (const state of fixture.states) {
+        const course = inputOf(fixture, state);
+        const states = itemStates(course);
+        const muted = new Set(states.mutedComponentIds);
+        const componentOf = new Map(course.items.map((row) => [row.key, row.componentId]));
+        for (const key of states.unsureItemKeys) {
+          expect(muted.has(componentOf.get(key) ?? Number.NaN), `${fixture.course}/${state.name}: ${key}`).toBe(true);
+        }
+        const parents = new Set(course.components.map((c) => c.parentId));
+        const unsureParts = new Set(states.unsureItemKeys.map((key) => componentOf.get(key)));
+        for (const id of states.mutedComponentIds) {
+          const parent = course.components.find((c) => c.id === id)?.parentId ?? null;
+          if (parents.has(id) || (parent !== null && muted.has(parent))) continue;
+          expect(unsureParts.has(id), `${fixture.course}/${state.name}: component ${id}`).toBe(true);
+        }
+      }
+    }
   });
 });

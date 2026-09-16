@@ -54,8 +54,8 @@ const { GradesScreen } = await import('@/app/(app)/grades/GradesScreen');
 
 const MODEL: GradesModelProps = {
   standings: {
-    'IST.323': { result: NOT_COMPUTED_MANUAL, realResult: NOT_COMPUTED_MANUAL, components: [], error: null, loading: false },
-    'IST.466': { result: makeComputed({ usesHypotheticals: true }), realResult: makeComputed(), components: [], error: null, loading: false },
+    'IST.323': { result: NOT_COMPUTED_MANUAL, realResult: NOT_COMPUTED_MANUAL, components: [], items: [], unsureItemKeys: [], error: null, loading: false },
+    'IST.466': { result: makeComputed({ usesHypotheticals: true }), realResult: makeComputed(), components: [], items: [], unsureItemKeys: [], error: null, loading: false },
   },
   history: historyByColumn(QUIZ_HISTORY),
 };
@@ -105,7 +105,7 @@ describe('GradesScreen — the read-only model line', () => {
     render(
       <GradesScreen
         model={{
-          standings: { 'IST.323': { result: null, realResult: null, components: [], error: 'Could not load the grade model: timeout', loading: false } },
+          standings: { 'IST.323': { result: null, realResult: null, components: [], items: [], unsureItemKeys: [], error: 'Could not load the grade model: timeout', loading: false } },
           history: new Map(),
           historyError: 'Could not load the score history: timeout',
         }}

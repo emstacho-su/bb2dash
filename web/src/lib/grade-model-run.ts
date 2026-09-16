@@ -92,6 +92,9 @@ export interface ModelStandingState {
   readonly realResult: ModelResult | null;
   /** The scheme's components, for the wording (R2-12). Empty until the reads land. */
   readonly components: ModelInput['components'];
+  /** The model's items and the engine's unsure ones, for the parts left out (R3-3). */
+  readonly items: ModelInput['items'];
+  readonly unsureItemKeys: readonly string[];
   readonly error: string | null;
   readonly loading: boolean;
 }
@@ -101,6 +104,8 @@ export const MODEL_STANDING_LOADING: ModelStandingState = {
   result: null,
   realResult: null,
   components: [],
+  items: [],
+  unsureItemKeys: [],
   error: null,
   loading: true,
 };
@@ -154,6 +159,8 @@ export function modelStandingStates(
           result: run.result,
           realResult: run.realResult,
           components: run.input?.components ?? [],
+          items: run.input?.items ?? [],
+          unsureItemKeys: run.states?.unsureItemKeys ?? [],
           error: run.error,
           loading: false,
         },

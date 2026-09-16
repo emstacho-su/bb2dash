@@ -203,6 +203,22 @@ describe('display rounding, once', () => {
     it('names a lone muted piece when its parent is not muted', () => {
       expect(format.mutedPartNames(results([], [19]), IST323)).toEqual(['Final Project: Running Log']);
     });
+
+    it('sorts the unsure items under the part they mute, pieces included (R3-3)', () => {
+      const items = [
+        { key: 'col:IST.323:_3569947_1', name: 'Log Checkpoint Assignment', kind: 'item' as const, componentId: 19 },
+        { key: 'asg:IST.323/fp-log-final', name: 'Running Log (final)', kind: 'placeholder' as const, componentId: 19 },
+        { key: 'col:IST.323:quiz', name: 'Quiz #3', kind: 'item' as const, componentId: 11 },
+      ];
+      const unsure = ['col:IST.323:_3569947_1', 'asg:IST.323/fp-log-final'];
+      expect(format.mutedParts(results([], [14, 18, 19, 20]), IST323, items, unsure)).toEqual([
+        { part: 'Final Project: Security Program Proposal', confirmable: ['Log Checkpoint Assignment'], notInBlackboard: 1 },
+      ]);
+      expect(format.mutedParts(results([], [19]), IST323, items, unsure.slice(1))).toEqual([
+        { part: 'Final Project: Running Log', confirmable: [], notInBlackboard: 1 },
+      ]);
+      expect(format.mutedParts(results([11]), IST323, items, unsure)).toEqual([]);
+    });
   });
 
   it('writes a history line with the dash for "not graded yet"', () => {
