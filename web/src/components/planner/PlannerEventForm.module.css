@@ -1,0 +1,98 @@
+/* PlannerEventForm (Phase 11b) — sits inside PopoutShell's panel.
+   Every colour, radius and spacing value is a token from globals.css; inputs
+   and buttons compose the primitives in tokens.module.css from the TSX. */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 620px;
+}
+
+.heading {
+  margin: 0;
+  padding-right: var(--space-8);
+  font-size: var(--text-lg);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.fieldGrow {
+  composes: field;
+  flex: 1 1 220px;
+}
+
+.label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.note {
+  max-width: 280px;
+  font-size: var(--text-xs);
+  color: var(--color-accent-300);
+}
+
+.error {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.notes {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.serverError {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.delete {
+  composes: btnSecondary from '@/styles/tokens.module.css';
+  margin-right: auto;
+  color: var(--color-danger);
+}
+
+.confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-right: auto;
+  font-size: var(--text-sm);
+}
+
+.confirm .delete {
+  margin-right: 0;
+}

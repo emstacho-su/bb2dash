@@ -158,3 +158,131 @@ migration and redeploy, never edited in place. Phase 10a/10b own grades; V-1 own
 
 Reading anything from Google; the SU primary calendar; Google's native out-of-office /
 focus-time / working-location semantics; appointment schedule pages; recurrence; drag.
+
+## PM kickoff notes (2026-09-16)
+
+Implementation details the Contract left open, settled by the PM at kickoff. No product decision
+above changes; where a note tightens a rule, the Contract's intent is quoted. Workers cite these
+as K-n.
+
+**K-1 Branches, worktrees, seams checked.** Phase branch `feat/planner-events-11b`
+(`C:/Users/estac/projects/bb2dash-wt-planner-events-11b`), cut from `main` at `5b84b01` (PR #13).
+W-23 `feat/planner-events-11b-db` in `bb2dash-wt-pe-db`; W-24 `feat/planner-events-11b-web` in
+`bb2dash-wt-pe-web`. At kickoff prod `schema_migrations` ends at 066 (nothing at 067 or above),
+`calendar-push` v3 is live with `verify_jwt` off, `gcal_enabled` is true, no push lock is held,
+`calendar_events` holds 64 rows, and nothing depends on `v_calendar_push_items` or
+`calendar_events`. Phase 10a's `run_transform` (051) and every grade object are untouched here.
+
+**K-2 `time_zone` is an IANA name, checked by the database.** Postgres also accepts POSIX strings
+such as `UTC+3` and reads their sign the opposite way from ISO (three hours *west*); `Intl` and
+Google read them differently or reject them. Rule: the value is `UTC` or matches
+`^[A-Za-z]+(/[A-Za-z0-9_+-]+)+$` and is present in `pg_timezone_names`. A `check` cannot run that
+lookup (and a check calling `now()` is not immutable), so a `before insert or update` trigger
+enforces it with a clear message. The web mirrors it: the same regex plus
+`new Intl.DateTimeFormat('en-US', { timeZone })` not throwing.
+
+**K-3 All-day rows store an exclusive end.** `all_day = true` → `starts_at` is 00:00 of the first
+day in `time_zone`, `ends_at` is 00:00 of the day *after* the last day (Google's convention), so
+a one-day event spans one local day. The view's all-day `start.date` / `end.date` are
+`(starts_at at time zone time_zone)::date` / `(ends_at at time zone time_zone)::date`. The trigger
+from K-2 rejects an all-day row whose instants are not local midnights in its zone or whose end
+date is not after its start date. The grid places an all-day event on its dates whatever its zone.
+
+**K-4 The remaining checks, spelled out.** `btrim(title) <> ''` alongside the length check;
+`(location_kind is null) = (location is null)`; `location_kind is distinct from 'online' or
+location ~* '^https?://[^[:space:]]+$'`; `(kind = 'task') = (done is not null)`. Grants: select,
+insert, update, delete to `authenticated` under the owner policies; `anon` revoked. The dirty
+trigger is statement-level `after insert or update or delete`, like 061's on `assignments`.
+
+**K-5 068 must not break the live push.** v3 reads `calendar_events.assignment_id` and
+`v_calendar_push_items.assignment_id`; renaming the column breaks v3 the moment 068 lands. "View-
+compatible rename" is read as: `calendar_events.assignment_id` becomes `ref_id` with
+`source text not null default 'assignment' check (source in ('assignment','planner'))` and primary
+key `(source, ref_id)`; the view is dropped and recreated (no dependents, so column order may
+change) with new leading columns `source`, `ref_id`, `event_id`, keeps `assignment_id` (null on
+planner rows), and re-applies `security_invoker`, the anon revoke and the grants. Cut-over order,
+timestamps recorded: (1) `gcal_enabled = false`, confirm `gcal_push_run_id is null`; (2) apply
+068; (3) deploy v4 with `verify_jwt` false; (4) one manual push must report **zero writes on the
+assignment arm**; (5) `gcal_enabled = true`. Step 4 is the proof that every existing row kept its
+event id *and* that v4 builds the assignment body byte-for-byte as v3 did (any drift moves every
+`content_hash` and patches all of them).
+
+**K-6 Event body for the planner arm.** Kind labels, exactly: Event, Task, Out of office, Focus
+time, Working location, Appointment slot. The view's `summary` is `[<course code> · ]<kind label>
+· <title>`; v4 prefixes `✓ ` to the whole summary for a task with `done`. Timed events send
+`start.dateTime` / `end.dateTime` as the stored instant (RFC 3339 with offset) **and** `timeZone`
+= the event's zone, so Google keeps the instant and displays it in that zone. `description` =
+notes (when set), the online URL (when online), the line `bb2dash: <kind label>`, and the
+`open in bb2dash` link to `<web_base_url>/planner?week=<Monday of the New York start date>`.
+`colorId` comes from one fixed six-entry kind map in `google.ts`, commented; the assignment arm
+keeps its per-course colour. Deleting uses the mirror row's `source`.
+
+**K-7 Run counts.** `calendar_push_runs.counts` keeps its six totals and adds
+`<verb>_assignments` / `<verb>_planner` for each verb. Nothing in `web/` reads `counts` today.
+
+**K-8 Live proof on Stack's real calendar leaves nothing behind.** Proof events are inserted with
+SQL as the service role, titled `bb2dash test · <kind>`, dated in one week, one per kind plus one
+in `America/Los_Angeles`, one all-day and one online. Run the push, check Google, patch one, mark
+the task done, delete all, push again. End state: no `planner` rows in `calendar_events`, no
+`planner_events` rows, Google-side count by `privateExtendedProperty app=bb2dash` equal to the
+mirror count. The second-uid RLS check runs in `begin; … rollback;`.
+
+**K-9 Grid rules (W-24).**
+* Window query: `starts_at < <week end> and ends_at >= <week start>` (keeps zero-length tasks).
+* Position is the New York wall clock through `Intl`. A timed event crossing New York midnight
+  renders one segment per day, clipped. A segment outside 08:00–22:00 is clamped to the grid edge
+  and its chip still prints the real times. A zero-length event renders at the due-card minimum
+  height.
+* Zone chip: when `time_zone` is not `America/New_York`, the block shows the event's own local
+  time and `Intl`'s short zone name (e.g. "09:00 PDT").
+* All-day events sit in a second band row labelled **Events**, directly beneath the Assignments
+  band, same seven columns.
+* Clicking an empty half-hour slot opens `PlannerEventForm` pre-filled with that date, that start,
+  a 60-minute end and `America/New_York`; clicking an empty Events cell pre-fills an all-day
+  event. Clicking an existing block (class, due card, planner event) never opens the create form;
+  the Phase 11 click-to-popout on due cards and class blocks keeps working.
+* Form times are wall-clock values in the chosen zone, converted once, in the web, with an
+  `Intl`-based helper and no new dependency, using Temporal's `compatible` rule: a repeated time
+  (the 2026-11-01 01:00–02:00 fold) takes the earlier instant, a skipped time moves forward by the
+  gap, and the form says so under the field. Postgres resolves a fold the other way (standard
+  time), which is why SQL never re-derives an instant from a wall clock.
+* Kind decides the block style (six variants on tokens in `globals.css`; a missing token is added
+  there, nowhere else). A course, when set, puts its code in the block's text; it does not
+  recolour the block.
+* The task checkbox updates `planner_events.done` only.
+
+**K-10 Types and ordering.** W-23 applies and pushes **067 first** so W-24 can regenerate
+`database.types.ts` from prod; until then W-24 writes against a local type matching the DDL. The
+PM regenerates the types again at integration, after 068.
+
+**K-11 Test floors.** Neither package may end below its count at `5b84b01`; each worker reports
+before and after. W-23 writes `docs/planning/69c_W23_VERIFICATION.md` in the shape of
+`69a_W21_VERIFICATION.md` (git-blob md5 per its §1.1, the K-5 timestamps, the K-8 runs, RLS,
+advisor diff).
+
+## Round 2 — code-review fixes (2026-09-16)
+
+`/code-review main high` on the integrated branch (`56e8ec4`) returned 15 findings; the PM checked
+the ones that matter against the code and prod. `/security-review`: no findings. Migration **069**
+is reserved for this round (070–072 stay free). 067–068 are byte-frozen.
+
+| # | Owner | Finding (checked) | Fix |
+|---|---|---|---|
+| R2-1 | W-23 | `index.ts` reads `v_calendar_push_items` and `calendar_events` in one unpaginated select; PostgREST's row cap (1000) would silently truncate the desired set and the delete pass would remove the missing events from Google. The planner arm grows without a date bound, so the cap is reachable | Read both sides page by page (`.range()`) until a short page, in a helper that `push.ts`-style tests can drive; a run that cannot read a complete side aborts rather than diffing a partial list |
+| R2-2 | W-23 | `saveFailure` and `markDeleting` discard PostgREST's `{ error }` | Check and throw like `saveSuccess` / `remove` |
+| R2-3 | W-23 | 067's trigger scans `pg_timezone_names` on every insert **and** update: **499 ms measured on prod**, so every task tick waits half a second | **069**: skip the zone lookup on `UPDATE` when `time_zone` is unchanged; show before/after timing of a rolled-back `done` update |
+| R2-4 | W-24 | Editing an event that starts in the second 01:xx of the 2026-11-01 fold re-resolves its wall clock with the earlier-instant rule and moves it an hour, even when only the title changed | Keep the stored instants when date, time and zone are unchanged; convert only edited times |
+| R2-5 | W-24 | Rollback restores a whole-cache snapshot, so two overlapping optimistic writes undo each other | Roll back only the affected row (or invalidate) instead of restoring the snapshot |
+| R2-6 | W-24 | Esc / Cancel stay enabled while a save is pending; closing mid-save hides a server rejection | No silent loss: either block closing while pending or surface the failure outside the dialog (the grid alert) |
+| R2-7 | W-24 | `canonicalTimeZone` leaves an alias such as `us/eastern` as typed; Intl accepts it, 067 rejects it, the user sees a raw database error | Send Intl's resolved zone name; field-level error for anything the K-2 rule rejects |
+| R2-8 | W-24 | `eventCount` / `isEmpty` count fetched rows, not placed blocks | Count what renders |
+| R2-9 | W-24 | All-day midnight check ignores seconds, so the validator accepts rows 067 rejects | Compare seconds too |
+| R2-10 | W-24 | The task-toggle error alert never clears after a later successful write | Clear on the next successful write or on dismiss |
+| R2-11 | W-24 | `intlAcceptsZone` builds a new `Intl.DateTimeFormat` per call despite the cached formatter | Reuse the cache |
+| R2-12 | W-24 | `planner-zone.ts` re-implements `newYorkWallClock` (planner-week.ts) and `shiftIso` (anchor.ts) | Call the existing helpers |
+| R2-13 | W-24 | `PlannerEventForm`'s `COLUMN_FIELD` duplicates `FIELD_OF`; the server-validation merge is unreachable | Export one map, drop the dead path |
+
+Not changed, recorded in DECISIONS instead: 068 renamed a column and swapped a primary key rather
+than adding them (the frozen Contract asked for `(source, ref_id)`; the K-5 cut-over held the push
+off for 3 min 37 s with zero writes to existing events). STATUS / DECISIONS / ORCHESTRATOR are the
+PM's, in this PR.

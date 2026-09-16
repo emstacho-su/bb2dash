@@ -36,6 +36,8 @@ export default defineConfig({
       //
       // Phase 10a added the gradebook query layer and the staged-upload module;
       // Phase 11 added the planner week grid and the announcements bell/page.
+      // Phase 11b added planner events: zone helper, validation, placement,
+      // the query layer and the form's state.
       // Every module listed has a suite in test/ that drives it end to end.
       include: [
         'src/lib/queries.search.ts',
@@ -45,6 +47,11 @@ export default defineConfig({
         'src/lib/planner-week.ts',
         'src/lib/queries.planner.ts',
         'src/lib/queries.announcements.ts',
+        'src/lib/planner-zone.ts',
+        'src/lib/planner-events.ts',
+        'src/lib/planner-events-grid.ts',
+        'src/lib/queries.plannerEvents.ts',
+        'src/components/planner/planner-event-form-state.ts',
         'src/components/planner/PlannerWeek.tsx',
         'src/components/shell/Bell.tsx',
         'src/components/announcements/AnnouncementsList.tsx',

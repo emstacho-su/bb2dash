@@ -4,15 +4,19 @@
  * /planner — the week grid (R-19, Phase 11).
  *
  * Monday → Sunday columns, 08:00–22:00 in half-hour rows, an Assignments band
- * above them (the all-day band, so named because that is what Stack puts in it). Class meetings come from `meetings` (expanded by wall clock, with the
+ * above them (the all-day band, so named because that is what Stack puts in it)
+ * and, beneath it, the Events band for all-day planner events (Phase 11b). Class meetings come from `meetings` (expanded by wall clock, with the
  * room and, when a `sessions` row covers that course and day, its topic); due
  * items come from the same `v_work_items` window Today reads, so a status
  * changed here and a status changed there are the same fact in the same caches.
  *
- * Read-only by design (Stack, 2026-09-14): no drag, no day view, no work-window
- * lane. The one write is the status quick-edit, which is `StatusSelect` plus
- * `useSetItemStatus` — the Today mutation, unchanged, so it can only ever reach
- * `assignment_progress` / `reading_progress`.
+ * No drag, no day view, no work-window lane (Stack, 2026-09-14). Two kinds of
+ * write: the status quick-edit on a due item (`StatusSelect` plus
+ * `useSetItemStatus`, the Today mutation, so it can only reach
+ * `assignment_progress` / `reading_progress`), and planner events (Phase 11b):
+ * an empty slot or Events cell opens `PlannerEventForm`, a planner-event block
+ * opens it in edit mode, and a task's checkbox writes `planner_events.done`.
+ * Those reach `planner_events` only.
  *
  * `?week=YYYY-MM-DD` is the Monday anchor, so a week is linkable and ◂ ▸ are
  * plain links rather than state. The parameter is untrusted: `weekAnchor`
@@ -25,13 +29,11 @@
  * and so does a timed one whose clock falls outside the drawn hours.
  */
 
-import { useMemo } from 'react';
-import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import tokens from '@/styles/tokens.module.css';
 import { todayIso } from '@/components/tracker/anchor';
 import { itemHref } from '@/lib/queries.popout';
-import { useSetItemStatus, useTerm, type WorkItem } from '@/lib/queries.today';
+import { useSetItemStatus, type WorkItem } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
 import {
   PLANNER_SLOT_COUNT,
@@ -40,12 +42,17 @@ import {
   localWallClock,
   plannerHours,
   slotOffset,
-  termWeekNumber,
   weekAnchor,
   type LaneSpan,
   type PlannerDay,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
+import { isCompactSegment } from '@/lib/planner-events-grid';
+import { EventBlockContent, eventCardProps, type EventActions } from './PlannerEventBlock';
+import { PlannerEventForm } from './PlannerEventForm';
+import { DaySlots, EventsBand, type SlotPosition } from './PlannerSlots';
+import { DayHead, WeekHeader } from './PlannerWeekHeader';
+import { usePlannerEventEditor } from './usePlannerEventEditor';
 import {
   ItemChip,
   ItemContent,
@@ -84,12 +91,18 @@ export function PlannerWeek() {
 
   const data = usePlannerWeekData(view);
   const setStatus = useSetItemStatus();
+  const editor = usePlannerEventEditor();
+  const [activeSlot, setActiveSlot] = useState<SlotPosition>({ dayIndex: 0, slot: 0 });
 
   const actions = itemActions(pathname, view, setStatus, router);
 
   const itemCount = data.placedItems.timed.length + data.placedItems.allDay.length;
   const isEmpty =
-    !data.loading && data.error === null && data.placedMeetings.length === 0 && itemCount === 0;
+    !data.loading &&
+    data.error === null &&
+    data.placedMeetings.length === 0 &&
+    itemCount === 0 &&
+    data.eventCount === 0;
 
   return (
     <section className={styles.section} aria-label="Week grid">
@@ -100,6 +113,7 @@ export function PlannerWeek() {
         error={data.error}
         meetingCount={data.placedMeetings.length}
         itemCount={itemCount}
+        eventCount={data.eventCount}
       />
 
       {data.error !== null && (
@@ -108,11 +122,32 @@ export function PlannerWeek() {
         </p>
       )}
 
-      <WeekBoard view={view} data={data} actions={actions} isEmpty={isEmpty} now={nowSlot(view)} />
+      {editor.alert !== null && (
+        <p className={styles.alert} role="alert">
+          <span>{editor.alert}</span>
+          <button type="button" className={styles.alertDismiss} onClick={editor.dismissAlert}>
+            Dismiss
+          </button>
+        </p>
+      )}
+
+      <WeekBoard
+        view={view}
+        data={data}
+        actions={actions}
+        eventActions={editor.actions}
+        activeSlot={activeSlot}
+        onActivateSlot={setActiveSlot}
+        isEmpty={isEmpty}
+        now={nowSlot(view)}
+      />
 
       <div className={styles.legend}>
         <span>Times are as recorded · a date-only item sits in the Assignments band</span>
+        <span>Click an empty slot to add an event · the grid shows New York time</span>
       </div>
+
+      {editor.form !== null && <PlannerEventForm key={editor.form.sessionId} {...editor.form} />}
     </section>
   );
 }
@@ -160,12 +195,19 @@ function WeekBoard({
   view,
   data,
   actions,
+  eventActions,
+  activeSlot,
+  onActivateSlot,
   isEmpty,
   now,
 }: {
   view: PlannerWeekModel;
   data: PlannerWeekData;
   actions: ItemActions;
+  eventActions: EventActions;
+  /** The slot holding the grid's one tab stop. */
+  activeSlot: SlotPosition;
+  onActivateSlot: (position: SlotPosition) => void;
   isEmpty: boolean;
   /** Slot offset of the now-line, or null when it does not belong on screen. */
   now: number | null;
@@ -173,6 +215,7 @@ function WeekBoard({
   return (
     <div
       className={styles.board}
+      data-planner-board="true"
       style={{ ['--planner-slots' as string]: String(PLANNER_SLOT_COUNT) }}
     >
       <div className={styles.corner} />
@@ -181,94 +224,22 @@ function WeekBoard({
       ))}
 
       <AllDayBand view={view} band={data.bandByDay} isEmpty={isEmpty} actions={actions} />
+      <EventsBand view={view} band={data.eventBandByDay} actions={eventActions} />
 
       <HourGutter />
       {view.days.map((day, index) => (
         <DayColumn
           key={`col-${day.iso}`}
           day={day}
+          dayCount={view.days.length}
           blocks={data.blocksByDay[index]}
           actions={actions}
+          eventActions={eventActions}
+          activeSlot={activeSlot}
+          onActivateSlot={onActivateSlot}
           nowSlot={day.isToday ? now : null}
         />
       ))}
-    </div>
-  );
-}
-
-function WeekHeader({
-  view,
-  pathname,
-  loading,
-  error,
-  meetingCount,
-  itemCount,
-}: {
-  view: PlannerWeekModel;
-  pathname: string;
-  loading: boolean;
-  error: Error | null;
-  meetingCount: number;
-  itemCount: number;
-}) {
-  const term = useTerm();
-  const termWeek = termWeekNumber(term.data ?? null, view.weekStart);
-
-  return (
-    <div className={styles.head}>
-      <h2 className={styles.h2}>{view.rangeLabel}</h2>
-      {termWeek !== null && (
-        <span className={tokens.kicker}>
-          {term.data ? `Week ${termWeek} · ${term.data.name}` : `Week ${termWeek}`}
-        </span>
-      )}
-      <span className={styles.sub}>
-        {loading
-          ? 'loading…'
-          : error !== null
-            ? 'could not load'
-            : `${meetingCount} class${meetingCount === 1 ? '' : 'es'} · ${itemCount} due`}
-      </span>
-
-      <WeekPager view={view} pathname={pathname} />
-    </div>
-  );
-}
-
-/** ◂ ▸ write `?week=`; Today drops it. Plain links, so a week is linkable. */
-function WeekPager({ view, pathname }: { view: PlannerWeekModel; pathname: string }) {
-  return (
-    <span className={styles.pager}>
-      <Link
-        className={styles.pageLink}
-        href={`?week=${view.previousWeek}`}
-        title="Previous week"
-        aria-label="Previous week"
-        scroll={false}
-      >
-        ◂
-      </Link>
-      <Link
-        className={styles.pageLink}
-        href={`?week=${view.nextWeek}`}
-        title="Next week"
-        aria-label="Next week"
-        scroll={false}
-      >
-        ▸
-      </Link>
-      <Link className={styles.todayLink} href={pathname} scroll={false}>
-        Today
-      </Link>
-    </span>
-  );
-}
-
-function DayHead({ day }: { day: PlannerDay }) {
-  return (
-    <div className={styles.dayHead} data-today={String(day.isToday)}>
-      <span className={styles.dayName}>{day.isToday ? 'Today' : day.dowLabel}</span>
-      <span className={styles.dayDate}>{day.dayOfMonth}</span>
     </div>
   );
 }
@@ -328,17 +299,32 @@ function HourGutter() {
 
 function DayColumn({
   day,
+  dayCount,
   blocks,
   actions,
+  eventActions,
+  activeSlot,
+  onActivateSlot,
   nowSlot,
 }: {
   day: PlannerDay;
+  dayCount: number;
   blocks: (GridBlock & LaneSpan)[];
   actions: ItemActions;
+  eventActions: EventActions;
+  activeSlot: SlotPosition;
+  onActivateSlot: (position: SlotPosition) => void;
   nowSlot: number | null;
 }) {
   return (
     <div className={styles.dayColumn} data-today={String(day.isToday)} data-day={day.iso}>
+      <DaySlots
+        day={day}
+        dayCount={dayCount}
+        active={activeSlot}
+        onActivate={onActivateSlot}
+        actions={eventActions}
+      />
       {nowSlot !== null && (
         <span
           className={styles.nowLine}
@@ -346,27 +332,45 @@ function DayColumn({
           style={{ ['--slot' as string]: String(nowSlot) }}
         />
       )}
-      {blocks.map((block) => (
-        <div
-          key={block.key}
-          className={block.kind === 'meeting' ? styles.meetingBlock : styles.itemBlock}
-          data-block={block.kind}
-          data-category={block.kind === 'item' ? block.item.item.category : undefined}
-          {...(block.kind === 'item' ? itemCardProps(block.item, actions) : {})}
-          style={{
-            ['--top' as string]: String(block.top),
-            ['--height' as string]: String(block.height),
-            ['--lane-left' as string]: `${(block.lane / block.lanes) * 100}%`,
-            ['--lane-width' as string]: `${100 / block.lanes}%`,
-          }}
-        >
-          {block.kind === 'meeting' ? (
-            <MeetingContent meeting={block.meeting} nested={block.nested} actions={actions} />
-          ) : (
-            <ItemContent placed={block.item} actions={actions} />
-          )}
-        </div>
-      ))}
+      {blocks.map((block) => {
+        const style = {
+          ['--top' as string]: String(block.top),
+          ['--height' as string]: String(block.height),
+          ['--lane-left' as string]: `${(block.lane / block.lanes) * 100}%`,
+          ['--lane-width' as string]: `${100 / block.lanes}%`,
+        };
+        if (block.kind === 'event') {
+          return (
+            <div
+              key={block.key}
+              className={styles.eventBlock}
+              data-block="event"
+              data-clamped={block.segment.clamped ? 'true' : undefined}
+              data-compact={isCompactSegment(block.segment) ? 'true' : undefined}
+              {...eventCardProps(block.segment.event, eventActions)}
+              style={style}
+            >
+              <EventBlockContent segment={block.segment} actions={eventActions} />
+            </div>
+          );
+        }
+        return (
+          <div
+            key={block.key}
+            className={block.kind === 'meeting' ? styles.meetingBlock : styles.itemBlock}
+            data-block={block.kind}
+            data-category={block.kind === 'item' ? block.item.item.category : undefined}
+            {...(block.kind === 'item' ? itemCardProps(block.item, actions) : {})}
+            style={style}
+          >
+            {block.kind === 'meeting' ? (
+              <MeetingContent meeting={block.meeting} nested={block.nested} actions={actions} />
+            ) : (
+              <ItemContent placed={block.item} actions={actions} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

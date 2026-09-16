@@ -120,6 +120,30 @@
   --type-exam-bg: var(--color-accent-500);
   --type-exam-fg: var(--color-bg);
 
+  /* — planner-event kinds (Phase 11b) — one bg / fg / edge per kind, all on the
+     ramps above. Kind is the colour; a course never recolours a block (Q5).
+     Out of office adds a hatch, working location a dashed edge and an
+     appointment slot a dotted one, so the six read apart without colour too. */
+  --planner-event-bg: var(--color-accent-700);
+  --planner-event-fg: var(--color-accent-100);
+  --planner-event-edge: var(--color-accent-300);
+  --planner-task-bg: var(--color-neutral-800);
+  --planner-task-fg: var(--color-neutral-100);
+  --planner-task-edge: var(--color-neutral-300);
+  --planner-ooo-bg: var(--color-danger-bg);
+  --planner-ooo-fg: var(--color-text);
+  --planner-ooo-edge: var(--color-danger);
+  --planner-ooo-hatch: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  --planner-focus-bg: var(--color-accent-900);
+  --planner-focus-fg: var(--color-accent-200);
+  --planner-focus-edge: var(--color-accent-500);
+  --planner-worklocation-bg: var(--color-neutral-900);
+  --planner-worklocation-fg: var(--color-neutral-200);
+  --planner-worklocation-edge: var(--color-neutral-500);
+  --planner-appointment-bg: color-mix(in srgb, var(--color-accent-2-700) 40%, transparent);
+  --planner-appointment-fg: var(--color-accent-2-100);
+  --planner-appointment-edge: var(--color-accent-2-400);
+
   color-scheme: dark;
 }
 
