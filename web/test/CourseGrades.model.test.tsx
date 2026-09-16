@@ -34,6 +34,8 @@ interface LinkRow { course_id: string; column_id: string; component_id: number |
 const db = vi.hoisted(() => ({
   scenarios: new Map<string, ScenarioRow>(),
   links: new Map<string, LinkRow>(),
+  /** `relation:op` → the error message that write returns instead of succeeding. */
+  failures: new Map<string, string>(),
 }));
 
 /**
@@ -104,6 +106,8 @@ function builder(relation: string) {
   let payload: Record<string, unknown> | null = null;
   const settle = () => {
     if (op === 'select') return { data: read(relation, filters), error: null };
+    const failure = db.failures.get(`${relation}:${op}`);
+    if (failure) return { data: null, error: new Error(failure) };
     write(relation, op, payload, filters);
     return { data: null, error: null };
   };
@@ -125,7 +129,7 @@ function builder(relation: string) {
       return chain;
     },
     maybeSingle: () => Promise.resolve(settle()),
-    then: (resolve: (value: { data: unknown; error: null }) => unknown) => Promise.resolve(settle()).then(resolve),
+    then: (resolve: (value: { data: unknown; error: Error | null }) => unknown) => Promise.resolve(settle()).then(resolve),
   };
   return chain;
 }
@@ -195,6 +199,7 @@ const MUTED_LINE = 'Left out: Two Major Case Studies (Synchrony, SU IT) — the 
 beforeEach(() => {
   db.scenarios.clear();
   db.links.clear();
+  db.failures.clear();
 });
 
 describe('CourseGrades — the scenario persists', () => {
@@ -253,6 +258,43 @@ describe('CourseGrades — a percentage what-if (Round 1b A1)', () => {
     fireEvent.blur(field);
     await waitFor(() => expect(db.scenarios.get('IST.466')?.item_scores).toEqual({ 'asg:IST.466/ethics-practice-2': 80 }));
     expect(await screen.findByText('includes what-if values')).toBeInTheDocument();
+  });
+});
+
+describe('CourseGrades — only the latest scenario action shows its error (R2-10)', () => {
+  const SAVED = { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: null, updated_at: 'x' };
+
+  it("a successful Reset clears a failed save's alert", async () => {
+    db.scenarios.set('IST.466', SAVED);
+    db.failures.set('grade_scenarios:upsert', 'network down');
+    mount();
+
+    const field = await whatIfField('Ethics Case Presentation');
+    fireEvent.change(field, { target: { value: '70' } });
+    fireEvent.blur(field);
+    expect(await screen.findByText('Could not save the scenario: network down')).toBeInTheDocument();
+
+    db.failures.clear();
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset scenario' }));
+    await waitFor(() => expect(db.scenarios.has('IST.466')).toBe(false));
+    await waitFor(() => expect(screen.queryByText(/Could not save the scenario/)).toBeNull());
+  });
+
+  it("a successful save clears a failed Reset's alert", async () => {
+    db.scenarios.set('IST.466', SAVED);
+    db.failures.set('grade_scenarios:delete', 'permission denied');
+    mount();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset scenario' }));
+    expect(await screen.findByText('Could not reset the scenario: permission denied')).toBeInTheDocument();
+
+    db.failures.clear();
+    const field = await whatIfField('Ethics Case Presentation');
+    await waitFor(() => expect(field.value).toBe('90'));
+    fireEvent.change(field, { target: { value: '80' } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(db.scenarios.get('IST.466')?.item_scores).toEqual({ [ETHICS_KEY]: 80 }));
+    await waitFor(() => expect(screen.queryByText(/Could not reset the scenario/)).toBeNull());
   });
 });
 

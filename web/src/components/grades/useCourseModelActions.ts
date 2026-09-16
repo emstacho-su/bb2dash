@@ -58,6 +58,10 @@ export function useCourseModelActions(
 ): CourseModelActions {
   const save = useSaveScenario(schemeCourseId);
   const reset = useResetScenario(schemeCourseId);
+  // Only the latest scenario action's error is shown (R2-10): starting a save
+  // clears a failed reset's alert, and starting a reset clears a failed save's.
+  const clearResetError = reset.reset;
+  const clearSaveError = save.reset;
   const link = useLinkColumn();
   const [linkKey, setLinkKey] = useState<string | null>(null);
 
@@ -72,9 +76,10 @@ export function useCourseModelActions(
   const onCommit = useCallback(
     (key: string, value: number | null) => {
       if (!schemeCourseId) return;
+      clearResetError();
       saveMutate({ item: { key, value } });
     },
-    [schemeCourseId, saveMutate],
+    [schemeCourseId, saveMutate, clearResetError],
   );
 
   const targets = useMemo(() => (input ? whatIfTargets(input) : NO_TARGETS), [input]);
@@ -111,9 +116,10 @@ export function useCourseModelActions(
   const onSelect = useCallback(
     (letter: string) => {
       if (!schemeCourseId) return;
+      clearResetError();
       saveMutate({ targetLetter: letter });
     },
-    [schemeCourseId, saveMutate],
+    [schemeCourseId, saveMutate, clearResetError],
   );
 
   const scenarioError = save.isError
@@ -128,7 +134,9 @@ export function useCourseModelActions(
     solver: solved ? { ...solved, letters, selected, onSelect } : null,
     canReset: Boolean(schemeCourseId) && model.scenario !== null,
     onReset: () => {
-      if (schemeCourseId) reset.mutate();
+      if (!schemeCourseId) return;
+      clearSaveError();
+      reset.mutate();
     },
     resetPending: reset.isPending,
     scenarioError,
