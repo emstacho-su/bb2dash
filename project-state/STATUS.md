@@ -232,9 +232,14 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    Los Angeles, the online link safe in both, six UI deletes gone from Google, due-date events 0
    writes in every run (runs 25–29), Google 64 = mirror 64 at the end. Two layout fixes from it:
    a zone chip no longer covers the title (block lines never shrink; chip and link share a line),
-   and a half-hour block is one row led by its title (`isCompactSegment`). Still open, not from
-   11b: the "Assignments" band label clips to "GNMENTS", and React #418 on `/planner` (same
-   render-time clock read as `main`).
+   and a half-hour block is one row led by its title (`isCompactSegment`). Three Phase 11 display
+   issues the walk also found are fixed on the stacked follow-up `fix/planner-display` (held with
+   #14 for Stack's word): React #418 on every `/planner` load (the grid hydrates inside Suspense
+   after the persisted query cache is restored, so its first client render had rows the server
+   HTML lacked — confirmed on the preview by clearing the cache; `useHydrated` renders the same
+   placeholder on both sides, then the grid), the "Assignments" band label clipped to "GNMENTS"
+   (now vertical), and a due item nested in its class block drawn over its own title and status
+   (class lines keep their height; the chip is two lines). Web tests 792.
 
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's
