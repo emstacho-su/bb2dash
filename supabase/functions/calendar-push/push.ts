@@ -93,6 +93,99 @@ export interface RunPushResult {
   errors: string[];
 }
 
+// ------------------------------------------------------------------------------------------
+// Round 2, R2-1: reading both sides of the diff completely, or not at all
+// ------------------------------------------------------------------------------------------
+//
+// PostgREST caps a response at max_rows (1000 on this project) and says nothing when it does.
+// A truncated desired set is the worst failure this function can have: the delete pass would
+// take every event past the cap off Stack's calendar. So both sides are read page by page, in
+// a fixed total order ((source, ref_id) is unique on both the view and the mirror), and a side
+// that cannot be read completely throws, which aborts the run before a single Google call.
+//
+// Offset paging over a table that changes mid-read can skip or repeat a row. Each page asks for
+// the exact row count; if the count moves between pages, if a key repeats, or if the rows read
+// do not add up to the count, the read throws too. Any such change also raises gcal_dirty
+// (061, 067 triggers), so the next tick simply tries again.
+
+/**
+ * Well under the project's max_rows (1000), so a full page is never silently cut short by the
+ * server and "a short page is the last page" stays true.
+ */
+export const PAGE_SIZE = 500;
+
+export interface PageResult<T> {
+  data: T[] | null;
+  error: { message: string } | null;
+  /** The exact row count PostgREST reports with `count: "exact"`; null when not asked for. */
+  count: number | null;
+}
+
+/** Reads rows `from`..`to` inclusive (PostgREST's `.range()`), in a stable total order. */
+export type PageReader<T> = (from: number, to: number) => Promise<PageResult<T>>;
+
+export async function readAllPages<T>(
+  label: string,
+  readPage: PageReader<T>,
+  keyOf: (row: T) => string,
+  pageSize: number = PAGE_SIZE,
+): Promise<T[]> {
+  if (!Number.isInteger(pageSize) || pageSize < 1) {
+    throw new Error(`${label}: page size must be a positive integer`);
+  }
+  const rows: T[] = [];
+  const seen = new Set<string>();
+  let expected: number | null = null;
+
+  for (let from = 0;; from += pageSize) {
+    const to = from + pageSize - 1;
+    const page = await readPage(from, to);
+    if (page.error) {
+      throw new Error(`${label}: reading rows ${from}-${to} failed: ${page.error.message}`);
+    }
+    if (page.count !== null) {
+      if (expected === null) expected = page.count;
+      else if (page.count !== expected) {
+        throw new Error(`${label}: row count moved from ${expected} to ${page.count} mid-read`);
+      }
+    }
+    const data = page.data ?? [];
+    if (data.length > pageSize) {
+      throw new Error(`${label}: page ${from}-${to} returned ${data.length} rows`);
+    }
+    for (const row of data) {
+      const key = keyOf(row);
+      if (seen.has(key)) throw new Error(`${label}: ${key} was read twice; the rows moved mid-read`);
+      seen.add(key);
+      rows.push(row);
+    }
+    if (data.length < pageSize) break;
+  }
+
+  if (expected !== null && rows.length !== expected) {
+    throw new Error(`${label}: read ${rows.length} rows but the count is ${expected}`);
+  }
+  return rows;
+}
+
+export interface PagedPushDeps extends Omit<RunPushDeps, "desired" | "mirror"> {
+  readDesiredPage: PageReader<PushItem>;
+  readMirrorPage: PageReader<MirrorRow>;
+  pageSize?: number;
+}
+
+/**
+ * Read both sides completely, then run the diff. A read failure rejects before runPush is
+ * reached, so nothing is ever diffed against a partial list and Google is never called.
+ */
+export async function readAndRunPush(deps: PagedPushDeps): Promise<RunPushResult> {
+  const { readDesiredPage, readMirrorPage, pageSize, ...rest } = deps;
+  const keyOf = (row: { source: PushSource; ref_id: string }) => mirrorKey(row.source, row.ref_id);
+  const desired = await readAllPages("v_calendar_push_items", readDesiredPage, keyOf, pageSize);
+  const mirror = await readAllPages("calendar_events", readMirrorPage, keyOf, pageSize);
+  return runPush({ ...rest, desired, mirror });
+}
+
 /** 1 s, 2 s, 4 s, then give up on that item and carry on with the rest of the run. */
 export const BACKOFF_MS: readonly number[] = [1000, 2000, 4000];
 

@@ -285,3 +285,98 @@ Baseline taken immediately before 067 (20:09); after, at 20:29, following the li
 - **Kind colours** (deviation 6) await a nod.
 - Unchanged from 69a §12: the duplicate-`bb_item_id` pair (`IST.323/fp-proposal`,
   `IST.323/fp-log-final`) stays absent and unpushed.
+
+## Round 2 (2026-09-16, code-review fixes R2-1, R2-2, R2-3)
+
+Branch fast-forwarded to `origin/feat/planner-events-11b` at `e0b4b29` first (no conflicts in
+W-23's files). Commits: `eb25d15` R2-1, `c8f6c0f` R2-2, `20d6254` R2-3 (069), then this note.
+
+### R2-1: both sides of the diff are read page by page
+
+`push.ts` gains `readAllPages(label, readPage, keyOf, pageSize = 500)` and `readAndRunPush`, which
+reads `v_calendar_push_items` and `calendar_events` completely before `runPush` is reached.
+`index.ts` supplies the two page readers: `.select(..., { count: "exact" }).order("source")
+.order("ref_id").range(from, to)`. `PAGE_SIZE` 500 sits under the project's `max_rows` 1000, and a
+short page ends the read. The read throws, and the run is recorded `failed` before any Google call,
+when a page returns an error, when the exact count moves between pages, when a key repeats, or when
+the rows read do not add up to the count. Offset paging over a table that changes mid-read can
+otherwise skip a row, and a skipped desired row would be deleted from Google.
+
+Checked against PostgREST on prod (read-only probe of `calendar_events`, 64 rows):
+`offset=64&limit=500` with `count=exact` → **206, 0 rows** (so an exact multiple of the page size
+ends cleanly on an empty page); `offset=70` → **416 PGRST103**, which can only happen if rows vanish
+mid-read, and which aborts the run as intended.
+
+### R2-2: every mirror write checks PostgREST's error
+
+The writer moved from `index.ts` to **`store.ts`** (`createMirrorStore(client, now)`) behind a
+structural slice of supabase-js, so the node tests can drive it. `saveFailure` and `markDeleting`
+now throw on `{ error }` like `saveSuccess` and `remove`. Tested through that seam: each of the four
+methods throws on an error; writes are scoped by `(source, ref_id)` and `last_error` is capped at
+500; a failed `markDeleting` rejects the run before Google is asked to delete anything.
+
+### R2-3: migration 069, the zone lookup only when the zone changes
+
+| Artefact | Applied as | Version | md5 (git blob = `md5(statements[1])`) |
+|---|---|---|---|
+| `db/migrations/069_planner_events_zone_check_on_change.sql` | `069_planner_events_zone_check_on_change` | `20260916210258` | `64647e139d9d25785937cfa683c6d5b5` |
+
+`planner_events_check_time()` runs the K-2 `pg_timezone_names` check on `INSERT` and on an `UPDATE`
+whose `time_zone IS DISTINCT FROM` the old value; the K-3 all-day checks still run on every write.
+The trigger definition is unchanged. The file is ASCII and stored with its trailing newline, like 067
+and 068.
+
+Timing, each inside `begin; … rollback;` on prod, with a probe task row: clock time of the
+`update planner_events set done = not done` statement, then `EXPLAIN (ANALYZE)` of one more.
+
+| When | `done` update, clock ms | `planner_events_check_time` in EXPLAIN |
+|---|---|---|
+| dry run, 067 body | 62.7 / 46.7 / 47.8 | 46.5 ms |
+| dry run, 069 body, same transaction | 0.5 / 0.2 / 0.1 | 0.0 ms |
+| after applying 069 (fresh transaction) | 0.4 / 0.2 / 0.2 / 0.1 / 0.1 | 0.0 ms |
+| for comparison, still paying the lookup: insert of the probe; an update that changes `time_zone` | 48.7; 46.7 | 46.9 ms; 46.1 ms |
+
+This session measured the lookup at about 47 ms, not the PM's 499 ms (likely a colder zone
+directory or a different client path). Either way the `done` update drops to below a millisecond. An
+insert, or an edit that changes the zone, still pays the lookup, as R2-3 specifies.
+
+Still enforced after 069 (dry run): update to `UTC+3` and to `Mars/Olympus`, insert with `EST5EDT`
+→ `23514` zone error; an all-day row moved to `America/Los_Angeles` → K-3 midnight error; an all-day
+row's start moved an hour with the zone unchanged → K-3 midnight error; an all-day end moved onto
+its start date → K-3 end-date error; a timed row moved to `America/Los_Angeles` → ok. Function ACL
+unchanged (`postgres`, `service_role`).
+
+### Function v5
+
+| File | v4 md5 | **v5** md5 (git blob) | bytes |
+|---|---|---|---|
+| `index.ts` | `216b3daf1e15668bb797cc8c547a0e31` | `6797e25c25e42dbf7de085bb8846c4d3` | 13202 |
+| `google.ts` | `b48c5cd95e4fa8adb5adf5f37e8309a5` | unchanged | 22147 |
+| `push.ts` | `95c2b5873ed4f1a422089f8e8a537d7e` | `5b52f08cbfc460bc6645a5067c8d31ec` | 16434 |
+| `store.ts` | — | `e64f7416a3be4774d28c55930755e10d` (new) | 3435 |
+
+Deployed **21:06:32.098** as `calendar-push` **v5**, `verify_jwt false`, `ezbr_sha256
+5cd89d55a35d9af89250c361e5d05ad42dbfbb8a3bdf4cc03651bdb27870b0ed`. The `get_edge_function`
+read-back was compared by script with the git blobs: all four files `IDENTICAL`. `index.ts` keeps
+its `(v4)` first-line banner; the v5 changes are described in its header.
+
+**The zero-write run (run 24).** `calendar_push_now()` + `calendar_push_tick()` at 21:06:51.126,
+`gcal_enabled` true throughout, no pause: `status ok`, finished 21:06:52.367, `scanned 66`
+(assignments 66, planner 0), `unchanged 64`, inserted / patched / deleted / failed **0 on both
+arms**, `error` null. So v5 read both sides through the pager and the assignment hashes did not move.
+Afterwards: 64 mirror rows, 0 planner rows, lock free, `gcal_dirty` false.
+
+### Tests
+
+| Suite | Before round 2 | After |
+|---|---|---|
+| `push_test.ts` | 35 | **42** (R2-1: 4, R2-2: 3) |
+| `google-consent.test.mjs` | 9 | 9 |
+| **Total** | **44** | **51** |
+
+New R2-1 tests: a 1203-row side read completely in fixed `[0,499] [500,999] [1000,1499]` ranges, and
+an exact 1000 ending on an empty page; 1200 unchanged events past the old row cap issue zero Google
+calls; a page error on either side (second page, after a partial list exists) rejects with no Google
+call and no mirror write; a count that moves, a repeated key and a short total all abort the read.
+`google.ts`, `push.ts`, `store.ts` and `push_test.ts` type-check under `tsc --strict` apart from the
+pre-existing TS2783 in v3's key-order test.
