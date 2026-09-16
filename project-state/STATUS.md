@@ -2,7 +2,7 @@
 
 > Updated upon each PR. Last update: **2026-09-15**, Phase 11 planner + calendar + bell **PR #12 open**
 > (`feat/planner-11`: `/planner` week grid, Google Calendar push, announcements bell and page;
-> migrations 060–066 live; calendar push live against Stack's Google calendar, three-run proof recorded).
+> migrations 060–066 live; calendar push live against Stack's Google calendar, three-run proof recorded; **Stack signed off the six-step acceptance script on 2026-09-16**).
 > Phase 10a is in flight in parallel on `feat/grades-10a` (migrations 046–051 live). Phase 9
 > merged 2026-09-15 (PR #10), Phase 8 2026-09-14 (PR #8). Convention: see root `CLAUDE.md`.
 
@@ -194,7 +194,7 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 10 | Grades and submissions | `67_PHASE10A_grades.md` | 10a in flight on `feat/grades-10a` (046–051 live), parallel with 11; 10b after October scores + V-1 |
 | V-1 | Grading schema validation (stream, Stack + a materials-only session) | `63_GRADING_VALIDATION.md`, `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | added 2026-09-14; parallel with 10a; gate for 10b. Launch: `scripts/validate-grading.ps1` |
 | V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14; parallel with 10a |
-| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **PR #12 open** (`feat/planner-11`, migrations 060–066 live, calendar push live and proven) |
+| 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **PR #12 open, signed off by Stack 2026-09-16** (`feat/planner-11`, migrations 060–066 live, calendar push live and proven) |
 | 12 | Electron shell | — | |
 | 13 | Styling pass | — | last |
 
