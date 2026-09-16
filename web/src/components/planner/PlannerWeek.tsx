@@ -32,6 +32,7 @@
 import { useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { todayIso } from '@/components/tracker/anchor';
+import { useHydrated } from '@/lib/use-hydrated';
 import { itemHref } from '@/lib/queries.popout';
 import { useSetItemStatus, type WorkItem } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
@@ -71,12 +72,26 @@ import styles from './PlannerWeek.module.css';
 
 /** What the band says when the whole week holds nothing. */
 const EMPTY_WEEK = 'Nothing scheduled this week.';
+/** What the server and the hydrating client both render (see `useHydrated`). */
+const LOADING_WEEK = 'Loading the week…';
 
 /* ---------------------------------------------------------------------------
  * The screen
  * ------------------------------------------------------------------------ */
 
+/**
+ * The server renders a placeholder, never the grid: it has none of the week's
+ * rows, and its clock is UTC. The browser renders the same placeholder while it
+ * hydrates and the grid immediately after, from whatever the restored query
+ * cache already holds.
+ */
 export function PlannerWeek() {
+  const hydrated = useHydrated();
+  if (!hydrated) return <p className={styles.state}>{LOADING_WEEK}</p>;
+  return <PlannerWeekScreen />;
+}
+
+function PlannerWeekScreen() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -257,7 +272,7 @@ function AllDayBand({
 }) {
   return (
     <>
-      <div className={styles.bandLabel}>Assignments</div>
+      <div className={styles.bandLabelVertical}>Assignments</div>
       {isEmpty ? (
         <div className={styles.bandEmpty}>{EMPTY_WEEK}</div>
       ) : (
