@@ -58,7 +58,7 @@ describe('weighted_pct standings', () => {
     expect(result.components[1]).toMatchObject({ state: 'graded', usesHypothetical: true });
   });
 
-  it.each([
+  it.each<{ name: string; scores: Readonly<Record<string, number>> }>([
     { name: 'a key that matches no item', scores: { 'asg:nope': 50 } },
     { name: 'a key on an already graded item (Blackboard wins)', scores: { 'col:hw1': 0 } },
     { name: 'a key on a zero-point item', scores: { 'col:kc': 1 } },
