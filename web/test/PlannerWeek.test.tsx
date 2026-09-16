@@ -30,6 +30,7 @@ interface StubChain {
   select: () => StubChain;
   eq: () => StubChain;
   gte: () => StubChain;
+  lt: () => StubChain;
   lte: () => StubChain;
   order: () => StubChain;
   limit: () => StubChain;
@@ -90,6 +91,7 @@ function chainFor(table: string): StubChain {
     select: () => chain,
     eq: () => chain,
     gte: () => chain,
+    lt: () => chain, // planner_events window (Phase 11b)
     lte: () => chain,
     order: () => chain,
     limit: () => chain,
