@@ -129,12 +129,29 @@ describe('linkStates (answer 2, PM call 9)', () => {
     });
   });
 
-  it('offers it on a scored unlinked column and on an override, never on a placeholder or a confirmed link', () => {
-    const scoredUnlinked = makeItem({ item_key: 'col:IST.323:lab', score: 4, component_id: null, link_source: null, link_confidence: null });
+  it('offers it on an unlinked column scored or not, and on an override; never on a placeholder or a confirmed link', () => {
+    const unlinked = { component_id: null, link_source: null, link_confidence: null } as const;
+    const scoredUnlinked = makeItem({ item_key: 'col:IST.323:lab', score: 4, ...unlinked });
+    const unscoredUnlinked = makeItem({ item_key: 'col:IST.323:_3569973_1', column_id: '_3569973_1', possible: 13, score: null, assignment_id: null, ...unlinked });
     const notGraded = makeItem({ item_key: 'col:IST.323:sel', link_source: 'override', excluded: true, component_id: 13 });
-    const states = view.linkStates([scoredUnlinked, notGraded, makeItem(), IST466_LETTER_PLACEHOLDER, makeItem({ item_key: 'x', component_id: null, link_source: null })]);
-    expect([...states.keys()]).toEqual(['col:IST.323:lab', 'col:IST.323:sel']);
+    const states = view.linkStates([scoredUnlinked, unscoredUnlinked, notGraded, makeItem(), IST466_LETTER_PLACEHOLDER]);
+    expect([...states.keys()]).toEqual(['col:IST.323:lab', 'col:IST.323:_3569973_1', 'col:IST.323:sel']);
+    expect(states.get('col:IST.323:_3569973_1')).toMatchObject({ componentId: null, unsure: false, override: false });
     expect(states.get('col:IST.323:sel')).toMatchObject({ override: true, excluded: true, componentId: null, unsure: false });
+  });
+
+  it('offers none on a zero-point or pointless column, unlinked or unsure (Round 1b A2)', () => {
+    const states = view.linkStates([
+      makeItem({ item_key: 'col:IST.352:kc', possible: 0, score: 1, component_id: null, link_source: null, link_confidence: null }),
+      makeItem({ item_key: 'col:IST.352:null', possible: null, component_id: null, link_source: null, link_confidence: null }),
+      { ...IST466_SYNCHRONY, item_key: 'col:IST.466:zero', possible: 0 },
+    ]);
+    expect(states.size).toBe(0);
+  });
+
+  it('keeps an override pickable even on a zero-point column, so it can be undone', () => {
+    const states = view.linkStates([makeItem({ item_key: 'col:IST.352:kc', possible: 0, link_source: 'override', link_confidence: 'confirmed' })]);
+    expect(states.get('col:IST.352:kc')).toMatchObject({ override: true });
   });
 
   it('lists a parent before its parts', () => {

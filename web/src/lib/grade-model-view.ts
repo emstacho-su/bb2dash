@@ -140,20 +140,24 @@ export function columnItemKey(shellCourseId: string, columnId: string): string {
 }
 
 /**
- * The columns that get the picker: a scored column no rule is attached to, a
- * column whose link is tentative / inferred (PM call 9), and — so a choice is
- * never a one-way door — a column Stack already overrode. A placeholder has no
- * column and cannot be confirmed this way.
+ * The columns that get the picker (Round 1b A2): every gradebook column worth
+ * points (`possible > 0`) that no rule is attached to — scored or not, so a
+ * column can be linked before Blackboard grades it — or whose link is
+ * tentative / inferred (PM call 9). A column Stack already overrode keeps its
+ * picker whatever its possible, so a choice is never a one-way door. A zero-
+ * point column (IST.352's knowledge checks) is bookkeeping and gets none; a
+ * placeholder has no column and cannot be confirmed this way.
  */
 export function linkStates(rows: readonly GradeModelItemRow[]): ReadonlyMap<string, LinkState> {
   const states = new Map<string, LinkState>();
   for (const row of rows) {
     if (row.column_kind === 'placeholder' || row.column_id === null) continue;
     const override = row.link_source === 'override';
+    const worthPoints = row.possible !== null && Number(row.possible) > 0;
     const unsure = row.link_source === 'assignment'
       && (row.link_confidence === 'tentative' || row.link_confidence === 'inferred');
-    const scoredUnlinked = row.score !== null && row.component_id === null && !row.excluded;
-    if (!override && !unsure && !scoredUnlinked) continue;
+    const unlinked = row.link_source === null && row.component_id === null;
+    if (!override && !(worthPoints && (unsure || unlinked))) continue;
     states.set(row.item_key, {
       shellCourseId: row.shell_course_id,
       columnId: row.column_id,

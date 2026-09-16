@@ -83,7 +83,16 @@ describe('the picker in the gradebook table', () => {
     course_id: 'GEO.103.recitation', column_id: '_3602445_1', name: 'Attendance', column_kind: 'attendance', effective_score: 0, counts_toward_grade: false,
   });
 
+  const unscoredUnlinked = makeGradebookRow({
+    course_id: 'IST.352', column_id: '_3610995_1', name: 'Project Assignment #2A - Project Resources & Risks', possible: 10, effective_score: null, counts_toward_grade: false,
+  });
+  const zeroPoint = makeGradebookRow({
+    course_id: 'IST.352', column_id: '_3611110_1', name: 'Knowledge Check - 09/09/2026', possible: 0, effective_score: 2, counts_toward_grade: false,
+  });
+
   const rows = [
+    makeItem({ item_key: 'col:IST.352:_3610995_1', shell_course_id: 'IST.352', column_id: '_3610995_1', possible: 10, score: null, component_id: null, link_source: null, link_confidence: null }),
+    makeItem({ item_key: 'col:IST.352:_3611110_1', shell_course_id: 'IST.352', column_id: '_3611110_1', possible: 0, score: 2, component_id: null, link_source: null, link_confidence: null }),
     makeItem({ item_key: 'col:IST.323:_3560541_1', shell_course_id: 'IST.323', column_id: '_3560541_1', score: 4, component_id: null, link_source: null, link_confidence: null }),
     makeItem({ item_key: 'col:IST.323:_3560530_1', shell_course_id: 'IST.323', column_id: '_3560530_1', score: 10 }),
     makeItem({ item_key: 'col:GEO.103.recitation:_3602445_1', shell_course_id: 'GEO.103.recitation', column_id: '_3602445_1', score: 0, component_id: 5, link_source: 'override', link_confidence: 'confirmed' }),
@@ -95,6 +104,14 @@ describe('the picker in the gradebook table', () => {
     const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
     expect(within(rowOf('Lab #1')).getByRole('combobox')).toBeInTheDocument();
     expect(within(rowOf('Quiz #1')).queryByRole('combobox')).toBeNull();
+  });
+
+  it('appears on an unscored unlinked column but not on a zero-point one (Round 1b A2)', () => {
+    render(<GradebookTable rows={[unscoredUnlinked, zeroPoint]} links={{ states: linkStates(rows), options: OPTIONS, onChange: vi.fn() }} />);
+    const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
+    const picker = within(rowOf('Project Assignment #2A - Project Resources & Risks')).getByRole('combobox');
+    expect((picker as HTMLSelectElement).value).toBe('');
+    expect(within(rowOf('Knowledge Check - 09/09/2026')).queryByRole('combobox')).toBeNull();
   });
 
   it('moves an override-linked attendance column up among the items with the "counts toward grade" tag', () => {
