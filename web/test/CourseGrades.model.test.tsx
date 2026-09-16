@@ -4,9 +4,8 @@
  * real QueryClient and an in-memory Supabase stand-in whose `v_grade_model_items`
  * applies `grade_column_links` the way migration 058 does.
  *
- * The engine is the real one when W-19's implementation is present and the
- * Contract-shaped fake otherwise (`fake-grade-model.ts`); every assertion here
- * holds for both.
+ * The engine is the real one (round 2, R2-16): no fake stands in for it, so a
+ * missing or broken engine fails these tests instead of hiding behind one.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -141,16 +140,6 @@ vi.mock('@/lib/supabase/client', () => ({
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
-
-vi.mock('@/lib/grade-model', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/grade-model')>();
-  const fake = await import('./fake-grade-model');
-  return {
-    ...actual,
-    projectCourse: fake.engineOrFake(actual.projectCourse, fake.fakeProjectCourse),
-    solveTarget: fake.engineOrFake(actual.solveTarget, fake.fakeSolveTarget),
-  };
-});
 
 /* ---------------------------------------------------------------------------
  * The 10a hooks the tab also calls, stubbed
