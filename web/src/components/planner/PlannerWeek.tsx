@@ -3,8 +3,8 @@
 /**
  * /planner — the week grid (R-19, Phase 11).
  *
- * Monday → Sunday columns, 08:00–22:00 in half-hour rows, an all-day band above
- * them. Class meetings come from `meetings` (expanded by wall clock, with the
+ * Monday → Sunday columns, 08:00–22:00 in half-hour rows, an Assignments band
+ * above them (the all-day band, so named because that is what Stack puts in it). Class meetings come from `meetings` (expanded by wall clock, with the
  * room and, when a `sessions` row covers that course and day, its topic); due
  * items come from the same `v_work_items` window Today reads, so a status
  * changed here and a status changed there are the same fact in the same caches.
@@ -27,7 +27,7 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import tokens from '@/styles/tokens.module.css';
 import { todayIso } from '@/components/tracker/anchor';
 import { itemHref } from '@/lib/queries.popout';
@@ -51,6 +51,7 @@ import {
   ItemContent,
   MeetingChip,
   MeetingContent,
+  itemCardProps,
   type ItemActions,
 } from './PlannerItem';
 import {
@@ -71,6 +72,7 @@ const EMPTY_WEEK = 'Nothing scheduled this week.';
 export function PlannerWeek() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const router = useRouter();
 
   // `?week=` is untrusted input; `weekAnchor` validates it and falls back to
   // the current week rather than throwing.
@@ -83,7 +85,7 @@ export function PlannerWeek() {
   const data = usePlannerWeekData(view);
   const setStatus = useSetItemStatus();
 
-  const actions = itemActions(pathname, view, setStatus);
+  const actions = itemActions(pathname, view, setStatus, router);
 
   const itemCount = data.placedItems.timed.length + data.placedItems.allDay.length;
   const isEmpty =
@@ -109,7 +111,7 @@ export function PlannerWeek() {
       <WeekBoard view={view} data={data} actions={actions} isEmpty={isEmpty} now={nowSlot(view)} />
 
       <div className={styles.legend}>
-        <span>Times are as recorded · a date-only item sits in the all-day band</span>
+        <span>Times are as recorded · a date-only item sits in the Assignments band</span>
       </div>
     </section>
   );
@@ -126,10 +128,13 @@ function itemActions(
   pathname: string,
   view: PlannerWeekModel,
   setStatus: ReturnType<typeof useSetItemStatus>,
+  router: ReturnType<typeof useRouter>,
 ): ItemActions {
   const weekSuffix = view.isCurrentWeek ? '' : `&week=${view.weekStart}`;
+  const href = (id: string) => `${itemHref(pathname, { kind: 'assignment', id })}${weekSuffix}`;
   return {
-    href: (id) => `${itemHref(pathname, { kind: 'assignment', id })}${weekSuffix}`,
+    href,
+    open: (id) => router.push(href(id), { scroll: false }),
     onStatusChange: (item: WorkItem, status: ProgressStatus) =>
       setStatus.mutate({ item: { item_kind: item.item_kind, item_id: item.item_id }, status }),
     pendingItemId: setStatus.isPending ? (setStatus.variables?.item.item_id ?? null) : null,
@@ -281,12 +286,17 @@ function AllDayBand({
 }) {
   return (
     <>
-      <div className={styles.bandLabel}>All day</div>
+      <div className={styles.bandLabel}>Assignments</div>
       {isEmpty ? (
         <div className={styles.bandEmpty}>{EMPTY_WEEK}</div>
       ) : (
         view.days.map((day, index) => (
-          <div key={`band-${day.iso}`} className={styles.bandCell} data-today={String(day.isToday)}>
+          <div
+            key={`band-${day.iso}`}
+            className={styles.bandCell}
+            data-today={String(day.isToday)}
+            aria-label={`Assignments · ${day.dowLabel}`}
+          >
             {band[index].meetings.map((meeting) => (
               <MeetingChip key={meeting.key} meeting={meeting} />
             ))}
@@ -340,7 +350,9 @@ function DayColumn({
         <div
           key={block.key}
           className={block.kind === 'meeting' ? styles.meetingBlock : styles.itemBlock}
+          data-block={block.kind}
           data-category={block.kind === 'item' ? block.item.item.category : undefined}
+          {...(block.kind === 'item' ? itemCardProps(block.item, actions) : {})}
           style={{
             ['--top' as string]: String(block.top),
             ['--height' as string]: String(block.height),
@@ -349,7 +361,7 @@ function DayColumn({
           }}
         >
           {block.kind === 'meeting' ? (
-            <MeetingContent meeting={block.meeting} />
+            <MeetingContent meeting={block.meeting} nested={block.nested} actions={actions} />
           ) : (
             <ItemContent placed={block.item} actions={actions} />
           )}

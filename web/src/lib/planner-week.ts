@@ -508,6 +508,73 @@ export function placeWorkItems<T extends DatedWorkItem>(
 }
 
 /* ---------------------------------------------------------------------------
+ * Nesting a due item inside the class it is due in
+ * ------------------------------------------------------------------------ */
+
+/** A placed item that also knows which course it belongs to. */
+export type CourseWorkItem = DatedWorkItem & { course_id: string };
+
+export interface NestedPlacement<T extends CourseWorkItem> {
+  /** Items that belong inside a meeting block, keyed by that meeting's `key`. */
+  nested: Map<string, PlacedItem<T>[]>;
+  /** Items with no matching class — they keep their own block in the column. */
+  standalone: PlacedItem<T>[];
+}
+
+/**
+ * Move a due item inside the class it is due in (Stack, 2026-09-16).
+ *
+ * A quiz due at 4:00 PM during the 3:45–5:05 IST 323 lecture is not a second
+ * thing happening at 4:00 PM; it is part of that class. When an item's New York
+ * wall clock falls within a meeting of the **same course** on the **same day**,
+ * it renders inside that meeting's block instead of overlapping it.
+ *
+ * Deliberately narrow. A different course's class at the same hour is a real
+ * clash and stays a separate, overlapping block — hiding it inside someone
+ * else's lecture would be a lie. A meeting with no recorded end has no window,
+ * so nothing nests in it. Where two meetings of one course overlap on a day,
+ * the earlier one takes the item; `meetings` is already day-then-start ordered.
+ */
+export function nestItemsInMeetings<T extends CourseWorkItem>(
+  meetings: readonly PlacedMeeting[],
+  items: readonly PlacedItem<T>[],
+): NestedPlacement<T> {
+  const nested = new Map<string, PlacedItem<T>[]>();
+  const standalone: PlacedItem<T>[] = [];
+
+  for (const placed of items) {
+    const host = placed.minute === null ? undefined : findHostMeeting(meetings, placed);
+    if (!host) {
+      standalone.push(placed);
+      continue;
+    }
+    const existing = nested.get(host.key);
+    if (existing) existing.push(placed);
+    else nested.set(host.key, [placed]);
+  }
+
+  return { nested, standalone };
+}
+
+/** The same course's class, on the same day, whose window contains this time. */
+function findHostMeeting<T extends CourseWorkItem>(
+  meetings: readonly PlacedMeeting[],
+  placed: PlacedItem<T>,
+): PlacedMeeting | undefined {
+  const minute = placed.minute;
+  if (minute === null) return undefined;
+  return meetings.find(
+    (meeting) =>
+      meeting.dayIso === placed.dayIso &&
+      meeting.courseId === placed.item.course_id &&
+      meeting.startMinute !== null &&
+      meeting.endMinute !== null &&
+      minute >= meeting.startMinute &&
+      minute <= meeting.endMinute,
+  );
+}
+
+/* ---------------------------------------------------------------------------
  * Overlap lanes
  * ------------------------------------------------------------------------ */
 

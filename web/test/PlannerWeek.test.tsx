@@ -49,11 +49,12 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: db.from }),
 }));
 
-const nav = vi.hoisted(() => ({ params: new URLSearchParams() }));
+const nav = vi.hoisted(() => ({ params: new URLSearchParams(), push: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => nav.params,
   usePathname: () => '/planner',
+  useRouter: () => ({ push: nav.push, replace: vi.fn(), refresh: vi.fn() }),
 }));
 
 vi.mock('next/link', () => ({
@@ -213,6 +214,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 8, 16, 10, 0, 0)); // Wednesday 2026-09-16, 10:00
   nav.params = new URLSearchParams();
+  nav.push.mockReset();
   seedDefaults();
   db.from.mockReset();
   db.from.mockImplementation((table: string) => chainFor(table));
@@ -342,11 +344,12 @@ describe('PlannerWeek — due items', () => {
     );
   });
 
-  it('puts a date-only item in the all-day band, not on a row it does not sit on', async () => {
+  it('puts a date-only item in the Assignments band, not on a row it does not sit on', async () => {
     renderPlanner();
     expect(await screen.findByText('Chapter 4')).toBeInTheDocument();
     expect(within(dayColumn('2026-09-18')).queryByText('Chapter 4')).toBeNull();
-    expect(screen.getByText('All day')).toBeInTheDocument();
+    expect(screen.getByText('Assignments')).toBeInTheDocument();
+    expect(screen.queryByText('All day')).toBeNull();
   });
 
   it('sends an 11:59 PM deadline to the band rather than clamping it onto 10 PM', async () => {
@@ -369,6 +372,174 @@ describe('PlannerWeek — due items', () => {
     renderPlanner();
     expect(await screen.findByText('Chapter 4')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Chapter 4' })).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * A due item inside the class it is due in
+ * ------------------------------------------------------------------------ */
+
+/** The positioned blocks of one day column, in DOM order. */
+function blocksIn(iso: string): HTMLElement[] {
+  return Array.from(dayColumn(iso).querySelectorAll<HTMLElement>('[data-block]'));
+}
+
+describe('PlannerWeek — a due item inside its own class', () => {
+  it('renders it in the class block instead of overlapping it', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'IST.323/quiz-3',
+        title: 'Quiz 3',
+        course_id: 'IST.323',
+        due_on: '2026-09-16',
+        due_at: '2026-09-16T20:00:00Z', // 4:00 PM, inside the 3:45-5:05 lecture
+        category: 'quiz',
+        glyph: 'Q',
+      }),
+    ];
+    renderPlanner();
+    await within(dayColumn('2026-09-16')).findByText('Quiz 3');
+
+    const blocks = blocksIn('2026-09-16');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toHaveAttribute('data-block', 'meeting');
+    expect(within(blocks[0]).getByText('Quiz 3')).toBeInTheDocument();
+    expect(within(blocks[0]).getByText('Hinds Hall 010')).toBeInTheDocument();
+  });
+
+  it('leaves another course item as its own block at the same minute', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'ECN.304/pset-2',
+        title: 'Problem set 2',
+        course_id: 'ECN.304',
+        due_on: '2026-09-16',
+        due_at: '2026-09-16T20:00:00Z',
+      }),
+    ];
+    renderPlanner();
+    await within(dayColumn('2026-09-16')).findByText('Problem set 2');
+
+    const blocks = blocksIn('2026-09-16');
+    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual(['meeting', 'item']);
+    expect(within(blocks[0]).queryByText('Problem set 2')).toBeNull();
+  });
+
+  it('keeps the status quick-edit on a nested item', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'IST.323/quiz-3',
+        title: 'Quiz 3',
+        course_id: 'IST.323',
+        due_on: '2026-09-16',
+        due_at: '2026-09-16T20:00:00Z',
+      }),
+    ];
+    renderPlanner();
+
+    const select = await screen.findByLabelText('Status for Quiz 3');
+    fireEvent.change(select, { target: { value: 'submitted' } });
+
+    await waitFor(() => expect(db.writes).toHaveLength(1));
+    expect(db.writes[0].table).toBe('assignment_progress');
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * The whole card opens the popout
+ * ------------------------------------------------------------------------ */
+
+const LAB_HREF = '/planner?item=assignment%3AIST.323%2Flab-1';
+
+describe('PlannerWeek — clicking a due item', () => {
+  it('opens the popout from anywhere on a grid block, not just the title', async () => {
+    renderPlanner();
+    await within(dayColumn('2026-09-17')).findByText('Lab #1');
+
+    const block = blocksIn('2026-09-17')[0];
+    expect(block).toHaveAttribute('data-block', 'item');
+    fireEvent.click(block);
+
+    expect(nav.push).toHaveBeenCalledWith(LAB_HREF, { scroll: false });
+  });
+
+  it('opens the popout from a band chip', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({ item_id: 'IST.323/lab-1', title: 'Lab #1', due_on: '2026-09-18', due_at: null }),
+    ];
+    renderPlanner();
+
+    const chip = (await screen.findByText('Lab #1')).closest('[data-open="true"]');
+    fireEvent.click(chip as HTMLElement);
+    expect(nav.push).toHaveBeenCalledWith(LAB_HREF, { scroll: false });
+  });
+
+  it('opens the assignment popout from a chip nested in a class, never a session', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'IST.323/quiz-3',
+        title: 'Quiz 3',
+        course_id: 'IST.323',
+        due_on: '2026-09-16',
+        due_at: '2026-09-16T20:00:00Z',
+      }),
+    ];
+    renderPlanner();
+    await within(dayColumn('2026-09-16')).findByText('Quiz 3');
+
+    const meetingBlock = blocksIn('2026-09-16')[0];
+    expect(meetingBlock).toHaveAttribute('data-block', 'meeting');
+    // The class block itself opens nothing — there is no session popout here.
+    expect(meetingBlock).not.toHaveAttribute('data-open');
+
+    const chip = within(meetingBlock).getByText('Quiz 3').closest('[data-open="true"]');
+    fireEvent.click(chip as HTMLElement);
+
+    expect(nav.push).toHaveBeenCalledTimes(1);
+    expect(nav.push).toHaveBeenCalledWith('/planner?item=assignment%3AIST.323%2Fquiz-3', {
+      scroll: false,
+    });
+  });
+
+  it('keeps the paged week on the href it opens', async () => {
+    nav.params = new URLSearchParams('week=2026-09-21');
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'IST.323/lab-2',
+        title: 'Lab #2',
+        due_on: '2026-09-23',
+        due_at: '2026-09-23T18:00:00Z',
+      }),
+    ];
+    renderPlanner();
+    await within(dayColumn('2026-09-23')).findByText('Lab #2');
+
+    fireEvent.click(blocksIn('2026-09-23')[0]);
+    expect(nav.push).toHaveBeenCalledWith(
+      '/planner?item=assignment%3AIST.323%2Flab-2&week=2026-09-21',
+      { scroll: false },
+    );
+  });
+
+  it('does not navigate when the status quick-edit is used', async () => {
+    renderPlanner();
+    const select = await screen.findByLabelText('Status for Lab #1');
+
+    fireEvent.mouseDown(select);
+    fireEvent.click(select);
+    fireEvent.change(select, { target: { value: 'in_progress' } });
+
+    await waitFor(() => expect(db.writes).toHaveLength(1));
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it('leaves a reading card unclickable — a reading has no popout', async () => {
+    renderPlanner();
+    const chip = (await screen.findByText('Chapter 4')).closest('span[data-category]');
+    expect(chip).not.toHaveAttribute('data-open');
+
+    fireEvent.click(chip as HTMLElement);
+    expect(nav.push).not.toHaveBeenCalled();
   });
 });
 

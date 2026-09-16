@@ -218,6 +218,16 @@
   line-height: 1.25;
 }
 
+/* Two blocks can still overlap — a due item at a time inside *another*
+   course's class is a real clash and stays its own block. Hovering one, or
+   tabbing into it, lifts it clear of its neighbours. `:focus-within` is what
+   makes that work from the keyboard, since the focus lands on the block's own
+   title link or status select. No script, no timers. */
+.block:hover,
+.block:focus-within {
+  z-index: 6;
+}
+
 .meetingBlock {
   composes: block;
   z-index: 1;
@@ -295,6 +305,39 @@
   margin-top: auto;
   display: flex;
   min-width: 0;
+}
+
+/* A due item that falls inside its own class sits in that class's block, under
+   the room and topic lines. The block's height still encodes the class's real
+   duration, so a busy class scrolls rather than growing into the hour below. */
+.nested {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.nestedChip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-accent-300);
+}
+
+/* A card that opens the popout says so with the pointer. The card is the
+   target; the title inside it stays a real link for the keyboard. Each
+   selector names its own local class — a bare attribute selector is not a
+   pure CSS-Modules selector and the build refuses it. */
+.itemBlock[data-open='true'],
+.chip[data-open='true'],
+.nestedChip[data-open='true'] {
+  cursor: pointer;
 }
 
 /* — band chips ——————————————————————————————————————————————————————— */

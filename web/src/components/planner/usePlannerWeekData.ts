@@ -16,6 +16,7 @@ import { useWorkItemsWindow, type WorkItem } from '@/lib/queries.today';
 import {
   assignLanes,
   expandMeetings,
+  nestItemsInMeetings,
   placeWorkItems,
   slotBox,
   type LaneSpan,
@@ -26,9 +27,22 @@ import {
 } from '@/lib/planner-week';
 import { toMeetingPatterns, useMeetings, useSessionsForWeek } from '@/lib/queries.planner';
 
-/** One positioned block inside a day column: a meeting, or a timed due item. */
+/**
+ * One positioned block inside a day column: a meeting, or a timed due item.
+ *
+ * A meeting carries the due items that fall inside it — same course, same day,
+ * inside its wall-clock window — so they render as chips in the class rather
+ * than as blocks overlapping it.
+ */
 export type GridBlock =
-  | { kind: 'meeting'; key: string; top: number; height: number; meeting: PlacedMeeting }
+  | {
+      kind: 'meeting';
+      key: string;
+      top: number;
+      height: number;
+      meeting: PlacedMeeting;
+      nested: PlacedItem<WorkItem>[];
+    }
   | { kind: 'item'; key: string; top: number; height: number; item: PlacedItem<WorkItem> };
 
 /** What the all-day band holds for one day: undated items, untimed meetings. */
@@ -48,19 +62,30 @@ export interface PlannerWeekData {
   error: Error | null;
 }
 
-/** Meetings and timed items share each column, so they share its lanes. */
+/**
+ * Meetings and the timed items that are not inside one share each column, so
+ * they share its lanes. An item due during its own class is a chip in that
+ * class's block, not a block of its own.
+ */
 function buildBlocks(
   meetings: readonly PlacedMeeting[],
-  items: PlacedWorkItems<WorkItem>,
+  timed: readonly PlacedItem<WorkItem>[],
+  nested: ReadonlyMap<string, PlacedItem<WorkItem>[]>,
   dayCount: number,
 ): (GridBlock & LaneSpan)[][] {
   const byDay: GridBlock[][] = Array.from({ length: dayCount }, () => []);
   for (const meeting of meetings) {
     if (meeting.startMinute === null) continue;
     const box = slotBox(meeting.startMinute, meeting.endMinute);
-    byDay[meeting.dayIndex].push({ kind: 'meeting', key: meeting.key, ...box, meeting });
+    byDay[meeting.dayIndex].push({
+      kind: 'meeting',
+      key: meeting.key,
+      ...box,
+      meeting,
+      nested: nested.get(meeting.key) ?? [],
+    });
   }
-  for (const placed of items.timed) {
+  for (const placed of timed) {
     if (placed.minute === null) continue;
     const box = slotBox(placed.minute, null);
     byDay[placed.dayIndex].push({ kind: 'item', key: placed.key, ...box, item: placed });
@@ -102,10 +127,10 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
     [itemsQuery.data, view],
   );
 
-  const blocksByDay = useMemo(
-    () => buildBlocks(placedMeetings, placedItems, view.days.length),
-    [placedMeetings, placedItems, view.days.length],
-  );
+  const blocksByDay = useMemo(() => {
+    const { nested, standalone } = nestItemsInMeetings(placedMeetings, placedItems.timed);
+    return buildBlocks(placedMeetings, standalone, nested, view.days.length);
+  }, [placedMeetings, placedItems, view.days.length]);
 
   const bandByDay = useMemo(
     () => buildBand(placedMeetings, placedItems, view.days.length),

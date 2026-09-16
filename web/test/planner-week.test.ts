@@ -30,6 +30,7 @@ import {
   isWithinGridHours,
   minutesFromTime,
   mondayOf,
+  nestItemsInMeetings,
   newYorkWallClock,
   placeWorkItems,
   plannerHours,
@@ -542,6 +543,93 @@ describe('placeWorkItems', () => {
     ).timed[0];
     expect(before.timeText).toBe('1:00 PM');
     expect(later.timeText).toBe('2:00 PM');
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Nesting a due item inside the class it is due in
+ * ------------------------------------------------------------------------ */
+
+describe('nestItemsInMeetings', () => {
+  const view = week(ORDINARY_WEEK);
+  // IST 323 meets Wednesday 15:45-17:05 on 2026-09-16.
+  const classes = expandMeetings([meeting()], view);
+
+  /** A timed IST.323 item on the Wednesday, at `hhmmZ` in UTC. */
+  function due(overrides: Partial<DatedWorkItem & { course_id: string }> = {}) {
+    return {
+      item_kind: 'assignment',
+      item_id: 'IST.323/quiz-3',
+      course_id: 'IST.323',
+      due_on: '2026-09-16',
+      due_at: '2026-09-16T20:00:00Z', // 4:00 PM New York — inside the lecture
+      due_rule: null,
+      ...overrides,
+    };
+  }
+
+  function timedFor(items: ReturnType<typeof due>[]) {
+    return placeWorkItems(items, view).timed;
+  }
+
+  it('nests an item of the same course due inside the class window', () => {
+    const { nested, standalone } = nestItemsInMeetings(classes, timedFor([due()]));
+    expect(standalone).toHaveLength(0);
+    expect(nested.get(classes[0].key)?.map((p) => p.item.item_id)).toEqual(['IST.323/quiz-3']);
+  });
+
+  it('nests an item due exactly on the class start and on its end', () => {
+    const edges = timedFor([
+      due({ item_id: 'at-start', due_at: '2026-09-16T19:45:00Z' }), // 3:45 PM
+      due({ item_id: 'at-end', due_at: '2026-09-16T21:05:00Z' }), // 5:05 PM
+    ]);
+    const { nested, standalone } = nestItemsInMeetings(classes, edges);
+    expect(standalone).toHaveLength(0);
+    expect(nested.get(classes[0].key)?.map((p) => p.item.item_id)).toEqual(['at-start', 'at-end']);
+  });
+
+  it('holds two nested items in class order', () => {
+    const two = timedFor([
+      due({ item_id: 'later', due_at: '2026-09-16T20:30:00Z' }),
+      due({ item_id: 'earlier', due_at: '2026-09-16T19:50:00Z' }),
+    ]);
+    const { nested } = nestItemsInMeetings(classes, two);
+    expect(nested.get(classes[0].key)?.map((p) => p.item.item_id)).toEqual(['earlier', 'later']);
+  });
+
+  it('leaves another course item alone, even at the same minute', () => {
+    const other = timedFor([due({ item_id: 'ECN.304/pset-2', course_id: 'ECN.304' })]);
+    const { nested, standalone } = nestItemsInMeetings(classes, other);
+    expect(nested.size).toBe(0);
+    expect(standalone.map((p) => p.item.item_id)).toEqual(['ECN.304/pset-2']);
+  });
+
+  it('leaves an item outside the window alone, either side of it', () => {
+    const outside = timedFor([
+      due({ item_id: 'before', due_at: '2026-09-16T19:44:00Z' }), // 3:44 PM
+      due({ item_id: 'after', due_at: '2026-09-16T21:06:00Z' }), // 5:06 PM
+    ]);
+    const { nested, standalone } = nestItemsInMeetings(classes, outside);
+    expect(nested.size).toBe(0);
+    expect(standalone.map((p) => p.item.item_id)).toEqual(['before', 'after']);
+  });
+
+  it('leaves an item on another day alone', () => {
+    const otherDay = timedFor([
+      due({ item_id: 'thursday', due_on: '2026-09-17', due_at: '2026-09-17T20:00:00Z' }),
+    ]);
+    expect(nestItemsInMeetings(classes, otherDay).standalone).toHaveLength(1);
+  });
+
+  it('nests nothing in a class with no recorded end', () => {
+    const open = expandMeetings([meeting({ end_time: null })], view);
+    const { nested, standalone } = nestItemsInMeetings(open, timedFor([due()]));
+    expect(nested.size).toBe(0);
+    expect(standalone).toHaveLength(1);
+  });
+
+  it('nests nothing when there are no classes at all', () => {
+    expect(nestItemsInMeetings([], timedFor([due()])).standalone).toHaveLength(1);
   });
 });
 
