@@ -35,12 +35,13 @@
 // the cut-over push report zero writes on that arm.
 //
 // v5 (Phase 11b round 2). R2-1: both sides of the diff are read page by page and a side that
-// cannot be read completely aborts the run (push.ts readAndRunPush).
+// cannot be read completely aborts the run (push.ts readAndRunPush). R2-2: every mirror write
+// checks PostgREST's error and throws, saveFailure and markDeleting included (store.ts).
 //
 // WHAT THIS FILE OWNS, and what it does not. Here: the HTTP request, the secret, the Supabase
 // client, the OAuth exchange, and writing the run's result back. The diff itself lives in
-// push.ts and the Google calls in google.ts, both free of Deno globals, so the tests can drive
-// the whole algorithm with a fake client and no network.
+// push.ts, the Google calls in google.ts and the mirror writer in store.ts, all free of Deno
+// globals, so the tests can drive the whole algorithm with fakes and no network.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -49,23 +50,16 @@ import {
   DEFAULT_WEB_BASE_URL,
   exchangeRefreshToken,
   type PushItem,
-  type PushSource,
 } from "./google.ts";
-import {
-  type MirrorRow,
-  type MirrorStore,
-  type PageReader,
-  type PushCounts,
-  readAndRunPush,
-} from "./push.ts";
+import { type MirrorRow, type PageReader, type PushCounts, readAndRunPush } from "./push.ts";
+import { createMirrorStore, type MirrorTableClient } from "./store.ts";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 // R2b-8: the truncation limits, named where they can be compared with the columns they protect.
 /** calendar_push_runs.error and app_settings.gcal_last_error are unbounded text; be sane anyway. */
 const RUN_ERROR_LIMIT = 2000;
-/** calendar_events.last_error — one item's failure, not a stack trace. */
-const ITEM_ERROR_LIMIT = 500;
+// calendar_events.last_error's limit (ITEM_ERROR_LIMIT) lives beside its writer in store.ts.
 /** How many per-item failures are folded into the run's single error string. */
 const MAX_REPORTED_ERRORS = 20;
 
@@ -112,44 +106,6 @@ async function loadSecrets(): Promise<Secrets> {
     (out as Record<string, string>)[row.name] = row.secret;
   }
   return out;
-}
-
-/**
- * The mirror writer. Every column calendar_events carries is set from here and nowhere else.
- * v4: every statement is scoped by the full primary key (source, ref_id), migration 068.
- */
-function mirrorStore(): MirrorStore {
-  return {
-    async saveSuccess(row: MirrorRow) {
-      const { error } = await supabase.from("calendar_events").upsert({
-        ...row,
-        last_error: null,
-        last_pushed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "source,ref_id" });
-      if (error) throw new Error(`calendar_events upsert: ${error.message}`);
-    },
-    async saveFailure(source: PushSource, refId: string, message: string) {
-      // update, never upsert: a failed insert means Google holds nothing, and a mirror row
-      // claiming otherwise would stop the next run from retrying it.
-      await supabase.from("calendar_events")
-        .update({
-          last_error: message.slice(0, ITEM_ERROR_LIMIT),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("source", source).eq("ref_id", refId);
-    },
-    async markDeleting(source: PushSource, refId: string) {
-      await supabase.from("calendar_events")
-        .update({ state: "deleting", updated_at: new Date().toISOString() })
-        .eq("source", source).eq("ref_id", refId);
-    },
-    async remove(source: PushSource, refId: string) {
-      const { error } = await supabase.from("calendar_events").delete()
-        .eq("source", source).eq("ref_id", refId);
-      if (error) throw new Error(`calendar_events delete: ${error.message}`);
-    },
-  };
 }
 
 /**
@@ -308,7 +264,8 @@ Deno.serve(async (req: Request) => {
       readDesiredPage,
       readMirrorPage,
       google: createGoogleCalendar(token.accessToken),
-      store: mirrorStore(),
+      // The SDK client satisfies store.ts's structural slice; the cast only bridges its generics.
+      store: createMirrorStore(supabase as unknown as MirrorTableClient),
     });
 
     await finish(

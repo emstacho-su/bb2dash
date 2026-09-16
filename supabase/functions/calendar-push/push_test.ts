@@ -61,6 +61,12 @@ import {
   readAndRunPush,
   runPush,
 } from "./push.ts";
+import {
+  createMirrorStore,
+  type FilterChain,
+  ITEM_ERROR_LIMIT,
+  type MirrorTableClient,
+} from "./store.ts";
 
 const CALENDAR = "bb2dash-test@group.calendar.google.com";
 const OLD_CALENDAR = "previous-calendar@group.calendar.google.com";
@@ -1462,4 +1468,124 @@ test("R2-1: rows that move between pages abort the read instead of skipping one"
   const short: PageReader<PushItem> = () =>
     Promise.resolve({ data: base.slice(0, 1), error: null, count: 4 });
   await assert.rejects(readAllPages("v", short, key, 2), /read 1 rows but the count is 4/);
+});
+
+// ==========================================================================================
+// Round 2, R2-2 — every mirror write checks PostgREST's error
+// ==========================================================================================
+
+interface TableCall {
+  op: "upsert" | "update" | "delete";
+  values?: Record<string, unknown>;
+  options?: unknown;
+  filters: [string, unknown][];
+}
+
+/** A fake of the supabase-js slice store.ts uses; `errors` makes an operation answer an error. */
+function fakeTable(errors: Partial<Record<TableCall["op"], string>> = {}) {
+  const calls: TableCall[] = [];
+  const result = (op: TableCall["op"]) => ({
+    error: errors[op] ? { message: errors[op]! } : null,
+  });
+  const chain = (call: TableCall): FilterChain => {
+    const c: FilterChain = {
+      eq(column, value) {
+        call.filters.push([column, value]);
+        return c;
+      },
+      then(onfulfilled, onrejected) {
+        return Promise.resolve(result(call.op)).then(onfulfilled, onrejected);
+      },
+    };
+    return c;
+  };
+  const client: MirrorTableClient = {
+    from(table) {
+      assert.equal(table, "calendar_events");
+      return {
+        upsert(values, options) {
+          calls.push({ op: "upsert", values, options, filters: [] });
+          return Promise.resolve(result("upsert"));
+        },
+        update(values) {
+          const call: TableCall = { op: "update", values, filters: [] };
+          calls.push(call);
+          return chain(call);
+        },
+        delete() {
+          const call: TableCall = { op: "delete", filters: [] };
+          calls.push(call);
+          return chain(call);
+        },
+      };
+    },
+  };
+  return { client, calls };
+}
+
+const NOW = "2026-09-16T21:00:00.000Z";
+const liveRow: MirrorRow = {
+  source: "planner",
+  ref_id: uuid(1),
+  event_id: "pe11e594f481958c10e3015d0bf0447a22",
+  calendar_id: CALENDAR,
+  content_hash: "h",
+  etag: '"e"',
+  state: "live",
+};
+
+test("R2-2: every mirror write throws when PostgREST answers with an error", async () => {
+  const failing = createMirrorStore(
+    fakeTable({ upsert: "boom", update: "boom", delete: "boom" }).client,
+    () => NOW,
+  );
+  await assert.rejects(failing.saveSuccess(liveRow), /calendar_events upsert: boom/);
+  await assert.rejects(
+    failing.saveFailure("planner", uuid(1), "HTTP 500"),
+    /calendar_events update last_error: boom/,
+  );
+  await assert.rejects(failing.markDeleting("planner", uuid(1)), /calendar_events update state: boom/);
+  await assert.rejects(failing.remove("planner", uuid(1)), /calendar_events delete: boom/);
+});
+
+test("R2-2: the store scopes every write by (source, ref_id) and caps last_error", async () => {
+  const { client, calls } = fakeTable();
+  const store = createMirrorStore(client, () => NOW);
+  await store.saveSuccess(liveRow);
+  await store.saveFailure("assignment", "IST.323/quiz-03", "x".repeat(ITEM_ERROR_LIMIT + 50));
+  await store.markDeleting("planner", uuid(2));
+  await store.remove("planner", uuid(3));
+
+  assert.deepEqual(calls[0], {
+    op: "upsert",
+    values: { ...liveRow, last_error: null, last_pushed_at: NOW, updated_at: NOW },
+    options: { onConflict: "source,ref_id" },
+    filters: [],
+  });
+  assert.deepEqual(calls[1].filters, [["source", "assignment"], ["ref_id", "IST.323/quiz-03"]]);
+  assert.equal((calls[1].values!.last_error as string).length, ITEM_ERROR_LIMIT);
+  assert.deepEqual(calls[2], {
+    op: "update",
+    values: { state: "deleting", updated_at: NOW },
+    filters: [["source", "planner"], ["ref_id", uuid(2)]],
+  });
+  assert.deepEqual(calls[3], { op: "delete", filters: [["source", "planner"], ["ref_id", uuid(3)]] });
+});
+
+test("R2-2: a failed markDeleting stops the run before Google is asked to delete", async () => {
+  const { rows } = await seeded(onePerKind());
+  const google = fakeGoogle();
+  await assert.rejects(
+    runPush({
+      calendarId: CALENDAR,
+      webBaseUrl: WEB_BASE,
+      desired: onePerKind().filter((i) => i.ref_id !== uuid(3)), // uuid(3) must be deleted
+      mirror: [...rows.values()],
+      google: google.client,
+      store: createMirrorStore(fakeTable({ update: "connection reset" }).client, () => NOW),
+      sleep: noSleep,
+    }),
+    /calendar_events update state: connection reset/,
+  );
+  assert.deepEqual(google.calls, []);
 });
