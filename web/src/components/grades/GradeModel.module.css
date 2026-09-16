@@ -1,0 +1,230 @@
+/* Grade model surfaces (Phase 10b). Tokens only — see tokens.module.css.
+   Everything bb2dash computes renders inside `.model`; Blackboard's own figures
+   keep 10a's styles, so the two can never be mistaken for each other. */
+
+/* — the "Our model" container ———————————————————————————————————————— */
+
+.model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+.kicker {
+  composes: kicker from '@/styles/tokens.module.css';
+}
+
+.headlineRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.headline {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  color: var(--color-accent-200);
+}
+
+.line {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-300);
+  max-width: 72ch;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  max-width: 72ch;
+}
+
+.whatIfNote {
+  composes: tagOutline from '@/styles/tokens.module.css';
+}
+
+.reasons {
+  margin: 0;
+  padding-left: var(--space-6);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.alert {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  max-width: 72ch;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.resetButton {
+  composes: btnSecondary from '@/styles/tokens.module.css';
+  font-size: var(--text-sm);
+}
+
+/* — the solver —————————————————————————————————————————————————————— */
+
+.solver {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.select {
+  composes: input from '@/styles/tokens.module.css';
+  width: auto;
+  min-height: 0;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+/* — the what-if cell ———————————————————————————————————————————————— */
+
+.whatIf {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: var(--space-3);
+}
+
+.whatIfLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.whatIfInput {
+  composes: input from '@/styles/tokens.module.css';
+  width: 6ch;
+  min-height: 0;
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--color-muted);
+}
+
+/* A typed value is ours, never Blackboard's: accent colour, italic, dashed. */
+.whatIfInputSet {
+  composes: whatIfInput;
+  color: var(--color-accent);
+  border-style: dashed;
+  border-color: var(--color-accent);
+}
+
+.whatIfInvalid {
+  composes: whatIfInput;
+  border-color: var(--color-danger);
+}
+
+.revert {
+  composes: btnGhost from '@/styles/tokens.module.css';
+  font-size: var(--text-sm);
+  padding: 0 var(--space-1);
+}
+
+.fieldError {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+}
+
+/* — link picker, history, placeholders ————————————————————————————— */
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.unsure {
+  composes: tagNeutral from '@/styles/tokens.module.css';
+}
+
+.historyToggle {
+  composes: btnGhost from '@/styles/tokens.module.css';
+  font-size: var(--text-xs);
+  padding: 0;
+}
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+}
+
+.historyLine {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-neutral-400);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.groupToggle {
+  composes: btnSecondary from '@/styles/tokens.module.css';
+  align-self: flex-start;
+  font-size: var(--text-sm);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+
+.table th,
+.table td {
+  padding: var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.table thead th {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+
+.dash {
+  font-family: var(--font-mono);
+  color: var(--color-muted);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
