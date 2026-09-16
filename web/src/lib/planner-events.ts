@@ -10,6 +10,7 @@
  * in `planner-zone.ts`.
  */
 
+import type { Database } from './supabase/database.types';
 import {
   DEFAULT_TIME_ZONE,
   addDaysIso,
@@ -23,7 +24,10 @@ import {
  * Kinds
  * ------------------------------------------------------------------------ */
 
-/** `planner_event_kind`, in the Contract's order. */
+/** `planner_event_kind` (067), generated from prod. */
+export type PlannerEventKind = Database['public']['Enums']['planner_event_kind'];
+
+/** The enum's values in the Contract's order, for the form's picker. */
 export const PLANNER_EVENT_KINDS = [
   'event',
   'task',
@@ -31,9 +35,7 @@ export const PLANNER_EVENT_KINDS = [
   'focus_time',
   'working_location',
   'appointment_slot',
-] as const;
-
-export type PlannerEventKind = (typeof PLANNER_EVENT_KINDS)[number];
+] as const satisfies readonly PlannerEventKind[];
 
 /** K-6's labels, exactly — the same words the push puts in Google's title. */
 export const PLANNER_EVENT_KIND_LABELS: Record<PlannerEventKind, string> = {
@@ -57,30 +59,11 @@ export type PlannerLocationKind = (typeof LOCATION_KINDS)[number];
  * ------------------------------------------------------------------------ */
 
 /**
- * One `planner_events` row, as the Contract's DDL (067) declares it.
- *
- * K-10: written by hand until 067 is on prod and `database.types.ts` can be
- * regenerated, then swapped for `Tables<'planner_events'>` in
- * `queries.plannerEvents.ts`. `location_kind` is a check constraint, not an
- * enum, so the generated type spells it `string | null`; this module narrows it
- * where it matters.
+ * One `planner_events` row (067), from the generated types. `location_kind` is
+ * a check constraint rather than an enum, so it is `string | null` there; the
+ * validator narrows it.
  */
-export interface PlannerEventRow {
-  id: string;
-  kind: PlannerEventKind;
-  title: string;
-  starts_at: string;
-  ends_at: string;
-  time_zone: string;
-  all_day: boolean;
-  location_kind: string | null;
-  location: string | null;
-  notes: string | null;
-  done: boolean | null;
-  course_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export type PlannerEventRow = Database['public']['Tables']['planner_events']['Row'];
 
 /** The columns a create or a full edit writes. */
 export type PlannerEventDraft = Pick<
@@ -228,18 +211,27 @@ function checkTimes(input: PlannerEventDraft, zone: string | null, errors: Plann
   }
   // K-3: local midnights in the event's own zone, end date after start date.
   if (zone === null) return;
-  if (!isLocalMidnight(input.starts_at, zone)) {
-    errors.starts_at = 'An all-day event starts at midnight in its zone.';
-  }
-  if (!isLocalMidnight(input.ends_at, zone)) {
+  const startDate = localMidnightDate(input.starts_at, zone);
+  const endDate = localMidnightDate(input.ends_at, zone);
+  if (startDate === null) errors.starts_at = 'An all-day event starts at midnight in its zone.';
+  if (endDate === null) {
     errors.ends_at = 'An all-day event ends at midnight in its zone.';
-  } else if (end <= start) {
+  } else if (startDate !== null && endDate <= startDate) {
     errors.ends_at = 'The last day cannot be before the first.';
   }
 }
 
-function isLocalMidnight(instant: string, zone: string): boolean {
-  return wallClockIn(instant, zone)?.minute === 0;
+/**
+ * The local date when `instant` is that date's midnight in `zone`, else null.
+ * Like the 067 trigger, a midnight that falls in a DST gap counts when it is the
+ * instant local midnight resolves to (moved forward).
+ */
+function localMidnightDate(instant: string, zone: string): string | null {
+  const wall = wallClockIn(instant, zone);
+  if (!wall) return null;
+  if (wall.minute === 0) return wall.date;
+  const midnight = localMidnight(wall.date, zone);
+  return midnight !== null && Date.parse(midnight.iso) === Date.parse(instant) ? wall.date : null;
 }
 
 function checkLocation(
@@ -281,9 +273,9 @@ export interface AllDayInstants {
  * First and last day (inclusive, as the form shows them) → the stored pair:
  * 00:00 of the first day and 00:00 of the day *after* the last, in `zone`.
  *
- * Null when a date or the zone is invalid, the last day is before the first,
- * or a midnight does not exist in that zone on that date (a handful of zones
- * change their clocks at 00:00) — the database would refuse that row anyway.
+ * Null when a date or the zone is invalid, or the last day is before the
+ * first. A midnight that does not exist (a handful of zones change their
+ * clocks at 00:00) moves forward, which the 067 trigger also accepts.
  */
 export function allDayInstants(
   firstDay: string,
@@ -293,7 +285,7 @@ export function allDayInstants(
   if (!isValidTimeZone(zone) || lastDay < firstDay) return null;
   const start = localMidnight(firstDay, zone);
   const end = localMidnight(addDaysIso(lastDay, 1), zone);
-  if (!start || !end || start.resolution === 'gap' || end.resolution === 'gap') return null;
+  if (!start || !end) return null;
   return { starts_at: start.iso, ends_at: end.iso };
 }
 
