@@ -1,0 +1,52 @@
+/* One course's grade card (Phase 10a). Tokens only. */
+
+.card {
+  gap: var(--space-4);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.headText {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg);
+  color: var(--color-text);
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.pillRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.total {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  color: var(--color-text);
+}
+
+.explain {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  max-width: 62ch;
+}

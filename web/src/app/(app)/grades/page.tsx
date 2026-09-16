@@ -1,11 +1,19 @@
 import type { Metadata } from 'next';
-import { ScreenStub } from '@/components/shell/ScreenStub';
+import { GradesScreen } from './GradesScreen';
 import styles from '../Shell.module.css';
 
 export const metadata: Metadata = {
   title: 'Grades · bb2dash',
 };
 
+/**
+ * `/grades` (Phase 10a) — Blackboard's gradebook, mirrored honestly.
+ *
+ * The screen that used to stand here said the project rule out loud: no grade
+ * display until real gradebook data exists. That data exists now, so the rule
+ * moves into the rendering instead — every figure below is Blackboard's own,
+ * shown with the time we saw it, and bb2dash computes none of them.
+ */
 export default function GradesPage() {
   return (
     <>
@@ -16,11 +24,7 @@ export default function GradesPage() {
         </div>
       </header>
 
-      <ScreenStub title="Grades" owner="unassigned · blocked on data">
-        Project rule: no grade display until real gradebook data exists. Two courses still have an
-        unknown grading scheme, so this screen stays empty rather than showing a computed number
-        that is not real.
-      </ScreenStub>
+      <GradesScreen />
     </>
   );
 }
