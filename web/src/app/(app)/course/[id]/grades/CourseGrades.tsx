@@ -116,7 +116,13 @@ export function CourseGrades({ courseId }: { courseId: string }) {
             whatIf={actions.whatIf}
             history={model.history}
             links={actions.links}
-            footer={<PlaceholderRows items={model.items} whatIf={actions.whatIf} />}
+            footer={
+              <PlaceholderRows
+                items={model.items}
+                whatIf={actions.whatIf}
+                dropped={model.run?.states?.droppedPlaceholderKeys ?? []}
+              />
+            }
           />
         )}
       </CourseGradeCard>

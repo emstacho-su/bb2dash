@@ -18,10 +18,10 @@ import {
   columnItemKey,
   linkOptions,
   linkStates,
-  whatIfTargets,
+  whatIfCellTargets,
   type LinkState,
   type LinkTarget,
-  type WhatIfTarget,
+  type WhatIfCellTarget,
 } from '@/lib/grade-model-view';
 import type { TargetResult } from '@/lib/grade-model/types';
 import { queryErrorMessage } from '@/components/shared/QueryState';
@@ -49,7 +49,7 @@ export interface CourseModelActions {
   readonly scenarioError: string | null;
 }
 
-const NO_TARGETS: ReadonlyMap<string, WhatIfTarget> = new Map();
+const NO_TARGETS: ReadonlyMap<string, WhatIfCellTarget> = new Map();
 const NO_VALUES: Readonly<Record<string, number>> = {};
 
 export function useCourseModelActions(
@@ -82,7 +82,12 @@ export function useCourseModelActions(
     [schemeCourseId, saveMutate, clearResetError],
   );
 
-  const targets = useMemo(() => (input ? whatIfTargets(input) : NO_TARGETS), [input]);
+  // The engine decides which items take a value (R2-3w); this only names the cells.
+  const itemStatesNow = model.run?.states ?? null;
+  const targets = useMemo(
+    () => (itemStatesNow && input ? whatIfCellTargets(itemStatesNow, input.items) : NO_TARGETS),
+    [itemStatesNow, input],
+  );
   const whatIf = useMemo<WhatIfProps>(
     () => ({ targets, values, onCommit, disabled: !schemeCourseId }),
     [targets, values, onCommit, schemeCourseId],

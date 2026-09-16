@@ -9,7 +9,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { GradebookTable } from '@/components/grades/GradebookTable';
 import { WhatIfCell } from '@/components/grades/WhatIfCell';
 import { toModelInput } from '@/lib/grade-model-input';
-import { whatIfTargets } from '@/lib/grade-model-view';
+import { whatIfCellTargets } from '@/lib/grade-model-view';
+import { itemStates } from '@/lib/grade-model';
 import { makeGradebookRow } from './factories.grades';
 import { IST466_COMPONENTS, IST466_SCHEME, IST466_SYNCHRONY, makeItem } from './factories.grade-model';
 
@@ -140,7 +141,7 @@ describe('what-if cells in the gradebook table', () => {
     render(
       <GradebookTable
         rows={[ethics, synchrony, graded]}
-        whatIf={{ targets: whatIfTargets(input), values: {}, onCommit: vi.fn() }}
+        whatIf={{ targets: whatIfCellTargets(itemStates(input), input.items), values: {}, onCommit: vi.fn() }}
       />,
     );
     const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;

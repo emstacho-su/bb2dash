@@ -1,60 +1,22 @@
 /**
  * bb2dash — what the grade-model screens may offer on each row (Phase 10b).
  *
- * Pure. These are the gates, not the arithmetic: which items take a what-if
- * value, which columns get the "Counts toward…" picker, and whether a typed
- * value is acceptable. The rules are the frozen Contract's
- * (`68_PHASE10B_grade_model.md` §Engine semantics and §Web), restated here only
- * so a screen can decide what to render before, or without, a computed result:
- * a course that is `nothing_graded` must still offer the what-if cell that will
- * make it compute.
+ * Pure. Which columns get the "Counts toward…" picker, whether a typed what-if
+ * value is acceptable, and how the engine's `itemStates()` becomes cells.
+ * Since round 2 (R2-3w / R2-4 / R2-15) nothing here re-states an engine rule:
+ * what-if targets, muted parts and dropped placeholders come from
+ * `itemStates()` only.
  */
 
-import type { Aggregation, ComponentInput, ItemInput, ModelInput } from './grade-model/types';
+import type { ComponentInput, ItemInput, ItemStates } from './grade-model/types';
 import type { GradeModelItemRow } from './grade-model-input';
 
 /* ---------------------------------------------------------------------------
- * Counted and muted (frozen semantics)
+ * What-if cells — from the engine's itemStates(), never a copy of its rules
  * ------------------------------------------------------------------------ */
 
-/** An item that takes part in arithmetic: possible > 0, not exempt, not "Not graded". */
-export function isCountedItem(item: Pick<ItemInput, 'possible' | 'exempt' | 'excluded'>): boolean {
-  return item.possible !== null && item.possible > 0 && !item.exempt && !item.excluded;
-}
-
-/**
- * Components left out because a counted item's link is unsure (answer 3,
- * PM call 10). An override is confirmed, so a picker save un-mutes the part.
- */
-export function mutedComponentIds(input: Pick<ModelInput, 'items'>): ReadonlySet<number> {
-  const muted = new Set<number>();
-  for (const item of input.items) {
-    if (item.componentId === null || !isCountedItem(item)) continue;
-    if (item.linkConfidence !== 'confirmed') muted.add(item.componentId);
-  }
-  return muted;
-}
-
-/** The names of the muted components, in the scheme's own order. */
-export function mutedComponentNames(input: Pick<ModelInput, 'items' | 'components'>): string[] {
-  const muted = mutedComponentIds(input);
-  return input.components.filter((c) => muted.has(c.id)).map((c) => c.name);
-}
-
-/** Round 1b A1: the aggregations that read an item only as a fraction of its possible. */
-export const FRACTION_AGGREGATIONS: readonly Aggregation[] = [
-  'single',
-  'average',
-  'average_drop_lowest',
-  'rank_weighted',
-  'normalized',
-];
-
-/** The largest value a percentage what-if accepts. */
-export const PERCENT_MAX = 100;
-
 /** What a what-if cell needs to know about its item. */
-export interface WhatIfTarget {
+export interface WhatIfCellTarget {
   readonly key: string;
   readonly name: string;
   /**
@@ -63,59 +25,28 @@ export interface WhatIfTarget {
    * as 0–100 and stored as that number; the engine reads `f = v / 100`.
    */
   readonly unit: 'points' | 'percent';
-  /** The upper bound the typed value is checked against: possible, or 100. */
+  /** The upper bound the typed value is checked against: the engine's `max`. */
   readonly possible: number;
 }
 
 /**
- * Round 1b A1: a placeholder with no possible that may still take a value —
- * its link is confirmed and its component only ever reads fractions. A `sum`
- * placeholder with no points, or an unconfirmed series row, stays bookkeeping.
+ * The cells to draw: exactly the engine's `whatIfTargets` (round 2, R2-3w /
+ * R2-15), labelled with each item's name. Which items qualify — counted,
+ * leaf-linked, not muted (a muted parent's pieces included), not dropped as
+ * surplus, not hand-graded, a percent placeholder whose value would count — is
+ * the engine's decision, made from the same preparation `projectCourse` uses.
  */
-export function isPercentPlaceholder(
-  item: Pick<ItemInput, 'kind' | 'possible' | 'linkConfidence' | 'exempt' | 'excluded'>,
-  component: Pick<ComponentInput, 'aggregation'>,
-): boolean {
-  return (
-    item.kind === 'placeholder'
-    && item.possible === null
-    && item.linkConfidence === 'confirmed'
-    && !item.exempt
-    && !item.excluded
-    && FRACTION_AGGREGATIONS.includes(component.aggregation)
+export function whatIfCellTargets(
+  states: Pick<ItemStates, 'whatIfTargets'>,
+  items: readonly Pick<ItemInput, 'key' | 'name'>[],
+): ReadonlyMap<string, WhatIfCellTarget> {
+  const names = new Map(items.map((item) => [item.key, item.name]));
+  return new Map(
+    states.whatIfTargets.map((target) => [
+      target.key,
+      { key: target.key, name: names.get(target.key) ?? target.key, unit: target.unit, possible: target.max },
+    ]),
   );
-}
-
-/** The cell an item gets, if any, given its (existing, live) component. */
-function targetFor(item: ItemInput, component: ComponentInput): WhatIfTarget | null {
-  if (isCountedItem(item)) {
-    return { key: item.key, name: item.name, unit: 'points', possible: item.possible as number };
-  }
-  if (isPercentPlaceholder(item, component)) {
-    return { key: item.key, name: item.name, unit: 'percent', possible: PERCENT_MAX };
-  }
-  return null;
-}
-
-/**
- * The items that may take a hypothetical score: ungraded, linked to a
- * component that exists, is not muted and is not hand-graded (answer 1: no
- * assumed score for a `manual` part) — and either counted (typed in points) or
- * a pointless confirmed placeholder of a fraction-only part (typed as a
- * percentage, Round 1b A1).
- */
-export function whatIfTargets(input: Pick<ModelInput, 'items' | 'components'>): ReadonlyMap<string, WhatIfTarget> {
-  const muted = mutedComponentIds(input);
-  const byId = new Map<number, ComponentInput>(input.components.map((c) => [c.id, c]));
-  const targets = new Map<string, WhatIfTarget>();
-  for (const item of input.items) {
-    if (item.score !== null || item.componentId === null) continue;
-    const component = byId.get(item.componentId);
-    if (!component || component.aggregation === 'manual' || muted.has(component.id)) continue;
-    const target = targetFor(item, component);
-    if (target) targets.set(item.key, target);
-  }
-  return targets;
 }
 
 /* ---------------------------------------------------------------------------

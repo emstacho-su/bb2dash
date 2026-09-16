@@ -8,8 +8,8 @@
  * shows in place of a standing — the rest of the page keeps working.
  */
 
-import { DEFAULT_TARGET_LETTER, projectCourse, solveTarget } from './grade-model';
-import type { ModelInput, ModelResult, TargetResult } from './grade-model/types';
+import { DEFAULT_TARGET_LETTER, itemStates, projectCourse, solveTarget } from './grade-model';
+import type { ItemStates, ModelInput, ModelResult, TargetResult } from './grade-model/types';
 import type { GradeModelItemRow, GradeModelTotalRow, GradeScenarioRow, GradeSchemeBundle } from './grade-model-input';
 import { toModelInput } from './grade-model-input';
 
@@ -23,15 +23,17 @@ function messageOf(error: unknown): string {
 export interface ModelRun {
   readonly input: ModelInput | null;
   readonly result: ModelResult | null;
+  /** The engine's per-item view: what-if targets, muted parts, dropped placeholders (R2-3). */
+  readonly states: ItemStates | null;
   readonly error: string | null;
 }
 
-/** `projectCourse`, with any exception turned into `error`. */
+/** `projectCourse` and `itemStates`, with any exception turned into `error`. */
 export function runModel(input: ModelInput): ModelRun {
   try {
-    return { input, result: projectCourse(input), error: null };
+    return { input, result: projectCourse(input), states: itemStates(input), error: null };
   } catch (error) {
-    return { input, result: null, error: `Could not compute the model: ${messageOf(error)}` };
+    return { input, result: null, states: null, error: `Could not compute the model: ${messageOf(error)}` };
   }
 }
 

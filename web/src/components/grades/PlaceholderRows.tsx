@@ -9,6 +9,10 @@
  * with the same cell the table uses. Blackboard has recorded nothing for any of
  * them, so the score column is always the dash. A placeholder's link cannot be
  * confirmed here — there is no column to attach an override to.
+ *
+ * A placeholder the engine dropped as surplus (round 2, R2-4: a part with more
+ * items than it expects drops placeholders, earliest due first) is not drawn:
+ * IST.323's seeded "Lab #1" disappears once the real Lab #1 column is linked.
  */
 
 import { useState } from 'react';
@@ -43,12 +47,16 @@ function PlaceholderRow({ item, whatIf }: { item: GradeModelItemRow; whatIf: Wha
 export function PlaceholderRows({
   items,
   whatIf,
+  dropped,
 }: {
   /** `v_grade_model_items` rows with `column_kind = 'placeholder'`. */
   items: readonly GradeModelItemRow[];
   whatIf: WhatIfProps;
+  /** The engine's `itemStates().droppedPlaceholderKeys`. */
+  dropped: readonly string[];
 }) {
-  const placeholders = items.filter((item) => item.column_kind === 'placeholder');
+  const droppedKeys = new Set(dropped);
+  const placeholders = items.filter((item) => item.column_kind === 'placeholder' && !droppedKeys.has(item.item_key));
   const anyValue = placeholders.some((item) => whatIf.values[item.item_key] !== undefined);
   // Derived until the owner toggles it (R2-9): a saved value that arrives after
   // the first render — the scenario read landing late — still opens the group,
