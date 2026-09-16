@@ -42,7 +42,7 @@ and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
 | 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | **in flight** on `feat/grades-10a` (own PM session, main checkout) | — | 046–059 (046–051 live) |
 | 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | same range |
 | 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | **PR open**; calendar push live and proven | #12 | 060–069 (060–066 live) |
-| 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | brief written (`69b`), questions open | — | 067–072; Phase 12 moves to 073–079 |
+| 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | brief + Stack's answers frozen (`69b`); starts after PR #12 merges | — | 067–072; Phase 12 moves to 073–079 |
 | V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | one data migration in 10's range |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell | planned; after the web app is stable | — | — |
@@ -221,6 +221,18 @@ new scope is verified before development begins).
 > and W-H2 pipeline + retrieval (`feat/ingest-on-capture`). The frontmatter field names in the
 > brief are frozen. Tests must not drop below 261. Migrations to `harness-memory` are applied
 > under the file's name and kept byte-identical. Open one PR per worker; do not merge.
+
+**Phase 11b — planner events** (after PR #12 merges)
+
+> `/bb2dash-pm` Start Phase 11b (planner events created in bb2dash and pushed to the `bb2dash`
+> calendar). The brief `docs/planning/69b_PHASE11B_planner_events.md` is frozen with my answers of
+> 2026-09-16 (own time zone per event, optional physical or online location, working location as
+> an ordinary kind, appointment slot kept, no task→assignment link, kind colour wins). Migration
+> range 067–072; Phase 12 moves to 073–079. Cut `feat/planner-events-11b` from `main` in its own
+> worktree, confirm the seams with whatever 10a has merged (its `run_transform` is untouched by
+> this phase), spawn W-23 (db + push: 067–068, `calendar-push` v4, live proof) and W-24 (web:
+> query layer, form, blocks, zone handling), integrate, run the gates, update STATUS, DECISIONS
+> and ORCHESTRATOR, open the PR with a preview, and stop at "ready when you say so".
 
 **Phase 12 — Electron shell** (after 10a and 11 are on `main`)
 

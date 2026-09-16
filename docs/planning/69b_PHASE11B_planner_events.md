@@ -16,6 +16,15 @@ the week grid is the one place he plans from. Nothing is read back from Google.
 * **Direction:** create in the planner, write to Google; never the other way.
 * **Calendar:** only the `bb2dash` calendar. The SU primary calendar is never read or written.
 * **Display:** as blocks on the week grid, alongside class meetings and due items.
+* **Time zones (Q1):** not always New York. Every planner event carries its own IANA zone; the
+  grid and Google both honour it. Location is optional and is either a physical place or an
+  online meeting link.
+* **Working location (Q2):** varies; it is an ordinary kind with an optional time range and an
+  optional place, not a fixed whole-day strip.
+* **Appointment slot (Q3):** kept, as a plain timed block.
+* **Tasks (Q4):** no link to assignments; ticking a task never touches `assignment_progress`.
+* **Colour (Q5):** kind colour wins in Google; the course code leads the title when a course is
+  set.
 
 ## Google facts that shape the contract
 
@@ -51,8 +60,13 @@ create table planner_events (
   title         text not null check (length(title) between 1 and 200),
   starts_at     timestamptz not null,
   ends_at       timestamptz not null check (ends_at >= starts_at),
+  time_zone     text not null default 'America/New_York',   -- IANA name, validated by
+                                                            -- `now() at time zone time_zone`
   all_day       boolean not null default false,
-  location      text check (location is null or length(location) <= 200),
+  location_kind text check (location_kind in ('in_person','online')),
+  location      text check (location is null or length(location) <= 500),
+                -- place name for in_person, a URL for online; null when there is none
+                -- (check: location_kind is null iff location is null; online => location is http(s))
   notes         text check (notes is null or length(notes) <= 2000),
   done          boolean,                        -- tasks only; null for other kinds (check)
   course_id     text references courses(id),   -- optional link, colours the block
@@ -65,7 +79,9 @@ create table planner_events (
 
 **068 `v_calendar_push_items` v2.** Adds the planner arm: one row per `planner_events` row with
 `source = 'planner'`, `event_id = 'pe' || …`, `summary` = `<kind label> · <title>` (course code
-first when `course_id` is set), `start`/`end` from `starts_at`/`ends_at` (all-day → date pair),
+first when `course_id` is set), `start`/`end` from `starts_at`/`ends_at` with `timeZone = time_zone` (all-day → the date pair
+in that zone), `location` passed through (an online URL goes in both `location` and the
+description, since arbitrary meeting links cannot be attached as conference data),
 `absent_from_blackboard = false`. The assignment arm is unchanged (`source = 'assignment'`).
 `calendar_events` gains `source text not null default 'assignment'` and the primary key becomes
 `(source, ref_id)` where `ref_id` is `assignment_id` or the planner event uuid; the existing
@@ -88,12 +104,17 @@ keeps both arms' counts separate in `counts` (`inserted_assignments`, `inserted_
 * `queries.plannerEvents.ts`: `plannerEventsWindowOptions(from, to)`, `useCreatePlannerEvent`,
   `useUpdatePlannerEvent`, `useDeletePlannerEvent` (optimistic, keyed on the week window);
   validation at the boundary (title length, end ≥ start, kind enum, notes cap).
-* Grid: planner events render as blocks in their column at wall-clock position (all-day ones in
-  the Assignments band's sibling row labelled "Events"); kind decides the block style (six CSS
+* Grid: planner events render as blocks in their column at the wall-clock position **converted
+  from the event's own zone to the grid's zone** (the grid stays on `COURSE_TIME_ZONE`; a block
+  whose zone differs shows its local time in the chip, e.g. "09:00 PT"); all-day ones sit in a
+  row labelled "Events" beside the Assignments band; kind decides the block style (six CSS
   variants on tokens, no new colours outside `globals.css`); a `task` shows a checkbox that writes
-  `done`; clicking an empty slot opens `PlannerEventForm` (a small dialog: kind, title, date,
-  start/end or all-day, location, notes, course); clicking a block opens the same form in edit
-  mode with Delete. Esc closes; focus returns to the slot.
+  `done`; an online location renders as a link; clicking an empty slot opens `PlannerEventForm`
+  (dialog: kind, title, date, start/end or all-day, **time zone** picker defaulting to
+  New York with a short list of common zones plus free entry, location kind + location, notes,
+  course); clicking a block opens the same form in edit mode with Delete. Esc closes; focus
+  returns to the slot. Zone arithmetic goes through `Intl`, never hand-rolled offsets, with tests
+  on both sides of the 2026-11-01 fall-back and for an event entered in `America/Los_Angeles`.
 * No drag, no recurrence, no reminders in the MVP (Google's default reminders apply).
 * Tests: form validation, create/edit/delete mutations hit `planner_events` only, block placement
   per kind, all-day placement, task checkbox, keyboard close.
@@ -104,26 +125,24 @@ Phase 11's `v_calendar_push_items`, `calendar_events` and `calendar-push` are ex
 migration and redeploy, never edited in place. Phase 10a/10b own grades; V-1 owns grading rules.
 `assignments` and `assignment_progress` are never written by planner events.
 
-## Open questions for Stack (answer before workers spawn)
+## Stack's answers (2026-09-16)
 
-1. **Time zone for all-day and working-location rows:** date-only in New York, as due dates are?
-   (proposed: yes)
-2. **Working location:** a whole-day block with a place ("Bird Library", "Home") and no time, or a
-   timed block? (proposed: whole-day, place in `location`, shown as a thin strip at the top of the
-   column, not in Google's working-location feature)
-3. **Appointment slot:** a plain timed block with a title (Google cannot create schedules via the
-   API). Keep it as a kind, or drop it? (proposed: keep, as a plain block)
-4. **Tasks and assignments:** should a task be able to link to an assignment so ticking it sets
-   the assignment's status? (proposed: no in the MVP; `course_id` link only)
-5. **Colour rule when a planner event has a course:** kind colour or course colour on Google?
-   (proposed: kind colour; the course code still leads the title)
+| # | Question | Answer |
+|---|---|---|
+| Q1 | All-day and working-location rows date-only in New York? | **No.** Each event carries its own time zone; location is optional and may be a physical place or an online meeting link |
+| Q2 | Working location a whole-day strip with a place? | **No.** It varies; ordinary kind, optional time range, optional place |
+| Q3 | Keep appointment slot as a plain timed block? | **Yes** |
+| Q4 | Task linked to an assignment? | **No** |
+| Q5 | Kind colour wins when a course is set? | **Yes** |
 
 ## Definition of done
 
 - [ ] Stack's acceptance script: (1) create one of each kind on `/planner` and see each block;
       (2) each appears on the `bb2dash` calendar within two minutes with the kind in the title;
       (3) edit a time → the Google event moves; (4) delete → it disappears; (5) tick a task → the
-      title gains ✓ in Google; (6) due-date events are unaffected (count unchanged).
+      title gains ✓ in Google; (6) due-date events are unaffected (count unchanged); (7) an event
+      entered in another zone shows at the right New York time in the grid and the right local
+      time in Google; (8) an online event's link is clickable in both.
 - [ ] Idempotency: a re-run with no change issues zero writes for both arms.
 - [ ] RLS: a second uid sees and writes nothing on `planner_events`.
 - [ ] SOP gates: typecheck/build/test green; `/code-review main high`; `/security-review`;
