@@ -95,7 +95,7 @@ describe('muting', () => {
     expect(result.standings.zeros_on_rest.denominator).toBe(100);
   });
 
-  it('a muted parent mutes its children with it', () => {
+  it('R2-1: an unsure item linked straight to a parent does not mute it (the item is unlinked)', () => {
     const tree = [
       component({ id: 10, name: 'Final Project', points: 20, aggregation: 'sum' }),
       component({ id: 11, name: 'Proposal', parentId: 10, points: 20, countExpected: 1, aggregation: 'single' }),
@@ -109,8 +109,8 @@ describe('muting', () => {
     const result = projectCourse(
       modelInput({ scheme: scheme({ method: 'points', totalPoints: 100, gradedOutOf: 100 }), components: tree, items }),
     ) as ComputedResult;
-    expect(result.components.map((c) => c.state)).toEqual(['muted', 'muted', 'graded']);
-    expect(result.standings.zeros_on_rest).toMatchObject({ earned: 56, denominator: 80 });
+    expect(result.components.map((c) => c.state)).toEqual(['graded', 'graded', 'graded']);
+    expect(result.standings.zeros_on_rest).toMatchObject({ earned: 76, denominator: 100 });
   });
 
   it('a what-if value on a muted part is not used', () => {

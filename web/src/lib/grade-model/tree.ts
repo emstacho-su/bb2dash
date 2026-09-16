@@ -18,9 +18,9 @@ export interface ComponentNode {
   /** Counted items linked directly to this component, placeholders dropped. */
   readonly items: readonly CountedItem[];
   /**
-   * An own counted item's link is unsure, or an ancestor is muted.
-   * Decision: the children of a muted parent are muted with it, since the
-   * parent (and so every child) is left out of the model.
+   * An own counted item's link is unsure, or an ancestor is muted. Since R2-1
+   * only leaves carry items, so only leaves mute through their own items; the
+   * inheritance is kept so a muted parent can never leave a child counted.
    */
   readonly muted: boolean;
   /** Own flag or an ancestor's. */
