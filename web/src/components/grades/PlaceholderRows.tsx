@@ -50,7 +50,11 @@ export function PlaceholderRows({
 }) {
   const placeholders = items.filter((item) => item.column_kind === 'placeholder');
   const anyValue = placeholders.some((item) => whatIf.values[item.item_key] !== undefined);
-  const [open, setOpen] = useState(anyValue);
+  // Derived until the owner toggles it (R2-9): a saved value that arrives after
+  // the first render — the scenario read landing late — still opens the group,
+  // so a what-if on a placeholder is never hidden behind a collapsed button.
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const open = toggled ?? anyValue;
 
   if (placeholders.length === 0) return null;
 
@@ -60,7 +64,7 @@ export function PlaceholderRows({
         type="button"
         className={styles.groupToggle}
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setToggled(!open)}
       >
         {PLACEHOLDER_GROUP} ({placeholders.length})
       </button>
