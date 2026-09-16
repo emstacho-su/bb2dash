@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DUE_CARD_MIN_SLOTS,
   eventWindowBounds,
+  isCompactSegment,
   overlapsWindow,
   placePlannerEvents,
   segmentBox,
@@ -135,6 +136,27 @@ describe('segmentBox', () => {
 
   it('gives a short event at least one slot', () => {
     expect(segmentBox(9 * 60, 9 * 60 + 10, false)).toEqual({ top: 2, height: 1 });
+  });
+});
+
+describe('isCompactSegment', () => {
+  const at = (starts: string, ends: string) =>
+    placePlannerEvents([makePlannerEvent({ starts_at: starts, ends_at: ends })], WEEK).timed[0];
+
+  it('is compact for a half-hour event: one slot holds one line', () => {
+    expect(isCompactSegment(at('2026-09-16T18:00:00Z', '2026-09-16T18:30:00Z'))).toBe(true);
+  });
+
+  it('is compact for a 15-minute event drawn at the one-slot minimum', () => {
+    expect(isCompactSegment(at('2026-09-16T18:00:00Z', '2026-09-16T18:15:00Z'))).toBe(true);
+  });
+
+  it('is not compact for an hour-long event', () => {
+    expect(isCompactSegment(at('2026-09-16T18:00:00Z', '2026-09-16T19:00:00Z'))).toBe(false);
+  });
+
+  it('is not compact for a zero-length event, which is drawn at due-card height', () => {
+    expect(isCompactSegment(at('2026-09-16T18:00:00Z', '2026-09-16T18:00:00Z'))).toBe(false);
   });
 });
 

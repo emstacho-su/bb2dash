@@ -38,6 +38,8 @@ import {
 export const DUE_CARD_MIN_SLOTS = 2;
 /** The shortest a timed event block is drawn, in slots. */
 export const EVENT_MIN_SLOTS = 1;
+/** A timed block this many slots tall or shorter has room for one line of text. */
+export const COMPACT_MAX_SLOTS = 1;
 const MINUTES_PER_DAY = 24 * 60;
 
 /* ---------------------------------------------------------------------------
@@ -198,4 +200,16 @@ export function segmentBox(
     ? DUE_CARD_MIN_SLOTS
     : Math.max(slotOffset(endMinute) - rawTop, EVENT_MIN_SLOTS);
   return { top: Math.max(0, Math.min(rawTop, PLANNER_SLOT_COUNT - height)), height };
+}
+
+/**
+ * Whether a segment is drawn as one line. A half-hour slot holds a single line
+ * of text, so a block that short leads with its title instead of its kind line
+ * (which would otherwise be the only thing visible). A zero-length event is
+ * drawn at due-card height and is never compact.
+ */
+export function isCompactSegment(
+  segment: Pick<PlacedEventSegment, 'height' | 'zeroLength'>,
+): boolean {
+  return !segment.zeroLength && segment.height <= COMPACT_MAX_SLOTS;
 }

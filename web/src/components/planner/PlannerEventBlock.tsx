@@ -130,7 +130,13 @@ function KindLine({ event, time }: { event: PlannerEventRow; time: string | null
   );
 }
 
-/** The body of a timed block in a day column. */
+/**
+ * The body of a timed block in a day column: the kind line, the title, then one
+ * line for the zone chip and the location. The lines never shrink into each
+ * other; a block too short for all of them clips at its bottom edge. A compact
+ * block (half an hour or less, `data-compact` on the block) lays the same
+ * elements out in one row — see `.eventBlock[data-compact]` in the stylesheet.
+ */
 export function EventBlockContent({
   segment,
   actions,
@@ -139,6 +145,7 @@ export function EventBlockContent({
   actions: EventActions;
 }) {
   const { event } = segment;
+  const hasLocation = Boolean(event.location?.trim());
   return (
     <>
       <span className={styles.blockHead}>
@@ -146,8 +153,12 @@ export function EventBlockContent({
         <KindLine event={event} time={segment.timeText} />
       </span>
       <EventTitle event={event} actions={actions} />
-      {segment.zoneChip && <span className={styles.zoneChip}>{segment.zoneChip}</span>}
-      <EventLocation event={event} />
+      {(segment.zoneChip || hasLocation) && (
+        <span className={styles.eventMeta} data-event-meta="true">
+          {segment.zoneChip && <span className={styles.zoneChip}>{segment.zoneChip}</span>}
+          <EventLocation event={event} />
+        </span>
+      )}
     </>
   );
 }

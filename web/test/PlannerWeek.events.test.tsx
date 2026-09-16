@@ -302,6 +302,35 @@ describe('planner events on the grid', () => {
     expect(within(block).getByText('09:00 PDT')).toBeInTheDocument();
   });
 
+  it('keeps the zone chip and the link on one line under the title, so neither covers it', async () => {
+    seed([
+      makePlannerEvent({ title: 'Call with Sam', time_zone: 'America/Los_Angeles', starts_at: '2026-09-16T16:00:00Z', ends_at: '2026-09-16T17:00:00Z', location_kind: 'online', location: 'https://syr.zoom.us/j/1' }),
+    ]);
+    renderPlanner();
+
+    await findTitle('Call with Sam');
+    const block = blockOf('Call with Sam');
+    const meta = within(block).getByText('09:00 PDT').parentElement!;
+    expect(meta).toHaveAttribute('data-event-meta', 'true');
+    expect(within(meta).getByText('Join · syr.zoom.us')).toBeInTheDocument();
+    expect(block).not.toHaveAttribute('data-compact');
+  });
+
+  it('draws a half-hour event as one compact line that still names its kind and time', async () => {
+    seed([
+      makePlannerEvent({ title: 'Office hours', kind: 'appointment_slot', course_id: 'IST.323', starts_at: '2026-09-16T18:00:00Z', ends_at: '2026-09-16T18:30:00Z' }),
+    ]);
+    renderPlanner();
+
+    await findTitle('Office hours');
+    const block = blockOf('Office hours');
+    expect(block).toHaveAttribute('data-compact', 'true');
+    expect(within(block).getByText('IST 323')).toBeInTheDocument();
+    // Visually hidden in the compact line, still read out.
+    expect(within(block).getByText('Appointment slot')).toBeInTheDocument();
+    expect(within(block).getByText('2:00 PM – 2:30 PM')).toBeInTheDocument();
+  });
+
   it('shows no zone chip for a New York event', async () => {
     seed([makePlannerEvent({ title: 'Advising' })]);
     renderPlanner();

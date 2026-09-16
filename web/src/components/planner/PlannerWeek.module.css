@@ -399,6 +399,53 @@
   box-shadow: inset 2px 0 0 var(--planner-kind-edge);
 }
 
+/* A block's lines keep their height. Flex items shrink by default, and the title
+   (`overflow: hidden`) shrank to nothing on a one-hour block, so the zone chip
+   was drawn over it. Now a block too short for every line clips at its bottom
+   edge, and the kind line and title — the first two — are the ones that show. */
+.eventBlock > * {
+  flex-shrink: 0;
+}
+
+/* The zone chip and the location share one line under the title. */
+.eventMeta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Half an hour or less (`data-compact`, see isCompactSegment): one slot holds one
+   line, which used to be the kind line alone. The block becomes a single row —
+   checkbox, course code, title, zone chip, link — and the kind label and time
+   are visually hidden but still read out; the block's style and position carry
+   them on screen. */
+.eventBlock[data-compact='true'] {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+.eventBlock[data-compact='true'] > .blockHead {
+  flex: none;
+}
+.eventBlock[data-compact='true'] > .eventTitle {
+  flex: 1 1 auto;
+}
+.eventBlock[data-compact='true'] > .eventMeta {
+  flex: 0 1 auto;
+  max-width: 50%;
+}
+.eventBlock[data-compact='true'] .eventKind,
+.eventBlock[data-compact='true'] .blockTime {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .eventChip {
   composes: chip;
   cursor: pointer;
@@ -499,6 +546,7 @@
 }
 
 .zoneChip {
+  flex: none;
   align-self: flex-start;
   padding: 0 4px;
   border-radius: var(--radius-sm);
@@ -509,6 +557,7 @@
 }
 
 .eventLink {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

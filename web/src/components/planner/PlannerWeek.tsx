@@ -47,6 +47,7 @@ import {
   type PlannerDay,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
+import { isCompactSegment } from '@/lib/planner-events-grid';
 import { EventBlockContent, eventCardProps, type EventActions } from './PlannerEventBlock';
 import { PlannerEventForm } from './PlannerEventForm';
 import { DaySlots, EventsBand, type SlotPosition } from './PlannerSlots';
@@ -345,6 +346,7 @@ function DayColumn({
               className={styles.eventBlock}
               data-block="event"
               data-clamped={block.segment.clamped ? 'true' : undefined}
+              data-compact={isCompactSegment(block.segment) ? 'true' : undefined}
               {...eventCardProps(block.segment.event, eventActions)}
               style={style}
             >
