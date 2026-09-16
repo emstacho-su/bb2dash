@@ -20,6 +20,7 @@ import {
   IST466_LETTER_PLACEHOLDER,
   IST466_SCHEME,
   IST466_SYNCHRONY,
+  makeComponent,
   makeItem,
 } from './factories.grade-model';
 
@@ -35,14 +36,19 @@ const db = vi.hoisted(() => ({
   links: new Map<string, LinkRow>(),
 }));
 
-/** A pointless confirmed placeholder on IST.466's single-item Ethics part (Round 1b A1). */
+/**
+ * A pointless confirmed placeholder on a single-item part of its own (Round 1b A1). It must not
+ * share a part with a real column: a part with more items than `count_expected` drops its
+ * placeholders first (Contract, Semantics), so the what-if would be ignored.
+ */
+const ETHICS_PRACTICE_2 = makeComponent({ id: 36, code: 'ethics_practice_2', name: 'Ethics Practice 2', points: 50 });
 const ETHICS_PRACTICE_PLACEHOLDER: GradeModelItemRow = {
   ...ECN304_EXAM1_PLACEHOLDER,
   scheme_course_id: 'IST.466',
   shell_course_id: 'IST.466',
   item_key: 'asg:IST.466/ethics-practice-2',
   assignment_id: 'IST.466/ethics-practice-2',
-  component_id: 25,
+  component_id: ETHICS_PRACTICE_2.id,
   name: 'Ethics Practice 2',
 };
 
@@ -69,7 +75,7 @@ type Filters = Record<string, string>;
 function read(relation: string, filters: Filters): unknown {
   switch (relation) {
     case 'grading_schemes': return IST466_SCHEME;
-    case 'grade_components': return IST466_COMPONENTS;
+    case 'grade_components': return [...IST466_COMPONENTS, ETHICS_PRACTICE_2];
     case 'v_grade_model_items': return modelItems();
     case 'v_grade_model_total': return null;
     case 'v_gradebook_history': return [];

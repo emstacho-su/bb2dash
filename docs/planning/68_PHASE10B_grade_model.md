@@ -557,6 +557,35 @@ columns Stack already linked, so a choice can be undone; a "Confirm link" button
 link; a link write sends both `component_id` and `excluded`; 057 adds an index on `component_id`
 and `updated_at` triggers; display formatting and control labels in `grade-model-format.ts`.
 
+## Round 1c — engine readings accepted at integration (PM, 2026-09-16)
+
+W-19 finished (`4e2ea83`; 970 tests on its branch, engine coverage 100 % lines / 96.5 %
+branches; IST.323 graded-so-far 5.0 and 14.8 exactly; the live table above reproduced). Its
+calls where the Contract was silent or wrong, all accepted:
+
+1. **Contract correction:** the item fraction is `score / possible`. `normalize_to` is the
+   component's target (IST.323 quizzes: `normalize_to = 5.00` = its points), not a per-item
+   denominator; reading it per item gave quizzes 10 instead of 5.0. The Semantics line
+   `f = score / (normalizeTo ?? possible)` is superseded.
+2. The solver leaves ungraded extra credit at 0 (never required work).
+3. Once every exam is graded, `rank_weighted` applies its rank weights in graded-so-far too.
+4. A points letter scale converts with `gradedOutOf ?? totalPoints` (the full-course total the
+   thresholds were written for), not the muted-reduced denominator.
+5. The 0.5 agreement band scales with a points course's total; a course that computes only
+   through what-if values shows no agreement (real scores only).
+6. Out-of-range scenario values are ignored, and so is any value on a `manual` part.
+7. `nothing_graded` also covers a course where only extra credit is scored.
+8. Children of a muted parent are muted.
+9. A letter not on the scale is a caller error (`RangeError`); `grade-model-run.ts` turns it into
+   an error state and falls back to a letter on the scale, so a stale saved target cannot break
+   the tab.
+
+Integration fix: `CourseGrades.model.test.tsx` put its synthetic percent placeholder in the same
+single-item part as a real column; the real engine correctly drops a placeholder in excess of
+`count_expected`, so the test now gives it a part of its own. Known limit (V-1 data, not code):
+IST.323's 13-point proposal column bundles the 11-point proposal and the 2-point final log, so
+once it is graded and linked the agreement reads `unexplained` — recorded in STATUS.
+
 ## Integration (PM)
 
 Merge W-19, then W-20; regenerate `database.types.ts`; `npm ci` (new devDependency); typecheck +
