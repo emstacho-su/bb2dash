@@ -121,9 +121,12 @@ export function PlannerWeek() {
         </p>
       )}
 
-      {editor.doneError !== null && (
-        <p className={styles.state} role="alert">
-          Could not update the task: {editor.doneError.message}
+      {editor.alert !== null && (
+        <p className={styles.alert} role="alert">
+          <span>{editor.alert}</span>
+          <button type="button" className={styles.alertDismiss} onClick={editor.dismissAlert}>
+            Dismiss
+          </button>
         </p>
       )}
 
@@ -143,9 +146,7 @@ export function PlannerWeek() {
         <span>Click an empty slot to add an event · the grid shows New York time</span>
       </div>
 
-      {editor.target !== null && (
-        <PlannerEventForm key={editor.openCount} target={editor.target} onClose={editor.close} />
-      )}
+      {editor.form !== null && <PlannerEventForm key={editor.form.sessionId} {...editor.form} />}
     </section>
   );
 }

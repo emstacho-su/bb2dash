@@ -29,6 +29,10 @@ interface Write {
 const db = vi.hoisted(() => ({
   rows: {} as Record<string, unknown[]>,
   writes: [] as Write[],
+  /** When set, every write is refused with this message. */
+  failWith: null as string | null,
+  /** When set, writes wait on it before answering. */
+  gate: null as Promise<void> | null,
 }));
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -65,6 +69,7 @@ function chainFor(table: string) {
       return { data: table === 'terms' ? (rows[0] ?? null) : rows, error: null };
     }
     db.writes.push(pending);
+    if (db.failWith !== null) return { data: null, error: { message: db.failWith } };
     if (pending.op === 'delete') return { data: [{ id: pending.id }], error: null };
     const base = pending.op === 'update'
       ? (db.rows[table] ?? []).find((row) => (row as { id: string }).id === pending!.id)
@@ -91,9 +96,13 @@ function chainFor(table: string) {
       db.writes.push({ table, op: 'upsert', payload });
       return { error: null };
     },
-    single: async () => settle(),
+    single: async () => {
+      if (pending && db.gate) await db.gate;
+      return settle();
+    },
     maybeSingle: async () => settle(),
-    then: (onFulfilled: (value: unknown) => unknown) => Promise.resolve(settle()).then(onFulfilled),
+    then: (onFulfilled: (value: unknown) => unknown) =>
+      (pending && db.gate ? db.gate : Promise.resolve()).then(() => onFulfilled(settle())),
   });
   return chain;
 }
@@ -144,6 +153,8 @@ function seed(events: unknown[] = []) {
     planner_events: events,
   };
   db.writes = [];
+  db.failWith = null;
+  db.gate = null;
 }
 
 function renderPlanner() {
@@ -529,5 +540,154 @@ describe('saving through the form', () => {
 
     await waitFor(() => expect(openDialog()).toBeNull());
     expect(db.writes).toEqual([{ table: 'planner_events', op: 'delete', payload: null, id: 'e-1' }]);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Round 2 (code review)
+ * ------------------------------------------------------------------------ */
+
+/** A gate the test opens by hand. */
+function holdWrites(): () => void {
+  let open = () => {};
+  db.gate = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return open;
+}
+
+function gridAlert(): HTMLElement | null {
+  return Array.from(document.querySelectorAll<HTMLElement>('[role="alert"]')).find(
+    (element) => !element.closest('[role="dialog"]'),
+  ) ?? null;
+}
+
+describe('R2-4 — editing keeps a stored instant the owner did not change', () => {
+  it('saves the second 01:30 of the 2026-11-01 fold unchanged when only the title is edited', async () => {
+    nav.params = new URLSearchParams('week=2026-10-26');
+    seed([
+      makePlannerEvent({
+        id: 'fold',
+        title: 'Late call',
+        starts_at: '2026-11-01T06:30:00.000Z', // 01:30 EST, the second one
+        ends_at: '2026-11-01T07:00:00.000Z',
+      }),
+    ]);
+    renderPlanner();
+    fireEvent.click(await findTitle('Late call'));
+
+    const dialog = dialogNamed('Edit planner event');
+    expect(within(dialog).getByLabelText('Start time')).toHaveValue('01:30');
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Late call (moved room)' } });
+    fireEvent.click(buttonIn(dialog, 'Save'));
+
+    await waitFor(() => expect(openDialog()).toBeNull());
+    expect(db.writes).toHaveLength(1);
+    expect(db.writes[0]).toMatchObject({
+      table: 'planner_events',
+      op: 'update',
+      id: 'fold',
+      payload: {
+        title: 'Late call (moved room)',
+        starts_at: '2026-11-01T06:30:00.000Z',
+        ends_at: '2026-11-01T07:00:00.000Z',
+      },
+    });
+  });
+});
+
+describe('R2-6 — a save refused after the dialog closed is not lost', () => {
+  it('reports the refusal in the grid alert and rolls the block back', async () => {
+    renderPlanner();
+    fireEvent.click(await findLabelled('New event, Wed Sep 16, 2:30 PM'));
+    const dialog = dialogNamed('New planner event');
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Advising' } });
+
+    const open = holdWrites();
+    db.failWith = 'insert refused';
+    fireEvent.click(buttonIn(dialog, 'Save'));
+    await waitFor(() => expect(buttonIn(dialog, 'Saving…')).toBeDisabled());
+    await findTitle('Advising'); // the optimistic block
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(openDialog()).toBeNull());
+
+    open();
+    await waitFor(() => expect(gridAlert()).not.toBeNull());
+    expect(gridAlert()).toHaveTextContent('Could not save “Advising”: insert refused');
+    await waitFor(() => expect(titleButtons('Advising')).toHaveLength(0));
+  });
+
+  it('keeps the dialog open with the refusal when it is still open', async () => {
+    db.failWith = 'insert refused';
+    renderPlanner();
+    fireEvent.click(await findLabelled('New event, Wed Sep 16, 2:30 PM'));
+    const dialog = dialogNamed('New planner event');
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Advising' } });
+    fireEvent.click(buttonIn(dialog, 'Save'));
+
+    expect(await within(dialog).findByText('Could not save: insert refused')).toBeInTheDocument();
+    expect(openDialog()).not.toBeNull();
+    expect(gridAlert()).toBeNull();
+  });
+
+  it("shows the server's zone refusal under the zone field", async () => {
+    db.failWith = "planner_events: time_zone 'Mars/Base' is not an IANA zone name";
+    renderPlanner();
+    fireEvent.click(await findLabelled('New event, Wed Sep 16, 2:30 PM'));
+    const dialog = dialogNamed('New planner event');
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Advising' } });
+    fireEvent.click(buttonIn(dialog, 'Save'));
+
+    expect(
+      await within(dialog).findByText('The calendar database does not know this zone; choose another.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Time zone')).toHaveAttribute('aria-invalid', 'true');
+  });
+});
+
+describe('R2-10 — the task alert clears', () => {
+  it('on dismiss, and on the next successful write', async () => {
+    seed([SIX_KINDS[1]]);
+    db.failWith = 'permission denied';
+    renderPlanner();
+
+    fireEvent.click(await findLabelled('Done: Email TA'));
+    await waitFor(() => expect(gridAlert()).toHaveTextContent('Could not update “Email TA”: permission denied'));
+    fireEvent.click(buttonIn(gridAlert()!, 'Dismiss'));
+    expect(gridAlert()).toBeNull();
+
+    fireEvent.click(await findLabelled('Done: Email TA'));
+    await waitFor(() => expect(gridAlert()).not.toBeNull());
+
+    db.failWith = null;
+    await waitFor(() => expect(labelled('Done: Email TA')).not.toBeDisabled());
+    fireEvent.click(labelled('Done: Email TA'));
+    await waitFor(() => expect(gridAlert()).toBeNull());
+  });
+});
+
+describe('R2-8 — counts what renders', () => {
+  it('treats an event ending exactly at Monday 00:00 as nothing this week', async () => {
+    db.rows = {
+      meetings: [],
+      sessions: [],
+      v_work_items: [],
+      terms: TERM,
+      courses: COURSES,
+      planner_events: [
+        makePlannerEvent({
+          id: 'sunday-late',
+          title: 'Sunday wind-down',
+          starts_at: '2026-09-14T03:00:00.000Z', // Sun Sep 13, 23:00 New York
+          ends_at: '2026-09-14T04:00:00.000Z', // Mon Sep 14, 00:00 New York
+        }),
+      ],
+    };
+    renderPlanner();
+
+    expect(await screen.findByText('Nothing scheduled this week.')).toBeInTheDocument();
+    expect(screen.getByText('0 classes · 0 due')).toBeInTheDocument();
+    expect(titleButtons('Sunday wind-down')).toHaveLength(0);
   });
 });

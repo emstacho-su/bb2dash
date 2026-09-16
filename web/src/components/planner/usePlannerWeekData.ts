@@ -65,7 +65,11 @@ export interface PlannerWeekData {
   placedMeetings: PlacedMeeting[];
   placedItems: PlacedWorkItems<WorkItem>;
   placedEvents: PlacedPlannerEvents;
-  /** How many planner events touch this week (not segments or chips). */
+  /**
+   * How many planner events are drawn this week — distinct events with at least
+   * one block or chip, not rows fetched: the window also returns an event that
+   * ends exactly at Monday 00:00, which draws nothing here (R2-8).
+   */
   eventCount: number;
   /** One lane-assigned block list per day column, Monday → Sunday. */
   blocksByDay: (GridBlock & LaneSpan)[][];
@@ -132,6 +136,11 @@ function buildBand(
   return byDay;
 }
 
+/** Distinct planner events with something on screen. */
+function renderedEventCount(placed: PlacedPlannerEvents): number {
+  return new Set([...placed.timed, ...placed.allDay].map((entry) => entry.event.id)).size;
+}
+
 export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
   const meetingsQuery = useMeetings();
   const sessionsQuery = useSessionsForWeek(view.weekStart, view.weekEnd);
@@ -178,7 +187,7 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
     placedMeetings,
     placedItems,
     placedEvents,
-    eventCount: eventsQuery.data?.length ?? 0,
+    eventCount: renderedEventCount(placedEvents),
     blocksByDay,
     bandByDay,
     eventBandByDay,
