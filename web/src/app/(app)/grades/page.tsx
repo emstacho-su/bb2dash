@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { GradesScreen } from './GradesScreen';
+import { GradesModelScreen } from './GradesModelScreen';
 import styles from '../Shell.module.css';
 
 export const metadata: Metadata = {
@@ -11,8 +11,9 @@ export const metadata: Metadata = {
  *
  * The screen that used to stand here said the project rule out loud: no grade
  * display until real gradebook data exists. That data exists now, so the rule
- * moves into the rendering instead — every figure below is Blackboard's own,
- * shown with the time we saw it, and bb2dash computes none of them.
+ * moves into the rendering instead — every Blackboard figure is shown with the
+ * time we saw it, and the only numbers bb2dash computes (Phase 10b) sit inside
+ * each course's "Our model" container.
  */
 export default function GradesPage() {
   return (
@@ -24,7 +25,7 @@ export default function GradesPage() {
         </div>
       </header>
 
-      <GradesScreen />
+      <GradesModelScreen />
     </>
   );
 }
