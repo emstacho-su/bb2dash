@@ -216,8 +216,10 @@ function buildComponents(input: InputSpec): Built {
 function scenarioFor(items: readonly ItemInput[], specs: ReadonlyMap<string, ItemSpec>): Record<string, number> {
   const entries = items.flatMap((item) => {
     const whatIfPct = specs.get(item.key)?.whatIfPct ?? null;
-    const eligible = item.score === null && item.possible !== null && item.possible > 0;
-    return eligible && whatIfPct !== null ? [[item.key, (whatIfPct * (item.possible ?? 0)) / 100] as const] : [];
+    if (item.score !== null || whatIfPct === null) return [];
+    // A1: a pointless placeholder takes the percentage itself (the engine decides whether it counts).
+    if (item.possible === null && item.kind === 'placeholder') return [[item.key, whatIfPct] as const];
+    return item.possible !== null && item.possible > 0 ? [[item.key, (whatIfPct * item.possible) / 100] as const] : [];
   });
   return Object.fromEntries([...entries, ['asg:orphan', 3]]);
 }

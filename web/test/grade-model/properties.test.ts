@@ -30,21 +30,39 @@ const NO_EXTRA = modelInputArb({ extraCredit: false, unsure: true });
 
 const isComputed = (result: ModelResult): result is ComputedResult => result.state === 'computed';
 
-/** Raises item `index`'s score (real, else its what-if value) a share `t` of the way to possible. */
+/**
+ * Raises item `index`'s score (real, else its what-if value) a share `t` of the
+ * way to its ceiling: `possible`, or 100 for an A1 percent placeholder.
+ */
 function raiseScore(input: ModelInput, index: number, t: number): ModelInput | null {
   const target = input.items[index % Math.max(1, input.items.length)];
-  if (target === undefined || target.possible === null || target.possible <= 0) return null;
-  if (target.score !== null) {
+  if (target === undefined) return null;
+  if (target.score !== null && target.possible !== null && target.possible > 0) {
     const score = target.score + (target.possible - target.score) * t;
     return { ...input, items: input.items.map((row) => (row === target ? { ...row, score } : row)) };
   }
+  const ceiling = target.possible === null && target.kind === 'placeholder' ? 100 : target.possible;
   const current = input.scenario.itemScores[target.key];
-  if (current === undefined) return null;
-  const value = current + (target.possible - current) * t;
+  if (current === undefined || ceiling === null || ceiling <= 0) return null;
+  const value = current + (ceiling - current) * t;
   return { ...input, scenario: { itemScores: { ...input.scenario.itemScores, [target.key]: value } } };
 }
 
 describe('L2 properties', () => {
+  it('generates A1 percent placeholders that count (so monotonicity covers them)', () => {
+    const samples = fc.sample(ANY, { numRuns: 300, seed: 7 });
+    const percentKeys = samples.flatMap((input) =>
+      input.items
+        .filter((row) => row.kind === 'placeholder' && row.possible === null && row.linkConfidence === 'confirmed')
+        .filter((row) => input.scenario.itemScores[row.key] !== undefined)
+        .filter((row) => {
+          const aggregation = input.components.find((c) => c.id === row.componentId)?.aggregation;
+          return aggregation !== undefined && !['sum', 'manual'].includes(aggregation);
+        }),
+    );
+    expect(percentKeys.length).toBeGreaterThan(20);
+  });
+
   it('is monotone in every score, real or what-if', () => {
     assertProperty(
       fc.property(ANY, fc.nat(), fc.integer({ min: 0, max: 100 }), (input, index, step) => {

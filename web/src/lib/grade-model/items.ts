@@ -7,7 +7,21 @@
  * "Item fraction", "Placeholders" and PM calls 7 and 10.
  */
 
-import type { ComponentInput, ItemInput, Scenario } from './types';
+import type { Aggregation, ComponentInput, ItemInput, Scenario } from './types';
+
+/**
+ * Contract amendment A1 (Round 1b): aggregations that use fractions only. A
+ * confirmed placeholder with no `possible` under one of these takes a what-if
+ * value as a percentage, `0 ≤ v ≤ 100`, so `f = v / 100`.
+ */
+const PERCENT_AGGREGATIONS: ReadonlySet<Aggregation> = new Set<Aggregation>([
+  'single',
+  'average',
+  'average_drop_lowest',
+  'rank_weighted',
+  'normalized',
+]);
+const PERCENT_POSSIBLE = 100;
 
 /** An item that enters arithmetic: possible > 0, not exempt, not excluded. */
 export interface CountedItem {
@@ -53,6 +67,10 @@ function scenarioValueFor(item: ItemInput, possible: number, scenario: Scenario)
   return inRange ? value : null;
 }
 
+function isConfirmedLink(item: ItemInput): boolean {
+  return item.linkSource === 'override' || item.linkConfidence === 'confirmed';
+}
+
 function toCounted(item: ItemInput, possible: number, scenario: Scenario): CountedItem {
   const realScore = realScoreOf(item);
   const whatIf = scenarioValueFor(item, possible, scenario);
@@ -64,17 +82,39 @@ function toCounted(item: ItemInput, possible: number, scenario: Scenario): Count
     score: realScore ?? whatIf,
     hypothetical: whatIf !== null,
     extraCredit: item.isExtraCredit,
-    confirmed: item.linkSource === 'override' || item.linkConfidence === 'confirmed',
+    confirmed: isConfirmedLink(item),
     placeholder: item.kind === 'placeholder',
     dueAt: item.dueAt,
   };
 }
 
+/**
+ * A1: a placeholder with `possible` null, a confirmed link and a fraction-only
+ * aggregation counts, out of 100, once the scenario gives it a value. Without
+ * a value (or under `sum` / `manual`, or with an unsure link) it stays bookkeeping.
+ */
+function isPercentPlaceholder(
+  item: ItemInput,
+  scenario: Scenario,
+  aggregationOf: ReadonlyMap<number, Aggregation>,
+): boolean {
+  if (item.kind !== 'placeholder' || item.possible !== null || item.exempt || item.excluded) return false;
+  const aggregation = item.componentId === null ? undefined : aggregationOf.get(item.componentId);
+  if (aggregation === undefined || !PERCENT_AGGREGATIONS.has(aggregation) || !isConfirmedLink(item)) return false;
+  return scenarioValueFor(item, PERCENT_POSSIBLE, scenario) !== null;
+}
+
 /** Every counted item, in input order, with its effective score. */
-export function countedItems(items: readonly ItemInput[], scenario: Scenario): readonly CountedItem[] {
-  return items.flatMap((item) =>
-    isCounted(item) && item.possible !== null ? [toCounted(item, item.possible, scenario)] : [],
-  );
+export function countedItems(
+  items: readonly ItemInput[],
+  scenario: Scenario,
+  components: readonly ComponentInput[] = [],
+): readonly CountedItem[] {
+  const aggregationOf = new Map(components.map((component) => [component.id, component.aggregation]));
+  return items.flatMap((item) => {
+    if (isCounted(item) && item.possible !== null) return [toCounted(item, item.possible, scenario)];
+    return isPercentPlaceholder(item, scenario, aggregationOf) ? [toCounted(item, PERCENT_POSSIBLE, scenario)] : [];
+  });
 }
 
 function dueRank(item: CountedItem): number {

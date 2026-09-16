@@ -50,7 +50,7 @@ export interface CourseEvaluation {
 }
 
 export function prepareModel(input: ModelInput, scheme: SchemeInput, method: ComputableMethod): PreparedModel {
-  const byComponent = itemsByComponent(input.components, countedItems(input.items, input.scenario));
+  const byComponent = itemsByComponent(input.components, countedItems(input.items, input.scenario, input.components));
   const roots = buildForest(method, input.components, byComponent);
   const regular = roots.filter((root) => !root.extraCredit);
   const nominal = sum(regular.map((root) => root.nominalCap));
