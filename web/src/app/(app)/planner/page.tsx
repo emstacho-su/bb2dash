@@ -1,11 +1,20 @@
 import type { Metadata } from 'next';
-import { ScreenStub } from '@/components/shell/ScreenStub';
+import { Suspense } from 'react';
+import { PlannerWeek } from '@/components/planner/PlannerWeek';
 import styles from '../Shell.module.css';
 
 export const metadata: Metadata = {
   title: 'Planner · bb2dash',
 };
 
+/**
+ * /planner — the week grid (R-19, Phase 11).
+ *
+ * The grid reads `?week=` for its Monday anchor, so it sits behind a Suspense
+ * boundary: without one, `useSearchParams` would opt this route out of
+ * prerendering altogether (the same reason the popout host has one in the
+ * (app) layout).
+ */
 export default function PlannerPage() {
   return (
     <>
@@ -16,10 +25,9 @@ export default function PlannerPage() {
         </div>
       </header>
 
-      <ScreenStub title="Planner day view" owner="unassigned · spec T-17">
-        Today&rsquo;s meetings moved off Home and become a Planner day view (GUI decision, T-17).
-        The route exists so the top bar is complete; the screen is not in the current worker split.
-      </ScreenStub>
+      <Suspense fallback={<p className={styles.stubBody}>Loading the week…</p>}>
+        <PlannerWeek />
+      </Suspense>
     </>
   );
 }
