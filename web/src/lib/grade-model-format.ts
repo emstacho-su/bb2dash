@@ -14,6 +14,7 @@
 
 import type { Agreement, ComponentInput, ComponentResult, Standing } from './grade-model/types';
 import { COURSE_TIME_ZONE } from './course-dimension';
+import { scoreNumberText } from './queries.grades';
 
 /** What a missing figure looks like. Never `0`. */
 export const NO_FIGURE = '—';
@@ -122,9 +123,13 @@ export interface HistoryPoint {
   readonly seenAt: string;
 }
 
-/** "— → 9 → 9.5 · seen 14 Sep, 16 Sep". Null is the dash, never zero. */
+/**
+ * "— → 83.333 → 85.714 · seen 14 Sep, 16 Sep". Null is the dash, never zero.
+ * Each value prints exactly as the score cell prints it (round 3, R3-4):
+ * Blackboard's stored value, trailing zeros trimmed, no display rounding.
+ */
 export function historyText(points: readonly HistoryPoint[]): string {
-  const scores = points.map((p) => (p.score === null ? NO_FIGURE : formatPoints(p.score)));
+  const scores = points.map((p) => (p.score === null ? NO_FIGURE : scoreNumberText(p.score)));
   const days = points.map((p) => historyDayText(p.seenAt));
   return `${scores.join(' → ')} · seen ${days.join(', ')}`;
 }

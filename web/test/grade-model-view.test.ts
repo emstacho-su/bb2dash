@@ -27,6 +27,7 @@ vi.mock('@/lib/grade-model', async (importOriginal) => {
 
 const view = await import('@/lib/grade-model-view');
 const format = await import('@/lib/grade-model-format');
+const grades = await import('@/lib/queries.grades');
 const runner = await import('@/lib/grade-model-run');
 const { toModelInput } = await import('@/lib/grade-model-input');
 const { itemStates } = await import('@/lib/grade-model');
@@ -206,6 +207,19 @@ describe('display rounding, once', () => {
     expect(format.historyText(QUIZ_HISTORY.map((r) => ({ score: r.score, seenAt: r.seen_at })))).toBe(
       '— → 9 → 9.5 · seen 10 Sep, 14 Sep, 16 Sep',
     );
+  });
+
+  it('prints each history value exactly as the score cell does (R3-4)', () => {
+    // ECN.304's Attendance: Blackboard stores three decimals; the cell reads "85.714 / 100".
+    const points = [
+      { score: 83.333, seenAt: '2026-09-14T17:19:23.154Z' },
+      { score: 85.714, seenAt: '2026-09-16T17:14:02.645Z' },
+    ];
+    expect(format.historyText(points)).toBe('83.333 → 85.714 · seen 14 Sep, 16 Sep');
+    expect(grades.scoreText(85.714, 100)).toBe('85.714 / 100');
+    for (const { score } of points) {
+      expect(format.historyText([{ score, seenAt: points[0].seenAt }])).toContain(grades.scoreNumberText(score));
+    }
   });
 
   it('counts unlinked columns in words', () => {
