@@ -259,3 +259,30 @@ PM regenerates the types again at integration, after 068.
 before and after. W-23 writes `docs/planning/69c_W23_VERIFICATION.md` in the shape of
 `69a_W21_VERIFICATION.md` (git-blob md5 per its §1.1, the K-5 timestamps, the K-8 runs, RLS,
 advisor diff).
+
+## Round 2 — code-review fixes (2026-09-16)
+
+`/code-review main high` on the integrated branch (`56e8ec4`) returned 15 findings; the PM checked
+the ones that matter against the code and prod. `/security-review`: no findings. Migration **069**
+is reserved for this round (070–072 stay free). 067–068 are byte-frozen.
+
+| # | Owner | Finding (checked) | Fix |
+|---|---|---|---|
+| R2-1 | W-23 | `index.ts` reads `v_calendar_push_items` and `calendar_events` in one unpaginated select; PostgREST's row cap (1000) would silently truncate the desired set and the delete pass would remove the missing events from Google. The planner arm grows without a date bound, so the cap is reachable | Read both sides page by page (`.range()`) until a short page, in a helper that `push.ts`-style tests can drive; a run that cannot read a complete side aborts rather than diffing a partial list |
+| R2-2 | W-23 | `saveFailure` and `markDeleting` discard PostgREST's `{ error }` | Check and throw like `saveSuccess` / `remove` |
+| R2-3 | W-23 | 067's trigger scans `pg_timezone_names` on every insert **and** update: **499 ms measured on prod**, so every task tick waits half a second | **069**: skip the zone lookup on `UPDATE` when `time_zone` is unchanged; show before/after timing of a rolled-back `done` update |
+| R2-4 | W-24 | Editing an event that starts in the second 01:xx of the 2026-11-01 fold re-resolves its wall clock with the earlier-instant rule and moves it an hour, even when only the title changed | Keep the stored instants when date, time and zone are unchanged; convert only edited times |
+| R2-5 | W-24 | Rollback restores a whole-cache snapshot, so two overlapping optimistic writes undo each other | Roll back only the affected row (or invalidate) instead of restoring the snapshot |
+| R2-6 | W-24 | Esc / Cancel stay enabled while a save is pending; closing mid-save hides a server rejection | No silent loss: either block closing while pending or surface the failure outside the dialog (the grid alert) |
+| R2-7 | W-24 | `canonicalTimeZone` leaves an alias such as `us/eastern` as typed; Intl accepts it, 067 rejects it, the user sees a raw database error | Send Intl's resolved zone name; field-level error for anything the K-2 rule rejects |
+| R2-8 | W-24 | `eventCount` / `isEmpty` count fetched rows, not placed blocks | Count what renders |
+| R2-9 | W-24 | All-day midnight check ignores seconds, so the validator accepts rows 067 rejects | Compare seconds too |
+| R2-10 | W-24 | The task-toggle error alert never clears after a later successful write | Clear on the next successful write or on dismiss |
+| R2-11 | W-24 | `intlAcceptsZone` builds a new `Intl.DateTimeFormat` per call despite the cached formatter | Reuse the cache |
+| R2-12 | W-24 | `planner-zone.ts` re-implements `newYorkWallClock` (planner-week.ts) and `shiftIso` (anchor.ts) | Call the existing helpers |
+| R2-13 | W-24 | `PlannerEventForm`'s `COLUMN_FIELD` duplicates `FIELD_OF`; the server-validation merge is unreachable | Export one map, drop the dead path |
+
+Not changed, recorded in DECISIONS instead: 068 renamed a column and swapped a primary key rather
+than adding them (the frozen Contract asked for `(source, ref_id)`; the K-5 cut-over held the push
+off for 3 min 37 s with zero writes to existing events). STATUS / DECISIONS / ORCHESTRATOR are the
+PM's, in this PR.
