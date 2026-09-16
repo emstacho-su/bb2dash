@@ -162,8 +162,8 @@ describe('display rounding, once', () => {
   it('explains the headline from the component results, leaving muted parts out', () => {
     const { components } = makeComputed();
     const parts = components.map((c) => ({ id: c.componentId, parentId: null, isExtraCredit: false }));
-    expect(format.explanationText(components, parts)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
-    expect(format.explanationText([{ ...components[2], state: 'muted' }], parts)).toBe('0 of 0 parts graded');
+    expect(format.explanationText(components, makeComputed(), parts)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
+    expect(format.explanationText([{ ...components[2], state: 'muted' }], makeComputed(), parts)).toBe('0 of 0 parts graded');
   });
 
   describe('IST.323 counts parts, not pieces (R2-12)', () => {
@@ -187,15 +187,17 @@ describe('display rounding, once', () => {
         state: muted.includes(c.id) ? 'muted' as const : graded.includes(c.id) ? 'graded' as const : 'ungraded' as const,
         earned: 0, gradedCap: 0, cap: 0, usesHypothetical: false, capacityFromKnownItems: false,
       }));
+    /** The same component results with no what-if values in play. */
+    const real = (components: ReturnType<typeof results>) => makeComputed({ components });
 
     it('reads "of 7 parts", with children and extra credit not counted', () => {
-      expect(format.explanationText(results([11, 15, 17, 18]), IST323)).toBe('2 of 7 parts graded: Blackboard Quizzes, Exams');
+      expect(format.explanationText(results([11, 15, 17, 18]), real(results([11, 15, 17, 18])), IST323)).toBe('2 of 7 parts graded: Blackboard Quizzes, Exams');
     });
 
     it('names a muted parent once, not its pieces', () => {
       const muted = results([], [14, 18, 19, 20]);
       expect(format.mutedPartNames(muted, IST323)).toEqual(['Final Project: Security Program Proposal']);
-      expect(format.explanationText(muted, IST323)).toBe('0 of 6 parts graded');
+      expect(format.explanationText(muted, real(muted), IST323)).toBe('0 of 6 parts graded');
     });
 
     it('names a lone muted piece when its parent is not muted', () => {
@@ -250,8 +252,11 @@ describe('running the engine from a screen', () => {
     const computed = makeComputed();
     engine.project.mockReturnValue(computed);
     const empty = { schemes: undefined, items: undefined, totals: undefined, scenarios: undefined };
-    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': { result: null, components: [], error: null, loading: true } });
-    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({ 'IST.466': { result: null, components: [], error: 'Could not load x', loading: false } });
+    expect(runner.MODEL_STANDING_LOADING).toMatchObject({ result: null, realResult: null, components: [], error: null, loading: true });
+    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': runner.MODEL_STANDING_LOADING });
+    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({
+      'IST.466': { ...runner.MODEL_STANDING_LOADING, error: 'Could not load x', loading: false },
+    });
 
     const states = runner.modelStandingStates(
       ['IST.466', 'IST.471'],
@@ -263,12 +268,31 @@ describe('running the engine from a screen', () => {
       },
       null,
     );
-    expect(states['IST.466']).toMatchObject({ result: computed, error: null, loading: false });
+    expect(states['IST.466']).toMatchObject({ result: computed, realResult: computed, error: null, loading: false });
     expect(states['IST.466'].components.map((c) => c.id)).toEqual(IST466_COMPONENTS.map((c) => c.id));
-    const firstInput = engine.project.mock.calls.at(-2)?.[0] as ModelInput;
+    // IST.466 holds a what-if value, so it runs twice: with its scenario, then real-only (R3-2).
+    // IST.471 holds none, so its real-only result is its result and it runs once.
+    const [firstInput, realOnlyInput, secondInput] = engine.project.mock.calls.slice(-3).map((call) => call[0] as ModelInput);
     expect(firstInput.items.map((i) => i.key)).toEqual(['col:IST.466:_3562497_1']);
     expect(firstInput.scenario.itemScores).toEqual({ 'col:IST.466:_3562497_1': 90 });
-    const secondInput = engine.project.mock.calls.at(-1)?.[0] as ModelInput;
+    expect(realOnlyInput).toEqual({ ...firstInput, scenario: { itemScores: {} } });
     expect(secondInput.scheme).toBeNull();
+  });
+
+  it('runs the real-only projection on the same input with an empty scenario (R3-2)', () => {
+    const typed = makeComputed({ usesHypotheticals: true });
+    const real = makeComputed();
+    engine.project.mockReset();
+    engine.project.mockReturnValueOnce(typed).mockReturnValueOnce(real);
+    const input = { ...inputOf(), scenario: { itemScores: { 'col:IST.466:_3562497_1': 90 } } };
+    expect(runner.runModel(input)).toMatchObject({ result: typed, realResult: real, error: null });
+    expect(engine.project.mock.calls.map((call) => call[0])).toEqual([input, { ...input, scenario: { itemScores: {} } }]);
+    expect(input.scenario.itemScores).toEqual({ 'col:IST.466:_3562497_1': 90 });
+
+    engine.project.mockReset();
+    engine.project.mockReturnValue(real);
+    const noValues = { ...input, scenario: { itemScores: {} } };
+    expect(runner.runModel(noValues)).toMatchObject({ result: real, realResult: real });
+    expect(engine.project).toHaveBeenCalledTimes(1);
   });
 });

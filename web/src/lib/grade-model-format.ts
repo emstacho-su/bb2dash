@@ -12,7 +12,7 @@
  * component invents its own copy.
  */
 
-import type { Agreement, ComponentInput, ComponentResult, Standing } from './grade-model/types';
+import type { Agreement, ComponentInput, ComponentResult, ModelResult, Standing } from './grade-model/types';
 import { COURSE_TIME_ZONE } from './course-dimension';
 import { scoreNumberText } from './queries.grades';
 
@@ -59,15 +59,25 @@ export function agreementDeltaText(agreement: Pick<Agreement, 'delta' | 'unit'>)
 /** The facts about a component the wording needs: where it sits, and whether it is extra credit. */
 export type PartComponent = Pick<ComponentInput, 'id' | 'parentId' | 'isExtraCredit'>;
 
+const isGradedState = (result: ComponentResult) => result.state === 'graded' || result.state === 'partly_graded';
+
 /**
- * "3 of 7 parts graded: quizzes, exams" — how the headline was computed, from
- * the engine's component results. A *part* is a top-level, non-extra-credit
- * component (round 2, R2-12): IST.323's three Final Project pieces are one part
- * and its extra-credit lab is none, so the course reads "of 7 parts", not
- * "of 11". A muted part is not counted; `MUTED_TEXT` names it on its own line.
+ * "2 of 3 parts graded: Participation, Average Quiz Grade · what-if on Exams
+ * (rank-weighted)" — how the headline was computed, from the engine's
+ * component results. A *part* is a top-level, non-extra-credit component
+ * (round 2, R2-12): IST.323's three Final Project pieces are one part and its
+ * extra-credit lab is none, so the course reads "of 7 parts", not "of 11". A
+ * muted part is not counted; `mutedText` names it on its own line.
+ *
+ * Round 3 (R3-2): a part is *graded* only by real scores. `realResult` is
+ * `projectCourse` on the same input with an empty scenario (`runModel`); a
+ * part graded there is graded, and one graded only in `results` is graded by
+ * what-if values alone and is named after " · what-if on". A real-only course
+ * the model cannot compute (nothing graded yet) has no part graded.
  */
 export function explanationText(
   results: readonly ComponentResult[],
+  realResult: ModelResult | null,
   components: readonly PartComponent[],
 ): string {
   const byId = new Map(components.map((c) => [c.id, c]));
@@ -75,9 +85,14 @@ export function explanationText(
     const component = byId.get(r.componentId);
     return component !== undefined && component.parentId === null && !component.isExtraCredit && r.state !== 'muted';
   });
-  const graded = parts.filter((c) => c.state === 'graded' || c.state === 'partly_graded');
+  const realGraded = new Set(
+    realResult?.state === 'computed' ? realResult.components.filter(isGradedState).map((r) => r.componentId) : [],
+  );
+  const graded = parts.filter((part) => realGraded.has(part.componentId));
+  const whatIfOnly = parts.filter((part) => isGradedState(part) && !realGraded.has(part.componentId));
   const head = `${graded.length} of ${parts.length} ${parts.length === 1 ? 'part' : 'parts'} graded`;
-  return graded.length === 0 ? head : `${head}: ${graded.map((c) => c.name).join(', ')}`;
+  const real = graded.length === 0 ? head : `${head}: ${graded.map((c) => c.name).join(', ')}`;
+  return whatIfOnly.length === 0 ? real : `${real} · what-if on ${whatIfOnly.map((c) => c.name).join(', ')}`;
 }
 
 /**

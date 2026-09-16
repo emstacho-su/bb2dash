@@ -57,7 +57,15 @@ function AgreementLine({ agreement }: { agreement: Agreement }) {
   );
 }
 
-function ComputedStanding({ result, components }: { result: ComputedResult; components: readonly PartComponent[] }) {
+function ComputedStanding({
+  result,
+  realResult,
+  components,
+}: {
+  result: ComputedResult;
+  realResult: ModelResult | null;
+  components: readonly PartComponent[];
+}) {
   const { graded_so_far: graded, zeros_on_rest: zeros, best_case: best } = result.standings;
   const muted = mutedPartNames(result.components, components);
 
@@ -72,7 +80,7 @@ function ComputedStanding({ result, components }: { result: ComputedResult; comp
         {PROJECTION_LABEL.zeros_on_rest} {standingText(zeros)} · {PROJECTION_LABEL.best_case}{' '}
         {standingText(best)}
       </p>
-      <p className={styles.note}>{explanationText(result.components, components)}</p>
+      <p className={styles.note}>{explanationText(result.components, realResult, components)}</p>
       {muted.length > 0 && <p className={styles.note}>{mutedText(muted)}</p>}
       {result.agreement && <AgreementLine agreement={result.agreement} />}
       {result.unlinkedScoredKeys.length > 0 && (
@@ -84,6 +92,7 @@ function ComputedStanding({ result, components }: { result: ComputedResult; comp
 
 export function ModelStanding({
   result,
+  realResult,
   components,
   error = null,
   loading = false,
@@ -91,6 +100,8 @@ export function ModelStanding({
 }: {
   /** The engine's answer; null while its inputs load or when it failed. */
   result: ModelResult | null;
+  /** The same course with no what-if values (`runModel`), so only real scores count a part as graded (R3-2). */
+  realResult: ModelResult | null;
   /** The scheme's components, so the wording counts parts, not pieces (R2-12). */
   components: readonly PartComponent[];
   /** Why the model could not be computed or its rows could not be read. */
@@ -113,7 +124,7 @@ export function ModelStanding({
       ) : result.state === 'not_computable' ? (
         <p className={styles.line}>{notComputableText(result.reason, result.unscoredManual)}</p>
       ) : (
-        <ComputedStanding result={result} components={components} />
+        <ComputedStanding result={result} realResult={realResult} components={components} />
       )}
       {children}
     </section>

@@ -11,6 +11,9 @@ import { DELTA_REASON_TEXT } from '@/lib/grade-model/labels';
 import { ModelStanding } from '@/components/grades/ModelStanding';
 import { COMPUTED_PARTS, NOT_COMPUTED_MANUAL, makeComputed } from './factories.grade-model';
 
+/** Blackboard's own scores grade the same parts `makeComputed` does: no part is graded by what-if values alone. */
+const REAL = makeComputed();
+
 function container(): HTMLElement {
   return screen.getByRole('region', { name: 'Our model' });
 }
@@ -27,7 +30,7 @@ function percentageNodes(root: HTMLElement): Text[] {
 
 describe('ModelStanding — a computed course', () => {
   it('leads with graded so far, then zeros on the rest and best case on one line', () => {
-    render(<ModelStanding components={COMPUTED_PARTS} result={makeComputed()} />);
+    render(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={makeComputed()} />);
     const model = container();
     expect(within(model).getByText('87.4% (B+)')).toBeInTheDocument();
     expect(within(model).getByText('graded so far')).toBeInTheDocument();
@@ -36,10 +39,22 @@ describe('ModelStanding — a computed course', () => {
   });
 
   it('says so when a standing uses what-if values, and not otherwise', () => {
-    const { rerender } = render(<ModelStanding components={COMPUTED_PARTS} result={makeComputed()} />);
+    const { rerender } = render(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={makeComputed()} />);
     expect(screen.queryByText('includes what-if values')).toBeNull();
-    rerender(<ModelStanding components={COMPUTED_PARTS} result={makeComputed({ usesHypotheticals: true })} />);
+    rerender(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={makeComputed({ usesHypotheticals: true })} />);
     expect(within(container()).getByText('includes what-if values')).toBeInTheDocument();
+  });
+
+  it('counts a part graded only by what-if values apart from the graded ones (R3-2)', () => {
+    const base = makeComputed();
+    const withWhatIf = makeComputed({
+      usesHypotheticals: true,
+      components: base.components.map((c) => (c.componentId === 16 ? { ...c, state: 'partly_graded' as const, usesHypothetical: true } : c)),
+    });
+    render(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={withWhatIf} />);
+    expect(
+      within(container()).getByText('2 of 3 parts graded: Blackboard Quizzes, Exams · what-if on Required Labs'),
+    ).toBeInTheDocument();
   });
 
   it('names a part left out because its link is unsure', () => {
@@ -47,7 +62,7 @@ describe('ModelStanding — a computed course', () => {
     const muted = makeComputed({
       components: [...base.components, { ...base.components[2], componentId: 24, name: 'Two Major Case Studies (Synchrony, SU IT)', state: 'muted' }],
     });
-    render(<ModelStanding components={[...COMPUTED_PARTS, { id: 24, parentId: null, isExtraCredit: false }]} result={muted} />);
+    render(<ModelStanding realResult={REAL} components={[...COMPUTED_PARTS, { id: 24, parentId: null, isExtraCredit: false }]} result={muted} />);
     expect(
       within(container()).getByText('Left out: Two Major Case Studies (Synchrony, SU IT) — the link to the syllabus is unsure'),
     ).toBeInTheDocument();
@@ -55,7 +70,7 @@ describe('ModelStanding — a computed course', () => {
 
   it("agrees with Blackboard's number", () => {
     render(
-      <ModelStanding components={COMPUTED_PARTS}
+      <ModelStanding realResult={REAL} components={COMPUTED_PARTS}
         result={makeComputed({ agreement: { status: 'agrees', modelValue: 14.8, blackboardValue: 14.8, unit: 'points', delta: 0, reasons: [] } })}
       />,
     );
@@ -65,7 +80,7 @@ describe('ModelStanding — a computed course', () => {
   it('differs, and lists every reason in its own words', () => {
     const reasons = Object.keys(DELTA_REASON_TEXT) as DeltaReason[];
     render(
-      <ModelStanding components={COMPUTED_PARTS}
+      <ModelStanding realResult={REAL} components={COMPUTED_PARTS}
         result={makeComputed({ agreement: { status: 'differs', modelValue: 12.5, blackboardValue: 14.8, unit: 'points', delta: -2.3, reasons } })}
       />,
     );
@@ -78,7 +93,7 @@ describe('ModelStanding — a computed course', () => {
 
   it('reports a percentage-unit difference in percentage points', () => {
     render(
-      <ModelStanding components={COMPUTED_PARTS}
+      <ModelStanding realResult={REAL} components={COMPUTED_PARTS}
         result={makeComputed({ agreement: { status: 'differs', modelValue: 80, blackboardValue: 81.26, unit: 'pct', delta: -1.26, reasons: ['extra_credit'] } })}
       />,
     );
@@ -86,7 +101,7 @@ describe('ModelStanding — a computed course', () => {
   });
 
   it('counts scored columns no rule is attached to', () => {
-    render(<ModelStanding components={COMPUTED_PARTS} result={makeComputed({ unlinkedScoredKeys: ['col:IST.323:a', 'col:IST.323:b'] })} />);
+    render(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={makeComputed({ unlinkedScoredKeys: ['col:IST.323:a', 'col:IST.323:b'] })} />);
     expect(within(container()).getByText('2 scored Blackboard columns are not linked to a syllabus rule')).toBeInTheDocument();
   });
 
@@ -95,7 +110,7 @@ describe('ModelStanding — a computed course', () => {
       <div>
         <p>Blackboard’s number, as of Sep 16, 1:14 PM</p>
         <p>14.8 / 104</p>
-        <ModelStanding components={COMPUTED_PARTS}
+        <ModelStanding realResult={REAL} components={COMPUTED_PARTS}
           result={makeComputed({
             usesHypotheticals: true,
             agreement: { status: 'differs', modelValue: 80, blackboardValue: 81, unit: 'pct', delta: -1, reasons: ['muted_component'] },
@@ -124,19 +139,19 @@ describe('ModelStanding — a course the model cannot speak for', () => {
   ];
 
   it.each(cases)('%s says exactly why', (reason, text) => {
-    render(<ModelStanding components={COMPUTED_PARTS} result={{ state: 'not_computable', reason, unscoredManual: [] }} />);
+    render(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={{ state: 'not_computable', reason, unscoredManual: [] }} />);
     expect(within(container()).getByText(text)).toBeInTheDocument();
     expect(percentageNodes(container())).toEqual([]);
   });
 
   it('names the hand-graded parts that are not scored yet', () => {
-    render(<ModelStanding components={COMPUTED_PARTS} result={NOT_COMPUTED_MANUAL} />);
+    render(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={NOT_COMPUTED_MANUAL} />);
     expect(within(container()).getByText('Model not computed — Class Participation not scored yet')).toBeInTheDocument();
   });
 
   it('names two parts with "and"', () => {
     render(
-      <ModelStanding components={COMPUTED_PARTS}
+      <ModelStanding realResult={REAL} components={COMPUTED_PARTS}
         result={{ state: 'not_computable', reason: 'manual_unscored', unscoredManual: ['Lecture Attendance', 'Discussion Section Attendance & Participation'] }}
       />,
     );
@@ -146,9 +161,9 @@ describe('ModelStanding — a course the model cannot speak for', () => {
   });
 
   it('shows a failure as an alert, and loading as loading — never a number', () => {
-    const { rerender } = render(<ModelStanding components={COMPUTED_PARTS} result={null} error="Could not compute the model: boom" />);
+    const { rerender } = render(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={null} error="Could not compute the model: boom" />);
     expect(within(container()).getByRole('alert')).toHaveTextContent('Could not compute the model: boom');
-    rerender(<ModelStanding components={COMPUTED_PARTS} result={null} loading />);
+    rerender(<ModelStanding realResult={REAL} components={COMPUTED_PARTS} result={null} loading />);
     expect(within(container()).getByText('loading…')).toBeInTheDocument();
   });
 });

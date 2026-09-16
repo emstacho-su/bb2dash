@@ -30,7 +30,7 @@ import { GradebookTable } from '@/components/grades/GradebookTable';
 import { ModelStanding } from '@/components/grades/ModelStanding';
 import { QueryState, isQueryUnresolved } from '@/components/shared/QueryState';
 import type { GradebookHistoryRow } from '@/lib/grade-model-input';
-import type { ModelStandingState } from '@/lib/grade-model-run';
+import { MODEL_STANDING_LOADING, type ModelStandingState } from '@/lib/grade-model-run';
 import type { LinkState } from '@/lib/grade-model-view';
 import tokens from '@/styles/tokens.module.css';
 import styles from './GradesScreen.module.css';
@@ -46,8 +46,6 @@ export interface GradesModelProps {
   /** Stack's link choices by column item key, so rows sit where the course tab puts them (R2-8). */
   readonly overrides?: ReadonlyMap<string, LinkState>;
 }
-
-const MODEL_LOADING: ModelStandingState = { result: null, components: [], error: null, loading: true };
 
 export function GradesScreen({ model }: { model?: GradesModelProps } = {}) {
   const coursesQ = useCourseDisplay();
@@ -99,7 +97,7 @@ export function GradesScreen({ model }: { model?: GradesModelProps } = {}) {
               </Link>
             }
           >
-            {model && <ModelStanding {...(model.standings[course.display_id] ?? MODEL_LOADING)} />}
+            {model && <ModelStanding {...(model.standings[course.display_id] ?? MODEL_STANDING_LOADING)} />}
             {isQueryUnresolved(gradebookQ) ? null : (
               <GradebookTable rows={rows} caption={`${course.code} gradebook`} history={model?.history} overrides={model?.overrides} />
             )}

@@ -9,7 +9,7 @@
  */
 
 import { DEFAULT_TARGET_LETTER, itemStates, projectCourse, solveTarget } from './grade-model';
-import type { ItemStates, ModelInput, ModelResult, TargetResult } from './grade-model/types';
+import type { ItemStates, ModelInput, ModelResult, Scenario, TargetResult } from './grade-model/types';
 import type { GradeModelItemRow, GradeModelTotalRow, GradeScenarioRow, GradeSchemeBundle } from './grade-model-input';
 import { toModelInput } from './grade-model-input';
 
@@ -19,21 +19,37 @@ function messageOf(error: unknown): string {
   return typeof error === 'string' && error !== '' ? error : 'no reason given';
 }
 
+/** No what-if values: the course as Blackboard's real scores alone grade it. */
+const NO_SCENARIO: Scenario = { itemScores: {} };
+
 /** A model the screen can render, or the reason it could not be computed. */
 export interface ModelRun {
   readonly input: ModelInput | null;
   readonly result: ModelResult | null;
+  /**
+   * `projectCourse` on the same input with an empty scenario (round 3, R3-2):
+   * which parts real scores grade, so the explanation never counts a part
+   * graded only by what-if values as graded.
+   */
+  readonly realResult: ModelResult | null;
   /** The engine's per-item view: what-if targets, muted parts, dropped placeholders (R2-3). */
   readonly states: ItemStates | null;
   readonly error: string | null;
 }
 
-/** `projectCourse` and `itemStates`, with any exception turned into `error`. */
+/** The real-only projection; the result itself when the scenario holds no values (same input, same answer). */
+function realOnlyResult(input: ModelInput, result: ModelResult): ModelResult {
+  if (Object.keys(input.scenario.itemScores).length === 0) return result;
+  return projectCourse({ ...input, scenario: NO_SCENARIO });
+}
+
+/** `projectCourse` (with and without the scenario) and `itemStates`, with any exception turned into `error`. */
 export function runModel(input: ModelInput): ModelRun {
   try {
-    return { input, result: projectCourse(input), states: itemStates(input), error: null };
+    const result = projectCourse(input);
+    return { input, result, realResult: realOnlyResult(input, result), states: itemStates(input), error: null };
   } catch (error) {
-    return { input, result: null, states: null, error: `Could not compute the model: ${messageOf(error)}` };
+    return { input, result: null, realResult: null, states: null, error: `Could not compute the model: ${messageOf(error)}` };
   }
 }
 
@@ -72,11 +88,22 @@ export function pickTargetLetter(letters: readonly string[], saved: string | nul
 /** What the "Our model" container renders for one course. */
 export interface ModelStandingState {
   readonly result: ModelResult | null;
+  /** The same course with no what-if values, for "N of M parts graded" (R3-2). */
+  readonly realResult: ModelResult | null;
   /** The scheme's components, for the wording (R2-12). Empty until the reads land. */
   readonly components: ModelInput['components'];
   readonly error: string | null;
   readonly loading: boolean;
 }
+
+/** A course whose model inputs have not all arrived. */
+export const MODEL_STANDING_LOADING: ModelStandingState = {
+  result: null,
+  realResult: null,
+  components: [],
+  error: null,
+  loading: true,
+};
 
 /** The bulk reads /grades makes, keyed by scheme course where they are per course. */
 export interface BulkModelRows {
@@ -113,15 +140,24 @@ export function modelStandingStates(
   const scenariosBy = new Map((rows.scenarios ?? []).map((scenario) => [scenario.course_id, scenario]));
   return Object.fromEntries(
     schemeIds.map((id): [string, ModelStandingState] => {
-      if (loadError) return [id, { result: null, components: [], error: loadError, loading: false }];
-      if (!ready) return [id, { result: null, components: [], error: null, loading: true }];
+      if (loadError) return [id, { ...MODEL_STANDING_LOADING, error: loadError, loading: false }];
+      if (!ready) return [id, MODEL_STANDING_LOADING];
       const run = runCourseModel({
         bundle: rows.schemes?.[id] ?? { scheme: null, components: [] },
         items: itemsBy.get(id) ?? [],
         total: totalsBy.get(id) ?? null,
         scenario: scenariosBy.get(id) ?? null,
       });
-      return [id, { result: run.result, components: run.input?.components ?? [], error: run.error, loading: false }];
+      return [
+        id,
+        {
+          result: run.result,
+          realResult: run.realResult,
+          components: run.input?.components ?? [],
+          error: run.error,
+          loading: false,
+        },
+      ];
     }),
   );
 }
