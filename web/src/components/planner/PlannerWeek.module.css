@@ -118,6 +118,17 @@
   background: var(--color-surface);
 }
 
+/* "Assignments" is wider than the time gutter (62px, 48px on a narrow screen)
+   and clipped to "GNMENTS". That band is the tall one, so its label runs
+   bottom-to-top, centred on the band, and fits whatever the gutter's width. The
+   short Events band keeps a horizontal label, which fits. */
+.bandLabelVertical {
+  composes: bandLabel;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  rotate: 180deg;
+}
+
 .bandCell {
   display: flex;
   flex-direction: column;
@@ -236,6 +247,12 @@
   box-shadow: inset 2px 0 0 var(--color-accent-2-400);
 }
 
+/* A class block's own lines keep their height. Only the nested due items give
+   way (they scroll inside the block), so no line is drawn over another. */
+.meetingBlock > :not(.nested) {
+  flex-shrink: 0;
+}
+
 .itemBlock {
   composes: block;
   z-index: 2;
@@ -321,13 +338,45 @@
 
 .nestedChip {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 1px 4px;
   min-width: 0;
   padding: 1px 4px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-bg) 55%, transparent);
   box-shadow: inset 2px 0 0 var(--color-accent-300);
+}
+
+/* In a ~140px chip the one-row layout drew the course code and time over the
+   title and the status select. Two lines instead: glyph, title and due time,
+   then the status quick-edit on its own line. The head's children join the row
+   directly (`display: contents`) so the time can follow the title. The course
+   code is the class block's own, so it is visually hidden here, still read out. */
+.nestedChip > .blockHead {
+  display: contents;
+}
+.nestedChip > .blockTitle {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.nestedChip .blockTime {
+  order: 1;
+  margin-left: 0;
+}
+.nestedChip .blockCode {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.nestedChip > .blockStatus {
+  order: 2;
+  flex: 1 0 100%;
+  margin-top: 0;
 }
 
 /* A card that opens the popout says so with the pointer. The card is the
