@@ -54,7 +54,11 @@ import {
   mirrorKey,
   type MirrorRow,
   type MirrorStore,
+  PAGE_SIZE,
+  type PageReader,
   type PushCounts,
+  readAllPages,
+  readAndRunPush,
   runPush,
 } from "./push.ts";
 
@@ -1335,4 +1339,127 @@ test("golden: the assignment arm's body and hash are byte-for-byte v3's", async 
     "283cdfd8d886691345208f896160f7b83f8650e9f829812c1bdb40ab6fe208d3",
   );
   assert.equal("location" in body, false, "the assignment arm never sends a location key");
+});
+
+// ==========================================================================================
+// Round 2, R2-1 — both sides are read page by page, completely or not at all
+// ==========================================================================================
+
+/** PostgREST's silent response cap on this project. The fake enforces it like the server. */
+const MAX_ROWS = 1000;
+
+/**
+ * A fake `.range()` reader over `rows`. `failOnCall` makes that call (1-based) return an error;
+ * `mutate` runs before a call so a test can move rows between pages.
+ */
+function fakePages<T>(
+  rows: T[],
+  opts: { failOnCall?: number; mutate?: (call: number, rows: T[]) => void } = {},
+): { read: PageReader<T>; ranges: [number, number][] } {
+  const ranges: [number, number][] = [];
+  const read: PageReader<T> = (from, to) => {
+    ranges.push([from, to]);
+    opts.mutate?.(ranges.length, rows);
+    if (opts.failOnCall === ranges.length) {
+      return Promise.resolve({ data: null, error: { message: "HTTP 503" }, count: null });
+    }
+    const size = Math.min(to - from + 1, MAX_ROWS);
+    return Promise.resolve({ data: rows.slice(from, from + size), error: null, count: rows.length });
+  };
+  return { read, ranges };
+}
+
+const assignmentRows = (n: number): PushItem[] =>
+  Array.from({ length: n }, (_, i) =>
+    item({
+      assignment_id: `ZZ.999/item-${String(i).padStart(5, "0")}`,
+      title: `Item ${i}`,
+      event_at: "2026-10-01T03:59:00+00:00",
+    }));
+
+test("R2-1: a side larger than one page is read completely, in fixed-size ranges", async () => {
+  const rows = assignmentRows(1203);
+  const pages = fakePages(rows);
+  const read = await readAllPages("v_calendar_push_items", pages.read, (r) => r.ref_id);
+  assert.equal(read.length, 1203);
+  assert.deepEqual(read.map((r) => r.ref_id), rows.map((r) => r.ref_id));
+  assert.equal(PAGE_SIZE, 500);
+  assert.ok(PAGE_SIZE < MAX_ROWS, "a page must fit under PostgREST's max_rows");
+  assert.deepEqual(pages.ranges, [[0, 499], [500, 999], [1000, 1499]]);
+
+  // An exact multiple of the page size ends on an empty page, not one page early.
+  const exact = fakePages(assignmentRows(1000));
+  assert.equal((await readAllPages("x", exact.read, (r) => r.ref_id)).length, 1000);
+  assert.deepEqual(exact.ranges, [[0, 499], [500, 999], [1000, 1499]]);
+});
+
+test("R2-1: 1200 unchanged events past the old row cap issue zero Google calls", async () => {
+  // The bug R2-1 fixes: one unpaginated select would have returned 1000 of these, and the delete
+  // pass would have removed the other 200 events from Stack's calendar.
+  const desired = assignmentRows(1200);
+  const { rows } = await seeded(desired);
+  const google = fakeGoogle();
+  const result = await readAndRunPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    readDesiredPage: fakePages(assignmentRows(1200)).read,
+    readMirrorPage: fakePages([...rows.values()]).read,
+    google: google.client,
+    store: memoryStore().store,
+    sleep: noSleep,
+  });
+  assert.deepEqual(google.calls, []);
+  assert.equal(result.counts.unchanged_assignments, 1200);
+  assert.equal(result.counts.deleted, 0);
+});
+
+test("R2-1: a page error aborts the run before any Google call or mirror write", async () => {
+  const { rows } = await seeded(assignmentRows(3));
+  for (const side of ["desired", "mirror"] as const) {
+    const google = fakeGoogle();
+    const writes: string[] = [];
+    const store: MirrorStore = {
+      saveSuccess: (r) => Promise.resolve(void writes.push(`save ${r.ref_id}`)),
+      saveFailure: (_s, id) => Promise.resolve(void writes.push(`fail ${id}`)),
+      markDeleting: (_s, id) => Promise.resolve(void writes.push(`deleting ${id}`)),
+      remove: (_s, id) => Promise.resolve(void writes.push(`remove ${id}`)),
+    };
+    await assert.rejects(
+      readAndRunPush({
+        calendarId: CALENDAR,
+        webBaseUrl: WEB_BASE,
+        // Page size 2: the failure lands on the SECOND page, after a partial list exists.
+        pageSize: 2,
+        readDesiredPage: fakePages(assignmentRows(3), { failOnCall: side === "desired" ? 2 : undefined }).read,
+        readMirrorPage: fakePages([...rows.values()], { failOnCall: side === "mirror" ? 2 : undefined }).read,
+        google: google.client,
+        store,
+        sleep: noSleep,
+      }),
+      side === "desired"
+        ? /v_calendar_push_items: reading rows 2-3 failed: HTTP 503/
+        : /calendar_events: reading rows 2-3 failed: HTTP 503/,
+    );
+    assert.deepEqual(google.calls, [], `${side}: no Google call`);
+    assert.deepEqual(writes, [], `${side}: no mirror write`);
+  }
+});
+
+test("R2-1: rows that move between pages abort the read instead of skipping one", async () => {
+  const key = (r: PushItem) => r.ref_id;
+
+  // A row deleted before page 2: the count moves, and offset paging would have skipped a row.
+  const deleted = fakePages(assignmentRows(5), { mutate: (call, rows) => call === 2 && rows.splice(0, 1) });
+  await assert.rejects(readAllPages("v", deleted.read, key, 2), /row count moved from 5 to 4/);
+
+  // A reader that repeats a row across pages (an insert shifted it) is caught by its key.
+  const base = assignmentRows(4);
+  const repeating: PageReader<PushItem> = (from) =>
+    Promise.resolve({ data: from === 0 ? base.slice(0, 2) : base.slice(1, 3), error: null, count: null });
+  await assert.rejects(readAllPages("v", repeating, key, 2), /read twice/);
+
+  // Fewer rows than the count claims (a page the server cut short) is not a complete read.
+  const short: PageReader<PushItem> = () =>
+    Promise.resolve({ data: base.slice(0, 1), error: null, count: 4 });
+  await assert.rejects(readAllPages("v", short, key, 2), /read 1 rows but the count is 4/);
 });

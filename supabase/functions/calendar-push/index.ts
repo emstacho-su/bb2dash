@@ -34,6 +34,9 @@
 // of assignment_id; the assignment arm's event body and hash are unchanged, which is what lets
 // the cut-over push report zero writes on that arm.
 //
+// v5 (Phase 11b round 2). R2-1: both sides of the diff are read page by page and a side that
+// cannot be read completely aborts the run (push.ts readAndRunPush).
+//
 // WHAT THIS FILE OWNS, and what it does not. Here: the HTTP request, the secret, the Supabase
 // client, the OAuth exchange, and writing the run's result back. The diff itself lives in
 // push.ts and the Google calls in google.ts, both free of Deno globals, so the tests can drive
@@ -48,7 +51,13 @@ import {
   type PushItem,
   type PushSource,
 } from "./google.ts";
-import { type MirrorRow, type MirrorStore, type PushCounts, runPush } from "./push.ts";
+import {
+  type MirrorRow,
+  type MirrorStore,
+  type PageReader,
+  type PushCounts,
+  readAndRunPush,
+} from "./push.ts";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -142,6 +151,26 @@ function mirrorStore(): MirrorStore {
     },
   };
 }
+
+/**
+ * R2-1: one page of the desired set. `count: "exact"` lets readAllPages notice rows that moved
+ * between pages; (source, ref_id) is unique on the view, so the order is total and stable.
+ */
+const readDesiredPage: PageReader<PushItem> = async (from, to) => {
+  const { data, error, count } = await supabase
+    .from("v_calendar_push_items").select("*", { count: "exact" })
+    .order("source").order("ref_id").range(from, to);
+  return { data: data as PushItem[] | null, error, count };
+};
+
+/** R2-1: one page of the mirror, ordered by its primary key. */
+const readMirrorPage: PageReader<MirrorRow> = async (from, to) => {
+  const { data, error, count } = await supabase
+    .from("calendar_events")
+    .select("source, ref_id, event_id, calendar_id, content_hash, etag, state", { count: "exact" })
+    .order("source").order("ref_id").range(from, to);
+  return { data: data as MirrorRow[] | null, error, count };
+};
 
 async function openRun(): Promise<number> {
   const { data, error } = await supabase.from("calendar_push_runs")
@@ -271,22 +300,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 5. The two sides of the diff.
-    const { data: desired, error: desiredError } = await supabase
-      .from("v_calendar_push_items").select("*").order("source").order("ref_id");
-    if (desiredError) throw new Error(`v_calendar_push_items: ${desiredError.message}`);
-
-    const { data: mirror, error: mirrorError } = await supabase
-      .from("calendar_events")
-      .select("source, ref_id, event_id, calendar_id, content_hash, etag, state")
-      .order("source").order("ref_id");
-    if (mirrorError) throw new Error(`calendar_events: ${mirrorError.message}`);
-
-    const result = await runPush({
+    // 5. The two sides of the diff, read page by page (R2-1); a side that cannot be read
+    //    completely throws before any Google call and the run is recorded as failed below.
+    const result = await readAndRunPush({
       calendarId,
       webBaseUrl: String(settings.web_base_url ?? DEFAULT_WEB_BASE_URL),
-      desired: (desired ?? []) as PushItem[],
-      mirror: (mirror ?? []) as MirrorRow[],
+      readDesiredPage,
+      readMirrorPage,
       google: createGoogleCalendar(token.accessToken),
       store: mirrorStore(),
     });
