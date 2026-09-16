@@ -43,7 +43,16 @@ export interface ItemActions {
  * Meetings
  * ------------------------------------------------------------------------ */
 
-export function MeetingContent({ meeting }: { meeting: PlacedMeeting }) {
+export function MeetingContent({
+  meeting,
+  nested,
+  actions,
+}: {
+  meeting: PlacedMeeting;
+  /** Due items of this course that fall inside this class's window. */
+  nested: readonly PlacedItem<WorkItem>[];
+  actions: ItemActions;
+}) {
   return (
     <>
       <span className={styles.blockHead}>
@@ -52,6 +61,15 @@ export function MeetingContent({ meeting }: { meeting: PlacedMeeting }) {
       </span>
       <span className={styles.blockRoom}>{meeting.room}</span>
       {meeting.topic !== null && <span className={styles.blockTopic}>{meeting.topic}</span>}
+      {nested.length > 0 && (
+        <span className={styles.nested}>
+          {nested.map((placed) => (
+            <span key={placed.key} className={styles.nestedChip} data-category={placed.item.category}>
+              <ItemContent placed={placed} actions={actions} />
+            </span>
+          ))}
+        </span>
+      )}
     </>
   );
 }

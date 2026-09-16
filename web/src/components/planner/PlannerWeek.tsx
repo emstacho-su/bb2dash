@@ -345,6 +345,7 @@ function DayColumn({
         <div
           key={block.key}
           className={block.kind === 'meeting' ? styles.meetingBlock : styles.itemBlock}
+          data-block={block.kind}
           data-category={block.kind === 'item' ? block.item.item.category : undefined}
           style={{
             ['--top' as string]: String(block.top),
@@ -354,7 +355,7 @@ function DayColumn({
           }}
         >
           {block.kind === 'meeting' ? (
-            <MeetingContent meeting={block.meeting} />
+            <MeetingContent meeting={block.meeting} nested={block.nested} actions={actions} />
           ) : (
             <ItemContent placed={block.item} actions={actions} />
           )}

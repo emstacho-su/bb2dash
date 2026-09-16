@@ -374,6 +374,76 @@ describe('PlannerWeek — due items', () => {
 });
 
 /* ---------------------------------------------------------------------------
+ * A due item inside the class it is due in
+ * ------------------------------------------------------------------------ */
+
+/** The positioned blocks of one day column, in DOM order. */
+function blocksIn(iso: string): HTMLElement[] {
+  return Array.from(dayColumn(iso).querySelectorAll<HTMLElement>('[data-block]'));
+}
+
+describe('PlannerWeek — a due item inside its own class', () => {
+  it('renders it in the class block instead of overlapping it', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'IST.323/quiz-3',
+        title: 'Quiz 3',
+        course_id: 'IST.323',
+        due_on: '2026-09-16',
+        due_at: '2026-09-16T20:00:00Z', // 4:00 PM, inside the 3:45-5:05 lecture
+        category: 'quiz',
+        glyph: 'Q',
+      }),
+    ];
+    renderPlanner();
+    await within(dayColumn('2026-09-16')).findByText('Quiz 3');
+
+    const blocks = blocksIn('2026-09-16');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toHaveAttribute('data-block', 'meeting');
+    expect(within(blocks[0]).getByText('Quiz 3')).toBeInTheDocument();
+    expect(within(blocks[0]).getByText('Hinds Hall 010')).toBeInTheDocument();
+  });
+
+  it('leaves another course item as its own block at the same minute', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'ECN.304/pset-2',
+        title: 'Problem set 2',
+        course_id: 'ECN.304',
+        due_on: '2026-09-16',
+        due_at: '2026-09-16T20:00:00Z',
+      }),
+    ];
+    renderPlanner();
+    await within(dayColumn('2026-09-16')).findByText('Problem set 2');
+
+    const blocks = blocksIn('2026-09-16');
+    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual(['meeting', 'item']);
+    expect(within(blocks[0]).queryByText('Problem set 2')).toBeNull();
+  });
+
+  it('keeps the status quick-edit on a nested item', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'IST.323/quiz-3',
+        title: 'Quiz 3',
+        course_id: 'IST.323',
+        due_on: '2026-09-16',
+        due_at: '2026-09-16T20:00:00Z',
+      }),
+    ];
+    renderPlanner();
+
+    const select = await screen.findByLabelText('Status for Quiz 3');
+    fireEvent.change(select, { target: { value: 'submitted' } });
+
+    await waitFor(() => expect(db.writes).toHaveLength(1));
+    expect(db.writes[0].table).toBe('assignment_progress');
+  });
+});
+
+/* ---------------------------------------------------------------------------
  * States
  * ------------------------------------------------------------------------ */
 
