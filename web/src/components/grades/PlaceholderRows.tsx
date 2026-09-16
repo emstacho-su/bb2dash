@@ -1,0 +1,85 @@
+'use client';
+
+/**
+ * "Not in Blackboard yet" (Phase 10b, PM call 7; course tab only).
+ *
+ * The syllabus items linked to a grade component that Blackboard has no column
+ * for yet (ECN.304's exams, IST.323's later quizzes and labs). They sit under
+ * the gradebook, in their own group, so a hypothetical can be typed on them
+ * with the same cell the table uses. Blackboard has recorded nothing for any of
+ * them, so the score column is always the dash. A placeholder's link cannot be
+ * confirmed here — there is no column to attach an override to.
+ */
+
+import { useState } from 'react';
+import { PLACEHOLDER_GROUP } from '@/lib/grade-model/labels';
+import { NO_FIGURE, formatPoints } from '@/lib/grade-model-format';
+import type { GradeModelItemRow } from '@/lib/grade-model-input';
+import { WhatIfCell, type WhatIfProps } from './WhatIfCell';
+import styles from './GradeModel.module.css';
+
+function PlaceholderRow({ item, whatIf }: { item: GradeModelItemRow; whatIf: WhatIfProps }) {
+  const target = whatIf.targets.get(item.item_key);
+  return (
+    <tr data-column-kind="placeholder">
+      <th scope="row">{item.name}</th>
+      <td>
+        <span className={styles.dash}>
+          {item.possible === null ? NO_FIGURE : `${NO_FIGURE} / ${formatPoints(item.possible)}`}
+        </span>
+        {target && (
+          <WhatIfCell
+            target={target}
+            value={whatIf.values[item.item_key]}
+            onCommit={whatIf.onCommit}
+            disabled={whatIf.disabled}
+          />
+        )}
+      </td>
+    </tr>
+  );
+}
+
+export function PlaceholderRows({
+  items,
+  whatIf,
+}: {
+  /** `v_grade_model_items` rows with `column_kind = 'placeholder'`. */
+  items: readonly GradeModelItemRow[];
+  whatIf: WhatIfProps;
+}) {
+  const placeholders = items.filter((item) => item.column_kind === 'placeholder');
+  const anyValue = placeholders.some((item) => whatIf.values[item.item_key] !== undefined);
+  const [open, setOpen] = useState(anyValue);
+
+  if (placeholders.length === 0) return null;
+
+  return (
+    <div className={styles.group}>
+      <button
+        type="button"
+        className={styles.groupToggle}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {PLACEHOLDER_GROUP} ({placeholders.length})
+      </button>
+      {open && (
+        <table className={styles.table}>
+          <caption className={styles.srOnly}>{PLACEHOLDER_GROUP}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Item</th>
+              <th scope="col">Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {placeholders.map((item) => (
+              <PlaceholderRow key={item.item_key} item={item} whatIf={whatIf} />
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
