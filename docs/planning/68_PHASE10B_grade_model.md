@@ -630,6 +630,26 @@ muted parts and dropped placeholders from `itemStates()`, never from their own c
 Both: typecheck/build/test green, one commit per finding, push, append "Round 2" to your
 verification note (W-20: 080/081 versions + md5s and SQL outputs; W-19: in the report).
 
+## Round 3 — fixes from the browser walk (2026-09-16)
+
+The PM walked all seven acceptance steps on the preview (`web-git-feat-grades-10b-…`) in a
+logged-in browser; all seven pass and prod was restored to 0 scenarios / 0 links. Stack chose to
+fix four findings in this PR and carry three to Phase 13 (`81_PHASE13_styling.md`: phone-width
+overflow of the top nav and the gradebook table; per-exam rank weights not shown; missing
+favicon). No migration. One worker, on `feat/grades-10b-web`. **The PM authorises two
+Contract-file edits this round, exactly as specified:** `ItemStates.unsureItemKeys` in `types.ts`
+and the muted-part wording in `labels.ts`.
+
+| # | Finding (seen on the preview) | Fix | Check |
+|---|---|---|---|
+| R3-1 | **Gradebook table columns misaligned on every Grades table** (10a bug, also on production): `.nameCell` and `.submissionCell` put `display: flex` on the `<th>`/`<td>` itself, which takes them out of table layout — the status pill wraps under the name, the score renders under "Submission", the date under "Score", "Seen" is empty, and the what-if box wraps its "/ 50 ×" | Keep every `<th>`/`<td>` a table cell: move the flex layout onto an inner wrapper element inside the cell; audit `GradebookTable`, `PlaceholderRows` and any other grades table for the same pattern. CSS Modules + existing tokens only | RTL/DOM test: every `th`/`td` in the rendered table has no flex class on itself; PM re-checks in the browser that the four header columns line up with their cells and the what-if box sits on one line at 1280px |
+| R3-2 | "N of M parts graded" counts parts that only have what-if values as graded (ECN.304 read "3 of 3" with hypothetical exams) | `explanationText` counts a part as graded only from real scores: take the real-only result by calling `projectCourse` on the same input with an empty scenario (never re-derive the rule). Wording: `{n} of {m} parts graded: {names}` (n > 0) or `0 of {m} parts graded`, then when parts are graded only by what-if values, append ` · what-if on {names}` | unit: ECN.304 shape with exams typed → "2 of 3 parts graded: Participation, Average Quiz Grade · what-if on Exams (rank-weighted)"; IST.466 with one what-if → "0 of 6 parts graded · what-if on Ethics Case Practice" |
+| R3-3 | After confirming one of two unsure links, the part stays "Left out" with no hint that another item is still unsure | **`types.ts`:** `ItemStates` gains `readonly unsureItemKeys: readonly string[]` — counted items whose non-confirmed link mutes their component (placeholders included), from the engine's own preparation in `states.ts`. **`labels.ts`:** `mutedText` becomes one sentence per muted part, from `{ part, confirmable: string[] (item names with a Blackboard column), notInBlackboard: number (placeholders) }`: confirmable only → `Left out: {part} — confirm the unsure link on {items}` (`links` when more than one); placeholders only → `Left out: {part} — its link is unsure and it isn't in Blackboard yet`; both → `Left out: {part} — confirm the unsure link(s) on {items}; {n} more not in Blackboard yet`. Names joined "A", "A and B", "A, B and C" | engine L1: `unsureItemKeys` for IST.466 live shape = the two major-case columns + the AI Team placeholder; after overriding one major case, only the other remains; labels tests for the three shapes; RTL: IST.466 line names both major cases, then one after a confirm |
+| R3-4 | A score cell reads `85.714 / 100` while its history reads `83.33 → 85.71` | History formats each value with the **same** number formatter as the score cell (Blackboard's stored value, no extra rounding): `83.333 → 85.714` | unit on the history formatter with a three-decimal value |
+
+Gates: typecheck/build/`npm test` green, one commit per finding, push; append "Round 3" to
+`68a_W20_VERIFICATION.md`.
+
 ## Integration (PM)
 
 Merge W-19, then W-20; regenerate `database.types.ts`; `npm ci` (new devDependency); typecheck +
