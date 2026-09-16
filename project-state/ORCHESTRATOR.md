@@ -42,6 +42,7 @@ and points at `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`.
 | 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | **in flight** on `feat/grades-10a` (own PM session, main checkout) | — | 046–059 (046–051 live) |
 | 10b | Grades: methodology model + what-if | planned; gated on October scores **and V-1** | — | same range |
 | 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | **PR open**; calendar push live and proven | #12 | 060–069 (060–066 live) |
+| 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | brief written (`69b`), questions open | — | 067–072; Phase 12 moves to 073–079 |
 | V-1 | Grading schema validation (stream, COLLABORATE) | planned; parallel with 10a | — | one data migration in 10's range |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell | planned; after the web app is stable | — | — |
