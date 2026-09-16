@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GradeModelItemRow } from '@/lib/grade-model-input';
 import { makeGradebookRow } from './factories.grades';
 import {
+  ECN304_EXAM1_PLACEHOLDER,
   IST466_COMPONENTS,
   IST466_LETTER_PLACEHOLDER,
   IST466_SCHEME,
@@ -34,7 +35,18 @@ const db = vi.hoisted(() => ({
   links: new Map<string, LinkRow>(),
 }));
 
-const BASE_ITEMS: GradeModelItemRow[] = [makeItem(), IST466_SYNCHRONY, IST466_LETTER_PLACEHOLDER];
+/** A pointless confirmed placeholder on IST.466's single-item Ethics part (Round 1b A1). */
+const ETHICS_PRACTICE_PLACEHOLDER: GradeModelItemRow = {
+  ...ECN304_EXAM1_PLACEHOLDER,
+  scheme_course_id: 'IST.466',
+  shell_course_id: 'IST.466',
+  item_key: 'asg:IST.466/ethics-practice-2',
+  assignment_id: 'IST.466/ethics-practice-2',
+  component_id: 25,
+  name: 'Ethics Practice 2',
+};
+
+const BASE_ITEMS: GradeModelItemRow[] = [makeItem(), IST466_SYNCHRONY, IST466_LETTER_PLACEHOLDER, ETHICS_PRACTICE_PLACEHOLDER];
 const ETHICS_KEY = 'col:IST.466:_3562497_1';
 
 /** 058's override rule, applied to the base rows. */
@@ -197,7 +209,7 @@ describe('CourseGrades — the scenario persists', () => {
 
   it('types a hypothetical on a "Not in Blackboard yet" row', async () => {
     mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (1)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (2)' }));
     const field = await whatIfField('Letter of Gratitude');
     fireEvent.change(field, { target: { value: '95' } });
     fireEvent.keyDown(field, { key: 'Enter' });
@@ -215,6 +227,26 @@ describe('CourseGrades — the scenario persists', () => {
     await waitFor(() => expect(db.scenarios.has('IST.466')).toBe(false));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Reset scenario' })).toBeNull());
     expect((await whatIfField('Ethics Case Presentation')).value).toBe('');
+  });
+});
+
+describe('CourseGrades — a percentage what-if (Round 1b A1)', () => {
+  it('types a percentage on a pointless confirmed placeholder and the standing uses it', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (2)' }));
+    const field = await whatIfField('Ethics Practice 2');
+    const cell = field.closest('[data-what-if-unit]') as HTMLElement;
+    expect(cell).toHaveAttribute('data-what-if-unit', 'percent');
+
+    fireEvent.change(field, { target: { value: '101' } });
+    fireEvent.blur(field);
+    expect(await within(cell).findByRole('alert')).toHaveTextContent('Enter a number from 0 to 100.');
+    expect(db.scenarios.has('IST.466')).toBe(false);
+
+    fireEvent.change(field, { target: { value: '80' } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(db.scenarios.get('IST.466')?.item_scores).toEqual({ 'asg:IST.466/ethics-practice-2': 80 }));
+    expect(await screen.findByText('includes what-if values')).toBeInTheDocument();
   });
 });
 

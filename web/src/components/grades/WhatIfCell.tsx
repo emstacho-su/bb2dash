@@ -12,11 +12,14 @@
  * extra-credit item's own possible included). Anything else stays in the field
  * with an error beside it and is never saved. An empty field clears the value;
  * so does the × revert.
+ *
+ * Round 1b A1: a placeholder with no possible (ECN.304's exams) reads "what if
+ * __ %" instead of "/ possible", accepts 0–100, and stores that number.
  */
 
 import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 import { WHAT_IF_LABEL } from '@/lib/grade-model/labels';
-import { REVERT_WHAT_IF_LABEL, formatPoints } from '@/lib/grade-model-format';
+import { PERCENT_SUFFIX, REVERT_WHAT_IF_LABEL, formatPoints } from '@/lib/grade-model-format';
 import { parseWhatIf, type WhatIfTarget } from '@/lib/grade-model-view';
 import styles from './GradeModel.module.css';
 
@@ -78,7 +81,11 @@ export function WhatIfCell({
   const inputClass = error ? styles.whatIfInvalid : value !== undefined ? styles.whatIfInputSet : styles.whatIfInput;
 
   return (
-    <span className={styles.whatIf} data-what-if={value !== undefined ? 'set' : 'empty'}>
+    <span
+      className={styles.whatIf}
+      data-what-if={value !== undefined ? 'set' : 'empty'}
+      data-what-if-unit={target.unit}
+    >
       <label className={styles.whatIfLabel}>
         <span>{WHAT_IF_LABEL}</span>
         <span className={styles.srOnly}> — {target.name}</span>
@@ -95,7 +102,9 @@ export function WhatIfCell({
           onKeyDown={onKeyDown}
         />
       </label>
-      <span className={styles.note}>/ {formatPoints(target.possible)}</span>
+      <span className={styles.note}>
+        {target.unit === 'percent' ? PERCENT_SUFFIX : `/ ${formatPoints(target.possible)}`}
+      </span>
       {value !== undefined && (
         <button
           type="button"

@@ -10,7 +10,7 @@
  * make it compute.
  */
 
-import type { ComponentInput, ItemInput, ModelInput } from './grade-model/types';
+import type { Aggregation, ComponentInput, ItemInput, ModelInput } from './grade-model/types';
 import type { GradeModelItemRow } from './grade-model-input';
 
 /* ---------------------------------------------------------------------------
@@ -41,28 +41,79 @@ export function mutedComponentNames(input: Pick<ModelInput, 'items' | 'component
   return input.components.filter((c) => muted.has(c.id)).map((c) => c.name);
 }
 
+/** Round 1b A1: the aggregations that read an item only as a fraction of its possible. */
+export const FRACTION_AGGREGATIONS: readonly Aggregation[] = [
+  'single',
+  'average',
+  'average_drop_lowest',
+  'rank_weighted',
+  'normalized',
+];
+
+/** The largest value a percentage what-if accepts. */
+export const PERCENT_MAX = 100;
+
 /** What a what-if cell needs to know about its item. */
 export interface WhatIfTarget {
   readonly key: string;
   readonly name: string;
-  /** The item's own possible — an extra-credit item's included. */
+  /**
+   * `points`: typed against the item's own possible (an extra-credit item's
+   * included). `percent` (Round 1b A1): a placeholder with no possible, typed
+   * as 0–100 and stored as that number; the engine reads `f = v / 100`.
+   */
+  readonly unit: 'points' | 'percent';
+  /** The upper bound the typed value is checked against: possible, or 100. */
   readonly possible: number;
 }
 
 /**
- * The items that may take a hypothetical score: ungraded, counted, linked to a
+ * Round 1b A1: a placeholder with no possible that may still take a value —
+ * its link is confirmed and its component only ever reads fractions. A `sum`
+ * placeholder with no points, or an unconfirmed series row, stays bookkeeping.
+ */
+export function isPercentPlaceholder(
+  item: Pick<ItemInput, 'kind' | 'possible' | 'linkConfidence' | 'exempt' | 'excluded'>,
+  component: Pick<ComponentInput, 'aggregation'>,
+): boolean {
+  return (
+    item.kind === 'placeholder'
+    && item.possible === null
+    && item.linkConfidence === 'confirmed'
+    && !item.exempt
+    && !item.excluded
+    && FRACTION_AGGREGATIONS.includes(component.aggregation)
+  );
+}
+
+/** The cell an item gets, if any, given its (existing, live) component. */
+function targetFor(item: ItemInput, component: ComponentInput): WhatIfTarget | null {
+  if (isCountedItem(item)) {
+    return { key: item.key, name: item.name, unit: 'points', possible: item.possible as number };
+  }
+  if (isPercentPlaceholder(item, component)) {
+    return { key: item.key, name: item.name, unit: 'percent', possible: PERCENT_MAX };
+  }
+  return null;
+}
+
+/**
+ * The items that may take a hypothetical score: ungraded, linked to a
  * component that exists, is not muted and is not hand-graded (answer 1: no
- * assumed score for a `manual` part).
+ * assumed score for a `manual` part) — and either counted (typed in points) or
+ * a pointless confirmed placeholder of a fraction-only part (typed as a
+ * percentage, Round 1b A1).
  */
 export function whatIfTargets(input: Pick<ModelInput, 'items' | 'components'>): ReadonlyMap<string, WhatIfTarget> {
   const muted = mutedComponentIds(input);
   const byId = new Map<number, ComponentInput>(input.components.map((c) => [c.id, c]));
   const targets = new Map<string, WhatIfTarget>();
   for (const item of input.items) {
-    if (item.score !== null || !isCountedItem(item) || item.componentId === null) continue;
+    if (item.score !== null || item.componentId === null) continue;
     const component = byId.get(item.componentId);
     if (!component || component.aggregation === 'manual' || muted.has(component.id)) continue;
-    targets.set(item.key, { key: item.key, name: item.name, possible: item.possible as number });
+    const target = targetFor(item, component);
+    if (target) targets.set(item.key, target);
   }
   return targets;
 }

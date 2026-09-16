@@ -20,7 +20,8 @@ vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 
-const TARGET = { key: 'asg:IST.323/exam-2', name: 'Exam #2', possible: 10 };
+const TARGET = { key: 'asg:IST.323/exam-2', name: 'Exam #2', unit: 'points', possible: 10 } as const;
+const PERCENT = { key: 'asg:ECN.304/exam-1', name: 'Exam 1', unit: 'percent', possible: 100 } as const;
 
 function field(): HTMLInputElement {
   return screen.getByLabelText(/what if/) as HTMLInputElement;
@@ -88,6 +89,37 @@ describe('WhatIfCell', () => {
     const { rerender } = render(<WhatIfCell target={TARGET} value={7} onCommit={vi.fn()} />);
     rerender(<WhatIfCell target={TARGET} value={undefined} onCommit={vi.fn()} />);
     expect(field().value).toBe('');
+  });
+});
+
+describe('WhatIfCell — a percentage (Round 1b A1)', () => {
+  it('reads "what if __ %" and stores the typed percentage as that number', () => {
+    const onCommit = vi.fn();
+    const { container } = render(<WhatIfCell target={PERCENT} value={undefined} onCommit={onCommit} />);
+    const cell = container.querySelector('[data-what-if-unit="percent"]') as HTMLElement;
+    expect(cell.textContent).toBe('what if — Exam 1%');
+    expect(within(cell).queryByText(/\//)).toBeNull();
+
+    fireEvent.change(field(), { target: { value: '87.5' } });
+    fireEvent.blur(field());
+    expect(onCommit).toHaveBeenCalledWith('asg:ECN.304/exam-1', 87.5);
+  });
+
+  it.each(['0', '100'])('accepts the bound %j', (raw) => {
+    const onCommit = vi.fn();
+    render(<WhatIfCell target={PERCENT} value={undefined} onCommit={onCommit} />);
+    fireEvent.change(field(), { target: { value: raw } });
+    fireEvent.blur(field());
+    expect(onCommit).toHaveBeenCalledWith('asg:ECN.304/exam-1', Number(raw));
+  });
+
+  it.each(['100.5', '-1', '150'])('refuses %j outside 0–100', (raw) => {
+    const onCommit = vi.fn();
+    render(<WhatIfCell target={PERCENT} value={undefined} onCommit={onCommit} />);
+    fireEvent.change(field(), { target: { value: raw } });
+    fireEvent.blur(field());
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter a number from 0 to 100.');
   });
 });
 

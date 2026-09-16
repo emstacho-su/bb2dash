@@ -101,6 +101,9 @@ export function historyText(points: readonly HistoryPoint[]): string {
 /** The disclosure's own label. */
 export const HISTORY_LABEL = 'history';
 
+/** What follows a percentage what-if field: "what if __ %" (Round 1b A1). */
+export const PERCENT_SUFFIX = '%';
+
 /** The per-row revert on a what-if value. */
 export const REVERT_WHAT_IF_LABEL = 'Clear this what-if value';
 

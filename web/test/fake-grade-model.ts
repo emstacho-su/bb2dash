@@ -10,11 +10,24 @@
  * never a number only this fake would produce.
  *
  * The fake follows the Contract's order of checks and its muting rule; its
- * arithmetic is a plain points ratio and is not the Contract's.
+ * arithmetic is a plain points ratio and is not the Contract's. It mirrors
+ * Round 1b A1 in that shape: a pointless confirmed placeholder of a
+ * fraction-only part counts only once it has a value, read as `v / 100` of a
+ * nominal 100.
  */
 
+type Item = ModelInput['items'][number];
+
+/** The item with its A1 percentage made into points out of 100, or unchanged. */
+function withPercent(input: ModelInput, item: Item): Item {
+  const component = input.components.find((c) => c.id === item.componentId);
+  const value = input.scenario.itemScores[item.key];
+  if (!component || value === undefined || !isPercentPlaceholder(item, component)) return item;
+  return { ...item, possible: 100 };
+}
+
 import type { ModelInput, ModelResult, NotComputableReason, Standing, TargetResult } from '@/lib/grade-model/types';
-import { isCountedItem, mutedComponentIds } from '@/lib/grade-model-view';
+import { isCountedItem, isPercentPlaceholder, mutedComponentIds } from '@/lib/grade-model-view';
 
 function notComputable(reason: NotComputableReason, unscoredManual: string[] = []): ModelResult {
   return { state: 'not_computable', reason, unscoredManual };
@@ -43,7 +56,9 @@ export function fakeProjectCourse(input: ModelInput): ModelResult {
   if (unscoredManual.length > 0) return notComputable('manual_unscored', unscoredManual);
 
   const muted = mutedComponentIds(input);
-  const live = input.items.filter((i) => i.componentId !== null && isCountedItem(i) && !muted.has(i.componentId));
+  const live = input.items
+    .map((i) => withPercent(input, i))
+    .filter((i) => i.componentId !== null && isCountedItem(i) && !muted.has(i.componentId));
   const graded = live.filter((i) => valueOf(i) !== null);
   if (graded.length === 0) return notComputable('nothing_graded');
 

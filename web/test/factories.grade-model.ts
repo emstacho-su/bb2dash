@@ -71,6 +71,24 @@ export const IST466_LETTER_PLACEHOLDER = makeItem({
   seen_at: null,
 });
 
+/**
+ * ECN.304 Exam 1 as prod holds it: a confirmed placeholder with no possible,
+ * linked to the rank-weighted Exams component (Round 1b A1).
+ */
+export const ECN304_EXAM1_PLACEHOLDER = makeItem({
+  scheme_course_id: 'ECN.304',
+  item_key: 'asg:ECN.304/exam-1',
+  assignment_id: 'ECN.304/exam-1',
+  shell_course_id: 'ECN.304',
+  column_id: null,
+  component_id: 3,
+  name: 'Exam 1',
+  possible: null,
+  column_kind: 'placeholder',
+  due_at: '2026-10-02T03:59:00.000Z',
+  seen_at: null,
+});
+
 export const IST466_SCHEME: GradingSchemeRow = {
   course_id: 'IST.466',
   method: 'points',

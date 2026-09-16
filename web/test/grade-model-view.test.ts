@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ModelInput } from '@/lib/grade-model/types';
 import {
+  ECN304_EXAM1_PLACEHOLDER,
   IST466_COMPONENTS,
   IST466_LETTER_PLACEHOLDER,
   IST466_SCHEME,
@@ -60,7 +61,9 @@ describe('whatIfTargets', () => {
   it('offers ungraded, counted items of live components, placeholders included', () => {
     const targets = view.whatIfTargets(inputOf());
     expect([...targets.keys()]).toEqual(['col:IST.466:_3562497_1', 'asg:IST.466/letter-of-gratitude']);
-    expect(targets.get('asg:IST.466/letter-of-gratitude')).toEqual({ key: 'asg:IST.466/letter-of-gratitude', name: 'Letter of Gratitude', possible: 100 });
+    expect(targets.get('asg:IST.466/letter-of-gratitude')).toEqual({
+      key: 'asg:IST.466/letter-of-gratitude', name: 'Letter of Gratitude', unit: 'points', possible: 100,
+    });
   });
 
   it('offers nothing on a muted, graded, unlinked or hand-graded item', () => {
@@ -73,6 +76,49 @@ describe('whatIfTargets', () => {
       makeItem({ item_key: 'orphan-component', component_id: 12345 }),
     ], null, null);
     expect(view.whatIfTargets(input).size).toBe(0);
+  });
+});
+
+describe('percentage what-if on a pointless placeholder (Round 1b A1)', () => {
+  const ECN_SCHEME = { ...IST466_SCHEME, course_id: 'ECN.304', method: 'weighted_pct' as const };
+  const component = (aggregation: string, id = 3) =>
+    ({ ...IST466_COMPONENTS[0], id, course_id: 'ECN.304', points: null, weight_pct: 75, aggregation }) as (typeof IST466_COMPONENTS)[number];
+
+  it.each(['single', 'average', 'average_drop_lowest', 'rank_weighted', 'normalized'])(
+    'offers a percent cell on a confirmed pointless placeholder of a %s part',
+    (aggregation) => {
+      const input = toModelInput(ECN_SCHEME, [component(aggregation)], [ECN304_EXAM1_PLACEHOLDER], null, null);
+      expect(view.whatIfTargets(input).get('asg:ECN.304/exam-1')).toEqual({
+        key: 'asg:ECN.304/exam-1', name: 'Exam 1', unit: 'percent', possible: 100,
+      });
+    },
+  );
+
+  it('offers none on a sum or manual part, an unsure link, or a pointless column', () => {
+    const input = toModelInput(
+      ECN_SCHEME,
+      [component('sum', 30), component('manual', 1), component('rank_weighted', 3)],
+      [
+        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'asg:IST.352/term-project', component_id: 30 },
+        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'asg:ECN.304/participation', component_id: 1 },
+        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'asg:ECN.304/quiz-series', link_confidence: 'inferred' },
+        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'col:ECN.304:x', column_kind: 'item', column_id: 'x' },
+        { ...ECN304_EXAM1_PLACEHOLDER, item_key: 'asg:ECN.304/zero', possible: 0 },
+      ],
+      null,
+      null,
+    );
+    expect(view.whatIfTargets(input).size).toBe(0);
+  });
+
+  it('never mutes a part: a pointless placeholder is not a counted item', () => {
+    const input = toModelInput(ECN_SCHEME, [component('rank_weighted')], [{ ...ECN304_EXAM1_PLACEHOLDER, link_confidence: 'inferred' }], null, null);
+    expect(view.mutedComponentIds(input).size).toBe(0);
+  });
+
+  it('keeps its saved percentage in the scenario handed to the engine', () => {
+    const input = toModelInput(ECN_SCHEME, [component('rank_weighted')], [ECN304_EXAM1_PLACEHOLDER], makeScenario({ course_id: 'ECN.304', item_scores: { 'asg:ECN.304/exam-1': 90 } }), null);
+    expect(input.scenario.itemScores).toEqual({ 'asg:ECN.304/exam-1': 90 });
   });
 });
 
