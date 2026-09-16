@@ -342,11 +342,12 @@ describe('PlannerWeek — due items', () => {
     );
   });
 
-  it('puts a date-only item in the all-day band, not on a row it does not sit on', async () => {
+  it('puts a date-only item in the Assignments band, not on a row it does not sit on', async () => {
     renderPlanner();
     expect(await screen.findByText('Chapter 4')).toBeInTheDocument();
     expect(within(dayColumn('2026-09-18')).queryByText('Chapter 4')).toBeNull();
-    expect(screen.getByText('All day')).toBeInTheDocument();
+    expect(screen.getByText('Assignments')).toBeInTheDocument();
+    expect(screen.queryByText('All day')).toBeNull();
   });
 
   it('sends an 11:59 PM deadline to the band rather than clamping it onto 10 PM', async () => {
