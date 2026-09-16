@@ -1,0 +1,1472 @@
+{
+  "course": "IST.352",
+  "provenance": "Cut 2026-09-16 from prod goultdzqcavefcgnifdy with read-only SQL: grading_schemes, grade_components, v_gradebook_latest (+ assignments via assignment_id), assignments with component_id and no latest column (placeholders), bb_gradebook runs bf2f81e5 (9/14) and c877b0cc (9/16). Rows are shaped as the Contract 058 v_grade_model_items columns: component/link from the single linked assignment (null when linked_assignments != 1 or the assignment has no component), possible = column possible or assignments.points_possible for a placeholder.",
+  "scheme": {
+    "courseId": "IST.352",
+    "method": "weighted_pct",
+    "totalPoints": null,
+    "gradedOutOf": null,
+    "letterScale": [
+      {
+        "min": 93,
+        "letter": "A"
+      },
+      {
+        "min": 90,
+        "letter": "A-"
+      },
+      {
+        "min": 87,
+        "letter": "B+"
+      },
+      {
+        "min": 83,
+        "letter": "B"
+      },
+      {
+        "min": 80,
+        "letter": "B-"
+      },
+      {
+        "min": 77,
+        "letter": "C+"
+      },
+      {
+        "min": 73,
+        "letter": "C"
+      },
+      {
+        "min": 70,
+        "letter": "C-"
+      },
+      {
+        "min": 67,
+        "letter": "D+"
+      },
+      {
+        "min": 63,
+        "letter": "D"
+      },
+      {
+        "min": 60,
+        "letter": "D-"
+      },
+      {
+        "min": 0,
+        "letter": "F"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": 29,
+      "code": "research",
+      "name": "Research - Role of Systems Analyst",
+      "parentId": null,
+      "weightPct": 5,
+      "points": null,
+      "countExpected": 1,
+      "aggregation": "single",
+      "dropLowest": 0,
+      "rankWeights": null,
+      "normalizeTo": null,
+      "isExtraCredit": false
+    },
+    {
+      "id": 30,
+      "code": "project_deliverables",
+      "name": "Project Assignment Deliverables",
+      "parentId": null,
+      "weightPct": 60,
+      "points": null,
+      "countExpected": null,
+      "aggregation": "sum",
+      "dropLowest": 0,
+      "rankWeights": null,
+      "normalizeTo": null,
+      "isExtraCredit": false
+    },
+    {
+      "id": 31,
+      "code": "project_final",
+      "name": "Project Presentation / Final Version of Deliverables",
+      "parentId": null,
+      "weightPct": 10,
+      "points": null,
+      "countExpected": 1,
+      "aggregation": "single",
+      "dropLowest": 0,
+      "rankWeights": null,
+      "normalizeTo": null,
+      "isExtraCredit": false
+    },
+    {
+      "id": 32,
+      "code": "peer_assessment",
+      "name": "Project Self / Peer Assessment",
+      "parentId": null,
+      "weightPct": 10,
+      "points": null,
+      "countExpected": 1,
+      "aggregation": "single",
+      "dropLowest": 0,
+      "rankWeights": null,
+      "normalizeTo": null,
+      "isExtraCredit": false
+    },
+    {
+      "id": 33,
+      "code": "attendance",
+      "name": "Attendance, Class Contribution",
+      "parentId": null,
+      "weightPct": 15,
+      "points": null,
+      "countExpected": null,
+      "aggregation": "manual",
+      "dropLowest": 0,
+      "rankWeights": null,
+      "normalizeTo": null,
+      "isExtraCredit": false
+    }
+  ],
+  "states": [
+    {
+      "name": "live_2026_09_16",
+      "synthetic": false,
+      "description": "Prod as of the 9/16 run: Research 4/5 and Project #1A 9.5/10 scored; every column linked to Attendance, Class Contribution is a 0-point knowledge check or reading; Project #2A and #3 unlinked.",
+      "items": [
+        {
+          "key": "col:IST.352:_3543038_1",
+          "componentId": 29,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Research - Role of Systems Analyst",
+          "possible": 5,
+          "score": 4,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-03T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543039_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Project Assignment #3 - Business Case",
+          "possible": 10,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543058_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Project Teams & Option",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-02T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543065_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Reading - Chapter 1 (pp. 11-12)",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-27T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543066_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Reading - Chapters 2",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543069_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Reading - Chapter 4",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3599875_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 08/26/26",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-26T16:52:00Z"
+        },
+        {
+          "key": "col:IST.352:_3599890_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Read Chapter 1 (All)",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-31T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3603945_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 08/31/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-31T16:53:00Z"
+        },
+        {
+          "key": "col:IST.352:_3606600_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 09/02/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-02T16:52:00Z"
+        },
+        {
+          "key": "col:IST.352:_3607154_1",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #1A - Project Description",
+          "possible": 10,
+          "score": 9.5,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3610995_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Project Assignment #2A - Project Resources & Risks",
+          "possible": 10,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-14T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3611099_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Reading - Chapter 3",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3611110_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/09/2026",
+          "possible": 0,
+          "score": 2,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T16:51:00Z"
+        },
+        {
+          "key": "col:IST.352:_3613591_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/14/26",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-14T16:50:00Z"
+        },
+        {
+          "key": "col:IST.352:_3615186_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/16/2026",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-16T16:53:00Z"
+        },
+        {
+          "key": "col:IST.352:_3615326_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Moving Tasks",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-16T17:30:00Z"
+        },
+        {
+          "key": "asg:IST.352/term-project",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Team project: Otto's Custom T-Shirt E-Commerce Website (Group 7)",
+          "possible": null,
+          "score": null,
+          "exempt": false,
+          "kind": "placeholder",
+          "isExtraCredit": false,
+          "dueAt": null
+        }
+      ],
+      "scenario": {
+        "itemScores": {}
+      },
+      "blackboardTotal": null,
+      "expected": {
+        "state": "not_computable",
+        "reason": "manual_unscored",
+        "unscoredManual": [
+          "Attendance, Class Contribution"
+        ]
+      },
+      "solver": [
+        {
+          "letter": "A-",
+          "expected": {
+            "state": "not_computable",
+            "reason": "manual_unscored"
+          }
+        }
+      ],
+      "derivation": [
+        "Attendance, Class Contribution is manual; its linked columns all have possible 0 (bookkeeping, never counted) -> no scored counted item -> manual_unscored.",
+        "Matches \"on screen today\": IST.352 not computed, its linked columns are 0-point knowledge checks."
+      ]
+    },
+    {
+      "name": "start",
+      "synthetic": true,
+      "description": "Start of term: the live structure with nothing scored.",
+      "items": [
+        {
+          "key": "col:IST.352:_3543038_1",
+          "componentId": 29,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Research - Role of Systems Analyst",
+          "possible": 5,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-03T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543039_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Project Assignment #3 - Business Case",
+          "possible": 10,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543058_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Project Teams & Option",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-02T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543065_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Reading - Chapter 1 (pp. 11-12)",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-27T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543066_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Reading - Chapters 2",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543069_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Reading - Chapter 4",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3599875_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 08/26/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-26T16:52:00Z"
+        },
+        {
+          "key": "col:IST.352:_3599890_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Read Chapter 1 (All)",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-31T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3603945_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 08/31/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-31T16:53:00Z"
+        },
+        {
+          "key": "col:IST.352:_3606600_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 09/02/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-02T16:52:00Z"
+        },
+        {
+          "key": "col:IST.352:_3607154_1",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #1A - Project Description",
+          "possible": 10,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3610995_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Project Assignment #2A - Project Resources & Risks",
+          "possible": 10,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-14T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3611099_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Reading - Chapter 3",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3611110_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/09/2026",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T16:51:00Z"
+        },
+        {
+          "key": "col:IST.352:_3613591_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/14/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-14T16:50:00Z"
+        },
+        {
+          "key": "col:IST.352:_3615186_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/16/2026",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-16T16:53:00Z"
+        },
+        {
+          "key": "col:IST.352:_3615326_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Moving Tasks",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-16T17:30:00Z"
+        },
+        {
+          "key": "asg:IST.352/term-project",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Team project: Otto's Custom T-Shirt E-Commerce Website (Group 7)",
+          "possible": null,
+          "score": null,
+          "exempt": false,
+          "kind": "placeholder",
+          "isExtraCredit": false,
+          "dueAt": null
+        }
+      ],
+      "scenario": {
+        "itemScores": {}
+      },
+      "blackboardTotal": null,
+      "expected": {
+        "state": "not_computable",
+        "reason": "manual_unscored",
+        "unscoredManual": [
+          "Attendance, Class Contribution"
+        ]
+      },
+      "derivation": [
+        "No scored column links to the manual attendance part -> manual_unscored."
+      ]
+    },
+    {
+      "name": "mid",
+      "synthetic": true,
+      "description": "Hypothetical mid-term: a hand-graded attendance column (90/100) linked by override; Project #2A (8/10) and #3 (ungraded) linked to deliverables by override; Research 4/5 and #1A 9.5/10 as live.",
+      "items": [
+        {
+          "key": "col:IST.352:_3543038_1",
+          "componentId": 29,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Research - Role of Systems Analyst",
+          "possible": 5,
+          "score": 4,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-03T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543039_1",
+          "componentId": 30,
+          "linkSource": "override",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #3 - Business Case",
+          "possible": 10,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543058_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Project Teams & Option",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-02T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543065_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Reading - Chapter 1 (pp. 11-12)",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-27T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543066_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Reading - Chapters 2",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543069_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Reading - Chapter 4",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3599875_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 08/26/26",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-26T16:52:00Z"
+        },
+        {
+          "key": "col:IST.352:_3599890_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Read Chapter 1 (All)",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-31T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3603945_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 08/31/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-31T16:53:00Z"
+        },
+        {
+          "key": "col:IST.352:_3606600_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 09/02/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-02T16:52:00Z"
+        },
+        {
+          "key": "col:IST.352:_3607154_1",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #1A - Project Description",
+          "possible": 10,
+          "score": 9.5,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3610995_1",
+          "componentId": 30,
+          "linkSource": "override",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #2A - Project Resources & Risks",
+          "possible": 10,
+          "score": 8,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-14T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3611099_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Reading - Chapter 3",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3611110_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/09/2026",
+          "possible": 0,
+          "score": 2,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T16:51:00Z"
+        },
+        {
+          "key": "col:IST.352:_3613591_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/14/26",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-14T16:50:00Z"
+        },
+        {
+          "key": "col:IST.352:_3615186_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/16/2026",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-16T16:53:00Z"
+        },
+        {
+          "key": "col:IST.352:_3615326_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Moving Tasks",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-16T17:30:00Z"
+        },
+        {
+          "key": "asg:IST.352/term-project",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Team project: Otto's Custom T-Shirt E-Commerce Website (Group 7)",
+          "possible": null,
+          "score": null,
+          "exempt": false,
+          "kind": "placeholder",
+          "isExtraCredit": false,
+          "dueAt": null
+        },
+        {
+          "key": "col:IST.352:_9352001_1",
+          "componentId": 33,
+          "linkSource": "override",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Attendance & contribution (hand-graded)",
+          "possible": 100,
+          "score": 90,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": null
+        }
+      ],
+      "scenario": {
+        "itemScores": {}
+      },
+      "blackboardTotal": null,
+      "expected": {
+        "state": "computed",
+        "standings": {
+          "graded_so_far": {
+            "pct": 87.5,
+            "earned": 52.5,
+            "denominator": 60,
+            "letter": "B+"
+          },
+          "zeros_on_rest": {
+            "pct": 52.5,
+            "earned": 52.5,
+            "denominator": 100,
+            "letter": "F"
+          },
+          "best_case": {
+            "pct": 92.5,
+            "earned": 92.5,
+            "denominator": 100,
+            "letter": "A-"
+          }
+        },
+        "components": [
+          {
+            "code": "research",
+            "state": "graded",
+            "earned": 4,
+            "gradedCap": 5,
+            "cap": 5
+          },
+          {
+            "code": "project_deliverables",
+            "state": "partly_graded",
+            "earned": 35,
+            "gradedCap": 40,
+            "cap": 60,
+            "capacityFromKnownItems": true
+          },
+          {
+            "code": "project_final",
+            "state": "ungraded",
+            "earned": 0,
+            "gradedCap": 0,
+            "cap": 10
+          },
+          {
+            "code": "peer_assessment",
+            "state": "ungraded",
+            "earned": 0,
+            "gradedCap": 0,
+            "cap": 10
+          },
+          {
+            "code": "attendance",
+            "state": "graded",
+            "earned": 13.5,
+            "gradedCap": 15,
+            "cap": 15
+          }
+        ],
+        "unlinkedScoredKeys": [],
+        "usesHypotheticals": false,
+        "agreement": null
+      },
+      "solver": [
+        {
+          "letter": "A-",
+          "expected": {
+            "state": "needed",
+            "targetPct": 90,
+            "averageNeeded": 0.9375,
+            "remainingCount": 3,
+            "remainingShare": 0.4
+          }
+        },
+        {
+          "letter": "D-",
+          "expected": {
+            "state": "needed",
+            "targetPct": 60,
+            "averageNeeded": 0.1875,
+            "remainingCount": 3,
+            "remainingShare": 0.4
+          }
+        },
+        {
+          "letter": "A",
+          "expected": {
+            "state": "unreachable",
+            "bestCase": {
+              "pct": 92.5,
+              "earned": 92.5,
+              "denominator": 100,
+              "letter": "A-"
+            }
+          }
+        },
+        {
+          "letter": "F",
+          "expected": {
+            "state": "secured",
+            "worstCase": {
+              "pct": 52.5,
+              "earned": 52.5,
+              "denominator": 100,
+              "letter": "F"
+            }
+          }
+        }
+      ],
+      "derivation": [
+        "Research (single 5): 5 * 0.8 = 4. Attendance (manual 15): 15 * 0.9 = 13.5. The 0-point checks and readings stay bookkeeping.",
+        "Deliverables (sum under weighted_pct, capacity from the known items #1A, #2A, #3 = 30 points): earned 60 * (9.5 + 8)/30 = 35, gradedCap 60 * 20/30 = 40, one slot of 20 left. term-project has no points (bookkeeping).",
+        "Graded so far = (4 + 35 + 13.5) / (5 + 40 + 15) = 52.5 / 60 = 87.5 % -> B+.",
+        "Zeros = 52.5 / 100 -> F. Best = 52.5 + 20 (#3) + 10 (final) + 10 (peer) = 92.5 % -> A-.",
+        "Solver: 52.5 + 40r. A- (90): r = 37.5/40 = 0.9375. D- (60): r = 7.5/40 = 0.1875. A (93): needs 40.5 > 40 -> unreachable, best 92.5. F: secured at 52.5. Remaining 3 slots, 40 of 100.",
+        "Reading - Chapter 3 and the 9/09-9/16 knowledge checks are scored but 0-point, so they are not unlinked scored columns."
+      ]
+    },
+    {
+      "name": "all_graded",
+      "synthetic": true,
+      "description": "Hypothetical end of term: attendance 90, Research 4/5, deliverables 9.5/8/9/10 of 10, final presentation 88/100, peer assessment 95/100.",
+      "items": [
+        {
+          "key": "col:IST.352:_3543038_1",
+          "componentId": 29,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Research - Role of Systems Analyst",
+          "possible": 5,
+          "score": 4,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-03T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543039_1",
+          "componentId": 30,
+          "linkSource": "override",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #3 - Business Case",
+          "possible": 10,
+          "score": 9,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543058_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Project Teams & Option",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-02T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543065_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Reading - Chapter 1 (pp. 11-12)",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-27T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543066_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Reading - Chapters 2",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3543069_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Reading - Chapter 4",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3599875_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 08/26/26",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-26T16:52:00Z"
+        },
+        {
+          "key": "col:IST.352:_3599890_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Read Chapter 1 (All)",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-31T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3603945_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 08/31/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-08-31T16:53:00Z"
+        },
+        {
+          "key": "col:IST.352:_3606600_1",
+          "componentId": 33,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Knowledge Check - 09/02/26",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-02T16:52:00Z"
+        },
+        {
+          "key": "col:IST.352:_3607154_1",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #1A - Project Description",
+          "possible": 10,
+          "score": 9.5,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3610995_1",
+          "componentId": 30,
+          "linkSource": "override",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #2A - Project Resources & Risks",
+          "possible": 10,
+          "score": 8,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-14T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3611099_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Reading - Chapter 3",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-21T03:59:00Z"
+        },
+        {
+          "key": "col:IST.352:_3611110_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/09/2026",
+          "possible": 0,
+          "score": 2,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-09T16:51:00Z"
+        },
+        {
+          "key": "col:IST.352:_3613591_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/14/26",
+          "possible": 0,
+          "score": 1,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-14T16:50:00Z"
+        },
+        {
+          "key": "col:IST.352:_3615186_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Knowledge Check - 09/16/2026",
+          "possible": 0,
+          "score": 0,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-16T16:53:00Z"
+        },
+        {
+          "key": "col:IST.352:_3615326_1",
+          "componentId": null,
+          "linkSource": null,
+          "linkConfidence": null,
+          "excluded": false,
+          "name": "Moving Tasks",
+          "possible": 0,
+          "score": null,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": "2026-09-16T17:30:00Z"
+        },
+        {
+          "key": "asg:IST.352/term-project",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Team project: Otto's Custom T-Shirt E-Commerce Website (Group 7)",
+          "possible": null,
+          "score": null,
+          "exempt": false,
+          "kind": "placeholder",
+          "isExtraCredit": false,
+          "dueAt": null
+        },
+        {
+          "key": "col:IST.352:_9352001_1",
+          "componentId": 33,
+          "linkSource": "override",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Attendance & contribution (hand-graded)",
+          "possible": 100,
+          "score": 90,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": null
+        },
+        {
+          "key": "col:IST.352:_9352004_1",
+          "componentId": 30,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Assignment #4",
+          "possible": 10,
+          "score": 10,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": null
+        },
+        {
+          "key": "col:IST.352:_9352101_1",
+          "componentId": 31,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Presentation / Final Version",
+          "possible": 100,
+          "score": 88,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": null
+        },
+        {
+          "key": "col:IST.352:_9352102_1",
+          "componentId": 32,
+          "linkSource": "assignment",
+          "linkConfidence": "confirmed",
+          "excluded": false,
+          "name": "Project Self / Peer Assessment",
+          "possible": 100,
+          "score": 95,
+          "exempt": false,
+          "kind": "item",
+          "isExtraCredit": false,
+          "dueAt": null
+        }
+      ],
+      "scenario": {
+        "itemScores": {}
+      },
+      "blackboardTotal": null,
+      "expected": {
+        "state": "computed",
+        "standings": {
+          "graded_so_far": {
+            "pct": 90.55,
+            "earned": 90.55,
+            "denominator": 100,
+            "letter": "A-"
+          },
+          "zeros_on_rest": {
+            "pct": 90.55,
+            "earned": 90.55,
+            "denominator": 100,
+            "letter": "A-"
+          },
+          "best_case": {
+            "pct": 90.55,
+            "earned": 90.55,
+            "denominator": 100,
+            "letter": "A-"
+          }
+        },
+        "components": [
+          {
+            "code": "research",
+            "earned": 4
+          },
+          {
+            "code": "project_deliverables",
+            "state": "graded",
+            "earned": 54.75,
+            "gradedCap": 60
+          },
+          {
+            "code": "project_final",
+            "earned": 8.8
+          },
+          {
+            "code": "peer_assessment",
+            "earned": 9.5
+          },
+          {
+            "code": "attendance",
+            "earned": 13.5
+          }
+        ],
+        "unlinkedScoredKeys": [],
+        "usesHypotheticals": false,
+        "agreement": null
+      },
+      "solver": [
+        {
+          "letter": "A-",
+          "expected": {
+            "state": "no_remaining_work",
+            "current": {
+              "pct": 90.55,
+              "earned": 90.55,
+              "denominator": 100,
+              "letter": "A-"
+            }
+          }
+        }
+      ],
+      "derivation": [
+        "Deliverables: 60 * (9.5 + 8 + 9 + 10)/40 = 60 * 36.5/40 = 54.75. Final 10 * 0.88 = 8.8. Peer 10 * 0.95 = 9.5.",
+        "Total 4 + 54.75 + 8.8 + 9.5 + 13.5 = 90.55 % -> A- in every projection. Nothing remains."
+      ]
+    }
+  ]
+}
