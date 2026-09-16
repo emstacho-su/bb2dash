@@ -1883,6 +1883,86 @@ export type Database = {
           },
         ]
       }
+      planner_events: {
+        Row: {
+          all_day: boolean
+          course_id: string | null
+          created_at: string
+          done: boolean | null
+          ends_at: string
+          id: string
+          kind: Database["public"]["Enums"]["planner_event_kind"]
+          location: string | null
+          location_kind: string | null
+          notes: string | null
+          starts_at: string
+          time_zone: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean
+          course_id?: string | null
+          created_at?: string
+          done?: boolean | null
+          ends_at: string
+          id?: string
+          kind: Database["public"]["Enums"]["planner_event_kind"]
+          location?: string | null
+          location_kind?: string | null
+          notes?: string | null
+          starts_at: string
+          time_zone?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean
+          course_id?: string | null
+          created_at?: string
+          done?: boolean | null
+          ends_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["planner_event_kind"]
+          location?: string | null
+          location_kind?: string | null
+          notes?: string | null
+          starts_at?: string
+          time_zone?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planner_events_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_events_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "planner_events_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "planner_events_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+        ]
+      }
       reading_progress: {
         Row: {
           notes: string | null
@@ -3597,6 +3677,13 @@ export type Database = {
         | "media_links"
         | "unclassified"
       grading_method: "weighted_pct" | "points" | "qualitative" | "unknown"
+      planner_event_kind:
+        | "event"
+        | "task"
+        | "out_of_office"
+        | "focus_time"
+        | "working_location"
+        | "appointment_slot"
       priority_level: "low" | "normal" | "high" | "critical"
       progress_status:
         | "not_started"
@@ -3826,6 +3913,14 @@ export const Constants = {
         "unclassified",
       ],
       grading_method: ["weighted_pct", "points", "qualitative", "unknown"],
+      planner_event_kind: [
+        "event",
+        "task",
+        "out_of_office",
+        "focus_time",
+        "working_location",
+        "appointment_slot",
+      ],
       priority_level: ["low", "normal", "high", "critical"],
       progress_status: [
         "not_started",

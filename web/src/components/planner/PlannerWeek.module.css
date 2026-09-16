@@ -1,7 +1,7 @@
 /* The /planner week grid (R-19, Phase 11).
 
-   One CSS grid: a time gutter plus seven day columns, in three bands — the day
-   heads, the all-day band, and the hour rows. The hour rows are not 28 × 7 DOM
+   One CSS grid: a time gutter plus seven day columns, in four bands — the day
+   heads, the Assignments band, the Events band (Phase 11b) and the hour rows. The hour rows are not 28 × 7 DOM
    nodes: each day column is one positioned box `--planner-slots` tall, with the
    half-hour rules painted as a repeating gradient and every block placed on it
    by custom properties the component computes.
@@ -60,7 +60,7 @@
 
   display: grid;
   grid-template-columns: var(--planner-gutter) repeat(7, minmax(0, 1fr));
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto auto auto;
   gap: 1px;
   padding: 1px;
   border-radius: var(--radius-lg);
@@ -364,6 +364,179 @@
   gap: 4px;
   background: color-mix(in srgb, var(--color-accent-2-800) 78%, transparent);
   color: var(--color-accent-2-100);
+}
+
+/* — planner events (Phase 11b) ———————————————————————————————————————— */
+
+/* Empty half-hour slots: real buttons under the blocks. Blocks are positioned
+   siblings on higher layers, so a click on one never reaches a slot. */
+.slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--slot) * var(--planner-slot));
+  height: var(--planner-slot);
+  z-index: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.slot:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.slot:focus-visible {
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+.eventBlock {
+  composes: block;
+  z-index: 2;
+  cursor: pointer;
+  background: var(--planner-kind-bg);
+  color: var(--planner-kind-fg);
+  box-shadow: inset 2px 0 0 var(--planner-kind-edge);
+}
+
+.eventChip {
+  composes: chip;
+  cursor: pointer;
+  background: var(--planner-kind-bg);
+  color: var(--planner-kind-fg);
+  box-shadow: inset 2px 0 0 var(--planner-kind-edge);
+}
+
+.eventBlock[data-pending='true'],
+.eventChip[data-pending='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Six kinds. Each selector names its own local class (pure CSS Modules). */
+.eventBlock[data-kind='event'],
+.eventChip[data-kind='event'] {
+  --planner-kind-bg: var(--planner-event-bg);
+  --planner-kind-fg: var(--planner-event-fg);
+  --planner-kind-edge: var(--planner-event-edge);
+}
+.eventBlock[data-kind='task'],
+.eventChip[data-kind='task'] {
+  --planner-kind-bg: var(--planner-task-bg);
+  --planner-kind-fg: var(--planner-task-fg);
+  --planner-kind-edge: var(--planner-task-edge);
+}
+.eventBlock[data-kind='out_of_office'],
+.eventChip[data-kind='out_of_office'] {
+  --planner-kind-bg: var(--planner-ooo-bg);
+  --planner-kind-fg: var(--planner-ooo-fg);
+  --planner-kind-edge: var(--planner-ooo-edge);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--planner-ooo-hatch) 0 4px,
+    transparent 4px 9px
+  );
+}
+.eventBlock[data-kind='focus_time'],
+.eventChip[data-kind='focus_time'] {
+  --planner-kind-bg: var(--planner-focus-bg);
+  --planner-kind-fg: var(--planner-focus-fg);
+  --planner-kind-edge: var(--planner-focus-edge);
+}
+.eventBlock[data-kind='working_location'],
+.eventChip[data-kind='working_location'] {
+  --planner-kind-bg: var(--planner-worklocation-bg);
+  --planner-kind-fg: var(--planner-worklocation-fg);
+  --planner-kind-edge: var(--planner-worklocation-edge);
+  outline: 1px dashed var(--planner-worklocation-edge);
+  outline-offset: -1px;
+}
+.eventBlock[data-kind='appointment_slot'],
+.eventChip[data-kind='appointment_slot'] {
+  --planner-kind-bg: var(--planner-appointment-bg);
+  --planner-kind-fg: var(--planner-appointment-fg);
+  --planner-kind-edge: var(--planner-appointment-edge);
+  outline: 1px dotted var(--planner-appointment-edge);
+  outline-offset: -1px;
+}
+
+.eventKind {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+/* The title is the keyboard path to the editor. `all: unset` drops the global
+   focus ring, so it is put back explicitly. */
+.eventTitle {
+  all: unset;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.eventTitle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.eventTitle[data-done='true'] {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.eventDone {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.zoneChip {
+  align-self: flex-start;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--color-bg) 45%, transparent);
+}
+
+.eventLink {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: underline;
+}
+.eventLink:hover {
+  color: var(--color-accent-300);
+}
+
+/* The Events band: same seven columns as Assignments, directly beneath it. The
+   add button fills whatever the chips leave, so an empty cell is a target. */
+.eventBandCell {
+  composes: bandCell;
+}
+
+.bandAdd {
+  flex: 1 1 auto;
+  min-height: calc(var(--planner-slot) * 0.8);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.bandAdd:hover,
+.bandAdd:focus-visible {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 /* — states ——————————————————————————————————————————————————————————— */
