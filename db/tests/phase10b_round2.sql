@@ -1,6 +1,6 @@
 -- bb2dash :: db/tests/phase10b_round2.sql
 -- Phase 10b round 2. Tests migration 080 (strict item_scores shape check, grade_column_links
--- course_id cascade) against prod.
+-- course_id cascade) and 081 (v_grade_model_items with a not-materialized latest CTE) against prod.
 --
 -- RUN IT: paste the whole file into one `execute_sql` call, or `psql "$DATABASE_URL" -f <file>`.
 -- A failing assertion raises; a pass ends with one summary row. The file opens its own
@@ -70,12 +70,59 @@ begin
 end $$;
 
 -- =============================================================================================
+-- 3. 081 / R2-13: same rows, no materialized CTE, the course filter below the join
+-- =============================================================================================
+do $$
+declare
+  n_view bigint; n_expected bigint; r record; plan text := '';
+begin
+  -- Row count unchanged: latest item + attendance columns + placeholders, computed from the base
+  -- relations independently of the view (the same count phase10b_grade_model.sql 4a asserts).
+  select count(*) into n_view from v_grade_model_items;
+  select (select count(*) from v_gradebook_latest where column_kind in ('item', 'attendance'))
+       + (select count(*) from assignments a
+           where a.component_id is not null
+             and not exists (select 1 from v_gradebook_latest g
+                              where g.course_id = a.course_id and g.column_id = a.bb_column_id))
+    into n_expected;
+  if n_view <> n_expected then
+    raise exception 'FAIL v_grade_model_items has % rows, expected %', n_view, n_expected;
+  end if;
+
+  if (select string_agg(attname, ',' order by attnum) from pg_attribute
+       where attrelid = 'public.v_grade_model_items'::regclass and attnum > 0 and not attisdropped)
+     <> 'scheme_course_id,item_key,assignment_id,shell_course_id,column_id,component_id,link_source,'
+        'link_confidence,excluded,name,possible,score,is_exempt,column_kind,is_extra_credit,due_at,seen_at' then
+    raise exception 'FAIL v_grade_model_items columns changed';
+  end if;
+  if not exists (select 1 from pg_class c, unnest(c.reloptions) o
+                  where c.oid = 'public.v_grade_model_items'::regclass and o = 'security_invoker=true')
+     or has_table_privilege('anon', 'public.v_grade_model_items', 'select') then
+    raise exception 'FAIL v_grade_model_items lost security_invoker or is readable by anon';
+  end if;
+
+  for r in execute 'explain (costs off) select * from v_grade_model_items where scheme_course_id = ''IST.323''' loop
+    plan := plan || r."QUERY PLAN" || chr(10);
+  end loop;
+  -- 058 planned "CTE latest" plus two "CTE Scan on latest" nodes; 081 inlines both references.
+  if position('CTE latest' in plan) > 0 or position('CTE Scan' in plan) > 0 then
+    raise exception 'FAIL the latest CTE is still materialized:%', chr(10) || plan;
+  end if;
+  -- The scheme filter is applied on the courses scans, underneath the joins to the gradebook rows.
+  if position('Seq Scan on courses c' in plan) = 0
+     or position('Filter: (COALESCE(parent_course_id, id) = ''IST.323''::text)' in plan) = 0 then
+    raise exception 'FAIL the scheme_course_id filter did not reach the courses scan:%', chr(10) || plan;
+  end if;
+end $$;
+
+-- =============================================================================================
 -- Pass
 -- =============================================================================================
 select 'phase10b_round2: PASS' as result,
        (select pg_get_constraintdef(oid) from pg_constraint
          where conname = 'grade_scenarios_item_scores_shape')  as shape_check,
        (select pg_get_constraintdef(oid) from pg_constraint
-         where conname = 'grade_column_links_course_id_fkey')  as links_course_fk;
+         where conname = 'grade_column_links_course_id_fkey')  as links_course_fk,
+       (select count(*) from v_grade_model_items)                 as model_items;
 
 rollback;
