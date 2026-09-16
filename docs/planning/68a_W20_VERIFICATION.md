@@ -206,3 +206,68 @@ component not muted, which the screen checks at render):
 
 Gates from `web/`: `npm run typecheck` clean, `npm run build` compiled, `npm test` **810 passed /
 52 files** (807 after A1). `vitest.config.mts` coverage left to W-19.
+
+---
+
+## Round 2 — review fixes (brief commit `106844b`; W-19 round 2 merged `a2f6b58`)
+
+Merged `origin/feat/grades-10b` twice: first for the brief, the scoped `database.types.ts` and
+`fast-check` (`npm ci`), then for W-19's `itemStates()`. `database.types.ts` was not regenerated
+(080/081 change no types).
+
+### Migrations
+
+| File | Applied as | Prod version | md5 (git blob = prod `statements`) | Bytes |
+|---|---|---|---|---|
+| `db/migrations/080_grade_scenarios_checks_and_cascade.sql` | `080_grade_scenarios_checks_and_cascade` | `20260916214318` | `10c5588603b289b2357845d4f16b6349` | 2,738 |
+| `db/migrations/081_grade_model_items_not_materialized.sql` | `081_grade_model_items_not_materialized` | `20260916214532` | `5e7edcec10df10aa6847b9c0bed5f98e` | 6,913 |
+
+Both were dry-run verbatim in `begin; … rollback;` first. What the dry runs showed:
+
+- **080:** all six malformed shapes were refused. `{}` and `{"a": 0, "b": 9.5}` were accepted. Both constraint definitions read back as written.
+- **081:** `v_grade_model_items` had **77 rows before and 77 after, with 0 differing** (`except all` both ways). The column list was unchanged, `security_invoker=true` was kept, anon still has no select, and 036's guard passed.
+
+Plan for `select * from v_grade_model_items where scheme_course_id = 'IST.323'`:
+
+| | 058 | 081 |
+|---|---|---|
+| `CTE latest` / `CTE Scan on latest` | present (whole mirror computed once, scanned twice) | **gone** — both references inlined as subquery scans |
+| `Filter: (COALESCE(parent_course_id, id) = 'IST.323'::text)` | on the courses scans | on the courses scans, below the joins to the inlined gradebook rows |
+
+The gradebook subquery still sorts every registered row for its `DISTINCT ON`. A course filter
+can't be pushed through `DISTINCT ON`, and the table is small (93 rows), so that is left as is.
+
+### SQL tests — `db/tests/phase10b_round2.sql` (rolled back, run whole against prod)
+
+```
+result          | phase10b_round2: PASS
+shape_check     | CHECK (jsonb_typeof(item_scores) = 'object' AND NOT jsonb_path_exists(item_scores, 'strict $.*?(@.type() != "number")') AND NOT jsonb_path_exists(item_scores, 'strict $.*?(@.type() == "number" && @ < 0)'))
+links_course_fk | FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+model_items     | 77
+```
+
+| Section | Assertion | Result |
+|---|---|---|
+| 1 (080, R2-6) | refuses `{"k": [1]}`, `{"k": []}`, `{"k": null}`, `{"k": {"b": 1}}`, `{"k": "9"}`, `{"k": -1}`, `[9]`, `null` | 8 of 8 refused; `{}` then `{"a":0,"b":9.5,"c":100}` stored |
+| 2 (080, R2-11) | a throwaway course with one link and one scenario is deleted | both rows gone; FK reads `ON DELETE CASCADE` |
+| 3 (081, R2-13) | row count = latest item + attendance columns + placeholders; same 17 columns in order; `security_invoker`; no anon select; plan has no `CTE latest` / `CTE Scan`; the scheme filter is on the courses scan | pass |
+
+Security advisors after 080/081: unchanged from §5 (no new finding).
+
+### Web findings
+
+| # | Commit | What changed | Check |
+|---|---|---|---|
+| R2-1w | `660eff3` | `linkOptions` offers leaf components only; parts sit where their parent was | RTL: IST.323 picker has no "Final Project: Security Program Proposal", has its three parts |
+| R2-5 | `b7c5003` | scenario writes move to `queries.grade-scenario.ts`; saves and resets share mutation scope `grade-scenario:<course>`; a save carries a patch and builds its row from the cache when it runs; refetch only when no other scenario mutation for the course is pending; a failure refetches instead of restoring a snapshot | deferred-promise vitest: A, B, C with save 1 landing between B and C → upserts `{A}`, `{A,B}`, `{A,B,C}`; save 2 fails → server row refetched, A kept; a reset queued behind a save runs after it |
+| R2-8 | `5c409ad` | an excluded override beats 10a's rule and V-1's `counts_toward_grade`: no tag, bookkeeping group; `/grades` passes the same link states read-only (`overrides`) | RTL: excluded attendance column → bookkeeping group, no tag, picker shows "Not graded"; read-only overrides place it the same way |
+| R2-9 | `fd2827d` | "Not in Blackboard yet" open state derived from saved values until the owner toggles | RTL: values after first render → open; the owner's toggle then wins |
+| R2-10 | `3c9c578` | starting a save clears a failed reset's error and vice versa | RTL both orders (confirmed failing without the fix) |
+| R2-12 | `dc3eccc` | `explanationText` counts top-level, non-extra-credit components; `mutedPartNames` names a muted component only when its parent is not muted; `ModelStanding` takes the scheme's components | unit: IST.323 shape reads "2 of 7 parts graded"; a muted parent is named once |
+| R2-14 | `36fdf9b` | scheme + components reads in `Promise.all`; `groupByCourse`, `/grades` standing states and `historyByColumn` group in one pass; a history list is sorted only when it arrives out of order (the query already orders it) | existing tests unchanged |
+| R2-16 | `95c41bf` | `web/test/fake-grade-model.ts` and `engineOrFake` deleted; container tests run the real engine | `grep -r fake-grade-model web/` → nothing |
+| R2-3w / R2-4 / R2-15 | `64cf63e` | `FRACTION_AGGREGATIONS`, `isCountedItem`, `isPercentPlaceholder`, `mutedComponentIds` (and the local `whatIfTargets`) deleted from `grade-model-view.ts`; `runModel` returns `itemStates(input)` beside the result; cells come from `whatIfTargets` (`whatIfCellTargets` only adds names); `PlaceholderRows` skips `droppedPlaceholderKeys` | RTL on the IST.323 lab shape: linking Lab #1 removes the seeded "Lab #1" placeholder (6 → 5 rows) and "Lab #4" keeps its cell; a muted Final Project piece (Running Log) has no cell while its unmuted sibling (Proposal) has one |
+
+Gates from `web/` after the last commit: `npm run typecheck` clean, `npm run build` compiled,
+`npm test` **1172 passed / 76 files**. The count after merging W-19's round 2, before this switch,
+was 1163 on the phase branch.
