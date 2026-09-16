@@ -431,9 +431,11 @@
 .eventBlock[data-compact='true'] > .eventTitle {
   flex: 1 1 auto;
 }
+/* The title wins the row: the chip and link shrink a hundred times faster, so a
+   narrow column clips them first and a wide one still shows them. */
 .eventBlock[data-compact='true'] > .eventMeta {
-  flex: 0 1 auto;
-  max-width: 50%;
+  flex: 0 100 auto;
+  overflow: hidden;
 }
 .eventBlock[data-compact='true'] .eventKind,
 .eventBlock[data-compact='true'] .blockTime {
