@@ -49,6 +49,8 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   Invoke edge functions server-side instead: `select net.http_post(...)` via
   `mcp__Supabase__execute_sql`, then read `net._http_response`. pg_net is enabled for this.
 * Edge functions: `verify_jwt` is on — use the legacy anon JWT, not the `sb_publishable_` key.
+  Exception: `calendar-push` runs with `verify_jwt` off and authenticates the tick's
+  `x-push-secret` header from Vault (Phase 11); nothing else calls it.
 * Edge CPU budget ≈ 8–9 embedding parts per invocation; `embed-corpus` is resume-safe per part.
 * Secrets: service key never in a browser or the repo; publishable/anon key is fine
   client-side (RLS is the boundary). There is no Docker in this project.

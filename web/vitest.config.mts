@@ -33,10 +33,21 @@ export default defineConfig({
       // shell — keyboard plumbing, debounce, router navigation — is not, and
       // counting it would report a number that describes nothing. Widen this
       // list as screens get covered, rather than lowering the bar.
+      //
+      // Phase 10a added the gradebook query layer and the staged-upload module;
+      // Phase 11 added the planner week grid and the announcements bell/page.
+      // Every module listed has a suite in test/ that drives it end to end.
       include: [
         'src/lib/queries.search.ts',
         'src/lib/queries.sync.ts',
         'src/lib/queries.grades.ts',
+        'src/lib/queries.submissions.ts',
+        'src/lib/planner-week.ts',
+        'src/lib/queries.planner.ts',
+        'src/lib/queries.announcements.ts',
+        'src/components/planner/PlannerWeek.tsx',
+        'src/components/shell/Bell.tsx',
+        'src/components/announcements/AnnouncementsList.tsx',
       ],
     },
   },
