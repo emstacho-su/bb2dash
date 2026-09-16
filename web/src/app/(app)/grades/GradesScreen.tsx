@@ -47,7 +47,7 @@ export interface GradesModelProps {
   readonly overrides?: ReadonlyMap<string, LinkState>;
 }
 
-const MODEL_LOADING: ModelStandingState = { result: null, error: null, loading: true };
+const MODEL_LOADING: ModelStandingState = { result: null, components: [], error: null, loading: true };
 
 export function GradesScreen({ model }: { model?: GradesModelProps } = {}) {
   const coursesQ = useCourseDisplay();

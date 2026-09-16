@@ -70,6 +70,8 @@ export function pickTargetLetter(letters: readonly string[], saved: string | nul
 /** What the "Our model" container renders for one course. */
 export interface ModelStandingState {
   readonly result: ModelResult | null;
+  /** The scheme's components, for the wording (R2-12). Empty until the reads land. */
+  readonly components: ModelInput['components'];
   readonly error: string | null;
   readonly loading: boolean;
 }
@@ -94,15 +96,15 @@ export function modelStandingStates(
   const ready = rows.schemes && rows.items && rows.totals && rows.scenarios;
   return Object.fromEntries(
     schemeIds.map((id): [string, ModelStandingState] => {
-      if (loadError) return [id, { result: null, error: loadError, loading: false }];
-      if (!ready) return [id, { result: null, error: null, loading: true }];
+      if (loadError) return [id, { result: null, components: [], error: loadError, loading: false }];
+      if (!ready) return [id, { result: null, components: [], error: null, loading: true }];
       const run = runCourseModel({
         bundle: rows.schemes?.[id] ?? { scheme: null, components: [] },
         items: (rows.items ?? []).filter((item) => item.scheme_course_id === id),
         total: (rows.totals ?? []).find((total) => total.scheme_course_id === id) ?? null,
         scenario: (rows.scenarios ?? []).find((scenario) => scenario.course_id === id) ?? null,
       });
-      return [id, { result: run.result, error: run.error, loading: false }];
+      return [id, { result: run.result, components: run.input?.components ?? [], error: run.error, loading: false }];
     }),
   );
 }

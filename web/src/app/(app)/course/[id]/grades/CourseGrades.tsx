@@ -83,6 +83,7 @@ export function CourseGrades({ courseId }: { courseId: string }) {
       >
         <ModelStanding
           result={model.run?.result ?? null}
+          components={model.run?.input?.components ?? []}
           error={model.loadError ?? model.run?.error ?? null}
           loading={model.loading}
         >

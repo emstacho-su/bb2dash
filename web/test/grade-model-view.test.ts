@@ -217,8 +217,46 @@ describe('display rounding, once', () => {
 
   it('explains the headline from the component results, leaving muted parts out', () => {
     const { components } = makeComputed();
-    expect(format.explanationText(components)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
-    expect(format.explanationText([{ ...components[2], state: 'muted' }])).toBe('0 of 0 parts graded');
+    const parts = components.map((c) => ({ id: c.componentId, parentId: null, isExtraCredit: false }));
+    expect(format.explanationText(components, parts)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
+    expect(format.explanationText([{ ...components[2], state: 'muted' }], parts)).toBe('0 of 0 parts graded');
+  });
+
+  describe('IST.323 counts parts, not pieces (R2-12)', () => {
+    // grade_components for IST.323: Final Project (14) has three children; 17 is extra credit.
+    const IST323 = [
+      { id: 10, name: 'Class Participation', parentId: null, isExtraCredit: false },
+      { id: 11, name: 'Blackboard Quizzes', parentId: null, isExtraCredit: false },
+      { id: 12, name: 'Security in the News Group Presentation', parentId: null, isExtraCredit: false },
+      { id: 13, name: 'Individual Security Presentation', parentId: null, isExtraCredit: false },
+      { id: 14, name: 'Final Project: Security Program Proposal', parentId: null, isExtraCredit: false },
+      { id: 15, name: 'Exams', parentId: null, isExtraCredit: false },
+      { id: 16, name: 'Required Labs', parentId: null, isExtraCredit: false },
+      { id: 17, name: 'Extra Credit Lab', parentId: null, isExtraCredit: true },
+      { id: 18, name: 'Final Project: Proposal', parentId: 14, isExtraCredit: false },
+      { id: 19, name: 'Final Project: Running Log', parentId: 14, isExtraCredit: false },
+      { id: 20, name: 'Final Project: In-class Defense', parentId: 14, isExtraCredit: false },
+    ];
+    const results = (graded: number[], muted: number[] = []) =>
+      IST323.map((c) => ({
+        componentId: c.id, code: String(c.id), name: c.name,
+        state: muted.includes(c.id) ? 'muted' as const : graded.includes(c.id) ? 'graded' as const : 'ungraded' as const,
+        earned: 0, gradedCap: 0, cap: 0, usesHypothetical: false, capacityFromKnownItems: false,
+      }));
+
+    it('reads "of 7 parts", with children and extra credit not counted', () => {
+      expect(format.explanationText(results([11, 15, 17, 18]), IST323)).toBe('2 of 7 parts graded: Blackboard Quizzes, Exams');
+    });
+
+    it('names a muted parent once, not its pieces', () => {
+      const muted = results([], [14, 18, 19, 20]);
+      expect(format.mutedPartNames(muted, IST323)).toEqual(['Final Project: Security Program Proposal']);
+      expect(format.explanationText(muted, IST323)).toBe('0 of 6 parts graded');
+    });
+
+    it('names a lone muted piece when its parent is not muted', () => {
+      expect(format.mutedPartNames(results([], [19]), IST323)).toEqual(['Final Project: Running Log']);
+    });
   });
 
   it('writes a history line with the dash for "not graded yet"', () => {
@@ -255,8 +293,8 @@ describe('running the engine from a screen', () => {
     const computed = makeComputed();
     engine.project.mockReturnValue(computed);
     const empty = { schemes: undefined, items: undefined, totals: undefined, scenarios: undefined };
-    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': { result: null, error: null, loading: true } });
-    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({ 'IST.466': { result: null, error: 'Could not load x', loading: false } });
+    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': { result: null, components: [], error: null, loading: true } });
+    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({ 'IST.466': { result: null, components: [], error: 'Could not load x', loading: false } });
 
     const states = runner.modelStandingStates(
       ['IST.466', 'IST.471'],
@@ -268,7 +306,8 @@ describe('running the engine from a screen', () => {
       },
       null,
     );
-    expect(states['IST.466']).toEqual({ result: computed, error: null, loading: false });
+    expect(states['IST.466']).toMatchObject({ result: computed, error: null, loading: false });
+    expect(states['IST.466'].components.map((c) => c.id)).toEqual(IST466_COMPONENTS.map((c) => c.id));
     const firstInput = engine.project.mock.calls.at(-2)?.[0] as ModelInput;
     expect(firstInput.items.map((i) => i.key)).toEqual(['col:IST.466:_3562497_1']);
     expect(firstInput.scenario.itemScores).toEqual({ 'col:IST.466:_3562497_1': 90 });

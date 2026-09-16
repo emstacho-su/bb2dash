@@ -183,6 +183,13 @@ export function makeComputed(overrides: Partial<ComputedResult> = {}): ComputedR
   };
 }
 
+/** The components `makeComputed`'s results come from: three top-level parts. */
+export const COMPUTED_PARTS = [
+  { id: 11, parentId: null, isExtraCredit: false },
+  { id: 15, parentId: null, isExtraCredit: false },
+  { id: 16, parentId: null, isExtraCredit: false },
+] as const;
+
 export const NOT_COMPUTED_MANUAL: ModelResult = {
   state: 'not_computable',
   reason: 'manual_unscored',
