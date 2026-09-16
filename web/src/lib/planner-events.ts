@@ -10,13 +10,15 @@
  * in `planner-zone.ts`.
  */
 
+import { isValidIsoDate, shiftIso } from '@/components/tracker/anchor';
 import type { Database } from './supabase/database.types';
 import {
   DEFAULT_TIME_ZONE,
-  addDaysIso,
   canonicalTimeZone,
   isValidTimeZone,
   localMidnight,
+  localMidnightDateOf,
+  nextLocalMidnight,
   wallClockIn,
 } from './planner-zone';
 
@@ -211,27 +213,14 @@ function checkTimes(input: PlannerEventDraft, zone: string | null, errors: Plann
   }
   // K-3: local midnights in the event's own zone, end date after start date.
   if (zone === null) return;
-  const startDate = localMidnightDate(input.starts_at, zone);
-  const endDate = localMidnightDate(input.ends_at, zone);
+  const startDate = localMidnightDateOf(input.starts_at, zone);
+  const endDate = localMidnightDateOf(input.ends_at, zone);
   if (startDate === null) errors.starts_at = 'An all-day event starts at midnight in its zone.';
   if (endDate === null) {
     errors.ends_at = 'An all-day event ends at midnight in its zone.';
   } else if (startDate !== null && endDate <= startDate) {
     errors.ends_at = 'The last day cannot be before the first.';
   }
-}
-
-/**
- * The local date when `instant` is that date's midnight in `zone`, else null.
- * Like the 067 trigger, a midnight that falls in a DST gap counts when it is the
- * instant local midnight resolves to (moved forward).
- */
-function localMidnightDate(instant: string, zone: string): string | null {
-  const wall = wallClockIn(instant, zone);
-  if (!wall) return null;
-  if (wall.minute === 0) return wall.date;
-  const midnight = localMidnight(wall.date, zone);
-  return midnight !== null && Date.parse(midnight.iso) === Date.parse(instant) ? wall.date : null;
 }
 
 function checkLocation(
@@ -282,9 +271,9 @@ export function allDayInstants(
   lastDay: string,
   zone: string,
 ): AllDayInstants | null {
-  if (!isValidTimeZone(zone) || lastDay < firstDay) return null;
+  if (!isValidTimeZone(zone) || !isValidIsoDate(firstDay) || lastDay < firstDay) return null;
   const start = localMidnight(firstDay, zone);
-  const end = localMidnight(addDaysIso(lastDay, 1), zone);
+  const end = nextLocalMidnight(lastDay, zone);
   if (!start || !end) return null;
   return { starts_at: start.iso, ends_at: end.iso };
 }
@@ -302,7 +291,7 @@ export function allDayDates(
   const start = wallClockIn(row.starts_at, row.time_zone);
   const end = wallClockIn(row.ends_at, row.time_zone);
   if (!start || !end) return null;
-  const lastDay = addDaysIso(end.date, -1);
+  const lastDay = shiftIso(end.date, -1);
   return { firstDay: start.date, lastDay: lastDay < start.date ? start.date : lastDay };
 }
 

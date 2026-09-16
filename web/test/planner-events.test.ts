@@ -118,6 +118,26 @@ describe('validatePlannerEvent — refused rows', () => {
     expect(errorsFor({ time_zone: 'Nowhere/Land' }).time_zone).toBeDefined();
   });
 
+  it('all-day: an instant seconds past midnight, as 067 compares seconds too (R2-9)', () => {
+    expect(
+      errorsFor({ all_day: true, starts_at: '2026-09-16T04:00:30Z', ends_at: '2026-09-17T04:00:00Z' })
+        .starts_at,
+    ).toBeDefined();
+    expect(
+      errorsFor({ all_day: true, starts_at: '2026-09-16T04:00:00Z', ends_at: '2026-09-17T04:00:00.500Z' })
+        .ends_at,
+    ).toBeDefined();
+    expect(
+      errorsFor({ all_day: true, starts_at: '2026-09-16T04:00:00Z', ends_at: '2026-09-17T04:00:00Z' }),
+    ).toEqual({});
+  });
+
+  it('time zone: an alias goes out as the resolved name (R2-7)', () => {
+    const result = validatePlannerEvent(makePlannerEventDraft({ time_zone: 'us/eastern' }));
+    expect(result.ok && result.value.time_zone).toBe('America/New_York');
+    expect(errorsFor({ time_zone: 'EST5EDT' }).time_zone).toBeDefined();
+  });
+
   it('all-day: instants that are not local midnights, or no whole day', () => {
     expect(
       errorsFor({ all_day: true, starts_at: '2026-09-16T13:00:00Z', ends_at: '2026-09-17T04:00:00Z' })

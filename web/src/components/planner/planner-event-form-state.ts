@@ -16,10 +16,11 @@ import {
   type PlannerEventKind,
   type PlannerEventRow,
 } from '@/lib/planner-events';
+import { shiftIso } from '@/components/tracker/anchor';
+import { newYorkWallClock } from '@/lib/planner-week';
 import {
   COMMON_TIME_ZONES,
   DEFAULT_TIME_ZONE,
-  addDaysIso,
   isValidTimeZone,
   wallClockIn,
   wallClockToInstant,
@@ -114,7 +115,7 @@ export function formStateFromPrefill(prefill: PlannerEventPrefill): PlannerEvent
     allDay: false,
     startDate: prefill.date,
     startTime: clockText(prefill.startMinute),
-    endDate: addDaysIso(prefill.date, dayCarry),
+    endDate: shiftIso(prefill.date, dayCarry),
     endTime: clockText(endMinute % (24 * 60)),
   };
 }
@@ -137,7 +138,7 @@ export function formStateFromRow(row: PlannerEventRow): PlannerEventFormState {
 
   if (row.all_day) {
     const dates = allDayDates(row);
-    const fallback = wallClockIn(row.starts_at, DEFAULT_TIME_ZONE)?.date ?? '';
+    const fallback = newYorkWallClock(row.starts_at)?.iso ?? '';
     return {
       ...base,
       startDate: dates?.firstDay ?? fallback,
