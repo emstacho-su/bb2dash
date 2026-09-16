@@ -57,7 +57,7 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell | planned; after the web app is stable | — | — |
-| 13 | Styling pass | planned; last | — | — |
+| 13 | Styling pass | planned; last; carries C-1..C-3 from Phase 10b's browser walk (brief §Carried in) | — | — |
 
 ## 2. Execution order and what each phase hands to the next
 
@@ -153,8 +153,9 @@ the repo.
 * Run the next `/bb-sync` from the `main` checkout (now crawler v3): it settles Blackboard's
   attempt key names and pulls the first submission files (step 4b). Then tick acceptance step
   (3) of Phase 10a on the live app.
-* Walk Phase 10b's seven-step acceptance script on its Vercel preview (`68_PHASE10B_grade_model.md`
-  §Definition of done). No course shows "Our model" until he links a column (e.g. ECN.304
+* Phase 10b (PR #15): the PM walked all seven acceptance steps in a logged-in browser and round 3
+  fixed the four findings he chose; say "merge" or walk it yourself on the Vercel preview
+  (`68_PHASE10B_grade_model.md` §Definition of done). No course shows "Our model" until he links a column (e.g. ECN.304
   Attendance → Participation, if the syllabus means that) or types a what-if on IST.466. Decide
   merge order with Phase 11b's PR #14; the second to merge regenerates `database.types.ts`.
 * Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and start V-2.
