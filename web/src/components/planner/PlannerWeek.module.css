@@ -330,6 +330,16 @@
   box-shadow: inset 2px 0 0 var(--color-accent-300);
 }
 
+/* A card that opens the popout says so with the pointer. The card is the
+   target; the title inside it stays a real link for the keyboard. Each
+   selector names its own local class — a bare attribute selector is not a
+   pure CSS-Modules selector and the build refuses it. */
+.itemBlock[data-open='true'],
+.chip[data-open='true'],
+.nestedChip[data-open='true'] {
+  cursor: pointer;
+}
+
 /* — band chips ——————————————————————————————————————————————————————— */
 
 /* A band chip is the same content as a grid block, in a box that is as tall as

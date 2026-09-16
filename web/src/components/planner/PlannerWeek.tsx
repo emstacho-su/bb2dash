@@ -27,7 +27,7 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import tokens from '@/styles/tokens.module.css';
 import { todayIso } from '@/components/tracker/anchor';
 import { itemHref } from '@/lib/queries.popout';
@@ -51,6 +51,7 @@ import {
   ItemContent,
   MeetingChip,
   MeetingContent,
+  itemCardProps,
   type ItemActions,
 } from './PlannerItem';
 import {
@@ -71,6 +72,7 @@ const EMPTY_WEEK = 'Nothing scheduled this week.';
 export function PlannerWeek() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const router = useRouter();
 
   // `?week=` is untrusted input; `weekAnchor` validates it and falls back to
   // the current week rather than throwing.
@@ -83,7 +85,7 @@ export function PlannerWeek() {
   const data = usePlannerWeekData(view);
   const setStatus = useSetItemStatus();
 
-  const actions = itemActions(pathname, view, setStatus);
+  const actions = itemActions(pathname, view, setStatus, router);
 
   const itemCount = data.placedItems.timed.length + data.placedItems.allDay.length;
   const isEmpty =
@@ -126,10 +128,13 @@ function itemActions(
   pathname: string,
   view: PlannerWeekModel,
   setStatus: ReturnType<typeof useSetItemStatus>,
+  router: ReturnType<typeof useRouter>,
 ): ItemActions {
   const weekSuffix = view.isCurrentWeek ? '' : `&week=${view.weekStart}`;
+  const href = (id: string) => `${itemHref(pathname, { kind: 'assignment', id })}${weekSuffix}`;
   return {
-    href: (id) => `${itemHref(pathname, { kind: 'assignment', id })}${weekSuffix}`,
+    href,
+    open: (id) => router.push(href(id), { scroll: false }),
     onStatusChange: (item: WorkItem, status: ProgressStatus) =>
       setStatus.mutate({ item: { item_kind: item.item_kind, item_id: item.item_id }, status }),
     pendingItemId: setStatus.isPending ? (setStatus.variables?.item.item_id ?? null) : null,
@@ -347,6 +352,7 @@ function DayColumn({
           className={block.kind === 'meeting' ? styles.meetingBlock : styles.itemBlock}
           data-block={block.kind}
           data-category={block.kind === 'item' ? block.item.item.category : undefined}
+          {...(block.kind === 'item' ? itemCardProps(block.item, actions) : {})}
           style={{
             ['--top' as string]: String(block.top),
             ['--height' as string]: String(block.height),
