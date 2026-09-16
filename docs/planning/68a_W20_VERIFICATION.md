@@ -178,3 +178,31 @@ From `web/`: `npm run typecheck` clean; `npm run build` compiled (15 routes); `n
   unlinked"). The picker will appear once it has a score.
 * `vitest.config.mts` coverage `include` was not widened, to avoid a merge conflict with W-19's
   engine entry. The PM may add the new modules at integration.
+
+---
+
+## Round 1b (Contract amendments A1, A2 — brief commit `2e71521`)
+
+Merged `origin/feat/grades-10b` into this branch first (`2e1c45e`). No migration, no SQL change.
+
+| # | Commit | What changed | Tests |
+|---|---|---|---|
+| A1 | `88a6c6e` | `whatIfTargets` gives a placeholder with `possible` null, a `confirmed` link and a `single` / `average` / `average_drop_lowest` / `rank_weighted` / `normalized` component a **percent** target (`unit: 'percent'`, bound 100). `WhatIfCell` reads "what if __ %", validates 0–100, stores the number under the item key. `sum` / `manual` parts, unsure placeholders and pointless *columns* get no cell. A pointless placeholder is still not a counted item, so it never mutes a part. The container fake mirrors `f = v / 100`. | `WhatIfCell` (percent label, 0 and 100 accepted, 100.5 / −1 / 150 refused), `grade-model-view` (all five aggregations; none on sum, manual, inferred, column, zero), `CourseGrades.model` (101 refused and not saved; 80 saved; "includes what-if values") |
+| A2 | `3b81a73` | `linkStates` offers the picker on a column with `possible > 0` that is unlinked (scored or not) or has a tentative / inferred link. A column Stack already overrode keeps its picker whatever its possible (the accepted "never a one-way door" choice). | `grade-model-view` (unscored unlinked `_3569973_1` offered; zero-point and pointless columns not; override on a zero-point column kept), `LinkColumnControl` (IST.352 Project #2A shows the picker, a 0-point knowledge check does not) |
+
+**What prod offers after round 1b** (from `v_grade_model_items`, 2026-09-16; a cell also needs its
+component not muted, which the screen checks at render):
+
+| Surface | Course | Columns / items |
+|---|---|---|
+| percent what-if candidates | ECN.304 | Exam 1, Exam 2, Exam 3, Quiz 2 (in class) |
+| | GEO 103 | First Exam, Second Exam, Final Exam |
+| | IST.323 | Quiz #4 – #10 |
+| picker | ECN.304 | Attendance |
+| | GEO 103 | Absences, Attendance |
+| | IST.323 | Final Project - Proposal and Appendices, Individual Presentation Selection, Individual Security Presentation, Lab #1, Participation |
+| | IST.352 | Project Assignment #2A, Project Assignment #3 |
+| | IST.466 | Attendance ×2, Class Participation, SU IT - Major Case #2, Synchrony Major Case #1 |
+
+Gates from `web/`: `npm run typecheck` clean, `npm run build` compiled, `npm test` **810 passed /
+52 files** (807 after A1). `vitest.config.mts` coverage left to W-19.
