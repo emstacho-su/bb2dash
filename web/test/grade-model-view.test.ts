@@ -27,6 +27,7 @@ vi.mock('@/lib/grade-model', async (importOriginal) => {
 
 const view = await import('@/lib/grade-model-view');
 const format = await import('@/lib/grade-model-format');
+const grades = await import('@/lib/queries.grades');
 const runner = await import('@/lib/grade-model-run');
 const { toModelInput } = await import('@/lib/grade-model-input');
 const { itemStates } = await import('@/lib/grade-model');
@@ -161,8 +162,8 @@ describe('display rounding, once', () => {
   it('explains the headline from the component results, leaving muted parts out', () => {
     const { components } = makeComputed();
     const parts = components.map((c) => ({ id: c.componentId, parentId: null, isExtraCredit: false }));
-    expect(format.explanationText(components, parts)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
-    expect(format.explanationText([{ ...components[2], state: 'muted' }], parts)).toBe('0 of 0 parts graded');
+    expect(format.explanationText(components, makeComputed(), parts)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
+    expect(format.explanationText([{ ...components[2], state: 'muted' }], makeComputed(), parts)).toBe('0 of 0 parts graded');
   });
 
   describe('IST.323 counts parts, not pieces (R2-12)', () => {
@@ -186,19 +187,37 @@ describe('display rounding, once', () => {
         state: muted.includes(c.id) ? 'muted' as const : graded.includes(c.id) ? 'graded' as const : 'ungraded' as const,
         earned: 0, gradedCap: 0, cap: 0, usesHypothetical: false, capacityFromKnownItems: false,
       }));
+    /** The same component results with no what-if values in play. */
+    const real = (components: ReturnType<typeof results>) => makeComputed({ components });
 
     it('reads "of 7 parts", with children and extra credit not counted', () => {
-      expect(format.explanationText(results([11, 15, 17, 18]), IST323)).toBe('2 of 7 parts graded: Blackboard Quizzes, Exams');
+      expect(format.explanationText(results([11, 15, 17, 18]), real(results([11, 15, 17, 18])), IST323)).toBe('2 of 7 parts graded: Blackboard Quizzes, Exams');
     });
 
     it('names a muted parent once, not its pieces', () => {
       const muted = results([], [14, 18, 19, 20]);
       expect(format.mutedPartNames(muted, IST323)).toEqual(['Final Project: Security Program Proposal']);
-      expect(format.explanationText(muted, IST323)).toBe('0 of 6 parts graded');
+      expect(format.explanationText(muted, real(muted), IST323)).toBe('0 of 6 parts graded');
     });
 
     it('names a lone muted piece when its parent is not muted', () => {
       expect(format.mutedPartNames(results([], [19]), IST323)).toEqual(['Final Project: Running Log']);
+    });
+
+    it('sorts the unsure items under the part they mute, pieces included (R3-3)', () => {
+      const items = [
+        { key: 'col:IST.323:_3569947_1', name: 'Log Checkpoint Assignment', kind: 'item' as const, componentId: 19 },
+        { key: 'asg:IST.323/fp-log-final', name: 'Running Log (final)', kind: 'placeholder' as const, componentId: 19 },
+        { key: 'col:IST.323:quiz', name: 'Quiz #3', kind: 'item' as const, componentId: 11 },
+      ];
+      const unsure = ['col:IST.323:_3569947_1', 'asg:IST.323/fp-log-final'];
+      expect(format.mutedParts(results([], [14, 18, 19, 20]), IST323, items, unsure)).toEqual([
+        { part: 'Final Project: Security Program Proposal', confirmable: ['Log Checkpoint Assignment'], notInBlackboard: 1 },
+      ]);
+      expect(format.mutedParts(results([], [19]), IST323, items, unsure.slice(1))).toEqual([
+        { part: 'Final Project: Running Log', confirmable: [], notInBlackboard: 1 },
+      ]);
+      expect(format.mutedParts(results([11]), IST323, items, unsure)).toEqual([]);
     });
   });
 
@@ -206,6 +225,19 @@ describe('display rounding, once', () => {
     expect(format.historyText(QUIZ_HISTORY.map((r) => ({ score: r.score, seenAt: r.seen_at })))).toBe(
       '— → 9 → 9.5 · seen 10 Sep, 14 Sep, 16 Sep',
     );
+  });
+
+  it('prints each history value exactly as the score cell does (R3-4)', () => {
+    // ECN.304's Attendance: Blackboard stores three decimals; the cell reads "85.714 / 100".
+    const points = [
+      { score: 83.333, seenAt: '2026-09-14T17:19:23.154Z' },
+      { score: 85.714, seenAt: '2026-09-16T17:14:02.645Z' },
+    ];
+    expect(format.historyText(points)).toBe('83.333 → 85.714 · seen 14 Sep, 16 Sep');
+    expect(grades.scoreText(85.714, 100)).toBe('85.714 / 100');
+    for (const { score } of points) {
+      expect(format.historyText([{ score, seenAt: points[0].seenAt }])).toContain(grades.scoreNumberText(score));
+    }
   });
 
   it('counts unlinked columns in words', () => {
@@ -236,8 +268,11 @@ describe('running the engine from a screen', () => {
     const computed = makeComputed();
     engine.project.mockReturnValue(computed);
     const empty = { schemes: undefined, items: undefined, totals: undefined, scenarios: undefined };
-    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': { result: null, components: [], error: null, loading: true } });
-    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({ 'IST.466': { result: null, components: [], error: 'Could not load x', loading: false } });
+    expect(runner.MODEL_STANDING_LOADING).toMatchObject({ result: null, realResult: null, components: [], error: null, loading: true });
+    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': runner.MODEL_STANDING_LOADING });
+    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({
+      'IST.466': { ...runner.MODEL_STANDING_LOADING, error: 'Could not load x', loading: false },
+    });
 
     const states = runner.modelStandingStates(
       ['IST.466', 'IST.471'],
@@ -249,12 +284,31 @@ describe('running the engine from a screen', () => {
       },
       null,
     );
-    expect(states['IST.466']).toMatchObject({ result: computed, error: null, loading: false });
+    expect(states['IST.466']).toMatchObject({ result: computed, realResult: computed, error: null, loading: false });
     expect(states['IST.466'].components.map((c) => c.id)).toEqual(IST466_COMPONENTS.map((c) => c.id));
-    const firstInput = engine.project.mock.calls.at(-2)?.[0] as ModelInput;
+    // IST.466 holds a what-if value, so it runs twice: with its scenario, then real-only (R3-2).
+    // IST.471 holds none, so its real-only result is its result and it runs once.
+    const [firstInput, realOnlyInput, secondInput] = engine.project.mock.calls.slice(-3).map((call) => call[0] as ModelInput);
     expect(firstInput.items.map((i) => i.key)).toEqual(['col:IST.466:_3562497_1']);
     expect(firstInput.scenario.itemScores).toEqual({ 'col:IST.466:_3562497_1': 90 });
-    const secondInput = engine.project.mock.calls.at(-1)?.[0] as ModelInput;
+    expect(realOnlyInput).toEqual({ ...firstInput, scenario: { itemScores: {} } });
     expect(secondInput.scheme).toBeNull();
+  });
+
+  it('runs the real-only projection on the same input with an empty scenario (R3-2)', () => {
+    const typed = makeComputed({ usesHypotheticals: true });
+    const real = makeComputed();
+    engine.project.mockReset();
+    engine.project.mockReturnValueOnce(typed).mockReturnValueOnce(real);
+    const input = { ...inputOf(), scenario: { itemScores: { 'col:IST.466:_3562497_1': 90 } } };
+    expect(runner.runModel(input)).toMatchObject({ result: typed, realResult: real, error: null });
+    expect(engine.project.mock.calls.map((call) => call[0])).toEqual([input, { ...input, scenario: { itemScores: {} } }]);
+    expect(input.scenario.itemScores).toEqual({ 'col:IST.466:_3562497_1': 90 });
+
+    engine.project.mockReset();
+    engine.project.mockReturnValue(real);
+    const noValues = { ...input, scenario: { itemScores: {} } };
+    expect(runner.runModel(noValues)).toMatchObject({ result: real, realResult: real });
+    expect(engine.project).toHaveBeenCalledTimes(1);
   });
 });

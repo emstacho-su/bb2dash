@@ -271,3 +271,25 @@ Security advisors after 080/081: unchanged from §5 (no new finding).
 Gates from `web/` after the last commit: `npm run typecheck` clean, `npm run build` compiled,
 `npm test` **1172 passed / 76 files**. The count after merging W-19's round 2, before this switch,
 was 1163 on the phase branch.
+
+## Round 3 — fixes from the browser walk (brief commit `8f48bfb`)
+
+No migration, no database change. One commit per finding on `feat/grades-10b-web`.
+
+| # | Commit | What changed | Check |
+|---|---|---|---|
+| R3-1 | `24c7ab3` | `.nameCell` / `.submissionCell` no longer set `display: flex` on the `th`/`td`; the flex layout moved to inner `div`s (`.nameStack`, `.submissionStack`). The what-if label, field, "/ 50" and × sit in one `nowrap` group (`.whatIfControls`) so only an error drops below. Audited: `PlaceholderRows` cells carried no layout class; no other grades table exists | `test/GradesTables.layout.test.tsx`: reads the three stylesheets, collects every class that sets a non-`table-cell` display (through `composes` too), renders every row branch of the gradebook, bookkeeping and placeholder tables, and finds no such class on any `th`/`td` (confirmed failing with `display: flex` put back on `.nameCell`). PM to re-check column alignment and the one-line what-if box at 1280px |
+| R3-4 | `6c272dc` | the score cell's formatter is exported from `queries.grades.ts` as `scoreNumberText`; `historyText` uses it instead of `formatPoints` | unit: `83.333 → 85.714 · seen 14 Sep, 16 Sep`, and each history value equals `scoreNumberText` of it |
+| R3-2 | `aa95103` | `runModel` also runs `projectCourse` on the same input with an empty scenario (`realResult`; reused when the scenario is empty); `explanationText(results, realResult, components)` counts a part graded only when the real-only result grades it and appends ` · what-if on {names}` for parts graded only with the scenario; `ModelStandingState` carries `realResult` | unit on the real engine (`test/grade-model-explanation.test.ts`): ECN.304 `exam_what_ifs` → "2 of 3 parts graded: Participation, Average Quiz Grade · what-if on Exams (rank-weighted)"; IST.466 live + Ethics Case Practice typed → "0 of 6 parts graded · what-if on Ethics Case Practice"; runner test: the second call is the same input with `itemScores: {}` |
+| R3-3 | `5f9c1ad` | `ItemStates.unsureItemKeys` (types.ts) from the tree `states.ts` builds: a node's own kept, unconfirmed items, input order. `mutedText({ part, confirmable, notInBlackboard })` (labels.ts) writes the three sentences. `mutedParts` sorts the keys under their muted part (pieces included); `ModelStanding` renders one line per part on both screens | engine L1: IST.466 live = SU IT #2, Synchrony #1, AI Team placeholder; after overriding Synchrony, SU IT #2 + AI Team (AI Team is its own part); a consistency pass over every fixture state against `mutedComponentIds`; labels for the three shapes with 1/2/3 names; RTL on the course tab: both major cases named, then only SU IT #2 after Confirm link |
+
+Interpretations:
+- "the unsure link(s)" in the both-shape reads `link` for one confirmable item and `links` for more, the same rule as the confirmable-only shape.
+- "after overriding one major case, only the other remains" is read for the major cases: the AI Team placeholder mutes its own part and stays listed.
+- `mutedText` with no confirmable item and no placeholder cannot come from `itemStates`; it keeps the round-2 sentence rather than printing an empty list.
+- The what-if `nowrap` group is part of R3-1: the finding lists the wrapped "/ 50 ×" and the PM check asks for one line.
+
+Existing tests changed only for the new signatures and wording: the ModelStanding / GradesScreen fixtures pass `realResult`, `items` and `unsureItemKeys`; the round-2 `mutedText` template test and the course-tab muted line use the R3-3 sentence; the `/grades` runner test reads the extra real-only engine call.
+
+Gates from `web/` after the last commit: `npx tsc --noEmit` clean, `npm run build` compiled,
+`npm test` **1196 passed / 78 files** (1172 / 76 before this round).

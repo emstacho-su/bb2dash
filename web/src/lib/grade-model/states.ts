@@ -1,8 +1,9 @@
 /**
  * `itemStates()` (Round 2, R2-3): the engine's own view of each item — which
  * ungraded items take a what-if value, which components are muted, which
- * placeholders were dropped as surplus — so screens never re-implement the
- * rules. Built from `prepareItems`, the preparation `projectCourse` uses.
+ * placeholders were dropped as surplus, which unsure items do the muting
+ * (Round 3, R3-3) — so screens never re-implement the rules. Built from
+ * `prepareItems`, the preparation `projectCourse` uses.
  */
 
 import { checkComputable } from './checks';
@@ -73,11 +74,22 @@ function droppedPlaceholderKeys(input: ModelInput, prepared: PreparedItems): rea
 }
 
 /**
- * Decision: `mutedComponentIds` and `droppedPlaceholderKeys` are reported for
- * every input (a not-computed course still has unsure links to name);
- * `whatIfTargets` is empty unless the order of checks lets the course compute
- * (`nothing_graded` still gets targets, since a value is what computes it).
- * All three read the input's current scenario.
+ * Round 3 (R3-3): the items the component tree mutes on — a node's own counted
+ * items, after the surplus drop, whose link is not confirmed — in input order.
+ * A dropped placeholder, an unlinked column and a column linked straight to a
+ * parent never reach a node, so they never mute and are not listed.
+ */
+function unsureItemKeys(prepared: PreparedItems): readonly string[] {
+  const muting = new Set(flattenForest(prepared.roots).flatMap((node) => node.items.filter((item) => !item.confirmed)));
+  return prepared.counted.filter((item) => muting.has(item)).map((item) => item.key);
+}
+
+/**
+ * Decision: `mutedComponentIds`, `droppedPlaceholderKeys` and `unsureItemKeys`
+ * are reported for every input (a not-computed course still has unsure links to
+ * name); `whatIfTargets` is empty unless the order of checks lets the course
+ * compute (`nothing_graded` still gets targets, since a value is what computes
+ * it). All four read the input's current scenario.
  */
 export function itemStatesOf(input: ModelInput): ItemStates {
   const gate = checkComputable(input);
@@ -87,5 +99,6 @@ export function itemStatesOf(input: ModelInput): ItemStates {
     whatIfTargets: gate.state === 'open' ? whatIfTargets(input, method, prepared) : [],
     mutedComponentIds: mutedComponentIds(input, prepared),
     droppedPlaceholderKeys: droppedPlaceholderKeys(input, prepared),
+    unsureItemKeys: unsureItemKeys(prepared),
   };
 }

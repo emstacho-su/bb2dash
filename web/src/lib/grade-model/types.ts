@@ -180,6 +180,11 @@ export interface ItemStates {
   readonly mutedComponentIds: readonly number[];
   /** Placeholders dropped as surplus over `countExpected`. */
   readonly droppedPlaceholderKeys: readonly string[];
+  /**
+   * Round 3 (R3-3, PM-authorised): counted items whose link is not confirmed and
+   * that mute their component (placeholders included), in input order.
+   */
+  readonly unsureItemKeys: readonly string[];
 }
 
 export type TargetResult =

@@ -86,36 +86,40 @@ export function WhatIfCell({
       data-what-if={value !== undefined ? 'set' : 'empty'}
       data-what-if-unit={target.unit}
     >
-      <label className={styles.whatIfLabel}>
-        <span>{WHAT_IF_LABEL}</span>
-        <span className={styles.srOnly}> — {target.name}</span>
-        <input
-          className={inputClass}
-          type="text"
-          inputMode="decimal"
-          value={draft}
-          disabled={disabled}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={onKeyDown}
-        />
-      </label>
-      <span className={styles.note}>
-        {target.unit === 'percent' ? PERCENT_SUFFIX : `/ ${formatPoints(target.possible)}`}
+      {/* One line, whatever width the table gives the column (round 3, R3-1):
+          only the error may wrap under the field. */}
+      <span className={styles.whatIfControls}>
+        <label className={styles.whatIfLabel}>
+          <span>{WHAT_IF_LABEL}</span>
+          <span className={styles.srOnly}> — {target.name}</span>
+          <input
+            className={inputClass}
+            type="text"
+            inputMode="decimal"
+            value={draft}
+            disabled={disabled}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={onKeyDown}
+          />
+        </label>
+        <span className={styles.note}>
+          {target.unit === 'percent' ? PERCENT_SUFFIX : `/ ${formatPoints(target.possible)}`}
+        </span>
+        {value !== undefined && (
+          <button
+            type="button"
+            className={styles.revert}
+            aria-label={`${REVERT_WHAT_IF_LABEL}: ${target.name}`}
+            disabled={disabled}
+            onClick={() => onCommit(target.key, null)}
+          >
+            ×
+          </button>
+        )}
       </span>
-      {value !== undefined && (
-        <button
-          type="button"
-          className={styles.revert}
-          aria-label={`${REVERT_WHAT_IF_LABEL}: ${target.name}`}
-          disabled={disabled}
-          onClick={() => onCommit(target.key, null)}
-        >
-          ×
-        </button>
-      )}
       {error && (
         <span id={errorId} className={styles.fieldError} role="alert">
           {error}

@@ -203,7 +203,7 @@ function whatIfField(name: string): Promise<HTMLInputElement> {
   return screen.findByLabelText(new RegExp(`what if\\s*—\\s*${name}`)) as Promise<HTMLInputElement>;
 }
 
-const MUTED_LINE = 'Left out: Two Major Case Studies (Synchrony, SU IT) — the link to the syllabus is unsure';
+const MUTED_LINE = 'Left out: Two Major Case Studies (Synchrony, SU IT) — confirm the unsure link on Synchrony Major Case #1';
 
 beforeEach(() => {
   course = IST466_FIXTURE;
@@ -328,6 +328,60 @@ describe('CourseGrades — a link turns a muted part on', () => {
     const after = screen.getByText('Synchrony Major Case #1').closest('tr') as HTMLElement;
     expect(within(after).queryByText('unsure')).toBeNull();
     expect(within(after).getByLabelText(/what if/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * IST.466 as prod holds it (R3-3): both major-case columns linked `tentative`,
+ * and the AI Team assignment only as a tentative placeholder on its own part.
+ */
+const IST466_UNSURE_FIXTURE: CourseFixture = (() => {
+  const aiTeam = makeComponent({ id: 36, code: 'ai_team_assignment', name: 'AI Team Assignment', points: 100 });
+  const suIt = { ...IST466_SYNCHRONY, item_key: 'col:IST.466:_3562492_1', assignment_id: 'IST.466/major-project-2-su-it', column_id: '_3562492_1', name: 'SU IT - Major Case #2' };
+  const aiTeamPlaceholder = {
+    ...IST466_LETTER_PLACEHOLDER,
+    item_key: 'asg:IST.466/ai-team-assignment',
+    assignment_id: 'IST.466/ai-team-assignment',
+    component_id: aiTeam.id,
+    link_confidence: 'tentative' as const,
+    name: 'AI Team Assignment',
+  };
+  return {
+    ...IST466_FIXTURE,
+    components: [...IST466_COMPONENTS, aiTeam],
+    items: [makeItem(), suIt, IST466_SYNCHRONY, aiTeamPlaceholder],
+    gradebook: [
+      IST466_FIXTURE.gradebook[0],
+      makeGradebookRow({ course_id: 'IST.466', column_id: '_3562492_1', name: 'SU IT - Major Case #2', possible: 150, assignment_id: null }),
+      IST466_FIXTURE.gradebook[1],
+    ],
+  };
+})();
+
+describe('CourseGrades — a part left out names what is still unsure (R3-3)', () => {
+  const BOTH = 'Left out: Two Major Case Studies (Synchrony, SU IT) — confirm the unsure links on SU IT - Major Case #2 and Synchrony Major Case #1';
+  const ONE = 'Left out: Two Major Case Studies (Synchrony, SU IT) — confirm the unsure link on SU IT - Major Case #2';
+  const AI_TEAM = "Left out: AI Team Assignment — its link is unsure and it isn't in Blackboard yet";
+
+  beforeEach(() => {
+    course = IST466_UNSURE_FIXTURE;
+  });
+
+  it('names both major cases, then only the other one after a confirm', async () => {
+    db.scenarios.set('IST.466', { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: null, updated_at: 'x' });
+    mount();
+
+    const model = await screen.findByRole('region', { name: 'Our model' });
+    expect(await within(model).findByText(BOTH)).toBeInTheDocument();
+    expect(within(model).getByText(AI_TEAM)).toBeInTheDocument();
+
+    const row = screen.getByText('Synchrony Major Case #1').closest('tr') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Confirm link: Synchrony Major Case #1' }));
+    await waitFor(() => expect(db.links.get('IST.466:_3562496_1')).toMatchObject({ component_id: 24, excluded: false }));
+
+    expect(await within(model).findByText(ONE)).toBeInTheDocument();
+    expect(within(model).queryByText(BOTH)).toBeNull();
+    expect(within(model).getByText(AI_TEAM)).toBeInTheDocument();
   });
 });
 

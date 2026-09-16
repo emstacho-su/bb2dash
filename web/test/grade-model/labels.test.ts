@@ -52,16 +52,48 @@ describe('grade-model labels', () => {
 
   it('renders the templates', () => {
     expect(differsText('17', 'points')).toBe("Differs from Blackboard's number by 17 points:");
-    expect(mutedText(['Two Major Case Studies (Synchrony, SU IT)', 'AI Team Assignment'])).toBe(
-      'Left out: Two Major Case Studies (Synchrony, SU IT) and AI Team Assignment — the link to the syllabus is unsure',
-    );
-    expect(mutedText([])).toBe('Left out:  — the link to the syllabus is unsure');
     expect(solverNeededText({ letter: 'A-', min: '90%', avg: '93.2%', n: 4, share: '35%' })).toBe(
       'For A- (≥ 90%) you need 93.2% average on the 4 remaining items (35% of the grade left).',
     );
     expect(solverUnreachableText('A', '92.3%', 'A-')).toBe('A is out of reach — the most you can finish with is 92.3% (A-).');
     expect(solverSecuredText('F', '44.3%', 'F')).toBe('F is secured — even zeros on the rest leave 44.3% (F).');
     expect(solverNoRemainingText('86.9%', 'B')).toBe('Nothing is left to grade — the course stands at 86.9% (B).');
+  });
+
+  describe('mutedText — one sentence per part left out (R3-3)', () => {
+    const PART = 'Two Major Case Studies (Synchrony, SU IT)';
+
+    it.each<[string, readonly string[], string]>([
+      ['one', ['Synchrony Major Case #1'], `Left out: ${PART} — confirm the unsure link on Synchrony Major Case #1`],
+      ['two', ['SU IT - Major Case #2', 'Synchrony Major Case #1'], `Left out: ${PART} — confirm the unsure links on SU IT - Major Case #2 and Synchrony Major Case #1`],
+      ['three', ['A', 'B', 'C'], `Left out: ${PART} — confirm the unsure links on A, B and C`],
+    ])('items with a Blackboard column only: %s', (_count, confirmable, text) => {
+      expect(mutedText({ part: PART, confirmable, notInBlackboard: 0 })).toBe(text);
+    });
+
+    it('placeholders only', () => {
+      expect(mutedText({ part: 'AI Team Assignment', confirmable: [], notInBlackboard: 1 })).toBe(
+        "Left out: AI Team Assignment — its link is unsure and it isn't in Blackboard yet",
+      );
+      expect(mutedText({ part: 'Reflections', confirmable: [], notInBlackboard: 3 })).toBe(
+        "Left out: Reflections — its link is unsure and it isn't in Blackboard yet",
+      );
+    });
+
+    it('both: the columns to confirm, then how many more are not in Blackboard yet', () => {
+      expect(mutedText({ part: 'Reflections', confirmable: ['Reflection 1'], notInBlackboard: 2 })).toBe(
+        'Left out: Reflections — confirm the unsure link on Reflection 1; 2 more not in Blackboard yet',
+      );
+      expect(mutedText({ part: 'Reflections', confirmable: ['Reflection 1', 'Reflection 2'], notInBlackboard: 1 })).toBe(
+        'Left out: Reflections — confirm the unsure links on Reflection 1 and Reflection 2; 1 more not in Blackboard yet',
+      );
+    });
+
+    it('never prints an empty list: a part with no unsure item keeps the round-2 sentence', () => {
+      expect(mutedText({ part: PART, confirmable: [], notInBlackboard: 0 })).toBe(
+        `Left out: ${PART} — the link to the syllabus is unsure`,
+      );
+    });
   });
 
   it('has a sentence for every delta reason', () => {

@@ -12,8 +12,10 @@
  * component invents its own copy.
  */
 
-import type { Agreement, ComponentInput, ComponentResult, Standing } from './grade-model/types';
+import type { MutedPartArgs } from './grade-model/labels';
+import type { Agreement, ComponentInput, ComponentResult, ItemInput, ModelResult, Standing } from './grade-model/types';
 import { COURSE_TIME_ZONE } from './course-dimension';
+import { scoreNumberText } from './queries.grades';
 
 /** What a missing figure looks like. Never `0`. */
 export const NO_FIGURE = '—';
@@ -58,15 +60,25 @@ export function agreementDeltaText(agreement: Pick<Agreement, 'delta' | 'unit'>)
 /** The facts about a component the wording needs: where it sits, and whether it is extra credit. */
 export type PartComponent = Pick<ComponentInput, 'id' | 'parentId' | 'isExtraCredit'>;
 
+const isGradedState = (result: ComponentResult) => result.state === 'graded' || result.state === 'partly_graded';
+
 /**
- * "3 of 7 parts graded: quizzes, exams" — how the headline was computed, from
- * the engine's component results. A *part* is a top-level, non-extra-credit
- * component (round 2, R2-12): IST.323's three Final Project pieces are one part
- * and its extra-credit lab is none, so the course reads "of 7 parts", not
- * "of 11". A muted part is not counted; `MUTED_TEXT` names it on its own line.
+ * "2 of 3 parts graded: Participation, Average Quiz Grade · what-if on Exams
+ * (rank-weighted)" — how the headline was computed, from the engine's
+ * component results. A *part* is a top-level, non-extra-credit component
+ * (round 2, R2-12): IST.323's three Final Project pieces are one part and its
+ * extra-credit lab is none, so the course reads "of 7 parts", not "of 11". A
+ * muted part is not counted; `mutedText` names it on its own line.
+ *
+ * Round 3 (R3-2): a part is *graded* only by real scores. `realResult` is
+ * `projectCourse` on the same input with an empty scenario (`runModel`); a
+ * part graded there is graded, and one graded only in `results` is graded by
+ * what-if values alone and is named after " · what-if on". A real-only course
+ * the model cannot compute (nothing graded yet) has no part graded.
  */
 export function explanationText(
   results: readonly ComponentResult[],
+  realResult: ModelResult | null,
   components: readonly PartComponent[],
 ): string {
   const byId = new Map(components.map((c) => [c.id, c]));
@@ -74,9 +86,29 @@ export function explanationText(
     const component = byId.get(r.componentId);
     return component !== undefined && component.parentId === null && !component.isExtraCredit && r.state !== 'muted';
   });
-  const graded = parts.filter((c) => c.state === 'graded' || c.state === 'partly_graded');
+  const realGraded = new Set(
+    realResult?.state === 'computed' ? realResult.components.filter(isGradedState).map((r) => r.componentId) : [],
+  );
+  const graded = parts.filter((part) => realGraded.has(part.componentId));
+  const whatIfOnly = parts.filter((part) => isGradedState(part) && !realGraded.has(part.componentId));
   const head = `${graded.length} of ${parts.length} ${parts.length === 1 ? 'part' : 'parts'} graded`;
-  return graded.length === 0 ? head : `${head}: ${graded.map((c) => c.name).join(', ')}`;
+  const real = graded.length === 0 ? head : `${head}: ${graded.map((c) => c.name).join(', ')}`;
+  return whatIfOnly.length === 0 ? real : `${real} · what-if on ${whatIfOnly.map((c) => c.name).join(', ')}`;
+}
+
+/** Each muted component whose parent is not muted too. */
+function mutedPartResults(
+  results: readonly ComponentResult[],
+  components: readonly PartComponent[],
+): ComponentResult[] {
+  const parentOf = new Map(components.map((c) => [c.id, c.parentId]));
+  const muted = new Set(results.filter((r) => r.state === 'muted').map((r) => r.componentId));
+  return results
+    .filter((r) => muted.has(r.componentId))
+    .filter((r) => {
+      const parent = parentOf.get(r.componentId) ?? null;
+      return parent === null || !muted.has(parent);
+    });
 }
 
 /**
@@ -87,15 +119,50 @@ export function mutedPartNames(
   results: readonly ComponentResult[],
   components: readonly PartComponent[],
 ): string[] {
+  return mutedPartResults(results, components).map((r) => r.name);
+}
+
+/** What a muted part's sentence needs to know about one model item. */
+export type PartItem = Pick<ItemInput, 'key' | 'name' | 'kind' | 'componentId'>;
+
+/** `componentId` is `ancestorId` or one of its pieces. A parent cycle ends the walk. */
+function isWithin(
+  componentId: number | null,
+  ancestorId: number,
+  parentOf: ReadonlyMap<number, number | null>,
+): boolean {
+  const seen = new Set<number>();
+  for (let id = componentId; id !== null && !seen.has(id); id = parentOf.get(id) ?? null) {
+    if (id === ancestorId) return true;
+    seen.add(id);
+  }
+  return false;
+}
+
+/**
+ * One `mutedText` entry per muted part (round 3, R3-3), named as
+ * `mutedPartNames` names them. Which items are unsure is the engine's
+ * `itemStates().unsureItemKeys`; this only sorts them by part: an item with a
+ * Blackboard column is confirmable with the picker, and a placeholder counts
+ * toward "not in Blackboard yet".
+ */
+export function mutedParts(
+  results: readonly ComponentResult[],
+  components: readonly PartComponent[],
+  items: readonly PartItem[],
+  unsureItemKeys: readonly string[],
+): MutedPartArgs[] {
   const parentOf = new Map(components.map((c) => [c.id, c.parentId]));
-  const muted = new Set(results.filter((r) => r.state === 'muted').map((r) => r.componentId));
-  return results
-    .filter((r) => muted.has(r.componentId))
-    .filter((r) => {
-      const parent = parentOf.get(r.componentId) ?? null;
-      return parent === null || !muted.has(parent);
-    })
-    .map((r) => r.name);
+  const unsureKeys = new Set(unsureItemKeys);
+  const unsure = items.filter((item) => unsureKeys.has(item.key));
+  return mutedPartResults(results, components).map((part) => {
+    const own = unsure.filter((item) => isWithin(item.componentId, part.componentId, parentOf));
+    return {
+      part: part.name,
+      confirmable: own.filter((item) => item.kind !== 'placeholder').map((item) => item.name),
+      notInBlackboard: own.filter((item) => item.kind === 'placeholder').length,
+    };
+  });
 }
 
 /** "2 scored Blackboard columns are not linked to a syllabus rule". */
@@ -122,9 +189,13 @@ export interface HistoryPoint {
   readonly seenAt: string;
 }
 
-/** "— → 9 → 9.5 · seen 14 Sep, 16 Sep". Null is the dash, never zero. */
+/**
+ * "— → 83.333 → 85.714 · seen 14 Sep, 16 Sep". Null is the dash, never zero.
+ * Each value prints exactly as the score cell prints it (round 3, R3-4):
+ * Blackboard's stored value, trailing zeros trimmed, no display rounding.
+ */
 export function historyText(points: readonly HistoryPoint[]): string {
-  const scores = points.map((p) => (p.score === null ? NO_FIGURE : formatPoints(p.score)));
+  const scores = points.map((p) => (p.score === null ? NO_FIGURE : scoreNumberText(p.score)));
   const days = points.map((p) => historyDayText(p.seenAt));
   return `${scores.join(' → ')} · seen ${days.join(', ')}`;
 }

@@ -31,9 +31,15 @@
   border-bottom: 1px solid var(--color-divider);
 }
 
+/* A th/td keeps `display: table-cell` — a flex cell leaves table layout and
+   every later cell in the row slides one column over (round 3, R3-1). Each
+   cell's own layout lives on the wrapper inside it. */
 .nameCell {
   text-align: left;
   font-weight: 400;
+}
+
+.nameStack {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -58,7 +64,7 @@
   color: var(--color-muted);
 }
 
-.submissionCell {
+.submissionStack {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
