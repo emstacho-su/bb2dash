@@ -1,6 +1,6 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-16**, Phase 10b grade model + what-if **PR open**
+> Updated upon each PR. Last update: **2026-09-16**, Phase 10b grade model + what-if **PR #15 open**
 > (branch `feat/grades-10b`: engine `web/src/lib/grade-model/`, "Our model" on `/grades` and the
 > course Grades tab, what-if + target solver + "Counts toward…" picker + score history;
 > migrations 057–058 and 080–081 live; V-1 stubbed by Stack, so the model leaves out parts with
@@ -198,7 +198,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    extended property = 62 = mirror. `gcal_enabled` is true; the push runs on its own tick from
    here on. Announcement `author` stays
    "not recorded": the live crawl carries no creator key and the crawler is 10a's file this sprint.
-12. **Phase 10b — Grade model, what-if, score history** (`feat/grades-10b`, PR open 2026-09-16; brief,
+12. **Phase 10b — Grade model, what-if, score history** (`feat/grades-10b`, [PR #15](https://github.com/emstacho-su/bb2dash/pull/15) open 2026-09-16; brief,
    frozen Contract, Stack's four answers and rounds 1b/1c/2 in `docs/planning/68_PHASE10B_grade_model.md`,
    evidence in `68a_W20_VERIFICATION.md`). Preconditions: 10a on `main` and 18 scored item columns
    held; **V-1 sign-off waived** — Stack stubbed V-1 as a data-accuracy task. Stack's answers: the
@@ -261,7 +261,7 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 8 | Course dimension (Classroom-style course page) | `61_PHASE8_course_dimension.md` | **merged** (PR #8, 2026-09-14) — courses sidebar on the right added after Stack's preview review |
 | 9 | Sync loop (automated transform, Inbox, `bb-files` bucket → private) | `62_PHASE9_sync_loop.md` | **merged** (PR #10, 2026-09-15) after Stack's first live end-to-end sync |
 | 10a | Grades: gradebook mirror, Grades screens, submission pull-back, staged upload | `67_PHASE10A_grades.md` | **merged** (PR #13, 2026-09-16; migrations 046–056 live). Mirror verified by Stack's 9/16 sync; the attempts probe and step 4b run on the first post-merge sync |
-| 10b | Grades: methodology model + what-if | `68_PHASE10B_grade_model.md` | **PR open** 2026-09-16 (migrations 057–058, 080–081 live); awaiting Stack's seven-step acceptance walk on the preview |
+| 10b | Grades: methodology model + what-if | `68_PHASE10B_grade_model.md` | **PR #15 open** 2026-09-16 (migrations 057–058, 080–081 live); awaiting Stack's seven-step acceptance walk on the preview |
 | V-1 | Grading schema validation (stream, Stack + a materials-only session) | `63_GRADING_VALIDATION.md`, `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | **stubbed for later** (Stack, 2026-09-16: a data-accuracy task, no longer a gate for 10b); reconciliation migration stays 059; it should fold `grade_column_links` into `assignments` and fill placeholder points. Launch: `scripts/validate-grading.ps1` |
 | V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14 |
 | 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **merged** (PR #12, 2026-09-16; migrations 060–066 live, calendar push live and proven; Stack signed off the six-step script) |

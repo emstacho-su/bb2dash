@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-16** (Phase 10b PR, opened while Phase 11b's PR #14 is open; Phase 10a PR #13 merged after Phase 11's PR #12).
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-16** (Phase 10b PR #15, opened while Phase 11b's PR #14 is open; Phase 10a PR #13 merged after Phase 11's PR #12).
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement
@@ -30,7 +30,7 @@ Backend foundation live; GUI v1 merged and deployed to Vercel; retrieval polishe
 Classroom-style course page (Phase 8); automated sync loop with Inbox (Phase 9); gradebook
 mirrored and shown as Blackboard's numbers, submissions catalogued, staged uploads (Phase 10a);
 planner week grid, Google Calendar push, announcements bell (Phase 11); grade model + what-if
-(Phase 10b, PR open). Prod is Supabase `goultdzqcavefcgnifdy`; migrations 001–056 and 060–066 on
+(Phase 10b, PR #15). Prod is Supabase `goultdzqcavefcgnifdy`; migrations 001–056 and 060–066 on
 `main` and live; 057–058 and 080–081 (10b) and 067–069 (11b) live ahead of their merges. The materials MCP
 server (`mcp-server/`) is registered at user scope and points at
 `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`. The 10a / 11 / V-1 / V-2 sprint
@@ -51,7 +51,7 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | — | V-1 + R-27 briefs, Phase 10 split, ORCHESTRATOR + `/bb2dash-pm` | merged Sep 14 | #9 | — |
 | — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | merged Sep 15 | #11 | — |
 | 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | merged Sep 16 (contract frozen Sep 15, Stack's ten answers in the brief; round 2 = 052–056; mirror verified by his 9/16 sync, attempts probe settles on the first v3 crawl) | #13 | 046–056 (057–058 slack) |
-| 10b | Grades: methodology model + what-if | PR open Sep 16 (V-1 gate waived by Stack; his four answers + rounds 1b/1c/2 in the brief; `/code-review` 15 findings fixed, `/security-review` none); awaiting his seven-step walk | open | 057–058, review rounds 080–089 (080–081 used) |
+| 10b | Grades: methodology model + what-if | PR open Sep 16 (V-1 gate waived by Stack; his four answers + rounds 1b/1c/2 in the brief; `/code-review` 15 findings fixed, `/security-review` none); awaiting his seven-step walk | #15 | 057–058, review rounds 080–089 (080–081 used) |
 | 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | merged Sep 16; calendar push live and proven | #12 | 060–066 |
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | brief + Stack's answers frozen (`69b`); next | — | 067–072; Phase 12 moves to 073–079 |
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
