@@ -60,13 +60,24 @@ function extraItemEarned(item: CountedItem, unit: UnitCap, r: number | null, man
   return unit.perPoint !== null ? level * item.possible * unit.perPoint : level * unit.perSlot;
 }
 
-function leafOutcome(node: ComponentNode, method: ComputableMethod, r: number | null): NodeOutcome {
+/**
+ * The fill values for one evaluation: `r` on regular ungraded slots, `extraR`
+ * on ungraded extra credit (the standings use `r` for both; the solver keeps
+ * `extraR` at 0 because extra credit is never remaining work).
+ */
+export interface Fill {
+  readonly r: number | null;
+  readonly extraR: number | null;
+}
+
+function leafOutcome(node: ComponentNode, method: ComputableMethod, fill: Fill): NodeOutcome {
   const slots = node.extraCredit ? node.items : node.items.filter((item) => !item.extraCredit);
   const extras = node.extraCredit ? [] : node.items.filter((item) => item.extraCredit);
   const context = { method, component: node.component, cap: node.nominalCap, items: slots };
+  const r = node.extraCredit ? fill.extraR : fill.r;
   const outcome: LeafOutcome = aggregateFor(node.component.aggregation)(context, r);
   const manual = node.component.aggregation === 'manual';
-  const extrasEarned = sum(extras.map((item) => extraItemEarned(item, outcome.unitCap, r, manual)));
+  const extrasEarned = sum(extras.map((item) => extraItemEarned(item, outcome.unitCap, fill.extraR, manual)));
   const earned = outcome.earned + extrasEarned;
   return {
     node,
@@ -115,10 +126,10 @@ function parentOutcome(node: ComponentNode, children: readonly NodeOutcome[]): N
   };
 }
 
-export function evaluateNode(node: ComponentNode, method: ComputableMethod, r: number | null): NodeOutcome {
-  const children = node.children.map((child) => evaluateNode(child, method, r));
+export function evaluateNode(node: ComponentNode, method: ComputableMethod, fill: Fill): NodeOutcome {
+  const children = node.children.map((child) => evaluateNode(child, method, fill));
   if (node.muted) return mutedOutcome(node, children);
-  return children.length === 0 ? leafOutcome(node, method, r) : parentOutcome(node, children);
+  return children.length === 0 ? leafOutcome(node, method, fill) : parentOutcome(node, children);
 }
 
 /** Every outcome, parents before their children. */

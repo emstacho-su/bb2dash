@@ -59,9 +59,12 @@ export function prepareModel(input: ModelInput, scheme: SchemeInput, method: Com
   return { scheme, method, roots, wholeCourse, denominator };
 }
 
-/** Course totals with `r` on every ungraded slot (`null` = graded so far). */
-export function totalsAt(model: PreparedModel, r: number | null): CourseTotals {
-  const outcomes = model.roots.map((root) => evaluateNode(root, model.method, r));
+/**
+ * Course totals with `r` on every ungraded slot (`null` = graded so far).
+ * `extraR` fills ungraded extra credit and defaults to `r` (the standings).
+ */
+export function totalsAt(model: PreparedModel, r: number | null, extraR: number | null = r): CourseTotals {
+  const outcomes = model.roots.map((root) => evaluateNode(root, model.method, { r, extraR }));
   const active = outcomes.filter((outcome) => !outcome.node.muted);
   const capacity = active.filter((outcome) => !outcome.node.extraCredit);
   return {

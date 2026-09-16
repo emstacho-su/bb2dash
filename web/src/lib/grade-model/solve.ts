@@ -5,10 +5,11 @@
  * Contract: `68_PHASE10B_grade_model.md` §Engine, Semantics "Solver".
  *
  * Decisions:
- * - The solver's projection at `r` is the standings' projection at `r` (every
- *   ungraded slot at `r`, extra credit included), so `unreachable.bestCase` is
- *   the best-case standing and `secured.worstCase` the zeros-on-the-rest one.
- *   Remaining work (count and share) still leaves extra credit out.
+ * - The solver's projection at `r` fills only the remaining slots with `r`:
+ *   ungraded extra credit is not remaining work, so it stays at 0. Feeding
+ *   `averageNeeded` back onto the remaining items then reaches the target, and
+ *   `unreachable.bestCase` never counts on extra credit not yet earned (it can
+ *   sit below the standings' best case). `secured.worstCase` is zeros on the rest.
  * - `no_remaining_work.current` is zeros on the rest: with nothing left it is
  *   the course's final figure over its own denominator.
  * - The target is compared in the scale's unit (points for IST.466), the same
@@ -25,7 +26,7 @@ const BISECT_WIDTH = 1e-6;
 
 export function standingAtR(evaluation: CourseEvaluation, r: number): Standing {
   const { model } = evaluation;
-  return standingOf(totalsAt(model, r).earned, model.denominator, model.scheme);
+  return standingOf(totalsAt(model, r, 0).earned, model.denominator, model.scheme);
 }
 
 function reaches(evaluation: CourseEvaluation, step: LetterStep, r: number): boolean {
