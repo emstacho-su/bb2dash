@@ -8,7 +8,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LinkColumnControl, linkTargetFor, selectedLinkValue } from '@/components/grades/LinkColumnControl';
 import { GradebookTable } from '@/components/grades/GradebookTable';
-import { linkStates, type LinkState } from '@/lib/grade-model-view';
+import { linkOptions, linkStates, type LinkState } from '@/lib/grade-model-view';
 import { makeGradebookRow } from './factories.grades';
 import { IST466_SYNCHRONY, makeItem } from './factories.grade-model';
 
@@ -73,6 +73,40 @@ describe('LinkColumnControl', () => {
     expect(linkTargetFor('', { override: true })).toEqual({ kind: 'clear' });
     expect(linkTargetFor('', { override: false })).toBeNull();
     expect(linkTargetFor('abc', { override: false })).toBeNull();
+  });
+});
+
+describe("IST.323's picker offers leaf components only (R2-1w)", () => {
+  // grade_components for IST.323 as prod holds them: Final Project (14) has three children.
+  const IST323_COMPONENTS = [
+    { id: 10, name: 'Class Participation', parentId: null },
+    { id: 11, name: 'Blackboard Quizzes', parentId: null },
+    { id: 12, name: 'Security in the News Group Presentation', parentId: null },
+    { id: 13, name: 'Individual Security Presentation', parentId: null },
+    { id: 14, name: 'Final Project: Security Program Proposal', parentId: null },
+    { id: 15, name: 'Exams', parentId: null },
+    { id: 16, name: 'Required Labs', parentId: null },
+    { id: 17, name: 'Extra Credit Lab', parentId: null },
+    { id: 18, name: 'Final Project: Proposal', parentId: 14 },
+    { id: 19, name: 'Final Project: Running Log', parentId: 14 },
+    { id: 20, name: 'Final Project: In-class Defense', parentId: 14 },
+  ];
+
+  it('has no "Final Project: Security Program Proposal" and has its three parts', () => {
+    render(
+      <LinkColumnControl
+        state={{ ...UNLINKED, columnId: '_3569973_1' }}
+        options={linkOptions(IST323_COMPONENTS)}
+        columnName="Final Project - Proposal and Appendices"
+        onChange={vi.fn()}
+      />,
+    );
+    const names = [...select().options].map((o) => o.textContent);
+    expect(names).not.toContain('Final Project: Security Program Proposal');
+    expect(names).toEqual(expect.arrayContaining([
+      'Final Project: Proposal', 'Final Project: Running Log', 'Final Project: In-class Defense',
+    ]));
+    expect(names).toHaveLength(1 + 10 + 1);
   });
 });
 

@@ -176,12 +176,20 @@ export type LinkTarget =
   | { readonly kind: 'excluded' }
   | { readonly kind: 'clear' };
 
-/** The picker's options: every component of the scheme, a parent before its parts. */
+/**
+ * The picker's options: the scheme's **leaf** components only (Round 2, R2-1w).
+ * An item linked straight to a component that has children is treated as
+ * unlinked by the engine, so offering the parent (IST.323's "Final Project")
+ * would save a link that counts for nothing. A part is listed where its parent
+ * would have been, so the three Final Project pieces stay together.
+ */
 export function linkOptions(
   components: readonly Pick<ComponentInput, 'id' | 'name' | 'parentId'>[],
 ): { id: number; name: string }[] {
+  const parents = new Set(components.map((c) => c.parentId).filter((id): id is number => id !== null));
   const order = (c: Pick<ComponentInput, 'id' | 'parentId'>) => [c.parentId ?? c.id, c.parentId === null ? 0 : 1, c.id];
-  return [...components]
+  return components
+    .filter((c) => !parents.has(c.id))
     .sort((a, b) => {
       const [a1, a2, a3] = order(a);
       const [b1, b2, b3] = order(b);

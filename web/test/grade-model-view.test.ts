@@ -154,13 +154,14 @@ describe('linkStates (answer 2, PM call 9)', () => {
     expect(states.get('col:IST.352:kc')).toMatchObject({ override: true });
   });
 
-  it('lists a parent before its parts', () => {
+  it("offers leaf components only, a parent's parts where the parent sat (R2-1w)", () => {
     const options = view.linkOptions([
       { id: 18, name: 'Proposal', parentId: 14 },
       { id: 15, name: 'Exams', parentId: null },
       { id: 14, name: 'Final Project', parentId: null },
+      { id: 20, name: 'Defense', parentId: 14 },
     ]);
-    expect(options.map((o) => o.name)).toEqual(['Final Project', 'Proposal', 'Exams']);
+    expect(options.map((o) => o.name)).toEqual(['Proposal', 'Defense', 'Exams']);
   });
 });
 
