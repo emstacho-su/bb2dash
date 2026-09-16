@@ -586,6 +586,50 @@ single-item part as a real column; the real engine correctly drops a placeholder
 IST.323's 13-point proposal column bundles the 11-point proposal and the 2-point final log, so
 once it is graded and linked the agreement reads `unexplained` — recorded in STATUS.
 
+## Round 2 — review fixes (2026-09-16)
+
+`/code-review main high` on the integrated phase branch (`7d8eb8e`) returned 15 confirmed
+findings (checked read-only against prod) plus one cleanup; `/security-review` returned no
+finding (its one low note is R2-11). Migrations **080–081** are this round's. 057–058 stay
+byte-frozen. `types.ts` gains `WhatIfTarget` / `ItemStates` and `index.ts` a frozen
+`itemStates(input): ItemStates` signature (PM, this commit). Workers first `git merge
+origin/feat/grades-10b` into their own branch.
+
+**Contract changes this round:** (a) an item linked straight to a component that has children is
+treated as **unlinked** (never counted, listed in `unlinkedScoredKeys` when scored, no what-if),
+and the picker offers **leaf components only**; (b) surplus placeholders are dropped **earliest
+`dueAt` first, undated last** — the Contract's "latest first" dropped a real future lab and kept
+the seeded duplicate of the lab that already has a column; (c) screens take what-if targets,
+muted parts and dropped placeholders from `itemStates()`, never from their own copy of the rules.
+
+### W-19 (engine) — first, the web fixes that depend on it wait for it
+
+| # | Finding | Fix | Check |
+|---|---|---|---|
+| R2-1e | An item linked straight to a parent (IST.323 Final Project, id 14) is silently dropped; not in `unlinkedScoredKeys`, so the agreement reads `unexplained` | Contract change (a) | L1: a scored item linked to a parent is in `unlinkedScoredKeys`, contributes nothing, has no what-if target; agreement lists `unlinked_column` |
+| R2-2 | Placeholder drop keeps the duplicate: live IST.323 Lab #1 column linked to Required Labs (count 4) + `lab-1..lab-4` placeholders → `lab-4` dropped | Contract change (b) | L1 on that live shape: `lab-1` dropped, `lab-4` kept; undated placeholders drop last; L3 fixtures still pass |
+| R2-3e | No engine source for what-if targets / muted parts / dropped placeholders; the screens copied the rules and drifted | Implement `itemStates()` from the engine's own item preparation (the same functions `projectCourse` uses) | L1 per field; L2 property: giving any `whatIfTargets` key a value in `0..max` makes `usesHypotheticals` true; a key not in the set never does; `mutedComponentIds` includes children |
+
+### W-20 (db + web)
+
+| # | Finding | Fix | Check |
+|---|---|---|---|
+| R2-1w | Picker offers parent components | Leaf components only | RTL: IST.323 picker has no "Final Project: Security Program Proposal", has its three children |
+| R2-3w / R2-4 / R2-15 | `whatIfTargets`, `PlaceholderRows` and `mutedComponentIds` in `grade-model-view.ts` ignore the surplus drop, parent muting, and duplicate the engine | **After** the PM merges W-19 (you will be told): delete `FRACTION_AGGREGATIONS`, `isCountedItem`, `isPercentPlaceholder`, `mutedComponentIds` from `grade-model-view.ts`; cells, placeholder rows and muted rendering read `itemStates()`; a dropped placeholder is not rendered | RTL on the IST.323 lab shape: after linking Lab #1, "Lab #1" placeholder gone, "Lab #4" still has a cell; a child of a muted parent has no cell |
+| R2-5 | Lost update: whole-map upserts from a stale cache; refetch during a pending save; rollback past earlier saves | Serialize scenario saves per course (TanStack v5 mutation `scope: { id: 'grade-scenario:<course>' }`); build `item_scores` from the **current cache** at mutate time, not the render closure; invalidate only when no other scenario mutation for that course is pending; on error **refetch** instead of restoring an older snapshot | vitest with deferred promises: commit A, B, C with save 1 resolving between B and C → last upsert holds A, B, C; save 2 fails → cache refetched, A kept |
+| R2-6 + R2-11 | `item_scores` check passes arrays in lax jsonpath mode; `grade_column_links.course_id` does not cascade | **080** `080_grade_scenarios_checks_and_cascade.sql`: drop and re-add `grade_scenarios_item_scores_shape` as `jsonb_typeof(item_scores) = 'object' and not jsonb_path_exists(item_scores, 'strict $.* ? (@.type() != "number")') and not jsonb_path_exists(item_scores, 'strict $.* ? (@.type() == "number" && @ < 0)')` (PM verified on prod: refuses array, empty array, null, nested object, string, negative; accepts `{}` and numbers); re-create the `course_id` foreign key `on delete cascade` | SQL tests: each refused shape; a rolled-back course delete removes its links |
+| R2-7 | `database.types.ts` carried Phase 11b's live objects | **Done by the PM**: the file is `main`'s plus the five 10b objects only. Do not regenerate it this round (080/081 change no types) | typecheck |
+| R2-8 | A "Not graded" override on an attendance column keeps the "counts toward grade" tag and the item-row placement | `counted` / `isItemRow` honour `excluded` | RTL: excluded attendance column → bookkeeping group, no tag |
+| R2-9 | "Not in Blackboard yet" stays collapsed when saved values arrive after mount | Open when values arrive (derive, or an effect on the first non-empty values) | RTL: values after first render → group open |
+| R2-10 | A failed save's alert survives a successful Reset | Reset clears the save mutation's error and vice versa; only the latest action's error shows | RTL both orders |
+| R2-12 | `explanationText` counts children and extra credit as parts ("N of 11 parts"); the muted line names children | Count top-level, non-extra-credit components; the muted line names top-level parts | unit: IST.323 shape reads "of 7 parts" |
+| R2-13 | `latest` CTE in `v_grade_model_items` is materialized (used twice), so a `scheme_course_id` filter cannot push down | **081** `081_grade_model_items_not_materialized.sql`: `create or replace view` with `latest as not materialized (…)`, same columns in the same order, `security_invoker` and grants re-stated, 036 guard re-run | SQL: row count unchanged; `explain` of `where scheme_course_id = 'IST.323'` shows the filter below the join |
+| R2-14 | Serial scheme/components requests; quadratic accumulators; re-sort of pre-sorted history | `Promise.all`; single-pass grouping returning a new object; drop the redundant sort | existing tests unchanged |
+| R2-16 | `web/test/fake-grade-model.ts` + `engineOrFake` now hide a real "not implemented" | Remove; container tests use the real engine | grep: no `fake-grade-model` |
+
+Both: typecheck/build/test green, one commit per finding, push, append "Round 2" to your
+verification note (W-20: 080/081 versions + md5s and SQL outputs; W-19: in the report).
+
 ## Integration (PM)
 
 Merge W-19, then W-20; regenerate `database.types.ts`; `npm ci` (new devDependency); typecheck +

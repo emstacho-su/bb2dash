@@ -161,6 +161,27 @@ export interface ComputedResult {
 
 export type ModelResult = NotComputedResult | ComputedResult;
 
+/** Round 2 (R2-3): an ungraded item whose scenario value the engine will actually use. */
+export interface WhatIfTarget {
+  readonly key: string;
+  readonly unit: 'points' | 'percent';
+  /** Inclusive upper bound: the item's `possible` for points, 100 for percent. */
+  readonly max: number;
+}
+
+/**
+ * Round 2 (R2-3/R2-4): the engine's own view of each item, so screens never re-implement it.
+ * Built from the same item preparation `projectCourse` uses.
+ */
+export interface ItemStates {
+  /** Empty when the course is not computable for any reason other than `nothing_graded`. */
+  readonly whatIfTargets: readonly WhatIfTarget[];
+  /** Muted components, children of a muted parent included. */
+  readonly mutedComponentIds: readonly number[];
+  /** Placeholders dropped as surplus over `countExpected`. */
+  readonly droppedPlaceholderKeys: readonly string[];
+}
+
 export type TargetResult =
   | {
       readonly state: 'needed';

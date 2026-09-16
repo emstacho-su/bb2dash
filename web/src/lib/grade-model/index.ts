@@ -15,7 +15,7 @@ import { unlinkedScoredKeys } from './items';
 import { letterForPct } from './letter';
 import { componentResults, evaluateCourse, standingsOf, usesHypotheticals } from './project';
 import { solve } from './solve';
-import type { ModelInput, ModelResult, SchemeInput, TargetResult } from './types';
+import type { ItemStates, ModelInput, ModelResult, SchemeInput, TargetResult } from './types';
 
 export * from './types';
 
@@ -40,4 +40,10 @@ export function solveTarget(input: ModelInput, letter: string): TargetResult {
 
 export function letterFor(pct: number, scheme: SchemeInput): string | null {
   return letterForPct(pct, scheme);
+}
+
+/** Round 2 (R2-3/R2-4). Frozen signature; W-19 replaces the stub body. */
+export function itemStates(input: ModelInput): ItemStates {
+  void input;
+  throw new Error('grade-model: itemStates not implemented (W-19 round 2)');
 }
