@@ -149,43 +149,49 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
   return (
     <>
       <tr className={styles.row} data-column-kind={row.column_kind}>
+        {/* Every th/td stays a table cell (round 3, R3-1): the flex layout lives
+            on the wrapper inside, so the columns line up with their headers. */}
         <th scope="row" className={styles.nameCell}>
-          {row.assignment_id ? (
-            <Link className={styles.itemLink} href={itemQuery({ kind: 'assignment', id: row.assignment_id })}>
-              {row.name}
-            </Link>
-          ) : (
-            <span className={styles.itemName}>{row.name}</span>
-          )}
-          {counted && (
-            <span className={tokens.tagOutline} title="Its linked assignment has a grade component.">
-              counts toward grade
-            </span>
-          )}
-          {ambiguous && (
-            <span className={styles.note}>
-              linked to {row.linked_assignments} assignments — no single item to open
-            </span>
-          )}
-          {linkState && extras.links && (
-            <LinkColumnControl
-              state={linkState}
-              options={extras.links.options}
-              columnName={row.name}
-              onChange={extras.links.onChange}
-              pending={extras.links.pendingKey === key}
-              error={extras.links.errorKey === key ? extras.links.error : null}
-            />
-          )}
+          <div className={styles.nameStack}>
+            {row.assignment_id ? (
+              <Link className={styles.itemLink} href={itemQuery({ kind: 'assignment', id: row.assignment_id })}>
+                {row.name}
+              </Link>
+            ) : (
+              <span className={styles.itemName}>{row.name}</span>
+            )}
+            {counted && (
+              <span className={tokens.tagOutline} title="Its linked assignment has a grade component.">
+                counts toward grade
+              </span>
+            )}
+            {ambiguous && (
+              <span className={styles.note}>
+                linked to {row.linked_assignments} assignments — no single item to open
+              </span>
+            )}
+            {linkState && extras.links && (
+              <LinkColumnControl
+                state={linkState}
+                options={extras.links.options}
+                columnName={row.name}
+                onChange={extras.links.onChange}
+                pending={extras.links.pendingKey === key}
+                error={extras.links.errorKey === key ? extras.links.error : null}
+              />
+            )}
+          </div>
         </th>
 
-        <td className={styles.submissionCell}>
-          <span className={tokens.tagNeutral} title={submission.status ?? 'Blackboard recorded no submission status.'}>
-            {submission.text}
-          </span>
-          {submission.attemptStatus && (
-            <span className={styles.note}>last attempt: {submission.attemptStatus}</span>
-          )}
+        <td>
+          <div className={styles.submissionStack}>
+            <span className={tokens.tagNeutral} title={submission.status ?? 'Blackboard recorded no submission status.'}>
+              {submission.text}
+            </span>
+            {submission.attemptStatus && (
+              <span className={styles.note}>last attempt: {submission.attemptStatus}</span>
+            )}
+          </div>
         </td>
 
         <td className={styles.scoreCell}>
