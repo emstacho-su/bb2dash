@@ -21,6 +21,12 @@
 // keeps its class-start instant and a date-only quiz its 23:59, on both sides of the 2026-11-01
 // fall-back, and a meeting- or attendance-typed row never reaches the pusher at all.
 
+//
+// v4 (Phase 11b) adds the planner arm. Its tests are at the end of the file: one row per kind,
+// an edit, a delete, a task ticked done, a mixed run with per-arm counts, zero writes on a
+// re-run for both arms, the Los Angeles, all-day and online bodies, and the golden test that the
+// assignment arm's body and hash are still v3's.
+
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -30,15 +36,27 @@ import {
   calendarEventId,
   type CalendarEventBody,
   colourIdForCourse,
+  colourIdForKind,
   contentHash,
   DEFAULT_WEB_BASE_URL,
+  DONE_PREFIX,
   type GoogleCalendar,
   type GoogleResult,
   itemLink,
+  KIND_COLOUR_IDS,
+  plannerEventId,
   type PushItem,
   stableStringify,
 } from "./google.ts";
-import { isRateLimited, type MirrorRow, type MirrorStore, runPush } from "./push.ts";
+import {
+  emptyCounts,
+  isRateLimited,
+  mirrorKey,
+  type MirrorRow,
+  type MirrorStore,
+  type PushCounts,
+  runPush,
+} from "./push.ts";
 
 const CALENDAR = "bb2dash-test@group.calendar.google.com";
 const OLD_CALENDAR = "previous-calendar@group.calendar.google.com";
@@ -49,8 +67,34 @@ const WEB_BASE = "https://bb2dash.test";
 // Fixtures. event_at values are verbatim from the SQL fixture transaction (verification §4).
 // ------------------------------------------------------------------------------------------
 
+/** The planner columns of v_calendar_push_items v2, all null on an assignment row (068). */
+const NO_PLANNER_COLUMNS = {
+  kind: null,
+  kind_label: null,
+  summary: null,
+  starts_at: null,
+  ends_at: null,
+  time_zone: null,
+  all_day: null,
+  start_date: null,
+  end_date: null,
+  week_start: null,
+  location_kind: null,
+  location: null,
+  notes: null,
+  done: null,
+} as const;
+
+/**
+ * An assignment-arm row. event_id is left empty ("not supplied") so the fixtures stay
+ * synchronous; the pusher only cross-checks a view id that is present, and the tests at the end
+ * of the file cover a present one, matching and not.
+ */
 function item(over: Partial<PushItem> & { assignment_id: string }): PushItem {
   return {
+    source: "assignment",
+    ref_id: over.assignment_id,
+    event_id: "",
     course_id: "IST.323",
     course_code: "IST 323",
     title: "Untitled",
@@ -61,8 +105,19 @@ function item(over: Partial<PushItem> & { assignment_id: string }): PushItem {
     points_possible: null,
     status: "not_started",
     absent_from_blackboard: false,
+    ...NO_PLANNER_COLUMNS,
     ...over,
   };
+}
+
+/** The six v3 totals, expanded to the full v4 counts object for a run with assignments only. */
+function assignmentsOnly(totals: Partial<Record<string, number>>): PushCounts {
+  const counts = emptyCounts() as unknown as Record<string, number>;
+  for (const [verb, n] of Object.entries(totals)) {
+    counts[verb] = n ?? 0;
+    counts[`${verb}_assignments`] = n ?? 0;
+  }
+  return counts as unknown as PushCounts;
 }
 
 /** Four items: two syllabus-only, two Blackboard-linked. */
@@ -153,31 +208,36 @@ function fakeGoogle(
   };
 }
 
+/** An in-memory calendar_events, keyed like the table: (source, ref_id). */
 function memoryStore(): { store: MirrorStore; rows: Map<string, MirrorRow> } {
   const rows = new Map<string, MirrorRow>();
   return {
     rows,
     store: {
       saveSuccess(row) {
-        rows.set(row.assignment_id, { ...row });
+        rows.set(mirrorKey(row.source, row.ref_id), { ...row });
         return Promise.resolve();
       },
-      saveFailure(assignmentId) {
+      saveFailure(source, refId) {
         // The real store updates last_error on an existing row and never creates one.
-        return Promise.resolve(void assignmentId);
+        return Promise.resolve(void mirrorKey(source, refId));
       },
-      markDeleting(assignmentId) {
-        const row = rows.get(assignmentId);
-        if (row) rows.set(assignmentId, { ...row, state: "deleting" });
+      markDeleting(source, refId) {
+        const key = mirrorKey(source, refId);
+        const row = rows.get(key);
+        if (row) rows.set(key, { ...row, state: "deleting" });
         return Promise.resolve();
       },
-      remove(assignmentId) {
-        rows.delete(assignmentId);
+      remove(source, refId) {
+        rows.delete(mirrorKey(source, refId));
         return Promise.resolve();
       },
     },
   };
 }
+
+/** A mirror key for an assignment row, for the v3 tests that address rows by assignment id. */
+const assignmentKey = (assignmentId: string) => mirrorKey("assignment", assignmentId);
 
 const noSleep = () => Promise.resolve();
 
@@ -201,14 +261,14 @@ test("run 1: an empty mirror inserts one event per desired item", async () => {
   });
 
   assert.equal(result.status, "ok");
-  assert.deepEqual(result.counts, {
+  assert.deepEqual(result.counts, assignmentsOnly({
     scanned: 4,
     inserted: 4,
     patched: 0,
     deleted: 0,
     unchanged: 0,
     failed: 0,
-  });
+  }));
   assert.equal(google.calls.filter((c) => c.op === "insert").length, 4);
   assert.equal(google.calls.filter((c) => c.op !== "insert").length, 0);
   assert.equal(rows.size, 4);
@@ -293,14 +353,14 @@ test("run 3: one date change patches one event, one removed row deletes one", as
   });
 
   assert.equal(result.status, "ok");
-  assert.deepEqual(result.counts, {
+  assert.deepEqual(result.counts, assignmentsOnly({
     scanned: 3,
     inserted: 0,
     patched: 1,
     deleted: 1,
     unchanged: 2,
     failed: 0,
-  });
+  }));
 
   const patched = google.calls.filter((c) => c.op === "patch");
   const deleted = google.calls.filter((c) => c.op === "delete");
@@ -308,7 +368,7 @@ test("run 3: one date change patches one event, one removed row deletes one", as
   assert.equal(deleted.length, 1);
   assert.equal(patched[0].id, await calendarEventId("IST.323/quiz-09"));
   assert.equal(deleted[0].id, await calendarEventId("IST.352/knowledge-check-09-14-26"));
-  assert.equal(rows.has("IST.352/knowledge-check-09-14-26"), false);
+  assert.equal(rows.has(assignmentKey("IST.352/knowledge-check-09-14-26")), false);
   assert.equal(rows.size, 3);
 });
 
@@ -349,18 +409,18 @@ test("run 4: an absent Blackboard item is deleted, syllabus-only items are left 
   });
 
   assert.equal(result.status, "ok");
-  assert.deepEqual(result.counts, {
+  assert.deepEqual(result.counts, assignmentsOnly({
     scanned: 4,
     inserted: 0,
     patched: 0,
     deleted: 1,
     unchanged: 3,
     failed: 0,
-  });
+  }));
   assert.deepEqual(google.calls.map((c) => c.op), ["delete"]);
   assert.equal(google.calls[0].id, await calendarEventId("IST.352/knowledge-check-09-14-26"));
   assert.equal(rows.size, 3);
-  assert.equal(rows.has("IST.323/exam-2"), true);
+  assert.equal(rows.has(assignmentKey("IST.323/exam-2")), true);
 });
 
 // ------------------------------------------------------------------------------------------
@@ -670,14 +730,14 @@ test("repointing the calendar deletes on the old id and inserts on the new", asy
     sleep: noSleep,
   });
 
-  assert.deepEqual(result.counts, {
+  assert.deepEqual(result.counts, assignmentsOnly({
     scanned: 4,
     inserted: 4,
     patched: 0,
     deleted: 4,
     unchanged: 0,
     failed: 0,
-  });
+  }));
   // Order matters: the old events come off before the new ones go on, or the mirror rows that
   // say where the old ones live are overwritten first.
   assert.deepEqual(
@@ -722,7 +782,7 @@ test("an orphan Google refuses to delete is retried next run, not re-created", a
   assert.equal(result.counts.inserted, 0);
   assert.equal(result.status, "partial");
   assert.equal(
-    rows.get("IST.323/exam-2")?.calendar_id,
+    rows.get(assignmentKey("IST.323/exam-2"))?.calendar_id,
     OLD_CALENDAR,
     "the row must keep pointing at the old calendar so the next run can retry the delete",
   );
@@ -801,7 +861,7 @@ test("an item deleted and then re-added is un-cancelled, not silently invisible"
 
   assert.deepEqual(back.calls.map((c) => c.op), ["insert", "patch"]);
   const patched = back.calls[1];
-  assert.equal(patched.id, await calendarEventId(only.assignment_id));
+  assert.equal(patched.id, await calendarEventId(only.ref_id));
   assert.equal(patched.body?.status, "confirmed", "the 409 fallback must un-cancel the event");
   assert.equal(result.counts.patched, 1);
   assert.equal(result.counts.failed, 0);
@@ -836,4 +896,443 @@ test("every write carries status confirmed, insert and patch alike", async () =>
   const bodies = [...first.calls, ...second.calls].filter((c) => c.body);
   assert.equal(bodies.length, 8);
   assert.ok(bodies.every((c) => c.body?.status === "confirmed"));
+});
+
+// ==========================================================================================
+// v4 — the planner arm (Phase 11b, migration 068, K-5..K-7)
+// ==========================================================================================
+
+/** Kind labels exactly as migration 068's view writes them (K-6). */
+const KIND_LABELS: Readonly<Record<string, string>> = {
+  event: "Event",
+  task: "Task",
+  out_of_office: "Out of office",
+  focus_time: "Focus time",
+  working_location: "Working location",
+  appointment_slot: "Appointment slot",
+};
+
+const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+
+/**
+ * A planner-arm row shaped like 068's output. summary is what SQL builds —
+ * "[<course code> · ]<kind label> · <title>" — so a test that sets a course passes it too.
+ */
+function plannerItem(over: Partial<PushItem> & { ref_id: string; kind: string }): PushItem {
+  const label = KIND_LABELS[over.kind];
+  const title = over.title ?? `bb2dash test · ${over.kind}`;
+  const startsAt = over.starts_at ?? "2026-09-21T17:00:00+00:00";
+  return {
+    source: "planner",
+    event_id: "",
+    assignment_id: null,
+    course_id: null,
+    course_code: null,
+    title,
+    type: null,
+    due_at: null,
+    due_date: null,
+    event_at: startsAt,
+    points_possible: null,
+    status: null,
+    absent_from_blackboard: false,
+    kind_label: label,
+    summary: `${label} · ${title}`,
+    starts_at: startsAt,
+    ends_at: "2026-09-21T18:00:00+00:00",
+    time_zone: "America/New_York",
+    all_day: false,
+    start_date: null,
+    end_date: null,
+    week_start: "2026-09-21",
+    location_kind: null,
+    location: null,
+    notes: null,
+    done: over.kind === "task" ? false : null,
+    ...over,
+  };
+}
+
+/** One planner row per kind, uuids 1..6. */
+function onePerKind(): PushItem[] {
+  return Object.keys(KIND_LABELS).map((kind, i) => plannerItem({ ref_id: uuid(i + 1), kind }));
+}
+
+/** A mirror already holding `desired`, as after a first successful run. */
+async function seeded(desired: PushItem[]) {
+  const mirror = memoryStore();
+  await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired,
+    mirror: [],
+    google: fakeGoogle().client,
+    store: mirror.store,
+    sleep: noSleep,
+  });
+  return mirror;
+}
+
+test("planner: one row per kind inserts six events, each with its kind's label and colour", async () => {
+  const google = fakeGoogle();
+  const { store, rows } = memoryStore();
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: onePerKind(),
+    mirror: [],
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.counts.inserted_planner, 6);
+  assert.equal(result.counts.inserted_assignments, 0);
+  assert.equal(google.calls.length, 6);
+  assert.ok(google.calls.every((c) => c.op === "insert"));
+
+  for (const [i, kind] of Object.keys(KIND_LABELS).entries()) {
+    const ref = uuid(i + 1);
+    const body = google.calls[i].body!;
+    assert.equal(body.id, await plannerEventId(ref));
+    assert.match(body.id, /^pe[0-9a-f]{32}$/);
+    assert.equal(body.summary, `${KIND_LABELS[kind]} · bb2dash test · ${kind}`);
+    assert.equal(body.colorId, KIND_COLOUR_IDS[kind]);
+    assert.ok(body.description.includes(`bb2dash: ${KIND_LABELS[kind]}`));
+    assert.ok(body.description.endsWith(`${WEB_BASE}/planner?week=2026-09-21`));
+    assert.deepEqual(body.extendedProperties.private, { app: APP_PROPERTY, planner_event_id: ref });
+    assert.equal(body.status, "confirmed");
+    assert.equal(rows.get(mirrorKey("planner", ref))?.source, "planner");
+  }
+  assert.equal(rows.size, 6);
+});
+
+test("planner: the six kinds have six distinct fixed colours, and the kind wins over a course", () => {
+  const colours = Object.keys(KIND_LABELS).map((kind) => colourIdForKind(kind));
+  assert.equal(new Set(colours).size, 6);
+  assert.ok(colours.every((c) => Number(c) >= 1 && Number(c) <= 11));
+  assert.equal(colourIdForKind("nonsense"), "8");
+
+  const withCourse = plannerItem({
+    ref_id: uuid(1),
+    kind: "focus_time",
+    course_id: "IST.323",
+    course_code: "IST 323",
+    title: "Exam prep",
+    summary: "IST 323 · Focus time · Exam prep",
+  });
+  const body = buildEventBody(withCourse, "pex", WEB_BASE);
+  assert.equal(body.colorId, KIND_COLOUR_IDS.focus_time);
+  assert.notEqual(body.colorId, colourIdForCourse("IST.323"));
+  assert.equal(body.summary, "IST 323 · Focus time · Exam prep");
+});
+
+test("planner: an edited time patches exactly one event", async () => {
+  const { store, rows } = await seeded(onePerKind());
+  const edited = onePerKind().map((i) =>
+    i.ref_id === uuid(1)
+      ? { ...i, starts_at: "2026-09-21T19:00:00+00:00", ends_at: "2026-09-21T20:00:00+00:00" }
+      : i
+  );
+  const google = fakeGoogle();
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: edited,
+    mirror: [...rows.values()],
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+  assert.deepEqual(
+    google.calls.map((c) => [c.op, c.id]),
+    [["patch", await plannerEventId(uuid(1))]],
+  );
+  assert.equal(result.counts.patched_planner, 1);
+  assert.equal(result.counts.unchanged_planner, 5);
+  const start = google.calls[0].body!.start as { dateTime: string };
+  assert.equal(start.dateTime, "2026-09-21T19:00:00Z");
+});
+
+test("planner: a deleted planner event deletes exactly one Google event", async () => {
+  const { store, rows } = await seeded(onePerKind());
+  const google = fakeGoogle();
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: onePerKind().filter((i) => i.ref_id !== uuid(3)),
+    mirror: [...rows.values()],
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+  assert.deepEqual(
+    google.calls.map((c) => [c.op, c.id]),
+    [["delete", await plannerEventId(uuid(3))]],
+  );
+  assert.equal(result.counts.deleted_planner, 1);
+  assert.equal(result.counts.deleted_assignments, 0);
+  assert.equal(rows.has(mirrorKey("planner", uuid(3))), false);
+  assert.equal(rows.size, 5);
+});
+
+test("planner: a task marked done patches once and its title gains the check mark", async () => {
+  const { store, rows } = await seeded(onePerKind());
+  const done = onePerKind().map((i) => (i.kind === "task" ? { ...i, done: true } : i));
+  const google = fakeGoogle();
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: done,
+    mirror: [...rows.values()],
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+  assert.equal(google.calls.length, 1);
+  assert.equal(google.calls[0].op, "patch");
+  assert.equal(google.calls[0].body!.summary, `${DONE_PREFIX}Task · bb2dash test · task`);
+  assert.equal(DONE_PREFIX, "✓ ");
+  assert.equal(result.counts.patched_planner, 1);
+
+  // done only decorates a task; a stray true on another kind (the database forbids it) does not.
+  const notTask = buildEventBody(
+    plannerItem({ ref_id: uuid(9), kind: "event", done: true }),
+    "pex",
+    WEB_BASE,
+  );
+  assert.ok(!notTask.summary.startsWith(DONE_PREFIX));
+});
+
+test("planner: a mixed run keeps both arms' counts separate", async () => {
+  // Mirror holds the four assignments and six planner events. Then: one assignment date moves,
+  // one assignment disappears, one planner event is edited, one is deleted, one new one is added.
+  const { store, rows } = await seeded([...baseDesired(), ...onePerKind()]);
+  const desired = [
+    ...baseDesired()
+      .filter((i) => i.assignment_id !== "IST.466/major-project-2-su-it")
+      .map((i) =>
+        i.assignment_id === "IST.323/quiz-09" ? { ...i, event_at: "2026-10-29T03:59:00+00:00" } : i
+      ),
+    ...onePerKind()
+      .filter((i) => i.ref_id !== uuid(2))
+      .map((i) => (i.ref_id === uuid(5) ? { ...i, notes: "bring laptop" } : i)),
+    plannerItem({ ref_id: uuid(7), kind: "event", title: "new one", summary: "Event · new one" }),
+  ];
+  const google = fakeGoogle();
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired,
+    mirror: [...rows.values()],
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+
+  assert.equal(result.status, "ok");
+  assert.deepEqual(result.counts, {
+    scanned: 9,
+    inserted: 1,
+    patched: 2,
+    deleted: 2,
+    unchanged: 6,
+    failed: 0,
+    scanned_assignments: 3,
+    inserted_assignments: 0,
+    patched_assignments: 1,
+    deleted_assignments: 1,
+    unchanged_assignments: 2,
+    failed_assignments: 0,
+    scanned_planner: 6,
+    inserted_planner: 1,
+    patched_planner: 1,
+    deleted_planner: 1,
+    unchanged_planner: 4,
+    failed_planner: 0,
+  });
+  assert.equal(google.calls.length, 5);
+});
+
+test("planner: a re-run with no change issues zero writes on both arms", async () => {
+  const both = () => [...baseDesired(), ...onePerKind()];
+  const { store, rows } = await seeded(both());
+  const google = fakeGoogle();
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: both(),
+    mirror: [...rows.values()],
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+  assert.deepEqual(google.calls, []);
+  assert.equal(result.counts.unchanged_assignments, 4);
+  assert.equal(result.counts.unchanged_planner, 6);
+  for (const verb of ["inserted", "patched", "deleted", "failed"] as const) {
+    assert.equal(result.counts[`${verb}_assignments`], 0, verb);
+    assert.equal(result.counts[`${verb}_planner`], 0, verb);
+  }
+});
+
+test("planner body: an event entered in America/Los_Angeles keeps its instant and its zone", () => {
+  // 09:00-10:00 PDT on Monday 2026-09-21 is 16:00-17:00 UTC and 12:00-13:00 in New York.
+  const la = plannerItem({
+    ref_id: uuid(1),
+    kind: "event",
+    starts_at: "2026-09-21T16:00:00+00:00",
+    ends_at: "2026-09-21T17:00:00+00:00",
+    time_zone: "America/Los_Angeles",
+  });
+  const body = buildEventBody(la, "pex", WEB_BASE);
+  assert.deepEqual(body.start, {
+    dateTime: "2026-09-21T16:00:00Z",
+    timeZone: "America/Los_Angeles",
+    date: null,
+  });
+  assert.deepEqual(body.end, {
+    dateTime: "2026-09-21T17:00:00Z",
+    timeZone: "America/Los_Angeles",
+    date: null,
+  });
+  // The same instant shown in another zone is a different body, so the zone edit is pushed.
+  const ny = buildEventBody({ ...la, time_zone: "America/New_York" }, "pex", WEB_BASE);
+  assert.notEqual(stableStringify(body), stableStringify(ny));
+});
+
+test("planner body: an all-day event sends the exclusive date pair and clears dateTime", () => {
+  // 068's view: start_date / end_date are the local dates, end exclusive (067, K-3).
+  const allDay = plannerItem({
+    ref_id: uuid(3),
+    kind: "out_of_office",
+    starts_at: "2026-09-27T07:00:00+00:00",
+    ends_at: "2026-09-29T07:00:00+00:00",
+    time_zone: "America/Los_Angeles",
+    all_day: true,
+    start_date: "2026-09-27",
+    end_date: "2026-09-29",
+  });
+  const body = buildEventBody(allDay, "pex", WEB_BASE);
+  assert.deepEqual(body.start, { date: "2026-09-27", dateTime: null, timeZone: null });
+  assert.deepEqual(body.end, { date: "2026-09-29", dateTime: null, timeZone: null });
+
+  // An all-day row the view could not date is a failed item, never a guessed event.
+  assert.throws(
+    () => buildEventBody({ ...allDay, start_date: null }, "pex", WEB_BASE),
+    /all-day row without start_date/,
+  );
+});
+
+test("planner body: an online URL goes in location and description; a place in location only", () => {
+  const url = "https://meet.google.com/abc-defg-hij";
+  const online = buildEventBody(
+    plannerItem({
+      ref_id: uuid(4),
+      kind: "appointment_slot",
+      location_kind: "online",
+      location: url,
+      notes: "Office hours",
+      week_start: "2026-09-21",
+    }),
+    "pex",
+    WEB_BASE,
+  );
+  assert.equal(online.location, url);
+  assert.equal(
+    online.description,
+    [
+      "Office hours",
+      "",
+      url,
+      "bb2dash: Appointment slot",
+      `${WEB_BASE}/planner?week=2026-09-21`,
+    ].join("\n"),
+  );
+
+  const inPerson = buildEventBody(
+    plannerItem({
+      ref_id: uuid(5),
+      kind: "working_location",
+      location_kind: "in_person",
+      location: "Bird Library",
+    }),
+    "pex",
+    WEB_BASE,
+  );
+  assert.equal(inPerson.location, "Bird Library");
+  assert.ok(!inPerson.description.includes("Bird Library"));
+
+  // No location is an explicit null, so removing a location in bb2dash clears it in Google.
+  const none = buildEventBody(plannerItem({ ref_id: uuid(6), kind: "event" }), "pex", WEB_BASE);
+  assert.equal(none.location, null);
+  assert.equal(none.description, `bb2dash: Event\n${WEB_BASE}/planner?week=2026-09-21`);
+});
+
+test("planner event ids are deterministic and match migration 068's view", async () => {
+  // The value on the right is what 068's view returned for this uuid in the dry-run on prod.
+  assert.equal(await plannerEventId(uuid(1)), "pe11e594f481958c10e3015d0bf0447a22");
+  assert.match(await plannerEventId(uuid(2)), /^pe[0-9a-v]{32}$/);
+  assert.notEqual(
+    await plannerEventId("IST.323/quiz-03"),
+    await calendarEventId("IST.323/quiz-03"),
+  );
+});
+
+test("a view event_id that disagrees with the computed id fails the item and writes nothing", async () => {
+  const good = { ...baseDesired()[0], event_id: await calendarEventId("IST.323/exam-2") };
+  const bad = plannerItem({ ref_id: uuid(1), kind: "event", event_id: "pe" + "0".repeat(32) });
+  const google = fakeGoogle();
+  const { store, rows } = memoryStore();
+  const result = await runPush({
+    calendarId: CALENDAR,
+    webBaseUrl: WEB_BASE,
+    desired: [good, bad],
+    mirror: [],
+    google: google.client,
+    store,
+    sleep: noSleep,
+  });
+  assert.deepEqual(google.calls.map((c) => c.id), [good.event_id]);
+  assert.equal(result.counts.inserted_assignments, 1);
+  assert.equal(result.counts.failed_planner, 1);
+  assert.equal(result.status, "partial");
+  assert.match(result.errors[0], /differs from computed/);
+  assert.equal(rows.has(mirrorKey("planner", uuid(1))), false);
+});
+
+test("golden: the assignment arm's body and hash are byte-for-byte v3's", async () => {
+  // A real prod row (IST.323/exam-2) as v_calendar_push_items v2 returns it. The expected JSON
+  // and hash were produced by calendar-push v3's google.ts at ddc8bba and equal the content_hash
+  // in prod's calendar_events for this row, so a v4 that drifts by one byte fails here, before
+  // the cut-over push would patch every due-date event on Stack's calendar.
+  const row = item({
+    assignment_id: "IST.323/exam-2",
+    event_id: "bb863233340d4ca3699d9629aeb39bec61",
+    title: "Exam #2",
+    type: "exam",
+    due_date: "2026-10-21",
+    event_at: "2026-10-21T19:45:00+00:00",
+    points_possible: 10,
+    status: "not_started",
+  });
+  const eventId = await calendarEventId("IST.323/exam-2");
+  assert.equal(eventId, row.event_id);
+
+  const body = buildEventBody(row, eventId, DEFAULT_WEB_BASE_URL);
+  const v3Json = '{"colorId":"11","description":"Type: exam\\nPoints: 10\\n' +
+    "https://web-xi-ten-uy9xk6c6p0.vercel.app/?item=assignment:IST.323/exam-2\\n\\n" +
+    'Managed by bb2dash — edits here are overwritten on the next push.",' +
+    '"end":{"dateTime":"2026-10-21T19:45:00Z","timeZone":"America/New_York"},' +
+    '"extendedProperties":{"private":{"app":"bb2dash","assignment_id":"IST.323/exam-2"}},' +
+    '"id":"bb863233340d4ca3699d9629aeb39bec61","reminders":{"useDefault":true},' +
+    '"start":{"dateTime":"2026-10-21T19:45:00Z","timeZone":"America/New_York"},' +
+    '"status":"confirmed","summary":"IST 323 · Exam #2"}';
+  assert.equal(stableStringify(body), v3Json);
+  assert.equal(
+    await contentHash(body),
+    "283cdfd8d886691345208f896160f7b83f8650e9f829812c1bdb40ab6fe208d3",
+  );
+  assert.equal("location" in body, false, "the assignment arm never sends a location key");
 });
