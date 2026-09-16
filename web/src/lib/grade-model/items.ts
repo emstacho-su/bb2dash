@@ -138,35 +138,38 @@ function dueRank(item: CountedItem): number {
 }
 
 /**
- * Order in which placeholders are dropped: latest `dueAt` first.
- * Decision: an unknown due date counts as the latest; ties fall back to the
- * key, descending, so the result never depends on input order.
+ * Order in which placeholders are dropped (Round 2, R2-2): earliest `dueAt`
+ * first, undated (or unparseable) last — the seeded duplicate of a lab that
+ * already has a column goes before a real future lab. Ties fall back to the
+ * key, ascending, so the result never depends on input order.
  */
 function dropOrder(a: CountedItem, b: CountedItem): number {
   const ra = dueRank(a);
   const rb = dueRank(b);
-  if (ra !== rb) return ra < rb ? 1 : -1;
+  if (ra !== rb) return ra < rb ? -1 : 1;
   if (a.key === b.key) return 0;
-  return a.key < b.key ? 1 : -1;
+  return a.key < b.key ? -1 : 1;
 }
 
-/**
- * When a component has more counted items than `countExpected`, drop
- * placeholders first, latest due first. Real columns are never dropped.
- */
+/** The placeholders dropped when a component has more counted items than `countExpected`. */
+export function surplusPlaceholders(
+  items: readonly CountedItem[],
+  countExpected: number | null,
+): readonly CountedItem[] {
+  if (countExpected === null || items.length <= countExpected) return [];
+  return items
+    .filter((item) => item.placeholder)
+    .sort(dropOrder)
+    .slice(0, items.length - countExpected);
+}
+
+/** `items` without the surplus placeholders. Real columns are never dropped. */
 export function withoutSurplusPlaceholders(
   items: readonly CountedItem[],
   countExpected: number | null,
 ): readonly CountedItem[] {
-  if (countExpected === null || items.length <= countExpected) return items;
-  const surplus = items.length - countExpected;
-  const droppable = items
-    .map((item, index) => ({ item, index }))
-    .filter(({ item }) => item.placeholder)
-    .sort((a, b) => dropOrder(a.item, b.item))
-    .slice(0, surplus);
-  const dropped = new Set(droppable.map(({ index }) => index));
-  return items.filter((_, index) => !dropped.has(index));
+  const dropped = new Set(surplusPlaceholders(items, countExpected));
+  return dropped.size === 0 ? items : items.filter((item) => !dropped.has(item));
 }
 
 /**
