@@ -1,8 +1,8 @@
 /**
  * L1 — placeholders (PM call 7) and the placeholder-drop rule: when a
  * component has more counted items than `countExpected`, placeholders are
- * dropped first, latest `dueAt` first (IST.323's seeded `lab-1` beside the real
- * Lab #1 column).
+ * dropped first, earliest `dueAt` first and undated last (Round 2, R2-2:
+ * IST.323's seeded `lab-1` beside the real Lab #1 column goes, `lab-4` stays).
  */
 
 import { describe, expect, it } from 'vitest';
@@ -18,30 +18,35 @@ describe('withoutSurplusPlaceholders', () => {
     item({ key: `asg:IST.323/lab-${n}`, componentId: 16, possible: 5, kind: 'placeholder', dueAt });
   const realLab1 = item({ key: 'col:IST.323:_3560541_1', componentId: 16, linkSource: 'override', possible: 5, dueAt: '2026-09-24T03:59:00Z' });
 
+  it('decision: ties on due date fall back to the key, ascending, whatever the input order', () => {
+    const rows = [lab(3, '2026-10-01T00:00:00Z'), lab(2, '2026-10-01T00:00:00Z'), realLab1];
+    expect(keys(withoutSurplusPlaceholders(countedItems(rows, EMPTY), 2))).toEqual(['asg:IST.323/lab-3', 'col:IST.323:_3560541_1']);
+  });
+
   it.each([
     {
-      name: 'IST.323 labs: real Lab #1 linked beside four seeded placeholders drops one placeholder',
+      name: 'R2-2 live IST.323 shape: Lab #1 column linked to Required Labs (count 4) + lab-1..lab-4 drops lab-1, keeps lab-4',
       rows: [realLab1, lab(1), lab(2), lab(3), lab(4)],
       count: 4,
-      kept: ['col:IST.323:_3560541_1', 'asg:IST.323/lab-1', 'asg:IST.323/lab-2', 'asg:IST.323/lab-3'],
+      kept: ['col:IST.323:_3560541_1', 'asg:IST.323/lab-2', 'asg:IST.323/lab-3', 'asg:IST.323/lab-4'],
     },
     {
-      name: 'latest due date is dropped first',
+      name: 'earliest due date is dropped first',
       rows: [lab(1, '2026-10-01T00:00:00Z'), lab(2, '2026-12-01T00:00:00Z'), lab(3, '2026-11-01T00:00:00Z')],
       count: 2,
-      kept: ['asg:IST.323/lab-1', 'asg:IST.323/lab-3'],
+      kept: ['asg:IST.323/lab-2', 'asg:IST.323/lab-3'],
     },
     {
-      name: 'decision: an unknown due date counts as the latest',
+      name: 'undated placeholders drop last',
       rows: [lab(1, null), lab(2, '2026-12-01T00:00:00Z')],
       count: 1,
-      kept: ['asg:IST.323/lab-2'],
+      kept: ['asg:IST.323/lab-1'],
     },
     {
-      name: 'decision: an unparseable due date counts as unknown',
+      name: 'decision: an unparseable due date counts as undated',
       rows: [lab(1, 'not a date'), lab(2, '2026-12-01T00:00:00Z')],
       count: 1,
-      kept: ['asg:IST.323/lab-2'],
+      kept: ['asg:IST.323/lab-1'],
     },
     {
       name: 'real columns are never dropped, even beyond the count',

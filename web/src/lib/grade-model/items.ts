@@ -21,7 +21,7 @@ const PERCENT_AGGREGATIONS: ReadonlySet<Aggregation> = new Set<Aggregation>([
   'rank_weighted',
   'normalized',
 ]);
-const PERCENT_POSSIBLE = 100;
+export const PERCENT_POSSIBLE = 100;
 
 /** An item that enters arithmetic: possible > 0, not exempt, not excluded. */
 export interface CountedItem {
@@ -50,7 +50,7 @@ export function isCounted(item: ItemInput): boolean {
   return !isBookkeeping(item) && !item.exempt && !item.excluded;
 }
 
-function realScoreOf(item: ItemInput): number | null {
+export function realScoreOf(item: ItemInput): number | null {
   return item.score !== null && Number.isFinite(item.score) ? item.score : null;
 }
 
@@ -89,6 +89,18 @@ function toCounted(item: ItemInput, possible: number, scenario: Scenario): Count
 }
 
 /**
+ * Components that have no children. Round 2 (R2-1): an item linked straight to
+ * a component with children is treated as unlinked — never counted, listed as
+ * unlinked when scored, and no what-if target.
+ */
+export function leafComponentIds(components: readonly ComponentInput[]): ReadonlySet<number> {
+  const parents = new Set(
+    components.filter((c) => c.parentId !== null && c.parentId !== c.id).map((c) => c.parentId as number),
+  );
+  return new Set(components.map((c) => c.id).filter((id) => !parents.has(id)));
+}
+
+/**
  * A1: a placeholder with `possible` null, a confirmed link and a fraction-only
  * aggregation counts, out of 100, once the scenario gives it a value. Without
  * a value (or under `sum` / `manual`, or with an unsure link) it stays bookkeeping.
@@ -98,10 +110,14 @@ function isPercentPlaceholder(
   scenario: Scenario,
   aggregationOf: ReadonlyMap<number, Aggregation>,
 ): boolean {
-  if (item.kind !== 'placeholder' || item.possible !== null || item.exempt || item.excluded) return false;
   const aggregation = item.componentId === null ? undefined : aggregationOf.get(item.componentId);
-  if (aggregation === undefined || !PERCENT_AGGREGATIONS.has(aggregation) || !isConfirmedLink(item)) return false;
-  return scenarioValueFor(item, PERCENT_POSSIBLE, scenario) !== null;
+  return takesPercentValue(item, aggregation) && scenarioValueFor(item, PERCENT_POSSIBLE, scenario) !== null;
+}
+
+/** A1's shape test, without the scenario: `aggregation` is the linked leaf component's, if any. */
+export function takesPercentValue(item: ItemInput, aggregation: Aggregation | undefined): boolean {
+  if (item.kind !== 'placeholder' || item.possible !== null || item.exempt || item.excluded) return false;
+  return aggregation !== undefined && PERCENT_AGGREGATIONS.has(aggregation) && isConfirmedLink(item);
 }
 
 /** Every counted item, in input order, with its effective score. */
@@ -110,7 +126,10 @@ export function countedItems(
   scenario: Scenario,
   components: readonly ComponentInput[] = [],
 ): readonly CountedItem[] {
-  const aggregationOf = new Map(components.map((component) => [component.id, component.aggregation]));
+  const leaves = leafComponentIds(components);
+  const aggregationOf = new Map(
+    components.filter((component) => leaves.has(component.id)).map((component) => [component.id, component.aggregation]),
+  );
   return items.flatMap((item) => {
     if (isCounted(item) && item.possible !== null) return [toCounted(item, item.possible, scenario)];
     return isPercentPlaceholder(item, scenario, aggregationOf) ? [toCounted(item, PERCENT_POSSIBLE, scenario)] : [];
@@ -123,56 +142,64 @@ function dueRank(item: CountedItem): number {
 }
 
 /**
- * Order in which placeholders are dropped: latest `dueAt` first.
- * Decision: an unknown due date counts as the latest; ties fall back to the
- * key, descending, so the result never depends on input order.
+ * Order in which placeholders are dropped (Round 2, R2-2): earliest `dueAt`
+ * first, undated (or unparseable) last — the seeded duplicate of a lab that
+ * already has a column goes before a real future lab. Ties fall back to the
+ * key, ascending, so the result never depends on input order.
  */
 function dropOrder(a: CountedItem, b: CountedItem): number {
   const ra = dueRank(a);
   const rb = dueRank(b);
-  if (ra !== rb) return ra < rb ? 1 : -1;
+  if (ra !== rb) return ra < rb ? -1 : 1;
   if (a.key === b.key) return 0;
-  return a.key < b.key ? 1 : -1;
+  return a.key < b.key ? -1 : 1;
 }
 
-/**
- * When a component has more counted items than `countExpected`, drop
- * placeholders first, latest due first. Real columns are never dropped.
- */
+/** The placeholders dropped when a component has more counted items than `countExpected`. */
+export function surplusPlaceholders(
+  items: readonly CountedItem[],
+  countExpected: number | null,
+): readonly CountedItem[] {
+  if (countExpected === null || items.length <= countExpected) return [];
+  return items
+    .filter((item) => item.placeholder)
+    .sort(dropOrder)
+    .slice(0, items.length - countExpected);
+}
+
+/** `items` without the surplus placeholders. Real columns are never dropped. */
 export function withoutSurplusPlaceholders(
   items: readonly CountedItem[],
   countExpected: number | null,
 ): readonly CountedItem[] {
-  if (countExpected === null || items.length <= countExpected) return items;
-  const surplus = items.length - countExpected;
-  const droppable = items
-    .map((item, index) => ({ item, index }))
-    .filter(({ item }) => item.placeholder)
-    .sort((a, b) => dropOrder(a.item, b.item))
-    .slice(0, surplus);
-  const dropped = new Set(droppable.map(({ index }) => index));
-  return items.filter((_, index) => !dropped.has(index));
+  const dropped = new Set(surplusPlaceholders(items, countExpected));
+  return dropped.size === 0 ? items : items.filter((item) => !dropped.has(item));
 }
 
-/** Counted items per component id, placeholders already dropped. Unlinked items are left out. */
+/**
+ * Counted items per component id, placeholders already dropped. Unlinked items,
+ * and items linked straight to a component with children (R2-1), are left out:
+ * such a component gets an empty list.
+ */
 export function itemsByComponent(
   components: readonly ComponentInput[],
   items: readonly CountedItem[],
 ): ReadonlyMap<number, readonly CountedItem[]> {
+  const leaves = leafComponentIds(components);
   return new Map(
     components.map((component) => {
-      const linked = items.filter((item) => item.componentId === component.id);
+      const linked = leaves.has(component.id) ? items.filter((item) => item.componentId === component.id) : [];
       return [component.id, withoutSurplusPlaceholders(linked, component.countExpected)] as const;
     }),
   );
 }
 
-/** Keys of scored, counted, non-excluded items tied to no known component, in input order. */
+/** Keys of scored, counted, non-excluded items tied to no known leaf component (R2-1), in input order. */
 export function unlinkedScoredKeys(
   components: readonly ComponentInput[],
   items: readonly ItemInput[],
 ): readonly string[] {
-  const ids = new Set(components.map((component) => component.id));
+  const ids = leafComponentIds(components);
   return items
     .filter((item) => isCounted(item) && realScoreOf(item) !== null)
     .filter((item) => item.componentId === null || !ids.has(item.componentId))

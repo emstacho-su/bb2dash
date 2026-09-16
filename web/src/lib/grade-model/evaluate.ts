@@ -102,10 +102,7 @@ function parentState(capacityChildren: readonly NodeOutcome[]): ComponentResult[
   return capacityChildren.every((child) => child.state === 'graded') ? 'graded' : 'partly_graded';
 }
 
-/**
- * A parent computes from its children only. Decision: counted items linked
- * straight to a parent that has children still mute it, but add no arithmetic.
- */
+/** A parent computes from its children only; items linked straight to it are unlinked (R2-1). */
 function parentOutcome(node: ComponentNode, children: readonly NodeOutcome[]): NodeOutcome {
   const active = children.filter((child) => !child.node.muted);
   const capacity = active.filter((child) => !isExtraWithin(child.node, node));
