@@ -83,12 +83,20 @@ function toScenarioRow(row: {
   };
 }
 
-/** Group the bulk reads by scheme course, preserving each list's order. */
+/**
+ * Group the bulk reads by scheme course, preserving each list's order. One
+ * pass over a local map (R2-14: the spread-per-row reduce was quadratic), and a
+ * new object out — the input is never touched.
+ */
 export function groupByCourse<T>(rows: readonly T[], courseOf: (row: T) => string): Record<string, T[]> {
-  return rows.reduce<Record<string, T[]>>(
-    (acc, row) => ({ ...acc, [courseOf(row)]: [...(acc[courseOf(row)] ?? []), row] }),
-    {},
-  );
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const course = courseOf(row);
+    const list = groups.get(course);
+    if (list) list.push(row);
+    else groups.set(course, [row]);
+  }
+  return Object.fromEntries(groups);
 }
 
 /* ---------------------------------------------------------------------------
@@ -102,13 +110,12 @@ export function gradingSchemeOptions(schemeCourseId: string | null) {
     queryFn: async (): Promise<GradeSchemeBundle> => {
       const supabase = getSupabaseBrowserClient();
       const id = schemeCourseId as string;
-      const schemeRes = await supabase.from('grading_schemes').select(SCHEME_COLUMNS).eq('course_id', id).maybeSingle();
+      // The two reads are independent: in parallel (R2-14).
+      const [schemeRes, compRes] = await Promise.all([
+        supabase.from('grading_schemes').select(SCHEME_COLUMNS).eq('course_id', id).maybeSingle(),
+        supabase.from('grade_components').select(COMPONENT_COLUMNS).eq('course_id', id).order('id', { ascending: true }),
+      ]);
       if (schemeRes.error) throw schemeRes.error;
-      const compRes = await supabase
-        .from('grade_components')
-        .select(COMPONENT_COLUMNS)
-        .eq('course_id', id)
-        .order('id', { ascending: true });
       if (compRes.error) throw compRes.error;
       return { scheme: schemeRes.data ?? null, components: compRes.data ?? [] };
     },
@@ -201,21 +208,20 @@ export function gradingSchemesForCoursesOptions(ids: readonly string[]) {
     queryKey: gradeModelKeys.schemesFor(ids),
     queryFn: async (): Promise<Record<string, GradeSchemeBundle>> => {
       const supabase = getSupabaseBrowserClient();
-      const schemeRes = await supabase.from('grading_schemes').select(SCHEME_COLUMNS).in('course_id', ids as string[]);
+      const [schemeRes, compRes] = await Promise.all([
+        supabase.from('grading_schemes').select(SCHEME_COLUMNS).in('course_id', ids as string[]),
+        supabase
+          .from('grade_components')
+          .select(COMPONENT_COLUMNS)
+          .in('course_id', ids as string[])
+          .order('id', { ascending: true }),
+      ]);
       if (schemeRes.error) throw schemeRes.error;
-      const compRes = await supabase
-        .from('grade_components')
-        .select(COMPONENT_COLUMNS)
-        .in('course_id', ids as string[])
-        .order('id', { ascending: true });
       if (compRes.error) throw compRes.error;
-      const schemes: GradingSchemeRow[] = schemeRes.data ?? [];
+      const schemes = new Map<string, GradingSchemeRow>((schemeRes.data ?? []).map((s) => [s.course_id, s]));
       const components = groupByCourse<GradeComponentRow>(compRes.data ?? [], (c) => c.course_id);
       return Object.fromEntries(
-        ids.map((id) => [id, {
-          scheme: schemes.find((s) => s.course_id === id) ?? null,
-          components: components[id] ?? [],
-        }]),
+        ids.map((id) => [id, { scheme: schemes.get(id) ?? null, components: components[id] ?? [] }]),
       );
     },
     enabled: ids.length > 0,

@@ -84,6 +84,17 @@ export interface BulkModelRows {
   readonly scenarios: readonly GradeScenarioRow[] | undefined;
 }
 
+/** Items by scheme course, in one pass. */
+function groupItems(items: readonly GradeModelItemRow[]): ReadonlyMap<string, readonly GradeModelItemRow[]> {
+  const groups = new Map<string, GradeModelItemRow[]>();
+  for (const item of items) {
+    const list = groups.get(item.scheme_course_id);
+    if (list) list.push(item);
+    else groups.set(item.scheme_course_id, [item]);
+  }
+  return groups;
+}
+
 /**
  * One standing state per scheme course for `/grades`. A read that failed is an
  * error on every course (it is the same read); one still in flight is loading.
@@ -94,15 +105,19 @@ export function modelStandingStates(
   loadError: string | null,
 ): Record<string, ModelStandingState> {
   const ready = rows.schemes && rows.items && rows.totals && rows.scenarios;
+  // Indexed once, not searched once per course (R2-14).
+  const itemsBy = groupItems(rows.items ?? []);
+  const totalsBy = new Map((rows.totals ?? []).map((total) => [total.scheme_course_id, total]));
+  const scenariosBy = new Map((rows.scenarios ?? []).map((scenario) => [scenario.course_id, scenario]));
   return Object.fromEntries(
     schemeIds.map((id): [string, ModelStandingState] => {
       if (loadError) return [id, { result: null, components: [], error: loadError, loading: false }];
       if (!ready) return [id, { result: null, components: [], error: null, loading: true }];
       const run = runCourseModel({
         bundle: rows.schemes?.[id] ?? { scheme: null, components: [] },
-        items: (rows.items ?? []).filter((item) => item.scheme_course_id === id),
-        total: (rows.totals ?? []).find((total) => total.scheme_course_id === id) ?? null,
-        scenario: (rows.scenarios ?? []).find((scenario) => scenario.course_id === id) ?? null,
+        items: itemsBy.get(id) ?? [],
+        total: totalsBy.get(id) ?? null,
+        scenario: scenariosBy.get(id) ?? null,
       });
       return [id, { result: run.result, components: run.input?.components ?? [], error: run.error, loading: false }];
     }),

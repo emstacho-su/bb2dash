@@ -239,16 +239,24 @@ export function withItemScore(
  * Score history
  * ------------------------------------------------------------------------ */
 
-/** `v_gradebook_history` rows grouped by column item key, oldest first. */
+/**
+ * `v_gradebook_history` rows grouped by column item key, oldest first. One pass
+ * (R2-14). The query already orders by `seen_at`, so a list is only sorted when
+ * it arrives out of order — a linear check, not a sort of every list.
+ */
 export function historyByColumn<T extends { shell_course_id: string; column_id: string; seen_at: string }>(
   rows: readonly T[],
 ): ReadonlyMap<string, readonly T[]> {
   const grouped = new Map<string, T[]>();
   for (const row of rows) {
     const key = columnItemKey(row.shell_course_id, row.column_id);
-    grouped.set(key, [...(grouped.get(key) ?? []), row]);
+    const list = grouped.get(key);
+    if (list) list.push(row);
+    else grouped.set(key, [row]);
   }
-  return new Map(
-    [...grouped.entries()].map(([key, list]) => [key, [...list].sort((a, b) => a.seen_at.localeCompare(b.seen_at))]),
-  );
+  for (const [key, list] of grouped) {
+    const ordered = list.every((row, i) => i === 0 || list[i - 1].seen_at <= row.seen_at);
+    if (!ordered) grouped.set(key, [...list].sort((a, b) => a.seen_at.localeCompare(b.seen_at)));
+  }
+  return grouped;
 }
