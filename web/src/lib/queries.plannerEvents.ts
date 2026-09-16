@@ -6,9 +6,11 @@
  * nothing here reads or writes `assignments` or `assignment_progress` (Q4).
  *
  * Every write is validated at the boundary with `validatePlannerEvent` — the
- * 067 checks restated — before a request is built, and is optimistic: the week
- * window caches are patched at once, rolled back if the write fails, and
- * refetched when it settles. Saving here is what puts an event on Stack's real
+ * 067 checks restated — before a request is built, and is optimistic: the one
+ * row it touches is patched in every cached week at once, and put back if the
+ * write fails. Rollback is per row, never a whole-cache snapshot, so two writes
+ * in flight together cannot undo each other; the windows are refetched once the
+ * last planner-event write settles. Saving here is what puts an event on Stack's real
  * Google calendar (the push follows within two minutes), so a refused write
  * must never look like it landed.
  *
@@ -39,6 +41,8 @@ import { eventWindowBounds, overlapsWindow } from './planner-events-grid';
 
 export const plannerEventKeys = {
   all: () => ['planner-events'] as const,
+  /** Every planner-event mutation carries this key, so settling can count them. */
+  writes: () => ['planner-events', 'write'] as const,
   /** Every week window — the prefix every write patches and invalidates. */
   windows: () => ['planner-events', 'window'] as const,
   window: (from: string, to: string) => ['planner-events', 'window', from, to] as const,
@@ -94,28 +98,75 @@ export function usePlannerEventsWindow(from: string, to: string) {
  * Cache fan-out
  * ------------------------------------------------------------------------ */
 
-type WindowSnapshot = [QueryKey, PlannerEventRow[] | undefined][];
+/** One row's state in one cached week, before and after an optimistic patch. */
+interface RowChange {
+  key: QueryKey;
+  before: PlannerEventRow | undefined;
+  after: PlannerEventRow | undefined;
+}
 
-/** Apply `edit` to every cached week window; return what was there before. */
-async function patchWindows(
+/** What a write patched, so a failure can put back exactly that row. */
+interface RowPatch {
+  id: string;
+  changes: RowChange[];
+}
+
+const NO_PATCH: RowPatch = { id: '', changes: [] };
+
+/**
+ * Put `next` in every cached week it belongs in (and out of the ones it does
+ * not), or remove row `id` everywhere when `next` is null. Only that row moves.
+ */
+async function patchRow(
   queryClient: QueryClient,
-  edit: (rows: PlannerEventRow[], windowKey: QueryKey) => PlannerEventRow[],
-): Promise<WindowSnapshot> {
+  id: string,
+  next: PlannerEventRow | null,
+): Promise<RowPatch> {
   await queryClient.cancelQueries({ queryKey: plannerEventKeys.windows() });
-  const snapshot = queryClient.getQueriesData<PlannerEventRow[]>({
+  const changes: RowChange[] = [];
+  for (const [key, rows] of queryClient.getQueriesData<PlannerEventRow[]>({
     queryKey: plannerEventKeys.windows(),
-  });
-  for (const [key, rows] of snapshot) {
-    if (rows) queryClient.setQueryData<PlannerEventRow[]>(key, edit(rows, key));
+  })) {
+    if (!rows) continue;
+    const updated = next ? upsertInWindow(rows, next, key) : rows.filter((row) => row.id !== id);
+    // Read `after` back from the cache: structural sharing stores a copy, and
+    // the rollback compares against what is actually there.
+    const stored = queryClient.setQueryData<PlannerEventRow[]>(key, updated);
+    changes.push({
+      key,
+      before: rows.find((row) => row.id === id),
+      after: stored?.find((row) => row.id === id),
+    });
   }
-  return snapshot;
+  return { id, changes };
 }
 
-function restoreWindows(queryClient: QueryClient, snapshot: WindowSnapshot | undefined) {
-  for (const [key, rows] of snapshot ?? []) queryClient.setQueryData(key, rows);
+/**
+ * Undo one write's patch, row by row. Where the row has moved on since (another
+ * write patched it after this one), it is left alone: that write owns it now,
+ * and the refetch on settle has the last word.
+ */
+function rollbackRow(queryClient: QueryClient, patch: RowPatch | undefined) {
+  if (!patch) return;
+  for (const { key, before, after } of patch.changes) {
+    const rows = queryClient.getQueryData<PlannerEventRow[]>(key);
+    if (!rows) continue;
+    if (rows.find((row) => row.id === patch.id) !== after) continue;
+    const without = rows.filter((row) => row.id !== patch.id);
+    queryClient.setQueryData<PlannerEventRow[]>(
+      key,
+      before ? upsertInWindow(without, before, key) : without,
+    );
+  }
 }
 
-function invalidateWindows(queryClient: QueryClient) {
+/**
+ * Refetch the weeks once no other planner-event write is still in flight — a
+ * refetch landing mid-write would wipe that write's optimistic row. During
+ * `onSettled` the settling mutation still counts as pending, hence `<= 1`.
+ */
+function invalidateWhenIdle(queryClient: QueryClient) {
+  if (queryClient.isMutating({ mutationKey: plannerEventKeys.writes() }) > 1) return;
   void queryClient.invalidateQueries({ queryKey: plannerEventKeys.all() });
 }
 
@@ -157,15 +208,12 @@ function writableColumns(row: PlannerEventRow): PlannerEventDraft {
  * Create
  * ------------------------------------------------------------------------ */
 
-interface CreateContext {
-  snapshot: WindowSnapshot;
-  optimisticId: string | null;
-}
 
 export function useCreatePlannerEvent() {
   const queryClient = useQueryClient();
 
-  return useMutation<PlannerEventRow, Error, PlannerEventDraft, CreateContext>({
+  return useMutation<PlannerEventRow, Error, PlannerEventDraft, RowPatch>({
+    mutationKey: plannerEventKeys.writes(),
     mutationFn: async (draft) => {
       const value = validated(draft);
       const supabase = getSupabaseBrowserClient();
@@ -180,7 +228,7 @@ export function useCreatePlannerEvent() {
 
     onMutate: async (draft) => {
       const result = validatePlannerEvent(draft);
-      if (!result.ok) return { snapshot: [], optimisticId: null };
+      if (!result.ok) return NO_PATCH;
       const now = new Date().toISOString();
       const optimistic: PlannerEventRow = {
         ...result.value,
@@ -188,10 +236,7 @@ export function useCreatePlannerEvent() {
         created_at: now,
         updated_at: now,
       };
-      const snapshot = await patchWindows(queryClient, (rows, key) =>
-        upsertInWindow(rows, optimistic, key),
-      );
-      return { snapshot, optimisticId: optimistic.id };
+      return patchRow(queryClient, optimistic.id, optimistic);
     },
 
     onSuccess: (row, _draft, context) => {
@@ -200,12 +245,12 @@ export function useCreatePlannerEvent() {
         queryKey: plannerEventKeys.windows(),
       })) {
         if (!rows) continue;
-        queryClient.setQueryData(key, upsertInWindow(rows, row, key, context?.optimisticId ?? row.id));
+        queryClient.setQueryData(key, upsertInWindow(rows, row, key, context?.id || row.id));
       }
     },
 
-    onError: (_error, _draft, context) => restoreWindows(queryClient, context?.snapshot),
-    onSettled: () => invalidateWindows(queryClient),
+    onError: (_error, _draft, context) => rollbackRow(queryClient, context),
+    onSettled: () => invalidateWhenIdle(queryClient),
   });
 }
 
@@ -234,7 +279,8 @@ function mergedUpdate({ current, patch }: PlannerEventUpdate) {
 export function useUpdatePlannerEvent() {
   const queryClient = useQueryClient();
 
-  return useMutation<PlannerEventRow, Error, PlannerEventUpdate, { snapshot: WindowSnapshot }>({
+  return useMutation<PlannerEventRow, Error, PlannerEventUpdate, RowPatch>({
+    mutationKey: plannerEventKeys.writes(),
     mutationFn: async (update) => {
       const { columns } = mergedUpdate(update);
       if (Object.keys(columns).length === 0) return update.current;
@@ -254,16 +300,14 @@ export function useUpdatePlannerEvent() {
       try {
         next = { ...update.current, ...mergedUpdate(update).value };
       } catch {
-        return { snapshot: [] };
+        // mutationFn re-validates and throws; there is nothing to patch.
+        return NO_PATCH;
       }
-      const snapshot = await patchWindows(queryClient, (rows, key) =>
-        upsertInWindow(rows, next, key),
-      );
-      return { snapshot };
+      return patchRow(queryClient, next.id, next);
     },
 
-    onError: (_error, _update, context) => restoreWindows(queryClient, context?.snapshot),
-    onSettled: () => invalidateWindows(queryClient),
+    onError: (_error, _update, context) => rollbackRow(queryClient, context),
+    onSettled: () => invalidateWhenIdle(queryClient),
   });
 }
 
@@ -274,7 +318,8 @@ export function useUpdatePlannerEvent() {
 export function useDeletePlannerEvent() {
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, Pick<PlannerEventRow, 'id'>, { snapshot: WindowSnapshot }>({
+  return useMutation<void, Error, Pick<PlannerEventRow, 'id'>, RowPatch>({
+    mutationKey: plannerEventKeys.writes(),
     mutationFn: async (row) => {
       if (typeof row.id !== 'string' || row.id === '' || isOptimisticEvent(row)) {
         throw new Error('This event has not been saved yet, so there is nothing to delete.');
@@ -291,14 +336,9 @@ export function useDeletePlannerEvent() {
       }
     },
 
-    onMutate: async (row) => {
-      const snapshot = await patchWindows(queryClient, (rows) =>
-        rows.filter((existing) => existing.id !== row.id),
-      );
-      return { snapshot };
-    },
+    onMutate: (row) => patchRow(queryClient, row.id, null),
 
-    onError: (_error, _row, context) => restoreWindows(queryClient, context?.snapshot),
-    onSettled: () => invalidateWindows(queryClient),
+    onError: (_error, _row, context) => rollbackRow(queryClient, context),
+    onSettled: () => invalidateWhenIdle(queryClient),
   });
 }

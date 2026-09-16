@@ -5,7 +5,8 @@
  *   * every read and write reaches `planner_events` and nothing else — never
  *     `assignments` or `assignment_progress` (Q4);
  *   * a draft the database would refuse is refused here first, with no request;
- *   * writes are optimistic on every cached week window and roll back on error;
+ *   * writes are optimistic on every cached week window and roll back on error —
+ *     only the row they touched, so overlapping writes do not undo each other;
  *   * the task checkbox's update sends `done` alone.
  *
  * Nothing touches the network, so nothing can reach Stack's Google calendar.
@@ -26,6 +27,8 @@ const stub = vi.hoisted(() => ({
   calls: [] as Call[],
   /** What the terminal await resolves to, per operation. */
   result: { data: null as unknown, error: null as { message: string } | null },
+  /** Per-request results, taken in call order; `result` once these run out. */
+  results: [] as { data: unknown; error: { message: string } | null }[],
   /** When set, the terminal await waits on this promise first. */
   gate: null as Promise<void> | null,
 }));
@@ -36,8 +39,10 @@ function builder(table: string) {
     return chain;
   };
   const settle = async () => {
+    // Taken when the request is made, not when it resolves.
+    const result = stub.results.shift() ?? stub.result;
     if (stub.gate) await stub.gate;
-    return stub.result;
+    return result;
   };
   const chain: Record<string, unknown> = {
     select: record('select'),
@@ -107,6 +112,7 @@ function holdWrites(): () => void {
 beforeEach(() => {
   stub.calls = [];
   stub.result = { data: null, error: null };
+  stub.results = [];
   stub.gate = null;
 });
 
@@ -306,5 +312,124 @@ describe('useDeletePlannerEvent', () => {
     result.current.mutate(makePlannerEvent());
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toMatch(/not found/);
+  });
+});
+
+describe('overlapping writes (R2-5)', () => {
+  const A = makePlannerEvent({ id: 'aaaaaaaa-0000-4000-8000-000000000001', title: 'Advising' });
+  const B = makePlannerEvent({
+    id: 'bbbbbbbb-0000-4000-8000-000000000002',
+    title: 'Study group',
+    starts_at: '2026-09-17T13:00:00.000Z',
+    ends_at: '2026-09-17T14:00:00.000Z',
+  });
+
+  function titles(queryClient: QueryClient) {
+    return queryClient.getQueryData<{ title: string }[]>(WEEK_KEY)?.map((row) => row.title);
+  }
+
+  it('rolls back only the failed row: a second write in flight keeps its change', async () => {
+    const queryClient = client();
+    queryClient.setQueryData(WEEK_KEY, [A, B]);
+    const open = holdWrites();
+    stub.results = [
+      { data: null, error: { message: 'first refused' } },
+      { data: { ...B, title: 'Study group (moved)' }, error: null },
+    ];
+    const first = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(queryClient) });
+    const second = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(queryClient) });
+
+    first.result.current.mutate({ current: A, patch: { title: 'Advising (renamed)' } });
+    await waitFor(() => expect(titles(queryClient)).toContain('Advising (renamed)'));
+    second.result.current.mutate({ current: B, patch: { title: 'Study group (moved)' } });
+    await waitFor(() => expect(titles(queryClient)).toContain('Study group (moved)'));
+
+    open();
+    await waitFor(() => expect(first.result.current.isError).toBe(true));
+    await waitFor(() => expect(second.result.current.isSuccess).toBe(true));
+
+    expect(titles(queryClient)).toEqual(['Advising', 'Study group (moved)']);
+  });
+
+  it('a failed delete puts its row back without dropping a create made meanwhile', async () => {
+    const queryClient = client();
+    queryClient.setQueryData(WEEK_KEY, [A]);
+    const open = holdWrites();
+    stub.results = [
+      { data: null, error: { message: 'delete refused' } },
+      { data: B, error: null },
+    ];
+    const remove = renderHook(() => useDeletePlannerEvent(), { wrapper: wrapper(queryClient) });
+    const create = renderHook(() => useCreatePlannerEvent(), { wrapper: wrapper(queryClient) });
+
+    remove.result.current.mutate(A);
+    await waitFor(() => expect(titles(queryClient)).toEqual([]));
+    create.result.current.mutate(makePlannerEventDraft({
+      title: 'Study group',
+      starts_at: B.starts_at,
+      ends_at: B.ends_at,
+    }));
+    await waitFor(() => expect(titles(queryClient)).toEqual(['Study group']));
+
+    open();
+    await waitFor(() => expect(remove.result.current.isError).toBe(true));
+    await waitFor(() => expect(create.result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData<{ id: string }[]>(WEEK_KEY)?.map((row) => row.id)).toEqual([
+      A.id,
+      B.id,
+    ]);
+  });
+
+  it('leaves a row alone when a later write on the same row is still in flight', async () => {
+    const queryClient = client();
+    queryClient.setQueryData(WEEK_KEY, [A]);
+    const open = holdWrites();
+    stub.results = [
+      { data: null, error: { message: 'first refused' } },
+      { data: { ...A, title: 'Second title' }, error: null },
+    ];
+    const first = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(queryClient) });
+    const second = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(queryClient) });
+
+    first.result.current.mutate({ current: A, patch: { title: 'First title' } });
+    await waitFor(() => expect(titles(queryClient)).toEqual(['First title']));
+    second.result.current.mutate({ current: A, patch: { title: 'Second title' } });
+    await waitFor(() => expect(titles(queryClient)).toEqual(['Second title']));
+
+    open();
+    await waitFor(() => expect(first.result.current.isError).toBe(true));
+    expect(titles(queryClient)).toEqual(['Second title']);
+    await waitFor(() => expect(second.result.current.isSuccess).toBe(true));
+  });
+
+  it('waits for the last write to settle before marking the weeks stale', async () => {
+    const queryClient = client();
+    queryClient.setQueryData(WEEK_KEY, [A, B]);
+    let openFirst = () => {};
+    let openSecond = () => {};
+    const firstGate = new Promise<void>((resolve) => (openFirst = resolve));
+    const secondGate = new Promise<void>((resolve) => (openSecond = resolve));
+    stub.results = [
+      { data: { ...A, done: null }, error: null },
+      { data: { ...B }, error: null },
+    ];
+    const first = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(queryClient) });
+    const second = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(queryClient) });
+
+    stub.gate = firstGate;
+    first.result.current.mutate({ current: A, patch: { title: 'A2' } });
+    await waitFor(() => expect(opsOf('single')).toHaveLength(1));
+    stub.gate = secondGate;
+    second.result.current.mutate({ current: B, patch: { title: 'B2' } });
+    await waitFor(() => expect(opsOf('single')).toHaveLength(2));
+
+    openFirst();
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryState(WEEK_KEY)?.isInvalidated).toBe(false);
+
+    openSecond();
+    await waitFor(() => expect(second.result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(queryClient.getQueryState(WEEK_KEY)?.isInvalidated).toBe(true));
   });
 });
