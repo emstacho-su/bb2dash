@@ -11,6 +11,12 @@
 //
 // Nothing in this file reads Deno globals or remote modules, so the same source runs under
 // `node --test`.
+//
+// v4 (Phase 11b) adds the planner arm beside the assignment arm. The rule that shapes every
+// line below: THE ASSIGNMENT BODY IS BYTE-FOR-BYTE v3's. Its content_hash is what tells the
+// pusher an event is already right, so one changed character in that body would patch every
+// due-date event on Stack's calendar. buildAssignmentEventBody is v3's buildEventBody unchanged,
+// and a golden test pins its canonical JSON and hash for a real prod row.
 
 /** Google's eleven event colours, by the id the Calendar API expects. */
 export const GOOGLE_EVENT_COLOURS: Readonly<Record<string, string>> = Object.freeze({
@@ -48,6 +54,25 @@ export function colourIdForCourse(courseId: string): string {
   return COURSE_COLOUR_IDS[courseId] ?? DEFAULT_COLOUR_ID;
 }
 
+// Q5 and K-6: on a planner event the KIND sets the colour, whether or not a course is linked
+// (the course code still leads the title). Google has eleven colours and seven are taken by
+// courses, so a clash is unavoidable; the three the course map leaves free (Blueberry, Lavender,
+// Flamingo) go to the three kinds Stack creates most, and the other three reuse colours whose
+// due-date events are zero-length markers, which never look like a block. Fixed, not hashed,
+// for the same reason as the course map.
+export const KIND_COLOUR_IDS: Readonly<Record<string, string>> = Object.freeze({
+  event: "9", // Blueberry
+  task: "1", // Lavender
+  out_of_office: "4", // Flamingo
+  focus_time: "8", // Graphite (the unknown-course fallback, which no current course uses)
+  working_location: "2", // Sage (shared with GEO.103.recitation's due-date markers)
+  appointment_slot: "5", // Banana (shared with ECN.304's due-date markers)
+});
+
+export function colourIdForKind(kind: string | null): string {
+  return (kind && KIND_COLOUR_IDS[kind]) || DEFAULT_COLOUR_ID;
+}
+
 /** The calendar every event is written in. Google resolves the instant from dateTime's offset. */
 export const EVENT_TIME_ZONE = "America/New_York";
 
@@ -68,6 +93,18 @@ export function itemLink(webBaseUrl: string, assignmentId: string): string {
   return `${origin}/?item=assignment:${assignmentId}`;
 }
 
+/**
+ * K-6: a planner event opens the planner on its week. weekStart is the view's week_start, the
+ * Monday computed in SQL (068), so no zone arithmetic happens here.
+ */
+export function plannerLink(webBaseUrl: string, weekStart: string | null): string {
+  const origin = (webBaseUrl || DEFAULT_WEB_BASE_URL).replace(/\/+$/, "");
+  return weekStart ? `${origin}/planner?week=${weekStart}` : `${origin}/planner`;
+}
+
+/** K-6: prefixed to the whole summary of a task that is done. */
+export const DONE_PREFIX = "✓ ";
+
 export const MANAGED_NOTICE =
   "Managed by bb2dash — edits here are overwritten on the next push.";
 
@@ -78,24 +115,63 @@ export const APP_PROPERTY = "bb2dash";
 // Types
 // ------------------------------------------------------------------------------------------
 
-/** One row of v_calendar_push_items, as PostgREST returns it. */
+/** Which arm of v_calendar_push_items a row came from, and the mirror's key half (068). */
+export type PushSource = "assignment" | "planner";
+
+/**
+ * One row of v_calendar_push_items v2 (migration 068), as PostgREST returns it. The first block
+ * is the assignment arm's columns, exactly v3's; the second is null on assignment rows and
+ * filled on planner rows. assignment_id, course_id, course_code and type are null on a planner
+ * row (course ones when no course is linked).
+ */
 export interface PushItem {
-  assignment_id: string;
-  course_id: string;
-  course_code: string;
+  source: PushSource;
+  ref_id: string;
+  event_id: string;
+  assignment_id: string | null;
+  course_id: string | null;
+  course_code: string | null;
   title: string;
-  type: string;
+  type: string | null;
   due_at: string | null;
   due_date: string | null;
   event_at: string;
   points_possible: number | string | null;
   status: string | null;
   absent_from_blackboard: boolean;
+
+  kind: string | null;
+  kind_label: string | null;
+  summary: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  time_zone: string | null;
+  all_day: boolean | null;
+  start_date: string | null;
+  end_date: string | null;
+  week_start: string | null;
+  location_kind: string | null;
+  location: string | null;
+  notes: string | null;
+  done: boolean | null;
 }
 
+/** v3's shape, still the only one the assignment arm ever sends. */
 export interface EventDateTime {
   dateTime: string;
   timeZone: string;
+}
+
+/**
+ * The planner arm's shape. Exactly one of dateTime / date is set and the other is an explicit
+ * null: an event edited from timed to all-day (or back) is PATCHed, and Google merges nested
+ * objects on a patch, so leaving the old field out would leave it in place. JSON null is how
+ * the Calendar API is told to clear a field.
+ */
+export interface PlannerEventDateTime {
+  dateTime: string | null;
+  timeZone: string | null;
+  date: string | null;
 }
 
 export interface CalendarEventBody {
@@ -115,10 +191,13 @@ export interface CalendarEventBody {
   status: "confirmed";
   summary: string;
   description: string;
-  start: EventDateTime;
-  end: EventDateTime;
+  /** Planner arm only (a place, or the online URL). Absent from every assignment body. */
+  location?: string | null;
+  start: EventDateTime | PlannerEventDateTime;
+  end: EventDateTime | PlannerEventDateTime;
   colorId: string;
-  extendedProperties: { private: { app: string; assignment_id: string } };
+  /** assignment_id on the assignment arm (v3), planner_event_id on the planner arm (v4). */
+  extendedProperties: { private: { app: string } & Record<string, string> };
   reminders: { useDefault: boolean };
 }
 
@@ -158,6 +237,20 @@ export async function sha256Hex(input: string): Promise<string> {
  */
 export async function calendarEventId(assignmentId: string): Promise<string> {
   return "bb" + (await sha256Hex(assignmentId)).slice(0, 32);
+}
+
+/**
+ * The planner arm's id, the same expression migration 068's view computes:
+ * 'pe' || left(sha256_hex(planner_events.id::text), 32). The prefix keeps it apart from every
+ * 'bb' assignment id; hex stays inside Google's base32hex charset.
+ */
+export async function plannerEventId(plannerEventUuid: string): Promise<string> {
+  return "pe" + (await sha256Hex(plannerEventUuid)).slice(0, 32);
+}
+
+/** The Google event id for a view row, derived from its (source, ref_id). */
+export function eventIdFor(item: Pick<PushItem, "source" | "ref_id">): Promise<string> {
+  return item.source === "planner" ? plannerEventId(item.ref_id) : calendarEventId(item.ref_id);
 }
 
 /** JSON with object keys sorted, so the content hash does not depend on key order. */
@@ -203,21 +296,34 @@ export function buildDescription(item: PushItem, webBaseUrl: string): string {
   const lines = [`Type: ${item.type}`];
   const points = pointsLine(item.points_possible);
   if (points) lines.push(points);
-  lines.push(itemLink(webBaseUrl, item.assignment_id));
+  lines.push(itemLink(webBaseUrl, item.assignment_id ?? item.ref_id));
   lines.push("");
   lines.push(MANAGED_NOTICE);
   return lines.join("\n");
 }
 
-/**
- * Q2: a zero-length timed event sitting exactly at the due instant, which is what a deadline is.
- * start === end is legal in the Calendar API and renders as a marker rather than a block.
- */
+/** The body for a view row: the arm decides which builder, and nothing else. */
 export function buildEventBody(
   item: PushItem,
   eventId: string,
   webBaseUrl: string,
 ): CalendarEventBody {
+  return item.source === "planner"
+    ? buildPlannerEventBody(item, eventId, webBaseUrl)
+    : buildAssignmentEventBody(item, eventId, webBaseUrl);
+}
+
+/**
+ * The assignment arm, v3's buildEventBody unchanged (see the header: its hash must not move).
+ * Q2: a zero-length timed event sitting exactly at the due instant, which is what a deadline is.
+ * start === end is legal in the Calendar API and renders as a marker rather than a block.
+ */
+export function buildAssignmentEventBody(
+  item: PushItem,
+  eventId: string,
+  webBaseUrl: string,
+): CalendarEventBody {
+  const assignmentId = item.assignment_id ?? item.ref_id;
   const at: EventDateTime = { dateTime: toRfc3339(item.event_at), timeZone: EVENT_TIME_ZONE };
   return {
     id: eventId,
@@ -226,8 +332,75 @@ export function buildEventBody(
     description: buildDescription(item, webBaseUrl),
     start: at,
     end: { ...at },
-    colorId: colourIdForCourse(item.course_id),
-    extendedProperties: { private: { app: APP_PROPERTY, assignment_id: item.assignment_id } },
+    colorId: colourIdForCourse(item.course_id ?? ""),
+    extendedProperties: { private: { app: APP_PROPERTY, assignment_id: assignmentId } },
+    reminders: { useDefault: true },
+  };
+}
+
+/**
+ * K-6: notes (when set), the online URL (when online), the kind line, then the planner link.
+ * The notes are separated from bb2dash's own lines by a blank line.
+ */
+export function buildPlannerDescription(item: PushItem, webBaseUrl: string): string {
+  const lines: string[] = [];
+  if (item.notes) lines.push(item.notes, "");
+  if (item.location_kind === "online" && item.location) lines.push(item.location);
+  lines.push(`bb2dash: ${item.kind_label ?? item.kind ?? "Event"}`);
+  lines.push(plannerLink(webBaseUrl, item.week_start));
+  return lines.join("\n");
+}
+
+/**
+ * K-6: a timed event carries its stored instant as dateTime (RFC 3339, normalised like the
+ * assignment arm's) AND its own zone as timeZone, so Google keeps the instant and shows it in
+ * that zone. An all-day event carries the view's local dates; end is exclusive (067, K-3),
+ * which is Google's convention too.
+ */
+export function plannerDateTimes(
+  item: PushItem,
+): { start: PlannerEventDateTime; end: PlannerEventDateTime } {
+  if (item.all_day) {
+    if (!item.start_date || !item.end_date) {
+      throw new Error(`planner event ${item.ref_id}: all-day row without start_date/end_date`);
+    }
+    return {
+      start: { date: item.start_date, dateTime: null, timeZone: null },
+      end: { date: item.end_date, dateTime: null, timeZone: null },
+    };
+  }
+  if (!item.starts_at || !item.ends_at || !item.time_zone) {
+    throw new Error(`planner event ${item.ref_id}: timed row without starts_at/ends_at/time_zone`);
+  }
+  return {
+    start: { dateTime: toRfc3339(item.starts_at), timeZone: item.time_zone, date: null },
+    end: { dateTime: toRfc3339(item.ends_at), timeZone: item.time_zone, date: null },
+  };
+}
+
+/**
+ * The planner arm (v4). Pushed as an ordinary event on the bb2dash calendar: Google refuses
+ * outOfOffice / focusTime / workingLocation event types on a secondary calendar, so the title
+ * and the colour carry the kind. location is always present (null clears a removed one on a
+ * patch).
+ */
+export function buildPlannerEventBody(
+  item: PushItem,
+  eventId: string,
+  webBaseUrl: string,
+): CalendarEventBody {
+  const { start, end } = plannerDateTimes(item);
+  const summary = item.summary ?? item.title;
+  return {
+    id: eventId,
+    status: "confirmed",
+    summary: item.kind === "task" && item.done ? DONE_PREFIX + summary : summary,
+    description: buildPlannerDescription(item, webBaseUrl),
+    location: item.location ?? null,
+    start,
+    end,
+    colorId: colourIdForKind(item.kind),
+    extendedProperties: { private: { app: APP_PROPERTY, planner_event_id: item.ref_id } },
     reminders: { useDefault: true },
   };
 }

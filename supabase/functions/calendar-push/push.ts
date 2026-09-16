@@ -14,24 +14,32 @@
 // the mirror has never seen is inserted; an item whose hash is unchanged costs no API call at
 // all; an item whose hash moved is patched. A mirror row with no matching desired item is
 // deleted from Google and then from the mirror — that covers a deleted assignment, an
-// assignment that lost its date, one that left the workload, and one the newest Blackboard crawl
-// stopped reporting (Q3), because all four leave v_calendar_push_items the same way. A fifth
-// case runs before all of them: a mirror row pointing at a calendar that is no longer the
-// configured one is deleted from THAT calendar and dropped, so the item is re-created on the
-// new one instead of being abandoned on the old.
+// assignment that lost its date, one that left the workload, one the newest Blackboard crawl
+// stopped reporting (Q3), and a deleted planner event, because all of them leave
+// v_calendar_push_items the same way. A further case runs before all of them: a mirror row
+// pointing at a calendar that is no longer the configured one is deleted from THAT calendar and
+// dropped, so the item is re-created on the new one instead of being abandoned on the old.
+//
+// v4 (Phase 11b). Two arms share this one diff: `source` 'assignment' (due dates, unchanged
+// from v3) and 'planner' (events Stack creates in the planner). Everything is keyed by
+// (source, ref_id), the mirror's primary key since migration 068, and every count is kept twice:
+// the six totals v3 wrote, and the same six split per arm (K-7), so a run that touched only
+// planner events visibly issued zero writes on the assignment arm.
 
 import {
   buildEventBody,
-  calendarEventId,
   type CalendarEventBody,
   contentHash,
+  eventIdFor,
   type GoogleCalendar,
   type GoogleResult,
   type PushItem,
+  type PushSource,
 } from "./google.ts";
 
 export interface MirrorRow {
-  assignment_id: string;
+  source: PushSource;
+  ref_id: string;
   event_id: string;
   calendar_id: string;
   content_hash: string;
@@ -43,19 +51,28 @@ export interface MirrorRow {
 export interface MirrorStore {
   saveSuccess(row: MirrorRow): Promise<void>;
   /** Records last_error on an EXISTING row; never invents one for an event Google refused. */
-  saveFailure(assignmentId: string, error: string): Promise<void>;
-  markDeleting(assignmentId: string): Promise<void>;
-  remove(assignmentId: string): Promise<void>;
+  saveFailure(source: PushSource, refId: string, error: string): Promise<void>;
+  markDeleting(source: PushSource, refId: string): Promise<void>;
+  remove(source: PushSource, refId: string): Promise<void>;
 }
 
-export interface PushCounts {
-  scanned: number;
-  inserted: number;
-  patched: number;
-  deleted: number;
-  unchanged: number;
-  failed: number;
-}
+export const COUNT_VERBS = [
+  "scanned",
+  "inserted",
+  "patched",
+  "deleted",
+  "unchanged",
+  "failed",
+] as const;
+export type CountVerb = typeof COUNT_VERBS[number];
+
+/** The per-arm suffix K-7 names: `inserted_assignments`, `inserted_planner`, ... */
+export type ArmSuffix = "assignments" | "planner";
+
+/** The six v3 totals, then each of them per arm. calendar_push_runs.counts is this object. */
+export type PushCounts =
+  & Record<CountVerb, number>
+  & Record<`${CountVerb}_${ArmSuffix}`, number>;
 
 export interface RunPushDeps {
   calendarId: string;
@@ -80,6 +97,31 @@ export interface RunPushResult {
 export const BACKOFF_MS: readonly number[] = [1000, 2000, 4000];
 
 const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+export function emptyCounts(): PushCounts {
+  const counts = {} as Record<string, number>;
+  for (const verb of COUNT_VERBS) {
+    counts[verb] = 0;
+    counts[`${verb}_assignments`] = 0;
+    counts[`${verb}_planner`] = 0;
+  }
+  return counts as PushCounts;
+}
+
+function armOf(source: PushSource): ArmSuffix {
+  return source === "planner" ? "planner" : "assignments";
+}
+
+/** Adds one to a verb's total and to that verb's count for the row's arm. */
+function bump(counts: PushCounts, verb: CountVerb, source: PushSource): void {
+  counts[verb] += 1;
+  counts[`${verb}_${armOf(source)}`] += 1;
+}
+
+/** The mirror's primary key as one string. A source never contains ':', so this cannot clash. */
+export function mirrorKey(source: PushSource, refId: string): string {
+  return `${source}:${refId}`;
+}
 
 /**
  * Google signals "slow down" two ways: 429, and 403 with a rateLimitExceeded reason. A plain 403
@@ -120,21 +162,15 @@ export async function runPush(deps: RunPushDeps): Promise<RunPushResult> {
     throw new Error("calendar-push refuses to write to 'primary'");
   }
 
-  const counts: PushCounts = {
-    scanned: desired.length,
-    inserted: 0,
-    patched: 0,
-    deleted: 0,
-    unchanged: 0,
-    failed: 0,
-  };
+  const counts = emptyCounts();
+  for (const item of desired) bump(counts, "scanned", item.source);
   const errors: string[] = [];
 
   // Q3: an item the newest folded crawl of its course stopped reporting leaves the desired set,
-  // which is precisely how its event comes to be deleted below.
+  // which is precisely how its event comes to be deleted below. Planner rows are never absent.
   const wanted = desired.filter((item) => !item.absent_from_blackboard);
-  const wantedIds = new Set(wanted.map((item) => item.assignment_id));
-  const byAssignment = new Map(mirror.map((row) => [row.assignment_id, row]));
+  const wantedKeys = new Set(wanted.map((item) => mirrorKey(item.source, item.ref_id)));
+  const byKey = new Map(mirror.map((row) => [mirrorKey(row.source, row.ref_id), row]));
 
   // R2b-5. A mirror row written to a DIFFERENT calendar is an orphan: Stack repointed
   // app_settings.gcal_calendar_id and that event is still sitting on the old calendar where
@@ -146,37 +182,54 @@ export async function runPush(deps: RunPushDeps): Promise<RunPushResult> {
   const skip = new Set<string>();
   for (const row of mirror) {
     if (row.calendar_id === calendarId) continue;
+    const key = mirrorKey(row.source, row.ref_id);
 
-    await store.markDeleting(row.assignment_id);
+    await store.markDeleting(row.source, row.ref_id);
     const result = await withBackoff(() => google.remove(row.calendar_id, row.event_id), sleep);
 
     if (result.error && !isMissing(result)) {
-      counts.failed += 1;
-      errors.push(`${row.assignment_id}: on the previous calendar: ${result.error}`);
-      await store.saveFailure(row.assignment_id, result.error);
-      skip.add(row.assignment_id);
+      bump(counts, "failed", row.source);
+      errors.push(`${key}: on the previous calendar: ${result.error}`);
+      await store.saveFailure(row.source, row.ref_id, result.error);
+      skip.add(key);
       continue;
     }
 
-    counts.deleted += 1;
-    await store.remove(row.assignment_id);
-    byAssignment.delete(row.assignment_id);
+    bump(counts, "deleted", row.source);
+    await store.remove(row.source, row.ref_id);
+    byKey.delete(key);
   }
 
   for (const item of wanted) {
-    if (skip.has(item.assignment_id)) continue;
+    const key = mirrorKey(item.source, item.ref_id);
+    if (skip.has(key)) continue;
 
-    const eventId = await calendarEventId(item.assignment_id);
-    const body = buildEventBody(item, eventId, webBaseUrl);
+    const eventId = await eventIdFor(item);
+    // The view computes the same id in SQL (060, 068). If the two ever disagree, writing under
+    // either would strand an event the other side cannot find, so the item fails loudly instead.
+    if (item.event_id && item.event_id !== eventId) {
+      bump(counts, "failed", item.source);
+      errors.push(`${key}: view event_id ${item.event_id} differs from computed ${eventId}`);
+      continue;
+    }
+
+    let body: CalendarEventBody;
+    try {
+      body = buildEventBody(item, eventId, webBaseUrl);
+    } catch (cause) {
+      bump(counts, "failed", item.source);
+      errors.push(`${key}: ${cause instanceof Error ? cause.message : String(cause)}`);
+      continue;
+    }
     const hash = await contentHash(body);
-    const existing = byAssignment.get(item.assignment_id);
+    const existing = byKey.get(key);
 
     // The whole idempotency proof: same hash, same calendar, still live — no API call is made.
     if (
       existing && existing.content_hash === hash && existing.state === "live" &&
       existing.calendar_id === calendarId
     ) {
-      counts.unchanged += 1;
+      bump(counts, "unchanged", item.source);
       continue;
     }
 
@@ -190,15 +243,16 @@ export async function runPush(deps: RunPushDeps): Promise<RunPushResult> {
     );
 
     if (result.error) {
-      counts.failed += 1;
-      errors.push(`${item.assignment_id}: ${result.error}`);
-      await store.saveFailure(item.assignment_id, result.error);
+      bump(counts, "failed", item.source);
+      errors.push(`${key}: ${result.error}`);
+      await store.saveFailure(item.source, item.ref_id, result.error);
       continue;
     }
 
-    counts[action] += 1;
+    bump(counts, action, item.source);
     await store.saveSuccess({
-      assignment_id: item.assignment_id,
+      source: item.source,
+      ref_id: item.ref_id,
       event_id: eventId,
       calendar_id: calendarId,
       content_hash: hash,
@@ -210,22 +264,23 @@ export async function runPush(deps: RunPushDeps): Promise<RunPushResult> {
   for (const row of mirror) {
     // Rows on another calendar were dealt with by the orphan pass above.
     if (row.calendar_id !== calendarId) continue;
-    if (wantedIds.has(row.assignment_id)) continue;
+    const key = mirrorKey(row.source, row.ref_id);
+    if (wantedKeys.has(key)) continue;
 
-    await store.markDeleting(row.assignment_id);
+    await store.markDeleting(row.source, row.ref_id);
     const result = await withBackoff(() => google.remove(calendarId, row.event_id), sleep);
 
     // A 404 means somebody already deleted it in Google's UI. That is the desired end state, so
     // it counts as a delete rather than a failure the next run would retry forever.
     if (result.error && !isMissing(result)) {
-      counts.failed += 1;
-      errors.push(`${row.assignment_id}: ${result.error}`);
-      await store.saveFailure(row.assignment_id, result.error);
+      bump(counts, "failed", row.source);
+      errors.push(`${key}: ${result.error}`);
+      await store.saveFailure(row.source, row.ref_id, result.error);
       continue;
     }
 
-    counts.deleted += 1;
-    await store.remove(row.assignment_id);
+    bump(counts, "deleted", row.source);
+    await store.remove(row.source, row.ref_id);
   }
 
   return { status: counts.failed > 0 ? "partial" : "ok", counts, errors };

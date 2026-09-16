@@ -1,12 +1,15 @@
-// bb2dash :: edge function `calendar-push`  (v2)
-// Pushes every dated assignment onto Stack's dedicated Google "bb2dash" calendar, and takes off
-// the ones that no longer belong there. Due dates only — class meetings are not pushed (Stack,
-// 2026-09-14). Push-only: nothing Google says is ever read back into bb2dash.
+// bb2dash :: edge function `calendar-push`  (v4)
+// Pushes every dated assignment, and every event Stack created in the planner, onto his
+// dedicated Google "bb2dash" calendar, and takes off the ones that no longer belong there. Class
+// meetings are not pushed (Stack, 2026-09-14). Push-only: nothing Google says is ever read back
+// into bb2dash.
 //
 // POST { run_id?: number }   header: x-push-secret: <Vault calendar_push_secret>
 //   run_id  the calendar_push_runs row calendar_push_tick() already opened. Absent (the PM
 //           invoking by hand) opens one with trigger = 'manual'.
-//   -> 200 { run_id, status, counts: {scanned, inserted, patched, deleted, unchanged, failed} }
+//   -> 200 { run_id, status, counts: {scanned, inserted, patched, deleted, unchanged, failed,
+//                                      and each of those six as <verb>_assignments and
+//                                      <verb>_planner} }
 //   -> 400 for a body that is not a JSON object, or a non-numeric run_id. No run is opened.
 //   -> 401 with an empty body for anything that cannot prove the shared secret.
 //
@@ -26,6 +29,11 @@
 //          the scheduled push's lock.
 //   R2b-7  the "open in bb2dash" origin comes from app_settings.web_base_url, per run.
 //
+// v3 changed google.ts only (R3-1, status confirmed). v4 (Phase 11b, migration 068) reads the
+// widened v_calendar_push_items and keys the calendar_events mirror by (source, ref_id) instead
+// of assignment_id; the assignment arm's event body and hash are unchanged, which is what lets
+// the cut-over push report zero writes on that arm.
+//
 // WHAT THIS FILE OWNS, and what it does not. Here: the HTTP request, the secret, the Supabase
 // client, the OAuth exchange, and writing the run's result back. The diff itself lives in
 // push.ts and the Google calls in google.ts, both free of Deno globals, so the tests can drive
@@ -38,6 +46,7 @@ import {
   DEFAULT_WEB_BASE_URL,
   exchangeRefreshToken,
   type PushItem,
+  type PushSource,
 } from "./google.ts";
 import { type MirrorRow, type MirrorStore, type PushCounts, runPush } from "./push.ts";
 
@@ -96,7 +105,10 @@ async function loadSecrets(): Promise<Secrets> {
   return out;
 }
 
-/** The mirror writer. Every column calendar_events carries is set from here and nowhere else. */
+/**
+ * The mirror writer. Every column calendar_events carries is set from here and nowhere else.
+ * v4: every statement is scoped by the full primary key (source, ref_id), migration 068.
+ */
 function mirrorStore(): MirrorStore {
   return {
     async saveSuccess(row: MirrorRow) {
@@ -105,10 +117,10 @@ function mirrorStore(): MirrorStore {
         last_error: null,
         last_pushed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }, { onConflict: "assignment_id" });
+      }, { onConflict: "source,ref_id" });
       if (error) throw new Error(`calendar_events upsert: ${error.message}`);
     },
-    async saveFailure(assignmentId: string, message: string) {
+    async saveFailure(source: PushSource, refId: string, message: string) {
       // update, never upsert: a failed insert means Google holds nothing, and a mirror row
       // claiming otherwise would stop the next run from retrying it.
       await supabase.from("calendar_events")
@@ -116,16 +128,16 @@ function mirrorStore(): MirrorStore {
           last_error: message.slice(0, ITEM_ERROR_LIMIT),
           updated_at: new Date().toISOString(),
         })
-        .eq("assignment_id", assignmentId);
+        .eq("source", source).eq("ref_id", refId);
     },
-    async markDeleting(assignmentId: string) {
+    async markDeleting(source: PushSource, refId: string) {
       await supabase.from("calendar_events")
         .update({ state: "deleting", updated_at: new Date().toISOString() })
-        .eq("assignment_id", assignmentId);
+        .eq("source", source).eq("ref_id", refId);
     },
-    async remove(assignmentId: string) {
+    async remove(source: PushSource, refId: string) {
       const { error } = await supabase.from("calendar_events").delete()
-        .eq("assignment_id", assignmentId);
+        .eq("source", source).eq("ref_id", refId);
       if (error) throw new Error(`calendar_events delete: ${error.message}`);
     },
   };
@@ -261,13 +273,13 @@ Deno.serve(async (req: Request) => {
 
     // 5. The two sides of the diff.
     const { data: desired, error: desiredError } = await supabase
-      .from("v_calendar_push_items").select("*").order("assignment_id");
+      .from("v_calendar_push_items").select("*").order("source").order("ref_id");
     if (desiredError) throw new Error(`v_calendar_push_items: ${desiredError.message}`);
 
     const { data: mirror, error: mirrorError } = await supabase
       .from("calendar_events")
-      .select("assignment_id, event_id, calendar_id, content_hash, etag, state")
-      .order("assignment_id");
+      .select("source, ref_id, event_id, calendar_id, content_hash, etag, state")
+      .order("source").order("ref_id");
     if (mirrorError) throw new Error(`calendar_events: ${mirrorError.message}`);
 
     const result = await runPush({
