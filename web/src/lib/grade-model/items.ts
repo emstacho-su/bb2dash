@@ -89,6 +89,18 @@ function toCounted(item: ItemInput, possible: number, scenario: Scenario): Count
 }
 
 /**
+ * Components that have no children. Round 2 (R2-1): an item linked straight to
+ * a component with children is treated as unlinked — never counted, listed as
+ * unlinked when scored, and no what-if target.
+ */
+export function leafComponentIds(components: readonly ComponentInput[]): ReadonlySet<number> {
+  const parents = new Set(
+    components.filter((c) => c.parentId !== null && c.parentId !== c.id).map((c) => c.parentId as number),
+  );
+  return new Set(components.map((c) => c.id).filter((id) => !parents.has(id)));
+}
+
+/**
  * A1: a placeholder with `possible` null, a confirmed link and a fraction-only
  * aggregation counts, out of 100, once the scenario gives it a value. Without
  * a value (or under `sum` / `manual`, or with an unsure link) it stays bookkeeping.
@@ -110,7 +122,10 @@ export function countedItems(
   scenario: Scenario,
   components: readonly ComponentInput[] = [],
 ): readonly CountedItem[] {
-  const aggregationOf = new Map(components.map((component) => [component.id, component.aggregation]));
+  const leaves = leafComponentIds(components);
+  const aggregationOf = new Map(
+    components.filter((component) => leaves.has(component.id)).map((component) => [component.id, component.aggregation]),
+  );
   return items.flatMap((item) => {
     if (isCounted(item) && item.possible !== null) return [toCounted(item, item.possible, scenario)];
     return isPercentPlaceholder(item, scenario, aggregationOf) ? [toCounted(item, PERCENT_POSSIBLE, scenario)] : [];
@@ -154,25 +169,30 @@ export function withoutSurplusPlaceholders(
   return items.filter((_, index) => !dropped.has(index));
 }
 
-/** Counted items per component id, placeholders already dropped. Unlinked items are left out. */
+/**
+ * Counted items per component id, placeholders already dropped. Unlinked items,
+ * and items linked straight to a component with children (R2-1), are left out:
+ * such a component gets an empty list.
+ */
 export function itemsByComponent(
   components: readonly ComponentInput[],
   items: readonly CountedItem[],
 ): ReadonlyMap<number, readonly CountedItem[]> {
+  const leaves = leafComponentIds(components);
   return new Map(
     components.map((component) => {
-      const linked = items.filter((item) => item.componentId === component.id);
+      const linked = leaves.has(component.id) ? items.filter((item) => item.componentId === component.id) : [];
       return [component.id, withoutSurplusPlaceholders(linked, component.countExpected)] as const;
     }),
   );
 }
 
-/** Keys of scored, counted, non-excluded items tied to no known component, in input order. */
+/** Keys of scored, counted, non-excluded items tied to no known leaf component (R2-1), in input order. */
 export function unlinkedScoredKeys(
   components: readonly ComponentInput[],
   items: readonly ItemInput[],
 ): readonly string[] {
-  const ids = new Set(components.map((component) => component.id));
+  const ids = leafComponentIds(components);
   return items
     .filter((item) => isCounted(item) && realScoreOf(item) !== null)
     .filter((item) => item.componentId === null || !ids.has(item.componentId))

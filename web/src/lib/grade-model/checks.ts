@@ -8,7 +8,7 @@
  * projection (see `project.ts`).
  */
 
-import { countedItems, itemsByComponent } from './items';
+import { countedItems, itemsByComponent, leafComponentIds } from './items';
 import type { ComputableMethod } from './tree';
 import type { ModelInput, NotComputableReason, NotComputedResult, Scenario, SchemeInput } from './types';
 
@@ -28,11 +28,14 @@ export function notComputed(reason: NotComputableReason, unscoredManual: readonl
  * Names of manual components with no real score on any counted item, in input
  * order. Runs before muting, so a muted unscored manual part still counts, and
  * ignores the scenario: a what-if value is not a hand-graded score (answer 1).
+ * Decision (R2-1): only leaves are checked — a manual component with children
+ * computes from its children and can carry no item of its own.
  */
 export function unscoredManualNames(input: ModelInput): readonly string[] {
   const byComponent = itemsByComponent(input.components, countedItems(input.items, EMPTY_SCENARIO));
+  const leaves = leafComponentIds(input.components);
   return input.components
-    .filter((component) => component.aggregation === 'manual')
+    .filter((component) => component.aggregation === 'manual' && leaves.has(component.id))
     .filter((component) => !(byComponent.get(component.id) ?? []).some((item) => item.realScore !== null))
     .map((component) => component.name);
 }
