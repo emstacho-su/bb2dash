@@ -21,16 +21,16 @@ import {
   PLANNER_SLOT_COUNT,
   PLANNER_START_MINUTE,
   formatClock,
+  newYorkWallClock,
   slotOffset,
   type PlannerWeekModel,
 } from './planner-week';
 import { allDayDates, type PlannerEventRow } from './planner-events';
 import {
   DEFAULT_TIME_ZONE,
-  addDaysIso,
   localMidnight,
+  nextLocalMidnight,
   shortZoneName,
-  wallClockIn,
   zoneChipLabel,
 } from './planner-zone';
 
@@ -60,7 +60,7 @@ export interface EventWindowBounds {
  */
 export function eventWindowBounds(from: string, to: string): EventWindowBounds | null {
   const start = localMidnight(from, DEFAULT_TIME_ZONE);
-  const end = localMidnight(addDaysIso(to, 1), DEFAULT_TIME_ZONE);
+  const end = nextLocalMidnight(to, DEFAULT_TIME_ZONE);
   if (!start || !end) return null;
   return { start: start.iso, end: end.iso };
 }
@@ -151,8 +151,8 @@ function allDayChips(row: PlannerEventRow, week: PlannerWeekModel): PlacedAllDay
 }
 
 function timedSegments(row: PlannerEventRow, week: PlannerWeekModel): PlacedEventSegment[] {
-  const start = wallClockIn(row.starts_at, DEFAULT_TIME_ZONE);
-  const end = wallClockIn(row.ends_at, DEFAULT_TIME_ZONE);
+  const start = newYorkWallClock(row.starts_at);
+  const end = newYorkWallClock(row.ends_at);
   if (!start || !end) return [];
 
   const zeroLength = Date.parse(row.starts_at) === Date.parse(row.ends_at);
@@ -163,12 +163,12 @@ function timedSegments(row: PlannerEventRow, week: PlannerWeekModel): PlacedEven
   const segments: PlacedEventSegment[] = [];
 
   for (const day of week.days) {
-    if (day.iso < start.date || day.iso > end.date) continue;
+    if (day.iso < start.iso || day.iso > end.iso) continue;
     // Ending exactly at midnight leaves nothing on the next day.
-    if (!zeroLength && day.iso === end.date && day.iso !== start.date && end.minute === 0) continue;
+    if (!zeroLength && day.iso === end.iso && day.iso !== start.iso && end.minute === 0) continue;
 
-    const segStart = day.iso === start.date ? start.minute : 0;
-    const segEnd = day.iso === end.date ? end.minute : MINUTES_PER_DAY;
+    const segStart = day.iso === start.iso ? start.minute : 0;
+    const segEnd = day.iso === end.iso ? end.minute : MINUTES_PER_DAY;
     segments.push({
       key: `${row.id}:${day.iso}`,
       event: row,

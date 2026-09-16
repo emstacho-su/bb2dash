@@ -40,6 +40,7 @@ import {
   shiftIso,
 } from '@/components/tracker/anchor';
 import { COURSE_TIME_ZONE } from './course-dimension';
+import { wallClockIn } from './planner-zone';
 
 /* ---------------------------------------------------------------------------
  * Grid constants
@@ -122,40 +123,19 @@ export interface WallClock {
   minute: number;
 }
 
-const NEW_YORK_PARTS = new Intl.DateTimeFormat('en-US', {
-  timeZone: COURSE_TIME_ZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
 /**
  * The New York wall clock of an instant. `null` for a missing or unparseable
  * timestamp — a bad value is not a position on the grid.
  *
  * Read through `Intl` rather than by adding a fixed offset, so the answer is
  * right on both sides of a DST change and does not depend on the machine's own
- * zone.
+ * zone. The reading itself is `wallClockIn` (planner-zone.ts), the one `Intl`
+ * wall-clock reader, which planner events use for every other zone.
  */
 export function newYorkWallClock(instant: string | null | undefined): WallClock | null {
   if (typeof instant !== 'string' || instant.trim() === '') return null;
-  const at = new Date(instant);
-  if (!Number.isFinite(at.getTime())) return null;
-
-  const parts = new Map(NEW_YORK_PARTS.formatToParts(at).map((part) => [part.type, part.value]));
-  const year = parts.get('year');
-  const month = parts.get('month');
-  const day = parts.get('day');
-  const hourText = parts.get('hour');
-  const minuteText = parts.get('minute');
-  if (!year || !month || !day || !hourText || !minuteText) return null;
-
-  // Some ICU builds report midnight as '24' under hourCycle h24.
-  const hour = Number(hourText) % 24;
-  return { iso: `${year}-${month}-${day}`, minute: hour * 60 + Number(minuteText) };
+  const wall = wallClockIn(instant, COURSE_TIME_ZONE);
+  return wall ? { iso: wall.date, minute: wall.minute } : null;
 }
 
 /** The reader's own wall clock — what the now-line and the today column mean. */

@@ -23,6 +23,7 @@
  * No React, no data access, no new dependency.
  */
 
+import { isValidIsoDate, shiftIso } from '@/components/tracker/anchor';
 import { COURSE_TIME_ZONE } from './course-dimension';
 
 /** The grid's zone and every new event's default zone. */
@@ -59,36 +60,49 @@ const HH_MM = /^(\d{2}):(\d{2})$/;
  * Zone validation
  * ------------------------------------------------------------------------ */
 
-/** True when `Intl` accepts the zone. Never throws. */
+/**
+ * True when `Intl` accepts the zone. Never throws. Goes through the formatter
+ * cache, so a zone read on every render builds its formatter once; a rejected
+ * zone throws before anything is cached.
+ */
 function intlAcceptsZone(zone: string): boolean {
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    partsFormatter(zone);
     return true;
   } catch {
     return false;
   }
 }
 
+/** The K-2 shape: `UTC`, or an Area/Location name. */
+function matchesZoneShape(zone: string): boolean {
+  return zone === 'UTC' || TIME_ZONE_PATTERN.test(zone);
+}
+
 /** K-2's rule, mirrored: the pattern (or `UTC`) and `Intl` not throwing. */
 export function isValidTimeZone(zone: string | null | undefined): zone is string {
   if (typeof zone !== 'string') return false;
-  if (zone !== 'UTC' && !TIME_ZONE_PATTERN.test(zone)) return false;
-  return intlAcceptsZone(zone);
+  return matchesZoneShape(zone) && intlAcceptsZone(zone);
 }
 
 /**
- * The zone as `Intl` spells it, when the only difference is letter case
- * ('america/new_york' → 'America/New_York'). Aliases are left as typed:
- * `pg_timezone_names` is matched exactly and carries both spellings of a link,
- * but not a lower-case one. Returns null for an invalid zone.
+ * The zone a write sends: `Intl`'s resolved name for what was typed, so
+ * 'us/eastern' and 'America/new_york' both go out as 'America/New_York' — the
+ * database matches `pg_timezone_names` exactly, and a lower-case alias is not
+ * in it.
+ *
+ * Null (a field-level error in the form) when either the typed value or the
+ * resolved name fails the K-2 shape: a POSIX string such as 'EST5EDT' is
+ * refused even though `Intl` would quietly map it to a real zone, because the
+ * rule is about what the owner typed.
  */
 export function canonicalTimeZone(zone: string | null | undefined): string | null {
   if (typeof zone !== 'string') return null;
   const trimmed = zone.trim();
-  if (!isValidTimeZone(trimmed)) return null;
-  const resolved = new Intl.DateTimeFormat('en-US', { timeZone: trimmed }).resolvedOptions()
-    .timeZone;
-  return resolved.toLowerCase() === trimmed.toLowerCase() ? resolved : trimmed;
+  const typed = trimmed.toUpperCase() === 'UTC' ? 'UTC' : trimmed;
+  if (!matchesZoneShape(typed) || !intlAcceptsZone(typed)) return null;
+  const resolved = partsFormatter(typed).resolvedOptions().timeZone;
+  return isValidTimeZone(resolved) ? resolved : null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -152,7 +166,11 @@ function zonedFields(epochMs: number, zone: string): Fields {
 
 const pad = (value: number, width = 2) => String(value).padStart(width, '0');
 
-/** The wall clock of an instant in `zone`, or null for a bad instant or zone. */
+/**
+ * The wall clock of an instant in `zone`, or null for a bad instant or zone.
+ * This is the app's one `Intl` wall-clock reader: `newYorkWallClock` in
+ * `planner-week.ts` is this, in New York.
+ */
 export function wallClockIn(
   instant: string | Date | null | undefined,
   zone: string,
@@ -227,6 +245,24 @@ export function wallClockToInstant(
   return resolved(target - before * MINUTE_MS, zone, 'gap');
 }
 
+/**
+ * The local date `instant` is exactly midnight of in `zone` — hours, minutes,
+ * seconds and milliseconds all zero, as 067's `::time = '00:00'` requires — or
+ * null. A midnight that falls in a DST gap counts when `instant` is where local
+ * midnight resolves to (moved forward), which the 067 trigger also accepts.
+ */
+export function localMidnightDateOf(instant: string, zone: string): string | null {
+  if (!isValidTimeZone(zone)) return null;
+  const epochMs = Date.parse(instant);
+  if (!Number.isFinite(epochMs)) return null;
+  const f = zonedFields(epochMs, zone);
+  const date = `${pad(f.year, 4)}-${pad(f.month)}-${pad(f.day)}`;
+  const millis = ((epochMs % 1000) + 1000) % 1000;
+  if (f.hour === 0 && f.minute === 0 && f.second === 0 && millis === 0) return date;
+  const midnight = localMidnight(date, zone);
+  return midnight !== null && Date.parse(midnight.iso) === epochMs ? date : null;
+}
+
 function sameUtcDate(epochMs: number, year: number, month: number, day: number): boolean {
   const d = new Date(epochMs);
   return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
@@ -247,18 +283,14 @@ function resolved(epochMs: number, zone: string, resolution: WallClockResolution
  * Dates and labels
  * ------------------------------------------------------------------------ */
 
-/** 'YYYY-MM-DD' shifted by whole days, by calendar arithmetic in UTC. */
-export function addDaysIso(date: string, days: number): string {
-  const match = ISO_DATE.exec(date);
-  if (!match) return date;
-  const [year, month, day] = match.slice(1).map(Number);
-  const shifted = new Date(Date.UTC(year, month - 1, day + Math.trunc(days)));
-  return `${pad(shifted.getUTCFullYear(), 4)}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`;
-}
-
 /** 00:00 of `date` in `zone`, as a resolved instant (a gap moves it forward). */
 export function localMidnight(date: string, zone: string): ResolvedInstant | null {
   return wallClockToInstant(date, '00:00', zone);
+}
+
+/** 00:00 of the day after `date` in `zone` — an all-day or window end. */
+export function nextLocalMidnight(date: string, zone: string): ResolvedInstant | null {
+  return isValidIsoDate(date) ? localMidnight(shiftIso(date, 1), zone) : null;
 }
 
 const shortNameFormatters = new Map<string, Intl.DateTimeFormat>();

@@ -13,10 +13,11 @@ import { describe, expect, it } from 'vitest';
 import {
   COMMON_TIME_ZONES,
   DEFAULT_TIME_ZONE,
-  addDaysIso,
   canonicalTimeZone,
   isValidTimeZone,
   localMidnight,
+  localMidnightDateOf,
+  nextLocalMidnight,
   shortZoneName,
   wallClockIn,
   wallClockToInstant,
@@ -53,7 +54,22 @@ describe('isValidTimeZone — K-2 mirrored', () => {
 
   it('fixes the letter case of a typed zone and trims it', () => {
     expect(canonicalTimeZone(' america/new_york ')).toBe(NY);
+    expect(canonicalTimeZone('utc')).toBe('UTC');
     expect(canonicalTimeZone('UTC+3')).toBeNull();
+  });
+
+  it("sends Intl's resolved name for an alias 067 would reject as typed (R2-7)", () => {
+    expect(canonicalTimeZone('us/eastern')).toBe(NY);
+    expect(canonicalTimeZone('US/Pacific')).toBe(LA);
+  });
+
+  it('refuses a typed value outside the K-2 shape even when Intl maps it to a zone', () => {
+    // Intl resolves both of these to real zones; the rule is about what was typed.
+    expect(canonicalTimeZone('EST5EDT')).toBeNull();
+    expect(canonicalTimeZone('est')).toBeNull();
+    expect(canonicalTimeZone('GMT')).toBeNull();
+    expect(canonicalTimeZone('Nowhere/Land')).toBeNull();
+    expect(canonicalTimeZone(null)).toBeNull();
   });
 });
 
@@ -141,15 +157,32 @@ describe('wallClockToInstant — the 2026-03-08 spring-forward gap', () => {
 });
 
 describe('dates and labels', () => {
-  it('shifts ISO dates by calendar days across months and years', () => {
-    expect(addDaysIso('2026-12-31', 1)).toBe('2027-01-01');
-    expect(addDaysIso('2026-03-01', -1)).toBe('2026-02-28');
-    expect(addDaysIso('not a date', 1)).toBe('not a date');
+  it('finds the next local midnight across a month, a year and the fall-back', () => {
+    expect(nextLocalMidnight('2026-12-31', NY)?.iso).toBe('2027-01-01T05:00:00.000Z');
+    expect(nextLocalMidnight('2026-11-01', NY)?.iso).toBe('2026-11-02T05:00:00.000Z');
+    expect(nextLocalMidnight('not a date', NY)).toBeNull();
   });
 
   it('finds local midnight in the zone', () => {
     expect(localMidnight('2026-11-01', NY)?.iso).toBe('2026-11-01T04:00:00.000Z');
     expect(localMidnight('2026-11-02', NY)?.iso).toBe('2026-11-02T05:00:00.000Z');
+  });
+
+  it('recognises an exact local midnight, and nothing a second off it (R2-9)', () => {
+    expect(localMidnightDateOf('2026-09-16T04:00:00.000Z', NY)).toBe('2026-09-16');
+    expect(localMidnightDateOf('2026-09-16T04:00:30.000Z', NY)).toBeNull();
+    expect(localMidnightDateOf('2026-09-16T04:00:00.001Z', NY)).toBeNull();
+    expect(localMidnightDateOf('2026-09-16T04:01:00.000Z', NY)).toBeNull();
+    expect(localMidnightDateOf('2026-09-16T15:00:00.000Z', 'Asia/Tokyo')).toBe('2026-09-17');
+    expect(localMidnightDateOf('garbage', NY)).toBeNull();
+    expect(localMidnightDateOf('2026-09-16T04:00:00.000Z', 'UTC+3')).toBeNull();
+  });
+
+  it('counts a midnight moved forward by a DST gap, as the 067 trigger does', () => {
+    // America/Havana springs forward at 00:00 on 2026-03-08: 00:00 never happens.
+    const moved = localMidnight('2026-03-08', 'America/Havana');
+    expect(moved?.resolution).toBe('gap');
+    expect(localMidnightDateOf(moved!.iso, 'America/Havana')).toBe('2026-03-08');
   });
 
   it('labels an instant with its own local time and Intl short zone name', () => {

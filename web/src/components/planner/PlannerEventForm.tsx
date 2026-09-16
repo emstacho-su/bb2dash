@@ -7,6 +7,11 @@
  * the ✕ behave as every other popout does. The planner hands it an `onClose`
  * that also puts focus back on the slot or block that opened it.
  *
+ * The form does not own its writes: `usePlannerEventEditor` does, and it
+ * outlives the dialog. Closing while a save is in flight is allowed, and a
+ * rejection that lands after the dialog has gone is reported in the grid's
+ * alert instead of vanishing with the form (R2-6).
+ *
  * Wall clocks are typed in the event's own zone and converted once, in
  * `draftFromForm`; a time that falls in the fall-back fold or the spring-forward
  * gap is explained under its field. Errors are shown per field after the first
@@ -20,22 +25,16 @@ import { PopoutShell } from '@/components/popout/PopoutShell';
 import {
   PLANNER_EVENT_KINDS,
   PLANNER_EVENT_KIND_LABELS,
-  PlannerEventValidationError,
+  type PlannerEventDraft,
   type PlannerEventKind,
   type PlannerEventRow,
 } from '@/lib/planner-events';
-import {
-  useCreatePlannerEvent,
-  useDeletePlannerEvent,
-  useUpdatePlannerEvent,
-} from '@/lib/queries.plannerEvents';
 import {
   draftFromForm,
   formStateFromPrefill,
   formStateFromRow,
   updateForm,
   type FormErrors,
-  type FormField,
   type PlannerEventFormState,
   type PlannerEventPrefill,
 } from './planner-event-form-state';
@@ -53,43 +52,45 @@ export type PlannerEventFormMode =
   | { mode: 'create'; prefill: PlannerEventPrefill }
   | { mode: 'edit'; event: PlannerEventRow };
 
-const COLUMN_FIELD: Record<string, FormField> = {
-  kind: 'kind',
-  title: 'title',
-  starts_at: 'start',
-  ends_at: 'end',
-  all_day: 'start',
-  time_zone: 'zone',
-  location_kind: 'locationKind',
-  location: 'location',
-  notes: 'notes',
-  done: 'done',
-  course_id: 'courseId',
-};
+/**
+ * The 067 trigger's zone refusal ('planner_events: time_zone … is not an IANA
+ * zone name'). The web applies the same rule first, so this only fires for a
+ * zone `Intl` knows and the server's zone database does not.
+ */
+const SERVER_ZONE_REFUSAL = /\btime_zone\b/;
+
+export interface PlannerEventFormProps {
+  target: PlannerEventFormMode;
+  onClose: () => void;
+  /** Create or update, depending on `target`. */
+  onSave: (draft: PlannerEventDraft) => void;
+  onDelete: (event: PlannerEventRow) => void;
+  /** A write from this dialog is in flight. */
+  pending: boolean;
+  /** Why this dialog's last write was refused, if it was. */
+  error: Error | null;
+}
 
 export function PlannerEventForm({
   target,
   onClose,
-}: {
-  target: PlannerEventFormMode;
-  onClose: () => void;
-}) {
+  onSave,
+  onDelete,
+  pending,
+  error,
+}: PlannerEventFormProps) {
   const [state, setState] = useState<PlannerEventFormState>(() =>
     target.mode === 'create' ? formStateFromPrefill(target.prefill) : formStateFromRow(target.event),
   );
   const [attempted, setAttempted] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const create = useCreatePlannerEvent();
-  const update = useUpdatePlannerEvent();
-  const remove = useDeletePlannerEvent();
-  const pending = create.isPending || update.isPending || remove.isPending;
-
   const result = draftFromForm(state);
-  const serverError = create.error ?? update.error ?? remove.error ?? null;
-  const errors: FormErrors = attempted
-    ? { ...(result.ok ? {} : result.errors), ...fieldErrorsOf(serverError) }
-    : {};
+  const zoneRefused = error !== null && SERVER_ZONE_REFUSAL.test(error.message);
+  const errors: FormErrors = {
+    ...(attempted && !result.ok ? result.errors : {}),
+    ...(zoneRefused ? { zone: 'The calendar database does not know this zone; choose another.' } : {}),
+  };
 
   const set = <K extends keyof PlannerEventFormState>(field: K, value: PlannerEventFormState[K]) =>
     setState((current) => updateForm(current, field, value));
@@ -98,11 +99,7 @@ export function PlannerEventForm({
     event.preventDefault();
     setAttempted(true);
     if (!result.ok || pending) return;
-    if (target.mode === 'create') {
-      create.mutate(result.draft, { onSuccess: onClose });
-    } else {
-      update.mutate({ current: target.event, patch: result.draft }, { onSuccess: onClose });
-    }
+    onSave(result.draft);
   }
 
   const heading = target.mode === 'create' ? 'New planner event' : 'Edit planner event';
@@ -177,9 +174,9 @@ export function PlannerEventForm({
           )}
         </Field>
 
-        {serverError && !(serverError instanceof PlannerEventValidationError) && (
+        {error !== null && !zoneRefused && (
           <p className={styles.serverError} role="alert">
-            Could not save: {serverError.message}
+            Could not save: {error.message}
           </p>
         )}
 
@@ -190,7 +187,7 @@ export function PlannerEventForm({
               pending={pending}
               onAsk={() => setConfirmingDelete(true)}
               onCancel={() => setConfirmingDelete(false)}
-              onConfirm={() => remove.mutate(target.event, { onSuccess: onClose })}
+              onConfirm={() => onDelete(target.event)}
             />
           )}
           <button type="button" className={tokens.btnSecondary} onClick={onClose}>
@@ -202,13 +199,5 @@ export function PlannerEventForm({
         </div>
       </form>
     </PopoutShell>
-  );
-}
-
-/** Field errors the mutation itself refused with (the same rules, re-checked). */
-function fieldErrorsOf(error: Error | null): FormErrors {
-  if (!(error instanceof PlannerEventValidationError)) return {};
-  return Object.fromEntries(
-    Object.entries(error.errors).map(([column, message]) => [COLUMN_FIELD[column], message]),
   );
 }

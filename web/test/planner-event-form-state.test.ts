@@ -162,3 +162,52 @@ describe('draftFromForm', () => {
     expect(event.ok && event.draft.done).toBeNull();
   });
 });
+
+describe('R2-4 — unchanged times keep their stored instants', () => {
+  const fold = makePlannerEvent({
+    starts_at: '2026-11-01T06:30:00.000Z', // the second 01:30 (EST)
+    ends_at: '2026-11-01T07:00:00.000Z',
+  });
+
+  it('keeps both instants when only the title changes', () => {
+    const result = draftFromForm({ ...formStateFromRow(fold), title: 'Renamed' });
+    expect(result).toMatchObject({
+      ok: true,
+      draft: { starts_at: '2026-11-01T06:30:00.000Z', ends_at: '2026-11-01T07:00:00.000Z' },
+    });
+    expect(result.notes).toEqual({});
+  });
+
+  it('converts the start once its time is edited, and keeps the untouched end', () => {
+    const edited = updateForm(formStateFromRow(fold), 'startTime', '00:45');
+    expect(draftFromForm(edited)).toMatchObject({
+      ok: true,
+      draft: { starts_at: '2026-11-01T04:45:00.000Z', ends_at: '2026-11-01T07:00:00.000Z' },
+    });
+  });
+
+  it('re-derives both when the zone changes', () => {
+    const moved = { ...formStateFromRow(fold), zoneChoice: 'America/Chicago' };
+    expect(draftFromForm(moved)).toMatchObject({
+      ok: true,
+      draft: { starts_at: '2026-11-01T06:30:00.000Z', time_zone: 'America/Chicago' },
+    });
+    // 01:30 in Chicago is also a fold, so the conversion (not the stored value) says so.
+    expect(draftFromForm(moved).notes.start).toMatch(/happens twice/);
+  });
+
+  it('keeps an all-day pair when its dates are unchanged', () => {
+    const trip = makePlannerEvent({
+      all_day: true,
+      ...allDayInstants('2026-09-17', '2026-09-19', 'America/New_York')!,
+    });
+    expect(draftFromForm({ ...formStateFromRow(trip), title: 'Trip' })).toMatchObject({
+      ok: true,
+      draft: { starts_at: trip.starts_at, ends_at: trip.ends_at },
+    });
+  });
+
+  it('a new event has nothing stored', () => {
+    expect(formStateFromPrefill({ allDay: true, date: '2026-09-18' }).stored).toBeNull();
+  });
+});
