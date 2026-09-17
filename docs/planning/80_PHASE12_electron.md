@@ -87,6 +87,7 @@ ships the example.
 | `dueReminderTime` | `18:00` | New York wall-clock time the "due tomorrow" check runs once a day (Q5) |
 | `launchAtLogin` | `false` | applied with `app.setLoginItemSettings` at startup (Q1) |
 | `mirrorRoot` | see C-9 | post-MVP |
+| `syncDryRun` | `false` | added at integration (W-25 note 2, PM accepted 2026-09-16): the sync terminal opens as usual and **prints** the command instead of running it, so the Sync button can be shown without starting a live Blackboard sync; `BB2DASH_SYNC_DRY_RUN=1` does the same for one run |
 
 Secrets: the anon key is the only credential anywhere in `desktop/`; RLS is the boundary, as in
 `web/`. `test/unit/audit.test.ts` greps `desktop/src` and `desktop/test` for `service_role` and
