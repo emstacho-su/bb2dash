@@ -166,25 +166,37 @@ describe('startPoller', () => {
     expect(powerHandlers['resume']).toHaveLength(0);
   });
 
-  it('a resume event and a focus event each drive a tick', async () => {
-    // Counting the reads rather than diffing the watermark file: two ticks in the same
-    // millisecond write byte-identical JSON, which made a file-diff assertion flaky.
+  /**
+   * One trigger per test, each against its own poller.
+   *
+   * Two things make a single combined test unreliable, and both are real behaviour rather
+   * than test noise: ticks never overlap, so a second trigger fired while the first tick is
+   * still in flight is dropped as busy; and `onFocus` is throttled to 60 s, so the dropped
+   * one cannot simply be retried. Counting reads rather than diffing the watermark file
+   * also matters — two ticks in the same millisecond write byte-identical JSON.
+   */
+  async function firstTickFrom(trigger: 'resume' | 'focus'): Promise<number> {
     const rest = countingRest();
     const handle = start(fakeWindow(), rest.get);
     // The launch tick finds no watermark, writes a first-launch one and reads nothing —
-    // that file appearing is how we know it is over.
+    // that file appearing is how we know it is over and the poller is idle again.
     await vi.waitFor(() => readFile(join(dir, WATERMARK_FILENAME), 'utf8'));
     expect(rest.ticks()).toBe(0);
 
-    // Sequentially, with a wait between: ticks never overlap, so firing both at once would
-    // have one dropped as busy and prove only that one of the two paths works.
-    powerHandlers['resume']?.[0]?.();
+    if (trigger === 'resume') powerHandlers['resume']?.[0]?.();
+    else focusHandlers[0]?.();
+
     await vi.waitFor(() => expect(rest.ticks()).toBe(1));
-
-    focusHandlers[0]?.();
-    await vi.waitFor(() => expect(rest.ticks()).toBe(2));
-
     handle.stop();
+    return rest.ticks();
+  }
+
+  it('a powerMonitor resume drives a tick', async () => {
+    expect(await firstTickFrom('resume')).toBe(1);
+  });
+
+  it('a window focus drives a tick', async () => {
+    expect(await firstTickFrom('focus')).toBe(1);
   });
 
   it('a toast click routes through the deep-link validator', async () => {
