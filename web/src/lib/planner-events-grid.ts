@@ -21,6 +21,7 @@ import {
   PLANNER_SLOT_COUNT,
   PLANNER_START_MINUTE,
   formatClock,
+  formatClockRange,
   newYorkWallClock,
   slotOffset,
   type PlannerWeekModel,
@@ -160,7 +161,7 @@ function timedSegments(row: PlannerEventRow, week: PlannerWeekModel): PlacedEven
   const zeroLength = Date.parse(row.starts_at) === Date.parse(row.ends_at);
   const timeText = zeroLength
     ? formatClock(start.minute)
-    : `${formatClock(start.minute)} – ${formatClock(end.minute)}`;
+    : formatClockRange(start.minute, end.minute);
   const zoneChip = chipFor(row);
   const segments: PlacedEventSegment[] = [];
 

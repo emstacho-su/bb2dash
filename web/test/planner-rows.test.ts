@@ -28,9 +28,11 @@ import { PLANNER_SLOT_COUNT } from '@/lib/planner-week';
 import {
   PLANNER_BASE_SLOT_PX,
   PLANNER_BLOCK_LINE_PX,
+  PLANNER_BLOCK_PADDING_PX,
   PLANNER_MAX_SLOT_SCALE,
   PLANNER_MAX_TITLE_LINES,
   baseSlotHeights,
+  blockContentPx,
   buildSlotHeights,
   gridHeightPx,
   pxToSlot,
@@ -291,6 +293,69 @@ describe('spanPx — what a block hands the stylesheet', () => {
 /* ---------------------------------------------------------------------------
  * Wrapping (P-planner-4)
  * ------------------------------------------------------------------------ */
+
+/**
+ * F-2(b), from the PM's browser walk: a 55-minute block cut "Trendy Today,
+ * Toxic" through the middle of the letters. A block clips at its own edge, and
+ * its own edge is wherever the hour puts it — which is almost never a line
+ * boundary. The text area is therefore a whole number of lines, and the line
+ * after the last one it can afford starts exactly where the clip is.
+ */
+describe('blockContentPx — the text area is whole lines, never a part of one', () => {
+  it('gives a 55-minute block two lines, not two and a half', () => {
+    // 55 min is 44px; 38px of it is text area; two 14px lines fit, 2.71 do not.
+    expect(blockContentPx(44)).toBe(2 * PLANNER_BLOCK_LINE_PX);
+  });
+
+  it('is always a whole number of lines', () => {
+    assertProperty(
+      fc.property(fc.double({ min: 0, max: 600, noNaN: true }), (heightPx) => {
+        expect(blockContentPx(heightPx) % PLANNER_BLOCK_LINE_PX).toBe(0);
+      }),
+    );
+  });
+
+  it('never asks for more room than the block has to give', () => {
+    assertProperty(
+      fc.property(
+        fc.double({ min: PLANNER_BLOCK_PADDING_PX + PLANNER_BLOCK_LINE_PX, max: 600, noNaN: true }),
+        (heightPx) => {
+          expect(blockContentPx(heightPx)).toBeLessThanOrEqual(
+            heightPx - PLANNER_BLOCK_PADDING_PX,
+          );
+        },
+      ),
+    );
+  });
+
+  it('keeps one line even for a block too short for one', () => {
+    expect(blockContentPx(0)).toBe(PLANNER_BLOCK_LINE_PX);
+    expect(blockContentPx(12)).toBe(PLANNER_BLOCK_LINE_PX);
+  });
+
+  it('never shrinks when the block grows', () => {
+    assertProperty(
+      fc.property(
+        fc.double({ min: 0, max: 600, noNaN: true }),
+        fc.double({ min: 0, max: 600, noNaN: true }),
+        (a, b) => {
+          const [low, high] = a <= b ? [a, b] : [b, a];
+          expect(blockContentPx(low)).toBeLessThanOrEqual(blockContentPx(high));
+        },
+      ),
+    );
+  });
+
+  it('agrees with titleLines about how many lines there are', () => {
+    assertProperty(
+      fc.property(fc.double({ min: 0, max: 600, noNaN: true }), (heightPx) => {
+        const lines = blockContentPx(heightPx) / PLANNER_BLOCK_LINE_PX;
+        // With nothing else on the block, the title may use every line it has.
+        expect(titleLines(heightPx, 0)).toBe(Math.min(lines, PLANNER_MAX_TITLE_LINES));
+      }),
+    );
+  });
+});
 
 describe('titleLines — the clamp that fits the block', () => {
   it('gives a half-hour block one line, which is where the ellipsis comes from', () => {

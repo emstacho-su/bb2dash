@@ -26,6 +26,7 @@ import {
   buildPlannerWeek,
   expandMeetings,
   formatClock,
+  formatClockRange,
   formatWeekRange,
   isWithinGridHours,
   minutesFromTime,
@@ -265,6 +266,35 @@ describe('wall-clock helpers', () => {
     expect(formatClock(23 * 60 + 59)).toBe('11:59 PM');
   });
 
+  /**
+   * F-2(a), from the PM's browser walk: a ~150px column clipped the end of
+   * "GEO 103 10:35 AM – 11:30 A". Google Calendar says the meridiem once when
+   * both ends share it, which is three characters of the four that were lost.
+   */
+  it('says the meridiem once when both ends of a range share it', () => {
+    expect(formatClockRange(635, 690)).toBe('10:35 – 11:30 AM');
+    expect(formatClockRange(945, 1025)).toBe('3:45 – 5:05 PM');
+    expect(formatClockRange(720, 750)).toBe('12:00 – 12:30 PM');
+  });
+
+  it('keeps both when they differ, which is where the reader needs them', () => {
+    expect(formatClockRange(700, 755)).toBe('11:40 AM – 12:35 PM');
+    // Noon and midnight are the two that a naive hour test gets wrong.
+    expect(formatClockRange(690, 720)).toBe('11:30 AM – 12:00 PM');
+    expect(formatClockRange(0, 30)).toBe('12:00 – 12:30 AM');
+  });
+
+  it('is one clock when there is no end, or the end is the same minute', () => {
+    expect(formatClockRange(945, null)).toBe('3:45 PM');
+    expect(formatClockRange(945, 945)).toBe('3:45 PM');
+  });
+
+  it('reads an end earlier than the start as the next day, not as broken data', () => {
+    // An 11 PM – 1 AM event reaches this as (1380, 60). A caller that treats a
+    // backwards end as bad data checks it before asking — `expandMeetings` does.
+    expect(formatClockRange(23 * 60, 60)).toBe('11:00 PM – 1:00 AM');
+  });
+
   it('draws fourteen hour labels over twenty-eight slots', () => {
     const hours = plannerHours();
     expect(PLANNER_SLOT_COUNT).toBe(28);
@@ -338,7 +368,7 @@ describe('expandMeetings — ordinary week', () => {
     expect(placed.dayIndex).toBe(2);
     expect(placed.startMinute).toBe(945);
     expect(placed.endMinute).toBe(1025);
-    expect(placed.timeText).toBe('3:45 PM – 5:05 PM');
+    expect(placed.timeText).toBe('3:45 – 5:05 PM');
     expect(placed.room).toBe('Hinds Hall 010');
   });
 
@@ -424,7 +454,7 @@ describe('expandMeetings — DST is not allowed to move a class', () => {
     expect(after.dayIso).toBe('2026-11-04');
     expect(before.startMinute).toBe(945);
     expect(after.startMinute).toBe(945);
-    expect(after.timeText).toBe('3:45 PM – 5:05 PM');
+    expect(after.timeText).toBe('3:45 – 5:05 PM');
   });
 
   it('keeps a 15:45 class at 15:45 either side of the spring forward', () => {
