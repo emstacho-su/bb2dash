@@ -27,9 +27,11 @@ export function isCurrentCourse(pathname: string, courseId: string): boolean {
 
 export function CourseSidebar() {
   const pathname = usePathname();
-  const { open, overlay, close, toggleRef } = useSidebar();
+  const { open, overlay, close, closeForNavigation, toggleRef } = useSidebar();
   const panelRef = useRef<HTMLElement | null>(null);
   const coursesQuery = useCourses();
+  /** The route this component last saw, so a mount is not read as a move. */
+  const lastPathname = useRef(pathname);
 
   /** Close and hand focus back to the control that opened it. */
   const dismiss = useCallback(() => {
@@ -49,10 +51,24 @@ export function CourseSidebar() {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [overlay, open, dismiss]);
 
-  // A drawer covers the page it just navigated to, so get out of the way.
-  // In-flow mode keeps the rail up — that is the whole point of it.
+  /**
+   * H-6 (P-home-9, Stack's answer 10): navigating gets the rail out of the way
+   * of the page it just opened — in flow as well as over it, since Stack asked
+   * for exactly that when he opens a course from the rail.
+   *
+   * Two things this must not do. It must not fire on mount: landing on a route
+   * is not moving between them, and closing there would mean the rail never
+   * showed on a cold load. And it must not remember the close — hence
+   * `closeForNavigation` rather than `close`. The overlay branch used to use
+   * `close()`, so tapping a course on a phone quietly wrote 'closed' and the
+   * rail stayed down on every later visit.
+   */
   useEffect(() => {
-    if (overlay && open) close();
+    if (lastPathname.current === pathname) return;
+    lastPathname.current = pathname;
+    if (open) closeForNavigation();
+    // `open` is read, not depended on: this must run when the ROUTE moves and
+    // at no other time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 

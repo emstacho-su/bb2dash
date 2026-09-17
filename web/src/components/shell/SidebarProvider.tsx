@@ -36,7 +36,18 @@ type SidebarContextValue = {
   /** Below `SIDEBAR_BREAKPOINT` the rail is a drawer over the content. */
   overlay: boolean;
   toggle: () => void;
+  /** Close because the reader asked to. Remembered for next time. */
   close: () => void;
+  /**
+   * Close because the app navigated — H-6 / P-home-9, Stack's answer 10.
+   *
+   * Deliberately does NOT touch the stored preference. Getting out of the way
+   * of the page you just opened is the router's business; whether the rail is
+   * up when you arrive at bb2dash is Stack's, and one should never decide the
+   * other. (Before this, opening a course from the rail wrote 'closed' and the
+   * rail stayed down on every later visit until he re-opened it by hand.)
+   */
+  closeForNavigation: () => void;
   /** The ☰ button, so the drawer can hand focus back when it dismisses. */
   toggleRef: RefObject<HTMLButtonElement | null>;
 };
@@ -90,10 +101,12 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 
   const toggle = useCallback(() => setOpenPersisted(!open), [open, setOpenPersisted]);
   const close = useCallback(() => setOpenPersisted(false), [setOpenPersisted]);
+  /** The same close, minus the memory. See `closeForNavigation` above. */
+  const closeForNavigation = useCallback(() => setOpen(false), []);
 
   const value = useMemo<SidebarContextValue>(
-    () => ({ open, overlay, toggle, close, toggleRef }),
-    [open, overlay, toggle, close],
+    () => ({ open, overlay, toggle, close, closeForNavigation, toggleRef }),
+    [open, overlay, toggle, close, closeForNavigation],
   );
 
   return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>;
