@@ -43,3 +43,23 @@ his list; no before-screenshots were taken (the list is the record).
   `apply_resolutions` skips.
 * **F-5 (X-3, W-30, low).** The IST.323 shared-column conflict is still open in the Inbox though
   075 now handles the shared column; decide whether 075's restamp should dismiss it.
+
+## Pass 2 — 2026-09-17, branch at `c59a7d2` (W-31 merged, Home card wired, round-2 fixes in)
+
+| row | check | result | evidence |
+|---|---|---|---|
+| G-1 | no "Our model", what-if, target solver, scenario, best case | **pass** — none of those strings on `/grades`; "Counts toward…" pointer present | `grades.png` |
+| G-2 | each course collapses; header shows graded so far with "as of"; Home card shows the same number | **pass** — ECN 304 90.0 % A-, GEO 103 nothing graded yet, IST 323 98.7 % A (14.8 / 15, beside Blackboard's 14.8 / 104), IST 352 93.8 % A, IST 466 nothing graded yet, IST 471 graded qualitatively — identical on `/grades` and the six Home cards; "Hide" folds a course | `grades.png`, `home-pass2.png` |
+| G-3 | course title is the link | **pass** — six `<h2>` links to `/course/<id>`, no "Course tab →" button | DOM read |
+| G-4 | no "last attempt: COMPLETED" beside "graded" | **pass** | `grades.png` |
+| G-5 | feedback and history inside the popout | **pass** — IST 352 "Research - Role of Systems Analyst": Feedback section in the popout; `ScoreHistory` renders only with two or more observations and this column has one | `grades-popout.png` |
+| G-6 | feedback mark on the item cell | **pass** — six marked rows | DOM read |
+| S-1 | six statuses in the popout menu | **pass** | `grades-popout.png` |
+| G-7 | submission files in the popout and Materials | **waits for the first crawler-v4 sync** (`80f`); popout says "No submission files have been recorded" today | `grades-popout.png` |
+
+### Notes for Stack from pass 2 (data, not code)
+
+* ECN 304 reads 90.0 % from Quiz 1 alone: **Quiz 2 (6 / 8) and Attendance are listed under "Counts
+  toward nothing"** — today's sync brought the Quiz 2 column and nothing links it to the Quizzes
+  part yet. One click on the row's "Counts toward…" fixes the figure (it would read 83.3 %).
+* IST 323's 14.8 / 15 agrees with Blackboard's own 14.8 running total.

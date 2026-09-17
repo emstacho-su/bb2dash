@@ -8,7 +8,10 @@
  * whose rule sets `display` to something other than `table-cell` — directly or
  * through `composes` — is a layout class, and no rendered cell may carry one.
  * Every row branch is rendered: link picker, counted tag, ambiguous note,
- * what-if cell, history, feedback row, bookkeeping group, placeholder rows.
+ * feedback row, bookkeeping group. The score history left the table in Phase
+ * 12b (G-5) and the what-if cell and placeholder rows went with the what-if
+ * layer in G-1; the feedback row now only appears on a column with no
+ * assignment to open, which is what `QUIZ` is here.
  */
 
 import { readFileSync } from 'node:fs';
@@ -19,9 +22,8 @@ import { describe, expect, it, vi } from 'vitest';
 import gradebookStyles from '@/components/grades/GradebookTable.module.css';
 import modelStyles from '@/components/grades/GradeModel.module.css';
 import tokenStyles from '@/styles/tokens.module.css';
-import { columnItemKey, historyByColumn, type LinkState, type WhatIfCellTarget } from '@/lib/grade-model-view';
+import { columnItemKey, type LinkState } from '@/lib/grade-model-view';
 import { makeGradebookRow } from './factories.grades';
-import { IST466_LETTER_PLACEHOLDER, QUIZ_HISTORY } from './factories.grade-model';
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn(), auth: { getSession: vi.fn() } }),
@@ -31,7 +33,6 @@ vi.mock('next/link', () => ({
 }));
 
 const { GradebookTable } = await import('@/components/grades/GradebookTable');
-const { PlaceholderRows } = await import('@/components/grades/PlaceholderRows');
 
 /* ---------------------------------------------------------------------------
  * Which classes lay a box out as something other than a table cell
@@ -116,31 +117,20 @@ function layoutClasses(): { readonly rendered: ReadonlySet<string>; readonly cel
  * ------------------------------------------------------------------------ */
 
 const LINKED = makeGradebookRow({ course_id: 'IST.466', column_id: '_3562496_1', name: 'Synchrony Major Case #1', possible: 150, assignment_id: null, submission_status: 'SUBMITTED', last_attempt_status: 'NEEDS_GRADING' });
-const QUIZ = makeGradebookRow({ column_id: '_3560532_1', name: 'Quiz #3', effective_score: 9.5, possible: 10, display_grade: 'A', feedback: 'Well done.\nSee me.' });
-const WHAT_IF = makeGradebookRow({ column_id: '_3560541_1', name: 'Lab #2', possible: 50 });
+const QUIZ = makeGradebookRow({ column_id: '_3560532_1', name: 'Quiz #3', effective_score: 9.5, possible: 10, display_grade: 'A', feedback: 'Well done.\nSee me.', assignment_id: null, linked_assignments: 0 });
+const UNGRADED = makeGradebookRow({ column_id: '_3560541_1', name: 'Lab #2', possible: 50 });
 const AMBIGUOUS = makeGradebookRow({ column_id: '_3560600_1', name: 'Reading check', column_kind: 'attendance', linked_assignments: 3, counts_toward_grade: true });
 const BOOKKEEPING = makeGradebookRow({ column_id: '_3560700_1', name: 'Attendance', column_kind: 'attendance', counts_toward_grade: false });
 
 const linkKey = columnItemKey('IST.466', '_3562496_1');
-const whatIfKey = columnItemKey('IST.323', '_3560541_1');
-const placeholderKey = IST466_LETTER_PLACEHOLDER.item_key;
-
-const targets = new Map<string, WhatIfCellTarget>([
-  [whatIfKey, { key: whatIfKey, name: 'Lab #2', unit: 'points', possible: 50 }],
-  [placeholderKey, { key: placeholderKey, name: 'Letter of Gratitude', unit: 'points', possible: 100 }],
-]);
-const whatIf = { targets, values: { [whatIfKey]: 40, [placeholderKey]: 90 }, onCommit: vi.fn() };
 const linkState: LinkState = { shellCourseId: 'IST.466', columnId: '_3562496_1', componentId: 24, excluded: false, unsure: true, override: false };
 const links = { states: new Map([[linkKey, linkState]]), options: [{ id: 24, name: 'Two Major Case Studies (Synchrony, SU IT)' }], onChange: vi.fn() };
 
 function renderEveryBranch() {
   const view = render(
     <GradebookTable
-      rows={[LINKED, QUIZ, WHAT_IF, AMBIGUOUS, BOOKKEEPING]}
-      whatIf={whatIf}
-      history={historyByColumn(QUIZ_HISTORY)}
+      rows={[LINKED, QUIZ, UNGRADED, AMBIGUOUS, BOOKKEEPING]}
       links={links}
-      footer={<PlaceholderRows items={[IST466_LETTER_PLACEHOLDER]} whatIf={whatIf} dropped={[]} />}
     />,
   );
   fireEvent.click(screen.getByRole('button', { name: /Attendance and bookkeeping columns/ }));
@@ -153,7 +143,7 @@ describe('grades tables — every th/td stays a table cell (R3-1)', () => {
     expect(cellRules).toEqual([]);
     expect(rendered.has(gradebookStyles.nameStack)).toBe(true);
     expect(rendered.has(gradebookStyles.submissionStack)).toBe(true);
-    expect(rendered.has(modelStyles.whatIf)).toBe(true);
+    expect(rendered.has(modelStyles.link)).toBe(true);
     expect(rendered.has(tokenStyles.tagNeutral)).toBe(true);
   });
 
@@ -162,9 +152,8 @@ describe('grades tables — every th/td stays a table cell (R3-1)', () => {
     const { rendered } = layoutClasses();
     const cells = [...container.querySelectorAll('th, td')];
 
-    expect(container.querySelectorAll('table')).toHaveLength(3);
+    expect(container.querySelectorAll('table')).toHaveLength(2);
     expect(screen.getByText('Well done.', { exact: false })).toBeInTheDocument();
-    expect(screen.getByLabelText(/what if\s*—\s*Letter of Gratitude/)).toBeInTheDocument();
     expect(cells.length).toBeGreaterThan(20);
 
     const offenders = cells
@@ -179,14 +168,5 @@ describe('grades tables — every th/td stays a table cell (R3-1)', () => {
     expect(name.querySelector(`.${gradebookStyles.nameStack}`)).not.toBeNull();
     const submission = container.querySelector(`.${gradebookStyles.submissionStack}`)?.parentElement;
     expect(submission?.tagName).toBe('TD');
-  });
-
-  it('keeps the what-if label, field, "/ 50" and × together in one group', () => {
-    renderEveryBranch();
-    const field = screen.getByLabelText(/what if\s*—\s*Lab #2/);
-    const group = field.closest(`.${modelStyles.whatIfControls}`) as HTMLElement;
-    expect(group).not.toBeNull();
-    expect(group.textContent).toContain('/ 50');
-    expect(group.querySelector('button[aria-label^="Clear this what-if value"]')).not.toBeNull();
   });
 });

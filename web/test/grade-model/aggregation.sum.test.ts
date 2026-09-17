@@ -5,9 +5,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { projectCourse, type ComputedResult } from '@/lib/grade-model';
+import { run as runCourse, type RunResult } from './run';
 import { sumAggregate } from '@/lib/grade-model/aggregations/sum';
-import { component, counted, item, leaf, modelInput, scheme, whatIf } from './builders';
+import { component, counted, item, leaf, modelInput, scheme } from './builders';
 
 describe('sum under weighted_pct (capacity from known items)', () => {
   const CAP = 60; // IST.352 project_deliverables
@@ -41,7 +41,6 @@ describe('sum under points (Σp_exp = points)', () => {
     { name: 'IST.323 fp_log at best case', cap: 3, count: 2, items: [counted(1, 1)], r: 1, earned: 3, gradedCap: 1, remainingCap: 2, remainingCount: 1 },
     { name: 'missing capacity with no count still leaves one slot', cap: 20, count: null, items: [counted(5, 4)], r: 0, earned: 4, gradedCap: 5, remainingCap: 15, remainingCount: 1 },
     { name: 'known possibles above points: no missing capacity, nothing clamped', cap: 11, count: 1, items: [counted(13, 13)], r: 1, earned: 13, gradedCap: 13, remainingCap: 0, remainingCount: 0 },
-    { name: 'what-if 6/10 on a placeholder counts', cap: 30, count: 3, items: [counted(10, 9.8), whatIf(10, 6), counted(10, null)], r: null, earned: 15.8, gradedCap: 20, remainingCap: 10, remainingCount: 1 },
   ])('$name', ({ cap, count, items, r, earned, gradedCap, remainingCap, remainingCount }) => {
     const outcome = sumAggregate(leaf({ aggregation: 'sum', points: cap, countExpected: count }, items, cap, 'points'), r);
     expect(outcome.earned).toBeCloseTo(earned, 12);
@@ -74,25 +73,21 @@ describe('sum with children: IST.323 final_project = proposal 11 + log 3 + defen
   const baseItems = [
     item({ key: 'col:proposal', componentId: 18, possible: 11, score: 9 }),
     item({ key: 'col:log-checkpoint', componentId: 19, possible: 1, score: 1 }),
-    item({ key: 'asg:fp-defense', componentId: 20, possible: 6, kind: 'placeholder' }),
-    item({ key: 'asg:fp-packet', componentId: 14, possible: null, kind: 'placeholder' }),
+    item({ key: 'col:fp-defense', componentId: 20, possible: 6 }),
   ];
   const points = scheme({ method: 'points', totalPoints: 20, gradedOutOf: null, letterScale: [{ min: 0, letter: 'F' }] });
 
   function run(items = baseItems) {
-    const result = projectCourse(modelInput({ scheme: points, components, items }));
+    const result = runCourse(modelInput({ scheme: points, components, items }));
     expect(result.state).toBe('computed');
-    return result as ComputedResult;
+    return result as Extract<RunResult, { state: 'computed' }>;
   }
 
   it('computes the parent from its children in points', () => {
     const result = run();
-    // graded so far: 9 + 1 earned over 11 + 1 graded capacity
-    expect(result.standings.graded_so_far.earned).toBe(10);
-    expect(result.standings.graded_so_far.denominator).toBe(12);
-    // zeros on the rest: 10 / 20; best case: 9 + 3 + 6 = 18 / 20
-    expect(result.standings.zeros_on_rest.pct).toBeCloseTo(50, 12);
-    expect(result.standings.best_case.earned).toBe(18);
+    // graded so far: 9 + 1 earned over 11 + 1 of graded capacity
+    expect(result.standing.earned).toBe(10);
+    expect(result.standing.denominator).toBe(12);
     expect(result.components.map((c) => [c.code, c.state, c.earned, c.gradedCap, c.cap])).toEqual([
       ['final_project', 'partly_graded', 10, 12, 20],
       ['fp_proposal', 'graded', 9, 11, 11],
@@ -101,18 +96,20 @@ describe('sum with children: IST.323 final_project = proposal 11 + log 3 + defen
     ]);
   });
 
-  it('a muted child leaves the parent and the denominator 6 points smaller', () => {
-    const items = baseItems.map((row) => (row.key === 'asg:fp-defense' ? { ...row, linkConfidence: 'tentative' as const } : row));
+  // G-1: an unsure link used to remove its child from the parent and the
+  // course. It now counts like any other, and the screen says the link is
+  // unsure instead.
+  it('an unsure child still counts toward its parent', () => {
+    const items = baseItems.map((row) => (row.key === 'col:fp-defense' ? { ...row, linkConfidence: 'tentative' as const, score: 6 } : row));
     const result = run(items);
-    expect(result.components.find((c) => c.code === 'final_project')?.cap).toBe(14);
-    expect(result.components.find((c) => c.code === 'fp_defense')?.state).toBe('muted');
-    expect(result.standings.best_case.denominator).toBe(14);
-    expect(result.standings.best_case.earned).toBe(12);
+    expect(result.components.find((c) => c.code === 'final_project')?.cap).toBe(20);
+    expect(result.components.find((c) => c.code === 'fp_defense')?.state).toBe('graded');
+    expect(result.standing).toMatchObject({ earned: 16, denominator: 18 });
   });
 
   it('a parent whose every child is graded is graded', () => {
     const items = [
-      ...baseItems.filter((row) => row.key !== 'asg:fp-defense'),
+      ...baseItems.filter((row) => row.key !== 'col:fp-defense'),
       item({ key: 'col:log-final', componentId: 19, possible: 2, score: 2 }),
       item({ key: 'col:defense', componentId: 20, possible: 6, score: 5 }),
     ];

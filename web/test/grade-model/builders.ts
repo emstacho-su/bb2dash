@@ -6,7 +6,6 @@
 import type { LeafContext } from '@/lib/grade-model/aggregations';
 import type { CountedItem } from '@/lib/grade-model/items';
 import type {
-  BlackboardTotal,
   ComponentInput,
   ItemInput,
   LetterStep,
@@ -68,28 +67,18 @@ export function item(overrides: Partial<ItemInput> & Pick<ItemInput, 'key'>): It
     kind: 'item',
     isExtraCredit: false,
     dueAt: null,
+    seenAt: null,
     ...overrides,
   };
 }
 
 export function modelInput(overrides: Partial<ModelInput> = {}): ModelInput {
-  return {
-    scheme: scheme(),
-    components: [],
-    items: [],
-    scenario: { itemScores: {} },
-    blackboardTotal: null,
-    ...overrides,
-  };
-}
-
-export function total(overrides: Partial<BlackboardTotal> = {}): BlackboardTotal {
-  return { score: null, possible: 100, running: true, seenAt: '2026-09-16T17:14:02Z', ...overrides };
+  return { scheme: scheme(), components: [], items: [], ...overrides };
 }
 
 let counter = 0;
 
-/** A counted item for leaf tests: `[possible, score]`, optionally a what-if score. */
+/** A counted item for leaf tests: `[possible, score]`. */
 export function counted(possible: number, score: number | null, extras: Partial<CountedItem> = {}): CountedItem {
   counter += 1;
   return {
@@ -98,18 +87,11 @@ export function counted(possible: number, score: number | null, extras: Partial<
     possible,
     realScore: score,
     score,
-    hypothetical: false,
     extraCredit: false,
     confirmed: true,
-    placeholder: false,
     dueAt: null,
     ...extras,
   };
-}
-
-/** A what-if value on an ungraded item. */
-export function whatIf(possible: number, value: number): CountedItem {
-  return counted(possible, null, { score: value, hypothetical: true });
 }
 
 export function leaf(

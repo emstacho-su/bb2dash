@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { averageAggregate } from '@/lib/grade-model/aggregations/average';
-import { counted, leaf, whatIf } from './builders';
+import { counted, leaf } from './builders';
 
 const CAP = 10;
 
@@ -19,7 +19,6 @@ describe('average', () => {
     { name: 'more known items than the count: slots follow the items', count: 2, items: [counted(10, 8), counted(10, 6), counted(10, 10)], r: 0, earned: 8, gradedCap: 10, remainingCap: 0, remainingCount: 0 },
     { name: 'nothing graded: left out of graded so far', count: 4, items: [counted(10, null)], r: null, earned: 0, gradedCap: 0, remainingCap: 10, remainingCount: 4 },
     { name: 'nothing known, no count: the capacity is one slot', count: null, items: [], r: 1, earned: 10, gradedCap: 0, remainingCap: 10, remainingCount: 1 },
-    { name: 'a what-if value fills a slot', count: 2, items: [counted(10, 8), whatIf(10, 4)], r: 0, earned: 6, gradedCap: 10, remainingCap: 0, remainingCount: 0 },
   ])('$name', ({ count, items, r, earned, gradedCap, remainingCap, remainingCount }) => {
     const outcome = averageAggregate(leaf({ aggregation: 'average', countExpected: count }, items, CAP), r);
     expect(outcome.earned).toBeCloseTo(earned, 12);

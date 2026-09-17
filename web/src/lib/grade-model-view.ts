@@ -1,53 +1,16 @@
 /**
  * bb2dash — what the grade-model screens may offer on each row (Phase 10b).
  *
- * Pure. Which columns get the "Counts toward…" picker, whether a typed what-if
- * value is acceptable, and how the engine's `itemStates()` becomes cells.
- * Since round 2 (R2-3w / R2-4 / R2-15) nothing here re-states an engine rule:
- * what-if targets, muted parts and dropped placeholders come from
- * `itemStates()` only.
+ * Pure. Which columns get the "Counts toward…" picker, and how the score
+ * history groups by column.
+ *
+ * Phase 12b (G-1) took the what-if cells with the rest of that layer, so what
+ * is left is the picker — which survives, because the figure still needs
+ * columns linked to the syllabus — and the history grouping.
  */
 
-import type { ComponentInput, ItemInput, ItemStates } from './grade-model/types';
+import type { ComponentInput, ItemInput } from './grade-model/types';
 import type { GradeModelItemRow } from './grade-model-input';
-
-/* ---------------------------------------------------------------------------
- * What-if cells — from the engine's itemStates(), never a copy of its rules
- * ------------------------------------------------------------------------ */
-
-/** What a what-if cell needs to know about its item. */
-export interface WhatIfCellTarget {
-  readonly key: string;
-  readonly name: string;
-  /**
-   * `points`: typed against the item's own possible (an extra-credit item's
-   * included). `percent` (Round 1b A1): a placeholder with no possible, typed
-   * as 0–100 and stored as that number; the engine reads `f = v / 100`.
-   */
-  readonly unit: 'points' | 'percent';
-  /** The upper bound the typed value is checked against: the engine's `max`. */
-  readonly possible: number;
-}
-
-/**
- * The cells to draw: exactly the engine's `whatIfTargets` (round 2, R2-3w /
- * R2-15), labelled with each item's name. Which items qualify — counted,
- * leaf-linked, not muted (a muted parent's pieces included), not dropped as
- * surplus, not hand-graded, a percent placeholder whose value would count — is
- * the engine's decision, made from the same preparation `projectCourse` uses.
- */
-export function whatIfCellTargets(
-  states: Pick<ItemStates, 'whatIfTargets'>,
-  items: readonly Pick<ItemInput, 'key' | 'name'>[],
-): ReadonlyMap<string, WhatIfCellTarget> {
-  const names = new Map(items.map((item) => [item.key, item.name]));
-  return new Map(
-    states.whatIfTargets.map((target) => [
-      target.key,
-      { key: target.key, name: names.get(target.key) ?? target.key, unit: target.unit, possible: target.max },
-    ]),
-  );
-}
 
 /* ---------------------------------------------------------------------------
  * The "Counts toward…" picker
@@ -127,43 +90,6 @@ export function linkOptions(
       return a1 - b1 || a2 - b2 || a3 - b3;
     })
     .map((c) => ({ id: c.id, name: c.name }));
-}
-
-/* ---------------------------------------------------------------------------
- * What-if values: validation and immutable updates
- * ------------------------------------------------------------------------ */
-
-export type WhatIfParse =
-  | { readonly ok: true; readonly value: number | null }
-  | { readonly ok: false; readonly error: string };
-
-/**
- * A typed what-if value, checked at the boundary: empty clears the value;
- * otherwise a finite number with `0 ≤ v ≤ possible`. Anything else is an error
- * that is shown on the field and never saved.
- */
-export function parseWhatIf(raw: string, possible: number): WhatIfParse {
-  const text = raw.trim();
-  if (text === '') return { ok: true, value: null };
-  // Number('') and Number(' ') are 0 and Number('0x10') is 16: only plain decimals pass.
-  if (!/^\d+(\.\d+)?$|^\.\d+$/.test(text)) {
-    return { ok: false, error: `Enter a number from 0 to ${possible}.` };
-  }
-  const value = Number(text);
-  if (!Number.isFinite(value) || value < 0 || value > possible) {
-    return { ok: false, error: `Enter a number from 0 to ${possible}.` };
-  }
-  return { ok: true, value };
-}
-
-/** A new scores object with one key set, or removed when `value` is null. */
-export function withItemScore(
-  scores: Readonly<Record<string, number>>,
-  key: string,
-  value: number | null,
-): Record<string, number> {
-  const next = Object.fromEntries(Object.entries(scores).filter(([k]) => k !== key));
-  return value === null ? next : { ...next, [key]: value };
 }
 
 /* ---------------------------------------------------------------------------

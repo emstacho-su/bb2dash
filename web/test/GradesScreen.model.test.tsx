@@ -1,16 +1,14 @@
 /**
- * `/grades` with the model: each card carries the read-only "Our model" line
- * under Blackboard's header and a history disclosure on rows that changed —
- * and none of the course tab's controls (PM call 4). Every hook is a stub and
- * the model arrives as typed results, the way `GradesModelScreen` passes it.
+ * `/grades` with the figure: each card carries "Graded so far" under
+ * Blackboard's own header, and none of the course tab's controls. Every hook is
+ * a stub and the figures arrive already computed, the way `GradesModelScreen`
+ * passes them.
  */
 
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { GradesModelProps } from '@/app/(app)/grades/GradesScreen';
-import { historyByColumn } from '@/lib/grade-model-view';
+import type { GradesFiguresProps } from '@/app/(app)/grades/GradesScreen';
 import { makeCourseGrade, makeGradebookRow } from './factories.grades';
-import { NOT_COMPUTED_MANUAL, QUIZ_HISTORY, makeComputed } from './factories.grade-model';
 
 function stub<T>(data: T) {
   return { data, isPending: false, isFetching: false, isError: false, error: null };
@@ -52,27 +50,47 @@ vi.mock('@/lib/queries.grades', async (importOriginal) => {
 
 const { GradesScreen } = await import('@/app/(app)/grades/GradesScreen');
 
-const MODEL: GradesModelProps = {
-  standings: {
-    'IST.323': { result: NOT_COMPUTED_MANUAL, realResult: NOT_COMPUTED_MANUAL, components: [], items: [], unsureItemKeys: [], error: null, loading: false },
-    'IST.466': { result: makeComputed({ usesHypotheticals: true }), realResult: makeComputed(), components: [], items: [], unsureItemKeys: [], error: null, loading: false },
+const MODEL: GradesFiguresProps = {
+  figures: {
+    'IST.323': {
+      figure: { state: 'not_computable', reason: 'qualitative_method' },
+      error: null,
+    },
+    'IST.466': {
+      figure: {
+        state: 'figure',
+        percent: 87.3612,
+        letter: 'B+',
+        pointsEarned: null,
+        pointsPossible: null,
+        countedParts: ['Major Cases'],
+        leftOutParts: ['Ethics Presentation'],
+        unlinkedColumns: [],
+        asOf: '2026-09-16T17:14:02.645Z',
+      },
+      error: null,
+    },
   },
-  history: historyByColumn(QUIZ_HISTORY),
 };
 
-describe('GradesScreen — the read-only model line', () => {
-  it("puts each course's model under Blackboard's own header", () => {
+describe('GradesScreen — the figure under each header', () => {
+  it("puts each course's figure under Blackboard's own number, never merged with it", () => {
     render(<GradesScreen model={MODEL} />);
     const ist323 = screen.getByRole('region', { name: 'IST 323' });
     expect(within(ist323).getByText('14.8 / 104')).toBeInTheDocument();
     expect(
-      within(within(ist323).getByRole('region', { name: 'Our model' })).getByText('Model not computed — Class Participation not scored yet'),
+      within(ist323).getByText(/graded qualitatively/),
     ).toBeInTheDocument();
 
     const ist466 = screen.getByRole('region', { name: 'IST 466' });
-    const model = within(ist466).getByRole('region', { name: 'Our model' });
-    expect(within(model).getByText('87.4% (B+)')).toBeInTheDocument();
-    expect(within(model).getByText('includes what-if values')).toBeInTheDocument();
+    expect(within(ist466).getByText('87.4%')).toBeInTheDocument();
+    expect(within(ist466).getByText('B+')).toBeInTheDocument();
+  });
+
+  it('names the parts the figure does not cover', () => {
+    render(<GradesScreen model={MODEL} />);
+    const ist466 = screen.getByRole('region', { name: 'IST 466' });
+    expect(within(ist466).getByText('Not counted yet: Ethics Presentation')).toBeInTheDocument();
   });
 
   it('offers no what-if cell, no solver, no picker and no Reset', () => {
@@ -83,39 +101,26 @@ describe('GradesScreen — the read-only model line', () => {
     expect(screen.queryByRole('button', { name: 'Reset scenario' })).toBeNull();
   });
 
-  it('shows the history disclosure on the row that changed', () => {
+  /* G-5, P-grades-8: the history disclosure left this screen for the popout. */
+  it('shows no history disclosure on any row', () => {
     render(<GradesScreen model={MODEL} />);
-    const row = screen.getByText('Quiz #3').closest('tr') as HTMLElement;
-    expect(within(row).getByRole('button', { name: /history/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /history/ })).toBeNull();
   });
 
-  it('keeps every computed percentage inside an "Our model" container', () => {
-    const { container } = render(<GradesScreen model={MODEL} />);
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-    let count = 0;
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!/\d%/.test(node.textContent ?? '')) continue;
-      count += 1;
-      expect(node.parentElement?.closest('[data-model]')).not.toBeNull();
-    }
-    expect(count).toBeGreaterThan(0);
-  });
-
-  it('says loading for a course whose model has not been computed yet, and a failure as an alert', () => {
+  it('says loading for a course whose reads have not landed, and a failure as an alert', () => {
     render(
       <GradesScreen
         model={{
-          standings: { 'IST.323': { result: null, realResult: null, components: [], items: [], unsureItemKeys: [], error: 'Could not load the grade model: timeout', loading: false } },
-          history: new Map(),
-          historyError: 'Could not load the score history: timeout',
+          figures: {
+            'IST.323': { figure: null, error: 'Could not load the grading rules: timeout' },
+          },
         }}
       />,
     );
     const ist466 = screen.getByRole('region', { name: 'IST 466' });
     expect(within(ist466).getByText('loading…')).toBeInTheDocument();
     expect(screen.getAllByRole('alert').map((a) => a.textContent)).toEqual([
-      'Could not load the score history: timeout',
-      'Could not load the grade model: timeout',
+      'Could not load the grading rules: timeout',
     ]);
   });
 });

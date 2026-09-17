@@ -27,9 +27,38 @@
   color: var(--color-text);
 }
 
+/*
+ * The title as the way into the course (Phase 12b, P-grades-2). It reads as a
+ * hyperlink — accent colour, underline on hover — while inheriting the
+ * heading's family, weight and size from `.title` above it.
+ */
+.titleLink {
+  color: var(--color-accent);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.titleLink:hover,
+.titleLink:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.titleLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .subtitle {
   font-size: var(--text-sm);
   color: var(--color-muted);
+}
+
+/* Fold one course's gradebook away (Phase 12b, P-grades-1). */
+.collapseToggle {
+  composes: btnGhost from '@/styles/tokens.module.css';
+  font-size: var(--text-sm);
+  margin-inline-start: auto;
 }
 
 .pillRow {

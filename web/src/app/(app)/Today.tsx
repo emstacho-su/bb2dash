@@ -46,6 +46,9 @@ import {
   parseDateOnly,
 } from '@/components/tracker/anchor';
 import { pickCourseGrade, useCourseGrades } from '@/lib/queries.grades';
+import { schemeCourseIdFor } from '@/lib/queries.grade-model';
+import { gradedSoFarCardFigure } from '@/lib/graded-so-far';
+import { useCourseFigures } from '@/lib/use-course-figures';
 import { NeedsAttentionRow } from './NeedsAttention';
 import {
   blackboardGradeFigure,
@@ -69,6 +72,8 @@ const CATEGORY_ORDER: WorkCategory[] = ['exam', 'project', 'quiz', 'assignment',
  * away, which is a different claim from the one the card has been making.
  */
 const CARD_HORIZON_DAYS = DEFAULT_VISIBLE_DAYS;
+/** Stable empty list while the courses read is in flight (keeps the figures memo steady). */
+const EMPTY_COURSES: readonly CourseDisplay[] = [];
 
 const GLYPH_CLASS: Record<WorkCategory, string> = {
   reading: tokens.glyphReading,
@@ -125,6 +130,7 @@ export function Today() {
   const coursesQ = useCourseDisplay();
   const termQ = useTerm();
   const gradesQ = useCourseGrades();
+  const courseFigures = useCourseFigures(coursesQ.data ?? EMPTY_COURSES);
   const setStatus = useSetItemStatus();
 
   const pendingId = setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null;
@@ -149,15 +155,17 @@ export function Today() {
    * figure at all: "not synced yet" is a claim about the data, and neither a
    * request in flight nor a failed one supports it.
    *
-   * >>> SLOT: the graded-so-far figure goes here, second in the array, once
-   * Stack picks the method (G-0 / `80e_GRADE_METHOD_COMPARISON.md`). It is a
-   * `CourseGradeFigure` produced by W-31's winning function — this screen must
-   * not compute one, or Home and /grades will drift apart. Nothing else on the
-   * card changes when it is added.
+   * Second in the array: the graded-so-far figure (Stack's pick, G-1), from
+   * `useCourseFigures` — the same hook `/grades` uses, so Home and /grades run
+   * one function over one set of rows. This screen computes nothing itself.
    */
   function cardGrades(course: CourseDisplay): CourseGradeFigure[] {
     if (gradesQ.isPending || gradesQ.error) return [];
-    return [blackboardGradeFigure(pickCourseGrade(gradesQ.data, course.shell_ids))];
+    const blackboard = blackboardGradeFigure(pickCourseGrade(gradesQ.data, course.shell_ids));
+    const schemeId = schemeCourseIdFor(course);
+    const soFar = schemeId === null ? null : courseFigures.figures[schemeId]?.figure ?? null;
+    // Still loading, failed, or no scheme course: the card shows Blackboard's number alone.
+    return soFar === null ? [blackboard] : [blackboard, gradedSoFarCardFigure(soFar)];
   }
 
   // Header kicker: real weekday/date + truthful term week (only if the term row loaded).

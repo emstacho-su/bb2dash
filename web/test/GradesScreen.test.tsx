@@ -11,8 +11,9 @@
  * Every query hook is a stub; nothing here reaches Supabase.
  */
 
-import { render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readStoredSections, writeStoredSection } from '@/lib/grades-sections';
 import {
   ECN304_ATTENDANCE,
   IST323_QUIZ,
@@ -167,6 +168,103 @@ describe('GradesScreen — grouping and honesty', () => {
 
     expect(screen.getByText('Blackboard publishes no total')).toBeInTheDocument();
     expect(screen.getByText(/GEO.103.lecture \+ GEO.103.recitation/)).toBeInTheDocument();
+  });
+});
+
+describe('GradesScreen — the title is the link (G-3, P-grades-2)', () => {
+  it('makes the course title itself a link to that course', () => {
+    render(<GradesScreen />);
+    const card = screen.getByRole('region', { name: 'IST 323' });
+    const link = within(card).getByRole('link', { name: 'IST 323' });
+    expect(link).toHaveAttribute('href', '/course/IST.323');
+  });
+
+  it('keeps the link inside the level-2 heading, so the card still announces itself', () => {
+    render(<GradesScreen />);
+    const heading = screen.getByRole('heading', { level: 2, name: 'IST 323' });
+    expect(within(heading).getByRole('link')).toHaveAttribute('href', '/course/IST.323');
+  });
+
+  it('encodes a display id that needs it', () => {
+    hooks.courses = stub([course({ display_id: 'GEO.103.lecture', code: 'GEO 103' })]);
+    hooks.grades = stub([makeCourseGrade({ course_id: 'GEO.103.lecture' })]);
+    hooks.gradebook = stub([]);
+    render(<GradesScreen />);
+    expect(screen.getByRole('link', { name: 'GEO 103' })).toHaveAttribute(
+      'href',
+      '/course/GEO.103.lecture',
+    );
+  });
+
+  it('no longer draws a separate "Course tab" button', () => {
+    render(<GradesScreen />);
+    expect(screen.queryByRole('link', { name: /Course tab/ })).toBeNull();
+    expect(screen.queryByText(/Course tab/)).toBeNull();
+  });
+});
+
+/*
+ * G-2 / P-grades-1, Stack's answer 4: each course's block collapses, and the
+ * choice survives a reload. The header stays — folding a course away should
+ * leave the summary, not the whole card.
+ */
+describe('GradesScreen — a course block collapses (G-2)', () => {
+  afterEach(() => window.localStorage.clear());
+
+  it('opens every course block by default', () => {
+    render(<GradesScreen />);
+    expect(screen.getByRole('button', { name: 'Hide IST 323' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByText('Quiz 2')).toBeInTheDocument();
+  });
+
+  it('folds the gradebook away and keeps the header', () => {
+    render(<GradesScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+
+    expect(screen.queryByText('Quiz 2')).toBeNull();
+    expect(screen.getByText(/Blackboard’s number, as of/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'IST 323' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show IST 323' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('opens it again', () => {
+    render(<GradesScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show IST 323' }));
+    expect(screen.getByText('Quiz 2')).toBeInTheDocument();
+  });
+
+  it('remembers the choice under the course\'s own key', () => {
+    render(<GradesScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+    expect(readStoredSections()['course:IST.323']).toBe('closed');
+  });
+
+  it('renders a course collapsed when that is what was stored', () => {
+    writeStoredSection('course:IST.323', 'closed');
+    render(<GradesScreen />);
+    expect(screen.queryByText('Quiz 2')).toBeNull();
+  });
+
+  it('keeps each course block on its own key', () => {
+    hooks.courses = stub([
+      course(),
+      course({ display_id: 'IST.352', code: 'IST 352', shell_ids: ['IST.352'] }),
+    ]);
+    hooks.grades = stub([makeCourseGrade(), makeCourseGrade({ course_id: 'IST.352' })]);
+    hooks.gradebook = stub([IST323_QUIZ, { ...ECN304_ATTENDANCE, course_id: 'IST.352', counts_toward_grade: true }]);
+    render(<GradesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+    expect(screen.queryByText('Quiz 2')).toBeNull();
+    expect(screen.getByText('Attendance')).toBeInTheDocument();
+    expect(readStoredSections()['course:IST.352']).toBeUndefined();
   });
 });
 

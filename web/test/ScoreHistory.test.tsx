@@ -1,22 +1,20 @@
 /**
- * Score history: a disclosure on a row whose score moved across syncs, reading
- * Blackboard's own figures with the day each was seen. One observation is not a
- * history.
+ * Score history: a disclosure reading Blackboard's own figures with the day
+ * each was seen. One observation is not a history.
+ *
+ * Phase 12b (G-5, P-grades-8) moved it off the gradebook row and into the
+ * assignment popout; where it now sits is asserted in `SubmissionBlock.test.tsx`,
+ * and that the table no longer carries it in `GradebookTable.test.tsx`. This
+ * file keeps the component's own contract, which survives whatever G-1 decides.
  */
 
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ScoreHistory } from '@/components/grades/ScoreHistory';
-import { GradebookTable } from '@/components/grades/GradebookTable';
-import { historyByColumn } from '@/lib/grade-model-view';
-import { makeGradebookRow } from './factories.grades';
 import { QUIZ_HISTORY } from './factories.grade-model';
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn() }),
-}));
-vi.mock('next/link', () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 
 describe('ScoreHistory', () => {
@@ -36,13 +34,8 @@ describe('ScoreHistory', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('sits on the matching gradebook row only', () => {
-    const quiz = makeGradebookRow({ column_id: '_3560532_1', name: 'Quiz #3', effective_score: 9.5, possible: 10 });
-    const lab = makeGradebookRow({ column_id: '_3560541_1', name: 'Lab #1' });
-    render(<GradebookTable rows={[quiz, lab]} history={historyByColumn(QUIZ_HISTORY)} />);
-
-    const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
-    expect(within(rowOf('Quiz #3')).getByRole('button', { name: /history/ })).toBeInTheDocument();
-    expect(within(rowOf('Lab #1')).queryByRole('button', { name: /history/ })).toBeNull();
+  it('names the column it belongs to, for a screen reader', () => {
+    render(<ScoreHistory rows={QUIZ_HISTORY} label="Quiz #3" />);
+    expect(screen.getByRole('button', { name: 'history of Quiz #3' })).toBeInTheDocument();
   });
 });

@@ -6,8 +6,10 @@
  *    progress rows or the gradebook mirror: no `.from('assignments' |
  *    'assignment_progress' | 'bb_gradebook' | 'grading_schemes' |
  *    'grade_components')` chain ends in insert / update / upsert / delete. The
- *    only writes are to `grade_scenarios` and `grade_column_links` — and the
- *    audit proves it can see those, so a pass is not a blind pass.
+ *    only write left is `grade_column_links` — and the audit proves it can see
+ *    that one, so a pass is not a blind pass. Phase 12b's G-1 removed the
+ *    `grade_scenarios` writes with the what-if layer; the table stays in the
+ *    database, unused.
  * 2. No `service_role` / `sb_secret` anywhere under `web/src`.
  */
 
@@ -21,19 +23,16 @@ const SRC = join(WEB, 'src');
 /** Everything Phase 10b adds, plus the three screens/tables it edits. */
 const PHASE_FILES = [
   'src/lib/queries.grade-model.ts',
-  'src/lib/queries.grade-scenario.ts',
   'src/lib/grade-model-input.ts',
   'src/lib/grade-model-view.ts',
   'src/lib/grade-model-format.ts',
-  'src/lib/grade-model-run.ts',
-  'src/components/grades/ModelStanding.tsx',
-  'src/components/grades/WhatIfCell.tsx',
-  'src/components/grades/PlaceholderRows.tsx',
-  'src/components/grades/TargetSolver.tsx',
+  'src/lib/grade-figure-run.ts',
+  'src/lib/graded-so-far.ts',
+  'src/components/grades/GradedSoFarFigure.tsx',
   'src/components/grades/ScoreHistory.tsx',
   'src/components/grades/LinkColumnControl.tsx',
   'src/components/grades/useCourseGradeModel.ts',
-  'src/components/grades/useCourseModelActions.ts',
+  'src/components/grades/useCourseLinkActions.ts',
   'src/components/grades/GradebookTable.tsx',
   'src/app/(app)/grades/GradesModelScreen.tsx',
   'src/app/(app)/grades/GradesScreen.tsx',
@@ -74,7 +73,7 @@ function chains(source: string): Chain[] {
   return found;
 }
 
-describe('Phase 10b writes only its own two tables', () => {
+describe('the grade feature writes only its own link table', () => {
   it.each(PHASE_FILES)('%s exists (the list is not stale)', (relative) => {
     expect(() => read(relative)).not.toThrow();
   });
@@ -88,18 +87,27 @@ describe('Phase 10b writes only its own two tables', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('sees the writes it allows, so the audit is not vacuous', () => {
-    const writes = ['src/lib/queries.grade-model.ts', 'src/lib/queries.grade-scenario.ts']
+  it('sees the write it allows, so the audit is not vacuous', () => {
+    const writes = ['src/lib/queries.grade-model.ts']
       .flatMap((relative) => chains(read(relative)))
       .filter((chain) => WRITE.test(chain.text))
       .map((chain) => chain.relation);
-    expect(new Set(writes)).toEqual(new Set(['grade_scenarios', 'grade_column_links']));
+    expect(new Set(writes)).toEqual(new Set(['grade_column_links']));
+  });
+
+  it('G-1: nothing in the grade feature writes grade_scenarios any more', () => {
+    const scenarioWrites = PHASE_FILES.flatMap((relative) =>
+      chains(read(relative))
+        .filter((chain) => chain.relation === 'grade_scenarios' && WRITE.test(chain.text))
+        .map(() => relative),
+    );
+    expect(scenarioWrites).toEqual([]);
   });
 
   it('catches a protected write when one is planted', () => {
     const planted = "const t = supabase.from('grading_schemes');\nawait t.update({ method: 'points' });";
     expect(chains(planted).some((c) => PROTECTED.includes(c.relation) && WRITE.test(c.text))).toBe(true);
-    const inline = "await supabase.from('assignments').select('id').eq('id', 1);\nawait supabase.from('grade_scenarios').upsert({});";
+    const inline = "await supabase.from('assignments').select('id').eq('id', 1);\nawait supabase.from('grade_column_links').upsert({});";
     expect(chains(inline).filter((c) => PROTECTED.includes(c.relation) && WRITE.test(c.text))).toEqual([]);
   });
 });

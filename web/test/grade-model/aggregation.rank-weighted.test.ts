@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { rankWeightedAggregate, rankWeightedLevel } from '@/lib/grade-model/aggregations/rank-weighted';
-import { counted, leaf, whatIf } from './builders';
+import { counted, leaf } from './builders';
 
 const EXAMS = { aggregation: 'rank_weighted' as const, countExpected: 3, rankWeights: [30, 25, 20] };
 const CAP = 75;
@@ -22,7 +22,6 @@ describe('rank_weighted', () => {
     { name: 'two exams (0.7, 0.9) at r = 0.5: [0.9, 0.7, 0.5]', items: [counted(100, 70), counted(100, 90)], r: 0.5, earned: 54.5, gradedCap: 75, remainingCount: 1 },
     { name: 'decision: all three graded, graded so far applies the ranks', items: [counted(100, 60), counted(100, 90), counted(100, 80)], r: null, earned: 59, gradedCap: 75, remainingCount: 0 },
     { name: 'all three graded, zeros on the rest agrees', items: [counted(100, 60), counted(100, 90), counted(100, 80)], r: 0, earned: 59, gradedCap: 75, remainingCount: 0 },
-    { name: 'what-if values on Exams 1–2 re-order the weights', items: [whatIf(100, 95), whatIf(100, 70)], r: 0, earned: 46, gradedCap: 75, remainingCount: 1 },
   ])('$name', ({ items, r, earned, gradedCap, remainingCount }) => {
     const outcome = rankWeightedAggregate(leaf(EXAMS, items, CAP), r);
     expect(outcome.earned).toBeCloseTo(earned, 12);

@@ -33,7 +33,6 @@ export interface LeafOutcome {
   readonly gradedCount: number;
   readonly remainingCount: number;
   readonly capacityFromKnownItems: boolean;
-  readonly usesHypothetical: boolean;
   readonly unitCap: UnitCap;
 }
 
