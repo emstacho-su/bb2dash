@@ -25,6 +25,7 @@ const stub = vi.hoisted(() => ({
   undated: [] as unknown[],
   courses: [] as unknown[],
   grades: { data: [] as unknown[], isPending: false, error: null as Error | null },
+  figures: {} as Record<string, { figure: unknown; error: string | null }>,
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -54,6 +55,13 @@ vi.mock('@/lib/queries.grades', async (importOriginal) => {
   return { ...actual, useCourseGrades: () => ({ ...idle, ...stub.grades }) };
 });
 
+// P-home-10: the graded-so-far figure comes from the hook `/grades` also uses.
+// Its arithmetic has its own suite (test/graded-so-far.test.ts); here only the
+// wiring is under test, so the hook hands back whatever the test sets.
+vi.mock('@/lib/use-course-figures', () => ({
+  useCourseFigures: () => ({ figures: stub.figures, items: [] }),
+}));
+
 // The needs-attention row has a query layer of its own; it is the position of
 // the section that is under test here, not its contents.
 vi.mock('@/app/(app)/NeedsAttention', () => ({
@@ -69,6 +77,7 @@ beforeEach(() => {
   stub.undated = [];
   stub.courses = [makeCourseDisplay({ display_id: 'IST.323', code: 'IST 323' })];
   stub.grades = { data: [], isPending: false, error: null };
+  stub.figures = {};
 });
 
 afterEach(() => {
@@ -210,5 +219,43 @@ describe('Home — the course card grade slot', () => {
     const geo = card(/Open GEO 103/);
     expect(geo.getByText(/14\.8 \/ 104/)).toBeInTheDocument();
     expect(geo.queryByText(/99/)).toBeNull();
+  });
+
+  const FIGURE = {
+    state: 'figure',
+    percent: 84.46,
+    letter: 'B',
+    pointsEarned: null,
+    pointsPossible: null,
+    countedParts: ['Labs'],
+    leftOutParts: ['Final Exam'],
+    unlinkedColumns: [],
+    asOf: '2026-09-16T14:00:00Z',
+  };
+
+  it('shows graded so far beside Blackboard’s number (P-home-10)', () => {
+    stub.grades = { data: [TOTAL_ROW], isPending: false, error: null };
+    stub.figures = { 'IST.323': { figure: FIGURE, error: null } };
+    render(<Today />);
+    expect(card().getByText('Graded so far')).toBeInTheDocument();
+    expect(card().getByText(/84\.5%/)).toBeInTheDocument();
+    expect(card().getByText(/14\.8 \/ 104/)).toBeInTheDocument();
+  });
+
+  it('says why a course has no graded-so-far number, never a zero', () => {
+    stub.grades = { data: [TOTAL_ROW], isPending: false, error: null };
+    stub.figures = { 'IST.323': { figure: { state: 'nothing_graded' }, error: null } };
+    render(<Today />);
+    expect(card().getByText('Graded so far')).toBeInTheDocument();
+    expect(card().getByText('nothing graded yet')).toBeInTheDocument();
+    expect(card().queryByText(/0%/)).toBeNull();
+  });
+
+  it('shows Blackboard’s number alone while the figure is loading or failed', () => {
+    stub.grades = { data: [TOTAL_ROW], isPending: false, error: null };
+    stub.figures = { 'IST.323': { figure: null, error: 'Could not load the grading rules: x' } };
+    render(<Today />);
+    expect(card().getByText(/14\.8 \/ 104/)).toBeInTheDocument();
+    expect(card().queryByText('Graded so far')).toBeNull();
   });
 });

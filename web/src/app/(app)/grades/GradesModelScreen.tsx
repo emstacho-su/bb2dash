@@ -14,36 +14,16 @@
 
 import { useMemo } from 'react';
 import { useCourseDisplay } from '@/lib/queries.today';
-import {
-  schemeCourseIdFor,
-  useGradeModelItemsForCourses,
-  useGradingSchemesForCourses,
-} from '@/lib/queries.grade-model';
-import { courseFigureStates } from '@/lib/grade-figure-run';
+import { useCourseFigures } from '@/lib/use-course-figures';
 import { linkStates } from '@/lib/grade-model-view';
-import { queryErrorMessage } from '@/components/shared/QueryState';
 import { GradesScreen, type GradesFiguresProps } from './GradesScreen';
 
 export function GradesModelScreen() {
   const coursesQ = useCourseDisplay();
   const courses = useMemo(() => coursesQ.data ?? [], [coursesQ.data]);
 
-  const schemeIds = useMemo(
-    () => courses.map((course) => schemeCourseIdFor(course)).filter((id): id is string => id !== null),
-    [courses],
-  );
-
-  const schemesQ = useGradingSchemesForCourses(schemeIds);
-  const itemsQ = useGradeModelItemsForCourses(schemeIds);
-
-  const failed = [schemesQ, itemsQ].find((query) => query.isError);
-  const loadError = failed ? `Could not load the grading rules: ${queryErrorMessage(failed.error)}` : null;
-
-  const figures = useMemo(
-    () => courseFigureStates(schemeIds, { schemes: schemesQ.data, items: itemsQ.data }, loadError),
-    [schemeIds, schemesQ.data, itemsQ.data, loadError],
-  );
-  const overrides = useMemo(() => linkStates(itemsQ.data ?? []), [itemsQ.data]);
+  const { figures, items } = useCourseFigures(courses);
+  const overrides = useMemo(() => linkStates(items ?? []), [items]);
 
   const model = useMemo<GradesFiguresProps>(() => ({ figures, overrides }), [figures, overrides]);
 
