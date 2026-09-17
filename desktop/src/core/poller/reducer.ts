@@ -183,14 +183,20 @@ function dueToast(input: ReduceInput, checkedOn: string): Toast | null {
 // Rule 4 — dedupe, cap, advance
 // ---------------------------------------------------------------------------------------
 
-/** `existing` then the new `added`, de-duplicated, oldest first, newest 500 kept. */
+/**
+ * `existing` then the new `added`, oldest first, newest `FIRED_KEYS_LIMIT` kept.
+ *
+ * Duplicates are dropped on both sides, keeping the first occurrence: the store's own output
+ * never contains one, but a hand-edited file could, and a duplicate would otherwise eat a
+ * slot under the cap.
+ */
 export function mergeFiredKeys(
   existing: readonly string[],
   added: readonly string[],
 ): readonly string[] {
-  const merged = [...existing];
-  const seen = new Set(existing);
-  for (const key of added) {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+  for (const key of [...existing, ...added]) {
     if (seen.has(key)) continue;
     seen.add(key);
     merged.push(key);
