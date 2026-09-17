@@ -25,7 +25,9 @@ import {
   RECORDED_ONLY,
   fieldPhrase,
   fieldValueText,
+  describeDetails,
   isAssignmentRef,
+  keyPhrase,
   outcomeApplies,
   outcomeText,
   type AttentionItem,
@@ -255,5 +257,103 @@ describe('fieldPhrase / INBOX_APPLY_HELP', () => {
   it('states the rule once, on the screen', () => {
     expect(INBOX_APPLY_HELP).toContain('due date');
     expect(INBOX_APPLY_HELP).toContain('recorded');
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * I-3 / P-inbox-3 — describing a jsonb payload without printing jsonb
+ * ------------------------------------------------------------------------ */
+
+describe('describeDetails — no braces, no quotes, nothing dropped', () => {
+  it('turns an object into labelled lines, keys as words', () => {
+    expect(
+      describeDetails({
+        due: '2026-09-14T16:50:00+00:00',
+        possible: 0,
+        column_id: '_3613591_1',
+        source: 'stage_assignments',
+      }),
+    ).toEqual([
+      { label: 'due', text: 'Mon, Sep 14, 12:50 PM' },
+      { label: 'possible', text: '0' },
+      { label: 'column id', text: '_3613591_1' },
+      { label: 'source', text: 'stage_assignments' },
+    ]);
+  });
+
+  it('unrolls one level of nesting onto the line', () => {
+    expect(
+      describeDetails({
+        gap: { what: 'Meeting days Mon vs Mon/Wed', owner: 'stack' },
+        version: 3,
+      }),
+    ).toEqual([
+      { label: 'gap', text: 'what Meeting days Mon vs Mon/Wed · owner stack' },
+      { label: 'version', text: '3' },
+    ]);
+  });
+
+  it('says "none" for a null rather than printing null', () => {
+    expect(describeDetails({ field: { name: 'weekly_hours', value: null } })).toEqual([
+      { label: 'field', text: 'name weekly_hours · value none' },
+    ]);
+  });
+
+  it('reads booleans as yes and no', () => {
+    expect(describeDetails({ out_of_term: true, stale: false })).toEqual([
+      { label: 'out of term', text: 'yes' },
+      { label: 'stale', text: 'no' },
+    ]);
+  });
+
+  it('numbers the entries of an array', () => {
+    expect(describeDetails(['Mon', 'Wed'])).toEqual([
+      { label: '1', text: 'Mon' },
+      { label: '2', text: 'Wed' },
+    ]);
+  });
+
+  it('gives a plain value no label it does not have', () => {
+    expect(describeDetails('IST.323 Quiz 2')).toEqual([{ label: '', text: 'IST.323 Quiz 2' }]);
+    expect(describeDetails(25, 'points_possible')).toEqual([{ label: '', text: '25' }]);
+  });
+
+  it('describes nothing at all as nothing, not as an empty row', () => {
+    expect(describeDetails(null)).toEqual([]);
+    expect(describeDetails(undefined)).toEqual([]);
+    expect(describeDetails('')).toEqual([]);
+  });
+
+  it('stops rather than unrolling something unreadable', () => {
+    const deep = { a: { b: { c: { d: 1 } } } };
+    expect(describeDetails(deep)[0].text).toContain('…');
+  });
+
+  it('never emits a brace or a quote from any real payload shape', () => {
+    const payloads: unknown[] = [
+      { source: 'stage_assignments', column_id: '_3562491_1', out_of_term: true },
+      { from: 'course_map', field: { name: 'sitn_date', note: 'derivable', value: null } },
+      { gap: { what: 'OIA textbook: keep or opt out', owner: 'stack' }, from: 'course_map' },
+      { source: 'stage_gaps', source_url: 'https://blackboard.syracuse.edu/x' },
+      ['a', { b: 1 }],
+    ];
+    for (const payload of payloads) {
+      const text = describeDetails(payload)
+        .map((line) => `${line.label} ${line.text}`)
+        .join(' ');
+      expect(text, JSON.stringify(payload)).not.toMatch(/[{}"]/);
+    }
+  });
+});
+
+describe('keyPhrase', () => {
+  it('spells a snake_case key as words', () => {
+    expect(keyPhrase('column_id')).toBe('column id');
+    expect(keyPhrase('out_of_term')).toBe('out of term');
+  });
+
+  it('keeps the four writable columns on their nicer phrasing', () => {
+    expect(keyPhrase('points_possible')).toBe('points possible');
+    expect(keyPhrase('bb_url')).toBe('Blackboard link');
   });
 });

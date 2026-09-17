@@ -677,6 +677,67 @@ export function fieldValueText(field: string | null, value: unknown): string {
   return value;
 }
 
+/* ---------------------------------------------------------------------------
+ * Describing a jsonb payload without printing jsonb (I-3 / P-inbox-3)
+ * ------------------------------------------------------------------------ */
+
+/** A key spelled as a reader would say it: `column_id` → "column id". */
+export function keyPhrase(key: string): string {
+  return FIELD_PHRASE[key] ?? key.replace(/_/g, ' ');
+}
+
+/** One labelled fact out of a payload. An empty `label` means "no label". */
+export interface DescribedValue {
+  label: string;
+  text: string;
+}
+
+/** A nested value on one line: "name weekly_hours · value none". */
+function describeInline(value: unknown, depth = 0): string {
+  if (value === null || value === undefined || value === '') return 'none';
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return fieldValueText(null, value);
+  if (Array.isArray(value)) {
+    return value.map((entry) => describeInline(entry, depth + 1)).join(', ');
+  }
+  if (typeof value === 'object') {
+    // Two levels is enough for every payload the stages raise; deeper than
+    // that, say so rather than unrolling something unreadable.
+    if (depth >= 2) return '…';
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, inner]) => `${keyPhrase(key)} ${describeInline(inner, depth + 1)}`)
+      .join(' · ');
+  }
+  return String(value);
+}
+
+/**
+ * Turn a from/to/suggested payload into labelled lines a person can read.
+ *
+ * `attention_items.suggested` is ad-hoc jsonb — each stage puts in what it
+ * happened to know — and the Inbox used to `JSON.stringify()` it, so the screen
+ * showed `{"due":"2026-09-14T16:50:00+00:00","source":"stage_assignments",…}`.
+ * Braces and quotes are not information. Keys become words, timestamps become
+ * New York dates, and nothing is dropped.
+ */
+export function describeDetails(value: unknown, field: string | null = null): DescribedValue[] {
+  if (value === null || value === undefined || value === '') return [];
+  if (typeof value !== 'object') {
+    return [{ label: '', text: fieldValueText(field, value) }];
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry, index) => ({
+      label: String(index + 1),
+      text: describeInline(entry, 1),
+    }));
+  }
+  return Object.entries(value as Record<string, unknown>).map(([key, inner]) => ({
+    label: keyPhrase(key),
+    text: describeInline(inner, 1),
+  }));
+}
+
 /**
  * The sentence that goes under one of a row's controls: what pressing it will
  * actually change, named, with the real value and the real date.
