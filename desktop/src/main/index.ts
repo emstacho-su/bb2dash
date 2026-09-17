@@ -28,12 +28,12 @@ import { attachNavigationGuards } from './navigation';
 import type { PollerHandle } from './poller-wiring';
 import { startPoller } from './poller-wiring';
 import { createMainRest, createMainSessionRest } from './rest';
-import { readWebSession } from './session';
+import { createUsableSessionReader } from './session';
 import { attachSyncWatcher } from './sync-terminal';
 import { installShellTestHook, recordEvent } from './test-hook';
 import { MENU_CHECK_NOW, createTray } from './tray';
 import type { TrayHandle } from './tray';
-import { createWindow, showWindow } from './window';
+import { createWindow, ensureLoaded, showWindow } from './window';
 
 export const APP_USER_MODEL_ID = 'su.stack.bb2dash';
 
@@ -105,8 +105,18 @@ function startShellPoller(validConfig: DesktopConfig): PollerHandle {
       pollIntervalMinutes: validConfig.pollIntervalMinutes,
       dueReminderTime: validConfig.dueReminderTime,
     },
-    getSession: () =>
-      readWebSession({ appUrl: validConfig.appUrl, supabaseUrl: validConfig.supabaseUrl }),
+    // R2-4: an expired session reads as `null` so the tick skips rather than 401-ing, and
+    // a *hidden* window is reloaded (at most once per 10 min) so the web app's own proxy
+    // rewrites the cookie. Main still never calls the auth API itself (C-5).
+    getSession: createUsableSessionReader({
+      appUrl: validConfig.appUrl,
+      supabaseUrl: validConfig.supabaseUrl,
+      getWindow: getMainWindow,
+      reload: () => {
+        const window = getMainWindow();
+        if (window !== null) ensureLoaded(window);
+      },
+    }),
     createRest: createMainSessionRest(validConfig),
     getWindow: getMainWindow,
     log: createNamedLogger('poller'),
