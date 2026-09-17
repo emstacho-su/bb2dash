@@ -41,11 +41,36 @@
  *                   exempt, receipt, files: [{ id, name, size, downloadUrl }], keys: [...] }] }]
  *    `status` is the HTTP status of the attempts call; a failed probe is recorded with an empty
  *    `results`, never thrown, and the crawl carries on.
- *  - NOT VERIFIED, and cannot be without a logged-in session: the attempts endpoints are not in
- *    Anthology's published REST schema, and no bb_raw payload has ever carried an attempt. Every
- *    key name in ATTEMPT_FIELD_KEYS is a CANDIDATE. `keys` (Object.keys of the first raw attempt
- *    per column) travels with the payload so one live crawl settles the real names — the same
- *    trick `authorSource` plays for announcements. Unknown keys yield null, never a guess.
+ *
+ * PHASE 12b (crawler version 4) — the attempts chain, now that it is known
+ *  v3 asked `GET .../gradebook/columns/<col>/attempts?userId=<me>`. For a STUDENT that answers
+ *  `200 {"results": []}` on every column — 21 of 21 in crawl 1b5e8da5 — so v3 catalogued nothing
+ *  and `bb_attempts` / the `my_submissions` bucket stayed empty. Blackboard's own UI never calls
+ *  that route. The PM read the requests the Ultra gradebook page actually makes
+ *  (docs/planning/80f_ATTEMPTS_ENDPOINT.md); it walks THREE requests per column:
+ *      1. `/gradebook/columns/<col>/grades?expand=attemptsLeft&userId=<me>`  -> the GRADE ID
+ *      2. `/gradebook/columns/<col>/grades/<gradeId>/attempts`               -> the attempt rows
+ *      3. `/gradebook/attempts/<attemptId>?columnId=<col>&expand=…`          -> the FILES
+ *  Step 3 is the only one that carries `studentSubmissionFiles[]`, and each file's
+ *  `file.permanentUrl` is an ordinary durable `bbcswebdav/xid-<n>_1` URL — the same kind bb-sync
+ *  step 4 already pulls with the session cookie. v3's `downloadUrl` was BUILT, not read, and the
+ *  route it built does not exist for a student.
+ *  The envelope keeps v3's shape so migration 050/055 still reads it, and gains the chain:
+ *      attempts: [{ columnId, contentId, endpoint, status, steps, keys: { grade, attempt, detail,
+ *                   file }, grade: {…}, attempts: [{…}], detail: [{…}],
+ *                   results: [{ id, status, created, modified, submitted, score, exempt, receipt,
+ *                               files: [{ id, name, size, mime, uuid, downloadUrl }],
+ *                               text: { studentSubmission, studentComments, instructorFeedback },
+ *                               keys: [...] }] }]
+ *  `results[]` is the contract the stage reads; `grade` / `attempts` / `detail` / `steps` / `keys`
+ *  are the diagnosis. Bounded at the newest ATTEMPT_LIMIT (3) attempts per column, one request at
+ *  a time. Every step records its own status and moves on: a failed step never throws the crawl.
+ *  PROSE MOVED. Stack's typed-in submission, his comments and the instructor's feedback are now
+ *  nested under `results[].text`, which the stage does not read into a column — so they live in
+ *  `bb_attempts.raw` (owner-only, RLS) and nowhere else.
+ *  STILL UNVERIFIED AGAINST A LIVE RUN: the key names come from one read of Blackboard's own
+ *  requests, not from a crawl of our own. `keys` travels with every column so Stack's next sync
+ *  settles them for good. Unknown keys yield null, never a guess.
  *  - Assessment fields (`dueDate`, `points`, `gradebookColumnId`, `attemptsAllowed`): ALSO NOT
  *    VERIFIED. `slim()` runs on the Summary view, whose `contentDetail` only ever holds `file`
  *    and `url` (migration 034's header). walk() already fetches the full item for every
@@ -144,7 +169,10 @@ const mapAnnouncement = (a) => {
 // ================================================================================================
 
 /** Envelope version stamped on every course payload. Stages read a missing key as version 2. */
-const CRAWLER_VERSION = 3;
+const CRAWLER_VERSION = 4;
+
+/** Newest N attempts per column. A column with ten resubmissions is not worth ten round trips. */
+const ATTEMPT_LIMIT = 3;
 
 /**
  * A caller-supplied run id has to be a real uuid or nothing at all. `bb_raw.run_id` is a uuid
@@ -165,37 +193,59 @@ const assertRunId = (runId) => {
 };
 
 /**
- * Candidate key names for one attempt. NONE of these is verified: the internal attempts endpoint
- * is not in Anthology's published schema and no stored payload carries an attempt. The first
- * candidate that is actually present wins; when none is, the field is null. `keys` on the first
- * attempt of each column records what Blackboard really sent, so one live crawl cuts each list to
- * its true name.
+ * v4 (P-grades-4): the key names Blackboard's own gradebook page uses, read off its requests and
+ * written down in docs/planning/80f_ATTEMPTS_ENDPOINT.md. v3's candidate lists were guesses and
+ * are cut to these. Two entries per field at most, and only where BOTH are real: the attempt
+ * DETAIL (step 3) carries `attemptReceipt.submissionDate`, the attempt LIST (step 2) carries only
+ * `attemptDate`, and a column whose detail request failed falls back to the list row.
+ *
+ * A dotted candidate is a path, read one level at a time — Ultra nests the score under
+ * `displayGrade` and the submission date under `attemptReceipt`.
  */
 const ATTEMPT_FIELD_KEYS = {
-  status:            ['status', 'attemptStatus'],
-  created:           ['createdDate', 'created'],
-  submitted:         ['submittedDate', 'attemptDate', 'submitted'],
-  modified:          ['modifiedDate', 'modified'],
-  score:             ['score'],
-  feedback:          ['feedback', 'instructorFeedback', 'instructorComments'],
-  studentComments:   ['studentComments', 'studentComment'],
-  studentSubmission: ['studentSubmission', 'submissionText', 'text'],
-  exempt:            ['exempt', 'isExempt'],
-  receipt:           ['receipt', 'confirmationNumber', 'receiptNumber', 'submissionReceiptId'],
+  status:            ['status'],
+  created:           ['creationDate'],
+  submitted:         ['attemptReceipt.submissionDate', 'attemptDate'],
+  modified:          ['modifiedDate'],
+  score:             ['displayGrade.score'],
+  feedback:          ['instructorFeedback.rawText', 'instructorFeedback.displayText'],
+  studentComments:   ['studentComments'],
+  studentSubmission: ['studentSubmission.rawText', 'studentSubmission.displayText'],
+  exempt:            ['exempt'],
+  receipt:           ['attemptReceipt.receiptId'],
 };
 
-/** Candidate key names for one attempt file. Same rule: first present wins, else null. */
+/**
+ * Key names for one `studentSubmissionFiles[]` entry. `file.permanentUrl` is the whole point of
+ * the v4 chain: a durable `bbcswebdav/xid-<n>_1` URL that downloads with the session cookie.
+ */
 const ATTEMPT_FILE_KEYS = {
-  id:   ['id', 'fileId'],
-  name: ['name', 'fileName', 'displayName', 'originalFileName'],
-  size: ['size', 'fileSize', 'bytes'],
+  id:   ['id', 'bbFileUuid'],
+  name: ['name', 'file.fileName', 'linkName'],
+  size: ['size'],
+  mime: ['file.mimeType'],
+  url:  ['file.permanentUrl'],
+  uuid: ['bbFileUuid'],
 };
 
-/** First candidate that is present (a key that exists and is neither null nor ''), else null. */
+/** Read a dotted path one level at a time. Returns undefined the moment the walk runs out. */
+const atPath = (o, path) => {
+  let v = o;
+  for (const k of String(path).split('.')) {
+    if (v == null || typeof v !== 'object') return undefined;
+    v = v[k];
+  }
+  return v;
+};
+
+/**
+ * First candidate that is present (exists and is neither null nor ''), else null. A candidate with
+ * a dot in it is a path into the object; one without is a plain key, exactly as in v3.
+ */
 const pickKey = (o, keys) => {
   if (o == null || typeof o !== 'object') return null;
   for (const k of keys) {
-    const v = o[k];
+    const v = k.includes('.') ? atPath(o, k) : o[k];
     if (v !== undefined && v !== null && v !== '') return v;
   }
   return null;
@@ -220,9 +270,13 @@ const shouldProbeColumn = (g) => {
 };
 
 /**
- * One raw attempt file -> the shape stage_attempts catalogues. `downloadUrl` is built, not read:
- * the per-file download route is the one documented form of the two-call pattern (attempt files
- * metadata, then the file), and a relative URL would 404 from the Claude browser's exec context.
+ * One `studentSubmissionFiles[]` entry -> the shape stage_attempts catalogues.
+ *
+ * v4 READS the download URL instead of building one. `file.permanentUrl` is Blackboard's own
+ * durable link; v3 built `/gradebook/attempts/<aid>/files/<id>/download`, which is not a route a
+ * student session can use, and that is the second reason v3 catalogued nothing. The built form
+ * survives only as a fallback so an old payload still produces a row.
+ *
  * Returns null for anything with no usable id, so a malformed entry drops out rather than
  * producing a catalog row nothing can download.
  */
@@ -230,41 +284,118 @@ const mapAttemptFile = (f, { base = 'https://blackboard.syracuse.edu', courseId 
   if (f == null || typeof f !== 'object') return null;
   const id = asString(pickKey(f, ATTEMPT_FILE_KEYS.id));
   if (!id) return null;
+  const url = asString(pickKey(f, ATTEMPT_FILE_KEYS.url));
   return {
     id,
     name: asString(pickKey(f, ATTEMPT_FILE_KEYS.name)),
     size: asNumber(pickKey(f, ATTEMPT_FILE_KEYS.size)),
-    downloadUrl: courseId && attemptId
-      ? `${base}/learn/api/v1/courses/${courseId}/gradebook/attempts/${attemptId}/files/${id}/download`
-      : null,
+    mime: asString(pickKey(f, ATTEMPT_FILE_KEYS.mime)),
+    uuid: asString(pickKey(f, ATTEMPT_FILE_KEYS.uuid)),
+    downloadUrl: url
+      ?? (courseId && attemptId
+        ? `${base}/learn/api/v1/courses/${courseId}/gradebook/attempts/${attemptId}/files/${id}/download`
+        : null),
   };
 };
 
 /**
- * One raw attempt -> the frozen shape migration 050 reads. Pure: no fetch, no session, no globals.
- * `includeKeys` is set for the FIRST attempt of each column only — that is the probe that names
- * Blackboard's real keys after one live crawl, and repeating it on every attempt would just make
- * the payload bigger. Prose is flattened and capped the way the rest of the crawler caps it:
- * feedback 1000, student comments 2000, submitted text 4000.
+ * One raw attempt (step 3's detail, or step 2's list row when the detail request failed) -> the
+ * shape migration 050/055 reads. Pure: no fetch, no session, no globals.
+ *
+ * WHERE THE PROSE WENT (v4). `studentSubmission.rawText` is what Stack typed into Blackboard and
+ * `instructorFeedback` is what a professor wrote back. The stage lifts the TOP-LEVEL keys of this
+ * object into columns; nesting the three prose fields under `text` keeps them out of those columns
+ * and leaves them in `bb_attempts.raw` alone, which is owner-only under RLS. They are still capped
+ * the way the rest of the crawler caps prose: feedback 1000, student comments 2000, submitted text
+ * 4000, all flattened to plain text first.
+ *
+ * `includeKeys` is set for the FIRST attempt of each column only — the probe that names what this
+ * row was actually built from — and repeating it on every attempt would just make the payload
+ * bigger.
  */
 const mapAttempt = (a, files = [], includeKeys = false) => {
   if (a == null || typeof a !== 'object') return null;
   const out = {
-    id:                asString(a.id),
-    status:            asString(pickKey(a, ATTEMPT_FIELD_KEYS.status)),
-    created:           asString(pickKey(a, ATTEMPT_FIELD_KEYS.created)),
-    modified:          asString(pickKey(a, ATTEMPT_FIELD_KEYS.modified)),
-    submitted:         asString(pickKey(a, ATTEMPT_FIELD_KEYS.submitted)),
-    score:             asNumber(pickKey(a, ATTEMPT_FIELD_KEYS.score)),
-    feedback:          strip(pickKey(a, ATTEMPT_FIELD_KEYS.feedback))?.slice(0, 1000) || null,
-    studentComments:   strip(pickKey(a, ATTEMPT_FIELD_KEYS.studentComments))?.slice(0, 2000) || null,
-    studentSubmission: strip(pickKey(a, ATTEMPT_FIELD_KEYS.studentSubmission))?.slice(0, 4000) || null,
-    exempt:            asBool(pickKey(a, ATTEMPT_FIELD_KEYS.exempt)),
-    receipt:           asString(pickKey(a, ATTEMPT_FIELD_KEYS.receipt)),
-    files:             Array.isArray(files) ? files.filter(Boolean) : [],
+    id:        asString(a.id),
+    status:    asString(pickKey(a, ATTEMPT_FIELD_KEYS.status)),
+    created:   asString(pickKey(a, ATTEMPT_FIELD_KEYS.created)),
+    modified:  asString(pickKey(a, ATTEMPT_FIELD_KEYS.modified)),
+    submitted: asString(pickKey(a, ATTEMPT_FIELD_KEYS.submitted)),
+    score:     asNumber(pickKey(a, ATTEMPT_FIELD_KEYS.score)),
+    exempt:    asBool(pickKey(a, ATTEMPT_FIELD_KEYS.exempt)),
+    receipt:   asString(pickKey(a, ATTEMPT_FIELD_KEYS.receipt)),
+    files:     Array.isArray(files) ? files.filter(Boolean) : [],
+    text: {
+      studentSubmission:  strip(pickKey(a, ATTEMPT_FIELD_KEYS.studentSubmission))?.slice(0, 4000) || null,
+      studentComments:    strip(pickKey(a, ATTEMPT_FIELD_KEYS.studentComments))?.slice(0, 2000) || null,
+      instructorFeedback: strip(pickKey(a, ATTEMPT_FIELD_KEYS.feedback))?.slice(0, 1000) || null,
+    },
   };
   if (includeKeys) out.keys = Object.keys(a);
   return out;
+};
+
+/**
+ * Step 1's grade row, slimmed. Its `id` is the grade id the rest of the chain hangs off — the
+ * course-wide gradebook list the crawler already reads does not carry it, which is why step 1 is
+ * per column. Returns null when there is no id, because there is then no chain to walk.
+ */
+const mapGradeRow = (g) => {
+  if (g == null || typeof g !== 'object') return null;
+  const id = asString(g.id);
+  if (!id) return null;
+  return {
+    id,
+    status:         asString(g.status),
+    attemptsLeft:   asNumber(g.attemptsLeft),
+    effectiveScore: asNumber(g.effectiveScore),
+    pointsPossible: asNumber(g.pointsPossible),
+    displayScore:   asNumber(pickKey(g, ['displayGrade.score'])),
+    isExempt:       asBool(g.isExempt),
+    firstAttemptId: asString(g.firstAttemptId),
+    lastAttemptId:  asString(g.lastAttemptId),
+  };
+};
+
+/**
+ * Step 3's detail, slimmed for diagnosis. Deliberately carries NO prose and no file bodies —
+ * `hasRawText` is a boolean, not the text. The prose lives in `results[].text` and nowhere else.
+ */
+const mapAttemptDetail = (d) => {
+  if (d == null || typeof d !== 'object') return null;
+  const id = asString(d.id);
+  if (!id) return null;
+  const r = (d.attemptReceipt && typeof d.attemptReceipt === 'object') ? d.attemptReceipt : {};
+  return {
+    attemptId:           id,
+    gradeId:             asString(d.gradeId),
+    status:              asString(d.status),
+    attemptDate:         asString(d.attemptDate),
+    creationDate:        asString(d.creationDate),
+    modifiedDate:        asString(d.modifiedDate),
+    receiptId:           asString(r.receiptId),
+    submissionDate:      asString(r.submissionDate),
+    submissionType:      asString(r.submissionType),
+    submissionTotalSize: asNumber(r.submissionTotalSize),
+    displayScore:        asNumber(pickKey(d, ['displayGrade.score'])),
+    fileCount:           Array.isArray(d.studentSubmissionFiles) ? d.studentSubmissionFiles.length : 0,
+    hasRawText:          !!strip(pickKey(d, ['studentSubmission.rawText'])),
+  };
+};
+
+/**
+ * The newest `limit` attempts of a column, newest first. Blackboard returns them oldest-first and
+ * a column can carry a resubmission chain; step 3 costs one request each, so the chain is bounded.
+ * An attempt with no parsable date sorts last and ties break on the id, so the order is total and
+ * a replay picks the same three.
+ */
+const newestAttempts = (rows, limit = ATTEMPT_LIMIT) => {
+  const ts = (r) => { const d = Date.parse((r && r.attemptDate) || ''); return Number.isFinite(d) ? d : 0; };
+  return (Array.isArray(rows) ? rows : [])
+    .filter((r) => r != null && typeof r === 'object' && r.id !== undefined && r.id !== null && r.id !== '')
+    .slice()
+    .sort((a, b) => (ts(b) - ts(a)) || String(b.id).localeCompare(String(a.id)))
+    .slice(0, Math.max(0, limit));
 };
 
 /**
@@ -371,40 +502,78 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
       displayGrade: g.displayGrade ?? null, isExempt: !!g.isExempt, feedback: strip(g.instructorFeedback)?.slice(0, 1000) || null, submissionStatus: g.submissionStatus?.status || null, attemptsLeft: g.attemptsLeft ?? null,
       lastAttempt: g.lastAttempt ? { status: g.lastAttempt.status, created: g.lastAttempt.createdDate, submitted: g.lastAttempt.submittedDate || g.lastAttempt.attemptDate || null, score: g.lastAttempt.score ?? null } : null })); };
   // Submission attempts for the columns that look like they have one (shouldProbeColumn).
-  // Two calls per attempt, as Blackboard splits it: the attempts list, then that attempt's files.
-  // Each call falls back to the public REST form on a non-2xx. Nothing here throws: a column whose
-  // probe failed is recorded with its status and an empty `results`, and the crawl continues.
-  const attempts = async (C, gradebook = []) => {
+  //
+  // v4 (P-grades-4): the three-request chain Blackboard's own gradebook page walks —
+  //   1. the grade row, for the GRADE ID the other two need,
+  //   2. the attempts under that grade,
+  //   3. each attempt's detail, which is the only response carrying studentSubmissionFiles[].
+  // Bounded at the newest ATTEMPT_LIMIT attempts per column and issued one at a time, as v3 was.
+  // Nothing here throws: every step records its own status under `steps`, `entry.status` keeps the
+  // FIRST non-2xx of the chain (so the stage's error count still means something), and a column
+  // that fails at any step is pushed with whatever it got and the crawl carries on.
+  const attempts = async (C, gradebook = [], { limit = ATTEMPT_LIMIT } = {}) => {
+    const ok = (s) => s >= 200 && s <= 299;
     const out = [];
     for (const g of (Array.isArray(gradebook) ? gradebook : [])) {
       if (!shouldProbeColumn(g)) continue;
       const col = g.columnId;
-      const entry = { columnId: col, contentId: g.contentId ?? null, endpoint: null, status: 0, results: [] };
+      const gradeUrl = `/learn/api/v1/courses/${C}/gradebook/columns/${col}/grades?expand=attemptsLeft&userId=${userId}`;
+      const entry = {
+        columnId: col, contentId: g.contentId ?? null,
+        endpoint: gradeUrl, status: 0,
+        steps: { grade: null, attempts: null, detail: [] },
+        keys: {}, grade: null, attempts: [], detail: [], results: [],
+      };
+      // Keep the first non-2xx; a later success must not paper over an earlier failure.
+      const fail = (s) => { if (ok(entry.status)) entry.status = s; };
       try {
-        const primary  = `/learn/api/v1/courses/${C}/gradebook/columns/${col}/attempts?userId=${userId}&limit=100`;
-        const fallback = `/learn/api/public/v2/courses/${C}/gradebook/columns/${col}/attempts?userId=${userId}`;
-        entry.endpoint = primary;
-        let r = await jx(primary);
-        if (r.body === null) { entry.endpoint = fallback; r = await jx(fallback); }
-        entry.status = r.status;
-        if (r.body === null) { out.push(entry); continue; }
+        // 1. the grade row
+        const gr = await jx(gradeUrl);
+        entry.steps.grade = { url: gradeUrl, status: gr.status };
+        entry.status = gr.status;
+        const gRow = rowsOf(gr.body)[0] || null;
+        if (gRow) entry.keys.grade = Object.keys(gRow);
+        entry.grade = mapGradeRow(gRow);
+        if (!entry.grade) { out.push(entry); continue; }
 
-        let first = true;
-        for (const a of rowsOf(r.body)) {
-          const aid = a && a.id != null ? String(a.id) : null;
-          let files = [];
-          if (aid) {
-            let fr = await jx(`/learn/api/v1/courses/${C}/gradebook/attempts/${aid}/files`);
-            if (fr.body === null) fr = await jx(`/learn/api/public/v1/courses/${C}/gradebook/attempts/${aid}/files`);
-            files = rowsOf(fr.body).map((f) => mapAttemptFile(f, { base, courseId: C, attemptId: aid })).filter(Boolean);
-          }
-          const m = mapAttempt(a, files, first);
-          if (m) { entry.results.push(m); first = false; }
+        // 2. the attempts under it
+        const attUrl = `/learn/api/v1/courses/${C}/gradebook/columns/${col}/grades/${entry.grade.id}/attempts`;
+        const ar = await jx(attUrl);
+        entry.steps.attempts = { url: attUrl, status: ar.status };
+        if (!ok(ar.status)) fail(ar.status);
+        const rows = rowsOf(ar.body);
+        if (rows[0]) entry.keys.attempt = Object.keys(rows[0]);
+        const wanted = newestAttempts(rows, limit);
+        entry.attempts = wanted.map((r) => ({
+          id: asString(r.id), status: asString(r.status), attemptDate: asString(r.attemptDate),
+          exempt: asBool(r.exempt), overrideStatus: asString(r.overrideStatus),
+        }));
+
+        // 3. each attempt's detail — the files live here and nowhere else
+        for (const r of wanted) {
+          const aid = String(r.id);
+          const detUrl = `/learn/api/v1/courses/${C}/gradebook/attempts/${aid}?columnId=${col}&expand=toolAttemptDetail,attempts,attempts.toolAttemptDetail`;
+          const dr = await jx(detUrl);
+          entry.steps.detail.push({ attemptId: aid, url: detUrl, status: dr.status });
+          if (!ok(dr.status)) fail(dr.status);
+          const d = (dr.body && typeof dr.body === 'object' && !Array.isArray(dr.body)) ? dr.body : null;
+          if (d && entry.keys.detail === undefined) entry.keys.detail = Object.keys(d);
+
+          const rawFiles = (d && Array.isArray(d.studentSubmissionFiles)) ? d.studentSubmissionFiles : [];
+          if (rawFiles[0] && entry.keys.file === undefined) entry.keys.file = Object.keys(rawFiles[0]);
+          const files = rawFiles
+            .map((f) => mapAttemptFile(f, { base, courseId: C, attemptId: aid }))
+            .filter(Boolean);
+
+          const det = mapAttemptDetail(d);
+          if (det) entry.detail.push(det);
+          // The contract row: built from the detail when we have it, from the list row when the
+          // detail request failed — so a submission is still recorded, just without its files.
+          const m = mapAttempt(d ?? r, files, entry.results.length === 0);
+          if (m) entry.results.push(m);
         }
       } catch (e) {
-        entry.status = entry.status || 0;
         entry.error = String((e && e.message) || e);
-        entry.results = [];
       }
       out.push(entry);
     }
@@ -449,13 +618,14 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
   // Deep-scans the whole item (body + assessment instructions + any other string field), durable URLs only.
   const refreshEmbeds = async (C, contentIds) => { const out = {}; for (const id of contentIds) { const full = await j(`/learn/api/v1/courses/${C}/contents/${id}`);
       out[id] = full.__status ? { error: full.__status, files: [] } : { modified: full.modifiedDate, files: embedsDeep(full) }; } return out; };
-  return { j, jx, strip, pageAll, walk, grades, attempts, crawl, memberships, calendar, post, runAll, downloadAll, refreshEmbeds, embedsDeep, durableUrl, mapAnnouncement, mapAttempt, mapAttemptFile, version: CRAWLER_VERSION };
+  return { j, jx, strip, pageAll, walk, grades, attempts, crawl, memberships, calendar, post, runAll, downloadAll, refreshEmbeds, embedsDeep, durableUrl, mapAnnouncement, mapAttempt, mapAttemptFile, mapGradeRow, mapAttemptDetail, newestAttempts, version: CRAWLER_VERSION };
 }
 
 // Inert in a browser tab (no `module` there), so this file stays paste-and-run in the Ultra console.
 // Under Node it exposes the pure mappers to the vitest suite in web/test.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { installCrawler, strip, personName, announcementAuthor, mapAnnouncement, AUTHOR_KEYS,
-    mapAttempt, mapAttemptFile, shouldProbeColumn, assessmentFields, pickKey, assertRunId,
-    ATTEMPT_FIELD_KEYS, ATTEMPT_FILE_KEYS, ASSESSMENT_FIELDS, CRAWLER_VERSION };
+    mapAttempt, mapAttemptFile, mapGradeRow, mapAttemptDetail, newestAttempts, atPath,
+    shouldProbeColumn, assessmentFields, pickKey, assertRunId,
+    ATTEMPT_FIELD_KEYS, ATTEMPT_FILE_KEYS, ASSESSMENT_FIELDS, CRAWLER_VERSION, ATTEMPT_LIMIT };
 }
