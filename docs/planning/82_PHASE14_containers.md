@@ -68,7 +68,7 @@ Research behind every choice: `research/82_RESEARCH_phase14_R1…R6_*.md` (six S
 7. **The harness needs almost no code change (R6).** One variable, `HARNESS_VAULT`, points every
    writer at the vault. The vault is 2.6 MB, 318 notes, no attachments.
 
-## MVP (in Stack's words — to confirm)
+## MVP (in Stack's words — confirmed by Stack 2026-09-16: "matches")
 
 On a clean copy of three repos I fill in one secrets folder and run one command. A page on my
 laptop shows a browser where I log in to Blackboard with Duo. After that the app's Sync button
