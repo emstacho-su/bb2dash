@@ -315,7 +315,7 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14 |
 | 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **merged** (PR #12, 2026-09-16; migrations 060–066 live, calendar push live and proven; Stack signed off the six-step script) |
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar | `69b_PHASE11B_planner_events.md` | **merged** (PR #14 + display follow-up PR #16, 2026-09-16; migrations 067–069 live, `calendar-push` v5 live, live proof and browser walk done) |
-| 12 | Electron shell | — | |
+| 12 | Electron shell, tray, desktop notifications, Sync button runs the command | `80_PHASE12_electron.md` | **in progress** (2026-09-16, `feat/electron-12`; Contract + Stack's Q1–Q9; mirror dropped under R-28) |
 | 13 | Styling pass | `81_PHASE13_styling.md` | last; carries C-1..C-3 from Phase 10b's browser walk (phone-width overflow, rank weights shown per exam, favicon) |
 
 **MVP, definition of done, task loops (2026-09-14, PR #11):** every remaining phase and stream

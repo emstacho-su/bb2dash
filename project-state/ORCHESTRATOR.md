@@ -57,7 +57,7 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | merged Sep 16 (brief + answers + K-notes + round 2 in `69b`, evidence `69c`; `calendar-push` v5 live, live proof and browser walk done; display follow-up #16 merged the same minute) | #14, #16 | 067–069 (070–072 free) |
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
-| 12 | Electron shell | planned; after the web app is stable | — | 073–079 if needed |
+| 12 | Electron shell + tray + desktop notifications | **in progress** since 2026-09-16 on `feat/electron-12` (worktree `bb2dash-wt-electron-12`); Contract C-1..C-13 + Stack's Q1–Q9 in `80_PHASE12_electron.md`; W-25 shell, W-26 notifications; mirror dropped (R-28) | — | 073–079 reserved, none expected |
 | 13 | Styling pass | planned; last; carries C-1..C-3 from Phase 10b's browser walk (brief §Carried in) | — | — |
 
 ## 2. Execution order and what each phase hands to the next
@@ -89,8 +89,10 @@ Rules that fall out of the graph:
    ranges, separate worktrees. V-1 is Stack's time, one course per sitting. V-2 touches only the
    harness repo.
 4. **12 and 13 are sequential, small, and after week 11's exams.** Neither pays off inside the
-   term.
-5. **Reserve migration ranges with slack.** Phase 9 was given 030–039 and used 030–045 (its review-fix rounds took 041–045), so Phase 10 starts at **046**.
+   term. (Stack pulled 12 forward to 2026-09-16.)
+5. **R-28 shapes every brief from 12 on:** OS-bound code behind thin adapters over a plain-Node
+   core, credentials from the environment, no local mirrors. See `60_REQUIREMENTS_v2.md` §3.5.
+6. **Reserve migration ranges with slack.** Phase 9 was given 030–039 and used 030–045 (its review-fix rounds took 041–045), so Phase 10 starts at **046**.
 
 Term calendar: week 1 = Aug 24. Weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week 14
 is Thanksgiving; Nov 30 – Dec 13 is a code freeze. Phases 8–10 are the ones that pay off in
@@ -169,7 +171,9 @@ Learned in Phase 11b (2026-09-16):
   (3) of Phase 10a on the live app.
 * Phase 10b is live: no course shows "Our model" until he links a column on a course Grades tab
   (e.g. ECN.304 Attendance → Participation, if the syllabus means that) or a hand-graded score posts.
-* Say when to start Phase 12 (Electron shell; prompt in §6).
+* Phase 12 is running: try the unpacked build when the PM hands it over (six-step acceptance
+  script in the brief's DoD, plus the tray).
+* Decide when R-28 (container migration after development) gets its own brief; after Phase 13.
 * Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and start V-2.
   V-1's reconciliation migration is `059_grading_reconciliation.sql`.
 * Answer V-1's *ask the professor* items as they come up.
@@ -277,7 +281,7 @@ regenerated `database.types.ts`.)
 > query layer, form, blocks, zone handling), integrate, run the gates, update STATUS, DECISIONS
 > and ORCHESTRATOR, open the PR with a preview, and stop at "ready when you say so".
 
-**Phase 12 — Electron shell** (after 10a and 11 are on `main`)
+**Phase 12 — Electron shell** (ran 2026-09-16; Contract and answers in `80_`; the brief file is `80_`, not `70_`)
 
 > `/bb2dash-pm` Start Phase 12 (R-23 Electron shell, R-26 desktop notifications). Complete the Contract section of
 > `docs/planning/80_PHASE12_electron.md`: a new `desktop/` package that loads the deployed web

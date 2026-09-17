@@ -53,4 +53,5 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   `x-push-secret` header from Vault (Phase 11); nothing else calls it.
 * Edge CPU budget ≈ 8–9 embedding parts per invocation; `embed-corpus` is resume-safe per part.
 * Secrets: service key never in a browser or the repo; publishable/anon key is fine
-  client-side (RLS is the boundary). There is no Docker in this project.
+  client-side (RLS is the boundary). There is no Docker during development;
+  containers are the post-development target (R-28), so keep OS-bound code behind thin adapters.

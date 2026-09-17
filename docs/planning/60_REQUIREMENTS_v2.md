@@ -214,6 +214,15 @@ new view, L a new ingest path / table / engine.
   **MVP (Stack, 2026-09-14): the shell, desktop notifications for all three R-26 triggers, and
   the Sync button. The file mirror (a) is a post-MVP task in the same phase.**
 * **R-24 Professional-side stub: dropped.** Never. IST.471's hours log (T-09) is also out.
+* **R-28 Portability after development (added 2026-09-16, Stack's Q7/Q9 answers to Phase 12).**
+  When development completes, the local pieces of bb2dash migrate from this laptop into
+  containers so the whole thing can be moved. Consequences for every remaining brief: OS-bound
+  code (Electron, Windows Terminal, DPAPI, OneDrive paths) stays behind thin adapters over a
+  plain-Node core; jobs take credentials from the environment, not from a desktop keychain; a
+  local file mirror is not built (Phase 12's mirror was dropped). Known open problem: the
+  Blackboard crawl inside `/bb-sync` needs a logged-in browser (NetID + Duo). Effort: a phase of
+  its own, after 13. Supersedes the 2026-09-09 "no Docker" decision's *never* reading; Docker is
+  still not used during development.
 
 ### 3.6 Validation and memory streams (added 2026-09-14)
 
