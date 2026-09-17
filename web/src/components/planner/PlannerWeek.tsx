@@ -29,7 +29,7 @@
  * and so does a timed one whose clock falls outside the drawn hours.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { todayIso } from '@/components/tracker/anchor';
 import { useHydrated } from '@/lib/use-hydrated';
@@ -49,6 +49,13 @@ import {
   type PlannerWeekModel,
 } from '@/lib/planner-week';
 import { isCompactSegment } from '@/lib/planner-events-grid';
+import {
+  readStoredBand,
+  resolveBand,
+  toggleBand,
+  writeStoredBand,
+  type BandState,
+} from './band-preference';
 import { EventBlockContent, eventCardProps, type EventActions } from './PlannerEventBlock';
 import { PlannerEventForm } from './PlannerEventForm';
 import { DaySlots, EventsBand, type SlotPosition } from './PlannerSlots';
@@ -108,6 +115,7 @@ function PlannerWeekScreen() {
   const setStatus = useSetItemStatus();
   const editor = usePlannerEventEditor();
   const [activeSlot, setActiveSlot] = useState<SlotPosition>({ dayIndex: 0, slot: 0 });
+  const band = useBandState();
 
   const actions = itemActions(pathname, view, setStatus, router);
 
@@ -155,6 +163,7 @@ function PlannerWeekScreen() {
         onActivateSlot={setActiveSlot}
         isEmpty={isEmpty}
         now={nowSlot(view)}
+        band={band}
       />
 
       <div className={styles.legend}>
@@ -191,6 +200,30 @@ function itemActions(
   };
 }
 
+/** The Assignments band's open/closed state, and the one way to change it. */
+export interface BandToggle {
+  expanded: boolean;
+  toggle: () => void;
+}
+
+/**
+ * The band's memory (P-planner-1). Read once, on the first render of the
+ * screen — which only ever happens in the browser, after `useHydrated`, so
+ * there is no server render to disagree with. Every change is written straight
+ * back, best-effort; `writeStoredBand` cannot throw.
+ */
+function useBandState(): BandToggle {
+  const [state, setState] = useState<BandState>(() => resolveBand(readStoredBand()));
+  // The write stays out of the updater: React may call an updater twice, and a
+  // side effect belongs to the event, not to the reducer.
+  const toggle = useCallback(() => {
+    const next = toggleBand(state);
+    setState(next);
+    writeStoredBand(next);
+  }, [state]);
+  return { expanded: state === 'open', toggle };
+}
+
 /**
  * Where the now-line goes, or null when it means nothing here. This is the
  * reader's own clock and their own calendar day, not the term's zone.
@@ -215,6 +248,7 @@ function WeekBoard({
   onActivateSlot,
   isEmpty,
   now,
+  band,
 }: {
   view: PlannerWeekModel;
   data: PlannerWeekData;
@@ -226,6 +260,8 @@ function WeekBoard({
   isEmpty: boolean;
   /** Slot offset of the now-line, or null when it does not belong on screen. */
   now: number | null;
+  /** Whether the Assignments band is open, and how to change that. */
+  band: BandToggle;
 }) {
   return (
     <div
@@ -238,7 +274,13 @@ function WeekBoard({
         <DayHead key={`head-${day.iso}`} day={day} />
       ))}
 
-      <AllDayBand view={view} band={data.bandByDay} isEmpty={isEmpty} actions={actions} />
+      <AllDayBand
+        view={view}
+        days={data.bandByDay}
+        isEmpty={isEmpty}
+        actions={actions}
+        band={band}
+      />
       <EventsBand view={view} band={data.eventBandByDay} actions={eventActions} />
 
       <HourGutter />
@@ -259,40 +301,103 @@ function WeekBoard({
   );
 }
 
+/** How many things one day's band cell is holding — chips, or the count. */
+function bandDayCount(day: BandDay): number {
+  return day.meetings.length + day.items.length;
+}
+
+/**
+ * The Assignments band, and the control that opens it (P-planner-1).
+ *
+ * Closed is the default. A closed band is not a hidden one: each day cell keeps
+ * its place and says how many things it is holding, so a deadline can never go
+ * missing behind the toggle. The empty-week line is the *week's* state rather
+ * than the band's contents, so it shows either way — a blank row would read as
+ * a broken screen.
+ */
 function AllDayBand({
   view,
-  band,
+  days,
   isEmpty,
   actions,
+  band,
 }: {
   view: PlannerWeekModel;
-  band: BandDay[];
+  days: BandDay[];
   isEmpty: boolean;
   actions: ItemActions;
+  band: BandToggle;
 }) {
   return (
     <>
-      <div className={styles.bandLabelVertical}>Assignments</div>
+      <button
+        type="button"
+        className={styles.bandToggle}
+        aria-expanded={band.expanded}
+        title={band.expanded ? 'Hide assignments' : 'Show assignments'}
+        onClick={band.toggle}
+      >
+        <span className={styles.bandChevron} aria-hidden="true">
+          {band.expanded ? '▾' : '▸'}
+        </span>
+        <span className={styles.bandLabelVertical}>Assignments</span>
+      </button>
+
       {isEmpty ? (
         <div className={styles.bandEmpty}>{EMPTY_WEEK}</div>
       ) : (
         view.days.map((day, index) => (
-          <div
+          <BandCell
             key={`band-${day.iso}`}
-            className={styles.bandCell}
-            data-today={String(day.isToday)}
-            aria-label={`Assignments · ${day.dowLabel}`}
-          >
-            {band[index].meetings.map((meeting) => (
-              <MeetingChip key={meeting.key} meeting={meeting} />
-            ))}
-            {band[index].items.map((placed) => (
-              <ItemChip key={placed.key} placed={placed} actions={actions} />
-            ))}
-          </div>
+            day={day}
+            content={days[index]}
+            actions={actions}
+            expanded={band.expanded}
+          />
         ))
       )}
     </>
+  );
+}
+
+function BandCell({
+  day,
+  content,
+  actions,
+  expanded,
+}: {
+  day: PlannerDay;
+  content: BandDay;
+  actions: ItemActions;
+  expanded: boolean;
+}) {
+  const count = bandDayCount(content);
+  const summary = count === 0 ? 'nothing due' : `${count} due`;
+  return (
+    <div
+      className={styles.bandCell}
+      data-today={String(day.isToday)}
+      data-band-day={day.iso}
+      data-collapsed={expanded ? undefined : 'true'}
+      aria-label={`Assignments · ${day.dowLabel} · ${summary}`}
+    >
+      {expanded ? (
+        <>
+          {content.meetings.map((meeting) => (
+            <MeetingChip key={meeting.key} meeting={meeting} />
+          ))}
+          {content.items.map((placed) => (
+            <ItemChip key={placed.key} placed={placed} actions={actions} />
+          ))}
+        </>
+      ) : (
+        count > 0 && (
+          <span className={styles.bandCount} aria-hidden="true">
+            {count}
+          </span>
+        )
+      )}
+    </div>
   );
 }
 

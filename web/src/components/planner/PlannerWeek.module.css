@@ -123,10 +123,47 @@
    bottom-to-top, centred on the band, and fits whatever the gutter's width. The
    short Events band keeps a horizontal label, which fits. */
 .bandLabelVertical {
-  composes: bandLabel;
   justify-content: center;
   writing-mode: vertical-rl;
   rotate: 180deg;
+}
+
+/* The band's gutter cell is the toggle (P-planner-1): the whole cell, so it is
+   a real target rather than a 10px chevron. */
+.bandToggle {
+  composes: bandLabel;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  border: 0;
+  cursor: pointer;
+  /* Only the font family needs saying: every other button default this cell
+     cares about (size, colour, background, padding) is set by `bandLabel`,
+     and an author rule beats the user-agent stylesheet. */
+  font-family: inherit;
+}
+
+.bandToggle:hover,
+.bandToggle:focus-visible {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+}
+
+.bandChevron {
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+/* What a closed cell says instead of its chips, so nothing due is invisible. */
+.bandCount {
+  align-self: flex-start;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  background: var(--color-neutral-900);
+  box-shadow: inset 0 0 0 1px var(--color-divider);
 }
 
 .bandCell {
