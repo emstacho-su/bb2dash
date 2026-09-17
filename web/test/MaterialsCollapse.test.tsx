@@ -116,7 +116,11 @@ vi.mock('@/lib/queries', async (importOriginal) => {
   return { ...actual, useCourses: () => ({ data: courses, isPending: false, error: null }) };
 });
 const syllabi = [
-  { id: 'IST.466', kind: 'lecture', syllabus_path: 'IST.466/syllabus_policy/Syllabus.docx' },
+  {
+    id: 'IST.466',
+    parent_course_id: null,
+    syllabus_path: 'IST.466/syllabus_policy/Syllabus.docx',
+  },
 ];
 
 vi.mock('@/lib/queries.materials', async (importOriginal) => {

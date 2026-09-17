@@ -36,7 +36,7 @@ import {
 import type { ProgressStatus } from '@/lib/queries';
 import { itemQuery } from '@/lib/queries.popout';
 import { StatusSelect } from '@/components/tracker/StatusSelect';
-import { isQueryLoading } from '@/components/shared/QueryState';
+import { isQueryLoading, queryErrorMessage } from '@/components/shared/QueryState';
 import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
 import {
   DEFAULT_HORIZON_DAYS,
@@ -51,8 +51,10 @@ import { gradedSoFarCardFigure } from '@/lib/graded-so-far';
 import { useCourseFigures } from '@/lib/use-course-figures';
 import { NeedsAttentionRow } from './NeedsAttention';
 import {
+  blackboardErrorFigure,
   blackboardGradeFigure,
   CourseGradeFigureView,
+  gradedSoFarErrorFigure,
   type CourseGradeFigure,
 } from './CourseGradeFigure';
 
@@ -149,23 +151,37 @@ export function Today() {
   /**
    * G-2 / P-home-10 — what the course card is handed to show.
    *
-   * Blackboard's own published total is wired now, through the Phase 10a
-   * helpers, so the card and `/grades` read the same row and cannot disagree.
-   * While the gradebook read is in flight or has failed the card shows no
-   * figure at all: "not synced yet" is a claim about the data, and neither a
-   * request in flight nor a failed one supports it.
+   * Two figures from two unrelated sets of reads: Blackboard's published total
+   * from `v_course_grade`, and graded-so-far (Stack's pick, G-1) from the
+   * scheme and item bulk reads behind `useCourseFigures` — the same hook
+   * `/grades` uses, so Home and /grades run one function over one set of rows.
+   * This screen computes nothing itself.
    *
-   * Second in the array: the graded-so-far figure (Stack's pick, G-1), from
-   * `useCourseFigures` — the same hook `/grades` uses, so Home and /grades run
-   * one function over one set of rows. This screen computes nothing itself.
+   * CR-7: they are built INDEPENDENTLY. This used to return [] the moment the
+   * gradebook read failed, so one broken query took away a number the other,
+   * perfectly healthy query had already worked out — silently, leaving a card
+   * that looked like a course with nothing to say.
+   *
+   * In flight, a figure is omitted: "not synced yet" is a claim about the data,
+   * and a request that has not answered supports neither it nor its opposite.
+   * A FAILED read is a different thing — a fact about us, not the course — and
+   * the card says so in its own words, with the database's behind the title.
    */
   function cardGrades(course: CourseDisplay): CourseGradeFigure[] {
-    if (gradesQ.isPending || gradesQ.error) return [];
-    const blackboard = blackboardGradeFigure(pickCourseGrade(gradesQ.data, course.shell_ids));
+    const figures: CourseGradeFigure[] = [];
+
+    if (gradesQ.error) {
+      figures.push(blackboardErrorFigure(queryErrorMessage(gradesQ.error)));
+    } else if (!gradesQ.isPending) {
+      figures.push(blackboardGradeFigure(pickCourseGrade(gradesQ.data, course.shell_ids)));
+    }
+
     const schemeId = schemeCourseIdFor(course);
-    const soFar = schemeId === null ? null : courseFigures.figures[schemeId]?.figure ?? null;
-    // Still loading, failed, or no scheme course: the card shows Blackboard's number alone.
-    return soFar === null ? [blackboard] : [blackboard, gradedSoFarCardFigure(soFar)];
+    const soFar = schemeId === null ? null : courseFigures.figures[schemeId] ?? null;
+    if (soFar?.error) figures.push(gradedSoFarErrorFigure(soFar.error));
+    else if (soFar?.figure) figures.push(gradedSoFarCardFigure(soFar.figure));
+
+    return figures;
   }
 
   // Header kicker: real weekday/date + truthful term week (only if the term row loaded).
