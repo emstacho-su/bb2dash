@@ -59,6 +59,8 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell | planned; after the web app is stable | — | 073–079 if needed |
 | 13 | Styling pass | planned; last; carries C-1..C-3 from Phase 10b's browser walk (brief §Carried in) | — | — |
+| 12b | Fine-tooth-comb pass: Stack's list of bugs and changes by page → triage → research → MVP (`80c_PHASE12B_page_pass.md`) | planned; **after 12, before 13**; starts from Stack's list, not from requirements | — | 073–079 if Phase 12 leaves it free, else 082–089 |
+| 14 | Containers (R-28): deterministic `sync-runner` + noVNC Blackboard login, harness jobs with a catch-up scheduler, vault → private git repo, dev container, umbrella repo `bb2dash-stack` (`82_PHASE14_containers.md`, research `research/82_*`) | planned; **after 13**; brief + Stack's 16 answers + six-researcher synthesis written 2026-09-16; one PR per repo (three repos) | — | 090–099 (090–091 expected) |
 
 ## 2. Execution order and what each phase hands to the next
 
@@ -294,3 +296,23 @@ regenerated `database.types.ts`.)
 > from; wait. Then complete `docs/planning/81_PHASE13_styling.md`, branch `feat/styling-13`, and
 > spawn workers: CSS custom properties only, no Tailwind, no layout changes, no new
 > dependencies. Vercel preview before the PR; stop there.
+
+**Phase 12b — fine-tooth-comb pass** (after 12 merges, before 13)
+
+> `/bb2dash-pm` Start Phase 12b. Read `docs/planning/80c_PHASE12B_page_pass.md` and follow its
+> Method exactly. My list of bugs and changes by page follows below. Give every item an id,
+> triage it, spawn Sonnet researchers (one per page) to reproduce, locate and size, then bring me
+> your questions in one batch. After my answers, write the MVP, DoD and task loops into the brief
+> and stop for my approval before spawning any worker.
+>
+> <the list, grouped by page>
+
+**Phase 14 — containers (R-28)** (after 13 merges)
+
+> `/bb2dash-pm` Start Phase 14. Read `docs/planning/82_PHASE14_containers.md` and the six
+> `research/82_RESEARCH_phase14_*` files. Re-check R5's Electron seam against the merged
+> `desktop/src/main/` code. Put the brief's open questions to me and wait. Then freeze the
+> Contract, create the `bb2dash-stack` and `vault` repos with me, run task 2 (the noVNC login
+> spike) as a gate before anything else, and only if it passes cut worktrees in bb2dash and
+> agentic-harness, spawn W-27 / W-28 / W-29, integrate, run the gates on all three PRs, and stop
+> at "ready when you say so". Keep the Windows path working until my acceptance sitting.

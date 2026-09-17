@@ -317,6 +317,8 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar | `69b_PHASE11B_planner_events.md` | **merged** (PR #14 + display follow-up PR #16, 2026-09-16; migrations 067–069 live, `calendar-push` v5 live, live proof and browser walk done) |
 | 12 | Electron shell | — | |
 | 13 | Styling pass | `81_PHASE13_styling.md` | last; carries C-1..C-3 from Phase 10b's browser walk (phone-width overflow, rank weights shown per exam, favicon) |
+| 12b | Fine-tooth-comb pass over every page and feature | `80c_PHASE12B_page_pass.md` | planned 2026-09-16; after 12, before 13; input is Stack's list of bugs and changes by page |
+| 14 | Containers (R-28): every local process in Docker | `82_PHASE14_containers.md` + `research/82_RESEARCH_phase14_R1…R6` | planned 2026-09-16; after 13; Stack's 16 answers recorded, open questions in the brief; migration range 090–099 |
 
 **MVP, definition of done, task loops (2026-09-14, PR #11):** every remaining phase and stream
 now has an explicit MVP in Stack's words, a DoD checklist (SOP gates + his acceptance script +
