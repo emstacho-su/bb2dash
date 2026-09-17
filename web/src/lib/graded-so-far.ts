@@ -14,9 +14,10 @@
  *     of both sides of the figure, and **named underneath it** so the reader
  *     can see what the number does not cover. On the fixture set that alone
  *     turned three silent courses of six into real figures.
- *   * **Muting is gone.** A part whose syllabus link was unsure used to be
- *     dropped from the headline, taking its graded scores with it — 1.5 points
- *     and a graded 135/150 on fixture F16. Unsure links now count, and a
+ *   * **Muting is gone** — removed from `grade-model/tree.ts` itself, not
+ *     worked around here. A part whose syllabus link was unsure used to be
+ *     dropped from the headline, taking its graded scores with it (1.5 points
+ *     and a graded 135/150 on fixture F16). Unsure links now count, and a
  *     **scored column that counts toward nothing at all** is named underneath
  *     instead, where the "Counts toward…" picker can fix it.
  *   * **One projection.** Graded so far is the figure. "Zeros on the rest",
@@ -25,17 +26,18 @@
  *
  * WHAT DID NOT CHANGE: the arithmetic. Every per-part rule — sum, average,
  * drop-lowest, rank-weighted, normalised, single, hand-graded — is the engine's
- * own, unaltered, and `web/test/grade-method-comparison/` runs this function
- * against the hand-derived truths on every fixture as a permanent regression.
+ * own, unaltered, and so are the order of checks and the `nothing_graded`
+ * decision: this module composes `evaluateCourse` rather than re-stating any of
+ * it. `web/test/graded-so-far.test.ts` runs this function against the
+ * hand-derived truth of every fixture as a permanent regression.
  *
  * Pure and deterministic: no I/O, no clock, no mutation. Same input, same
  * output — asserted by a property test.
  */
 
-import { evaluateModel, standingOf } from './grade-model/project';
+import { evaluateCourse, standingFor } from './grade-model';
 import { isCounted, realScoreOf, unlinkedScoredKeys } from './grade-model/items';
-import type { ItemInput, ModelInput, SchemeInput } from './grade-model/types';
-import type { ComputableMethod } from './grade-model/tree';
+import type { ItemInput, ModelInput } from './grade-model/types';
 // A pure date formatter that happens to live in the 10a query module, the same
 // one Home's card uses — so both sides print an "as of" identically. The
 // Supabase client it sits beside is only reached inside a queryFn, never at
@@ -75,32 +77,6 @@ export type GradedSoFarResult =
   | { readonly state: 'nothing_graded' }
   | { readonly state: 'not_computable'; readonly reason: FigureReason };
 
-interface OpenGate {
-  readonly state: 'open';
-  readonly scheme: SchemeInput;
-  readonly method: ComputableMethod;
-}
-
-function notComputable(reason: FigureReason): GradedSoFarResult {
-  return { state: 'not_computable', reason };
-}
-
-/**
- * The checks that remain. A course with no rules, or graded qualitatively, or
- * carrying a rule we cannot read, has no percentage — and saying so is the
- * point. IST.471 is the live case: it never shows a number.
- */
-function gate(input: ModelInput): GradedSoFarResult | OpenGate {
-  const { scheme } = input;
-  if (scheme === null) return notComputable('no_scheme');
-  if (scheme.method === 'qualitative') return notComputable('qualitative_method');
-  if (scheme.method === 'unknown') return notComputable('unknown_method');
-  if (input.components.some((component) => component.aggregation === 'unknown')) {
-    return notComputable('unknown_aggregation');
-  }
-  return { state: 'open', scheme, method: scheme.method };
-}
-
 /** The newest instant among the graded rows the figure actually used. */
 export function asOfFor(items: readonly ItemInput[]): string | null {
   const stamps = items
@@ -114,25 +90,6 @@ export function asOfFor(items: readonly ItemInput[]): string | null {
 function unlinkedColumnNames(input: ModelInput): readonly string[] {
   const keys = new Set(unlinkedScoredKeys(input.components, input.items));
   return input.items.filter((item) => keys.has(item.key)).map((item) => item.name);
-}
-
-/**
- * Muting off, expressed in the input: a link's confidence no longer decides
- * whether a graded score counts, only whether the reader is told the link is
- * unsure. Every linked item therefore enters the arithmetic as confirmed.
- *
- * This is how the "gates off" row of `80e` was measured, and it is how the
- * production path behaves. It reads as a shim only because the muting code is
- * still inside `grade-model/tree.ts`; when that goes, this function goes with
- * it and the fixtures prove the figure did not move.
- */
-function linksConfirmed(input: ModelInput): ModelInput {
-  return {
-    ...input,
-    items: input.items.map((item) =>
-      item.componentId === null ? item : { ...item, linkConfidence: 'confirmed' as const },
-    ),
-  };
 }
 
 /* ---------------------------------------------------------------------------
@@ -196,19 +153,35 @@ export function gradedSoFarCardFigure(result: GradedSoFarResult): GradedSoFarCar
   };
 }
 
+/* ---------------------------------------------------------------------------
+ * The figure itself
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The figure, and what it does not cover.
+ *
+ * The order of checks and the `nothing_graded` decision are the engine's own
+ * (`evaluateCourse`), so there is exactly one gate and the two cannot drift.
+ * All this adds is the reading: the percentage, and the parts and columns the
+ * percentage leaves out.
+ */
 export function gradedSoFar(input: ModelInput): GradedSoFarResult {
-  const open = gate(input);
-  if (open.state !== 'open') return open;
+  const evaluation = evaluateCourse(input);
+  if (evaluation.state === 'not_computable') {
+    // `nothing_graded` is a state of its own here: a course whose rules are
+    // fine and whose work simply has not been marked yet is a different thing
+    // to say than one that can never carry a percentage.
+    return evaluation.reason === 'nothing_graded'
+      ? { state: 'nothing_graded' }
+      : { state: 'not_computable', reason: evaluation.reason };
+  }
 
-  const evaluation = evaluateModel(linksConfirmed(input), open.scheme, open.method);
   const totals = evaluation.gradedSoFar;
-  if (totals.gradedCap <= 0) return { state: 'nothing_graded' };
-
-  const standing = standingOf(totals.earned, totals.gradedCap, open.scheme);
+  const standing = standingFor(evaluation);
   // Extra credit has no capacity by design, so it is neither counted nor left
   // out — listing it either way would misdescribe it.
   const parts = totals.outcomes.filter((outcome) => !outcome.node.extraCredit);
-  const points = open.method === 'points';
+  const points = evaluation.model.method === 'points';
 
   return {
     state: 'figure',
