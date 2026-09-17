@@ -61,7 +61,10 @@ export function makeAttentionItem(overrides: Partial<AttentionItem> = {}): Atten
     kind: 'conflict',
     course_id: 'IST.323',
     entity: 'assignment',
-    ref: 'IST.323.quiz-2',
+    // Assignment ids are `<course_id>/<slug>` — every one of the 83 rows in
+    // prod is. The dot here was a typo, and I-2's outcome sentences read the
+    // ref to decide whether an answer can be applied at all.
+    ref: 'IST.323/quiz-2',
     field: 'due_at',
     from_value: '2026-09-02',
     to_value: '2026-09-09',

@@ -103,6 +103,36 @@
   flex-wrap: wrap;
 }
 
+/* I-2: a control and the sentence saying what it does, stacked, so the two are
+   read together. `.choices` puts the two conflict answers side by side. */
+.choices {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: 44ch;
+}
+.outcome {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-neutral-400);
+}
+
+/* The one-line rule at the top of the screen. */
+.applyHelp {
+  margin: 0 0 var(--space-4);
+  max-width: 88ch;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
 .answered {
   margin: var(--space-2) 0 0;
   font-size: var(--text-sm);

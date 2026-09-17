@@ -28,16 +28,19 @@ import styles from './Inbox.module.css';
 import {
   ATTENTION_KIND_HEADING,
   ATTENTION_KIND_LABEL,
+  INBOX_APPLY_HELP,
   NOTE_MAX_LENGTH,
   freshnessLine,
   groupByKind,
   isAwaitingApply,
+  outcomeText,
   useAttentionItems,
   useResolveAttentionItem,
   useSyncStatus,
   valueText,
   type AttentionItem,
   type AttentionKind,
+  type OutcomeAction,
   type ResolveInput,
   type SyncStatus,
 } from '@/lib/queries.sync';
@@ -157,6 +160,9 @@ export function InboxView({
         </div>
       </header>
 
+      {/* I-2: the rule stated once, so it is not only implied row by row. */}
+      <p className={styles.applyHelp}>{INBOX_APPLY_HELP}</p>
+
       {error && (
         <p className={styles.problem} role="alert">
           Could not load the inbox: {error.message}
@@ -218,6 +224,14 @@ export function InboxView({
 /* ---------------------------------------------------------------------------
  * One row
  * ------------------------------------------------------------------------ */
+
+/**
+ * I-2: the sentence under a control — what pressing it actually changes, with
+ * the real field and the real date, or that nothing is changed at all.
+ */
+function Outcome({ item, action }: { item: AttentionItem; action: OutcomeAction }) {
+  return <p className={styles.outcome}>{outcomeText(item, action)}</p>;
+}
 
 function StateChip({ item }: { item: AttentionItem }) {
   if (item.state === 'open') return null;
@@ -320,59 +334,71 @@ export function InboxRow({
           </label>
 
           {item.kind === 'conflict' && (
-            <div className={styles.buttons}>
-              <button
-                type="button"
-                className={tokens.btnPrimary}
-                disabled={pending}
-                onClick={() => send({ id: item.id, kind: 'conflict', accept: 'blackboard', note })}
-              >
-                Accept Blackboard
-              </button>
-              <button
-                type="button"
-                className={tokens.btnSecondary}
-                disabled={pending}
-                onClick={() => send({ id: item.id, kind: 'conflict', accept: 'keep', note })}
-              >
-                Keep mine
-              </button>
+            <div className={styles.choices}>
+              <div className={styles.choice}>
+                <button
+                  type="button"
+                  className={tokens.btnPrimary}
+                  disabled={pending}
+                  onClick={() => send({ id: item.id, kind: 'conflict', accept: 'blackboard', note })}
+                >
+                  Accept Blackboard
+                </button>
+                <Outcome item={item} action="accept_blackboard" />
+              </div>
+              <div className={styles.choice}>
+                <button
+                  type="button"
+                  className={tokens.btnSecondary}
+                  disabled={pending}
+                  onClick={() => send({ id: item.id, kind: 'conflict', accept: 'keep', note })}
+                >
+                  Keep mine
+                </button>
+                <Outcome item={item} action="keep_mine" />
+              </div>
             </div>
           )}
 
           {answerKind && (
-            <div className={styles.buttons}>
-              <input
-                type={answerType}
-                className={tokens.input}
-                value={answer}
-                maxLength={NOTE_MAX_LENGTH}
-                aria-label={`Answer for item ${item.id}`}
-                onChange={(event) => setAnswer(event.target.value)}
-              />
-              <button
-                type="button"
-                className={tokens.btnPrimary}
-                disabled={pending || answer.trim().length === 0}
-                onClick={() =>
-                  send({ id: item.id, kind: answerKind, answer, answerType, note })
-                }
-              >
-                Save
-              </button>
+            <div className={styles.choice}>
+              <div className={styles.buttons}>
+                <input
+                  type={answerType}
+                  className={tokens.input}
+                  value={answer}
+                  maxLength={NOTE_MAX_LENGTH}
+                  aria-label={`Answer for item ${item.id}`}
+                  onChange={(event) => setAnswer(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className={tokens.btnPrimary}
+                  disabled={pending || answer.trim().length === 0}
+                  onClick={() =>
+                    send({ id: item.id, kind: answerKind, answer, answerType, note })
+                  }
+                >
+                  Save
+                </button>
+              </div>
+              <Outcome item={item} action="save" />
             </div>
           )}
 
           {dismissKind && (
-            <div className={styles.buttons}>
-              <button
-                type="button"
-                className={tokens.btnSecondary}
-                disabled={pending}
-                onClick={() => send({ id: item.id, kind: dismissKind, note })}
-              >
-                Dismiss
-              </button>
+            <div className={styles.choice}>
+              <div className={styles.buttons}>
+                <button
+                  type="button"
+                  className={tokens.btnSecondary}
+                  disabled={pending}
+                  onClick={() => send({ id: item.id, kind: dismissKind, note })}
+                >
+                  Dismiss
+                </button>
+              </div>
+              <Outcome item={item} action="dismiss" />
             </div>
           )}
         </div>

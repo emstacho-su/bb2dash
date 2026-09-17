@@ -21,7 +21,9 @@ vi.mock('next/link', () => ({
 }));
 
 const { InboxView, answerTypeFor, failureText, sourceText } = await import('@/app/(app)/inbox/Inbox');
-const { normalizeSyncStatus } = await import('@/lib/queries.sync');
+const { normalizeSyncStatus, INBOX_APPLY_HELP, RECORDED_ONLY } = await import(
+  '@/lib/queries.sync',
+);
 
 const status = normalizeSyncStatus(makeSyncStatusRow());
 
@@ -222,7 +224,7 @@ describe('Inbox — what a row shows', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('2026-09-02')).toBeInTheDocument();
     expect(screen.getByText('2026-09-09')).toBeInTheDocument();
-    expect(screen.getByText('assignment · IST.323.quiz-2 · due_at · run #42')).toBeInTheDocument();
+    expect(screen.getByText('assignment · IST.323/quiz-2 · due_at · run #42')).toBeInTheDocument();
   });
 
   it('shows a suggested answer when the transform offered one', () => {
@@ -298,5 +300,83 @@ describe('Inbox — a failed resolve', () => {
     );
     expect(failureText({})).toBe('the database rejected the change');
     expect(failureText(null)).toBe('the database rejected the change');
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * I-2 / P-inbox-2 — what each control says it will do
+ *
+ * The sentences themselves are covered exhaustively in
+ * test/queries.sync.outcome.test.ts. What is under test here is that the screen
+ * puts one under every control it renders, and states the rule once at the top.
+ * ------------------------------------------------------------------------ */
+
+describe('Inbox — the outcome under each button', () => {
+  it('states both outcomes of a due-date conflict, with real dates', () => {
+    renderInbox([makeAttentionItem({ id: 1, kind: 'conflict' })]);
+
+    expect(
+      screen.getByText('Sets this assignment’s due date to Wed, Sep 9.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Keeps this assignment’s due date at Wed, Sep 2 and marks it confirmed, ' +
+          'so the next sync stops asking.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('says "recorded only" under a control nothing applies', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 2,
+        kind: 'stack_must_confirm',
+        entity: 'course',
+        ref: 'course_field:academic_advisor',
+        field: null,
+        question: 'Who is your academic advisor?',
+      }),
+    ]);
+    expect(screen.getByText(RECORDED_ONLY)).toBeInTheDocument();
+  });
+
+  it('says a dismissal closes the row and stops the asking', () => {
+    renderInbox([
+      makeAttentionItem({ id: 3, kind: 'data_gap', entity: 'bb_file', ref: '117' }),
+    ]);
+    expect(screen.getByText(/The row closes and the sync stops asking\./)).toBeInTheDocument();
+  });
+
+  it('names the destination under a typed answer', () => {
+    renderInbox([makeAttentionItem({ id: 4, kind: 'missing', field: 'due_at' })]);
+    expect(
+      screen.getByText('Saves what you type as this assignment’s due date.'),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves no control without a sentence beside it', () => {
+    renderInbox([
+      makeAttentionItem({ id: 1, kind: 'conflict' }),
+      makeAttentionItem({ id: 2, kind: 'missing' }),
+      makeAttentionItem({ id: 3, kind: 'data_gap', entity: 'bb_file', ref: '117' }),
+    ]);
+    const controls = screen
+      .getAllByRole('button')
+      .filter((button) =>
+        ['Accept Blackboard', 'Keep mine', 'Save', 'Dismiss'].includes(
+          button.textContent ?? '',
+        ),
+      );
+    expect(controls).toHaveLength(4);
+    for (const control of controls) {
+      const choice = control.closest('[class*="choice"]');
+      expect(choice, control.textContent ?? '').not.toBeNull();
+      expect(choice?.textContent).toMatch(/\.$/);
+    }
+  });
+
+  it('states the rule once, at the top of the screen', () => {
+    renderInbox([makeAttentionItem({ id: 1 })]);
+    expect(screen.getByText(INBOX_APPLY_HELP)).toBeInTheDocument();
   });
 });
