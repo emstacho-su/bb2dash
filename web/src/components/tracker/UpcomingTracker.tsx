@@ -346,7 +346,11 @@ export function UpcomingTracker({
     : `${selectedItems.length} due · ${effortLabel(sumEffort(selectedItems))}`;
 
   return (
-    <section className={styles.section}>
+    // H-3 (P-home-3): the strip and the day panel used to be a bare section
+    // with a card floating under it, which read as two unrelated blocks. One
+    // card now holds the heading, the strip and the panel, so "upcoming work"
+    // and "today's work" are visibly one thing.
+    <section className={`${tokens.cardLg} ${styles.section}`} aria-label={title}>
       <div className={styles.sectionHead}>
         <h2 className={styles.h2}>{title}</h2>
         <span className={styles.sub}>{headSub}</span>
@@ -410,7 +414,7 @@ export function UpcomingTracker({
         </span>
       </div>
 
-      <div className={`${tokens.card} ${styles.detail}`}>
+      <div className={styles.detail}>
         <div className={styles.detailHead}>
           <span className={styles.detailTitle}>
             {activeSelected === today ? 'Today' : DOW_LABELS[selectedDate.getDay()]},{' '}

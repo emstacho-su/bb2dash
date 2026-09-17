@@ -5,12 +5,14 @@
  *
  * Structure & interactions are the spec; the Nocturne skin is a placeholder.
  *   1. Horizontal effort tracker — now the shared `<UpcomingTracker>` component
- *      (`@/components/tracker`), fed a 56-day window so its ◂ ▸ paging has
- *      somewhere to go. Unpaged it shows the same 14 days it always did.
+ *      (`@/components/tracker`), fed a 56-day window. Since H-2 the strip
+ *      scrolls that whole span and opens anchored on today; H-3 put the strip
+ *      and the day panel in one card.
  *   2. Undated tray (v_work_items where undated = true).
  *   3. Status quick-edit (T-06) writing assignment_progress / reading_progress.
- *   4. Needs-attention row (typed counts + freshness, expands to the top five).
- *   5. 2-up course cards, NO grade line (no gradebook this term — honesty rule).
+ *   4. 2-up course cards.
+ *   5. Needs-attention row, LAST on the page (H-3 / P-home-5): the queue Stack
+ *      clears when he has time, not the thing he opens Home to see.
  *
  * Every figure traces to a v_work_items / v_course_display row. Missing data
  * shows "—" or an empty state; nothing is invented.
@@ -178,9 +180,6 @@ export function Today() {
         error={windowQ.error}
       />
 
-      {/* ---- 4. Needs-attention row (Phase 9; replaces the last-sync line) ---- */}
-      <NeedsAttentionRow />
-
       {/* ---- 2. Undated tray ---- */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
@@ -238,6 +237,11 @@ export function Today() {
           {coursesQ.isPending && <span className={styles.muted}>loading courses…</span>}
         </div>
       </section>
+
+      {/* ---- 4. Needs-attention row (Phase 9; replaces the last-sync line) ----
+          H-3 (P-home-5): last on the page. It is the queue Stack clears when he
+          has time, not the thing he opens Home to see. */}
+      <NeedsAttentionRow />
     </>
   );
 }

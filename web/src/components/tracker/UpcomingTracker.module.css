@@ -168,10 +168,15 @@
   flex-wrap: wrap;
 }
 
-/* — detail panel ——————————————————————————————————————————————————— */
+/* — detail panel ———————————————————————————————————————————————————
+   H-3: no longer its own card — it shares the section's. A rule across the
+   top is what now separates "the fortnight" from "the day you clicked". */
 .detail {
-  padding: var(--space-2) var(--space-4);
+  display: flex;
+  flex-direction: column;
   gap: 0;
+  padding-top: var(--space-2);
+  box-shadow: inset 0 1px 0 var(--color-divider);
 }
 .detailHead {
   display: flex;
