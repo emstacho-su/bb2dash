@@ -1,0 +1,184 @@
+/**
+ * "Counts toward…": offered on a scored unlinked column and on an unsure link
+ * (preselected, marked "unsure"), writing a component, "Not graded", a confirm
+ * of the link as it stands, or clearing Stack's own override.
+ */
+
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { LinkColumnControl, linkTargetFor, selectedLinkValue } from '@/components/grades/LinkColumnControl';
+import { GradebookTable } from '@/components/grades/GradebookTable';
+import { linkOptions, linkStates, type LinkState } from '@/lib/grade-model-view';
+import { makeGradebookRow } from './factories.grades';
+import { IST466_SYNCHRONY, makeItem } from './factories.grade-model';
+
+vi.mock('@/lib/supabase/client', () => ({
+  getSupabaseBrowserClient: () => ({ from: vi.fn() }),
+}));
+vi.mock('next/link', () => ({
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+}));
+
+const OPTIONS = [
+  { id: 24, name: 'Two Major Case Studies (Synchrony, SU IT)' },
+  { id: 25, name: 'Team Ethics Case Presentations' },
+];
+
+const UNLINKED: LinkState = { shellCourseId: 'IST.323', columnId: '_3560541_1', componentId: null, excluded: false, unsure: false, override: false };
+const UNSURE: LinkState = { shellCourseId: 'IST.466', columnId: '_3562496_1', componentId: 24, excluded: false, unsure: true, override: false };
+
+function select(): HTMLSelectElement {
+  return screen.getByRole('combobox', { name: /Counts toward…/ }) as HTMLSelectElement;
+}
+
+describe('LinkColumnControl', () => {
+  it('on a scored unlinked row: nothing selected, a component writes a link', () => {
+    const onChange = vi.fn();
+    render(<LinkColumnControl state={UNLINKED} options={OPTIONS} columnName="Lab #1" onChange={onChange} />);
+    expect(select().value).toBe('');
+    expect([...select().options].map((o) => o.textContent)).toEqual([
+      'Counts toward…', 'Two Major Case Studies (Synchrony, SU IT)', 'Team Ethics Case Presentations', 'Not graded',
+    ]);
+    expect(screen.queryByText('unsure')).toBeNull();
+
+    fireEvent.change(select(), { target: { value: '25' } });
+    expect(onChange).toHaveBeenCalledWith(UNLINKED, { kind: 'component', componentId: 25 });
+  });
+
+  it('on an unsure row: the current component preselected and marked "unsure", confirmable as it stands', () => {
+    const onChange = vi.fn();
+    render(<LinkColumnControl state={UNSURE} options={OPTIONS} columnName="Synchrony Major Case #1" onChange={onChange} />);
+    expect(select().value).toBe('24');
+    expect(screen.getByText('unsure')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm link: Synchrony Major Case #1' }));
+    expect(onChange).toHaveBeenCalledWith(UNSURE, { kind: 'component', componentId: 24 });
+  });
+
+  it('"Not graded" writes an exclusion', () => {
+    const onChange = vi.fn();
+    render(<LinkColumnControl state={UNLINKED} options={OPTIONS} columnName="Lab #1" onChange={onChange} />);
+    fireEvent.change(select(), { target: { value: 'not-graded' } });
+    expect(onChange).toHaveBeenCalledWith(UNLINKED, { kind: 'excluded' });
+  });
+
+  it('shows the database refusal beside the picker', () => {
+    render(<LinkColumnControl state={UNLINKED} options={OPTIONS} columnName="Lab #1" onChange={vi.fn()} error="Could not save the link: nope" />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not save the link: nope');
+  });
+
+  it('maps select values both ways, clearing only an override', () => {
+    expect(selectedLinkValue({ componentId: 5, excluded: false })).toBe('5');
+    expect(selectedLinkValue({ componentId: null, excluded: true })).toBe('not-graded');
+    expect(linkTargetFor('', { override: true })).toEqual({ kind: 'clear' });
+    expect(linkTargetFor('', { override: false })).toBeNull();
+    expect(linkTargetFor('abc', { override: false })).toBeNull();
+  });
+});
+
+describe("IST.323's picker offers leaf components only (R2-1w)", () => {
+  // grade_components for IST.323 as prod holds them: Final Project (14) has three children.
+  const IST323_COMPONENTS = [
+    { id: 10, name: 'Class Participation', parentId: null },
+    { id: 11, name: 'Blackboard Quizzes', parentId: null },
+    { id: 12, name: 'Security in the News Group Presentation', parentId: null },
+    { id: 13, name: 'Individual Security Presentation', parentId: null },
+    { id: 14, name: 'Final Project: Security Program Proposal', parentId: null },
+    { id: 15, name: 'Exams', parentId: null },
+    { id: 16, name: 'Required Labs', parentId: null },
+    { id: 17, name: 'Extra Credit Lab', parentId: null },
+    { id: 18, name: 'Final Project: Proposal', parentId: 14 },
+    { id: 19, name: 'Final Project: Running Log', parentId: 14 },
+    { id: 20, name: 'Final Project: In-class Defense', parentId: 14 },
+  ];
+
+  it('has no "Final Project: Security Program Proposal" and has its three parts', () => {
+    render(
+      <LinkColumnControl
+        state={{ ...UNLINKED, columnId: '_3569973_1' }}
+        options={linkOptions(IST323_COMPONENTS)}
+        columnName="Final Project - Proposal and Appendices"
+        onChange={vi.fn()}
+      />,
+    );
+    const names = [...select().options].map((o) => o.textContent);
+    expect(names).not.toContain('Final Project: Security Program Proposal');
+    expect(names).toEqual(expect.arrayContaining([
+      'Final Project: Proposal', 'Final Project: Running Log', 'Final Project: In-class Defense',
+    ]));
+    expect(names).toHaveLength(1 + 10 + 1);
+  });
+});
+
+describe('the picker in the gradebook table', () => {
+  const lab = makeGradebookRow({ course_id: 'IST.323', column_id: '_3560541_1', name: 'Lab #1', effective_score: 4, counts_toward_grade: false });
+  const quiz = makeGradebookRow({ course_id: 'IST.323', column_id: '_3560530_1', name: 'Quiz #1', effective_score: 10 });
+  const attendance = makeGradebookRow({
+    course_id: 'GEO.103.recitation', column_id: '_3602445_1', name: 'Attendance', column_kind: 'attendance', effective_score: 0, counts_toward_grade: false,
+  });
+
+  const unscoredUnlinked = makeGradebookRow({
+    course_id: 'IST.352', column_id: '_3610995_1', name: 'Project Assignment #2A - Project Resources & Risks', possible: 10, effective_score: null, counts_toward_grade: false,
+  });
+  const zeroPoint = makeGradebookRow({
+    course_id: 'IST.352', column_id: '_3611110_1', name: 'Knowledge Check - 09/09/2026', possible: 0, effective_score: 2, counts_toward_grade: false,
+  });
+
+  const rows = [
+    makeItem({ item_key: 'col:IST.352:_3610995_1', shell_course_id: 'IST.352', column_id: '_3610995_1', possible: 10, score: null, component_id: null, link_source: null, link_confidence: null }),
+    makeItem({ item_key: 'col:IST.352:_3611110_1', shell_course_id: 'IST.352', column_id: '_3611110_1', possible: 0, score: 2, component_id: null, link_source: null, link_confidence: null }),
+    makeItem({ item_key: 'col:IST.323:_3560541_1', shell_course_id: 'IST.323', column_id: '_3560541_1', score: 4, component_id: null, link_source: null, link_confidence: null }),
+    makeItem({ item_key: 'col:IST.323:_3560530_1', shell_course_id: 'IST.323', column_id: '_3560530_1', score: 10 }),
+    makeItem({ item_key: 'col:GEO.103.recitation:_3602445_1', shell_course_id: 'GEO.103.recitation', column_id: '_3602445_1', score: 0, component_id: 5, link_source: 'override', link_confidence: 'confirmed' }),
+    IST466_SYNCHRONY,
+  ];
+
+  it('appears on the unlinked row only, not on a confirmed link', () => {
+    render(<GradebookTable rows={[lab, quiz]} links={{ states: linkStates(rows), options: OPTIONS, onChange: vi.fn() }} />);
+    const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
+    expect(within(rowOf('Lab #1')).getByRole('combobox')).toBeInTheDocument();
+    expect(within(rowOf('Quiz #1')).queryByRole('combobox')).toBeNull();
+  });
+
+  it('appears on an unscored unlinked column but not on a zero-point one (Round 1b A2)', () => {
+    render(<GradebookTable rows={[unscoredUnlinked, zeroPoint]} links={{ states: linkStates(rows), options: OPTIONS, onChange: vi.fn() }} />);
+    const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
+    const picker = within(rowOf('Project Assignment #2A - Project Resources & Risks')).getByRole('combobox');
+    expect((picker as HTMLSelectElement).value).toBe('');
+    expect(within(rowOf('Knowledge Check - 09/09/2026')).queryByRole('combobox')).toBeNull();
+  });
+
+  it('puts a "Not graded" attendance column in the bookkeeping group with no tag, whatever V-1 says (R2-8)', () => {
+    const counted = { ...attendance, counts_toward_grade: true };
+    const excluded = [makeItem({
+      item_key: 'col:GEO.103.recitation:_3602445_1', shell_course_id: 'GEO.103.recitation', column_id: '_3602445_1',
+      score: 0, component_id: 5, link_source: 'override', link_confidence: 'confirmed', excluded: true,
+    })];
+    render(<GradebookTable rows={[quiz, counted]} links={{ states: linkStates(excluded), options: OPTIONS, onChange: vi.fn() }} />);
+
+    expect(screen.queryByText('Attendance')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Attendance and bookkeeping columns (1)' }));
+    const row = screen.getByText('Attendance').closest('tr') as HTMLElement;
+    expect(within(row).queryByText('counts toward grade')).toBeNull();
+    expect((within(row).getByRole('combobox') as HTMLSelectElement).value).toBe('not-graded');
+  });
+
+  it('places rows by read-only overrides too, as /grades does', () => {
+    const counted = { ...attendance, counts_toward_grade: true };
+    const excluded = [makeItem({
+      item_key: 'col:GEO.103.recitation:_3602445_1', shell_course_id: 'GEO.103.recitation', column_id: '_3602445_1',
+      link_source: 'override', link_confidence: 'confirmed', excluded: true,
+    })];
+    render(<GradebookTable rows={[quiz, counted]} overrides={linkStates(excluded)} />);
+    expect(screen.queryByText('counts toward grade')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Attendance and bookkeeping columns (1)' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('moves an override-linked attendance column up among the items with the "counts toward grade" tag', () => {
+    render(<GradebookTable rows={[quiz, attendance]} links={{ states: linkStates(rows), options: OPTIONS, onChange: vi.fn() }} />);
+    expect(screen.queryByRole('button', { name: /bookkeeping columns/ })).toBeNull();
+    const row = screen.getByText('Attendance').closest('tr') as HTMLElement;
+    expect(within(row).getByText('counts toward grade')).toBeInTheDocument();
+  });
+});

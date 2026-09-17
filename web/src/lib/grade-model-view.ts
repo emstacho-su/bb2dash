@@ -1,0 +1,193 @@
+/**
+ * bb2dash — what the grade-model screens may offer on each row (Phase 10b).
+ *
+ * Pure. Which columns get the "Counts toward…" picker, whether a typed what-if
+ * value is acceptable, and how the engine's `itemStates()` becomes cells.
+ * Since round 2 (R2-3w / R2-4 / R2-15) nothing here re-states an engine rule:
+ * what-if targets, muted parts and dropped placeholders come from
+ * `itemStates()` only.
+ */
+
+import type { ComponentInput, ItemInput, ItemStates } from './grade-model/types';
+import type { GradeModelItemRow } from './grade-model-input';
+
+/* ---------------------------------------------------------------------------
+ * What-if cells — from the engine's itemStates(), never a copy of its rules
+ * ------------------------------------------------------------------------ */
+
+/** What a what-if cell needs to know about its item. */
+export interface WhatIfCellTarget {
+  readonly key: string;
+  readonly name: string;
+  /**
+   * `points`: typed against the item's own possible (an extra-credit item's
+   * included). `percent` (Round 1b A1): a placeholder with no possible, typed
+   * as 0–100 and stored as that number; the engine reads `f = v / 100`.
+   */
+  readonly unit: 'points' | 'percent';
+  /** The upper bound the typed value is checked against: the engine's `max`. */
+  readonly possible: number;
+}
+
+/**
+ * The cells to draw: exactly the engine's `whatIfTargets` (round 2, R2-3w /
+ * R2-15), labelled with each item's name. Which items qualify — counted,
+ * leaf-linked, not muted (a muted parent's pieces included), not dropped as
+ * surplus, not hand-graded, a percent placeholder whose value would count — is
+ * the engine's decision, made from the same preparation `projectCourse` uses.
+ */
+export function whatIfCellTargets(
+  states: Pick<ItemStates, 'whatIfTargets'>,
+  items: readonly Pick<ItemInput, 'key' | 'name'>[],
+): ReadonlyMap<string, WhatIfCellTarget> {
+  const names = new Map(items.map((item) => [item.key, item.name]));
+  return new Map(
+    states.whatIfTargets.map((target) => [
+      target.key,
+      { key: target.key, name: names.get(target.key) ?? target.key, unit: target.unit, possible: target.max },
+    ]),
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * The "Counts toward…" picker
+ * ------------------------------------------------------------------------ */
+
+/** What the picker shows as selected on a column, and why it is offered. */
+export interface LinkState {
+  readonly shellCourseId: string;
+  readonly columnId: string;
+  readonly componentId: number | null;
+  readonly excluded: boolean;
+  /** The current link is tentative / inferred: preselected and marked "unsure". */
+  readonly unsure: boolean;
+  /** Stack already chose here; offered so the choice can be changed or cleared. */
+  readonly override: boolean;
+}
+
+/** The column item key the table and the scenario share. */
+export function columnItemKey(shellCourseId: string, columnId: string): string {
+  return `col:${shellCourseId}:${columnId}`;
+}
+
+/**
+ * The columns that get the picker (Round 1b A2): every gradebook column worth
+ * points (`possible > 0`) that no rule is attached to — scored or not, so a
+ * column can be linked before Blackboard grades it — or whose link is
+ * tentative / inferred (PM call 9). A column Stack already overrode keeps its
+ * picker whatever its possible, so a choice is never a one-way door. A zero-
+ * point column (IST.352's knowledge checks) is bookkeeping and gets none; a
+ * placeholder has no column and cannot be confirmed this way.
+ */
+export function linkStates(rows: readonly GradeModelItemRow[]): ReadonlyMap<string, LinkState> {
+  const states = new Map<string, LinkState>();
+  for (const row of rows) {
+    if (row.column_kind === 'placeholder' || row.column_id === null) continue;
+    const override = row.link_source === 'override';
+    const worthPoints = row.possible !== null && Number(row.possible) > 0;
+    const unsure = row.link_source === 'assignment'
+      && (row.link_confidence === 'tentative' || row.link_confidence === 'inferred');
+    const unlinked = row.link_source === null && row.component_id === null;
+    if (!override && !(worthPoints && (unsure || unlinked))) continue;
+    states.set(row.item_key, {
+      shellCourseId: row.shell_course_id,
+      columnId: row.column_id,
+      componentId: row.excluded ? null : row.component_id,
+      excluded: row.excluded,
+      unsure,
+      override,
+    });
+  }
+  return states;
+}
+
+/** What a picker change asks for. */
+export type LinkTarget =
+  | { readonly kind: 'component'; readonly componentId: number }
+  | { readonly kind: 'excluded' }
+  | { readonly kind: 'clear' };
+
+/**
+ * The picker's options: the scheme's **leaf** components only (Round 2, R2-1w).
+ * An item linked straight to a component that has children is treated as
+ * unlinked by the engine, so offering the parent (IST.323's "Final Project")
+ * would save a link that counts for nothing. A part is listed where its parent
+ * would have been, so the three Final Project pieces stay together.
+ */
+export function linkOptions(
+  components: readonly Pick<ComponentInput, 'id' | 'name' | 'parentId'>[],
+): { id: number; name: string }[] {
+  const parents = new Set(components.map((c) => c.parentId).filter((id): id is number => id !== null));
+  const order = (c: Pick<ComponentInput, 'id' | 'parentId'>) => [c.parentId ?? c.id, c.parentId === null ? 0 : 1, c.id];
+  return components
+    .filter((c) => !parents.has(c.id))
+    .sort((a, b) => {
+      const [a1, a2, a3] = order(a);
+      const [b1, b2, b3] = order(b);
+      return a1 - b1 || a2 - b2 || a3 - b3;
+    })
+    .map((c) => ({ id: c.id, name: c.name }));
+}
+
+/* ---------------------------------------------------------------------------
+ * What-if values: validation and immutable updates
+ * ------------------------------------------------------------------------ */
+
+export type WhatIfParse =
+  | { readonly ok: true; readonly value: number | null }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * A typed what-if value, checked at the boundary: empty clears the value;
+ * otherwise a finite number with `0 ≤ v ≤ possible`. Anything else is an error
+ * that is shown on the field and never saved.
+ */
+export function parseWhatIf(raw: string, possible: number): WhatIfParse {
+  const text = raw.trim();
+  if (text === '') return { ok: true, value: null };
+  // Number('') and Number(' ') are 0 and Number('0x10') is 16: only plain decimals pass.
+  if (!/^\d+(\.\d+)?$|^\.\d+$/.test(text)) {
+    return { ok: false, error: `Enter a number from 0 to ${possible}.` };
+  }
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0 || value > possible) {
+    return { ok: false, error: `Enter a number from 0 to ${possible}.` };
+  }
+  return { ok: true, value };
+}
+
+/** A new scores object with one key set, or removed when `value` is null. */
+export function withItemScore(
+  scores: Readonly<Record<string, number>>,
+  key: string,
+  value: number | null,
+): Record<string, number> {
+  const next = Object.fromEntries(Object.entries(scores).filter(([k]) => k !== key));
+  return value === null ? next : { ...next, [key]: value };
+}
+
+/* ---------------------------------------------------------------------------
+ * Score history
+ * ------------------------------------------------------------------------ */
+
+/**
+ * `v_gradebook_history` rows grouped by column item key, oldest first. One pass
+ * (R2-14). The query already orders by `seen_at`, so a list is only sorted when
+ * it arrives out of order — a linear check, not a sort of every list.
+ */
+export function historyByColumn<T extends { shell_course_id: string; column_id: string; seen_at: string }>(
+  rows: readonly T[],
+): ReadonlyMap<string, readonly T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = columnItemKey(row.shell_course_id, row.column_id);
+    const list = grouped.get(key);
+    if (list) list.push(row);
+    else grouped.set(key, [row]);
+  }
+  for (const [key, list] of grouped) {
+    const ordered = list.every((row, i) => i === 0 || list[i - 1].seen_at <= row.seen_at);
+    if (!ordered) grouped.set(key, [...list].sort((a, b) => a.seen_at.localeCompare(b.seen_at)));
+  }
+  return grouped;
+}

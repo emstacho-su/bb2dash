@@ -329,8 +329,11 @@ export function useSubmissionFiles(assignmentId: string | undefined) {
 /** What a missing figure looks like. Never `0`, never a blank cell. */
 export const NO_VALUE = '—';
 
-/** Trim a numeric's trailing zeros without rounding it: 83.333 → "83.333". */
-function numberText(value: number | string): string {
+/**
+ * Trim a numeric's trailing zeros without rounding it: 83.333 → "83.333".
+ * The score cell and the score history both print with this (round 3, R3-4).
+ */
+export function scoreNumberText(value: number | string): string {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return String(value);
   // `numeric(9,3)` can arrive as 5 or as "5.000" depending on the driver.
@@ -349,9 +352,9 @@ export function scoreText(
   possible: number | string | null | undefined,
 ): string {
   if (effective === null || effective === undefined || effective === '') return NO_VALUE;
-  const score = numberText(effective);
+  const score = scoreNumberText(effective);
   if (possible === null || possible === undefined || possible === '') return score;
-  return `${score} / ${numberText(possible)}`;
+  return `${score} / ${scoreNumberText(possible)}`;
 }
 
 /**

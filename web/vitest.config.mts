@@ -55,6 +55,8 @@ export default defineConfig({
         'src/components/planner/PlannerWeek.tsx',
         'src/components/shell/Bell.tsx',
         'src/components/announcements/AnnouncementsList.tsx',
+        // Phase 10b: the grade-model engine (L1-L5 in test/grade-model/).
+        'src/lib/grade-model/**/*.ts',
       ],
     },
   },
