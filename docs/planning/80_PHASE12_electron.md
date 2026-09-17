@@ -417,7 +417,7 @@ Kept for the record.
 ## Round 2 — `/code-review main high` findings (2026-09-17, PM-confirmed; owner: the integrator)
 
 Ten findings, all accepted. Fix each with a test that fails before the fix. Numbered notes for any
-Contract interpretation go in `80c_INTEGRATION_VERIFICATION.md` under "Round 2".
+Contract interpretation go in `80d_INTEGRATION_VERIFICATION.md` under "Round 2".
 
 | # | Where | Defect | Required outcome |
 |---|---|---|---|
