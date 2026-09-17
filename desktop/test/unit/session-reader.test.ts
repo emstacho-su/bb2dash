@@ -67,18 +67,26 @@ function setCookie(expiresAtSeconds: number): void {
 interface FakeWindow {
   visible: boolean;
   destroyed: boolean;
+  loaded: boolean;
 }
 
 function reader(options: { window?: FakeWindow | null; nowMs: () => number }) {
   const reloads: number[] = [];
-  const state = options.window === undefined ? { visible: false, destroyed: false } : options.window;
+  const state =
+    options.window === undefined
+      ? { visible: false, destroyed: false, loaded: true }
+      : options.window;
   const read = createUsableSessionReader({
     appUrl: APP_URL,
     supabaseUrl: SUPABASE_URL,
     getWindow: () =>
       state === null
         ? null
-        : { isVisible: () => state.visible, isDestroyed: () => state.destroyed },
+        : {
+            isVisible: () => state.visible,
+            isDestroyed: () => state.destroyed,
+            hasLoaded: () => state.loaded,
+          },
     reload: () => reloads.push(options.nowMs()),
     now: options.nowMs,
   });
@@ -128,7 +136,7 @@ describe('R2-4 — an expired session is null, not a 401 machine', () => {
 describe('R2-4 — the hidden window is reloaded so the web app can refresh the cookie', () => {
   it('reloads a hidden window when the session has expired', async () => {
     setCookie((T0 - HOUR) / 1000);
-    const { read, reloads } = reader({ window: { visible: false, destroyed: false }, nowMs: () => T0 });
+    const { read, reloads } = reader({ window: { visible: false, destroyed: false, loaded: true }, nowMs: () => T0 });
 
     await read();
 
@@ -137,14 +145,14 @@ describe('R2-4 — the hidden window is reloaded so the web app can refresh the 
 
   it('does not reload a visible window: the page refreshes itself', async () => {
     setCookie((T0 - HOUR) / 1000);
-    const { read, reloads } = reader({ window: { visible: true, destroyed: false }, nowMs: () => T0 });
+    const { read, reloads } = reader({ window: { visible: true, destroyed: false, loaded: true }, nowMs: () => T0 });
     await read();
     expect(reloads).toEqual([]);
   });
 
   it('does not reload a destroyed window, or none at all', async () => {
     setCookie((T0 - HOUR) / 1000);
-    const destroyed = reader({ window: { visible: false, destroyed: true }, nowMs: () => T0 });
+    const destroyed = reader({ window: { visible: false, destroyed: true, loaded: true }, nowMs: () => T0 });
     await destroyed.read();
     expect(destroyed.reloads).toEqual([]);
 
@@ -157,7 +165,7 @@ describe('R2-4 — the hidden window is reloaded so the web app can refresh the 
     setCookie((T0 - HOUR) / 1000);
     let now = T0;
     const { read, reloads } = reader({
-      window: { visible: false, destroyed: false },
+      window: { visible: false, destroyed: false, loaded: true },
       nowMs: () => now,
     });
 
@@ -185,7 +193,7 @@ describe('R2-4 — the hidden window is reloaded so the web app can refresh the 
   it('still returns null on the tick that triggered the reload', async () => {
     // The reload is asynchronous: the fresh cookie is there for the *next* tick.
     setCookie((T0 - HOUR) / 1000);
-    const { read } = reader({ window: { visible: false, destroyed: false }, nowMs: () => T0 });
+    const { read } = reader({ window: { visible: false, destroyed: false, loaded: true }, nowMs: () => T0 });
     expect(await read()).toBeNull();
   });
 
@@ -194,7 +202,7 @@ describe('R2-4 — the hidden window is reloaded so the web app can refresh the 
     const read = createUsableSessionReader({
       appUrl: APP_URL,
       supabaseUrl: SUPABASE_URL,
-      getWindow: () => ({ isVisible: () => false, isDestroyed: () => false }),
+      getWindow: () => ({ isVisible: () => false, isDestroyed: () => false, hasLoaded: () => true }),
       reload: () => {
         throw new Error('the window went away mid-reload');
       },
@@ -207,7 +215,7 @@ describe('R2-4 — the hidden window is reloaded so the web app can refresh the 
     setCookie((T0 + 24 * HOUR) / 1000);
     let now = T0;
     const { read, reloads } = reader({
-      window: { visible: false, destroyed: false },
+      window: { visible: false, destroyed: false, loaded: true },
       nowMs: () => now,
     });
     for (const offset of [0, HOUR, 2 * HOUR]) {
@@ -215,5 +223,38 @@ describe('R2-4 — the hidden window is reloaded so the web app can refresh the 
       await read();
     }
     expect(reloads).toEqual([]);
+  });
+});
+
+describe('R2-4 — a window that has never loaded is not reloaded', () => {
+  it('leaves a booting window alone', async () => {
+    // Found by the packed-exe smoke, not by a test: a window is created with `show: false`
+    // and only shown on `ready-to-show`, so at launch it is *not visible* and *not loaded*.
+    // The very first tick therefore "reloaded" a window whose first load was still in
+    // flight, fighting `window.ts`'s own retry for no reason.
+    setCookie((T0 - HOUR) / 1000);
+    const { read, reloads } = reader({
+      window: { visible: false, destroyed: false, loaded: false },
+      nowMs: () => T0,
+    });
+
+    await read();
+
+    expect(reloads).toEqual([]);
+  });
+
+  it('leaves a window with a dead renderer alone: window.ts owns that reload', async () => {
+    setCookie((T0 - HOUR) / 1000);
+    const { read, reloads, state } = reader({
+      window: { visible: false, destroyed: false, loaded: false },
+      nowMs: () => T0,
+    });
+    await read();
+    expect(reloads).toEqual([]);
+
+    // Once it has content again, the session nudge resumes.
+    if (state !== null) state.loaded = true;
+    await read();
+    expect(reloads).toEqual([T0]);
   });
 });

@@ -33,7 +33,7 @@ import { attachSyncWatcher } from './sync-terminal';
 import { installShellTestHook, recordEvent } from './test-hook';
 import { MENU_CHECK_NOW, createTray } from './tray';
 import type { TrayHandle } from './tray';
-import { createWindow, ensureLoaded, showWindow } from './window';
+import { createWindow, ensureLoaded, needsReload, showWindow } from './window';
 
 export const APP_USER_MODEL_ID = 'su.stack.bb2dash';
 
@@ -111,7 +111,17 @@ function startShellPoller(validConfig: DesktopConfig): PollerHandle {
     getSession: createUsableSessionReader({
       appUrl: validConfig.appUrl,
       supabaseUrl: validConfig.supabaseUrl,
-      getWindow: getMainWindow,
+      getWindow: () => {
+        const window = getMainWindow();
+        if (window === null) return null;
+        return {
+          isVisible: () => window.isVisible(),
+          isDestroyed: () => window.isDestroyed(),
+          // `needsReload` is true for a window that never loaded or whose renderer died;
+          // both are `window.ts`'s to retry, not this reader's.
+          hasLoaded: () => !needsReload(window),
+        };
+      },
       reload: () => {
         const window = getMainWindow();
         if (window !== null) ensureLoaded(window);

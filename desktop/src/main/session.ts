@@ -58,9 +58,22 @@ export async function readWebSession(source: SessionSource): Promise<WebSession 
  */
 export const HIDDEN_RELOAD_MIN_INTERVAL_MS = 10 * 60 * 1000;
 
+export interface ReloadableWindow {
+  isVisible(): boolean;
+  isDestroyed(): boolean;
+  /**
+   * False while the window has never successfully loaded, or its renderer is gone.
+   *
+   * A window is not visible at launch either — it is created with `show: false` and only
+   * shown on `ready-to-show` — so without this the very first tick would "reload" a window
+   * whose first load was still in flight. `window.ts`'s own retry owns that case.
+   */
+  hasLoaded(): boolean;
+}
+
 export interface UsableSessionOptions extends SessionSource {
   /** The single reused window (C-12), or `null` before it exists. */
-  readonly getWindow: () => { isVisible(): boolean; isDestroyed(): boolean } | null;
+  readonly getWindow: () => ReloadableWindow | null;
   /** Reload that window. Injected so the unit suite needs no Electron. */
   readonly reload: () => void;
   readonly now?: () => number;
@@ -112,8 +125,10 @@ export function createUsableSessionReader(
     }
 
     const window = options.getWindow();
-    if (window === null || window.isDestroyed() || window.isVisible()) {
-      // A visible window refreshes itself; a missing one has nothing to reload.
+    if (window === null || window.isDestroyed() || window.isVisible() || !window.hasLoaded()) {
+      // A visible window refreshes itself; a missing one has nothing to reload; and one
+      // that has never loaded is either still booting or already being retried by
+      // `window.ts`, so reloading it here would only fight that.
       return null;
     }
 
