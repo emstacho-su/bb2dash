@@ -72,6 +72,7 @@ export function getConfig(): DesktopConfig | null {
 }
 
 function onSecondInstance(): void {
+  recordEvent('second-instance', {});
   // Deferred: work done synchronously inside this event can be dropped
   // (electron#35732), and showing a window is exactly that kind of work.
   setImmediate(() => {

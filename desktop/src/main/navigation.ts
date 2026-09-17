@@ -10,8 +10,15 @@ import { BrowserWindow, shell } from 'electron';
 
 import { decideNavigation, decideWindowOpen } from '../core/navigation-policy';
 import { log, logError } from './log';
+import { IS_TEST_MODE, recordEvent } from './test-hook';
 
 function openExternal(url: string): void {
+  // Under test the URL is recorded: the e2e suite proves the allowlist end to
+  // end without opening Stack's browser on every run.
+  if (IS_TEST_MODE) {
+    recordEvent('open-external', { url });
+    return;
+  }
   shell.openExternal(url).catch((error: unknown) => {
     logError(`could not hand ${new URL(url).origin} to the default browser`, error);
   });

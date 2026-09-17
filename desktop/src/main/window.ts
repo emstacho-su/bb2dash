@@ -20,11 +20,29 @@ import { app } from 'electron';
 
 import { log, logError } from './log';
 import { resourcePath } from './resources';
+import { recordEvent } from './test-hook';
 
 const STATE_FILE = 'window-state.json';
 const SAVE_DEBOUNCE_MS = 500;
 const DEFAULT_SIZE = Object.freeze({ width: 1280, height: 800 });
 export const PARTITION = 'persist:bb2dash';
+
+/**
+ * The security baseline, in one place so the e2e suite can assert the exact
+ * object the window was built with (C-10) rather than a copy of it.
+ */
+export const WEB_PREFERENCES = Object.freeze({
+  partition: PARTITION,
+  nodeIntegration: false,
+  contextIsolation: true,
+  sandbox: true,
+  webSecurity: true,
+  spellcheck: false,
+});
+
+function preloadPath(): string {
+  return join(__dirname, '..', 'preload', 'index.js');
+}
 
 interface WindowState {
   readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
@@ -116,16 +134,10 @@ export function createWindow(appUrl: string): BrowserWindow {
     backgroundColor: '#12131a',
     title: 'bb2dash',
     ...(icon === null ? {} : { icon }),
-    webPreferences: {
-      partition: PARTITION,
-      preload: join(__dirname, '..', 'preload', 'index.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-      spellcheck: false,
-    },
+    webPreferences: { ...WEB_PREFERENCES, preload: preloadPath() },
   });
+
+  recordEvent('window-preferences', { ...WEB_PREFERENCES });
 
   if (saved?.isMaximized) window.maximize();
   window.once('ready-to-show', () => window.show());
