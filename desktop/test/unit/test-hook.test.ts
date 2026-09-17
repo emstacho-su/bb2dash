@@ -8,7 +8,12 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createRecorder, installTestHook, isTestMode } from '../../src/main/test-hook';
+import {
+  createRecorder,
+  installShellTestHook,
+  installTestHook,
+  isTestMode,
+} from '../../src/main/test-hook';
 import type { TickResult, TickRows } from '../../src/core/poller/scheduler';
 
 type Host = typeof globalThis & { __bb2dashTest?: Record<string, unknown> };
@@ -118,5 +123,65 @@ describe('installTestHook', () => {
     second.recorder.recordToast(TOAST);
     const recorded = (hook() as { recorded: () => { toasts: unknown[] } }).recorded();
     expect(recorded.toasts).toHaveLength(1);
+  });
+});
+
+describe("installShellTestHook (W-25's half)", () => {
+  it('installs nothing outside test mode', () => {
+    installShellTestHook({ clickTrayItem: () => undefined }, {});
+    expect(hook()).toBeUndefined();
+  });
+
+  it('brings recorded() into being before any poller exists', () => {
+    const clicked: string[] = [];
+    installShellTestHook({ clickTrayItem: (label) => clicked.push(label) }, TEST_ENV);
+
+    const surface = hook() as {
+      recorded: () => { events?: unknown[]; toasts?: unknown[] };
+      clickTrayItem: (label: string) => void;
+    };
+    surface.clickTrayItem('Check now');
+
+    expect(clicked).toEqual(['Check now']);
+    // `events` is always present; `toasts` only once the poller half installed.
+    expect(surface.recorded().events).toEqual([]);
+    expect(surface.recorded().toasts).toBeUndefined();
+  });
+
+  it('survives the poller half installing after it, in either order', () => {
+    const clicked: string[] = [];
+    const p = parts();
+
+    installShellTestHook({ clickTrayItem: (label) => clicked.push(label) }, TEST_ENV);
+    installTestHook(p, TEST_ENV);
+    p.recorder.recordToast(TOAST);
+
+    const surface = hook() as {
+      recorded: () => { events?: unknown[]; toasts?: unknown[] };
+      clickTrayItem: (label: string) => void;
+      clickToast: (key: string) => boolean;
+    };
+
+    surface.clickTrayItem('Quit');
+    expect(clicked).toEqual(['Quit']);
+    expect(surface.recorded().toasts).toHaveLength(1);
+    expect(surface.recorded().events).toEqual([]);
+    expect(surface.clickToast('sync:41')).toBe(true);
+  });
+
+  it('does not nest a foreign recorded() when both halves install', () => {
+    (globalThis as Host).__bb2dashTest = {
+      recorded: () => ({ spawns: [['wt.exe']] }),
+    };
+
+    const p = parts();
+    installShellTestHook({ clickTrayItem: () => undefined }, TEST_ENV);
+    installTestHook(p, TEST_ENV);
+    installShellTestHook({ clickTrayItem: () => undefined }, TEST_ENV);
+
+    const recorded = (hook() as { recorded: () => Record<string, unknown> }).recorded();
+    expect(recorded['spawns']).toEqual([['wt.exe']]);
+    expect(recorded['toasts']).toEqual([]);
+    expect(recorded['events']).toEqual([]);
   });
 });

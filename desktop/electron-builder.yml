@@ -1,0 +1,28 @@
+# C-10 — unpacked Windows build. No installer, no code signing, no auto-update:
+# `npm run pack` produces dist/win-unpacked/bb2dash.exe and
+# scripts/make-shortcut.ps1 puts a shortcut in front of it.
+#
+# `files` names the three compiled folders rather than `dist/**`, because
+# electron-builder writes its own output into dist/ as well and would otherwise
+# try to package its previous run.
+#
+# asar is off on purpose: an unpacked build is meant to be inspectable, and the
+# tray reads build/tray-16.png straight off disk.
+appId: su.stack.bb2dash
+productName: bb2dash
+copyright: Evan Stachowiak
+asar: false
+directories:
+  output: dist
+  buildResources: build
+files:
+  - package.json
+  - dist/core/**/*
+  - dist/main/**/*
+  - dist/preload/**/*
+  - build/icon.ico
+  - build/tray-16.png
+win:
+  target: dir
+  icon: build/icon.ico
+  legalTrademarks: ''

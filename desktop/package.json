@@ -2,23 +2,31 @@
   "name": "bb2dash-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "bb2dash Electron shell (Phase 12). NOTE: this file is W-25's to own (C-1). W-26 created this stopgap so its unit suite could run before the shell branch landed; on integration take W-25's package.json and merge the devDependencies listed here.",
+  "description": "Electron shell around the deployed bb2dash web app: window, tray, notifications, Sync terminal.",
+  "author": "Evan Stachowiak <estack318@gmail.com>",
+  "license": "UNLICENSED",
   "main": "dist/main/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "start": "npm run build && electron .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "pretest:e2e": "npm run build",
-    "test:e2e": "playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "pack": "npm run build && electron-builder --dir",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "@types/node": "22.20.2",
-    "@vitest/coverage-v8": "5.0.0",
+    "@types/node": "24.9.2",
+    "@vitest/coverage-v8": "5.0.1",
     "electron": "44.4.1",
+    "electron-builder": "26.15.3",
     "fast-check": "4.10.1",
     "typescript": "5.9.3",
-    "vitest": "5.0.0"
+    "vitest": "5.0.1"
   }
 }

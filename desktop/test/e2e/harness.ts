@@ -8,9 +8,15 @@
  *  - a per-test `--user-data-dir`, so the watermark starts clean and a *relaunch* can be
  *    pointed at the same directory on purpose.
  *
- * The shell's entry point (`dist/main/index.js`) is W-25's (C-1) and is not on this branch.
- * `mainEntry()` prefers it whenever it exists and otherwise falls back to W-26's own test
- * harness entry, so the same specs run today and need no edit after the merge.
+ * Since the integration merge these specs launch the real shell, `dist/main/index.js`, with
+ * the same environment as `shell.spec.ts` — `launchShell` here is a thin adapter over
+ * `launch.ts`'s, so the two suites cannot drift apart. W-26's stand-in main
+ * (`fixtures/harness-main.cjs`) went with it.
+ *
+ * That delegation matters for more than tidiness: the real shell validates its config at
+ * startup (C-2) and refuses to run without `supabaseAnonKey`. A launcher of its own that
+ * forgot one environment variable is exactly how this suite put a modal error box on the
+ * screen during the merge.
  */
 
 import { createServer, type Server } from 'node:http';
@@ -20,24 +26,18 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { AddressInfo } from 'node:net';
 
-import { _electron as electron, type ElectronApplication } from '@playwright/test';
+import { type ElectronApplication } from '@playwright/test';
 
-/** The shell's real entry point, built by `npm run build`; owned by W-25 (C-1). */
-export const SHELL_ENTRY = resolve(__dirname, '..', '..', 'dist', 'main', 'index.js');
+import { MAIN_ENTRY, launchShell as launchBuiltShell } from './launch';
 
-/** W-26's stand-in while W-25's branch is unmerged. See the file's own header. */
-export const HARNESS_ENTRY = resolve(__dirname, 'fixtures', 'harness-main.cjs');
+/** The shell's real entry point, built by `npm run build` (C-1). */
+export const SHELL_ENTRY = MAIN_ENTRY;
 
-/** What `npm run build` must have produced for either entry to load. */
+/** What `npm run build` must also have produced for the poller half to load. */
 const BUILT_WIRING = resolve(__dirname, '..', '..', 'dist', 'main', 'poller-wiring.js');
 
-/** Prefer the real shell whenever it exists, so these specs need no edit after the merge. */
-export function mainEntry(): string {
-  return existsSync(SHELL_ENTRY) ? SHELL_ENTRY : HARNESS_ENTRY;
-}
-
 export function shellIsBuilt(): boolean {
-  return existsSync(BUILT_WIRING) && existsSync(mainEntry());
+  return existsSync(BUILT_WIRING) && existsSync(SHELL_ENTRY);
 }
 
 export const SKIP_REASON =
@@ -74,16 +74,15 @@ export interface LaunchOptions {
   readonly appUrl: string;
 }
 
-/** Launch the shell under `BB2DASH_TEST=1` against a throwaway profile. */
+/**
+ * Launch the shell under `BB2DASH_TEST=1` against a throwaway profile.
+ *
+ * One launcher for both suites: the same entry point, the same fixture anon key, and
+ * the same loopback origin standing in for Supabase — which is also what keeps either
+ * suite from resolving `*.supabase.co`.
+ */
 export function launchShell({ userDataDir, appUrl }: LaunchOptions): Promise<ElectronApplication> {
-  return electron.launch({
-    args: [mainEntry(), `--user-data-dir=${userDataDir}`],
-    env: {
-      ...process.env,
-      BB2DASH_TEST: '1',
-      BB2DASH_APP_URL: appUrl,
-    },
-  });
+  return launchBuiltShell({ userDataDir, fixtureUrl: appUrl });
 }
 
 /** The shape `globalThis.__bb2dashTest` exposes for this worker's half (C-10). */

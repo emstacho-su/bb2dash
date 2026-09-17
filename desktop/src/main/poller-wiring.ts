@@ -6,18 +6,11 @@
  * window focus, `powerMonitor` `resume`, and the tray's *Check now* (C-12) — and installs
  * the e2e test hook (C-10).
  *
- * ---------------------------------------------------------------------------------------
- * TODO (W-25 seam, W-26 shim): the Contract has `main/index.ts` bootstrap the poller. Until
- * W-25's `index.ts` lands, this file is the whole integration point and `index.ts` should
- * call it once, after the window exists:
- *
- *     const poller = startPoller({ userDataDir: app.getPath('userData'), appUrl, ... });
- *     // tray "Check now" -> void poller.runOnce();
- *     // before-quit      -> poller.stop();
- *
- * If W-25 exports a `registerPoller(handle)` hook from `index.ts`, pass the returned
- * `PollerHandle` to it; the shape is `RegisterPoller` below. W-26 does not edit `index.ts`.
- * ---------------------------------------------------------------------------------------
+ * Wired in by `main/index.ts` (integration, 2026-09-17): `startPoller(...)` is called once
+ * from `start()`, after `attachSyncWatcher` and before the tray exists, so the tray's
+ * *Check now* has a poller to run from its first click. `index.ts` routes that click into
+ * `runOnce()` through its own `runPollerTick`, which records the `poller-tick` event the
+ * e2e suite asserts, and calls `stop()` from `before-quit`.
  */
 
 import { join } from 'node:path';
@@ -68,10 +61,7 @@ export interface PollerHandle {
   navigate(route: string): boolean;
 }
 
-/** The hook `main/index.ts` is expected to export; see the TODO at the top of this file. */
-export type RegisterPoller = (handle: PollerHandle) => void;
-
-/** A last-resort logger when W-25's rolling file is not wired yet. Redacted either way. */
+/** A last-resort logger if a caller supplies none. Redacted either way. */
 function consoleLogger(): Logger {
   return createRedactingLogger((level, line) => {
     if (level === 'error') console.error(line);

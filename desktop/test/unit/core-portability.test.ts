@@ -5,9 +5,10 @@
  * The check is a grep over every file actually on disk, not over a hand-kept list, so a new
  * file under `core/` is covered the moment it is written.
  *
- * It also greps `desktop/src` and `desktop/test` for service-role credentials (C-2). That
- * audit is a copy of `web/test/audits.test.ts`; W-25 owns the canonical `audit.test.ts`, and
- * this narrower run exists so W-26's own files are never the hole.
+ * This file used to carry a second C-2 credential audit as well. At integration it was
+ * folded into the canonical `audit.test.ts`, extra needle and hard-coded-JWT check
+ * included: two audits that each name the strings they forbid make each one flag the
+ * other's source, and one of them then has to exempt a file, which is the hole.
  */
 
 import { readdir, readFile } from 'node:fs/promises';
@@ -42,12 +43,17 @@ describe('C-13 — core/ imports nothing from electron', () => {
   it('finds the core files at all (a passing grep over an empty set proves nothing)', async () => {
     const files = await filesUnder(CORE);
     expect(files.length).toBeGreaterThanOrEqual(6);
-    expect(files.map((f) => relative(CORE, f).split(sep).join('/'))).toContain('poller/reducer.ts');
+    // One file from each worker's half, so a truncated walk cannot pass this.
+    const names = files.map((f) => relative(CORE, f).split(sep).join('/'));
+    expect(names).toContain('poller/reducer.ts');
+    expect(names).toContain('sync-command.ts');
   });
 
   it.each([
     ["from 'electron'", /from\s+['"]electron(\/[\w-]+)?['"]/],
     ['require("electron")', /require\(\s*['"]electron(\/[\w-]+)?['"]\s*\)/],
+    // A side-effect import has no `from`, so the first pattern misses it.
+    ["bare import 'electron'", /^\s*import\s+['"]electron(\/[\w-]+)?['"]/m],
     ['import("electron")', /import\(\s*['"]electron(\/[\w-]+)?['"]\s*\)/],
   ])('no file under core/ uses %s', async (_name, pattern) => {
     const offenders: string[] = [];
@@ -77,33 +83,14 @@ describe('C-13 — core/ imports nothing from electron', () => {
     for (const file of await filesUnder(CORE)) {
       const text = await readFile(file, 'utf8');
       const name = relative(CORE, file).split(sep).join('/');
+      // The one exception C-13 allows: the file-backed `WatermarkStore`, which is
+      // the only way anything in core/ is permitted to reach the disk.
       if (name === 'poller/watermark.ts') continue;
-      if (/from\s+['"]node:fs(\/promises)?['"]/.test(text)) offenders.push(name);
-    }
-    expect(offenders).toEqual([]);
-  });
-});
-
-describe('C-2 — no service-role credential in this worker’s files', () => {
-  it.each(['service_role', 'sb_secret', 'SUPABASE_SERVICE'])('no %s anywhere under src/ or test/', async (needle) => {
-    const offenders: string[] = [];
-    for (const root of [join(DESKTOP, 'src'), join(DESKTOP, 'test')]) {
-      for (const file of await filesUnder(root)) {
-        const text = await readFile(file, 'utf8');
-        // The audit names the strings it looks for, so skip this file itself.
-        if (file === __filename) continue;
-        if (text.includes(needle)) offenders.push(relative(DESKTOP, file));
-      }
-    }
-    expect(offenders).toEqual([]);
-  });
-
-  it('no file hard-codes a JWT', async () => {
-    const offenders: string[] = [];
-    for (const root of [join(DESKTOP, 'src')]) {
-      for (const file of await filesUnder(root)) {
-        const text = await readFile(file, 'utf8');
-        if (/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./.test(text)) offenders.push(relative(DESKTOP, file));
+      if (
+        /from\s+['"](node:)?fs(\/promises)?['"]/.test(text) ||
+        /require\(\s*['"](node:)?fs(\/promises)?['"]\s*\)/.test(text)
+      ) {
+        offenders.push(name);
       }
     }
     expect(offenders).toEqual([]);

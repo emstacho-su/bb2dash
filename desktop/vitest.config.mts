@@ -1,12 +1,14 @@
 /**
  * Vitest for the Electron shell's unit suite (C-10).
  *
- * `.mts`, like `web/vitest.config.mts`: this package is CommonJS and Vite's native
- * config loader cannot read ESM syntax out of a file it treats as CJS.
+ * `.mts`, like `web/vitest.config.mts`: this package is CommonJS (Electron's main
+ * process and a sandboxed preload both need CJS) and Vite's native config loader
+ * cannot read ESM syntax out of a file it treats as CJS.
  *
- * Nothing in the suite touches the network. The PostgREST layer is exercised through
- * an injected `RestGet` stub, and the Electron adapters are exercised through the
- * `BB2DASH_TEST=1` recorders, so no test can reach `*.supabase.co`.
+ * Node environment, not jsdom: everything under test is main-process or `core/`
+ * code. Nothing in the suite touches the network. The PostgREST layer is exercised
+ * through an injected `RestGet` stub or a stubbed `fetch`, and the Electron adapters
+ * through the `BB2DASH_TEST=1` recorders, so no test can reach `*.supabase.co`.
  */
 
 import { defineConfig } from 'vitest/config';
@@ -18,16 +20,11 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text'],
-      // The portable core and the three Electron adapters this worker owns. The adapters
-      // are driven with `electron` mocked; the Playwright suite proves them for real.
+      // The whole portable core (C-13) plus the four Electron adapters that are
+      // driven with `electron` mocked. The rest of `src/main/` opens windows and
+      // spawns processes; the Playwright suite proves that half for real.
       include: [
-        'src/core/poller/reducer.ts',
-        'src/core/poller/watermark.ts',
-        'src/core/poller/sources.ts',
-        'src/core/poller/scheduler.ts',
-        'src/core/poller/ny-time.ts',
-        'src/core/route.ts',
-        'src/core/redact.ts',
+        'src/core/**/*.ts',
         'src/main/notify.ts',
         'src/main/deeplink.ts',
         'src/main/test-hook.ts',
