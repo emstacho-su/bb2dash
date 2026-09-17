@@ -71,6 +71,9 @@ export function FileOpenAction({
   routes,
   blackboardUrl = null,
   showLabel = false,
+  action,
+  title,
+  className = tokens.btnPrimary,
 }: {
   /** Any row carrying the three route columns; unseen columns pass UNKNOWN_ROUTE. */
   routes: FileRoutes;
@@ -78,6 +81,18 @@ export function FileOpenAction({
   blackboardUrl?: string | null;
   /** Render the honesty tag ahead of the action, as the file lists do. */
   showLabel?: boolean;
+  /**
+   * What the control should say when the file IS reachable (M-3). The file
+   * lists want "Open"; a caller opening something on another row's behalf —
+   * "How to access", which opens the course syllabus — wants to say so. The
+   * dead-end rungs keep their own wording, because those describe the absence,
+   * not the errand.
+   */
+  action?: string;
+  /** Hover text for the control, when the caller has something to add. */
+  title?: string;
+  /** The button class; the ladder is primary by default, as the lists have it. */
+  className?: string;
 }) {
   const honesty = fileHonesty(routes);
   const stored = storedPath(routes);
@@ -92,11 +107,17 @@ export function FileOpenAction({
       )}
 
       {stored ? (
-        <OpenStoredButton storagePath={stored} className={tokens.btnPrimary} />
+        <OpenStoredButton storagePath={stored} label={action} className={className} title={title} />
       ) : source ? (
         <span className={styles.action}>
-          <a className={tokens.btnPrimary} href={source} target="_blank" rel="noreferrer">
-            Open ↗
+          <a
+            className={className}
+            href={source}
+            title={title}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {action ?? 'Open ↗'}
           </a>
         </span>
       ) : blackboardUrl ? (

@@ -24,7 +24,14 @@ import {
   type PlannerDay,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
-import { gridHeightPx, slotToPx, spanPx, titleLines } from '@/lib/planner-rows';
+import {
+  PLANNER_DUE_CARD_MIN_PX,
+  blockContentPx,
+  gridHeightPx,
+  slotToPx,
+  spanPx,
+  titleLines,
+} from '@/lib/planner-rows';
 import { isCompactSegment } from '@/lib/planner-events-grid';
 import { EventBlockContent, eventCardProps, type EventActions } from './PlannerEventBlock';
 import { DaySlots, EventsBand, type SlotPosition } from './PlannerSlots';
@@ -35,6 +42,7 @@ import {
   MeetingChip,
   MeetingContent,
   itemCardProps,
+  meetingTooltip,
   type ItemActions,
 } from './PlannerItem';
 import type { BandDay, GridBlock, PlannerWeekData } from './usePlannerWeekData';
@@ -342,13 +350,19 @@ function Block({
   eventActions: EventActions;
 }) {
   const { topPx, heightPx } = spanPx(block.top, block.height, heights);
+  // A due card spans one slot but is *drawn* at `.itemBlock`'s minimum, and it
+  // is the drawn height its text has to be counted from.
+  const drawnPx = block.kind === 'item' ? Math.max(heightPx, PLANNER_DUE_CARD_MIN_PX) : heightPx;
   const style = {
     ['--top-px' as string]: `${topPx}px`,
     ['--height-px' as string]: `${heightPx}px`,
-    ['--title-lines' as string]: String(titleLines(heightPx, otherLineCount(block))),
+    ['--title-lines' as string]: String(titleLines(drawnPx, otherLineCount(block))),
     ['--lane-left' as string]: `${(block.lane / block.lanes) * 100}%`,
     ['--lane-width' as string]: `${100 / block.lanes}%`,
   };
+  // The text area is a whole number of lines, so the clip lands where the next
+  // line starts rather than through the middle of one (F-2).
+  const body = { ['--content-px' as string]: `${blockContentPx(drawnPx)}px` };
 
   if (block.kind === 'event') {
     return (
@@ -360,7 +374,9 @@ function Block({
         {...eventCardProps(block.segment.event, eventActions)}
         style={style}
       >
-        <EventBlockContent segment={block.segment} actions={eventActions} />
+        <span className={styles.blockBody} data-block-body="true" style={body}>
+          <EventBlockContent segment={block.segment} actions={eventActions} />
+        </span>
       </div>
     );
   }
@@ -370,14 +386,19 @@ function Block({
       className={block.kind === 'meeting' ? styles.meetingBlock : styles.itemBlock}
       data-block={block.kind}
       data-category={block.kind === 'item' ? block.item.item.category : undefined}
+      // A class has no popout, so its tooltip is free to carry the lines the
+      // block was too short to draw. An item's own `title` wins below.
+      title={block.kind === 'meeting' ? meetingTooltip(block.meeting) : undefined}
       {...(block.kind === 'item' ? itemCardProps(block.item, actions) : {})}
       style={style}
     >
-      {block.kind === 'meeting' ? (
-        <MeetingContent meeting={block.meeting} nested={block.nested} actions={actions} />
-      ) : (
-        <ItemContent placed={block.item} actions={actions} />
-      )}
+      <span className={styles.blockBody} data-block-body="true" style={body}>
+        {block.kind === 'meeting' ? (
+          <MeetingContent meeting={block.meeting} nested={block.nested} actions={actions} />
+        ) : (
+          <ItemContent placed={block.item} actions={actions} />
+        )}
+      </span>
     </div>
   );
 }

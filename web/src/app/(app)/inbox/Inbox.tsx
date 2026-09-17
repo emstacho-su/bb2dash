@@ -7,8 +7,9 @@
  * anything it cannot decide, and this screen is the only place those rows get
  * answered. The app owns four columns on the row — `state`, `resolved_at`,
  * `resolution`, `resolution_note` — and nothing else. `applied_at` belongs to
- * the transform, so an answered row honestly reads "answered, applies on next
- * sync" until the next run folds it in.
+ * the transform, so an answered row reads "answered, applies on next sync"
+ * until the next run folds it in — and "answered · recorded only" (F-4) when
+ * the transform will never act on that kind of answer at all.
  *
  * Controls per kind, frozen in docs/planning/62_PHASE9_sync_loop.md:
  *   conflict                     Accept Blackboard / Keep mine
@@ -28,19 +29,29 @@ import styles from './Inbox.module.css';
 import {
   ATTENTION_KIND_HEADING,
   ATTENTION_KIND_LABEL,
+  INBOX_APPLY_HELP,
   NOTE_MAX_LENGTH,
+  appliesAutomatically,
+  describeDetails,
+  fieldPhrase,
+  fieldValueText,
   freshnessLine,
   groupByKind,
-  isAwaitingApply,
+  isAssignmentRef,
+  keyPhrase,
+  outcomeText,
+  relativeTime,
   useAttentionItems,
   useResolveAttentionItem,
   useSyncStatus,
-  valueText,
   type AttentionItem,
   type AttentionKind,
+  type OutcomeAction,
   type ResolveInput,
   type SyncStatus,
 } from '@/lib/queries.sync';
+import { courseCodeFromId } from '@/lib/queries.today';
+import { itemQuery } from '@/lib/queries.popout';
 
 /* ---------------------------------------------------------------------------
  * Pure helpers
@@ -70,13 +81,76 @@ export function failureText(err: unknown): string {
   return 'the database rejected the change';
 }
 
-/** "assignment · IST.323 quiz-2 · due_at" — where the question came from. */
+/**
+ * I-3 / P-inbox-3 — where the question came from, in words.
+ *
+ * This used to be `entity · ref · field · run #42`: four database values with
+ * separators between them. The thing it is describing — "the ECN 304 quiz-01
+ * assignment, about its due date" — was there all along, spelled as column
+ * names.
+ *
+ * The prefixed pseudo-refs each get their own phrase, because "column:_3569973_1"
+ * and "course_field:academic_advisor" are different KINDS of question and the
+ * difference is the first thing worth knowing about the row.
+ */
 export function sourceText(item: AttentionItem): string {
-  const parts = [item.entity, item.ref, item.field].filter(
-    (part): part is string => typeof part === 'string' && part.length > 0,
-  );
-  if (item.raised_by !== null) parts.push(`run #${item.raised_by}`);
-  return parts.length > 0 ? parts.join(' · ') : 'raised by the transform';
+  const course = item.course_id ? courseCodeFromId(item.course_id) : null;
+  const inCourse = course ? ` in ${course}` : '';
+  let where: string;
+
+  if (item.entity === 'assignment' && isAssignmentRef(item.ref)) {
+    const slug = (item.ref as string).split('/').pop();
+    where = `the assignment “${slug}”${inCourse}`;
+  } else if (item.ref?.startsWith('column:')) {
+    where = `the gradebook column ${item.ref.slice('column:'.length)}${inCourse}`;
+  } else if (item.ref?.startsWith('course_field:')) {
+    where = `the course record${inCourse}, field “${keyPhrase(
+      item.ref.slice('course_field:'.length),
+    )}”`;
+  } else if (item.ref?.startsWith('map_gap:')) {
+    where = `a gap in the course map${inCourse}`;
+  } else if (item.ref?.startsWith('staff:')) {
+    where = `the staff list${inCourse}`;
+  } else if (item.entity === 'bb_file') {
+    where = `a Blackboard file${inCourse}`;
+  } else if (item.entity === 'reading') {
+    where = `reading ${item.ref ?? '—'}${inCourse}`;
+  } else if (item.entity === 'course') {
+    where = `the course record${inCourse}`;
+  } else if (item.entity) {
+    where = `${item.entity} ${item.ref ?? ''}`.trim() + inCourse;
+  } else {
+    where = `the sync${inCourse}`;
+  }
+
+  const about = item.field ? `, about its ${fieldPhrase(item.field)}` : '';
+  const run =
+    item.raised_by !== null ? `sync run #${item.raised_by}` : 'the transform';
+  return `From ${where}${about}. Raised by ${run}.`;
+}
+
+/**
+ * The thing the question is about, if this app has a page for it.
+ *
+ * An assignment opens its own popout (`?item=`), which the (app) layout mounts
+ * on every route including this one. Anything else that names a course falls
+ * back to that course. A pseudo-ref points at no row bb2dash can show, so it
+ * gets no link rather than a broken one.
+ */
+export function sourceHref(item: AttentionItem): string | null {
+  if (item.entity === 'assignment' && isAssignmentRef(item.ref)) {
+    return itemQuery({ kind: 'assignment', id: item.ref as string });
+  }
+  if (item.course_id) return `/course/${encodeURIComponent(item.course_id)}`;
+  return null;
+}
+
+/** What that link should say it opens. */
+export function sourceLinkLabel(item: AttentionItem): string {
+  if (item.entity === 'assignment' && isAssignmentRef(item.ref)) {
+    return 'Open the assignment →';
+  }
+  return `Open ${item.course_id ? courseCodeFromId(item.course_id) : 'the course'} →`;
 }
 
 /* ---------------------------------------------------------------------------
@@ -157,6 +231,9 @@ export function InboxView({
         </div>
       </header>
 
+      {/* I-2: the rule stated once, so it is not only implied row by row. */}
+      <p className={styles.applyHelp}>{INBOX_APPLY_HELP}</p>
+
       {error && (
         <p className={styles.problem} role="alert">
           Could not load the inbox: {error.message}
@@ -219,16 +296,31 @@ export function InboxView({
  * One row
  * ------------------------------------------------------------------------ */
 
+/**
+ * I-2: the sentence under a control — what pressing it actually changes, with
+ * the real field and the real date, or that nothing is changed at all.
+ */
+function Outcome({ item, action }: { item: AttentionItem; action: OutcomeAction }) {
+  return <p className={styles.outcome}>{outcomeText(item, action)}</p>;
+}
+
+/**
+ * What an answered row says about itself.
+ *
+ * F-4: "applies on next sync" is a promise, and it used to be made to every
+ * answered row — including the kinds `apply_resolutions()` skips, which will
+ * carry that chip for the rest of the term without anything ever happening.
+ * `appliesAutomatically()` is the same predicate the sentence under each button
+ * uses, so the two halves of a row can never disagree.
+ */
 function StateChip({ item }: { item: AttentionItem }) {
   if (item.state === 'open') return null;
-  if (isAwaitingApply(item)) {
-    return <span className={tokens.tagOutline}>answered, applies on next sync</span>;
+  if (item.state === 'dismissed') return <span className={tokens.tagNeutral}>dismissed</span>;
+  if (item.applied_at !== null) return <span className={tokens.tagNeutral}>applied</span>;
+  if (!appliesAutomatically(item)) {
+    return <span className={tokens.tagNeutral}>answered · recorded only</span>;
   }
-  return (
-    <span className={tokens.tagNeutral}>
-      {item.state === 'dismissed' ? 'dismissed' : 'applied'}
-    </span>
-  );
+  return <span className={tokens.tagOutline}>answered, applies on next sync</span>;
 }
 
 export function InboxRow({
@@ -248,6 +340,9 @@ export function InboxRow({
 
   const answerType = answerTypeFor(item);
   const done = item.state !== 'open';
+  const href = sourceHref(item);
+  /** What the stage knew when it raised this — as words, never as jsonb. */
+  const details = describeDetails(item.suggested);
 
   // Narrowed once, here: TypeScript drops a narrowing on `item.kind` the moment
   // it is read inside a click handler's closure, so the kind each control sends
@@ -268,9 +363,16 @@ export function InboxRow({
 
   return (
     <article className={`${tokens.card} ${styles.row}`} data-kind={item.kind}>
+      {/* I-3: course, kind, age. The age is the thing that says whether this
+          is today's question or one that has been sitting here for a fortnight. */}
       <div className={styles.rowHead}>
-        <span className={tokens.mono}>{item.course_id ?? 'no course'}</span>
+        <span className={tokens.mono}>
+          {item.course_id ? courseCodeFromId(item.course_id) : 'no course'}
+        </span>
         <span className={styles.kindTag}>{ATTENTION_KIND_LABEL[item.kind]}</span>
+        <span className={styles.age} title={item.raised_at}>
+          {relativeTime(item.raised_at)}
+        </span>
         <StateChip item={item} />
       </div>
 
@@ -278,24 +380,31 @@ export function InboxRow({
 
       {(item.from_value !== null || item.to_value !== null) && (
         <p className={styles.change}>
-          <span className={tokens.kicker}>from</span>
-          <span className={styles.value}>{valueText(item.from_value)}</span>
+          <span className={tokens.kicker}>{fieldPhrase(item.field)}</span>
+          <span className={styles.value}>{fieldValueText(item.field, item.from_value)}</span>
           <span aria-hidden="true">→</span>
-          <span className={tokens.kicker}>to</span>
-          <span className={styles.value}>{valueText(item.to_value)}</span>
+          <span className={styles.value}>{fieldValueText(item.field, item.to_value)}</span>
         </p>
       )}
 
       <p className={styles.meta}>
-        <span className={tokens.kicker}>source</span>
         <span>{sourceText(item)}</span>
+        {href && (
+          <Link className={styles.sourceLink} href={href} scroll={false}>
+            {sourceLinkLabel(item)}
+          </Link>
+        )}
       </p>
 
-      {item.suggested !== null && item.suggested !== undefined && (
-        <p className={styles.meta}>
-          <span className={tokens.kicker}>suggested</span>
-          <span className={styles.value}>{valueText(item.suggested)}</span>
-        </p>
+      {details.length > 0 && (
+        <dl className={styles.details}>
+          {details.map((detail) => (
+            <div key={detail.label || detail.text} className={styles.detail}>
+              {detail.label && <dt className={tokens.kicker}>{detail.label}</dt>}
+              <dd className={styles.value}>{detail.text}</dd>
+            </div>
+          ))}
+        </dl>
       )}
 
       {done ? (
@@ -320,59 +429,71 @@ export function InboxRow({
           </label>
 
           {item.kind === 'conflict' && (
-            <div className={styles.buttons}>
-              <button
-                type="button"
-                className={tokens.btnPrimary}
-                disabled={pending}
-                onClick={() => send({ id: item.id, kind: 'conflict', accept: 'blackboard', note })}
-              >
-                Accept Blackboard
-              </button>
-              <button
-                type="button"
-                className={tokens.btnSecondary}
-                disabled={pending}
-                onClick={() => send({ id: item.id, kind: 'conflict', accept: 'keep', note })}
-              >
-                Keep mine
-              </button>
+            <div className={styles.choices}>
+              <div className={styles.choice}>
+                <button
+                  type="button"
+                  className={tokens.btnPrimary}
+                  disabled={pending}
+                  onClick={() => send({ id: item.id, kind: 'conflict', accept: 'blackboard', note })}
+                >
+                  Accept Blackboard
+                </button>
+                <Outcome item={item} action="accept_blackboard" />
+              </div>
+              <div className={styles.choice}>
+                <button
+                  type="button"
+                  className={tokens.btnSecondary}
+                  disabled={pending}
+                  onClick={() => send({ id: item.id, kind: 'conflict', accept: 'keep', note })}
+                >
+                  Keep mine
+                </button>
+                <Outcome item={item} action="keep_mine" />
+              </div>
             </div>
           )}
 
           {answerKind && (
-            <div className={styles.buttons}>
-              <input
-                type={answerType}
-                className={tokens.input}
-                value={answer}
-                maxLength={NOTE_MAX_LENGTH}
-                aria-label={`Answer for item ${item.id}`}
-                onChange={(event) => setAnswer(event.target.value)}
-              />
-              <button
-                type="button"
-                className={tokens.btnPrimary}
-                disabled={pending || answer.trim().length === 0}
-                onClick={() =>
-                  send({ id: item.id, kind: answerKind, answer, answerType, note })
-                }
-              >
-                Save
-              </button>
+            <div className={styles.choice}>
+              <div className={styles.buttons}>
+                <input
+                  type={answerType}
+                  className={tokens.input}
+                  value={answer}
+                  maxLength={NOTE_MAX_LENGTH}
+                  aria-label={`Answer for item ${item.id}`}
+                  onChange={(event) => setAnswer(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className={tokens.btnPrimary}
+                  disabled={pending || answer.trim().length === 0}
+                  onClick={() =>
+                    send({ id: item.id, kind: answerKind, answer, answerType, note })
+                  }
+                >
+                  Save
+                </button>
+              </div>
+              <Outcome item={item} action="save" />
             </div>
           )}
 
           {dismissKind && (
-            <div className={styles.buttons}>
-              <button
-                type="button"
-                className={tokens.btnSecondary}
-                disabled={pending}
-                onClick={() => send({ id: item.id, kind: dismissKind, note })}
-              >
-                Dismiss
-              </button>
+            <div className={styles.choice}>
+              <div className={styles.buttons}>
+                <button
+                  type="button"
+                  className={tokens.btnSecondary}
+                  disabled={pending}
+                  onClick={() => send({ id: item.id, kind: dismissKind, note })}
+                >
+                  Dismiss
+                </button>
+              </div>
+              <Outcome item={item} action="dismiss" />
             </div>
           )}
         </div>

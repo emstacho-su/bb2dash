@@ -100,6 +100,26 @@ describe('P-planner-7 — an absolutely positioned chip child has an anchor', ()
   });
 });
 
+describe('F-2 — nothing is clipped, sideways or through a line', () => {
+  it('lets a block head wrap, so a long time range drops under the code', () => {
+    expect(ruleBody('.blockHead')).toMatch(/flex-wrap:\s*wrap/);
+  });
+
+  it('gives a block an exact line box, so whole lines are countable', () => {
+    // `line-height: 1.25` on 11px is 13.75px, and three of those end 0.75px
+    // past a 42px text area — which is how a line gets half drawn.
+    expect(ruleBody('.block')).toMatch(/line-height:\s*14px/);
+  });
+
+  it('clips the text at a whole-line boundary, not at the block edge', () => {
+    const body = ruleBody('.blockBody');
+    expect(body).toMatch(/height:\s*var\(--content-px\)/);
+    expect(body).toMatch(/overflow:\s*hidden/);
+    // Row gaps would break the pitch the whole-line arithmetic assumes.
+    expect(body).toMatch(/gap:\s*0/);
+  });
+});
+
 describe('P-planner-2 — one row height table, read from the component', () => {
   it.each(['.block', '.slot', '.nowLine', '.hourRule'])(
     '%s is positioned in pixels the component resolved, not slots × a constant',

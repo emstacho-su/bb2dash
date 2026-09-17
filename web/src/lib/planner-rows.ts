@@ -48,8 +48,10 @@ export const PLANNER_BASE_SLOT_PX = 24;
 export const PLANNER_MAX_SLOT_SCALE = 4;
 
 /**
- * One line of text inside a block: `--text-xs` (11px) at the `line-height: 1.25`
- * `.block` sets, rounded up. Not a guess — both numbers are in the stylesheet.
+ * One line of text inside a block. `.block` sets `line-height: 14px` outright
+ * rather than the 1.25 it used to, because this arithmetic counts lines: 1.25
+ * on 11px text is 13.75px, three of those end 0.75px past a 42px text area, and
+ * that sliver is how a line gets half drawn (F-2).
  */
 export const PLANNER_BLOCK_LINE_PX = 14;
 
@@ -221,6 +223,32 @@ export function spanPx(
 /* ---------------------------------------------------------------------------
  * Wrapping (P-planner-4)
  * ------------------------------------------------------------------------ */
+
+/**
+ * A due card is drawn at `.itemBlock`'s `min-height` however short its span,
+ * so that — not its one slot — is the height its text has to be counted from.
+ */
+export const PLANNER_DUE_CARD_MIN_PX = 2 * PLANNER_BASE_SLOT_PX;
+
+/**
+ * How tall a block's text area is: the most whole lines that fit, and not one
+ * pixel more (F-2, the PM's browser walk).
+ *
+ * A block's own height is whatever its hours make it, which is almost never a
+ * multiple of a line — so clipping at the block's edge cut "Trendy Today,
+ * Toxic" through the middle of the letters. Sizing the text area to whole lines
+ * instead puts the clip exactly where the next line begins: every line that is
+ * drawn is drawn completely, and the one that does not fit is not drawn at all.
+ *
+ * One line is the floor. A block too short even for that shows one and clips;
+ * a sliver of text is bad, but a block with nothing in it says less than
+ * nothing.
+ */
+export function blockContentPx(heightPx: number): number {
+  const available = heightPx - PLANNER_BLOCK_PADDING_PX;
+  const lines = Math.max(1, Math.floor(available / PLANNER_BLOCK_LINE_PX));
+  return lines * PLANNER_BLOCK_LINE_PX;
+}
 
 /**
  * How many lines of title a block that tall has room for, once the lines it

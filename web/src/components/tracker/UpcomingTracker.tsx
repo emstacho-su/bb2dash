@@ -4,10 +4,15 @@
  * Upcoming-work effort tracker (R-02 / R-03) — extracted from Today.tsx.
  *
  * One column per day: bar height = Σ effort for that day, one segment per item,
- * segment tint = assignment-type ramp. Monday carries a rule, the 1st of a month
+ * segment tint = assignment-type hue. Monday carries a rule, the 1st of a month
  * carries its label, clicking a day fills the detail panel beneath, and the
- * legend names the five glyphs. `◂ ▸` page by whole windows across the horizon;
- * the horizontal scrollbar is hidden so the arrows are the affordance.
+ * legend names the five glyphs.
+ *
+ * H-2 (P-home-2, Stack's answer 11): the strip renders EVERY day from the first
+ * dated item to the last and scrolls across them, opening anchored on today.
+ * `visibleDays` is now how many columns fit on screen, not how many exist, and
+ * `◂ ▸` page by whole screens as they always did. Free scrolling moves the view
+ * without moving the anchor; the arrows carry on from wherever the view is.
  *
  * The same component serves Home (every course's items) and a course Stream
  * (that course's shells only) — the caller filters `items` and supplies the
@@ -28,7 +33,7 @@
  * and `error` and the counts step aside until then.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import {
@@ -44,14 +49,17 @@ import { StatusSelect } from './StatusSelect';
 import {
   DEFAULT_HORIZON_DAYS,
   DEFAULT_VISIBLE_DAYS,
-  buildTrackerWindow,
+  buildTrackerStrip,
+  daysBetween,
   formatDay,
   formatDayRange,
   isValidIsoDate,
-  pageAnchor,
+  pageStripAnchor,
   parseDateOnly,
   shiftIso,
+  stripWindow,
   todayIso,
+  trackerRange,
   DOW_LABELS,
   MONTH_LABELS,
   type TrackerDay,
@@ -65,11 +73,14 @@ import styles from './UpcomingTracker.module.css';
 export interface UpcomingTrackerProps {
   /** `v_work_items` rows, already course-filtered by the caller. */
   items: WorkItem[];
-  /** Days forward the caller fetched and the tracker pages over. */
+  /**
+   * Days forward the caller fetched. The strip never runs past it: a column
+   * beyond the fetch would render empty and read as "nothing due".
+   */
   horizonDays?: number;
-  /** Day columns on screen at once. */
+  /** Day columns on screen at once. The strip scrolls; this is the viewport. */
   visibleDays?: number;
-  /** 'YYYY-MM-DD' first visible day. Defaults to today; clamped to the horizon. */
+  /** 'YYYY-MM-DD' first visible day. Defaults to today; clamped to the range. */
   anchor?: string;
   onAnchorChange?: (iso: string) => void;
   /** 'YYYY-MM-DD' day whose detail panel is open. Defaults to today. */
@@ -185,49 +196,104 @@ export function UpcomingTracker({
   error = null,
 }: UpcomingTrackerProps) {
   const today = todayIso();
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  /** True while the effect below is moving the scroller, so its own scroll
+   *  events are not mistaken for the reader dragging the strip. */
+  const programmatic = useRef(false);
 
-  // Controlled when the matching prop is supplied, self-managed otherwise.
-  const [ownAnchor, setOwnAnchor] = useState(today);
-  const [ownSelected, setOwnSelected] = useState(today);
-  const activeAnchor = anchor ?? ownAnchor;
+  /**
+   * Anchor and selection are self-managed as `null` = "follow today", not as a
+   * date seeded once. A tab left open across midnight re-renders (the query
+   * layer refetches on window focus) with a new `today`, and a seeded date
+   * would hold yesterday: no column highlighted, and the panel going on
+   * describing yesterday's work under yesterday's heading. Null defers to
+   * whatever today now is, and the moment Stack pages or clicks, his choice is
+   * stored and stands.
+   */
+  const [ownAnchor, setOwnAnchor] = useState<string | null>(null);
+  const [ownSelected, setOwnSelected] = useState<string | null>(null);
+  /** Where the reader has scrolled to, when that is not the anchor. */
+  const [scrolledFirst, setScrolledFirst] = useState<string | null>(null);
 
-  const spec = { anchor: activeAnchor, today, horizonDays, visibleDays };
-  const view = useMemo(
-    () => buildTrackerWindow({ anchor: activeAnchor, today, horizonDays, visibleDays }),
-    [activeAnchor, today, horizonDays, visibleDays],
+  const range = useMemo(
+    () =>
+      trackerRange({
+        dueDates: items.map((item) => item.due_on),
+        today,
+        horizonDays,
+        visibleDays,
+      }),
+    [items, today, horizonDays, visibleDays],
+  );
+
+  const strip = useMemo(
+    () => buildTrackerStrip({ range, today, visibleDays, anchor: anchor ?? ownAnchor }),
+    [range, today, visibleDays, anchor, ownAnchor],
   );
   const byDay = useMemo(() => groupByDueDate(items), [items]);
 
+  // What is actually on screen: the anchor, unless the reader has scrolled away
+  // from it. Both are clamped into the range by `stripWindow`.
+  const view = stripWindow(range, scrolledFirst ?? strip.anchor, visibleDays, today);
+  const columnsInView = strip.columnsInView;
+
   /**
-   * The selection is *derived* into the window, never merely stored.
-   *
-   * `today` is recomputed every render but the two `useState` seeds are not, so
-   * a tab left open across midnight — and `refetchOnWindowFocus` means it does
-   * get re-rendered — held yesterday. `clampAnchor` moved the window forward on
-   * its own; the selection did not, so no column was highlighted and the panel
-   * below went on describing yesterday's work under yesterday's heading.
-   *
-   * Clamping here rather than in an effect means there is never a render in
-   * which the panel and the columns disagree — and it covers the same case for
-   * a controlled `selectedDay` the parent has not caught up on.
+   * Scroll the anchor's column to the left edge whenever the anchor moves.
+   * `clientWidth` is 0 under jsdom and before layout, which is why the guard is
+   * a width check rather than a mount flag: no width, nothing to scroll, and
+   * the render is still correct.
    */
-  const requestedSelected = selectedDay ?? ownSelected;
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setScrolledFirst(null);
+    const columnWidth = el.clientWidth / columnsInView;
+    if (!Number.isFinite(columnWidth) || columnWidth <= 0) return;
+    programmatic.current = true;
+    el.scrollLeft = daysBetween(range.firstIso, strip.anchor) * columnWidth;
+    const timer = window.setTimeout(() => {
+      programmatic.current = false;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [strip.anchor, range.firstIso, columnsInView]);
+
+  /** Free scrolling moves the view and the arrows — never the saved anchor. */
+  function handleScroll(event: React.UIEvent<HTMLDivElement>) {
+    if (programmatic.current) return;
+    const el = event.currentTarget;
+    const columnWidth = el.clientWidth / columnsInView;
+    if (!Number.isFinite(columnWidth) || columnWidth <= 0) return;
+    const index = Math.round(el.scrollLeft / columnWidth);
+    setScrolledFirst(shiftIso(range.firstIso, index));
+  }
+
+  /**
+   * The selection is *derived*, never merely stored: clamped into the range so
+   * a stale value (a controlled `selectedDay` the parent has not caught up on,
+   * or a day that fell off the end when the fetch narrowed) can never leave the
+   * panel describing a column that is not there.
+   */
+  const requestedSelected = selectedDay ?? ownSelected ?? today;
   const activeSelected =
     isValidIsoDate(requestedSelected) &&
-    requestedSelected >= view.firstIso &&
-    requestedSelected <= view.lastIso
+    requestedSelected >= range.firstIso &&
+    requestedSelected <= range.lastIso
       ? requestedSelected
       : view.firstIso;
 
   function moveAnchor(pages: number) {
-    const next = pageAnchor(spec, pages);
-    if (next === view.anchor) return;
+    const next = pageStripAnchor(
+      { range, today, visibleDays, anchor: view.firstIso },
+      pages,
+    );
+    if (next === view.firstIso) return;
+    setScrolledFirst(null);
     if (anchor === undefined) setOwnAnchor(next);
     onAnchorChange?.(next);
 
     // Keep the detail panel describing something on screen: if the selection
     // falls outside the *new* window, move it to that window's first day.
-    const nextLastIso = shiftIso(next, view.days.length - 1);
+    const nextLastIso = shiftIso(next, columnsInView - 1);
     if (activeSelected < next || activeSelected > nextLastIso) selectDay(next);
   }
 
@@ -236,26 +302,30 @@ export function UpcomingTracker({
     onSelectDay?.(iso);
   }
 
-  const columns = view.days.map((day) => {
+  const columns = strip.days.map((day) => {
     const dayItems = byDay.get(day.iso) ?? [];
     return { day, items: dayItems, effort: sumEffort(dayItems) };
   });
 
-  // Bars scale to the tallest day in *this* window, so a quiet page still reads.
+  // Bars scale to the tallest day on the whole strip, so scrolling never
+  // re-scales the bars under the reader's eye.
   const maxEffort = Math.max(1, ...columns.map((c) => c.effort));
   const scale = BAR_AREA_PX / maxEffort;
 
-  const windowItems = columns.reduce((total, c) => total + c.items.length, 0);
-  const windowEffort = columns.reduce((total, c) => total + c.effort, 0);
-  const columnCount = view.days.length;
+  // The two counters describe what is on screen, not the whole strip.
+  const inView = columns.filter(
+    (c) => c.day.iso >= view.firstIso && c.day.iso <= view.lastIso,
+  );
+  const windowItems = inView.reduce((total, c) => total + c.items.length, 0);
+  const windowEffort = inView.reduce((total, c) => total + c.effort, 0);
 
   const selectedItems = byDay.get(activeSelected) ?? [];
   const selectedDate = parseDateOnly(activeSelected);
 
   // "next 14 days" only while the window starts today; otherwise name the start.
   const rangeHint = view.isAtStart
-    ? `next ${columnCount} days`
-    : `${columnCount} days from ${formatDay(view.firstIso)}`;
+    ? `next ${columnsInView} days`
+    : `${columnsInView} days from ${formatDay(view.firstIso)}`;
 
   /**
    * Nothing counted from `items` is a fact until the caller's fetch has
@@ -276,7 +346,11 @@ export function UpcomingTracker({
     : `${selectedItems.length} due · ${effortLabel(sumEffort(selectedItems))}`;
 
   return (
-    <section className={styles.section}>
+    // H-3 (P-home-3): the strip and the day panel used to be a bare section
+    // with a card floating under it, which read as two unrelated blocks. One
+    // card now holds the heading, the strip and the panel, so "upcoming work"
+    // and "today's work" are visibly one thing.
+    <section className={`${tokens.cardLg} ${styles.section}`} aria-label={title}>
       <div className={styles.sectionHead}>
         <h2 className={styles.h2}>{title}</h2>
         <span className={styles.sub}>{headSub}</span>
@@ -313,10 +387,12 @@ export function UpcomingTracker({
       </div>
 
       <div
+        ref={scrollerRef}
         className={styles.tracker}
         role="tablist"
         aria-label="Effort by day"
-        style={{ ['--tracker-columns' as string]: String(columnCount) }}
+        onScroll={handleScroll}
+        style={{ ['--tracker-columns' as string]: String(columnsInView) }}
       >
         {columns.map(({ day, items: dayItems }) => (
           <DayColumn
@@ -332,10 +408,13 @@ export function UpcomingTracker({
 
       <div className={styles.windowSummary}>
         <span>Window · {formatDayRange(view.firstIso, view.lastIso)}</span>
-        <span>line = Monday · click a day for detail</span>
+        <span>
+          Scrolls {formatDayRange(strip.firstIso, strip.lastIso)} · line = Monday · click a day for
+          detail
+        </span>
       </div>
 
-      <div className={`${tokens.card} ${styles.detail}`}>
+      <div className={styles.detail}>
         <div className={styles.detailHead}>
           <span className={styles.detailTitle}>
             {activeSelected === today ? 'Today' : DOW_LABELS[selectedDate.getDay()]},{' '}

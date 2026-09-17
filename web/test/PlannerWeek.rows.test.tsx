@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeWorkItem } from './factories';
 import {
   PLANNER_BASE_SLOT_PX,
+  PLANNER_BLOCK_LINE_PX,
   buildSlotHeights,
   gridHeightPx,
   pxToSlot,
@@ -315,6 +316,91 @@ describe('the rest of the grid reads the same table', () => {
     expect(rules.map((rule) => px(rule, '--top-px'))).toEqual(
       [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26].map((slot) => slotToPx(slot, heights)),
     );
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * F-2 — what a short, narrow block is allowed to cut
+ * ------------------------------------------------------------------------ */
+
+/** The GEO 103 lecture from the walk: 55 minutes, a room and a topic. */
+const SHORT_LECTURE = {
+  id: 2,
+  course_id: 'GEO.103',
+  day_of_week: 1,
+  start_time: '10:35:00',
+  end_time: '11:30:00',
+  location: 'Watson Theater',
+  starts_on: null,
+  ends_on: null,
+  courses: { id: 'GEO.103', title_short: 'Environment', subject: 'GEO', number: '103' },
+};
+
+describe('F-2 — a short class block, as the PM found it', () => {
+  beforeEach(() => {
+    db.rows.meetings = [SHORT_LECTURE];
+    db.rows.sessions = [
+      { course_id: 'GEO.103', session_date: '2026-09-14', topic: 'Trendy Today, Toxic Tomorrow' },
+    ];
+    db.rows.v_work_items = [];
+  });
+
+  it('says the meridiem once, so the end time is not cut off the line', async () => {
+    renderPlanner();
+    const monday = dayColumn('2026-09-14');
+    await within(monday).findByText('GEO 103');
+
+    expect(within(monday).getByText('10:35 – 11:30 AM')).toBeInTheDocument();
+    expect(within(monday).queryByText('10:35 AM – 11:30 AM')).toBeNull();
+  });
+
+  it('gives the text a whole number of lines, shorter than the block itself', async () => {
+    renderPlanner();
+    const monday = dayColumn('2026-09-14');
+    await within(monday).findByText('GEO 103');
+
+    const block = monday.querySelector('[data-block="meeting"]') as HTMLElement;
+    const body = block.querySelector('[data-block-body]') as HTMLElement;
+
+    // 55 minutes is 44px; 38px of text area holds two 14px lines and no more.
+    expect(px(block, '--height-px')).toBeCloseTo(44, 6);
+    expect(body.style.getPropertyValue('--content-px')).toBe('28px');
+    expect(px(body, '--content-px') % PLANNER_BLOCK_LINE_PX).toBe(0);
+    expect(px(body, '--content-px')).toBeLessThan(px(block, '--height-px'));
+  });
+
+  it('keeps the line it had no room for reachable, on the block tooltip', async () => {
+    renderPlanner();
+    const monday = dayColumn('2026-09-14');
+    await within(monday).findByText('GEO 103');
+
+    const block = monday.querySelector('[data-block="meeting"]') as HTMLElement;
+    expect(block).toHaveAttribute(
+      'title',
+      'GEO 103 · 10:35 – 11:30 AM · Watson Theater · Trendy Today, Toxic Tomorrow',
+    );
+  });
+
+  it('gives a due card the three lines its minimum height pays for', async () => {
+    db.rows.v_work_items = [
+      makeWorkItem({
+        item_id: 'GEO.103/pset-1',
+        title: 'Problem set 1',
+        course_id: 'ECN.304', // another course, so it does not nest
+        due_on: '2026-09-15',
+        due_at: '2026-09-15T18:00:00Z',
+      }),
+    ];
+    renderPlanner();
+    const tuesday = dayColumn('2026-09-15');
+    await within(tuesday).findByText('Problem set 1');
+
+    // A due card spans one slot but is drawn at `.itemBlock`'s 48px minimum,
+    // which is what its text area has to be counted from: head, title, status.
+    const block = tuesday.querySelector('[data-block="item"]') as HTMLElement;
+    const body = block.querySelector('[data-block-body]') as HTMLElement;
+    expect(body.style.getPropertyValue('--content-px')).toBe('42px');
+    expect(px(block, '--title-lines')).toBe(1);
   });
 });
 

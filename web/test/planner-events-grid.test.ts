@@ -55,7 +55,7 @@ describe('placePlannerEvents — timed', () => {
       dayIndex: 2,
       top: slotOffset(9 * 60),
       height: 2,
-      timeText: '9:00 AM – 10:00 AM',
+      timeText: '9:00 – 10:00 AM',
       zoneChip: null,
       clamped: false,
     });
@@ -69,7 +69,7 @@ describe('placePlannerEvents — timed', () => {
     });
     const [segment] = placePlannerEvents([la], WEEK).timed;
     expect(segment.top).toBe(slotOffset(12 * 60));
-    expect(segment.timeText).toBe('12:00 PM – 1:00 PM');
+    expect(segment.timeText).toBe('12:00 – 1:00 PM');
     expect(segment.zoneChip).toBe('09:00 PDT');
   });
 
@@ -102,7 +102,7 @@ describe('placePlannerEvents — timed', () => {
     });
     const [segment] = placePlannerEvents([run], WEEK).timed;
     expect(segment).toMatchObject({ top: 0, height: 2, clamped: true });
-    expect(segment.timeText).toBe('6:30 AM – 9:00 AM');
+    expect(segment.timeText).toBe('6:30 – 9:00 AM');
   });
 
   it('gives a zero-length task the due-card minimum height', () => {

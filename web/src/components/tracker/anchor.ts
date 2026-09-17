@@ -167,29 +167,36 @@ export interface TrackerWindow {
   isAtStart: boolean;
 }
 
+/**
+ * One column descriptor. Shared by the paged window and the scrolling strip so
+ * the Monday rule, the month label and the "Today" label can never fork.
+ */
+function describeDay(date: Date, index: number, today: string): TrackerDay {
+  const iso = isoDate(date);
+  const dow = date.getDay();
+  return {
+    index,
+    iso,
+    date,
+    dayOfMonth: date.getDate(),
+    dowLabel: iso === today ? 'Today' : DOW_LABELS[dow],
+    isToday: iso === today,
+    isMonday: dow === 1,
+    isWeekend: dow === 0 || dow === 6,
+    // The 1st of a month names itself; so does the first column, whatever it is.
+    monthLabel: date.getDate() === 1 || index === 0 ? MONTH_LABELS[date.getMonth()] : '',
+  };
+}
+
 /** Build the visible window: the clamped anchor plus one descriptor per column. */
 export function buildTrackerWindow(spec: WindowSpec): TrackerWindow {
   const anchor = clampAnchor(spec);
   const count = columnCount(spec.horizonDays, spec.visibleDays);
   const start = parseDateOnly(anchor);
 
-  const days: TrackerDay[] = Array.from({ length: count }, (_, index) => {
-    const date = addDays(start, index);
-    const iso = isoDate(date);
-    const dow = date.getDay();
-    const showMonth = date.getDate() === 1 || index === 0;
-    return {
-      index,
-      iso,
-      date,
-      dayOfMonth: date.getDate(),
-      dowLabel: iso === spec.today ? 'Today' : DOW_LABELS[dow],
-      isToday: iso === spec.today,
-      isMonday: dow === 1,
-      isWeekend: dow === 0 || dow === 6,
-      monthLabel: showMonth ? MONTH_LABELS[date.getMonth()] : '',
-    };
-  });
+  const days: TrackerDay[] = Array.from({ length: count }, (_, index) =>
+    describeDay(addDays(start, index), index, spec.today),
+  );
 
   const latest = maxAnchor(spec.today, spec.horizonDays, spec.visibleDays);
   return {
@@ -215,4 +222,178 @@ export function formatDayRange(fromIso: string, toIso: string): string {
 export function formatDay(iso: string): string {
   const d = parseDateOnly(iso);
   return `${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`;
+}
+
+/* ---------------------------------------------------------------------------
+ * The scrolling strip (H-2 / P-home-2, Stack's answer 11)
+ *
+ * The tracker used to render exactly `visibleDays` columns sized to fill the
+ * container, so there was nothing to scroll and only ◂ ▸ moved the horizon.
+ * Stack asked for the strip to scroll across the whole term's work instead,
+ * opening on today, with the arrows kept.
+ *
+ * So the component now renders one column per day of a RANGE — the span of the
+ * dated items it was handed — while `visibleDays` becomes how many of those
+ * columns fit on screen at once. The anchor keeps its old meaning (the first
+ * visible column) and drives `scrollLeft`; the arrows keep paging by whole
+ * windows. Everything below is pure, for the same reason the rest of this file
+ * is: it is the paging maths, not the scrolling.
+ * ------------------------------------------------------------------------ */
+
+/** The whole span the strip scrolls over, inclusive at both ends. */
+export interface TrackerRange {
+  firstIso: string;
+  lastIso: string;
+}
+
+export interface RangeSpec {
+  /** Every item's `due_on`. Nulls and malformed values are ignored, not guessed. */
+  dueDates: readonly (string | null | undefined)[];
+  today: string;
+  /**
+   * How far forward the caller actually fetched. The strip never runs past it:
+   * days beyond the fetch would render as empty and read as "nothing due",
+   * which is a claim the data does not support.
+   */
+  horizonDays: number;
+  visibleDays: number;
+}
+
+/**
+ * The span the strip covers: the first dated item to the last, always
+ * including today, never shorter than one screenful, never past the horizon.
+ *
+ * With nothing dated (an empty list, or a fetch still in flight) this is today
+ * plus one screenful — the same calendar the tracker has always drawn while it
+ * waits, rather than an eight-week strip of blank columns.
+ */
+export function trackerRange(spec: RangeSpec): TrackerRange {
+  const { today, horizonDays, visibleDays } = spec;
+  const count = columnCount(horizonDays, visibleDays);
+
+  let earliest: string | null = null;
+  let latest: string | null = null;
+  for (const value of spec.dueDates) {
+    if (!isValidIsoDate(value)) continue;
+    if (earliest === null || value < earliest) earliest = value;
+    if (latest === null || value > latest) latest = value;
+  }
+
+  // Today is always on the strip: it is what the strip opens on.
+  const firstIso = earliest !== null && earliest < today ? earliest : today;
+
+  // At least one full screen, so the columns keep their width and there is
+  // never a half-empty strip.
+  const oneScreenEnd = shiftIso(firstIso, count - 1);
+  const wanted = latest !== null && latest > oneScreenEnd ? latest : oneScreenEnd;
+
+  // …but never past what was fetched — unless one screen already is.
+  const horizonEnd = horizonLastDay(today, horizonDays);
+  const cap = horizonEnd > oneScreenEnd ? horizonEnd : oneScreenEnd;
+  return { firstIso, lastIso: wanted > cap ? cap : wanted };
+}
+
+/** How many days the range holds, inclusive. */
+export function rangeLength(range: TrackerRange): number {
+  return daysBetween(range.firstIso, range.lastIso) + 1;
+}
+
+export interface StripSpec {
+  range: TrackerRange;
+  today: string;
+  visibleDays: number;
+  /** First visible column. Missing or unusable means "open on today". */
+  anchor?: string | null;
+}
+
+/** The furthest anchor that still leaves a full screen inside the range. */
+export function maxStripAnchor(range: TrackerRange, visibleDays: number): string {
+  const inView = columnCount(rangeLength(range), visibleDays);
+  return shiftIso(range.firstIso, Math.max(0, rangeLength(range) - inView));
+}
+
+/**
+ * Bring an anchor into the range. A missing or malformed one opens on today —
+ * itself clamped, because today can sit outside a range built from a stale
+ * fetch, and a bad value should never take the screen down.
+ */
+export function clampStripAnchor(spec: StripSpec): string {
+  const { range, today, visibleDays } = spec;
+  const wanted = isValidIsoDate(spec.anchor) ? spec.anchor : today;
+  const latest = maxStripAnchor(range, visibleDays);
+  if (wanted < range.firstIso) return range.firstIso;
+  if (wanted > latest) return latest;
+  return wanted;
+}
+
+/** Move `pages` whole screens (−1 = ◂, +1 = ▸) and clamp. */
+export function pageStripAnchor(spec: StripSpec, pages: number): string {
+  const from = clampStripAnchor(spec);
+  const inView = columnCount(rangeLength(spec.range), spec.visibleDays);
+  const step = inView * Math.trunc(pages);
+  return clampStripAnchor({ ...spec, anchor: shiftIso(from, step) });
+}
+
+/** What the `visibleDays` columns starting at `firstIso` look like. */
+export interface StripWindow {
+  /** First visible column, clamped into the range. */
+  firstIso: string;
+  /** Last visible column — the range's end when the window runs into it. */
+  lastIso: string;
+  /** Its offset in `days`, i.e. how many columns to scroll past. */
+  index: number;
+  columnsInView: number;
+  canPageBack: boolean;
+  canPageForward: boolean;
+  /** True when the window starts today — the default, unpaged view. */
+  isAtStart: boolean;
+}
+
+/** Describe the window a given first column puts on screen. */
+export function stripWindow(
+  range: TrackerRange,
+  firstIso: string,
+  visibleDays: number,
+  today: string,
+): StripWindow {
+  const inView = columnCount(rangeLength(range), visibleDays);
+  const first = clampStripAnchor({ range, today, visibleDays, anchor: firstIso });
+  const end = shiftIso(first, inView - 1);
+  return {
+    firstIso: first,
+    lastIso: end > range.lastIso ? range.lastIso : end,
+    index: daysBetween(range.firstIso, first),
+    columnsInView: inView,
+    canPageBack: first > range.firstIso,
+    canPageForward: first < maxStripAnchor(range, visibleDays),
+    isAtStart: first === today,
+  };
+}
+
+export interface TrackerStrip {
+  /** The clamped anchor actually used — the column scrolled to. */
+  anchor: string;
+  /** One descriptor per day of the whole range; the strip scrolls over them. */
+  days: TrackerDay[];
+  firstIso: string;
+  lastIso: string;
+  /** How many columns fit on screen; what the CSS sizes a column against. */
+  columnsInView: number;
+}
+
+/** Build the whole scrollable strip plus the anchor it opens on. */
+export function buildTrackerStrip(spec: StripSpec): TrackerStrip {
+  const { range, today } = spec;
+  const start = parseDateOnly(range.firstIso);
+  const length = rangeLength(range);
+  const days: TrackerDay[] = Array.from({ length }, (_, index) =>
+    describeDay(addDays(start, index), index, today),
+  );
+  return {
+    anchor: clampStripAnchor(spec),
+    days,
+    firstIso: range.firstIso,
+    lastIso: range.lastIso,
+    columnsInView: columnCount(length, spec.visibleDays),
+  };
 }

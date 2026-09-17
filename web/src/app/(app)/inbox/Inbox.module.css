@@ -63,6 +63,41 @@
   max-width: 80ch;
 }
 
+/* I-3 row anatomy: age in the head, the source sentence with its link, and the
+   stage's own payload as labelled words rather than jsonb. */
+.age {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+  white-space: nowrap;
+}
+.sourceLink {
+  color: var(--color-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sourceLink:hover {
+  text-decoration: underline;
+}
+.details {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.detail {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.detail dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .change,
 .meta {
   margin: 0;
@@ -101,6 +136,36 @@
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* I-2: a control and the sentence saying what it does, stacked, so the two are
+   read together. `.choices` puts the two conflict answers side by side. */
+.choices {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: 44ch;
+}
+.outcome {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-neutral-400);
+}
+
+/* The one-line rule at the top of the screen. */
+.applyHelp {
+  margin: 0 0 var(--space-4);
+  max-width: 88ch;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
 }
 
 .answered {
