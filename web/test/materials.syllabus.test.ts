@@ -14,7 +14,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   READING_TAG,
-  lectureShellFor,
   resolveReadingRoute,
   resolveSyllabusFiles,
   syllabusBasename,
@@ -24,29 +23,29 @@ import {
 
 /** The seven `courses` rows, as prod has them. */
 const COURSES: CourseSyllabusRow[] = [
-  { id: 'ECN.304', kind: 'lecture', syllabus_path: 'ECN.304/ECN 304 F26 Syllabus_M001.pdf' },
+  { id: 'ECN.304', parent_course_id: null, syllabus_path: 'ECN.304/ECN 304 F26 Syllabus_M001.pdf' },
   {
     id: 'GEO.103.lecture',
-    kind: 'lecture',
+    parent_course_id: null,
     syllabus_path: 'GEO.103/GEO 103 (2026) - syllabus - FINAL.pdf',
   },
   {
     id: 'GEO.103.recitation',
-    kind: 'recitation',
+    parent_course_id: 'GEO.103.lecture',
     syllabus_path: 'GEO.103/GEO 103 (2026) - syllabus - FINAL.pdf',
   },
-  { id: 'IST.323', kind: 'lecture', syllabus_path: 'IST.323/323Fall26V1.3.1.docx' },
+  { id: 'IST.323', parent_course_id: null, syllabus_path: 'IST.323/323Fall26V1.3.1.docx' },
   {
     id: 'IST.352',
-    kind: 'lecture',
+    parent_course_id: null,
     syllabus_path: 'IST.352/syllabus_policy/IST 352 Syllabus Fall 2026.docx',
   },
   {
     id: 'IST.466',
-    kind: 'lecture',
+    parent_course_id: null,
     syllabus_path: 'IST.466/syllabus_policy/IST466M3 Fall2026 Syllabus.docx',
   },
-  { id: 'IST.471', kind: 'internship', syllabus_path: 'IST.471/IST 471 Syllabus.pdf' },
+  { id: 'IST.471', parent_course_id: null, syllabus_path: 'IST.471/IST 471 Syllabus.pdf' },
 ];
 
 function file(
@@ -102,15 +101,77 @@ describe('syllabusBasename', () => {
   });
 });
 
-describe('lectureShellFor', () => {
-  it('names the lecture shell a recitation belongs to', () => {
-    expect(lectureShellFor('GEO.103.recitation')).toBe('GEO.103.lecture');
-    expect(lectureShellFor('BIO.121.lab')).toBe('BIO.121.lecture');
+/* ---------------------------------------------------------------------------
+ * CR-10 — the parent shell is a COLUMN, not a naming convention
+ *
+ * This used to string-split the course id and assume the parent was the same
+ * dotted prefix with `.lecture` on the end. `courses.parent_course_id` is the
+ * real link — it is what migration 074 follows to resolve the scheme course —
+ * and a shell whose parent is not called `.lecture` was silently cut off from
+ * its syllabus.
+ * ------------------------------------------------------------------------ */
+
+describe('resolveSyllabusFiles — inheriting from the parent shell', () => {
+  it('follows parent_course_id whatever the parent is called', () => {
+    const resolved = resolveSyllabusFiles(
+      [
+        { id: 'BIO.121.main', parent_course_id: null, syllabus_path: 'BIO.121/BIO 121.pdf' },
+        {
+          id: 'BIO.121.seminar',
+          parent_course_id: 'BIO.121.main',
+          syllabus_path: 'BIO.121/BIO 121.pdf',
+        },
+      ],
+      [file(1, 'BIO.121.main', 'BIO 121.pdf')],
+    );
+    // The old rule looked for 'BIO.121.lecture', which does not exist, and left
+    // the seminar with nothing.
+    expect(resolved.get('BIO.121.seminar')?.id).toBe(1);
   });
 
-  it('has nothing to say about a lecture or an unsplit course', () => {
-    expect(lectureShellFor('GEO.103.lecture')).toBeNull();
-    expect(lectureShellFor('IST.323')).toBeNull();
+  it('inherits through a chain of parents', () => {
+    const resolved = resolveSyllabusFiles(
+      [
+        { id: 'X.1.root', parent_course_id: null, syllabus_path: 'X.1/X 1.pdf' },
+        { id: 'X.1.mid', parent_course_id: 'X.1.root', syllabus_path: 'X.1/X 1.pdf' },
+        { id: 'X.1.leaf', parent_course_id: 'X.1.mid', syllabus_path: 'X.1/X 1.pdf' },
+      ],
+      [file(1, 'X.1.root', 'X 1.pdf')],
+    );
+    expect(resolved.get('X.1.leaf')?.id).toBe(1);
+  });
+
+  it('prefers the child\u2019s own named file over the parent\u2019s', () => {
+    const resolved = resolveSyllabusFiles(
+      [
+        { id: 'Y.1.lecture', parent_course_id: null, syllabus_path: 'Y.1/lecture.pdf' },
+        { id: 'Y.1.lab', parent_course_id: 'Y.1.lecture', syllabus_path: 'Y.1/lab.pdf' },
+      ],
+      [file(1, 'Y.1.lecture', 'lecture.pdf'), file(2, 'Y.1.lab', 'lab.pdf')],
+    );
+    expect(resolved.get('Y.1.lab')?.id).toBe(2);
+  });
+
+  it('does not loop for ever on a parent cycle', () => {
+    const resolved = resolveSyllabusFiles(
+      [
+        { id: 'A', parent_course_id: 'B', syllabus_path: 'A/missing.pdf' },
+        { id: 'B', parent_course_id: 'A', syllabus_path: 'B/missing.pdf' },
+      ],
+      [],
+    );
+    expect(resolved.size).toBe(0);
+  });
+
+  it('says nothing for a parent that has no syllabus either', () => {
+    const resolved = resolveSyllabusFiles(
+      [
+        { id: 'Z.1.lecture', parent_course_id: null, syllabus_path: null },
+        { id: 'Z.1.lab', parent_course_id: 'Z.1.lecture', syllabus_path: 'Z.1/nope.pdf' },
+      ],
+      [],
+    );
+    expect(resolved.get('Z.1.lab')).toBeUndefined();
   });
 });
 
@@ -130,9 +191,10 @@ describe('resolveSyllabusFiles — picking the right one of two', () => {
     expect(resolved.get('GEO.103.lecture')?.id).toBe(42);
   });
 
-  it('falls the recitation shell back to its lecture’s file', () => {
+  it('falls the recitation shell back to its parent shell’s file', () => {
     // Its own syllabus_policy file is the discussion-section guide, which is a
     // different document — and syllabus_path points at the lecture's anyway.
+    // The link followed is `parent_course_id`, not the shape of the id.
     expect(resolved.get('GEO.103.recitation')?.id).toBe(42);
     expect(resolved.get('GEO.103.recitation')?.file_name).toBe(
       'GEO 103 (2026) - syllabus - FINAL.pdf',
@@ -145,7 +207,7 @@ describe('resolveSyllabusFiles — picking the right one of two', () => {
 
   it('takes a course’s sole syllabus file when the recorded path does not match', () => {
     const one = resolveSyllabusFiles(
-      [{ id: 'ECN.304', kind: 'lecture', syllabus_path: 'ECN.304/stale-name.pdf' }],
+      [{ id: 'ECN.304', parent_course_id: null, syllabus_path: 'ECN.304/stale-name.pdf' }],
       [file(23, 'ECN.304', 'ECN 304 F26 Syllabus_M001.pdf')],
     );
     expect(one.get('ECN.304')?.id).toBe(23);
@@ -153,7 +215,7 @@ describe('resolveSyllabusFiles — picking the right one of two', () => {
 
   it('chooses nothing rather than guessing between two unmatched candidates', () => {
     const ambiguous = resolveSyllabusFiles(
-      [{ id: 'IST.323', kind: 'lecture', syllabus_path: 'IST.323/stale-name.docx' }],
+      [{ id: 'IST.323', parent_course_id: null, syllabus_path: 'IST.323/stale-name.docx' }],
       FILES.filter((f) => f.course_id === 'IST.323'),
     );
     expect(ambiguous.get('IST.323')).toBeUndefined();
@@ -161,7 +223,7 @@ describe('resolveSyllabusFiles — picking the right one of two', () => {
 
   it('ignores files in other buckets', () => {
     const wrongBucket = resolveSyllabusFiles(
-      [{ id: 'ECN.304', kind: 'lecture', syllabus_path: 'ECN.304/notes.pdf' }],
+      [{ id: 'ECN.304', parent_course_id: null, syllabus_path: 'ECN.304/notes.pdf' }],
       [file(1, 'ECN.304', 'notes.pdf', 'lecture_slides')],
     );
     expect(wrongBucket.get('ECN.304')).toBeUndefined();

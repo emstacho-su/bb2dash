@@ -576,7 +576,13 @@ export function resolveReadingRoute(
 /** The columns of `courses` this resolver needs. */
 export interface CourseSyllabusRow {
   id: string;
-  kind: string | null;
+  /**
+   * The shell this one hangs off, or null for a top-level course. CR-10: this
+   * is the real link between a recitation and its lecture — the same column
+   * migration 074 follows to resolve the scheme course — and it replaces
+   * guessing the parent from the shape of the id.
+   */
+  parent_course_id: string | null;
   syllabus_path: string | null;
 }
 
@@ -590,7 +596,7 @@ export function courseSyllabiOptions() {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('courses')
-        .select('id, kind, syllabus_path')
+        .select('id, parent_course_id, syllabus_path')
         .order('id', { ascending: true });
       if (error) throw error;
       return (data ?? []) as CourseSyllabusRow[];
@@ -611,18 +617,6 @@ export function syllabusBasename(path: string | null): string | null {
 }
 
 /**
- * The lecture shell a non-lecture shell belongs to: `GEO.103.recitation` →
- * `GEO.103.lecture`. Returns null for a shell that is already the lecture, or
- * for a plain course id with no shell suffix.
- */
-export function lectureShellFor(courseId: string): string | null {
-  const parts = courseId.split('.');
-  if (parts.length < 3) return null;
-  if (parts[parts.length - 1] === 'lecture') return null;
-  return [...parts.slice(0, -1), 'lecture'].join('.');
-}
-
-/**
  * Work out which `bb_files` row is each course's syllabus.
  *
  * `courses.syllabus_path` is unreliable as a storage key — it is sometimes the
@@ -633,9 +627,13 @@ export function lectureShellFor(courseId: string): string | null {
  *   1. a `syllabus_policy` file of this course whose name is that basename.
  *      This is what picks IST 323's own syllabus over the policy appendix
  *      filed beside it, and IST 466's over its student-policy sheet;
- *   2. failing that, the lecture shell's answer — GEO 103's recitation points
- *      at the lecture's syllabus, and its own `syllabus_policy` file is the
- *      discussion-section guide, which is not the same document;
+ *   2. failing that, the PARENT shell's answer, followed up the chain — GEO
+ *      103's recitation points at the lecture's syllabus, and its own
+ *      `syllabus_policy` file is the discussion-section guide, which is not the
+ *      same document. CR-10: the parent is `courses.parent_course_id`, not a
+ *      guess from the shape of the id. The old rule assumed the parent was the
+ *      same prefix with `.lecture` on the end, so a shell whose parent happens
+ *      to be called anything else was cut off from its syllabus entirely;
  *   3. failing that, this course's sole `syllabus_policy` file, if it has
  *      exactly one. With two candidates and no name match we choose nothing
  *      rather than guess which is the syllabus.
@@ -664,12 +662,27 @@ export function resolveSyllabusFiles(
     if (match) byName.set(course.id, match);
   }
 
+  const byId = new Map(courses.map((course) => [course.id, course]));
   const resolved = new Map(byName);
+
+  /** The nearest ancestor with a named syllabus file, if any. */
+  function inheritedFrom(course: CourseSyllabusRow): BbFileRow | undefined {
+    const seen = new Set<string>([course.id]);
+    let parentId = course.parent_course_id;
+    while (parentId !== null && !seen.has(parentId)) {
+      const match = byName.get(parentId);
+      if (match) return match;
+      seen.add(parentId);
+      parentId = byId.get(parentId)?.parent_course_id ?? null;
+    }
+    // `seen` also stops a cycle in the data taking the screen down.
+    return undefined;
+  }
+
   for (const course of courses) {
     if (resolved.has(course.id)) continue;
 
-    const lecture = lectureShellFor(course.id);
-    const inherited = lecture ? byName.get(lecture) : undefined;
+    const inherited = inheritedFrom(course);
     if (inherited) {
       resolved.set(course.id, inherited);
       continue;
