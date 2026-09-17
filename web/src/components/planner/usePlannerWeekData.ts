@@ -26,6 +26,7 @@ import {
   type PlacedWorkItems,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
+import { buildSlotHeights, weekSlotWeights } from '@/lib/planner-rows';
 import { toMeetingPatterns, useMeetings, useSessionsForWeek } from '@/lib/queries.planner';
 import {
   placePlannerEvents,
@@ -42,18 +43,16 @@ import { usePlannerEventsWindow } from '@/lib/queries.plannerEvents';
  * A meeting carries the due items that fall inside it — same course, same day,
  * inside its wall-clock window — so they render as chips in the class rather
  * than as blocks overlapping it.
+ *
+ * `weight` is how much vertical room the block asks of the rows it covers
+ * (P-planner-2). One for an ordinary block; a class asks for one more per
+ * nested chip, because those stack inside it rather than beside it.
  */
-export type GridBlock =
-  | {
-      kind: 'meeting';
-      key: string;
-      top: number;
-      height: number;
-      meeting: PlacedMeeting;
-      nested: PlacedItem<WorkItem>[];
-    }
-  | { kind: 'item'; key: string; top: number; height: number; item: PlacedItem<WorkItem> }
-  | { kind: 'event'; key: string; top: number; height: number; segment: PlacedEventSegment };
+export type GridBlock = { key: string; top: number; height: number; weight: number } & (
+  | { kind: 'meeting'; meeting: PlacedMeeting; nested: PlacedItem<WorkItem>[] }
+  | { kind: 'item'; item: PlacedItem<WorkItem> }
+  | { kind: 'event'; segment: PlacedEventSegment }
+);
 
 /** What the all-day band holds for one day: undated items, untimed meetings. */
 export interface BandDay {
@@ -73,6 +72,12 @@ export interface PlannerWeekData {
   eventCount: number;
   /** One lane-assigned block list per day column, Monday → Sunday. */
   blocksByDay: (GridBlock & LaneSpan)[][];
+  /**
+   * One height per half-hour row, in pixels — the week's, not a day's, because
+   * the seven columns share their rows with the gutter (P-planner-2). Every
+   * position on the grid goes through this table via `slotToPx`.
+   */
+  slotHeights: number[];
   /** One band cell per day column, Monday → Sunday. */
   bandByDay: BandDay[];
   /** The Events band: all-day planner events per day column, Monday → Sunday. */
@@ -97,18 +102,26 @@ function buildBlocks(
   for (const meeting of meetings) {
     if (meeting.startMinute === null) continue;
     const box = slotBox(meeting.startMinute, meeting.endMinute);
+    const chips = nested.get(meeting.key) ?? [];
     byDay[meeting.dayIndex].push({
       kind: 'meeting',
       key: meeting.key,
       ...box,
+      weight: 1 + chips.length,
       meeting,
-      nested: nested.get(meeting.key) ?? [],
+      nested: chips,
     });
   }
   for (const placed of timed) {
     if (placed.minute === null) continue;
     const box = slotBox(placed.minute, null);
-    byDay[placed.dayIndex].push({ kind: 'item', key: placed.key, ...box, item: placed });
+    byDay[placed.dayIndex].push({
+      kind: 'item',
+      key: placed.key,
+      ...box,
+      weight: 1,
+      item: placed,
+    });
   }
   for (const segment of segments) {
     byDay[segment.dayIndex].push({
@@ -116,6 +129,7 @@ function buildBlocks(
       key: `event:${segment.key}`,
       top: segment.top,
       height: segment.height,
+      weight: 1,
       segment,
     });
   }
@@ -172,6 +186,11 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
     return buildBlocks(placedMeetings, standalone, nested, placedEvents.timed, view.days.length);
   }, [placedMeetings, placedItems, placedEvents, view.days.length]);
 
+  const slotHeights = useMemo(
+    () => buildSlotHeights(weekSlotWeights(blocksByDay)),
+    [blocksByDay],
+  );
+
   const eventBandByDay = useMemo(
     () =>
       view.days.map((day) => placedEvents.allDay.filter((placed) => placed.dayIndex === day.index)),
@@ -189,6 +208,7 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
     placedEvents,
     eventCount: renderedEventCount(placedEvents),
     blocksByDay,
+    slotHeights,
     bandByDay,
     eventBandByDay,
     loading:
