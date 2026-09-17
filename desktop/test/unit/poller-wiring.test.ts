@@ -100,17 +100,30 @@ afterEach(async () => {
   delete (globalThis as Host).__bb2dashTest;
 });
 
-function start(window: BrowserWindow | null = fakeWindow()) {
+function start(window: BrowserWindow | null = fakeWindow(), rest: RestGet = restStub()) {
   return startPoller({
     userDataDir: dir,
     appUrl: APP_URL,
     config: { pollIntervalMinutes: 15, dueReminderTime: '18:00' },
     getSession: async () => SESSION,
-    createRest: () => restStub(),
+    createRest: () => rest,
     getWindow: () => window,
     env: { BB2DASH_TEST: '1' },
     log: { info: () => undefined, warn: () => undefined, error: () => undefined },
   });
+}
+
+/** A `RestGet` that counts how many ticks have reached R1. */
+function countingRest(): { get: RestGet; ticks: () => number } {
+  let ticks = 0;
+  const inner = restStub();
+  return {
+    ticks: () => ticks,
+    get: async <T>(relation: string, query: string, validate: (r: unknown) => T) => {
+      if (relation === 'v_sync_status') ticks += 1;
+      return inner(relation, query, validate);
+    },
+  };
 }
 
 describe('startPoller', () => {
@@ -154,16 +167,23 @@ describe('startPoller', () => {
   });
 
   it('a resume event and a focus event each drive a tick', async () => {
-    const handle = start();
+    // Counting the reads rather than diffing the watermark file: two ticks in the same
+    // millisecond write byte-identical JSON, which made a file-diff assertion flaky.
+    const rest = countingRest();
+    const handle = start(fakeWindow(), rest.get);
+    // The launch tick finds no watermark, writes a first-launch one and reads nothing —
+    // that file appearing is how we know it is over.
     await vi.waitFor(() => readFile(join(dir, WATERMARK_FILENAME), 'utf8'));
-    const before = await readFile(join(dir, WATERMARK_FILENAME), 'utf8');
+    expect(rest.ticks()).toBe(0);
 
+    // Sequentially, with a wait between: ticks never overlap, so firing both at once would
+    // have one dropped as busy and prove only that one of the two paths works.
     powerHandlers['resume']?.[0]?.();
+    await vi.waitFor(() => expect(rest.ticks()).toBe(1));
+
     focusHandlers[0]?.();
-    // Both paths are fire-and-forget; the watermark advancing is the observable effect.
-    await vi.waitFor(async () => {
-      expect(await readFile(join(dir, WATERMARK_FILENAME), 'utf8')).not.toBe(before);
-    });
+    await vi.waitFor(() => expect(rest.ticks()).toBe(2));
+
     handle.stop();
   });
 
