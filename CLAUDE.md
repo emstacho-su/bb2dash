@@ -33,7 +33,13 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
 ## Project facts
 
 * Facts live in `assignments`; Stack's planner state lives in `assignment_progress` /
-  `reading_progress` and is **never overwritten by syncs**.
+  `reading_progress` and is **never overwritten by syncs** — one sanctioned exception (Phase 12b):
+  a newly posted or changed Blackboard score advances `assignment_progress.status` to `graded`,
+  forward-only, never from excused or DNF. Status values and labels live in
+  `web/src/lib/progress-status.ts`.
+* Grades show one deterministic figure, "graded so far" (`web/src/lib/graded-so-far.ts`), computed
+  only from mirrored Blackboard scores, `grade_components` and column links; what it leaves out is
+  named under it. No what-if, no projections.
 * Blackboard ingest runs inside a logged-in Blackboard Ultra tab (`ingest/bb_crawler.js`)
   → `bb_raw` → SQL transforms populate typed tables. See `PHASE2_FINDINGS.md` and the
   ingest cadence runbook.
