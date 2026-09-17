@@ -80,7 +80,7 @@ cd desktop
 
 npm run build      # tsc -> dist/{core,main,preload}
 npm run typecheck  # tsc --noEmit over src + test + playwright.config.ts
-npm test           # vitest, test/unit
+npm test           # vitest over test/unit, with coverage thresholds enforced
 npm run test:e2e   # builds, then Playwright-for-Electron over test/e2e
 npm start          # builds, then runs the shell from source
 npm run pack       # builds, then electron-builder --dir
