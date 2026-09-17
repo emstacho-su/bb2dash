@@ -45,6 +45,9 @@ export default defineConfig({
         'src/lib/queries.grades.ts',
         'src/lib/queries.submissions.ts',
         'src/lib/planner-week.ts',
+        // Phase 12b: the variable row geometry (P-planner-2), driven by
+        // test/planner-rows.test.ts.
+        'src/lib/planner-rows.ts',
         'src/lib/queries.planner.ts',
         'src/lib/queries.announcements.ts',
         'src/lib/planner-zone.ts',

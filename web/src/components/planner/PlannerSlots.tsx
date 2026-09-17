@@ -23,6 +23,7 @@ import {
   type PlannerDay,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
+import { slotToPx } from '@/lib/planner-rows';
 import type { PlacedAllDayEvent } from '@/lib/planner-events-grid';
 import { EventChip, type EventActions } from './PlannerEventBlock';
 import styles from './PlannerWeek.module.css';
@@ -67,12 +68,15 @@ function dayLabel(day: PlannerDay): string {
 export function DaySlots({
   day,
   dayCount,
+  heights,
   active,
   onActivate,
   actions,
 }: {
   day: PlannerDay;
   dayCount: number;
+  /** The week's per-row heights — a slot button is as tall as its own row. */
+  heights: readonly number[];
   active: SlotPosition;
   onActivate: (position: SlotPosition) => void;
   actions: EventActions;
@@ -93,6 +97,10 @@ export function DaySlots({
       {Array.from({ length: PLANNER_SLOT_COUNT }, (_, slot) => {
         const startMinute = PLANNER_START_MINUTE + slot * PLANNER_SLOT_MINUTES;
         const isActive = active.dayIndex === day.index && active.slot === slot;
+        // A row is no longer a fixed 24px (P-planner-2), so a slot is placed
+        // and sized off the same map the blocks use. That is what keeps a
+        // click below a grown hour creating an event at the hour it looks like.
+        const topPx = slotToPx(slot, heights);
         return (
           <button
             key={slot}
@@ -102,7 +110,10 @@ export function DaySlots({
             data-slot-day={day.index}
             tabIndex={isActive ? 0 : -1}
             aria-label={`New event, ${dayLabel(day)}, ${formatClock(startMinute)}`}
-            style={{ ['--slot' as string]: String(slot) }}
+            style={{
+              ['--top-px' as string]: `${topPx}px`,
+              ['--height-px' as string]: `${slotToPx(slot + 1, heights) - topPx}px`,
+            }}
             onFocus={() => {
               if (!isActive) onActivate({ dayIndex: day.index, slot });
             }}
