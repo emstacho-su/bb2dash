@@ -32,6 +32,8 @@ export function recordedEvents(): readonly RecordedEvent[] {
 export interface TestHookHandlers {
   /** Run one poller tick, as the tray's *Check now* does. */
   readonly tick: () => Promise<void>;
+  /** Fire a tray menu item by label: Playwright cannot click a tray icon. */
+  readonly clickTrayItem: (label: string) => void;
 }
 
 export function installTestHook(handlers: TestHookHandlers): void {
@@ -40,6 +42,7 @@ export function installTestHook(handlers: TestHookHandlers): void {
     value: Object.freeze({
       recorded: (): readonly RecordedEvent[] => recordedEvents(),
       tick: (): Promise<void> => handlers.tick(),
+      clickTrayItem: (label: string): void => handlers.clickTrayItem(label),
     }),
     configurable: false,
     enumerable: false,
