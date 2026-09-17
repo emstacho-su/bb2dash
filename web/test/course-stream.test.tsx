@@ -94,8 +94,62 @@ describe('StreamRow — assignments', () => {
       meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
     });
     expect(screen.getByText('Due')).toBeInTheDocument();
-    expect(screen.getByText(/not started/)).toBeInTheDocument();
+    expect(screen.getByText(/not opened/)).toBeInTheDocument();
     expect(screen.queryByText(/pts/)).toBeNull();
+  });
+
+  /* -----------------------------------------------------------------------
+   * F-1 (S-1 / P-grades-7) — found on the PM's browser walk.
+   *
+   * The post line built its status label by replacing underscores, so the
+   * Stream read "not started" and "missed" while Home, the tracker, the popout
+   * and the planner chip all read "not opened" and "DNF" for the same item.
+   * It is the last place in web/src that spelled a planner status for itself.
+   * -------------------------------------------------------------------- */
+
+  it.each([
+    ['not_started', 'not opened'],
+    ['in_progress', 'in progress'],
+    ['submitted', 'submitted'],
+    ['graded', 'graded'],
+    ['excused', 'excused'],
+    ['missed', 'DNF'],
+  ])('reads %s as "%s", the same as every other screen', (status, label) => {
+    renderRow({
+      post_kind: 'assignment_due',
+      ref_kind: 'assignment',
+      meta: { due_on: '2026-09-18', status, points_possible: null, type: null },
+    });
+    expect(screen.getByText(new RegExp(label))).toBeInTheDocument();
+  });
+
+  it('never prints the raw enum', () => {
+    const { container } = renderRow({
+      post_kind: 'assignment_due',
+      ref_kind: 'assignment',
+      meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
+    });
+    expect(container.textContent).not.toContain('not started');
+    expect(container.textContent).not.toContain('not_started');
+  });
+
+  it('folds a retired value the way the rest of the app does', () => {
+    // Until migration 078 runs, rows still hold `waived` / `planned`.
+    renderRow({
+      post_kind: 'assignment_due',
+      ref_kind: 'assignment',
+      meta: { due_on: '2026-09-18', status: 'waived', points_possible: null, type: null },
+    });
+    expect(screen.getByText(/excused/)).toBeInTheDocument();
+  });
+
+  it('spells an unrecognised value rather than swallowing it', () => {
+    renderRow({
+      post_kind: 'assignment_due',
+      ref_kind: 'assignment',
+      meta: { due_on: '2026-09-18', status: 'from_the_future', points_possible: null, type: null },
+    });
+    expect(screen.getByText(/from the future/)).toBeInTheDocument();
   });
 
   it('marks the row with its kind so the four are distinguishable', () => {

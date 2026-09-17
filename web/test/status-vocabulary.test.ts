@@ -76,6 +76,9 @@ describe('the status vocabulary lives in one file', () => {
       'components/tracker/StatusSelect.tsx',
       'components/popout/AssignmentPopout.tsx',
       'app/(app)/course/[id]/classwork/CourseScreen.tsx',
+      // F-1: the course Stream was the one screen this list had missed, and it
+      // was spelling its own labels the whole time.
+      'app/(app)/course/[id]/stream/CourseStream.tsx',
       'lib/queries.today.ts',
     ]) {
       expect(importers, `${screen} must read the shared vocabulary`).toContain(screen);
@@ -99,6 +102,30 @@ describe('the status vocabulary lives in one file', () => {
         RETIRED.some((value) => new RegExp(`['"]${value}['"]`).test(text)),
       )
       .map(({ path }) => path);
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * F-1, found on the PM's browser walk. The scan above asks whether a file
+   * IMPORTS the vocabulary; the Stream did not, and nothing noticed, because
+   * `status.replace(/_/g, ' ')` looks like ordinary formatting rather than a
+   * label map. It is one: it is a screen deciding for itself what a status is
+   * called. That is the shape to forbid, not the list of files to enumerate.
+   */
+  it('lets no screen spell a status for itself', () => {
+    // Checked per occurrence, not per file: `session.kind.replace(/_/g, ' ')`
+    // and `assignment.type.replace(...)` are fine and live in the same files.
+    const offenders: string[] = [];
+    for (const { path, text } of files) {
+      for (const match of text.matchAll(/(.{0,60})\.replace\(\s*\/_\/g/g)) {
+        const before = match[1];
+        if (!/status/i.test(before)) continue;
+        // A fallback for a value the enum does not carry is fine — but only
+        // once statusLabel() has been asked, which is what `?? x.replace` is.
+        if (/statusLabel\(/i.test(before)) continue;
+        offenders.push(`${path}: ${before.trim()}.replace(/_/g`);
+      }
+    }
     expect(offenders).toEqual([]);
   });
 

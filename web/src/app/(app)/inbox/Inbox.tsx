@@ -7,8 +7,9 @@
  * anything it cannot decide, and this screen is the only place those rows get
  * answered. The app owns four columns on the row — `state`, `resolved_at`,
  * `resolution`, `resolution_note` — and nothing else. `applied_at` belongs to
- * the transform, so an answered row honestly reads "answered, applies on next
- * sync" until the next run folds it in.
+ * the transform, so an answered row reads "answered, applies on next sync"
+ * until the next run folds it in — and "answered · recorded only" (F-4) when
+ * the transform will never act on that kind of answer at all.
  *
  * Controls per kind, frozen in docs/planning/62_PHASE9_sync_loop.md:
  *   conflict                     Accept Blackboard / Keep mine
@@ -30,13 +31,13 @@ import {
   ATTENTION_KIND_LABEL,
   INBOX_APPLY_HELP,
   NOTE_MAX_LENGTH,
+  appliesAutomatically,
   describeDetails,
   fieldPhrase,
   fieldValueText,
   freshnessLine,
   groupByKind,
   isAssignmentRef,
-  isAwaitingApply,
   keyPhrase,
   outcomeText,
   relativeTime,
@@ -303,16 +304,23 @@ function Outcome({ item, action }: { item: AttentionItem; action: OutcomeAction 
   return <p className={styles.outcome}>{outcomeText(item, action)}</p>;
 }
 
+/**
+ * What an answered row says about itself.
+ *
+ * F-4: "applies on next sync" is a promise, and it used to be made to every
+ * answered row — including the kinds `apply_resolutions()` skips, which will
+ * carry that chip for the rest of the term without anything ever happening.
+ * `appliesAutomatically()` is the same predicate the sentence under each button
+ * uses, so the two halves of a row can never disagree.
+ */
 function StateChip({ item }: { item: AttentionItem }) {
   if (item.state === 'open') return null;
-  if (isAwaitingApply(item)) {
-    return <span className={tokens.tagOutline}>answered, applies on next sync</span>;
+  if (item.state === 'dismissed') return <span className={tokens.tagNeutral}>dismissed</span>;
+  if (item.applied_at !== null) return <span className={tokens.tagNeutral}>applied</span>;
+  if (!appliesAutomatically(item)) {
+    return <span className={tokens.tagNeutral}>answered · recorded only</span>;
   }
-  return (
-    <span className={tokens.tagNeutral}>
-      {item.state === 'dismissed' ? 'dismissed' : 'applied'}
-    </span>
-  );
+  return <span className={tokens.tagOutline}>answered, applies on next sync</span>;
 }
 
 export function InboxRow({

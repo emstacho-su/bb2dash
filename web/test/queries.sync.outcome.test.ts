@@ -25,10 +25,12 @@ import {
   RECORDED_ONLY,
   fieldPhrase,
   fieldValueText,
+  appliesAutomatically,
   describeDetails,
   isAssignmentRef,
   keyPhrase,
   outcomeApplies,
+  resolvedAction,
   outcomeText,
   type AttentionItem,
   type AttentionKind,
@@ -106,6 +108,45 @@ describe('fieldValueText — New York, and never a made-up clock', () => {
   it('prints an unparseable timestamp as itself, not as "Invalid Date"', () => {
     expect(fieldValueText('due_at', 'sometime next week')).toBe('sometime next week');
   });
+
+  /* -----------------------------------------------------------------------
+   * F-3 (P-inbox-3), found on the PM's browser walk.
+   *
+   * An out-of-term conflict printed "Tue, Sep 20, 11:06 AM" for a date that is
+   * really in 2022. The year IS the finding on those rows — it is the whole
+   * reason the transform flagged them — and leaving it off makes a four-year-old
+   * value read as this term's.
+   * -------------------------------------------------------------------- */
+
+  const NOW = new Date('2026-09-17T12:00:00Z');
+
+  it('prints the year when it is not the current one', () => {
+    expect(fieldValueText('due_at', '2022-09-21T03:06:00Z', NOW)).toBe(
+      'Tue, Sep 20, 2022, 11:06 PM',
+    );
+    expect(fieldValueText('due_date', '2022-09-20', NOW)).toBe('Tue, Sep 20, 2022');
+  });
+
+  it('leaves the year off when it is the current one', () => {
+    expect(fieldValueText('due_at', '2026-09-25T03:59:00Z', NOW)).toBe('Thu, Sep 24, 11:59 PM');
+    expect(fieldValueText('due_date', '2026-09-24', NOW)).toBe('Thu, Sep 24');
+  });
+
+  it('prints a future year too — "different" is not "older"', () => {
+    expect(fieldValueText('due_date', '2027-01-04', NOW)).toBe('Mon, Jan 4, 2027');
+  });
+
+  it('decides the year in New York, not in UTC', () => {
+    // 2027-01-01T04:00Z is still 11:00 PM on 2026-12-31 in New York, so this is
+    // the CURRENT year and carries no year label.
+    expect(fieldValueText('due_at', '2027-01-01T04:00:00Z', NOW)).toBe('Thu, Dec 31, 11:00 PM');
+  });
+
+  it('compares against the reader’s year, not a hard-coded one', () => {
+    const later = new Date('2027-03-01T12:00:00Z');
+    expect(fieldValueText('due_date', '2026-09-24', later)).toBe('Thu, Sep 24, 2026');
+    expect(fieldValueText('due_date', '2027-09-24', later)).toBe('Fri, Sep 24');
+  });
 });
 
 describe('outcomeApplies — mirrors apply_resolutions()', () => {
@@ -146,14 +187,27 @@ describe('outcomeApplies — mirrors apply_resolutions()', () => {
 });
 
 describe('outcomeText — a sentence per kind and field', () => {
+  const NOW = new Date('2026-09-17T12:00:00Z');
+
   it('names the field and the date "Accept Blackboard" would write', () => {
-    expect(outcomeText(makeItem(), 'accept_blackboard')).toBe(
+    expect(outcomeText(makeItem(), 'accept_blackboard', NOW)).toBe(
       'Sets this assignment’s due date to Thu, Sep 24, 11:59 PM.',
     );
   });
 
+  it('carries the year into the sentence on an out-of-term row (F-3)', () => {
+    const stale = makeItem({
+      from_value: '2022-09-21T03:06:00Z',
+      to_value: '2022-09-28T03:06:00Z',
+    });
+    expect(outcomeText(stale, 'accept_blackboard', NOW)).toBe(
+      'Sets this assignment’s due date to Tue, Sep 27, 2022, 11:06 PM.',
+    );
+    expect(outcomeText(stale, 'keep_mine', NOW)).toContain('Tue, Sep 20, 2022, 11:06 PM');
+  });
+
   it('names the value "Keep mine" would keep, and why it stops the asking', () => {
-    expect(outcomeText(makeItem(), 'keep_mine')).toBe(
+    expect(outcomeText(makeItem(), 'keep_mine', NOW)).toBe(
       'Keeps this assignment’s due date at Wed, Sep 23, 11:59 PM and marks it confirmed, ' +
         'so the next sync stops asking.',
     );
@@ -161,7 +215,7 @@ describe('outcomeText — a sentence per kind and field', () => {
 
   it('says what a points conflict changes, in points', () => {
     const points = makeItem({ field: 'points_possible', from_value: 10, to_value: 25 });
-    expect(outcomeText(points, 'accept_blackboard')).toBe(
+    expect(outcomeText(points, 'accept_blackboard', NOW)).toBe(
       'Sets this assignment’s points possible to 25.',
     );
   });
@@ -174,13 +228,13 @@ describe('outcomeText — a sentence per kind and field', () => {
   });
 
   it('says it clears the field when Blackboard shows nothing', () => {
-    expect(outcomeText(makeItem({ to_value: null }), 'accept_blackboard')).toBe(
+    expect(outcomeText(makeItem({ to_value: null }), 'accept_blackboard', NOW)).toBe(
       'Clears this assignment’s due date, because that is what Blackboard shows.',
     );
   });
 
   it('falls back honestly when we hold no value of our own to keep', () => {
-    expect(outcomeText(makeItem({ from_value: null }), 'keep_mine')).toBe(
+    expect(outcomeText(makeItem({ from_value: null }), 'keep_mine', NOW)).toBe(
       'Keeps what bb2dash already has and marks it confirmed, so the next sync stops asking.',
     );
   });
@@ -355,5 +409,104 @@ describe('keyPhrase', () => {
   it('keeps the four writable columns on their nicer phrasing', () => {
     expect(keyPhrase('points_possible')).toBe('points possible');
     expect(keyPhrase('bb_url')).toBe('Blackboard link');
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * F-4 — reading an ANSWERED row back: what was pressed, and will it apply?
+ *
+ * The chip promised "applies on next sync" to every answered row. For a
+ * staff-name conflict or a course-level confirm that promise can never be kept,
+ * and the row carries the chip for the rest of the term. These two predicates
+ * are what the chip reads, and they go through `outcomeApplies` — the same one
+ * the sentence under each button uses — so the two halves of a row cannot
+ * disagree.
+ * ------------------------------------------------------------------------ */
+
+describe('resolvedAction — which control produced this answer', () => {
+  it('reads back the two conflict answers', () => {
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: { accept: 'blackboard' } })))
+      .toBe('accept_blackboard');
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: { accept: 'keep' } })))
+      .toBe('keep_mine');
+  });
+
+  it('reads back a typed answer', () => {
+    expect(
+      resolvedAction(
+        makeItem({ state: 'resolved', resolution: { value: '2026-09-24', value_type: 'date' } }),
+      ),
+    ).toBe('save');
+  });
+
+  it('reads back a dismissal, by state or by resolution', () => {
+    expect(resolvedAction(makeItem({ state: 'dismissed', resolution: { dismissed: true } })))
+      .toBe('dismiss');
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: { dismissed: true } })))
+      .toBe('dismiss');
+  });
+
+  it('says nothing about a shape it does not recognise', () => {
+    // PM sessions answered 15 rows directly in SQL; those need not match.
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: null }))).toBeNull();
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: {} }))).toBeNull();
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: { accept: 'maybe' } })))
+      .toBeNull();
+  });
+});
+
+describe('appliesAutomatically — the promise the chip makes', () => {
+  const resolved = { state: 'resolved' as const, applied_at: null };
+
+  it('is true for an assignment due-date conflict answered either way', () => {
+    expect(appliesAutomatically(makeItem({ ...resolved, resolution: { accept: 'blackboard' } })))
+      .toBe(true);
+    expect(appliesAutomatically(makeItem({ ...resolved, resolution: { accept: 'keep' } })))
+      .toBe(true);
+  });
+
+  it('is false for the kinds apply_resolutions() skips', () => {
+    const skipped = [
+      { entity: 'course_staff', ref: 'staff:_34252_1', field: 'name' },
+      { entity: 'course', ref: 'course_field:academic_advisor', field: null },
+      { entity: 'course', ref: 'GEO.103.recitation', field: 'grading_scheme' },
+      { ref: 'column:_3569973_1', field: 'bb_column_id' },
+    ];
+    for (const overrides of skipped) {
+      expect(
+        appliesAutomatically(
+          makeItem({ ...resolved, ...overrides, resolution: { accept: 'blackboard' } }),
+        ),
+        JSON.stringify(overrides),
+      ).toBe(false);
+    }
+  });
+
+  it('is false for a dismissal — dismissing is the answer', () => {
+    expect(
+      appliesAutomatically(
+        makeItem({ kind: 'data_gap', state: 'dismissed', resolution: { dismissed: true } }),
+      ),
+    ).toBe(false);
+  });
+
+  it('claims nothing about an answer whose shape it cannot read', () => {
+    // Claiming less than we know is the safe direction for a promise.
+    expect(appliesAutomatically(makeItem({ ...resolved, resolution: {} }))).toBe(false);
+  });
+
+  it('agrees with the sentence under the button, row for row', () => {
+    const rows = [
+      makeItem({ ...resolved, resolution: { accept: 'blackboard' } }),
+      makeItem({ ...resolved, entity: 'course_staff', ref: 'staff:_1', resolution: { accept: 'keep' } }),
+      makeItem({ ...resolved, ref: 'column:_1_1', field: 'bb_column_id', resolution: { accept: 'blackboard' } }),
+      makeItem({ ...resolved, kind: 'missing', resolution: { value: '2026-09-24', value_type: 'date' } }),
+    ];
+    for (const row of rows) {
+      const action = resolvedAction(row);
+      if (action === null) continue;
+      const saysRecordedOnly = outcomeText(row, action) === RECORDED_ONLY;
+      expect(appliesAutomatically(row), JSON.stringify(row.ref)).toBe(!saysRecordedOnly);
+    }
   });
 });
