@@ -59,6 +59,13 @@ export const PLANNER_BLOCK_PADDING_PX = 6;
 /** However tall a block gets, a title stops wrapping here. */
 export const PLANNER_MAX_TITLE_LINES = 6;
 
+/**
+ * The chrome above the hour rows — the day heads and the two bands — measured
+ * in base rows. Only the pre-hydration placeholder uses it, and only to hold a
+ * space open; the real board is laid out by the browser, not by this number.
+ */
+export const PLANNER_CHROME_ROWS = 4;
+
 /* ---------------------------------------------------------------------------
  * What each row is asked for
  * ------------------------------------------------------------------------ */
@@ -143,6 +150,21 @@ export function buildSlotHeights(
 /** How tall the whole grid is. */
 export function gridHeightPx(heights: readonly number[]): number {
   return heights.reduce((total, height) => total + height, 0);
+}
+
+/**
+ * What the pre-hydration placeholder holds open (P-planner-7).
+ *
+ * The grid itself cannot be rendered before hydration — the server has none of
+ * the week's rows and its clock is UTC — but its *height* can be, and that is
+ * what stops the page jumping when the real board arrives a moment later. It is
+ * the base grid plus the chrome above it: exactly right on a week with no
+ * overlaps, which is most of them, and short by however much a crowded week
+ * grew. Approximate is the point; a reserved height nobody can compute exactly
+ * still beats a one-line placeholder swapping for 700 pixels of grid.
+ */
+export function reservedBoardHeightPx(slotCount: number = PLANNER_SLOT_COUNT): number {
+  return (slotCount + PLANNER_CHROME_ROWS) * PLANNER_BASE_SLOT_PX;
 }
 
 /* ---------------------------------------------------------------------------

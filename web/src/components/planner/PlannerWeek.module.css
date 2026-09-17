@@ -59,6 +59,25 @@
   margin-left: var(--space-2);
 }
 
+/* The pre-hydration pager (P-planner-7): the pager's shape, drawn dim, with no
+   link behind it. It exists so the header does not change size when the real
+   one arrives. */
+.pageGhost {
+  composes: btnGhost from '@/styles/tokens.module.css';
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* The board's space, held open while the browser works out what goes in it.
+   Height comes from `reservedBoardHeightPx`, inline, so one number describes
+   it and the test can read it back. */
+.boardReserve {
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-divider);
+  opacity: 0.6;
+}
+
 /* — the board ——————————————————————————————————————————————————————— */
 
 .board {
@@ -131,19 +150,33 @@
 }
 
 /* "Assignments" is wider than the time gutter (62px, 48px on a narrow screen)
-   and clipped to "GNMENTS". That band is the tall one, so its label runs
-   bottom-to-top, centred on the band, and fits whatever the gutter's width. The
-   short Events band keeps a horizontal label, which fits. */
-.bandLabelVertical {
-  justify-content: center;
-  writing-mode: vertical-rl;
-  rotate: 180deg;
+   and would be clipped to "GNMENTS". Phase 11b rotated it to run bottom-to-top,
+   which needs the band to be ~86px *tall* instead — and a band cell is 29px
+   with one chip in it, shorter on an empty week (P-planner-7). Rotating traded
+   one clipping for another.
+
+   So the word is not drawn at all. The chevron is what the gutter shows, the
+   per-day counts say what is behind it, and "Assignments" stays the cell's
+   accessible name and its tooltip. Nothing here can be clipped by a band that
+   happens to be short, because nothing here asks the band for room.
+
+   The short Events band keeps its horizontal label, which fits. */
+.bandToggleLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* The band's gutter cell is the toggle (P-planner-1): the whole cell, so it is
    a real target rather than a 10px chevron. */
 .bandToggle {
   composes: bandLabel;
+  /* Anchors the visually-hidden label below, which is absolute. */
+  position: relative;
   flex-direction: column;
   justify-content: center;
   gap: var(--space-1);
@@ -409,7 +442,12 @@
   min-height: 0;
 }
 
+/* `position: relative` earns its place (P-planner-7): the chip's own course
+   code is visually hidden with `position: absolute`, and its parent is
+   `display: contents` — so without an anchor here it resolves against the class
+   block two levels up, which is not where it belongs. */
 .nestedChip {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

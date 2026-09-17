@@ -158,13 +158,16 @@ function AllDayBand({
         type="button"
         className={styles.bandToggle}
         aria-expanded={band.expanded}
-        title={band.expanded ? 'Hide assignments' : 'Show assignments'}
+        title={band.expanded ? 'Hide the Assignments band' : 'Show the Assignments band'}
         onClick={band.toggle}
       >
         <span className={styles.bandChevron} aria-hidden="true">
           {band.expanded ? '▾' : '▸'}
         </span>
-        <span className={styles.bandLabelVertical}>Assignments</span>
+        {/* The word is the cell's name, not its contents: it does not fit the
+            gutter horizontally and rotating it made the band's height the thing
+            that clipped it (P-planner-7). */}
+        <span className={styles.bandToggleLabel}>Assignments</span>
       </button>
 
       {isEmpty ? (

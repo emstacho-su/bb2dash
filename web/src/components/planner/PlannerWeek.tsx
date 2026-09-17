@@ -54,6 +54,7 @@ import {
   writeStoredBand,
   type BandState,
 } from './band-preference';
+import { reservedBoardHeightPx } from '@/lib/planner-rows';
 import { WeekBoard, type BandToggle } from './PlannerBoard';
 import { PlannerEventForm } from './PlannerEventForm';
 import type { SlotPosition } from './PlannerSlots';
@@ -78,8 +79,44 @@ const LOADING_WEEK = 'Loading the week…';
  */
 export function PlannerWeek() {
   const hydrated = useHydrated();
-  if (!hydrated) return <p className={styles.state}>{LOADING_WEEK}</p>;
+  if (!hydrated) return <PlannerWeekSkeleton />;
   return <PlannerWeekScreen />;
+}
+
+/**
+ * What stands in for the grid until the browser has it (P-planner-7).
+ *
+ * It used to be one line of text, and the 700-pixel section that replaced it a
+ * moment later shoved the page down. This is the same section, the same header
+ * row and the same board-shaped space — so the grid arriving changes what is on
+ * screen, not where it is.
+ *
+ * It says nothing the server cannot know. No week label, no counts, no
+ * now-line: those come from the reader's clock and the restored query cache,
+ * and rendering the server's guess at them is the hydration error this file's
+ * other test exists to catch. The pager is drawn, not wired: its links need a
+ * week anchor, so they are inert chrome and hidden from screen readers, and the
+ * section says `aria-busy` while that is true.
+ */
+function PlannerWeekSkeleton() {
+  return (
+    <section className={styles.section} aria-label="Week grid" aria-busy="true">
+      <div className={styles.head}>
+        <h2 className={styles.h2}>{LOADING_WEEK}</h2>
+        <span className={styles.pager} data-planner-pager="true" aria-hidden="true">
+          <span className={styles.pageGhost}>◂</span>
+          <span className={styles.pageGhost}>▸</span>
+          <span className={styles.pageGhost}>Today</span>
+        </span>
+      </div>
+      <div
+        className={styles.boardReserve}
+        data-planner-reserve="true"
+        aria-hidden="true"
+        style={{ height: `${reservedBoardHeightPx()}px` }}
+      />
+    </section>
+  );
 }
 
 function PlannerWeekScreen() {

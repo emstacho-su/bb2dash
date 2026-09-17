@@ -65,6 +65,39 @@ describe('P-planner-4 — titles, topics and rooms wrap', () => {
   });
 });
 
+describe('P-planner-7 — the band label cannot be clipped by its own band', () => {
+  /**
+   * The label was rotated to fit "ASSIGNMENTS" into a 62px gutter, which traded
+   * one clipping problem for another: rotated, it needs ~86px of *height*, and
+   * a band cell is 29px with one chip in it and shorter still on an empty week.
+   * Nothing on the grid may depend on the band happening to be tall.
+   */
+  it('does not rotate the label into the band height', () => {
+    const source = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(source).not.toMatch(/writing-mode/);
+    expect(source).not.toMatch(/rotate:/);
+  });
+
+  it('keeps the word for a screen reader without asking for room on screen', () => {
+    const body = ruleBody('.bandToggleLabel');
+    expect(body).toMatch(/clip-path:\s*inset\(50%\)/);
+    expect(body).toMatch(/width:\s*1px/);
+  });
+});
+
+describe('P-planner-7 — an absolutely positioned chip child has an anchor', () => {
+  /**
+   * `.nestedChip > .blockHead` is `display: contents`, so it generates no box:
+   * the visually-hidden `.blockCode` inside it resolves against the nearest
+   * *positioned* ancestor. With none on the chip that was the class block, two
+   * levels up. The chip anchors it itself.
+   */
+  it('positions the nested chip, because its hidden course code is absolute', () => {
+    expect(ruleBody('.nestedChip')).toMatch(/position:\s*relative/);
+    expect(ruleBody('.nestedChip .blockCode')).toMatch(/position:\s*absolute/);
+  });
+});
+
 describe('P-planner-2 — one row height table, read from the component', () => {
   it.each(['.block', '.slot', '.nowLine', '.hourRule'])(
     '%s is positioned in pixels the component resolved, not slots × a constant',
