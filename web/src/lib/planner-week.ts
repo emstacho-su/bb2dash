@@ -110,11 +110,51 @@ export function minutesFromTime(time: string | null | undefined): number | null 
 
 /** 945 → '3:45 PM'. */
 export function formatClock(minute: number): string {
-  const total = ((Math.round(minute) % 1440) + 1440) % 1440;
+  return `${clockFace(minute)} ${meridiemOf(minute)}`;
+}
+
+/** '3:45' — the clock without its meridiem. */
+function clockFace(minute: number): string {
+  const total = normaliseMinute(minute);
   const hours24 = Math.floor(total / 60);
-  const minutes = total % 60;
   const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
-  return `${hours12}:${String(minutes).padStart(2, '0')} ${hours24 < 12 ? 'AM' : 'PM'}`;
+  return `${hours12}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** 'AM' before noon, 'PM' from noon. Midnight is AM; noon is PM. */
+function meridiemOf(minute: number): 'AM' | 'PM' {
+  return normaliseMinute(minute) < 720 ? 'AM' : 'PM';
+}
+
+function normaliseMinute(minute: number): number {
+  return ((Math.round(minute) % 1440) + 1440) % 1440;
+}
+
+/**
+ * A start and an end on one line: '10:35 – 11:30 AM', '11:40 AM – 12:35 PM'.
+ *
+ * Google Calendar's rule, and the reason for it (F-2, the PM's browser walk):
+ * "10:35 AM – 11:30 AM" did not fit a 150px column and the block clipped it to
+ * "10:35 AM – 11:30 A". When both ends fall in the same half of the day the
+ * first meridiem says nothing the second does not, so it goes — and the reader
+ * gets the end time back. When they differ, both stay: that is precisely the
+ * range where dropping one would mislead.
+ *
+ * No end, or an end on the same minute, is one clock — a range that does not go
+ * anywhere is not a range. An end *earlier* than the start is not bad data
+ * here: an event running 11 PM to 1 AM reaches this with 1380 and 60, and it
+ * reads '11:00 PM – 1:00 AM'. Callers that treat a backwards end as broken
+ * (`expandMeetings` does) check it themselves before asking.
+ */
+export function formatClockRange(startMinute: number, endMinute: number | null): string {
+  if (endMinute === null || normaliseMinute(endMinute) === normaliseMinute(startMinute)) {
+    return formatClock(startMinute);
+  }
+  const startMeridiem = meridiemOf(startMinute);
+  if (startMeridiem === meridiemOf(endMinute)) {
+    return `${clockFace(startMinute)} – ${clockFace(endMinute)} ${startMeridiem}`;
+  }
+  return `${formatClock(startMinute)} – ${formatClock(endMinute)}`;
 }
 
 /** A wall-clock reading: the calendar day it fell on, and the minute within it. */
@@ -396,9 +436,12 @@ export function expandMeetings(
         timeText:
           startMinute === null
             ? TIME_NOT_RECORDED
-            : endMinute !== null && endMinute > startMinute
-              ? `${formatClock(startMinute)} – ${formatClock(endMinute)}`
-              : formatClock(startMinute),
+            : formatClockRange(
+                startMinute,
+                // A class cannot end before it starts; that is bad data, not a
+                // meeting running past midnight, so it reads as a start alone.
+                endMinute !== null && endMinute > startMinute ? endMinute : null,
+              ),
         room: meeting.location?.trim() || ROOM_NOT_RECORDED,
         topic: topics.get(`${meeting.course_id}|${day.iso}`) ?? null,
       });

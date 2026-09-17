@@ -84,6 +84,21 @@ export function itemCardProps(
  * Meetings
  * ------------------------------------------------------------------------ */
 
+/**
+ * What a class block says on hover.
+ *
+ * Since F-2 a block draws a whole number of lines and clips the rest, so a
+ * 55-minute class has room for its code, its time and its room, and its topic
+ * is simply not drawn. Half a line was worse, but a topic that exists and is
+ * nowhere on screen would be worse still — the tooltip is where it goes, and it
+ * carries every line whether or not the block had room for it.
+ */
+export function meetingTooltip(meeting: PlacedMeeting): string {
+  return [meeting.courseCode, meeting.timeText, meeting.room, meeting.topic]
+    .filter((part): part is string => typeof part === 'string' && part !== '')
+    .join(' · ');
+}
+
 export function MeetingContent({
   meeting,
   nested,

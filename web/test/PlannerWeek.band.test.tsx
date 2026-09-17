@@ -18,6 +18,17 @@ import { PLANNER_BAND_STORAGE_KEY } from '@/components/planner/band-preference';
  * Mocks — the same read-only stub the other planner suites use.
  * ------------------------------------------------------------------------ */
 
+/**
+ * Eight renders of the whole planner, each firing four queries, in one of a
+ * hundred-odd jsdom environments running at once. The work is real and small;
+ * what is not predictable is when this file gets the CPU. Vitest's 5s default
+ * killed the first test of the file — the one that also pays the import — at
+ * 5.18s on a loaded machine. A planner test that fails only when the machine
+ * is busy tells nobody anything, so the budget is raised rather than the
+ * assertion loosened.
+ */
+vi.setConfig({ testTimeout: 20_000 });
+
 const db = vi.hoisted(() => ({ rows: {} as Record<string, unknown[]> }));
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -131,12 +142,12 @@ function bandToggle(): HTMLElement {
  * that fails only when the machine is busy is worse than no test.
  */
 async function weekLoaded(due = '0 classes · 3 due'): Promise<void> {
-  await screen.findByText(due, undefined, { timeout: 5000 });
+  await screen.findByText(due, undefined, { timeout: 15_000 });
 }
 
 /** Waits for the band's control to exist, whatever state it is in. */
 async function bandReady(): Promise<HTMLElement> {
-  return screen.findByRole('button', { name: /assignments/i }, { timeout: 5000 });
+  return screen.findByRole('button', { name: /assignments/i }, { timeout: 15_000 });
 }
 
 function bandCell(iso: string): HTMLElement {
@@ -204,7 +215,7 @@ describe('the Assignments band — the toggle', () => {
 
     fireEvent.click(bandToggle());
 
-    expect(await screen.findByText('Chapter 4', undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('Chapter 4', undefined, { timeout: 15_000 })).toBeInTheDocument();
     expect(screen.getByText('Quiz 3')).toBeInTheDocument();
     expect(screen.getByText('Chapter 9')).toBeInTheDocument();
     expect(bandToggle()).toHaveAttribute('aria-expanded', 'true');
@@ -222,14 +233,14 @@ describe('the Assignments band — the toggle', () => {
     first.unmount();
 
     renderPlanner();
-    expect(await screen.findByText('Chapter 4', undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('Chapter 4', undefined, { timeout: 15_000 })).toBeInTheDocument();
     expect(bandToggle()).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('closes again, and remembers that too', async () => {
     window.localStorage.setItem(PLANNER_BAND_STORAGE_KEY, 'open');
     renderPlanner();
-    await screen.findByText('Chapter 4', undefined, { timeout: 5000 });
+    await screen.findByText('Chapter 4', undefined, { timeout: 15_000 });
 
     fireEvent.click(bandToggle());
 
@@ -248,7 +259,7 @@ describe('the Assignments band — the toggle', () => {
     renderPlanner();
     expect(await bandReady()).toHaveAttribute('aria-expanded', 'false');
     expect(() => fireEvent.click(bandToggle())).not.toThrow();
-    expect(await screen.findByText('Chapter 4', undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('Chapter 4', undefined, { timeout: 15_000 })).toBeInTheDocument();
   });
 });
 
@@ -259,7 +270,7 @@ describe('the Assignments band — an empty week', () => {
 
     // Closed by default, and the week's own state is not the band's contents.
     expect(
-      await screen.findByText('Nothing scheduled this week.', undefined, { timeout: 5000 }),
+      await screen.findByText('Nothing scheduled this week.', undefined, { timeout: 15_000 }),
     ).toBeInTheDocument();
     fireEvent.click(bandToggle());
     expect(screen.getByText('Nothing scheduled this week.')).toBeInTheDocument();

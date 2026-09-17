@@ -240,6 +240,96 @@ after W-32 lands and confirm it lists exactly the six.
 6. A long assignment title on a tall block should **wrap**, not ellipsise mid-word; a
    half-hour event should still be one line.
 
+## Round 2 — F-2 (P-planner-4), from the PM's browser walk
+
+Everything else in PL-1..PL-3 passed the walk, including the click below a grown hour.
+`80d_PHASE12B_WALK.md` finding **F-2** had two halves, both visible in `walk-12b/planner.png`.
+
+| gate | round 1 | round 2 |
+|---|---|---|
+| `npm test` | 92 files, 1421 | **103 files, 1656** (the phase branch merged in) |
+| `npm run typecheck` / `build` | clean | clean |
+
+RED first: `npx vitest run test/planner-week.test.ts test/planner-rows.test.ts
+test/planner-css.test.ts test/PlannerWeek.rows.test.tsx` → **15 failed**
+(`formatClockRange is not a function`, `blockContentPx is not a function`,
+`no rule for ".blockBody"`, no `flex-wrap`, no `line-height: 14px`). Then green.
+
+### (a) "GEO 103 10:35 AM – 11:30 A" — the end time clipped off the line
+
+Two changes, because either alone leaves a case standing.
+
+* **`formatClockRange(startMinute, endMinute)`** in `planner-week.ts` — Google's rule: when
+  both ends share a meridiem it is said once. `10:35 AM – 11:30 AM` → **`10:35 – 11:30 AM`**,
+  three of the four characters that were being lost. Both are kept when they differ
+  (`11:40 AM – 12:35 PM`), which is exactly the range where dropping one would mislead.
+  Noon and midnight are the cases a naive hour comparison gets wrong and both are tested.
+  An end *earlier* than the start is not bad data here — an 11 PM–1 AM event arrives as
+  `(1380, 60)` and reads `11:00 PM – 1:00 AM`; `expandMeetings` checks a backwards end
+  itself before asking, because a class that ends before it starts *is* bad data.
+  Used by `expandMeetings` and `planner-events-grid.timedSegments` — the only two places
+  a range was being assembled by hand.
+* **`.blockHead { flex-wrap: wrap; gap: 0 4px }`** — shortening is not enough for
+  `11:40 AM – 12:35 PM` (19 characters), so the head is now allowed to wrap and the range
+  drops onto its own line instead of being eaten by the block's `overflow: hidden`.
+  Nothing in the head can be clipped horizontally any more: it either fits or it wraps.
+  `row-gap: 0` keeps that second line on the 14px pitch (b) counts in.
+
+Nine existing expectations moved to the new format across four suites
+(`3:45 PM – 5:05 PM` → `3:45 – 5:05 PM`, and so on); `11:00 PM – 1:00 AM` did not.
+
+### (b) "Trendy Today, Toxic" cut through the middle of the letters
+
+A block's height is whatever its hours make it and is almost never a multiple of a line, so
+clipping at the block's own edge cuts a line in half. Three changes:
+
+* **`.block { line-height: 14px }`**, not `1.25`. This arithmetic counts lines, and
+  1.25 × 11px = 13.75px does not divide a text area into whole ones — three of them end
+  0.75px past a 42px area, and that sliver is the half-drawn line. 14px on 11px text is the
+  same 1.27 to the eye. `PLANNER_BLOCK_LINE_PX` is now exact rather than a rounding.
+* **`blockContentPx(heightPx)`** in `planner-rows.ts` — the most whole lines that fit, and
+  not one pixel more. Property-tested: always a multiple of the line, never more than the
+  block has to give, never shrinks as the block grows, at least one line, and it agrees with
+  `titleLines`.
+* **`.blockBody`**, a new wrapper inside the block with `height: var(--content-px)`,
+  `overflow: hidden`, `gap: 0`. The block keeps its full height, so its coloured box still
+  spans its real hours and still meets the hour rules; only the *text* stops early, at the
+  line boundary. The clip then lands exactly where the next line begins, so every line drawn
+  is drawn completely and the one that does not fit is not drawn at all — whatever wrapped
+  above it. Six `>` selectors were re-rooted onto `.blockBody`, including the compact event
+  block's row layout.
+
+A due card is drawn at `.itemBlock`'s 48px minimum however short its span, so its text is
+counted from **that** (`PLANNER_DUE_CARD_MIN_PX`), not from its one slot: 42px, three lines,
+which is head + title + status.
+
+**The trade this makes, in the open.** The 55-minute GEO 103 block has room for two lines —
+code/time and room — so its topic is now not drawn at all rather than half drawn. A topic
+that exists and is nowhere would be worse than the bug, so the class block gained a tooltip
+carrying every line whether or not there was room for it:
+`GEO 103 · 10:35 – 11:30 AM · Watson Theater · Trendy Today, Toxic Tomorrow`
+(`meetingTooltip`, asserted in `PlannerWeek.rows.test.tsx`). A class has no popout, so its
+`title` was free; an item's own `Open …` title still wins.
+
+### Also in round 2
+
+`PlannerWeek.band.test.tsx` flaked once in the full run — the first test of the file, which
+also pays the module import, at 5.18s against vitest's 5s default, on a machine running
+103 jsdom environments. The work is real and small; what is not predictable is when the file
+gets the CPU. The budget is raised (`vi.setConfig({ testTimeout: 20_000 })`, 15s on the
+`findBy` waits) rather than the assertion loosened, and the reason is written above it. Full
+suite run twice after, green both times.
+
+### What the PM should check on the next walk
+
+1. Friday's `GEO 103 11:40 AM – 12:35 PM` — the one range that still cannot be shortened.
+   It should now **wrap onto a second line**, right-aligned, not clip.
+2. The Monday/Wednesday GEO blocks: two lines, both whole. Hover one and the topic should
+   be in the tooltip.
+3. `IST 466 2:00 – 3:20 PM` on Tuesday had a two-line topic that just fitted at 64px; with
+   whole-line clipping it gets four lines of 14px in a 58px text area — so the last line
+   may now be dropped rather than squeezed. Worth a look to confirm that reads better.
+
 ## What T-1 and T-2 will need from this geometry
 
 * **T-1 (recurring, P-planner-6).** Occurrences are ordinary `planner_events` rows, so they

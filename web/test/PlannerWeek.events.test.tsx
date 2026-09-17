@@ -301,7 +301,7 @@ describe('planner events on the grid', () => {
     // at the base height on a week with nothing overlapping (P-planner-2).
     expect(block.style.getPropertyValue('--top-px')).toBe('192px');
     expect(block.style.getPropertyValue('--height-px')).toBe('48px');
-    expect(within(block).getByText('12:00 PM – 1:00 PM')).toBeInTheDocument();
+    expect(within(block).getByText('12:00 – 1:00 PM')).toBeInTheDocument();
     expect(within(block).getByText('09:00 PDT')).toBeInTheDocument();
   });
 
@@ -331,7 +331,7 @@ describe('planner events on the grid', () => {
     expect(within(block).getByText('IST 323')).toBeInTheDocument();
     // Visually hidden in the compact line, still read out.
     expect(within(block).getByText('Appointment slot')).toBeInTheDocument();
-    expect(within(block).getByText('2:00 PM – 2:30 PM')).toBeInTheDocument();
+    expect(within(block).getByText('2:00 – 2:30 PM')).toBeInTheDocument();
   });
 
   it('shows no zone chip for a New York event', async () => {

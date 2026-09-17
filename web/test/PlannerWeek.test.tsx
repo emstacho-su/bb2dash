@@ -302,7 +302,7 @@ describe('PlannerWeek — meeting blocks', () => {
     const wednesday = dayColumn('2026-09-16');
 
     expect(await within(wednesday).findByText('IST 323')).toBeInTheDocument();
-    expect(within(wednesday).getByText('3:45 PM – 5:05 PM')).toBeInTheDocument();
+    expect(within(wednesday).getByText('3:45 – 5:05 PM')).toBeInTheDocument();
     expect(within(wednesday).getByText('Hinds Hall 010')).toBeInTheDocument();
     expect(within(wednesday).getByText('Risk assessment')).toBeInTheDocument();
   });
