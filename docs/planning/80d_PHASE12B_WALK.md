@@ -63,3 +63,14 @@ his list; no before-screenshots were taken (the list is the record).
   toward nothing"** — today's sync brought the Quiz 2 column and nothing links it to the Quizzes
   part yet. One click on the row's "Counts toward…" fixes the figure (it would read 83.3 %).
 * IST 323's 14.8 / 15 agrees with Blackboard's own 14.8 running total.
+
+## Pass 3 — 2026-09-17, integrated branch at `67bf250` (all rounds merged)
+
+| row | check | result |
+|---|---|---|
+| X-3 | the two IST.323 final-project events reach Google | **pass** — `calendar_events` rows `IST.323/fp-proposal` and `IST.323/fp-log-final` are `live`, pushed 2026-09-17 16:17 UTC, no error; the relabelled ethics practice row was re-pushed 17:01 UTC after 079 |
+| suites | integrated tree | web typecheck + build clean, `npm run lint` exits 0 (27 warnings, inventoried in the config), vitest 1582 / 93 files; desktop 549 / 28; mcp-server 88 / 5 |
+| gates | `/code-review main high` | 10 findings: 8 fixed in round 3 (CR-1, 2, 3, 5, 7, 8, 9, 10), CR-4 = the docs in this PR, CR-6 checked on prod (no action) |
+| gates | `/security-review` | no finding at or above 8 / 10 |
+
+**Not re-walked in a browser after round 3** (unit-tested only): CR-1 tracker re-anchor after a free scroll, CR-5 the smaller row growth, CR-7 the explicit grade-read error on Home cards, F-2 block text. **Not checked at all:** X-2 on the unpacked Electron build (unit + e2e green; no packed-exe smoke this phase — zero renderer changes reach it except through the deployed web app). These are on Stack's acceptance walk.
