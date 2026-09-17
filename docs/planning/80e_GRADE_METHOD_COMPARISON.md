@@ -49,19 +49,20 @@ there is no grade, `fail` means it disagreed about whether a grade exists at all
 | F15 IST.323 shape — normalised category, sub-parts, extra credit, an unlinked column | 96.36 % | 82.83 % | 13.5354 | 88.61 % | 7.7560 | 96.36 % | 0.0000 | 96.36 % | 0.0000 |
 | F16 IST.466 shape — a graded part whose syllabus link is unsure | 87.00 % | 88.00 % | 1.0000 | 88.00 % | 1.0000 | 85.50 % | 1.5000 | 87.00 % | 0.0000 |
 | F17 IST.471 shape — a qualitatively graded course | no grade (the course is graded qualitatively — there is no percentage) | **100.00 %** (invented) | fail | no grade (`qualitative_method`) | ok | no grade (`qualitative_method`) | ok | no grade (`qualitative_method`) | ok |
+| F18 Weighted sub-parts under an unweighted heading | 77.14 % | 77.50 % | 0.3571 | 77.14 % | 0.0000 | 77.14 % | 0.0000 | 77.14 % | 0.0000 |
 
 ## Per method
 
 | method | stated a number | mean abs error | max abs error | worst fixture | invented a grade | refused a real grade |
 |---|---|---|---|---|---|---|
-| Points ratio | 15 of 15 measurable | 4.1739 | 20.4545 | F10 | F17 | none |
-| Weighted so far | 15 of 15 measurable | 3.2363 | 20.4545 | F10 | none | none |
-| 10b engine | 12 of 15 measurable | 0.1250 | 1.5000 | F16 | none | F12, F13, F14 |
-| 10b engine, gates off | 15 of 15 measurable | 0.0000 | 0.0000 | F01 | none | none |
+| Points ratio | 16 of 16 measurable | 3.9354 | 20.4545 | F10 | F17 | none |
+| Weighted so far | 16 of 16 measurable | 3.0340 | 20.4545 | F10 | none | none |
+| 10b engine | 13 of 16 measurable | 0.1154 | 1.5000 | F16 | none | F12, F13, F14 |
+| 10b engine, gates off | 16 of 16 measurable | 0.0000 | 0.0000 | F01 | none | none |
 
 ## Where each method fails, and why
 
-**Points ratio** — mean 4.1739, max 20.4545 percentage points.
+**Points ratio** — mean 3.9354, max 20.4545 percentage points.
 
 * `F01` Weighted syllabus, one part still ungraded — read 84.29 % against 84.50 % (0.2143 off). Probe: the base case — do the three agree when nothing unusual happens?
 * `F03` Drop-lowest quiz part — read 75.00 % against 90.00 % (15.0000 off). Probe: a syllabus rule that removes a score from the arithmetic
@@ -72,8 +73,9 @@ there is no grade, `fail` means it disagreed about whether a grade exists at all
 * `F15` IST.323 shape — normalised category, sub-parts, extra credit, an unlinked column — read 82.83 % against 96.36 % (13.5354 off). Probe: raw column points against the points the syllabus gives a category
 * `F16` IST.466 shape — a graded part whose syllabus link is unsure — read 88.00 % against 87.00 % (1.0000 off). Probe: what an unconfirmed column → part link should do to the headline
 * `F17` IST.471 shape — a qualitatively graded course — printed 100.00 % where there is no grade. Probe: a course with no numeric grade at all
+* `F18` Weighted sub-parts under an unweighted heading — read 77.50 % against 77.14 % (0.3571 off). Probe: a syllabus that puts its weights one level down
 
-**Weighted so far** — mean 3.2363, max 20.4545 percentage points.
+**Weighted so far** — mean 3.0340, max 20.4545 percentage points.
 
 * `F03` Drop-lowest quiz part — read 75.00 % against 90.00 % (15.0000 off). Probe: a syllabus rule that removes a score from the arithmetic
 * `F10` Mixed point scales inside one part — read 54.55 % against 75.00 % (20.4545 off). Probe: an average of fractions against a pool of points — the sharpest split
@@ -82,7 +84,7 @@ there is no grade, `fail` means it disagreed about whether a grade exists at all
 * `F15` IST.323 shape — normalised category, sub-parts, extra credit, an unlinked column — read 88.61 % against 96.36 % (7.7560 off). Probe: raw column points against the points the syllabus gives a category
 * `F16` IST.466 shape — a graded part whose syllabus link is unsure — read 88.00 % against 87.00 % (1.0000 off). Probe: what an unconfirmed column → part link should do to the headline
 
-**10b engine** — mean 0.1250, max 1.5000 percentage points.
+**10b engine** — mean 0.1154, max 1.5000 percentage points.
 
 * `F12` ECN.304 shape — a hand-graded part nobody has scored — stated nothing where the true grade is 83.33 %. Probe: a syllabus part that will not carry a number until December
 * `F13` GEO.103 shape — two shells, two unscored attendance parts — stated nothing where the true grade is 90.00 %. Probe: a zero-point attendance column under a hand-graded part
@@ -95,7 +97,7 @@ there is no grade, `fail` means it disagreed about whether a grade exists at all
 
 **The syllabus rules are what make the difference, and only the engine has them.**
 
-* On the eight fixtures where nothing unusual happens the methods agree to within a quarter
+* On the nine fixtures where nothing unusual happens the methods agree to within four tenths
   of a point. Every gap in the table above comes from a syllabus rule the two slim methods
   cannot see: dropping a lowest quiz (`F03`, 15 points), averaging quizzes of different sizes
   instead of pooling their points (`F10`, 20.5 points), ranking exams by how well they went
@@ -106,8 +108,10 @@ there is no grade, `fail` means it disagreed about whether a grade exists at all
   mentions (`F07`, 7 points) and prints 100 % for a course that is not graded numerically at
   all (`F17`). The second is the one that decides it — a fabricated number on a screen.
 * The **weighted calculation** never invents a grade and always states one. It is the safer of
-  the two slim methods, and it is still 3.2 points out on average and 20.5 at worst.
-* The **10b engine** is within 0.13 points on average wherever it answers, and it fails in one
+  the two slim methods, and it is still 3.0 points out on average and 20.5 at worst. `F18` is
+  there because a review found it losing a whole subtree of a syllabus that weights its
+  sub-parts; it now rolls up to the outermost weighted row instead, and the fixture guards it.
+* The **10b engine** is within 0.12 points on average wherever it answers, and it fails in one
   direction only: it goes quiet. On three of the six real course shapes (`F12`, `F13`, `F14`) a
   hand-graded part carries no score yet and the whole course goes blank — which is exactly what
   the preview shows today, where no course displays a model at all. Its one wrong number (`F16`,
@@ -117,7 +121,7 @@ there is no grade, `fail` means it disagreed about whether a grade exists at all
 **What the numbers say to do.** The engine's arithmetic is the only one that tracks the
 syllabus, and its two silencing rules are the only places it is wrong. With both turned off —
 no engine code changed; the muting side-stepped in the input and the hand-graded gate through
-the engine's own ungated entry point — it reproduces all fifteen hand-derived grades exactly
+the engine's own ungated entry point — it reproduces all sixteen hand-derived grades exactly
 and never invents one. That is the last row of the table, and it is a variant of the engine,
 not a fourth candidate.
 
@@ -133,7 +137,7 @@ Read as a decision — Stack's to make, and nothing is deleted before he makes i
    the scenario table, the zeros-on-the-rest and best-case projections) still goes, per
    P-grades-3. Cost: the engine is 24 files and about 1,750 lines that have to stay.
 2. **Take the weighted calculation** if the engine's size is the objection rather than its
-   numbers. It is one file of about 240 lines with no database objects behind it, at a cost of
+   numbers. It is one file of under 300 lines with no database objects behind it, at a cost of
    roughly 3 points of accuracy and up to 20 on a course that averages work of different sizes.
    `IST.352` and `GEO.103` are such courses.
 3. **Do not take the points ratio.** It is the only method here that states a grade where none

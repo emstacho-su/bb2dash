@@ -18,7 +18,7 @@ Baseline on the branch before any of this work: **87 test files, 1342 tests, all
 | `web/src/lib/grade-so-far.ts` | the two new pure functions, `pointsRatio` and `weightedSoFar`, over one input shape (latest gradebook rows + `grade_components` + column → part links). No I/O, no clock, no mutation. |
 | `web/test/grade-method-comparison/types.ts` | the fixture shape, declared locally so the fixtures survive whatever G-1 deletes |
 | `web/test/grade-method-comparison/builders.ts` | terse fixture builders |
-| `web/test/grade-method-comparison/fixtures/01…17-*.ts` | **17 fixtures**, one file each, every one carrying its hand-written derivation as a comment |
+| `web/test/grade-method-comparison/fixtures/01…18-*.ts` | **18 fixtures**, one file each, every one carrying its hand-written derivation as a comment |
 | `web/test/grade-method-comparison/methods.ts` | the three methods behind one signature, plus one measured variant; the **only** file that imports `grade-model/` |
 | `web/test/grade-method-comparison/report.ts` | scoring and the markdown |
 | `web/test/grade-method-comparison/comparison.test.ts` | the run; writes `docs/planning/80e_GRADE_METHOD_COMPARISON.md` |
@@ -28,10 +28,10 @@ Baseline on the branch before any of this work: **87 test files, 1342 tests, all
 ```
 $ npx vitest run test/grade-method-comparison
  Test Files  1 passed (1)
-      Tests  106 passed (106)
+      Tests  112 passed (112)
 ```
 
-17 fixtures ≥ 12. Each one is asserted three ways:
+18 fixtures ≥ 12. Each one is asserted three ways:
 
 1. `%s states a truth its own written-out arithmetic reproduces` — the fixture's `derivation()`
    is the arithmetic of the comment written out in TypeScript, calling **none** of the three
@@ -57,15 +57,16 @@ $ npx vitest run test/grade-method-comparison
 | mixed point scales inside one part | F10 |
 | a rank-weighted exam part | F11 (the engine supports `rank_weighted`) |
 | one modelled on each real course's scheme shape | F12 ECN.304 · F13 GEO.103 · F14 IST.352 · F15 IST.323 · F16 IST.466 · F17 IST.471 |
+| *(added by review — see below)* | F18 weighted sub-parts under an unweighted heading |
 
 ### Headline result (full table in `80e_GRADE_METHOD_COMPARISON.md`)
 
 | method | stated a number | mean abs error | max abs error | invented a grade | refused a real grade |
 |---|---|---|---|---|---|
-| Points ratio | 15 of 15 | 4.1739 | 20.4545 (F10) | F17 | none |
-| Weighted so far | 15 of 15 | 3.2363 | 20.4545 (F10) | none | none |
-| 10b engine | 12 of 15 | 0.1250 | 1.5000 (F16) | none | F12, F13, F14 |
-| 10b engine, gates off | 15 of 15 | 0.0000 | 0.0000 | none | none |
+| Points ratio | 16 of 16 | 3.9354 | 20.4545 (F10) | F17 | none |
+| Weighted so far | 16 of 16 | 3.0340 | 20.4545 (F10) | none | none |
+| 10b engine | 13 of 16 | 0.1154 | 1.5000 (F16) | none | F12, F13, F14 |
+| 10b engine, gates off | 16 of 16 | 0.0000 | 0.0000 | none | none |
 
 The fourth row is **a variant of the third, not a fourth candidate**: the same engine with its
 two silencing rules bypassed — the unsure-link muting side-stepped by confirming the links in
@@ -92,14 +93,6 @@ No fabricated numbers: every fixture is invented data on a real *scheme shape*, 
 in its own file and asserted to be so by the suite. Nothing in `web/test/grade-method-comparison/`
 is imported by any component. `80e` is generated, deterministic (no clock, no randomness) and
 carries a "do not edit by hand" line.
-
-### Note for whoever runs G-1
-
-`ScoreHistory` must survive in every outcome (the desktop poller reads `v_gradebook_history`).
-It currently depends on three 10b modules: `grade-model-format.ts` (`HISTORY_LABEL`,
-`historyText`), `grade-model-input.ts` (`GradebookHistoryRow`) and `grade-model-view.ts`
-(`columnItemKey`, `historyByColumn`). If the engine's query layer is retired, those four
-symbols move to `queries.grades.ts` rather than being deleted with it.
 
 **Nothing has been deleted. Stack reads `80e` and picks; the PM resumes this worker with the
 pick.**
@@ -339,6 +332,44 @@ instead of painting the stale one first). RED → GREEN with a `rerender` case i
    to keep if the engine wins.
 
 ---
+
+## Review round (after the rows were committed)
+
+A review of the whole branch diff found nothing critical or high, confirmed the arithmetic of all
+17 fixtures against `80e` by hand, and raised four smaller things. Three are fixed; one is left
+for whoever owns the file.
+
+1. **`weightedSoFar` lost a whole subtree (the one that mattered).** It rolled every item up to
+   its *top-level* row and read only that row's `weight_pct`. A syllabus that hangs weighted
+   sub-parts under an unweighted heading — "Final project" with a 10 % proposal and a 30 % report
+   under it — therefore gave every graded item beneath it weight 0 on **both** sides: the figure
+   silently became the other parts alone. No fixture reached it (F15 is the only sub-part fixture
+   and it is a points scheme, so it never enters the weighted branch), which means `80e`'s
+   headline for that method was measured on a set that could not see its worst case.
+   **Fixed**: a "part" is now the outermost row that *carries* a weight, not simply a top-level
+   row, so nested weights behave exactly as before and this shape is rescued. **F18** was added
+   as the guard, and it is the one fixture whose numbers moved as a result: the old behaviour
+   read 75.00 % against a true 77.14 %. The per-method table above is the re-run.
+   A weighted scheme with no weights anywhere now says `no_weights` rather than `nothing_graded`
+   — the gap is in the rules, not in the gradebook.
+2. **"Has feedback" meant two things.** The table trimmed (`'   '` is not feedback); the popout
+   used bare truthiness. A whitespace-only feedback box would have shown no `*` on the row and an
+   empty "Feedback" panel in the popout. **Fixed**: `hasFeedback` now lives in `queries.grades.ts`
+   beside `submissionLabel`, and both sites call it. Three cases added to `SubmissionBlock.test.tsx`.
+3. **The mark's tooltip was wrong on an unlinked row** — it said "open the item to read it" where
+   there is no item to open and the words are already inline underneath. **Fixed**: the tooltip
+   follows `assignment_id`, with a case for each.
+4. **`earned` / `denominator` carried two units under one name** — points for the ratios, weight
+   units for the weighted calculation. Nothing renders them today, but a future caller printing
+   "50.7 / 60" would be inventing a points figure the gradebook does not hold. **Fixed**: the
+   result type carries `unit: 'points' | 'weight'`.
+5. **Not fixed, and deliberately.** `web/src/lib/sidebar-preference.ts:14` still says it is "the
+   one place in the app where a swallowed error is deliberate"; `grades-sections.ts` makes two.
+   That file is not W-31's, and a one-line comment edit in a shared file is not worth a merge
+   conflict with another worker. `grades-sections.ts`'s own header says "two of the few places",
+   so the pair is at least self-describing. **For the PM to sweep at integration.**
+
+After this round: typecheck, build and **1512 tests / 89 files** green.
 
 ## Honesty and scope
 

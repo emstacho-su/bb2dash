@@ -3,7 +3,8 @@
  * to probe one rule, labelled as such in its own file, and never rendered.
  *
  * F01–F11 probe one rule each; F12–F17 are modelled on the scheme shape of each
- * of Stack's six Fall 2026 courses, with invented scores.
+ * of Stack's six Fall 2026 courses, with invented scores; F18 was added after a
+ * review found a shape none of the others reached.
  */
 
 import { fixture as f01 } from './01-weighted-basic';
@@ -23,6 +24,7 @@ import { fixture as f14 } from './14-shape-ist352';
 import { fixture as f15 } from './15-shape-ist323';
 import { fixture as f16 } from './16-shape-ist466';
 import { fixture as f17 } from './17-shape-ist471';
+import { fixture as f18 } from './18-weighted-sub-parts';
 import type { ComparisonFixture } from '../types';
 
 export const FIXTURES: readonly ComparisonFixture[] = [
@@ -43,4 +45,5 @@ export const FIXTURES: readonly ComparisonFixture[] = [
   f15,
   f16,
   f17,
+  f18,
 ];

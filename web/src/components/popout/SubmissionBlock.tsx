@@ -34,6 +34,7 @@ import {
   attemptsText,
   compareSha,
   formatSeenAt,
+  hasFeedback,
   submissionLabel,
   submissionOrigin,
   useAssignmentAttempts,
@@ -194,10 +195,10 @@ export function SubmissionBlock({
 
       {/* P-grades-9: the instructor's own words, in full. React escapes them;
           `white-space: pre-wrap` keeps their line breaks. */}
-      {grade?.feedback && (
+      {hasFeedback(grade?.feedback) && (
         <div className={styles.feedback}>
           <span className={tokens.kicker}>Feedback</span>
-          <p className={styles.feedbackText}>{grade.feedback}</p>
+          <p className={styles.feedbackText}>{grade?.feedback}</p>
         </div>
       )}
 

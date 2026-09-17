@@ -219,6 +219,24 @@ describe('GradebookTable — the feedback mark (G-6)', () => {
     expect(screen.getByRole('note', { name: 'Orphan has feedback' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Feedback/ })).toBeInTheDocument();
   });
+
+  it('points the mark at the popout only when there is one to open', () => {
+    renderTable([marked]);
+    expect(screen.getByRole('note')).toHaveAttribute(
+      'title',
+      'The instructor left feedback — open the item to read it.',
+    );
+  });
+
+  it('points it at the row itself when the column opens nothing', () => {
+    renderTable([
+      makeGradebookRow({ name: 'Orphan', assignment_id: null, linked_assignments: 0, feedback: 'See me.' }),
+    ]);
+    expect(screen.getByRole('note')).toHaveAttribute(
+      'title',
+      'The instructor left feedback — it is under this row.',
+    );
+  });
 });
 
 describe('GradebookTable — the history toggle is gone (G-5)', () => {

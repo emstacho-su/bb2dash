@@ -50,6 +50,7 @@ import { itemQuery } from '@/lib/queries.popout';
 import {
   NO_VALUE,
   formatSeenAt,
+  hasFeedback,
   isItemRow,
   scoreText,
   submissionLabel,
@@ -106,11 +107,6 @@ function isPlacedAsItem(row: GradebookLatestRow, overrides: Overrides): boolean 
 
 /* -- feedback -------------------------------------------------------------- */
 
-/** Blackboard stores an untouched feedback box as `''` as readily as `null`. */
-function hasFeedback(feedback: string | null | undefined): feedback is string {
-  return typeof feedback === 'string' && feedback.trim() !== '';
-}
-
 /**
  * The mark that says an item carries the instructor's words (P-grades-10,
  * Stack's answer 6).
@@ -119,15 +115,29 @@ function hasFeedback(feedback: string | null | undefined): feedback is string {
  * is a superscript `*` — the smallest thing that reads as "there is a note
  * here". `role="note"` gives it a role, so `aria-label` is announced; without
  * one the asterisk would reach a screen reader as bare punctuation or not at
- * all. Present exactly when the feedback is non-empty.
+ * all. Present exactly when the feedback is non-empty (`hasFeedback`).
+ *
+ * `opensInPopout` is false for a column with no linked assignment: there is
+ * nothing to open, and the words are already inline under the row, so the
+ * tooltip must not send the reader looking for a popout that does not exist.
  */
-export function FeedbackMark({ itemName }: { itemName: string }) {
+export function FeedbackMark({
+  itemName,
+  opensInPopout,
+}: {
+  itemName: string;
+  opensInPopout: boolean;
+}) {
   return (
     <sup
       className={styles.feedbackMark}
       role="note"
       aria-label={`${itemName} has feedback`}
-      title="The instructor left feedback — open the item to read it."
+      title={
+        opensInPopout
+          ? 'The instructor left feedback — open the item to read it.'
+          : 'The instructor left feedback — it is under this row.'
+      }
     >
       *
     </sup>
@@ -198,7 +208,9 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
               ) : (
                 <span className={styles.itemName}>{row.name}</span>
               )}
-              {feedback && <FeedbackMark itemName={row.name} />}
+              {feedback && (
+                <FeedbackMark itemName={row.name} opensInPopout={row.assignment_id !== null} />
+              )}
             </span>
             {counted && (
               <span className={tokens.tagOutline} title="Its linked assignment has a grade component.">

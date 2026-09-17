@@ -105,8 +105,14 @@ describe('SubmissionBlock — feedback and history (G-5)', () => {
     ).toBeInTheDocument();
   });
 
-  it('says nothing about feedback when Blackboard recorded none', () => {
-    hooks.grade = stub(makeAssignmentGrade({ feedback: null }));
+  it.each([
+    ['null', null],
+    ['an empty string', ''],
+    ['whitespace only', '   \n '],
+  ])('says nothing about feedback when Blackboard recorded %s', (_why, feedback) => {
+    // Must match the table's rule exactly: a "has feedback" mark on the row
+    // beside an empty panel in the popout is worse than neither.
+    hooks.grade = stub(makeAssignmentGrade({ feedback }));
     renderBlock();
     expect(screen.queryByText('Feedback')).toBeNull();
   });

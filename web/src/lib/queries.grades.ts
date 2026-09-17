@@ -486,6 +486,19 @@ export function submissionLabel(
   };
 }
 
+/**
+ * Whether Blackboard actually recorded any feedback (Phase 12b, G-5/G-6).
+ *
+ * An untouched feedback box arrives as `''` as readily as `null`, and a box
+ * someone typed a space into arrives as `'   '`. None of the three is feedback.
+ * The rule lives here for the same reason `submissionLabel` does: the gradebook
+ * row draws a mark from it and the popout draws the text from it, and the two
+ * disagreeing would put a "has feedback" mark beside an empty panel.
+ */
+export function hasFeedback(feedback: string | null | undefined): feedback is string {
+  return typeof feedback === 'string' && feedback.trim() !== '';
+}
+
 /** The three distinct things a course's header can honestly say. */
 export type CourseGradeState = 'total' | 'no_total' | 'never_synced';
 
