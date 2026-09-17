@@ -82,7 +82,8 @@ Record the `run_id`. Report the per-course log line by line.
 is the order the authorisation rule would prefer — but it is not safe yet, and the reason is in the
 driver: `transform_tick` (migration 044) folds a **registered** run as soon as one of its `bb_raw`
 rows is more than three minutes old, with no completeness check. Register first, and a slow crawl
-(version 3 adds an attempts probe and a full-item GET per assessment) can be folded with one course
+(version 4 walks three requests per submitted column, plus a full-item GET per assessment, so it is
+slower still than version 3's single probe) can be folded with one course
 landed; `run_transform` is idempotent, so the remaining six are then dropped for good. Register-first
 becomes correct the moment the tick requires the `calendar` row for a registered run — a Phase 9
 driver change, not this phase's. Until then step 3a below is the order, and migration 039's grace
@@ -144,6 +145,11 @@ None → say "no new submission files" and go to step 5. Otherwise, for each row
    navigation and take the file from Playwright's `waitForEvent('download')`, then `saveAs` into the
    scratch directory. A 401/403 means the session died mid-sync — stop, report it, and leave the row
    alone; the next sync picks it up because `storage_path` is still null.
+   Since crawler v4 (Phase 12b) `source_url` is Blackboard's own durable
+   `bbcswebdav/xid-<n>_1` link, read from the attempt detail's `file.permanentUrl` — the same kind
+   of URL step 4 already pulls, and it behaves the same way. Before v4 it was a REST download route
+   the crawler built, which no student session could open; that is why this step has never had a
+   row to pull.
 2. **sha256** the saved file, and record its byte count and Content-Type.
 3. **Upload** to Storage at `bb_file_relpath(id)` — which since migration 052 carries an
    `attempt-<digits>/` segment for a pulled-back file, so it can never land on the key of a file
@@ -167,10 +173,15 @@ update bb_files
        local_path    = 'course context/' || bb_file_relpath(id),
        bytes         = $bytes,
        sha256        = $sha256,
-       mime_type     = $mime,
+       mime_type     = coalesce(mime_type, $mime),
        downloaded_at = now()
  where id = $id and storage_path is null;
 ```
+
+`coalesce(mime_type, $mime)`, not `$mime`: since migration 085 the catalogue row already carries
+the mime type Blackboard declared for the submission (`file.mimeType`), and a bbcswebdav download
+often answers `application/octet-stream`. Keep what Blackboard said; use the observed type only
+when the row has none, which is what a pre-v4 row looks like.
 
 Rules that apply to this step and no other:
 
