@@ -15,7 +15,12 @@
 
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { asOfFor, gradedSoFar, type GradedSoFarResult } from '@/lib/graded-so-far';
+import {
+  asOfFor,
+  gradedSoFar,
+  gradedSoFarCardFigure,
+  type GradedSoFarResult,
+} from '@/lib/graded-so-far';
 import type { ModelInput } from '@/lib/grade-model';
 import { FIXTURES } from './grade-fixtures/fixtures';
 import type { ComparisonFixture } from './grade-fixtures/types';
@@ -210,4 +215,54 @@ describe('determinism', () => {
       expect(modelOf(fixture)).toEqual(before);
     },
   );
+});
+
+/*
+ * G-2 / P-home-10, Stack's answer 12: the same figure reaches Home's course
+ * card, already formatted. W-32's card takes `{ label, value, absence, asOf,
+ * display }` and does no arithmetic, so exactly one of `value` and `absence` is
+ * ever filled — that is what keeps a course with no grade off the card as a
+ * zero.
+ */
+describe('the Home card figure', () => {
+  it('formats a real figure, rounding once', () => {
+    const figure = figureFor('F01');
+    expect(gradedSoFarCardFigure(figure)).toEqual({
+      label: 'Graded so far',
+      value: '84.5%',
+      absence: null,
+      asOf: 'Sep 16, 1:14 PM',
+      display: 'B',
+    });
+  });
+
+  it('gives an absence, never a zero, when nothing is graded', () => {
+    expect(gradedSoFarCardFigure(figureFor('F09'))).toEqual({
+      label: 'Graded so far',
+      value: null,
+      absence: 'nothing graded yet',
+      asOf: null,
+      display: null,
+    });
+  });
+
+  it('says a qualitative course is graded qualitatively', () => {
+    expect(gradedSoFarCardFigure(figureFor('F17')).absence).toBe('graded qualitatively');
+  });
+
+  it.each([
+    ['no_scheme', 'no grading rules yet'],
+    ['unknown_method', 'grading rules not readable'],
+    ['unknown_aggregation', 'grading rules not readable'],
+  ] as const)('has a short absence for %s', (reason, text) => {
+    expect(gradedSoFarCardFigure({ state: 'not_computable', reason }).absence).toBe(text);
+  });
+
+  it('fills exactly one of value and absence, for every fixture', () => {
+    for (const fixture of FIXTURES) {
+      const card = gradedSoFarCardFigure(gradedSoFar(modelOf(fixture)));
+      expect([card.value, card.absence].filter((v) => v !== null)).toHaveLength(1);
+      expect(card.label).toBe('Graded so far');
+    }
+  });
 });

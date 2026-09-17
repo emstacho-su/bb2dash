@@ -36,6 +36,11 @@ import { evaluateModel, standingOf } from './grade-model/project';
 import { isCounted, realScoreOf, unlinkedScoredKeys } from './grade-model/items';
 import type { ItemInput, ModelInput, SchemeInput } from './grade-model/types';
 import type { ComputableMethod } from './grade-model/tree';
+// A pure date formatter that happens to live in the 10a query module, the same
+// one Home's card uses — so both sides print an "as of" identically. The
+// Supabase client it sits beside is only reached inside a queryFn, never at
+// import, so this stays free of I/O.
+import { formatSeenAt } from './queries.grades';
 
 /** Why no figure can be stated at all. `nothing_graded` is its own state. */
 export type FigureReason =
@@ -127,6 +132,67 @@ function linksConfirmed(input: ModelInput): ModelInput {
     items: input.items.map((item) =>
       item.componentId === null ? item : { ...item, linkConfidence: 'confirmed' as const },
     ),
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * The Home course card's slot (G-2 / P-home-10, Stack's answer 12)
+ * ------------------------------------------------------------------------ */
+
+/** One decimal, rounded once, at the edge — never anywhere upstream. */
+export function percentText(percent: number): string {
+  return `${percent.toFixed(1)}%`;
+}
+
+/** The label the card prints beside the figure. */
+export const CARD_FIGURE_LABEL = 'Graded so far';
+
+/**
+ * Why there is no figure, in the few words a course card has room for. The
+ * long-form sentences live in `GradedSoFarFigure.tsx`, which has the space.
+ */
+export const CARD_ABSENCE_TEXT: Readonly<Record<FigureReason | 'nothing_graded', string>> = {
+  nothing_graded: 'nothing graded yet',
+  qualitative_method: 'graded qualitatively',
+  no_scheme: 'no grading rules yet',
+  unknown_method: 'grading rules not readable',
+  unknown_aggregation: 'grading rules not readable',
+};
+
+/**
+ * One already-formatted figure for Home's course card.
+ *
+ * The card's prop contract (`web/src/app/(app)/CourseGradeFigure.tsx`, W-32)
+ * carries no numerator, denominator or method: the card must not be in a
+ * position to do arithmetic, so everything arrives as text. Exactly one of
+ * `value` and `absence` is filled, never both and never neither — which is what
+ * keeps a course with no grade from rendering a zero.
+ */
+export interface GradedSoFarCardFigure {
+  readonly label: string;
+  readonly value: string | null;
+  readonly absence: string | null;
+  readonly asOf: string | null;
+  readonly display: string | null;
+}
+
+export function gradedSoFarCardFigure(result: GradedSoFarResult): GradedSoFarCardFigure {
+  if (result.state === 'figure') {
+    return {
+      label: CARD_FIGURE_LABEL,
+      value: percentText(result.percent),
+      absence: null,
+      asOf: result.asOf === null ? null : formatSeenAt(result.asOf),
+      display: result.letter,
+    };
+  }
+  const reason = result.state === 'nothing_graded' ? 'nothing_graded' : result.reason;
+  return {
+    label: CARD_FIGURE_LABEL,
+    value: null,
+    absence: CARD_ABSENCE_TEXT[reason],
+    asOf: null,
+    display: null,
   };
 }
 

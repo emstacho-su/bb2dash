@@ -26,13 +26,19 @@
  */
 
 import { formatSeenAt, scoreText } from '@/lib/queries.grades';
-import type { GradedSoFarResult as Figure, FigureReason } from '@/lib/graded-so-far';
+import {
+  CARD_FIGURE_LABEL,
+  percentText,
+  type FigureReason,
+  type GradedSoFarResult as Figure,
+} from '@/lib/graded-so-far';
 import tokens from '@/styles/tokens.module.css';
 import styles from './GradedSoFarFigure.module.css';
 
 /* -- the strings, in one place so the tests and the docs agree -------------- */
 
-export const FIGURE_LABEL = 'Graded so far';
+/** The same label the Home card prints, from the same constant. */
+export const FIGURE_LABEL = CARD_FIGURE_LABEL;
 export const NOTHING_GRADED_TEXT = 'Nothing that counts toward the grade has been graded yet.';
 export const LEFT_OUT_LABEL = 'Not counted yet:';
 export const UNLINKED_LABEL = 'Counts toward nothing:';
@@ -45,11 +51,6 @@ export const NOT_COMPUTABLE_TEXT: Readonly<Record<FigureReason, string>> = {
   unknown_method: 'A grading rule here is one bb2dash cannot read.',
   unknown_aggregation: 'A grading rule here is one bb2dash cannot read.',
 };
-
-/** One decimal, rounded once, here — never anywhere upstream. */
-export function percentText(percent: number): string {
-  return `${percent.toFixed(1)}%`;
-}
 
 /* -- Blackboard's number, beside ours and never merged with it ------------- */
 
