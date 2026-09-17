@@ -33,7 +33,7 @@
  * and `error` and the counts step aside until then.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import {
@@ -200,6 +200,8 @@ export function UpcomingTracker({
   /** True while the effect below is moving the scroller, so its own scroll
    *  events are not mistaken for the reader dragging the strip. */
   const programmatic = useRef(false);
+  /** The timer that releases that guard, so it can be cleared and cleaned up. */
+  const releaseTimer = useRef<number | null>(null);
 
   /**
    * Anchor and selection are self-managed as `null` = "follow today", not as a
@@ -214,6 +216,18 @@ export function UpcomingTracker({
   const [ownSelected, setOwnSelected] = useState<string | null>(null);
   /** Where the reader has scrolled to, when that is not the anchor. */
   const [scrolledFirst, setScrolledFirst] = useState<string | null>(null);
+  /**
+   * CR-1: a nonce bumped by every action that asks the strip to go back to its
+   * anchor, so the scroll happens even when the anchor DOES NOT CHANGE.
+   *
+   * Keying the effect on `strip.anchor` alone had a hole exactly where the
+   * reader is most likely to be: open on today, free-scroll a fortnight right,
+   * press ◂. `pageStripAnchor` returns today, which is already the anchor, so
+   * nothing in the deps moved and the effect never fired — the label, the
+   * counters and the arrows all snapped back to today while the strip stayed
+   * fourteen days ahead.
+   */
+  const [scrollRequest, setScrollRequest] = useState(0);
 
   const range = useMemo(
     () =>
@@ -238,24 +252,70 @@ export function UpcomingTracker({
   const columnsInView = strip.columnsInView;
 
   /**
-   * Scroll the anchor's column to the left edge whenever the anchor moves.
-   * `clientWidth` is 0 under jsdom and before layout, which is why the guard is
-   * a width check rather than a mount flag: no width, nothing to scroll, and
-   * the render is still correct.
+   * Put one day's column at the left edge.
+   *
+   * A column's pixel width is a function of the CONTAINER width, so an offset
+   * is only ever correct for the width it was computed at — which is why this
+   * takes a day rather than a pixel value, and why the resize observer below
+   * re-runs it rather than preserving `scrollLeft`.
+   *
+   * `clientWidth` is 0 under jsdom and before first layout, hence a width check
+   * rather than a mount flag: no width, nothing to scroll, and the render is
+   * still correct.
+   */
+  const scrollToDay = useCallback(
+    (iso: string) => {
+      const el = scrollerRef.current;
+      if (!el) return;
+      const columnWidth = el.clientWidth / columnsInView;
+      if (!Number.isFinite(columnWidth) || columnWidth <= 0) return;
+      programmatic.current = true;
+      el.scrollLeft = Math.max(0, daysBetween(range.firstIso, iso)) * columnWidth;
+      if (releaseTimer.current !== null) window.clearTimeout(releaseTimer.current);
+      releaseTimer.current = window.setTimeout(() => {
+        programmatic.current = false;
+        releaseTimer.current = null;
+      }, 0);
+    },
+    [range.firstIso, columnsInView],
+  );
+
+  /** Scroll to the anchor when it moves — or when something asks again. */
+  useEffect(() => {
+    setScrolledFirst(null);
+    scrollToDay(strip.anchor);
+  }, [strip.anchor, scrollRequest, scrollToDay]);
+
+  /**
+   * The day at the left edge, for the resize observer. Held in a ref so the
+   * observer is created once per `scrollToDay`, not on every scroll event.
+   */
+  const viewFirstRef = useRef(view.firstIso);
+  useEffect(() => {
+    viewFirstRef.current = view.firstIso;
+  });
+
+  /**
+   * A narrower container means narrower columns, so the offset that put Sep 24
+   * at the left edge now points somewhere else. Recompute it for whatever day
+   * is currently at the edge — the reader's own scroll position is kept, not
+   * just the anchor's.
    */
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
-    setScrolledFirst(null);
-    const columnWidth = el.clientWidth / columnsInView;
-    if (!Number.isFinite(columnWidth) || columnWidth <= 0) return;
-    programmatic.current = true;
-    el.scrollLeft = daysBetween(range.firstIso, strip.anchor) * columnWidth;
-    const timer = window.setTimeout(() => {
-      programmatic.current = false;
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [strip.anchor, range.firstIso, columnsInView]);
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => scrollToDay(viewFirstRef.current));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scrollToDay]);
+
+  /** A pending "programmatic scroll finished" timer must not outlive the tree. */
+  useEffect(
+    () => () => {
+      if (releaseTimer.current !== null) window.clearTimeout(releaseTimer.current);
+    },
+    [],
+  );
 
   /** Free scrolling moves the view and the arrows — never the saved anchor. */
   function handleScroll(event: React.UIEvent<HTMLDivElement>) {
@@ -288,6 +348,10 @@ export function UpcomingTracker({
     );
     if (next === view.firstIso) return;
     setScrolledFirst(null);
+    // CR-1: ask for the scroll explicitly. `next` is often a day the anchor is
+    // ALREADY on — pressing ◂ after a free scroll is the common case — so the
+    // effect cannot be left to notice a change that never happens.
+    setScrollRequest((count) => count + 1);
     if (anchor === undefined) setOwnAnchor(next);
     onAnchorChange?.(next);
 
