@@ -155,6 +155,22 @@ describe('running the engine from a screen', () => {
     expect(states['IST.471']).toEqual({ figure, error: null });
   });
 
+  it('gives each course its own rows, in order, over a list big enough to notice', () => {
+    engine.graded.mockClear();
+    engine.graded.mockReturnValue({ state: 'nothing_graded' });
+    const ids = ['IST.466', 'IST.471', 'IST.323'];
+    // Interleaved, so a grouping that trusted input order would be caught.
+    const items = Array.from({ length: 300 }, (_, n) =>
+      makeItem({ scheme_course_id: ids[n % 3], item_key: `col:k${n}` }),
+    );
+    runner.courseFigureStates(ids, { schemes: {}, items }, null);
+
+    const passed = engine.graded.mock.calls.map((call) => call[0] as { items: { key: string }[] });
+    expect(passed.map((input) => input.items.length)).toEqual([100, 100, 100]);
+    expect(passed[0].items.slice(0, 3).map((i) => i.key)).toEqual(['col:k0', 'col:k3', 'col:k6']);
+    expect(passed[1].items.slice(0, 3).map((i) => i.key)).toEqual(['col:k1', 'col:k4', 'col:k7']);
+  });
+
   it('gives a course with no rows of its own an empty input rather than another course’s', () => {
     engine.graded.mockClear();
     engine.graded.mockReturnValue({ state: 'nothing_graded' });
