@@ -95,7 +95,10 @@ describe('resolveSidebar', () => {
 
 describe('SIDEBAR_BOOT_SCRIPT', () => {
   function boot() {
-    // eslint-disable-next-line no-eval
+    // Indirect eval on purpose: the boot script is a string the document runs
+    // before hydration, and running it the same way is the only honest test of
+    // it. (`no-eval` is not in eslint-config-next, so there is no directive to
+    // disable here — ESLint reports an unused one as a problem of its own.)
     (0, eval)(SIDEBAR_BOOT_SCRIPT);
     return document.documentElement.getAttribute('data-sidebar');
   }
