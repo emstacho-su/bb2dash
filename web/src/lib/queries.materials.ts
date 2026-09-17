@@ -434,13 +434,43 @@ export interface ReadingRoute {
   kind: ReadingRouteKind;
   /** Short action label ("Open", "Open ↗", "How to access", "No route"). */
   action: string;
+  /**
+   * The tag beside the row (P-materials-2, label half).
+   *
+   * `kind` alone cannot carry this: 'instruction' covers two quite different
+   * situations, and lumping them under one "Off-platform" tag is what Stack
+   * reported. A chapter of a bought textbook is genuinely off-platform and
+   * always will be. A reading that IS on Blackboard and simply has not been
+   * pulled into the library yet is a gap on our side, and saying "Off-platform"
+   * about it is wrong — 20 of the 41 rows so tagged were GEO.103 readings
+   * sitting on Blackboard the whole time.
+   */
+  tag: string;
   /** Honest one-line explanation of what this route is (and isn't). */
   reason: string;
   /** For 'library': the stored file to sign at click time. */
   file?: BbFileRow;
   /** For 'external' / some 'instruction': the URL to open. */
   href?: string;
+  /**
+   * M-3: the course's syllabus, for an off-platform reading whose only honest
+   * answer is "the syllabus says how to get this". Opened through the ordinary
+   * `FileOpenAction` ladder, so it is stored bytes, a source link or an honest
+   * dead end like every other file.
+   */
+  syllabus?: BbFileRow;
 }
+
+/** The four tags a reading row can carry. Asserted by the tests. */
+export const READING_TAG = {
+  library: 'In library',
+  external: 'External',
+  /** On Blackboard, not yet pulled into the library — a gap on our side. */
+  notPulled: 'On Blackboard — not pulled yet',
+  /** A bought textbook or publisher e-book. Genuinely not ours to hold. */
+  offPlatform: 'Off-platform',
+  none: 'No route',
+} as const;
 
 /** Heuristic: does a citation look like a course textbook / publisher e-book? */
 function looksLikeEbook(citation: string | null): boolean {
@@ -463,16 +493,25 @@ export function resolveReadingRoute(
   reading: Pick<ReadingRow, 'url' | 'on_blackboard' | 'citation'>,
   file: BbFileRow | undefined,
   blackboardUrl: string | null,
+  /** M-3: the course's own syllabus file, when one has been resolved. */
+  syllabus?: BbFileRow,
 ): ReadingRoute {
   // (a) Stored file with bytes → signed-URL open.
   if (file?.storage_path) {
-    return { kind: 'library', action: 'Open', reason: 'Stored in the library — opens a signed link.', file };
+    return {
+      kind: 'library',
+      action: 'Open',
+      tag: READING_TAG.library,
+      reason: 'Stored in the library — opens a signed link.',
+      file,
+    };
   }
   // (b) Linked file that only carries a source URL (no stored bytes).
   if (file?.source_url) {
     return {
       kind: 'external',
       action: 'Open ↗',
+      tag: READING_TAG.external,
       reason: 'External source — not stored in the library.',
       href: file.source_url,
     };
@@ -482,6 +521,7 @@ export function resolveReadingRoute(
     return {
       kind: 'none',
       action: 'No route',
+      tag: READING_TAG.none,
       reason: 'Linked file is recorded on disk only — no online copy to open.',
     };
   }
@@ -490,27 +530,153 @@ export function resolveReadingRoute(
     return {
       kind: 'external',
       action: 'Open ↗',
+      tag: READING_TAG.external,
       reason: reading.on_blackboard ? 'Linked from Blackboard.' : 'External link.',
       href: reading.url,
     };
   }
-  // (c) Posted on Blackboard but not pulled into the library yet.
+  // (c) Posted on Blackboard but not pulled into the library yet. NOT
+  // off-platform — it is on the platform, we just have not fetched it.
   if (reading.on_blackboard) {
     return {
       kind: 'instruction',
       action: blackboardUrl ? 'In Blackboard ↗' : 'On Blackboard',
+      tag: READING_TAG.notPulled,
       reason: 'Posted on Blackboard — not yet pulled into the library. Open it in Blackboard.',
       href: blackboardUrl ?? undefined,
     };
   }
-  // (c) Course textbook / publisher e-book with no downloadable file.
+  // (c) Course textbook / publisher e-book with no downloadable file. There is
+  // no copy to open, so the honest action is the syllabus that says how to get
+  // it (M-3) — and if we do not hold that either, we say so.
   if (looksLikeEbook(reading.citation)) {
     return {
       kind: 'instruction',
       action: 'How to access',
-      reason: 'Course textbook / publisher e-book — access through the publisher or SU Libraries; no downloadable file.',
+      tag: READING_TAG.offPlatform,
+      reason: syllabus
+        ? 'Course textbook / publisher e-book — no downloadable file. The syllabus says how to get it.'
+        : 'Course textbook / publisher e-book — access through the publisher or SU Libraries; no downloadable file.',
+      syllabus,
     };
   }
   // (d) Nothing recorded.
-  return { kind: 'none', action: 'No route', reason: 'No linked file or link recorded for this reading.' };
+  return {
+    kind: 'none',
+    action: 'No route',
+    tag: READING_TAG.none,
+    reason: 'No linked file or link recorded for this reading.',
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Which file IS a course's syllabus (M-3 / P-materials-4)
+ * ------------------------------------------------------------------------ */
+
+/** The columns of `courses` this resolver needs. */
+export interface CourseSyllabusRow {
+  id: string;
+  kind: string | null;
+  syllabus_path: string | null;
+}
+
+export const courseSyllabiKey = ['materials', 'course-syllabi'] as const;
+
+/** `courses.syllabus_path` per course, for the syllabus resolver. */
+export function courseSyllabiOptions() {
+  return queryOptions({
+    queryKey: courseSyllabiKey,
+    queryFn: async (): Promise<CourseSyllabusRow[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('courses')
+        .select('id, kind, syllabus_path')
+        .order('id', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CourseSyllabusRow[];
+    },
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
+export function useCourseSyllabi() {
+  return useQuery(courseSyllabiOptions());
+}
+
+/** The last path segment of `syllabus_path`, which is the file's own name. */
+export function syllabusBasename(path: string | null): string | null {
+  if (!path) return null;
+  const base = path.split('/').pop()?.trim();
+  return base && base.length > 0 ? base : null;
+}
+
+/**
+ * The lecture shell a non-lecture shell belongs to: `GEO.103.recitation` →
+ * `GEO.103.lecture`. Returns null for a shell that is already the lecture, or
+ * for a plain course id with no shell suffix.
+ */
+export function lectureShellFor(courseId: string): string | null {
+  const parts = courseId.split('.');
+  if (parts.length < 3) return null;
+  if (parts[parts.length - 1] === 'lecture') return null;
+  return [...parts.slice(0, -1), 'lecture'].join('.');
+}
+
+/**
+ * Work out which `bb_files` row is each course's syllabus.
+ *
+ * `courses.syllabus_path` is unreliable as a storage key — it is sometimes the
+ * repo-relative path, sometimes bucket-prefixed — but its BASENAME is the
+ * file's real name, and that does match `bb_files.file_name`. Three rules, in
+ * order:
+ *
+ *   1. a `syllabus_policy` file of this course whose name is that basename.
+ *      This is what picks IST 323's own syllabus over the policy appendix
+ *      filed beside it, and IST 466's over its student-policy sheet;
+ *   2. failing that, the lecture shell's answer — GEO 103's recitation points
+ *      at the lecture's syllabus, and its own `syllabus_policy` file is the
+ *      discussion-section guide, which is not the same document;
+ *   3. failing that, this course's sole `syllabus_policy` file, if it has
+ *      exactly one. With two candidates and no name match we choose nothing
+ *      rather than guess which is the syllabus.
+ */
+export function resolveSyllabusFiles(
+  courses: readonly CourseSyllabusRow[],
+  files: readonly BbFileRow[],
+): Map<string, BbFileRow> {
+  const candidates = new Map<string, BbFileRow[]>();
+  for (const file of files) {
+    // A file with no course cannot be a course's syllabus, and the generated
+    // row type is honest that `course_id` is nullable.
+    if (file.bucket !== 'syllabus_policy' || !file.course_id) continue;
+    const list = candidates.get(file.course_id) ?? [];
+    list.push(file);
+    candidates.set(file.course_id, list);
+  }
+
+  const byName = new Map<string, BbFileRow>();
+  for (const course of courses) {
+    const wanted = syllabusBasename(course.syllabus_path);
+    if (!wanted) continue;
+    const match = (candidates.get(course.id) ?? []).find(
+      (file) => fileTitle(file) === wanted,
+    );
+    if (match) byName.set(course.id, match);
+  }
+
+  const resolved = new Map(byName);
+  for (const course of courses) {
+    if (resolved.has(course.id)) continue;
+
+    const lecture = lectureShellFor(course.id);
+    const inherited = lecture ? byName.get(lecture) : undefined;
+    if (inherited) {
+      resolved.set(course.id, inherited);
+      continue;
+    }
+
+    const own = candidates.get(course.id) ?? [];
+    if (own.length === 1) resolved.set(course.id, own[0]);
+  }
+  return resolved;
 }

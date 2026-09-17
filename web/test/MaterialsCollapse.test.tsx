@@ -78,6 +78,20 @@ const readings = [
     source: 'syllabus',
   },
   {
+    id: 200,
+    course_id: 'IST.466',
+    citation: 'Trevino & Nelson, Managing Business Ethics, 8e, ch. 3, pp. 55-70',
+    topic: null,
+    for_date: '2026-10-01',
+    week_no: null,
+    required: true,
+    on_blackboard: false,
+    url: null,
+    notes: null,
+    confidence: 'confirmed',
+    source: 'syllabus',
+  },
+  {
     id: 88,
     course_id: 'IST.466',
     citation: 'HBR: Ethics Across Cultures',
@@ -101,12 +115,17 @@ vi.mock('@/lib/queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/queries')>();
   return { ...actual, useCourses: () => ({ data: courses, isPending: false, error: null }) };
 });
+const syllabi = [
+  { id: 'IST.466', kind: 'lecture', syllabus_path: 'IST.466/syllabus_policy/Syllabus.docx' },
+];
+
 vi.mock('@/lib/queries.materials', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/queries.materials')>();
   return {
     ...actual,
     useCurrentFiles: () => ({ data: files, isPending: false, error: null }),
     useReadings: () => ({ data: readings, isPending: false, error: null }),
+    useCourseSyllabi: () => ({ data: syllabi, isPending: false, error: null }),
   };
 });
 
@@ -133,7 +152,7 @@ describe('Materials — a section folds away (P-materials-1)', () => {
     expect(readingsSection()).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('HBR: Apple vs. The FBI')).toBeNull();
     // …and leaves the head, with its count, so it can be opened again.
-    expect(within(readingsSection()).getByText('3')).toBeInTheDocument();
+    expect(within(readingsSection()).getByText(String(readings.length))).toBeInTheDocument();
   });
 
   it('folds one section without touching the others', () => {
@@ -195,5 +214,46 @@ describe('Materials — readings blocked by date (P-materials-3)', () => {
     for (const citation of readings.map((r) => r.citation)) {
       expect(screen.getByText(citation)).toBeInTheDocument();
     }
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * M-3 / P-materials-4 — "How to access" opens the course syllabus
+ *
+ * Rendered through the whole browser, because the syllabus is resolved once for
+ * the screen (a recitation shell's answer is its lecture's) rather than per row.
+ * The resolver itself is covered in test/materials.syllabus.test.ts.
+ * ------------------------------------------------------------------------ */
+
+describe('Materials — an off-platform reading points at the syllabus', () => {
+  it('offers a live "How to access" control instead of a disabled one', () => {
+    render(<MaterialsBrowser />);
+    const control = screen.getByRole('button', { name: 'How to access' });
+    expect(control).toBeEnabled();
+  });
+
+  it('names the syllabus it will open', () => {
+    render(<MaterialsBrowser />);
+    expect(screen.getByRole('button', { name: 'How to access' })).toHaveAttribute(
+      'title',
+      'Opens Syllabus.docx — the course syllabus says how to get this reading.',
+    );
+  });
+
+  it('says the syllabus is where to look, rather than naming a library', () => {
+    render(<MaterialsBrowser />);
+    expect(screen.getAllByText(/The syllabus says how to get it\./).length).toBeGreaterThan(0);
+  });
+
+  it('still tags it Off-platform — the reading itself has not moved', () => {
+    render(<MaterialsBrowser />);
+    expect(screen.getByText('Off-platform')).toBeInTheDocument();
+  });
+
+  it('tags a Blackboard reading we have not pulled as exactly that', () => {
+    render(<MaterialsBrowser />);
+    expect(screen.getAllByText('On Blackboard — not pulled yet').length).toBeGreaterThan(0);
+    // …and that row is not swept in with the textbook chapters.
+    expect(screen.getAllByText('Off-platform')).toHaveLength(1);
   });
 });

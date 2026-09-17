@@ -16,6 +16,8 @@ import {
   formatBytes,
   groupReadings,
   resolveReadingRoute,
+  resolveSyllabusFiles,
+  useCourseSyllabi,
   useCurrentFiles,
   useReadings,
   type BbFileRow,
@@ -103,20 +105,15 @@ function readingRouteTagClass(kind: ReadingRoute['kind']): string {
   return tokens.tagNeutral;
 }
 
-function readingRouteTagLabel(kind: ReadingRoute['kind']): string {
-  switch (kind) {
-    case 'library':
-      return 'In library';
-    case 'external':
-      return 'External';
-    case 'instruction':
-      return 'Off-platform';
-    default:
-      return 'No route';
-  }
-}
-
-function ReadingRowView({ reading, route }: { reading: ReadingRow; route: ReadingRoute }) {
+function ReadingRowView({
+  reading,
+  route,
+  blackboardUrl = null,
+}: {
+  reading: ReadingRow;
+  route: ReadingRoute;
+  blackboardUrl?: string | null;
+}) {
   const meta: string[] = [];
   if (reading.week_no != null) meta.push(`Week ${reading.week_no}`);
   meta.push(reading.required ? 'Required' : 'Optional');
@@ -145,7 +142,7 @@ function ReadingRowView({ reading, route }: { reading: ReadingRow; route: Readin
       </span>
 
       <span className={readingRouteTagClass(route.kind)} title={route.reason}>
-        {readingRouteTagLabel(route.kind)}
+        {route.tag}
       </span>
 
       {route.kind === 'library' && route.file?.storage_path ? (
@@ -160,6 +157,20 @@ function ReadingRowView({ reading, route }: { reading: ReadingRow; route: Readin
           >
             {route.action}
           </a>
+        </span>
+      ) : route.syllabus ? (
+        /* M-3: there is no copy of this reading to open, so "How to access"
+           opens the document that says how — through the same ladder every
+           other file uses, so it is honest about stored bytes, a source link
+           or a dead end. */
+        <span className={styles.action}>
+          <FileOpenAction
+            routes={route.syllabus}
+            blackboardUrl={blackboardUrl}
+            action={route.action}
+            title={`Opens ${fileTitle(route.syllabus)} — the course syllabus says how to get this reading.`}
+            className={tokens.btnSecondary}
+          />
         </span>
       ) : (
         <span className={styles.action}>
@@ -184,6 +195,8 @@ interface CourseData {
   linkedFileByReadingId: Map<number, BbFileRow>;
   orphanReadingFiles: BbFileRow[];
   fileCount: number;
+  /** M-3: this course's syllabus, when one could be resolved. */
+  syllabus?: BbFileRow;
 }
 
 /**
@@ -259,8 +272,15 @@ function ReadingsSection({
           </h4>
           {group.readings.map((reading) => {
             const file = data.linkedFileByReadingId.get(Number(reading.id));
-            const route = resolveReadingRoute(reading, file, bbUrl);
-            return <ReadingRowView key={`r-${reading.id}`} reading={reading} route={route} />;
+            const route = resolveReadingRoute(reading, file, bbUrl, data.syllabus);
+            return (
+              <ReadingRowView
+                key={`r-${reading.id}`}
+                reading={reading}
+                route={route}
+                blackboardUrl={bbUrl}
+              />
+            );
           })}
         </div>
       ))}
@@ -378,6 +398,7 @@ export function MaterialsBrowser() {
   const courses = useCourses();
   const files = useCurrentFiles();
   const readings = useReadings();
+  const syllabiQ = useCourseSyllabi();
 
   /**
    * M-1: which sections are folded away. Seeded empty and adopted from storage
@@ -399,12 +420,20 @@ export function MaterialsBrowser() {
   }
 
   const loading = courses.isPending || files.isPending || readings.isPending;
+  // The syllabus read is NOT in `loading`: it only decides whether one action
+  // on one kind of row can offer a document, and holding the whole screen for
+  // it would be the wrong trade. A row simply says it has no route until it
+  // answers. Nor is it in `failed` — a syllabus we cannot resolve is not a
+  // materials browser we cannot show.
   const failed = courses.error ?? files.error ?? readings.error;
 
   const perCourse = useMemo<CourseData[]>(() => {
     if (!courses.data || !files.data || !readings.data) return [];
 
     const bucketSet = new Set<string>(BUCKET_ORDER);
+    // M-3: which bb_files row IS each course's syllabus. Resolved once for the
+    // whole screen, because a recitation shell's answer is its lecture's.
+    const syllabi = resolveSyllabusFiles(syllabiQ.data ?? [], files.data);
 
     return courses.data
       .map((course): CourseData => {
@@ -444,10 +473,11 @@ export function MaterialsBrowser() {
           linkedFileByReadingId,
           orphanReadingFiles,
           fileCount: courseFiles.length,
+          syllabus: syllabi.get(course.id),
         };
       })
       .filter((d) => d.fileCount > 0 || d.readings.length > 0);
-  }, [courses.data, files.data, readings.data]);
+  }, [courses.data, files.data, readings.data, syllabiQ.data]);
 
   if (failed) {
     return (
