@@ -68,6 +68,8 @@ export interface FixtureItem {
   readonly kind: 'item' | 'attendance' | 'placeholder';
   readonly isExtraCredit: boolean;
   readonly dueAt: string | null;
+  /** When a sync last saw this row. */
+  readonly seenAt: string | null;
 }
 
 /** The one input shape all three methods read. */

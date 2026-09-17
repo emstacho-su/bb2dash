@@ -68,6 +68,7 @@ export function item(overrides: Partial<ItemInput> & Pick<ItemInput, 'key'>): It
     kind: 'item',
     isExtraCredit: false,
     dueAt: null,
+    seenAt: null,
     ...overrides,
   };
 }

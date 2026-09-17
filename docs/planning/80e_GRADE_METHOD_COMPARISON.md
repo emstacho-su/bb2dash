@@ -24,32 +24,33 @@ One definition, applied to every fixture before any code runs:
 * **Weighted so far** — Σ(weight × part ratio) ÷ Σ(weights of parts with ≥ 1 graded item); a part ratio is Σscore ÷ Σpossible.
 * **10b engine** — The Phase 10b model's `graded_so_far` standing: the syllabus aggregation rule per part.
 * **10b engine, gates off** — The same engine, with the unscored-hand-graded gate and the unsure-link muting removed. A variant of the row above, not a fourth candidate.
+* **What the app shows** — `gradedSoFar()` — Stack's pick, the row above made real. This column is the app, not a candidate; it is here so the report stays a true record of what shipped.
 
 ## Absolute error per fixture
 
 Δ is percentage points away from the hand-derived truth; `ok` means the method agreed that
 there is no grade, `fail` means it disagreed about whether a grade exists at all.
 
-| fixture | true grade so far | Points ratio | Δ | Weighted so far | Δ | 10b engine | Δ | 10b engine, gates off | Δ |
-|---|---|---|---|---|---|---|---|---|---|
-| F01 Weighted syllabus, one part still ungraded | 84.50 % | 84.29 % | 0.2143 | 84.50 % | 0.0000 | 84.50 % | 0.0000 | 84.50 % | 0.0000 |
-| F02 Points syllabus, half the work graded | 84.00 % | 84.00 % | 0.0000 | 84.00 % | 0.0000 | 84.00 % | 0.0000 | 84.00 % | 0.0000 |
-| F03 Drop-lowest quiz part | 90.00 % | 75.00 % | 15.0000 | 75.00 % | 15.0000 | 90.00 % | 0.0000 | 90.00 % | 0.0000 |
-| F04 Zero-point completion columns | 90.00 % | 90.00 % | 0.0000 | 90.00 % | 0.0000 | 90.00 % | 0.0000 | 90.00 % | 0.0000 |
-| F05 Extra credit — a score above its possible | 95.00 % | 95.00 % | 0.0000 | 95.00 % | 0.0000 | 95.00 % | 0.0000 | 95.00 % | 0.0000 |
-| F06 A whole part still ungraded | 88.00 % | 88.00 % | 0.0000 | 88.00 % | 0.0000 | 88.00 % | 0.0000 | 88.00 % | 0.0000 |
-| F07 An unlinked scored column | 85.00 % | 78.00 % | 7.0000 | 85.00 % | 0.0000 | 85.00 % | 0.0000 | 85.00 % | 0.0000 |
-| F08 An exempt column holding a zero | 80.00 % | 80.00 % | 0.0000 | 80.00 % | 0.0000 | 80.00 % | 0.0000 | 80.00 % | 0.0000 |
-| F09 Nothing graded yet | no grade (nothing that counts has been graded) | no grade (`nothing_graded`) | ok | no grade (`nothing_graded`) | ok | no grade (`nothing_graded`) | ok | no grade (`nothing_graded`) | ok |
-| F10 Mixed point scales inside one part | 75.00 % | 54.55 % | 20.4545 | 54.55 % | 20.4545 | 75.00 % | 0.0000 | 75.00 % | 0.0000 |
-| F11 Rank-weighted exams | 83.50 % | 81.43 % | 2.0714 | 82.50 % | 1.0000 | 83.50 % | 0.0000 | 83.50 % | 0.0000 |
-| F12 ECN.304 shape — a hand-graded part nobody has scored | 83.33 % | 80.00 % | 3.3333 | 80.00 % | 3.3333 | **no number** (`manual_unscored`) | fail | 83.33 % | 0.0000 |
-| F13 GEO.103 shape — two shells, two unscored attendance parts | 90.00 % | 90.00 % | 0.0000 | 90.00 % | 0.0000 | **no number** (`manual_unscored`) | fail | 90.00 % | 0.0000 |
-| F14 IST.352 shape — a tiny graded base under tick columns | 93.33 % | 93.33 % | 0.0000 | 93.33 % | 0.0000 | **no number** (`manual_unscored`) | fail | 93.33 % | 0.0000 |
-| F15 IST.323 shape — normalised category, sub-parts, extra credit, an unlinked column | 96.36 % | 82.83 % | 13.5354 | 88.61 % | 7.7560 | 96.36 % | 0.0000 | 96.36 % | 0.0000 |
-| F16 IST.466 shape — a graded part whose syllabus link is unsure | 87.00 % | 88.00 % | 1.0000 | 88.00 % | 1.0000 | 85.50 % | 1.5000 | 87.00 % | 0.0000 |
-| F17 IST.471 shape — a qualitatively graded course | no grade (the course is graded qualitatively — there is no percentage) | **100.00 %** (invented) | fail | no grade (`qualitative_method`) | ok | no grade (`qualitative_method`) | ok | no grade (`qualitative_method`) | ok |
-| F18 Weighted sub-parts under an unweighted heading | 77.14 % | 77.50 % | 0.3571 | 77.14 % | 0.0000 | 77.14 % | 0.0000 | 77.14 % | 0.0000 |
+| fixture | true grade so far | Points ratio | Δ | Weighted so far | Δ | 10b engine | Δ | 10b engine, gates off | Δ | What the app shows | Δ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| F01 Weighted syllabus, one part still ungraded | 84.50 % | 84.29 % | 0.2143 | 84.50 % | 0.0000 | 84.50 % | 0.0000 | 84.50 % | 0.0000 | 84.50 % | 0.0000 |
+| F02 Points syllabus, half the work graded | 84.00 % | 84.00 % | 0.0000 | 84.00 % | 0.0000 | 84.00 % | 0.0000 | 84.00 % | 0.0000 | 84.00 % | 0.0000 |
+| F03 Drop-lowest quiz part | 90.00 % | 75.00 % | 15.0000 | 75.00 % | 15.0000 | 90.00 % | 0.0000 | 90.00 % | 0.0000 | 90.00 % | 0.0000 |
+| F04 Zero-point completion columns | 90.00 % | 90.00 % | 0.0000 | 90.00 % | 0.0000 | 90.00 % | 0.0000 | 90.00 % | 0.0000 | 90.00 % | 0.0000 |
+| F05 Extra credit — a score above its possible | 95.00 % | 95.00 % | 0.0000 | 95.00 % | 0.0000 | 95.00 % | 0.0000 | 95.00 % | 0.0000 | 95.00 % | 0.0000 |
+| F06 A whole part still ungraded | 88.00 % | 88.00 % | 0.0000 | 88.00 % | 0.0000 | 88.00 % | 0.0000 | 88.00 % | 0.0000 | 88.00 % | 0.0000 |
+| F07 An unlinked scored column | 85.00 % | 78.00 % | 7.0000 | 85.00 % | 0.0000 | 85.00 % | 0.0000 | 85.00 % | 0.0000 | 85.00 % | 0.0000 |
+| F08 An exempt column holding a zero | 80.00 % | 80.00 % | 0.0000 | 80.00 % | 0.0000 | 80.00 % | 0.0000 | 80.00 % | 0.0000 | 80.00 % | 0.0000 |
+| F09 Nothing graded yet | no grade (nothing that counts has been graded) | no grade (`nothing_graded`) | ok | no grade (`nothing_graded`) | ok | no grade (`nothing_graded`) | ok | no grade (`nothing_graded`) | ok | no grade (`nothing_graded`) | ok |
+| F10 Mixed point scales inside one part | 75.00 % | 54.55 % | 20.4545 | 54.55 % | 20.4545 | 75.00 % | 0.0000 | 75.00 % | 0.0000 | 75.00 % | 0.0000 |
+| F11 Rank-weighted exams | 83.50 % | 81.43 % | 2.0714 | 82.50 % | 1.0000 | 83.50 % | 0.0000 | 83.50 % | 0.0000 | 83.50 % | 0.0000 |
+| F12 ECN.304 shape — a hand-graded part nobody has scored | 83.33 % | 80.00 % | 3.3333 | 80.00 % | 3.3333 | **no number** (`manual_unscored`) | fail | 83.33 % | 0.0000 | 83.33 % | 0.0000 |
+| F13 GEO.103 shape — two shells, two unscored attendance parts | 90.00 % | 90.00 % | 0.0000 | 90.00 % | 0.0000 | **no number** (`manual_unscored`) | fail | 90.00 % | 0.0000 | 90.00 % | 0.0000 |
+| F14 IST.352 shape — a tiny graded base under tick columns | 93.33 % | 93.33 % | 0.0000 | 93.33 % | 0.0000 | **no number** (`manual_unscored`) | fail | 93.33 % | 0.0000 | 93.33 % | 0.0000 |
+| F15 IST.323 shape — normalised category, sub-parts, extra credit, an unlinked column | 96.36 % | 82.83 % | 13.5354 | 88.61 % | 7.7560 | 96.36 % | 0.0000 | 96.36 % | 0.0000 | 96.36 % | 0.0000 |
+| F16 IST.466 shape — a graded part whose syllabus link is unsure | 87.00 % | 88.00 % | 1.0000 | 88.00 % | 1.0000 | 85.50 % | 1.5000 | 87.00 % | 0.0000 | 87.00 % | 0.0000 |
+| F17 IST.471 shape — a qualitatively graded course | no grade (the course is graded qualitatively — there is no percentage) | **100.00 %** (invented) | fail | no grade (`qualitative_method`) | ok | no grade (`qualitative_method`) | ok | no grade (`qualitative_method`) | ok | no grade (`qualitative_method`) | ok |
+| F18 Weighted sub-parts under an unweighted heading | 77.14 % | 77.50 % | 0.3571 | 77.14 % | 0.0000 | 77.14 % | 0.0000 | 77.14 % | 0.0000 | 77.14 % | 0.0000 |
 
 ## Per method
 
@@ -59,6 +60,7 @@ there is no grade, `fail` means it disagreed about whether a grade exists at all
 | Weighted so far | 16 of 16 measurable | 3.0340 | 20.4545 | F10 | none | none |
 | 10b engine | 13 of 16 measurable | 0.1154 | 1.5000 | F16 | none | F12, F13, F14 |
 | 10b engine, gates off | 16 of 16 measurable | 0.0000 | 0.0000 | F01 | none | none |
+| What the app shows | 16 of 16 measurable | 0.0000 | 0.0000 | F01 | none | none |
 
 ## Where each method fails, and why
 
@@ -92,6 +94,8 @@ there is no grade, `fail` means it disagreed about whether a grade exists at all
 * `F16` IST.466 shape — a graded part whose syllabus link is unsure — read 85.50 % against 87.00 % (1.5000 off). Probe: what an unconfirmed column → part link should do to the headline
 
 **10b engine, gates off** — no fixture separates it from the hand-derived truth.
+
+**What the app shows** — no fixture separates it from the hand-derived truth.
 
 ## Recommendation
 

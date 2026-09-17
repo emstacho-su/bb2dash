@@ -72,6 +72,8 @@ export function column(
     kind: 'item',
     isExtraCredit: false,
     dueAt: null,
+    // A single fixed instant: the comparison is about arithmetic, not clocks.
+    seenAt: '2026-09-16T17:14:02.645Z',
     ...overrides,
   };
 }

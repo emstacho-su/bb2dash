@@ -244,6 +244,7 @@ function toItemInput(row: GradeModelItemRow): ItemInput {
     kind: row.column_kind,
     isExtraCredit: row.is_extra_credit === true,
     dueAt: row.due_at,
+    seenAt: row.seen_at,
   };
 }
 
