@@ -644,7 +644,11 @@ export function outcomeApplies(item: AttentionItem, action: OutcomeAction): bool
  * would invent a deadline. A full timestamp is printed with its time. Anything
  * unparseable is printed as itself rather than as "Invalid Date".
  */
-export function fieldValueText(field: string | null, value: unknown): string {
+export function fieldValueText(
+  field: string | null,
+  value: unknown,
+  now: Date = new Date(),
+): string {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (typeof value !== 'string') return valueText(value);
@@ -657,6 +661,7 @@ export function fieldValueText(field: string | null, value: unknown): string {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
+      ...yearPart(day, now),
     });
   }
 
@@ -669,12 +674,34 @@ export function fieldValueText(field: string | null, value: unknown): string {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
+      ...yearPart(at, now),
       hour: 'numeric',
       minute: '2-digit',
     });
   }
 
   return value;
+}
+
+/** The calendar year `date` falls in, in New York. */
+function yearIn(date: Date): string {
+  return date.toLocaleDateString('en-US', { timeZone: INBOX_TIME_ZONE, year: 'numeric' });
+}
+
+/**
+ * F-3: show the year only when it is not the current one.
+ *
+ * On the rows that matter this IS the finding. The out-of-term conflicts carry
+ * dates four years old — a syllabus copied forward without its dates being
+ * changed — and printing "Tue, Sep 20, 11:06 AM" made a 2022 value read as this
+ * term's, which is exactly the mistake the transform flagged the row to prevent.
+ * Carrying the year on every date instead would be noise on the other 90%.
+ *
+ * Compared in New York, not UTC: 2027-01-01T04:00Z is still 2026 here, and a
+ * date is in "another year" only if the reader would call it one.
+ */
+function yearPart(date: Date, now: Date): { year?: 'numeric' } {
+  return yearIn(date) === yearIn(now) ? {} : { year: 'numeric' };
 }
 
 /* ---------------------------------------------------------------------------
@@ -742,7 +769,11 @@ export function describeDetails(value: unknown, field: string | null = null): De
  * The sentence that goes under one of a row's controls: what pressing it will
  * actually change, named, with the real value and the real date.
  */
-export function outcomeText(item: AttentionItem, action: OutcomeAction): string {
+export function outcomeText(
+  item: AttentionItem,
+  action: OutcomeAction,
+  now: Date = new Date(),
+): string {
   if (action === 'dismiss') {
     return `${RECORDED_ONLY} The row closes and the sync stops asking.`;
   }
@@ -752,14 +783,14 @@ export function outcomeText(item: AttentionItem, action: OutcomeAction): string 
   const what = fieldPhrase(item.field);
 
   if (action === 'keep_mine') {
-    const mine = fieldValueText(item.field, item.from_value);
+    const mine = fieldValueText(item.field, item.from_value, now);
     const kept =
       mine === '—' ? 'what bb2dash already has' : `this assignment’s ${what} at ${mine}`;
     return `Keeps ${kept} and marks it confirmed, so the next sync stops asking.`;
   }
 
   if (action === 'accept_blackboard') {
-    const theirs = fieldValueText(item.field, item.to_value);
+    const theirs = fieldValueText(item.field, item.to_value, now);
     return theirs === '—'
       ? `Clears this assignment’s ${what}, because that is what Blackboard shows.`
       : `Sets this assignment’s ${what} to ${theirs}.`;

@@ -106,6 +106,45 @@ describe('fieldValueText — New York, and never a made-up clock', () => {
   it('prints an unparseable timestamp as itself, not as "Invalid Date"', () => {
     expect(fieldValueText('due_at', 'sometime next week')).toBe('sometime next week');
   });
+
+  /* -----------------------------------------------------------------------
+   * F-3 (P-inbox-3), found on the PM's browser walk.
+   *
+   * An out-of-term conflict printed "Tue, Sep 20, 11:06 AM" for a date that is
+   * really in 2022. The year IS the finding on those rows — it is the whole
+   * reason the transform flagged them — and leaving it off makes a four-year-old
+   * value read as this term's.
+   * -------------------------------------------------------------------- */
+
+  const NOW = new Date('2026-09-17T12:00:00Z');
+
+  it('prints the year when it is not the current one', () => {
+    expect(fieldValueText('due_at', '2022-09-21T03:06:00Z', NOW)).toBe(
+      'Tue, Sep 20, 2022, 11:06 PM',
+    );
+    expect(fieldValueText('due_date', '2022-09-20', NOW)).toBe('Tue, Sep 20, 2022');
+  });
+
+  it('leaves the year off when it is the current one', () => {
+    expect(fieldValueText('due_at', '2026-09-25T03:59:00Z', NOW)).toBe('Thu, Sep 24, 11:59 PM');
+    expect(fieldValueText('due_date', '2026-09-24', NOW)).toBe('Thu, Sep 24');
+  });
+
+  it('prints a future year too — "different" is not "older"', () => {
+    expect(fieldValueText('due_date', '2027-01-04', NOW)).toBe('Mon, Jan 4, 2027');
+  });
+
+  it('decides the year in New York, not in UTC', () => {
+    // 2027-01-01T04:00Z is still 11:00 PM on 2026-12-31 in New York, so this is
+    // the CURRENT year and carries no year label.
+    expect(fieldValueText('due_at', '2027-01-01T04:00:00Z', NOW)).toBe('Thu, Dec 31, 11:00 PM');
+  });
+
+  it('compares against the reader’s year, not a hard-coded one', () => {
+    const later = new Date('2027-03-01T12:00:00Z');
+    expect(fieldValueText('due_date', '2026-09-24', later)).toBe('Thu, Sep 24, 2026');
+    expect(fieldValueText('due_date', '2027-09-24', later)).toBe('Fri, Sep 24');
+  });
 });
 
 describe('outcomeApplies — mirrors apply_resolutions()', () => {
@@ -146,14 +185,27 @@ describe('outcomeApplies — mirrors apply_resolutions()', () => {
 });
 
 describe('outcomeText — a sentence per kind and field', () => {
+  const NOW = new Date('2026-09-17T12:00:00Z');
+
   it('names the field and the date "Accept Blackboard" would write', () => {
-    expect(outcomeText(makeItem(), 'accept_blackboard')).toBe(
+    expect(outcomeText(makeItem(), 'accept_blackboard', NOW)).toBe(
       'Sets this assignment’s due date to Thu, Sep 24, 11:59 PM.',
     );
   });
 
+  it('carries the year into the sentence on an out-of-term row (F-3)', () => {
+    const stale = makeItem({
+      from_value: '2022-09-21T03:06:00Z',
+      to_value: '2022-09-28T03:06:00Z',
+    });
+    expect(outcomeText(stale, 'accept_blackboard', NOW)).toBe(
+      'Sets this assignment’s due date to Tue, Sep 27, 2022, 11:06 PM.',
+    );
+    expect(outcomeText(stale, 'keep_mine', NOW)).toContain('Tue, Sep 20, 2022, 11:06 PM');
+  });
+
   it('names the value "Keep mine" would keep, and why it stops the asking', () => {
-    expect(outcomeText(makeItem(), 'keep_mine')).toBe(
+    expect(outcomeText(makeItem(), 'keep_mine', NOW)).toBe(
       'Keeps this assignment’s due date at Wed, Sep 23, 11:59 PM and marks it confirmed, ' +
         'so the next sync stops asking.',
     );
@@ -161,7 +213,7 @@ describe('outcomeText — a sentence per kind and field', () => {
 
   it('says what a points conflict changes, in points', () => {
     const points = makeItem({ field: 'points_possible', from_value: 10, to_value: 25 });
-    expect(outcomeText(points, 'accept_blackboard')).toBe(
+    expect(outcomeText(points, 'accept_blackboard', NOW)).toBe(
       'Sets this assignment’s points possible to 25.',
     );
   });
@@ -174,13 +226,13 @@ describe('outcomeText — a sentence per kind and field', () => {
   });
 
   it('says it clears the field when Blackboard shows nothing', () => {
-    expect(outcomeText(makeItem({ to_value: null }), 'accept_blackboard')).toBe(
+    expect(outcomeText(makeItem({ to_value: null }), 'accept_blackboard', NOW)).toBe(
       'Clears this assignment’s due date, because that is what Blackboard shows.',
     );
   });
 
   it('falls back honestly when we hold no value of our own to keep', () => {
-    expect(outcomeText(makeItem({ from_value: null }), 'keep_mine')).toBe(
+    expect(outcomeText(makeItem({ from_value: null }), 'keep_mine', NOW)).toBe(
       'Keeps what bb2dash already has and marks it confirmed, so the next sync stops asking.',
     );
   });
