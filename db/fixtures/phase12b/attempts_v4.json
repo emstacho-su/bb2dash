@@ -1,0 +1,866 @@
+{
+  "_note": "SYNTHETIC. Crawler v4 shape (docs/planning/80f_ATTEMPTS_ENDPOINT.md) with INVENTED ids, names, text and URLs. No real submission, file name or feedback appears here.",
+  "run_id": "00000000-12b0-4000-8000-000000000001",
+  "kind": "course",
+  "bb_course_id": "_571529_1",
+  "course_id": "IST.323",
+  "captured_at": "2026-09-18T15:00:00.000000+00:00",
+  "payload": {
+    "crawler": {
+      "version": 4
+    },
+    "course": {
+      "id": "_571529_1",
+      "name": "IST.323.M002.FALL26.Intro to Cybersecurity",
+      "courseId": "15803.1271",
+      "modified": "2026-08-18T15:15:54.974Z"
+    },
+    "gradebook": [],
+    "attempts": [
+      {
+        "columnId": "_3560530_1",
+        "contentId": "_12928186_1",
+        "endpoint": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3560530_1/grades?expand=attemptsLeft&userId=_21025199_1",
+        "status": 200,
+        "steps": {
+          "grade": {
+            "url": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3560530_1/grades?expand=attemptsLeft&userId=_21025199_1",
+            "status": 200
+          },
+          "attempts": {
+            "url": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3560530_1/grades/_7700001_1/attempts",
+            "status": 200
+          },
+          "detail": [
+            {
+              "attemptId": "_8100002_1",
+              "url": "/learn/api/v1/courses/_571529_1/gradebook/attempts/_8100002_1?columnId=_3560530_1&expand=toolAttemptDetail,attempts,attempts.toolAttemptDetail",
+              "status": 200
+            },
+            {
+              "attemptId": "_8100001_1",
+              "url": "/learn/api/v1/courses/_571529_1/gradebook/attempts/_8100001_1?columnId=_3560530_1&expand=toolAttemptDetail,attempts,attempts.toolAttemptDetail",
+              "status": 200
+            }
+          ]
+        },
+        "keys": {
+          "grade": [
+            "id",
+            "status",
+            "firstAttemptId",
+            "lastAttemptId",
+            "highestAttemptId",
+            "lowestAttemptId",
+            "lastAttemptUrl",
+            "attemptsLeft",
+            "effectiveScore",
+            "pointsPossible",
+            "displayGrade",
+            "isExempt",
+            "instructorFeedback",
+            "manualGrade",
+            "manualStatus"
+          ],
+          "attempt": [
+            "id",
+            "status",
+            "attemptDate",
+            "exempt",
+            "overrideStatus"
+          ],
+          "detail": [
+            "id",
+            "gradeId",
+            "courseId",
+            "userId",
+            "status",
+            "attemptDate",
+            "creationDate",
+            "modifiedDate",
+            "attemptFirstGradedDate",
+            "attemptLastGradedDate",
+            "exempt",
+            "override",
+            "overrideStatus",
+            "readyToPost",
+            "displayGrade",
+            "attemptReceipt",
+            "studentSubmission",
+            "studentComments",
+            "studentSubmissionFiles",
+            "submissionHasFilePartsWithErrors"
+          ],
+          "file": [
+            "id",
+            "name",
+            "linkName",
+            "fileType",
+            "bbFileUuid",
+            "hasErrors",
+            "file"
+          ]
+        },
+        "grade": {
+          "id": "_7700001_1",
+          "status": "GRADED",
+          "attemptsLeft": 1,
+          "effectiveScore": 9.5,
+          "pointsPossible": 10,
+          "displayScore": 9.5,
+          "isExempt": false,
+          "firstAttemptId": "_8100001_1",
+          "lastAttemptId": "_8100002_1"
+        },
+        "attempts": [
+          {
+            "id": "_8100002_1",
+            "status": "COMPLETED",
+            "attemptDate": "2026-09-08T18:05:02.000Z",
+            "exempt": false,
+            "overrideStatus": "NOT_OVERRIDDEN"
+          },
+          {
+            "id": "_8100001_1",
+            "status": "COMPLETED",
+            "attemptDate": "2026-09-02T11:30:44.000Z",
+            "exempt": false,
+            "overrideStatus": "NOT_OVERRIDDEN"
+          }
+        ],
+        "detail": [
+          {
+            "attemptId": "_8100002_1",
+            "gradeId": "_7700001_1",
+            "status": "COMPLETED",
+            "attemptDate": "2026-09-08T18:05:02.000Z",
+            "creationDate": "2026-09-08T17:44:19.000Z",
+            "modifiedDate": "2026-09-09T13:12:40.000Z",
+            "receiptId": "RCPT-000000A2",
+            "submissionDate": "2026-09-08T18:05:44.000Z",
+            "submissionType": "MANUALLY_SUBMITTED",
+            "submissionTotalSize": 226114,
+            "displayScore": 9.5,
+            "fileCount": 2,
+            "hasRawText": true
+          },
+          {
+            "attemptId": "_8100001_1",
+            "gradeId": "_7700001_1",
+            "status": "COMPLETED",
+            "attemptDate": "2026-09-02T11:30:44.000Z",
+            "creationDate": "2026-09-02T11:02:00.000Z",
+            "modifiedDate": "2026-09-02T11:31:00.000Z",
+            "receiptId": "RCPT-000000A1",
+            "submissionDate": "2026-09-02T11:31:09.000Z",
+            "submissionType": "MANUALLY_SUBMITTED",
+            "submissionTotalSize": 41022,
+            "displayScore": 7,
+            "fileCount": 1,
+            "hasRawText": false
+          }
+        ],
+        "results": [
+          {
+            "id": "_8100002_1",
+            "status": "COMPLETED",
+            "created": "2026-09-08T17:44:19.000Z",
+            "modified": "2026-09-09T13:12:40.000Z",
+            "submitted": "2026-09-08T18:05:44.000Z",
+            "score": 9.5,
+            "exempt": false,
+            "receipt": "RCPT-000000A2",
+            "files": [
+              {
+                "id": "_4400001_1",
+                "name": "unit-one-writeup.docx",
+                "size": null,
+                "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "uuid": "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
+                "downloadUrl": "https://blackboard.syracuse.edu/bbcswebdav/xid-9000001_1"
+              },
+              {
+                "id": "_4400002_1",
+                "name": "unit-one-appendix.pdf",
+                "size": null,
+                "mime": "application/pdf",
+                "uuid": "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb",
+                "downloadUrl": "https://blackboard.syracuse.edu/bbcswebdav/xid-9000002_1"
+              }
+            ],
+            "text": {
+              "studentSubmission": "Second pass, appendix attached.",
+              "studentComments": "Resubmitting with the appendix I left out.",
+              "instructorFeedback": null
+            },
+            "keys": [
+              "id",
+              "gradeId",
+              "courseId",
+              "userId",
+              "status",
+              "attemptDate",
+              "creationDate",
+              "modifiedDate",
+              "attemptFirstGradedDate",
+              "attemptLastGradedDate",
+              "exempt",
+              "override",
+              "overrideStatus",
+              "readyToPost",
+              "displayGrade",
+              "attemptReceipt",
+              "studentSubmission",
+              "studentComments",
+              "studentSubmissionFiles",
+              "submissionHasFilePartsWithErrors"
+            ]
+          },
+          {
+            "id": "_8100001_1",
+            "status": "COMPLETED",
+            "created": "2026-09-02T11:02:00.000Z",
+            "modified": "2026-09-02T11:31:00.000Z",
+            "submitted": "2026-09-02T11:31:09.000Z",
+            "score": 7,
+            "exempt": false,
+            "receipt": "RCPT-000000A1",
+            "files": [
+              {
+                "id": "_4400003_1",
+                "name": "unit-one-writeup-v1.docx",
+                "size": null,
+                "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "uuid": "cccccccc-3333-4333-8333-cccccccccccc",
+                "downloadUrl": "https://blackboard.syracuse.edu/bbcswebdav/xid-9000003_1"
+              }
+            ],
+            "text": {
+              "studentSubmission": null,
+              "studentComments": null,
+              "instructorFeedback": null
+            }
+          }
+        ]
+      },
+      {
+        "columnId": "_3569973_1",
+        "contentId": "_12983388_1",
+        "endpoint": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3569973_1/grades?expand=attemptsLeft&userId=_21025199_1",
+        "status": 200,
+        "steps": {
+          "grade": {
+            "url": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3569973_1/grades?expand=attemptsLeft&userId=_21025199_1",
+            "status": 200
+          },
+          "attempts": {
+            "url": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3569973_1/grades/_7700002_1/attempts",
+            "status": 200
+          },
+          "detail": [
+            {
+              "attemptId": "_8100004_1",
+              "url": "/learn/api/v1/courses/_571529_1/gradebook/attempts/_8100004_1?columnId=_3569973_1&expand=toolAttemptDetail,attempts,attempts.toolAttemptDetail",
+              "status": 200
+            }
+          ]
+        },
+        "keys": {
+          "grade": [
+            "id",
+            "status",
+            "firstAttemptId",
+            "lastAttemptId",
+            "attemptsLeft",
+            "effectiveScore",
+            "pointsPossible",
+            "displayGrade",
+            "isExempt",
+            "instructorFeedback",
+            "manualGrade",
+            "manualStatus"
+          ],
+          "attempt": [
+            "id",
+            "status",
+            "attemptDate",
+            "exempt",
+            "overrideStatus"
+          ],
+          "detail": [
+            "id",
+            "gradeId",
+            "courseId",
+            "userId",
+            "status",
+            "attemptDate",
+            "creationDate",
+            "modifiedDate",
+            "exempt",
+            "override",
+            "readyToPost",
+            "displayGrade",
+            "attemptReceipt",
+            "studentSubmission",
+            "studentSubmissionFiles"
+          ],
+          "file": [
+            "id",
+            "name",
+            "linkName",
+            "fileType",
+            "bbFileUuid",
+            "hasErrors",
+            "file"
+          ]
+        },
+        "grade": {
+          "id": "_7700002_1",
+          "status": "NEEDS_GRADING",
+          "attemptsLeft": 0,
+          "effectiveScore": null,
+          "pointsPossible": 13,
+          "displayScore": null,
+          "isExempt": false,
+          "firstAttemptId": "_8100004_1",
+          "lastAttemptId": "_8100004_1"
+        },
+        "attempts": [
+          {
+            "id": "_8100004_1",
+            "status": "NEEDS_GRADING",
+            "attemptDate": "2026-09-12T02:14:00.000Z",
+            "exempt": false,
+            "overrideStatus": "NOT_OVERRIDDEN"
+          }
+        ],
+        "detail": [
+          {
+            "attemptId": "_8100004_1",
+            "gradeId": "_7700002_1",
+            "status": "NEEDS_GRADING",
+            "attemptDate": "2026-09-12T02:14:00.000Z",
+            "creationDate": "2026-09-11T22:40:00.000Z",
+            "modifiedDate": "2026-09-12T02:14:00.000Z",
+            "receiptId": "RCPT-000000B7",
+            "submissionDate": "2026-09-12T02:14:31.000Z",
+            "submissionType": "MANUALLY_SUBMITTED",
+            "submissionTotalSize": 512000,
+            "displayScore": null,
+            "fileCount": 1,
+            "hasRawText": true
+          }
+        ],
+        "results": [
+          {
+            "id": "_8100004_1",
+            "status": "NEEDS_GRADING",
+            "created": "2026-09-11T22:40:00.000Z",
+            "modified": "2026-09-12T02:14:00.000Z",
+            "submitted": "2026-09-12T02:14:31.000Z",
+            "score": null,
+            "exempt": false,
+            "receipt": "RCPT-000000B7",
+            "files": [
+              {
+                "id": "_4400004_1",
+                "name": "term-plan.pdf",
+                "size": null,
+                "mime": "application/pdf",
+                "uuid": "dddddddd-4444-4444-8444-dddddddddddd",
+                "downloadUrl": "https://blackboard.syracuse.edu/bbcswebdav/xid-9000004_1"
+              }
+            ],
+            "text": {
+              "studentSubmission": "Proposal plus appendices A and B.",
+              "studentComments": null,
+              "instructorFeedback": null
+            },
+            "keys": [
+              "id",
+              "gradeId",
+              "courseId",
+              "userId",
+              "status",
+              "attemptDate",
+              "creationDate",
+              "modifiedDate",
+              "exempt",
+              "override",
+              "readyToPost",
+              "displayGrade",
+              "attemptReceipt",
+              "studentSubmission",
+              "studentSubmissionFiles"
+            ]
+          }
+        ]
+      },
+      {
+        "columnId": "_3598132_1",
+        "contentId": "_13145817_1",
+        "endpoint": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3598132_1/grades?expand=attemptsLeft&userId=_21025199_1",
+        "status": 500,
+        "steps": {
+          "grade": {
+            "url": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3598132_1/grades?expand=attemptsLeft&userId=_21025199_1",
+            "status": 200
+          },
+          "attempts": {
+            "url": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3598132_1/grades/_7700003_1/attempts",
+            "status": 200
+          },
+          "detail": [
+            {
+              "attemptId": "_8100005_1",
+              "url": "/learn/api/v1/courses/_571529_1/gradebook/attempts/_8100005_1?columnId=_3598132_1&expand=toolAttemptDetail,attempts,attempts.toolAttemptDetail",
+              "status": 500
+            }
+          ]
+        },
+        "keys": {
+          "grade": [
+            "id",
+            "status",
+            "firstAttemptId",
+            "lastAttemptId",
+            "attemptsLeft",
+            "effectiveScore",
+            "pointsPossible",
+            "displayGrade",
+            "isExempt",
+            "instructorFeedback"
+          ],
+          "attempt": [
+            "id",
+            "status",
+            "attemptDate",
+            "exempt",
+            "overrideStatus"
+          ]
+        },
+        "grade": {
+          "id": "_7700003_1",
+          "status": "GRADED",
+          "attemptsLeft": -1,
+          "effectiveScore": 0,
+          "pointsPossible": 100,
+          "displayScore": 0,
+          "isExempt": false,
+          "firstAttemptId": "_8100005_1",
+          "lastAttemptId": "_8100005_1"
+        },
+        "attempts": [
+          {
+            "id": "_8100005_1",
+            "status": "COMPLETED",
+            "attemptDate": "2026-09-14T05:13:57.000Z",
+            "exempt": false,
+            "overrideStatus": "NOT_OVERRIDDEN"
+          }
+        ],
+        "detail": [],
+        "results": [
+          {
+            "id": "_8100005_1",
+            "status": "COMPLETED",
+            "created": null,
+            "modified": null,
+            "submitted": "2026-09-14T05:13:57.000Z",
+            "score": null,
+            "exempt": false,
+            "receipt": null,
+            "files": [],
+            "text": {
+              "studentSubmission": null,
+              "studentComments": null,
+              "instructorFeedback": null
+            },
+            "keys": [
+              "id",
+              "status",
+              "attemptDate",
+              "exempt",
+              "overrideStatus"
+            ]
+          }
+        ]
+      },
+      {
+        "columnId": "_3560541_1",
+        "contentId": "_12928193_1",
+        "endpoint": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3560541_1/grades?expand=attemptsLeft&userId=_21025199_1",
+        "status": 403,
+        "steps": {
+          "grade": {
+            "url": "/learn/api/v1/courses/_571529_1/gradebook/columns/_3560541_1/grades?expand=attemptsLeft&userId=_21025199_1",
+            "status": 403
+          },
+          "attempts": null,
+          "detail": []
+        },
+        "keys": {},
+        "grade": null,
+        "attempts": [],
+        "detail": [],
+        "results": []
+      }
+    ]
+  },
+  "_rawResponses": {
+    "_3560530_1": {
+      "grade": {
+        "status": 200,
+        "body": {
+          "results": [
+            {
+              "id": "_7700001_1",
+              "status": "GRADED",
+              "firstAttemptId": "_8100001_1",
+              "lastAttemptId": "_8100002_1",
+              "highestAttemptId": "_8100002_1",
+              "lowestAttemptId": "_8100001_1",
+              "lastAttemptUrl": "/ultra/courses/_571529_1/outline/assessment/_12928186_1/overview/attempt/_8100002_1",
+              "attemptsLeft": 1,
+              "effectiveScore": 9.5,
+              "pointsPossible": 10,
+              "displayGrade": {
+                "score": 9.5,
+                "isOverride": false
+              },
+              "isExempt": false,
+              "instructorFeedback": {
+                "rawText": "<p>Neat work on the key-length question.</p>",
+                "displayText": "Neat work on the key-length question."
+              },
+              "manualGrade": null,
+              "manualStatus": null
+            }
+          ]
+        }
+      },
+      "attempts": {
+        "status": 200,
+        "body": {
+          "results": [
+            {
+              "id": "_8100001_1",
+              "status": "COMPLETED",
+              "attemptDate": "2026-09-02T11:30:44.000Z",
+              "exempt": false,
+              "overrideStatus": "NOT_OVERRIDDEN"
+            },
+            {
+              "id": "_8100002_1",
+              "status": "COMPLETED",
+              "attemptDate": "2026-09-08T18:05:02.000Z",
+              "exempt": false,
+              "overrideStatus": "NOT_OVERRIDDEN"
+            }
+          ],
+          "paging": {},
+          "permissions": {
+            "viewAttempt": true
+          }
+        }
+      },
+      "detail": {
+        "_8100002_1": {
+          "status": 200,
+          "body": {
+            "id": "_8100002_1",
+            "gradeId": "_7700001_1",
+            "courseId": "_571529_1",
+            "userId": "_21025199_1",
+            "status": "COMPLETED",
+            "attemptDate": "2026-09-08T18:05:02.000Z",
+            "creationDate": "2026-09-08T17:44:19.000Z",
+            "modifiedDate": "2026-09-09T13:12:40.000Z",
+            "attemptFirstGradedDate": "2026-09-09T13:12:40.000Z",
+            "attemptLastGradedDate": "2026-09-09T13:12:40.000Z",
+            "exempt": false,
+            "override": false,
+            "overrideStatus": "NOT_OVERRIDDEN",
+            "readyToPost": false,
+            "displayGrade": {
+              "score": 9.5
+            },
+            "attemptReceipt": {
+              "receiptId": "RCPT-000000A2",
+              "submissionDate": "2026-09-08T18:05:44.000Z",
+              "submissionTotalSize": 226114,
+              "submissionType": "MANUALLY_SUBMITTED"
+            },
+            "studentSubmission": {
+              "rawText": "<p>Second pass, appendix attached.</p>",
+              "displayText": "Second pass, appendix attached."
+            },
+            "studentComments": "Resubmitting with the appendix I left out.",
+            "studentSubmissionFiles": [
+              {
+                "id": "_4400001_1",
+                "name": "unit-one-writeup.docx",
+                "linkName": "unit-one-writeup.docx",
+                "fileType": "STUDENT",
+                "bbFileUuid": "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
+                "hasErrors": false,
+                "file": {
+                  "fileName": "unit-one-writeup.docx",
+                  "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                  "permanentUrl": "https://blackboard.syracuse.edu/bbcswebdav/xid-9000001_1",
+                  "existingFileReference": false,
+                  "isMedia": false,
+                  "forceDownload": true
+                }
+              },
+              {
+                "id": "_4400002_1",
+                "name": "unit-one-appendix.pdf",
+                "linkName": "unit-one-appendix.pdf",
+                "fileType": "STUDENT",
+                "bbFileUuid": "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb",
+                "hasErrors": false,
+                "file": {
+                  "fileName": "unit-one-appendix.pdf",
+                  "mimeType": "application/pdf",
+                  "permanentUrl": "https://blackboard.syracuse.edu/bbcswebdav/xid-9000002_1",
+                  "existingFileReference": false,
+                  "isMedia": false,
+                  "forceDownload": true
+                }
+              }
+            ],
+            "submissionHasFilePartsWithErrors": false
+          }
+        },
+        "_8100001_1": {
+          "status": 200,
+          "body": {
+            "id": "_8100001_1",
+            "gradeId": "_7700001_1",
+            "courseId": "_571529_1",
+            "userId": "_21025199_1",
+            "status": "COMPLETED",
+            "attemptDate": "2026-09-02T11:30:44.000Z",
+            "creationDate": "2026-09-02T11:02:00.000Z",
+            "modifiedDate": "2026-09-02T11:31:00.000Z",
+            "exempt": false,
+            "override": false,
+            "readyToPost": false,
+            "displayGrade": {
+              "score": 7
+            },
+            "attemptReceipt": {
+              "receiptId": "RCPT-000000A1",
+              "submissionDate": "2026-09-02T11:31:09.000Z",
+              "submissionTotalSize": 41022,
+              "submissionType": "MANUALLY_SUBMITTED"
+            },
+            "studentSubmission": {
+              "rawText": null,
+              "displayText": null
+            },
+            "studentSubmissionFiles": [
+              {
+                "id": "_4400003_1",
+                "name": "unit-one-writeup-v1.docx",
+                "linkName": "unit-one-writeup-v1.docx",
+                "fileType": "STUDENT",
+                "bbFileUuid": "cccccccc-3333-4333-8333-cccccccccccc",
+                "hasErrors": false,
+                "file": {
+                  "fileName": "unit-one-writeup-v1.docx",
+                  "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                  "permanentUrl": "https://blackboard.syracuse.edu/bbcswebdav/xid-9000003_1",
+                  "existingFileReference": false,
+                  "isMedia": false,
+                  "forceDownload": true
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "_3569973_1": {
+      "grade": {
+        "status": 200,
+        "body": {
+          "results": [
+            {
+              "id": "_7700002_1",
+              "status": "NEEDS_GRADING",
+              "firstAttemptId": "_8100004_1",
+              "lastAttemptId": "_8100004_1",
+              "attemptsLeft": 0,
+              "effectiveScore": null,
+              "pointsPossible": 13,
+              "displayGrade": null,
+              "isExempt": false,
+              "instructorFeedback": null,
+              "manualGrade": null,
+              "manualStatus": null
+            }
+          ]
+        }
+      },
+      "attempts": {
+        "status": 200,
+        "body": {
+          "results": [
+            {
+              "id": "_8100004_1",
+              "status": "NEEDS_GRADING",
+              "attemptDate": "2026-09-12T02:14:00.000Z",
+              "exempt": false,
+              "overrideStatus": "NOT_OVERRIDDEN"
+            }
+          ]
+        }
+      },
+      "detail": {
+        "_8100004_1": {
+          "status": 200,
+          "body": {
+            "id": "_8100004_1",
+            "gradeId": "_7700002_1",
+            "courseId": "_571529_1",
+            "userId": "_21025199_1",
+            "status": "NEEDS_GRADING",
+            "attemptDate": "2026-09-12T02:14:00.000Z",
+            "creationDate": "2026-09-11T22:40:00.000Z",
+            "modifiedDate": "2026-09-12T02:14:00.000Z",
+            "exempt": false,
+            "override": false,
+            "readyToPost": false,
+            "displayGrade": null,
+            "attemptReceipt": {
+              "receiptId": "RCPT-000000B7",
+              "submissionDate": "2026-09-12T02:14:31.000Z",
+              "submissionTotalSize": 512000,
+              "submissionType": "MANUALLY_SUBMITTED"
+            },
+            "studentSubmission": {
+              "rawText": "<p>Proposal plus appendices A and B.</p>",
+              "displayText": "Proposal plus appendices A and B."
+            },
+            "studentSubmissionFiles": [
+              {
+                "id": "_4400004_1",
+                "name": "term-plan.pdf",
+                "linkName": "term-plan.pdf",
+                "fileType": "STUDENT",
+                "bbFileUuid": "dddddddd-4444-4444-8444-dddddddddddd",
+                "hasErrors": false,
+                "file": {
+                  "fileName": "term-plan.pdf",
+                  "mimeType": "application/pdf",
+                  "permanentUrl": "https://blackboard.syracuse.edu/bbcswebdav/xid-9000004_1",
+                  "existingFileReference": false,
+                  "isMedia": false,
+                  "forceDownload": true
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "_3598132_1": {
+      "grade": {
+        "status": 200,
+        "body": {
+          "results": [
+            {
+              "id": "_7700003_1",
+              "status": "GRADED",
+              "firstAttemptId": "_8100005_1",
+              "lastAttemptId": "_8100005_1",
+              "attemptsLeft": -1,
+              "effectiveScore": 0,
+              "pointsPossible": 100,
+              "displayGrade": {
+                "score": 0,
+                "isOverride": false
+              },
+              "isExempt": false,
+              "instructorFeedback": null
+            }
+          ]
+        }
+      },
+      "attempts": {
+        "status": 200,
+        "body": {
+          "results": [
+            {
+              "id": "_8100005_1",
+              "status": "COMPLETED",
+              "attemptDate": "2026-09-14T05:13:57.000Z",
+              "exempt": false,
+              "overrideStatus": "NOT_OVERRIDDEN"
+            }
+          ]
+        }
+      },
+      "detail": {
+        "_8100005_1": {
+          "status": 500,
+          "body": null
+        }
+      }
+    },
+    "_3560541_1": {
+      "grade": {
+        "status": 403,
+        "body": null
+      }
+    }
+  },
+  "_gradebookProbed": [
+    {
+      "columnId": "_3560530_1",
+      "contentId": "_12928186_1",
+      "isCalc": false,
+      "submissionStatus": "GRADED",
+      "lastAttempt": {
+        "status": "COMPLETED"
+      }
+    },
+    {
+      "columnId": "_3569973_1",
+      "contentId": "_12983388_1",
+      "isCalc": false,
+      "submissionStatus": "NEEDS_GRADING",
+      "lastAttempt": null
+    },
+    {
+      "columnId": "_3598132_1",
+      "contentId": "_13145817_1",
+      "isCalc": false,
+      "submissionStatus": "GRADED",
+      "lastAttempt": null
+    },
+    {
+      "columnId": "_3560541_1",
+      "contentId": "_12928193_1",
+      "isCalc": false,
+      "submissionStatus": "SUBMITTED",
+      "lastAttempt": null
+    },
+    {
+      "columnId": "_3599279_1",
+      "contentId": null,
+      "isCalc": true,
+      "submissionStatus": "NO_STATUS",
+      "lastAttempt": null
+    },
+    {
+      "columnId": "_3560526_1",
+      "contentId": "_12928176_1",
+      "isCalc": false,
+      "submissionStatus": "UNOPENED",
+      "lastAttempt": null
+    }
+  ]
+}
