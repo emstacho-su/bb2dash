@@ -413,3 +413,21 @@ Kept for the record.
 | Q7 | Mirror root: the OneDrive `course context` (71 harvested files today) or the repo's gitignored folder (20 seed files)? | **OneDrive**; it is where the harvest already lands. |
 | Q8 | Mirror shipping: your prompt lists the mirror among the jobs; the 9/14 answer made it post-MVP. | Keep it post-MVP in this phase: **MVP PR first** (your acceptance on the unpacked build), then the mirror as a second small PR on `feat/electron-12-mirror`. That is a one-PR-per-phase exception, like 10a/10b, so it needs your nod; the alternative holds the PR until the mirror is in. |
 | Q9 | Sync button: command **typed, not run** (your words), or run immediately? | **Typed**, via PSReadLine (C-8). If the prefilled line proves flaky on PowerShell 5.1, fall back to running it. |
+
+## Round 2 — `/code-review main high` findings (2026-09-17, PM-confirmed; owner: the integrator)
+
+Ten findings, all accepted. Fix each with a test that fails before the fix. Numbered notes for any
+Contract interpretation go in `80c_INTEGRATION_VERIFICATION.md` under "Round 2".
+
+| # | Where | Defect | Required outcome |
+|---|---|---|---|
+| R2-1 | `core/poller/sources.ts` grade read | `seen_at` is the **crawl** time (`bb_raw.captured_at`, migrations 046/056); `transform_tick` inserts the rows minutes later, so a tick between crawl and transform advances `lastSeenAt` past rows that do not exist yet and they never toast | No grade row may be lost to the crawl→transform gap or to local clock skew. Preferred: read with an overlap window behind `lastSeenAt` (a named constant, hours not minutes) and let `firedKeys` dedupe; first launch must still fire nothing historical (seed the fired keys, or keep a first-launch floor). If, and only if, that cannot be made correct, propose one additive migration from 073 exposing an insert-time column — propose it to the PM, do not apply it. |
+| R2-2 | `core/poller/scheduler.ts` `limit=200` | a full page advances `lastSeenAt` to `now`; rows past 200 are never read | page until short, or advance only to the last row's `seen_at` when the page is full |
+| R2-3 | `main/notify.ts` | the `Notification` is a local; after GC its `click` listener is gone | hold live notifications in a Set until `click`, `close` or `failed` |
+| R2-4 | `main/index.ts` `getSession` | bare `readWebSession`, never `isExpired`; and supabase-js stops auto-refresh while the page is hidden, so an hour after hide-to-tray every tick 401s | `getSession` returns null when expired. When the session is expired **and the window is not visible**, main reloads the hidden window (at most once per 10 min, named constant) so the web app's own server-side session refresh rewrites the cookie; verify in `web/` (read-only) that a page load does refresh the session, and say so in the note. Main still never calls the auth API itself (C-5 stands). |
+| R2-5 | `main/navigation.ts` permission handler | denying everything also denies `clipboard-sanitized-write`, so the Sync button's copy fails inside the shell, which is the only path when a request is already queued | allow exactly `clipboard-sanitized-write` for the `appUrl` origin; everything else stays denied; test both |
+| R2-6 | `main/sync-terminal.ts` spawn | the id is marked spawned before the spawn; an async `error` is only logged; no PowerShell fallback | on spawn `error`: fall back to the `powershell.exe` argv once, and if that fails too un-mark the id |
+| R2-7 | `main/window.ts` | failed initial `loadURL` and `render-process-gone` leave a dead window | retry the load with backoff (named constants) and on tray *Open*; reload after `render-process-gone` |
+| R2-8 | `main/deeplink.ts` | `void loadURL` without `.catch`; `navigate` reports success for a failed load | catch, log, record the real outcome (ERR_ABORTED from a redirect is not a failure) |
+| R2-9 | `core/poller/watermark.ts` | `isWatermark` accepts any `Date.parse`-able `lastSeenAt`, the query builder demands strict ISO `Z`; a hand-edited file wedges the poller | normalise with `toISOString()` on read, or validate with the same pattern and re-initialise |
+| R2-10 | duplication | `raise()` copies `showWindow()` without the `isDestroyed` guard; `HH_MM` / `ISO_DATE` re-declared in four files | one `showWindow`, one core patterns module |
