@@ -147,6 +147,62 @@ only): `web/test/grade-model/fc-params.ts` — the shared `fcParams()` for
 today; the randomness is the risk, not a known defect. One line closes it:
 `return seed === undefined ? { numRuns: MIN_RUNS, seed: DEFAULT_SEED } : …`.
 
+### The PM's two named suspects
+
+**(2) The `service_role` audit tests — found, root cause fixed.** This is the one that could time
+out. `test/grade-model.audits.test.ts` ran its **whole recursive walk inside each test body**: a
+`readdirSync` plus a `statSync` per entry, then a `readFileSync` of every file under `src/` — twice,
+once per `it.each` case. `test/audits.test.ts` hoisted the walk but still re-read every file for
+each of its five audits.
+
+Measured, which is the RED:
+
+| | idle | with one other full suite running alongside |
+|---|---|---|
+| `grade-model.audits` → `finds no "service_role"` | 373 ms | **1221 ms** |
+| `grade-model.audits` → `finds no "sb_secret"` | 434 ms | **1231 ms** |
+| `audits` → `finds no "service_role" anywhere under src/` | 226 ms | — |
+| `audits` → `finds no "sb_secret" anywhere under src/` | 300 ms | — |
+
+A single concurrent run costs ~3×, against a 5 s default timeout — and the cold run above was far
+harsher than one concurrent run (~13.75 s just to start each worker). A red there says "the machine
+was busy", not "a service-role key reached the bundle".
+
+**Fixed at the cause, not the timeout.** `src/` is walked **once** per file, at module load, with
+`readdirSync(dir, { withFileTypes: true })` (no `statSync` per entry), and every file is read once
+into a map the audits read from. **No assertion changed.**
+
+| | before | after |
+|---|---|---|
+| `finds no "service_role"` (grade-model) | 373 ms | **1 ms** |
+| `finds no "sb_secret"` (grade-model) | 434 ms | **1 ms** |
+| `finds no "service_role" anywhere under src/` | 226 ms | **1 ms** |
+| `finds no "sb_secret" anywhere under src/` | 300 ms | **2 ms** |
+
+These two can no longer time out under any load.
+
+**(1) `PlannerWeek.band.test.tsx` — already hardened; the exposure is its siblings.** The band suite
+was checked against every cause the PM named and is clean: `window.localStorage.clear()` in **both**
+`beforeEach` and `afterEach`, `db.rows` fully reassigned per test, a **fresh** `QueryClient` per
+render (no cache carried between tests), `vi.useFakeTimers({ toFake: ['Date'] })` with a frozen date
+and `useRealTimers` + `restoreAllMocks` after, `document.body.innerHTML = ''`, and W-33 had already
+raised its own `vi.setConfig({ testTimeout: 20_000 })` with 15 s on each `findBy`. Run **6× with
+`--sequence.shuffle` under a concurrent full suite: 8/8 every time.**
+
+What that suite got right, **no other suite had**. Of the nine suites that render a screen and wait
+with `findBy*`, only the band file raised anything; the rest — including `PlannerWeek.rows`,
+`PlannerWeek.events` and `PlannerWeek.test.tsx`, which mount the same component and the same four
+queries — waited Testing Library's **default one second** inside vitest's **default five**. Under a
+13× slowdown a one-second wait reports "the element never appeared" about a screen that was going to
+appear, as **one test**, in **one run**, green on the rerun. That is the shape of the report.
+
+**Fixed in one place** rather than in four of W-33's files: `test/setup.ts` sets
+`configure({ asyncUtilTimeout: 15_000 })` and `vitest.config.mts` sets `testTimeout` / `hookTimeout`
+to 20 s — the test has to outlive the wait it contains, or the raised wait can never be reached.
+This makes the band file's own argument the default everywhere. **Neither number hides a failure:**
+an element that never renders still fails, for the same reason, later. Full suite after: 91 files /
+1510 tests passed, 96 s.
+
 **Checked and clean, no change needed:**
 
 * **Real clocks.** No `new Date()` / `Date.now()` in any non-grades test's assertions. Every
