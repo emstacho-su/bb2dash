@@ -105,6 +105,34 @@ function isPlacedAsItem(row: GradebookLatestRow, overrides: Overrides): boolean 
 
 /* -- feedback -------------------------------------------------------------- */
 
+/** Blackboard stores an untouched feedback box as `''` as readily as `null`. */
+function hasFeedback(feedback: string | null | undefined): feedback is string {
+  return typeof feedback === 'string' && feedback.trim() !== '';
+}
+
+/**
+ * The mark that says an item carries the instructor's words (P-grades-10,
+ * Stack's answer 6).
+ *
+ * It sits on the item cell because that cell is the link to the details, and it
+ * is a superscript `*` — the smallest thing that reads as "there is a note
+ * here". `role="note"` gives it a role, so `aria-label` is announced; without
+ * one the asterisk would reach a screen reader as bare punctuation or not at
+ * all. Present exactly when the feedback is non-empty.
+ */
+export function FeedbackMark({ itemName }: { itemName: string }) {
+  return (
+    <sup
+      className={styles.feedbackMark}
+      role="note"
+      aria-label={`${itemName} has feedback`}
+      title="The instructor left feedback — open the item to read it."
+    >
+      *
+    </sup>
+  );
+}
+
 /**
  * The instructor's feedback, two lines until it is opened.
  *
@@ -150,8 +178,9 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
   const key = columnItemKey(row.course_id, row.column_id);
   const whatIfTarget = extras.whatIf?.targets.get(key);
   const linkState = extras.links?.states.get(key);
+  const feedback = hasFeedback(row.feedback);
   // G-5: with an assignment behind the row, its feedback is in that popout.
-  const showsFeedbackInline = Boolean(row.feedback) && row.assignment_id === null;
+  const showsFeedbackInline = feedback && row.assignment_id === null;
 
   return (
     <>
@@ -160,13 +189,16 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
             on the wrapper inside, so the columns line up with their headers. */}
         <th scope="row" className={styles.nameCell}>
           <div className={styles.nameStack}>
-            {row.assignment_id ? (
-              <Link className={styles.itemLink} href={itemQuery({ kind: 'assignment', id: row.assignment_id })}>
-                {row.name}
-              </Link>
-            ) : (
-              <span className={styles.itemName}>{row.name}</span>
-            )}
+            <span className={styles.nameLine}>
+              {row.assignment_id ? (
+                <Link className={styles.itemLink} href={itemQuery({ kind: 'assignment', id: row.assignment_id })}>
+                  {row.name}
+                </Link>
+              ) : (
+                <span className={styles.itemName}>{row.name}</span>
+              )}
+              {feedback && <FeedbackMark itemName={row.name} />}
+            </span>
             {counted && (
               <span className={tokens.tagOutline} title="Its linked assignment has a grade component.">
                 counts toward grade

@@ -174,6 +174,50 @@ describe('GradebookTable — feedback (G-5)', () => {
   });
 });
 
+/*
+ * G-6 / P-grades-10: a small superscript mark says an item has feedback. It
+ * sits on the ITEM cell, because that cell is the link to the details
+ * (Stack's answer 6).
+ */
+describe('GradebookTable — the feedback mark (G-6)', () => {
+  const marked = makeGradebookRow({ name: 'Lab #1', feedback: 'Solid. Watch the third assumption.' });
+
+  it('marks the item cell of a row that has feedback', () => {
+    renderTable([marked]);
+    const mark = screen.getByRole('note', { name: 'Lab #1 has feedback' });
+    expect(mark).toBeInTheDocument();
+    expect(mark.textContent).toBe('*');
+  });
+
+  it('puts the mark in the item cell, not the submission cell', () => {
+    renderTable([marked]);
+    const itemCell = screen.getByText('Lab #1').closest('th') as HTMLElement;
+    expect(within(itemCell).getByRole('note')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['no feedback at all', null],
+    ['an empty string', ''],
+    ['whitespace only', '   \n '],
+  ])('shows no mark for %s', (_why, feedback) => {
+    renderTable([makeGradebookRow({ name: 'Lab #4', feedback })]);
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
+  it('marks an unlinked column too, beside its own disclosure', () => {
+    renderTable([
+      makeGradebookRow({
+        name: 'Orphan',
+        assignment_id: null,
+        linked_assignments: 0,
+        feedback: 'See me.',
+      }),
+    ]);
+    expect(screen.getByRole('note', { name: 'Orphan has feedback' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Feedback/ })).toBeInTheDocument();
+  });
+});
+
 describe('GradebookTable — the history toggle is gone (G-5)', () => {
   it('renders no history disclosure on any row', () => {
     renderTable([IST323_QUIZ, IST352_SUBMITTED, ECN304_ATTENDANCE]);
