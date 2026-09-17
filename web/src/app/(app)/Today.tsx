@@ -45,7 +45,13 @@ import {
   isoDate,
   parseDateOnly,
 } from '@/components/tracker/anchor';
+import { pickCourseGrade, useCourseGrades } from '@/lib/queries.grades';
 import { NeedsAttentionRow } from './NeedsAttention';
+import {
+  blackboardGradeFigure,
+  CourseGradeFigureView,
+  type CourseGradeFigure,
+} from './CourseGradeFigure';
 
 /* ---------------------------------------------------------------------------
  * Constants & small pure helpers
@@ -118,6 +124,7 @@ export function Today() {
   const undatedQ = useUndatedWorkItems();
   const coursesQ = useCourseDisplay();
   const termQ = useTerm();
+  const gradesQ = useCourseGrades();
   const setStatus = useSetItemStatus();
 
   const pendingId = setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null;
@@ -132,6 +139,26 @@ export function Today() {
   const cardHorizonKey = isoDate(addDays(today, CARD_HORIZON_DAYS - 1));
 
   const failed = windowQ.error ?? undatedQ.error ?? coursesQ.error;
+
+  /**
+   * G-2 / P-home-10 — what the course card is handed to show.
+   *
+   * Blackboard's own published total is wired now, through the Phase 10a
+   * helpers, so the card and `/grades` read the same row and cannot disagree.
+   * While the gradebook read is in flight or has failed the card shows no
+   * figure at all: "not synced yet" is a claim about the data, and neither a
+   * request in flight nor a failed one supports it.
+   *
+   * >>> SLOT: the graded-so-far figure goes here, second in the array, once
+   * Stack picks the method (G-0 / `80e_GRADE_METHOD_COMPARISON.md`). It is a
+   * `CourseGradeFigure` produced by W-31's winning function — this screen must
+   * not compute one, or Home and /grades will drift apart. Nothing else on the
+   * card changes when it is added.
+   */
+  function cardGrades(course: CourseDisplay): CourseGradeFigure[] {
+    if (gradesQ.isPending || gradesQ.error) return [];
+    return [blackboardGradeFigure(pickCourseGrade(gradesQ.data, course.shell_ids))];
+  }
 
   // Header kicker: real weekday/date + truthful term week (only if the term row loaded).
   const kicker = (() => {
@@ -232,6 +259,7 @@ export function Today() {
               weekMonday={weekMonday}
               weekMondayKey={weekMondayKey}
               weekSundayKey={weekSundayKey}
+              grades={cardGrades(course)}
             />
           ))}
           {coursesQ.isPending && <span className={styles.muted}>loading courses…</span>}
@@ -261,6 +289,7 @@ export function CourseCard({
   weekMonday,
   weekMondayKey,
   weekSundayKey,
+  grades = [],
 }: {
   course: CourseDisplay;
   items: WorkItem[];
@@ -269,6 +298,18 @@ export function CourseCard({
   weekMonday: Date;
   weekMondayKey: string;
   weekSundayKey: string;
+  /**
+   * G-2 / P-home-10 (Stack's answer 12) — THE GRADE SLOT.
+   *
+   * Figures the card shows, already formatted by whoever produced them. The
+   * card renders them and does no arithmetic: it cannot compute a grade, which
+   * is the point. Home wires Blackboard's own total today; the graded-so-far
+   * figure is appended here by the PM once Stack picks the method from
+   * `80e_GRADE_METHOD_COMPARISON.md`, with no change to this component.
+   *
+   * Empty by default, so a caller with nothing honest to say says nothing.
+   */
+  grades?: readonly CourseGradeFigure[];
 }) {
   const meetingLines = formatMeetings(course.meetings);
   const note = course.card_note?.trim() ?? '';
@@ -334,6 +375,9 @@ export function CourseCard({
             <span className={tokens.kicker}>Open</span>
             <span className={styles.statValue}>{openThisWeek || '—'}</span>
           </div>
+          {grades.map((figure) => (
+            <CourseGradeFigureView key={figure.label} figure={figure} />
+          ))}
         </div>
       </div>
       <div className={styles.strip}>

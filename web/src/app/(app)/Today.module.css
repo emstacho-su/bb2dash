@@ -157,6 +157,15 @@
   gap: 3px;
   min-width: 0;
 }
+/* G-2: a figure the card was handed but has no value for. Muted and in words
+   — never a 0 or a bare dash, which would read as a grade of nothing. */
+.statAbsence {
+  font-size: var(--text-sm);
+  color: var(--color-neutral-500);
+}
+.statGrade {
+  color: var(--color-accent);
+}
 .statValue {
   overflow: hidden;
   text-overflow: ellipsis;

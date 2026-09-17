@@ -14,7 +14,7 @@
  * `Today` calls is replaced, so nothing here reaches Supabase or TanStack.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCourseDisplay, makeWorkItem } from './factories';
 
@@ -24,6 +24,7 @@ const stub = vi.hoisted(() => ({
   window: [] as unknown[],
   undated: [] as unknown[],
   courses: [] as unknown[],
+  grades: { data: [] as unknown[], isPending: false, error: null as Error | null },
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -45,6 +46,14 @@ vi.mock('@/lib/queries.today', async (importOriginal) => {
   };
 });
 
+// G-2: Home reads `v_course_grade` for the card's Blackboard figure. The
+// figure has its own suite (test/CourseGradeFigure.test.tsx); here it only has
+// to not want a QueryClient.
+vi.mock('@/lib/queries.grades', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries.grades')>();
+  return { ...actual, useCourseGrades: () => ({ ...idle, ...stub.grades }) };
+});
+
 // The needs-attention row has a query layer of its own; it is the position of
 // the section that is under test here, not its contents.
 vi.mock('@/app/(app)/NeedsAttention', () => ({
@@ -59,6 +68,7 @@ beforeEach(() => {
   stub.window = [makeWorkItem({ item_id: 'a-today', title: 'Reading for today', due_on: TODAY })];
   stub.undated = [];
   stub.courses = [makeCourseDisplay({ display_id: 'IST.323', code: 'IST 323' })];
+  stub.grades = { data: [], isPending: false, error: null };
 });
 
 afterEach(() => {
@@ -120,5 +130,85 @@ describe('Home — the needs-attention row goes last (P-home-5)', () => {
   it('still renders it — moving it down is not dropping it', () => {
     render(<Today />);
     expect(screen.getByRole('region', { name: 'Needs attention' })).toBeInTheDocument();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * G-2 / P-home-10 — what Home actually wires into the card's grade slot
+ * ------------------------------------------------------------------------ */
+
+describe('Home — the course card grade slot', () => {
+  const TOTAL_ROW = {
+    course_id: 'IST.323',
+    has_gradebook: true,
+    gradebook_seen_at: '2026-09-16T14:00:00Z',
+    has_total: true,
+    total_column_id: '_1_1',
+    total_name: 'Weighted Total',
+    total_effective_score: 14.8,
+    total_possible: 104,
+    total_display_grade: null,
+    total_seen_at: '2026-09-16T14:00:00Z',
+    item_count: 20,
+    graded_item_count: 6,
+  };
+
+  /** The card itself — "Blackboard" also appears in the tracker's rows. */
+  function card(name = /Open IST 323/) {
+    return within(screen.getByRole('link', { name }));
+  }
+
+  it("shows Blackboard's own total for the course's shell", () => {
+    stub.grades = { data: [TOTAL_ROW], isPending: false, error: null };
+    render(<Today />);
+    expect(card().getByText('Blackboard')).toBeInTheDocument();
+    expect(card().getByText(/14\.8 \/ 104/)).toBeInTheDocument();
+  });
+
+  it('says a course has no gradebook rather than showing a zero', () => {
+    stub.grades = { data: [], isPending: false, error: null };
+    render(<Today />);
+    expect(card().getByText('not synced yet')).toBeInTheDocument();
+  });
+
+  it('claims nothing at all while the gradebook read is in flight', () => {
+    // "not synced yet" is a claim about the data; a request in flight does not
+    // support it, and neither does a failed one.
+    stub.grades = { data: [], isPending: true, error: null };
+    render(<Today />);
+    expect(card().queryByText('Blackboard')).toBeNull();
+    expect(card().queryByText('not synced yet')).toBeNull();
+  });
+
+  it('claims nothing when the gradebook read failed', () => {
+    stub.grades = { data: [], isPending: false, error: new Error('permission denied') };
+    render(<Today />);
+    expect(card().queryByText('Blackboard')).toBeNull();
+    expect(card().queryByText('not synced yet')).toBeNull();
+  });
+
+  it('picks the right shell for a merged course', () => {
+    stub.courses = [
+      makeCourseDisplay({
+        display_id: 'GEO.103',
+        code: 'GEO 103',
+        shell_ids: ['GEO.103.lecture', 'GEO.103.recitation'],
+      }),
+    ];
+    stub.grades = {
+      data: [
+        { ...TOTAL_ROW, course_id: 'GEO.103.recitation', has_total: false },
+        { ...TOTAL_ROW, course_id: 'GEO.103.lecture' },
+        { ...TOTAL_ROW, course_id: 'IST.323', total_effective_score: 99 },
+      ],
+      isPending: false,
+      error: null,
+    };
+    render(<Today />);
+    // The shell that publishes a total wins, and another course's row is never
+    // borrowed.
+    const geo = card(/Open GEO 103/);
+    expect(geo.getByText(/14\.8 \/ 104/)).toBeInTheDocument();
+    expect(geo.queryByText(/99/)).toBeNull();
   });
 });
