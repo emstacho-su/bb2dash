@@ -1,0 +1,23 @@
+{
+  "name": "bb2dash-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "bb2dash Electron shell (Phase 12). NOTE: this file is W-25's to own (C-1). W-26 created this stopgap so its unit suite could run before the shell branch landed; on integration take W-25's package.json and merge the devDependencies listed here.",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.2",
+    "@vitest/coverage-v8": "5.0.0",
+    "electron": "44.4.1",
+    "fast-check": "4.10.1",
+    "typescript": "5.9.3",
+    "vitest": "5.0.0"
+  }
+}
