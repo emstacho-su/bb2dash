@@ -55,12 +55,23 @@ export interface BulkFigureRows {
   readonly items: readonly GradeModelItemRow[] | undefined;
 }
 
-/** Items by scheme course, in one pass rather than a search per course. */
+/**
+ * Items by scheme course, in one pass.
+ *
+ * Each row is pushed onto its course's array once; the arrays are built locally
+ * and only then handed out as a `ReadonlyMap`. Copying the accumulated list per
+ * row instead (`[...list, item]`) is quadratic in the number of items — the
+ * same trap review item R2-14 caught in Phase 10b — and this now runs on Home
+ * as well as `/grades`, over every course's columns at once.
+ */
 function groupItems(items: readonly GradeModelItemRow[]): ReadonlyMap<string, readonly GradeModelItemRow[]> {
-  return items.reduce((groups, item) => {
+  const groups = new Map<string, GradeModelItemRow[]>();
+  for (const item of items) {
     const list = groups.get(item.scheme_course_id);
-    return groups.set(item.scheme_course_id, list === undefined ? [item] : [...list, item]);
-  }, new Map<string, readonly GradeModelItemRow[]>());
+    if (list === undefined) groups.set(item.scheme_course_id, [item]);
+    else list.push(item);
+  }
+  return groups;
 }
 
 /**
