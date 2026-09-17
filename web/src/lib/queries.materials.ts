@@ -325,6 +325,98 @@ export function fileHonesty(row: FileRoutes): {
 }
 
 /* ---------------------------------------------------------------------------
+ * Grouping the readings (M-1 / P-materials-3)
+ *
+ * The Readings bucket was one flat list per course — 38 rows for ECN 304, in
+ * `week_no` then `id` order. Stack asked for them "blocked into the blocks of
+ * readings assigned for a given date", which is what `readings.for_date` says.
+ * ------------------------------------------------------------------------ */
+
+/** One date's worth of readings, or one of the two undated groups. */
+export interface ReadingGroup {
+  /** Stable React key; also what the collapse state is stored under. */
+  key: string;
+  /** "Thu, Sep 24", "Case pool", "No date yet". */
+  heading: string;
+  /** null for the undated groups. */
+  forDate: string | null;
+  readings: ReadingRow[];
+}
+
+/** Stack's word for IST.466's ethics cases (answer 7). */
+export const CASE_POOL_HEADING = 'Case pool';
+/** Undated readings that ARE required — a real gap, not a pool. */
+export const UNDATED_HEADING = 'No date yet';
+
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * "Thu, Sep 24" from a bare 'YYYY-MM-DD'. Parsed field by field rather than
+ * through `new Date(iso)`, which reads a bare date as UTC midnight and so shows
+ * the day before anywhere west of Greenwich.
+ */
+export function readingDateHeading(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
+  if (!Number.isFinite(date.getTime())) return iso;
+  return `${DOW[date.getDay()]}, ${MONTHS[date.getMonth()]} ${date.getDate()}`;
+}
+
+/**
+ * Block one course's readings by the date they are assigned for.
+ *
+ * Dated groups come first, in date order. Then the two undated groups, in this
+ * order, and both last:
+ *
+ *   * **Case pool** — undated AND `required = false`. This is IST.466's ten
+ *     HBR cases minus the one assigned to Stack's group: a pool the course
+ *     picks from, so no one date is theirs (Stack's answer 7). The rule is the
+ *     data, not a hard-coded list of ids — today it selects exactly those nine
+ *     and nothing else in the term.
+ *   * **No date yet** — undated and required. That IS a gap, and naming it
+ *     "Case pool" would hide one.
+ *
+ * Order inside a group is the order the caller supplied (week, then id).
+ */
+export function groupReadings(readings: readonly ReadingRow[]): ReadingGroup[] {
+  const byDate = new Map<string, ReadingRow[]>();
+  const pool: ReadingRow[] = [];
+  const undated: ReadingRow[] = [];
+
+  for (const reading of readings) {
+    if (reading.for_date) {
+      const list = byDate.get(reading.for_date);
+      if (list) list.push(reading);
+      else byDate.set(reading.for_date, [reading]);
+    } else if (reading.required === false) {
+      pool.push(reading);
+    } else {
+      undated.push(reading);
+    }
+  }
+
+  const groups: ReadingGroup[] = [...byDate.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([forDate, rows]) => ({
+      key: forDate,
+      heading: readingDateHeading(forDate),
+      forDate,
+      readings: rows,
+    }));
+
+  if (pool.length > 0) {
+    groups.push({ key: 'case-pool', heading: CASE_POOL_HEADING, forDate: null, readings: pool });
+  }
+  if (undated.length > 0) {
+    groups.push({ key: 'undated', heading: UNDATED_HEADING, forDate: null, readings: undated });
+  }
+  return groups;
+}
+
+/* ---------------------------------------------------------------------------
  * Reading "Open ladder" — four honest states
  * ------------------------------------------------------------------------ */
 
