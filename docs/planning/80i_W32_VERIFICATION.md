@@ -569,3 +569,125 @@ web/test/MaterialsCollapse.test.tsx          14
 Existing files extended: `tracker.anchor.test.ts`, `UpcomingTracker.test.tsx`,
 `CourseCard.test.tsx`, `CourseSidebar.test.tsx`, `queries.today.request.test.ts`,
 `Inbox.test.tsx`, `factories.ts`, `MaterialsCourseLinks.test.tsx`.
+
+---
+
+# Round 2 — the PM browser walk (2026-09-17)
+
+`origin/fix/page-pass-12b` merged in cleanly (no conflicts). Three findings assigned to
+W-32; **all three fixed**, one commit each, TDD, each pushed as it went.
+
+| gate | result |
+|---|---|
+| `npm run typecheck` | clean before every push |
+| `npm run build` | compiled successfully before every push |
+| `npm test` | **1672 passed, 103 files** (1555 at end of round 1; the merge brought W-30's and W-33's suites in) |
+
+| commit | finding |
+|---|---|
+| `d3789f5` | F-1 |
+| `7f95c24` | F-3 |
+| `a1ad19c` | F-4 |
+
+## F-1 (S-1) — the course Stream printed the raw enum
+
+`CourseStream.tsx:99` built its label with `meta.status.replace(/_/g, ' ')`, so the post
+line read "not started" while Home, the tracker, the popout and the planner chip said
+"not opened" for the same item. It also had no idea `missed` means DNF or that a `waived`
+row folds to excused. It now calls `statusLabel()` from `@/lib/progress-status`, keeping
+the underscore fallback only for a value the enum does not carry.
+
+**RED → GREEN:** 5 failures in `test/course-stream.test.tsx` → 22/22.
+
+### The grep of `web/src`, in full — this was the only other site
+
+Thirteen `replace(/_/g, ' ')` occurrences exist. One was the bug. The rest are **different
+vocabularies and are correctly left alone**:
+
+| file | what it spells | verdict |
+|---|---|---|
+| `CourseStream.tsx:96` | assignment `type` | not a status |
+| `CourseClasswork.tsx:87` | content kind / `bbType` | not a status |
+| `CourseScreen.tsx:455, 505` | session `kind` | not a status |
+| `SessionPopout.tsx:82` | session `kind` | not a status |
+| `AssignmentPopout.tsx:250, 282` | assignment `type`, `source` | not a status |
+| `CommandPalette.tsx:297` | search `bucket` | not a status |
+| `queries.materials.ts:177` | file bucket | not a status |
+| `queries.sync.ts:597, 686` | Inbox field / key names | not a status |
+| `CourseScreen.tsx:57` | planner status | **already correct** — asks `statusLabel()` first |
+| `AssignmentPopout.tsx:64` | planner status | **already correct** — same shape |
+
+Also checked and deliberately left: `GradebookTable.tsx:188` and
+`SubmissionBlock.tsx:155, 191` render Blackboard's own `submission_status` /
+`attempt.status` free text. That is a different vocabulary about a different column and
+belongs to W-31.
+
+### Why the round-1 scan missed it, and what now catches it
+
+`status-vocabulary.test.ts` asked whether a file **imports** the vocabulary, against a
+hand-kept list the Stream was not on. A list of files cannot catch a file nobody thought
+of. It now also forbids the **shape**: a `.replace(/_/g, ' ')` whose subject is a status
+and which has not asked `statusLabel()` first. Checked **per occurrence**, not per file,
+because `session.kind.replace(...)` is legitimate and lives in the same files — the
+first attempt at this was per-file and wrongly flagged `CourseScreen.tsx`.
+
+Verified both directions: the old Stream line flags, the fixed line does not.
+
+## F-3 (I-3) — a date in another year printed without it
+
+`fieldValueText()` now takes `now` and adds `year: 'numeric'` **only when the value's
+year differs from the current one**, so the ~90% of rows that are this term's stay
+uncluttered. `outcomeText()` threads the same `now` through, so the sentences under the
+buttons carry it too.
+
+On the out-of-term rows the year IS the finding — a syllabus carried forward without its
+dates changed is exactly why the transform raised them — and "Tue, Sep 20, 11:06 AM" made
+a 2022 value read as this term's.
+
+Asserted: the year appears for a past year **and a future one** ("different" is not
+"older"); the comparison is made **in New York, not UTC** (`2027-01-01T04:00Z` is still
+2026 here, and carries no year); and it tracks the reader's year rather than a hard-coded
+one. `now` is injected rather than read from the clock so the suite does not quietly start
+printing years on 1 January — the round-1 assertions were given a fixed `NOW` for the same
+reason.
+
+**RED → GREEN:** 4 failures → 46/46.
+
+## F-4 (I-2) — the chip promised an apply that never comes
+
+**One source of truth, as asked.** `resolvedAction(item)` reads an answered row back to
+find which control produced it — the Inbox writes `{accept}` / `{value, value_type}` /
+`{dismissed}` — and `appliesAutomatically(item)` hands that action to **`outcomeApplies`,
+the very predicate the sentence under each button already uses**. A row can no longer say
+"recorded only" beneath the control and "applies on next sync" beside the answer; there is
+a test that walks four row shapes and asserts the two agree row for row.
+
+The chip now reads, in order: `dismissed` → `applied` → `answered · recorded only` →
+`answered, applies on next sync`.
+
+Two further bugs fell out of that ordering:
+
+* a **dismissed** row with no `applied_at` used to claim it would apply — dismissing *is*
+  the answer, and nothing ever stamps it;
+* **"Keep mine"** correctly keeps the promise even on a row with no writable field,
+  because it writes `confidence` alone (migration 042's one exception).
+
+An answer whose shape cannot be read — the 15 rows PM sessions answered directly in SQL —
+is treated as recorded only. Claiming less than we know is the safe direction for a
+promise.
+
+**RED → GREEN:** 5 failures → 46/46 on the screen, 55/55 in the unit suite.
+
+## Files touched in round 2
+
+```
+web/src/app/(app)/course/[id]/stream/CourseStream.tsx   F-1
+web/src/lib/queries.sync.ts                             F-3, F-4
+web/src/app/(app)/inbox/Inbox.tsx                       F-4
+web/test/course-stream.test.tsx                         F-1
+web/test/status-vocabulary.test.ts                      F-1 (the guard that missed it)
+web/test/queries.sync.outcome.test.ts                   F-3, F-4
+web/test/Inbox.test.tsx                                 F-4
+```
+
+F-2 (W-33) and F-5 (W-30) were not touched.
