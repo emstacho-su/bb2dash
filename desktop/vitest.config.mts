@@ -18,9 +18,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text'],
-      // Only the portable core is measured. The Electron adapters (`src/main/`) are
-      // proven by the Playwright-for-Electron suite, which vitest never loads, so
-      // counting them here would report a number that describes nothing.
+      // The portable core and the three Electron adapters this worker owns. The adapters
+      // are driven with `electron` mocked; the Playwright suite proves them for real.
       include: [
         'src/core/poller/reducer.ts',
         'src/core/poller/watermark.ts',
@@ -29,6 +28,10 @@ export default defineConfig({
         'src/core/poller/ny-time.ts',
         'src/core/route.ts',
         'src/core/redact.ts',
+        'src/main/notify.ts',
+        'src/main/deeplink.ts',
+        'src/main/test-hook.ts',
+        'src/main/poller-wiring.ts',
       ],
       thresholds: {
         // C-7 freezes >= 90 % on the reducer; the rest of the core is held to the

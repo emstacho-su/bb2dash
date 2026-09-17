@@ -281,7 +281,7 @@ describe('first launch', () => {
 
 describe('ticks never overlap', () => {
   it('drops a trigger that arrives while a tick is in flight', async () => {
-    let release: (() => void) | null = null;
+    let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -295,7 +295,7 @@ describe('ticks never overlap', () => {
     const first = instance.runOnce();
     const second = await instance.runOnce('manual');
     expect(second.outcome).toBe('skipped-busy');
-    release?.();
+    release();
     expect((await first).outcome).toBe('fired');
     expect(notifier.shown).toHaveLength(1);
   });
