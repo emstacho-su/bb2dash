@@ -18,6 +18,11 @@ import {
   type Session,
   type WorkItem,
 } from '@/lib/queries.course';
+// S-1 (P-grades-7): the one status vocabulary. This screen used to spell its
+// own by replacing underscores, which is how a Classwork row read "not
+// started" while the same item read "not opened" on Home.
+import { statusLabel as progressStatusLabel } from '@/lib/progress-status';
+import type { ProgressStatus } from '@/lib/queries';
 import styles from './CourseScreen.module.css';
 
 /* -- small pure helpers ---------------------------------------------------- */
@@ -43,8 +48,13 @@ const GLYPH_CLASS: Record<string, string> = {
   exam: styles.avExam,
 };
 
+/**
+ * The view types `status` loosely (string | null). An unrecognised value falls
+ * back to spelling itself out rather than being swallowed or mislabelled.
+ */
 function statusLabel(status: string | null): string {
-  return (status ?? 'not_started').replace(/_/g, ' ');
+  const key = status ?? 'not_started';
+  return progressStatusLabel(key as ProgressStatus) ?? key.replace(/_/g, ' ');
 }
 
 type WeekBucket = {

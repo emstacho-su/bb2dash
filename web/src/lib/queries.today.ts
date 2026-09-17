@@ -263,31 +263,31 @@ export function useLastSync() {
  * Status quick-edit (T-06) — writes planner state, never the synced facts.
  * ------------------------------------------------------------------------ */
 
-/** The statuses the quick-edit offers, in a sensible planner order. */
-export const STATUS_OPTIONS: readonly ProgressStatus[] = [
-  'not_started',
-  'planned',
-  'in_progress',
-  'submitted',
-  'graded',
-  'missed',
-  'excused',
-  'waived',
-  'not_applicable',
-] as const;
-
-/** Human labels for the status enum. */
-export const STATUS_LABEL: Record<ProgressStatus, string> = {
-  not_started: 'not started',
-  planned: 'planned',
-  in_progress: 'in progress',
-  submitted: 'submitted',
-  graded: 'graded',
-  missed: 'missed',
-  excused: 'excused',
-  waived: 'waived',
-  not_applicable: 'n/a',
-};
+/**
+ * The status vocabulary (S-1 / P-grades-7).
+ *
+ * This module used to declare its own: nine options in the menu and a second
+ * label map that said "not started" and "missed" where the rest of the app was
+ * heading for "not opened" and "DNF". `@/lib/progress-status` is now the only
+ * one, PM-owned and frozen before the worker branches were cut. These are
+ * re-exports so existing importers keep working and there is still exactly one
+ * definition behind them.
+ *
+ * `STATUS_OPTIONS` is gone rather than re-exported: it named a nine-value menu,
+ * and a name that lies is worse than a name that is missing. Menus take
+ * `OFFERED_STATUSES` — or, better, `<StatusOptions>` from
+ * `@/components/tracker/StatusSelect`, which also handles a stored retired
+ * value.
+ */
+export {
+  AUTO_GRADED_FROM,
+  OFFERED_STATUSES,
+  RETIRED_STATUS_FOLD,
+  STATUS_LABEL,
+  foldStatus,
+  statusLabel,
+  type OfferedStatus,
+} from './progress-status';
 
 interface StatusPatch {
   item: Pick<WorkItem, 'item_kind' | 'item_id'>;

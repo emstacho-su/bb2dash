@@ -19,7 +19,11 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
-import { courseCodeFromId, STATUS_LABEL, STATUS_OPTIONS } from '@/lib/queries.today';
+import { courseCodeFromId } from '@/lib/queries.today';
+// S-1 (P-grades-7): the one status vocabulary, and the one menu that knows
+// what to do with a retired value still stored on a row.
+import { statusLabel } from '@/lib/progress-status';
+import { StatusOptions } from '@/components/tracker/StatusSelect';
 import { useCourse, type ProgressStatus } from '@/lib/queries';
 import {
   PRIORITY_LABEL,
@@ -57,7 +61,7 @@ function formatDate(iso: string | null): string {
  */
 function statusText(status: string | null | undefined): string {
   const key = status ?? 'not_started';
-  return STATUS_LABEL[key as ProgressStatus] ?? key.replace(/_/g, ' ');
+  return statusLabel(key as ProgressStatus) ?? key.replace(/_/g, ' ');
 }
 
 /** A timestamp's clock part, or '' when there is none. */
@@ -367,11 +371,7 @@ export function AssignmentPopout({ assignmentId }: { assignmentId: string }) {
               disabled={controlsDisabled}
               onChange={(e) => commit({ status: e.target.value as AssignmentProgress['status'] })}
             >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {STATUS_LABEL[option]}
-                </option>
-              ))}
+              <StatusOptions value={status as ProgressStatus} />
             </select>
           </label>
 
