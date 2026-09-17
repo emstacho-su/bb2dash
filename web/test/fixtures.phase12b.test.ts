@@ -189,10 +189,12 @@ describe('the v4 fixture is exactly what crawler v4 emits', () => {
     globalThis.fetch = vi.fn(async (url: string) => {
       const u = String(url);
       const col = (u.match(/columns\/(_\d+_\d+)/) ?? u.match(/columnId=(_\d+_\d+)/) ?? [])[1]!;
-      const step = /\/grades\?/.test(u) ? 'grade' : /\/grades\/[^/]+\/attempts$/.test(u) ? 'attempts' : 'detail';
-      const r = step === 'detail'
-        ? raw[col]!.detail![(u.match(/attempts\/(_\d+_\d+)\?/) ?? [])[1]!]!
-        : (raw[col] as Record<string, RawStep>)[step]!;
+      const entry = raw[col]!;
+      const r = /\/grades\?/.test(u)
+        ? entry.grade
+        : /\/grades\/[^/]+\/attempts$/.test(u)
+          ? entry.attempts!
+          : entry.detail![(u.match(/attempts\/(_\d+_\d+)\?/) ?? [])[1]!]!;
       return { ok: r.status >= 200 && r.status <= 299, status: r.status, json: async () => r.body };
     }) as unknown as typeof fetch;
 
