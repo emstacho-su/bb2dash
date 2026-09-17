@@ -219,6 +219,44 @@ test.describe('the shell', () => {
     expect(ticks[0]?.payload).toMatchObject({ source: 'tray' });
   });
 
+  // P-shell-2. `will-navigate` fires for the main frame only, and not again for a
+  // redirect, so these two routes reached nothing before Phase 12b. Both are
+  // driven with `page.evaluate` rather than a click helper: the navigation is
+  // prevented by design, so awaiting it would hang. Neither opens a dialog.
+  test('stops a same-origin link that redirects off the allowlist', async () => {
+    const before = (await recorded(app)).filter((event) => event.kind === 'open-external').length;
+    await page.evaluate(() => document.getElementById('redirect')?.click());
+
+    await expect
+      .poll(async () => (await recorded(app)).filter((event) => event.kind === 'open-external'))
+      .toHaveLength(before + 1);
+
+    expect((await recorded(app)).at(-1)?.payload).toEqual({ url: 'https://example.com/redirected' });
+    expect(page.url()).toBe(`${fixture.url}/`);
+    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+  });
+
+  test('stops a subframe navigating off the allowlist, without opening the browser', async () => {
+    const externalBefore = (await recorded(app)).filter((e) => e.kind === 'open-external').length;
+    await page.evaluate(() => document.getElementById('embed')?.click());
+
+    await expect
+      .poll(async () => (await recorded(app)).filter((e) => e.kind === 'navigation-blocked'))
+      .toHaveLength(1);
+
+    const blocked = (await recorded(app)).find((e) => e.kind === 'navigation-blocked');
+    expect(blocked?.payload).toMatchObject({
+      source: 'will-frame-navigate',
+      url: 'https://example.com/embedded',
+    });
+
+    // A frame is not a click: it must not reach Stack's browser either.
+    expect((await recorded(app)).filter((e) => e.kind === 'open-external')).toHaveLength(
+      externalBefore,
+    );
+    expect(page.frames().map((frame) => frame.url())).not.toContain('https://example.com/embedded');
+  });
+
   // Last of the page-driven tests: the prevented navigation leaves Playwright
   // waiting on a navigation that, by design, never happens.
   test('keeps an outside link out of the window and hands it to the browser', async () => {
