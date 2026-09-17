@@ -30,6 +30,8 @@ import {
 import { bucketLabel } from '@/lib/queries.materials';
 import { scrubSnippet } from '@/lib/queries.search';
 import { useSetItemStatus, type WorkItem as TrackerWorkItem } from '@/lib/queries.today';
+// S-1 (P-grades-7) / F-1: one status vocabulary, this screen included.
+import { statusLabel } from '@/lib/progress-status';
 import type { ProgressStatus } from '@/lib/queries';
 import { isQueryLoading } from '@/components/shared/QueryState';
 import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
@@ -96,7 +98,12 @@ export function StreamRow({ row }: { row: CourseStreamRow }) {
     if (meta.type) detail.push(meta.type.replace(/_/g, ' '));
     if (meta.due_on) detail.push(`due ${meta.due_on}`);
     if (points) detail.push(points);
-    if (meta.status) detail.push(meta.status.replace(/_/g, ' '));
+    // S-1 / F-1: the shared vocabulary, not this file's own spelling. The view
+    // types `status` loosely (string | null), so a value the enum does not
+    // carry is spelled out rather than swallowed.
+    if (meta.status) {
+      detail.push(statusLabel(meta.status as ProgressStatus) ?? meta.status.replace(/_/g, ' '));
+    }
   }
 
   return (
