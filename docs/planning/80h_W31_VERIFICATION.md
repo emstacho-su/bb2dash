@@ -459,6 +459,44 @@ The figure the card shows is the same function `/grades` uses, so the two cannot
 
 ---
 
+## Round 3 — `/code-review main high` findings in W-31's files
+
+Both were in code G-1 had just written, and both were real.
+
+**CR-8 — `graded-so-far.ts`: a dead shim and a duplicated gate.** `linksConfirmed()` existed to
+work around muting, and said so in its own comment — but muting was removed from
+`grade-model/tree.ts` in the same change that introduced it. Nothing has read a link's
+confidence since, so it was copying every item of every course on every computation to produce
+an identical input. And `gate()` had become branch-for-branch identical to `checks.ts`'s
+`checkComputable()` once `manual_unscored` left both.
+
+Fixed by composing the engine instead of restating it: `gradedSoFar` now calls `evaluateCourse`
+(which runs the one order of checks and makes the `nothing_graded` decision) and `standingFor`.
+What is left in the module is the part that is genuinely its own — the reading, and the parts
+and columns the figure leaves out. `nothing_graded` is still lifted to a state of its own on the
+way out, because "not marked yet" and "can never carry a percentage" are different things to
+say. **The 59-case regression suite is unchanged and green**, which is the evidence that matters:
+the arithmetic and every gate decision are identical, there is simply one copy of them now.
+
+**CR-9 — `grade-figure-run.ts`: quadratic grouping on the Home path.** `groupItems` rebuilt each
+course's list with `[...list, item]` per row, inside a `reduce` that mutated its own accumulator
+Map. That is the trap review item R2-14 caught in 10b, and `groupByCourse` in
+`queries.grade-model.ts` already documents the fix — but this copy had regressed to it, and the
+PM's `use-course-figures.ts` now runs it on Home as well as `/grades`, over every course's
+columns at once. Now one pass, arrays built locally, handed out as a `ReadonlyMap`. Guarded by a
+new case over 300 interleaved rows across three courses: each gets its own rows, in input order,
+and none of another's.
+
+Commits `dc4b5f1` (CR-8) and `bf5a90d` (CR-9). Gate: typecheck, build and **1511 tests / 91
+files** green, on a tree merged with `origin/fix/page-pass-12b` (including the PM's
+`use-course-figures.ts`, which is kept and unchanged).
+
+*Flakes seen once each and clean on every rerun, both filesystem/timing-sensitive on Windows and
+neither in W-31's changes: W-33's `PlannerWeek.band` "hides the band contents with nothing
+stored", and the two `service_role` audits that walk `src/` synchronously.*
+
+---
+
 ## What G-1 would have removed under the other picks
 
 Kept for the record, since the brief asked for it before Stack chose.
