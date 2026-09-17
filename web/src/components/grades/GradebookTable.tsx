@@ -28,8 +28,6 @@
  * `popout/SubmissionBlock.tsx`.
  *
  * Phase 10b adds optional props, all absent on 10a's call sites:
- *   whatIf   course tab only — a "what if" cell beside the dash on an ungraded,
- *            counted, non-muted item row.
  *   links    course tab only — the "Counts toward…" picker. A column Stack
  *            linked to a component by override also moves up among the item
  *            rows and carries 10a's "counts toward grade" tag; one he marked
@@ -38,12 +36,11 @@
  *   overrides both screens — Stack's link choices without the picker, so
  *            `/grades` places a row the same way the course tab does.
  *            Defaults to `links.states`.
- *   footer   course tab only — the placeholder rows under the table.
- * None of them computes anything in this file; the standing lives in
- * `ModelStanding`.
+ * Neither computes anything in this file; the figure lives in
+ * `GradedSoFarFigure`.
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSectionState } from '@/lib/grades-sections';
 import { itemQuery } from '@/lib/queries.popout';
@@ -59,7 +56,6 @@ import {
 import { columnItemKey, type LinkState, type LinkTarget } from '@/lib/grade-model-view';
 import tokens from '@/styles/tokens.module.css';
 import { LinkColumnControl } from './LinkColumnControl';
-import { WhatIfCell, type WhatIfProps } from './WhatIfCell';
 import styles from './GradebookTable.module.css';
 
 /** The picker wiring a table needs (course tab only). */
@@ -76,7 +72,6 @@ export interface GradebookLinksProps {
 
 /** Everything 10b adds to one row. All optional. */
 interface RowExtras {
-  readonly whatIf?: WhatIfProps;
   readonly links?: GradebookLinksProps;
   readonly overrides?: ReadonlyMap<string, LinkState>;
 }
@@ -187,7 +182,6 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
     && ((row.column_kind === 'attendance' && row.counts_toward_grade === true) || isOverrideCounted(row, overrides));
   const ambiguous = (row.linked_assignments ?? 0) > 1;
   const key = columnItemKey(row.course_id, row.column_id);
-  const whatIfTarget = extras.whatIf?.targets.get(key);
   const linkState = extras.links?.states.get(key);
   const feedback = hasFeedback(row.feedback);
   // G-5: with an assignment behind the row, its feedback is in that popout.
@@ -249,14 +243,6 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
         <td className={styles.scoreCell}>
           <span className={styles.score}>{scoreText(row.effective_score, row.possible)}</span>
           {row.display_grade && <span className={styles.note}>{row.display_grade}</span>}
-          {whatIfTarget && extras.whatIf && (
-            <WhatIfCell
-              target={whatIfTarget}
-              value={extras.whatIf.values[key]}
-              onCommit={extras.whatIf.onCommit}
-              disabled={extras.whatIf.disabled}
-            />
-          )}
         </td>
 
         <td className={styles.seenCell}>
@@ -311,23 +297,17 @@ function Table({
 export function GradebookTable({
   rows,
   caption = 'Gradebook columns, as Blackboard recorded them',
-  whatIf,
   links,
   overrides,
-  footer,
   sectionKey,
 }: {
   rows: GradebookLatestRow[];
   /** Named for the screen reader; the visible heading lives in the card. */
   caption?: string;
   /** Course tab only (Phase 10b). */
-  whatIf?: WhatIfProps;
-  /** Course tab only (Phase 10b). */
   links?: GradebookLinksProps;
   /** Both screens (Phase 10b): Stack's link choices, for placement only; defaults to `links.states`. */
   overrides?: ReadonlyMap<string, LinkState>;
-  /** Course tab only (Phase 10b): rendered under the table groups. */
-  footer?: ReactNode;
   /**
    * Phase 12b (P-grades-1): where the bookkeeping group's open/closed choice is
    * remembered. Without it the toggle still works and simply forgets.
@@ -347,17 +327,12 @@ export function GradebookTable({
     [rows, placement],
   );
   const extras = useMemo<RowExtras>(
-    () => ({ whatIf, links, overrides: placement }),
-    [whatIf, links, placement],
+    () => ({ links, overrides: placement }),
+    [links, placement],
   );
 
   if (rows.length === 0) {
-    return footer ? (
-      <div className={styles.wrap}>
-        <p className={styles.empty}>No gradebook columns have been pulled for this course yet.</p>
-        {footer}
-      </div>
-    ) : (
+    return (
       <p className={styles.empty}>
         No gradebook columns have been pulled for this course yet.
       </p>
@@ -391,7 +366,6 @@ export function GradebookTable({
         </div>
       )}
 
-      {footer}
     </div>
   );
 }

@@ -98,6 +98,11 @@ export type NotComputableReason =
   | 'unknown_aggregation'
   | 'nothing_graded';
 
+export interface NotComputedResult {
+  readonly state: 'not_computable';
+  readonly reason: NotComputableReason;
+}
+
 export interface Standing {
   readonly pct: number;
   readonly earned: number;

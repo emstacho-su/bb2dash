@@ -1,50 +1,28 @@
 /**
- * bb2dash — grade model engine entry point (Phase 10b, R-12).
+ * bb2dash — grade model engine entry point.
  *
- * Pure and deterministic: no I/O, no clock, no mutation of its input. The
- * signatures are the frozen Contract (`docs/planning/68_PHASE10B_grade_model.md`
- * §Engine); the implementation lives in the modules beside this file:
- * `items.ts` (counted items, what-if values, placeholders), `prepare.ts` (the
- * shared item preparation), `states.ts` (`itemStates`), `tree.ts`
- * (children, muting, capacity), `aggregations/` (one module per rule),
- * `evaluate.ts` + `project.ts` (projections and standings), `checks.ts`
- * (order of checks), `letter.ts`, `agreement.ts`, `solve.ts`.
+ * Pure and deterministic: no I/O, no clock, no mutation of its input.
+ *
+ * Phase 10b's public surface was `projectCourse` / `solveTarget` / `itemStates`
+ * over three projections, a what-if scenario and an agrees-with-Blackboard
+ * sentence. Phase 12b (G-1, P-grades-3) removed that layer on Stack's pick —
+ * "keep the engine's math, remove the layer around it". What the app reads now
+ * is `gradedSoFar()` in `@/lib/graded-so-far`, which composes the pieces below;
+ * this module re-exports the arithmetic and its vocabulary, nothing more.
+ *
+ * The implementation still lives in the modules beside this one: `items.ts`
+ * (what counts), `prepare.ts` (the shared preparation), `tree.ts` (children,
+ * extra credit, capacity), `aggregations/` (one module per syllabus rule),
+ * `evaluate.ts` + `project.ts` (totals and standings), `checks.ts` (the order
+ * of checks), `letter.ts`.
  */
 
-import { agreementFor } from './agreement';
-import { unlinkedScoredKeys } from './items';
-import { letterForPct } from './letter';
-import { componentResults, evaluateCourse, standingsOf, usesHypotheticals } from './project';
-import { solve } from './solve';
-import { itemStatesOf } from './states';
-import type { ItemStates, ModelInput, ModelResult, SchemeInput, TargetResult } from './types';
-
 export * from './types';
-
-export const DEFAULT_TARGET_LETTER = 'A-';
-
-export function projectCourse(input: ModelInput): ModelResult {
-  const evaluation = evaluateCourse(input);
-  if (evaluation.state === 'not_computable') return evaluation;
-  return {
-    state: 'computed',
-    standings: standingsOf(evaluation),
-    components: componentResults(input.components, evaluation),
-    unlinkedScoredKeys: unlinkedScoredKeys(input.components, input.items),
-    usesHypotheticals: usesHypotheticals(evaluation),
-    agreement: agreementFor(input),
-  };
-}
-
-export function solveTarget(input: ModelInput, letter: string): TargetResult {
-  return solve(input, letter);
-}
-
-export function letterFor(pct: number, scheme: SchemeInput): string | null {
-  return letterForPct(pct, scheme);
-}
-
-/** Round 2 (R2-3/R2-4): what-if targets, muted components, dropped placeholders and (R3-3) unsure items, from the engine's own preparation. */
-export function itemStates(input: ModelInput): ItemStates {
-  return itemStatesOf(input);
-}
+export {
+  componentResults,
+  evaluateCourse,
+  evaluateModel,
+  standingFor,
+  standingOf,
+} from './project';
+export { letterForPct as letterFor } from './letter';
