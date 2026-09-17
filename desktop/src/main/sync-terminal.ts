@@ -13,14 +13,14 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { session as electronSession } from 'electron';
 
 import type { DesktopConfig } from '../core/config';
-import { InvalidSyncIdError, buildSyncCommand, pickWtPath } from '../core/sync-command';
+import { InvalidSyncIdError, buildSyncCommand } from '../core/sync-command';
 import type { RestGet } from '../core/types';
 import { log, logError } from './log';
 import { IS_TEST_MODE, recordEvent } from './test-hook';
+import { resolveWtPath } from './wt';
 import { PARTITION } from './window';
 
 /** R4, frozen by C-6: the newest queued sync request. */
@@ -39,20 +39,6 @@ function validateQueuedRequests(rows: unknown): readonly QueuedRequest[] {
     if (typeof id !== 'number' && typeof id !== 'string') throw new Error('expected an id');
     return Object.freeze({ id: String(id) });
   });
-}
-
-/**
- * `%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe` first — the Store execution
- * alias — then `wt.exe` on PATH, then `null` for the PowerShell fallback.
- */
-export function resolveWtPath(env: NodeJS.ProcessEnv = process.env): string | null {
-  const candidates: string[] = [];
-  const localAppData = env.LOCALAPPDATA;
-  if (localAppData) candidates.push(join(localAppData, 'Microsoft', 'WindowsApps', 'wt.exe'));
-  for (const dir of (env.PATH ?? '').split(';')) {
-    if (dir.length > 0) candidates.push(join(dir, 'wt.exe'));
-  }
-  return pickWtPath(candidates, existsSync);
 }
 
 function launchTerminal(argv: readonly string[], repoDir: string): void {
