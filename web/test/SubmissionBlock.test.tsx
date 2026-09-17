@@ -90,6 +90,18 @@ describe('SubmissionBlock — the status line', () => {
     expect(screen.getAllByText('Attempt 1 of 3').length).toBeGreaterThan(0);
   });
 
+  /* G-4 / P-grades-6: the popout's status line carries the same rule. */
+  it.each(['GRADED', 'SUBMITTED'])(
+    'does not repeat a COMPLETED attempt beside a %s status',
+    (status) => {
+      hooks.grade = stub(
+        makeAssignmentGrade({ submission_status: status, last_attempt_status: 'COMPLETED' }),
+      );
+      renderBlock();
+      expect(screen.queryByText(/last attempt/)).toBeNull();
+    },
+  );
+
   it('shows no score anywhere — the popout is about the work, not the mark', () => {
     hooks.grade = stub(
       makeAssignmentGrade({

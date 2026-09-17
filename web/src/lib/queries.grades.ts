@@ -397,6 +397,22 @@ export interface SubmissionLabel {
 }
 
 /**
+ * Column statuses that already mean "the work is in" (P-grades-6, G-4).
+ * Beside one of these, Blackboard's `COMPLETED` attempt status states the same
+ * fact twice — "graded" next to "last attempt: COMPLETED" — so it is dropped.
+ *
+ * Only `COMPLETED` is dropped, and only beside these two. `NEEDS_GRADING` next
+ * to GRADED means a further attempt is waiting, `COMPLETED` next to UNOPENED
+ * contradicts the column, and both of those are worth reading.
+ */
+const SETTLED_COLUMN_STATUS: ReadonlySet<string> = new Set(['GRADED', 'SUBMITTED']);
+const REDUNDANT_ATTEMPT_STATUS: ReadonlySet<string> = new Set(['COMPLETED']);
+
+function saysNothingNew(status: string | null, attempt: string): boolean {
+  return status !== null && SETTLED_COLUMN_STATUS.has(status) && REDUNDANT_ATTEMPT_STATUS.has(attempt);
+}
+
+/**
  * Blackboard's submission status with a human gloss.
  *
  * The status is Blackboard's, verbatim — a row with feedback but no score
@@ -404,6 +420,11 @@ export interface SubmissionLabel {
  * special case (Stack's answer 3). An unrecognised code is shown as itself
  * rather than guessed at. `lastAttempt` is carried alongside, never merged in:
  * a SUBMITTED column whose last attempt is NEEDS_GRADING is still "submitted".
+ *
+ * `attemptStatus` is null when the attempt repeats the column — literally
+ * (GRADED beside GRADED) or in substance (COMPLETED beside GRADED or
+ * SUBMITTED, P-grades-6). Both call sites, the gradebook table and the
+ * popout's submission block, read it from here, so the rule lives once.
  */
 export function submissionLabel(
   status: string | null | undefined,
@@ -412,10 +433,11 @@ export function submissionLabel(
   const raw = typeof status === 'string' && status.trim() !== '' ? status.trim() : null;
   const attempt =
     typeof lastAttempt === 'string' && lastAttempt.trim() !== '' ? lastAttempt.trim() : null;
+  const repeats = attempt === null || attempt === raw || saysNothingNew(raw, attempt);
   return {
     status: raw,
     text: raw === null ? NO_VALUE : (SUBMISSION_GLOSS[raw] ?? raw),
-    attemptStatus: attempt !== null && attempt !== raw ? attempt : null,
+    attemptStatus: repeats ? null : attempt,
   };
 }
 

@@ -85,6 +85,38 @@ describe('GradebookTable — item rows', () => {
   });
 });
 
+/* G-4 / P-grades-6: "graded" and "last attempt: COMPLETED" are one fact. */
+describe('GradebookTable — the submission cell says one thing (G-4)', () => {
+  it('renders one label for a GRADED column whose last attempt is COMPLETED', () => {
+    renderTable([
+      makeGradebookRow({
+        name: 'Lab #2',
+        submission_status: 'GRADED',
+        last_attempt_status: 'COMPLETED',
+      }),
+    ]);
+    const row = rowFor('Lab #2');
+    expect(within(row).getByText('graded')).toBeInTheDocument();
+    expect(within(row).queryByText(/last attempt/)).toBeNull();
+  });
+
+  it('does the same for a SUBMITTED column whose last attempt is COMPLETED', () => {
+    renderTable([
+      makeGradebookRow({
+        name: 'Lab #3',
+        submission_status: 'SUBMITTED',
+        last_attempt_status: 'COMPLETED',
+      }),
+    ]);
+    expect(within(rowFor('Lab #3')).queryByText(/last attempt/)).toBeNull();
+  });
+
+  it('still shows an attempt status that says something else', () => {
+    renderTable([IST352_SUBMITTED]);
+    expect(within(rowFor('Assignment 1')).getByText('last attempt: NEEDS_GRADING')).toBeInTheDocument();
+  });
+});
+
 describe('GradebookTable — feedback', () => {
   const withMarkup = makeGradebookRow({
     name: 'Essay',
