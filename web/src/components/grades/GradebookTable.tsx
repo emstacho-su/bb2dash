@@ -45,6 +45,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useSectionState } from '@/lib/grades-sections';
 import { itemQuery } from '@/lib/queries.popout';
 import {
   NO_VALUE,
@@ -302,6 +303,7 @@ export function GradebookTable({
   links,
   overrides,
   footer,
+  sectionKey,
 }: {
   rows: GradebookLatestRow[];
   /** Named for the screen reader; the visible heading lives in the card. */
@@ -314,8 +316,15 @@ export function GradebookTable({
   overrides?: ReadonlyMap<string, LinkState>;
   /** Course tab only (Phase 10b): rendered under the table groups. */
   footer?: ReactNode;
+  /**
+   * Phase 12b (P-grades-1): where the bookkeeping group's open/closed choice is
+   * remembered. Without it the toggle still works and simply forgets.
+   */
+  sectionKey?: string;
 }) {
-  const [showBookkeeping, setShowBookkeeping] = useState(false);
+  // Collapsed by default — it is the group of columns that count toward
+  // nothing, and it was collapsed before it was remembered.
+  const [showBookkeeping, toggleBookkeeping] = useSectionState(sectionKey, 'closed');
 
   const placement = overrides ?? links?.states;
   const { items, bookkeeping } = useMemo(
@@ -360,7 +369,7 @@ export function GradebookTable({
             type="button"
             className={styles.groupToggle}
             aria-expanded={showBookkeeping}
-            onClick={() => setShowBookkeeping((value) => !value)}
+            onClick={toggleBookkeeping}
           >
             Attendance and bookkeeping columns ({bookkeeping.length})
           </button>

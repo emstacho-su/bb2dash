@@ -24,6 +24,7 @@ import Link from 'next/link';
 import { useCourseDisplay } from '@/lib/queries.course';
 import { pickCourseGrade, useCourseGrades, useGradebookLatest } from '@/lib/queries.grades';
 import { schemeCourseIdFor } from '@/lib/queries.grade-model';
+import { bookkeepingSectionKey } from '@/lib/grades-sections';
 import { RESET_LABEL } from '@/lib/grade-model/labels';
 import { CourseGradeCard } from '@/components/grades/CourseGradeCard';
 import { GradebookTable } from '@/components/grades/GradebookTable';
@@ -115,6 +116,10 @@ export function CourseGrades({ courseId }: { courseId: string }) {
             caption={`${code} gradebook`}
             whatIf={actions.whatIf}
             links={actions.links}
+            // The same key `/grades` uses, so the bookkeeping group is folded
+            // the same way in both places (P-grades-1). The card itself does
+            // not collapse here: there is only one of them.
+            sectionKey={bookkeepingSectionKey(courseId)}
             footer={
               <PlaceholderRows
                 items={model.items}

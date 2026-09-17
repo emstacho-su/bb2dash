@@ -11,8 +11,9 @@
  * Every query hook is a stub; nothing here reaches Supabase.
  */
 
-import { render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readStoredSections, writeStoredSection } from '@/lib/grades-sections';
 import {
   ECN304_ATTENDANCE,
   IST323_QUIZ,
@@ -199,6 +200,71 @@ describe('GradesScreen — the title is the link (G-3, P-grades-2)', () => {
     render(<GradesScreen />);
     expect(screen.queryByRole('link', { name: /Course tab/ })).toBeNull();
     expect(screen.queryByText(/Course tab/)).toBeNull();
+  });
+});
+
+/*
+ * G-2 / P-grades-1, Stack's answer 4: each course's block collapses, and the
+ * choice survives a reload. The header stays — folding a course away should
+ * leave the summary, not the whole card.
+ */
+describe('GradesScreen — a course block collapses (G-2)', () => {
+  afterEach(() => window.localStorage.clear());
+
+  it('opens every course block by default', () => {
+    render(<GradesScreen />);
+    expect(screen.getByRole('button', { name: 'Hide IST 323' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByText('Quiz 2')).toBeInTheDocument();
+  });
+
+  it('folds the gradebook away and keeps the header', () => {
+    render(<GradesScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+
+    expect(screen.queryByText('Quiz 2')).toBeNull();
+    expect(screen.getByText(/Blackboard’s number, as of/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'IST 323' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show IST 323' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('opens it again', () => {
+    render(<GradesScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show IST 323' }));
+    expect(screen.getByText('Quiz 2')).toBeInTheDocument();
+  });
+
+  it('remembers the choice under the course\'s own key', () => {
+    render(<GradesScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+    expect(readStoredSections()['course:IST.323']).toBe('closed');
+  });
+
+  it('renders a course collapsed when that is what was stored', () => {
+    writeStoredSection('course:IST.323', 'closed');
+    render(<GradesScreen />);
+    expect(screen.queryByText('Quiz 2')).toBeNull();
+  });
+
+  it('keeps each course block on its own key', () => {
+    hooks.courses = stub([
+      course(),
+      course({ display_id: 'IST.352', code: 'IST 352', shell_ids: ['IST.352'] }),
+    ]);
+    hooks.grades = stub([makeCourseGrade(), makeCourseGrade({ course_id: 'IST.352' })]);
+    hooks.gradebook = stub([IST323_QUIZ, { ...ECN304_ATTENDANCE, course_id: 'IST.352', counts_toward_grade: true }]);
+    render(<GradesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+    expect(screen.queryByText('Quiz 2')).toBeNull();
+    expect(screen.getByText('Attendance')).toBeInTheDocument();
+    expect(readStoredSections()['course:IST.352']).toBeUndefined();
   });
 });
 

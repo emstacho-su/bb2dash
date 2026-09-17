@@ -9,7 +9,8 @@
  */
 
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readStoredSections, writeStoredSection } from '@/lib/grades-sections';
 import {
   ECN304_ATTENDANCE,
   IST323_LETTER,
@@ -39,6 +40,8 @@ function renderTable(rows: GradebookLatestRow[]) {
 function rowFor(name: string): HTMLElement {
   return screen.getByText(name).closest('tr') as HTMLElement;
 }
+
+afterEach(() => window.localStorage.clear());
 
 describe('GradebookTable — item rows', () => {
   it('shows the score, the points possible, the status and when we saw it', () => {
@@ -242,6 +245,36 @@ describe('GradebookTable — the bookkeeping group (answer 8)', () => {
     expect(screen.getByText('Final Letter Grade')).toBeInTheDocument();
     // Still Blackboard's own figure, with its seen_at, and never summed.
     expect(within(rowFor('Attendance')).getByText('83.333 / 100')).toBeInTheDocument();
+  });
+
+  /* G-2 / P-grades-1: the inner group's state survives a reload too. */
+  it('remembers being opened, under the key it was given', () => {
+    render(
+      <GradebookTable
+        rows={[IST323_QUIZ, ECN304_ATTENDANCE, IST323_LETTER]}
+        sectionKey="bookkeeping:IST.323"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /bookkeeping columns/ }));
+    expect(readStoredSections()['bookkeeping:IST.323']).toBe('open');
+  });
+
+  it('starts open when that is what was stored', () => {
+    writeStoredSection('bookkeeping:IST.323', 'open');
+    render(
+      <GradebookTable
+        rows={[IST323_QUIZ, ECN304_ATTENDANCE, IST323_LETTER]}
+        sectionKey="bookkeeping:IST.323"
+      />,
+    );
+    expect(screen.getByText('Attendance')).toBeInTheDocument();
+  });
+
+  it('keeps the toggle working, and storage untouched, without a key', () => {
+    renderTable([IST323_QUIZ, ECN304_ATTENDANCE, IST323_LETTER]);
+    fireEvent.click(screen.getByRole('button', { name: /bookkeeping columns/ }));
+    expect(screen.getByText('Attendance')).toBeInTheDocument();
+    expect(readStoredSections()).toEqual({});
   });
 
   it('puts attendance among the items once its assignment has a component', () => {

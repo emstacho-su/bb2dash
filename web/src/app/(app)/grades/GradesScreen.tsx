@@ -26,6 +26,7 @@
 import { useMemo } from 'react';
 import { useCourseDisplay } from '@/lib/queries.today';
 import { pickCourseGrade, useCourseGrades, useGradebookLatest } from '@/lib/queries.grades';
+import { bookkeepingSectionKey, courseSectionKey } from '@/lib/grades-sections';
 import { CourseGradeCard } from '@/components/grades/CourseGradeCard';
 import { GradebookTable } from '@/components/grades/GradebookTable';
 import { ModelStanding } from '@/components/grades/ModelStanding';
@@ -81,10 +82,17 @@ export function GradesScreen({ model }: { model?: GradesModelProps } = {}) {
             titleHref={`/course/${encodeURIComponent(course.display_id)}`}
             subtitle={shellIds.length > 1 ? `${course.title} · ${shellIds.join(' + ')}` : course.title}
             row={row}
+            // P-grades-1: the block folds away and remembers it.
+            sectionKey={courseSectionKey(course.display_id)}
           >
             {model && <ModelStanding {...(model.standings[course.display_id] ?? MODEL_STANDING_LOADING)} />}
             {isQueryUnresolved(gradebookQ) ? null : (
-              <GradebookTable rows={rows} caption={`${course.code} gradebook`} overrides={model?.overrides} />
+              <GradebookTable
+                rows={rows}
+                caption={`${course.code} gradebook`}
+                overrides={model?.overrides}
+                sectionKey={bookkeepingSectionKey(course.display_id)}
+              />
             )}
           </CourseGradeCard>
         );
