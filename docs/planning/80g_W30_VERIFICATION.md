@@ -373,3 +373,185 @@ tests passed**; `npm run typecheck` (including tests) clean.
    IST.466 HBR files to their readings (their names are `HBR3- Apple vs. The FBI (3).pdf`); those
    were linked by an agent earlier and are untouched. A file the rule cannot place raises nothing
    unless *several* readings fit — a near-miss is silent by design.
+
+---
+
+# Round 2 — G-7a (P-grades-4 / P-grades-5) and the two code-review findings
+
+Added after the PM's endpoint discovery (`80f_ATTEMPTS_ENDPOINT.md`) and `/code-review main high`.
+Branch `fix/page-pass-12b-db`, worktree `bb2dash-wt-12b-db`. **I cannot log in to Blackboard, so
+nothing here has met a live response. Stack's next sync is the proof.**
+
+## G-7a — crawler v4, the fixture, migration 085
+
+### Why v3 found nothing (two reasons, not one)
+
+1. It asked `GET /gradebook/columns/<col>/attempts?userId=<me>`. For a **student** that answers
+   `200 {"results": []}` on every column — 21 of 21 in crawl `1b5e8da5`. Blackboard's own UI never
+   calls it.
+2. Even if it had, its `downloadUrl` was **built**, not read:
+   `/gradebook/attempts/<id>/files/<id>/download`. That is not a route a student session has.
+
+### The chain v4 walks
+
+`grades?expand=attemptsLeft&userId=<me>` → the **grade id** · `grades/<gradeId>/attempts` → the
+attempt rows · `gradebook/attempts/<id>?columnId=…&expand=…` → **the only response with
+`studentSubmissionFiles[]`**, each carrying `file.permanentUrl`
+(`https://blackboard.syracuse.edu/bbcswebdav/xid-<n>_1`) and `file.mimeType`.
+
+Bounded at the newest **3** attempts per column, one request at a time. Every step records its own
+status under `steps`; `entry.status` keeps the **first** non-2xx; no step can throw the crawl.
+
+The envelope keeps v3's shape, so `stage_attempts` still reads `attempts[].results[]`, and gains
+`grade`, `attempts[]`, `detail[]`, `steps` and `keys{grade,attempt,detail,file}`.
+`crawler.version = 4`.
+
+**Prose moved.** `studentSubmission.rawText`, `studentComments` and `instructorFeedback` are nested
+under `results[].text`. The stage lifts only top-level keys into columns, so on a v4 payload
+`bb_attempts.feedback` / `.student_comments` / `.student_submission` come out null and the text is
+in `bb_attempts.raw` alone (owner-only under RLS). The three top-level reads are **kept** in the
+SQL on purpose: a v3 payload does put them at the top level and a replay must still fill its
+columns.
+
+`pickKey` now accepts a dotted path — Ultra nests the score under `displayGrade` and the submission
+date under `attemptReceipt`.
+
+### Tests
+
+| suite | result |
+|---|---|
+| `web/test/crawler.attempts.test.ts` (rewritten for v4) | **62 passed** |
+| `web/test/fixtures.phase12b.test.ts` (new) | **14 passed** |
+| `web` typecheck | clean |
+
+The chain is driven against a stubbed `fetch`: request order, the bound, the `keys` probe, the
+first-non-2xx rule, a detail-only failure (submission still recorded, without files) and an offline
+run (`status 0`, nothing thrown).
+
+### The fixture — `db/fixtures/phase12b/`
+
+`attempts_v4.json` (four columns) and `attempts_v3_empty.json` (what v3 really returned).
+**Real Blackboard shell and column ids** so the fixture resolves to a course and to Stack's
+assignments; **every** attempt id, grade id, receipt, file name, `bbFileUuid`, `xid-…` URL and
+sentence is invented. No real submission, file name or feedback appears.
+
+| column | what it exercises |
+|---|---|
+| `_3560530_1` | two attempts, three files, real mime types, durable URLs, one assignment |
+| `_3569973_1` | the column `fp-proposal` / `fp-log-final` share → `assignment_id` must stay null |
+| `_3598132_1` | step 3 answers `500` → the submission is recorded from the list row, no files |
+| `_3560541_1` | step 1 answers `403` → the chain stops, nothing catalogued |
+
+`build_load_sql.js` generates `db/tests/phase12b_load_fixture.sql`; the vitest file re-derives
+`payload.attempts` from the invented raw responses through the **real crawler mappers**, so the
+fixture cannot drift from `ingest/bb_crawler.js`, and fails if the generated loader is stale.
+
+### Migration 085 — what the SQL did and did not need
+
+Checked 050/055 name by name against 80f. `columnId`, `status`, `results[].id/status/created/
+modified/submitted/score/exempt/receipt` and `files[].name/downloadUrl` all still land where the
+stage looks. **One real change:** `bb_files.mime_type` was a literal `null` (v3 had no metadata at
+all); it now reads `files[].mime`. `file.permanentUrl` needed nothing — it arrives as
+`files[].downloadUrl` already absolute and `bb_abs_url` passes it through.
+
+* **RED** — the v4 file catalogued with `mime_type` null.
+* Applied as `085_stage_attempts_v4`; **md5 `cc749f5258455ba04a8ba34241b5a0b2`**, equal to
+  `schema_migrations.statements[1]` (13 709 bytes). Test md5 `bde8dcaec72833689f036ec377c2a8e1`.
+* **GREEN** — `phase12b_085_stage_attempts_v4: PASS`. 4 attempts, 4 submission files, 2 distinct
+  mime types, every `source_url` a `bbcswebdav/xid-…` link, the three quiz files under
+  `IST.323/quiz-01`, the shared column's file under **no** assignment, the v3 shell folded with no
+  error and no invented row, **replay: `inserted 0`, `files_catalogued 0`**.
+
+### `skills/bb-sync` step 4b
+
+No field it reads changed name — it works off `bb_files` columns. Three edits anyway:
+
+* `mime_type = coalesce(mime_type, $mime)` instead of `$mime`. Since 085 the row already carries
+  what Blackboard declared, and a bbcswebdav download often answers `application/octet-stream`.
+* a note that `source_url` is now Blackboard's own durable link, so the download method is
+  unchanged and this step has simply never had a row to pull.
+* the crawl-duration note now says v4 walks three requests per submitted column.
+
+## Round 3 — CR-2 and CR-3
+
+### CR-2 → `086_reading_link_settles.sql`
+
+074's ambiguous reading-link question could never be answered: `apply_resolutions()` writes only
+`assignments` and only for `entity = 'assignment'`; `raise_attention`'s do-not-re-ask rules cover
+`missing`/`data_gap` and "Keep mine" conflicts, not `stack_must_confirm`; and the dedupe index is
+`where state = 'open'`, so resolving the row let the next fold insert a fresh one — every two
+minutes, for ever. Exactly what 041 exists to prevent.
+
+086 makes the link step its own apply path (it is the only code that knows what the candidates
+were). Before raising it reads the newest **closed** row for that file and compares the candidate
+set it was asked about (`to_value`) with the candidates now:
+
+| the closed row says | what happens |
+|---|---|
+| same set, answer names one of them | sets `bb_files.reading_id` — counted as `applied` |
+| same set, "none of these" / dismissed | silence — counted as `settled` |
+| the set has changed | asked once, about the new set |
+
+A linked file leaves the loop's `reading_id is null` filter, so an answered question cannot return
+by any route. Answer shape: `resolution = {"reading_id": <id>}`, or `{"accept": "none"}` / dismiss.
+
+* **RED** — answer the row, run again: `reading_id` still null **and** a new open row is back.
+* Applied as `086_reading_link_settles`; **md5 `506e7dfff5f4a2b5e39df370beb36251`** = the applied
+  statement. Test md5 `3c98790899492ab25e3e676301019724`.
+* **GREEN** — `phase12b_086_reading_link_settles: PASS`: answer applies, dismissal sticks, neither
+  returns, a third fold writes nothing, a new candidate is asked once, and 074's two real links are
+  untouched. No data change — prod has **zero** ambiguous reading-link rows today.
+
+### CR-3 → `087_auto_graded_sticks.sql`
+
+078's auto-graded step forced `graded` on every fold of the newest crawl, so it could not tell a
+status nobody had touched from one Stack deliberately moved back: setting an item to "in progress"
+(redoing the attempt) or "submitted" (regrade asked for) was overwritten by the next tick.
+
+087 adds two predicates, both from machinery 056 already has:
+
+1. **the score must be new or changed in this run** — `prev.effective_score is distinct from
+   round(<this run's>, 3)` against the newest `bb_gradebook` row from any other run, the same
+   comparison `scores_new` / `scores_changed` use, at the scale the column is stored at (so a value
+   that does not fit `numeric(9,3)` does not read as "changed" every run);
+2. **this fold must actually have mirrored the run** (`v_ins > 0`). The gradebook insert is
+   `on conflict do nothing`, so a replay inserts 0 while its scores still differ from the
+   *previous* run's — without this a replay looks exactly like a fresh crawl.
+
+Everything else is unchanged: forward-only from `AUTO_GRADED_FROM`, `excused` / `missed` never
+touched, shared and exempt columns skipped, only `status` written, newest-crawl guard.
+
+* **RED** — revert `IST.323/quiz-02` to `in_progress`, re-fold the same crawl: `auto_graded = 1`
+  and the revert was gone.
+* Applied as `087_auto_graded_sticks`; **md5 `6a9e0ce124587434561158598df418b5`** = the applied
+  statement. Test md5 `9e9b713a044415c4fda70e58813d8fba`.
+* **GREEN** — `phase12b_087_auto_graded_sticks: PASS`: a replay leaves the revert alone, a later
+  crawl carrying the identical score leaves it alone, a changed score advances it again, and
+  `excused` / `missed` are untouched either way. **No data change** — 078's 14 rows stand.
+
+### CR-6 — no action
+
+The PM checked 079 on prod: `due_at` is null on both ethics rows and `v_work_items.due_on` reads
+9/22 and 9/24, so writing only `due_date` is correct there.
+
+## What Stack's next sync should show
+
+The crawl is v4, so every `kind = 'course'` payload carries `crawler.version = 4` and an `attempts`
+entry per **submitted** column with `grade`, `attempts[]`, `detail[]` and `keys`.
+
+* `bb_attempts`: **0 → one row per attempt found**, up to 3 per submitted column. Prod's newest
+  crawl probed 21 columns, so expect roughly **15–21 rows** — one per column that really has a
+  submission, more where he resubmitted. `feedback`, `student_comments` and `student_submission`
+  stay **null**; the text is in `raw->'text'`.
+* `bb_files` bucket `my_submissions`: **0 → one row per `studentSubmissionFiles[]` entry**,
+  `source_url` a `bbcswebdav/xid-…` link, `mime_type` populated, `storage_path` null until
+  bb-sync step 4b pulls the bytes. The column two assignments share (`_3569973_1`) files under
+  **neither**.
+* `sync_stage_runs` for stage `attempts`: `columns_probed` ≈ 21, `errors` = however many steps
+  answered non-2xx (0 if the chain is right), `attempts_seen` = `inserted`, `files_catalogued` > 0.
+* Stage `gradebook`: `auto_graded` counts only columns whose score is **new or different** from the
+  previous crawl — most likely **0** on a sync that changes no grades, not the 14 a fresh fold
+  showed.
+* If `attempts` entries come back with `status: 0`, read 80f's last line before blaming the
+  endpoint: `fetch` from Playwright's `evaluate` failed in the PM's discovery session while the
+  page's own requests succeeded.

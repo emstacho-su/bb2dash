@@ -1,0 +1,34 @@
+{
+  "_note": "SYNTHETIC, but this is the shape crawler v3 really produced: every column answered 200 with an empty results[]. Kept so migration 085 can prove it still folds a v3 payload without error after Stack's next sync has replaced it. Ids are real Blackboard shell/column ids from ECN.304; no submission, file or text appears, because v3 never captured any.",
+  "run_id": "00000000-12b0-4000-8000-000000000001",
+  "kind": "course",
+  "bb_course_id": "_572517_1",
+  "course_id": "ECN.304",
+  "captured_at": "2026-09-18T15:00:02.000000+00:00",
+  "payload": {
+    "crawler": { "version": 3 },
+    "course": {
+      "id": "_572517_1",
+      "name": "ECN.304.M001.FALL26.The Economics of Social Issues",
+      "courseId": "19406.1271",
+      "modified": "2026-08-17T23:33:57.585Z"
+    },
+    "gradebook": [],
+    "attempts": [
+      {
+        "columnId": "_3598937_1",
+        "contentId": null,
+        "endpoint": "/learn/api/v1/courses/_572517_1/gradebook/columns/_3598937_1/attempts?userId=_21025199_1&limit=100",
+        "status": 200,
+        "results": []
+      },
+      {
+        "columnId": "_3607818_1",
+        "contentId": null,
+        "endpoint": "/learn/api/v1/courses/_572517_1/gradebook/columns/_3607818_1/attempts?userId=_21025199_1&limit=100",
+        "status": 200,
+        "results": []
+      }
+    ]
+  }
+}
