@@ -1,16 +1,16 @@
 /**
- * L2 — rule-level properties: drop-lowest never lowers when a score rises;
+ * L2 — rule-level properties: drop-lowest never lowers when a score rises, and
  * `rank_weighted` is invariant under exam order and, with weights summing to
- * `cap`, earns Σ wᵢ·f₍ᵢ₎; muting one component never changes another
- * component's result. Same parameters as `properties.test.ts`.
+ * `cap`, earns Σ wᵢ·f₍ᵢ₎. Same parameters as `properties.test.ts`.
+ *
+ * Phase 12b (G-1) removed the muting property with muting itself; what a link's
+ * confidence does now is covered in `graded-so-far.test.ts`.
  */
 
 import fc from 'fast-check';
 import { describe, it } from 'vitest';
-import { projectCourse, type ComputedResult, type ModelInput } from '@/lib/grade-model';
 import { averageDropLowestAggregate, meanAfterDrop } from '@/lib/grade-model/aggregations/average-drop-lowest';
 import { rankWeightedAggregate } from '@/lib/grade-model/aggregations/rank-weighted';
-import { modelInputArb } from './arbitraries';
 import { counted, leaf } from './builders';
 import { assertProperty } from './fc-params';
 
@@ -19,7 +19,7 @@ const fraction = fc.integer({ min: 0, max: 100 }).map((n) => n / 100);
 const R_VALUES = [null, 0, 0.5, 1] as const;
 
 describe('L2 drop-lowest', () => {
-  it('never lowers when a score rises, in every projection', () => {
+  it('never lowers when a score rises, at every fill value', () => {
     assertProperty(
       fc.property(
         fc.array(fraction, { minLength: 1, maxLength: 6 }),
@@ -80,37 +80,6 @@ describe('L2 rank_weighted', () => {
           r,
         );
         return Math.abs(outcome.earned - expected) <= 1e-7;
-      }),
-    );
-  });
-});
-
-/** Mutes top-level component `id` by marking one of its counted items unsure (adding one if needed). */
-function muteComponent(input: ModelInput, id: number): ModelInput {
-  const key = `col:mute:${id}`;
-  const unsure = {
-    key, componentId: id, linkSource: 'assignment' as const, linkConfidence: 'tentative' as const, excluded: false,
-    name: key, possible: 10, score: 5, exempt: false, kind: 'item' as const, isExtraCredit: false, dueAt: null,
-  };
-  return { ...input, items: [...input.items, unsure] };
-}
-
-describe('L2 muting', () => {
-  it('muting one component never changes another component’s result', () => {
-    const arb = modelInputArb({ extraCredit: true, unsure: true });
-    assertProperty(
-      fc.property(arb, fc.nat(), (input, pick) => {
-        const topLeaves = input.components.filter(
-          (c) => c.parentId === null && !input.components.some((k) => k.parentId === c.id),
-        );
-        const target = topLeaves[pick % Math.max(1, topLeaves.length)];
-        const before = projectCourse(input);
-        if (target === undefined || before.state !== 'computed') return true;
-        const after = projectCourse(muteComponent(input, target.id));
-        if (after.state !== 'computed') return true;
-        const others = (result: ComputedResult) => result.components.filter((c) => c.componentId !== target.id);
-        const muted = after.components.find((c) => c.componentId === target.id);
-        return muted?.state === 'muted' && JSON.stringify(others(after)) === JSON.stringify(others(before));
       }),
     );
   });

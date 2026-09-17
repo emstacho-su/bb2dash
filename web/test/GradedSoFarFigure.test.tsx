@@ -35,7 +35,7 @@ const FIGURE: Figure = {
   asOf: '2026-09-16T17:14:02.645Z',
 };
 
-describe('GradedSoFarResult — the number', () => {
+describe('GradedSoFarFigure — the number', () => {
   it('labels it "Graded so far" and rounds once, to one decimal', () => {
     render(<GradedSoFarFigure figure={FIGURE} />);
     expect(screen.getByText(FIGURE_LABEL)).toBeInTheDocument();
@@ -50,7 +50,7 @@ describe('GradedSoFarResult — the number', () => {
 
   it('prints a points fraction only when the scheme is in points', () => {
     render(
-      <GradedSoFarResult
+      <GradedSoFarFigure
         figure={{ ...FIGURE, pointsEarned: 53, pointsPossible: 55 }}
       />,
     );
@@ -63,7 +63,7 @@ describe('GradedSoFarResult — the number', () => {
   });
 });
 
-describe('GradedSoFarResult — what the number leaves out', () => {
+describe('GradedSoFarFigure — what the number leaves out', () => {
   it('names the parts it does not cover', () => {
     render(<GradedSoFarFigure figure={FIGURE} />);
     expect(screen.getByText(`${LEFT_OUT_LABEL} Participation`)).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('GradedSoFarResult — what the number leaves out', () => {
 
   it('names several parts in one sentence', () => {
     render(
-      <GradedSoFarResult
+      <GradedSoFarFigure
         figure={{ ...FIGURE, leftOutParts: ['Participation', 'Final exam'] }}
       />,
     );
@@ -95,7 +95,7 @@ describe('GradedSoFarResult — what the number leaves out', () => {
   });
 });
 
-describe('GradedSoFarResult — the states that are not a number', () => {
+describe('GradedSoFarFigure — the states that are not a number', () => {
   it('says nothing has been graded rather than showing a zero', () => {
     render(<GradedSoFarFigure figure={{ state: 'nothing_graded' }} />);
     expect(screen.getByText(NOTHING_GRADED_TEXT)).toBeInTheDocument();
@@ -128,7 +128,7 @@ describe('GradedSoFarResult — the states that are not a number', () => {
   });
 });
 
-describe("GradedSoFarResult — Blackboard's own total", () => {
+describe("GradedSoFarFigure — Blackboard's own total", () => {
   const blackboard = {
     score: 14.8,
     possible: 104,
@@ -158,7 +158,7 @@ describe("GradedSoFarResult — Blackboard's own total", () => {
 
   it("shows Blackboard's even when ours cannot be computed", () => {
     render(
-      <GradedSoFarResult
+      <GradedSoFarFigure
         figure={{ state: 'not_computable', reason: 'qualitative_method' }}
         blackboardTotal={blackboard}
       />,
@@ -167,7 +167,7 @@ describe("GradedSoFarResult — Blackboard's own total", () => {
   });
 });
 
-describe('GradedSoFarResult — compact, for Home\'s course card', () => {
+describe('GradedSoFarFigure — compact, for Home\'s course card', () => {
   it('keeps the number and the as-of, and drops the explanations', () => {
     render(<GradedSoFarFigure figure={FIGURE} compact />);
     expect(screen.getByText('87.4%')).toBeInTheDocument();

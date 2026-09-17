@@ -28,8 +28,6 @@ function modelOf(fixture: ComparisonFixture): ModelInput {
     scheme: fixture.input.scheme,
     components: fixture.input.components,
     items: fixture.input.items,
-    scenario: { itemScores: {} },
-    blackboardTotal: null,
   };
 }
 

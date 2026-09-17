@@ -95,7 +95,7 @@ export function GradedSoFarFigure({
 
   if (error) {
     return (
-      <div className={styles.figure} data-compact={compact ? 'true' : 'false'}>
+      <div className={styles.figure} data-figure="" data-compact={compact ? "true" : "false"}>
         <p className={styles.alert} role="alert">
           {error}
         </p>
@@ -106,7 +106,7 @@ export function GradedSoFarFigure({
 
   if (figure === null) {
     return (
-      <div className={styles.figure} data-compact={compact ? 'true' : 'false'}>
+      <div className={styles.figure} data-figure="" data-compact={compact ? "true" : "false"}>
         <span className={styles.note}>loading…</span>
         {theirs}
       </div>
@@ -115,7 +115,7 @@ export function GradedSoFarFigure({
 
   if (figure.state !== 'figure') {
     return (
-      <div className={styles.figure} data-compact={compact ? 'true' : 'false'}>
+      <div className={styles.figure} data-figure="" data-compact={compact ? "true" : "false"}>
         <span className={tokens.kicker}>{FIGURE_LABEL}</span>
         <p className={styles.sentence}>
           {figure.state === 'nothing_graded'
@@ -133,7 +133,7 @@ export function GradedSoFarFigure({
       : null;
 
   return (
-    <div className={styles.figure} data-compact={compact ? 'true' : 'false'}>
+    <div className={styles.figure} data-figure="" data-compact={compact ? "true" : "false"}>
       <span className={tokens.kicker}>{FIGURE_LABEL}</span>
 
       <span className={styles.headline}>
