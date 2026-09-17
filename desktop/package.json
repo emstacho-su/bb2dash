@@ -1,5 +1,6 @@
 {
   "name": "bb2dash-desktop",
+  "productName": "bb2dash",
   "version": "0.1.0",
   "private": true,
   "description": "Electron shell around the deployed bb2dash web app: window, tray, notifications, Sync terminal.",
