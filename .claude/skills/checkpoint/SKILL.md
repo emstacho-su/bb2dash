@@ -49,9 +49,11 @@ It prints one JSON line. On `ok: true` note the `path` and `id`. On `ok: false` 
 names (usually a missing heading) and run it again.
 
 **If `node` is not available** in this environment: write the note yourself at
-`.harness/sessions/<id>.md` where `<id>` is a fresh UUID (`python3 -c "import uuid; print(uuid.uuid4())"`
-or `uuidgen`). Copy this frontmatter exactly, filling only the marked fields, then append the body
-from step 1 under a `# Session <date> — <collection>` heading:
+`.harness/sessions/<id>.md` where `<id>` is `cp-` followed by a fresh UUID
+(`python3 -c "import uuid; print('cp-' + str(uuid.uuid4()))"` or `cp-$(uuidgen)`). The `cp-`
+prefix is required: it keeps this note from colliding with the transcript-based note the user's
+machine may write later for the same session. Copy this frontmatter exactly, filling only the
+marked fields, then append the body from step 1 under a `# Session <date> — <collection>` heading:
 
 ```yaml
 ---

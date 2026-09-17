@@ -21,6 +21,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const GENERATOR = 'checkpoint 1.0.0';
 export const SCHEMA_VERSION = 2;
@@ -132,12 +133,18 @@ export function parseRepoFullName(url) {
   return match ? `${match[1]}/${match[2]}` : '';
 }
 
+/** Verbatim copy of hooks/lib/text.mjs slugify; pinned by checkpoint-build.test.mjs. */
 export function slugify(name) {
-  return String(name ?? '')
+  const slug = String(name ?? '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
+    .replace(/[^a-z0-9 ._-]+/g, '-')
+    .replace(/[-\s]+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .trim();
+  if (!slug) return '';
+  // A reserved Windows device name would produce an uncreatable folder.
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(slug)) return `${slug}-dir`;
+  return slug.slice(0, 64);
 }
 
 function baseRef(repo, explicit) {
@@ -176,14 +183,23 @@ function claimFromJwt(token) {
   }
 }
 
+/**
+ * The checkpoint's own id: `cp-` + the sandbox's session id when one is
+ * exposed, else `cp-` + a UUID. The prefix is deliberate: a cloud session later
+ * pulled down with `claude --teleport` gets a transcript named by the *raw*
+ * session id, and the nightly sweep skips any id that already has a note. With
+ * the prefix the two never collide, so the fuller sweep note is still written.
+ */
+export const SESSION_ID_PREFIX = 'cp-';
+
 export function resolveSessionId({ explicit = '', env = process.env } = {}) {
+  if (typeof explicit === 'string' && SAFE_SEGMENT.test(explicit) && !explicit.includes('..')) return explicit;
   const candidates = [
-    explicit,
     ...SESSION_ENV_VARS.map((name) => env[name]),
     env[SESSION_TOKEN_VAR] ? claimFromJwt(env[SESSION_TOKEN_VAR]) : '',
   ];
   const found = candidates.find((value) => typeof value === 'string' && SAFE_SEGMENT.test(value) && !value.includes('..'));
-  return found ?? crypto.randomUUID();
+  return `${SESSION_ID_PREFIX}${found ?? crypto.randomUUID()}`;
 }
 
 // ------------------------------------------------------------------ body
@@ -337,7 +353,7 @@ export function main(argv, env = process.env) {
   };
 }
 
-const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
   const { code, output } = main(process.argv.slice(2));
   process.stdout.write(`${JSON.stringify(output)}\n`);
