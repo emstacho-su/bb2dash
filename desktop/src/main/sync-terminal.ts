@@ -41,28 +41,85 @@ function validateQueuedRequests(rows: unknown): readonly QueuedRequest[] {
   });
 }
 
-function launchTerminal(argv: readonly string[], repoDir: string): void {
+/**
+ * Spawn one argv and resolve once it is clear whether the process started.
+ *
+ * `child_process.spawn` reports a missing or unusable executable asynchronously, through
+ * an `error` event, not by throwing — which is why R2-6 existed: the old code logged that
+ * event and did nothing else, so a `wt.exe` that had been uninstalled produced a line in a
+ * log file nobody was reading and no terminal at all.
+ *
+ * `error` and `spawn` are mutually exclusive, so the first of the two settles this.
+ */
+function spawnOnce(argv: readonly string[], cwd: string | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const [command, ...args] = argv;
+    if (command === undefined) {
+      reject(new Error('empty argv'));
+      return;
+    }
+
+    let child;
+    try {
+      child = spawn(command, args, {
+        ...(cwd === undefined ? {} : { cwd }),
+        detached: true,
+        stdio: 'ignore',
+      });
+    } catch (error) {
+      // A synchronous throw (an invalid cwd, mostly) never emits an event.
+      reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+
+    child.once('error', reject);
+    child.once('spawn', () => {
+      // Detached and unreferenced only once it is really running: unref'ing a process that
+      // is about to emit `error` would let this Promise never settle.
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+/**
+ * R2-6 — open the terminal, falling back to PowerShell alone if the first argv will not
+ * start. Resolves true when a terminal is running, false when neither would start.
+ */
+async function launchTerminal(
+  argv: readonly string[],
+  fallbackArgv: readonly string[] | null,
+  repoDir: string,
+): Promise<boolean> {
   if (IS_TEST_MODE) {
     recordEvent('sync-terminal', { argv: [...argv], cwd: repoDir });
     log(`sync terminal recorded (test mode): ${argv.length} argv elements`);
-    return;
+    return true;
   }
-
-  const [command, ...args] = argv;
-  if (command === undefined) throw new Error('empty argv');
 
   // `wt -d` already sets the start directory; `cwd` matters only for the
   // PowerShell fallback, and a missing folder there would fail the spawn.
   const cwd = existsSync(repoDir) ? repoDir : undefined;
   if (cwd === undefined) log(`repoDir ${repoDir} does not exist; spawning without a cwd`);
 
-  const child = spawn(command, args, {
-    ...(cwd === undefined ? {} : { cwd }),
-    detached: true,
-    stdio: 'ignore',
-  });
-  child.on('error', (error) => logError('the sync terminal could not be started', error));
-  child.unref();
+  try {
+    await spawnOnce(argv, cwd);
+    return true;
+  } catch (error) {
+    logError('the sync terminal could not be started', error);
+  }
+
+  if (fallbackArgv === null) return false;
+
+  log('retrying the sync terminal with PowerShell alone');
+  try {
+    await spawnOnce(fallbackArgv, cwd);
+    recordEvent('sync-terminal-fallback', { cwd: repoDir });
+    return true;
+  } catch (error) {
+    logError('the PowerShell fallback could not be started either', error);
+    return false;
+  }
 }
 
 export interface SyncWatcherOptions {
@@ -100,26 +157,48 @@ export function createSyncWatcher(options: SyncWatcherOptions): {
     }
     if (spawnedIds.has(newest.id)) return;
 
+    let argv: readonly string[];
+    let fallbackArgv: readonly string[] | null;
+    let wtPath: string | null;
     try {
-      const wtPath = options.wtPath === undefined ? resolveWtPath() : options.wtPath;
-      const argv = buildSyncCommand({
+      wtPath = options.wtPath === undefined ? resolveWtPath() : options.wtPath;
+      const input = {
         repoDir: options.config.repoDir,
         id: newest.id,
-        wtPath,
         dryRun: options.config.syncDryRun,
-      });
-      spawnedIds.add(newest.id);
-      log(
-        `sync request ${newest.id}: opening ${wtPath === null ? 'PowerShell' : 'Windows Terminal'}` +
-          `${options.config.syncDryRun ? ' (dry run)' : ''}`,
-      );
-      launchTerminal(argv, options.config.repoDir);
+      };
+      argv = buildSyncCommand({ ...input, wtPath });
+      // R2-6: the same command with `wtPath: null` is the PowerShell-alone form. Built
+      // here, before anything is spawned, so a failure to build is not mistaken for a
+      // failure to launch.
+      fallbackArgv = wtPath === null ? null : buildSyncCommand({ ...input, wtPath: null });
     } catch (error) {
       if (error instanceof InvalidSyncIdError) {
         log(`sync request rejected: ${error.message}`);
         return;
       }
       logError('the sync terminal could not be prepared', error);
+      return;
+    }
+
+    // Marked before the spawn so a second POST arriving mid-launch cannot open a second
+    // terminal, and un-marked below if nothing started — otherwise one failed launch would
+    // mean this request could never open a terminal for the rest of the run (R2-6).
+    spawnedIds.add(newest.id);
+    log(
+      `sync request ${newest.id}: opening ${wtPath === null ? 'PowerShell' : 'Windows Terminal'}` +
+        `${options.config.syncDryRun ? ' (dry run)' : ''}`,
+    );
+
+    try {
+      const launched = await launchTerminal(argv, fallbackArgv, options.config.repoDir);
+      if (!launched) {
+        spawnedIds.delete(newest.id);
+        log(`sync request ${newest.id}: no terminal started; the id is free to retry`);
+      }
+    } catch (error) {
+      spawnedIds.delete(newest.id);
+      logError(`sync request ${newest.id}: the terminal launch failed unexpectedly`, error);
     }
   }
 
