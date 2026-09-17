@@ -691,3 +691,144 @@ web/test/Inbox.test.tsx                                 F-4
 ```
 
 F-2 (W-33) and F-5 (W-30) were not touched.
+
+---
+
+# Round 3 — `/code-review main high` (2026-09-17)
+
+`origin/fix/page-pass-12b` merged in cleanly. Three findings in W-32's files; **all three
+fixed**, TDD, one commit each, pushed as they went.
+
+| gate | result |
+|---|---|
+| `npm run typecheck` | clean before every push |
+| `npm run build` | compiled successfully before every push |
+| `npm test` | **1530 passed, 92 files** |
+
+| commit | finding |
+|---|---|
+| `f52dc8f` | CR-1 |
+| `8828e51` | CR-7 |
+| `fd8b96f` | CR-10 |
+
+**On the count:** 1530, against round 2's 1672. That is the merge — W-31 consolidated the
+grade-model suites (`test/grade-model/*` went from eleven files to a shared `run.ts` plus
+`graded-so-far.test.ts` and `grades-sections.test.ts`). No W-32 test was removed; round 3
+adds 20 (11 + 6 + 3, net of two rewritten).
+
+## CR-1 — the strip's label paged, its pixels did not
+
+The scroll effect was keyed on `strip.anchor`, and the hole was exactly where the reader
+is most likely to be:
+
+> Home opens on today → free-scroll a fortnight right → press ◂.
+> `pageStripAnchor` returns **today**, which is already the stored anchor, so nothing in
+> the deps moved, the effect never fired, and the Window label, the counters and the arrow
+> states all snapped back to today while the strip stayed fourteen days ahead.
+
+**Fix.** A `scrollRequest` nonce that `moveAnchor` bumps, so every paging action asks for
+the scroll explicitly rather than relying on the effect to notice a change that never
+happens. `scrollToDay(iso)` takes a **day, not a pixel**, because a column's width is a
+function of the container's width and an offset is only ever correct for the width it was
+computed at. A `ResizeObserver` re-runs it for whatever day is at the left edge, so the
+reader's own scroll position survives a resize and not just the anchor's. Guarded on
+`typeof ResizeObserver` (jsdom has none), disconnected on unmount, and the
+guard-release timer is now cleared on unmount too.
+
+**New `test/UpcomingTracker.scroll.test.tsx`** — its own file because it stubs
+`clientWidth` and `scrollLeft`, which jsdom pins at 0; the main tracker suite must keep
+running without them. It asserts **pixels**: the exact repro, paging from a free-scrolled
+position, landing on the last window, that clicking a day never moves the strip, both
+resize cases, unmount, no-ResizeObserver, and that the strip's own scroll is not read as
+a drag.
+
+**RED → GREEN:** 4 of 11 failed (the repro sat at 700px; all three resize tests) → 11/11.
+
+## CR-7 — one broken query took away the other query's number
+
+`cardGrades` returned `[]` the moment `useCourseGrades()` failed, so a failure in
+`v_course_grade` silently removed the graded-so-far figure that a completely separate,
+healthy set of reads had already produced. The card looked like a course with nothing to
+say.
+
+The two are now built **independently**, each from its own reads:
+
+| state | Blackboard's total | Graded so far |
+|---|---|---|
+| in flight | omitted | omitted |
+| failed | "Blackboard · could not be loaded" | "Graded so far · could not be worked out" |
+| absent | "not synced yet" / "publishes no total" | "nothing graded yet" |
+
+In flight still claims nothing — "not synced yet" is a statement about the data, and a
+request that has not answered supports neither it nor its opposite. A **failed** read is a
+fact about **us**, not the course, and the card now says which. `CourseFigureState.error`
+was already carried per course by the figures hook and was simply being ignored here.
+
+`CourseGradeFigure` gains `tone: 'absent' | 'error'` and `detail`. The tone keeps the two
+kinds of empty apart — "there is nothing to know" and "we could not find out" must not
+look alike — and renders in the danger colour with `role="status"`. `detail` puts the
+database's own words in the hover title rather than across the card. Both optional, so
+every existing producer keeps its meaning.
+
+**Tests.** The two that asserted the card claims nothing on a failed read now assert the
+explicit state; in-flight still claims nothing, asserted per figure. Added: graded-so-far
+survives a failed gradebook read **and** an in-flight one, Blackboard's number survives a
+failed figures hook, both failures show at once without either hiding the other, and the
+real reason is in the title.
+
+**RED → GREEN:** 6 failures → 29/29 across the two files.
+
+## CR-10 — the parent shell is a column, not a naming convention
+
+`lectureShellFor()` split the course id and assumed the parent was the same dotted prefix
+with `.lecture` on the end. `courses.parent_course_id` is the actual relationship — the
+same column migration 074 follows to resolve the scheme course — and a shell whose parent
+is called anything else was silently cut off from its syllabus.
+
+`courseSyllabiOptions` now selects `parent_course_id` in place of `kind`, which the
+resolver never used. `lectureShellFor` is **deleted** rather than reworked: it had no
+other caller, and keeping a helper that encodes the convention invites someone to reach
+for it again. The inheritance walks the parent **chain** rather than one hop, with a
+`seen` set so a cycle in the data cannot take the screen down.
+
+**Prod is unchanged by this.** `GEO.103.recitation.parent_course_id` is
+`GEO.103.lecture` — exactly what the old rule guessed — so the seven-course fixture still
+resolves to the same seven files. What changed is that it reads the answer instead of
+inferring it.
+
+**RED → GREEN:** 2 failures (a `.seminar` whose parent is `.main`; a parent chain) →
+23/23. Added: the child's own named file still beats the parent's, a parent with no
+syllabus yields nothing, and the cycle case.
+
+## Files touched in round 3
+
+```
+web/src/components/tracker/UpcomingTracker.tsx   CR-1
+web/src/app/(app)/CourseGradeFigure.tsx          CR-7
+web/src/app/(app)/Today.tsx                      CR-7
+web/src/app/(app)/Today.module.css               CR-7
+web/src/lib/queries.materials.ts                 CR-10
+web/test/UpcomingTracker.scroll.test.tsx  (new)  CR-1
+web/test/TodayLayout.test.tsx                    CR-7
+web/test/materials.syllabus.test.ts              CR-10
+web/test/MaterialsCollapse.test.tsx              CR-10 (fixture shape)
+```
+
+## ⚠ For the PM — the flaky gate, now diagnosed
+
+The single unexplained failure flagged at the end of round 2 reproduced here, and it is
+**not a W-32 file**. `web/test/audits.test.ts` (and `grade-model.audits.test.ts`) walk
+`src/` and call `readFileSync` **inside each test**, so every test re-reads the whole
+tree. Under the full parallel run those tests took **5239 ms and 9529 ms** against
+vitest's **5000 ms default `testTimeout`**, and failed as timeouts — not as assertions.
+They pass in isolation in 3.5 s.
+
+Observed failing: `finds no "sb_secret"`, `finds no string literal that would render as a
+Submit control label`, `finds no "sb_secret" anywhere under src/`.
+
+**Fix** (one line, someone else's file, so not taken here): hoist the reads into a
+module-scope `Map` the way `test/status-vocabulary.test.ts` and
+`test/work-items.workload-filter.test.ts` already do — module-scope work runs at
+collection time and does not count against a test's timeout — or give those two files an
+explicit `testTimeout`. Worth doing before the integration gate, since it fails
+intermittently and looks like a real regression when it does.
