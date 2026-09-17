@@ -270,6 +270,28 @@ describe('GradebookTable — the bookkeeping group (answer 8)', () => {
     expect(screen.getByText('Attendance')).toBeInTheDocument();
   });
 
+  it('re-reads storage when the same table is given another course\'s key', () => {
+    writeStoredSection('bookkeeping:IST.352', 'open');
+    const rows = [IST323_QUIZ, ECN304_ATTENDANCE, IST323_LETTER];
+    const { rerender } = render(<GradebookTable rows={rows} sectionKey="bookkeeping:IST.323" />);
+
+    // Open this course's group, so the component is holding an answer of its own.
+    fireEvent.click(screen.getByRole('button', { name: /bookkeeping columns/ }));
+    expect(screen.getByText('Attendance')).toBeInTheDocument();
+    // Then close it again, so IST.323's stored answer differs from IST.352's.
+    fireEvent.click(screen.getByRole('button', { name: /bookkeeping columns/ }));
+    expect(screen.queryByText('Attendance')).toBeNull();
+
+    // Navigating from one course's Grades tab to another reuses this component
+    // instance: the answer it is showing has to follow the new key, not linger.
+    rerender(<GradebookTable rows={rows} sectionKey="bookkeeping:IST.352" />);
+    expect(screen.getByText('Attendance')).toBeInTheDocument();
+    expect(readStoredSections()).toEqual({
+      'bookkeeping:IST.323': 'closed',
+      'bookkeeping:IST.352': 'open',
+    });
+  });
+
   it('keeps the toggle working, and storage untouched, without a key', () => {
     renderTable([IST323_QUIZ, ECN304_ATTENDANCE, IST323_LETTER]);
     fireEvent.click(screen.getByRole('button', { name: /bookkeeping columns/ }));

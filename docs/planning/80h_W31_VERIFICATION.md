@@ -103,3 +103,251 @@ symbols move to `queries.grades.ts` rather than being deleted with it.
 
 **Nothing has been deleted. Stack reads `80e` and picks; the PM resumes this worker with the
 pick.**
+
+Commit: `d63ad3c` `fix(G-0): grade-method comparison suite and 80e, the gate before any removal`.
+
+---
+
+## G-3 — the course title is the link (P-grades-2) — **done**
+
+`CourseGradeCard` takes an optional `titleHref` and wraps the title in it, **inside** the level-2
+heading, so the card still announces itself by the course's name. `/grades` passes
+`/course/<display_id>` — the brief's backend check says the course, not its Grades tab — and no
+longer renders the "Course tab →" ghost button. The course's own Grades tab passes no href (a
+link from a page to itself is noise) and keeps its "All courses →" button, which is a different
+control.
+
+**RED → GREEN.** Four new cases in `web/test/GradesScreen.test.tsx`:
+
+```
+$ npx vitest run test/GradesScreen.test.tsx          # before the fix
+ × makes the course title itself a link to that course
+ × keeps the link inside the level-2 heading, so the card still announces itself
+ × encodes a display id that needs it
+ × no longer draws a separate "Course tab" button
+AssertionError: expected <a href="/course/IST.323/grades"></a> to be null
+      Tests  4 failed | 10 passed (14)
+
+$ npx vitest run test/GradesScreen.test.tsx          # after
+      Tests  14 passed (14)
+```
+
+Gate: typecheck, build and **1452 tests / 88 files** green. Commit `9c35f1d`.
+
+---
+
+## G-4 — "graded" and "last attempt: COMPLETED" (P-grades-6) — **done**
+
+The rule lives once, in `submissionLabel` (`web/src/lib/queries.grades.ts`), so both call sites —
+the gradebook table and the popout's submission block — get it. `attemptStatus` is null when the
+attempt repeats the column literally (GRADED beside GRADED) or in substance (COMPLETED beside
+GRADED or SUBMITTED). Research counted 16 rows on prod reading that way.
+
+Nothing else is suppressed: NEEDS_GRADING beside GRADED means a further attempt is waiting, and
+COMPLETED beside UNOPENED contradicts the column. Both still show, and both are asserted.
+
+**RED → GREEN.** Six new cases across three files:
+
+```
+$ npx vitest run test/queries.grades.test.ts test/GradebookTable.test.tsx \
+      test/SubmissionBlock.test.tsx                  # before the fix
+ × drops a COMPLETED attempt beside a GRADED column — it adds nothing
+ × drops a COMPLETED attempt beside a SUBMITTED column — it adds nothing
+ × does not repeat a COMPLETED attempt beside a GRADED status
+ × does not repeat a COMPLETED attempt beside a SUBMITTED status
+ × renders one label for a GRADED column whose last attempt is COMPLETED
+ × does the same for a SUBMITTED column whose last attempt is COMPLETED
+AssertionError: expected 'COMPLETED' to be null
+AssertionError: expected <span class="_note_13f0d1"></span> to be null
+      Tests  6 failed | 82 passed (88)
+
+$ … same command                                     # after
+      Tests  88 passed (88)
+```
+
+Gate: typecheck, build and **1465 tests / 88 files** green. Commit `dcc1a43`.
+
+---
+
+## G-5 — history and feedback move into the popout (P-grades-8, P-grades-9) — **done**
+
+`SubmissionBlock` now renders the instructor's feedback in full (escaped by React, `pre-wrap` so
+their line breaks survive) and this column's score history behind the same `ScoreHistory`
+disclosure as before. It reads one column's rows through a new `assignmentHistoryOptions` in
+`queries.grades.ts` — one column, not a whole course, and in the module that survives whatever
+G-1 decides. A failed read says so rather than looking like "no history".
+
+The gradebook table drops the history toggle entirely. It keeps the feedback disclosure **only**
+for a column with no linked assignment: there is no popout to send the reader to, and the words
+must not become unreachable. The whole-course history plumbing went with it from `GradesScreen`,
+`GradesModelScreen`, `CourseGrades` and `useCourseGradeModel`.
+
+Two accessible names were spelled out with `aria-label` rather than left to an adjacent
+screen-reader span, which the name computation joins **without** a space: the toggles read
+"Feedbackfrom Essay" and "historyof Quiz #3" today.
+
+**`AssignmentPopout.tsx` is not edited.** The only change in its orbit is one line in its test's
+mock of `@/lib/queries.grades` (`useAssignmentHistory: () => stub([])`, `test/AssignmentPopout.test.tsx:105`),
+without which the real hook runs with no `QueryClient`. The status `<select>` W-32 owns is untouched.
+
+**RED → GREEN.** Five new cases:
+
+```
+$ npx vitest run test/SubmissionBlock.test.tsx test/GradebookTable.test.tsx \
+      test/ScoreHistory.test.tsx                     # before the fix
+ × names the column it belongs to, for a screen reader
+ × sends a linked row's feedback to the popout instead of showing it inline
+ × shows the instructor's feedback in full, as text
+ × carries the score history for this column
+ × says so when the history read failed, rather than pretending there is none
+      Tests  5 failed | 39 passed (44)
+
+$ … same command                                     # after
+      Tests  44 passed (44)
+```
+
+Tests that moved rather than disappeared: `ScoreHistory.test.tsx`'s "sits on the matching
+gradebook row only" became the popout's placement cases; `GradesScreen.model.test.tsx`'s "shows
+the history disclosure on the row that changed" became "shows no history disclosure on any row".
+Net test count went **up**, not down.
+
+Gate: typecheck, build and **1473 tests / 88 files** green. Commit `c220046`.
+
+---
+
+## G-6 — the feedback mark (P-grades-10) — **done**
+
+A superscript `*` on the **item** cell, which is the cell that links to the details (Stack's
+answer 6). Present exactly when the feedback is non-empty: Blackboard stores an untouched
+feedback box as `''` as readily as `null`, so the predicate trims, and `''`, `'   '` and `null`
+all show nothing.
+
+`role="note"` plus `aria-label` rather than a bare asterisk — without a role the punctuation
+reaches a screen reader as nothing useful. It reads "<item> has feedback"; a `title` says where
+to read it. The name and its mark share one inline wrapper so the superscript hugs the name
+instead of sitting a flex gap away; `.nameLine` declares no `display`, so it does not register as
+a layout class in the R3-1 audit (`GradesTables.layout.test.tsx` still passes).
+
+**RED → GREEN.** Three of seven new cases failed first — the four negative cases guarded the
+"iff non-empty" half from the start:
+
+```
+$ npx vitest run test/GradebookTable.test.tsx        # before the fix
+ × marks the item cell of a row that has feedback
+ × puts the mark in the item cell, not the submission cell
+ × marks an unlinked column too, beside its own disclosure
+      Tests  3 failed | 22 passed (25)
+
+$ npx vitest run test/GradebookTable.test.tsx        # after
+      Tests  25 passed (25)
+```
+
+Gate: typecheck, build and **1479 tests / 88 files** green. Commit `c83da8d`.
+
+---
+
+## G-2 (collapsible half) — sections fold away and remember it (P-grades-1) — **done**
+
+Stack's answer 4: each course's block collapses, and the groups inside collapse too. **Only the
+collapsible half is built** — the header figure is method-dependent and waits on the G-0 pick.
+
+New `web/src/lib/grades-sections.ts` holds the choice, following `sidebar-preference.ts`
+deliberately:
+
+* localStorage is best-effort; every read and write is wrapped, and the section's own default is
+  a correct answer in a private window, with cookies blocked or with a full quota. These are the
+  two places in the app where a swallowed error is intended, and the file says so.
+* What comes back out of the browser is validated: junk values, an array, `null`, a bare string
+  and unparseable text all read as "nothing stored".
+* Only a **deviation** from a default is recorded, so changing a default in code still reaches
+  sections nobody has touched — the shape `readStoredSidebar()` / `resolveSidebar()` already has.
+* Every write is a read-modify-write of the whole record, so two components toggling different
+  sections cannot overwrite each other.
+* `useSectionState` reads storage only once `useHydrated()` says this render may, so the first
+  client render matches the server's HTML (React error #418).
+
+On `/grades`, each course card gains a Hide/Show control whose accessible name carries the course
+("Hide IST 323"). Folding a course takes the gradebook and **leaves the heading and Blackboard's
+number** — the summary is the reason to fold the rest. Blocks open by default; Stack asked for
+"hidden on default" only on the planner (P-planner-1), not here. The
+attendance-and-bookkeeping group persists too, under a key the course tab shares, so it is folded
+the same way in both places; it stays closed by default, as it was. The course tab's single card
+does not collapse — there is nothing to gain from hiding the only card on the page.
+
+**RED → GREEN.** 13 new cases in `test/grades-sections.test.ts` (the module did not exist:
+`Failed to resolve import "@/lib/grades-sections"`), and 8 component cases:
+
+```
+$ npx vitest run test/GradebookTable.test.tsx test/GradesScreen.test.tsx   # before
+ × remembers being opened, under the key it was given
+ × starts open when that is what was stored
+ × opens every course block by default
+ × folds the gradebook away and keeps the header
+ × opens it again
+ × remembers the choice under the course's own key
+ × renders a course collapsed when that is what was stored
+ × keeps each course block on its own key
+      Tests  8 failed | 40 passed (48)
+
+$ … same command                                                          # after
+      Tests  48 passed (48)
+```
+
+Gate: typecheck, build and **1501 tests / 89 files** green. Commit `2f7e96a`.
+
+**Follow-up in the same row.** A self-review found one real bug in `useSectionState`: after a
+toggle the component held its own answer, and a change of `key` on the same instance kept showing
+it. Navigating from one course's Grades tab to the next does exactly that — the route changes,
+React reuses the tree, and only the key moves, so IST.352's group would have shown IST.323's
+state. Fixed by resetting the local answer when the key changes, using React's
+adjust-state-during-render pattern (cheaper than an effect: this render produces the right answer
+instead of painting the stale one first). RED → GREEN with a `rerender` case in
+`test/GradebookTable.test.tsx`; **1502 tests / 89 files** green.
+
+---
+
+## Not started — waiting on Stack
+
+| row | why it is not started |
+|---|---|
+| **G-1** (P-grades-3) | deletes the losing method. Nothing may be removed before Stack reads `80e` and picks. No grade-model code has been deleted or altered by W-31. |
+| **G-2, header figure half** (P-grades-1, P-home-10) | the figure *is* the winning method. The course-card half of G-2 is W-32's in any case. |
+
+### What G-1 removes under each possible pick
+
+| Stack picks | what goes | what stays |
+|---|---|---|
+| **10b engine** (as built, or with its two gates relaxed) | `grade-so-far.ts`; the `points_ratio` and `weighted_so_far` rows of `METHODS`; their fixtures' expectations, not the fixtures themselves. What-if, the target solver, `PlaceholderRows` and the scenario table still go, per P-grades-3; the "Counts toward…" picker stays if the winner needs links. | all of `grade-model/`, `queries.grade-model.ts`, `grade-model-{input,run,view,format}.ts` |
+| **weighted so far** | `web/src/lib/grade-model/` (24 files, ~1,750 lines), `grade-model-{input,run,view,format}.ts`, `queries.grade-model.ts`, `queries.grade-scenario.ts`, `ModelStanding`, `WhatIfCell`, `TargetSolver`, `PlaceholderRows`, `LinkColumnControl`, `useCourseGradeModel`, `useCourseModelActions`, `GradesModelScreen`, and ~268 engine tests in 32 files, plus the `engine_10b` and `engine_gates_off` rows of `METHODS` | `grade-so-far.ts`, `ScoreHistory`, `v_gradebook_history`. Tables `grade_scenarios` / `grade_column_links` and views `v_grade_model_*` are left in place unused — nothing is dropped from the database this phase (answer 3). |
+| **points ratio** | as above, plus `weightedSoFar` from `grade-so-far.ts` | `pointsRatio`, `ScoreHistory`, `v_gradebook_history` |
+
+### Two things G-1 has to carry
+
+1. **`ScoreHistory` must survive in every outcome** — the desktop poller reads
+   `v_gradebook_history` (`desktop/src/core/poller/sources.ts:47`). It currently depends on four
+   symbols in 10b modules: `HISTORY_LABEL` and `historyText` (`grade-model-format.ts`),
+   `GradebookHistoryRow` (`grade-model-input.ts`), and `columnItemKey` / `historyByColumn`
+   (`grade-model-view.ts`). If those modules are retired, those symbols move into
+   `queries.grades.ts` rather than being deleted with them. The popout's own read
+   (`assignmentHistoryOptions`) is already in `queries.grades.ts` and needs nothing.
+2. **`gradeHistoryOptions` / `useGradeHistory` in `queries.grade-model.ts` now have no consumer**
+   in `src/` — G-5 replaced the whole-course history read with the popout's per-column one. They
+   are left in place, with their tests, for G-1 to remove along with the rest of that module, or
+   to keep if the engine wins.
+
+---
+
+## Honesty and scope
+
+* **No fabricated numbers introduced.** Every fixture in the comparison suite is dummy data,
+  labelled and asserted as such, and none of it is imported by a component. No screen gained a
+  computed figure in this work — the header figure is G-2's other half and is not built.
+* **Files W-31 does not own were not touched.** `AssignmentPopout.tsx`, `Today.tsx`, the tracker,
+  planner, materials, inbox and the PM-owned `progress-status.ts` are unchanged on this branch.
+  The only edit outside W-31's list is one mock line in `test/AssignmentPopout.test.tsx`
+  (see G-5).
+* **No new dependencies, no Tailwind.** Every style added is a CSS Module rule over existing
+  custom properties.
+* **`npm run lint` fails on this repo** for a reason that predates this branch: the script runs
+  `next lint`, which Next 16 removed. `npm run typecheck`, `npm run build` and `npm test` are the
+  gates that ran.

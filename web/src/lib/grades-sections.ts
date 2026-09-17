@@ -96,7 +96,10 @@ export function resolveSection(
  * The stored value is read only once this render may use browser-only state
  * (`useHydrated`), so the first client render matches the server's HTML and
  * React never throws the tree away. After the first toggle the local answer
- * wins and nothing is re-read.
+ * wins and nothing is re-read — until `key` changes, which means this component
+ * instance is now showing a different section and the old answer would be a
+ * lie. Navigating from one course's Grades tab to the next does exactly that:
+ * the route changes, React reuses the tree, and only the key moves.
  */
 export function useSectionState(
   key: string | undefined,
@@ -104,12 +107,21 @@ export function useSectionState(
 ): readonly [open: boolean, toggle: () => void] {
   const hydrated = useHydrated();
   const [chosen, setChosen] = useState<SectionState | null>(null);
+  const [chosenFor, setChosenFor] = useState(key);
+
+  // Adjusting state during render because a prop changed — React's own pattern
+  // for it, and cheaper than an effect: this render already produces the right
+  // answer instead of painting the stale one first.
+  if (chosenFor !== key) {
+    setChosenFor(key);
+    setChosen(null);
+  }
 
   const stored = useMemo(
     () => (hydrated && key !== undefined ? readStoredSections()[key] : undefined),
     [hydrated, key],
   );
-  const state = chosen ?? resolveSection(stored, fallback);
+  const state = (chosenFor === key ? chosen : null) ?? resolveSection(stored, fallback);
 
   const toggle = () => {
     const next: SectionState = state === 'open' ? 'closed' : 'open';
