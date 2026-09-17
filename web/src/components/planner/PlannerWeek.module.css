@@ -398,17 +398,7 @@
 
 /* The topic and the room wrap too, but on a shorter leash than the title:
    two lines, so a long room string cannot push a class's due chips off. */
-.blockTopic {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  opacity: 0.8;
-}
-
+.blockTopic,
 .blockRoom {
   display: -webkit-box;
   -webkit-box-orient: vertical;

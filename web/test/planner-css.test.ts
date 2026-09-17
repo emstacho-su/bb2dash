@@ -18,16 +18,18 @@ const CSS = readFileSync(
 );
 
 /**
- * The body of one rule, by selector, with comments already stripped. The
- * selector has to start its own line, so `.eventTitle` finds the class's own
- * rule and not the `[data-compact] > .eventTitle` override above it.
+ * The body of one rule, by selector, with comments already stripped.
+ *
+ * The selector has to start its own line, so `.eventTitle` finds the class's
+ * own rule and not the `[data-compact] > .eventTitle` override above it, and a
+ * rule may list further selectors after it (`.blockTopic, .blockRoom { … }`).
  */
 function ruleBody(selector: string): string {
   const source = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`^${escaped}\\s*\\{([^}]*)\\}`, 'm').exec(source);
+  const match = new RegExp(`^${escaped}(\\s*,[^{]*)?\\s*\\{([^}]*)\\}`, 'm').exec(source);
   if (!match) throw new Error(`no rule for "${selector}" in PlannerWeek.module.css`);
-  return match[1];
+  return match[2];
 }
 
 describe('P-planner-3 — no scroll bars inside the planner', () => {
