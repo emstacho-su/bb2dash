@@ -32,6 +32,19 @@ export interface Deeplink {
   navigate(route: string): boolean;
 }
 
+/**
+ * R2-8 — a `loadURL` rejection that does not mean the navigation failed.
+ *
+ * Chromium aborts the load it was asked for whenever something supersedes it, and the web
+ * app's own proxy redirects (`/` -> `/login` when the session has gone, for one). The
+ * window did navigate; `loadURL` just never resolved for *that* URL. Treating it as a
+ * failure would report every redirect as a broken deep link.
+ */
+export function isBenignLoadFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /ERR_ABORTED|\(-3\)/.test(message);
+}
+
 export function createDeeplink(options: DeeplinkOptions): Deeplink {
   const log = options.log ?? silentLogger;
 
@@ -62,15 +75,43 @@ export function createDeeplink(options: DeeplinkOptions): Deeplink {
 
       try {
         showWindow(window);
-        void window.loadURL(target);
+      } catch (error) {
+        log.error(`raising the window for ${route} failed: ${describeError(error)}`);
+        options.recorder?.recordNavigation(route, false);
+        return false;
+      }
+
+      // R2-8: `void loadURL(...)` left the rejection unhandled and reported success for a
+      // load that never happened — a clicked toast said it worked while the window sat on
+      // the old screen. The click handler cannot wait for the load, so the outcome is
+      // recorded when it is known. A *synchronous* throw is still answered immediately.
+      let pending: Promise<void>;
+      try {
+        pending = window.loadURL(target);
       } catch (error) {
         log.error(`navigation to ${route} failed: ${describeError(error)}`);
         options.recorder?.recordNavigation(route, false);
         return false;
       }
 
-      options.recorder?.recordNavigation(route, true);
-      log.info(`navigated to ${route}`);
+      pending.then(
+        () => {
+          options.recorder?.recordNavigation(route, true);
+          log.info(`navigated to ${route}`);
+        },
+        (error: unknown) => {
+          if (isBenignLoadFailure(error)) {
+            // The app redirected or superseded this load: the window did navigate, just
+            // not to the URL that was asked for. Not a failure.
+            options.recorder?.recordNavigation(route, true);
+            log.info(`navigated to ${route} (superseded by the app's own redirect)`);
+            return;
+          }
+          options.recorder?.recordNavigation(route, false);
+          log.error(`navigation to ${route} failed: ${describeError(error)}`);
+        },
+      );
+
       return true;
     },
   };

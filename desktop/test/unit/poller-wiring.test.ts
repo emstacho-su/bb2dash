@@ -229,8 +229,12 @@ describe('startPoller', () => {
     });
     expect(second.outcome).toBe('quiet');
 
-    // And a recorded click navigates to the toast's own route.
+    // And a recorded click navigates to the toast's own route. R2-8: the *outcome* of that
+    // navigation is recorded once the load settles, not when it is issued, so the record
+    // appears a microtask later than the `true`.
     expect(surface.clickToast('sync:77')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
     expect(surface.recorded().navigations).toHaveLength(1);
     expect(surface.clickToast('does-not-exist')).toBe(false);
 

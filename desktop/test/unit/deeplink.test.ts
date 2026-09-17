@@ -10,7 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
 
-import { createDeeplink } from '../../src/main/deeplink';
+import { createDeeplink, isBenignLoadFailure } from '../../src/main/deeplink';
 import type { Logger } from '../../src/core/redact';
 import { createRecorder } from '../../src/main/test-hook';
 import { showWindow } from '../../src/main/window';
@@ -62,6 +62,12 @@ function logger(): Logger & { lines: string[] } {
     warn: (m) => lines.push(`warn ${m}`),
     error: (m) => lines.push(`error ${m}`),
   };
+}
+
+/** Let the microtask queue drain, so a settled `loadURL` has been recorded. */
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe('navigate', () => {
@@ -132,13 +138,16 @@ describe('navigate', () => {
     expect(createDeeplink({ appUrl: APP_URL, getWindow: () => window }).navigate('/inbox')).toBe(false);
   });
 
-  it('records every attempt for the e2e suite, accepted or not', () => {
+  it('records every attempt for the e2e suite, accepted or not', async () => {
     const { window } = fakeWindow();
     const recorder = createRecorder();
     const deeplink = createDeeplink({ appUrl: APP_URL, getWindow: () => window, recorder });
     deeplink.navigate('/inbox');
     deeplink.navigate('https://evil.example/');
-    expect(recorder.navigations().map((n) => [n.route, n.accepted])).toEqual([
+    // R2-8: an accepted route is recorded when the load settles, not when it is issued,
+    // so its real outcome is what gets recorded.
+    await flush();
+    expect(recorder.navigations().map((n) => [n.route, n.accepted]).sort()).toEqual([
       ['/inbox', true],
       ['https://evil.example/', false],
     ]);
@@ -183,6 +192,92 @@ describe('R2-10 — the deep link raises the window through the shared showWindo
     expect(accepted).toBe(false);
     expect(state.calls).toEqual([]);
     expect(state.loaded).toEqual([]);
+    expect(recorder.navigations()).toEqual([
+      expect.objectContaining({ route: '/inbox', accepted: false }),
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// R2-8 — a load that fails must not be reported as a navigation that worked
+// ---------------------------------------------------------------------------------------
+
+describe('R2-8 — the recorded outcome is the load\u2019s real one', () => {
+  it('records a rejected load as a failure, not a success', async () => {
+    const { window } = fakeWindow();
+    const recorder = createRecorder();
+    const log = logger();
+    vi.spyOn(window, 'loadURL').mockRejectedValue(
+      new Error('ERR_NAME_NOT_RESOLVED (-105) loading https://…'),
+    );
+
+    createDeeplink({ appUrl: APP_URL, getWindow: () => window, recorder, log }).navigate('/inbox');
+    await flush();
+
+    // Before the fix this was `void loadURL(...)`: the rejection was unhandled and the
+    // navigation was recorded accepted, so a clicked toast reported success while the
+    // window sat on the screen it was already on.
+    expect(recorder.navigations()).toEqual([
+      expect.objectContaining({ route: '/inbox', accepted: false }),
+    ]);
+    expect(log.lines.some((line) => line.startsWith('error'))).toBe(true);
+  });
+
+  it('treats ERR_ABORTED as a success: the app redirected, it did not fail', async () => {
+    const { window } = fakeWindow();
+    const recorder = createRecorder();
+    vi.spyOn(window, 'loadURL').mockRejectedValue(
+      new Error('ERR_ABORTED (-3) loading \u2018https://app.example/inbox\u2019'),
+    );
+
+    createDeeplink({ appUrl: APP_URL, getWindow: () => window, recorder }).navigate('/inbox');
+    await flush();
+
+    expect(recorder.navigations()).toEqual([
+      expect.objectContaining({ route: '/inbox', accepted: true }),
+    ]);
+  });
+
+  it('classifies the two by message', () => {
+    expect(isBenignLoadFailure(new Error('ERR_ABORTED (-3) loading x'))).toBe(true);
+    expect(isBenignLoadFailure(new Error('Error (-3) loading x'))).toBe(true);
+    expect(isBenignLoadFailure(new Error('ERR_NAME_NOT_RESOLVED (-105)'))).toBe(false);
+    expect(isBenignLoadFailure(new Error('ERR_CONNECTION_REFUSED (-102)'))).toBe(false);
+    expect(isBenignLoadFailure('ERR_ABORTED')).toBe(true);
+    expect(isBenignLoadFailure(undefined)).toBe(false);
+  });
+
+  it('leaves no unhandled rejection behind', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const { window } = fakeWindow();
+      vi.spyOn(window, 'loadURL').mockRejectedValue(new Error('ERR_CONNECTION_REFUSED (-102)'));
+      createDeeplink({ appUrl: APP_URL, getWindow: () => window }).navigate('/inbox');
+      await flush();
+      await flush();
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+    expect(unhandled).toEqual([]);
+  });
+
+  it('still returns false, synchronously, when loadURL throws', () => {
+    const { window } = fakeWindow();
+    const recorder = createRecorder();
+    vi.spyOn(window, 'loadURL').mockImplementation(() => {
+      throw new Error('renderer gone');
+    });
+    const accepted = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => window,
+      recorder,
+    }).navigate('/inbox');
+
+    expect(accepted).toBe(false);
     expect(recorder.navigations()).toEqual([
       expect.objectContaining({ route: '/inbox', accepted: false }),
     ]);

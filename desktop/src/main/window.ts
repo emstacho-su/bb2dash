@@ -28,6 +28,21 @@ const DEFAULT_SIZE = Object.freeze({ width: 1280, height: 800 });
 export const PARTITION = 'persist:bb2dash';
 
 /**
+ * R2-7 — recovering a window that has nothing in it.
+ *
+ * Two ways that happens, and both used to be terminal. `loadURL` rejects when the app URL
+ * is unreachable, which is the ordinary case of opening the shell before the wifi is up:
+ * the old code logged and left a blank window that never retried. And
+ * `render-process-gone` was logged and nothing else, leaving a window whose renderer is
+ * dead — no content, no reload, and closing it only hides it to the tray (C-12).
+ *
+ * The backoff is deliberately coarse. This is a laptop coming out of a tunnel, not a
+ * service: a handful of tries over about a minute, then wait for the person to do
+ * something. Tray *Open* retries immediately, which is the "do something".
+ */
+const LOAD_RETRY_DELAYS_MS = Object.freeze([2_000, 5_000, 15_000, 30_000]);
+
+/**
  * The security baseline, in one place so the e2e suite can assert the exact
  * object the window was built with (C-10) rather than a copy of it.
  */
@@ -121,6 +136,90 @@ function trackWindowState(window: BrowserWindow): void {
   });
 }
 
+/**
+ * R2-7 — is this window showing the app, or is it blank?
+ *
+ * `webContents.getURL()` is empty for a window whose load never succeeded, and
+ * `isCrashed()` is true for one whose renderer died. Either way the window is useless and
+ * `ensureLoaded` should put the app back in it.
+ */
+export function needsReload(window: BrowserWindow): boolean {
+  if (window.isDestroyed()) return false;
+  try {
+    return window.webContents.isCrashed() || window.webContents.getURL() === '';
+  } catch {
+    return false;
+  }
+}
+
+/** Every window's loader, so `showWindow` and the retry timer share one implementation. */
+const loaders = new WeakMap<BrowserWindow, () => void>();
+
+/**
+ * R2-7 — load `appUrl`, and keep trying on the backoff if it will not load.
+ *
+ * Attached by `createWindow`; also reachable through `showWindow`, so the tray's *Open*
+ * on a blank window is a retry rather than a shrug.
+ */
+export function ensureLoaded(window: BrowserWindow): void {
+  loaders.get(window)?.();
+}
+
+function attachLoader(window: BrowserWindow, appUrl: string): void {
+  let attempt = 0;
+  let timer: NodeJS.Timeout | null = null;
+  let loading = false;
+
+  const clear = (): void => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+  };
+
+  const load = (): void => {
+    if (window.isDestroyed() || loading) return;
+    loading = true;
+    clear();
+    window.webContents.loadURL(appUrl).then(
+      () => {
+        loading = false;
+        attempt = 0;
+        log(`loaded ${new URL(appUrl).origin}`);
+      },
+      (error: unknown) => {
+        loading = false;
+        logError(`could not load ${appUrl}`, error);
+        const delay = LOAD_RETRY_DELAYS_MS[Math.min(attempt, LOAD_RETRY_DELAYS_MS.length - 1)];
+        attempt += 1;
+        if (attempt > LOAD_RETRY_DELAYS_MS.length) {
+          log('giving up on automatic reload; the tray\'s Open will try again');
+          return;
+        }
+        log(`retrying the load in ${delay}ms (attempt ${attempt})`);
+        timer = setTimeout(load, delay);
+        // A pending retry must not be the reason the process stays alive; the poller's
+        // interval already does that job, and only until Quit.
+        timer.unref?.();
+      },
+    );
+  };
+
+  loaders.set(window, () => {
+    attempt = 0;
+    load();
+  });
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    log(`renderer gone: ${details.reason}; reloading`);
+    recordEvent('render-process-gone', { reason: details.reason });
+    attempt = 0;
+    loading = false;
+    load();
+  });
+
+  window.on('closed', clear);
+  load();
+}
+
 /** Create the window. It is created once per run and reused (C-12). */
 export function createWindow(appUrl: string): BrowserWindow {
   const saved = readWindowState();
@@ -147,21 +246,25 @@ export function createWindow(appUrl: string): BrowserWindow {
   window.once('ready-to-show', () => window.show());
   trackWindowState(window);
 
-  window.webContents.on('render-process-gone', (_event, details) => {
-    log(`renderer gone: ${details.reason}`);
-  });
-
-  void window.loadURL(appUrl).catch((error: unknown) => {
-    logError(`could not load ${appUrl}`, error);
-  });
+  // R2-7: owns the initial load, the retry backoff and the crash reload.
+  attachLoader(window, appUrl);
 
   return window;
 }
 
-/** Restore, show and focus — what the tray, a second launch and a toast all want. */
+/**
+ * Restore, show and focus — what the tray, a second launch and a toast all want.
+ *
+ * R2-7: a window that is blank or crashed is also reloaded here, so the tray's *Open* is
+ * the manual retry after the backoff has given up.
+ */
 export function showWindow(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   if (window.isMinimized()) window.restore();
   if (!window.isVisible()) window.show();
   window.focus();
+  if (needsReload(window)) {
+    log('the window has no content; reloading it');
+    ensureLoaded(window);
+  }
 }
