@@ -1,9 +1,9 @@
 # 80h — W-31 (grades) verification note
 
 Phase 12b, branch `fix/page-pass-12b-grades`, worktree `bb2dash-wt-12b-grades`.
-Rows from §Item task list of `80c_PHASE12B_page_pass.md`: **G-0** (gate), then the
-method-independent rows **G-3, G-4, G-5, G-6** and the collapsible half of **G-2**.
-**G-1 and the header-figure half of G-2 are not started** — they wait on Stack's pick.
+Rows from §Item task list of `80c_PHASE12B_page_pass.md`: **G-0** (the gate), the
+method-independent rows **G-3, G-4, G-5, G-6**, the collapsible half of **G-2**, and — after
+Stack's pick on 2026-09-17 — **G-1** and the header-figure half of **G-2**. All done.
 
 Baseline on the branch before any of this work: **87 test files, 1342 tests, all passing.**
 
@@ -16,17 +16,23 @@ Baseline on the branch before any of this work: **87 test files, 1342 tests, all
 | file | what it is |
 |---|---|
 | `web/src/lib/grade-so-far.ts` | the two new pure functions, `pointsRatio` and `weightedSoFar`, over one input shape (latest gradebook rows + `grade_components` + column → part links). No I/O, no clock, no mutation. |
-| `web/test/grade-method-comparison/types.ts` | the fixture shape, declared locally so the fixtures survive whatever G-1 deletes |
-| `web/test/grade-method-comparison/builders.ts` | terse fixture builders |
-| `web/test/grade-method-comparison/fixtures/01…18-*.ts` | **18 fixtures**, one file each, every one carrying its hand-written derivation as a comment |
-| `web/test/grade-method-comparison/methods.ts` | the three methods behind one signature, plus one measured variant; the **only** file that imports `grade-model/` |
-| `web/test/grade-method-comparison/report.ts` | scoring and the markdown |
-| `web/test/grade-method-comparison/comparison.test.ts` | the run; writes `docs/planning/80e_GRADE_METHOD_COMPARISON.md` |
+| `web/test/grade-fixtures/types.ts` | the fixture shape, declared locally so the fixtures survive whatever G-1 deletes |
+| `web/test/grade-fixtures/builders.ts` | terse fixture builders |
+| `web/test/grade-fixtures/fixtures/01…18-*.ts` | **18 fixtures**, one file each, every one carrying its hand-written derivation as a comment |
+| `web/test/grade-fixtures/methods.ts` | the methods behind one signature; the **only** file that imported `grade-model/` |
+| `web/test/grade-fixtures/report.ts` | scoring and the markdown |
+| `web/test/grade-fixtures/comparison.test.ts` | the run; wrote `docs/planning/80e_GRADE_METHOD_COMPARISON.md` |
+
+> The three files above were **deleted by G-1** once Stack had picked: `80e` is frozen as the
+> record, and regenerating it with fewer columns would falsify it. The folder was renamed from
+> `grade-method-comparison/` to `grade-fixtures/`, and what remains — `types.ts`, `builders.ts`
+> and the eighteen fixture files — is now the permanent regression set that
+> `web/test/graded-so-far.test.ts` runs against the shipped function.
 
 ### Executable check (the brief's: "≥ 12 fixtures, each asserts its hand-derived truth")
 
 ```
-$ npx vitest run test/grade-method-comparison
+$ npx vitest run test/grade-method-comparison    # at the gate, before G-1
  Test Files  1 passed (1)
       Tests  112 passed (112)
 ```
@@ -90,12 +96,12 @@ Fixtures that separate the methods:
 ### Honesty
 
 No fabricated numbers: every fixture is invented data on a real *scheme shape*, labelled DUMMY
-in its own file and asserted to be so by the suite. Nothing in `web/test/grade-method-comparison/`
+in its own file and asserted to be so by the suite. Nothing in `web/test/grade-fixtures/`
 is imported by any component. `80e` is generated, deterministic (no clock, no randomness) and
 carries a "do not edit by hand" line.
 
-**Nothing has been deleted. Stack reads `80e` and picks; the PM resumes this worker with the
-pick.**
+**Nothing was deleted at this point.** Stack read `80e`, picked, and the work resumed at G-1
+below.
 
 Commit: `d63ad3c` `fix(G-0): grade-method comparison suite and 80e, the gate before any removal`.
 
@@ -299,14 +305,163 @@ instead of painting the stale one first). RED → GREEN with a `rerender` case i
 
 ---
 
-## Not started — waiting on Stack
+## G-1 — Stack's pick, built (P-grades-3) — **done**
 
-| row | why it is not started |
+Stack, 2026-09-17: *"go with recommendation"* — keep the engine's arithmetic, remove the layer
+around it. That is the `10b engine, gates off` row of `80e`, which reproduced every hand-derived
+grade in the fixture set exactly (0.0000 mean, 0.0000 max).
+
+### The production path
+
+| file | what it is |
 |---|---|
-| **G-1** (P-grades-3) | deletes the losing method. Nothing may be removed before Stack reads `80e` and picks. No grade-model code has been deleted or altered by W-31. |
-| **G-2, header figure half** (P-grades-1, P-home-10) | the figure *is* the winning method. The course-card half of G-2 is W-32's in any case. |
+| `web/src/lib/graded-so-far.ts` | `gradedSoFar()` — the one way a grade reaches a screen. Pure, deterministic, no I/O. Returns the percentage **and what the percentage does not cover**. Also `gradedSoFarCardFigure()`, the Home-card formatter (G-2). |
+| `web/src/lib/grade-figure-run.ts` | rows in, one figure per course out, with any engine exception caught into a sentence — this app has no error boundary, and a throw in render would blank Blackboard's numbers too |
+| `web/src/components/grades/GradedSoFarFigure.tsx` | the one presentational component, used by `/grades` and the course Grades tab |
+| `web/src/components/grades/useCourseLinkActions.ts` | the "Counts toward…" picker's wiring, all that survives of `useCourseModelActions` |
+| `web/test/graded-so-far.test.ts` | the permanent regression suite (59 cases) |
 
-### What G-1 removes under each possible pick
+### Both gates are off, and what replaced them
+
+* **The strict rule is gone.** An unscored hand-graded part no longer hides the whole course. It
+  is ordinary ungraded work: out of both sides of the figure, and **named underneath it**.
+* **Muting is gone.** An unsure link no longer drops a graded score from the headline. Unsure
+  links count; the row still says "unsure", and a scored column that counts toward **nothing**
+  is named under the figure with a pointer to the picker.
+
+Asserted directly in `test/grade-model/order-of-checks.test.ts` (the rows that used to expect
+`manual_unscored` now expect a figure) and in `test/CourseGrades.model.test.tsx` (an unsure link
+end to end, through the real query layer and the real engine).
+
+### What each real course shape shows now
+
+Read off the fixtures modelled on each of Stack's six courses — dummy scores, real scheme shapes:
+
+| fixture | figure | counted | not counted yet | counts toward nothing |
+|---|---|---|---|---|
+| F12 ECN.304 | **83.3 %** | Exams, Quizzes | Participation | — |
+| F13 GEO.103 | **90.0 %** | Reading Quizzes | Exams, Lecture Attendance, Discussion Section Attendance & Participation | — |
+| F14 IST.352 | **93.3 %** | Projects | Attendance & Class Contribution, Readings | — |
+| F15 IST.323 | **96.4 %** | Labs, Quizzes, Final project, Class participation | — | `labUnlinked` |
+| F16 IST.466 | **87.0 %** | Major Cases, AI Team Assignment, Reading Responses | Ethics Presentation | — |
+| F17 IST.471 | *no number* | — | — | — (graded qualitatively) |
+| F18 weighted sub-parts | **77.1 %** | Final project, Exams | — | — |
+
+Before G-1, **four of those six** (F12, F13, F14, and IST.323's real shape) showed nothing at
+all, and F16 showed 85.5 % with a graded 135/150 silently dropped. That is the whole point of
+the row.
+
+### Deleted
+
+**Files** — `grade-model/{solve,agreement,states}.ts`, `grade-model-run.ts`,
+`queries.grade-scenario.ts`, `ModelStanding.tsx`, `WhatIfCell.tsx`, `TargetSolver.tsx`,
+`PlaceholderRows.tsx`, `useCourseModelActions.ts`, and `grade-so-far.ts`'s two candidate
+calculations (they went with the comparison machinery).
+
+**Suites** — `ModelStanding`, `WhatIfCell`, `TargetSolver`, `PlaceholderRows`,
+`queries.grade-scenario`, `grade-model-explanation`, and in `test/grade-model/`: `solver`,
+`muting`, `placeholders`, `percent-placeholders`, `item-states`, `properties.states`,
+`agreement`, `labels`, and the **JSON fixture suite with its loader** — it asserted 10b's three
+projections, `agreement`, `unscoredManual` and `muted` component states, none of which exist.
+
+**Cut back, not deleted** — `types.ts` (no `Scenario`, `Projection`, `TargetResult`,
+`BlackboardTotal`, `Agreement`, `DeltaReason`, `ItemStates`, `manual_unscored`, `muted`);
+`items.ts` (no scenario, no placeholder rows); `tree.ts` / `evaluate.ts` (no muting);
+`project.ts` (one projection, no whole-course denominator); `labels.ts` down to the three picker
+strings; `grade-model-{input,view,format}.ts` and `queries.grade-model.ts` to their surviving
+reads.
+
+**The decision on `agreement` was mine, as the PM allowed.** It goes. It reads `zeros_on_rest`,
+the muted state and the `manual_unscored` gate — keeping it would have blocked four of the six
+removals for one sentence, and the card already shows Blackboard's number and ours side by side,
+each labelled. That is the same information, honestly.
+
+**80e is frozen, not regenerated.** It recorded a decision; re-running it with fewer columns
+would falsify the record. Its fixtures live on as `web/test/grade-fixtures/`, now the regression
+set, and the file carries the "do not edit by hand" line it always had.
+
+### Test count
+
+| point | files | tests |
+|---|---|---|
+| branch point (before W-31) | 87 | 1342 |
+| after G-0, G-3..G-6, G-2 collapse | 89 | 1502 |
+| after merging W-30/W-32/W-33 round 1 | 95 | 1596 |
+| **after G-1's deletions** | 81 | 1236 |
+| **after G-2's card formatter + the round-2 merge (final)** | **91** | **1506** |
+
+The drop at G-1 is the deletion itself: ~360 cases whose subject no longer exists. Typecheck,
+build and the full suite are green at every one of those points.
+
+### Proposed DECISIONS row
+
+> **2026-09-17 — Phase 10b's strict rule and what-if layer are reversed (P-grades-3, G-1).**
+> Stack read `docs/planning/80e_GRADE_METHOD_COMPARISON.md` — eighteen dummy-data fixtures, each
+> with a hand-derived grade, measured against four candidates — and picked the 10b engine's
+> arithmetic with its two silencing rules removed. That configuration reproduced every
+> hand-derived grade exactly; the raw points ratio was 3.9 points out on average and printed
+> 100 % for a qualitatively graded course, and a slim weighted calculation was 3.0 out.
+> **Reversed:** an unscored hand-graded part no longer hides a course's figure, and a syllabus
+> link marked unsure no longer drops its graded scores from the headline. Both are now stated —
+> the parts a figure does not cover are named under it, and a scored column linked to nothing is
+> named with a pointer to the "Counts toward…" picker. **Removed with them:** what-if scores,
+> the target solver, saved scenarios (`grade_scenarios` stays in the database, unused),
+> placeholder rows, the "zeros on the rest" and "best case" projections, and the
+> agrees-with-Blackboard sentence — the card shows both numbers side by side, each labelled,
+> which is the same information without a second explanation to maintain. **Kept:** every
+> per-part aggregation rule unaltered, the "Counts toward…" picker, `ScoreHistory` and
+> `v_gradebook_history`. The eighteen fixtures are now the permanent regression suite
+> (`web/test/graded-so-far.test.ts`); `80e` is frozen as the record of the decision.
+
+---
+
+## G-2 — the headline figure (P-grades-1, P-home-10) — **done**
+
+`gradedSoFar()` returns the figure; `GradedSoFarFigure` renders it in each collapsible course
+header on `/grades` and on the course Grades tab. It shows "Graded so far", the percentage
+rounded once to one decimal, the letter, the "as of" from the newest `seen_at` among the rows
+that went into it, and — only under a points scheme — the points fraction. Under a weighted
+scheme the two sides are weight units, and printing "50.7 / 60" would be a mark the gradebook
+does not contain, so it prints none.
+
+Blackboard's own total renders beside ours in its own labelled box, never merged with it.
+
+**Determinism** is a property test over generated inputs (`same input → equal output`, and the
+input is never mutated), plus a per-fixture non-mutation check.
+
+### The `CourseGradeFigure` prop contract (for the PM to wire)
+
+W-32 owns the name `CourseGradeFigure` (`web/src/app/(app)/CourseGradeFigure.tsx`), so the
+component here is **`GradedSoFarFigure`** and the result type is **`GradedSoFarResult`**. The
+card seam is a pure formatter:
+
+```ts
+import { gradedSoFarCardFigure } from '@/lib/graded-so-far';
+
+// in Today.tsx's cardGrades(course), as the second entry:
+gradedSoFarCardFigure(figureFor(course))   //  →  { label, value, absence, asOf, display }
+```
+
+| field | value |
+|---|---|
+| `label` | always `'Graded so far'` |
+| `value` | `'84.5%'`, or **null** when there is no figure |
+| `absence` | **null** when `value` is set; otherwise the short reason — `nothing graded yet`, `graded qualitatively`, `no grading rules yet`, `grading rules not readable` |
+| `asOf` | already formatted (`'Sep 16, 1:14 PM'`), null when there is no figure |
+| `display` | the letter, or null |
+
+Exactly one of `value` and `absence` is ever filled — asserted across every fixture, because
+that invariant is what keeps a course with no grade off the card as a zero. The assignment to
+W-32's `CourseGradeFigure` type is itself a test, so the seam cannot drift silently without the
+suite failing to compile.
+
+The figure the card shows is the same function `/grades` uses, so the two cannot disagree.
+
+---
+
+## What G-1 would have removed under the other picks
+
+Kept for the record, since the brief asked for it before Stack chose.
 
 | Stack picks | what goes | what stays |
 |---|---|---|
@@ -314,7 +469,7 @@ instead of painting the stale one first). RED → GREEN with a `rerender` case i
 | **weighted so far** | `web/src/lib/grade-model/` (24 files, ~1,750 lines), `grade-model-{input,run,view,format}.ts`, `queries.grade-model.ts`, `queries.grade-scenario.ts`, `ModelStanding`, `WhatIfCell`, `TargetSolver`, `PlaceholderRows`, `LinkColumnControl`, `useCourseGradeModel`, `useCourseModelActions`, `GradesModelScreen`, and ~268 engine tests in 32 files, plus the `engine_10b` and `engine_gates_off` rows of `METHODS` | `grade-so-far.ts`, `ScoreHistory`, `v_gradebook_history`. Tables `grade_scenarios` / `grade_column_links` and views `v_grade_model_*` are left in place unused — nothing is dropped from the database this phase (answer 3). |
 | **points ratio** | as above, plus `weightedSoFar` from `grade-so-far.ts` | `pointsRatio`, `ScoreHistory`, `v_gradebook_history` |
 
-### Two things G-1 has to carry
+### Two things G-1 had to carry (both done)
 
 1. **`ScoreHistory` must survive in every outcome** — the desktop poller reads
    `v_gradebook_history` (`desktop/src/core/poller/sources.ts:47`). Its dependencies are now

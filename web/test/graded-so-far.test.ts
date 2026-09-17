@@ -22,6 +22,7 @@ import {
   type GradedSoFarResult,
 } from '@/lib/graded-so-far';
 import type { ModelInput } from '@/lib/grade-model';
+import type { CourseGradeFigure as CardFigure } from '@/app/(app)/CourseGradeFigure';
 import { FIXTURES } from './grade-fixtures/fixtures';
 import type { ComparisonFixture } from './grade-fixtures/types';
 import { modelInputArb } from './grade-model/arbitraries';
@@ -264,5 +265,24 @@ describe('the Home card figure', () => {
       expect([card.value, card.absence].filter((v) => v !== null)).toHaveLength(1);
       expect(card.label).toBe('Graded so far');
     }
+  });
+});
+
+/**
+ * The seam itself. W-32's course card declares the shape it accepts; the PM
+ * drops `gradedSoFarCardFigure(...)` in as `cardGrades()`'s second entry at
+ * integration. This assignment is the contract, checked by the compiler: if
+ * either side changes shape, this file stops compiling instead of the card
+ * quietly rendering nothing.
+ */
+describe('the card slot contract', () => {
+  it('produces exactly what W-32\'s course card accepts', () => {
+    const slot: CardFigure = gradedSoFarCardFigure(figureFor('F01'));
+    expect(slot.label).toBe('Graded so far');
+
+    const bothKinds: readonly CardFigure[] = FIXTURES.map((fixture) =>
+      gradedSoFarCardFigure(gradedSoFar(modelOf(fixture))),
+    );
+    expect(bothKinds).toHaveLength(FIXTURES.length);
   });
 });
