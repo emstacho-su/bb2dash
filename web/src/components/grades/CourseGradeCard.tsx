@@ -19,6 +19,7 @@
  * figure itself renders `—`.
  */
 
+import Link from 'next/link';
 import {
   courseGradeState,
   formatSeenAt,
@@ -78,15 +79,23 @@ export function CourseGradeHeader({ row }: { row: CourseGradeRow | null | undefi
 /**
  * The header plus whatever the caller puts under it (the gradebook table).
  * `title` is the course's own code/title; this component never invents one.
+ *
+ * `titleHref` (Phase 12b, P-grades-2) makes that title the way into the course,
+ * in place of a separate button beside it. The link sits *inside* the heading,
+ * so the card keeps announcing itself as a level-2 heading with the course's
+ * name. Without it the title is plain text — the course's own Grades tab passes
+ * nothing, because a link from a page to itself is noise.
  */
 export function CourseGradeCard({
   title,
+  titleHref,
   subtitle,
   row,
   headerRight,
   children,
 }: {
   title: string;
+  titleHref?: string;
   subtitle?: string | null;
   row: CourseGradeRow | null | undefined;
   headerRight?: React.ReactNode;
@@ -96,7 +105,15 @@ export function CourseGradeCard({
     <section className={`${tokens.cardLg} ${styles.card}`} aria-label={title}>
       <div className={styles.head}>
         <div className={styles.headText}>
-          <h2 className={styles.title}>{title}</h2>
+          <h2 className={styles.title}>
+            {titleHref ? (
+              <Link className={styles.titleLink} href={titleHref}>
+                {title}
+              </Link>
+            ) : (
+              title
+            )}
+          </h2>
           {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
         </div>
         {headerRight}

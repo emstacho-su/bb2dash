@@ -170,6 +170,38 @@ describe('GradesScreen — grouping and honesty', () => {
   });
 });
 
+describe('GradesScreen — the title is the link (G-3, P-grades-2)', () => {
+  it('makes the course title itself a link to that course', () => {
+    render(<GradesScreen />);
+    const card = screen.getByRole('region', { name: 'IST 323' });
+    const link = within(card).getByRole('link', { name: 'IST 323' });
+    expect(link).toHaveAttribute('href', '/course/IST.323');
+  });
+
+  it('keeps the link inside the level-2 heading, so the card still announces itself', () => {
+    render(<GradesScreen />);
+    const heading = screen.getByRole('heading', { level: 2, name: 'IST 323' });
+    expect(within(heading).getByRole('link')).toHaveAttribute('href', '/course/IST.323');
+  });
+
+  it('encodes a display id that needs it', () => {
+    hooks.courses = stub([course({ display_id: 'GEO.103.lecture', code: 'GEO 103' })]);
+    hooks.grades = stub([makeCourseGrade({ course_id: 'GEO.103.lecture' })]);
+    hooks.gradebook = stub([]);
+    render(<GradesScreen />);
+    expect(screen.getByRole('link', { name: 'GEO 103' })).toHaveAttribute(
+      'href',
+      '/course/GEO.103.lecture',
+    );
+  });
+
+  it('no longer draws a separate "Course tab" button', () => {
+    render(<GradesScreen />);
+    expect(screen.queryByRole('link', { name: /Course tab/ })).toBeNull();
+    expect(screen.queryByText(/Course tab/)).toBeNull();
+  });
+});
+
 describe('GradesScreen — queries that have not landed', () => {
   it('says the courses are loading rather than "no courses"', () => {
     hooks.courses = stub(undefined, { isPending: true, isFetching: true });

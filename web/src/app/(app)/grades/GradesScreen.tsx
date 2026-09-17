@@ -22,7 +22,6 @@
  */
 
 import { useMemo } from 'react';
-import Link from 'next/link';
 import { useCourseDisplay } from '@/lib/queries.today';
 import { pickCourseGrade, useCourseGrades, useGradebookLatest } from '@/lib/queries.grades';
 import { CourseGradeCard } from '@/components/grades/CourseGradeCard';
@@ -32,7 +31,6 @@ import { QueryState, isQueryUnresolved } from '@/components/shared/QueryState';
 import type { GradebookHistoryRow } from '@/lib/grade-model-input';
 import { MODEL_STANDING_LOADING, type ModelStandingState } from '@/lib/grade-model-run';
 import type { LinkState } from '@/lib/grade-model-view';
-import tokens from '@/styles/tokens.module.css';
 import styles from './GradesScreen.module.css';
 
 /** The read-only model data `/grades` renders (Phase 10b). */
@@ -86,16 +84,11 @@ export function GradesScreen({ model }: { model?: GradesModelProps } = {}) {
           <CourseGradeCard
             key={course.display_id}
             title={course.code}
+            // P-grades-2: the title is the way into the course. The "Course
+            // tab →" button that used to sit opposite it is gone.
+            titleHref={`/course/${encodeURIComponent(course.display_id)}`}
             subtitle={shellIds.length > 1 ? `${course.title} · ${shellIds.join(' + ')}` : course.title}
             row={row}
-            headerRight={
-              <Link
-                className={tokens.btnGhost}
-                href={`/course/${encodeURIComponent(course.display_id)}/grades`}
-              >
-                Course tab →
-              </Link>
-            }
           >
             {model && <ModelStanding {...(model.standings[course.display_id] ?? MODEL_STANDING_LOADING)} />}
             {isQueryUnresolved(gradebookQ) ? null : (
