@@ -20,6 +20,8 @@ import type { DesktopConfig } from '../core/config';
 import { loadConfig, reportConfigError } from './config';
 import { log, logError } from './log';
 import { attachNavigationGuards } from './navigation';
+import { createMainRest } from './rest';
+import { attachSyncWatcher } from './sync-terminal';
 import { installTestHook } from './test-hook';
 import { createWindow, showWindow } from './window';
 
@@ -83,6 +85,8 @@ function start(): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  attachSyncWatcher({ config, restGet: createMainRest(config) });
 
   installTestHook({ tick: runPollerTick });
   log(`bb2dash shell ready (Electron ${process.versions.electron})`);

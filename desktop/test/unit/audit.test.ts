@@ -52,7 +52,10 @@ describe('no service-role credential anywhere in the desktop package', () => {
     for (const file of FILES) {
       for (const match of read(file).matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
         const name = match[1] ?? '';
-        if (!name.startsWith('BB2DASH_') && name !== 'NODE_ENV' && name !== 'LOCALAPPDATA') {
+        // `LOCALAPPDATA` and `PATH` are how `wt.exe` is located (C-8); neither
+        // can carry a credential, and nothing else in the environment is read.
+        const ALLOWED = ['NODE_ENV', 'LOCALAPPDATA', 'PATH'];
+        if (!name.startsWith('BB2DASH_') && !ALLOWED.includes(name)) {
           offenders.push(`${file}: ${name}`);
         }
       }
