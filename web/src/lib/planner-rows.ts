@@ -22,8 +22,15 @@
  *     so a week with no overlaps is pixel-for-pixel the grid he already knows;
  *   * a row grows one base height per concurrent lane — two overlapping blocks
  *     make it 48px, three 72px;
+ *   * **and, separately, by however much a block needs that its own span does
+ *     not give it.** A class carrying nested due chips is one lane wide and
+ *     taller than its hours; it asks for the shortfall once, spread over its
+ *     own span, not for a lane on every row it touches (CR-5). Charging it a
+ *     lane per row made an 80-minute class with one 39px chip 144px tall, and
+ *     three chips put every row on the cap;
  *   * it stops at 4× (96px). Past the cap the side-by-side lanes carry the rest,
- *     exactly as they did before;
+ *     exactly as they did before, and a block's own content clips — on a whole
+ *     line, per `blockContentPx`;
  *   * the seven day columns share one table, because they share one set of
  *     rows: the gutter's "3 PM" has to sit on the same line in all of them. The
  *     busiest day decides a row's height, never the week's total.
@@ -62,6 +69,23 @@ export const PLANNER_BLOCK_PADDING_PX = 6;
 export const PLANNER_MAX_TITLE_LINES = 6;
 
 /**
+ * The status quick-edit inside a nested chip: one line box, plus
+ * `.statusSelect`'s 3px padding and 1px border, top and bottom.
+ */
+const STATUS_SELECT_PX = PLANNER_BLOCK_LINE_PX + 2 * 3 + 2 * 1;
+
+/**
+ * A due chip nested in a class block, top to bottom: `.nestedChip`'s 1px
+ * padding, its title line, the 1px row gap, the status control, the other 1px
+ * of padding. 39px — and, before CR-5, it was being charged as a whole 24px
+ * lane on every row of the class, four of them on an 80-minute lecture.
+ */
+export const PLANNER_NESTED_CHIP_PX = 1 + PLANNER_BLOCK_LINE_PX + 1 + STATUS_SELECT_PX + 1;
+
+/** `.nested { margin-top: 2px; gap: 2px }` — above the list, and between chips. */
+export const PLANNER_NESTED_GAP_PX = 2;
+
+/**
  * The chrome above the hour rows — the day heads and the two bands — measured
  * in base rows. Only the pre-hydration placeholder uses it, and only to hold a
  * space open; the real board is laid out by the browser, not by this number.
@@ -73,59 +97,85 @@ export const PLANNER_CHROME_ROWS = 4;
  * ------------------------------------------------------------------------ */
 
 /**
- * A block, as this module sees it: where it sits in slots, and how many lanes'
- * worth of vertical room it asks of the rows it covers.
+ * A block, as this module sees it: where it sits in slots, and how much room
+ * its content needs whether or not its hours give it that much.
  *
- * `weight` is 1 for an ordinary block. A class block carrying nested due chips
- * asks for more, because those chips are stacked inside it rather than beside
- * it — that is what makes "a class block with nested due chips grows to fit
- * them" fall out of the same table as an overlap.
+ * `requiredPx` is 0 for a block that is happy with whatever its span is worth,
+ * which is nearly all of them. A class carrying nested due chips is the case it
+ * exists for: the chips stack inside the block, so the block needs pixels, not
+ * a second lane.
  */
 export interface RowSpan {
   /** Slots from the top of the grid. */
   top: number;
   /** Height in slots. */
   height: number;
-  /** Lanes' worth of room this block asks for; 1 unless it nests something. */
-  weight: number;
+  /** Pixels this block's content needs; 0 when its own span already suffices. */
+  requiredPx: number;
 }
 
 /**
- * What one day column asks of each row: the summed weight of everything drawn
- * on it. With one block per row that is 1; with three overlapping blocks it is
- * 3, which is exactly the lane count `assignLanes` gives them.
+ * How much taller than the base a block needs each of its own rows to be.
+ *
+ * The shortfall is spread across the block's **span**, not across the rows it
+ * happens to touch, so that the block ends up exactly as tall as it asked: a
+ * 2⅔-slot block short by 25px asks each row for 25 / 2⅔ ≈ 9.4px, and gets
+ * 2⅔ × 9.4 ≈ 25px back. Spreading over the four rows it overlaps instead would
+ * hand it only two-thirds of what it needs (CR-5).
  */
-export function slotWeights(
+function shortfallPerRow(block: RowSpan, base: number): number {
+  if (block.height <= 0) return 0;
+  const shortfall = block.requiredPx - block.height * base;
+  return shortfall > 0 ? shortfall / block.height : 0;
+}
+
+/**
+ * What one day column asks of each row, in pixels.
+ *
+ * Two demands, added: one base height per block drawn on the row — the lane
+ * rule, unchanged, so three overlapping blocks still make a 72px row — plus the
+ * largest per-row shortfall among those blocks. The lanes add up because they
+ * sit side by side; the shortfalls do not, because a row only has to be as tall
+ * as the hungriest block on it needs it to be.
+ */
+export function slotDemandPx(
   blocks: readonly RowSpan[],
   slotCount: number = PLANNER_SLOT_COUNT,
+  base: number = PLANNER_BASE_SLOT_PX,
 ): number[] {
-  const weights = new Array<number>(slotCount).fill(0);
+  const lanes = new Array<number>(slotCount).fill(0);
+  const extra = new Array<number>(slotCount).fill(0);
+
   for (const block of blocks) {
     const first = Math.max(0, Math.floor(block.top));
     const last = Math.min(slotCount, Math.ceil(block.top + block.height));
+    const perRow = shortfallPerRow(block, base);
     for (let slot = first; slot < last; slot += 1) {
-      weights[slot] += block.weight;
+      lanes[slot] += 1;
+      extra[slot] = Math.max(extra[slot], perRow);
     }
   }
-  return weights;
+
+  return lanes.map((count, slot) => count * base + extra[slot]);
 }
 
 /**
  * The week's demand: the busiest day per row. Monday and Tuesday each having a
  * clash at 3 PM is still a two-lane row, not a four-lane one.
  */
-export function weekSlotWeights(
+export function weekSlotDemandPx(
   blocksByDay: readonly (readonly RowSpan[])[],
   slotCount: number = PLANNER_SLOT_COUNT,
+  base: number = PLANNER_BASE_SLOT_PX,
 ): number[] {
-  const weights = new Array<number>(slotCount).fill(0);
+  const demand = new Array<number>(slotCount).fill(0);
   for (const day of blocksByDay) {
-    const dayWeights = slotWeights(day, slotCount);
+    const dayDemand = slotDemandPx(day, slotCount, base);
     for (let slot = 0; slot < slotCount; slot += 1) {
-      weights[slot] = Math.max(weights[slot], dayWeights[slot]);
+      demand[slot] = Math.max(demand[slot], dayDemand[slot]);
     }
   }
-  return weights;
+  return demand;
 }
 
 /* ---------------------------------------------------------------------------
@@ -137,16 +187,18 @@ export function baseSlotHeights(slotCount: number = PLANNER_SLOT_COUNT): number[
   return new Array<number>(slotCount).fill(PLANNER_BASE_SLOT_PX);
 }
 
-/** One height per row, from what each row was asked for. */
+/**
+ * One height per row: what the row was asked for, floored at the base and
+ * capped at `maxScale` of it. A fractional height is fine and often right — a
+ * block's shortfall rarely divides evenly into its span, and CSS lays out
+ * subpixels without complaint.
+ */
 export function buildSlotHeights(
-  weights: readonly number[],
+  demandPx: readonly number[],
   base: number = PLANNER_BASE_SLOT_PX,
   maxScale: number = PLANNER_MAX_SLOT_SCALE,
 ): number[] {
-  return weights.map((weight) => {
-    const lanes = Math.min(Math.max(Math.ceil(weight), 1), maxScale);
-    return lanes * base;
-  });
+  return demandPx.map((px) => Math.min(Math.max(px, base), base * maxScale));
 }
 
 /** How tall the whole grid is. */
@@ -223,6 +275,23 @@ export function spanPx(
 /* ---------------------------------------------------------------------------
  * Wrapping (P-planner-4)
  * ------------------------------------------------------------------------ */
+
+/**
+ * The room a block's content needs, in pixels: the lines it draws itself, plus
+ * any due chips nested inside it, plus the block's own padding.
+ *
+ * This is what a block hands the row table as `requiredPx`. It is measured, not
+ * estimated: every term is a value in `PlannerWeek.module.css`.
+ */
+export function contentRequiredPx(textLines: number, nestedChips: number): number {
+  const chips =
+    nestedChips <= 0
+      ? 0
+      : PLANNER_NESTED_GAP_PX +
+        nestedChips * PLANNER_NESTED_CHIP_PX +
+        (nestedChips - 1) * PLANNER_NESTED_GAP_PX;
+  return PLANNER_BLOCK_PADDING_PX + textLines * PLANNER_BLOCK_LINE_PX + chips;
+}
 
 /**
  * A due card is drawn at `.itemBlock`'s `min-height` however short its span,
