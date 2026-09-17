@@ -8,3 +8,5 @@ dist/
 course context/
 # Local worktree scaffolding for isolated subagents
 .claude/worktrees/
+# Playwright MCP browser session output (screenshots, snapshots, console logs)
+.playwright-mcp/
