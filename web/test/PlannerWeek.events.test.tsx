@@ -297,7 +297,10 @@ describe('planner events on the grid', () => {
     await findTitle('Call with Sam');
     const block = blockOf('Call with Sam');
     expect(dayColumn('2026-09-16')).toContainElement(block);
-    expect(block.style.getPropertyValue('--top')).toBe('8'); // (12:00 − 08:00) / 30 min
+    // Slot 8 — (12:00 − 08:00) / 30 min — through the row table, which is flat
+    // at the base height on a week with nothing overlapping (P-planner-2).
+    expect(block.style.getPropertyValue('--top-px')).toBe('192px');
+    expect(block.style.getPropertyValue('--height-px')).toBe('48px');
     expect(within(block).getByText('12:00 PM – 1:00 PM')).toBeInTheDocument();
     expect(within(block).getByText('09:00 PDT')).toBeInTheDocument();
   });
@@ -360,8 +363,10 @@ describe('planner events on the grid', () => {
       expect(segment).toHaveAttribute('data-clamped', 'true');
       expect(within(segment).getByText('11:00 PM – 1:00 AM')).toBeInTheDocument();
     }
-    expect(wednesday.style.getPropertyValue('--top')).toBe('27');
-    expect(thursday.style.getPropertyValue('--top')).toBe('0');
+    // Slots 27 and 0, in pixels off the flat row table: the clamp lives in slot
+    // space and the map carries it into pixels unchanged (P-planner-2).
+    expect(wednesday.style.getPropertyValue('--top-px')).toBe('648px');
+    expect(thursday.style.getPropertyValue('--top-px')).toBe('0px');
   });
 
   it('puts an all-day event in the Events band on each of its days, not on the grid', async () => {

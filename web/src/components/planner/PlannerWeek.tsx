@@ -22,11 +22,14 @@
  * plain links rather than state. The parameter is untrusted: `weekAnchor`
  * validates it and falls back to the current week rather than throwing.
  *
- * This file is the markup. The queries and the placement are in
- * `usePlannerWeekData`; the arithmetic is in `@/lib/planner-week`, which has no
- * React in it; one block's content is in `PlannerItem`. Nothing here invents a
- * position: a date-only item sits in the band because that is what is recorded,
- * and so does a timed one whose clock falls outside the drawn hours.
+ * This file is the screen: the header, the states, the one write the band's
+ * toggle makes, and what it hands the board. The board itself is
+ * `PlannerBoard`; the queries and the placement are in `usePlannerWeekData`;
+ * the week arithmetic is in `@/lib/planner-week` and the row geometry in
+ * `@/lib/planner-rows`, neither of which has React in it; one block's content
+ * is in `PlannerItem`. Nothing here invents a position: a date-only item sits
+ * in the band because that is what is recorded, and so does a timed one whose
+ * clock falls outside the drawn hours.
  */
 
 import { useCallback, useMemo, useState } from 'react';
@@ -37,18 +40,13 @@ import { itemHref } from '@/lib/queries.popout';
 import { useSetItemStatus, type WorkItem } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
 import {
-  PLANNER_SLOT_COUNT,
   buildPlannerWeek,
   isWithinGridHours,
   localWallClock,
-  plannerHours,
   slotOffset,
   weekAnchor,
-  type LaneSpan,
-  type PlannerDay,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
-import { isCompactSegment } from '@/lib/planner-events-grid';
 import {
   readStoredBand,
   resolveBand,
@@ -56,29 +54,15 @@ import {
   writeStoredBand,
   type BandState,
 } from './band-preference';
-import { EventBlockContent, eventCardProps, type EventActions } from './PlannerEventBlock';
+import { WeekBoard, type BandToggle } from './PlannerBoard';
 import { PlannerEventForm } from './PlannerEventForm';
-import { DaySlots, EventsBand, type SlotPosition } from './PlannerSlots';
-import { DayHead, WeekHeader } from './PlannerWeekHeader';
+import type { SlotPosition } from './PlannerSlots';
+import { WeekHeader } from './PlannerWeekHeader';
 import { usePlannerEventEditor } from './usePlannerEventEditor';
-import {
-  ItemChip,
-  ItemContent,
-  MeetingChip,
-  MeetingContent,
-  itemCardProps,
-  type ItemActions,
-} from './PlannerItem';
-import {
-  usePlannerWeekData,
-  type BandDay,
-  type GridBlock,
-  type PlannerWeekData,
-} from './usePlannerWeekData';
+import type { ItemActions } from './PlannerItem';
+import { usePlannerWeekData } from './usePlannerWeekData';
 import styles from './PlannerWeek.module.css';
 
-/** What the band says when the whole week holds nothing. */
-const EMPTY_WEEK = 'Nothing scheduled this week.';
 /** What the server and the hydrating client both render (see `useHydrated`). */
 const LOADING_WEEK = 'Loading the week…';
 
@@ -200,12 +184,6 @@ function itemActions(
   };
 }
 
-/** The Assignments band's open/closed state, and the one way to change it. */
-export interface BandToggle {
-  expanded: boolean;
-  toggle: () => void;
-}
-
 /**
  * The band's memory (P-planner-1). Read once, on the first render of the
  * screen — which only ever happens in the browser, after `useHydrated`, so
@@ -232,265 +210,4 @@ function nowSlot(view: PlannerWeekModel): number | null {
   const now = localWallClock(new Date());
   if (view.todayIndex < 0 || !isWithinGridHours(now.minute)) return null;
   return slotOffset(now.minute);
-}
-
-/* ---------------------------------------------------------------------------
- * Parts
- * ------------------------------------------------------------------------ */
-
-/** The grid itself: day heads, the all-day band, the gutter, seven columns. */
-function WeekBoard({
-  view,
-  data,
-  actions,
-  eventActions,
-  activeSlot,
-  onActivateSlot,
-  isEmpty,
-  now,
-  band,
-}: {
-  view: PlannerWeekModel;
-  data: PlannerWeekData;
-  actions: ItemActions;
-  eventActions: EventActions;
-  /** The slot holding the grid's one tab stop. */
-  activeSlot: SlotPosition;
-  onActivateSlot: (position: SlotPosition) => void;
-  isEmpty: boolean;
-  /** Slot offset of the now-line, or null when it does not belong on screen. */
-  now: number | null;
-  /** Whether the Assignments band is open, and how to change that. */
-  band: BandToggle;
-}) {
-  return (
-    <div
-      className={styles.board}
-      data-planner-board="true"
-      style={{ ['--planner-slots' as string]: String(PLANNER_SLOT_COUNT) }}
-    >
-      <div className={styles.corner} />
-      {view.days.map((day) => (
-        <DayHead key={`head-${day.iso}`} day={day} />
-      ))}
-
-      <AllDayBand
-        view={view}
-        days={data.bandByDay}
-        isEmpty={isEmpty}
-        actions={actions}
-        band={band}
-      />
-      <EventsBand view={view} band={data.eventBandByDay} actions={eventActions} />
-
-      <HourGutter />
-      {view.days.map((day, index) => (
-        <DayColumn
-          key={`col-${day.iso}`}
-          day={day}
-          dayCount={view.days.length}
-          blocks={data.blocksByDay[index]}
-          actions={actions}
-          eventActions={eventActions}
-          activeSlot={activeSlot}
-          onActivateSlot={onActivateSlot}
-          nowSlot={day.isToday ? now : null}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** How many things one day's band cell is holding — chips, or the count. */
-function bandDayCount(day: BandDay): number {
-  return day.meetings.length + day.items.length;
-}
-
-/**
- * The Assignments band, and the control that opens it (P-planner-1).
- *
- * Closed is the default. A closed band is not a hidden one: each day cell keeps
- * its place and says how many things it is holding, so a deadline can never go
- * missing behind the toggle. The empty-week line is the *week's* state rather
- * than the band's contents, so it shows either way — a blank row would read as
- * a broken screen.
- */
-function AllDayBand({
-  view,
-  days,
-  isEmpty,
-  actions,
-  band,
-}: {
-  view: PlannerWeekModel;
-  days: BandDay[];
-  isEmpty: boolean;
-  actions: ItemActions;
-  band: BandToggle;
-}) {
-  return (
-    <>
-      <button
-        type="button"
-        className={styles.bandToggle}
-        aria-expanded={band.expanded}
-        title={band.expanded ? 'Hide assignments' : 'Show assignments'}
-        onClick={band.toggle}
-      >
-        <span className={styles.bandChevron} aria-hidden="true">
-          {band.expanded ? '▾' : '▸'}
-        </span>
-        <span className={styles.bandLabelVertical}>Assignments</span>
-      </button>
-
-      {isEmpty ? (
-        <div className={styles.bandEmpty}>{EMPTY_WEEK}</div>
-      ) : (
-        view.days.map((day, index) => (
-          <BandCell
-            key={`band-${day.iso}`}
-            day={day}
-            content={days[index]}
-            actions={actions}
-            expanded={band.expanded}
-          />
-        ))
-      )}
-    </>
-  );
-}
-
-function BandCell({
-  day,
-  content,
-  actions,
-  expanded,
-}: {
-  day: PlannerDay;
-  content: BandDay;
-  actions: ItemActions;
-  expanded: boolean;
-}) {
-  const count = bandDayCount(content);
-  const summary = count === 0 ? 'nothing due' : `${count} due`;
-  return (
-    <div
-      className={styles.bandCell}
-      data-today={String(day.isToday)}
-      data-band-day={day.iso}
-      data-collapsed={expanded ? undefined : 'true'}
-      aria-label={`Assignments · ${day.dowLabel} · ${summary}`}
-    >
-      {expanded ? (
-        <>
-          {content.meetings.map((meeting) => (
-            <MeetingChip key={meeting.key} meeting={meeting} />
-          ))}
-          {content.items.map((placed) => (
-            <ItemChip key={placed.key} placed={placed} actions={actions} />
-          ))}
-        </>
-      ) : (
-        count > 0 && (
-          <span className={styles.bandCount} aria-hidden="true">
-            {count}
-          </span>
-        )
-      )}
-    </div>
-  );
-}
-
-function HourGutter() {
-  return (
-    <div className={styles.gutter}>
-      {plannerHours().map((hour) => (
-        <span
-          key={hour.minute}
-          className={styles.hourLabel}
-          style={{ ['--slot' as string]: String(hour.slot) }}
-        >
-          {hour.label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function DayColumn({
-  day,
-  dayCount,
-  blocks,
-  actions,
-  eventActions,
-  activeSlot,
-  onActivateSlot,
-  nowSlot,
-}: {
-  day: PlannerDay;
-  dayCount: number;
-  blocks: (GridBlock & LaneSpan)[];
-  actions: ItemActions;
-  eventActions: EventActions;
-  activeSlot: SlotPosition;
-  onActivateSlot: (position: SlotPosition) => void;
-  nowSlot: number | null;
-}) {
-  return (
-    <div className={styles.dayColumn} data-today={String(day.isToday)} data-day={day.iso}>
-      <DaySlots
-        day={day}
-        dayCount={dayCount}
-        active={activeSlot}
-        onActivate={onActivateSlot}
-        actions={eventActions}
-      />
-      {nowSlot !== null && (
-        <span
-          className={styles.nowLine}
-          data-testid="now-line"
-          style={{ ['--slot' as string]: String(nowSlot) }}
-        />
-      )}
-      {blocks.map((block) => {
-        const style = {
-          ['--top' as string]: String(block.top),
-          ['--height' as string]: String(block.height),
-          ['--lane-left' as string]: `${(block.lane / block.lanes) * 100}%`,
-          ['--lane-width' as string]: `${100 / block.lanes}%`,
-        };
-        if (block.kind === 'event') {
-          return (
-            <div
-              key={block.key}
-              className={styles.eventBlock}
-              data-block="event"
-              data-clamped={block.segment.clamped ? 'true' : undefined}
-              data-compact={isCompactSegment(block.segment) ? 'true' : undefined}
-              {...eventCardProps(block.segment.event, eventActions)}
-              style={style}
-            >
-              <EventBlockContent segment={block.segment} actions={eventActions} />
-            </div>
-          );
-        }
-        return (
-          <div
-            key={block.key}
-            className={block.kind === 'meeting' ? styles.meetingBlock : styles.itemBlock}
-            data-block={block.kind}
-            data-category={block.kind === 'item' ? block.item.item.category : undefined}
-            {...(block.kind === 'item' ? itemCardProps(block.item, actions) : {})}
-            style={style}
-          >
-            {block.kind === 'meeting' ? (
-              <MeetingContent meeting={block.meeting} nested={block.nested} actions={actions} />
-            ) : (
-              <ItemContent placed={block.item} actions={actions} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 }

@@ -123,9 +123,20 @@ function bandToggle(): HTMLElement {
   return screen.getByRole('button', { name: /assignments/i });
 }
 
-/** Waits for the four queries to have answered, so the band holds the week. */
-async function weekLoaded(due: string): Promise<void> {
-  await screen.findByText(due);
+/**
+ * Waits for the four queries to have answered, so the band holds the week.
+ *
+ * The generous timeout is not decoration: 90-odd jsdom environments running at
+ * once can push a first paint past the one-second default, and a planner test
+ * that fails only when the machine is busy is worse than no test.
+ */
+async function weekLoaded(due = '0 classes · 3 due'): Promise<void> {
+  await screen.findByText(due, undefined, { timeout: 5000 });
+}
+
+/** Waits for the band's control to exist, whatever state it is in. */
+async function bandReady(): Promise<HTMLElement> {
+  return screen.findByRole('button', { name: /assignments/i }, { timeout: 5000 });
 }
 
 function bandCell(iso: string): HTMLElement {
@@ -157,7 +168,10 @@ afterEach(() => {
 describe('the Assignments band — closed on arrival', () => {
   it('hides the band contents with nothing stored', async () => {
     renderPlanner();
-    await waitFor(() => expect(bandToggle()).toHaveAttribute('aria-expanded', 'false'));
+    // Wait for the three items to have arrived, or "not on screen" would be
+    // true of a screen that simply has not loaded yet.
+    await weekLoaded();
+    expect(await bandReady()).toHaveAttribute('aria-expanded', 'false');
 
     expect(screen.queryByText('Chapter 4')).toBeNull();
     expect(screen.queryByText('Quiz 3')).toBeNull();
@@ -186,11 +200,11 @@ describe('the Assignments band — closed on arrival', () => {
 describe('the Assignments band — the toggle', () => {
   it('opens on click and shows every chip', async () => {
     renderPlanner();
-    await waitFor(() => expect(bandToggle()).toHaveAttribute('aria-expanded', 'false'));
+    expect(await bandReady()).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(bandToggle());
 
-    expect(await screen.findByText('Chapter 4')).toBeInTheDocument();
+    expect(await screen.findByText('Chapter 4', undefined, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText('Quiz 3')).toBeInTheDocument();
     expect(screen.getByText('Chapter 9')).toBeInTheDocument();
     expect(bandToggle()).toHaveAttribute('aria-expanded', 'true');
@@ -200,7 +214,7 @@ describe('the Assignments band — the toggle', () => {
 
   it('writes the choice so it survives a reload', async () => {
     const first = renderPlanner();
-    await waitFor(() => expect(bandToggle()).toHaveAttribute('aria-expanded', 'false'));
+    expect(await bandReady()).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(bandToggle());
     await waitFor(() =>
       expect(window.localStorage.getItem(PLANNER_BAND_STORAGE_KEY)).toBe('open'),
@@ -208,14 +222,14 @@ describe('the Assignments band — the toggle', () => {
     first.unmount();
 
     renderPlanner();
-    expect(await screen.findByText('Chapter 4')).toBeInTheDocument();
+    expect(await screen.findByText('Chapter 4', undefined, { timeout: 5000 })).toBeInTheDocument();
     expect(bandToggle()).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('closes again, and remembers that too', async () => {
     window.localStorage.setItem(PLANNER_BAND_STORAGE_KEY, 'open');
     renderPlanner();
-    await screen.findByText('Chapter 4');
+    await screen.findByText('Chapter 4', undefined, { timeout: 5000 });
 
     fireEvent.click(bandToggle());
 
@@ -232,9 +246,9 @@ describe('the Assignments band — the toggle', () => {
     });
 
     renderPlanner();
-    await waitFor(() => expect(bandToggle()).toHaveAttribute('aria-expanded', 'false'));
+    expect(await bandReady()).toHaveAttribute('aria-expanded', 'false');
     expect(() => fireEvent.click(bandToggle())).not.toThrow();
-    expect(await screen.findByText('Chapter 4')).toBeInTheDocument();
+    expect(await screen.findByText('Chapter 4', undefined, { timeout: 5000 })).toBeInTheDocument();
   });
 });
 
@@ -244,7 +258,9 @@ describe('the Assignments band — an empty week', () => {
     renderPlanner();
 
     // Closed by default, and the week's own state is not the band's contents.
-    expect(await screen.findByText('Nothing scheduled this week.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Nothing scheduled this week.', undefined, { timeout: 5000 }),
+    ).toBeInTheDocument();
     fireEvent.click(bandToggle());
     expect(screen.getByText('Nothing scheduled this week.')).toBeInTheDocument();
   });
