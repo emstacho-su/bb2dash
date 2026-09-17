@@ -88,6 +88,46 @@ test.describe('the shell', () => {
     expect(chrome).toEqual({ autoHideMenuBar: true, hasApplicationMenu: true });
   });
 
+  test('lets the app copy to the clipboard, and denies every other permission', async () => {
+    // R2-5. The Sync button's "copy the command" is a `navigator.clipboard.writeText`,
+    // which Chromium gates behind `clipboard-sanitized-write`. C-3's blanket denial made it
+    // fail silently, and the clipboard is the only path to the command once a request is
+    // already queued: a second press makes no POST, so no terminal opens.
+    const written = await page.evaluate(async () => {
+      try {
+        await navigator.clipboard.writeText('claude "/bb-sync 77"');
+        return 'ok';
+      } catch (error) {
+        return String(error);
+      }
+    });
+    expect(written).toBe('ok');
+
+    const onClipboard = await app.evaluate(({ clipboard }) => clipboard.readText());
+    expect(onClipboard).toBe('claude "/bb-sync 77"');
+
+    // Everything else is still denied. `geolocation` is asked for through the same
+    // permission handler and must come back refused rather than prompting.
+    const geolocation = await page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            () => resolve('granted'),
+            (error) => resolve(`denied:${error.code}`),
+          );
+        }),
+    );
+    expect(geolocation).toContain('denied');
+
+    const decisions = (await recorded(app)).filter((event) => event.kind === 'permission');
+    expect(decisions.some((d) => (d.payload as { permission: string }).permission === 'geolocation'))
+      .toBe(true);
+    for (const decision of decisions) {
+      const payload = decision.payload as { permission: string; allowed: boolean };
+      if (payload.allowed) expect(payload.permission).toBe('clipboard-sanitized-write');
+    }
+  });
+
   test('and the renderer really has none of what those flags forbid', async () => {
     // The flags are only worth what they deny, so assert the denial too.
     const reachable = await page.evaluate(() => ({

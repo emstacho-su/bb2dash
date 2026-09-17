@@ -8,7 +8,7 @@
 
 import { BrowserWindow, shell } from 'electron';
 
-import { decideNavigation, decideWindowOpen } from '../core/navigation-policy';
+import { decideNavigation, decidePermission, decideWindowOpen } from '../core/navigation-policy';
 import { log, logError } from './log';
 import { IS_TEST_MODE, recordEvent } from './test-hook';
 
@@ -27,6 +27,8 @@ function openExternal(url: string): void {
 export function attachNavigationGuards(
   window: BrowserWindow,
   allowedOrigins: readonly string[],
+  /** R2-5: the app origin, the only one that may reach the clipboard. */
+  appUrl: string = allowedOrigins[0] ?? '',
 ): void {
   window.webContents.on('will-navigate', (event, url) => {
     const decision = decideNavigation(url, allowedOrigins);
@@ -54,9 +56,24 @@ export function attachNavigationGuards(
     return { action: 'deny' };
   });
 
-  // Nothing in the renderer needs an OS permission: the toasts are main's.
-  window.webContents.session.setPermissionRequestHandler((_contents, permission, callback) => {
-    log(`permission "${permission}" denied`);
-    callback(false);
+  // R2-5: deny everything except the app's own clipboard write, which is what the Sync
+  // button's "copy the command" uses. Both handlers are set: `setPermissionRequestHandler`
+  // covers the async path, `setPermissionCheckHandler` the synchronous `permissions.query`
+  // that Chromium consults first — leaving the second one at its default would let a
+  // `query()` report "granted" for something the first handler then denies.
+  const decide = (permission: string, requestingUrl: string | undefined): boolean => {
+    const decision = decidePermission(permission, requestingUrl, appUrl);
+    log(decision.allow ? `permission ${decision.reason}` : `permission denied: ${decision.reason}`);
+    recordEvent('permission', { permission, requestingUrl, allowed: decision.allow });
+    return decision.allow;
+  };
+
+  window.webContents.session.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const requestingUrl = details?.requestingUrl ?? contents?.getURL();
+    callback(decide(permission, requestingUrl));
   });
+
+  window.webContents.session.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
+    decide(permission, requestingOrigin),
+  );
 }

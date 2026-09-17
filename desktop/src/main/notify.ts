@@ -27,11 +27,28 @@ export interface NotifierOptions {
  * handed to Windows; it never waits for a click, and it never rejects for a toast the OS
  * declined — the scheduler logs and moves on.
  */
-export function createNotifier(options: NotifierOptions): Notifier {
+/** The `Notifier`, plus the one thing only a test needs to see (R2-3). */
+export interface MainNotifier extends Notifier {
+  /** How many notifications Windows has not yet finished with. */
+  liveCount(): number;
+}
+
+export function createNotifier(options: NotifierOptions): MainNotifier {
   const log = options.log ?? silentLogger;
   const testMode = isTestMode(options.env ?? process.env);
 
+  /**
+   * R2-3 — every notification Windows still owns. A strong Set, not a `WeakSet`: the whole
+   * point is to be the strong reference that stops the object being collected while its
+   * `click` listener is the only thing standing between a toast and the right screen.
+   * Entries leave on `click`, `close` or `failed`, which between them cover every way
+   * Windows finishes with a toast.
+   */
+  const live = new Set<Notification>();
+
   return {
+    liveCount: () => live.size,
+
     async show(toast: Toast): Promise<void> {
       if (testMode) {
         // Recording is the whole behaviour under test: no OS toast, no AUMID dependency.
@@ -47,19 +64,36 @@ export function createNotifier(options: NotifierOptions): Notifier {
 
       try {
         const notification = new Notification({ title: toast.title, body: toast.body });
+
+        // R2-3: hold a reference until Windows is finished with it.
+        //
+        // A toast can sit in the Action Center for minutes. `notification` is a local, and
+        // the only thing keeping the object — and therefore its `click` listener — alive is
+        // Electron's own internal reference, which is not a guarantee: once V8 collects the
+        // JS wrapper the click does nothing, silently, and the toast the whole feature
+        // exists for stops opening the right screen. Every live notification stays in this
+        // Set until Windows reports it closed, clicked or failed.
+        live.add(notification);
+        const release = (): void => {
+          live.delete(notification);
+        };
+
         // Click-only for the MVP (Q6): no actions, no reply field.
         notification.on('click', () => {
+          release();
           try {
             options.onClick(toast.route);
           } catch (error) {
             log.error(`toast click handler failed: ${describeError(error)}`);
           }
         });
+        notification.on('close', release);
         notification.on('failed', (_event, error) => {
+          release();
           log.warn(`Windows declined ${toast.key}: ${String(error).slice(0, 200)}`);
         });
         notification.show();
-        log.info(`showed toast ${toast.key}`);
+        log.info(`showed toast ${toast.key} (${live.size} live)`);
       } catch (error) {
         log.error(`could not show ${toast.key}: ${describeError(error)}`);
       }

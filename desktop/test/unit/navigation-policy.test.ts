@@ -5,7 +5,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { decideNavigation, decideWindowOpen } from '../../src/core/navigation-policy';
+import {
+  ALLOWED_PERMISSION,
+  decideNavigation,
+  decidePermission,
+  decideWindowOpen,
+} from '../../src/core/navigation-policy';
 
 const ALLOWED = Object.freeze([
   'https://web-xi-ten-uy9xk6c6p0.vercel.app',
@@ -72,5 +77,75 @@ describe('decideWindowOpen', () => {
     for (const url of ['https://example.com/', 'file:///x', 'bad']) {
       expect(decideWindowOpen(url).kind).not.toBe('allow');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// R2-5 — the Sync button's clipboard write
+// ---------------------------------------------------------------------------------------
+
+describe('decidePermission (R2-5)', () => {
+  const APP = 'https://web-xi-ten-uy9xk6c6p0.vercel.app';
+  const SUPABASE = 'https://goultdzqcavefcgnifdy.supabase.co';
+
+  it('allows the app origin to write the clipboard', () => {
+    // C-3 denied everything, which made the Sync button's copy fail silently inside the
+    // shell — and the clipboard is the only path to the command once a request is queued,
+    // because a second press makes no POST and opens no terminal.
+    const decision = decidePermission(ALLOWED_PERMISSION, `${APP}/planner`, APP);
+    expect(decision.allow).toBe(true);
+    expect(decision.reason).toContain(APP);
+  });
+
+  it('allows it regardless of the path or query the request came from', () => {
+    for (const from of [APP, `${APP}/`, `${APP}/course/IST.323/grades?tab=all`]) {
+      expect(decidePermission(ALLOWED_PERMISSION, from, APP).allow).toBe(true);
+    }
+  });
+
+  it.each([
+    'clipboard-read',
+    'geolocation',
+    'notifications',
+    'media',
+    'midi',
+    'openExternal',
+    'display-capture',
+    'fullscreen',
+  ])('denies %s even from the app', (permission) => {
+    const decision = decidePermission(permission, `${APP}/`, APP);
+    expect(decision.allow).toBe(false);
+    expect(decision.reason).toContain('allowlist');
+  });
+
+  it('denies the clipboard write to the Supabase origin', () => {
+    // Supabase is in the *navigation* allowlist for auth redirects and signed Storage
+    // URLs. None of that needs a clipboard.
+    const decision = decidePermission(ALLOWED_PERMISSION, `${SUPABASE}/auth/v1/callback`, APP);
+    expect(decision.allow).toBe(false);
+    expect(decision.reason).toContain(SUPABASE);
+  });
+
+  it.each([
+    ['a different host', 'https://evil.example/page'],
+    ['http against an https app', 'http://web-xi-ten-uy9xk6c6p0.vercel.app/'],
+    ['a lookalike host', 'https://web-xi-ten-uy9xk6c6p0.vercel.app.evil.example/'],
+    ['a file URL', 'file:///C:/Users/estac/x.html'],
+  ])('denies the clipboard write from %s', (_label, from) => {
+    expect(decidePermission(ALLOWED_PERMISSION, from, APP).allow).toBe(false);
+  });
+
+  it('denies when the requesting URL is missing or unparseable', () => {
+    expect(decidePermission(ALLOWED_PERMISSION, undefined, APP).allow).toBe(false);
+    expect(decidePermission(ALLOWED_PERMISSION, '', APP).allow).toBe(false);
+    expect(decidePermission(ALLOWED_PERMISSION, 'not a url', APP).allow).toBe(false);
+  });
+
+  it('denies everything when appUrl itself is not a URL', () => {
+    expect(decidePermission(ALLOWED_PERMISSION, `${APP}/`, 'nonsense').allow).toBe(false);
+  });
+
+  it('names exactly the permission Chromium raises for navigator.clipboard.writeText', () => {
+    expect(ALLOWED_PERMISSION).toBe('clipboard-sanitized-write');
   });
 });

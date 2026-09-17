@@ -126,7 +126,7 @@ function start(): void {
   }
 
   mainWindow = createWindow(config.appUrl);
-  attachNavigationGuards(mainWindow, allowedOrigins(config));
+  attachNavigationGuards(mainWindow, allowedOrigins(config), config.appUrl);
   hideOnClose(mainWindow);
   mainWindow.on('closed', () => {
     mainWindow = null;
