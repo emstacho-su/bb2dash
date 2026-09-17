@@ -17,6 +17,7 @@ import {
   loadOrInitialise,
 } from '../../src/core/poller/watermark';
 import { FIRED_KEYS_LIMIT } from '../../src/core/poller/reducer';
+import { gradesQuery } from '../../src/core/poller/sources';
 import type { Logger } from '../../src/core/redact';
 import type { Watermark } from '../../src/core/types';
 import { watermark } from '../fixtures/rows';
@@ -158,6 +159,7 @@ describe('loadOrInitialise', () => {
     expect(value).toEqual({
       version: 1,
       lastSeenAt: now.toISOString(),
+      notifyFloor: now.toISOString(),
       dueCheckedOn: null,
       firedKeys: [],
     });
@@ -171,5 +173,76 @@ describe('loadOrInitialise', () => {
     const { watermark: value, created } = await loadOrInitialise(store(), now);
     expect(created).toBe(false);
     expect(value).toEqual(stored);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// R2-9 — a loosely formatted timestamp must not wedge the poller
+// ---------------------------------------------------------------------------------------
+
+describe('R2-9 — lastSeenAt is normalised on read, not rejected', () => {
+  /** Shapes `Date.parse` accepts and `ISO_INSTANT` does not. */
+  const LOOSE = [
+    ['an explicit +00:00 offset', '2026-09-16T14:04:02+00:00', '2026-09-16T14:04:02.000Z'],
+    ['a non-UTC offset', '2026-09-16T10:04:02-04:00', '2026-09-16T14:04:02.000Z'],
+    ['no zone designator at all', '2026-09-16T14:04:02Z', '2026-09-16T14:04:02Z'],
+  ] as const;
+
+  it.each(LOOSE)('repairs %s', async (_label, written, expected) => {
+    await writeFile(
+      filePath,
+      JSON.stringify({ ...watermark(), lastSeenAt: written }),
+      'utf8',
+    );
+
+    const read = await store().read();
+
+    // Before the fix `isWatermark` accepted this, `read()` handed it straight back, and the
+    // query builder threw QueryValueError on it — on this tick and on every tick after,
+    // because a read failure changes nothing and the bad value stays on disk.
+    expect(read?.lastSeenAt).toBe(expected);
+    expect(() => gradesQuery(read?.lastSeenAt ?? '')).not.toThrow();
+  });
+
+  it('the repaired value survives a write and a second read', async () => {
+    await writeFile(
+      filePath,
+      JSON.stringify({ ...watermark(), lastSeenAt: '2026-09-16T14:04:02+00:00' }),
+      'utf8',
+    );
+    const first = await store().read();
+    await store().write(first as Watermark);
+    expect((await store().read())?.lastSeenAt).toBe('2026-09-16T14:04:02.000Z');
+  });
+
+  it('a lastSeenAt that is not a timestamp at all is still a first launch', async () => {
+    await writeFile(filePath, JSON.stringify({ ...watermark(), lastSeenAt: 'yesterday' }), 'utf8');
+    expect(await store().read()).toBeNull();
+    expect(lines.some((line) => line.includes('schema validation'))).toBe(true);
+  });
+
+  it('a file written before notifyFloor existed gets its lastSeenAt as the floor', async () => {
+    // R2-1: an upgrade must not suddenly let the overlap window reach back behind where the
+    // previous build had already got to.
+    const legacy = {
+      version: 1,
+      lastSeenAt: '2026-09-16T12:00:00.000Z',
+      dueCheckedOn: null,
+      firedKeys: ['sync:41'],
+    };
+    await writeFile(filePath, JSON.stringify(legacy), 'utf8');
+
+    const read = await store().read();
+
+    expect(read?.notifyFloor).toBe('2026-09-16T12:00:00.000Z');
+    expect(read?.firedKeys).toEqual(['sync:41']);
+  });
+
+  it('isWatermark still refuses a wrong version, a bad date and a non-string key', () => {
+    expect(isWatermark({ ...watermark(), version: 2 })).toBe(false);
+    expect(isWatermark({ ...watermark(), dueCheckedOn: '16/09/2026' })).toBe(false);
+    expect(isWatermark({ ...watermark(), firedKeys: [1] })).toBe(false);
+    expect(isWatermark(null)).toBe(false);
+    expect(isWatermark([])).toBe(false);
   });
 });

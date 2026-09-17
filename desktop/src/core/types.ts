@@ -68,6 +68,13 @@ export interface CourseLabel {
 export interface Watermark {
   readonly version: 1;
   readonly lastSeenAt: string;
+  /**
+   * R2-1: the instant this install first started notifying. The grade read looks a fixed
+   * window *behind* `lastSeenAt` to cover the crawl -> transform gap, and this is the line
+   * that window may never cross — so a first launch still fires nothing historical, however
+   * wide the overlap grows. Written once and never moved.
+   */
+  readonly notifyFloor: string;
   readonly dueCheckedOn: string | null;
   /** Newest 500 kept. */
   readonly firedKeys: readonly string[];
@@ -95,6 +102,12 @@ export interface ReduceInput {
   readonly now: Date;
   readonly watermark: Watermark;
   readonly courses: readonly CourseLabel[];
+  /**
+   * R2-2: where `lastSeenAt` advances to. Defaults to `now` (C-7 rule 4). The scheduler
+   * passes an earlier instant when the grade read was truncated by the page cap, so the
+   * rows it could not reach this tick are still behind the watermark next tick.
+   */
+  readonly advanceTo?: Date;
 }
 
 export interface ReduceOutput {

@@ -18,30 +18,61 @@ import { dirname } from 'node:path';
 
 import type { Watermark, WatermarkStore } from '../types';
 import { type Logger, describeError, silentLogger } from '../redact';
+import { isIsoDate, normaliseInstant } from '../patterns';
 import { FIRED_KEYS_LIMIT, initialWatermark } from './reducer';
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * R2-9 — a watermark whose timestamps are in the shape the rest of the poller demands.
+ *
+ * `isWatermark` used to accept any `Date.parse`-able `lastSeenAt`, while `gradesQuery`
+ * demands a strict `...Z` instant. A hand-edited file holding `2026-09-16T14:04:02+00:00`
+ * therefore validated, reached the query builder, threw `QueryValueError` — and threw again
+ * on every tick after that, because a read failure changes nothing and the bad value stays
+ * on disk. The poller was wedged until someone deleted the file.
+ *
+ * The fix is to coerce on read rather than to reject: anything `Date.parse` understands is
+ * re-emitted through `toISOString()`, and only a value that is not a timestamp at all is
+ * treated as a corrupt file (which reads as `null`, i.e. a first launch).
+ */
+export function normaliseWatermark(value: unknown): Watermark | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  if (candidate['version'] !== 1) return null;
+
+  const lastSeenAt = normaliseInstant(candidate['lastSeenAt']);
+  if (lastSeenAt === null) return null;
+
+  const due = candidate['dueCheckedOn'];
+  if (due !== null && due !== undefined && !isIsoDate(due)) return null;
+
+  const keys = candidate['firedKeys'];
+  if (!Array.isArray(keys) || keys.some((key) => typeof key !== 'string')) return null;
+
+  // R2-1: a file written before the floor existed has none. Its `lastSeenAt` is then the
+  // floor — an upgrade must not suddenly reach back behind where the old build had got to.
+  const floor = normaliseInstant(candidate['notifyFloor']) ?? lastSeenAt;
+
+  return capKeys({
+    version: 1,
+    lastSeenAt,
+    notifyFloor: floor,
+    dueCheckedOn: due ?? null,
+    firedKeys: keys as readonly string[],
+  });
+}
 
 /** True when `value` is a watermark this version understands. Total: never throws. */
 export function isWatermark(value: unknown): value is Watermark {
-  if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  if (candidate['version'] !== 1) return false;
-  if (typeof candidate['lastSeenAt'] !== 'string') return false;
-  if (Number.isNaN(Date.parse(candidate['lastSeenAt']))) return false;
-  const due = candidate['dueCheckedOn'];
-  if (due !== null && (typeof due !== 'string' || !ISO_DATE.test(due))) return false;
-  const keys = candidate['firedKeys'];
-  if (!Array.isArray(keys) || keys.some((key) => typeof key !== 'string')) return false;
-  return true;
+  return normaliseWatermark(value) !== null;
 }
 
 /** A defensive copy, capped at the newest 500 keys even if the file on disk held more. */
-function normalise(value: Watermark): Watermark {
+function capKeys(value: Watermark): Watermark {
   const keys = value.firedKeys;
   return {
     version: 1,
     lastSeenAt: value.lastSeenAt,
+    notifyFloor: value.notifyFloor,
     dueCheckedOn: value.dueCheckedOn,
     firedKeys: keys.length > FIRED_KEYS_LIMIT ? keys.slice(keys.length - FIRED_KEYS_LIMIT) : [...keys],
   };
@@ -82,18 +113,28 @@ export function createFileWatermarkStore({
       return null;
     }
 
-    if (!isWatermark(parsed)) {
+    const normalised = normaliseWatermark(parsed);
+    if (normalised === null) {
       log.warn('watermark failed schema validation; treating as first launch');
       return null;
     }
-    return normalise(parsed);
+    // R2-9: a file whose `lastSeenAt` was loosely formatted is repaired here rather than
+    // rejected, so a hand edit costs nothing instead of wedging every tick.
+    if (
+      typeof (parsed as Record<string, unknown>)['lastSeenAt'] === 'string' &&
+      (parsed as Record<string, unknown>)['lastSeenAt'] !== normalised.lastSeenAt
+    ) {
+      log.info('watermark lastSeenAt was not a strict ISO instant; normalised on read');
+    }
+    return normalised;
   }
 
   async function write(next: Watermark): Promise<void> {
-    if (!isWatermark(next)) {
+    const normalised = normaliseWatermark(next);
+    if (normalised === null) {
       throw new TypeError('createFileWatermarkStore.write: refusing to write an invalid watermark');
     }
-    const payload = `${JSON.stringify(normalise(next), null, 2)}\n`;
+    const payload = `${JSON.stringify(normalised, null, 2)}\n`;
     await mkdir(dirname(filePath), { recursive: true });
 
     // Truncating open + write + fsync, then rename over the target. `fs.rename` on Windows

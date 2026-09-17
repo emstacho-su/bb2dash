@@ -27,7 +27,7 @@ import { type Logger, describeError, silentLogger } from '../redact';
 import { initialWatermark, reduce } from './reducer';
 import { loadOrInitialise } from './watermark';
 import { nyTomorrow, shouldRunDueCheck } from './ny-time';
-import { readCourseLabels, readDueItems, readNewGrades, readSyncStatus } from './sources';
+import { gradesSince, readCourseLabels, readDueItems, readNewGrades, readSyncStatus } from './sources';
 
 /** Why a tick ran — carried into the log line and returned to the caller. */
 export type TickReason = 'launch' | 'interval' | 'focus' | 'resume' | 'manual' | 'test';
@@ -155,6 +155,7 @@ export function createPoller(deps: PollerDeps): Poller {
     rows: TickRows,
     now: Date,
     watermark: Watermark,
+    advanceTo: Date = now,
   ): Promise<TickResult> {
     const result = reduce({
       sync: rows.sync,
@@ -163,6 +164,7 @@ export function createPoller(deps: PollerDeps): Poller {
       now,
       watermark,
       courses: rows.courses,
+      advanceTo,
     });
 
     for (const toast of result.toasts) {
@@ -210,6 +212,7 @@ export function createPoller(deps: PollerDeps): Poller {
 
     const get = deps.createRest(session);
     let rows: TickRows;
+    let advanceTo = now;
     try {
       if (!courseLabels) courseLabels = await readCourseLabels(get);
       const runDue = shouldRunDueCheck({
@@ -217,18 +220,33 @@ export function createPoller(deps: PollerDeps): Poller {
         dueReminderTime: deps.config.dueReminderTime,
         dueCheckedOn: stored.dueCheckedOn,
       });
+      // R2-1: read from the overlap window behind the watermark, floored at `notifyFloor`.
       const [sync, grades, due] = await Promise.all([
         readSyncStatus(get),
-        readNewGrades(get, stored.lastSeenAt),
+        readNewGrades(get, gradesSince(stored)),
         runDue ? readDueItems(get, nyTomorrow(now)) : Promise.resolve(null),
       ]);
-      rows = { sync, grades, due, courses: courseLabels };
+
+      if (!grades.complete) {
+        // R2-2: more rows exist than this tick read. Hold `lastSeenAt` at the last row it
+        // did read, so the remainder is still ahead of the watermark next tick. A tick that
+        // read nothing at all leaves the watermark exactly where it was.
+        const lastRow = grades.rows[grades.rows.length - 1];
+        const truncatedAt = lastRow ? Date.parse(lastRow.seen_at) : Number.NaN;
+        advanceTo = Number.isNaN(truncatedAt) ? new Date(Date.parse(stored.lastSeenAt)) : new Date(truncatedAt);
+        log.warn(
+          `tick (${reason}) read ${grades.rows.length} grade row(s) and there are more; ` +
+            `holding the watermark at ${advanceTo.toISOString()}`,
+        );
+      }
+
+      rows = { sync, grades: grades.rows, due, courses: courseLabels };
     } catch (error) {
       log.warn(`tick (${reason}) read failed, changing nothing: ${describeError(error)}`);
       return skipped(reason, 'skipped-read-failed');
     }
 
-    return deliver(reason, rows, now, stored);
+    return deliver(reason, rows, now, stored, advanceTo);
   }
 
   return {

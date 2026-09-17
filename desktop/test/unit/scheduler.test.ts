@@ -261,6 +261,7 @@ describe('first launch', () => {
     expect(store.value).toEqual({
       version: 1,
       lastSeenAt: NOW.toISOString(),
+      notifyFloor: NOW.toISOString(),
       dueCheckedOn: null,
       firedKeys: [],
     });
@@ -406,5 +407,172 @@ describe('runWithRows (the e2e test hook)', () => {
     const { instance } = poller({ store });
     await instance.runWithRows({ sync: null, grades: [], due: null, courses: COURSES });
     expect(store.value?.lastSeenAt).toBe(NOW.toISOString());
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// R2-1 / R2-2 — the crawl -> transform gap, and a backlog bigger than one page
+// ---------------------------------------------------------------------------------------
+
+/**
+ * A transport that honours the parts of the query these two findings turn on: the
+ * `seen_at=gt.` bound and `offset`. `restStub` above ignores the query and replays
+ * everything, which is fine for the rest of the suite but would hide both defects.
+ */
+function postgrestStub(gradeRows: readonly ReturnType<typeof gradeRow>[]): {
+  createRest: () => RestGet;
+  bounds: string[];
+} {
+  const bounds: string[] = [];
+  const get: RestGet = async <T>(relation: string, query: string, validate: (r: unknown) => T) => {
+    if (relation !== 'v_gradebook_history') {
+      return validate(relation === 'courses' ? COURSES : []);
+    }
+    const bound = /seen_at=gt\.([^&]+)/.exec(query)?.[1] ?? '';
+    bounds.push(bound);
+    const offset = Number(/&offset=(\d+)/.exec(query)?.[1] ?? 0);
+    const limit = Number(/&limit=(\d+)/.exec(query)?.[1] ?? 200);
+    const matching = gradeRows
+      .filter((row) => Date.parse(row.seen_at) > Date.parse(bound))
+      .sort((a, b) => Date.parse(a.seen_at) - Date.parse(b.seen_at));
+    return validate(matching.slice(offset, offset + limit));
+  };
+  return { createRest: () => get, bounds };
+}
+
+describe('R2-1 — a grade row whose seen_at is behind the watermark', () => {
+  // `seen_at` is the *crawl* time. `transform_tick` inserts the row minutes later, so this
+  // row did not exist when the previous tick ran even though its timestamp is older.
+  const LATE_ROW = gradeRow({
+    seen_at: new Date(Date.parse(NOW.toISOString()) - 20 * 60_000).toISOString(),
+    column_id: 'col-late',
+    run_id: 'run-late',
+  });
+
+  it('is still read and still fires, because the read overlaps backwards', async () => {
+    const store = memoryStore(
+      watermark({
+        // The previous tick already advanced past the row's timestamp.
+        lastSeenAt: new Date(Date.parse(NOW.toISOString()) - 5 * 60_000).toISOString(),
+        notifyFloor: '2026-01-01T00:00:00.000Z',
+      }),
+    );
+    const rest = postgrestStub([LATE_ROW]);
+    const { instance, notifier } = poller({ store, createRest: rest.createRest });
+
+    const result = await instance.runOnce();
+
+    expect(result.outcome).toBe('fired');
+    expect(notifier.shown.map((toast) => toast.key)).toEqual([
+      `grade:${LATE_ROW.shell_course_id}:col-late:run-late`,
+    ]);
+  });
+
+  it('fires it exactly once, however many ticks re-read it', async () => {
+    const store = memoryStore(
+      watermark({
+        lastSeenAt: new Date(Date.parse(NOW.toISOString()) - 5 * 60_000).toISOString(),
+        notifyFloor: '2026-01-01T00:00:00.000Z',
+      }),
+    );
+    const rest = postgrestStub([LATE_ROW]);
+    const { instance, notifier } = poller({ store, createRest: rest.createRest });
+
+    await instance.runOnce();
+    await instance.runOnce();
+    await instance.runOnce();
+
+    // The overlap re-reads the row every tick; `firedKeys` is what stops it toasting again.
+    expect(notifier.shown).toHaveLength(1);
+    expect(rest.bounds).toHaveLength(3);
+  });
+
+  it('a first launch reads nothing behind its own floor', async () => {
+    // Two ticks: the first initialises, the second is the first real read.
+    const store = memoryStore(null);
+    const old = gradeRow({ seen_at: '2026-09-16T10:00:00.000Z', column_id: 'col-old' });
+    const rest = postgrestStub([old]);
+    const { instance, notifier } = poller({ store, createRest: rest.createRest });
+
+    await instance.runOnce();
+    await instance.runOnce();
+
+    expect(notifier.shown).toEqual([]);
+    // The bound never went behind the floor the first tick wrote.
+    for (const bound of rest.bounds) {
+      expect(Date.parse(bound)).toBeGreaterThanOrEqual(Date.parse(NOW.toISOString()));
+    }
+  });
+});
+
+describe('R2-2 — a backlog bigger than one page', () => {
+  function backlog(count: number): ReturnType<typeof gradeRow>[] {
+    const base = Date.parse(NOW.toISOString()) - 60 * 60_000;
+    return Array.from({ length: count }, (_row, index) =>
+      gradeRow({
+        column_id: `col-${index}`,
+        run_id: 'run-a',
+        seen_at: new Date(base + index * 1000).toISOString(),
+      }),
+    );
+  }
+
+  it('reads every row rather than the first 200', async () => {
+    const rows = backlog(430);
+    const store = memoryStore(
+      watermark({ lastSeenAt: '2026-09-16T20:00:00.000Z', notifyFloor: '2026-01-01T00:00:00.000Z' }),
+    );
+    const rest = postgrestStub(rows);
+    const { instance } = poller({ store, createRest: rest.createRest });
+
+    await instance.runOnce();
+
+    // 430 rows coalesce into one toast per course rather than toasting 430 times, but every
+    // one of them must have been *read*: the watermark advances past them all, so a row the
+    // page limit hid is lost for good. Before R2-2 only the first 200 keys were recorded.
+    const keys = store.value?.firedKeys ?? [];
+    for (const row of rows) {
+      expect(keys).toContain(`grade:${row.shell_course_id}:${row.column_id}:${row.run_id}`);
+    }
+    expect(store.value?.lastSeenAt).toBe(NOW.toISOString());
+  });
+
+  it('holds the watermark at the last row it read when the page cap is hit', async () => {
+    const rows = backlog(200 * 10 + 5);
+    const store = memoryStore(
+      watermark({ lastSeenAt: '2026-09-16T20:00:00.000Z', notifyFloor: '2026-01-01T00:00:00.000Z' }),
+    );
+    const rest = postgrestStub(rows);
+    const { instance } = poller({ store, createRest: rest.createRest });
+
+    await instance.runOnce();
+
+    const lastRead = rows[200 * 10 - 1];
+    // Not `now`: the five rows past the cap are still ahead of the watermark next tick.
+    expect(store.value?.lastSeenAt).toBe(lastRead?.seen_at);
+    expect(Date.parse(store.value?.lastSeenAt ?? '')).toBeLessThan(Date.parse(NOW.toISOString()));
+  });
+
+  it('never moves the watermark backwards', async () => {
+    const store = memoryStore(
+      watermark({ lastSeenAt: NOW.toISOString(), notifyFloor: '2026-01-01T00:00:00.000Z' }),
+    );
+    const rest = postgrestStub([]);
+    const { instance } = poller({ store, createRest: rest.createRest });
+
+    await instance.runOnce();
+
+    expect(store.value?.lastSeenAt).toBe(NOW.toISOString());
+  });
+
+  it('carries notifyFloor through untouched', async () => {
+    const floor = '2026-01-01T00:00:00.000Z';
+    const store = memoryStore(watermark({ notifyFloor: floor }));
+    const rest = postgrestStub([]);
+    const { instance } = poller({ store, createRest: rest.createRest });
+
+    await instance.runOnce();
+
+    expect(store.value?.notifyFloor).toBe(floor);
   });
 });

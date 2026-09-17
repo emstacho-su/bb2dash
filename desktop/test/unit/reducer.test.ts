@@ -302,6 +302,9 @@ describe('rule 4 — dedupe, cap, advance', () => {
     expect(initialWatermark(NOW)).toEqual({
       version: 1,
       lastSeenAt: NOW.toISOString(),
+      // R2-1: the floor starts level with `lastSeenAt`, so the grade read's overlap window
+      // has nowhere to reach back to and a first launch is silent.
+      notifyFloor: NOW.toISOString(),
       dueCheckedOn: null,
       firedKeys: [],
     });

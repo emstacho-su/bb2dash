@@ -15,6 +15,8 @@
 
 import { z } from 'zod';
 
+import { HH_MM } from './patterns';
+
 /** Defaults for every key the user may leave out of `config.json` (C-2). */
 export const CONFIG_DEFAULTS = Object.freeze({
   appUrl: 'https://web-xi-ten-uy9xk6c6p0.vercel.app',
@@ -32,7 +34,6 @@ export const CONFIG_DEFAULTS = Object.freeze({
 });
 
 const HTTP_URL = 'must be an http(s) URL';
-const HH_MM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function isHttpUrl(value: string): boolean {
   try {

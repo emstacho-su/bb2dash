@@ -12,8 +12,12 @@ import {
   QueryValueError,
   RowShapeError,
   coursesQuery,
+  GRADE_MAX_PAGES,
+  GRADE_OVERLAP_MS,
+  GRADE_PAGE_SIZE,
   dueQuery,
   gradesQuery,
+  gradesSince,
   readCourseLabels,
   readDueItems,
   readNewGrades,
@@ -248,5 +252,115 @@ describe('validateCourseLabels', () => {
 
   it('throws for a missing id', () => {
     expect(() => validateCourseLabels([{ title_short: 'x' }])).toThrow(RowShapeError);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// R2-1 — the overlap window behind the watermark
+// ---------------------------------------------------------------------------------------
+
+describe('gradesSince (R2-1)', () => {
+  const FLOOR = '2026-01-01T00:00:00.000Z';
+
+  it('looks GRADE_OVERLAP_MS behind lastSeenAt', () => {
+    const since = gradesSince({ lastSeenAt: LAST_SEEN_AT, notifyFloor: FLOOR });
+    expect(Date.parse(LAST_SEEN_AT) - Date.parse(since)).toBe(GRADE_OVERLAP_MS);
+    // Six hours, not six minutes: it has to cover a crawl -> transform gap and a nap.
+    expect(GRADE_OVERLAP_MS).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it('never reaches behind notifyFloor, so a first launch stays silent', () => {
+    // What `initialWatermark` writes: the floor is level with lastSeenAt.
+    const fresh = { lastSeenAt: LAST_SEEN_AT, notifyFloor: LAST_SEEN_AT };
+    expect(gradesSince(fresh)).toBe(LAST_SEEN_AT);
+  });
+
+  it('clamps to the floor when the install is younger than the window', () => {
+    const floor = new Date(Date.parse(LAST_SEEN_AT) - 60_000).toISOString();
+    expect(gradesSince({ lastSeenAt: LAST_SEEN_AT, notifyFloor: floor })).toBe(floor);
+  });
+
+  it('always produces a strict ISO instant the query builder accepts', () => {
+    const since = gradesSince({ lastSeenAt: LAST_SEEN_AT, notifyFloor: FLOOR });
+    expect(() => gradesQuery(since)).not.toThrow();
+  });
+
+  it('rejects a watermark whose timestamps are not timestamps', () => {
+    expect(() => gradesSince({ lastSeenAt: 'nope', notifyFloor: FLOOR })).toThrow(QueryValueError);
+    expect(() => gradesSince({ lastSeenAt: LAST_SEEN_AT, notifyFloor: 'nope' })).toThrow(
+      QueryValueError,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// R2-2 — paging
+// ---------------------------------------------------------------------------------------
+
+describe('readNewGrades pages until a short page (R2-2)', () => {
+  function gradePage(count: number, from = 0): unknown[] {
+    return Array.from({ length: count }, (_row, index) => ({
+      shell_course_id: 'IST.323',
+      column_id: `col-${from + index}`,
+      name: 'Lab',
+      run_id: 'run-a',
+      seen_at: new Date(Date.parse(LAST_SEEN_AT) + (from + index) * 1000).toISOString(),
+      score: 10,
+      possible: 10,
+      previous_score: null,
+    }));
+  }
+
+  /** Serves `total` rows across as many pages as the caller asks for. */
+  function pagedRest(total: number): { get: RestGet; queries: string[] } {
+    const queries: string[] = [];
+    const get: RestGet = async <T>(_relation: string, query: string, validate: (r: unknown) => T) => {
+      queries.push(query);
+      const offsetMatch = /&offset=(\d+)/.exec(query);
+      const offset = offsetMatch ? Number(offsetMatch[1]) : 0;
+      return validate(gradePage(Math.max(0, Math.min(GRADE_PAGE_SIZE, total - offset)), offset));
+    };
+    return { get, queries };
+  }
+
+  it('one short page is one request', async () => {
+    const { get, queries } = pagedRest(3);
+    const page = await readNewGrades(get, LAST_SEEN_AT);
+    expect(page.rows).toHaveLength(3);
+    expect(page.complete).toBe(true);
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).not.toContain('offset=');
+  });
+
+  it('reads past the first 200 rows instead of dropping them', async () => {
+    const { get, queries } = pagedRest(450);
+    const page = await readNewGrades(get, LAST_SEEN_AT);
+    // Before R2-2 this returned 200 rows and the rest were lost for good.
+    expect(page.rows).toHaveLength(450);
+    expect(page.complete).toBe(true);
+    expect(queries).toHaveLength(3);
+    expect(queries[1]).toContain(`&offset=${GRADE_PAGE_SIZE}`);
+    expect(queries[2]).toContain(`&offset=${GRADE_PAGE_SIZE * 2}`);
+  });
+
+  it('an exactly-full set costs one more empty read and is still complete', async () => {
+    const { get, queries } = pagedRest(GRADE_PAGE_SIZE);
+    const page = await readNewGrades(get, LAST_SEEN_AT);
+    expect(page.rows).toHaveLength(GRADE_PAGE_SIZE);
+    expect(page.complete).toBe(true);
+    expect(queries).toHaveLength(2);
+  });
+
+  it('stops at GRADE_MAX_PAGES and reports the read as incomplete', async () => {
+    const { get, queries } = pagedRest(GRADE_PAGE_SIZE * GRADE_MAX_PAGES + 50);
+    const page = await readNewGrades(get, LAST_SEEN_AT);
+    expect(queries).toHaveLength(GRADE_MAX_PAGES);
+    expect(page.rows).toHaveLength(GRADE_PAGE_SIZE * GRADE_MAX_PAGES);
+    expect(page.complete).toBe(false);
+  });
+
+  it('rejects a negative or fractional offset rather than building a query with it', () => {
+    expect(() => gradesQuery(LAST_SEEN_AT, -1)).toThrow(QueryValueError);
+    expect(() => gradesQuery(LAST_SEEN_AT, 1.5)).toThrow(QueryValueError);
   });
 });

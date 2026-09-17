@@ -12,6 +12,10 @@ import type { BrowserWindow } from 'electron';
 import { isAllowedRoute } from '../core/route';
 import { type Logger, describeError, silentLogger } from '../core/redact';
 import type { Recorder } from './test-hook';
+// R2-10: one `showWindow`. This file used to carry a private `raise()` that did the same
+// three steps *without* the `isDestroyed()` guard, so a toast clicked after the window had
+// gone threw inside the click handler instead of being reported as a refused navigation.
+import { showWindow } from './window';
 
 export interface DeeplinkOptions {
   /** The single app origin the window may navigate to (C-2, C-4). */
@@ -26,13 +30,6 @@ export interface DeeplinkOptions {
 export interface Deeplink {
   /** True when the route validated and the window was asked to load it. */
   navigate(route: string): boolean;
-}
-
-/** Restore from minimised, show if hidden (C-12), focus. Each step is independently safe. */
-function raise(window: BrowserWindow): void {
-  if (window.isMinimized()) window.restore();
-  if (!window.isVisible()) window.show();
-  window.focus();
 }
 
 export function createDeeplink(options: DeeplinkOptions): Deeplink {
@@ -64,7 +61,7 @@ export function createDeeplink(options: DeeplinkOptions): Deeplink {
       }
 
       try {
-        raise(window);
+        showWindow(window);
         void window.loadURL(target);
       } catch (error) {
         log.error(`navigation to ${route} failed: ${describeError(error)}`);

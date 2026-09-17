@@ -20,10 +20,16 @@ export const COURSES: readonly CourseLabel[] = [
   { id: 'MAT.295', title_short: 'MAT 295' },
 ];
 
+/**
+ * `notifyFloor` (R2-1) defaults far behind `lastSeenAt` so a fixture watermark behaves like
+ * a long-running install: the overlap window is free to look back. A test about first-launch
+ * silence overrides it to equal `lastSeenAt`, which is what `initialWatermark` writes.
+ */
 export function watermark(overrides: Partial<Watermark> = {}): Watermark {
   return {
     version: 1,
     lastSeenAt: '2026-09-16T12:00:00.000Z',
+    notifyFloor: '2026-01-01T00:00:00.000Z',
     dueCheckedOn: null,
     firedKeys: [],
     ...overrides,

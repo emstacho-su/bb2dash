@@ -10,6 +10,8 @@
  * Nothing here reads a clock of its own: every function takes the `Date` it works from.
  */
 
+import { HH_MM, ISO_DATE } from '../patterns';
+
 /** `YYYY-MM-DD` in New York, plus the wall-clock hour and minute at the same instant. */
 export interface NyWallClock {
   readonly date: string;
@@ -28,8 +30,8 @@ const NY_FORMAT = new Intl.DateTimeFormat('en-US', {
   hourCycle: 'h23',
 });
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const HH_MM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+// R2-10: the shapes live in `core/patterns.ts`, so the config schema and this clock
+// cannot disagree about what `18:00` or `2026-09-16` means.
 
 /** Thrown for a `dueReminderTime` that is not `HH:MM` — a config fault, named explicitly. */
 export class InvalidReminderTimeError extends Error {

@@ -13,6 +13,7 @@ import type { BrowserWindow } from 'electron';
 import { createDeeplink } from '../../src/main/deeplink';
 import type { Logger } from '../../src/core/redact';
 import { createRecorder } from '../../src/main/test-hook';
+import { showWindow } from '../../src/main/window';
 
 const APP_URL = 'https://web-xi-ten-uy9xk6c6p0.vercel.app';
 
@@ -148,5 +149,42 @@ describe('navigate', () => {
     const log = logger();
     createDeeplink({ appUrl: APP_URL, getWindow: () => window, log }).navigate('/'.repeat(5000));
     expect(log.lines[0]?.length).toBeLessThan(200);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// R2-10 — one showWindow
+// ---------------------------------------------------------------------------------------
+
+describe('R2-10 — the deep link raises the window through the shared showWindow', () => {
+  it('restores, shows and focuses, in that order', () => {
+    const { window, state } = fakeWindow({ minimized: true, visible: false });
+    createDeeplink({ appUrl: APP_URL, getWindow: () => window }).navigate('/inbox');
+    expect(state.calls).toEqual(['restore', 'show', 'focus']);
+  });
+
+  it('is the same function main/window.ts exports, not a private copy', () => {
+    // The copy this replaced had no `isDestroyed` guard. Driving the shared one directly
+    // with a destroyed window proves the guard the copy was missing.
+    const { window, state } = fakeWindow({ destroyed: true, minimized: true, visible: false });
+    expect(() => showWindow(window)).not.toThrow();
+    expect(state.calls).toEqual([]);
+  });
+
+  it('does nothing at all to a destroyed window, and reports the navigation refused', () => {
+    const { window, state } = fakeWindow({ destroyed: true });
+    const recorder = createRecorder();
+    const accepted = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => window,
+      recorder,
+    }).navigate('/inbox');
+
+    expect(accepted).toBe(false);
+    expect(state.calls).toEqual([]);
+    expect(state.loaded).toEqual([]);
+    expect(recorder.navigations()).toEqual([
+      expect.objectContaining({ route: '/inbox', accepted: false }),
+    ]);
   });
 });

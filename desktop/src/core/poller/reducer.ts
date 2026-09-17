@@ -236,19 +236,34 @@ export function reduce(input: ReduceInput): ReduceOutput {
   const toasts = candidates.filter((toast) => !alreadyFired.has(toast.key));
   for (const toast of toasts) keysToRecord.push(toast.key);
 
+  // C-7 rule 4: `lastSeenAt` advances to the tick's start time — except when R2-2's page
+  // cap stopped the grade read short, in which case it advances only as far as the rows
+  // actually read, and never backwards.
+  const advanceTo = input.advanceTo ?? now;
+  const advanced =
+    Date.parse(advanceTo.toISOString()) > Date.parse(watermark.lastSeenAt)
+      ? advanceTo.toISOString()
+      : watermark.lastSeenAt;
+
   return {
     toasts,
     watermark: {
       version: 1,
-      // C-7 rule 4: `lastSeenAt` advances to the tick's start time.
-      lastSeenAt: now.toISOString(),
+      lastSeenAt: advanced,
+      notifyFloor: watermark.notifyFloor,
       dueCheckedOn: checkedOn,
       firedKeys: mergeFiredKeys(watermark.firedKeys, keysToRecord),
     },
   };
 }
 
-/** The watermark a first launch writes: nothing historical can fire behind it. */
+/**
+ * The watermark a first launch writes: nothing historical can fire behind it.
+ *
+ * `notifyFloor` is `now` too (R2-1), so the overlap window the grade read looks back
+ * through cannot reach anything that happened before this install existed.
+ */
 export function initialWatermark(now: Date): Watermark {
-  return { version: 1, lastSeenAt: now.toISOString(), dueCheckedOn: null, firedKeys: [] };
+  const at = now.toISOString();
+  return { version: 1, lastSeenAt: at, notifyFloor: at, dueCheckedOn: null, firedKeys: [] };
 }

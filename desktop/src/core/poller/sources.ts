@@ -14,6 +14,7 @@
  */
 
 import type { CourseLabel, DueRow, GradeRow, RestGet, SyncStatusRow } from '../types';
+import { ISO_DATE, ISO_INSTANT } from '../patterns';
 
 /** A relation whose rows did not match the shape C-6 promises. */
 export class RowShapeError extends Error {
@@ -34,9 +35,9 @@ export class QueryValueError extends Error {
   }
 }
 
-/** `2026-09-16T18:04:02.000Z` — what `Date.prototype.toISOString` produces, and only that. */
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+// R2-10: `ISO_INSTANT` and `ISO_DATE` come from `core/patterns.ts`. The query builders
+// below interpolate unencoded, so the shapes are what makes that safe, and they have to be
+// the same shapes the watermark validates against.
 
 // ---------------------------------------------------------------------------------------
 // Query strings — frozen by C-6
@@ -53,18 +54,69 @@ export function syncQuery(): string {
 }
 
 /**
- * R2. `lastSeenAt` must be a plain `...Z` ISO instant: it goes in unencoded, exactly as C-6
+ * R2-1 — how far behind `lastSeenAt` the grade read looks.
+ *
+ * `v_gradebook_history.seen_at` is the **crawl** time (`bb_raw.captured_at`, migrations
+ * 046/056), not the time the row appeared in the view: `transform_tick` folds the crawl in
+ * minutes later. A tick that lands between the crawl and the transform reads nothing, then
+ * advances `lastSeenAt` to `now` — and the rows that arrive a minute later are already
+ * behind the watermark and can never fire.
+ *
+ * So every read looks back this far and lets `firedKeys` throw away what has already
+ * fired. Six hours, not six minutes: it has to cover the whole crawl -> transform gap, a
+ * laptop asleep through the middle of one, and any skew between this machine's clock and
+ * the database's. The cost of a wide window is re-reading at most a few hundred rows the
+ * reducer then discards; the cost of a narrow one is a grade that never toasts.
+ */
+export const GRADE_OVERLAP_MS = 6 * 60 * 60 * 1000;
+
+/** C-6 freezes the page at 200 rows. R2-2: read pages until one comes back short. */
+export const GRADE_PAGE_SIZE = 200;
+
+/**
+ * R2-2 — the most pages one tick will fetch (2000 rows). A real gradebook never approaches
+ * this; the cap exists so a view that suddenly returns everything cannot spin a tick
+ * forever. Hitting it is reported, not swallowed: the caller keeps the watermark behind the
+ * rows it could not reach.
+ */
+export const GRADE_MAX_PAGES = 10;
+
+/**
+ * R2. `since` must be a plain `...Z` ISO instant: it goes in unencoded, exactly as C-6
  * writes it, and the regex is what makes that safe.
  */
-export function gradesQuery(lastSeenAt: string): string {
-  if (!ISO_INSTANT.test(lastSeenAt)) throw new QueryValueError('lastSeenAt', lastSeenAt);
+export function gradesQuery(since: string, offset = 0): string {
+  if (!ISO_INSTANT.test(since)) throw new QueryValueError('lastSeenAt', since);
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new QueryValueError('offset', String(offset));
+  }
   return (
-    `seen_at=gt.${lastSeenAt}` +
+    `seen_at=gt.${since}` +
     '&score=not.is.null' +
     '&select=shell_course_id,column_id,name,run_id,seen_at,score,possible,previous_score' +
     '&order=seen_at.asc' +
-    '&limit=200'
+    `&limit=${GRADE_PAGE_SIZE}` +
+    (offset > 0 ? `&offset=${offset}` : '')
   );
+}
+
+/**
+ * R2-1 — the instant the grade read starts from: `lastSeenAt` minus the overlap, but never
+ * earlier than `notifyFloor`.
+ *
+ * The floor is what keeps a first launch silent. Without it, a watermark written seconds
+ * ago would still be read six hours back, and every grade from the last six hours would
+ * toast the first time the app ran.
+ */
+export function gradesSince(
+  watermark: { readonly lastSeenAt: string; readonly notifyFloor: string },
+  overlapMs: number = GRADE_OVERLAP_MS,
+): string {
+  const lastSeen = Date.parse(watermark.lastSeenAt);
+  const floor = Date.parse(watermark.notifyFloor);
+  if (Number.isNaN(lastSeen)) throw new QueryValueError('lastSeenAt', watermark.lastSeenAt);
+  if (Number.isNaN(floor)) throw new QueryValueError('notifyFloor', watermark.notifyFloor);
+  return new Date(Math.max(lastSeen - Math.max(0, overlapMs), floor)).toISOString();
 }
 
 /** R3. `dueOn` is the New York calendar date plus one, as `YYYY-MM-DD`. */
@@ -222,9 +274,35 @@ export function readSyncStatus(get: RestGet): Promise<SyncStatusRow | null> {
   return get(SYNC_RELATION, syncQuery(), validateSyncRows);
 }
 
-/** R2 — every gradebook observation newer than the watermark. */
-export function readNewGrades(get: RestGet, lastSeenAt: string): Promise<readonly GradeRow[]> {
-  return get(GRADES_RELATION, gradesQuery(lastSeenAt), validateGradeRows);
+/** What one tick's grade read came back with. */
+export interface GradePage {
+  readonly rows: readonly GradeRow[];
+  /**
+   * False when `GRADE_MAX_PAGES` was reached with a full page still coming back: there are
+   * more rows than this tick read, and the watermark must not advance past `rows`.
+   */
+  readonly complete: boolean;
+}
+
+/**
+ * R2 — every gradebook observation at or after `since`, in pages (R2-2).
+ *
+ * The old single `limit=200` read silently dropped everything past the 200th row while the
+ * watermark advanced to `now`, so a backlog bigger than one page was lost for good. This
+ * reads pages until one comes back short, which is the only way to know there is no more.
+ */
+export async function readNewGrades(get: RestGet, since: string): Promise<GradePage> {
+  const rows: GradeRow[] = [];
+
+  for (let page = 0; page < GRADE_MAX_PAGES; page += 1) {
+    const batch = await get(GRADES_RELATION, gradesQuery(since, rows.length), validateGradeRows);
+    rows.push(...batch);
+    // A short page is the end of the set. An exactly-full last page costs one more read
+    // that returns nothing, which is the price of not guessing.
+    if (batch.length < GRADE_PAGE_SIZE) return { rows, complete: true };
+  }
+
+  return { rows, complete: false };
 }
 
 /** R3 — the work items due on `dueOn`, still open and inside the workload. */
