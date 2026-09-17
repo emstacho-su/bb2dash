@@ -116,6 +116,127 @@ describe('Inbox — state chip', () => {
     expect(screen.getByText('applied')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Accept Blackboard' })).toBeNull();
   });
+
+  /* -----------------------------------------------------------------------
+   * F-4 (I-2 / P-inbox-2), found on the PM's browser walk.
+   *
+   * Every answered row said "answered, applies on next sync", including the
+   * kinds apply_resolutions() skips entirely — a staff-name conflict, a
+   * course-level confirm, an ambiguous gradebook column. Those never apply, so
+   * the chip was promising something that will never happen, on rows that will
+   * carry it for the rest of the term.
+   *
+   * The chip reads the SAME predicate the button sentences read
+   * (`outcomeApplies`, via `appliesAutomatically`), so the two can never
+   * disagree about a row.
+   * -------------------------------------------------------------------- */
+
+  const resolvedAt = { state: 'resolved' as const, resolved_at: '2026-09-10T10:00:00.000Z' };
+
+  it('says "recorded only" on a resolved staff-name conflict', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 2,
+        ...resolvedAt,
+        entity: 'course_staff',
+        ref: 'staff:_34252_1',
+        field: 'name',
+        resolution: { accept: 'blackboard' },
+        applied_at: null,
+      }),
+    ]);
+    expect(screen.getByText('answered · recorded only')).toBeInTheDocument();
+    expect(screen.queryByText('answered, applies on next sync')).toBeNull();
+  });
+
+  it('says "recorded only" on a resolved course-level confirm', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 3,
+        ...resolvedAt,
+        kind: 'stack_must_confirm',
+        entity: 'course',
+        ref: 'course_field:academic_advisor',
+        field: null,
+        resolution: { value: 'Dr Chen', value_type: 'text' },
+        applied_at: null,
+      }),
+    ]);
+    expect(screen.getByText('answered · recorded only')).toBeInTheDocument();
+  });
+
+  it('says "recorded only" on a resolved ambiguous gradebook column', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 4,
+        ...resolvedAt,
+        ref: 'column:_3569973_1',
+        field: 'bb_column_id',
+        resolution: { accept: 'blackboard' },
+        applied_at: null,
+      }),
+    ]);
+    expect(screen.getByText('answered · recorded only')).toBeInTheDocument();
+  });
+
+  it('keeps the promise on a row that really will apply', () => {
+    // An assignment due_at conflict — the kind apply_resolutions() writes.
+    renderInbox([
+      makeAttentionItem({ id: 5, ...resolvedAt, resolution: { accept: 'blackboard' } }),
+    ]);
+    expect(screen.getByText('answered, applies on next sync')).toBeInTheDocument();
+    expect(screen.queryByText('answered · recorded only')).toBeNull();
+  });
+
+  it('keeps it for "Keep mine" too, which writes confidence and needs no field', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 6,
+        ...resolvedAt,
+        field: 'bb_column_id',
+        resolution: { accept: 'keep' },
+        applied_at: null,
+      }),
+    ]);
+    expect(screen.getByText('answered, applies on next sync')).toBeInTheDocument();
+  });
+
+  it('shows a dismissal as dismissed, never as "applies on next sync"', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 7,
+        kind: 'data_gap',
+        entity: 'bb_file',
+        ref: '117',
+        state: 'dismissed',
+        resolved_at: '2026-09-10T10:00:00.000Z',
+        resolution: { dismissed: true },
+        applied_at: null,
+      }),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: /dismissed \(1\)/ }));
+    expect(screen.queryByText('answered, applies on next sync')).toBeNull();
+  });
+
+  it('says "recorded only" on an answer it cannot classify at all', () => {
+    renderInbox([
+      makeAttentionItem({ id: 8, ...resolvedAt, resolution: {}, applied_at: null }),
+    ]);
+    expect(screen.getByText('answered · recorded only')).toBeInTheDocument();
+  });
+
+  it('still says "applied" once the transform has stamped it', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 9,
+        ...resolvedAt,
+        entity: 'course_staff',
+        ref: 'staff:_1',
+        applied_at: '2026-09-10T11:00:00.000Z',
+      }),
+    ]);
+    expect(screen.getByText('applied')).toBeInTheDocument();
+  });
 });
 
 describe('Inbox — the resolve payload per kind', () => {

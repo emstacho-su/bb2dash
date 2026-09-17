@@ -543,6 +543,46 @@ export function isAwaitingApply(item: AttentionItem): boolean {
   return item.state !== 'open' && item.applied_at === null;
 }
 
+/**
+ * Which control produced this row's resolution — F-4.
+ *
+ * The Inbox writes a per-kind shape into `resolution` (`{accept}` for a
+ * conflict, `{value, value_type}` for a typed answer, `{dismissed}` for a
+ * dismissal), so an answered row can be read back to find out what was pressed.
+ * Returns null for a shape we do not recognise, which includes the rows PM
+ * sessions answered directly in SQL.
+ */
+export function resolvedAction(item: AttentionItem): OutcomeAction | null {
+  if (item.state === 'dismissed') return 'dismiss';
+  const resolution = item.resolution;
+  if (!resolution) return null;
+  if (resolution.accept === 'blackboard') return 'accept_blackboard';
+  if (resolution.accept === 'keep') return 'keep_mine';
+  if (typeof resolution.value === 'string') return 'save';
+  if (resolution.dismissed === true) return 'dismiss';
+  return null;
+}
+
+/**
+ * Will the transform ever act on the answer already on this row? F-4.
+ *
+ * The chip used to promise "applies on next sync" to every answered row,
+ * including the kinds `apply_resolutions()` skips outright — a staff-name
+ * conflict, a course-level confirm, an ambiguous gradebook column. Those never
+ * apply, so the promise was one the app could not keep, on rows that carry the
+ * chip for the rest of the term.
+ *
+ * It goes through `outcomeApplies`, the SAME predicate the sentence under each
+ * button uses, so a row cannot say "recorded only" beneath the control and
+ * "applies on next sync" beside the answer. An answer whose shape we cannot
+ * read is treated as recorded only: claiming less than we know is the safe
+ * direction for a promise.
+ */
+export function appliesAutomatically(item: AttentionItem): boolean {
+  const action = resolvedAction(item);
+  return action === null ? false : outcomeApplies(item, action);
+}
+
 /** Render a jsonb from/to/suggested value as text without inventing one. */
 export function valueText(value: unknown): string {
   if (value === null || value === undefined) return '—';

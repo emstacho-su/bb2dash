@@ -25,10 +25,12 @@ import {
   RECORDED_ONLY,
   fieldPhrase,
   fieldValueText,
+  appliesAutomatically,
   describeDetails,
   isAssignmentRef,
   keyPhrase,
   outcomeApplies,
+  resolvedAction,
   outcomeText,
   type AttentionItem,
   type AttentionKind,
@@ -407,5 +409,104 @@ describe('keyPhrase', () => {
   it('keeps the four writable columns on their nicer phrasing', () => {
     expect(keyPhrase('points_possible')).toBe('points possible');
     expect(keyPhrase('bb_url')).toBe('Blackboard link');
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * F-4 — reading an ANSWERED row back: what was pressed, and will it apply?
+ *
+ * The chip promised "applies on next sync" to every answered row. For a
+ * staff-name conflict or a course-level confirm that promise can never be kept,
+ * and the row carries the chip for the rest of the term. These two predicates
+ * are what the chip reads, and they go through `outcomeApplies` — the same one
+ * the sentence under each button uses — so the two halves of a row cannot
+ * disagree.
+ * ------------------------------------------------------------------------ */
+
+describe('resolvedAction — which control produced this answer', () => {
+  it('reads back the two conflict answers', () => {
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: { accept: 'blackboard' } })))
+      .toBe('accept_blackboard');
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: { accept: 'keep' } })))
+      .toBe('keep_mine');
+  });
+
+  it('reads back a typed answer', () => {
+    expect(
+      resolvedAction(
+        makeItem({ state: 'resolved', resolution: { value: '2026-09-24', value_type: 'date' } }),
+      ),
+    ).toBe('save');
+  });
+
+  it('reads back a dismissal, by state or by resolution', () => {
+    expect(resolvedAction(makeItem({ state: 'dismissed', resolution: { dismissed: true } })))
+      .toBe('dismiss');
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: { dismissed: true } })))
+      .toBe('dismiss');
+  });
+
+  it('says nothing about a shape it does not recognise', () => {
+    // PM sessions answered 15 rows directly in SQL; those need not match.
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: null }))).toBeNull();
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: {} }))).toBeNull();
+    expect(resolvedAction(makeItem({ state: 'resolved', resolution: { accept: 'maybe' } })))
+      .toBeNull();
+  });
+});
+
+describe('appliesAutomatically — the promise the chip makes', () => {
+  const resolved = { state: 'resolved' as const, applied_at: null };
+
+  it('is true for an assignment due-date conflict answered either way', () => {
+    expect(appliesAutomatically(makeItem({ ...resolved, resolution: { accept: 'blackboard' } })))
+      .toBe(true);
+    expect(appliesAutomatically(makeItem({ ...resolved, resolution: { accept: 'keep' } })))
+      .toBe(true);
+  });
+
+  it('is false for the kinds apply_resolutions() skips', () => {
+    const skipped = [
+      { entity: 'course_staff', ref: 'staff:_34252_1', field: 'name' },
+      { entity: 'course', ref: 'course_field:academic_advisor', field: null },
+      { entity: 'course', ref: 'GEO.103.recitation', field: 'grading_scheme' },
+      { ref: 'column:_3569973_1', field: 'bb_column_id' },
+    ];
+    for (const overrides of skipped) {
+      expect(
+        appliesAutomatically(
+          makeItem({ ...resolved, ...overrides, resolution: { accept: 'blackboard' } }),
+        ),
+        JSON.stringify(overrides),
+      ).toBe(false);
+    }
+  });
+
+  it('is false for a dismissal — dismissing is the answer', () => {
+    expect(
+      appliesAutomatically(
+        makeItem({ kind: 'data_gap', state: 'dismissed', resolution: { dismissed: true } }),
+      ),
+    ).toBe(false);
+  });
+
+  it('claims nothing about an answer whose shape it cannot read', () => {
+    // Claiming less than we know is the safe direction for a promise.
+    expect(appliesAutomatically(makeItem({ ...resolved, resolution: {} }))).toBe(false);
+  });
+
+  it('agrees with the sentence under the button, row for row', () => {
+    const rows = [
+      makeItem({ ...resolved, resolution: { accept: 'blackboard' } }),
+      makeItem({ ...resolved, entity: 'course_staff', ref: 'staff:_1', resolution: { accept: 'keep' } }),
+      makeItem({ ...resolved, ref: 'column:_1_1', field: 'bb_column_id', resolution: { accept: 'blackboard' } }),
+      makeItem({ ...resolved, kind: 'missing', resolution: { value: '2026-09-24', value_type: 'date' } }),
+    ];
+    for (const row of rows) {
+      const action = resolvedAction(row);
+      if (action === null) continue;
+      const saysRecordedOnly = outcomeText(row, action) === RECORDED_ONLY;
+      expect(appliesAutomatically(row), JSON.stringify(row.ref)).toBe(!saysRecordedOnly);
+    }
   });
 });
