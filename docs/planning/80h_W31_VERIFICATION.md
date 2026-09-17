@@ -324,12 +324,15 @@ instead of painting the stale one first). RED → GREEN with a `rerender` case i
 ### Two things G-1 has to carry
 
 1. **`ScoreHistory` must survive in every outcome** — the desktop poller reads
-   `v_gradebook_history` (`desktop/src/core/poller/sources.ts:47`). It currently depends on four
-   symbols in 10b modules: `HISTORY_LABEL` and `historyText` (`grade-model-format.ts`),
-   `GradebookHistoryRow` (`grade-model-input.ts`), and `columnItemKey` / `historyByColumn`
-   (`grade-model-view.ts`). If those modules are retired, those symbols move into
-   `queries.grades.ts` rather than being deleted with them. The popout's own read
-   (`assignmentHistoryOptions`) is already in `queries.grades.ts` and needs nothing.
+   `v_gradebook_history` (`desktop/src/core/poller/sources.ts:47`). Its dependencies are now
+   exactly three, all in 10b modules: `HISTORY_LABEL` and `historyText`
+   (`grade-model-format.ts`), the `GradebookHistoryRow` type (`grade-model-input.ts`) and
+   `GradeModel.module.css`. If those modules are retired, those move rather than being deleted —
+   the two functions and the type into `queries.grades.ts`, the three `.history*` rules into a
+   stylesheet beside the component. `columnItemKey` / `historyByColumn` (`grade-model-view.ts`)
+   are **no longer** needed for the history: they keyed the whole-course map the table used, and
+   the popout reads one column directly. The popout's own read (`assignmentHistoryOptions`) is
+   already in `queries.grades.ts` and needs nothing.
 2. **`gradeHistoryOptions` / `useGradeHistory` in `queries.grade-model.ts` now have no consumer**
    in `src/` — G-5 replaced the whole-course history read with the popout's per-column one. They
    are left in place, with their tests, for G-1 to remove along with the rest of that module, or
