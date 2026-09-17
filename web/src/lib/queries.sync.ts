@@ -556,6 +556,221 @@ export function valueText(value: unknown): string {
 }
 
 /* ---------------------------------------------------------------------------
+ * What an answer actually does (I-2 / P-inbox-2, Stack's answer 16)
+ *
+ * The Inbox's buttons said "Accept Blackboard" / "Keep mine" / "Save" /
+ * "Dismiss" and nothing else, so the only way to know what pressing one would
+ * do to this row was to read `apply_resolutions()`. Worse, most rows in the
+ * queue are ones nothing applies at all — a course-map seed, a staff-name
+ * disagreement, an ambiguous gradebook column — and those looked exactly like
+ * the ones that do.
+ *
+ * Everything below mirrors migration 042's `apply_resolutions()` and must be
+ * read against it. The rule there is: kind in (conflict, stack_must_confirm,
+ * missing), `entity = 'assignment'`, a `ref` that is an assignment id, and a
+ * `field` in {due_at, due_date, points_possible, bb_url}. "Keep mine" is the
+ * one exception — it writes `confidence` alone, so it needs no field.
+ * ------------------------------------------------------------------------ */
+
+/** The zone the course calendar is in; every date in the Inbox reads in it. */
+export const INBOX_TIME_ZONE = 'America/New_York';
+
+/** The only four columns `apply_resolutions()` can write (042). */
+export const APPLIED_FIELDS: readonly string[] = [
+  'due_at',
+  'due_date',
+  'points_possible',
+  'bb_url',
+];
+
+/** Those fields in words, for a sentence rather than a column name. */
+const FIELD_PHRASE: Record<string, string> = {
+  due_at: 'due date',
+  due_date: 'due date',
+  points_possible: 'points possible',
+  bb_url: 'Blackboard link',
+};
+
+/** A field named as a reader would say it; unknown columns say themselves. */
+export function fieldPhrase(field: string | null): string {
+  if (!field) return 'value';
+  return FIELD_PHRASE[field] ?? field.replace(/_/g, ' ');
+}
+
+/** The sentence for every answer nothing acts on. Stack's answer 16. */
+export const RECORDED_ONLY = 'Recorded only — nothing is changed automatically.';
+
+/**
+ * One line on the Inbox itself, so the rule is stated once rather than only
+ * implied row by row.
+ */
+export const INBOX_APPLY_HELP =
+  'An answer about an assignment’s due date, points or Blackboard link is ' +
+  'applied by the next transform, usually within a couple of minutes. Every ' +
+  'other answer is recorded for you and for a later agent to act on — each ' +
+  'button says which below it.';
+
+/**
+ * Is `ref` an assignment id, as opposed to one of the prefixed pseudo-refs the
+ * stages raise (`column:…`, `staff:…`, `course_field:…`, `map_gap:…`)?
+ * `apply_resolutions()` looks `ref` up in `assignments.id`, so a pseudo-ref
+ * matches nothing and the answer stays unapplied however it is worded.
+ */
+export function isAssignmentRef(ref: string | null): boolean {
+  return typeof ref === 'string' && ref.includes('/') && !ref.includes(':');
+}
+
+/** The controls a row can offer, one sentence each. */
+export type OutcomeAction = 'accept_blackboard' | 'keep_mine' | 'save' | 'dismiss';
+
+/**
+ * Will `apply_resolutions()` act on this answer? Mirrors 042 branch for branch.
+ *
+ * Dismissals never apply by definition — dismissing IS the answer. "Keep mine"
+ * applies whenever the row is about a real assignment, because all it writes is
+ * `confidence = 'confirmed'`, which is what stops the next fold re-asking.
+ */
+export function outcomeApplies(item: AttentionItem, action: OutcomeAction): boolean {
+  if (action === 'dismiss') return false;
+  if (item.entity !== 'assignment' || !isAssignmentRef(item.ref)) return false;
+  if (action === 'keep_mine') return true;
+  return item.field !== null && APPLIED_FIELDS.includes(item.field);
+}
+
+/**
+ * A jsonb value as a sentence would say it, in New York.
+ *
+ * A bare 'YYYY-MM-DD' is a DAY and is printed as one: giving it a clock time
+ * would invent a deadline. A full timestamp is printed with its time. Anything
+ * unparseable is printed as itself rather than as "Invalid Date".
+ */
+export function fieldValueText(field: string | null, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value !== 'string') return valueText(value);
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const day = new Date(`${value}T12:00:00Z`);
+    if (!Number.isFinite(day.getTime())) return value;
+    return day.toLocaleDateString('en-US', {
+      timeZone: INBOX_TIME_ZONE,
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  const looksLikeTimestamp = field?.endsWith('_at') || /\d{4}-\d{2}-\d{2}T/.test(value);
+  if (looksLikeTimestamp) {
+    const at = new Date(value);
+    if (!Number.isFinite(at.getTime())) return value;
+    return at.toLocaleString('en-US', {
+      timeZone: INBOX_TIME_ZONE,
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+
+  return value;
+}
+
+/* ---------------------------------------------------------------------------
+ * Describing a jsonb payload without printing jsonb (I-3 / P-inbox-3)
+ * ------------------------------------------------------------------------ */
+
+/** A key spelled as a reader would say it: `column_id` → "column id". */
+export function keyPhrase(key: string): string {
+  return FIELD_PHRASE[key] ?? key.replace(/_/g, ' ');
+}
+
+/** One labelled fact out of a payload. An empty `label` means "no label". */
+export interface DescribedValue {
+  label: string;
+  text: string;
+}
+
+/** A nested value on one line: "name weekly_hours · value none". */
+function describeInline(value: unknown, depth = 0): string {
+  if (value === null || value === undefined || value === '') return 'none';
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return fieldValueText(null, value);
+  if (Array.isArray(value)) {
+    return value.map((entry) => describeInline(entry, depth + 1)).join(', ');
+  }
+  if (typeof value === 'object') {
+    // Two levels is enough for every payload the stages raise; deeper than
+    // that, say so rather than unrolling something unreadable.
+    if (depth >= 2) return '…';
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, inner]) => `${keyPhrase(key)} ${describeInline(inner, depth + 1)}`)
+      .join(' · ');
+  }
+  return String(value);
+}
+
+/**
+ * Turn a from/to/suggested payload into labelled lines a person can read.
+ *
+ * `attention_items.suggested` is ad-hoc jsonb — each stage puts in what it
+ * happened to know — and the Inbox used to `JSON.stringify()` it, so the screen
+ * showed `{"due":"2026-09-14T16:50:00+00:00","source":"stage_assignments",…}`.
+ * Braces and quotes are not information. Keys become words, timestamps become
+ * New York dates, and nothing is dropped.
+ */
+export function describeDetails(value: unknown, field: string | null = null): DescribedValue[] {
+  if (value === null || value === undefined || value === '') return [];
+  if (typeof value !== 'object') {
+    return [{ label: '', text: fieldValueText(field, value) }];
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry, index) => ({
+      label: String(index + 1),
+      text: describeInline(entry, 1),
+    }));
+  }
+  return Object.entries(value as Record<string, unknown>).map(([key, inner]) => ({
+    label: keyPhrase(key),
+    text: describeInline(inner, 1),
+  }));
+}
+
+/**
+ * The sentence that goes under one of a row's controls: what pressing it will
+ * actually change, named, with the real value and the real date.
+ */
+export function outcomeText(item: AttentionItem, action: OutcomeAction): string {
+  if (action === 'dismiss') {
+    return `${RECORDED_ONLY} The row closes and the sync stops asking.`;
+  }
+
+  if (!outcomeApplies(item, action)) return RECORDED_ONLY;
+
+  const what = fieldPhrase(item.field);
+
+  if (action === 'keep_mine') {
+    const mine = fieldValueText(item.field, item.from_value);
+    const kept =
+      mine === '—' ? 'what bb2dash already has' : `this assignment’s ${what} at ${mine}`;
+    return `Keeps ${kept} and marks it confirmed, so the next sync stops asking.`;
+  }
+
+  if (action === 'accept_blackboard') {
+    const theirs = fieldValueText(item.field, item.to_value);
+    return theirs === '—'
+      ? `Clears this assignment’s ${what}, because that is what Blackboard shows.`
+      : `Sets this assignment’s ${what} to ${theirs}.`;
+  }
+
+  // 'save' — the value is whatever Stack types, so the sentence names the
+  // destination rather than pretending to know the value.
+  return `Saves what you type as this assignment’s ${what}.`;
+}
+
+/* ---------------------------------------------------------------------------
  * Activity seen marker (localStorage — per browser, never sent anywhere)
  * ------------------------------------------------------------------------ */
 

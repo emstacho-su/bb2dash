@@ -20,8 +20,12 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-const { InboxView, answerTypeFor, failureText, sourceText } = await import('@/app/(app)/inbox/Inbox');
-const { normalizeSyncStatus } = await import('@/lib/queries.sync');
+const { InboxView, answerTypeFor, failureText, sourceHref, sourceText } = await import(
+  '@/app/(app)/inbox/Inbox',
+);
+const { normalizeSyncStatus, INBOX_APPLY_HELP, RECORDED_ONLY } = await import(
+  '@/lib/queries.sync',
+);
 
 const status = normalizeSyncStatus(makeSyncStatusRow());
 
@@ -213,21 +217,144 @@ describe('Inbox — the resolve payload per kind', () => {
   });
 });
 
+/* ---------------------------------------------------------------------------
+ * I-3 / P-inbox-3 — the row's anatomy
+ *
+ * The row used to be a course id, a question, two raw jsonb values, one
+ * `entity · ref · field · run #42` line and, when the stage had offered one,
+ * `JSON.stringify(suggested)`. No age, no link, and braces on screen.
+ * ------------------------------------------------------------------------ */
+
 describe('Inbox — what a row shows', () => {
-  it('renders the course, the question, from → to and the source', () => {
+  it('names the course the way the rest of the app does', () => {
     renderInbox([makeAttentionItem({ id: 7 })]);
-    expect(screen.getByText('IST.323')).toBeInTheDocument();
+    expect(screen.getByText('IST 323')).toBeInTheDocument();
+  });
+
+  it('shows the question as written', () => {
+    renderInbox([makeAttentionItem({ id: 7 })]);
     expect(
       screen.getByText('Blackboard moved Quiz 2 from 9/2 to 9/9. Which is right?'),
     ).toBeInTheDocument();
-    expect(screen.getByText('2026-09-02')).toBeInTheDocument();
-    expect(screen.getByText('2026-09-09')).toBeInTheDocument();
-    expect(screen.getByText('assignment · IST.323.quiz-2 · due_at · run #42')).toBeInTheDocument();
   });
 
-  it('shows a suggested answer when the transform offered one', () => {
+  it('shows how old the question is, with the exact time behind it', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-13T14:00:00.000Z'));
+    renderInbox([makeAttentionItem({ id: 7, raised_at: '2026-09-10T14:00:00.000Z' })]);
+    const age = screen.getByText('3 days ago');
+    expect(age).toHaveAttribute('title', '2026-09-10T14:00:00.000Z');
+    vi.useRealTimers();
+  });
+
+  it('formats from and to as dates, under the field they belong to', () => {
+    renderInbox([makeAttentionItem({ id: 7 })]);
+    expect(screen.getByText('due date')).toBeInTheDocument();
+    expect(screen.getByText('Wed, Sep 2')).toBeInTheDocument();
+    expect(screen.getByText('Wed, Sep 9')).toBeInTheDocument();
+    // …and not as the raw column values they used to be.
+    expect(screen.queryByText('2026-09-02')).toBeNull();
+  });
+
+  it('says where the question came from in words, with the run number', () => {
+    renderInbox([makeAttentionItem({ id: 7 })]);
+    expect(
+      screen.getByText(
+        'From the assignment “quiz-2” in IST 323, about its due date. Raised by sync run #42.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('links an assignment row to that assignment', () => {
+    renderInbox([makeAttentionItem({ id: 7 })]);
+    expect(screen.getByRole('link', { name: 'Open the assignment →' })).toHaveAttribute(
+      'href',
+      '?item=assignment%3AIST.323%2Fquiz-2',
+    );
+  });
+
+  it('links a course-level row to the course instead', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 8,
+        kind: 'stack_must_confirm',
+        entity: 'course',
+        ref: 'course_field:academic_advisor',
+        field: null,
+      }),
+    ]);
+    expect(screen.getByRole('link', { name: 'Open IST 323 →' })).toHaveAttribute(
+      'href',
+      '/course/IST.323',
+    );
+  });
+
+  it('describes a course-map seed as one, not as a column name', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 8,
+        kind: 'stack_must_confirm',
+        entity: 'course',
+        ref: 'course_field:academic_advisor',
+        field: null,
+      }),
+    ]);
+    expect(
+      screen.getByText(
+        'From the course record in IST 323, field “academic advisor”. Raised by sync run #42.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('describes an ambiguous gradebook column as one', () => {
+    renderInbox([
+      makeAttentionItem({ id: 9, ref: 'column:_3569973_1', field: 'bb_column_id' }),
+    ]);
+    expect(screen.getByText(/the gradebook column _3569973_1 in IST 323/)).toBeInTheDocument();
+  });
+
+  it('shows the stage payload as labelled words, never as jsonb', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 7,
+        suggested: {
+          due: '2026-09-14T16:50:00+00:00',
+          possible: 0,
+          column_id: '_3613591_1',
+          source: 'stage_assignments',
+        },
+      }),
+    ]);
+
+    expect(screen.getByText('column id')).toBeInTheDocument();
+    expect(screen.getByText('_3613591_1')).toBeInTheDocument();
+    expect(screen.getByText('Mon, Sep 14, 12:50 PM')).toBeInTheDocument();
+    expect(screen.getByText('stage_assignments')).toBeInTheDocument();
+  });
+
+  it('puts no raw JSON on the screen at all', () => {
+    const { container } = render(
+      <InboxView
+        items={[
+          makeAttentionItem({
+            id: 7,
+            suggested: { gap: { what: 'Meeting days Mon vs Mon/Wed', owner: 'stack' }, version: 3 },
+          }),
+        ]}
+        status={status}
+        onResolve={vi.fn()}
+      />,
+    );
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/[{}]/);
+    expect(text).not.toContain('"');
+    // …and the content is still all there, in words.
+    expect(text).toContain('Meeting days Mon vs Mon/Wed');
+    expect(text).toContain('owner stack');
+  });
+
+  it('shows a plain suggested answer without a label it does not have', () => {
     renderInbox([makeAttentionItem({ id: 7, suggested: 'IST.323 Quiz 2' })]);
-    expect(screen.getByText('suggested')).toBeInTheDocument();
     expect(screen.getByText('IST.323 Quiz 2')).toBeInTheDocument();
   });
 });
@@ -243,8 +370,24 @@ describe('Inbox — pure helpers', () => {
 
   it('names the source without inventing one', () => {
     expect(
-      sourceText(makeAttentionItem({ entity: null, ref: null, field: null, raised_by: null })),
-    ).toBe('raised by the transform');
+      sourceText(
+        makeAttentionItem({
+          entity: null,
+          ref: null,
+          field: null,
+          raised_by: null,
+          course_id: null,
+        }),
+      ),
+    ).toBe('From the sync. Raised by the transform.');
+  });
+
+  it('offers no link when there is no row bb2dash can show', () => {
+    expect(
+      sourceHref(makeAttentionItem({ entity: null, ref: null, course_id: null })),
+    ).toBeNull();
+    // A pseudo-ref names no assignment, so it falls back to the course.
+    expect(sourceHref(makeAttentionItem({ ref: 'column:_1_1' }))).toBe('/course/IST.323');
   });
 });
 
@@ -298,5 +441,83 @@ describe('Inbox — a failed resolve', () => {
     );
     expect(failureText({})).toBe('the database rejected the change');
     expect(failureText(null)).toBe('the database rejected the change');
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * I-2 / P-inbox-2 — what each control says it will do
+ *
+ * The sentences themselves are covered exhaustively in
+ * test/queries.sync.outcome.test.ts. What is under test here is that the screen
+ * puts one under every control it renders, and states the rule once at the top.
+ * ------------------------------------------------------------------------ */
+
+describe('Inbox — the outcome under each button', () => {
+  it('states both outcomes of a due-date conflict, with real dates', () => {
+    renderInbox([makeAttentionItem({ id: 1, kind: 'conflict' })]);
+
+    expect(
+      screen.getByText('Sets this assignment’s due date to Wed, Sep 9.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Keeps this assignment’s due date at Wed, Sep 2 and marks it confirmed, ' +
+          'so the next sync stops asking.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('says "recorded only" under a control nothing applies', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 2,
+        kind: 'stack_must_confirm',
+        entity: 'course',
+        ref: 'course_field:academic_advisor',
+        field: null,
+        question: 'Who is your academic advisor?',
+      }),
+    ]);
+    expect(screen.getByText(RECORDED_ONLY)).toBeInTheDocument();
+  });
+
+  it('says a dismissal closes the row and stops the asking', () => {
+    renderInbox([
+      makeAttentionItem({ id: 3, kind: 'data_gap', entity: 'bb_file', ref: '117' }),
+    ]);
+    expect(screen.getByText(/The row closes and the sync stops asking\./)).toBeInTheDocument();
+  });
+
+  it('names the destination under a typed answer', () => {
+    renderInbox([makeAttentionItem({ id: 4, kind: 'missing', field: 'due_at' })]);
+    expect(
+      screen.getByText('Saves what you type as this assignment’s due date.'),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves no control without a sentence beside it', () => {
+    renderInbox([
+      makeAttentionItem({ id: 1, kind: 'conflict' }),
+      makeAttentionItem({ id: 2, kind: 'missing' }),
+      makeAttentionItem({ id: 3, kind: 'data_gap', entity: 'bb_file', ref: '117' }),
+    ]);
+    const controls = screen
+      .getAllByRole('button')
+      .filter((button) =>
+        ['Accept Blackboard', 'Keep mine', 'Save', 'Dismiss'].includes(
+          button.textContent ?? '',
+        ),
+      );
+    expect(controls).toHaveLength(4);
+    for (const control of controls) {
+      const choice = control.closest('[class*="choice"]');
+      expect(choice, control.textContent ?? '').not.toBeNull();
+      expect(choice?.textContent).toMatch(/\.$/);
+    }
+  });
+
+  it('states the rule once, at the top of the screen', () => {
+    renderInbox([makeAttentionItem({ id: 1 })]);
+    expect(screen.getByText(INBOX_APPLY_HELP)).toBeInTheDocument();
   });
 });

@@ -233,6 +233,74 @@ describe('CourseSidebar — remembering the choice', () => {
   });
 });
 
+/* ---------------------------------------------------------------------------
+ * H-6 / P-home-9 — opening a course gets the rail out of the way, for that
+ * navigation only (Stack's answer 10: the saved preference is untouched).
+ * ------------------------------------------------------------------------ */
+
+describe('CourseSidebar — navigating away', () => {
+  /** Render, then navigate, the way the router does: a new pathname, same tree. */
+  async function navigateTo(pathname: string) {
+    const { rerender } = renderShell();
+    await waitFor(() => expect(sidebarState()).toBe('open'));
+    stub.pathname = pathname;
+    rerender(
+      <SidebarProvider>
+        <TopNav userEmail="stack@syr.edu" />
+        <CourseSidebar />
+      </SidebarProvider>,
+    );
+    return { rerender };
+  }
+
+  it('closes the in-flow rail when a course is opened from it', async () => {
+    await navigateTo('/course/IST.323');
+    await waitFor(() => expect(sidebarState()).toBe('closed'));
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('does NOT write that close down — the preference is Stack’s, not the router’s', async () => {
+    await navigateTo('/course/IST.323');
+    await waitFor(() => expect(sidebarState()).toBe('closed'));
+    expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBeNull();
+  });
+
+  it('leaves a stored "open" alone, so the next visit still opens', async () => {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, 'open');
+    await navigateTo('/course/IST.323');
+    await waitFor(() => expect(sidebarState()).toBe('closed'));
+    expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('open');
+
+    // A fresh mount reads the preference back and opens, as it should.
+    document.documentElement.removeAttribute('data-sidebar');
+    stub.pathname = '/course/IST.323';
+    renderShell();
+    await waitFor(() => expect(sidebarState()).toBe('open'));
+  });
+
+  it('does not close on the first render — landing on a page is not navigating', async () => {
+    stub.pathname = '/course/IST.323';
+    renderShell();
+    await waitFor(() => expect(sidebarState()).toBe('open'));
+    expect(sidebarState()).toBe('open');
+  });
+
+  it('closes in overlay mode too, and writes nothing there either', async () => {
+    setWidth(800);
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, 'open');
+    await navigateTo('/course/IST.323');
+    await waitFor(() => expect(sidebarState()).toBe('closed'));
+    expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('open');
+  });
+
+  it('still persists a close Stack asked for with the toggle', async () => {
+    renderShell();
+    await waitFor(() => expect(sidebarState()).toBe('open'));
+    fireEvent.click(toggle());
+    expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('closed');
+  });
+});
+
 describe('CourseSidebar — the overlay drawer', () => {
   beforeEach(() => {
     setWidth(800);

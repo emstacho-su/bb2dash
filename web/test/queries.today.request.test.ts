@@ -14,18 +14,28 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-type Recorded = { relation: string; columns: string };
+type Recorded = {
+  relation: string;
+  columns: string;
+  /** Every `.eq(column, value)` the read applied, in order. */
+  filters: { column: string; value: unknown }[];
+};
 
 const recorded: Recorded[] = [];
 let nextResult: { data: unknown; error: unknown } = { data: [], error: null };
 
 function fakeBuilder(relation: string) {
+  const entry: Recorded = { relation, columns: '', filters: [] };
   const builder = {
     select(columns: string) {
-      recorded.push({ relation, columns });
+      entry.columns = columns;
+      recorded.push(entry);
       return builder;
     },
-    eq: () => builder,
+    eq(column: string, value: unknown) {
+      entry.filters.push({ column, value });
+      return builder;
+    },
     gte: () => builder,
     lte: () => builder,
     order: () => builder,
@@ -84,6 +94,21 @@ describe('workItemsWindowOptions', () => {
       'permission denied',
     );
   });
+
+  /**
+   * H-4 / P-home-6 and P-home-7. `v_work_items.in_workload` is what migration
+   * 073 turns into the switch that hides series placeholders and the ethics
+   * case pool: `required is not false` for readings, `not hidden_from_workload`
+   * for assignments. It only hides anything if the read asks for it, and a
+   * dropped filter would show as twelve phantom rows rather than an error.
+   */
+  it('asks Postgres for workload rows only, dated ones', async () => {
+    await run(workItemsWindowOptions('2026-09-10', '2026-09-23'));
+    expect(recorded[0].filters).toEqual([
+      { column: 'in_workload', value: true },
+      { column: 'undated', value: false },
+    ]);
+  });
 });
 
 describe('undatedWorkItemsOptions', () => {
@@ -95,6 +120,14 @@ describe('undatedWorkItemsOptions', () => {
 
     expect(dated.relation).toBe('v_work_items');
     expect(dated.columns).toBe(recorded[0].columns);
+  });
+
+  it('filters the Undated tray on in_workload too, or the tray shows the twelve', async () => {
+    await run(undatedWorkItemsOptions());
+    expect(recorded[0].filters).toEqual([
+      { column: 'in_workload', value: true },
+      { column: 'undated', value: true },
+    ]);
   });
 });
 

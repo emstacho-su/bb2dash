@@ -87,6 +87,9 @@ vi.mock('@/lib/queries.materials', async (importOriginal) => {
     ...actual,
     useCurrentFiles: () => ({ data: files, isPending: false, error: null }),
     useReadings: () => ({ data: [], isPending: false, error: null }),
+    // M-3 added a fourth read (courses.syllabus_path). This suite is about the
+    // header links, so it only has to not want a QueryClient.
+    useCourseSyllabi: () => ({ data: [], isPending: false, error: null }),
   };
 });
 

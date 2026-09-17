@@ -107,18 +107,35 @@
   --sidebar-side: row-reverse; /* row = left, row-reverse = right (Stack, 2026-09-14) */
   --sidebar-width: 260px;
 
-  /* — assignment-type ramp (effort tracker glyph + segment tints, T-15) —
-     reading · assignment · quiz · project · exam, darkest to brightest. */
-  --type-reading-bg: var(--color-neutral-800);
-  --type-reading-fg: var(--color-neutral-200);
-  --type-assignment-bg: var(--color-accent-900);
-  --type-assignment-fg: var(--color-accent-200);
-  --type-quiz-bg: var(--color-accent-800);
-  --type-quiz-fg: var(--color-accent-100);
-  --type-project-bg: var(--color-accent-700);
-  --type-project-fg: var(--color-accent-100);
-  --type-exam-bg: var(--color-accent-500);
-  --type-exam-fg: var(--color-bg);
+  /* — assignment-type hues (effort tracker glyph + segment tints, T-15) —
+     reading · assignment · quiz · project · exam.
+
+     P-home-1 / H-1: these were one purple ramp plus a grey — five steps of the
+     same hue, told apart only by lightness, which on a 14-column tracker bar
+     reads as one smear. They are now five HUES at a deliberately common
+     lightness, so the category is carried by colour and the bar's own heights
+     stay the only thing lightness means.
+
+     The five luminances sit in a narrow band (0.170–0.172) chosen so the same
+     token works on either ground: >= 3:1 against the dark card (WCAG 1.4.11,
+     a bar segment carries meaning) and >= 4.5:1 for white on it (WCAG AA, the
+     glyph chip carries a letter). Above the band the letter fails; below it the
+     segment does. `test/type-tokens.contrast.test.ts` measures all of it
+     straight out of this file, on a light ground as well as this dark one, so
+     the Phase 13 restyle has a check rather than a judgement call.
+
+     Literal hexes, not ramp names, because no ramp holds these hues. A restyle
+     may reintroduce `var(--…)` references; the test resolves them. */
+  --type-reading-bg: #137e92; /* teal */
+  --type-reading-fg: #ffffff;
+  --type-assignment-bg: #725fde; /* violet — the accent family */
+  --type-assignment-fg: #ffffff;
+  --type-quiz-bg: #9d6811; /* amber */
+  --type-quiz-fg: #ffffff;
+  --type-project-bg: #1a8352; /* green */
+  --type-project-fg: #ffffff;
+  --type-exam-bg: #c8435a; /* rose */
+  --type-exam-fg: #ffffff;
 
   /* — planner-event kinds (Phase 11b) — one bg / fg / edge per kind, all on the
      ramps above. Kind is the colour; a course never recolours a block (Q5).

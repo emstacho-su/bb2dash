@@ -15,13 +15,17 @@ import styles from './OpenStoredButton.module.css';
  */
 export function OpenStoredButton({
   storagePath,
-  label = 'Open',
+  label,
   className,
+  title,
 }: {
   storagePath: string;
+  /** What the button says. Undefined, not just absent, falls back to "Open". */
   label?: string;
   className: string;
+  title?: string;
 }) {
+  const text = label ?? 'Open';
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,8 +51,14 @@ export function OpenStoredButton({
 
   return (
     <span className={styles.action}>
-      <button type="button" className={className} onClick={handleOpen} disabled={pending}>
-        {pending ? 'Opening…' : label}
+      <button
+        type="button"
+        className={className}
+        onClick={handleOpen}
+        disabled={pending}
+        title={title}
+      >
+        {pending ? 'Opening…' : text}
       </button>
       {error && (
         <span className={styles.rowError} role="alert">

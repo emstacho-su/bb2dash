@@ -68,6 +68,63 @@ describe('CourseCard — the card note', () => {
   });
 });
 
+/* ---------------------------------------------------------------------------
+ * H-5 / P-home-8 — the card looked clickable and was not
+ * ------------------------------------------------------------------------ */
+
+describe('CourseCard — opening the course', () => {
+  it('is a link to that course page', () => {
+    renderCard();
+    const link = screen.getByRole('link', { name: /IST 323/ });
+    expect(link).toHaveAttribute('href', '/course/IST.323');
+  });
+
+  it('links by display_id, so a merged course opens its own page', () => {
+    renderCard({
+      display_id: 'GEO.103',
+      code: 'GEO 103',
+      shell_ids: ['GEO.103.lecture', 'GEO.103.recitation'],
+    });
+    expect(screen.getByRole('link', { name: /GEO 103/ })).toHaveAttribute(
+      'href',
+      '/course/GEO.103',
+    );
+  });
+
+  it('escapes an id that needs it rather than building a broken href', () => {
+    renderCard({ display_id: 'IST 323/M002', code: 'IST 323' });
+    expect(screen.getByRole('link', { name: /IST 323/ })).toHaveAttribute(
+      'href',
+      '/course/IST%20323%2FM002',
+    );
+  });
+
+  it('reaches the whole card, not just the code', () => {
+    renderCard();
+    const link = screen.getByRole('link', { name: /IST 323/ });
+    expect(link).toContainElement(screen.getByText('Intro to Cybersecurity'));
+    expect(link).toContainElement(screen.getByText(/Hinds Hall 010/));
+  });
+
+  it('is reachable from the keyboard', () => {
+    renderCard();
+    const link = screen.getByRole('link', { name: /IST 323/ });
+    // An <a href> is in the tab order by default; an explicit tabindex that
+    // took it out would be the regression worth catching.
+    expect(link.tagName).toBe('A');
+    expect(link).not.toHaveAttribute('tabindex', '-1');
+    link.focus();
+    expect(link).toHaveFocus();
+  });
+
+  it('names the course it opens, for a screen reader reading links alone', () => {
+    renderCard();
+    expect(
+      screen.getByRole('link', { name: 'Open IST 323 — Intro to Cybersecurity' }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('CourseCard — the rest of the card is unchanged', () => {
   it('still shows the code, title and meeting line', () => {
     renderCard();
