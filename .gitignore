@@ -10,3 +10,4 @@ course context/
 .claude/worktrees/
 # Playwright MCP browser session output (screenshots, snapshots, console logs)
 .playwright-mcp/
+.harness/checkpoint-body.md
