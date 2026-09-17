@@ -16,14 +16,13 @@ import { useMemo } from 'react';
 import { useCourseDisplay } from '@/lib/queries.today';
 import {
   schemeCourseIdFor,
-  useGradeHistory,
   useGradeModelItemsForCourses,
   useGradeModelTotalsForCourses,
   useGradeScenariosForCourses,
   useGradingSchemesForCourses,
 } from '@/lib/queries.grade-model';
 import { modelStandingStates } from '@/lib/grade-model-run';
-import { historyByColumn, linkStates } from '@/lib/grade-model-view';
+import { linkStates } from '@/lib/grade-model-view';
 import { queryErrorMessage } from '@/components/shared/QueryState';
 import { GradesScreen, type GradesModelProps } from './GradesScreen';
 
@@ -35,13 +34,10 @@ export function GradesModelScreen() {
     () => courses.map((course) => schemeCourseIdFor(course)).filter((id): id is string => id !== null),
     [courses],
   );
-  const shellIds = useMemo(() => courses.flatMap((course) => course.shell_ids ?? []), [courses]);
-
   const schemesQ = useGradingSchemesForCourses(schemeIds);
   const itemsQ = useGradeModelItemsForCourses(schemeIds);
   const totalsQ = useGradeModelTotalsForCourses(schemeIds);
   const scenariosQ = useGradeScenariosForCourses(schemeIds);
-  const historyQ = useGradeHistory(shellIds);
 
   const failed = [schemesQ, itemsQ, totalsQ, scenariosQ].find((query) => query.isError);
   const loadError = failed ? `Could not load the grade model: ${queryErrorMessage(failed.error)}` : null;
@@ -55,19 +51,11 @@ export function GradesModelScreen() {
       ),
     [schemeIds, schemesQ.data, itemsQ.data, totalsQ.data, scenariosQ.data, loadError],
   );
-  const history = useMemo(() => historyByColumn(historyQ.data ?? []), [historyQ.data]);
   const overrides = useMemo(() => linkStates(itemsQ.data ?? []), [itemsQ.data]);
 
   const model = useMemo<GradesModelProps>(
-    () => ({
-      standings,
-      history,
-      overrides,
-      historyError: historyQ.isError
-        ? `Could not load the score history: ${queryErrorMessage(historyQ.error)}`
-        : null,
-    }),
-    [standings, history, overrides, historyQ.isError, historyQ.error],
+    () => ({ standings, overrides }),
+    [standings, overrides],
   );
 
   return <GradesScreen model={model} />;

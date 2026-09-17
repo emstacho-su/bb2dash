@@ -16,14 +16,20 @@
  * collapsed bookkeeping group underneath, with the same cells and the same
  * honesty.
  *
- * Feedback is the instructor's own words: rendered as text, escaped by React,
+ * Feedback is the instructor's own words. Phase 12b (G-5) moved the text into
+ * the assignment popout, where there is room for all of it — the row shows only
+ * that there is some. The disclosure below survives for a column with **no
+ * linked assignment**: there is no popout to send the reader to, and the words
+ * must not become unreachable. It renders as text, escaped by React,
  * `white-space: pre-wrap` so their line breaks survive, clamped to two lines
  * until it is expanded.
+ *
+ * The score-history disclosure left with it (G-5, P-grades-8) and now lives in
+ * `popout/SubmissionBlock.tsx`.
  *
  * Phase 10b adds optional props, all absent on 10a's call sites:
  *   whatIf   course tab only — a "what if" cell beside the dash on an ungraded,
  *            counted, non-muted item row.
- *   history  both screens — a "history" disclosure on a row whose score moved.
  *   links    course tab only — the "Counts toward…" picker. A column Stack
  *            linked to a component by override also moves up among the item
  *            rows and carries 10a's "counts toward grade" tag; one he marked
@@ -48,11 +54,9 @@ import {
   submissionLabel,
   type GradebookLatestRow,
 } from '@/lib/queries.grades';
-import type { GradebookHistoryRow } from '@/lib/grade-model-input';
 import { columnItemKey, type LinkState, type LinkTarget } from '@/lib/grade-model-view';
 import tokens from '@/styles/tokens.module.css';
 import { LinkColumnControl } from './LinkColumnControl';
-import { ScoreHistory } from './ScoreHistory';
 import { WhatIfCell, type WhatIfProps } from './WhatIfCell';
 import styles from './GradebookTable.module.css';
 
@@ -71,7 +75,6 @@ export interface GradebookLinksProps {
 /** Everything 10b adds to one row. All optional. */
 interface RowExtras {
   readonly whatIf?: WhatIfProps;
-  readonly history?: ReadonlyMap<string, readonly GradebookHistoryRow[]>;
   readonly links?: GradebookLinksProps;
   readonly overrides?: ReadonlyMap<string, LinkState>;
 }
@@ -117,10 +120,13 @@ export function FeedbackDisclosure({ feedback, label }: { feedback: string; labe
         type="button"
         className={styles.feedbackToggle}
         aria-expanded={open}
+        // Spelled out rather than left to an adjacent screen-reader span: the
+        // name is computed by joining the nodes' text, which drops the space
+        // between them and reads "Feedbackfrom Essay".
+        aria-label={`${open ? 'Hide feedback' : 'Feedback'} from ${label}`}
         onClick={() => setOpen((value) => !value)}
       >
         {open ? 'Hide feedback' : 'Feedback'}
-        <span className={styles.srOnly}> from {label}</span>
       </button>
       <p
         className={open ? styles.feedbackTextOpen : styles.feedbackText}
@@ -144,7 +150,8 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
   const key = columnItemKey(row.course_id, row.column_id);
   const whatIfTarget = extras.whatIf?.targets.get(key);
   const linkState = extras.links?.states.get(key);
-  const historyRows = extras.history?.get(key);
+  // G-5: with an assignment behind the row, its feedback is in that popout.
+  const showsFeedbackInline = Boolean(row.feedback) && row.assignment_id === null;
 
   return (
     <>
@@ -205,7 +212,6 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
               disabled={extras.whatIf.disabled}
             />
           )}
-          {historyRows && <ScoreHistory rows={historyRows} label={row.name} />}
         </td>
 
         <td className={styles.seenCell}>
@@ -215,10 +221,10 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
         </td>
       </tr>
 
-      {row.feedback && (
+      {showsFeedbackInline && (
         <tr className={styles.feedbackRow}>
           <td colSpan={4}>
-            <FeedbackDisclosure feedback={row.feedback} label={row.name} />
+            <FeedbackDisclosure feedback={row.feedback as string} label={row.name} />
           </td>
         </tr>
       )}
@@ -261,7 +267,6 @@ export function GradebookTable({
   rows,
   caption = 'Gradebook columns, as Blackboard recorded them',
   whatIf,
-  history,
   links,
   overrides,
   footer,
@@ -271,8 +276,6 @@ export function GradebookTable({
   caption?: string;
   /** Course tab only (Phase 10b). */
   whatIf?: WhatIfProps;
-  /** Both screens (Phase 10b): history rows by column item key. */
-  history?: ReadonlyMap<string, readonly GradebookHistoryRow[]>;
   /** Course tab only (Phase 10b). */
   links?: GradebookLinksProps;
   /** Both screens (Phase 10b): Stack's link choices, for placement only; defaults to `links.states`. */
@@ -291,8 +294,8 @@ export function GradebookTable({
     [rows, placement],
   );
   const extras = useMemo<RowExtras>(
-    () => ({ whatIf, history, links, overrides: placement }),
-    [whatIf, history, links, placement],
+    () => ({ whatIf, links, overrides: placement }),
+    [whatIf, links, placement],
   );
 
   if (rows.length === 0) {

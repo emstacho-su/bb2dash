@@ -11,10 +11,12 @@
  *
  * Phase 10b puts "Our model" under that header — the standing from the
  * syllabus rules, the target solver and Reset scenario, all inside the one
- * labelled container — and adds the what-if cells, the "Counts toward…" picker,
- * score history and the "Not in Blackboard yet" rows to the table. The model is
- * keyed on the scheme course (GEO 103: the lecture shell), so both shells'
- * columns feed one standing.
+ * labelled container — and adds the what-if cells, the "Counts toward…" picker
+ * and the "Not in Blackboard yet" rows to the table. The model is keyed on the
+ * scheme course (GEO 103: the lecture shell), so both shells' columns feed one
+ * standing.
+ *
+ * Phase 12b (G-5): the score history left the table for the assignment popout.
  */
 
 import { useMemo } from 'react';
@@ -42,7 +44,7 @@ export function CourseGrades({ courseId }: { courseId: string }) {
 
   const gradesQ = useCourseGrades();
   const gradebookQ = useGradebookLatest(shellIds);
-  const model = useCourseGradeModel(schemeCourseId, shellIds);
+  const model = useCourseGradeModel(schemeCourseId);
   const actions = useCourseModelActions(schemeCourseId, model);
 
   if (isQueryUnresolved(display)) {
@@ -65,11 +67,6 @@ export function CourseGrades({ courseId }: { courseId: string }) {
 
       <QueryState query={gradesQ} of="the gradebook total" className={styles.state} />
       <QueryState query={gradebookQ} of="the gradebook" className={styles.state} />
-      {model.historyError && (
-        <p className={styles.state} role="alert">
-          {model.historyError}
-        </p>
-      )}
 
       <CourseGradeCard
         title={code}
@@ -117,7 +114,6 @@ export function CourseGrades({ courseId }: { courseId: string }) {
             rows={rows}
             caption={`${code} gradebook`}
             whatIf={actions.whatIf}
-            history={model.history}
             links={actions.links}
             footer={
               <PlaceholderRows

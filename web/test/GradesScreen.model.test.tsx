@@ -57,7 +57,6 @@ const MODEL: GradesModelProps = {
     'IST.323': { result: NOT_COMPUTED_MANUAL, realResult: NOT_COMPUTED_MANUAL, components: [], items: [], unsureItemKeys: [], error: null, loading: false },
     'IST.466': { result: makeComputed({ usesHypotheticals: true }), realResult: makeComputed(), components: [], items: [], unsureItemKeys: [], error: null, loading: false },
   },
-  history: historyByColumn(QUIZ_HISTORY),
 };
 
 describe('GradesScreen — the read-only model line', () => {
@@ -83,10 +82,10 @@ describe('GradesScreen — the read-only model line', () => {
     expect(screen.queryByRole('button', { name: 'Reset scenario' })).toBeNull();
   });
 
-  it('shows the history disclosure on the row that changed', () => {
+  /* G-5, P-grades-8: the history disclosure left this screen for the popout. */
+  it('shows no history disclosure on any row', () => {
     render(<GradesScreen model={MODEL} />);
-    const row = screen.getByText('Quiz #3').closest('tr') as HTMLElement;
-    expect(within(row).getByRole('button', { name: /history/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /history/ })).toBeNull();
   });
 
   it('keeps every computed percentage inside an "Our model" container', () => {
@@ -106,15 +105,12 @@ describe('GradesScreen — the read-only model line', () => {
       <GradesScreen
         model={{
           standings: { 'IST.323': { result: null, realResult: null, components: [], items: [], unsureItemKeys: [], error: 'Could not load the grade model: timeout', loading: false } },
-          history: new Map(),
-          historyError: 'Could not load the score history: timeout',
         }}
       />,
     );
     const ist466 = screen.getByRole('region', { name: 'IST 466' });
     expect(within(ist466).getByText('loading…')).toBeInTheDocument();
     expect(screen.getAllByRole('alert').map((a) => a.textContent)).toEqual([
-      'Could not load the score history: timeout',
       'Could not load the grade model: timeout',
     ]);
   });

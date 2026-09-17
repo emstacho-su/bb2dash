@@ -117,14 +117,37 @@ describe('GradebookTable — the submission cell says one thing (G-4)', () => {
   });
 });
 
-describe('GradebookTable — feedback', () => {
-  const withMarkup = makeGradebookRow({
+/*
+ * G-5 / P-grades-8, P-grades-9: the instructor's words and the score history
+ * live in the assignment popout now. The table keeps the feedback disclosure
+ * for a column with no linked assignment — there is no popout to send the
+ * reader to, and the text must not become unreachable.
+ */
+describe('GradebookTable — feedback (G-5)', () => {
+  const unlinkedWithMarkup = makeGradebookRow({
     name: 'Essay',
+    assignment_id: null,
+    linked_assignments: 0,
     feedback: '<b>Nice work</b> & <script>alert(1)</script>\nSee line 4.',
+  });
+  const linkedWithFeedback = makeGradebookRow({
+    name: 'Lab #1',
+    feedback: 'Solid. Watch the third assumption.',
+  });
+
+  it('sends a linked row\'s feedback to the popout instead of showing it inline', () => {
+    renderTable([linkedWithFeedback]);
+    expect(screen.queryByRole('button', { name: /Feedback/ })).toBeNull();
+    expect(screen.queryByText(/Watch the third assumption/)).toBeNull();
+  });
+
+  it('keeps the disclosure on a column with no assignment to open', () => {
+    renderTable([unlinkedWithMarkup]);
+    expect(screen.getByRole('button', { name: 'Feedback from Essay' })).toBeInTheDocument();
   });
 
   it('escapes the instructor\'s text instead of rendering it as markup', () => {
-    const { container } = renderTable([withMarkup]);
+    const { container } = renderTable([unlinkedWithMarkup]);
     expect(container.querySelector('b')).toBeNull();
     expect(container.querySelector('script')).toBeNull();
     expect(
@@ -133,7 +156,7 @@ describe('GradebookTable — feedback', () => {
   });
 
   it('starts collapsed and opens on the disclosure', () => {
-    renderTable([withMarkup]);
+    renderTable([unlinkedWithMarkup]);
     const toggle = screen.getByRole('button', { name: /Feedback/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
@@ -148,6 +171,13 @@ describe('GradebookTable — feedback', () => {
   it('offers no disclosure when there is no feedback', () => {
     renderTable([IST352_SUBMITTED]);
     expect(screen.queryByRole('button', { name: /Feedback/ })).toBeNull();
+  });
+});
+
+describe('GradebookTable — the history toggle is gone (G-5)', () => {
+  it('renders no history disclosure on any row', () => {
+    renderTable([IST323_QUIZ, IST352_SUBMITTED, ECN304_ATTENDANCE]);
+    expect(screen.queryByRole('button', { name: /history/ })).toBeNull();
   });
 });
 

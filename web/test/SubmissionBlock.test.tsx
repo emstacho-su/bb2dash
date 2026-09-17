@@ -10,7 +10,7 @@
  * here at all (Stack's answers 1 and 6).
  */
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   makeAssignmentGrade,
@@ -18,6 +18,7 @@ import {
   makeStagedFile,
   makeSubmissionFile,
 } from './factories.grades';
+import { QUIZ_HISTORY } from './factories.grade-model';
 
 interface Stub<T> {
   data: T;
@@ -35,6 +36,7 @@ const hooks = vi.hoisted(() => ({
   grade: null as unknown,
   attempts: null as unknown,
   files: null as unknown,
+  history: null as unknown,
 }));
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -47,6 +49,7 @@ vi.mock('@/lib/queries.grades', async (importOriginal) => {
     useAssignmentGrade: () => hooks.grade,
     useAssignmentAttempts: () => hooks.attempts,
     useSubmissionFiles: () => hooks.files,
+    useAssignmentHistory: () => hooks.history,
   };
 });
 vi.mock('@/lib/queries.submissions', async (importOriginal) => {
@@ -79,6 +82,55 @@ beforeEach(() => {
   );
   hooks.attempts = stub([makeAttempt()]);
   hooks.files = stub([makeSubmissionFile()]);
+  hooks.history = stub([]);
+});
+
+/*
+ * G-5 / P-grades-8, P-grades-9: the instructor's words and the score history
+ * moved off the gradebook row and into this block.
+ */
+describe('SubmissionBlock — feedback and history (G-5)', () => {
+  it("shows the instructor's feedback in full, as text", () => {
+    hooks.grade = stub(
+      makeAssignmentGrade({
+        feedback: '<b>Nice work</b> & <script>alert(1)</script>\nSee line 4.',
+      }),
+    );
+    const { container } = renderBlock();
+
+    expect(container.querySelector('b')).toBeNull();
+    expect(container.querySelector('script')).toBeNull();
+    expect(
+      screen.getByText(/<b>Nice work<\/b> & <script>alert\(1\)<\/script>/),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing about feedback when Blackboard recorded none', () => {
+    hooks.grade = stub(makeAssignmentGrade({ feedback: null }));
+    renderBlock();
+    expect(screen.queryByText('Feedback')).toBeNull();
+  });
+
+  it('carries the score history for this column', () => {
+    hooks.history = stub(QUIZ_HISTORY);
+    renderBlock();
+    const toggle = screen.getByRole('button', { name: /history/ });
+
+    fireEvent.click(toggle);
+    expect(screen.getByText('— → 9 → 9.5 · seen 10 Sep, 14 Sep, 16 Sep')).toBeInTheDocument();
+  });
+
+  it('shows no history for a column seen only once', () => {
+    hooks.history = stub([QUIZ_HISTORY[0]]);
+    renderBlock();
+    expect(screen.queryByRole('button', { name: /history/ })).toBeNull();
+  });
+
+  it('says so when the history read failed, rather than pretending there is none', () => {
+    hooks.history = stub(undefined, { isError: true, error: new Error('permission denied') });
+    renderBlock();
+    expect(screen.getByRole('alert').textContent).toContain('permission denied');
+  });
 });
 
 describe('SubmissionBlock — the status line', () => {

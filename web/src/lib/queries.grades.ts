@@ -29,6 +29,10 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables } from './queries';
+// Type-only, so it is erased at build: no runtime dependency from 10a's query
+// layer on the grade model. The row shape is migration 058's and the popout's
+// score history reads it (Phase 12b, G-5).
+import type { GradebookHistoryRow } from './grade-model-input';
 import { COURSE_TIME_ZONE, shellCacheKey } from './course-dimension';
 
 /* ---------------------------------------------------------------------------
@@ -196,6 +200,8 @@ export const gradesKeys = {
     ['grades', 'assignment-attempts', assignmentId] as const,
   submissionFiles: (assignmentId: string) =>
     ['grades', 'submission-files', assignmentId] as const,
+  assignmentHistory: (courseId: string, columnId: string) =>
+    ['grades', 'assignment-history', courseId, columnId] as const,
 } as const;
 
 /* ---------------------------------------------------------------------------
@@ -306,6 +312,39 @@ export function submissionFilesOptions(assignmentId: string | undefined) {
   });
 }
 
+/**
+ * How one gradebook column's score moved across syncs (Phase 12b, G-5).
+ *
+ * `v_gradebook_history` (058) holds the first registered observation of every
+ * column and every later run whose score differed. The popout wants one
+ * column's rows, so it asks for one column's rows — the model screens' read of
+ * a whole course's history is a different question with a different key.
+ *
+ * The view survives whatever G-1 decides: the desktop poller reads it too.
+ */
+export function assignmentHistoryOptions(
+  courseId: string | undefined,
+  columnId: string | null | undefined,
+) {
+  return queryOptions({
+    queryKey: gradesKeys.assignmentHistory(courseId ?? 'none', columnId ?? 'none'),
+    queryFn: async (): Promise<GradebookHistoryRow[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('v_gradebook_history')
+        .select('*')
+        .eq('shell_course_id', courseId as string)
+        .eq('column_id', columnId as string)
+        .order('seen_at', { ascending: true });
+      if (error) throw error;
+      // Narrowed to 058's frozen column list — see the module header.
+      return (data ?? []) as unknown as GradebookHistoryRow[];
+    },
+    enabled: Boolean(courseId) && Boolean(columnId),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCourseGrades() {
   return useQuery(courseGradesOptions());
 }
@@ -320,6 +359,12 @@ export function useAssignmentAttempts(assignmentId: string | undefined) {
 }
 export function useSubmissionFiles(assignmentId: string | undefined) {
   return useQuery(submissionFilesOptions(assignmentId));
+}
+export function useAssignmentHistory(
+  courseId: string | undefined,
+  columnId: string | null | undefined,
+) {
+  return useQuery(assignmentHistoryOptions(courseId, columnId));
 }
 
 /* ---------------------------------------------------------------------------

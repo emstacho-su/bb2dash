@@ -8,9 +8,16 @@
  * recorded, the file(s) actually submitted (pulled back into the library by the
  * sync), and the files Stack has staged here ready to attach.
  *
+ * Phase 12b (G-5, P-grades-8 / P-grades-9) adds two things that used to sit on
+ * the gradebook row: the instructor's feedback, in full and as text, and the
+ * score history for this assignment's column. This is where Stack opens an
+ * item, so this is where the words about it belong.
+ *
  * What it deliberately does NOT show:
  *   - any score. The popout is about the work, not the mark (Requirements §6.2
- *     #4, Stack's answer 6); the gradebook table is where a score lives.
+ *     #4, Stack's answer 6); the gradebook table is where a score lives. The
+ *     score *history* is a different thing — it is the record of a mark
+ *     changing between syncs, and it only renders behind a disclosure.
  *   - the confirmation/receipt number. It is captured in `bb_attempts.receipt`
  *     because Blackboard hands it over, but it tells Stack nothing he acts on
  *     (answer 1), so nothing renders it.
@@ -31,11 +38,13 @@ import {
   submissionOrigin,
   useAssignmentAttempts,
   useAssignmentGrade,
+  useAssignmentHistory,
   useSubmissionFiles,
   type SubmissionFile,
 } from '@/lib/queries.grades';
 import { fileTypeChip, formatBytes } from '@/lib/queries.materials';
 import { FileOpenAction } from '@/components/materials/FileOpenAction';
+import { ScoreHistory } from '@/components/grades/ScoreHistory';
 import { UploadDropZone } from '@/components/grades/UploadDropZone';
 import { QueryState, isQueryUnresolved } from '@/components/shared/QueryState';
 import tokens from '@/styles/tokens.module.css';
@@ -125,6 +134,11 @@ export function SubmissionBlock({
   const attempts = attemptsQ.data ?? [];
   const files = filesQ.data ?? [];
 
+  // The shell the column lives in. `v_assignment_grade` carries it; the prop is
+  // the fallback for a popout opened before that read lands.
+  const historyQ = useAssignmentHistory(grade?.course_id ?? courseId, grade?.column_id);
+  const history = historyQ.data ?? [];
+
   const submission = submissionLabel(grade?.submission_status, grade?.last_attempt_status);
   const latest = attempts.length > 0 ? attempts[attempts.length - 1] : null;
   // The view already encodes the ceiling (055); a gradebook row on its own
@@ -176,6 +190,23 @@ export function SubmissionBlock({
           No gradebook column is linked to this assignment yet, so Blackboard has told us nothing
           about its submission.
         </p>
+      )}
+
+      {/* P-grades-9: the instructor's own words, in full. React escapes them;
+          `white-space: pre-wrap` keeps their line breaks. */}
+      {grade?.feedback && (
+        <div className={styles.feedback}>
+          <span className={tokens.kicker}>Feedback</span>
+          <p className={styles.feedbackText}>{grade.feedback}</p>
+        </div>
+      )}
+
+      {/* P-grades-8: how this column's score moved across syncs. `ScoreHistory`
+          renders nothing when there are fewer than two observations. */}
+      {historyQ.isError ? (
+        <QueryState query={historyQ} of="the score history" className={styles.note} />
+      ) : (
+        <ScoreHistory rows={history} label={grade?.name ?? 'this item'} />
       )}
 
       {isQueryUnresolved(attemptsQ) ? (

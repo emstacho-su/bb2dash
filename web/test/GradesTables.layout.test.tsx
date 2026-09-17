@@ -8,7 +8,10 @@
  * whose rule sets `display` to something other than `table-cell` — directly or
  * through `composes` — is a layout class, and no rendered cell may carry one.
  * Every row branch is rendered: link picker, counted tag, ambiguous note,
- * what-if cell, history, feedback row, bookkeeping group, placeholder rows.
+ * what-if cell, feedback row, bookkeeping group, placeholder rows. The score
+ * history left the table in Phase 12b (G-5) and is covered in the popout's
+ * suite; the feedback row now only appears on a column with no assignment to
+ * open, which is what `QUIZ` is here.
  */
 
 import { readFileSync } from 'node:fs';
@@ -19,9 +22,9 @@ import { describe, expect, it, vi } from 'vitest';
 import gradebookStyles from '@/components/grades/GradebookTable.module.css';
 import modelStyles from '@/components/grades/GradeModel.module.css';
 import tokenStyles from '@/styles/tokens.module.css';
-import { columnItemKey, historyByColumn, type LinkState, type WhatIfCellTarget } from '@/lib/grade-model-view';
+import { columnItemKey, type LinkState, type WhatIfCellTarget } from '@/lib/grade-model-view';
 import { makeGradebookRow } from './factories.grades';
-import { IST466_LETTER_PLACEHOLDER, QUIZ_HISTORY } from './factories.grade-model';
+import { IST466_LETTER_PLACEHOLDER } from './factories.grade-model';
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn(), auth: { getSession: vi.fn() } }),
@@ -116,7 +119,7 @@ function layoutClasses(): { readonly rendered: ReadonlySet<string>; readonly cel
  * ------------------------------------------------------------------------ */
 
 const LINKED = makeGradebookRow({ course_id: 'IST.466', column_id: '_3562496_1', name: 'Synchrony Major Case #1', possible: 150, assignment_id: null, submission_status: 'SUBMITTED', last_attempt_status: 'NEEDS_GRADING' });
-const QUIZ = makeGradebookRow({ column_id: '_3560532_1', name: 'Quiz #3', effective_score: 9.5, possible: 10, display_grade: 'A', feedback: 'Well done.\nSee me.' });
+const QUIZ = makeGradebookRow({ column_id: '_3560532_1', name: 'Quiz #3', effective_score: 9.5, possible: 10, display_grade: 'A', feedback: 'Well done.\nSee me.', assignment_id: null, linked_assignments: 0 });
 const WHAT_IF = makeGradebookRow({ column_id: '_3560541_1', name: 'Lab #2', possible: 50 });
 const AMBIGUOUS = makeGradebookRow({ column_id: '_3560600_1', name: 'Reading check', column_kind: 'attendance', linked_assignments: 3, counts_toward_grade: true });
 const BOOKKEEPING = makeGradebookRow({ column_id: '_3560700_1', name: 'Attendance', column_kind: 'attendance', counts_toward_grade: false });
@@ -138,7 +141,6 @@ function renderEveryBranch() {
     <GradebookTable
       rows={[LINKED, QUIZ, WHAT_IF, AMBIGUOUS, BOOKKEEPING]}
       whatIf={whatIf}
-      history={historyByColumn(QUIZ_HISTORY)}
       links={links}
       footer={<PlaceholderRows items={[IST466_LETTER_PLACEHOLDER]} whatIf={whatIf} dropped={[]} />}
     />,
