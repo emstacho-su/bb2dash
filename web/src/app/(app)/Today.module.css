@@ -159,6 +159,12 @@
 }
 /* G-2: a figure the card was handed but has no value for. Muted and in words
    — never a 0 or a bare dash, which would read as a grade of nothing. */
+/* CR-7: a figure whose read failed. Told apart from an honest absence, because
+   "we do not know" and "there is nothing to know" are different things. */
+.statError {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}
 .statAbsence {
   font-size: var(--text-sm);
   color: var(--color-neutral-500);

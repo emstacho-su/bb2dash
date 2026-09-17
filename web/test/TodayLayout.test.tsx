@@ -69,6 +69,9 @@ vi.mock('@/app/(app)/NeedsAttention', () => ({
 }));
 
 const { Today } = await import('@/app/(app)/Today');
+const { BLACKBOARD_ERROR_TEXT, GRADED_SO_FAR_ERROR_TEXT } = await import(
+  '@/app/(app)/CourseGradeFigure'
+);
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -189,11 +192,72 @@ describe('Home — the course card grade slot', () => {
     expect(card().queryByText('not synced yet')).toBeNull();
   });
 
-  it('claims nothing when the gradebook read failed', () => {
+  /* ---------------------------------------------------------------------
+   * CR-7 — the two figures are independent.
+   *
+   * They come from different reads: Blackboard's total from `v_course_grade`,
+   * graded-so-far from the scheme and item bulk reads behind `useCourseFigures`.
+   * `cardGrades` returned [] the moment the gradebook read failed, so one
+   * broken query took away a number the OTHER, perfectly healthy query had
+   * already worked out — and it did so silently, leaving a card that looked
+   * like a course with nothing to say.
+   *
+   * In flight still claims nothing: "not synced yet" is a statement about the
+   * data, and a request that has not answered supports neither it nor its
+   * opposite. A FAILED read is different — that is a fact about us, and the
+   * card says it.
+   * ------------------------------------------------------------------- */
+
+  it('says so when the gradebook read failed, rather than going quiet', () => {
     stub.grades = { data: [], isPending: false, error: new Error('permission denied') };
     render(<Today />);
-    expect(card().queryByText('Blackboard')).toBeNull();
+    expect(card().getByText('Blackboard')).toBeInTheDocument();
+    expect(card().getByText(BLACKBOARD_ERROR_TEXT)).toBeInTheDocument();
+    // …and never as a value, which would read as a grade.
     expect(card().queryByText('not synced yet')).toBeNull();
+  });
+
+  it('carries the real reason in the title, not on the card', () => {
+    stub.grades = { data: [], isPending: false, error: new Error('permission denied') };
+    render(<Today />);
+    expect(card().getByText(BLACKBOARD_ERROR_TEXT).closest('[title]')).toHaveAttribute(
+      'title',
+      expect.stringContaining('permission denied'),
+    );
+  });
+
+  it('still shows graded so far when only the gradebook read failed', () => {
+    stub.grades = { data: [], isPending: false, error: new Error('permission denied') };
+    stub.figures = { 'IST.323': { figure: FIGURE, error: null } };
+    render(<Today />);
+    expect(card().getByText('Graded so far')).toBeInTheDocument();
+    expect(card().getByText(/84\.5%/)).toBeInTheDocument();
+    expect(card().getByText(BLACKBOARD_ERROR_TEXT)).toBeInTheDocument();
+  });
+
+  it('still shows graded so far while the gradebook read is in flight', () => {
+    stub.grades = { data: [], isPending: true, error: null };
+    stub.figures = { 'IST.323': { figure: FIGURE, error: null } };
+    render(<Today />);
+    expect(card().getByText('Graded so far')).toBeInTheDocument();
+    expect(card().queryByText('Blackboard')).toBeNull();
+  });
+
+  it('says so when the figures hook failed, and keeps Blackboard’s number', () => {
+    stub.grades = { data: [TOTAL_ROW], isPending: false, error: null };
+    stub.figures = { 'IST.323': { figure: null, error: 'Could not load the grading rules: x' } };
+    render(<Today />);
+    expect(card().getByText(/14\.8 \/ 104/)).toBeInTheDocument();
+    expect(card().getByText('Graded so far')).toBeInTheDocument();
+    expect(card().getByText(GRADED_SO_FAR_ERROR_TEXT)).toBeInTheDocument();
+  });
+
+  it('shows both failures at once without either hiding the other', () => {
+    stub.grades = { data: [], isPending: false, error: new Error('permission denied') };
+    stub.figures = { 'IST.323': { figure: null, error: 'Could not load the grading rules: x' } };
+    render(<Today />);
+    expect(card().getByText(BLACKBOARD_ERROR_TEXT)).toBeInTheDocument();
+    expect(card().getByText(GRADED_SO_FAR_ERROR_TEXT)).toBeInTheDocument();
   });
 
   it('picks the right shell for a merged course', () => {
@@ -251,9 +315,19 @@ describe('Home — the course card grade slot', () => {
     expect(card().queryByText(/0%/)).toBeNull();
   });
 
-  it('shows Blackboard’s number alone while the figure is loading or failed', () => {
+  it('shows Blackboard’s number alone while the figure is still loading', () => {
+    // Loading is `{ figure: null, error: null }` — FIGURE_LOADING. Only a
+    // failure gets a message; a request in flight claims nothing.
     stub.grades = { data: [TOTAL_ROW], isPending: false, error: null };
-    stub.figures = { 'IST.323': { figure: null, error: 'Could not load the grading rules: x' } };
+    stub.figures = { 'IST.323': { figure: null, error: null } };
+    render(<Today />);
+    expect(card().getByText(/14\.8 \/ 104/)).toBeInTheDocument();
+    expect(card().queryByText('Graded so far')).toBeNull();
+  });
+
+  it('shows Blackboard’s number alone for a course with no scheme at all', () => {
+    stub.grades = { data: [TOTAL_ROW], isPending: false, error: null };
+    stub.figures = {};
     render(<Today />);
     expect(card().getByText(/14\.8 \/ 104/)).toBeInTheDocument();
     expect(card().queryByText('Graded so far')).toBeNull();

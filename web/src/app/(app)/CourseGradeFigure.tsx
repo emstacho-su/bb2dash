@@ -49,6 +49,23 @@ export interface CourseGradeFigure {
   absence: string | null;
   /** When the figure was read, already formatted. Null when not applicable. */
   asOf: string | null;
+  /**
+   * CR-7 — WHY there is no value:
+   *
+   *   'absent' the data honestly has none (no gradebook, no total, nothing
+   *            graded). A fact about the course.
+   *   'error'  we could not find out. A fact about us.
+   *
+   * They must not look alike. "not synced yet" beside a read that threw would
+   * be the app reporting a state it never managed to observe. Defaults to
+   * 'absent', so every existing producer keeps its meaning.
+   */
+  tone?: 'absent' | 'error';
+  /**
+   * The full reason, for the hover title. The card shows a short line; the
+   * database's own words go behind it rather than across the layout.
+   */
+  detail?: string | null;
   /** A letter or display grade published alongside it, if any. */
   display?: string | null;
 }
@@ -56,6 +73,32 @@ export interface CourseGradeFigure {
 /** The two sentences for the two absences, asserted by the tests. */
 export const NO_TOTAL_TEXT = 'publishes no total';
 export const NEVER_SYNCED_TEXT = 'not synced yet';
+
+/** The two short failure lines (CR-7). Short: they sit in a card stat. */
+export const BLACKBOARD_ERROR_TEXT = 'could not be loaded';
+export const GRADED_SO_FAR_ERROR_TEXT = 'could not be worked out';
+
+/**
+ * A figure whose read failed. Distinct from an absence on purpose: the card
+ * says that it does not know, rather than that there is nothing to know.
+ */
+export function errorFigure(
+  label: string,
+  absence: string,
+  detail?: string | null,
+): CourseGradeFigure {
+  return { label, value: null, absence, asOf: null, tone: 'error', detail: detail ?? null };
+}
+
+/** Blackboard's total, when `v_course_grade` could not be read. */
+export function blackboardErrorFigure(detail?: string | null): CourseGradeFigure {
+  return errorFigure('Blackboard', BLACKBOARD_ERROR_TEXT, detail);
+}
+
+/** The graded-so-far figure, when its own reads failed or the maths threw. */
+export function gradedSoFarErrorFigure(detail?: string | null): CourseGradeFigure {
+  return errorFigure('Graded so far', GRADED_SO_FAR_ERROR_TEXT, detail);
+}
 
 /**
  * Blackboard's own published total for one display course, or the absence of
@@ -99,12 +142,18 @@ export function blackboardGradeFigure(
  * is handed and never reaches for data of its own.
  */
 export function CourseGradeFigureView({ figure }: { figure: CourseGradeFigure }) {
-  const title = figure.asOf ? `${figure.label} · as of ${figure.asOf}` : figure.label;
+  const title =
+    figure.detail ?? (figure.asOf ? `${figure.label} · as of ${figure.asOf}` : figure.label);
   return (
     <div className={styles.stat} title={title}>
       <span className={tokens.kicker}>{figure.label}</span>
       {figure.value === null ? (
-        <span className={styles.statAbsence}>{figure.absence}</span>
+        <span
+          className={figure.tone === 'error' ? styles.statError : styles.statAbsence}
+          role={figure.tone === 'error' ? 'status' : undefined}
+        >
+          {figure.absence}
+        </span>
       ) : (
         <span className={styles.statValue}>
           {figure.value}
