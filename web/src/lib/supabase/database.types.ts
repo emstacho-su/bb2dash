@@ -296,13 +296,6 @@ export type Database = {
             foreignKeyName: "assignment_progress_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: true
-            referencedRelation: "v_calendar_push_items"
-            referencedColumns: ["assignment_id"]
-          },
-          {
-            foreignKeyName: "assignment_progress_assignment_id_fkey"
-            columns: ["assignment_id"]
-            isOneToOne: true
             referencedRelation: "v_overdue"
             referencedColumns: ["id"]
           },
@@ -756,13 +749,6 @@ export type Database = {
             foreignKeyName: "bb_content_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: false
-            referencedRelation: "v_calendar_push_items"
-            referencedColumns: ["assignment_id"]
-          },
-          {
-            foreignKeyName: "bb_content_assignment_id_fkey"
-            columns: ["assignment_id"]
-            isOneToOne: false
             referencedRelation: "v_overdue"
             referencedColumns: ["id"]
           },
@@ -997,13 +983,6 @@ export type Database = {
             columns: ["assignment_id"]
             isOneToOne: false
             referencedRelation: "v_assignment_grade"
-            referencedColumns: ["assignment_id"]
-          },
-          {
-            foreignKeyName: "bb_files_assignment_id_fkey"
-            columns: ["assignment_id"]
-            isOneToOne: false
-            referencedRelation: "v_calendar_push_items"
             referencedColumns: ["assignment_id"]
           },
           {
@@ -1316,35 +1295,38 @@ export type Database = {
       }
       calendar_events: {
         Row: {
-          assignment_id: string
           calendar_id: string
           content_hash: string
           etag: string | null
           event_id: string
           last_error: string | null
           last_pushed_at: string
+          ref_id: string
+          source: string
           state: string
           updated_at: string
         }
         Insert: {
-          assignment_id: string
           calendar_id: string
           content_hash: string
           etag?: string | null
           event_id: string
           last_error?: string | null
           last_pushed_at?: string
+          ref_id: string
+          source?: string
           state?: string
           updated_at?: string
         }
         Update: {
-          assignment_id?: string
           calendar_id?: string
           content_hash?: string
           etag?: string | null
           event_id?: string
           last_error?: string | null
           last_pushed_at?: string
+          ref_id?: string
+          source?: string
           state?: string
           updated_at?: string
         }
@@ -1986,6 +1968,86 @@ export type Database = {
           },
           {
             foreignKeyName: "meetings_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+        ]
+      }
+      planner_events: {
+        Row: {
+          all_day: boolean
+          course_id: string | null
+          created_at: string
+          done: boolean | null
+          ends_at: string
+          id: string
+          kind: Database["public"]["Enums"]["planner_event_kind"]
+          location: string | null
+          location_kind: string | null
+          notes: string | null
+          starts_at: string
+          time_zone: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean
+          course_id?: string | null
+          created_at?: string
+          done?: boolean | null
+          ends_at: string
+          id?: string
+          kind: Database["public"]["Enums"]["planner_event_kind"]
+          location?: string | null
+          location_kind?: string | null
+          notes?: string | null
+          starts_at: string
+          time_zone?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean
+          course_id?: string | null
+          created_at?: string
+          done?: boolean | null
+          ends_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["planner_event_kind"]
+          location?: string | null
+          location_kind?: string | null
+          notes?: string | null
+          starts_at?: string
+          time_zone?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planner_events_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_events_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "planner_events_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "planner_events_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "v_course_points_median"
@@ -2725,13 +2787,6 @@ export type Database = {
             foreignKeyName: "bb_files_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: false
-            referencedRelation: "v_calendar_push_items"
-            referencedColumns: ["assignment_id"]
-          },
-          {
-            foreignKeyName: "bb_files_assignment_id_fkey"
-            columns: ["assignment_id"]
-            isOneToOne: false
             referencedRelation: "v_overdue"
             referencedColumns: ["id"]
           },
@@ -2817,47 +2872,35 @@ export type Database = {
       v_calendar_push_items: {
         Row: {
           absent_from_blackboard: boolean | null
+          all_day: boolean | null
           assignment_id: string | null
           course_code: string | null
           course_id: string | null
+          done: boolean | null
           due_at: string | null
           due_date: string | null
+          end_date: string | null
+          ends_at: string | null
           event_at: string | null
+          event_id: string | null
+          kind: string | null
+          kind_label: string | null
+          location: string | null
+          location_kind: string | null
+          notes: string | null
           points_possible: number | null
+          ref_id: string | null
+          source: string | null
+          start_date: string | null
+          starts_at: string | null
           status: string | null
+          summary: string | null
+          time_zone: string | null
           title: string | null
           type: string | null
+          week_start: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "assignments_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "assignments_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "v_course_corpus"
-            referencedColumns: ["course_id"]
-          },
-          {
-            foreignKeyName: "assignments_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "v_course_grade"
-            referencedColumns: ["course_id"]
-          },
-          {
-            foreignKeyName: "assignments_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "v_course_points_median"
-            referencedColumns: ["course_id"]
-          },
-        ]
+        Relationships: []
       }
       v_content_tree: {
         Row: {
@@ -2906,13 +2949,6 @@ export type Database = {
             columns: ["assignment_id"]
             isOneToOne: false
             referencedRelation: "v_assignment_grade"
-            referencedColumns: ["assignment_id"]
-          },
-          {
-            foreignKeyName: "bb_content_assignment_id_fkey"
-            columns: ["assignment_id"]
-            isOneToOne: false
-            referencedRelation: "v_calendar_push_items"
             referencedColumns: ["assignment_id"]
           },
           {
@@ -3193,13 +3229,6 @@ export type Database = {
             columns: ["assignment_id"]
             isOneToOne: false
             referencedRelation: "v_assignment_grade"
-            referencedColumns: ["assignment_id"]
-          },
-          {
-            foreignKeyName: "bb_files_assignment_id_fkey"
-            columns: ["assignment_id"]
-            isOneToOne: false
-            referencedRelation: "v_calendar_push_items"
             referencedColumns: ["assignment_id"]
           },
           {
@@ -3813,6 +3842,13 @@ export type Database = {
         | "media_links"
         | "unclassified"
       grading_method: "weighted_pct" | "points" | "qualitative" | "unknown"
+      planner_event_kind:
+        | "event"
+        | "task"
+        | "out_of_office"
+        | "focus_time"
+        | "working_location"
+        | "appointment_slot"
       priority_level: "low" | "normal" | "high" | "critical"
       progress_status:
         | "not_started"
@@ -4042,6 +4078,14 @@ export const Constants = {
         "unclassified",
       ],
       grading_method: ["weighted_pct", "points", "qualitative", "unknown"],
+      planner_event_kind: [
+        "event",
+        "task",
+        "out_of_office",
+        "focus_time",
+        "working_location",
+        "appointment_slot",
+      ],
       priority_level: ["low", "normal", "high", "critical"],
       progress_status: [
         "not_started",

@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-16** (Phase 10b PR #15, opened while Phase 11b's PR #14 is open; Phase 10a PR #13 merged after Phase 11's PR #12).
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-16** (Phase 10b PR #15, reconciled with `main` after Phase 11b's PR #14 and its display follow-up #16 merged; Phase 10a PR #13 merged after Phase 11's PR #12).
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement
@@ -29,9 +29,10 @@
 Backend foundation live; GUI v1 merged and deployed to Vercel; retrieval polished (Phase 7);
 Classroom-style course page (Phase 8); automated sync loop with Inbox (Phase 9); gradebook
 mirrored and shown as Blackboard's numbers, submissions catalogued, staged uploads (Phase 10a);
-planner week grid, Google Calendar push, announcements bell (Phase 11); grade model + what-if
-(Phase 10b, PR #15). Prod is Supabase `goultdzqcavefcgnifdy`; migrations 001–056 and 060–066 on
-`main` and live; 057–058 and 080–081 (10b) and 067–069 (11b) live ahead of their merges. The materials MCP
+planner week grid, Google Calendar push, announcements bell (Phase 11); planner events pushed to
+Google (Phase 11b); grade model + what-if (Phase 10b, PR #15). Prod is Supabase
+`goultdzqcavefcgnifdy`; migrations 001–056 and 060–069 on `main` and live; 057–058 and 080–081 live
+from Phase 10b's branch ahead of its merge. The materials MCP
 server (`mcp-server/`) is registered at user scope and points at
 `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`. The 10a / 11 / V-1 / V-2 sprint
 started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
@@ -51,12 +52,12 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | — | V-1 + R-27 briefs, Phase 10 split, ORCHESTRATOR + `/bb2dash-pm` | merged Sep 14 | #9 | — |
 | — | MVP / DoD / task loops for every remaining phase (`70_MVP_INDEX.md`) | merged Sep 15 | #11 | — |
 | 10a | Grades: gradebook mirror, Grades screens, submission pull-back, upload | merged Sep 16 (contract frozen Sep 15, Stack's ten answers in the brief; round 2 = 052–056; mirror verified by his 9/16 sync, attempts probe settles on the first v3 crawl) | #13 | 046–056 (057–058 slack) |
-| 10b | Grades: methodology model + what-if | PR open Sep 16 (V-1 gate waived by Stack; his four answers + rounds 1b/1c/2 in the brief; `/code-review` 15 findings fixed, `/security-review` none); awaiting his seven-step walk | #15 | 057–058, review rounds 080–089 (080–081 used) |
+| 10b | Grades: methodology model + what-if | PR open Sep 16 (V-1 gate waived by Stack; his four answers + rounds 1b/1c/2 in the brief; `/code-review` 15 findings fixed, `/security-review` none); PM browser walk 7/7 and round 3 (four UX fixes) done; awaiting Stack's merge word | #15 | 057–058, review rounds 080–089 (080–081 used) |
 | 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | merged Sep 16; calendar push live and proven | #12 | 060–066 |
-| 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | brief + Stack's answers frozen (`69b`); next | — | 067–072; Phase 12 moves to 073–079 |
+| 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | merged Sep 16 (brief + answers + K-notes + round 2 in `69b`, evidence `69c`; `calendar-push` v5 live, live proof and browser walk done; display follow-up #16 merged the same minute) | #14, #16 | 067–069 (070–072 free) |
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
-| 12 | Electron shell | planned; after the web app is stable | — | — |
+| 12 | Electron shell | planned; after the web app is stable | — | 073–079 if needed |
 | 13 | Styling pass | planned; last; carries C-1..C-3 from Phase 10b's browser walk (brief §Carried in) | — | — |
 
 ## 2. Execution order and what each phase hands to the next
@@ -148,6 +149,19 @@ paths, not `/c/…`. Repo files are CRLF on checkout; edit with tools that prese
 The `bb2dash` MCP server runs with the service key from `~/.claude.json`; never copy it into
 the repo.
 
+Learned in Phase 11b (2026-09-16):
+* `generate_typescript_types` returns ~140 KB, more than a tool result can carry; the harness saves
+  it as a one-line JSON file (`{"types": "…"}`). Write it out with
+  `node -e` + `JSON.parse(...).types` rather than transcribing it by hand.
+* A contract that renames a column a live edge function reads needs a **cut-over**: switch the
+  consumer off (`gcal_enabled = false`), apply, deploy, prove one run makes zero writes to existing
+  rows, switch on. Run a pre-flight first that feeds prod rows to the new code and compares hashes.
+* The push has no staging calendar: web workers mock `planner_events`; a live proof inserts
+  labelled test rows by SQL and deletes them in the same sitting.
+* Git Bash `sed -i` strips CRLF from working-tree files. Git normalises on commit, so the diff stays
+  clean, but prefer the Edit tool for docs.
+* `node --test <folder>` treats the folder as one failing test; pass the `*_test.ts` files.
+
 ## 4. Open items that are Stack's, not the PM's
 
 * Run the next `/bb-sync` from the `main` checkout (now crawler v3): it settles Blackboard's
@@ -156,8 +170,7 @@ the repo.
 * Phase 10b (PR #15): the PM walked all seven acceptance steps in a logged-in browser and round 3
   fixed the four findings he chose; say "merge" or walk it yourself on the Vercel preview
   (`68_PHASE10B_grade_model.md` §Definition of done). No course shows "Our model" until he links a column (e.g. ECN.304
-  Attendance → Participation, if the syllabus means that) or types a what-if on IST.466. Decide
-  merge order with Phase 11b's PR #14; the second to merge regenerates `database.types.ts`.
+  Attendance → Participation, if the syllabus means that) or types a what-if on IST.466.
 * Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and start V-2.
   V-1's reconciliation migration is `059_grading_reconciliation.sql`.
 * Answer V-1's *ask the professor* items as they come up.
@@ -252,7 +265,9 @@ new scope is verified before development begins).
 > brief are frozen. Tests must not drop below 261. Migrations to `harness-memory` are applied
 > under the file's name and kept byte-identical. Open one PR per worker; do not merge.
 
-**Phase 11b — planner events** (after PR #12 merges)
+**Phase 11b — planner events** (used 2026-09-16; PR #14. After Stack's merge, the next PM session
+switches the checkout to `main`, removes `bb2dash-wt-planner-events-11b`, `bb2dash-wt-pe-db`,
+`bb2dash-wt-pe-web` and their branches, and regenerates `database.types.ts` if 10b merged first.)
 
 > `/bb2dash-pm` Start Phase 11b (planner events created in bb2dash and pushed to the `bb2dash`
 > calendar). The brief `docs/planning/69b_PHASE11B_planner_events.md` is frozen with my answers of
