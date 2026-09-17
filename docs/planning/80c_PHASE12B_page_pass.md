@@ -234,8 +234,26 @@ third decimal).
 
 Stack runs one sync from the app's Sync button (`main` checkout, crawler v3). The PM session then
 records here: `bb_attempts` rows, `bb_files` rows in `my_submissions`, GEO.103 reading files now
-matchable to the 18 unlinked readings, any IST.466 schedule change touching 9/22 or 9/24. _To be
-filled._
+matchable to the 18 unlinked readings, any IST.466 schedule change touching 9/22 or 9/24.
+
+**Filled 2026-09-17** (Stack approved the brief and ran the sync: request 20, sync run 47, crawl
+`1b5e8da5-…`, captured 15:35 UTC, **crawler v3** on all seven course rows, 49 gradebook columns).
+
+* `bb_attempts` = **0**, `my_submissions` files = **0**. The v3 probe ran 21 column requests
+  (`/learn/api/v1/courses/<c>/gradebook/columns/<col>/attempts?userId=<me>&limit=100`); every one
+  answered `200` with `results: []`, including columns Blackboard shows as GRADED with a
+  submitted attempt. **The endpoint is wrong for a student session — P-grades-4 / P-grades-5 are
+  a crawler bug, not a data wait.** New task **G-7a** below; G-7 stays the verification after it.
+* GEO.103 `readings`-bucket files: 7, of which 4 unlinked; on-Blackboard readings with no linked
+  file: 20 (unchanged). The reading files Stack describes are not being harvested by the crawl;
+  file pull is bb-sync step 4 / `bb-course-pull`. M-2's worker lists what `bb_content` holds for
+  those titles and the PM runs a file pull for GEO.103 before M-2's front-end check.
+* The course payload now carries a `schedule` key. Not consumed by any stage yet; out of scope
+  here unless H-4 needs it (9/24 already stands in `sessions`).
+
+| task | ids | owner | backend / unit check | front-end check |
+|---|---|---|---|---|
+| G-7a | P-grades-4, 5 | PM (discovery, in Stack's logged-in Blackboard tab) → W-30 (`ingest/bb_crawler.js`) | PM records the request Blackboard's own UI makes when a student opens a submitted attempt (network panel), with status and top-level keys, in `80f_ATTEMPTS_ENDPOINT.md`; W-30 points the probe at it (v4), keeps the `keys` list, adds a fixture from the real payload with names scrubbed; `stage_attempts` SQL test passes on it | after the next sync: G-7 |
 
 ### Workers (disjoint files; cut after `progress-status.ts` is committed)
 
