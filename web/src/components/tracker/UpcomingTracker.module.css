@@ -52,10 +52,17 @@
   align-items: center;
 }
 
-/* — tracker ————————————————————————————————————————————————————————— */
+/* — tracker —————————————————————————————————————————————————————————
+   H-2: the strip holds one column per day of the whole range and scrolls
+   across them. `--tracker-columns` is how many fit on screen, so a column is
+   still 1/14 of the VISIBLE width (a flex item's percentage resolves against
+   the container's content box, not its scroll width) and the rest overflow.
+   `overscroll-behavior-x: contain` keeps a trackpad flick inside the strip
+   instead of triggering the browser's back gesture. */
 .tracker {
   display: flex;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   padding-bottom: var(--space-1);
   align-items: flex-end;
