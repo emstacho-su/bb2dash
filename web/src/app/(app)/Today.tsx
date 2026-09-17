@@ -297,7 +297,15 @@ export function CourseCard({
   });
 
   return (
-    <div className={`${tokens.card} ${tokens.elevSm} ${styles.courseCard}`}>
+    // H-5 (P-home-8): the card was a bare <div> that looked clickable and was
+    // not. The whole card is the link now — one target, in the tab order, with
+    // an accessible name that says where it goes. Nothing inside it is
+    // interactive, so there is no nested control to swallow the click.
+    <Link
+      href={`/course/${encodeURIComponent(course.display_id)}`}
+      className={`${tokens.card} ${tokens.elevSm} ${styles.courseCard}`}
+      aria-label={`Open ${course.code} — ${course.title}`}
+    >
       <div className={styles.courseMain}>
         <div className={styles.courseCodeRow}>
           <span className={styles.courseCode}>{course.code}</span>
@@ -342,7 +350,7 @@ export function CourseCard({
           ))}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 
