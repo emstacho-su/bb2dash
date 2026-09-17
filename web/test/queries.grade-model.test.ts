@@ -235,7 +235,12 @@ describe('schemeCourseIdFor', () => {
  * ======================================================================== */
 
 function wrapper(client: QueryClient) {
-  return ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+  // Named, not an arrow: react/display-name wants every component to say what
+  // it is in a stack trace, including one that only exists to hold a provider.
+  function QueryWrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  }
+  return QueryWrapper;
 }
 
 function newClient() {

@@ -15,7 +15,7 @@
  * is covered too.
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -24,10 +24,14 @@ import { describe, expect, it } from 'vitest';
 // from `web/`, which is where `vitest.config.mts` lives.
 const SRC = join(process.cwd(), 'src');
 
+/**
+ * `withFileTypes` so the directory entry already says what it is: the older
+ * `statSync` per entry doubled the syscalls for no information.
+ */
 function walk(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, out);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) walk(full, out);
     else out.push(full);
   }
   return out;
@@ -35,8 +39,20 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const FILES = walk(SRC);
 
+/**
+ * Every file is read from disk ONCE, at module load, and the audits below read
+ * the strings. Each audit used to re-read the whole of `src/` for itself, so a
+ * file was opened five times over; on Windows, with a virus scanner in front of
+ * every open and the rest of the suite spawning workers beside it, that put
+ * these tests within reach of the 5 s default timeout — a red run that means
+ * "the machine was busy", not "a service-role key reached the bundle". The
+ * assertions below are unchanged; only the number of syscalls is.
+ */
+const SOURCES = new Map(FILES.map((file) => [file, readFileSync(file, 'utf8')]));
+
 function read(file: string): string {
-  return readFileSync(file, 'utf8');
+  const cached = SOURCES.get(file);
+  return cached ?? readFileSync(file, 'utf8');
 }
 
 describe('no control anywhere reads "Submit"', () => {
