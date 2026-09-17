@@ -28,10 +28,8 @@ const rare = fc.integer({ min: 0, max: 9 }).map((n) => n === 0);
 export interface ItemSpec {
   readonly possible: number | null;
   readonly scorePct: number | null;
-  readonly whatIfPct: number | null;
   readonly exempt: boolean;
   readonly excluded: boolean;
-  readonly placeholder: boolean;
   readonly confidence: 'confirmed' | 'tentative' | 'inferred';
   readonly override: boolean;
   readonly dueDay: number | null;
@@ -46,10 +44,8 @@ function itemSpecArb(options: GenOptions): fc.Arbitrary<ItemSpec> {
       { weight: 1, arbitrary: fc.constant(null) },
     ),
     scorePct: fc.option(fc.integer({ min: 0, max: 100 }), { nil: null }),
-    whatIfPct: fc.option(fc.integer({ min: 0, max: 100 }), { nil: null }),
     exempt: rare,
     excluded: rare,
-    placeholder: fc.boolean(),
     confidence: options.unsure
       ? fc.constantFrom('confirmed' as const, 'confirmed' as const, 'confirmed' as const, 'tentative' as const, 'inferred' as const)
       : fc.constant('confirmed' as const),
@@ -121,7 +117,7 @@ export function modelInputArb(options: GenOptions): fc.Arbitrary<ModelInput> {
 
 /** A manual part always carries one scored, confirmed column so most inputs compute. */
 const MANUAL_ANCHOR: ItemSpec = {
-  possible: 10, scorePct: 80, whatIfPct: null, exempt: false, excluded: false, placeholder: false,
+  possible: 10, scorePct: 80, exempt: false, excluded: false,
   confidence: 'confirmed', override: false, dueDay: null, extraCredit: false,
 };
 
@@ -130,8 +126,7 @@ function itemsFor(spec: ComponentSpec): readonly ItemSpec[] {
 }
 
 function toItem(spec: ItemSpec, key: string, componentId: number | null): ItemInput {
-  const placeholder = spec.placeholder && componentId !== null;
-  const scored = !placeholder && spec.scorePct !== null && spec.possible !== null;
+  const scored = spec.scorePct !== null && spec.possible !== null;
   return {
     key,
     componentId,
@@ -142,9 +137,10 @@ function toItem(spec: ItemSpec, key: string, componentId: number | null): ItemIn
     possible: spec.possible,
     score: scored ? ((spec.scorePct ?? 0) * (spec.possible ?? 0)) / 100 : null,
     exempt: spec.exempt,
-    kind: placeholder ? 'placeholder' : 'item',
+    kind: 'item',
     isExtraCredit: spec.extraCredit,
     dueAt: spec.dueDay === null ? null : `2026-10-${String(spec.dueDay).padStart(2, '0')}T12:00:00Z`,
+    seenAt: '2026-09-16T17:14:02.645Z',
   };
 }
 
@@ -213,17 +209,6 @@ function buildComponents(input: InputSpec): Built {
   };
 }
 
-function scenarioFor(items: readonly ItemInput[], specs: ReadonlyMap<string, ItemSpec>): Record<string, number> {
-  const entries = items.flatMap((item) => {
-    const whatIfPct = specs.get(item.key)?.whatIfPct ?? null;
-    if (item.score !== null || whatIfPct === null) return [];
-    // A1: a pointless placeholder takes the percentage itself (the engine decides whether it counts).
-    if (item.possible === null && item.kind === 'placeholder') return [[item.key, whatIfPct] as const];
-    return item.possible !== null && item.possible > 0 ? [[item.key, (whatIfPct * item.possible) / 100] as const] : [];
-  });
-  return Object.fromEntries([...entries, ['asg:orphan', 3]]);
-}
-
 function capOf(component: ComponentInput, method: InputSpec['method']): number {
   return (method === 'weighted_pct' ? component.weightPct : component.points) ?? 0;
 }
@@ -244,7 +229,6 @@ export function buildInput(input: InputSpec): ModelInput {
   const built = buildComponents(input);
   const unlinked = input.unlinked.map((spec, index) => ({ spec, item: toItem(spec, `col:unlinked:${index}`, null) }));
   const items = [...built.items, ...unlinked.map(({ item }) => item)];
-  const specs = new Map([...built.specs, ...unlinked.map(({ spec, item }) => [item.key, spec] as const)]);
   const regular = regularCap(built.components, input.method);
   const points = input.method === 'points';
   return {
@@ -257,11 +241,6 @@ export function buildInput(input: InputSpec): ModelInput {
     },
     components: built.components,
     items,
-    scenario: { itemScores: scenarioFor(items, specs) },
-    blackboardTotal:
-      input.total === null
-        ? null
-        : { score: input.total.scorePct, possible: 100, running: input.total.running, seenAt: '2026-09-16T17:14:02Z' },
   };
 }
 

@@ -1,25 +1,25 @@
 /**
- * The one item preparation every engine entry point shares (`projectCourse`,
- * `solveTarget`, `itemStates`): counted items with their effective scores,
- * items per leaf component with surplus placeholders dropped, and the component
- * tree with muting and capacity.
+ * The one item preparation the engine shares: counted items with their scores,
+ * items per leaf component, and the component tree.
+ *
+ * Phase 12b (G-1): no scenario parameter — a what-if value no longer exists —
+ * and no placeholder drop, because placeholders no longer count.
  */
 
 import { countedItems, itemsByComponent, type CountedItem } from './items';
 import { buildForest, type ComponentNode, type ComputableMethod } from './tree';
-import type { ModelInput, Scenario } from './types';
+import type { ModelInput } from './types';
 
 export interface PreparedItems {
-  /** Every counted item in input order, linked or not, before the surplus drop. */
+  /** Every counted item in input order, linked or not. */
   readonly counted: readonly CountedItem[];
-  /** Counted items per component id after the surplus drop; empty for a component with children. */
+  /** Counted items per component id; empty for a component with children. */
   readonly byComponent: ReadonlyMap<number, readonly CountedItem[]>;
   readonly roots: readonly ComponentNode[];
 }
 
-/** `scenario` is passed apart from `input` so a caller can probe a what-if value without rebuilding the input. */
-export function prepareItems(input: ModelInput, scenario: Scenario, method: ComputableMethod): PreparedItems {
-  const counted = countedItems(input.items, scenario, input.components);
+export function prepareItems(input: ModelInput, method: ComputableMethod): PreparedItems {
+  const counted = countedItems(input.items);
   const byComponent = itemsByComponent(input.components, counted);
   return { counted, byComponent, roots: buildForest(method, input.components, byComponent) };
 }

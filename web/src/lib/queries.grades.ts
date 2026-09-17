@@ -29,6 +29,10 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables } from './queries';
+// Type-only, so it is erased at build: no runtime dependency from 10a's query
+// layer on the grade model. The row shape is migration 058's and the popout's
+// score history reads it (Phase 12b, G-5).
+import type { GradebookHistoryRow } from './grade-model-input';
 import { COURSE_TIME_ZONE, shellCacheKey } from './course-dimension';
 
 /* ---------------------------------------------------------------------------
@@ -196,6 +200,8 @@ export const gradesKeys = {
     ['grades', 'assignment-attempts', assignmentId] as const,
   submissionFiles: (assignmentId: string) =>
     ['grades', 'submission-files', assignmentId] as const,
+  assignmentHistory: (courseId: string, columnId: string) =>
+    ['grades', 'assignment-history', courseId, columnId] as const,
 } as const;
 
 /* ---------------------------------------------------------------------------
@@ -306,6 +312,39 @@ export function submissionFilesOptions(assignmentId: string | undefined) {
   });
 }
 
+/**
+ * How one gradebook column's score moved across syncs (Phase 12b, G-5).
+ *
+ * `v_gradebook_history` (058) holds the first registered observation of every
+ * column and every later run whose score differed. The popout wants one
+ * column's rows, so it asks for one column's rows — the model screens' read of
+ * a whole course's history is a different question with a different key.
+ *
+ * The view survives whatever G-1 decides: the desktop poller reads it too.
+ */
+export function assignmentHistoryOptions(
+  courseId: string | undefined,
+  columnId: string | null | undefined,
+) {
+  return queryOptions({
+    queryKey: gradesKeys.assignmentHistory(courseId ?? 'none', columnId ?? 'none'),
+    queryFn: async (): Promise<GradebookHistoryRow[]> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('v_gradebook_history')
+        .select('*')
+        .eq('shell_course_id', courseId as string)
+        .eq('column_id', columnId as string)
+        .order('seen_at', { ascending: true });
+      if (error) throw error;
+      // Narrowed to 058's frozen column list — see the module header.
+      return (data ?? []) as unknown as GradebookHistoryRow[];
+    },
+    enabled: Boolean(courseId) && Boolean(columnId),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCourseGrades() {
   return useQuery(courseGradesOptions());
 }
@@ -320,6 +359,12 @@ export function useAssignmentAttempts(assignmentId: string | undefined) {
 }
 export function useSubmissionFiles(assignmentId: string | undefined) {
   return useQuery(submissionFilesOptions(assignmentId));
+}
+export function useAssignmentHistory(
+  courseId: string | undefined,
+  columnId: string | null | undefined,
+) {
+  return useQuery(assignmentHistoryOptions(courseId, columnId));
 }
 
 /* ---------------------------------------------------------------------------
@@ -397,6 +442,22 @@ export interface SubmissionLabel {
 }
 
 /**
+ * Column statuses that already mean "the work is in" (P-grades-6, G-4).
+ * Beside one of these, Blackboard's `COMPLETED` attempt status states the same
+ * fact twice — "graded" next to "last attempt: COMPLETED" — so it is dropped.
+ *
+ * Only `COMPLETED` is dropped, and only beside these two. `NEEDS_GRADING` next
+ * to GRADED means a further attempt is waiting, `COMPLETED` next to UNOPENED
+ * contradicts the column, and both of those are worth reading.
+ */
+const SETTLED_COLUMN_STATUS: ReadonlySet<string> = new Set(['GRADED', 'SUBMITTED']);
+const REDUNDANT_ATTEMPT_STATUS: ReadonlySet<string> = new Set(['COMPLETED']);
+
+function saysNothingNew(status: string | null, attempt: string): boolean {
+  return status !== null && SETTLED_COLUMN_STATUS.has(status) && REDUNDANT_ATTEMPT_STATUS.has(attempt);
+}
+
+/**
  * Blackboard's submission status with a human gloss.
  *
  * The status is Blackboard's, verbatim — a row with feedback but no score
@@ -404,6 +465,11 @@ export interface SubmissionLabel {
  * special case (Stack's answer 3). An unrecognised code is shown as itself
  * rather than guessed at. `lastAttempt` is carried alongside, never merged in:
  * a SUBMITTED column whose last attempt is NEEDS_GRADING is still "submitted".
+ *
+ * `attemptStatus` is null when the attempt repeats the column — literally
+ * (GRADED beside GRADED) or in substance (COMPLETED beside GRADED or
+ * SUBMITTED, P-grades-6). Both call sites, the gradebook table and the
+ * popout's submission block, read it from here, so the rule lives once.
  */
 export function submissionLabel(
   status: string | null | undefined,
@@ -412,11 +478,25 @@ export function submissionLabel(
   const raw = typeof status === 'string' && status.trim() !== '' ? status.trim() : null;
   const attempt =
     typeof lastAttempt === 'string' && lastAttempt.trim() !== '' ? lastAttempt.trim() : null;
+  const repeats = attempt === null || attempt === raw || saysNothingNew(raw, attempt);
   return {
     status: raw,
     text: raw === null ? NO_VALUE : (SUBMISSION_GLOSS[raw] ?? raw),
-    attemptStatus: attempt !== null && attempt !== raw ? attempt : null,
+    attemptStatus: repeats ? null : attempt,
   };
+}
+
+/**
+ * Whether Blackboard actually recorded any feedback (Phase 12b, G-5/G-6).
+ *
+ * An untouched feedback box arrives as `''` as readily as `null`, and a box
+ * someone typed a space into arrives as `'   '`. None of the three is feedback.
+ * The rule lives here for the same reason `submissionLabel` does: the gradebook
+ * row draws a mark from it and the popout draws the text from it, and the two
+ * disagreeing would put a "has feedback" mark beside an empty panel.
+ */
+export function hasFeedback(feedback: string | null | undefined): feedback is string {
+  return typeof feedback === 'string' && feedback.trim() !== '';
 }
 
 /** The three distinct things a course's header can honestly say. */

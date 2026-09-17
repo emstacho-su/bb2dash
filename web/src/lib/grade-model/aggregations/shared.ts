@@ -12,10 +12,6 @@ export function gradedFractions(items: readonly CountedItem[]): readonly number[
   return items.flatMap((item) => (item.score === null ? [] : [item.score / item.possible]));
 }
 
-export function anyHypothetical(items: readonly CountedItem[]): boolean {
-  return items.some((item) => item.hypothetical);
-}
-
 export interface SlotRules {
   /** Level 0..1 from the graded fractions alone; `allGraded` when no slot is left. */
   readonly gradedSoFar: (graded: readonly number[], allGraded: boolean) => number;
@@ -56,7 +52,6 @@ export function slotAggregate(
     gradedCount: graded.length,
     remainingCount,
     capacityFromKnownItems: false,
-    usesHypothetical: anyHypothetical(context.items),
     unitCap: { perSlot: context.cap / slotCount, perPoint: null },
   };
 }

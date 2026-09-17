@@ -1,18 +1,19 @@
 /**
  * The order of checks before anything is computed.
  *
- * Contract: `68_PHASE10B_grade_model.md` §Engine, Semantics "Order of checks":
- * no scheme → `no_scheme`; method `qualitative` / `unknown` → that reason; any
- * component `unknown` → `unknown_aggregation`; any unscored manual component →
- * `manual_unscored` (names listed). `nothing_graded` is decided after the
- * projection (see `project.ts`).
+ * Phase 12b (G-1) removed the `manual_unscored` gate: a hand-graded part nobody
+ * has scored no longer hides the whole course. It is ungraded work like any
+ * other — out of both sides of the figure, and named under it by the screen.
+ * That one rule silenced three of Stack's six courses
+ * (`docs/planning/80e_GRADE_METHOD_COMPARISON.md`, fixtures F12–F14).
+ *
+ * What is left are the three facts that genuinely mean there is no percentage:
+ * no rules recorded, a qualitative scheme, or a rule we cannot read.
+ * `nothing_graded` is decided after the projection (see `project.ts`).
  */
 
-import { countedItems, itemsByComponent, leafComponentIds } from './items';
 import type { ComputableMethod } from './tree';
-import type { ModelInput, NotComputableReason, NotComputedResult, Scenario, SchemeInput } from './types';
-
-export const EMPTY_SCENARIO: Scenario = { itemScores: {} };
+import type { ModelInput, NotComputableReason, NotComputedResult, SchemeInput } from './types';
 
 export interface OpenGate {
   readonly state: 'open';
@@ -20,24 +21,8 @@ export interface OpenGate {
   readonly method: ComputableMethod;
 }
 
-export function notComputed(reason: NotComputableReason, unscoredManual: readonly string[] = []): NotComputedResult {
-  return { state: 'not_computable', reason, unscoredManual };
-}
-
-/**
- * Names of manual components with no real score on any counted item, in input
- * order. Runs before muting, so a muted unscored manual part still counts, and
- * ignores the scenario: a what-if value is not a hand-graded score (answer 1).
- * Decision (R2-1): only leaves are checked — a manual component with children
- * computes from its children and can carry no item of its own.
- */
-export function unscoredManualNames(input: ModelInput): readonly string[] {
-  const byComponent = itemsByComponent(input.components, countedItems(input.items, EMPTY_SCENARIO));
-  const leaves = leafComponentIds(input.components);
-  return input.components
-    .filter((component) => component.aggregation === 'manual' && leaves.has(component.id))
-    .filter((component) => !(byComponent.get(component.id) ?? []).some((item) => item.realScore !== null))
-    .map((component) => component.name);
+export function notComputed(reason: NotComputableReason): NotComputedResult {
+  return { state: 'not_computable', reason };
 }
 
 export function checkComputable(input: ModelInput): NotComputedResult | OpenGate {
@@ -48,7 +33,5 @@ export function checkComputable(input: ModelInput): NotComputedResult | OpenGate
   if (input.components.some((component) => component.aggregation === 'unknown')) {
     return notComputed('unknown_aggregation');
   }
-  const unscored = unscoredManualNames(input);
-  if (unscored.length > 0) return notComputed('manual_unscored', unscored);
   return { state: 'open', scheme, method: scheme.method };
 }

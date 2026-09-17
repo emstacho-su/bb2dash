@@ -10,7 +10,6 @@
  */
 
 import { sum } from '../math';
-import { anyHypothetical } from './shared';
 import type { Aggregate, LeafContext, LeafOutcome } from './types';
 
 function emptyOutcome(context: LeafContext, r: number | null): LeafOutcome {
@@ -23,7 +22,6 @@ function emptyOutcome(context: LeafContext, r: number | null): LeafOutcome {
     gradedCount: 0,
     remainingCount: slotCount,
     capacityFromKnownItems: true,
-    usesHypothetical: false,
     unitCap: { perSlot: context.cap / slotCount, perPoint: null },
   };
 }
@@ -58,7 +56,6 @@ export const sumAggregate: Aggregate = (context, r) => {
     gradedCount: graded.length,
     remainingCount: ungraded.length + extraSlots,
     capacityFromKnownItems: !fixedTotal,
-    usesHypothetical: anyHypothetical(context.items),
     unitCap: { perSlot: context.cap / Math.max(1, slotCount), perPoint: context.cap / expected },
   };
 };

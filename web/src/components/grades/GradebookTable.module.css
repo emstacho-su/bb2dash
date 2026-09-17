@@ -46,6 +46,23 @@
   gap: var(--space-2);
 }
 
+/* The name and its feedback mark on one line. No `display` here on purpose:
+   a span is inline already, and declaring one would make this a layout class
+   for the R3-1 audit without buying anything. */
+.nameLine {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The "there is a note here" mark (Phase 12b, P-grades-10). */
+.feedbackMark {
+  font-size: var(--text-xs);
+  line-height: 0;
+  color: var(--color-accent);
+  margin-inline-start: 1px;
+  cursor: help;
+}
+
 .itemName,
 .itemLink {
   color: var(--color-text);

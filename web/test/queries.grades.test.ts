@@ -237,6 +237,30 @@ describe('submissionLabel', () => {
   it('does not repeat the attempt status when it says the same thing', () => {
     expect(submissionLabel('GRADED', 'GRADED').attemptStatus).toBeNull();
   });
+
+  /* G-4 / P-grades-6: "graded" and "last attempt: COMPLETED" say one thing. */
+  it.each(['GRADED', 'SUBMITTED'])(
+    'drops a COMPLETED attempt beside a %s column — it adds nothing',
+    (status) => {
+      expect(submissionLabel(status, 'COMPLETED').attemptStatus).toBeNull();
+    },
+  );
+
+  it.each([
+    ['GRADED', 'NEEDS_GRADING'],
+    ['SUBMITTED', 'NEEDS_GRADING'],
+    ['SUBMITTED', 'IN_PROGRESS'],
+    ['UNOPENED', 'COMPLETED'],
+    ['NO_STATUS', 'COMPLETED'],
+  ])('keeps the attempt status beside a %s column when it reads %s', (status, attempt) => {
+    expect(submissionLabel(status, attempt).attemptStatus).toBe(attempt);
+  });
+
+  it('still reports the column status itself when the attempt is dropped', () => {
+    const label = submissionLabel('GRADED', 'COMPLETED');
+    expect(label.status).toBe('GRADED');
+    expect(label.text).toBe('graded');
+  });
 });
 
 describe('courseGradeState', () => {

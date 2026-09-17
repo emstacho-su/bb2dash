@@ -1,11 +1,13 @@
 /**
- * The course Grades tab with the model: persistence, Reset, and a picker link
- * turning a muted part back on — end to end through the real query layer, a
- * real QueryClient and an in-memory Supabase stand-in whose `v_grade_model_items`
- * applies `grade_column_links` the way migration 058 does.
+ * The course Grades tab, end to end: the real query layer, a real QueryClient,
+ * the real engine, and an in-memory Supabase stand-in whose
+ * `v_grade_model_items` applies `grade_column_links` the way migration 058
+ * does. No fake stands in for the engine (round 2, R2-16), so a broken one
+ * fails here instead of hiding behind a mock.
  *
- * The engine is the real one (round 2, R2-16): no fake stands in for it, so a
- * missing or broken engine fails these tests instead of hiding behind one.
+ * Phase 12b (G-1) removed the saved scenario, the what-if cells, the solver and
+ * Reset, so the cases about them went with them. What is left is what the tab
+ * is for now: the figure, and the one control that changes what it counts.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,49 +16,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GradeComponentRow, GradeModelItemRow, GradingSchemeRow } from '@/lib/grade-model-input';
 import type { GradebookLatestRow } from '@/lib/queries.grades';
 import { makeGradebookRow } from './factories.grades';
-import {
-  ECN304_EXAM1_PLACEHOLDER,
-  IST466_COMPONENTS,
-  IST466_LETTER_PLACEHOLDER,
-  IST466_SCHEME,
-  IST466_SYNCHRONY,
-  makeComponent,
-  makeItem,
-} from './factories.grade-model';
+import { IST466_COMPONENTS, IST466_SCHEME, IST466_SYNCHRONY, makeItem } from './factories.grade-model';
 
 /* ---------------------------------------------------------------------------
  * The in-memory database
  * ------------------------------------------------------------------------ */
 
-interface ScenarioRow { course_id: string; item_scores: Record<string, number>; target_letter: string | null; updated_at: string }
 interface LinkRow { course_id: string; column_id: string; component_id: number | null; excluded: boolean }
 
 const db = vi.hoisted(() => ({
-  scenarios: new Map<string, ScenarioRow>(),
   links: new Map<string, LinkRow>(),
   /** `relation:op` → the error message that write returns instead of succeeding. */
   failures: new Map<string, string>(),
 }));
 
-/**
- * A pointless confirmed placeholder on a single-item part of its own (Round 1b A1). It must not
- * share a part with a real column: a part with more items than `count_expected` drops its
- * placeholders first (Contract, Semantics), so the what-if would be ignored.
- */
-const ETHICS_PRACTICE_2 = makeComponent({ id: 36, code: 'ethics_practice_2', name: 'Ethics Practice 2', points: 50 });
-const ETHICS_PRACTICE_PLACEHOLDER: GradeModelItemRow = {
-  ...ECN304_EXAM1_PLACEHOLDER,
-  scheme_course_id: 'IST.466',
-  shell_course_id: 'IST.466',
-  item_key: 'asg:IST.466/ethics-practice-2',
-  assignment_id: 'IST.466/ethics-practice-2',
-  component_id: ETHICS_PRACTICE_2.id,
-  name: 'Ethics Practice 2',
-};
-
-const ETHICS_KEY = 'col:IST.466:_3562497_1';
-
-/** One course's rows, as the stand-in database serves them. */
 interface CourseFixture {
   readonly id: string;
   readonly code: string;
@@ -66,19 +39,26 @@ interface CourseFixture {
   readonly gradebook: readonly GradebookLatestRow[];
 }
 
+/**
+ * IST.466 as prod holds it: the Ethics presentation linked and graded, and the
+ * Synchrony major case linked only `tentative`. Before G-1 that unsure link
+ * emptied the whole course; now it counts and the row says "unsure".
+ */
 const IST466_FIXTURE: CourseFixture = {
   id: 'IST.466',
   code: 'IST 466',
   scheme: IST466_SCHEME,
-  components: [...IST466_COMPONENTS, ETHICS_PRACTICE_2],
-  items: [makeItem(), IST466_SYNCHRONY, IST466_LETTER_PLACEHOLDER, ETHICS_PRACTICE_PLACEHOLDER],
+  components: IST466_COMPONENTS,
+  items: [
+    makeItem({ score: 90 }),
+    { ...IST466_SYNCHRONY, score: 120 },
+  ],
   gradebook: [
-    makeGradebookRow({ course_id: 'IST.466', column_id: '_3562497_1', name: 'Ethics Case Presentation', possible: 100, assignment_id: null }),
-    makeGradebookRow({ course_id: 'IST.466', column_id: '_3562496_1', name: 'Synchrony Major Case #1', possible: 150, assignment_id: null }),
+    makeGradebookRow({ course_id: 'IST.466', column_id: '_3562497_1', name: 'Ethics Case Presentation', possible: 100, effective_score: 90, assignment_id: null }),
+    makeGradebookRow({ course_id: 'IST.466', column_id: '_3562496_1', name: 'Synchrony Major Case #1', possible: 150, effective_score: 120, assignment_id: null }),
   ],
 };
 
-/** The course the tab is showing; each describe may swap it in its own beforeEach. */
 let course: CourseFixture = IST466_FIXTURE;
 
 /** 058's override rule, applied to the base rows. */
@@ -98,24 +78,18 @@ function modelItems(): GradeModelItemRow[] {
 
 type Filters = Record<string, string>;
 
-function read(relation: string, filters: Filters): unknown {
+function read(relation: string): unknown {
   switch (relation) {
     case 'grading_schemes': return course.scheme;
     case 'grade_components': return course.components;
     case 'v_grade_model_items': return modelItems();
-    case 'v_grade_model_total': return null;
     case 'v_gradebook_history': return [];
-    case 'grade_scenarios': return db.scenarios.get(filters.course_id) ?? null;
     default: throw new Error(`unexpected read of ${relation}`);
   }
 }
 
 function write(relation: string, op: 'upsert' | 'delete', payload: Record<string, unknown> | null, filters: Filters) {
-  if (relation === 'grade_scenarios' && op === 'upsert' && payload) {
-    db.scenarios.set(String(payload.course_id), { ...(payload as unknown as ScenarioRow), updated_at: 'now' });
-  } else if (relation === 'grade_scenarios' && op === 'delete') {
-    db.scenarios.delete(filters.course_id);
-  } else if (relation === 'grade_column_links' && op === 'upsert' && payload) {
+  if (relation === 'grade_column_links' && op === 'upsert' && payload) {
     db.links.set(`${payload.course_id}:${payload.column_id}`, payload as unknown as LinkRow);
   } else if (relation === 'grade_column_links' && op === 'delete') {
     db.links.delete(`${filters.course_id}:${filters.column_id}`);
@@ -129,7 +103,7 @@ function builder(relation: string) {
   let op: 'select' | 'upsert' | 'delete' = 'select';
   let payload: Record<string, unknown> | null = null;
   const settle = () => {
-    if (op === 'select') return { data: read(relation, filters), error: null };
+    if (op === 'select') return { data: read(relation), error: null };
     const failure = db.failures.get(`${relation}:${op}`);
     if (failure) return { data: null, error: new Error(failure) };
     write(relation, op, payload, filters);
@@ -161,14 +135,9 @@ function builder(relation: string) {
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: (relation: string) => builder(relation), auth: { getSession: vi.fn() } }),
 }));
-
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
-
-/* ---------------------------------------------------------------------------
- * The 10a hooks the tab also calls, stubbed
- * ------------------------------------------------------------------------ */
 
 function stub<T>(data: T) {
   return { data, isPending: false, isFetching: false, isError: false, error: null };
@@ -199,288 +168,99 @@ function mount() {
   );
 }
 
-function whatIfField(name: string): Promise<HTMLInputElement> {
-  return screen.findByLabelText(new RegExp(`what if\\s*—\\s*${name}`)) as Promise<HTMLInputElement>;
-}
-
-const MUTED_LINE = 'Left out: Two Major Case Studies (Synchrony, SU IT) — confirm the unsure link on Synchrony Major Case #1';
-
 beforeEach(() => {
   course = IST466_FIXTURE;
-  db.scenarios.clear();
   db.links.clear();
   db.failures.clear();
 });
 
-describe('CourseGrades — the scenario persists', () => {
-  it('saves a what-if value on blur and restores it after a remount', async () => {
-    const first = mount();
-    const field = await whatIfField('Ethics Case Presentation');
-    fireEvent.change(field, { target: { value: '90' } });
-    fireEvent.blur(field);
-
-    await waitFor(() => expect(db.scenarios.get('IST.466')?.item_scores).toEqual({ [ETHICS_KEY]: 90 }));
-    expect(await screen.findByText('includes what-if values')).toBeInTheDocument();
-
-    first.unmount();
+describe('CourseGrades — the figure', () => {
+  it('states one number, worked out by the real engine from the real query layer', async () => {
     mount();
-    expect((await whatIfField('Ethics Case Presentation')).value).toBe('90');
-    expect(await screen.findByText('includes what-if values')).toBeInTheDocument();
+    // Ethics presentation 90/100 of its 100-point part → 90 of 100 graded.
+    // Major Cases is a 300-point `sum` over 2 expected cases, so Synchrony's
+    // 120/150 is 300 × 120/300 = 120 earned of 300 × 150/300 = 150 graded.
+    // (120 + 90) / (150 + 100) = 84 %. The Letter of Gratitude part has no
+    // column at all, so it is on neither side.
+    expect(await screen.findByText('84.0%')).toBeInTheDocument();
+    expect(screen.getByText('Graded so far')).toBeInTheDocument();
   });
 
-  it('types a hypothetical on a "Not in Blackboard yet" row', async () => {
+  it('G-1: an unsure link no longer empties the course', async () => {
     mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (2)' }));
-    const field = await whatIfField('Letter of Gratitude');
-    fireEvent.change(field, { target: { value: '95' } });
-    fireEvent.keyDown(field, { key: 'Enter' });
-    await waitFor(() =>
-      expect(db.scenarios.get('IST.466')?.item_scores).toEqual({ 'asg:IST.466/letter-of-gratitude': 95 }),
-    );
+    await screen.findByText('84.0%');
+    const row = screen.getByText('Synchrony Major Case #1').closest('tr') as HTMLElement;
+    // The link is still flagged on the row…
+    expect(within(row).getByText('unsure')).toBeInTheDocument();
+    // …but its 120/150 is in the figure. Before G-1 the whole Major Cases part
+    // was dropped, and the course read 90 %.
+    expect(screen.getByText(/Not counted yet/).textContent).not.toContain('Major Case');
   });
 
-  it('Reset scenario deletes the row and empties every cell', async () => {
-    db.scenarios.set('IST.466', { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: 'A', updated_at: 'x' });
+  it('offers no what-if cell, no solver and no Reset', async () => {
     mount();
-    expect((await whatIfField('Ethics Case Presentation')).value).toBe('90');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Reset scenario' }));
-    await waitFor(() => expect(db.scenarios.has('IST.466')).toBe(false));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Reset scenario' })).toBeNull());
-    expect((await whatIfField('Ethics Case Presentation')).value).toBe('');
+    await screen.findByText('84.0%');
+    expect(screen.queryByLabelText(/what if/)).toBeNull();
+    expect(screen.queryByLabelText('Target letter')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reset scenario' })).toBeNull();
   });
-});
 
-describe('CourseGrades — a percentage what-if (Round 1b A1)', () => {
-  it('types a percentage on a pointless confirmed placeholder and the standing uses it', async () => {
+  it('says nothing has been graded rather than showing a zero', async () => {
+    course = { ...IST466_FIXTURE, items: IST466_FIXTURE.items.map((row) => ({ ...row, score: null })) };
     mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (2)' }));
-    const field = await whatIfField('Ethics Practice 2');
-    const cell = field.closest('[data-what-if-unit]') as HTMLElement;
-    expect(cell).toHaveAttribute('data-what-if-unit', 'percent');
-
-    fireEvent.change(field, { target: { value: '101' } });
-    fireEvent.blur(field);
-    expect(await within(cell).findByRole('alert')).toHaveTextContent('Enter a number from 0 to 100.');
-    expect(db.scenarios.has('IST.466')).toBe(false);
-
-    fireEvent.change(field, { target: { value: '80' } });
-    fireEvent.blur(field);
-    await waitFor(() => expect(db.scenarios.get('IST.466')?.item_scores).toEqual({ 'asg:IST.466/ethics-practice-2': 80 }));
-    expect(await screen.findByText('includes what-if values')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Nothing that counts toward the grade has been graded yet.'),
+    ).toBeInTheDocument();
   });
 });
 
-describe('CourseGrades — only the latest scenario action shows its error (R2-10)', () => {
-  const SAVED = { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: null, updated_at: 'x' };
-
-  it("a successful Reset clears a failed save's alert", async () => {
-    db.scenarios.set('IST.466', SAVED);
-    db.failures.set('grade_scenarios:upsert', 'network down');
+describe('CourseGrades — the "Counts toward…" picker', () => {
+  it('confirming the unsure major-case link writes an override, and the row stops saying "unsure"', async () => {
     mount();
-
-    const field = await whatIfField('Ethics Case Presentation');
-    fireEvent.change(field, { target: { value: '70' } });
-    fireEvent.blur(field);
-    expect(await screen.findByText('Could not save the scenario: network down')).toBeInTheDocument();
-
-    db.failures.clear();
-    fireEvent.click(await screen.findByRole('button', { name: 'Reset scenario' }));
-    await waitFor(() => expect(db.scenarios.has('IST.466')).toBe(false));
-    await waitFor(() => expect(screen.queryByText(/Could not save the scenario/)).toBeNull());
-  });
-
-  it("a successful save clears a failed Reset's alert", async () => {
-    db.scenarios.set('IST.466', SAVED);
-    db.failures.set('grade_scenarios:delete', 'permission denied');
-    mount();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Reset scenario' }));
-    expect(await screen.findByText('Could not reset the scenario: permission denied')).toBeInTheDocument();
-
-    db.failures.clear();
-    const field = await whatIfField('Ethics Case Presentation');
-    await waitFor(() => expect(field.value).toBe('90'));
-    fireEvent.change(field, { target: { value: '80' } });
-    fireEvent.blur(field);
-    await waitFor(() => expect(db.scenarios.get('IST.466')?.item_scores).toEqual({ [ETHICS_KEY]: 80 }));
-    await waitFor(() => expect(screen.queryByText(/Could not reset the scenario/)).toBeNull());
-  });
-});
-
-describe('CourseGrades — a link turns a muted part on', () => {
-  it('confirming the unsure major-case link writes an override and un-mutes the part', async () => {
-    db.scenarios.set('IST.466', { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: null, updated_at: 'x' });
-    mount();
-
-    const model = await screen.findByRole('region', { name: 'Our model' });
-    expect(await within(model).findByText(MUTED_LINE)).toBeInTheDocument();
+    // Wait for the figure: it lands after the same reads the picker needs.
+    await screen.findByText('84.0%');
     const row = screen.getByText('Synchrony Major Case #1').closest('tr') as HTMLElement;
     expect(within(row).getByText('unsure')).toBeInTheDocument();
-    expect(within(row).queryByLabelText(/what if/)).toBeNull();
 
     fireEvent.click(within(row).getByRole('button', { name: 'Confirm link: Synchrony Major Case #1' }));
 
     await waitFor(() =>
-      expect(db.links.get('IST.466:_3562496_1')).toEqual({ course_id: 'IST.466', column_id: '_3562496_1', component_id: 24, excluded: false }),
+      expect(db.links.get('IST.466:_3562496_1')).toEqual({
+        course_id: 'IST.466',
+        column_id: '_3562496_1',
+        component_id: 24,
+        excluded: false,
+      }),
     );
-    await waitFor(() => expect(screen.queryByText(MUTED_LINE)).toBeNull());
-    const after = screen.getByText('Synchrony Major Case #1').closest('tr') as HTMLElement;
-    expect(within(after).queryByText('unsure')).toBeNull();
-    expect(within(after).getByLabelText(/what if/)).toBeInTheDocument();
-  });
-});
-
-/**
- * IST.466 as prod holds it (R3-3): both major-case columns linked `tentative`,
- * and the AI Team assignment only as a tentative placeholder on its own part.
- */
-const IST466_UNSURE_FIXTURE: CourseFixture = (() => {
-  const aiTeam = makeComponent({ id: 36, code: 'ai_team_assignment', name: 'AI Team Assignment', points: 100 });
-  const suIt = { ...IST466_SYNCHRONY, item_key: 'col:IST.466:_3562492_1', assignment_id: 'IST.466/major-project-2-su-it', column_id: '_3562492_1', name: 'SU IT - Major Case #2' };
-  const aiTeamPlaceholder = {
-    ...IST466_LETTER_PLACEHOLDER,
-    item_key: 'asg:IST.466/ai-team-assignment',
-    assignment_id: 'IST.466/ai-team-assignment',
-    component_id: aiTeam.id,
-    link_confidence: 'tentative' as const,
-    name: 'AI Team Assignment',
-  };
-  return {
-    ...IST466_FIXTURE,
-    components: [...IST466_COMPONENTS, aiTeam],
-    items: [makeItem(), suIt, IST466_SYNCHRONY, aiTeamPlaceholder],
-    gradebook: [
-      IST466_FIXTURE.gradebook[0],
-      makeGradebookRow({ course_id: 'IST.466', column_id: '_3562492_1', name: 'SU IT - Major Case #2', possible: 150, assignment_id: null }),
-      IST466_FIXTURE.gradebook[1],
-    ],
-  };
-})();
-
-describe('CourseGrades — a part left out names what is still unsure (R3-3)', () => {
-  const BOTH = 'Left out: Two Major Case Studies (Synchrony, SU IT) — confirm the unsure links on SU IT - Major Case #2 and Synchrony Major Case #1';
-  const ONE = 'Left out: Two Major Case Studies (Synchrony, SU IT) — confirm the unsure link on SU IT - Major Case #2';
-  const AI_TEAM = "Left out: AI Team Assignment — its link is unsure and it isn't in Blackboard yet";
-
-  beforeEach(() => {
-    course = IST466_UNSURE_FIXTURE;
+    await waitFor(() => {
+      const after = screen.getByText('Synchrony Major Case #1').closest('tr') as HTMLElement;
+      expect(within(after).queryByText('unsure')).toBeNull();
+    });
+    // Confirming a link it was already counting does not move the figure.
+    expect(screen.getByText('84.0%')).toBeInTheDocument();
   });
 
-  it('names both major cases, then only the other one after a confirm', async () => {
-    db.scenarios.set('IST.466', { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: null, updated_at: 'x' });
+  it("surfaces the database's refusal on the row that caused it", async () => {
+    db.failures.set('grade_column_links:upsert', 'component belongs to another course');
     mount();
-
-    const model = await screen.findByRole('region', { name: 'Our model' });
-    expect(await within(model).findByText(BOTH)).toBeInTheDocument();
-    expect(within(model).getByText(AI_TEAM)).toBeInTheDocument();
-
+    await screen.findByText('84.0%');
     const row = screen.getByText('Synchrony Major Case #1').closest('tr') as HTMLElement;
     fireEvent.click(within(row).getByRole('button', { name: 'Confirm link: Synchrony Major Case #1' }));
-    await waitFor(() => expect(db.links.get('IST.466:_3562496_1')).toMatchObject({ component_id: 24, excluded: false }));
-
-    expect(await within(model).findByText(ONE)).toBeInTheDocument();
-    expect(within(model).queryByText(BOTH)).toBeNull();
-    expect(within(model).getByText(AI_TEAM)).toBeInTheDocument();
+    expect(await screen.findByText(/component belongs to another course/)).toBeInTheDocument();
   });
 });
 
 describe('CourseGrades — honesty', () => {
-  it('keeps every computed percentage, the solver included, inside "Our model"', async () => {
-    db.scenarios.set('IST.466', { course_id: 'IST.466', item_scores: { [ETHICS_KEY]: 90 }, target_letter: null, updated_at: 'x' });
+  it('prints no percentage outside the labelled figure', async () => {
     const { container } = mount();
-    const model = await screen.findByRole('region', { name: 'Our model' });
-    await within(model).findByLabelText('Target letter');
-
+    await screen.findByText('84.0%');
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
     let count = 0;
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (!/\d%/.test(node.textContent ?? '')) continue;
       count += 1;
-      expect(node.parentElement?.closest('[data-model]')).not.toBeNull();
+      expect(node.parentElement?.closest('[data-figure]')).not.toBeNull();
     }
     expect(count).toBeGreaterThan(0);
-  });
-});
-
-/* ---------------------------------------------------------------------------
- * Round 2: cells, placeholder rows and muting come from itemStates()
- * ------------------------------------------------------------------------ */
-
-/**
- * The live IST.323 lab shape (R2-2 / R2-4): a real "Lab #1" column that no rule
- * is attached to yet, the four seeded lab placeholders, and a Final Project
- * whose Running Log piece is muted by a tentative checkpoint column. Hand-graded
- * participation is left out so the course can compute.
- */
-const IST323_LAB_FIXTURE: CourseFixture = (() => {
-  const part = (over: Partial<GradeComponentRow>) =>
-    makeComponent({ course_id: 'IST.323', weight_pct: null, count_expected: 1, aggregation: 'single', ...over });
-  const labPlaceholder = (n: number, due: string) =>
-    makeItem({
-      scheme_course_id: 'IST.323', shell_course_id: 'IST.323', item_key: `asg:IST.323/lab-${n}`,
-      assignment_id: `IST.323/lab-${n}`, column_id: null, component_id: 16, name: `Lab #${n}`,
-      possible: 5, column_kind: 'placeholder', due_at: due, seen_at: null,
-    });
-  const piece = (over: Partial<GradeModelItemRow>) =>
-    makeItem({ scheme_course_id: 'IST.323', shell_course_id: 'IST.323', seen_at: null, ...over });
-  return {
-    id: 'IST.323',
-    code: 'IST 323',
-    scheme: { course_id: 'IST.323', method: 'points', total_points: 40, graded_out_of: 40, letter_scale: IST466_SCHEME.letter_scale },
-    components: [
-      part({ id: 14, code: 'final_project', name: 'Final Project: Security Program Proposal', points: 20, count_expected: null, aggregation: 'sum' }),
-      part({ id: 16, code: 'labs', name: 'Required Labs', points: 20, count_expected: 4, aggregation: 'sum' }),
-      part({ id: 18, code: 'fp_proposal', name: 'Final Project: Proposal', parent_id: 14, points: 11 }),
-      part({ id: 19, code: 'fp_log', name: 'Final Project: Running Log', parent_id: 14, points: 3, count_expected: 2, aggregation: 'sum' }),
-      part({ id: 20, code: 'fp_defense', name: 'Final Project: In-class Defense', parent_id: 14, points: 6 }),
-    ],
-    items: [
-      piece({ item_key: 'col:IST.323:_3560541_1', column_id: '_3560541_1', assignment_id: null, component_id: null, link_source: null, link_confidence: null, name: 'Lab #1: Performing a Ransomware Attack', possible: 5, score: 4 }),
-      labPlaceholder(1, '2026-09-24T03:59:00.000Z'),
-      labPlaceholder(2, '2026-10-15T03:59:00.000Z'),
-      labPlaceholder(3, '2026-12-01T04:59:00.000Z'),
-      labPlaceholder(4, '2026-12-08T04:59:00.000Z'),
-      piece({ item_key: 'col:IST.323:_3569947_1', column_id: '_3569947_1', component_id: 19, link_confidence: 'tentative', name: 'Log Checkpoint Assignment', possible: 1 }),
-      piece({ item_key: 'asg:IST.323/fp-log-final', column_id: null, column_kind: 'placeholder', component_id: 19, name: 'Running Log (final)', possible: 2 }),
-      piece({ item_key: 'asg:IST.323/fp-proposal', column_id: null, column_kind: 'placeholder', component_id: 18, name: 'Proposal', possible: 11 }),
-    ],
-    gradebook: [
-      makeGradebookRow({ course_id: 'IST.323', column_id: '_3560541_1', name: 'Lab #1: Performing a Ransomware Attack', possible: 5, effective_score: 4, assignment_id: null, counts_toward_grade: false }),
-      makeGradebookRow({ course_id: 'IST.323', column_id: '_3569947_1', name: 'Log Checkpoint Assignment', possible: 1, assignment_id: null }),
-    ],
-  };
-})();
-
-describe('CourseGrades — the engine decides cells and placeholder rows (R2-3w / R2-4 / R2-15)', () => {
-  beforeEach(() => {
-    course = IST323_LAB_FIXTURE;
-  });
-
-  it('after linking Lab #1, the seeded "Lab #1" placeholder is gone and "Lab #4" still has a cell', async () => {
-    mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (6)' }));
-    expect(await screen.findByText('Lab #1')).toBeInTheDocument();
-    expect(await whatIfField('Lab #4')).toBeInTheDocument();
-
-    const labRow = screen.getByText('Lab #1: Performing a Ransomware Attack').closest('tr') as HTMLElement;
-    const picker = within(labRow).getByRole('combobox') as HTMLSelectElement;
-    expect([...picker.options].map((o) => o.textContent)).not.toContain('Final Project: Security Program Proposal');
-    fireEvent.change(picker, { target: { value: '16' } });
-
-    await waitFor(() => expect(db.links.get('IST.323:_3560541_1')).toMatchObject({ component_id: 16, excluded: false }));
-    await waitFor(() => expect(screen.queryByText('Lab #1')).toBeNull());
-    expect(screen.getByRole('button', { name: 'Not in Blackboard yet (5)' })).toBeInTheDocument();
-    expect(await whatIfField('Lab #4')).toBeInTheDocument();
-  });
-
-  it('a piece of a muted part has no cell; a sibling piece that is not muted keeps its cell', async () => {
-    mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Not in Blackboard yet (6)' }));
-    expect(await whatIfField('Proposal')).toBeInTheDocument();
-    const runningLog = screen.getByText('Running Log (final)').closest('tr') as HTMLElement;
-    expect(within(runningLog).queryByLabelText(/what if/)).toBeNull();
-    const checkpoint = screen.getByText('Log Checkpoint Assignment').closest('tr') as HTMLElement;
-    expect(within(checkpoint).queryByLabelText(/what if/)).toBeNull();
   });
 });

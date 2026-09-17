@@ -27,6 +27,26 @@
   flex-wrap: wrap;
 }
 
+/*
+ * The instructor's feedback (Phase 12b, P-grades-9). Shown in full here —
+ * the popout has the room the gradebook row did not — with their own line
+ * breaks preserved.
+ */
+.feedback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.feedbackText {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 62ch;
+}
+
 .attempts {
   list-style: none;
   margin: 0;
