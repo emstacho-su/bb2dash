@@ -26,7 +26,7 @@ import {
   type PlacedWorkItems,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
-import { buildSlotHeights, weekSlotWeights } from '@/lib/planner-rows';
+import { buildSlotHeights, contentRequiredPx, weekSlotDemandPx } from '@/lib/planner-rows';
 import { toMeetingPatterns, useMeetings, useSessionsForWeek } from '@/lib/queries.planner';
 import {
   placePlannerEvents,
@@ -44,11 +44,13 @@ import { usePlannerEventsWindow } from '@/lib/queries.plannerEvents';
  * inside its wall-clock window — so they render as chips in the class rather
  * than as blocks overlapping it.
  *
- * `weight` is how much vertical room the block asks of the rows it covers
- * (P-planner-2). One for an ordinary block; a class asks for one more per
- * nested chip, because those stack inside it rather than beside it.
+ * `requiredPx` is the room the block's content needs (P-planner-2). Zero for an
+ * ordinary block, which is happy with whatever its hours are worth; a class
+ * with due chips nested in it needs more, because those stack inside the block
+ * rather than beside it, and it asks for that once rather than for a lane on
+ * every row it touches (CR-5).
  */
-export type GridBlock = { key: string; top: number; height: number; weight: number } & (
+export type GridBlock = { key: string; top: number; height: number; requiredPx: number } & (
   | { kind: 'meeting'; meeting: PlacedMeeting; nested: PlacedItem<WorkItem>[] }
   | { kind: 'item'; item: PlacedItem<WorkItem> }
   | { kind: 'event'; segment: PlacedEventSegment }
@@ -87,6 +89,15 @@ export interface PlannerWeekData {
 }
 
 /**
+ * A class block's own lines: the course-and-time head, the room, and a topic
+ * when a `sessions` row gave it one. What `MeetingContent` renders above the
+ * nested chips, and therefore what the block needs room for before them.
+ */
+function meetingTextLines(meeting: PlacedMeeting): number {
+  return 2 + (meeting.topic === null ? 0 : 1);
+}
+
+/**
  * Meetings and the timed items that are not inside one share each column, so
  * they share its lanes. An item due during its own class is a chip in that
  * class's block, not a block of its own.
@@ -107,7 +118,12 @@ function buildBlocks(
       kind: 'meeting',
       key: meeting.key,
       ...box,
-      weight: 1 + chips.length,
+      // Only a class with something nested in it asks the grid for more room.
+      // Stack's rule is that hours grow when things collide, not whenever a
+      // line does not fit — a class too short for its own topic clips it on a
+      // whole line and keeps it on the block's tooltip (F-2).
+      requiredPx:
+        chips.length === 0 ? 0 : contentRequiredPx(meetingTextLines(meeting), chips.length),
       meeting,
       nested: chips,
     });
@@ -119,7 +135,7 @@ function buildBlocks(
       kind: 'item',
       key: placed.key,
       ...box,
-      weight: 1,
+      requiredPx: 0,
       item: placed,
     });
   }
@@ -129,7 +145,7 @@ function buildBlocks(
       key: `event:${segment.key}`,
       top: segment.top,
       height: segment.height,
-      weight: 1,
+      requiredPx: 0,
       segment,
     });
   }
@@ -187,7 +203,7 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
   }, [placedMeetings, placedItems, placedEvents, view.days.length]);
 
   const slotHeights = useMemo(
-    () => buildSlotHeights(weekSlotWeights(blocksByDay)),
+    () => buildSlotHeights(weekSlotDemandPx(blocksByDay)),
     [blocksByDay],
   );
 

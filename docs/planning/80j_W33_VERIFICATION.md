@@ -29,11 +29,16 @@ columns share their rows with the gutter, so a table per day would put "3 PM" on
 different lines. It is built by
 
 ```ts
-buildSlotHeights(weekSlotWeights(blocksByDay))   // in usePlannerWeekData
+buildSlotHeights(weekSlotDemandPx(blocksByDay))   // in usePlannerWeekData
 ```
 
-where `weekSlotWeights` takes the **busiest day** per row (never the week's sum) and
-`buildSlotHeights` turns a row's weight *w* into `min(max(ceil(w), 1), 4) × 24px`.
+where `weekSlotDemandPx` takes the **busiest day** per row (never the week's sum) and
+`buildSlotHeights` clamps each row's demand to `[24px, 96px]`. A row's demand is two things
+added: **one base height per block drawn on it** (the lane rule, so three overlapping blocks
+still make a 72px row) **plus the largest per-row shortfall among them** — how much more a
+block needs than its own span is worth, spread over that span. Lanes add up because they sit
+side by side; shortfalls do not, because a row only has to be as tall as the hungriest block
+on it needs. See Round 3 below for why that is not one number.
 
 Every consumer and where it calls:
 
@@ -68,41 +73,61 @@ block (Phase 11's rule, unchanged).
 **1. Slots.** `slotOffset(15:45) = (945 − 480) / 30 = 15.5`;
 `slotOffset(17:05) = (1025 − 480) / 30 = 18.1\overline{6}`. Height `2.6\overline{6}` slots.
 
-**2. Weight.** The class asks for `1 + nested.length = 3` lanes' worth of room —
-itself plus one per chip. Nothing else is drawn that day.
+**2. What it needs.** The class draws three lines of its own — the course-and-time head, the
+room, the session's topic — and carries two nested chips. A chip is 39px: 1px of padding,
+a 14px title line, a 1px row gap, the 22px status control, 1px of padding. So
+
+```
+contentRequiredPx(3, 2) = 6 + 3×14 + (2 + 39 + 2 + 39) = 130px
+```
+
+against the `2.6\overline{6} × 24 = 64px` its hours are worth. **Shortfall 66px.**
+
+Not "three lanes". That was CR-5's bug: a chip was charged as a whole 24px lane on *every*
+row the class spanned, so this block came out at 192px, an 80-minute class with one chip at
+144px for a 39px chip, and three chips put every row on the 96px cap.
 
 **3. Rows charged.** Every row the block covers, whole or part:
 `floor(15.5) = 15` through `ceil(18.1\overline{6}) = 19`, exclusive — rows **15, 16, 17, 18**.
+Each is asked for one lane (24px) plus the shortfall spread over the block's **span**, not
+over the four rows it touches: `66 / 2.6\overline{6} = 24.75px`. Spreading over the four rows
+would hand the block only two-thirds of what it asked for.
 
 **4. The table.**
 
-| row | clock | weight | height |
+| row | clock | demand | height |
 |---|---|---|---|
-| 0–14 | 08:00 – 15:30 | 0 or 1 | 24px |
-| **15** | **15:30** | **3** | **72px** |
-| **16** | **16:00** | **3** | **72px** |
-| **17** | **16:30** | **3** | **72px** |
-| **18** | **17:00** | **3** | **72px** |
+| 0–14 | 08:00 – 15:30 | 0 or 24px | 24px |
+| **15** | **15:30** | **24 + 24.75** | **48.75px** |
+| **16** | **16:00** | **24 + 24.75** | **48.75px** |
+| **17** | **16:30** | **24 + 24.75** | **48.75px** |
+| **18** | **17:00** | **24 + 24.75** | **48.75px** |
 | 19–27 | 17:30 – 21:30 | 0 | 24px |
+
+A fractional row height is fine, and usually right: a shortfall rarely divides evenly into a
+span, and CSS lays out subpixels without complaint.
 
 **5. Positions.**
 
 ```
-slotToPx(15.5)    = 15×24 + 0.5×72                 = 360 + 36        = 396px
-slotToPx(18.1667) = 15×24 + 3×72 + 0.1667×72       = 360 + 216 + 12  = 588px
-block height      = 588 − 396                                        = 192px
+slotToPx(15.5)    = 15×24 + 0.5×48.75               = 360 + 24.375   = 384.375px
+slotToPx(18.1667) = 15×24 + 3×48.75 + 0.1667×48.75  = 360 + 146.25 + 8.125 = 514.375px
+block height      = 514.375 − 384.375                                = 130px
 ```
 
-Phase 11 gave the same class `2.6\overline{6} × 24 = 64px` and scrolled the two chips
-inside it. It now gets **192px** — three times the room, which is exactly the three lanes
-it asked for — and nothing scrolls.
+Phase 11 gave the same class 64px and scrolled the two chips inside it. It now gets
+**exactly the 130px its content needs** — not a pixel more — and nothing scrolls.
 
-**6. What moved with it.** Grid height `28×24 + 4×48 = 672 + 192 = 864px`. The 5 PM gutter
-label sits at `slotToPx(18) = 576px`. The 5:30 PM click target sits at
-`slotToPx(19) = 648px` and `pxToSlot(648) = 19` exactly, so the click still creates an
+**6. What moved with it.** Grid height `28×24 + 4×24.75 = 672 + 99 = 771px`. The 5 PM gutter
+label sits at `slotToPx(18) = 506.25px`. The 5:30 PM click target sits at
+`slotToPx(19) = 555px` and `pxToSlot(555) = 19` exactly, so the click still creates an
 event at 5:30 PM. The now-line (10:00, slot 4) has not moved at all: `96px`, as before.
 
-All six numbers are asserted in `PlannerWeek.rows.test.tsx`, written out literally and then
+**A class with no chips does not grow at all**, even if a line does not fit: Stack's rule is
+that hours grow when things collide, not whenever text is long. The 55-minute GEO 103 block
+stays 44px, clips its topic on a whole line, and keeps it on its tooltip (F-2).
+
+All of these numbers are asserted in `PlannerWeek.rows.test.tsx`, written out literally and then
 asked of `slotToPx` a second time — which is what pins the component to the module rather
 than to a copy of its arithmetic.
 
@@ -329,6 +354,65 @@ suite run twice after, green both times.
 3. `IST 466 2:00 – 3:20 PM` on Tuesday had a two-line topic that just fitted at 64px; with
    whole-line clipping it gets four lines of 14px in a 58px text area — so the last line
    may now be dropped rather than squeezed. Worth a look to confirm that reads better.
+
+## Round 3 — CR-5 (P-planner-2), from `/code-review main high`
+
+| gate | round 2 | round 3 |
+|---|---|---|
+| `npm test` | 103 files, 1656 | **91 files, 1520** (the phase branch merged in; W-31 consolidated the grade-model suites) |
+| `npm run typecheck` / `build` | clean | clean |
+
+**The finding.** `weight = 1 + chips` was charged to *every* row a class spanned. An
+80-minute class is four rows, so one 39px chip made all four 48px and the block 144px; three
+chips put every row on the 96px cap, 288px of block — and since the seven columns share one
+set of rows, the whole board stretched with it.
+
+**The fix.** A row's demand is no longer one number. It is **lanes + shortfall**:
+
+* **lanes** — one base height per block drawn on the row. Unchanged, and it is still what
+  makes two genuinely concurrent blocks a 48px row and three a 72px one. They add up because
+  they sit side by side.
+* **shortfall** — `max(0, requiredPx − span × 24)`, spread over the block's **own span** and
+  taken as a *maximum* across the blocks on a row, not a sum. A row only has to be as tall as
+  the hungriest block on it needs it to be.
+
+`requiredPx` is measured, not estimated: `contentRequiredPx(textLines, chips)` adds the
+block's padding (6px), its own lines (14px each) and the chips — **39px** apiece, which is
+`.nestedChip`'s 1px padding + a 14px title line + its 1px row gap + the 22px status control
+(`.statusSelect`: a line box, 3px padding and a 1px border, both sides) + 1px of padding —
+with `.nested`'s 2px gaps between and above them.
+
+Spreading over the *span* rather than over the rows touched is the part that is easy to get
+wrong: a 2⅔-slot block covers four rows, so dividing by four would hand it two-thirds of what
+it asked for.
+
+**The numbers.** All from `test/planner-rows.test.ts`, RED against the old table:
+
+| case | required | before | after |
+|---|---|---|---|
+| 80-min class, 1 chip | 89px | 144px | **89px** |
+| 80-min class, 2 chips | 130px | 192px | **130px** |
+| 80-min class, 3 chips | 171px | 288px, every row capped | **171px**, no row above 64.125px |
+| 80-min class, no chips | 48px | 64px | **64px** (unchanged) |
+| two clashing blocks | — | 48px row | **48px row** (unchanged) |
+
+**New property**, as the review asked: *gives a block that needs more than its span the room,
+and barely more* — for random spans and demands, a block that asked for more than its span is
+worth gets at least `min(requiredPx, cap)` and strictly less than `requiredPx + 24`. Blocks
+hanging off the bottom of the grid are excluded, because `slotToPx` clamps them and they
+genuinely cannot be given their full height (`slotBox` and `segmentBox` clamp before this
+point, so no real block reaches it that way).
+
+**Base case and cap both kept.** A week with nothing overlapping and nothing nested demands
+`1 × 24` a row, so the table is flat and `slotToPx(s) === s × 24` — still property-tested at
+200 random fractional positions. The cap is still 4× base, now applied to the summed demand.
+
+**One judgement call to flag.** `requiredPx` is only asked for by a class that actually has
+chips nested in it. A class too short for its own topic does **not** stretch the grid — Stack's
+rule is that hours grow when things collide, not whenever a line is long — so the 55-minute
+GEO 103 block stays 44px and keeps F-2's behaviour: two whole lines, and the topic on the
+tooltip. `buildSlotHeights` now returns fractional heights, which is correct (a shortfall
+rarely divides evenly into a span) and which CSS lays out without complaint.
 
 ## What T-1 and T-2 will need from this geometry
 

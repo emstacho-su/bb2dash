@@ -26,6 +26,7 @@ import {
   PLANNER_BASE_SLOT_PX,
   PLANNER_BLOCK_LINE_PX,
   buildSlotHeights,
+  contentRequiredPx,
   gridHeightPx,
   pxToSlot,
   slotToPx,
@@ -131,19 +132,23 @@ const TERM = [
 ];
 
 /**
- * The lecture covers slots 15.5 … 18.167, so rows 15–18 are the ones asked for
- * three lanes' worth of room: the class itself plus its two chips.
+ * The lecture covers slots 15.5 … 18.167, so rows 15–18 are the ones it asks
+ * for more of. It has three lines of its own and two nested chips — 130px — of
+ * which its 2⅔ slots are worth 64, so the 66px shortfall is spread across its
+ * span: 24.75px a row, making each of the four 48.75px tall (CR-5).
  */
 const CROWDED_ROWS = [15, 16, 17, 18];
+const LECTURE_REQUIRED_PX = contentRequiredPx(3, 2);
+const CROWDED_ROW_PX = PLANNER_BASE_SLOT_PX + (LECTURE_REQUIRED_PX - 64) / (8 / 3);
 
 function crowdedHeights(): number[] {
-  const weights = new Array<number>(PLANNER_SLOT_COUNT).fill(1);
-  for (const slot of CROWDED_ROWS) weights[slot] = 3;
-  return buildSlotHeights(weights);
+  const demand = new Array<number>(PLANNER_SLOT_COUNT).fill(PLANNER_BASE_SLOT_PX);
+  for (const slot of CROWDED_ROWS) demand[slot] = CROWDED_ROW_PX;
+  return buildSlotHeights(demand);
 }
 
 function flatHeights(): number[] {
-  return buildSlotHeights(new Array<number>(PLANNER_SLOT_COUNT).fill(1));
+  return buildSlotHeights(new Array<number>(PLANNER_SLOT_COUNT).fill(PLANNER_BASE_SLOT_PX));
 }
 
 function renderPlanner() {
@@ -186,7 +191,9 @@ beforeEach(() => {
   window.localStorage.clear();
   db.rows = {
     meetings: [LECTURE],
-    sessions: [],
+    // A topic, so the block draws all three of the lines the brief's worked
+    // example counts: the head, the room and the session's topic.
+    sessions: [{ course_id: 'IST.323', session_date: '2026-09-16', topic: 'Cryptography 2' }],
     v_work_items: NESTED_ITEMS,
     terms: TERM,
     planner_events: [],
@@ -203,7 +210,7 @@ afterEach(() => {
  * ------------------------------------------------------------------------ */
 
 describe('a class with two due items in it', () => {
-  it('draws the class three times as tall as its hours alone would give it', async () => {
+  it('draws the class exactly as tall as its chips need, and no taller', async () => {
     renderPlanner();
     await within(dayColumn('2026-09-16')).findByText('Quiz 3');
 
@@ -211,13 +218,17 @@ describe('a class with two due items in it', () => {
     expect(block).toBeInstanceOf(HTMLElement);
     const meeting = block as HTMLElement;
 
-    // Phase 11: 2.667 slots × 24px = 64px, and the two chips scrolled.
-    // Now: rows 15–18 are 72px each, so the same hours are 192px of screen.
-    expect(px(meeting, '--top-px')).toBe(396);
-    expect(px(meeting, '--height-px')).toBeCloseTo(192, 6);
+    // Phase 11: 2⅔ slots × 24px = 64px, and the two chips scrolled inside it.
+    // Now: three lines of its own plus two 39px chips is 130px, so its four
+    // rows carry 24.75px each. CR-5's version charged a lane a chip a row and
+    // made it 192px.
+    expect(LECTURE_REQUIRED_PX).toBe(130);
+    expect(px(meeting, '--height-px')).toBeCloseTo(130, 6);
+    expect(px(meeting, '--top-px')).toBeCloseTo(384.375, 6);
 
     const heights = crowdedHeights();
-    expect(px(meeting, '--top-px')).toBe(slotToPx(15.5, heights));
+    expect(px(meeting, '--top-px')).toBeCloseTo(slotToPx(15.5, heights), 6);
+    expect(heights[16]).toBeCloseTo(48.75, 6);
   });
 
   it('keeps both chips in the block, and gives the long one room to wrap', async () => {
@@ -233,7 +244,7 @@ describe('a class with two due items in it', () => {
     expect(
       within(meeting).getByText('Lab #1 — packet capture and analysis for the midterm review'),
     ).toBeInTheDocument();
-    // A 192px block, less its padding, pays for more than one line of title.
+    // A 130px block, less its padding, pays for more than one line of title.
     expect(px(meeting, '--title-lines')).toBeGreaterThan(1);
   });
 
@@ -242,9 +253,9 @@ describe('a class with two due items in it', () => {
     await within(dayColumn('2026-09-16')).findByText('Quiz 3');
 
     const flat = PLANNER_SLOT_COUNT * PLANNER_BASE_SLOT_PX;
-    expect(board().style.getPropertyValue('--planner-grid-height')).toBe(
-      `${flat + CROWDED_ROWS.length * 2 * PLANNER_BASE_SLOT_PX}px`,
-    );
+    const gained = CROWDED_ROWS.length * (CROWDED_ROW_PX - PLANNER_BASE_SLOT_PX);
+    expect(gained).toBeCloseTo(99, 6); // four rows at 24.75px each
+    expect(board().style.getPropertyValue('--planner-grid-height')).toBe(`${flat + gained}px`);
     expect(board().style.getPropertyValue('--planner-grid-height')).toBe(
       `${gridHeightPx(crowdedHeights())}px`,
     );
@@ -261,9 +272,10 @@ describe('the rest of the grid reads the same table', () => {
     await within(dayColumn('2026-09-16')).findByText('Quiz 3');
 
     const heights = crowdedHeights();
-    // 5:30 PM is slot 19, the first row after the lecture.
-    expect(slotTopPx('2026-09-16', 19)).toBe(648);
-    expect(slotTopPx('2026-09-16', 19)).toBe(slotToPx(19, heights));
+    // 5:30 PM is slot 19, the first row after the lecture: 15 base rows and
+    // the lecture's four at 48.75px.
+    expect(slotTopPx('2026-09-16', 19)).toBeCloseTo(555, 6);
+    expect(slotTopPx('2026-09-16', 19)).toBeCloseTo(slotToPx(19, heights), 6);
     // Read back the other way: that pixel is slot 19 and nothing else.
     expect(pxToSlot(slotTopPx('2026-09-16', 19), heights)).toBeCloseTo(19, 9);
 
@@ -278,7 +290,7 @@ describe('the rest of the grid reads the same table', () => {
     const column = dayColumn('2026-09-16');
     const crowded = column.querySelector('[data-slot="16"]') as HTMLElement;
     const ordinary = column.querySelector('[data-slot="4"]') as HTMLElement;
-    expect(crowded.style.getPropertyValue('--height-px')).toBe('72px');
+    expect(crowded.style.getPropertyValue('--height-px')).toBe('48.75px');
     expect(ordinary.style.getPropertyValue('--height-px')).toBe('24px');
   });
 
@@ -287,9 +299,9 @@ describe('the rest of the grid reads the same table', () => {
     await within(dayColumn('2026-09-16')).findByText('Quiz 3');
 
     const heights = crowdedHeights();
-    // 5 PM is slot 18: fifteen base rows, then three grown ones.
-    expect(px(screen.getByText('5:00 PM'), '--top-px')).toBe(576);
-    expect(px(screen.getByText('5:00 PM'), '--top-px')).toBe(slotToPx(18, heights));
+    // 5 PM is slot 18: fifteen base rows, then three 48.75px ones.
+    expect(px(screen.getByText('5:00 PM'), '--top-px')).toBeCloseTo(506.25, 6);
+    expect(px(screen.getByText('5:00 PM'), '--top-px')).toBeCloseTo(slotToPx(18, heights), 6);
     // 9 AM is above the crowd and has not moved at all.
     expect(px(screen.getByText('9:00 AM'), '--top-px')).toBe(slotToPx(2, flatHeights()));
   });

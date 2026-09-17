@@ -331,7 +331,9 @@ function DayColumn({
  */
 function otherLineCount(block: GridBlock): number {
   if (block.kind === 'meeting') {
-    return 2 + (block.meeting.topic === null ? 0 : 1) + block.nested.length * 2;
+    // Nested chips are not counted: a class block has no title of its own, and
+    // the row table already gave it the pixels the chips need (CR-5).
+    return 2 + (block.meeting.topic === null ? 0 : 1);
   }
   if (block.kind === 'item') return 2;
   const { segment } = block;

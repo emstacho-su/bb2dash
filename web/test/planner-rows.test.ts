@@ -31,16 +31,18 @@ import {
   PLANNER_BLOCK_PADDING_PX,
   PLANNER_MAX_SLOT_SCALE,
   PLANNER_MAX_TITLE_LINES,
+  PLANNER_NESTED_CHIP_PX,
   baseSlotHeights,
   blockContentPx,
   buildSlotHeights,
+  contentRequiredPx,
   gridHeightPx,
   pxToSlot,
+  slotDemandPx,
   slotToPx,
-  slotWeights,
   spanPx,
   titleLines,
-  weekSlotWeights,
+  weekSlotDemandPx,
 } from '@/lib/planner-rows';
 
 /* ---------------------------------------------------------------------------
@@ -64,14 +66,14 @@ function assertProperty<Ts extends [unknown, ...unknown[]]>(property: fc.IProper
   throw new Error(`${hint}\n${fc.defaultReportMessage(details)}`);
 }
 
-/** A whole week's worth of per-slot weights: mostly 1, sometimes crowded. */
-const weightsArb = fc.array(fc.integer({ min: 0, max: 7 }), {
+/** A whole week's worth of per-row demand, in pixels: mostly one lane's worth. */
+const demandArb = fc.array(fc.double({ min: 0, max: 240, noNaN: true }), {
   minLength: PLANNER_SLOT_COUNT,
   maxLength: PLANNER_SLOT_COUNT,
 });
 
 /** A height table built the only way the app builds one. */
-const heightsArb = weightsArb.map((weights) => buildSlotHeights(weights));
+const heightsArb = demandArb.map((demand) => buildSlotHeights(demand));
 
 /** Any position on the grid, whole slots and halves and everything between. */
 const slotArb = fc.double({ min: 0, max: PLANNER_SLOT_COUNT, noNaN: true });
@@ -80,23 +82,24 @@ const slotArb = fc.double({ min: 0, max: PLANNER_SLOT_COUNT, noNaN: true });
  * The table
  * ------------------------------------------------------------------------ */
 
-describe('buildSlotHeights — a row grows with what is on it, and stops', () => {
-  it('leaves an uncrowded row at the base height', () => {
-    expect(buildSlotHeights([0, 1, 1, 0])).toEqual([24, 24, 24, 24]);
+describe('buildSlotHeights — a row is as tall as what is asked of it, and stops', () => {
+  it('leaves a row nobody asked much of at the base height', () => {
+    expect(buildSlotHeights([0, 12, 24, 0])).toEqual([24, 24, 24, 24]);
   });
 
-  it('grows a row one base height per concurrent lane', () => {
-    expect(buildSlotHeights([1, 2, 3, 4])).toEqual([24, 48, 72, 96]);
+  it('gives a row exactly the pixels it was asked for', () => {
+    expect(buildSlotHeights([24, 48, 72, 96])).toEqual([24, 48, 72, 96]);
+    expect(buildSlotHeights([33.375])).toEqual([33.375]);
   });
 
-  it('caps a row at four base heights, however crowded the slot', () => {
-    expect(buildSlotHeights([5, 9, 40])).toEqual([96, 96, 96]);
+  it('caps a row at four base heights, however much is asked of it', () => {
+    expect(buildSlotHeights([120, 240, 1000])).toEqual([96, 96, 96]);
   });
 
   it('never leaves a row shorter than the base or taller than the cap', () => {
     assertProperty(
-      fc.property(weightsArb, (weights) => {
-        for (const height of buildSlotHeights(weights)) {
+      fc.property(demandArb, (demand) => {
+        for (const height of buildSlotHeights(demand)) {
           expect(height).toBeGreaterThanOrEqual(PLANNER_BASE_SLOT_PX);
           expect(height).toBeLessThanOrEqual(PLANNER_BASE_SLOT_PX * PLANNER_MAX_SLOT_SCALE);
         }
@@ -105,58 +108,90 @@ describe('buildSlotHeights — a row grows with what is on it, and stops', () =>
   });
 
   it('is the flat Phase 11 table when nothing is crowded', () => {
-    expect(buildSlotHeights(new Array(PLANNER_SLOT_COUNT).fill(1))).toEqual(baseSlotHeights());
+    const oneLane = new Array(PLANNER_SLOT_COUNT).fill(PLANNER_BASE_SLOT_PX);
+    expect(buildSlotHeights(oneLane)).toEqual(baseSlotHeights());
     expect(baseSlotHeights()).toHaveLength(PLANNER_SLOT_COUNT);
     expect(gridHeightPx(baseSlotHeights())).toBe(PLANNER_SLOT_COUNT * PLANNER_BASE_SLOT_PX);
   });
 });
 
 /* ---------------------------------------------------------------------------
- * Weights — who asks a row to grow
+ * Demand — who asks a row to grow, and for how much
  * ------------------------------------------------------------------------ */
 
-describe('slotWeights — what one day column asks of each row', () => {
-  it('charges a block to every row it covers, whole or part', () => {
-    // 09:00–10:00 is slots 2 … 4; 09:15 starts inside slot 2.
-    expect(slotWeights([{ top: 2, height: 2, weight: 1 }], 6)).toEqual([0, 0, 1, 1, 0, 0]);
-    expect(slotWeights([{ top: 2.5, height: 1, weight: 1 }], 6)).toEqual([0, 0, 1, 1, 0, 0]);
+describe('contentRequiredPx — the room a block needs for its content', () => {
+  it('is its own lines plus the padding around them', () => {
+    expect(contentRequiredPx(1, 0)).toBe(6 + 14);
+    expect(contentRequiredPx(3, 0)).toBe(6 + 42);
+  });
+
+  it('adds a nested chip once each, with the gap the list sits in', () => {
+    expect(PLANNER_NESTED_CHIP_PX).toBe(39);
+    expect(contentRequiredPx(3, 1)).toBe(6 + 42 + 2 + 39);
+    expect(contentRequiredPx(3, 2)).toBe(6 + 42 + 2 + 39 + 2 + 39);
+  });
+});
+
+describe('slotDemandPx — what one day column asks of each row', () => {
+  it('charges one lane to every row a block covers, whole or part', () => {
+    const b = { top: 2, height: 2, requiredPx: 0 };
+    expect(slotDemandPx([b], 6)).toEqual([0, 0, 24, 24, 0, 0]);
+    expect(slotDemandPx([{ ...b, top: 2.5, height: 1 }], 6)).toEqual([0, 0, 24, 24, 0, 0]);
   });
 
   it('adds up the blocks that share a row — that is the concurrency', () => {
     const blocks = [
-      { top: 1, height: 2, weight: 1 },
-      { top: 2, height: 2, weight: 1 },
-      { top: 2, height: 1, weight: 1 },
+      { top: 1, height: 2, requiredPx: 0 },
+      { top: 2, height: 2, requiredPx: 0 },
+      { top: 2, height: 1, requiredPx: 0 },
     ];
-    expect(slotWeights(blocks, 5)).toEqual([0, 1, 3, 1, 0]);
+    expect(slotDemandPx(blocks, 5)).toEqual([0, 24, 72, 24, 0]);
   });
 
-  it('lets a block ask for more than one lane — a class with nested chips', () => {
-    expect(slotWeights([{ top: 0, height: 2, weight: 3 }], 4)).toEqual([3, 3, 0, 0]);
+  it('spreads a shortfall over the span of the block, not over the rows it touches', () => {
+    // Two slots is 48px; asking for 72 is 24 short, which is 12 a slot — and
+    // the block covers exactly two rows, so each one carries 12.
+    expect(slotDemandPx([{ top: 0, height: 2, requiredPx: 72 }], 4)).toEqual([36, 36, 0, 0]);
+  });
+
+  it('takes the largest shortfall on a shared row rather than their sum', () => {
+    const blocks = [
+      { top: 0, height: 2, requiredPx: 72 }, // 12px a row
+      { top: 0, height: 2, requiredPx: 96 }, // 24px a row
+    ];
+    // Two lanes, plus the bigger of the two shortfalls — not 24 + 12.
+    expect(slotDemandPx(blocks, 3)).toEqual([72, 72, 0]);
+  });
+
+  it('asks for nothing extra when a block already fits its span', () => {
+    expect(slotDemandPx([{ top: 0, height: 2, requiredPx: 48 }], 3)).toEqual([24, 24, 0]);
+    expect(slotDemandPx([{ top: 0, height: 2, requiredPx: 10 }], 3)).toEqual([24, 24, 0]);
   });
 
   it('ignores a block that falls outside the drawn hours', () => {
-    expect(slotWeights([{ top: -4, height: 2, weight: 1 }], 4)).toEqual([0, 0, 0, 0]);
-    expect(slotWeights([{ top: 9, height: 2, weight: 1 }], 4)).toEqual([0, 0, 0, 0]);
+    expect(slotDemandPx([{ top: -4, height: 2, requiredPx: 0 }], 4)).toEqual([0, 0, 0, 0]);
+    expect(slotDemandPx([{ top: 9, height: 2, requiredPx: 0 }], 4)).toEqual([0, 0, 0, 0]);
   });
 });
 
-describe('weekSlotWeights — seven columns share one set of rows', () => {
+describe('weekSlotDemandPx — seven columns share one set of rows', () => {
   it('takes the busiest day per row, never the sum of the week', () => {
-    const monday = [{ top: 0, height: 2, weight: 2 }];
-    const tuesday = [{ top: 0, height: 2, weight: 2 }];
+    const monday = [
+      { top: 0, height: 2, requiredPx: 0 },
+      { top: 0, height: 2, requiredPx: 0 },
+    ];
     // Two days each with two overlapping blocks is still a two-lane row.
-    expect(weekSlotWeights([monday, tuesday], 3)).toEqual([2, 2, 0]);
+    expect(weekSlotDemandPx([monday, monday], 3)).toEqual([48, 48, 0]);
   });
 
   it('grows a row for the one day that needs it', () => {
-    const quiet = [{ top: 0, height: 1, weight: 1 }];
-    const busy = [{ top: 1, height: 1, weight: 4 }];
-    expect(weekSlotWeights([quiet, busy], 3)).toEqual([1, 4, 0]);
+    const quiet = [{ top: 0, height: 1, requiredPx: 0 }];
+    const busy = [{ top: 1, height: 1, requiredPx: 96 }];
+    expect(weekSlotDemandPx([quiet, busy], 3)).toEqual([24, 96, 0]);
   });
 
   it('is all zeroes for an empty week', () => {
-    expect(weekSlotWeights([[], [], []], 3)).toEqual([0, 0, 0]);
+    expect(weekSlotDemandPx([[], [], []], 3)).toEqual([0, 0, 0]);
   });
 });
 
@@ -211,14 +246,14 @@ describe('slotToPx — the properties every consumer relies on', () => {
   });
 
   it('clamps a position off either end of the grid rather than extrapolating', () => {
-    const heights = buildSlotHeights([1, 3, 1]);
+    const heights = buildSlotHeights([24, 72, 24]);
     expect(slotToPx(-5, heights)).toBe(0);
     expect(slotToPx(99, heights)).toBe(gridHeightPx(heights));
   });
 
   it('puts a grown row where its own height says, not where 24px would', () => {
     // Rows 0 and 1 are base; row 2 holds three lanes; row 3 is base again.
-    const heights = buildSlotHeights([1, 1, 3, 1]);
+    const heights = buildSlotHeights([24, 24, 72, 24]);
     expect(heights).toEqual([24, 24, 72, 24]);
     expect(slotToPx(2, heights)).toBe(48);
     expect(slotToPx(2.5, heights)).toBe(84); // halfway down the grown row
@@ -246,7 +281,7 @@ describe('pxToSlot — reading a pixel on the board back as a time', () => {
   });
 
   it('finds the right half-hour under a grown row', () => {
-    const heights = buildSlotHeights([1, 1, 3, 1]);
+    const heights = buildSlotHeights([24, 24, 72, 24]);
     // The click that used to land on row 3 at 72px now lands a third of the
     // way into the grown row 2; row 3 starts 48px further down.
     expect(pxToSlot(72, heights)).toBeCloseTo(2 + 1 / 3, 9);
@@ -255,7 +290,7 @@ describe('pxToSlot — reading a pixel on the board back as a time', () => {
   });
 
   it('clamps rather than running off either end', () => {
-    const heights = buildSlotHeights([1, 1]);
+    const heights = buildSlotHeights([24, 24]);
     expect(pxToSlot(-10, heights)).toBe(0);
     expect(pxToSlot(9999, heights)).toBe(2);
   });
@@ -270,15 +305,16 @@ describe('spanPx — what a block hands the stylesheet', () => {
     });
   });
 
-  it('grows a class block by exactly the rows it covers', () => {
-    // A 3:45–5:05 class with two due items nested in it: slots 15…18 at 3×.
-    const weights = new Array(PLANNER_SLOT_COUNT).fill(1);
-    for (const slot of [15, 16, 17, 18]) weights[slot] = 3;
-    const heights = buildSlotHeights(weights);
+  it('grows a class block to exactly the room its chips asked for', () => {
+    // The 3:45–5:05 lecture with two due items nested in it. It needs 130px of
+    // the 64 its hours are worth, so its four rows carry 66/2⅔ = 24.75px each.
+    const requiredPx = contentRequiredPx(3, 2);
+    const heights = buildSlotHeights(weekSlotDemandPx([[{ ...LECTURE, requiredPx }]]));
+    expect(heights[16]).toBeCloseTo(48.75, 6);
 
-    const { topPx, heightPx } = spanPx(15.5, 2.6666666666666665, heights);
-    expect(topPx).toBe(396); // 15 base rows, then half of a 72px row
-    expect(heightPx).toBeCloseTo(192, 6); // three times the 64px it used to get
+    const { topPx, heightPx } = spanPx(LECTURE.top, LECTURE.height, heights);
+    expect(topPx).toBeCloseTo(384.375, 6); // 15 base rows, then half of a grown one
+    expect(heightPx).toBeCloseTo(requiredPx, 6); // 130px, not the 192 CR-5 found
   });
 
   it('never returns a negative height', () => {
@@ -293,6 +329,91 @@ describe('spanPx — what a block hands the stylesheet', () => {
 /* ---------------------------------------------------------------------------
  * Wrapping (P-planner-4)
  * ------------------------------------------------------------------------ */
+
+/* ---------------------------------------------------------------------------
+ * CR-5 — a nested chip is not a lane
+ * ------------------------------------------------------------------------ */
+
+/** The IST 323 lecture from the brief: 3:45 – 5:05 PM, four rows, 2⅔ slots. */
+const LECTURE = { top: 15.5, height: 8 / 3 };
+
+/** The rows a block spanning `LECTURE` charges, and its height off them. */
+function grownHeight(requiredPx: number): number {
+  const heights = buildSlotHeights(weekSlotDemandPx([[{ ...LECTURE, requiredPx }]]));
+  return spanPx(LECTURE.top, LECTURE.height, heights).heightPx;
+}
+
+describe('CR-5 — a class asks for the room its chips need, not a lane per row', () => {
+  /**
+   * The bug the review found: a chip was worth one lane on *every* row the
+   * class spanned, so an 80-minute class (four rows) with one chip made all
+   * four 48px and the block 144px — for a chip that needs 39. Three chips put
+   * every row on the 96px cap, 288px of block, and since rows are shared with
+   * the other six columns the whole board stretched with it.
+   */
+  it('grows an 80-minute class with one chip to the room it needs, not to 144px', () => {
+    const requiredPx = contentRequiredPx(3, 1); // head, room, topic, and one chip
+    expect(requiredPx).toBe(89);
+    expect(grownHeight(requiredPx)).toBeCloseTo(89, 6);
+    expect(grownHeight(requiredPx)).toBeLessThan(96);
+  });
+
+  it('grows it once per chip, not once per chip per row', () => {
+    expect(grownHeight(contentRequiredPx(3, 2))).toBeCloseTo(130, 6); // was 192
+    expect(grownHeight(contentRequiredPx(3, 3))).toBeCloseTo(171, 6); // was 288
+  });
+
+  it('leaves a class whose own lines already fit at its Phase 11 height', () => {
+    // 2⅔ slots is 64px; head, room and topic need 48.
+    expect(contentRequiredPx(3, 0)).toBe(48);
+    expect(grownHeight(contentRequiredPx(3, 0))).toBeCloseTo(64, 6);
+    expect(grownHeight(0)).toBeCloseTo(64, 6);
+  });
+
+  it('gives a block that needs more than its span the room, and barely more', () => {
+    assertProperty(
+      fc.property(
+        fc.double({ min: 0, max: 27, noNaN: true }),
+        fc.double({ min: 0.5, max: 8, noNaN: true }),
+        fc.double({ min: 0, max: 400, noNaN: true }),
+        (top, rawHeight, requiredPx) => {
+          // Blocks are clamped into the drawn hours before they get here
+          // (`slotBox`, `segmentBox`); one hanging off the bottom of the grid
+          // is clipped by `slotToPx` and cannot be given its full height.
+          const height = Math.min(rawHeight, PLANNER_SLOT_COUNT - top);
+          if (height < 0.5) return;
+
+          const heights = buildSlotHeights(weekSlotDemandPx([[{ top, height, requiredPx }]]));
+          const grown = spanPx(top, height, heights).heightPx;
+          if (requiredPx <= height * PLANNER_BASE_SLOT_PX) return; // nothing was asked for
+
+          const capped = height * PLANNER_BASE_SLOT_PX * PLANNER_MAX_SLOT_SCALE;
+          // It gets what it asked for, unless the cap says otherwise …
+          expect(grown).toBeGreaterThanOrEqual(Math.min(requiredPx, capped) - 1e-6);
+          // … and never a whole extra row more than it asked for.
+          expect(grown).toBeLessThan(requiredPx + PLANNER_BASE_SLOT_PX);
+        },
+      ),
+    );
+  });
+
+  it('still counts genuine side-by-side blocks as lanes', () => {
+    const a = { top: 4, height: 2, requiredPx: 0 };
+    const b = { top: 4, height: 2, requiredPx: 0 };
+    const c = { top: 4, height: 2, requiredPx: 0 };
+    expect(buildSlotHeights(weekSlotDemandPx([[a, b]], 8)).slice(4, 6)).toEqual([48, 48]);
+    expect(buildSlotHeights(weekSlotDemandPx([[a, b, c]], 8)).slice(4, 6)).toEqual([72, 72]);
+  });
+
+  it('adds a chip block room on top of the lanes it shares its rows with', () => {
+    // A class needing 89px of its 64 alongside one clashing block: two lanes
+    // and the shortfall, not one or the other.
+    const clash = { top: 15.5, height: 8 / 3, requiredPx: 0 };
+    const lecture = { ...LECTURE, requiredPx: contentRequiredPx(3, 1) };
+    const heights = buildSlotHeights(weekSlotDemandPx([[lecture, clash]]));
+    expect(heights[16]).toBeCloseTo(2 * PLANNER_BASE_SLOT_PX + (89 - 64) / (8 / 3), 6);
+  });
+});
 
 /**
  * F-2(b), from the PM's browser walk: a 55-minute block cut "Trendy Today,
