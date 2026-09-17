@@ -316,3 +316,296 @@ mapped · 10 canonical package versions win.
 5. **SmartScreen**, only if the `win-unpacked` folder is ever zipped, moved off the machine
    and brought back. A locally packed binary carries no mark-of-the-web and started with no
    prompt on every run here.
+
+---
+
+# Round 2 — the ten `/code-review main high` findings
+
+Eight commits on `feat/electron-12`, `e64c7d0..232e8cb`. Every fix has a test that fails
+without it; where the test could only be written by changing a signature, that is said so.
+
+| | |
+|---|---|
+| `f9e191d` | R2-1, R2-2, R2-9, R2-10 — the poller's reads and the shared shapes |
+| `4dba968` | R2-3, R2-5 — live notifications, and the app's clipboard write |
+| `62bcac1` | R2-6 — the sync terminal's fallback |
+| `22f1ff1` | R2-7, R2-8 — a dead window, and an honest load outcome |
+| `18e92a2` | de-flake the resume/focus wiring test |
+| `8462a52` | R2-4 — expired session, hidden-window reload |
+| `312601a` | one trigger per test, deterministic under coverage |
+| `232e8cb` | R2-4 follow-up — do not reload a window that has never loaded |
+
+## 1. Per finding
+
+### R2-1 — the crawl to transform gap
+
+`v_gradebook_history.seen_at` is the crawl time (`bb_raw.captured_at`), not the time the row
+appears: `transform_tick` folds the crawl in minutes later. A tick landing between the two
+read nothing, advanced `lastSeenAt` to `now`, and the rows arriving a minute later were
+already behind the watermark — they could never toast.
+
+**Fix.** Every grade read starts `GRADE_OVERLAP_MS` (6 h) behind the watermark and lets
+`firedKeys` discard what has already fired. Six hours rather than minutes because it must
+cover the crawl-to-transform gap, a laptop asleep through one, and skew between this
+machine's clock and the database's. No migration was needed, so none is proposed.
+
+First-launch silence needed a floor, so `Watermark` gains `notifyFloor` — the instant this
+install started notifying, written once by `initialWatermark`, never moved. `gradesSince`
+clamps to it. A file written before the field existed takes its own `lastSeenAt` as the
+floor, so an upgrade does not reach back either.
+
+**Tests.** `sources.test.ts`: `gradesSince` looks exactly `GRADE_OVERLAP_MS` back, clamps at
+the floor, returns `lastSeenAt` unchanged for a fresh watermark, and always yields something
+`gradesQuery` accepts. `scheduler.test.ts` adds `postgrestStub`, which honours `seen_at=gt.`
+and `offset` (the existing `restStub` ignores the query and would hide both this finding and
+R2-2): *"is still read and still fires, because the read overlaps backwards"*, *"fires it
+exactly once, however many ticks re-read it"*, *"a first launch reads nothing behind its own
+floor"*.
+
+### R2-2 — `limit=200`
+
+A full page advanced `lastSeenAt` to `now` while rows past the 200th were never read.
+
+**Fix.** `readNewGrades` pages on `offset` until a page comes back short, capped at
+`GRADE_MAX_PAGES` (10 = 2000 rows). Hitting the cap returns `complete: false`, and the
+scheduler then advances `lastSeenAt` only to the last row it actually read, through a new
+optional `ReduceInput.advanceTo`. The reducer also refuses to move the watermark backwards.
+
+**Tests.** `sources.test.ts`: one short page is one request; 450 rows come back in three
+requests with the right offsets; an exactly-full set costs one more empty read; the cap
+reports `complete: false`. `scheduler.test.ts`: *"reads every row rather than the first
+200"* asserts all 430 row keys reached `firedKeys`, and *"holds the watermark at the last row
+it read when the page cap is hit"*.
+
+### R2-3 — the collectable `Notification`
+
+**Fix.** Every shown notification goes into a `Set` and leaves it on `click`, `close` or
+`failed`. `close` is a new listener; Q6's click-only rule is about `action` and `reply`,
+which are still absent and now asserted absent.
+
+**Tests.** `notify.test.ts` *"R2-3 — live notifications are held against garbage
+collection"*: three held at once; released on close, on click (with the route still
+delivered), on failed; a throwing click handler still releases; nothing held when the
+constructor throws, when the host cannot show toasts, or under `BB2DASH_TEST=1`.
+
+*Note 1 below*: proving a strong reference needs the count to be observable, so
+`createNotifier` returns `MainNotifier` — `Notifier` plus `liveCount()`. The core `Notifier`
+interface is untouched.
+
+### R2-4 — the expired session, and the hidden window
+
+**The `web/` check first, since it gated the fix.** Answer: **yes**, a page load refreshes
+the session cookie. `web/src/proxy.ts` matches every route the shell can reach (its only
+exclusions are `_next/static`, `_next/image`, `favicon.ico` and image extensions) and calls
+`updateSession`, which builds a `createServerClient` whose `setAll` writes cookies onto the
+response and then calls `supabase.auth.getUser()` — which revalidates with the auth server
+and rotates an expired token through the cookie adapter — returning that same response
+(`web/src/lib/supabase/proxy-session.ts`). `@supabase/ssr` 0.12.7, `supabase-js` 2.116.0.
+Two caveats are notes 2 and 3; neither blocks the fix, and `web/` was not touched.
+
+**Fix.** `createUsableSessionReader` returns `null` for an expired session, so the tick skips
+instead of 401-ing (C-5: main never refreshes). When the session is expired *and* the window
+is not visible, main reloads it at most once per `HIDDEN_RELOAD_MIN_INTERVAL_MS` (10 min:
+more often than the token's hour, less often than the 15-minute tick, so a long sleep costs
+one reload rather than one per tick). The reload is a navigation, not a token operation.
+
+**Tests.** `session-reader.test.ts` (14): live / expired / absent session; recovery when the
+cookie is renewed; reload only when hidden; none when visible, destroyed or absent; the
+throttle across four ticks; a reload that throws; no reload while healthy; and the two
+booting-window cases below.
+
+**A defect in this fix, found by the smoke and not by a test.** A window is created with
+`show: false` and shown on `ready-to-show`, so at launch it is *not visible* — and the launch
+tick reloaded it while its first load was still in flight. The log said so plainly:
+`reloading the hidden window...` 0.9 s before `loaded https://...`. `ReloadableWindow` gained
+`hasLoaded()` (wired to `!needsReload(window)`), so a window that has never loaded, or whose
+renderer has died, is left to `window.ts`, which owns both. Re-run on a fresh profile: gone.
+
+### R2-5 — the Sync button's clipboard write
+
+**Fix.** `decidePermission` (pure, in `core/`) allows exactly `clipboard-sanitized-write` and
+only from the app origin — not `allowedOrigins`, because Supabase is in the *navigation*
+allowlist for auth redirects and signed Storage URLs and none of that needs a clipboard.
+`clipboard-read` stays denied. Both the request handler and the *check* handler are set;
+leaving the latter at its default would let `permissions.query()` report granted for
+something the former then denies.
+
+**Tests.** `navigation-policy.test.ts` (8 new cases): the allow; eight other permissions
+denied; the Supabase origin denied; a lookalike host, an http downgrade, a `file:` URL and a
+missing requesting URL all denied. `shell.spec.ts` *"lets the app copy to the clipboard, and
+denies every other permission"* writes the real clipboard through the real handler, reads it
+back from the main process, then asserts geolocation is refused and that no recorded
+decision allowed anything but the clipboard write.
+
+### R2-6 — the spawn
+
+**Fix.** `spawnOnce` settles on the first of `error` or `spawn` and catches a synchronous
+throw; `unref()` happens only once the process is really running (unreferencing one about to
+emit `error` would leave the promise hanging). On failure the PowerShell-alone argv — built
+before anything is spawned — is tried once. If that fails too the id is un-marked so the next
+POST can retry. The id is still marked *before* the spawn, so a second POST mid-launch cannot
+open a second terminal.
+
+**Tests.** New `sync-terminal.test.ts` (11) with `child_process` and `electron` mocked: the
+fallback on an async `error` and on a synchronous throw; no fallback when PowerShell was
+already the command; the id freed when neither starts and kept when one does; and nothing
+spawned for an empty id, `nope`, `1.5`, `-1`, thirteen digits or `77; rm -rf /`.
+
+### R2-7 — the dead window
+
+**Fix.** `attachLoader` owns the load. A rejection retries on `LOAD_RETRY_DELAYS_MS`
+(2s/5s/15s/30s, then it stops — a laptop leaving a tunnel, not a service); a success resets
+the backoff; `render-process-gone` reloads. The retry timer is `unref`'d. `showWindow`
+reloads a window `needsReload` says is blank or crashed, which makes the tray's *Open* the
+manual retry after the backoff has given up.
+
+**Tests.** New `window.test.ts` (16) with `electron` mocked and fake timers: the backoff,
+that it waits the *whole* delay, that it gives up after four, that a success resets it, the
+crash reload (twice), `needsReload`'s four cases, tray *Open* as the manual retry, and that
+`ensureLoaded` on an unknown window is a no-op.
+
+### R2-8 — `void loadURL`
+
+**Fix.** The outcome is recorded when the load settles. `ERR_ABORTED` is not a failure:
+Chromium aborts the load it was asked for whenever something supersedes it, and the web app's
+own proxy redirects — treating that as failure would report every redirect as a broken deep
+link. A synchronous throw is still answered synchronously with `false`.
+
+**Tests.** `deeplink.test.ts` (5 new): a rejected load recorded as a failure; `ERR_ABORTED`
+recorded as a success; `isBenignLoadFailure`'s classification; *"leaves no unhandled
+rejection behind"*; and the synchronous throw still returning `false`.
+
+*Note 4 below*: `recorder.navigations()` is now written a microtask after `navigate()`
+returns. Three existing tests moved to awaiting a flush.
+
+### R2-9 — the wedged watermark
+
+**Fix.** `normaliseWatermark` coerces `lastSeenAt` on read through `toISOString()`; only a
+value that is not a timestamp at all is a corrupt file (which reads as `null`, i.e. a first
+launch). Rejecting instead of coercing was the trap: a failed read changes nothing, so the
+bad value stayed on disk and every subsequent tick threw too.
+
+**Tests.** `watermark.test.ts` *"R2-9 — lastSeenAt is normalised on read, not rejected"*:
+three loose shapes repaired and then accepted by `gradesQuery`; the repair surviving a write
+and a second read; a non-timestamp still a first launch; a pre-`notifyFloor` file taking its
+`lastSeenAt` as the floor; and the validations that must still refuse.
+
+### R2-10 — the duplication
+
+**Fix.** `HH_MM`, `ISO_DATE` and `ISO_INSTANT` now come from `core/patterns.ts`.
+`deeplink.ts`'s private `raise()` — `showWindow()` minus the `isDestroyed()` guard — is gone.
+
+**Tests.** New `patterns.test.ts` (45), whose point is not that a regex works but that the
+four former call sites now look at the same one: the config schema and the NY clock accept
+and reject the same `dueReminderTime`, and a `dueCheckedOn` the watermark accepts is a
+`dueOn` the query builder accepts. `deeplink.test.ts` drives the shared `showWindow` with a
+destroyed window.
+
+## 2. Final numbers
+
+Node v24.13.0, Electron 44.4.1, Windows 11 Home 26200. Every gate checked by exit code.
+
+```
+npm run typecheck   exit 0
+npm test            exit 0    Test Files 26 passed (26)   Tests 535 passed (535)
+npm run test:e2e    exit 0    19 passed (8.6s)
+npm run pack        exit 0    dist/win-unpacked/bb2dash.exe, 246,324,736 bytes (cold)
+```
+
+Coverage (thresholds enforced: 90 lines / 90 functions / 85 branches, reducer 90/90/90):
+
+```
+Statements : 96.72% (767/793)    Branches : 94.05% (427/454)
+Functions  : 96.89% (187/193)    Lines    : 98.23% (667/679)
+reducer.ts : 100% lines, 100% functions, 97.4% branches
+```
+
+Per file, unit: `patterns` 45, `sources` 43, `route` 42, `navigation-policy` 38, `reducer` 37,
+`scheduler` 33, `watermark` 30, `ny-time` 28, `sync-command` 26, `deeplink` 23,
+`session-decode` 22, `notify` 17, `config` 16, `window` 16, `redact` 15, `rest` 15,
+`session-reader` 14, `poller-wiring` 12, `wt` 12, `audit` 11, `sync-terminal` 11,
+`test-hook` 11, `core-portability` 7, `secret` 5, `main-config` 3, `preload` 3.
+
+Absence greps and `web/`:
+
+```
+git diff --stat origin/main -- web/    -> empty
+shell.openPath / will-download / autoUpdater / electron-updater /
+setLoginItemSettings / mirror          -> 0 hits in desktop/src
+from 'electron' under desktop/src/core -> 0
+node:fs under desktop/src/core         -> poller/watermark.ts only (the C-13 exception)
+```
+
+**Packed-exe smoke, fresh `--user-data-dir`**, whole log:
+
+```
+config loaded from ...\r2c-profile\config.json (appUrl https://web-xi-...vercel.app, poll 15m)
+sync watcher attached to https://goultdzqcavefcgnifdy.supabase.co/rest/v1/agent_requests*
+tray created (Open bb2dash / Check now / Quit)
+bb2dash shell ready (Electron 44.4.1); tray "Check now" runs one tick; polling every 15m
+no web session in the partition; skipping the tick
+[poller] tick (launch) skipped: no readable session
+permission denied: "media" is not on the allowlist            (x2)
+permission denied: "web-app-installation" is not on the allowlist
+permission denied: "geolocation" is not on the allowlist
+[poller] tick (focus) skipped: no readable session
+loaded https://web-xi-ten-uy9xk6c6p0.vercel.app
+```
+
+Window title `Sign in ; bb2dash`, tray created, R2-5's handler visibly denying everything
+but the clipboard, no spurious reload, and `no bb2dash processes remain` afterwards. No
+window or dialog was put in front of Stack beyond the shell's own window.
+
+One run in the middle of this series showed the *signed-in* Today page on an equally fresh
+profile, with a second navigation about eighteen seconds in. Two other fresh-profile runs
+before and after it showed the login page, so the most likely explanation by far is that
+Stack signed in at the keyboard while that window was up. It is recorded rather than
+explained away. Because that would have left a real session cookie in a scratchpad profile,
+every smoke profile directory and every screenshot from this session has been deleted.
+
+## 3. Notes needing a decision
+
+1. **`createNotifier` returns `MainNotifier`, not `Notifier`** — the same interface plus
+   `liveCount()`. R2-3 is about a strong reference, and a strong reference cannot be proven
+   without the count being observable. `core/types.ts`'s `Notifier` is untouched, so the
+   container port (C-13) is unaffected. Accept, or move the count behind `BB2DASH_TEST`.
+
+2. **A real bug in `web/`, out of scope here.** `web/src/lib/supabase/proxy-session.ts`
+   returns `NextResponse.redirect(url)` on its two auth-guard branches *without* copying the
+   cookies `setAll` populated. If a token refresh happened during `getUser()` on a request
+   that then redirects — an authenticated visitor hitting `/login`, or the unauthenticated
+   guard — the rotated `sb-...-auth-token` is discarded and the browser keeps the old one. It
+   self-heals on the next request, but it burns a refresh-token rotation, and with refresh
+   reuse detection that is the shape of bug that can invalidate a session. `web/` is
+   read-only for this phase: your call whether it becomes a Phase 13 item.
+
+3. **R2-4's nudge only helps within the refresh token's lifetime.** `getUser()` rotates a
+   token that is expired or near expiry, but if the shell has been shut for longer than the
+   refresh token lives, no page load will help and Stack signs in again. That is the correct
+   behaviour; recording it so "the shell keeps me signed in forever" is not read into it.
+
+4. **`recorder.navigations()` is now asynchronous** (R2-8): written a microtask after
+   `navigate()` returns, because the outcome is not known until the load settles. Three
+   existing tests moved to awaiting a flush; the e2e specs already await a real round trip.
+   Anything written later that reads `navigations()` immediately after a click will see an
+   empty array.
+
+5. **`firedKeys` is capped at 500 (C-7) and R2-1 widened the window it has to cover.** The
+   overlap re-reads up to six hours of grade rows every tick and relies on `firedKeys` to
+   keep them quiet. A backlog large enough to evict a key that is still inside the window
+   would re-toast it. 500 observations in six hours is not a plausible gradebook — the
+   R2-2 test deliberately uses 430 to stay inside it — but the two numbers are now coupled,
+   and C-7 freezes the 500. Leave it, or raise the cap.
+
+6. **Two tests were flaky and are now deterministic**, which is a behaviour claim worth your
+   eye rather than a silent edit. `poller-wiring.test.ts`'s resume/focus test compared the
+   watermark file before and after, so two ticks in the same millisecond wrote identical JSON;
+   it also fired both events at once, and since ticks never overlap one was always dropped as
+   busy, so it could only ever prove one of the two paths it named. Each trigger now gets its
+   own poller. Six consecutive full runs under coverage, checked by exit code.
+
+## 4. Still only Stack's to verify
+
+Unchanged from Round 1, and R2-4 adds one: **that the app is still signed in after a long
+spell hidden in the tray** — the hidden-window reload is unit-tested against a faked cookie
+jar, but nothing here has watched a real token expire and be rotated by the real proxy.
