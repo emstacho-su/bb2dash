@@ -19,7 +19,10 @@ import { z } from 'zod';
 export const CONFIG_DEFAULTS = Object.freeze({
   appUrl: 'https://web-xi-ten-uy9xk6c6p0.vercel.app',
   supabaseUrl: 'https://goultdzqcavefcgnifdy.supabase.co',
-  repoDir: 'C:\Users\estac\projects\bb2dash',
+  // Backslashes are escaped: an unescaped `\b` here is a backspace character and
+  // `\U` / `\e` / `\p` silently drop their backslash, which turned this default
+  // into the unusable `C:Usersestacprojects\x08b2dash`.
+  repoDir: 'C:\\Users\\estac\\projects\\bb2dash',
   /** Q3: 15 minutes, raised from the brief's original 5. */
   pollIntervalMinutes: 15,
   /** Q5: one "due tomorrow" check a day, at this New York wall-clock time. */

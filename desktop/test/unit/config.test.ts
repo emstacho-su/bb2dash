@@ -16,6 +16,35 @@ import {
 
 const MINIMAL = { supabaseAnonKey: 'eyJhbGciOiJIUzI1NiJ9.anon.signature' };
 
+describe('CONFIG_DEFAULTS', () => {
+  // Spelled out rather than compared to itself: the Windows path is a
+  // backslash-heavy string literal, and an unescaped one compiles to a
+  // different, unusable path without any test noticing (C-2's table is the
+  // authority for these values).
+  it('matches the values C-2 fixes, character for character', () => {
+    expect(CONFIG_DEFAULTS).toEqual({
+      appUrl: 'https://web-xi-ten-uy9xk6c6p0.vercel.app',
+      supabaseUrl: 'https://goultdzqcavefcgnifdy.supabase.co',
+      repoDir: 'C:\\Users\\estac\\projects\\bb2dash',
+      pollIntervalMinutes: 15,
+      dueReminderTime: '18:00',
+      syncDryRun: false,
+    });
+  });
+
+  it('has a repoDir made only of printable characters', () => {
+    // eslint-disable-next-line no-control-regex
+    expect(CONFIG_DEFAULTS.repoDir).not.toMatch(/[\u0000-\u001f]/);
+    expect(CONFIG_DEFAULTS.repoDir.split('\\')).toEqual([
+      'C:',
+      'Users',
+      'estac',
+      'projects',
+      'bb2dash',
+    ]);
+  });
+});
+
 describe('parseConfig', () => {
   it('fills every default when only the anon key is given', () => {
     const config = parseConfig(MINIMAL);
