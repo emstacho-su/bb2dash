@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-17** (Phase 12 in PR, awaiting acceptance; before that the post-merge reconciliation: Phase 10b PR #15 merged after Phase 11b's PR #14 and its display follow-up #16; Phase 10a PR #13 merged after Phase 11's PR #12).
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-17** (Phase 12 merged, PR #19; before that the post-merge reconciliation: Phase 10b PR #15 merged after Phase 11b's PR #14 and its display follow-up #16; Phase 10a PR #13 merged after Phase 11's PR #12).
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement
@@ -32,7 +32,7 @@ mirrored and shown as Blackboard's numbers, submissions catalogued, staged uploa
 planner week grid, Google Calendar push, announcements bell (Phase 11); planner events pushed to
 Google (Phase 11b); grade model + what-if (Phase 10b). Prod is Supabase
 `goultdzqcavefcgnifdy`; migrations 001–058, 060–069 and 080–081 on `main` and live (059 held for V-1).
-Phase 12 is the one open PR (`feat/electron-12` and its three worktrees exist until it merges). The materials MCP
+No open PRs after Phase 12 (#19). The materials MCP
 server (`mcp-server/`) is registered at user scope and points at
 `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`. The 10a / 11 / V-1 / V-2 sprint
 started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
@@ -57,7 +57,7 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | merged Sep 16 (brief + answers + K-notes + round 2 in `69b`, evidence `69c`; `calendar-push` v5 live, live proof and browser walk done; display follow-up #16 merged the same minute) | #14, #16 | 067–069 (070–072 free) |
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
-| 12 | Electron shell + tray + desktop notifications | **in PR** since 2026-09-17 (`feat/electron-12`, worktree `bb2dash-wt-electron-12`); W-25 shell + W-26 notifications integrated; round 2 = ten code-review findings fixed; security review clean; awaiting Stack's six-step acceptance on the unpacked build | open | none used (073–079 stay free) |
+| 12 | Electron shell + tray + desktop notifications | merged Sep 17 (W-25 shell + W-26 notifications; round 2 = ten code-review findings fixed; security review clean; Stack accepted steps 1–5 + tray; toasts still to be seen live) | #19 | none used (073–079 stay free) |
 | 13 | Styling pass | planned; last; carries C-1..C-3 from Phase 10b's browser walk (brief §Carried in) | — | — |
 | 12b | Fine-tooth-comb pass: Stack's list of bugs and changes by page → triage → research → MVP (`80c_PHASE12B_page_pass.md`) | planned; **after 12, before 13**; starts from Stack's list, not from requirements | — | 073–079 if Phase 12 leaves it free, else 082–089 |
 | 14 | Containers (R-28): deterministic `sync-runner` + noVNC Blackboard login, harness jobs with a catch-up scheduler, vault → private git repo, dev container, umbrella repo `bb2dash-stack` (`82_PHASE14_containers.md`, research `research/82_*`) | planned; **after 13**; brief + Stack's 16 answers + six-researcher synthesis written 2026-09-16; one PR per repo (three repos) | — | 090–099 (090–091 expected) |
@@ -181,9 +181,10 @@ Learned in Phase 12 (2026-09-17):
   (3) of Phase 10a on the live app.
 * Phase 10b is live: no course shows "Our model" until he links a column on a course Grades tab
   (e.g. ECN.304 Attendance → Participation, if the syllabus means that) or a hand-graded score posts.
-* Phase 12 is in PR: create `%APPDATA%\bb2dash\config.json` (example in `desktop/README.md`), run
-  `desktop/scripts/make-shortcut.ps1`, then walk the six-step acceptance script in the brief's DoD
-  plus the tray; say "merge" when it passes.
+* Phase 12 is merged and runs from `desktop/dist/win-unpacked` in the `main` checkout. Still his to
+  see: the three toasts (first real sync or posted grade), and staying signed in after hours in the
+  tray. `syncDryRun` is `true` in his `%APPDATA%\bb2dash\config.json` until he flips it.
+* Say when to start Phase 12b (his list of bugs and changes by page).
 * Decide when R-28 (container migration after development) gets its own brief; after Phase 13.
 * Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and start V-2.
   V-1's reconciliation migration is `059_grading_reconciliation.sql`.
