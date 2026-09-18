@@ -1,10 +1,17 @@
-/* The /planner week grid (R-19, Phase 11).
+/* The /planner week grid (R-19, Phase 11; rows made variable in 12b).
 
    One CSS grid: a time gutter plus seven day columns, in four bands — the day
-   heads, the Assignments band, the Events band (Phase 11b) and the hour rows. The hour rows are not 28 × 7 DOM
-   nodes: each day column is one positioned box `--planner-slots` tall, with the
-   half-hour rules painted as a repeating gradient and every block placed on it
-   by custom properties the component computes.
+   heads, the Assignments band, the Events band (Phase 11b) and the hour rows.
+   The hour rows are not 28 × 7 DOM nodes: each day column is one positioned box
+   `--planner-grid-height` tall, with every block placed on it by custom
+   properties the component computes.
+
+   ROWS ARE NOT ALL THE SAME HEIGHT (P-planner-2). Phase 11 multiplied a slot
+   number by a constant here in CSS. A row now grows with what is drawn on it,
+   which is a cumulative sum, not a multiplication — so the arithmetic moved to
+   `lib/planner-rows.ts` and this file receives `--top-px` and `--height-px`
+   already resolved. `--planner-slot` survives as the *base* row height, which
+   is still what the minimum heights around the grid are expressed in.
 
    No raw colours, radii or spacing here — everything is a token from
    globals.css, per the convention in src/styles/tokens.module.css. */
@@ -52,10 +59,34 @@
   margin-left: var(--space-2);
 }
 
+/* The pre-hydration pager (P-planner-7): the pager's shape, drawn dim, with no
+   link behind it. It exists so the header does not change size when the real
+   one arrives. */
+.pageGhost {
+  composes: btnGhost from '@/styles/tokens.module.css';
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* The board's space, held open while the browser works out what goes in it.
+   Height comes from `reservedBoardHeightPx`, inline, so one number describes
+   it and the test can read it back. */
+.boardReserve {
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-divider);
+  opacity: 0.6;
+}
+
 /* — the board ——————————————————————————————————————————————————————— */
 
 .board {
+  /* The base row height. A row that nothing crowds is exactly this tall, which
+     is what makes an ordinary week pixel-identical to Phase 11's grid. */
   --planner-slot: 24px;
+  /* The whole grid's height, summed over the per-row table. Overridden inline
+     by the board; the fallback keeps the stylesheet meaningful on its own. */
+  --planner-grid-height: calc(var(--planner-slots, 28) * var(--planner-slot));
   --planner-gutter: 62px;
 
   display: grid;
@@ -119,14 +150,65 @@
 }
 
 /* "Assignments" is wider than the time gutter (62px, 48px on a narrow screen)
-   and clipped to "GNMENTS". That band is the tall one, so its label runs
-   bottom-to-top, centred on the band, and fits whatever the gutter's width. The
-   short Events band keeps a horizontal label, which fits. */
-.bandLabelVertical {
+   and would be clipped to "GNMENTS". Phase 11b rotated it to run bottom-to-top,
+   which needs the band to be ~86px *tall* instead — and a band cell is 29px
+   with one chip in it, shorter on an empty week (P-planner-7). Rotating traded
+   one clipping for another.
+
+   So the word is not drawn at all. The chevron is what the gutter shows, the
+   per-day counts say what is behind it, and "Assignments" stays the cell's
+   accessible name and its tooltip. Nothing here can be clipped by a band that
+   happens to be short, because nothing here asks the band for room.
+
+   The short Events band keeps its horizontal label, which fits. */
+.bandToggleLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The band's gutter cell is the toggle (P-planner-1): the whole cell, so it is
+   a real target rather than a 10px chevron. */
+.bandToggle {
   composes: bandLabel;
+  /* Anchors the visually-hidden label below, which is absolute. */
+  position: relative;
+  flex-direction: column;
   justify-content: center;
-  writing-mode: vertical-rl;
-  rotate: 180deg;
+  gap: var(--space-1);
+  border: 0;
+  cursor: pointer;
+  /* Only the font family needs saying: every other button default this cell
+     cares about (size, colour, background, padding) is set by `bandLabel`,
+     and an author rule beats the user-agent stylesheet. */
+  font-family: inherit;
+}
+
+.bandToggle:hover,
+.bandToggle:focus-visible {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+}
+
+.bandChevron {
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+/* What a closed cell says instead of its chips, so nothing due is invisible. */
+.bandCount {
+  align-self: flex-start;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  background: var(--color-neutral-900);
+  box-shadow: inset 0 0 0 1px var(--color-divider);
 }
 
 .bandCell {
@@ -157,14 +239,14 @@
 
 .gutter {
   position: relative;
-  height: calc(var(--planner-slots) * var(--planner-slot));
+  height: var(--planner-grid-height);
   background: var(--color-surface);
 }
 
 .hourLabel {
   position: absolute;
   right: var(--space-2);
-  top: calc(var(--slot) * var(--planner-slot));
+  top: var(--top-px);
   transform: translateY(-50%);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -174,36 +256,33 @@
 
 .dayColumn {
   position: relative;
-  height: calc(var(--planner-slots) * var(--planner-slot));
+  height: var(--planner-grid-height);
   min-width: 0;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      var(--color-divider) 0,
-      var(--color-divider) 1px,
-      transparent 1px,
-      transparent calc(var(--planner-slot) * 2)
-    ),
-    var(--color-surface);
+  background: var(--color-surface);
 }
 
 .dayColumn[data-today='true'] {
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      var(--color-divider) 0,
-      var(--color-divider) 1px,
-      transparent 1px,
-      transparent calc(var(--planner-slot) * 2)
-    ),
-    color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+
+/* The hour lines. Phase 11 painted them as a repeating gradient every 48px;
+   with rows of different heights an even repeat stops meeting the gutter's
+   labels, so each one is drawn where `slotToPx` puts its hour. */
+.hourRule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--top-px);
+  height: 1px;
+  background: var(--color-divider);
+  pointer-events: none;
 }
 
 .nowLine {
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(var(--slot) * var(--planner-slot));
+  top: var(--top-px);
   height: 2px;
   background: var(--color-accent);
   box-shadow: 0 0 8px var(--color-accent);
@@ -215,18 +294,38 @@
 
 .block {
   position: absolute;
-  top: calc(var(--top) * var(--planner-slot));
-  height: calc(var(--height) * var(--planner-slot));
+  top: var(--top-px);
+  height: var(--height-px);
   left: var(--lane-left);
   width: var(--lane-width);
   display: flex;
   flex-direction: column;
-  gap: 1px;
   overflow: hidden;
   padding: 3px 5px;
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
-  line-height: 1.25;
+  /* An exact line box, not `1.25` (F-2). The whole-line arithmetic in
+     planner-rows.ts counts lines, and 1.25 × 11px = 13.75px does not divide a
+     text area into whole ones — the leftover sliver is how a line gets half
+     drawn. 14px on 11px text is the same 1.27 to the eye. */
+  line-height: 14px;
+}
+
+/* The block's text, in a box that is a whole number of lines tall (`--content-px`,
+   from `blockContentPx`). The block itself keeps its full height, so its
+   coloured box still spans its real hours and still meets the hour rules; it is
+   only the text that stops early — at the line boundary rather than wherever
+   the hour happened to end.
+
+   `gap: 0`: a row gap between children would put the lines off the 14px pitch
+   the arithmetic assumes, and a 1px gap is not worth a half-drawn line. */
+.blockBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: var(--content-px);
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Two blocks can still overlap — a due item at a time inside *another*
@@ -247,9 +346,10 @@
   box-shadow: inset 2px 0 0 var(--color-accent-2-400);
 }
 
-/* A class block's own lines keep their height. Only the nested due items give
-   way (they scroll inside the block), so no line is drawn over another. */
-.meetingBlock > :not(.nested) {
+/* Every line of a class block keeps its height. Nothing inside gives way any
+   more: the row the class sits on grew by one base height per nested due chip
+   (P-planner-2), so they all fit without a scroller. */
+.meetingBlock .blockBody > * {
   flex-shrink: 0;
 }
 
@@ -268,10 +368,18 @@
 .itemBlock[data-category='project'] { box-shadow: inset 2px 0 0 var(--type-project-fg), inset 0 0 0 1px var(--color-divider); }
 .itemBlock[data-category='exam'] { box-shadow: inset 2px 0 0 var(--type-exam-bg), inset 0 0 0 1px var(--color-divider); }
 
+/* The head wraps (F-2). A 150px column clipped "GEO 103 10:35 AM – 11:30 A" —
+   the row could not fit and had nowhere to put the overflow, so the block's
+   `overflow: hidden` ate the end of the time. Dropping the repeated meridiem
+   (`formatClockRange`) buys back most cases; wrapping covers the rest, so a
+   range that still does not fit goes on its own line instead of being cut.
+   `row-gap: 0` keeps the wrapped line on the 14px pitch the text area counts
+   in; `margin-left: auto` on the time then right-aligns it on that line. */
 .blockHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 0 4px;
   min-width: 0;
 }
 
@@ -289,10 +397,22 @@
   white-space: nowrap;
 }
 
+/* TEXT WRAPS (P-planner-4). Stack asked for Google Calendar's behaviour: a
+   title that does not fit runs onto the next line inside its own block rather
+   than being cut off mid-word. The clamp is how many lines the block's height
+   actually pays for — `titleLines` in planner-rows.ts computes it, and at one
+   line the clamp is what draws the ellipsis, so a compact half-hour block keeps
+   exactly the Phase 11 look with no special case. `overflow-wrap: anywhere`
+   because a course title can carry a long unbroken token (a URL, a file name)
+   and a 90px column has nowhere to break it. */
 .blockTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--title-lines, 2);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .blockLink {
@@ -304,17 +424,17 @@
   text-decoration: underline;
 }
 
-.blockTopic {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0.8;
-}
-
+/* The topic and the room wrap too, but on a shorter leash than the title:
+   two lines, so a long room string cannot push a class's due chips off. */
+.blockTopic,
 .blockRoom {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   opacity: 0.8;
 }
 
@@ -325,18 +445,27 @@
 }
 
 /* A due item that falls inside its own class sits in that class's block, under
-   the room and topic lines. The block's height still encodes the class's real
-   duration, so a busy class scrolls rather than growing into the hour below. */
+   the room and topic lines.
+
+   P-planner-3: there is no scroller here. Stack: "I also want to remove the
+   scroll bars from assignments within the planner". The block is tall enough
+   because its row grew to fit the chips — the class still spans its real hours,
+   those hours are simply drawn taller. The board's own `overflow-x` stays: that
+   one is the seven columns on a narrow window, not a block. */
 .nested {
   display: flex;
   flex-direction: column;
   gap: 2px;
   margin-top: 2px;
   min-height: 0;
-  overflow-y: auto;
 }
 
+/* `position: relative` earns its place (P-planner-7): the chip's own course
+   code is visually hidden with `position: absolute`, and its parent is
+   `display: contents` — so without an anchor here it resolves against the class
+   block two levels up, which is not where it belongs. */
 .nestedChip {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -359,6 +488,9 @@
 .nestedChip > .blockTitle {
   flex: 1 1 0;
   min-width: 0;
+  /* A chip is a line or two inside someone else's block, not the block's own
+     title, so it keeps a short leash whatever the class block's height pays for. */
+  -webkit-line-clamp: 2;
 }
 .nestedChip .blockTime {
   order: 1;
@@ -392,8 +524,10 @@
 /* — band chips ——————————————————————————————————————————————————————— */
 
 /* A band chip is the same content as a grid block, in a box that is as tall as
-   it needs to be instead of as tall as its half-hour span. */
+   it needs to be instead of as tall as its half-hour span — so its title can
+   afford a third line. */
 .chip {
+  --title-lines: 3;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -423,8 +557,8 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(var(--slot) * var(--planner-slot));
-  height: var(--planner-slot);
+  top: var(--top-px);
+  height: var(--height-px);
   z-index: 0;
   padding: 0;
   border: 0;
@@ -452,7 +586,7 @@
    (`overflow: hidden`) shrank to nothing on a one-hour block, so the zone chip
    was drawn over it. Now a block too short for every line clips at its bottom
    edge, and the kind line and title — the first two — are the ones that show. */
-.eventBlock > * {
+.eventBlock .blockBody > * {
   flex-shrink: 0;
 }
 
@@ -469,20 +603,24 @@
    checkbox, course code, title, zone chip, link — and the kind label and time
    are visually hidden but still read out; the block's style and position carry
    them on screen. */
-.eventBlock[data-compact='true'] {
+.eventBlock[data-compact='true'] .blockBody {
   flex-direction: row;
   align-items: center;
   gap: 4px;
 }
-.eventBlock[data-compact='true'] > .blockHead {
+.eventBlock[data-compact='true'] .blockBody > .blockHead {
   flex: none;
 }
-.eventBlock[data-compact='true'] > .eventTitle {
+/* One slot holds one line, so the title keeps to one and ellipsises — the same
+   thing `titleLines` would work out from the height, said here because the
+   compact layout is a row and its children are not stacked. */
+.eventBlock[data-compact='true'] .blockBody > .eventTitle {
   flex: 1 1 auto;
+  -webkit-line-clamp: 1;
 }
 /* The title wins the row: the chip and link shrink a hundred times faster, so a
    narrow column clips them first and a wide one still shows them. */
-.eventBlock[data-compact='true'] > .eventMeta {
+.eventBlock[data-compact='true'] .blockBody > .eventMeta {
   flex: 0 100 auto;
   overflow: hidden;
 }
@@ -570,12 +708,15 @@
    focus ring, so it is put back explicitly. */
 .eventTitle {
   all: unset;
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--title-lines, 2);
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 .eventTitle:focus-visible {

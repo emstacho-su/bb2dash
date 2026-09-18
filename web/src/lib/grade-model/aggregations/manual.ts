@@ -24,7 +24,6 @@ export const manualAggregate: Aggregate = (context) => {
     gradedCount: real.length,
     remainingCount: 0,
     capacityFromKnownItems: false,
-    usesHypothetical: false,
     unitCap: { perSlot: context.cap / Math.max(1, real.length), perPoint: null },
   };
 };

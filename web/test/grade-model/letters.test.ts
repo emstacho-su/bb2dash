@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TARGET_LETTER, letterFor, type LetterStep } from '@/lib/grade-model';
+import { letterFor, type LetterStep } from '@/lib/grade-model';
 import { PCT_SCALE, scheme } from './builders';
 
 const IST466_SCALE: readonly LetterStep[] = [
@@ -57,9 +57,5 @@ describe('letterFor', () => {
 
   it('decision: a points scale with no point total gives no letter', () => {
     expect(letterFor(99, scheme({ method: 'points', letterScale: IST466_SCALE }))).toBeNull();
-  });
-
-  it('defaults the target letter to A-', () => {
-    expect(DEFAULT_TARGET_LETTER).toBe('A-');
   });
 });

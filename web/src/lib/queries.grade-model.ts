@@ -7,14 +7,17 @@
  * (`toModelInput`, `schemeCourseIdFor`) live in `grade-model-input.ts` and are
  * re-exported here, so screens import one module.
  *
- * READS — V-1's `grading_schemes` / `grade_components`, and migration 058's
- * three views. The views' generated row types are all-nullable, so each view
- * read carries one documented cast to the hand-narrowed Contract shape.
+ * READS — V-1's `grading_schemes` / `grade_components`, and two of migration
+ * 058's three views. The views' generated row types are all-nullable, so each
+ * view read carries one documented cast to the hand-narrowed Contract shape.
+ * Phase 12b (G-1) dropped the `v_grade_model_total` reads with the
+ * agrees-with-Blackboard sentence; Blackboard's own total still reaches the
+ * screen through `v_course_grade` in `queries.grades.ts`, where 10a read it.
  *
- * WRITES — exactly two tables, both Stack's own state from migration 057:
- * `grade_scenarios` (what-if values and the target letter, in
- * `queries.grade-scenario.ts` since round 2) and `grade_column_links`
- * ("Counts toward…" / "Not graded", here). Nothing here writes
+ * WRITES — exactly one table, Stack's own state from migration 057:
+ * `grade_column_links` ("Counts toward…" / "Not graded"). The
+ * `grade_scenarios` reads and writes went with the what-if layer; the table
+ * itself stays in the database, unused. Nothing here writes
  * `assignments`, `assignment_progress`, `bb_gradebook`, `grading_schemes` or
  * `grade_components`; `web/test/grade-model.audits.test.ts` greps for it.
  */
@@ -23,11 +26,8 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/r
 import { getSupabaseBrowserClient } from './supabase/client';
 import { shellCacheKey } from './course-dimension';
 import {
-  parseItemScores,
   type GradeComponentRow,
   type GradeModelItemRow,
-  type GradeModelTotalRow,
-  type GradeScenarioRow,
   type GradeSchemeBundle,
   type GradebookHistoryRow,
   type GradingSchemeRow,
@@ -43,8 +43,6 @@ export * from './grade-model-input';
 const SCHEME_COLUMNS = 'course_id, method, total_points, graded_out_of, letter_scale';
 const COMPONENT_COLUMNS =
   'id, course_id, code, name, parent_id, weight_pct, points, count_expected, aggregation, drop_lowest, rank_weights, normalize_to, is_extra_credit';
-const SCENARIO_COLUMNS = 'course_id, item_scores, target_letter, updated_at';
-
 /** Scheme rows and gradebook-derived rows only move on a sync or a V-1 edit. */
 const MODEL_STALE_MS = 5 * 60 * 1000;
 
@@ -58,30 +56,12 @@ export const gradeModelKeys = {
   schemesFor: (ids: readonly string[]) => ['grade-model', 'schemes-for', shellCacheKey(ids)] as const,
   items: (schemeCourseId: string) => ['grade-model', 'items', schemeCourseId] as const,
   itemsFor: (ids: readonly string[]) => ['grade-model', 'items-for', shellCacheKey(ids)] as const,
-  total: (schemeCourseId: string) => ['grade-model', 'total', schemeCourseId] as const,
-  totalsFor: (ids: readonly string[]) => ['grade-model', 'totals-for', shellCacheKey(ids)] as const,
-  scenario: (schemeCourseId: string) => ['grade-model', 'scenario', schemeCourseId] as const,
-  scenariosFor: (ids: readonly string[]) => ['grade-model', 'scenarios-for', shellCacheKey(ids)] as const,
   history: (shellIds: readonly string[]) => ['grade-model', 'history', shellCacheKey(shellIds)] as const,
 } as const;
 
 /* ---------------------------------------------------------------------------
  * Row mapping
  * ------------------------------------------------------------------------ */
-
-function toScenarioRow(row: {
-  course_id: string;
-  item_scores: unknown;
-  target_letter: string | null;
-  updated_at: string;
-}): GradeScenarioRow {
-  return {
-    course_id: row.course_id,
-    item_scores: parseItemScores(row.item_scores),
-    target_letter: row.target_letter,
-    updated_at: row.updated_at,
-  };
-}
 
 /**
  * Group the bulk reads by scheme course, preserving each list's order. One
@@ -140,42 +120,6 @@ export function gradeModelItemsOptions(schemeCourseId: string | null) {
     },
     enabled: Boolean(schemeCourseId),
     staleTime: MODEL_STALE_MS,
-  });
-}
-
-/** Blackboard's published total for the scheme course, or null. */
-export function gradeModelTotalOptions(schemeCourseId: string | null) {
-  return queryOptions({
-    queryKey: gradeModelKeys.total(schemeCourseId ?? 'none'),
-    queryFn: async (): Promise<GradeModelTotalRow | null> => {
-      const { data, error } = await getSupabaseBrowserClient()
-        .from('v_grade_model_total')
-        .select('*')
-        .eq('scheme_course_id', schemeCourseId as string)
-        .maybeSingle();
-      if (error) throw error;
-      return (data ?? null) as unknown as GradeModelTotalRow | null;
-    },
-    enabled: Boolean(schemeCourseId),
-    staleTime: MODEL_STALE_MS,
-  });
-}
-
-/** The saved scenario. No row is an empty scenario, not an error. */
-export function gradeScenarioOptions(schemeCourseId: string | null) {
-  return queryOptions({
-    queryKey: gradeModelKeys.scenario(schemeCourseId ?? 'none'),
-    queryFn: async (): Promise<GradeScenarioRow | null> => {
-      const { data, error } = await getSupabaseBrowserClient()
-        .from('grade_scenarios')
-        .select(SCENARIO_COLUMNS)
-        .eq('course_id', schemeCourseId as string)
-        .maybeSingle();
-      if (error) throw error;
-      return data ? toScenarioRow(data) : null;
-    },
-    enabled: Boolean(schemeCourseId),
-    staleTime: 60 * 1000,
   });
 }
 
@@ -246,55 +190,17 @@ export function gradeModelItemsForCoursesOptions(ids: readonly string[]) {
   });
 }
 
-export function gradeModelTotalsForCoursesOptions(ids: readonly string[]) {
-  return queryOptions({
-    queryKey: gradeModelKeys.totalsFor(ids),
-    queryFn: async (): Promise<GradeModelTotalRow[]> => {
-      const { data, error } = await getSupabaseBrowserClient()
-        .from('v_grade_model_total')
-        .select('*')
-        .in('scheme_course_id', ids as string[]);
-      if (error) throw error;
-      return (data ?? []) as unknown as GradeModelTotalRow[];
-    },
-    enabled: ids.length > 0,
-    staleTime: MODEL_STALE_MS,
-  });
-}
-
-export function gradeScenariosForCoursesOptions(ids: readonly string[]) {
-  return queryOptions({
-    queryKey: gradeModelKeys.scenariosFor(ids),
-    queryFn: async (): Promise<GradeScenarioRow[]> => {
-      const { data, error } = await getSupabaseBrowserClient()
-        .from('grade_scenarios')
-        .select(SCENARIO_COLUMNS)
-        .in('course_id', ids as string[]);
-      if (error) throw error;
-      return (data ?? []).map(toScenarioRow);
-    },
-    enabled: ids.length > 0,
-    staleTime: 60 * 1000,
-  });
-}
-
 /* ---------------------------------------------------------------------------
  * Hooks
  * ------------------------------------------------------------------------ */
 
 export const useGradingScheme = (id: string | null) => useQuery(gradingSchemeOptions(id));
 export const useGradeModelItems = (id: string | null) => useQuery(gradeModelItemsOptions(id));
-export const useGradeModelTotal = (id: string | null) => useQuery(gradeModelTotalOptions(id));
-export const useGradeScenario = (id: string | null) => useQuery(gradeScenarioOptions(id));
 export const useGradeHistory = (shellIds: readonly string[]) => useQuery(gradeHistoryOptions(shellIds));
 export const useGradingSchemesForCourses = (ids: readonly string[]) =>
   useQuery(gradingSchemesForCoursesOptions(ids));
 export const useGradeModelItemsForCourses = (ids: readonly string[]) =>
   useQuery(gradeModelItemsForCoursesOptions(ids));
-export const useGradeModelTotalsForCourses = (ids: readonly string[]) =>
-  useQuery(gradeModelTotalsForCoursesOptions(ids));
-export const useGradeScenariosForCourses = (ids: readonly string[]) =>
-  useQuery(gradeScenariosForCoursesOptions(ids));
 
 /* ---------------------------------------------------------------------------
  * Writes

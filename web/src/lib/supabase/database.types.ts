@@ -327,6 +327,7 @@ export type Database = {
           event_end: string | null
           event_start: string | null
           group_key: string | null
+          hidden_from_workload: boolean
           id: string
           is_extra_credit: boolean
           is_group: boolean
@@ -360,6 +361,7 @@ export type Database = {
           event_end?: string | null
           event_start?: string | null
           group_key?: string | null
+          hidden_from_workload?: boolean
           id: string
           is_extra_credit?: boolean
           is_group?: boolean
@@ -393,6 +395,7 @@ export type Database = {
           event_end?: string | null
           event_start?: string | null
           group_key?: string | null
+          hidden_from_workload?: boolean
           id?: string
           is_extra_credit?: boolean
           is_group?: boolean
@@ -3465,6 +3468,115 @@ export type Database = {
           },
         ]
       }
+      v_inbox_feedback: {
+        Row: {
+          accept: string | null
+          applied_at: string | null
+          course_id: string | null
+          entity: string | null
+          feedback: string | null
+          field: string | null
+          from_value: Json | null
+          id: number | null
+          kind: string | null
+          question: string | null
+          raised_at: string | null
+          raised_by_sync_run: number | null
+          ref: string | null
+          resolution: Json | null
+          resolved_at: string | null
+          state: string | null
+          suggested: Json | null
+          to_value: Json | null
+          was_applied: boolean | null
+        }
+        Insert: {
+          accept?: never
+          applied_at?: string | null
+          course_id?: string | null
+          entity?: string | null
+          feedback?: string | null
+          field?: string | null
+          from_value?: Json | null
+          id?: number | null
+          kind?: string | null
+          question?: string | null
+          raised_at?: string | null
+          raised_by_sync_run?: number | null
+          ref?: string | null
+          resolution?: Json | null
+          resolved_at?: string | null
+          state?: string | null
+          suggested?: Json | null
+          to_value?: Json | null
+          was_applied?: never
+        }
+        Update: {
+          accept?: never
+          applied_at?: string | null
+          course_id?: string | null
+          entity?: string | null
+          feedback?: string | null
+          field?: string | null
+          from_value?: Json | null
+          id?: number | null
+          kind?: string | null
+          question?: string | null
+          raised_at?: string | null
+          raised_by_sync_run?: number | null
+          ref?: string | null
+          resolution?: Json | null
+          resolved_at?: string | null
+          state?: string | null
+          suggested?: Json | null
+          to_value?: Json | null
+          was_applied?: never
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attention_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attention_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "attention_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "attention_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "attention_items_raised_by_fkey"
+            columns: ["raised_by_sync_run"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attention_items_raised_by_fkey"
+            columns: ["raised_by_sync_run"]
+            isOneToOne: false
+            referencedRelation: "v_sync_status"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_overdue: {
         Row: {
           course_id: string | null
@@ -3687,6 +3799,7 @@ export type Database = {
       }
       ical_collect: { Args: never; Returns: Json }
       ical_poll: { Args: never; Returns: Json }
+      link_reading_files: { Args: { p_sync_run_id: number }; Returns: Json }
       mark_announcements_seen: { Args: never; Returns: number }
       match_file_text: {
         Args: {
@@ -3724,6 +3837,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      reading_match_tokens: { Args: { p_text: string }; Returns: string[] }
       run_transform: {
         Args: { p_run_id: string; p_trigger?: string }
         Returns: number

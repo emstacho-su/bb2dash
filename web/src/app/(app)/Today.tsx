@@ -5,12 +5,14 @@
  *
  * Structure & interactions are the spec; the Nocturne skin is a placeholder.
  *   1. Horizontal effort tracker — now the shared `<UpcomingTracker>` component
- *      (`@/components/tracker`), fed a 56-day window so its ◂ ▸ paging has
- *      somewhere to go. Unpaged it shows the same 14 days it always did.
+ *      (`@/components/tracker`), fed a 56-day window. Since H-2 the strip
+ *      scrolls that whole span and opens anchored on today; H-3 put the strip
+ *      and the day panel in one card.
  *   2. Undated tray (v_work_items where undated = true).
  *   3. Status quick-edit (T-06) writing assignment_progress / reading_progress.
- *   4. Needs-attention row (typed counts + freshness, expands to the top five).
- *   5. 2-up course cards, NO grade line (no gradebook this term — honesty rule).
+ *   4. 2-up course cards.
+ *   5. Needs-attention row, LAST on the page (H-3 / P-home-5): the queue Stack
+ *      clears when he has time, not the thing he opens Home to see.
  *
  * Every figure traces to a v_work_items / v_course_display row. Missing data
  * shows "—" or an empty state; nothing is invented.
@@ -34,7 +36,7 @@ import {
 import type { ProgressStatus } from '@/lib/queries';
 import { itemQuery } from '@/lib/queries.popout';
 import { StatusSelect } from '@/components/tracker/StatusSelect';
-import { isQueryLoading } from '@/components/shared/QueryState';
+import { isQueryLoading, queryErrorMessage } from '@/components/shared/QueryState';
 import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
 import {
   DEFAULT_HORIZON_DAYS,
@@ -43,7 +45,18 @@ import {
   isoDate,
   parseDateOnly,
 } from '@/components/tracker/anchor';
+import { pickCourseGrade, useCourseGrades } from '@/lib/queries.grades';
+import { schemeCourseIdFor } from '@/lib/queries.grade-model';
+import { gradedSoFarCardFigure } from '@/lib/graded-so-far';
+import { useCourseFigures } from '@/lib/use-course-figures';
 import { NeedsAttentionRow } from './NeedsAttention';
+import {
+  blackboardErrorFigure,
+  blackboardGradeFigure,
+  CourseGradeFigureView,
+  gradedSoFarErrorFigure,
+  type CourseGradeFigure,
+} from './CourseGradeFigure';
 
 /* ---------------------------------------------------------------------------
  * Constants & small pure helpers
@@ -61,6 +74,8 @@ const CATEGORY_ORDER: WorkCategory[] = ['exam', 'project', 'quiz', 'assignment',
  * away, which is a different claim from the one the card has been making.
  */
 const CARD_HORIZON_DAYS = DEFAULT_VISIBLE_DAYS;
+/** Stable empty list while the courses read is in flight (keeps the figures memo steady). */
+const EMPTY_COURSES: readonly CourseDisplay[] = [];
 
 const GLYPH_CLASS: Record<WorkCategory, string> = {
   reading: tokens.glyphReading,
@@ -116,6 +131,8 @@ export function Today() {
   const undatedQ = useUndatedWorkItems();
   const coursesQ = useCourseDisplay();
   const termQ = useTerm();
+  const gradesQ = useCourseGrades();
+  const courseFigures = useCourseFigures(coursesQ.data ?? EMPTY_COURSES);
   const setStatus = useSetItemStatus();
 
   const pendingId = setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null;
@@ -130,6 +147,42 @@ export function Today() {
   const cardHorizonKey = isoDate(addDays(today, CARD_HORIZON_DAYS - 1));
 
   const failed = windowQ.error ?? undatedQ.error ?? coursesQ.error;
+
+  /**
+   * G-2 / P-home-10 — what the course card is handed to show.
+   *
+   * Two figures from two unrelated sets of reads: Blackboard's published total
+   * from `v_course_grade`, and graded-so-far (Stack's pick, G-1) from the
+   * scheme and item bulk reads behind `useCourseFigures` — the same hook
+   * `/grades` uses, so Home and /grades run one function over one set of rows.
+   * This screen computes nothing itself.
+   *
+   * CR-7: they are built INDEPENDENTLY. This used to return [] the moment the
+   * gradebook read failed, so one broken query took away a number the other,
+   * perfectly healthy query had already worked out — silently, leaving a card
+   * that looked like a course with nothing to say.
+   *
+   * In flight, a figure is omitted: "not synced yet" is a claim about the data,
+   * and a request that has not answered supports neither it nor its opposite.
+   * A FAILED read is a different thing — a fact about us, not the course — and
+   * the card says so in its own words, with the database's behind the title.
+   */
+  function cardGrades(course: CourseDisplay): CourseGradeFigure[] {
+    const figures: CourseGradeFigure[] = [];
+
+    if (gradesQ.error) {
+      figures.push(blackboardErrorFigure(queryErrorMessage(gradesQ.error)));
+    } else if (!gradesQ.isPending) {
+      figures.push(blackboardGradeFigure(pickCourseGrade(gradesQ.data, course.shell_ids)));
+    }
+
+    const schemeId = schemeCourseIdFor(course);
+    const soFar = schemeId === null ? null : courseFigures.figures[schemeId] ?? null;
+    if (soFar?.error) figures.push(gradedSoFarErrorFigure(soFar.error));
+    else if (soFar?.figure) figures.push(gradedSoFarCardFigure(soFar.figure));
+
+    return figures;
+  }
 
   // Header kicker: real weekday/date + truthful term week (only if the term row loaded).
   const kicker = (() => {
@@ -177,9 +230,6 @@ export function Today() {
         isPending={isQueryLoading(windowQ)}
         error={windowQ.error}
       />
-
-      {/* ---- 4. Needs-attention row (Phase 9; replaces the last-sync line) ---- */}
-      <NeedsAttentionRow />
 
       {/* ---- 2. Undated tray ---- */}
       <section className={styles.section}>
@@ -233,11 +283,17 @@ export function Today() {
               weekMonday={weekMonday}
               weekMondayKey={weekMondayKey}
               weekSundayKey={weekSundayKey}
+              grades={cardGrades(course)}
             />
           ))}
           {coursesQ.isPending && <span className={styles.muted}>loading courses…</span>}
         </div>
       </section>
+
+      {/* ---- 4. Needs-attention row (Phase 9; replaces the last-sync line) ----
+          H-3 (P-home-5): last on the page. It is the queue Stack clears when he
+          has time, not the thing he opens Home to see. */}
+      <NeedsAttentionRow />
     </>
   );
 }
@@ -257,6 +313,7 @@ export function CourseCard({
   weekMonday,
   weekMondayKey,
   weekSundayKey,
+  grades = [],
 }: {
   course: CourseDisplay;
   items: WorkItem[];
@@ -265,6 +322,18 @@ export function CourseCard({
   weekMonday: Date;
   weekMondayKey: string;
   weekSundayKey: string;
+  /**
+   * G-2 / P-home-10 (Stack's answer 12) — THE GRADE SLOT.
+   *
+   * Figures the card shows, already formatted by whoever produced them. The
+   * card renders them and does no arithmetic: it cannot compute a grade, which
+   * is the point. Home wires Blackboard's own total today; the graded-so-far
+   * figure is appended here by the PM once Stack picks the method from
+   * `80e_GRADE_METHOD_COMPARISON.md`, with no change to this component.
+   *
+   * Empty by default, so a caller with nothing honest to say says nothing.
+   */
+  grades?: readonly CourseGradeFigure[];
 }) {
   const meetingLines = formatMeetings(course.meetings);
   const note = course.card_note?.trim() ?? '';
@@ -293,7 +362,15 @@ export function CourseCard({
   });
 
   return (
-    <div className={`${tokens.card} ${tokens.elevSm} ${styles.courseCard}`}>
+    // H-5 (P-home-8): the card was a bare <div> that looked clickable and was
+    // not. The whole card is the link now — one target, in the tab order, with
+    // an accessible name that says where it goes. Nothing inside it is
+    // interactive, so there is no nested control to swallow the click.
+    <Link
+      href={`/course/${encodeURIComponent(course.display_id)}`}
+      className={`${tokens.card} ${tokens.elevSm} ${styles.courseCard}`}
+      aria-label={`Open ${course.code} — ${course.title}`}
+    >
       <div className={styles.courseMain}>
         <div className={styles.courseCodeRow}>
           <span className={styles.courseCode}>{course.code}</span>
@@ -322,6 +399,9 @@ export function CourseCard({
             <span className={tokens.kicker}>Open</span>
             <span className={styles.statValue}>{openThisWeek || '—'}</span>
           </div>
+          {grades.map((figure) => (
+            <CourseGradeFigureView key={figure.label} figure={figure} />
+          ))}
         </div>
       </div>
       <div className={styles.strip}>
@@ -338,7 +418,7 @@ export function CourseCard({
           ))}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 

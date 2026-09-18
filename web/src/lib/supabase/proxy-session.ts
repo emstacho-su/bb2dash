@@ -11,6 +11,22 @@ function isPublicPath(pathname: string): boolean {
 }
 
 /**
+ * Move the auth cookies Supabase just refreshed onto a different response.
+ *
+ * `createServerClient`'s `setAll` writes the rotated token onto the pass-through
+ * response. A redirect is a NEW response and carries none of it, so returning one
+ * directly throws the refresh away and the next request arrives unauthenticated —
+ * a sign-out for anyone whose window has been open long enough for the token to
+ * expire (Phase 12b, P-shell-1).
+ */
+function carryCookies(from: NextResponse, to: NextResponse): NextResponse {
+  for (const cookie of from.cookies.getAll()) {
+    to.cookies.set(cookie);
+  }
+  return to;
+}
+
+/**
  * Refreshes the Supabase auth cookie and enforces the app-wide auth guard.
  *
  * There is exactly ONE user and NO signup path (project decision) — an
@@ -56,14 +72,14 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.search = pathname === '/' ? '' : `?next=${encodeURIComponent(pathname)}`;
-    return NextResponse.redirect(url);
+    return carryCookies(response, NextResponse.redirect(url));
   }
 
   if (user && pathname === '/login') {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     url.search = '';
-    return NextResponse.redirect(url);
+    return carryCookies(response, NextResponse.redirect(url));
   }
 
   return response;

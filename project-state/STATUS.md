@@ -1,6 +1,6 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-17** (Phase 12 Electron shell **merged**, PR #19; row 12 below; next is Phase 12b). Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
+> Updated upon each PR. Last update: **2026-09-17** (Phase 12b fine-tooth-comb pass **PR open**, MVP built; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — follows Stack's walk). Earlier the same day: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
 > ([PR #15](https://github.com/emstacho-su/bb2dash/pull/15), `c1e471d`, production deployed: engine `web/src/lib/grade-model/`, "Our model" on `/grades` and the
 > course Grades tab, what-if + target solver + "Counts toward…" picker + score history;
 > migrations 057–058 and 080–081 live; V-1 stubbed by Stack, so the model leaves out parts with
@@ -275,6 +275,35 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    of his — IST.323, ECN.304, IST.352 and GEO 103 name their unscored hand-graded parts, IST.466
    has nothing graded, IST.471 is qualitative.
 
+14. **Phase 12b — Fine-tooth-comb pass** (`fix/page-pass-12b`, PR open 2026-09-17; brief, Stack's 18
+   answers, MVP, DoD and the 28-row item task list in `docs/planning/80c_PHASE12B_page_pass.md`;
+   research `research/80c_RESEARCH_phase12b_findings.md`; evidence `80d` walk, `80e` grade-method
+   comparison, `80f` attempts endpoint, `80g`–`80k` worker notes). Input was Stack's list of 33
+   bugs and changes by page plus 8 PM carry-ins (41 intake ids): five Sonnet researchers, one batch of
+   questions, then five Opus workers (W-30 db + shell, W-31 grades, W-32 home / inbox / materials,
+   W-33 planner, W-34 sweep), PM-integrated. **Home:** five distinct type colours, tracker scrolls the
+   whole dated range and opens at today, strip + today in one card, needs-attention last, series
+   placeholders and other teams' IST.466 cases out of Undated (kept in Materials), course cards link,
+   sidebar closes on navigation without touching the preference, course card shows Blackboard's number
+   and graded so far. **Planner:** Assignments band collapsed by default with counts, rows grow by what
+   overlapping items need (`planner-rows.ts`, one `slotToPx`), no inner scrollbars, wrapped text, PR
+   #16's three CSS risks fixed. **Inbox:** each button says what it does for that row ("recorded only"
+   where nothing applies), rows show source, age and a link, `v_inbox_feedback` hook for a later agent.
+   **Grades:** Stack read the dummy-data comparison (`80e`) and kept the 10b engine's arithmetic with
+   the what-if layer and both silencing rules removed — one deterministic "graded so far" per course
+   with the parts it leaves out named under it; courses collapse; title is the link; feedback and
+   history in the popout; feedback mark on the row. **Status:** six offered values everywhere
+   (`progress-status.ts`); `graded` sets itself when a score is new or changed. **Materials:** buckets
+   collapse, readings under date headers, off-platform label split, "How to access" opens the syllabus.
+   **Ingest:** crawler **v4** reads attempts the way Blackboard's UI does (v3's endpoint answers empty
+   for a student). Migrations **073–079, 084–087** live, each byte-identical to its repo file.
+   `/code-review main high`: 10 findings, 8 fixed, 1 docs, 1 checked on prod; `/security-review`: none
+   ≥ 8/10. Tests: web 1582 (1342 on `main`; ~360 cases left with the deleted what-if layer), desktop
+   549, mcp-server 88; `npm run lint` works again (ESLint CLI). PM browser walk in `80d` (three
+   passes). **Still to come in this phase, after Stack's MVP walk:** recurring planner events with
+   single-occurrence edits (T-1, migrations 082–083) and the small anchored assignment popover (T-2).
+   **Live proof owed:** Stack's next sync (v4) should fill `bb_attempts` and `my_submissions`.
+
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's
 `012_hybrid_similarity` / `013_hybrid_similarity_single_source`. Same DDL, live once; the repo
@@ -317,7 +346,7 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar | `69b_PHASE11B_planner_events.md` | **merged** (PR #14 + display follow-up PR #16, 2026-09-16; migrations 067–069 live, `calendar-push` v5 live, live proof and browser walk done) |
 | 12 | Electron shell, tray, desktop notifications, Sync button runs the command | `80_PHASE12_electron.md` | **merged** (PR #19, 2026-09-17; Stack walked acceptance steps 1–5 and the tray on the unpacked build and said merge; the three toasts are still to be seen live, after the first real sync or posted grade). His first launch found one bug, fixed before merge: the app was named `bb2dash-desktop`, so it read its config from the wrong `%APPDATA%` folder (`productName` now pins `bb2dash`). Shipped: `desktop/` package, Electron 44.4.1, unpacked build `desktop/dist/win-unpacked/bb2dash.exe`; window + single instance + tray (close hides), navigation allowlist, poller with on-disk watermark and the three toasts, Sync button runs `claude '/bb-sync <id>'` in Windows Terminal (`syncDryRun` prints it instead); `core/` has no `electron` import (R-28). 535 unit + 19 e2e tests; `/code-review main high` 10 findings fixed (brief §Round 2), `/security-review` none ≥ 8/10; zero changes under `web/`; no migrations. Notes: `80a`, `80b`, `80d`. **Not yet proven, only Stack can:** real Windows toasts, a real `wt.exe` sync run, the clipboard copy inside the shell, staying signed in after hours in the tray. Carried to 12b: `web/src/lib/supabase/proxy-session.ts` drops refreshed auth cookies on its two redirect branches; low-priority hardening: police `will-redirect` / `will-frame-navigate` |
 | 13 | Styling pass | `81_PHASE13_styling.md` | last; carries C-1..C-3 from Phase 10b's browser walk (phone-width overflow, rank weights shown per exam, favicon) |
-| 12b | Fine-tooth-comb pass over every page and feature | `80c_PHASE12B_page_pass.md` | planned 2026-09-16; after 12, before 13; input is Stack's list of bugs and changes by page |
+| 12b | Fine-tooth-comb pass over every page and feature | `80c_PHASE12B_page_pass.md` | **MVP built, PR open 2026-09-17** (migrations 073–079, 084–087 live; gates run; PM walk in `80d`); post-MVP tail T-1 recurring events + T-2 small popover after Stack's walk; P-data-1 deferred, P-db-3 declined |
 | 14 | Containers (R-28): every local process in Docker | `82_PHASE14_containers.md` + `research/82_RESEARCH_phase14_R1…R6` | planned 2026-09-16; after 13; Stack's 16 answers recorded, open questions in the brief; migration range 090–099 |
 
 **MVP, definition of done, task loops (2026-09-14, PR #11):** every remaining phase and stream
@@ -329,7 +358,7 @@ phase's PM session freezes its Contract. Research behind them: `docs/planning/re
 
 Migration ranges: Phase 8 = 026–029, Phase 9 = 030–045 (030–040 plus its review-fix rounds 041–045), Phase 10 = 046–059
 (10a took 046–056; **10b took 057–058**; **059 held for V-1's reconciliation**), Phase 11 = 060–066,
-Phase 11b = 067–072 (used 067–069; 070–072 free), Phase 12 = 073–079 if needed, Phase 10b review rounds = 080–089 (080–081 used). Both phase branches cut from `main`
+Phase 11b = 067–072 (used 067–069; 070–072 free), Phase 12 = 073–079 if needed, Phase 10b review rounds = 080–081; **Phase 12b = 073–079 and 084–087** (082–083 reserved for its recurring-events tail; 088–089 free). Both phase branches cut from `main`
 (Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
 
 Phase 7 leftovers folded into the plan: automatic `superseded_by` on re-uploaded files and the
@@ -351,7 +380,7 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
 
 ## Known issues / operational notes
 
-* **Grade model (10b) shows on no course until Stack acts or a hand-graded score posts.** The
+* **(Superseded by Phase 12b: the strict rule is gone; every course with a graded item shows "graded so far" and names what it leaves out. A scored column linked to no part — ECN.304 Quiz 2 and Attendance on 2026-09-17 — is named under the figure until Stack places it with "Counts toward…".)** Before 12b: the grade model (10b) showed on no course until Stack acted. The
   strict rule (his answer 1) hides it where a `manual` part is unscored: IST.323 Class
   Participation, ECN.304 Participation, IST.352 Attendance / Class Contribution, GEO 103's two
   attendance parts. ECN.304 computes if he links its Attendance column (85.7) to Participation.
@@ -374,7 +403,7 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
   regenerated `database.types.ts` from prod (both phases' objects) and reconciled the three docs;
   the migrations never overlapped and no source file was shared.
 
-* **Attempts key names are unverified** until the first crawler-v3 sync — the next `/bb-sync`
+* **Attempts: v3's endpoint answers empty for a student (2026-09-17 sync, 21 of 21 columns); crawler v4 (Phase 12b, `80f`) walks grade → attempts → detail. Proof is the first v4 sync.** Older note — attempts key names were unverified until the first crawler-v3 sync — the next `/bb-sync`
   from the `main` checkout. `bb_attempts.raw->'keys'` and `bb_content`'s `detailSource` probe
   name the real keys; the candidate lists in `bb_crawler.js` are then cut to one name each
   (`66_W17_VERIFICATION.md` §10). Until then `bb_attempts` is empty and the popout shows
@@ -394,8 +423,7 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
 * Planner events are never pruned by date, so the push set grows; reads are paged since v5 (R2-1).
   A creation on a DST fall-back hour takes the earlier instant (Temporal `compatible`); Postgres
   would pick the later, which is why SQL never converts a planner wall clock.
-* `calendar_events` still grants `TRUNCATE` to `authenticated` (pre-existing since 060; unreachable
-  through PostgREST, which has no truncate verb). Revoke it the next time a migration touches the table.
+* ~~`calendar_events` grants `TRUNCATE` to `authenticated`~~ — fixed by 076 (it was 79 grants across `public`, to anon and authenticated; all revoked, default privileges too).
 * The kind colours are W-23's pick (DECISIONS 2026-09-16) until Stack confirms them on the walk.
 
 * IST.466 publishes two sibling content branches with identical `path`s; `bb_content`'s

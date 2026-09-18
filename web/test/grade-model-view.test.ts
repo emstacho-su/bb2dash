@@ -1,70 +1,34 @@
 /**
- * The pure gates and wording around the engine: which rows take a what-if
- * value or a picker, how a typed value is validated, how figures are rounded
- * for display, and how a screen survives an engine that throws.
+ * The pure gates and wording around the engine: which rows get the "Counts
+ * toward…" picker, how the score history groups, how figures are rounded for
+ * display, and how a screen survives an engine that throws.
+ *
+ * Phase 12b (G-1) removed the what-if cells and their validation, the solver's
+ * letter, the muted-part sentences, the agreement wording and the three-way
+ * "parts graded" explanation, so the cases about them went with them. The
+ * picker's own rules are unchanged and matter more than ever: they decide which
+ * Blackboard columns the figure counts at all.
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { ModelInput } from '@/lib/grade-model/types';
 import {
-  ECN304_EXAM1_PLACEHOLDER,
   IST466_COMPONENTS,
-  IST466_LETTER_PLACEHOLDER,
   IST466_SCHEME,
   IST466_SYNCHRONY,
   QUIZ_HISTORY,
-  makeComputed,
   makeItem,
-  makeScenario,
-  standing,
 } from './factories.grade-model';
 
-const engine = vi.hoisted(() => ({ project: vi.fn(), solve: vi.fn() }));
-vi.mock('@/lib/grade-model', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/grade-model')>();
-  return { ...actual, projectCourse: engine.project, solveTarget: engine.solve };
+const engine = vi.hoisted(() => ({ graded: vi.fn() }));
+vi.mock('@/lib/graded-so-far', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/graded-so-far')>();
+  return { ...actual, gradedSoFar: engine.graded };
 });
 
 const view = await import('@/lib/grade-model-view');
 const format = await import('@/lib/grade-model-format');
 const grades = await import('@/lib/queries.grades');
-const runner = await import('@/lib/grade-model-run');
-const { toModelInput } = await import('@/lib/grade-model-input');
-const { itemStates } = await import('@/lib/grade-model');
-
-function inputOf(items = [makeItem(), IST466_SYNCHRONY, IST466_LETTER_PLACEHOLDER]): ModelInput {
-  return toModelInput(IST466_SCHEME, IST466_COMPONENTS, items, null, null);
-}
-
-describe('whatIfCellTargets — the engine decides, the view only names (R2-3w / R2-15)', () => {
-  it('draws exactly the engine targets, labelled with each item name', () => {
-    const input = inputOf();
-    const cells = view.whatIfCellTargets(itemStates(input), input.items);
-    expect([...cells.keys()]).toEqual(itemStates(input).whatIfTargets.map((t) => t.key));
-    expect(cells.get('asg:IST.466/letter-of-gratitude')).toEqual({
-      key: 'asg:IST.466/letter-of-gratitude', name: 'Letter of Gratitude', unit: 'points', possible: 100,
-    });
-    // The unsure major case is muted by the engine, so it gets no cell.
-    expect(cells.has(IST466_SYNCHRONY.item_key)).toBe(false);
-  });
-
-  it("carries a percent target's unit and 100 bound through unchanged", () => {
-    const exams = { ...IST466_COMPONENTS[0], id: 3, course_id: 'ECN.304', points: null, weight_pct: 100, aggregation: 'rank_weighted' as const, rank_weights: [30, 25, 20], count_expected: 3 };
-    const input = toModelInput({ ...IST466_SCHEME, course_id: 'ECN.304', method: 'weighted_pct' }, [exams], [ECN304_EXAM1_PLACEHOLDER], null, null);
-    const cells = view.whatIfCellTargets(itemStates(input), input.items);
-    expect(cells.get('asg:ECN.304/exam-1')).toEqual({ key: 'asg:ECN.304/exam-1', name: 'Exam 1', unit: 'percent', possible: 100 });
-  });
-
-  it('falls back to the key for a target whose item is not in the list', () => {
-    const cells = view.whatIfCellTargets({ whatIfTargets: [{ key: 'asg:x', unit: 'points', max: 5 }] }, []);
-    expect(cells.get('asg:x')).toEqual({ key: 'asg:x', name: 'asg:x', unit: 'points', possible: 5 });
-  });
-
-  it('draws nothing for a course the engine will not compute', () => {
-    const input = toModelInput({ ...IST466_SCHEME, method: 'qualitative' }, IST466_COMPONENTS, [makeItem()], makeScenario(), null);
-    expect(view.whatIfCellTargets(itemStates(input), input.items).size).toBe(0);
-  });
-});
+const runner = await import('@/lib/grade-figure-run');
 
 describe('linkStates (answer 2, PM call 9)', () => {
   it('offers the picker on an unsure link, preselected', () => {
@@ -73,12 +37,12 @@ describe('linkStates (answer 2, PM call 9)', () => {
     });
   });
 
-  it('offers it on an unlinked column scored or not, and on an override; never on a placeholder or a confirmed link', () => {
+  it('offers it on an unlinked column scored or not, and on an override; never on a confirmed link', () => {
     const unlinked = { component_id: null, link_source: null, link_confidence: null } as const;
     const scoredUnlinked = makeItem({ item_key: 'col:IST.323:lab', score: 4, ...unlinked });
     const unscoredUnlinked = makeItem({ item_key: 'col:IST.323:_3569973_1', column_id: '_3569973_1', possible: 13, score: null, assignment_id: null, ...unlinked });
     const notGraded = makeItem({ item_key: 'col:IST.323:sel', link_source: 'override', excluded: true, component_id: 13 });
-    const states = view.linkStates([scoredUnlinked, unscoredUnlinked, notGraded, makeItem(), IST466_LETTER_PLACEHOLDER]);
+    const states = view.linkStates([scoredUnlinked, unscoredUnlinked, notGraded, makeItem()]);
     expect([...states.keys()]).toEqual(['col:IST.323:lab', 'col:IST.323:_3569973_1', 'col:IST.323:sel']);
     expect(states.get('col:IST.323:_3569973_1')).toMatchObject({ componentId: null, unsure: false, override: false });
     expect(states.get('col:IST.323:sel')).toMatchObject({ override: true, excluded: true, componentId: null, unsure: false });
@@ -109,29 +73,6 @@ describe('linkStates (answer 2, PM call 9)', () => {
   });
 });
 
-describe('parseWhatIf — the boundary', () => {
-  it.each([
-    ['9', 9], ['9.5', 9.5], ['0', 0], ['10', 10], ['.5', 0.5], [' 7 ', 7],
-  ])('accepts %j', (raw, value) => {
-    expect(view.parseWhatIf(raw, 10)).toEqual({ ok: true, value });
-  });
-
-  it('reads an empty field as "clear"', () => {
-    expect(view.parseWhatIf('   ', 10)).toEqual({ ok: true, value: null });
-  });
-
-  it.each(['-1', '10.01', 'abc', '0x10', '1e2', 'Infinity', '9,5'])('refuses %j', (raw) => {
-    expect(view.parseWhatIf(raw, 10)).toEqual({ ok: false, error: 'Enter a number from 0 to 10.' });
-  });
-
-  it('sets and removes one key without touching the original', () => {
-    const scores = Object.freeze({ a: 1, b: 2 });
-    expect(view.withItemScore(scores, 'c', 3)).toEqual({ a: 1, b: 2, c: 3 });
-    expect(view.withItemScore(scores, 'a', null)).toEqual({ b: 2 });
-    expect(scores).toEqual({ a: 1, b: 2 });
-  });
-});
-
 describe('historyByColumn', () => {
   it('groups by column item key, oldest first whatever the input order', () => {
     const grouped = view.historyByColumn([QUIZ_HISTORY[2], QUIZ_HISTORY[0], QUIZ_HISTORY[1]]);
@@ -144,81 +85,11 @@ describe('display rounding, once', () => {
     expect(format.formatPct(87.36)).toBe('87.4%');
     expect(format.formatPoints(14.8)).toBe('14.8');
     expect(format.formatPoints(3.14159)).toBe('3.14');
-    expect(format.formatShare(0.61249)).toBe('61.2%');
   });
 
   it('never prints NaN', () => {
     expect(format.formatPct(Number.NaN)).toBe('—');
-    expect(format.standingText(standing(Number.NaN, 'A'))).toBe('—');
-  });
-
-  it('writes the standing with its letter, the delta without a sign', () => {
-    expect(format.standingText(standing(87.36, 'B+'))).toBe('87.4% (B+)');
-    expect(format.agreementDeltaText({ delta: -1.234, unit: 'points' })).toBe('1.23');
-    expect(format.agreementDeltaText({ delta: 0.66, unit: 'pct' })).toBe('0.7');
-    expect(format.agreementUnitText('pct')).toBe('percentage points');
-  });
-
-  it('explains the headline from the component results, leaving muted parts out', () => {
-    const { components } = makeComputed();
-    const parts = components.map((c) => ({ id: c.componentId, parentId: null, isExtraCredit: false }));
-    expect(format.explanationText(components, makeComputed(), parts)).toBe('2 of 3 parts graded: Blackboard Quizzes, Exams');
-    expect(format.explanationText([{ ...components[2], state: 'muted' }], makeComputed(), parts)).toBe('0 of 0 parts graded');
-  });
-
-  describe('IST.323 counts parts, not pieces (R2-12)', () => {
-    // grade_components for IST.323: Final Project (14) has three children; 17 is extra credit.
-    const IST323 = [
-      { id: 10, name: 'Class Participation', parentId: null, isExtraCredit: false },
-      { id: 11, name: 'Blackboard Quizzes', parentId: null, isExtraCredit: false },
-      { id: 12, name: 'Security in the News Group Presentation', parentId: null, isExtraCredit: false },
-      { id: 13, name: 'Individual Security Presentation', parentId: null, isExtraCredit: false },
-      { id: 14, name: 'Final Project: Security Program Proposal', parentId: null, isExtraCredit: false },
-      { id: 15, name: 'Exams', parentId: null, isExtraCredit: false },
-      { id: 16, name: 'Required Labs', parentId: null, isExtraCredit: false },
-      { id: 17, name: 'Extra Credit Lab', parentId: null, isExtraCredit: true },
-      { id: 18, name: 'Final Project: Proposal', parentId: 14, isExtraCredit: false },
-      { id: 19, name: 'Final Project: Running Log', parentId: 14, isExtraCredit: false },
-      { id: 20, name: 'Final Project: In-class Defense', parentId: 14, isExtraCredit: false },
-    ];
-    const results = (graded: number[], muted: number[] = []) =>
-      IST323.map((c) => ({
-        componentId: c.id, code: String(c.id), name: c.name,
-        state: muted.includes(c.id) ? 'muted' as const : graded.includes(c.id) ? 'graded' as const : 'ungraded' as const,
-        earned: 0, gradedCap: 0, cap: 0, usesHypothetical: false, capacityFromKnownItems: false,
-      }));
-    /** The same component results with no what-if values in play. */
-    const real = (components: ReturnType<typeof results>) => makeComputed({ components });
-
-    it('reads "of 7 parts", with children and extra credit not counted', () => {
-      expect(format.explanationText(results([11, 15, 17, 18]), real(results([11, 15, 17, 18])), IST323)).toBe('2 of 7 parts graded: Blackboard Quizzes, Exams');
-    });
-
-    it('names a muted parent once, not its pieces', () => {
-      const muted = results([], [14, 18, 19, 20]);
-      expect(format.mutedPartNames(muted, IST323)).toEqual(['Final Project: Security Program Proposal']);
-      expect(format.explanationText(muted, real(muted), IST323)).toBe('0 of 6 parts graded');
-    });
-
-    it('names a lone muted piece when its parent is not muted', () => {
-      expect(format.mutedPartNames(results([], [19]), IST323)).toEqual(['Final Project: Running Log']);
-    });
-
-    it('sorts the unsure items under the part they mute, pieces included (R3-3)', () => {
-      const items = [
-        { key: 'col:IST.323:_3569947_1', name: 'Log Checkpoint Assignment', kind: 'item' as const, componentId: 19 },
-        { key: 'asg:IST.323/fp-log-final', name: 'Running Log (final)', kind: 'placeholder' as const, componentId: 19 },
-        { key: 'col:IST.323:quiz', name: 'Quiz #3', kind: 'item' as const, componentId: 11 },
-      ];
-      const unsure = ['col:IST.323:_3569947_1', 'asg:IST.323/fp-log-final'];
-      expect(format.mutedParts(results([], [14, 18, 19, 20]), IST323, items, unsure)).toEqual([
-        { part: 'Final Project: Security Program Proposal', confirmable: ['Log Checkpoint Assignment'], notInBlackboard: 1 },
-      ]);
-      expect(format.mutedParts(results([], [19]), IST323, items, unsure.slice(1))).toEqual([
-        { part: 'Final Project: Running Log', confirmable: [], notInBlackboard: 1 },
-      ]);
-      expect(format.mutedParts(results([11]), IST323, items, unsure)).toEqual([]);
-    });
+    expect(format.formatPoints(Number.NaN)).toBe('—');
   });
 
   it('writes a history line with the dash for "not graded yet"', () => {
@@ -247,68 +118,64 @@ describe('display rounding, once', () => {
 });
 
 describe('running the engine from a screen', () => {
+  const bundle = { scheme: IST466_SCHEME, components: IST466_COMPONENTS };
+
   it('turns an engine exception into a sentence instead of a blank screen', () => {
-    engine.project.mockImplementationOnce(() => {
+    engine.graded.mockImplementationOnce(() => {
       throw new Error('boom');
     });
-    expect(runner.runModel(inputOf())).toMatchObject({ result: null, error: 'Could not compute the model: boom' });
-    engine.solve.mockImplementationOnce(() => {
-      throw new Error('no');
+    expect(runner.runCourseFigure({ bundle, items: [makeItem()] })).toEqual({
+      figure: null,
+      error: 'Could not work out the grade: boom',
     });
-    expect(runner.runSolver(inputOf(), 'A-')).toEqual({ result: null, error: 'Could not solve for A-: no' });
   });
 
-  it('starts the solver on the saved letter, else A-, else the best letter', () => {
-    expect(runner.pickTargetLetter(['A', 'A-', 'B'], 'B')).toBe('B');
-    expect(runner.pickTargetLetter(['A', 'A-', 'B'], 'Z')).toBe('A-');
-    expect(runner.pickTargetLetter(['A', 'B'], null)).toBe('A');
-  });
+  it('builds /grades states: loading, a shared load error, then one figure per course', () => {
+    const figure = { state: 'nothing_graded' } as const;
+    engine.graded.mockReturnValue(figure);
+    const empty = { schemes: undefined, items: undefined };
 
-  it('builds /grades states: loading, a shared load error, then one result per course', () => {
-    const computed = makeComputed();
-    engine.project.mockReturnValue(computed);
-    const empty = { schemes: undefined, items: undefined, totals: undefined, scenarios: undefined };
-    expect(runner.MODEL_STANDING_LOADING).toMatchObject({ result: null, realResult: null, components: [], error: null, loading: true });
-    expect(runner.modelStandingStates(['IST.466'], empty, null)).toEqual({ 'IST.466': runner.MODEL_STANDING_LOADING });
-    expect(runner.modelStandingStates(['IST.466'], empty, 'Could not load x')).toEqual({
-      'IST.466': { ...runner.MODEL_STANDING_LOADING, error: 'Could not load x', loading: false },
+    expect(runner.FIGURE_LOADING).toEqual({ figure: null, error: null });
+    expect(runner.courseFigureStates(['IST.466'], empty, null)).toEqual({
+      'IST.466': runner.FIGURE_LOADING,
+    });
+    expect(runner.courseFigureStates(['IST.466'], empty, 'Could not load x')).toEqual({
+      'IST.466': { figure: null, error: 'Could not load x' },
     });
 
-    const states = runner.modelStandingStates(
+    const states = runner.courseFigureStates(
       ['IST.466', 'IST.471'],
       {
-        schemes: { 'IST.466': { scheme: IST466_SCHEME, components: IST466_COMPONENTS } },
+        schemes: { 'IST.466': bundle },
         items: [makeItem(), makeItem({ scheme_course_id: 'IST.471', item_key: 'other' })],
-        totals: [],
-        scenarios: [makeScenario({ item_scores: { 'col:IST.466:_3562497_1': 90 } })],
       },
       null,
     );
-    expect(states['IST.466']).toMatchObject({ result: computed, realResult: computed, error: null, loading: false });
-    expect(states['IST.466'].components.map((c) => c.id)).toEqual(IST466_COMPONENTS.map((c) => c.id));
-    // IST.466 holds a what-if value, so it runs twice: with its scenario, then real-only (R3-2).
-    // IST.471 holds none, so its real-only result is its result and it runs once.
-    const [firstInput, realOnlyInput, secondInput] = engine.project.mock.calls.slice(-3).map((call) => call[0] as ModelInput);
-    expect(firstInput.items.map((i) => i.key)).toEqual(['col:IST.466:_3562497_1']);
-    expect(firstInput.scenario.itemScores).toEqual({ 'col:IST.466:_3562497_1': 90 });
-    expect(realOnlyInput).toEqual({ ...firstInput, scenario: { itemScores: {} } });
-    expect(secondInput.scheme).toBeNull();
+    expect(states['IST.466']).toEqual({ figure, error: null });
+    expect(states['IST.471']).toEqual({ figure, error: null });
   });
 
-  it('runs the real-only projection on the same input with an empty scenario (R3-2)', () => {
-    const typed = makeComputed({ usesHypotheticals: true });
-    const real = makeComputed();
-    engine.project.mockReset();
-    engine.project.mockReturnValueOnce(typed).mockReturnValueOnce(real);
-    const input = { ...inputOf(), scenario: { itemScores: { 'col:IST.466:_3562497_1': 90 } } };
-    expect(runner.runModel(input)).toMatchObject({ result: typed, realResult: real, error: null });
-    expect(engine.project.mock.calls.map((call) => call[0])).toEqual([input, { ...input, scenario: { itemScores: {} } }]);
-    expect(input.scenario.itemScores).toEqual({ 'col:IST.466:_3562497_1': 90 });
+  it('gives each course its own rows, in order, over a list big enough to notice', () => {
+    engine.graded.mockClear();
+    engine.graded.mockReturnValue({ state: 'nothing_graded' });
+    const ids = ['IST.466', 'IST.471', 'IST.323'];
+    // Interleaved, so a grouping that trusted input order would be caught.
+    const items = Array.from({ length: 300 }, (_, n) =>
+      makeItem({ scheme_course_id: ids[n % 3], item_key: `col:k${n}` }),
+    );
+    runner.courseFigureStates(ids, { schemes: {}, items }, null);
 
-    engine.project.mockReset();
-    engine.project.mockReturnValue(real);
-    const noValues = { ...input, scenario: { itemScores: {} } };
-    expect(runner.runModel(noValues)).toMatchObject({ result: real, realResult: real });
-    expect(engine.project).toHaveBeenCalledTimes(1);
+    const passed = engine.graded.mock.calls.map((call) => call[0] as { items: { key: string }[] });
+    expect(passed.map((input) => input.items.length)).toEqual([100, 100, 100]);
+    expect(passed[0].items.slice(0, 3).map((i) => i.key)).toEqual(['col:k0', 'col:k3', 'col:k6']);
+    expect(passed[1].items.slice(0, 3).map((i) => i.key)).toEqual(['col:k1', 'col:k4', 'col:k7']);
+  });
+
+  it('gives a course with no rows of its own an empty input rather than another course’s', () => {
+    engine.graded.mockClear();
+    engine.graded.mockReturnValue({ state: 'nothing_graded' });
+    runner.courseFigureStates(['IST.471'], { schemes: {}, items: [makeItem()] }, null);
+    const passed = engine.graded.mock.calls[0]?.[0];
+    expect(passed).toMatchObject({ scheme: null, components: [], items: [] });
   });
 });

@@ -6,11 +6,16 @@
  * keeps both files inside the project's size rule and makes the adapter
  * directly unit-testable (the `course-dimension.ts` precedent).
  *
- * ROW TYPES — `v_grade_model_items`, `v_grade_model_total` and
- * `v_gradebook_history` are created by migration 058. The generated view types
- * make every column nullable (Postgres reports no not-null on a view), so the
- * three interfaces below are hand-narrowed to the frozen column lists in
- * `docs/planning/68_PHASE10B_grade_model.md` §058 — the 10a precedent.
+ * ROW TYPES — `v_grade_model_items` and `v_gradebook_history` are created by
+ * migration 058. The generated view types make every column nullable (Postgres
+ * reports no not-null on a view), so the interfaces below are hand-narrowed to
+ * the frozen column lists in `docs/planning/68_PHASE10B_grade_model.md` §058 —
+ * the 10a precedent.
+ *
+ * Phase 12b (G-1): `GradeScenarioRow`, `GradeModelTotalRow` and their parsers
+ * went with the what-if layer and the agrees-with-Blackboard sentence.
+ * Blackboard's own total still reaches the screen — through `v_course_grade`
+ * in `queries.grades.ts`, which is where 10a always read it.
  *
  * HONESTY — nothing here computes a grade. `toModelInput` only reshapes rows
  * into the engine's `ModelInput`; every sum is the engine's. Numbers are never
@@ -19,7 +24,6 @@
 
 import type {
   Aggregation,
-  BlackboardTotal,
   ComponentInput,
   Confidence,
   ItemInput,
@@ -85,19 +89,6 @@ export interface GradeModelItemRow {
   seen_at: string | null;
 }
 
-/** One row of `v_grade_model_total` (058). */
-export interface GradeModelTotalRow {
-  scheme_course_id: string;
-  shell_course_id: string;
-  column_id: string;
-  name: string;
-  score: number | null;
-  possible: number | null;
-  seen_at: string;
-  /** Read from the total's formula; null when it could not be read. */
-  bb_running: boolean | null;
-}
-
 /** One row of `v_gradebook_history` (058). */
 export interface GradebookHistoryRow {
   shell_course_id: string;
@@ -108,14 +99,6 @@ export interface GradebookHistoryRow {
   score: number | null;
   possible: number | null;
   previous_score: number | null;
-}
-
-/** One row of `grade_scenarios` (057), `item_scores` already parsed. */
-export interface GradeScenarioRow {
-  course_id: string;
-  item_scores: Readonly<Record<string, number>>;
-  target_letter: string | null;
-  updated_at: string;
 }
 
 /** The scheme row and its components, fetched together. */
@@ -185,17 +168,6 @@ export function parseRankWeights(value: unknown): number[] | null {
   return weights.every((w): w is number => w !== null) ? weights : null;
 }
 
-/** `grade_scenarios.item_scores` jsonb → only finite, non-negative numbers survive. */
-export function parseItemScores(value: unknown): Record<string, number> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).filter(
-      (entry): entry is [string, number] =>
-        typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] >= 0,
-    ),
-  );
-}
-
 /* ---------------------------------------------------------------------------
  * The adapter
  * ------------------------------------------------------------------------ */
@@ -244,31 +216,6 @@ function toItemInput(row: GradeModelItemRow): ItemInput {
     kind: row.column_kind,
     isExtraCredit: row.is_extra_credit === true,
     dueAt: row.due_at,
-  };
-}
-
-/**
- * The saved scenario, keeping only values on items that are still ungraded.
- * A key for an item Blackboard has since graded, or for an item that no longer
- * exists, is an orphan: it is dropped here so it can never reach a standing.
- */
-function scenarioFor(
-  items: readonly ItemInput[],
-  scenario: GradeScenarioRow | null,
-): Readonly<Record<string, number>> {
-  if (!scenario) return {};
-  const ungraded = new Set(items.filter((item) => item.score === null).map((item) => item.key));
-  return Object.fromEntries(
-    Object.entries(parseItemScores(scenario.item_scores)).filter(([key]) => ungraded.has(key)),
-  );
-}
-
-function toBlackboardTotal(row: GradeModelTotalRow | null): BlackboardTotal | null {
-  if (!row) return null;
-  return {
-    score: toNumberOrNull(row.score),
-    possible: toNumberOrNull(row.possible),
-    running: typeof row.bb_running === 'boolean' ? row.bb_running : null,
     seenAt: row.seen_at,
   };
 }
@@ -282,16 +229,11 @@ export function toModelInput(
   scheme: GradingSchemeRow | null,
   components: readonly GradeComponentRow[],
   items: readonly GradeModelItemRow[],
-  scenario: GradeScenarioRow | null,
-  total: GradeModelTotalRow | null,
 ): ModelInput {
-  const itemInputs = items.map(toItemInput);
   return {
     scheme: scheme ? toSchemeInput(scheme) : null,
     components: components.map(toComponentInput),
-    items: itemInputs,
-    scenario: { itemScores: scenarioFor(itemInputs, scenario) },
-    blackboardTotal: toBlackboardTotal(total),
+    items: items.map(toItemInput),
   };
 }
 

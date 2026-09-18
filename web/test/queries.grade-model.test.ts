@@ -12,13 +12,11 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  IST323_TOTAL_ROW,
   IST466_COMPONENTS,
-  IST466_LETTER_PLACEHOLDER,
   IST466_SCHEME,
+  SEEN_0916,
   IST466_SYNCHRONY,
   makeItem,
-  makeScenario,
 } from './factories.grade-model';
 
 type Call = {
@@ -117,31 +115,6 @@ describe('reads — one scheme course', () => {
     });
   });
 
-  it('reads v_grade_model_total as a single row', async () => {
-    results.set('v_grade_model_total', { data: IST323_TOTAL_ROW, error: null });
-    expect(await run(q.gradeModelTotalOptions('IST.323'))).toEqual(IST323_TOTAL_ROW);
-    expect(calls[0].filters).toEqual(['eq:scheme_course_id=IST.323']);
-  });
-
-  it('reads grade_scenarios and treats no row as an empty scenario', async () => {
-    results.set('grade_scenarios', { data: null, error: null });
-    expect(await run(q.gradeScenarioOptions('IST.466'))).toBeNull();
-    expect(calls[0]).toMatchObject({
-      relation: 'grade_scenarios',
-      columns: 'course_id, item_scores, target_letter, updated_at',
-      filters: ['eq:course_id=IST.466'],
-    });
-  });
-
-  it('parses item_scores, dropping anything that is not a non-negative number', async () => {
-    results.set('grade_scenarios', {
-      data: { course_id: 'IST.466', item_scores: { a: 9, b: '9', c: -1, d: 0 }, target_letter: 'B+', updated_at: 'x' },
-      error: null,
-    });
-    const row = (await run(q.gradeScenarioOptions('IST.466'))) as { item_scores: unknown };
-    expect(row.item_scores).toEqual({ a: 9, d: 0 });
-  });
-
   it('reads v_gradebook_history for the shells, oldest first per column', async () => {
     await run(q.gradeHistoryOptions(['GEO.103.recitation', 'GEO.103.lecture']));
     expect(calls[0]).toMatchObject({
@@ -175,16 +148,6 @@ describe('reads — every course at once (/grades)', () => {
     expect(byCourse['IST.471']).toEqual({ scheme: null, components: [] });
   });
 
-  it('reads items, totals and scenarios with an in-filter', async () => {
-    await run(q.gradeModelItemsForCoursesOptions(['A', 'B']));
-    await run(q.gradeModelTotalsForCoursesOptions(['A', 'B']));
-    await run(q.gradeScenariosForCoursesOptions(['A', 'B']));
-    expect(calls.map((c) => [c.relation, c.filters[0]])).toEqual([
-      ['v_grade_model_items', 'in:scheme_course_id=A,B'],
-      ['v_grade_model_total', 'in:scheme_course_id=A,B'],
-      ['grade_scenarios', 'in:course_id=A,B'],
-    ]);
-  });
 });
 
 /* ===========================================================================
@@ -194,7 +157,7 @@ describe('reads — every course at once (/grades)', () => {
 describe('toModelInput', () => {
   it('maps the scheme, sorting the letter scale best first', () => {
     const scrambled = { ...IST466_SCHEME, letter_scale: [{ min: 0, letter: 'F' }, { min: 930, letter: 'A' }, { bad: 1 }] };
-    const input = q.toModelInput(scrambled, IST466_COMPONENTS, [], null, null);
+    const input = q.toModelInput(scrambled, IST466_COMPONENTS, []);
     expect(input.scheme).toEqual({
       courseId: 'IST.466',
       method: 'points',
@@ -202,7 +165,6 @@ describe('toModelInput', () => {
       gradedOutOf: 1020,
       letterScale: [{ min: 930, letter: 'A' }, { min: 0, letter: 'F' }],
     });
-    expect(input.blackboardTotal).toBeNull();
   });
 
   it('maps components, parsing rank weights and coercing numeric strings', () => {
@@ -213,12 +175,12 @@ describe('toModelInput', () => {
       rank_weights: [30, 25, 20],
       weight_pct: '75' as unknown as number,
     };
-    const [component] = q.toModelInput(null, [exams], [], null, null).components;
+    const [component] = q.toModelInput(null, [exams], []).components;
     expect(component).toMatchObject({ id: 3, aggregation: 'rank_weighted', rankWeights: [30, 25, 20], weightPct: 75, dropLowest: 0 });
   });
 
-  it('maps an item row field for field, and a placeholder keeps its null score', () => {
-    const input = q.toModelInput(IST466_SCHEME, IST466_COMPONENTS, [IST466_SYNCHRONY, IST466_LETTER_PLACEHOLDER], null, null);
+  it('maps an item row field for field', () => {
+    const input = q.toModelInput(IST466_SCHEME, IST466_COMPONENTS, [IST466_SYNCHRONY]);
     expect(input.items[0]).toEqual({
       key: 'col:IST.466:_3562496_1',
       componentId: 24,
@@ -232,33 +194,17 @@ describe('toModelInput', () => {
       kind: 'item',
       isExtraCredit: false,
       dueAt: null,
+      seenAt: SEEN_0916,
     });
-    expect(input.items[1]).toMatchObject({ key: 'asg:IST.466/letter-of-gratitude', kind: 'placeholder', score: null });
   });
 
   it("puts GEO 103's two shells into one input under the lecture's scheme", () => {
     const lecture = makeItem({ scheme_course_id: 'GEO.103.lecture', shell_course_id: 'GEO.103.lecture', item_key: 'col:GEO.103.lecture:_3602583_1', column_id: '_3602583_1', name: 'Absences' });
     const recitation = makeItem({ scheme_course_id: 'GEO.103.lecture', shell_course_id: 'GEO.103.recitation', item_key: 'col:GEO.103.recitation:_3602445_1', column_id: '_3602445_1', name: 'Attendance', link_source: 'override', component_id: 5 });
-    const input = q.toModelInput({ ...IST466_SCHEME, course_id: 'GEO.103.lecture', method: 'weighted_pct' }, [], [lecture, recitation], null, null);
+    const input = q.toModelInput({ ...IST466_SCHEME, course_id: 'GEO.103.lecture', method: 'weighted_pct' }, [], [lecture, recitation]);
     expect(input.scheme?.courseId).toBe('GEO.103.lecture');
     expect(input.items.map((i) => i.key)).toEqual(['col:GEO.103.lecture:_3602583_1', 'col:GEO.103.recitation:_3602445_1']);
     expect(input.items[1]).toMatchObject({ linkSource: 'override', componentId: 5 });
-  });
-
-  it('ignores orphan scenario keys: a graded item, an unknown key, a bad value', () => {
-    const graded = makeItem({ item_key: 'col:IST.466:graded', score: 80 });
-    const scenario = makeScenario({ item_scores: { 'col:IST.466:_3562497_1': 90, 'col:IST.466:graded': 50, 'col:gone': 12 } });
-    const input = q.toModelInput(IST466_SCHEME, IST466_COMPONENTS, [makeItem(), graded], scenario, null);
-    expect(input.scenario).toEqual({ itemScores: { 'col:IST.466:_3562497_1': 90 } });
-  });
-
-  it("carries Blackboard's total and its running flag", () => {
-    expect(q.toModelInput(null, [], [], null, IST323_TOTAL_ROW).blackboardTotal).toEqual({
-      score: 14.8,
-      possible: 104,
-      running: true,
-      seenAt: IST323_TOTAL_ROW.seen_at,
-    });
   });
 
   it('reads an unknown method, aggregation or confidence as unknown / null, never a guess', () => {
@@ -266,8 +212,6 @@ describe('toModelInput', () => {
       { ...IST466_SCHEME, method: 'curve' as never },
       [{ ...IST466_COMPONENTS[0], aggregation: 'best_of' as never }],
       [makeItem({ link_confidence: 'maybe' as never })],
-      null,
-      null,
     );
     expect(input.scheme?.method).toBe('unknown');
     expect(input.components[0].aggregation).toBe('unknown');
@@ -291,7 +235,12 @@ describe('schemeCourseIdFor', () => {
  * ======================================================================== */
 
 function wrapper(client: QueryClient) {
-  return ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+  // Named, not an arrow: react/display-name wants every component to say what
+  // it is in a stack trace, including one that only exists to hold a provider.
+  function QueryWrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  }
+  return QueryWrapper;
 }
 
 function newClient() {

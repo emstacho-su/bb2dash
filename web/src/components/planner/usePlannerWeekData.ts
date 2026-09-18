@@ -26,6 +26,7 @@ import {
   type PlacedWorkItems,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
+import { buildSlotHeights, contentRequiredPx, weekSlotDemandPx } from '@/lib/planner-rows';
 import { toMeetingPatterns, useMeetings, useSessionsForWeek } from '@/lib/queries.planner';
 import {
   placePlannerEvents,
@@ -42,18 +43,18 @@ import { usePlannerEventsWindow } from '@/lib/queries.plannerEvents';
  * A meeting carries the due items that fall inside it — same course, same day,
  * inside its wall-clock window — so they render as chips in the class rather
  * than as blocks overlapping it.
+ *
+ * `requiredPx` is the room the block's content needs (P-planner-2). Zero for an
+ * ordinary block, which is happy with whatever its hours are worth; a class
+ * with due chips nested in it needs more, because those stack inside the block
+ * rather than beside it, and it asks for that once rather than for a lane on
+ * every row it touches (CR-5).
  */
-export type GridBlock =
-  | {
-      kind: 'meeting';
-      key: string;
-      top: number;
-      height: number;
-      meeting: PlacedMeeting;
-      nested: PlacedItem<WorkItem>[];
-    }
-  | { kind: 'item'; key: string; top: number; height: number; item: PlacedItem<WorkItem> }
-  | { kind: 'event'; key: string; top: number; height: number; segment: PlacedEventSegment };
+export type GridBlock = { key: string; top: number; height: number; requiredPx: number } & (
+  | { kind: 'meeting'; meeting: PlacedMeeting; nested: PlacedItem<WorkItem>[] }
+  | { kind: 'item'; item: PlacedItem<WorkItem> }
+  | { kind: 'event'; segment: PlacedEventSegment }
+);
 
 /** What the all-day band holds for one day: undated items, untimed meetings. */
 export interface BandDay {
@@ -73,12 +74,27 @@ export interface PlannerWeekData {
   eventCount: number;
   /** One lane-assigned block list per day column, Monday → Sunday. */
   blocksByDay: (GridBlock & LaneSpan)[][];
+  /**
+   * One height per half-hour row, in pixels — the week's, not a day's, because
+   * the seven columns share their rows with the gutter (P-planner-2). Every
+   * position on the grid goes through this table via `slotToPx`.
+   */
+  slotHeights: number[];
   /** One band cell per day column, Monday → Sunday. */
   bandByDay: BandDay[];
   /** The Events band: all-day planner events per day column, Monday → Sunday. */
   eventBandByDay: PlacedAllDayEvent[][];
   loading: boolean;
   error: Error | null;
+}
+
+/**
+ * A class block's own lines: the course-and-time head, the room, and a topic
+ * when a `sessions` row gave it one. What `MeetingContent` renders above the
+ * nested chips, and therefore what the block needs room for before them.
+ */
+function meetingTextLines(meeting: PlacedMeeting): number {
+  return 2 + (meeting.topic === null ? 0 : 1);
 }
 
 /**
@@ -97,18 +113,31 @@ function buildBlocks(
   for (const meeting of meetings) {
     if (meeting.startMinute === null) continue;
     const box = slotBox(meeting.startMinute, meeting.endMinute);
+    const chips = nested.get(meeting.key) ?? [];
     byDay[meeting.dayIndex].push({
       kind: 'meeting',
       key: meeting.key,
       ...box,
+      // Only a class with something nested in it asks the grid for more room.
+      // Stack's rule is that hours grow when things collide, not whenever a
+      // line does not fit — a class too short for its own topic clips it on a
+      // whole line and keeps it on the block's tooltip (F-2).
+      requiredPx:
+        chips.length === 0 ? 0 : contentRequiredPx(meetingTextLines(meeting), chips.length),
       meeting,
-      nested: nested.get(meeting.key) ?? [],
+      nested: chips,
     });
   }
   for (const placed of timed) {
     if (placed.minute === null) continue;
     const box = slotBox(placed.minute, null);
-    byDay[placed.dayIndex].push({ kind: 'item', key: placed.key, ...box, item: placed });
+    byDay[placed.dayIndex].push({
+      kind: 'item',
+      key: placed.key,
+      ...box,
+      requiredPx: 0,
+      item: placed,
+    });
   }
   for (const segment of segments) {
     byDay[segment.dayIndex].push({
@@ -116,6 +145,7 @@ function buildBlocks(
       key: `event:${segment.key}`,
       top: segment.top,
       height: segment.height,
+      requiredPx: 0,
       segment,
     });
   }
@@ -172,6 +202,11 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
     return buildBlocks(placedMeetings, standalone, nested, placedEvents.timed, view.days.length);
   }, [placedMeetings, placedItems, placedEvents, view.days.length]);
 
+  const slotHeights = useMemo(
+    () => buildSlotHeights(weekSlotDemandPx(blocksByDay)),
+    [blocksByDay],
+  );
+
   const eventBandByDay = useMemo(
     () =>
       view.days.map((day) => placedEvents.allDay.filter((placed) => placed.dayIndex === day.index)),
@@ -189,6 +224,7 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
     placedEvents,
     eventCount: renderedEventCount(placedEvents),
     blocksByDay,
+    slotHeights,
     bandByDay,
     eventBandByDay,
     loading:

@@ -25,6 +25,14 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['test/**/*.test.{ts,tsx}'],
     setupFiles: ['./test/setup.ts'],
+    // A test gets 20s, not the default 5s, and so does a hook. `test/setup.ts`
+    // lets Testing Library wait 15s for an async render; the test that contains
+    // that wait has to outlive it, or the raised wait can never be reached.
+    // Both numbers exist for the same reason: 90-odd jsdom environments start
+    // at once on Windows and a screen's first paint is not bounded by a second.
+    // Neither hides a failure — a defect still fails, later.
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
     coverage: {
       provider: 'v8',
       reporter: ['text'],
@@ -45,6 +53,9 @@ export default defineConfig({
         'src/lib/queries.grades.ts',
         'src/lib/queries.submissions.ts',
         'src/lib/planner-week.ts',
+        // Phase 12b: the variable row geometry (P-planner-2), driven by
+        // test/planner-rows.test.ts.
+        'src/lib/planner-rows.ts',
         'src/lib/queries.planner.ts',
         'src/lib/queries.announcements.ts',
         'src/lib/planner-zone.ts',

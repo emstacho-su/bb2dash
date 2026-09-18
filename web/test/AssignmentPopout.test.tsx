@@ -102,6 +102,7 @@ vi.mock('@/lib/queries.grades', async (importOriginal) => {
     useAssignmentGrade: () => stub(null),
     useAssignmentAttempts: () => stub([]),
     useSubmissionFiles: () => stub([]),
+    useAssignmentHistory: () => stub([]),
   };
 });
 vi.mock('@/lib/queries.submissions', async (importOriginal) => {

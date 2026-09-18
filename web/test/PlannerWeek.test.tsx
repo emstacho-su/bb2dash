@@ -205,6 +205,14 @@ function renderPlanner() {
   );
 }
 
+/**
+ * Opens the Assignments band. It is closed on arrival since P-planner-1, so a
+ * test about a band chip has to open it first — the same click Stack makes.
+ */
+async function openBand(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: /assignments/i }));
+}
+
 /** The seven day columns, Monday → Sunday. */
 function dayColumn(iso: string): HTMLElement {
   const column = document.querySelector(`[data-day="${iso}"]`);
@@ -215,6 +223,10 @@ function dayColumn(iso: string): HTMLElement {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 8, 16, 10, 0, 0)); // Wednesday 2026-09-16, 10:00
+  // jsdom keeps one localStorage per file, and the Assignments band remembers
+  // itself there (P-planner-1). Without this, opening the band in one test
+  // leaves the next one starting open — and `openBand` would close it.
+  window.localStorage.clear();
   nav.params = new URLSearchParams();
   nav.push.mockReset();
   seedDefaults();
@@ -290,7 +302,7 @@ describe('PlannerWeek — meeting blocks', () => {
     const wednesday = dayColumn('2026-09-16');
 
     expect(await within(wednesday).findByText('IST 323')).toBeInTheDocument();
-    expect(within(wednesday).getByText('3:45 PM – 5:05 PM')).toBeInTheDocument();
+    expect(within(wednesday).getByText('3:45 – 5:05 PM')).toBeInTheDocument();
     expect(within(wednesday).getByText('Hinds Hall 010')).toBeInTheDocument();
     expect(within(wednesday).getByText('Risk assessment')).toBeInTheDocument();
   });
@@ -348,6 +360,7 @@ describe('PlannerWeek — due items', () => {
 
   it('puts a date-only item in the Assignments band, not on a row it does not sit on', async () => {
     renderPlanner();
+    await openBand();
     expect(await screen.findByText('Chapter 4')).toBeInTheDocument();
     expect(within(dayColumn('2026-09-18')).queryByText('Chapter 4')).toBeNull();
     expect(screen.getByText('Assignments')).toBeInTheDocument();
@@ -364,6 +377,7 @@ describe('PlannerWeek — due items', () => {
       }),
     ];
     renderPlanner();
+    await openBand();
 
     expect(await screen.findByText('Quiz 3')).toBeInTheDocument();
     expect(screen.getByText('11:59 PM')).toBeInTheDocument();
@@ -372,6 +386,7 @@ describe('PlannerWeek — due items', () => {
 
   it('leaves a reading as plain text — only assignments have a popout', async () => {
     renderPlanner();
+    await openBand();
     expect(await screen.findByText('Chapter 4')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Chapter 4' })).toBeNull();
   });
@@ -470,6 +485,7 @@ describe('PlannerWeek — clicking a due item', () => {
       makeWorkItem({ item_id: 'IST.323/lab-1', title: 'Lab #1', due_on: '2026-09-18', due_at: null }),
     ];
     renderPlanner();
+    await openBand();
 
     const chip = (await screen.findByText('Lab #1')).closest('[data-open="true"]');
     fireEvent.click(chip as HTMLElement);
@@ -537,6 +553,7 @@ describe('PlannerWeek — clicking a due item', () => {
 
   it('leaves a reading card unclickable — a reading has no popout', async () => {
     renderPlanner();
+    await openBand();
     const chip = (await screen.findByText('Chapter 4')).closest('span[data-category]');
     expect(chip).not.toHaveAttribute('data-open');
 
@@ -601,6 +618,7 @@ describe('PlannerWeek — status quick-edit', () => {
 
   it('writes reading_progress for a reading row', async () => {
     renderPlanner();
+    await openBand();
 
     const select = await screen.findByLabelText('Status for Chapter 4');
     fireEvent.change(select, { target: { value: 'submitted' } });

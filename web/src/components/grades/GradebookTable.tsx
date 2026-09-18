@@ -16,14 +16,18 @@
  * collapsed bookkeeping group underneath, with the same cells and the same
  * honesty.
  *
- * Feedback is the instructor's own words: rendered as text, escaped by React,
+ * Feedback is the instructor's own words. Phase 12b (G-5) moved the text into
+ * the assignment popout, where there is room for all of it — the row shows only
+ * that there is some. The disclosure below survives for a column with **no
+ * linked assignment**: there is no popout to send the reader to, and the words
+ * must not become unreachable. It renders as text, escaped by React,
  * `white-space: pre-wrap` so their line breaks survive, clamped to two lines
  * until it is expanded.
  *
+ * The score-history disclosure left with it (G-5, P-grades-8) and now lives in
+ * `popout/SubmissionBlock.tsx`.
+ *
  * Phase 10b adds optional props, all absent on 10a's call sites:
- *   whatIf   course tab only — a "what if" cell beside the dash on an ungraded,
- *            counted, non-muted item row.
- *   history  both screens — a "history" disclosure on a row whose score moved.
  *   links    course tab only — the "Counts toward…" picker. A column Stack
  *            linked to a component by override also moves up among the item
  *            rows and carries 10a's "counts toward grade" tag; one he marked
@@ -32,28 +36,26 @@
  *   overrides both screens — Stack's link choices without the picker, so
  *            `/grades` places a row the same way the course tab does.
  *            Defaults to `links.states`.
- *   footer   course tab only — the placeholder rows under the table.
- * None of them computes anything in this file; the standing lives in
- * `ModelStanding`.
+ * Neither computes anything in this file; the figure lives in
+ * `GradedSoFarFigure`.
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSectionState } from '@/lib/grades-sections';
 import { itemQuery } from '@/lib/queries.popout';
 import {
   NO_VALUE,
   formatSeenAt,
+  hasFeedback,
   isItemRow,
   scoreText,
   submissionLabel,
   type GradebookLatestRow,
 } from '@/lib/queries.grades';
-import type { GradebookHistoryRow } from '@/lib/grade-model-input';
 import { columnItemKey, type LinkState, type LinkTarget } from '@/lib/grade-model-view';
 import tokens from '@/styles/tokens.module.css';
 import { LinkColumnControl } from './LinkColumnControl';
-import { ScoreHistory } from './ScoreHistory';
-import { WhatIfCell, type WhatIfProps } from './WhatIfCell';
 import styles from './GradebookTable.module.css';
 
 /** The picker wiring a table needs (course tab only). */
@@ -70,8 +72,6 @@ export interface GradebookLinksProps {
 
 /** Everything 10b adds to one row. All optional. */
 interface RowExtras {
-  readonly whatIf?: WhatIfProps;
-  readonly history?: ReadonlyMap<string, readonly GradebookHistoryRow[]>;
   readonly links?: GradebookLinksProps;
   readonly overrides?: ReadonlyMap<string, LinkState>;
 }
@@ -103,6 +103,43 @@ function isPlacedAsItem(row: GradebookLatestRow, overrides: Overrides): boolean 
 /* -- feedback -------------------------------------------------------------- */
 
 /**
+ * The mark that says an item carries the instructor's words (P-grades-10,
+ * Stack's answer 6).
+ *
+ * It sits on the item cell because that cell is the link to the details, and it
+ * is a superscript `*` — the smallest thing that reads as "there is a note
+ * here". `role="note"` gives it a role, so `aria-label` is announced; without
+ * one the asterisk would reach a screen reader as bare punctuation or not at
+ * all. Present exactly when the feedback is non-empty (`hasFeedback`).
+ *
+ * `opensInPopout` is false for a column with no linked assignment: there is
+ * nothing to open, and the words are already inline under the row, so the
+ * tooltip must not send the reader looking for a popout that does not exist.
+ */
+export function FeedbackMark({
+  itemName,
+  opensInPopout,
+}: {
+  itemName: string;
+  opensInPopout: boolean;
+}) {
+  return (
+    <sup
+      className={styles.feedbackMark}
+      role="note"
+      aria-label={`${itemName} has feedback`}
+      title={
+        opensInPopout
+          ? 'The instructor left feedback — open the item to read it.'
+          : 'The instructor left feedback — it is under this row.'
+      }
+    >
+      *
+    </sup>
+  );
+}
+
+/**
  * The instructor's feedback, two lines until it is opened.
  *
  * The whole text is always in the DOM — the clamp is CSS — so nothing is
@@ -117,10 +154,13 @@ export function FeedbackDisclosure({ feedback, label }: { feedback: string; labe
         type="button"
         className={styles.feedbackToggle}
         aria-expanded={open}
+        // Spelled out rather than left to an adjacent screen-reader span: the
+        // name is computed by joining the nodes' text, which drops the space
+        // between them and reads "Feedbackfrom Essay".
+        aria-label={`${open ? 'Hide feedback' : 'Feedback'} from ${label}`}
         onClick={() => setOpen((value) => !value)}
       >
         {open ? 'Hide feedback' : 'Feedback'}
-        <span className={styles.srOnly}> from {label}</span>
       </button>
       <p
         className={open ? styles.feedbackTextOpen : styles.feedbackText}
@@ -142,9 +182,10 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
     && ((row.column_kind === 'attendance' && row.counts_toward_grade === true) || isOverrideCounted(row, overrides));
   const ambiguous = (row.linked_assignments ?? 0) > 1;
   const key = columnItemKey(row.course_id, row.column_id);
-  const whatIfTarget = extras.whatIf?.targets.get(key);
   const linkState = extras.links?.states.get(key);
-  const historyRows = extras.history?.get(key);
+  const feedback = hasFeedback(row.feedback);
+  // G-5: with an assignment behind the row, its feedback is in that popout.
+  const showsFeedbackInline = feedback && row.assignment_id === null;
 
   return (
     <>
@@ -153,13 +194,18 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
             on the wrapper inside, so the columns line up with their headers. */}
         <th scope="row" className={styles.nameCell}>
           <div className={styles.nameStack}>
-            {row.assignment_id ? (
-              <Link className={styles.itemLink} href={itemQuery({ kind: 'assignment', id: row.assignment_id })}>
-                {row.name}
-              </Link>
-            ) : (
-              <span className={styles.itemName}>{row.name}</span>
-            )}
+            <span className={styles.nameLine}>
+              {row.assignment_id ? (
+                <Link className={styles.itemLink} href={itemQuery({ kind: 'assignment', id: row.assignment_id })}>
+                  {row.name}
+                </Link>
+              ) : (
+                <span className={styles.itemName}>{row.name}</span>
+              )}
+              {feedback && (
+                <FeedbackMark itemName={row.name} opensInPopout={row.assignment_id !== null} />
+              )}
+            </span>
             {counted && (
               <span className={tokens.tagOutline} title="Its linked assignment has a grade component.">
                 counts toward grade
@@ -197,15 +243,6 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
         <td className={styles.scoreCell}>
           <span className={styles.score}>{scoreText(row.effective_score, row.possible)}</span>
           {row.display_grade && <span className={styles.note}>{row.display_grade}</span>}
-          {whatIfTarget && extras.whatIf && (
-            <WhatIfCell
-              target={whatIfTarget}
-              value={extras.whatIf.values[key]}
-              onCommit={extras.whatIf.onCommit}
-              disabled={extras.whatIf.disabled}
-            />
-          )}
-          {historyRows && <ScoreHistory rows={historyRows} label={row.name} />}
         </td>
 
         <td className={styles.seenCell}>
@@ -215,10 +252,10 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
         </td>
       </tr>
 
-      {row.feedback && (
+      {showsFeedbackInline && (
         <tr className={styles.feedbackRow}>
           <td colSpan={4}>
-            <FeedbackDisclosure feedback={row.feedback} label={row.name} />
+            <FeedbackDisclosure feedback={row.feedback as string} label={row.name} />
           </td>
         </tr>
       )}
@@ -260,27 +297,26 @@ function Table({
 export function GradebookTable({
   rows,
   caption = 'Gradebook columns, as Blackboard recorded them',
-  whatIf,
-  history,
   links,
   overrides,
-  footer,
+  sectionKey,
 }: {
   rows: GradebookLatestRow[];
   /** Named for the screen reader; the visible heading lives in the card. */
   caption?: string;
   /** Course tab only (Phase 10b). */
-  whatIf?: WhatIfProps;
-  /** Both screens (Phase 10b): history rows by column item key. */
-  history?: ReadonlyMap<string, readonly GradebookHistoryRow[]>;
-  /** Course tab only (Phase 10b). */
   links?: GradebookLinksProps;
   /** Both screens (Phase 10b): Stack's link choices, for placement only; defaults to `links.states`. */
   overrides?: ReadonlyMap<string, LinkState>;
-  /** Course tab only (Phase 10b): rendered under the table groups. */
-  footer?: ReactNode;
+  /**
+   * Phase 12b (P-grades-1): where the bookkeeping group's open/closed choice is
+   * remembered. Without it the toggle still works and simply forgets.
+   */
+  sectionKey?: string;
 }) {
-  const [showBookkeeping, setShowBookkeeping] = useState(false);
+  // Collapsed by default — it is the group of columns that count toward
+  // nothing, and it was collapsed before it was remembered.
+  const [showBookkeeping, toggleBookkeeping] = useSectionState(sectionKey, 'closed');
 
   const placement = overrides ?? links?.states;
   const { items, bookkeeping } = useMemo(
@@ -291,17 +327,12 @@ export function GradebookTable({
     [rows, placement],
   );
   const extras = useMemo<RowExtras>(
-    () => ({ whatIf, history, links, overrides: placement }),
-    [whatIf, history, links, placement],
+    () => ({ links, overrides: placement }),
+    [links, placement],
   );
 
   if (rows.length === 0) {
-    return footer ? (
-      <div className={styles.wrap}>
-        <p className={styles.empty}>No gradebook columns have been pulled for this course yet.</p>
-        {footer}
-      </div>
-    ) : (
+    return (
       <p className={styles.empty}>
         No gradebook columns have been pulled for this course yet.
       </p>
@@ -325,7 +356,7 @@ export function GradebookTable({
             type="button"
             className={styles.groupToggle}
             aria-expanded={showBookkeeping}
-            onClick={() => setShowBookkeeping((value) => !value)}
+            onClick={toggleBookkeeping}
           >
             Attendance and bookkeeping columns ({bookkeeping.length})
           </button>
@@ -335,7 +366,6 @@ export function GradebookTable({
         </div>
       )}
 
-      {footer}
     </div>
   );
 }

@@ -13,41 +13,37 @@
  * Every Blackboard figure is a value read out of `v_course_grade` /
  * `v_gradebook_latest` and shown with the time we saw it.
  *
- * Phase 10b: when `model` is passed (by `GradesModelScreen`, which does the
- * reads), each card also carries the read-only "Our model" line under
- * Blackboard's header and a score-history disclosure on rows that changed. The
- * only computed figures are inside that labelled container; what-if values,
- * the solver and the link picker live on the course tab, never here. Without
- * `model` the screen is exactly 10a's.
+ * Phase 12b: when `model` is passed (by `GradesModelScreen`, which does the
+ * reads), each card also carries the "Graded so far" figure under Blackboard's
+ * header — one number, labelled, with what it does not cover named underneath.
+ * The link picker lives on the course tab, never here, and this screen writes
+ * nothing. Without `model` the screen is exactly 10a's.
+ *
+ * Phase 12b: the course title is the link into the course (G-3, P-grades-2),
+ * and the score history moved to the assignment popout (G-5, P-grades-8).
  */
 
 import { useMemo } from 'react';
-import Link from 'next/link';
 import { useCourseDisplay } from '@/lib/queries.today';
 import { pickCourseGrade, useCourseGrades, useGradebookLatest } from '@/lib/queries.grades';
+import { bookkeepingSectionKey, courseSectionKey } from '@/lib/grades-sections';
 import { CourseGradeCard } from '@/components/grades/CourseGradeCard';
 import { GradebookTable } from '@/components/grades/GradebookTable';
-import { ModelStanding } from '@/components/grades/ModelStanding';
+import { GradedSoFarFigure } from '@/components/grades/GradedSoFarFigure';
 import { QueryState, isQueryUnresolved } from '@/components/shared/QueryState';
-import type { GradebookHistoryRow } from '@/lib/grade-model-input';
-import { MODEL_STANDING_LOADING, type ModelStandingState } from '@/lib/grade-model-run';
+import { FIGURE_LOADING, type CourseFigureState } from '@/lib/grade-figure-run';
 import type { LinkState } from '@/lib/grade-model-view';
-import tokens from '@/styles/tokens.module.css';
 import styles from './GradesScreen.module.css';
 
-/** The read-only model data `/grades` renders (Phase 10b). */
-export interface GradesModelProps {
+/** The read-only figures `/grades` renders (Phase 12b). */
+export interface GradesFiguresProps {
   /** By scheme course id — `v_course_display.display_id`. */
-  readonly standings: Readonly<Record<string, ModelStandingState>>;
-  /** History rows by column item key, across every shell. */
-  readonly history: ReadonlyMap<string, readonly GradebookHistoryRow[]>;
-  /** Why the history could not be read, if it could not. */
-  readonly historyError?: string | null;
+  readonly figures: Readonly<Record<string, CourseFigureState>>;
   /** Stack's link choices by column item key, so rows sit where the course tab puts them (R2-8). */
   readonly overrides?: ReadonlyMap<string, LinkState>;
 }
 
-export function GradesScreen({ model }: { model?: GradesModelProps } = {}) {
+export function GradesScreen({ model }: { model?: GradesFiguresProps } = {}) {
   const coursesQ = useCourseDisplay();
   const courses = useMemo(() => coursesQ.data ?? [], [coursesQ.data]);
 
@@ -71,11 +67,6 @@ export function GradesScreen({ model }: { model?: GradesModelProps } = {}) {
     <div className={styles.screen}>
       <QueryState query={gradesQ} of="the gradebook totals" className={styles.state} />
       <QueryState query={gradebookQ} of="the gradebook" className={styles.state} />
-      {model?.historyError && (
-        <p className={styles.state} role="alert">
-          {model.historyError}
-        </p>
-      )}
 
       {courses.map((course) => {
         const shellIds = course.shell_ids ?? [];
@@ -86,20 +77,24 @@ export function GradesScreen({ model }: { model?: GradesModelProps } = {}) {
           <CourseGradeCard
             key={course.display_id}
             title={course.code}
+            // P-grades-2: the title is the way into the course. The "Course
+            // tab →" button that used to sit opposite it is gone.
+            titleHref={`/course/${encodeURIComponent(course.display_id)}`}
             subtitle={shellIds.length > 1 ? `${course.title} · ${shellIds.join(' + ')}` : course.title}
             row={row}
-            headerRight={
-              <Link
-                className={tokens.btnGhost}
-                href={`/course/${encodeURIComponent(course.display_id)}/grades`}
-              >
-                Course tab →
-              </Link>
-            }
+            // P-grades-1: the block folds away and remembers it.
+            sectionKey={courseSectionKey(course.display_id)}
           >
-            {model && <ModelStanding {...(model.standings[course.display_id] ?? MODEL_STANDING_LOADING)} />}
+            {model && (
+              <GradedSoFarFigure {...(model.figures[course.display_id] ?? FIGURE_LOADING)} />
+            )}
             {isQueryUnresolved(gradebookQ) ? null : (
-              <GradebookTable rows={rows} caption={`${course.code} gradebook`} history={model?.history} overrides={model?.overrides} />
+              <GradebookTable
+                rows={rows}
+                caption={`${course.code} gradebook`}
+                overrides={model?.overrides}
+                sectionKey={bookkeepingSectionKey(course.display_id)}
+              />
             )}
           </CourseGradeCard>
         );
