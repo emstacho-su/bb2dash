@@ -35,20 +35,31 @@ const stub = vi.hoisted(() => ({
   /** What the next rpc resolves with. */
   rpc: { data: null as unknown, error: null as { message: string } | null },
   readError: null as { message: string } | null,
+  /** What a plain update or delete on the opened row resolves to (TR-2). */
+  write: { data: [{ id: 'written' }] as unknown, error: null as { message: string } | null },
 }));
 
 function builder(table: string) {
+  let writing = false;
   const record = (op: string) => (...args: unknown[]) => {
     stub.calls.push({ table, op, args });
     return chain;
   };
-  const settle = async () => ({ data: stub.rows, error: stub.readError });
+  const write = (op: string) => (...args: unknown[]) => {
+    writing = true;
+    stub.calls.push({ table, op, args });
+    return chain;
+  };
+  const settle = async () =>
+    writing ? stub.write : { data: stub.rows, error: stub.readError };
   const chain: Record<string, unknown> = {
     select: record('select'),
     eq: record('eq'),
     gte: record('gte'),
     lt: record('lt'),
     order: record('order'),
+    update: write('update'),
+    delete: write('delete'),
     then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
       settle().then(onFulfilled, onRejected),
   };
@@ -121,6 +132,7 @@ beforeEach(() => {
   stub.rows = [];
   stub.rpc = { data: null, error: null };
   stub.readError = null;
+  stub.write = { data: [{ id: 'written' }], error: null };
 });
 
 describe('useCreatePlannerSeries', () => {
@@ -180,6 +192,29 @@ describe('useCreatePlannerSeries', () => {
     expect(thisWeek).toHaveLength(1);
     expect(nextWeek).toHaveLength(1);
     expect(thisWeek[0].id.startsWith(OPTIMISTIC_ID_PREFIX)).toBe(true);
+  });
+
+  it('writes each cached week once, however many rows it patches (TR-9)', async () => {
+    stub.rpc = { data: null, error: { message: 'insert refused' } };
+    const queryClient = client();
+    queryClient.setQueryData(WEEK_KEY, []);
+    queryClient.setQueryData(NEXT_WEEK_KEY, []);
+    const setQueryData = vi.spyOn(queryClient, 'setQueryData');
+    const { result } = renderHook(() => useCreatePlannerSeries(), {
+      wrapper: wrapper(queryClient),
+    });
+
+    await expect(
+      result.current.mutateAsync({ freq: 'weekly', until: '2026-09-30', rows: weekly() }),
+    ).rejects.toThrow();
+
+    // Three rows across two cached weeks: two writes going out, two coming
+    // back — not six and six. Every write notifies every observer of that week.
+    const windowWrites = setQueryData.mock.calls.filter(
+      ([key]) => Array.isArray(key) && key[1] === 'window',
+    );
+    expect(windowWrites).toHaveLength(4);
+    setQueryData.mockRestore();
   });
 
   it('puts the weeks back when the RPC refuses the series', async () => {
@@ -348,7 +383,7 @@ describe('useUpdatePlannerSeries', () => {
     expect(rpcCall('planner_series_update')).toBeUndefined();
   });
 
-  it('refuses when the scope came back empty', async () => {
+  it('refuses when a "following" scope came back empty', async () => {
     stub.rows = [];
     const queryClient = client();
     const { result } = renderHook(() => useUpdatePlannerSeries(), {
@@ -358,12 +393,211 @@ describe('useUpdatePlannerSeries', () => {
     await expect(
       result.current.mutateAsync({
         seriesId: SERIES_ID,
-        scope: 'all',
+        scope: 'following',
         edited: seriesRows()[0],
         draft: draft(),
       }),
     ).rejects.toThrow();
     expect(rpcCall('planner_series_update')).toBeUndefined();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * TR-2 — the occurrence Stack opened, when the RPC's scope cannot reach it
+ * ------------------------------------------------------------------------ */
+
+describe('the opened occurrence, outside an "all events" scope', () => {
+  const draft = () =>
+    makePlannerEventDraft({
+      title: 'Studio B',
+      starts_at: '2026-09-16T15:00:00.000Z',
+      ends_at: '2026-09-16T16:00:00.000Z',
+    });
+
+  /** A row that has already started, so 083's `now()` will not reach it. */
+  const past = () => makePlannerEvent({ id: 'past', series_id: SERIES_ID });
+
+  /** A row well beyond the safety margin. */
+  const future = () =>
+    makePlannerEvent({
+      id: 'future',
+      series_id: SERIES_ID,
+      starts_at: new Date(Date.now() + 3_600_000).toISOString(),
+      ends_at: new Date(Date.now() + 7_200_000).toISOString(),
+    });
+
+  it('writes it as a plain update after the RPC', async () => {
+    stub.rows = seriesRows();
+    stub.rpc = { data: 3, error: null };
+    const queryClient = client();
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({
+      seriesId: SERIES_ID,
+      scope: 'all',
+      edited: past(),
+      draft: draft(),
+    });
+
+    // The RPC first, then the one row it could not take.
+    expect(rpcCall('planner_series_update')).toBeDefined();
+    const update = stub.calls.find((call) => call.op === 'update');
+    expect(update).toBeDefined();
+    expect(update?.args[0]).toMatchObject({ title: 'Studio B' });
+    // No detach: this row is still part of its series.
+    expect(update?.args[0]).not.toHaveProperty('series_detached');
+    expect(stub.calls.filter((call) => call.op === 'eq').map((call) => call.args)).toContainEqual([
+      'id',
+      'past',
+    ]);
+  });
+
+  it('leaves it to the RPC when the scope does reach it', async () => {
+    stub.rows = seriesRows();
+    stub.rpc = { data: 3, error: null };
+    const queryClient = client();
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({
+      seriesId: SERIES_ID,
+      scope: 'all',
+      edited: future(),
+      draft: draft(),
+    });
+
+    expect(stub.calls.some((call) => call.op === 'update')).toBe(false);
+  });
+
+  it('writes it even when the RPC has nothing to do', async () => {
+    stub.rows = [];
+    const queryClient = client();
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({
+      seriesId: SERIES_ID,
+      scope: 'all',
+      edited: past(),
+      draft: draft(),
+    });
+
+    expect(rpcCall('planner_series_update')).toBeUndefined();
+    expect(stub.calls.some((call) => call.op === 'update')).toBe(true);
+  });
+
+  it('surfaces an error from that second write', async () => {
+    stub.rows = seriesRows();
+    stub.rpc = { data: 3, error: null };
+    stub.write = { data: null, error: { message: 'row-level security' } };
+    const queryClient = client();
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await expect(
+      result.current.mutateAsync({
+        seriesId: SERIES_ID,
+        scope: 'all',
+        edited: past(),
+        draft: draft(),
+      }),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('deletes it too, after the delete RPC', async () => {
+    stub.rpc = { data: 2, error: null };
+    const queryClient = client();
+    const { result } = renderHook(() => useDeletePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({ seriesId: SERIES_ID, scope: 'all', occurrence: past() });
+
+    expect(rpcCall('planner_series_delete')?.p_scope).toBe('all');
+    expect(stub.calls.some((call) => call.op === 'delete')).toBe(true);
+    expect(stub.calls.filter((call) => call.op === 'eq').map((call) => call.args)).toContainEqual([
+      'id',
+      'past',
+    ]);
+  });
+
+  it('leaves a future occurrence to the delete RPC', async () => {
+    stub.rpc = { data: 2, error: null };
+    const queryClient = client();
+    const { result } = renderHook(() => useDeletePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({ seriesId: SERIES_ID, scope: 'all', occurrence: future() });
+
+    expect(stub.calls.some((call) => call.op === 'delete')).toBe(false);
+  });
+
+  it('surfaces an error from that second delete', async () => {
+    stub.rpc = { data: 2, error: null };
+    stub.write = { data: null, error: { message: 'delete refused' } };
+    const queryClient = client();
+    const { result } = renderHook(() => useDeletePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await expect(
+      result.current.mutateAsync({ seriesId: SERIES_ID, scope: 'all', occurrence: past() }),
+    ).rejects.toThrow(/delete refused/);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * TR-6 — the rule the form reads back
+ * ------------------------------------------------------------------------ */
+
+describe('every series write', () => {
+  const invalidations = (queryClient: QueryClient) =>
+    vi.spyOn(queryClient, 'invalidateQueries');
+
+  const ruleInvalidated = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.some((call) => {
+      const key = (call[0] as { queryKey?: unknown } | undefined)?.queryKey;
+      return Array.isArray(key) && key[0] === 'planner-series';
+    });
+
+  it('invalidates the rule after a create', async () => {
+    stub.rpc = { data: SERIES_ID, error: null };
+    const queryClient = client();
+    const spy = invalidations(queryClient);
+    const { result } = renderHook(() => useCreatePlannerSeries(), { wrapper: wrapper(queryClient) });
+    const expanded = expandSeries(makePlannerEventDraft(), 'weekly', '2026-09-30', NY);
+    if (!expanded.ok) throw new Error('fixture');
+
+    await result.current.mutateAsync({ freq: 'weekly', until: '2026-09-30', rows: expanded.rows });
+
+    await waitFor(() => expect(ruleInvalidated(spy)).toBe(true));
+    spy.mockRestore();
+  });
+
+  it('invalidates the rule after an update — the split makes a new one', async () => {
+    stub.rows = seriesRows();
+    stub.rpc = { data: 3, error: null };
+    const queryClient = client();
+    const spy = invalidations(queryClient);
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({
+      seriesId: SERIES_ID,
+      scope: 'following',
+      edited: seriesRows()[0],
+      draft: makePlannerEventDraft({ title: 'B' }),
+    });
+
+    await waitFor(() => expect(ruleInvalidated(spy)).toBe(true));
+    spy.mockRestore();
+  });
+
+  it('invalidates the rule after a delete — the series may be gone', async () => {
+    stub.rpc = { data: 3, error: null };
+    const queryClient = client();
+    const spy = invalidations(queryClient);
+    const { result } = renderHook(() => useDeletePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({
+      seriesId: SERIES_ID,
+      scope: 'following',
+      occurrence: seriesRows()[1],
+    });
+
+    await waitFor(() => expect(ruleInvalidated(spy)).toBe(true));
+    spy.mockRestore();
   });
 });
 
@@ -552,7 +786,7 @@ describe('useDeletePlannerSeries', () => {
     const deleted = await result.current.mutateAsync({
       seriesId: SERIES_ID,
       scope: 'following',
-      from: '2026-09-23T13:00:00.000Z',
+      occurrence: makePlannerEvent({ id: 'studio-2', starts_at: '2026-09-23T13:00:00.000Z' }),
     });
 
     expect(deleted).toBe(2);
@@ -578,7 +812,7 @@ describe('useDeletePlannerSeries', () => {
       result.current.mutateAsync({
         seriesId: SERIES_ID,
         scope: 'following',
-        from: '2026-09-16T13:00:00.000Z',
+        occurrence: makePlannerEvent({ id: 'studio-1', starts_at: '2026-09-16T13:00:00.000Z' }),
       }),
     ).rejects.toThrow(/no such series/);
 
@@ -599,7 +833,7 @@ describe('useDeletePlannerSeries', () => {
     await result.current.mutateAsync({
       seriesId: SERIES_ID,
       scope: 'all',
-      from: '2020-01-01T00:00:00.000Z',
+      occurrence: makePlannerEvent({ id: 'old', starts_at: '2020-01-01T00:00:00.000Z' }),
     });
 
     const args = rpcCall('planner_series_delete');

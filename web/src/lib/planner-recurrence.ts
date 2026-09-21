@@ -287,7 +287,22 @@ export function expandSeries(
  * ------------------------------------------------------------------------ */
 
 /** What a scoped edit needs of a stored row. */
-type ScopedRow = Pick<PlannerEventRow, 'id' | 'starts_at' | 'ends_at' | 'all_day' | 'time_zone'>;
+type ScopedRow = Pick<
+  PlannerEventRow,
+  'id' | 'starts_at' | 'ends_at' | 'all_day' | 'time_zone' | 'done'
+>;
+
+/**
+ * `done` is Stack's state, one occurrence at a time, so a scoped edit never
+ * carries the opened occurrence's tick onto the rest of the series: each row
+ * keeps its own. The kind still decides the shape 067 will accept — a task
+ * needs a done state and nothing else may have one — so a row that has just
+ * become a task starts not done, and a row that has stopped being one loses
+ * the flag.
+ */
+function doneFor(draft: PlannerEventDraft, row: Pick<ScopedRow, 'done'>): boolean | null {
+  return draft.kind === 'task' ? (row.done ?? false) : null;
+}
 
 /**
  * The in-scope rows restated from `draft`, **by id**.
@@ -315,7 +330,7 @@ export function restateSeriesRows(
     if (!rowShape) return fail('start', MESSAGES.start);
     const instants = instantsOn(shape, shiftIso(rowShape.firstDate, dayDelta), zone);
     if (!instants) return fail('start', MESSAGES.start);
-    patched.push({ ...draft, id: row.id, time_zone: zone, ...instants });
+    patched.push({ ...draft, id: row.id, time_zone: zone, done: doneFor(draft, row), ...instants });
   }
   return { ok: true, rows: patched };
 }

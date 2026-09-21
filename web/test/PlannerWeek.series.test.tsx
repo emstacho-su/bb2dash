@@ -307,10 +307,25 @@ describe('an occurrence on the grid', () => {
     expect(db.rpc).toEqual([]);
   });
 
+  it('is not asked when Save changes nothing, and nothing is detached (TR-8)', async () => {
+    seed(weeklyStudio());
+    renderPlanner();
+    fireEvent.click(await findTitle('Studio'));
+
+    // Opened and saved without typing anything.
+    fireEvent.click(buttonIn(formDialog(), 'Save'));
+
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    expect(scopeDialogOrNull()).toBeNull();
+    expect(db.writes).toEqual([]);
+    expect(db.rpc).toEqual([]);
+  });
+
   it('writes nothing when the question is cancelled', async () => {
     seed(weeklyStudio());
     renderPlanner();
     fireEvent.click(await findTitle('Studio'));
+    fireEvent.change(within(formDialog()).getByLabelText('Title'), { target: { value: 'Studio B' } });
     fireEvent.click(buttonIn(formDialog(), 'Save'));
 
     const scope = await waitFor(scopeDialog);
@@ -377,7 +392,15 @@ describe('editing an occurrence', () => {
     const rows = args?.p_rows as { id: string; title: string }[];
     expect(rows.map((row) => row.id)).toEqual(['studio-1', 'studio-2', 'studio-3']);
     expect(rows.every((row) => row.title === 'Studio B')).toBe(true);
-    expect(writesTo('planner_events')).toEqual([]);
+
+    // The occurrence Stack opened began at 09:00 and it is now 10:00, so 083's
+    // own `now()` cannot reach it: it is written plainly afterwards, and never
+    // detached (TR-2).
+    const opened = writesTo('planner_events');
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({ op: 'update', id: 'studio-1' });
+    expect(opened[0].payload).toMatchObject({ title: 'Studio B' });
+    expect(opened[0].payload).not.toHaveProperty('series_detached');
   });
 
   it('"This and following" runs from the occurrence that was opened', async () => {
@@ -523,6 +546,7 @@ describe('one layer at a time', () => {
     seed(weeklyStudio());
     renderPlanner();
     fireEvent.click(await findTitle('Studio'));
+    fireEvent.change(within(formDialog()).getByLabelText('Title'), { target: { value: 'Studio B' } });
     fireEvent.click(buttonIn(formDialog(), 'Save'));
     await waitFor(scopeDialog);
 

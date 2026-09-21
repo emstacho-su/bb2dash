@@ -623,12 +623,12 @@ describe('R2-4 — editing keeps a stored instant the owner did not change', () 
       table: 'planner_events',
       op: 'update',
       id: 'fold',
-      payload: {
-        title: 'Late call (moved room)',
-        starts_at: '2026-11-01T06:30:00.000Z',
-        ends_at: '2026-11-01T07:00:00.000Z',
-      },
+      payload: { title: 'Late call (moved room)' },
     });
+    // Stronger than R2-4 asked for since TR-8: the instants are not merely
+    // unchanged, they are not in the write at all, so nothing can move them.
+    expect(db.writes[0].payload).not.toHaveProperty('starts_at');
+    expect(db.writes[0].payload).not.toHaveProperty('ends_at');
   });
 });
 
