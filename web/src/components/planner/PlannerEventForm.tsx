@@ -100,15 +100,14 @@ export function PlannerEventForm({
   const result = draftFromForm(state);
   // The repeat is expanded on every keystroke: it is what the count line says,
   // and it is bounded at 53 dates, so it costs nothing to keep live.
-  const repeat = result.ok ? seriesFromForm(state, result.draft) : null;
+  const repeat = seriesFromForm(state, result.ok ? result.draft : null);
   const zoneRefused = error !== null && SERVER_ZONE_REFUSAL.test(error.message);
   const errors: FormErrors = {
     ...(attempted && !result.ok ? result.errors : {}),
-    ...(repeat && !repeat.ok ? repeat.errors : {}),
+    ...(repeat.ok ? {} : repeat.errors),
     ...(zoneRefused ? { zone: 'The calendar database does not know this zone; choose another.' } : {}),
   };
-  const count =
-    repeat?.ok && repeat.series ? occurrenceCountText(repeat.series.rows.length) : undefined;
+  const count = repeat.ok && repeat.count !== null ? occurrenceCountText(repeat.count) : undefined;
 
   const set = <K extends keyof PlannerEventFormState>(field: K, value: PlannerEventFormState[K]) =>
     setState((current) => updateForm(current, field, value));
@@ -119,8 +118,8 @@ export function PlannerEventForm({
     if (!result.ok || pending) return;
     // A repeat that will not expand is never sent: 52 occurrences reach Stack's
     // real Google calendar, so a half-built rule must not be saved as one event.
-    if (repeat && !repeat.ok) return;
-    onSave(result.draft, repeat?.ok ? repeat.series : null);
+    if (!repeat.ok) return;
+    onSave(result.draft, repeat.series);
   }
 
   const heading = target.mode === 'create' ? 'New planner event' : 'Edit planner event';

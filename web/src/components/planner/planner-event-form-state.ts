@@ -25,6 +25,7 @@ import {
 import { shiftIso } from '@/components/tracker/anchor';
 import {
   expandSeries,
+  seriesOccurrenceDates,
   type SeriesErrorField,
   type SeriesFreq,
 } from '@/lib/planner-recurrence';
@@ -374,7 +375,13 @@ export interface FormSeries {
 }
 
 export type SeriesFormResult =
-  | { ok: true; series: FormSeries | null }
+  | {
+      ok: true;
+      /** How many occurrences the rule names, or null when it does not repeat. */
+      count: number | null;
+      /** The finished rows — only once the event itself is valid. */
+      series: FormSeries | null;
+    }
   | { ok: false; errors: FormErrors };
 
 /** Which form field a recurrence refusal belongs under. */
@@ -384,24 +391,43 @@ const REPEAT_FIELD_OF: Record<SeriesErrorField, FormField> = {
   start: 'start',
 };
 
+function repeatError(field: SeriesErrorField, message: string): SeriesFormResult {
+  return { ok: false, errors: { [REPEAT_FIELD_OF[field]]: message } };
+}
+
 /**
  * The repeat the form describes, expanded into finished rows — or the one
  * message that says why it cannot be. A draft that does not repeat is not an
  * error: it comes back as `series: null`.
  *
- * The expansion happens on every keystroke so the form can show the count
- * live; it is bounded at 53 dates, so that costs nothing.
+ * `draft` is null while the event itself is still invalid (no title yet, say).
+ * The rule is still checked and still counted then, from the dates alone, so
+ * the end date and the 52 cap are answered as they are typed rather than
+ * waiting for the rest of the form to be finished.
+ *
+ * This runs on every keystroke; it is bounded at 53 dates, so that costs
+ * nothing.
  */
 export function seriesFromForm(
   state: PlannerEventFormState,
-  draft: PlannerEventDraft,
+  draft: PlannerEventDraft | null,
 ): SeriesFormResult {
-  if (state.repeat === NO_REPEAT) return { ok: true, series: null };
-  const expanded = expandSeries(draft, state.repeat, state.repeatUntil, draft.time_zone);
-  if (!expanded.ok) {
-    return { ok: false, errors: { [REPEAT_FIELD_OF[expanded.error.field]]: expanded.error.message } };
+  if (state.repeat === NO_REPEAT) return { ok: true, count: null, series: null };
+
+  if (draft === null) {
+    const dates = seriesOccurrenceDates(state.startDate, state.repeat, state.repeatUntil);
+    return dates.ok
+      ? { ok: true, count: dates.dates.length, series: null }
+      : repeatError(dates.error.field, dates.error.message);
   }
-  return { ok: true, series: { freq: state.repeat, until: state.repeatUntil, rows: expanded.rows } };
+
+  const expanded = expandSeries(draft, state.repeat, state.repeatUntil, draft.time_zone);
+  if (!expanded.ok) return repeatError(expanded.error.field, expanded.error.message);
+  return {
+    ok: true,
+    count: expanded.rows.length,
+    series: { freq: state.repeat, until: state.repeatUntil, rows: expanded.rows },
+  };
 }
 
 /** 'Repeats 12 times' — what the form says live under the end date. */
