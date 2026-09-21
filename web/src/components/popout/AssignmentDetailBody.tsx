@@ -41,7 +41,12 @@ import {
   queryStateText,
 } from '@/components/shared/QueryState';
 import { AssignmentPlannerBlock } from './AssignmentPlannerBlock';
-import { NOT_RECORDED, formatClock, formatDate } from './assignment-detail-format';
+import {
+  NOT_RECORDED,
+  dueDateText,
+  formatClock,
+  formatDate,
+} from './assignment-detail-format';
 import { SubmissionBlock } from './SubmissionBlock';
 import styles from './Popout.module.css';
 
@@ -110,8 +115,11 @@ export function AssignmentDetailBody({ assignmentId }: { assignmentId: string })
       <div className={styles.facts}>
         <div className={styles.fact}>
           <span className={tokens.kicker}>Due</span>
+          {/* Most rows record only the instant; `dueDateText` reads the day
+              off it in New York rather than saying "not recorded" next to a
+              perfectly good clock time (PM walk). */}
           <span className={styles.factValue}>
-            {assignment.due_date ? formatDate(assignment.due_date) : NOT_RECORDED}
+            {dueDateText(assignment.due_date, assignment.due_at)}
           </span>
           <span className={styles.factNote}>
             {clock || assignment.due_rule || 'time not recorded'}

@@ -172,8 +172,31 @@ describe('PlannerItemPopover — what it holds', () => {
   it('names the course, the due date and the points', () => {
     renderPopover(makeAnchor());
     expect(screen.getByText('IST 323')).toBeInTheDocument();
-    expect(screen.getByText(/Due Thu · Sep 17/)).toBeInTheDocument();
+    expect(screen.getByText('Due Thu, Sep 17 · 2:00 PM')).toBeInTheDocument();
     expect(screen.getByText('25 points possible')).toBeInTheDocument();
+  });
+
+  /**
+   * The walk finding: this row reads "Due not recorded · 11:59 PM" because
+   * `due_date` is null and only `due_at` is set — 38 of 44 timed assignments.
+   */
+  it('dates a row that records only the instant, in New York', () => {
+    hooks.assignment = stub({
+      ...ASSIGNMENT,
+      id: 'IST.323/lab-1-performing-a-ransomware-attack',
+      due_date: null,
+      due_at: '2026-09-24T03:59:00Z',
+    });
+    renderPopover(makeAnchor());
+
+    expect(screen.getByText('Due Wed, Sep 23 · 11:59 PM')).toBeInTheDocument();
+    expect(screen.queryByText(/Due not recorded/)).toBeNull();
+  });
+
+  it('still says "not recorded" when the row records nothing about when', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, due_date: null, due_at: null, due_rule: null });
+    renderPopover(makeAnchor());
+    expect(screen.getByText('Due not recorded')).toBeInTheDocument();
   });
 
   it('shows the mirrored score once Blackboard has one', () => {

@@ -187,3 +187,38 @@ W-35's work arriving on the branch.
 
 The PM's integration fix in `PlannerWeek.tsx` — opening the event form closes the popover, so one
 Escape never dismisses two layers — is untouched and still passes.
+
+---
+
+# Walk finding — "Due not recorded · 11:59 PM"
+
+`IST.323/lab-1-performing-a-ransomware-attack` has `due_date = null` and
+`due_at = 2026-09-24 03:59+00`; 38 of the 44 timed assignments are shaped that way. The date half
+of the due line was read off `due_date` alone, so it said "not recorded" beside a perfectly good
+clock time — on the popover and in the page's DUE cell both.
+
+Fixed in `assignment-detail-format.ts`, which both surfaces share:
+
+* New `dueDateText(due_date, due_at)` — the recorded date when there is one, otherwise the **New
+  York calendar day** of the instant, via `wallClockIn(…, COURSE_TIME_ZONE)` (the project's one
+  `Intl` wall-clock reader). `NOT_RECORDED` now means the row records neither.
+* `formatClock` now reads the term's zone too, the same `Intl` + `COURSE_TIME_ZONE` pattern
+  `grade-model-format.ts` uses. It was reading the machine's zone, which was invisible on Stack's
+  own screen but would have put the date and the time on different days for the same fact — an
+  11:59 PM New York deadline is the *next* UTC day. One reading, one zone, both halves.
+* `formatDue` (the popover's one line) spells the day `Wed, Sep 23` rather than `Wed · Sep 23`:
+  three interpuncts in a row read as a list. `formatDate` is unchanged, so the stacked fact cell
+  and the series rows look exactly as they did.
+
+`AssignmentDetailBody`'s DUE cell now calls `dueDateText`; the time stays underneath it.
+
+**Tests** 19 new, RED first. A new `assignment-detail-format.test.ts` (15) covers the fallback,
+the precedence of a recorded date, "not recorded" only when both are null, the UTC-vs-New-York day
+(the instant is Sep *24* in UTC), three DST-week instants — the night the clocks go back
+(11:30 PM Oct 31 from `2026-11-01T03:30Z`), the hour after they do (1:30 AM Nov 1), and the
+morning they go forward (3:30 AM Mar 8) — plus the clock and both `formatDue` branches. Two per
+surface: the popover reads `Due Wed, Sep 23 · 11:59 PM` and the page's DUE cell shows
+`Wed · Sep 23` over `11:59 PM`, each with its "records nothing" counterpart.
+
+**Gates** typecheck, lint (0 errors, the same 27 warnings), test and build green on the merged
+tail branch: **105 files / 1,812 tests**.
