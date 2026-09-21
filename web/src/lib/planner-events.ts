@@ -86,6 +86,32 @@ export type PlannerEventDraft = Pick<
 export type PlannerEventField = keyof PlannerEventDraft;
 
 /* ---------------------------------------------------------------------------
+ * Series membership (082, T-1)
+ * ------------------------------------------------------------------------ */
+
+/** What the membership predicates need of a row. */
+export type PlannerSeriesFields = Pick<PlannerEventRow, 'series_id' | 'series_detached'>;
+
+/** The series this occurrence belongs to, or null for a one-off. */
+export function seriesIdOf(row: PlannerSeriesFields | null | undefined): string | null {
+  const id = row?.series_id;
+  return typeof id === 'string' && id !== '' ? id : null;
+}
+
+/** True once "this event" has cut this row out of its series. */
+export function isSeriesDetached(row: PlannerSeriesFields | null | undefined): boolean {
+  return row?.series_detached === true;
+}
+
+/**
+ * True for a row the scope question applies to: in a series, and still part of
+ * it. A detached row is edited and deleted like any one-off.
+ */
+export function isSeriesMember(row: PlannerSeriesFields | null | undefined): boolean {
+  return seriesIdOf(row) !== null && !isSeriesDetached(row);
+}
+
+/* ---------------------------------------------------------------------------
  * Limits — the numbers in 067's checks
  * ------------------------------------------------------------------------ */
 

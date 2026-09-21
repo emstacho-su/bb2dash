@@ -61,6 +61,28 @@ export function isSeriesFreq(value: unknown): value is SeriesFreq {
   return typeof value === 'string' && (SERIES_FREQS as readonly string[]).includes(value);
 }
 
+/** What the scope question asks. `this` needs no RPC: it detaches, or deletes. */
+export const SERIES_SCOPES = ['this', 'following', 'all'] as const;
+
+export type SeriesScope = (typeof SERIES_SCOPES)[number];
+
+/** The two scopes 083's RPCs take. */
+export type SeriesWriteScope = Exclude<SeriesScope, 'this'>;
+
+/**
+ * 083 casts `starts_at` and `ends_at` straight from the strings the client
+ * sent and refuses any that do not carry their own offset, because that is
+ * exactly the string Postgres would otherwise have to read in a zone. Every
+ * instant this module produces comes from `Date.prototype.toISOString`, so it
+ * ends in `Z`; the query layer checks the rule anyway at the boundary.
+ */
+const ISO_INSTANT_WITH_OFFSET =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+
+export function hasExplicitOffset(instant: unknown): instant is string {
+  return typeof instant === 'string' && ISO_INSTANT_WITH_OFFSET.test(instant);
+}
+
 /* ---------------------------------------------------------------------------
  * Results
  * ------------------------------------------------------------------------ */

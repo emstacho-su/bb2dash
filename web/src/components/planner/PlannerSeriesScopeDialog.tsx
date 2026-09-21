@@ -20,7 +20,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import tokens from '@/styles/tokens.module.css';
-import { SERIES_SCOPES, type SeriesScope } from '@/lib/planner-series-types';
+import { SERIES_SCOPES, type SeriesScope } from '@/lib/planner-recurrence';
 import styles from './PlannerSeriesScopeDialog.module.css';
 
 export type SeriesScopeIntent = 'edit' | 'delete';

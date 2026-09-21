@@ -38,8 +38,13 @@ import {
   usePlannerSeriesRule,
   useUpdatePlannerSeries,
 } from '@/lib/queries.plannerSeries';
-import { isSeriesMember, seriesIdOf, type SeriesScope } from '@/lib/planner-series-types';
-import type { PlannerEventDraft, PlannerEventRow } from '@/lib/planner-events';
+import type { SeriesScope } from '@/lib/planner-recurrence';
+import {
+  isSeriesMember,
+  seriesIdOf,
+  type PlannerEventDraft,
+  type PlannerEventRow,
+} from '@/lib/planner-events';
 import type { EventActions } from './PlannerEventBlock';
 import type { PlannerEventFormMode, PlannerEventFormProps } from './PlannerEventForm';
 import type { FormSeries } from './planner-event-form-state';

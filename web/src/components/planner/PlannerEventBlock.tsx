@@ -19,11 +19,15 @@
 
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { courseCodeFromId } from '@/lib/queries.today';
-import { PLANNER_EVENT_KIND_LABELS, isHttpUrl, type PlannerEventRow } from '@/lib/planner-events';
+import {
+  PLANNER_EVENT_KIND_LABELS,
+  isHttpUrl,
+  isSeriesMember,
+  type PlannerEventRow,
+} from '@/lib/planner-events';
 import type { PlacedAllDayEvent, PlacedEventSegment } from '@/lib/planner-events-grid';
 import type { PlannerEventPrefill } from './planner-event-form-state';
 import { isOptimisticEvent } from '@/lib/queries.plannerEvents';
-import { isSeriesMember } from '@/lib/planner-series-types';
 import styles from './PlannerWeek.module.css';
 
 /** Everything a planner event on the grid (or an empty slot) can do. */

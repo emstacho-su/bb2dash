@@ -34,7 +34,6 @@ import {
   type PlannerEventRow,
 } from './planner-events';
 import { eventWindowBounds, overlapsWindow } from './planner-events-grid';
-import { SERIES_COLUMNS } from './planner-series-types';
 
 /* ---------------------------------------------------------------------------
  * Keys and columns
@@ -49,17 +48,14 @@ export const plannerEventKeys = {
   window: (from: string, to: string) => ['planner-events', 'window', from, to] as const,
 } as const;
 
-// One literal, not a concatenation: supabase-js types the rows from this string.
+// One literal, not a concatenation: supabase-js types the rows from this
+// string. 082's `series_id` and `series_detached` are in it, so every read
+// knows whether a row is an occurrence of a series (T-1).
 export const PLANNER_EVENT_COLUMNS =
-  'id, kind, title, starts_at, ends_at, time_zone, all_day, location_kind, location, notes, done, course_id, created_at, updated_at';
+  'id, kind, title, starts_at, ends_at, time_zone, all_day, location_kind, location, notes, done, course_id, series_id, series_detached, created_at, updated_at';
 
-/**
- * The same columns plus 082's two (T-1). Sent as the select string; the cast
- * keeps the *typed* result at `PlannerEventRow` because the generated types do
- * not know the new columns yet — they are read back through
- * `planner-series-types.ts`, which goes away with it at integration.
- */
-export const PLANNER_EVENT_COLUMNS_WITH_SERIES = `${PLANNER_EVENT_COLUMNS}, ${SERIES_COLUMNS}` as typeof PLANNER_EVENT_COLUMNS;
+/** The two 082 columns a fresh one-off row has. */
+export const NOT_IN_A_SERIES = { series_id: null, series_detached: false } as const;
 
 /** Rows shown before the insert returns carry this id prefix. */
 export const OPTIMISTIC_ID_PREFIX = 'optimistic:';
@@ -87,7 +83,7 @@ export function plannerEventsWindowOptions(from: string, to: string) {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('planner_events')
-        .select(PLANNER_EVENT_COLUMNS_WITH_SERIES)
+        .select(PLANNER_EVENT_COLUMNS)
         .lt('starts_at', bounds.end)
         .gte('ends_at', bounds.start)
         .order('starts_at', { ascending: true })
@@ -297,6 +293,7 @@ export function useCreatePlannerEvent() {
       const now = new Date().toISOString();
       const optimistic: PlannerEventRow = {
         ...result.value,
+        ...NOT_IN_A_SERIES,
         id: `${OPTIMISTIC_ID_PREFIX}${now}:${Math.random().toString(36).slice(2)}`,
         created_at: now,
         updated_at: now,
@@ -336,7 +333,7 @@ export interface PlannerEventUpdate {
   detach?: boolean;
 }
 
-/** 082's column, which the generated types do not know yet. */
+/** T-1 "This event": the one column that cuts a row out of its series. */
 const DETACHED = { series_detached: true } as const;
 
 function mergedUpdate({ current, patch }: PlannerEventUpdate) {
@@ -356,20 +353,17 @@ export function useUpdatePlannerEvent() {
   return useMutation<PlannerEventRow, Error, PlannerEventUpdate, RowPatch>({
     mutationKey: plannerEventKeys.writes(),
     mutationFn: async (update) => {
-      // TEMPORARY with `planner-series-types.ts`: the generated types do not
-      // know `series_detached`, and supabase-js refuses a column it has not
-      // heard of, so the extra key travels under the declared type.
       const columns = {
         ...mergedUpdate(update).columns,
         ...(update.detach ? DETACHED : {}),
-      } as Partial<PlannerEventDraft>;
+      };
       if (Object.keys(columns).length === 0) return update.current;
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('planner_events')
         .update(columns)
         .eq('id', update.current.id)
-        .select(PLANNER_EVENT_COLUMNS_WITH_SERIES)
+        .select(PLANNER_EVENT_COLUMNS)
         .single();
       if (error) throw error;
       return data;
