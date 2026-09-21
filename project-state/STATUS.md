@@ -1,6 +1,6 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-21** (post-merge reconciliation: Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
+> Updated upon each PR. Last update: **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
 > ([PR #15](https://github.com/emstacho-su/bb2dash/pull/15), `c1e471d`, production deployed: engine `web/src/lib/grade-model/`, "Our model" on `/grades` and the
 > course Grades tab, what-if + target solver + "Counts toward…" picker + score history;
 > migrations 057–058 and 080–081 live; V-1 stubbed by Stack, so the model leaves out parts with
@@ -32,7 +32,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 | Layer | State |
 |---|---|
 | Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` **v3** (anon insert, unique per run/kind/shell; `crawler.version = 3` envelope; attempts + attempt-files probe with a `keys` list; `runAll({ runId })`); last pull 2026-09-16 (run `c877b0cc-…`, 48 gradebook columns — made with v2 from the `main` checkout, so no `attempts` key yet). Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
-| Typed warehouse | migrations 001–058, 060–069, 073–079, 080–081 and 084–087 (repo numbering; see note below; all on `main` and live); **`grade_scenarios`** (one saved what-if per scheme course) and **`grade_column_links`** (Stack's column → part links and "Not graded"), both owner-only, never touched by a sync; views `v_grade_model_items` (77 items: 41 item + 5 attendance + 31 placeholder on 9/16), `v_grade_model_total` (`bb_running` read from the total's formula; IST.323 true), `v_gradebook_history` (5 changed columns); 7 courses, 80 assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings` (+ `gcal_*`, `web_base_url`), `calendar_events` mirror (keyed `(source, ref_id)` since 068), `calendar_push_runs`, `v_calendar_push_items` (assignment + planner arms), **`planner_events`** (owner-only, own IANA zone per row, 0 rows until Stack creates some), `v_announcements_unread`; **`bb_gradebook`** (append-per-run mirror: 45 rows from the 9/14 crawl + 48 from 9/16; IST.323 total 14.8/104), **`bb_attempts`** (empty until the first v3 crawl); every public view `security_invoker`, anon revoked |
+| Typed warehouse | migrations 001–058, 060–069, 073–089 (repo numbering; see note below; all on `main` and live); **`grade_scenarios`** (one saved what-if per scheme course) and **`grade_column_links`** (Stack's column → part links and "Not graded"), both owner-only, never touched by a sync; views `v_grade_model_items` (77 items: 41 item + 5 attendance + 31 placeholder on 9/16), `v_grade_model_total` (`bb_running` read from the total's formula; IST.323 true), `v_gradebook_history` (5 changed columns); 7 courses, 80 assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings` (+ `gcal_*`, `web_base_url`), `calendar_events` mirror (keyed `(source, ref_id)` since 068), `calendar_push_runs`, `v_calendar_push_items` (assignment + planner arms), **`planner_events`** (owner-only, own IANA zone per row, 0 rows until Stack creates some), `v_announcements_unread`; **`bb_gradebook`** (append-per-run mirror: 45 rows from the 9/14 crawl + 48 from 9/16; IST.323 total 14.8/104), **`bb_attempts`** (empty until the first v3 crawl); every public view `security_invoker`, anon revoked |
 | Gradebook mirror (10a) | `stage_gradebook` + `stage_attempts` in `run_transform` after `stage_assignments`; `v_gradebook_latest` (`column_kind` item / attendance / total / calc_other / letter, `assignment_id`, `linked_assignments`, `counts_toward_grade`), `v_assignment_grade`, `v_course_grade`, `v_attempts_latest`, `v_assignment_attempts`; registered runs only; reconciliation 45/45 columns and scores against `bb_raw` on the 9/14 crawl; every figure carries `seen_at`, nothing summed |
 | Effort model | migration 015 `effort_base` (19 types) + 016 `v_work_items` (152 items, effort + source) |
 | Document corpus | 64 files (100% in Storage + local mirror + sha256), 534 text units extracted; 4 stale IST.466 files marked `superseded_by` (migration 022) → `v_bb_files_current` = 60 |
@@ -300,13 +300,33 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    `/code-review main high`: 10 findings, 8 fixed, 1 docs, 1 checked on prod; `/security-review`: none
    ≥ 8/10. Tests: web 1582 (1342 on `main`; ~360 cases left with the deleted what-if layer), desktop
    549, mcp-server 88; `npm run lint` works again (ESLint CLI). PM browser walk in `80d` (three
-   passes). **Still to come in this phase, after Stack's MVP walk:** recurring planner events with
-   single-occurrence edits (T-1, migrations 082–083) and the small anchored assignment popover (T-2).
-   **Live proof owed:** Stack's next sync (v4) should fill `bb_attempts` and `my_submissions`.
+   passes). **Live proof owed:** Stack's next sync (v4) should fill `bb_attempts` and `my_submissions`.
    **State on 2026-09-21:** no sync since the merge (last crawl 2026-09-17 15:35 UTC, made before it;
    `bb_attempts` 0 rows); a sync request queued that day (id 33) was cancelled at Stack's word.
    Phase worktrees and branches removed; the two `chore/checkpoint-skill*` local branches were
    already contained in `main` and were deleted.
+
+15. **Phase 12b tail — recurring events + planner popover** (`fix/page-pass-12b-tail`, PR open 2026-09-21;
+   frozen contract, round 2 table and the walk in `80c` §Post-MVP tail, `80l`–`80n` worker notes, `80o` walk).
+   Three Opus workers (W-35 db, W-36 recurrence web, W-37 popover), PM-integrated; W-36 as integrator.
+   **T-1 recurring (P-planner-6):** the web expands a rule (daily / weekly / monthly, mandatory end date,
+   ≤ 52) into ordinary `planner_events` rows with `planner-recurrence.ts`, so the calendar push is
+   untouched; **082** `planner_event_series` + `series_id` / `series_detached` + a 52-row cap; **083**
+   RPCs `planner_series_create` / `_update` / `_delete` (`'following'` splits the series, `'all'` rewrites
+   the non-detached future rows, ids preserved so Google sees patches); **088** the split moves detached
+   rows too, an emptied series is deleted, `until_date` follows the moved rows. Form gains Repeats + Ends
+   on with a live count; a series row's edit or delete asks "This event / This and following / All events";
+   the rule is not editable after creation (delete following, create anew); ↻ mark on series blocks.
+   **T-2 popover (P-planner-5):** on `/planner` a due item opens a small anchored popover (status select,
+   points, Blackboard link, "See full details →"); the full details are a page,
+   `/course/[id]/assignment/[...assignmentId]`, sharing one body component with the `?item=` popout;
+   every other screen keeps the popout. **089** (found by the walk, pre-existing): `v_work_items.due_on`
+   took the UTC date of `due_at`, so every 11:59 PM deadline sat one day late on the planner and the Home
+   tracker — 22 assignments moved to their New York day. Gates: `/code-review main high` 10 findings all
+   fixed (round 2), `/security-review` none; PM browser walk 2026-09-21 (`80o`): series create → this
+   event → this and following → all-events delete, all proven on prod and Google (push run 42 inserted 4;
+   test rows deleted), popover and page walked. Tests: web 1812 (from 1582), mcp-server 88, desktop 549.
+   Known: deleting a series' last detached row plainly leaves an empty series row (`80o` W-3).
 
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's
@@ -350,7 +370,7 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar | `69b_PHASE11B_planner_events.md` | **merged** (PR #14 + display follow-up PR #16, 2026-09-16; migrations 067–069 live, `calendar-push` v5 live, live proof and browser walk done) |
 | 12 | Electron shell, tray, desktop notifications, Sync button runs the command | `80_PHASE12_electron.md` | **merged** (PR #19, 2026-09-17; Stack walked acceptance steps 1–5 and the tray on the unpacked build and said merge; the three toasts are still to be seen live, after the first real sync or posted grade). His first launch found one bug, fixed before merge: the app was named `bb2dash-desktop`, so it read its config from the wrong `%APPDATA%` folder (`productName` now pins `bb2dash`). Shipped: `desktop/` package, Electron 44.4.1, unpacked build `desktop/dist/win-unpacked/bb2dash.exe`; window + single instance + tray (close hides), navigation allowlist, poller with on-disk watermark and the three toasts, Sync button runs `claude '/bb-sync <id>'` in Windows Terminal (`syncDryRun` prints it instead); `core/` has no `electron` import (R-28). 535 unit + 19 e2e tests; `/code-review main high` 10 findings fixed (brief §Round 2), `/security-review` none ≥ 8/10; zero changes under `web/`; no migrations. Notes: `80a`, `80b`, `80d`. **Not yet proven, only Stack can:** real Windows toasts, a real `wt.exe` sync run, the clipboard copy inside the shell, staying signed in after hours in the tray. Carried to 12b: `web/src/lib/supabase/proxy-session.ts` drops refreshed auth cookies on its two redirect branches; low-priority hardening: police `will-redirect` / `will-frame-navigate` |
 | 13 | Styling pass | `81_PHASE13_styling.md` | last; carries C-1..C-3 from Phase 10b's browser walk (phone-width overflow, rank weights shown per exam, favicon) |
-| 12b | Fine-tooth-comb pass over every page and feature | `80c_PHASE12B_page_pass.md` | **MVP merged** (PR #20, 2026-09-17; migrations 073–079, 084–087 live; gates run; PM walk in `80d`); v4 proof sync owed; post-MVP tail T-1 recurring events + T-2 small popover after Stack's walk; P-data-1 deferred, P-db-3 declined |
+| 12b | Fine-tooth-comb pass over every page and feature | `80c_PHASE12B_page_pass.md` | **MVP merged** (PR #20, 2026-09-17; migrations 073–079, 084–087 live; gates run; PM walk in `80d`); v4 proof sync owed; **tail PR open 2026-09-21** (T-1 recurring events + T-2 popover and assignment page; migrations 082–083, 088–089 live; gates run; walk in `80o`); P-data-1 deferred, P-db-3 declined |
 | 14 | Containers (R-28): every local process in Docker | `82_PHASE14_containers.md` + `research/82_RESEARCH_phase14_R1…R6` | planned 2026-09-16; after 13; Stack's 16 answers recorded, open questions in the brief; migration range 090–099 |
 
 **MVP, definition of done, task loops (2026-09-14, PR #11):** every remaining phase and stream
@@ -362,7 +382,7 @@ phase's PM session freezes its Contract. Research behind them: `docs/planning/re
 
 Migration ranges: Phase 8 = 026–029, Phase 9 = 030–045 (030–040 plus its review-fix rounds 041–045), Phase 10 = 046–059
 (10a took 046–056; **10b took 057–058**; **059 held for V-1's reconciliation**), Phase 11 = 060–066,
-Phase 11b = 067–072 (used 067–069; 070–072 free), Phase 12 = 073–079 if needed, Phase 10b review rounds = 080–081; **Phase 12b = 073–079 and 084–087** (082–083 reserved for its recurring-events tail; 088–089 free). Both phase branches cut from `main`
+Phase 11b = 067–072 (used 067–069; 070–072 free), Phase 12 = 073–079 if needed, Phase 10b review rounds = 080–081; **Phase 12b = 073–089** (MVP 073–079, 084–087; tail 082–083, 088–089 — the range is used up; Phase 14 starts at 090). Both phase branches cut from `main`
 (Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
 
 Phase 7 leftovers folded into the plan: automatic `superseded_by` on re-uploaded files and the
