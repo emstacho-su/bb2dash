@@ -10,7 +10,7 @@
  * Every query hook is a stub; nothing here reaches Supabase.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface Stub<T> {
@@ -137,6 +137,41 @@ describe('CourseAssignment — the page renders the shared body', () => {
     expect(screen.getByLabelText('Submission')).toBeInTheDocument();
     expect(screen.getByText('10% a day.')).toBeInTheDocument();
     expect(notFound).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The walk finding: 38 of the 44 timed assignments carry `due_at` and no
+   * `due_date`, and the DUE cell read "not recorded" with "11:59 PM" under it.
+   */
+  it('dates a row that records only the instant, in New York', () => {
+    hooks.assignment = stub({
+      ...ASSIGNMENT,
+      id: 'IST.323/lab-1-performing-a-ransomware-attack',
+      title: 'Lab 1 — performing a ransomware attack',
+      due_date: null,
+      due_at: '2026-09-24T03:59:00Z',
+    });
+
+    render(
+      <CourseAssignment
+        courseId="IST.323"
+        assignmentId="IST.323/lab-1-performing-a-ransomware-attack"
+      />,
+    );
+
+    const due = screen.getByText('Due').parentElement as HTMLElement;
+    expect(within(due).getByText('Wed · Sep 23')).toBeInTheDocument();
+    expect(within(due).getByText('11:59 PM')).toBeInTheDocument();
+    expect(within(due).queryByText('not recorded')).toBeNull();
+  });
+
+  it('still says "not recorded" when the row records neither', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, due_date: null, due_at: null, due_rule: null });
+    render(<CourseAssignment courseId="IST.323" assignmentId="IST.323/lab-1" />);
+
+    const due = screen.getByText('Due').parentElement as HTMLElement;
+    expect(within(due).getByText('not recorded')).toBeInTheDocument();
+    expect(within(due).getByText('time not recorded')).toBeInTheDocument();
   });
 
   it('accepts an assignment on a child shell of the course in the URL', () => {
