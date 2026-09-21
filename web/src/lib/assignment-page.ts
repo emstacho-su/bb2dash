@@ -22,19 +22,50 @@ export function assignmentPagePath(courseId: string, assignmentId: string): stri
 }
 
 /**
- * Rebuild the assignment id from what the route hands over. The segments are
- * untrusted: anything empty resolves to `null` and the page says not found
- * rather than querying for `''`.
+ * `decodeURIComponent` that answers `null` instead of throwing.
+ *
+ * A path segment is untrusted input: `%`, `%zz` and a truncated multi-byte
+ * escape all raise `URIError`, and an unhandled one in a server component is a
+ * 500 for what is really a URL nobody can resolve.
+ */
+export function decodePathSegment(raw: string): string | null {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rebuild the assignment id from what the route hands over.
+ *
+ * TR-5: the segments arrive **still encoded** — Next gives a catch-all the path
+ * verbatim, which is why the sibling course pages decode `id` — so each one is
+ * decoded here. Without that, every id a URL cannot carry as-is (a space, an
+ * `&`, an apostrophe, an accented letter) rebuilt into a string no assignment
+ * has, and the `%2F` single-segment form this module documents never rebuilt at
+ * all.
+ *
+ * The segments are untrusted: an empty one is a doubled slash and is dropped, a
+ * malformed escape names no assignment and resolves to `null`, and so does a
+ * path with nothing left in it. The page says not found rather than querying
+ * for `''` or crashing.
  */
 export function assignmentIdFromSegments(
   segments: readonly string[] | string | undefined,
 ): string | null {
   const parts = typeof segments === 'string' ? [segments] : (segments ?? []);
-  const id = parts
-    .map((part) => part.trim())
-    .filter((part) => part !== '')
-    .join('/');
-  return id === '' ? null : id;
+  const decoded: string[] = [];
+
+  for (const part of parts) {
+    if (part === '') continue;
+    const value = decodePathSegment(part);
+    if (value === null) return null;
+    if (value.trim() === '') continue;
+    decoded.push(value);
+  }
+
+  return decoded.length === 0 ? null : decoded.join('/');
 }
 
 /**

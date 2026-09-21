@@ -109,6 +109,9 @@ vi.mock('@/lib/queries.submissions', async (importOriginal) => {
 const { CourseAssignment } = await import(
   '@/app/(app)/course/[id]/assignment/[...assignmentId]/CourseAssignment'
 );
+const CourseAssignmentPage = (
+  await import('@/app/(app)/course/[id]/assignment/[...assignmentId]/page')
+).default;
 
 beforeEach(() => {
   notFound.mockClear();
@@ -170,6 +173,52 @@ describe('CourseAssignment — states it must not guess at', () => {
     render(<CourseAssignment courseId="GEO.103" assignmentId="GEO.103.R/quiz-1" />);
     expect(screen.getByText('Loading assignment…')).toBeInTheDocument();
     expect(notFound).not.toHaveBeenCalled();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * The route segment itself (TR-5)
+ * ------------------------------------------------------------------------ */
+
+describe('the route decodes what it is handed', () => {
+  /** What Next passes the page: the path's segments, still encoded. */
+  function paramsOf(id: string, assignmentId: string[]) {
+    return Promise.resolve({ id, assignmentId });
+  }
+
+  it('hands the screen a decoded course id and assignment id', async () => {
+    const element = await CourseAssignmentPage({
+      params: paramsOf('GEO.103', ['GEO.103', 'caf%C3%A9%20study']),
+    });
+
+    expect(element.props).toMatchObject({
+      courseId: 'GEO.103',
+      assignmentId: 'GEO.103/café study',
+    });
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
+  it('accepts the single-segment %2F form', async () => {
+    const element = await CourseAssignmentPage({
+      params: paramsOf('IST.323', ['IST.323%2Flab-1']),
+    });
+    expect(element.props).toMatchObject({ assignmentId: 'IST.323/lab-1' });
+  });
+
+  it('is not found — never a crash — for a malformed escape', async () => {
+    await expect(
+      CourseAssignmentPage({ params: paramsOf('IST.323', ['IST.323', '%zz']) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+
+    await expect(
+      CourseAssignmentPage({ params: paramsOf('%E0%A4%A', ['IST.323', 'lab-1']) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+  });
+
+  it('is not found when the segments name no assignment', async () => {
+    await expect(
+      CourseAssignmentPage({ params: paramsOf('IST.323', []) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });
 
