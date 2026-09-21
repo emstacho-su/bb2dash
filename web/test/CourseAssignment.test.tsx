@@ -1,0 +1,194 @@
+/**
+ * `/course/[id]/assignment/[…]` — the full-details page (T-2, P-planner-5).
+ *
+ * Two things are under test: that the page renders the SAME body the `?item=`
+ * popout renders (the whole point of the split — there is no second copy of the
+ * markup to drift), and that a link to an assignment which does not exist, or
+ * which belongs to another course, raises not-found instead of drawing an empty
+ * panel.
+ *
+ * Every query hook is a stub; nothing here reaches Supabase.
+ */
+
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+interface Stub<T> {
+  data: T;
+  isPending: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: Error | null;
+}
+
+function stub<T>(data: T, over: Partial<Stub<T>> = {}): Stub<T> {
+  return { data, isPending: false, isFetching: false, isError: false, error: null, ...over };
+}
+
+function loading(): Stub<undefined> {
+  return stub(undefined, { isPending: true, isFetching: true });
+}
+
+const ASSIGNMENT = {
+  id: 'IST.323/lab-1',
+  course_id: 'IST.323',
+  title: 'Lab #1',
+  type: 'lab',
+  description: 'Build the threat model.',
+  due_date: '2026-09-14',
+  due_at: null,
+  due_rule: null,
+  points_possible: 25,
+  source: 'blackboard',
+  source_ref: 'bb:_1234_1',
+  series_key: null,
+  sequence_no: null,
+  confidence: 'confirmed',
+  component_id: null,
+  is_group: false,
+  is_extra_credit: false,
+};
+
+const hooks = vi.hoisted(() => ({
+  assignment: null as unknown,
+  progress: null as unknown,
+  component: null as unknown,
+  scheme: null as unknown,
+  series: null as unknown,
+  course: null as unknown,
+  save: null as unknown,
+}));
+
+const notFound = vi.hoisted(() => vi.fn(() => {
+  throw new Error('NEXT_NOT_FOUND');
+}));
+
+vi.mock('next/navigation', () => ({ notFound }));
+
+vi.mock('@/lib/supabase/client', () => ({
+  getSupabaseBrowserClient: () => ({ auth: { getSession: vi.fn() } }),
+}));
+
+vi.mock('@/lib/queries.popout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries.popout')>();
+  return {
+    ...actual,
+    useAssignment: () => hooks.assignment,
+    useAssignmentProgress: () => hooks.progress,
+    useGradeComponent: () => hooks.component,
+    useGradingScheme: () => hooks.scheme,
+    useAssignmentSeries: () => hooks.series,
+    useSavePlanner: () => hooks.save,
+  };
+});
+
+vi.mock('@/lib/queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries')>();
+  return { ...actual, useCourse: () => hooks.course };
+});
+
+/** The submission block's reads, as in `AssignmentPopout.test.tsx`. */
+vi.mock('@/lib/queries.grades', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries.grades')>();
+  return {
+    ...actual,
+    useAssignmentGrade: () => stub(null),
+    useAssignmentAttempts: () => stub([]),
+    useSubmissionFiles: () => stub([]),
+    useAssignmentHistory: () => stub([]),
+  };
+});
+vi.mock('@/lib/queries.submissions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queries.submissions')>();
+  return {
+    ...actual,
+    useStageUpload: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  };
+});
+
+const { CourseAssignment } = await import(
+  '@/app/(app)/course/[id]/assignment/[...assignmentId]/CourseAssignment'
+);
+
+beforeEach(() => {
+  notFound.mockClear();
+  hooks.assignment = stub(ASSIGNMENT);
+  hooks.progress = stub(null);
+  hooks.component = stub(null);
+  hooks.scheme = stub({ late_policy: '10% a day.', ai_policy: 'Cite any AI use.' });
+  hooks.series = stub([]);
+  hooks.course = stub({ id: 'IST.323', bb_url: 'https://bb.example/IST323', parent_course_id: null });
+  hooks.save = { mutate: vi.fn(), isPending: false, isError: false, error: null };
+});
+
+describe('CourseAssignment — the page renders the shared body', () => {
+  it('shows the same detail the popout shows, in a panel of its own', () => {
+    render(<CourseAssignment courseId="IST.323" assignmentId="IST.323/lab-1" />);
+
+    const panel = screen.getByLabelText('Assignment detail');
+    expect(panel).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Lab #1' })).toBeInTheDocument();
+    expect(screen.getByText('Build the threat model.')).toBeInTheDocument();
+    // The planner block and the submission block come along with the body.
+    expect(screen.getByLabelText('Notes')).toBeInTheDocument();
+    expect(screen.getByLabelText('Submission')).toBeInTheDocument();
+    expect(screen.getByText('10% a day.')).toBeInTheDocument();
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
+  it('accepts an assignment on a child shell of the course in the URL', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, id: 'GEO.103.R/quiz-1', course_id: 'GEO.103.R' });
+    hooks.course = stub({ id: 'GEO.103.R', bb_url: null, parent_course_id: 'GEO.103' });
+
+    render(<CourseAssignment courseId="GEO.103" assignmentId="GEO.103.R/quiz-1" />);
+    expect(screen.getByLabelText('Assignment detail')).toBeInTheDocument();
+    expect(notFound).not.toHaveBeenCalled();
+  });
+});
+
+describe('CourseAssignment — states it must not guess at', () => {
+  it('says it is loading rather than calling the assignment missing', () => {
+    hooks.assignment = loading();
+    render(<CourseAssignment courseId="IST.323" assignmentId="IST.323/lab-1" />);
+
+    expect(screen.getByText('Loading assignment…')).toBeInTheDocument();
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed read rather than raising not-found', () => {
+    hooks.assignment = stub(undefined, { isError: true, error: new Error('permission denied') });
+    render(<CourseAssignment courseId="IST.323" assignmentId="IST.323/lab-1" />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('permission denied');
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
+  it('waits for the course row before rejecting a possible child shell', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, course_id: 'GEO.103.R' });
+    hooks.course = loading();
+
+    render(<CourseAssignment courseId="GEO.103" assignmentId="GEO.103.R/quiz-1" />);
+    expect(screen.getByText('Loading assignment…')).toBeInTheDocument();
+    expect(notFound).not.toHaveBeenCalled();
+  });
+});
+
+describe('CourseAssignment — not found', () => {
+  it('raises not-found when no assignment has that id', () => {
+    hooks.assignment = stub(null);
+    expect(() =>
+      render(<CourseAssignment courseId="IST.323" assignmentId="IST.323/nope" />),
+    ).toThrow('NEXT_NOT_FOUND');
+    expect(notFound).toHaveBeenCalled();
+  });
+
+  it('raises not-found when the assignment belongs to another course', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, course_id: 'ECN.304' });
+    hooks.course = stub({ id: 'ECN.304', bb_url: null, parent_course_id: null });
+
+    expect(() =>
+      render(<CourseAssignment courseId="IST.323" assignmentId="ECN.304/pset-1" />),
+    ).toThrow('NEXT_NOT_FOUND');
+    expect(notFound).toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,37 @@
+/* The assignment full-details page (Phase 12b, T-2). Layout only: the body
+   inside the panel is the popout's, and brings the popout's own stylesheet
+   with it. Tokens only — no raw colour, radius or spacing value. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(760px, 100%);
+  margin-block: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-divider);
+  background: var(--color-surface);
+}
+
+.state {
+  margin: 0;
+  padding-block: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.problem {
+  margin-block: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 620px) {
+  .panel {
+    padding: var(--space-4);
+  }
+}
