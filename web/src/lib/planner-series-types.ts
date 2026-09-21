@@ -108,16 +108,23 @@ export interface SeriesResult<T> {
   error: { message: string } | null;
 }
 
+/** One `planner_event_series` row (082) — the rule the form shows read-only. */
+export interface PlannerSeriesRuleRow {
+  id: string;
+  freq: string;
+  until_date: string;
+}
+
 /** As much of PostgREST's builder as the series reads use. */
 export type SeriesQuery<T> = PromiseLike<SeriesResult<T>> & {
-  select(columns: string): SeriesQuery<PlannerEventSeriesRow[]>;
+  select<Row = PlannerEventSeriesRow>(columns: string): SeriesQuery<Row[]>;
   eq(column: string, value: unknown): SeriesQuery<T>;
   gte(column: string, value: unknown): SeriesQuery<T>;
   order(column: string, options: { ascending: boolean }): SeriesQuery<T>;
 };
 
 export interface SeriesClient {
-  from(table: 'planner_events'): SeriesQuery<PlannerEventSeriesRow[]>;
+  from(table: 'planner_events' | 'planner_event_series'): SeriesQuery<PlannerEventSeriesRow[]>;
   rpc<Name extends SeriesRpcName>(
     name: Name,
     args: PlannerSeriesRpcs[Name]['args'],

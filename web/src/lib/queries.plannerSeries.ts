@@ -25,7 +25,13 @@
  * error, one row at a time.
  */
 
-import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import {
   PlannerEventValidationError,
@@ -35,6 +41,7 @@ import {
 } from './planner-events';
 import {
   MAX_SERIES_OCCURRENCES,
+  isSeriesFreq,
   restateSeriesRows,
   type SeriesFreq,
 } from './planner-recurrence';
@@ -43,6 +50,7 @@ import {
   isSeriesDetached,
   seriesIdOf,
   type PlannerEventSeriesRow,
+  type PlannerSeriesRuleRow,
   type SeriesRowPayload,
   type SeriesWriteScope,
 } from './planner-series-types';
@@ -111,6 +119,49 @@ function scopeStart(scope: SeriesWriteScope, occurrence: string): string {
 /** Instants compare as numbers: PostgREST and the browser spell them differently. */
 function notBefore(instant: string, from: string): boolean {
   return Date.parse(instant) >= Date.parse(from);
+}
+
+/* ---------------------------------------------------------------------------
+ * Read — the rule, for the form's read-only line
+ * ------------------------------------------------------------------------ */
+
+export const plannerSeriesKeys = {
+  all: () => ['planner-series'] as const,
+  rule: (id: string) => ['planner-series', id] as const,
+} as const;
+
+/** What the form shows about a series it cannot edit. */
+export interface PlannerSeriesRule {
+  freq: SeriesFreq;
+  until: string;
+}
+
+/**
+ * The rule behind an occurrence. Read rather than guessed: the row carries
+ * only `series_id`, and the form must not invent a frequency it has not read.
+ * A missing or unreadable rule comes back as null, and the form says only that
+ * the event repeats.
+ */
+export function plannerSeriesRuleOptions(seriesId: string | null) {
+  return queryOptions({
+    queryKey: plannerSeriesKeys.rule(seriesId ?? ''),
+    enabled: seriesId !== null,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<PlannerSeriesRule | null> => {
+      const { data, error } = await client()
+        .from('planner_event_series')
+        .select<PlannerSeriesRuleRow>('id, freq, until_date')
+        .eq('id', seriesId);
+      if (error) throw new Error(error.message);
+      const row = data?.[0];
+      if (!row || !isSeriesFreq(row.freq)) return null;
+      return { freq: row.freq, until: row.until_date };
+    },
+  });
+}
+
+export function usePlannerSeriesRule(seriesId: string | null) {
+  return useQuery(plannerSeriesRuleOptions(seriesId));
 }
 
 /* ---------------------------------------------------------------------------

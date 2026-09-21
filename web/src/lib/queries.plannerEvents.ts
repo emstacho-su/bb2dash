@@ -328,7 +328,16 @@ export interface PlannerEventUpdate {
   current: PlannerEventRow;
   /** Only these columns are sent — the task checkbox sends `done` alone. */
   patch: Partial<PlannerEventDraft>;
+  /**
+   * T-1 "This event": also set `series_detached`, cutting this occurrence out
+   * of its series so no later scoped write moves it again. Forward only —
+   * nothing here ever re-attaches a row.
+   */
+  detach?: boolean;
 }
+
+/** 082's column, which the generated types do not know yet. */
+const DETACHED = { series_detached: true } as const;
 
 function mergedUpdate({ current, patch }: PlannerEventUpdate) {
   if (isOptimisticEvent(current)) {
@@ -347,14 +356,20 @@ export function useUpdatePlannerEvent() {
   return useMutation<PlannerEventRow, Error, PlannerEventUpdate, RowPatch>({
     mutationKey: plannerEventKeys.writes(),
     mutationFn: async (update) => {
-      const { columns } = mergedUpdate(update);
+      // TEMPORARY with `planner-series-types.ts`: the generated types do not
+      // know `series_detached`, and supabase-js refuses a column it has not
+      // heard of, so the extra key travels under the declared type.
+      const columns = {
+        ...mergedUpdate(update).columns,
+        ...(update.detach ? DETACHED : {}),
+      } as Partial<PlannerEventDraft>;
       if (Object.keys(columns).length === 0) return update.current;
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('planner_events')
         .update(columns)
         .eq('id', update.current.id)
-        .select(PLANNER_EVENT_COLUMNS)
+        .select(PLANNER_EVENT_COLUMNS_WITH_SERIES)
         .single();
       if (error) throw error;
       return data;
@@ -363,7 +378,11 @@ export function useUpdatePlannerEvent() {
     onMutate: async (update) => {
       let next: PlannerEventRow;
       try {
-        next = { ...update.current, ...mergedUpdate(update).value };
+        next = {
+          ...update.current,
+          ...mergedUpdate(update).value,
+          ...(update.detach ? DETACHED : {}),
+        };
       } catch {
         // mutationFn re-validates and throws; there is nothing to patch.
         return NO_PATCH;

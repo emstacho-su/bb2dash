@@ -23,6 +23,11 @@ import {
   type PlannerEventRow,
 } from '@/lib/planner-events';
 import { shiftIso } from '@/components/tracker/anchor';
+import {
+  expandSeries,
+  type SeriesErrorField,
+  type SeriesFreq,
+} from '@/lib/planner-recurrence';
 import { newYorkWallClock } from '@/lib/planner-week';
 import {
   COMMON_TIME_ZONES,
@@ -69,9 +74,18 @@ export interface PlannerEventFormState {
   notes: string;
   done: boolean;
   courseId: string;
+  /** T-1: the rule a new event repeats on. Offered on create only. */
+  repeat: RepeatChoice;
+  /** T-1: the last local date an occurrence may start on. Required when it repeats. */
+  repeatUntil: string;
   /** Edit mode: what was saved, so unchanged times keep their exact instants. */
   stored: StoredTimes | null;
 }
+
+/** The "Repeats" picker's values: the frequencies, plus not repeating at all. */
+export type RepeatChoice = 'none' | SeriesFreq;
+
+export const NO_REPEAT = 'none';
 
 /** The form's own fields, which errors and notes are keyed on. */
 export type FormField =
@@ -84,7 +98,9 @@ export type FormField =
   | 'location'
   | 'notes'
   | 'done'
-  | 'courseId';
+  | 'courseId'
+  | 'repeat'
+  | 'repeatUntil';
 
 export type FormErrors = Partial<Record<FormField, string>>;
 
@@ -121,6 +137,8 @@ const BLANK: Omit<PlannerEventFormState, 'startDate' | 'endDate' | 'allDay' | 's
   notes: '',
   done: false,
   courseId: '',
+  repeat: NO_REPEAT,
+  repeatUntil: '',
 };
 
 /** A new event from a slot: that date, that start, +60 minutes, New York. */
@@ -342,4 +360,51 @@ export function draftFromForm(state: PlannerEventFormState): DraftResult {
 
 function clean(notes: FormErrors): FormErrors {
   return Object.fromEntries(Object.entries(notes).filter(([, text]) => text !== undefined));
+}
+
+/* ---------------------------------------------------------------------------
+ * Repeats (T-1)
+ * ------------------------------------------------------------------------ */
+
+/** A whole series, ready for `planner_series_create`. */
+export interface FormSeries {
+  freq: SeriesFreq;
+  until: string;
+  rows: readonly PlannerEventDraft[];
+}
+
+export type SeriesFormResult =
+  | { ok: true; series: FormSeries | null }
+  | { ok: false; errors: FormErrors };
+
+/** Which form field a recurrence refusal belongs under. */
+const REPEAT_FIELD_OF: Record<SeriesErrorField, FormField> = {
+  freq: 'repeat',
+  until: 'repeatUntil',
+  start: 'start',
+};
+
+/**
+ * The repeat the form describes, expanded into finished rows — or the one
+ * message that says why it cannot be. A draft that does not repeat is not an
+ * error: it comes back as `series: null`.
+ *
+ * The expansion happens on every keystroke so the form can show the count
+ * live; it is bounded at 53 dates, so that costs nothing.
+ */
+export function seriesFromForm(
+  state: PlannerEventFormState,
+  draft: PlannerEventDraft,
+): SeriesFormResult {
+  if (state.repeat === NO_REPEAT) return { ok: true, series: null };
+  const expanded = expandSeries(draft, state.repeat, state.repeatUntil, draft.time_zone);
+  if (!expanded.ok) {
+    return { ok: false, errors: { [REPEAT_FIELD_OF[expanded.error.field]]: expanded.error.message } };
+  }
+  return { ok: true, series: { freq: state.repeat, until: state.repeatUntil, rows: expanded.rows } };
+}
+
+/** 'Repeats 12 times' — what the form says live under the end date. */
+export function occurrenceCountText(count: number): string {
+  return count === 1 ? '1 occurrence' : `${count} occurrences`;
 }

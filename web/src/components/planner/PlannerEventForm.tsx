@@ -33,8 +33,11 @@ import {
   draftFromForm,
   formStateFromPrefill,
   formStateFromRow,
+  occurrenceCountText,
+  seriesFromForm,
   updateForm,
   type FormErrors,
+  type FormSeries,
   type PlannerEventFormState,
   type PlannerEventPrefill,
 } from './planner-event-form-state';
@@ -43,8 +46,10 @@ import {
   DeleteControl,
   Field,
   LocationFields,
+  RepeatFields,
   WhenFields,
   ZoneField,
+  type ExistingRepeat,
 } from './PlannerEventFormFields';
 import styles from './PlannerEventForm.module.css';
 
@@ -62,9 +67,15 @@ const SERVER_ZONE_REFUSAL = /\btime_zone\b/;
 export interface PlannerEventFormProps {
   target: PlannerEventFormMode;
   onClose: () => void;
-  /** Create or update, depending on `target`. */
-  onSave: (draft: PlannerEventDraft) => void;
+  /**
+   * Create or update, depending on `target`. `series` is the whole expansion
+   * when a new event repeats, and null otherwise; the editor decides which
+   * write that becomes.
+   */
+  onSave: (draft: PlannerEventDraft, series: FormSeries | null) => void;
   onDelete: (event: PlannerEventRow) => void;
+  /** Edit mode: the saved rule when this event is in a series (T-1). */
+  existingRepeat?: ExistingRepeat | null;
   /** A write from this dialog is in flight. */
   pending: boolean;
   /** Why this dialog's last write was refused, if it was. */
@@ -78,6 +89,7 @@ export function PlannerEventForm({
   onDelete,
   pending,
   error,
+  existingRepeat = null,
 }: PlannerEventFormProps) {
   const [state, setState] = useState<PlannerEventFormState>(() =>
     target.mode === 'create' ? formStateFromPrefill(target.prefill) : formStateFromRow(target.event),
@@ -86,11 +98,17 @@ export function PlannerEventForm({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const result = draftFromForm(state);
+  // The repeat is expanded on every keystroke: it is what the count line says,
+  // and it is bounded at 53 dates, so it costs nothing to keep live.
+  const repeat = result.ok ? seriesFromForm(state, result.draft) : null;
   const zoneRefused = error !== null && SERVER_ZONE_REFUSAL.test(error.message);
   const errors: FormErrors = {
     ...(attempted && !result.ok ? result.errors : {}),
+    ...(repeat && !repeat.ok ? repeat.errors : {}),
     ...(zoneRefused ? { zone: 'The calendar database does not know this zone; choose another.' } : {}),
   };
+  const count =
+    repeat?.ok && repeat.series ? occurrenceCountText(repeat.series.rows.length) : undefined;
 
   const set = <K extends keyof PlannerEventFormState>(field: K, value: PlannerEventFormState[K]) =>
     setState((current) => updateForm(current, field, value));
@@ -99,7 +117,10 @@ export function PlannerEventForm({
     event.preventDefault();
     setAttempted(true);
     if (!result.ok || pending) return;
-    onSave(result.draft);
+    // A repeat that will not expand is never sent: 52 occurrences reach Stack's
+    // real Google calendar, so a half-built rule must not be saved as one event.
+    if (repeat && !repeat.ok) return;
+    onSave(result.draft, repeat?.ok ? repeat.series : null);
   }
 
   const heading = target.mode === 'create' ? 'New planner event' : 'Edit planner event';
@@ -160,6 +181,14 @@ export function PlannerEventForm({
 
         <WhenFields state={state} set={set} errors={errors} notes={result.notes} />
         <ZoneField state={state} set={set} error={errors.zone} />
+        {/* A rule is set once, on a new event; an existing series shows it read-only. */}
+        {target.mode === 'create' ? (
+          <RepeatFields state={state} set={set} errors={errors} count={count} />
+        ) : (
+          existingRepeat !== null && (
+            <RepeatFields state={state} set={set} errors={errors} existing={existingRepeat} />
+          )
+        )}
         <LocationFields state={state} set={set} errors={errors} />
         <CourseField value={state.courseId} onChange={(v) => set('courseId', v)} error={errors.courseId} />
 

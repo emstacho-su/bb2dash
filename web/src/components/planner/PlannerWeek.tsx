@@ -57,6 +57,7 @@ import {
 import { reservedBoardHeightPx } from '@/lib/planner-rows';
 import { WeekBoard, type BandToggle } from './PlannerBoard';
 import { PlannerEventForm } from './PlannerEventForm';
+import { PlannerSeriesScopeDialog } from './PlannerSeriesScopeDialog';
 import type { SlotPosition } from './PlannerSlots';
 import { WeekHeader } from './PlannerWeekHeader';
 import { usePlannerEventEditor } from './usePlannerEventEditor';
@@ -193,6 +194,7 @@ function PlannerWeekScreen() {
       </div>
 
       {editor.form !== null && <PlannerEventForm key={editor.form.sessionId} {...editor.form} />}
+      {editor.scope !== null && <PlannerSeriesScopeDialog {...editor.scope} />}
     </section>
   );
 }

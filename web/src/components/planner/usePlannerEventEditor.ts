@@ -17,6 +17,13 @@
  * FOCUS. Closing puts focus back on the opener (K-9: "focus returns to the
  * slot"), explicitly rather than by trusting `document.activeElement` at open
  * time, because some browsers do not focus a button on click.
+ *
+ * SERIES (T-1). A new event that repeats is written by `planner_series_create`
+ * instead of a plain insert. Saving or deleting an occurrence that is still
+ * part of a series asks "This event / This and following events / All events"
+ * first; the answer picks the write, and "This event" is the ordinary update
+ * with `series_detached` (or the ordinary delete). Nothing writes until the
+ * question is answered.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,9 +32,21 @@ import {
   useDeletePlannerEvent,
   useUpdatePlannerEvent,
 } from '@/lib/queries.plannerEvents';
+import {
+  useCreatePlannerSeries,
+  useDeletePlannerSeries,
+  usePlannerSeriesRule,
+  useUpdatePlannerSeries,
+} from '@/lib/queries.plannerSeries';
+import { isSeriesMember, seriesIdOf, type SeriesScope } from '@/lib/planner-series-types';
 import type { PlannerEventDraft, PlannerEventRow } from '@/lib/planner-events';
 import type { EventActions } from './PlannerEventBlock';
 import type { PlannerEventFormMode, PlannerEventFormProps } from './PlannerEventForm';
+import type { FormSeries } from './planner-event-form-state';
+import type {
+  PlannerSeriesScopeDialogProps,
+  SeriesScopeIntent,
+} from './PlannerSeriesScopeDialog';
 
 /** The open dialog: its identity, and the state of the write it started. */
 interface Session {
@@ -37,12 +56,26 @@ interface Session {
   error: Error | null;
 }
 
+/** T-1: the scope question standing between an edit or delete and its write. */
+interface ScopeAsk {
+  intent: SeriesScopeIntent;
+  /** The occurrence the question was asked from. */
+  event: PlannerEventRow;
+  seriesId: string;
+  /** Edit only: what the form wants saved. */
+  draft: PlannerEventDraft | null;
+  /** The dialog session the answer's write belongs to. */
+  sessionId: number;
+}
+
 export interface PlannerEventEditor {
   /**
    * Props for the open `PlannerEventForm`, or null when no dialog is open.
    * `sessionId` is its React key, so each open mounts a fresh form.
    */
   form: (PlannerEventFormProps & { sessionId: number }) | null;
+  /** Props for the open `PlannerSeriesScopeDialog`, or null (T-1). */
+  scope: PlannerSeriesScopeDialogProps | null;
   actions: EventActions;
   /** The grid alert's text, or null. */
   alert: string | null;
@@ -65,9 +98,20 @@ export function usePlannerEventEditor(): PlannerEventEditor {
   const nextSessionRef = useRef(0);
   const openerRef = useRef<HTMLElement | null>(null);
 
+  const [scopeAsk, setScopeAsk] = useState<ScopeAsk | null>(null);
+
   const create = useCreatePlannerEvent();
   const update = useUpdatePlannerEvent();
   const remove = useDeletePlannerEvent();
+  const createSeries = useCreatePlannerSeries();
+  const updateSeries = useUpdatePlannerSeries();
+  const deleteSeries = useDeletePlannerSeries();
+
+  // The rule behind the occurrence being edited, for the form's read-only
+  // line. Null id while the form is closed or the event does not repeat.
+  const editing = session?.target.mode === 'edit' ? session.target.event : null;
+  const editingSeriesId = isSeriesMember(editing) ? seriesIdOf(editing) : null;
+  const rule = usePlannerSeriesRule(editingSeriesId);
 
   const open = useCallback((target: PlannerEventFormMode, opener: HTMLElement) => {
     nextSessionRef.current += 1;
@@ -80,6 +124,7 @@ export function usePlannerEventEditor(): PlannerEventEditor {
   const close = useCallback(() => {
     openSessionRef.current = null;
     setSession(null);
+    setScopeAsk(null);
     setCloseCount((count) => count + 1);
   }, []);
 
@@ -114,6 +159,14 @@ export function usePlannerEventEditor(): PlannerEventEditor {
     );
   };
 
+  /** Ask the scope question instead of writing, when the row is in a series. */
+  const ask = (intent: SeriesScopeIntent, event: PlannerEventRow, draft: PlannerEventDraft | null) => {
+    const seriesId = seriesIdOf(event);
+    if (seriesId === null || !isSeriesMember(event) || session === null) return false;
+    setScopeAsk({ intent, event, seriesId, draft, sessionId: session.id });
+    return true;
+  };
+
   const form: PlannerEventEditor['form'] =
     session === null
       ? null
@@ -123,18 +176,62 @@ export function usePlannerEventEditor(): PlannerEventEditor {
           pending: session.pending,
           error: session.error,
           onClose: close,
-          onSave: (draft: PlannerEventDraft) => {
+          existingRepeat: editingSeriesId
+            ? { freq: rule.data?.freq ?? null, until: rule.data?.until ?? null }
+            : null,
+          onSave: (draft: PlannerEventDraft, series: FormSeries | null) => {
             const target = session.target;
-            runDialogWrite(session.id, `Could not save “${draft.title.trim()}”`, () =>
-              target.mode === 'create'
-                ? create.mutateAsync(draft)
-                : update.mutateAsync({ current: target.event, patch: draft }),
+            const failure = `Could not save “${draft.title.trim()}”`;
+            if (target.mode === 'create') {
+              runDialogWrite(session.id, failure, () =>
+                series === null
+                  ? create.mutateAsync(draft)
+                  : createSeries.mutateAsync({ freq: series.freq, until: series.until, rows: series.rows }),
+              );
+              return;
+            }
+            if (ask('edit', target.event, draft)) return;
+            runDialogWrite(session.id, failure, () =>
+              update.mutateAsync({ current: target.event, patch: draft }),
             );
           },
-          onDelete: (event: PlannerEventRow) =>
+          onDelete: (event: PlannerEventRow) => {
+            if (ask('delete', event, null)) return;
             runDialogWrite(session.id, `Could not delete “${event.title}”`, () =>
               remove.mutateAsync(event),
-            ),
+            );
+          },
+        };
+
+  /** The answer to the scope question, turned into the write it names. */
+  const chooseScope = (askState: ScopeAsk, scope: SeriesScope) => {
+    const { intent, event, seriesId, draft, sessionId } = askState;
+    setScopeAsk(null);
+    if (intent === 'delete') {
+      runDialogWrite(sessionId, `Could not delete “${event.title}”`, () =>
+        scope === 'this'
+          ? remove.mutateAsync(event)
+          : deleteSeries.mutateAsync({ seriesId, scope, from: event.starts_at }),
+      );
+      return;
+    }
+    if (draft === null) return;
+    runDialogWrite(sessionId, `Could not save “${draft.title.trim()}”`, () =>
+      // "This event" leaves the series alone and cuts this row out of it.
+      scope === 'this'
+        ? update.mutateAsync({ current: event, patch: draft, detach: true })
+        : updateSeries.mutateAsync({ seriesId, scope, edited: event, draft }),
+    );
+  };
+
+  const scope: PlannerEventEditor['scope'] =
+    scopeAsk === null
+      ? null
+      : {
+          intent: scopeAsk.intent,
+          title: scopeAsk.event.title,
+          onChoose: (chosen) => chooseScope(scopeAsk, chosen),
+          onCancel: () => setScopeAsk(null),
         };
 
   const actions: EventActions = {
@@ -154,5 +251,5 @@ export function usePlannerEventEditor(): PlannerEventEditor {
     pendingDoneId,
   };
 
-  return { form, actions, alert, dismissAlert: () => setAlert(null) };
+  return { form, scope, actions, alert, dismissAlert: () => setAlert(null) };
 }
