@@ -307,6 +307,75 @@ describe('PlannerItemPopover — focus', () => {
 });
 
 /* ---------------------------------------------------------------------------
+ * The anchor going away under it (TR-7)
+ *
+ * A refetch re-places the due card and the Assignments band collapses from the
+ * keyboard: both take the anchor out of the document while the popover is up.
+ * Measuring a detached element gives a zero rect, which used to send the
+ * popover to the board's top-left corner, and closing it then dropped focus on
+ * the floor.
+ * ------------------------------------------------------------------------ */
+
+/** The board, with the grid's one tab stop on it. */
+function makeBoard(): HTMLElement {
+  const board = document.createElement('div');
+  board.setAttribute('data-planner-board', 'true');
+  board.innerHTML =
+    '<button type="button" data-slot="0" data-slot-day="0" tabindex="0">New event</button>';
+  document.body.appendChild(board);
+  return board;
+}
+
+describe('PlannerItemPopover — the card it is anchored to goes away', () => {
+  it('closes itself rather than measuring a detached anchor', () => {
+    const anchor = makeAnchor();
+    const { rerender } = renderPopover(anchor);
+    expect(onClose).not.toHaveBeenCalled();
+
+    anchor.remove();
+    rerender(
+      <PlannerItemPopover assignmentId="IST.323/lab-1" anchor={anchor} onClose={onClose} />,
+    );
+
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not move to the board’s corner on a scroll after the card has gone', () => {
+    const anchor = makeAnchor();
+    renderPopover(anchor);
+    const placed = screen.getByRole('dialog').style.getPropertyValue('--popover-top');
+
+    anchor.remove();
+    fireEvent.scroll(window);
+
+    expect(screen.getByRole('dialog').style.getPropertyValue('--popover-top')).toBe(placed);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('puts focus on the board when the item it opened from is gone', () => {
+    const board = makeBoard();
+    const anchor = makeAnchor();
+    const { unmount } = renderPopover(anchor);
+
+    anchor.remove();
+    unmount();
+
+    expect(document.activeElement).toBe(board.querySelector('[data-slot]'));
+  });
+
+  it('loses focus to nothing when there is no board either', () => {
+    const anchor = makeAnchor();
+    const { unmount } = renderPopover(anchor);
+
+    anchor.remove();
+    unmount();
+
+    // Nothing to focus and nothing thrown — the body keeps it.
+    expect(document.activeElement).toBe(document.body);
+  });
+});
+
+/* ---------------------------------------------------------------------------
  * Placement
  * ------------------------------------------------------------------------ */
 
