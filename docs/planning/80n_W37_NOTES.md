@@ -126,3 +126,64 @@ renders the status, in place of `AssignmentPopout.tsx`).
   details" → the page under the course) should include a near-the-bottom item and a Sunday-column
   item, which are the flip and the right-edge clamp.
 * `database.types.ts` untouched; no migration, no `project-state/` edit, nothing merged.
+
+---
+
+# Round 2 — TR-5 and TR-7
+
+Two of the ten `/code-review main high` findings (§"Tail round 2"). Failing test first for each;
+both fixes on `fix/page-pass-12b-tail-popover`, one commit apiece.
+
+## TR-5 — the catch-all route never decoded its segments
+
+Next hands a catch-all the path verbatim, so the segments arrived still percent-encoded while `id`
+was being decoded like the sibling pages. Every assignment id a URL cannot carry as-is rebuilt
+into a string no row has, and the `%2F` single-segment form this route documents never rebuilt at
+all.
+
+* `assignmentIdFromSegments` now decodes each segment. An empty segment is still a doubled slash
+  and is dropped; a segment that decodes to nothing but whitespace (`%20`) is dropped too.
+* New `decodePathSegment` — `decodeURIComponent` that answers `null` instead of throwing. A
+  malformed escape (`%`, `%zz`, a truncated multi-byte sequence) names no assignment, so the page
+  is a 404 rather than an unhandled `URIError`, and `page.tsx` now routes the **course** id
+  through it as well; that `decodeURIComponent(id)` was the same 500 waiting to happen.
+
+Tests: 13 new. Six ids round-trip through `assignmentPagePath` → the router's split →
+`assignmentIdFromSegments` (a space, `&`, an apostrophe, `café`, `#`/`?`, `+`); the `%2F` form;
+already-legal segments unchanged; three malformed escapes; `decodePathSegment` on its own. Four of
+them exercise `page.tsx` itself, which had no test before: it hands the screen a decoded pair,
+accepts the `%2F` form, and 404s on a malformed course id or assignment segment.
+
+## TR-7 — the popover measured a detached anchor
+
+The anchor is a raw element. When the card left the document — a refetch re-placing the due item,
+the Assignments band collapsing from the keyboard — the next measure read a zero rect and parked
+the popover in the board's top-left corner, and closing it then dropped focus on `<body>`.
+
+* `measure()` closes instead of measuring when `anchor.isConnected` is false, which covers the
+  scroll and resize listeners.
+* A second effect **with no dependency array** asks the same question after every render. That is
+  the case the listeners miss: a re-render is how the card usually disappears, and it fires
+  neither a scroll nor a resize.
+* The unmount cleanup falls back to the grid's one tab stop
+  (`[data-planner-board] [data-slot][tabindex="0"]`) when the opener is no longer connected, so a
+  keyboard reader lands back on the board rather than at the top of the page. No board, no throw.
+
+Tests: 4 new — it closes rather than measuring a detached anchor; a scroll after the card has gone
+does not move it; focus lands on the board's tab stop; and with no board at all nothing throws.
+
+## Gates
+
+`npm run typecheck`, `npm run lint` (0 errors, the same 27 warnings as `main`, none in a file of
+mine), `npm test` and `npm run build` all green on the integrated tail branch.
+
+| | files | tests |
+|---|---|---|
+| round 1 end (my branch alone) | 98 | 1,645 |
+| round 2 end (branch with W-36 + W-35 integrated) | 104 | 1,773 |
+
+Of that, 17 tests are round 2's (13 for TR-5, 4 for TR-7); the rest of the rise is W-36's and
+W-35's work arriving on the branch.
+
+The PM's integration fix in `PlannerWeek.tsx` — opening the event form closes the popover, so one
+Escape never dismisses two layers — is untouched and still passes.
