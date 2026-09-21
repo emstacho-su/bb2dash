@@ -381,6 +381,24 @@ shell (`parent_course_id`, GEO 103's recitation) is accepted under the parent co
 merge. `database.types.ts` is the PM's at integration; W-36 types the three RPCs locally from this
 contract until then. Checks are rows T-1 and T-2 of §Item task list.
 
+### Tail round 2 — `/code-review main high`, 2026-09-21 (10 findings, all accepted)
+
+| # | Finding | Fix | Owner |
+|---|---|---|---|
+| TR-1 | A "following" / "all" edit copies the opened occurrence's `done` onto every row in scope | a series edit never changes `done`: each row in `p_rows` carries its own current `done` | W-36 |
+| TR-2 | "All events" from a past or in-progress occurrence leaves that occurrence out, silently (the 60 s margin and 083's `now()`) | after the RPC, the opened row is also written by the plain update (no detach) or plain delete when it is outside the RPC's scope; an error on either shows the error path | W-36 |
+| TR-3 | The "following" split leaves detached rows after the cut on the old series | **088**: the split moves detached rows with `starts_at >= p_from` to the new series too (moved, not updated) | W-35 |
+| TR-4 | A "following" update or delete from the first occurrence leaves an empty series row | **088**: a series left with zero rows is deleted in the same transaction | W-35 |
+| TR-5 | The catch-all route never decodes its segments | decode each segment the way the sibling pages decode `id`; test with a space, `&`, an apostrophe and `%2F` | W-37 |
+| TR-6 | Series writes never invalidate `['planner-series', id]`; the split copies the old `until_date` unshifted | invalidate the rule keys on every series write (W-36); **088**: the new series' `until_date` is the later of the old one and the last moved row's local date (W-35) | W-36 + W-35 |
+| TR-7 | The popover measures a detached anchor and jumps to the board's corner | close when the anchor is no longer connected; focus falls back to the board | W-37 |
+| TR-8 | "This event" with no edits still detaches the occurrence | no changed column → no write, no detach, and the scope dialog is not asked | W-36 |
+| TR-9 | `patchPlannerRows` writes every cached window once per row (52 × W) | group per window, one `setQueryData` per window; same for rollback | W-36 |
+| TR-10 | No `project-state/` update on the branch | STATUS, DECISIONS, ORCHESTRATOR in this PR | PM |
+
+088 is `088_planner_series_split_fixes.sql`: `create or replace` of the two RPCs only; 083 stays
+byte-frozen. 089 stays free.
+
 ## Out of scope
 
 * Visual restyling (Phase 13) — a layout **bug** is in; a taste change is 13's.
