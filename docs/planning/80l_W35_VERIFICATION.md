@@ -207,6 +207,69 @@ split moves its last row to the 13th — that is TR-6 working, and the reason is
 **No push proof re-run**: 088 changes neither `v_calendar_push_items` nor `calendar-push`, and it
 moves no row's `id`, so the mirror's behaviour is exactly what runs 37–41 above already showed.
 
+## Round 3 — migration 089, `v_work_items.due_on` was a day late
+
+Found in the PM's browser walk; pre-existing, not introduced by this phase. `v_work_items`
+derived the day of a deadline with `coalesce(a.due_at::date, a.due_date)`. A bare `::date` on a
+`timestamptz` uses the **session** zone, and every Supabase connection runs as UTC — so an
+11:59 PM New York deadline, stored as 03:59 or 04:59 the next day in UTC, landed on the wrong
+day on every surface that reads `due_on`: Today, the tracker, Undated, workload, the course
+stream. `suggested_start(...)` and the `undated` flag used the same expression, so they were
+wrong too.
+
+`db/migrations/089_work_items_due_on_new_york.sql` — `create or replace view` of `v_work_items`
+only, with `(a.due_at at time zone 'America/New_York')::date` in all three places. 016 and 073
+stay byte-frozen.
+
+| | applied as | md5 of the repo file (LF, the git blob) |
+|---|---|---|
+| `089_work_items_due_on_new_york.sql` | `089_work_items_due_on_new_york` | `ed1e4d39c8c6e5c19bf96a202a813c68` |
+
+Dry-run in `begin; … rollback;` first; the repo file is byte-identical to what was applied.
+
+### Before → after on prod
+
+| | before 089 | after 089 |
+|---|---|---|
+| IST.323 Lab #1 `due_on` (due_at 2026-09-24 03:59+00 = Wed 23rd 11:59 PM New York) | **2026-09-24** | **2026-09-23** |
+| assignments whose `due_on` ≠ the New York date of their `due_at` | **22** of 44 timed | **0** |
+| rows in `v_work_items` | 169 | 169 |
+| dated / undated items | 146 / 23 | 146 / 23 |
+| `v_calendar_push_items` rows | 72 | 72 |
+| `v_course_stream` rows | 208 | 208 |
+| columns / `security_invoker` / grants | 24 / true / unchanged | 24 / true / unchanged |
+
+**22 items moved a day earlier**, which is the whole change; nothing else in the view moved.
+38 of the 44 timed assignments have no `due_date` to fall back on, which is why the cast was
+load-bearing.
+
+`due_at` itself is emitted exactly as stored — only the derived day changed — and the reading arm
+is untouched (`readings.for_date` is already a date). The direction is instant → local date,
+which is unambiguous, so 067's K-9 rule still holds.
+
+**The Google mirror does not move.** `v_calendar_push_items` reads only `status` and
+`in_workload` from this view; its own `event_at` is built from `a.due_at` / `a.due_date`
+directly. `v_course_stream` reads `due_on` and so gets the fix, which is the point.
+`create or replace view` keeps the column list identical, so neither dependent was recreated.
+
+### Test
+
+`db/tests/phase12b_089_work_items_due_on.sql` (md5 `3f0134fcb328bc1d810477245fdeb9bb`), run against the applied view:
+**`phase12b_089_work_items_due_on: PASS`**, 6 sections, 17 assertions.
+
+| § | proves |
+|---|---|
+| 1 | Lab #1: `due_at` still the stored instant, that instant is 11:59 PM in New York, `due_on` = 2026-09-23 |
+| 2 | a date-only item (`due_at` null) still reads its `due_date` and is not undated |
+| 3 | a 10:00 AM New York item (14:00 UTC) does not move |
+| 4 | a DST-week 11:59 PM item — 2026-11-05 04:59+00, EST — reads 2026-11-04, and `suggested_start` counts back from that day |
+| 5 | the invariant over every row: no assignment's `due_on` differs from the New York date of its `due_at`; every reading's `due_on` still equals its `for_date`; row and undated counts unchanged |
+| 6 | 24 columns, `security_invoker = true`, nothing readable by `anon` or PUBLIC, no bare `a.due_at::date` left in the definition, both dependent views still resolve |
+
+The three synthetic assignments are inserted and deleted inside the rolled-back transaction.
+
+`get_advisors(security)` after 089: **no new findings** — the same 7 / 2 / 1 as before.
+
 ## For the PM
 
 * `database.types.ts` needs regenerating at integration: three new RPCs and two new
