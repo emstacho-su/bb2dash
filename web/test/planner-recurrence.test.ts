@@ -390,6 +390,44 @@ describe('restateSeriesRows — a scoped edit keeps the row ids', () => {
     ]);
   });
 
+  it('never carries the opened occurrence’s done onto the rest (TR-1)', () => {
+    // Ticking one week's task and then editing the title for "all events"
+    // must not mark the whole term done — `done` is Stack's state, per row.
+    const tasks = [
+      makePlannerEvent({ id: 'a', kind: 'task', done: true, starts_at: '2026-09-16T13:00:00.000Z', ends_at: '2026-09-16T14:00:00.000Z' }),
+      makePlannerEvent({ id: 'b', kind: 'task', done: false, starts_at: '2026-09-23T13:00:00.000Z', ends_at: '2026-09-23T14:00:00.000Z' }),
+      makePlannerEvent({ id: 'c', kind: 'task', done: true, starts_at: '2026-09-30T13:00:00.000Z', ends_at: '2026-09-30T14:00:00.000Z' }),
+    ];
+    const result = restateSeriesRows(
+      tasks,
+      tasks[0],
+      draft({ kind: 'task', done: true, title: 'Reading' }),
+      NY,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows.map((row) => row.done)).toEqual([true, false, true]);
+    expect(result.rows.every((row) => row.title === 'Reading')).toBe(true);
+  });
+
+  it('clears done on every row when the kind stops being a task', () => {
+    const tasks = [
+      makePlannerEvent({ id: 'a', kind: 'task', done: true, starts_at: '2026-09-16T13:00:00.000Z', ends_at: '2026-09-16T14:00:00.000Z' }),
+      makePlannerEvent({ id: 'b', kind: 'task', done: false, starts_at: '2026-09-23T13:00:00.000Z', ends_at: '2026-09-23T14:00:00.000Z' }),
+    ];
+    const result = restateSeriesRows(tasks, tasks[0], draft({ kind: 'event', done: null }), NY);
+    expect(result.ok && result.rows.map((row) => row.done)).toEqual([null, null]);
+  });
+
+  it('starts a row not done when the kind becomes a task', () => {
+    const events = [
+      makePlannerEvent({ id: 'a', starts_at: '2026-09-16T13:00:00.000Z', ends_at: '2026-09-16T14:00:00.000Z' }),
+      makePlannerEvent({ id: 'b', starts_at: '2026-09-23T13:00:00.000Z', ends_at: '2026-09-23T14:00:00.000Z' }),
+    ];
+    const result = restateSeriesRows(events, events[0], draft({ kind: 'task', done: true }), NY);
+    expect(result.ok && result.rows.map((row) => row.done)).toEqual([false, false]);
+  });
+
   it('restates nothing when the scope is empty', () => {
     const result = restateSeriesRows([], wednesdays[0], draft(), NY);
     expect(result.ok && result.rows).toEqual([]);
