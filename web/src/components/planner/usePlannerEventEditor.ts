@@ -220,7 +220,7 @@ export function usePlannerEventEditor(): PlannerEventEditor {
       runDialogWrite(sessionId, `Could not delete “${event.title}”`, () =>
         scope === 'this'
           ? remove.mutateAsync(event)
-          : deleteSeries.mutateAsync({ seriesId, scope, from: event.starts_at }),
+          : deleteSeries.mutateAsync({ seriesId, scope, occurrence: event }),
       );
       return;
     }

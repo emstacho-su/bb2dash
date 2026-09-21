@@ -136,6 +136,22 @@ function scopeStart(scope: SeriesWriteScope, occurrence: string, marginMs = 0): 
     : new Date(Date.now() + marginMs).toISOString();
 }
 
+/**
+ * True when 083's own cut will not reach the occurrence Stack had open (TR-2).
+ *
+ * `all` is the only scope this can happen in: it runs from `now()`, so an
+ * occurrence that has already started, is in progress, or falls inside the
+ * safety margin is left behind. The block Stack just edited must not silently
+ * keep its old values, so the caller writes that one row itself.
+ */
+function outsideScope(
+  scope: SeriesWriteScope,
+  occurrence: Pick<PlannerEventRow, 'starts_at'>,
+  cut: string,
+): boolean {
+  return scope === 'all' && !notBefore(occurrence.starts_at, cut);
+}
+
 /** 083's out-of-scope refusal, in words Stack can act on. */
 function refusalMessage(message: string): string {
   return /not in scope/i.test(message) ? MESSAGES.outOfScope : message;
@@ -198,6 +214,21 @@ export function usePlannerSeriesRule(seriesId: string | null) {
   return useQuery(plannerSeriesRuleOptions(seriesId));
 }
 
+/**
+ * What every series write does when it settles (TR-6).
+ *
+ * The weeks, as always — and the rules too. A create adds one, a `following`
+ * split makes a second and shortens the first's `until_date`, and an
+ * `all` delete removes the row outright, so the read-only line the form shows
+ * is stale after all three. The whole `['planner-series', …]` prefix goes: the
+ * split's new id never comes back to the browser, so there is nothing more
+ * precise to name, and there are only ever a handful of these keys.
+ */
+function settleSeriesWrite(queryClient: QueryClient) {
+  invalidateWhenIdle(queryClient);
+  void queryClient.invalidateQueries({ queryKey: plannerSeriesKeys.all() });
+}
+
 /* ---------------------------------------------------------------------------
  * Create
  * ------------------------------------------------------------------------ */
@@ -243,7 +274,7 @@ export function useCreatePlannerSeries() {
     // The stand-ins carry no real ids, so the refetch on settle is what swaps
     // them for the saved rows — it replaces each week's list outright.
     onError: (_error, _input, context) => rollbackPlannerRows(queryClient, context),
-    onSettled: () => invalidateWhenIdle(queryClient),
+    onSettled: () => settleSeriesWrite(queryClient),
   });
 }
 
@@ -277,6 +308,21 @@ async function rowsInScope(seriesId: string, from: string): Promise<PlannerEvent
   return data ?? [];
 }
 
+/**
+ * The opened occurrence, written on its own: the whole draft, by id, and no
+ * `series_detached` — Stack asked to change the series, not to leave it.
+ */
+async function writeOpenedRow(
+  edited: PlannerEventRow,
+  draft: PlannerEventDraft,
+): Promise<number> {
+  const [validated] = validatedRows([{ ...draft, id: edited.id }]);
+  const { id, ...columns } = validated;
+  const { error } = await client().from('planner_events').update(columns).eq('id', id ?? edited.id);
+  if (error) throw new Error(refusalMessage(error.message));
+  return 1;
+}
+
 export function useUpdatePlannerSeries() {
   const queryClient = useQueryClient();
 
@@ -287,18 +333,26 @@ export function useUpdatePlannerSeries() {
       // refuses a row for starting too early.
       const from = scopeStart(scope, edited.starts_at, SERIES_SCOPE_SAFETY_MS);
       const scoped = await rowsInScope(seriesId, from);
-      if (scoped.length === 0) throw new Error(MESSAGES.noScope);
+      const opened = outsideScope(scope, edited, from);
+      if (scoped.length === 0 && !opened) throw new Error(MESSAGES.noScope);
 
-      const restated = restateSeriesRows(scoped, edited, draft, draft.time_zone);
-      if (!restated.ok) throw new Error(restated.error.message);
+      let updated = 0;
+      if (scoped.length > 0) {
+        const restated = restateSeriesRows(scoped, edited, draft, draft.time_zone);
+        if (!restated.ok) throw new Error(restated.error.message);
 
-      const result = await client().rpc('planner_series_update', {
-        p_series_id: seriesId,
-        p_scope: scope,
-        p_from: from,
-        p_rows: asRows(validatedRows(restated.rows)),
-      });
-      return unwrapCount(result, MESSAGES.notUpdated);
+        const result = await client().rpc('planner_series_update', {
+          p_series_id: seriesId,
+          p_scope: scope,
+          p_from: from,
+          p_rows: asRows(validatedRows(restated.rows)),
+        });
+        updated = unwrapCount(result, MESSAGES.notUpdated);
+      }
+      // The one row 083's `now()` could not reach, written plainly — and
+      // without detaching it, because it is still part of its series (TR-2).
+      if (opened) updated += await writeOpenedRow(edited, draft);
+      return updated;
     },
 
     onMutate: async ({ seriesId, scope, edited, draft }) => {
@@ -306,7 +360,8 @@ export function useUpdatePlannerSeries() {
       const cached = cachedPlannerEvents(
         queryClient,
         (row) =>
-          seriesIdOf(row) === seriesId && !isSeriesDetached(row) && notBefore(row.starts_at, from),
+          row.id === edited.id ||
+          (seriesIdOf(row) === seriesId && !isSeriesDetached(row) && notBefore(row.starts_at, from)),
       );
       const restated = restateSeriesRows(cached, edited, draft, draft.time_zone);
       if (!restated.ok) return [];
@@ -320,7 +375,7 @@ export function useUpdatePlannerSeries() {
     },
 
     onError: (_error, _input, context) => rollbackPlannerRows(queryClient, context),
-    onSettled: () => invalidateWhenIdle(queryClient),
+    onSettled: () => settleSeriesWrite(queryClient),
   });
 }
 
@@ -332,7 +387,7 @@ export interface PlannerSeriesDelete {
   seriesId: string;
   scope: SeriesWriteScope;
   /** The occurrence the dialog was opened on; `following` starts here. */
-  from: string;
+  occurrence: PlannerEventRow;
 }
 
 /** Everything the grid is showing that this delete will take away. */
@@ -340,12 +395,23 @@ function doomedRows(
   queryClient: QueryClient,
   seriesId: string,
   from: string,
+  opened: PlannerEventRow,
 ): PlannerEventRow[] {
-  // A detached row still carries `series_id`, and 083 deletes it too.
+  // A detached row still carries `series_id`, and 083 deletes it too. The
+  // opened occurrence goes whether or not 083's cut reaches it (TR-2).
   return cachedPlannerEvents(
     queryClient,
-    (row) => seriesIdOf(row) === seriesId && notBefore(row.starts_at, from),
+    (row) =>
+      row.id === opened.id || (seriesIdOf(row) === seriesId && notBefore(row.starts_at, from)),
   );
+}
+
+/** The opened occurrence, deleted on its own. Zero rows is not an error: the
+ * RPC's own `now()` may have taken it a moment earlier. */
+async function deleteOpenedRow(id: string): Promise<number> {
+  const { data, error } = await client().from('planner_events').delete().eq('id', id).select('id');
+  if (error) throw new Error(refusalMessage(error.message));
+  return data?.length ?? 0;
 }
 
 export function useDeletePlannerSeries() {
@@ -353,27 +419,34 @@ export function useDeletePlannerSeries() {
 
   return useMutation<number, Error, PlannerSeriesDelete, RowPatch[]>({
     mutationKey: plannerEventKeys.writes(),
-    mutationFn: async ({ seriesId, scope, from }) => {
+    mutationFn: async ({ seriesId, scope, occurrence }) => {
       // No margin here: 083's delete takes `starts_at >= now()` itself and
       // refuses nothing, so a boundary row is deleted or not, never an error.
+      const cut = scopeStart(scope, occurrence.starts_at);
       const result = await client().rpc('planner_series_delete', {
         p_series_id: seriesId,
         p_scope: scope,
-        p_from: scopeStart(scope, from),
+        p_from: cut,
       });
-      return unwrapCount(result, MESSAGES.notDeleted);
+      let deleted = unwrapCount(result, MESSAGES.notDeleted);
+      // "All events" from an occurrence already under way: 083 leaves the past
+      // alone, but the one Stack opened was asked for by name (TR-2).
+      if (outsideScope(scope, occurrence, cut)) deleted += await deleteOpenedRow(occurrence.id);
+      return deleted;
     },
 
-    onMutate: ({ seriesId, scope, from }) =>
+    onMutate: ({ seriesId, scope, occurrence }) =>
       patchPlannerRows(
         queryClient,
-        doomedRows(queryClient, seriesId, scopeStart(scope, from)).map((row) => ({
-          id: row.id,
-          next: null,
-        })),
+        doomedRows(
+          queryClient,
+          seriesId,
+          scopeStart(scope, occurrence.starts_at),
+          occurrence,
+        ).map((row) => ({ id: row.id, next: null })),
       ),
 
     onError: (_error, _input, context) => rollbackPlannerRows(queryClient, context),
-    onSettled: () => invalidateWhenIdle(queryClient),
+    onSettled: () => settleSeriesWrite(queryClient),
   });
 }
