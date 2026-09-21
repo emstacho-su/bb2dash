@@ -32,6 +32,7 @@ import {
   MAX_SERIES_OCCURRENCES,
   SERIES_FREQS,
   expandSeries,
+  hasExplicitOffset,
   seriesOccurrenceDates,
   type SeriesFreq,
 } from '@/lib/planner-recurrence';
@@ -168,6 +169,22 @@ describe('every expansion', () => {
         const result = expandSeries(draft, freq, shiftIso(draw.date, span), draw.zone);
         if (!result.ok) return true;
         return localTimes(result.rows, draw.zone).every((time) => time === draw.time);
+      }),
+    );
+  });
+
+  it('emits instants that carry their own offset, whatever the rule', () => {
+    // 083 casts `starts_at` / `ends_at` straight from these strings and
+    // refuses any without an offset. Nothing may slip through.
+    assertProperty(
+      fc.property(timedArb, freqArb, fc.integer({ min: 0, max: 400 }), (draw, freq, span) => {
+        const draft = timedDraft(draw);
+        if (!draft) return true;
+        const result = expandSeries(draft, freq, shiftIso(draw.date, span), draw.zone);
+        if (!result.ok) return true;
+        return result.rows.every(
+          (row) => hasExplicitOffset(row.starts_at) && hasExplicitOffset(row.ends_at),
+        );
       }),
     );
   });

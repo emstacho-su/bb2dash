@@ -23,6 +23,7 @@ import {
   MAX_SERIES_OCCURRENCES,
   SERIES_FREQS,
   expandSeries,
+  hasExplicitOffset,
   isSeriesFreq,
   restateSeriesRows,
   seriesOccurrenceDates,
@@ -261,6 +262,45 @@ describe('expandSeries — refusals', () => {
     const result = expandSeries(draft({ starts_at: 'not a time' }), 'daily', '2026-09-20', NY);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.field).toBe('start');
+  });
+});
+
+describe('the instants a series emits', () => {
+  it('always carry an explicit offset, which is what 083 casts from', () => {
+    // 083 refuses an offsetless string: it is the one Postgres would have to
+    // read in a zone, and the whole point is that it never does.
+    const timed = rowsOf(expandSeries(draft(), 'daily', '2026-11-05', NY));
+    const range = allDayInstants('2026-09-16', '2026-09-17', NY);
+    if (!range) throw new Error('bad all-day fixture');
+    const allDay = rowsOf(
+      expandSeries(draft({ all_day: true, ...range }), 'monthly', '2027-03-16', NY),
+    );
+
+    for (const row of [...timed, ...allDay]) {
+      expect(hasExplicitOffset(row.starts_at)).toBe(true);
+      expect(hasExplicitOffset(row.ends_at)).toBe(true);
+    }
+  });
+
+  it('carry one on a restated scope too', () => {
+    const rows = [
+      makePlannerEvent({ id: 'a', starts_at: '2026-09-16T13:00:00.000Z', ends_at: '2026-09-16T14:00:00.000Z' }),
+      makePlannerEvent({ id: 'b', starts_at: '2026-09-23T13:00:00.000Z', ends_at: '2026-09-23T14:00:00.000Z' }),
+    ];
+    const result = restateSeriesRows(rows, rows[0], draft(), NY);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const row of result.rows) {
+      expect(hasExplicitOffset(row.starts_at)).toBe(true);
+      expect(hasExplicitOffset(row.ends_at)).toBe(true);
+    }
+  });
+
+  it('refuses a wall clock with no offset as an instant', () => {
+    expect(hasExplicitOffset('2026-09-16T09:00:00')).toBe(false);
+    expect(hasExplicitOffset('2026-09-16 09:00:00+00:00')).toBe(true);
+    expect(hasExplicitOffset('2026-09-16T09:00:00-0400')).toBe(true);
+    expect(hasExplicitOffset(null)).toBe(false);
   });
 });
 

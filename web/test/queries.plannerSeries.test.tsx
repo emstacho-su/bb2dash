@@ -66,11 +66,16 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 
 const { plannerEventKeys, OPTIMISTIC_ID_PREFIX } = await import('@/lib/queries.plannerEvents');
-const { useCreatePlannerSeries, useDeletePlannerSeries, useUpdatePlannerSeries } = await import(
-  '@/lib/queries.plannerSeries'
-);
+const {
+  SERIES_SCOPE_SAFETY_MS,
+  useCreatePlannerSeries,
+  useDeletePlannerSeries,
+  useUpdatePlannerSeries,
+} = await import('@/lib/queries.plannerSeries');
 const { PlannerEventValidationError } = await import('@/lib/planner-events');
-const { expandSeries, MAX_SERIES_OCCURRENCES } = await import('@/lib/planner-recurrence');
+const { expandSeries, hasExplicitOffset, MAX_SERIES_OCCURRENCES } = await import(
+  '@/lib/planner-recurrence'
+);
 
 const NY = 'America/New_York';
 const SERIES_ID = '99999999-9999-4999-8999-999999999999';
@@ -359,6 +364,180 @@ describe('useUpdatePlannerSeries', () => {
       }),
     ).rejects.toThrow();
     expect(rpcCall('planner_series_update')).toBeUndefined();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * The "all events" boundary, and 083's shape check
+ * ------------------------------------------------------------------------ */
+
+describe('the "all events" cut', () => {
+  const draft = () =>
+    makePlannerEventDraft({ starts_at: '2026-09-16T15:00:00.000Z', ends_at: '2026-09-16T16:00:00.000Z' });
+
+  it('sits a safety margin into the future, on the read and on p_from alike', async () => {
+    stub.rows = seriesRows();
+    stub.rpc = { data: 3, error: null };
+    const before = Date.now();
+    const queryClient = client();
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({
+      seriesId: SERIES_ID,
+      scope: 'all',
+      edited: seriesRows()[0],
+      draft: draft(),
+    });
+
+    // 083 refuses a row starting before the server's own now(), and refusing
+    // one row fails the whole transaction — so the client cuts early.
+    const cut = stub.calls.find((call) => call.op === 'gte')?.args[1];
+    expect(Date.parse(String(cut))).toBeGreaterThanOrEqual(before + SERIES_SCOPE_SAFETY_MS);
+    expect(rpcCall('planner_series_update')?.p_from).toBe(cut);
+  });
+
+  it('leaves an occurrence starting inside the margin out of the optimistic patch', async () => {
+    const at = (ms: number) => new Date(Date.now() + ms).toISOString();
+    const soon = makePlannerEvent({
+      id: 'soon',
+      title: 'Soon',
+      starts_at: at(SERIES_SCOPE_SAFETY_MS / 2),
+      ends_at: at(SERIES_SCOPE_SAFETY_MS),
+      series_id: SERIES_ID,
+    });
+    const later = makePlannerEvent({
+      id: 'later',
+      title: 'Later',
+      starts_at: at(10 * 60_000),
+      ends_at: at(11 * 60_000),
+      series_id: SERIES_ID,
+    });
+
+    // A window wide enough to hold both, whatever today is.
+    const day = (offset: number) =>
+      new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+    const key = plannerEventKeys.window(day(-2), day(2));
+
+    stub.rows = [later];
+    stub.rpc = { data: 1, error: null };
+    const queryClient = client();
+    queryClient.setQueryData(key, [soon, later]);
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({
+      seriesId: SERIES_ID,
+      scope: 'all',
+      edited: later,
+      draft: makePlannerEventDraft({
+        title: 'Later B',
+        starts_at: later.starts_at,
+        ends_at: later.ends_at,
+      }),
+    });
+
+    const rows = queryClient.getQueryData<PlannerEventRow[]>(key) ?? [];
+    expect(rows.find((row) => row.id === 'soon')?.title).toBe('Soon');
+    expect(rows.find((row) => row.id === 'later')?.title).toBe('Later B');
+  });
+
+  it('says plainly when 083 still refuses a row, and puts the week back', async () => {
+    stub.rows = seriesRows();
+    stub.rpc = {
+      data: null,
+      error: {
+        message:
+          'planner_series_update: these rows are not in scope for all on series x (detached, in another series, or starting before the cut): y',
+      },
+    };
+    const queryClient = client();
+    const cached = seriesRows();
+    queryClient.setQueryData(WEEK_KEY, [cached[0]]);
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await expect(
+      result.current.mutateAsync({
+        seriesId: SERIES_ID,
+        scope: 'following',
+        edited: cached[0],
+        draft: draft(),
+      }),
+    ).rejects.toThrow(/just started or already passed/);
+    // The raw Postgres sentence never reaches the reader.
+    await expect(
+      result.current.mutateAsync({
+        seriesId: SERIES_ID,
+        scope: 'following',
+        edited: cached[0],
+        draft: draft(),
+      }),
+    ).rejects.not.toThrow(/detached, in another series/);
+
+    await waitFor(() =>
+      expect(queryClient.getQueryData<PlannerEventRow[]>(WEEK_KEY)?.[0].title).toBe(cached[0].title),
+    );
+  });
+});
+
+describe('083’s shape check', () => {
+  it('sends only instants with an explicit offset', async () => {
+    stub.rpc = { data: SERIES_ID, error: null };
+    const queryClient = client();
+    const { result } = renderHook(() => useCreatePlannerSeries(), { wrapper: wrapper(queryClient) });
+    const expanded = expandSeries(makePlannerEventDraft(), 'weekly', '2026-10-21', NY);
+    if (!expanded.ok) throw new Error('fixture');
+
+    await result.current.mutateAsync({ freq: 'weekly', until: '2026-10-21', rows: expanded.rows });
+
+    const rows = rpcCall('planner_series_create')?.p_rows as { starts_at: string; ends_at: string }[];
+    expect(rows).toHaveLength(6);
+    for (const row of rows) {
+      expect(hasExplicitOffset(row.starts_at)).toBe(true);
+      expect(hasExplicitOffset(row.ends_at)).toBe(true);
+    }
+  });
+
+  it('refuses an offsetless instant at the boundary, with no request', async () => {
+    const queryClient = client();
+    const { result } = renderHook(() => useCreatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await expect(
+      result.current.mutateAsync({
+        freq: 'weekly',
+        until: '2026-09-30',
+        // A wall clock with no offset is exactly what 083 refuses: it is the
+        // one string Postgres would have to read in a zone.
+        rows: [makePlannerEventDraft({ starts_at: '2026-09-16T09:00:00', ends_at: '2026-09-16T10:00:00' })],
+      }),
+    ).rejects.toBeInstanceOf(PlannerEventValidationError);
+    expect(stub.calls).toEqual([]);
+  });
+
+  it('sends ids and offsets together on an update', async () => {
+    stub.rows = seriesRows();
+    stub.rpc = { data: 3, error: null };
+    const queryClient = client();
+    const { result } = renderHook(() => useUpdatePlannerSeries(), { wrapper: wrapper(queryClient) });
+
+    await result.current.mutateAsync({
+      seriesId: SERIES_ID,
+      scope: 'following',
+      edited: seriesRows()[0],
+      draft: makePlannerEventDraft({
+        starts_at: '2026-09-16T15:00:00.000Z',
+        ends_at: '2026-09-16T16:00:00.000Z',
+      }),
+    });
+
+    const rows = rpcCall('planner_series_update')?.p_rows as {
+      id: string;
+      starts_at: string;
+      ends_at: string;
+    }[];
+    for (const row of rows) {
+      expect(row.id).toMatch(/^w\d$/);
+      expect(hasExplicitOffset(row.starts_at)).toBe(true);
+      expect(hasExplicitOffset(row.ends_at)).toBe(true);
+    }
   });
 });
 
