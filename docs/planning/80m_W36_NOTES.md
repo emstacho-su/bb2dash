@@ -133,3 +133,89 @@ None in the frozen names or behaviour. Two choices the contract left open:
 6. **Visual sign-off (Stack).** The repeat mark glyph, the Repeats row's place in the form and the
    scope dialog have not been in front of him. Per the SOP, anything visual needs a dev server or a
    preview before merge.
+
+---
+
+# Integration (W-36 as integrator, branch `fix/page-pass-12b-tail`)
+
+W-35 (082–083, live on prod), W-37 (popover + route) and W-36 merged, with `database.types.ts`
+regenerated from prod at `3f417cc`. Four changes on top of that merge.
+
+## 1. The temporary types are gone
+
+`web/src/lib/planner-series-types.ts` is **deleted**, with both casts it carried:
+
+* `series_id` and `series_detached` are now in `PLANNER_EVENT_COLUMNS` itself, and the generated
+  `Row` has them, so `PLANNER_EVENT_COLUMNS_WITH_SERIES` and its `as typeof` are gone; the detach
+  update's `as Partial<PlannerEventDraft>` is gone with them.
+* The membership predicates (`seriesIdOf`, `isSeriesDetached`, `isSeriesMember`, and
+  `PlannerSeriesFields`) moved to `planner-events.ts`, the module that owns the row shape; the
+  scope vocabulary (`SERIES_SCOPES`, `SeriesScope`, `SeriesWriteScope`) moved to
+  `planner-recurrence.ts`. The series module now uses the ordinary typed browser client, and
+  supabase-js types all three RPCs' arguments and returns.
+* `test/factories.plannerEvents.ts` gained the two column defaults — the regenerated `Row` is what
+  made the omission an error, which is the point of generating it.
+
+One deliberate cast remains and is commented: `p_rows` is declared `Json` by the generated types,
+so the row array is widened to `Json` at the call.
+
+## 2. The "all events" boundary (PM decision 1), client-side
+
+083 refuses a `p_rows` element starting before the server's own `now()`, and one refused element
+fails the transaction. `SERIES_SCOPE_SAFETY_MS = 60_000` now cuts an `all` scope a minute into the
+future — on the in-scope read **and** on `p_from` — so an occurrence starting within the next
+minute counts as already past and is left out. The margin is one-sided on purpose: 083 updates
+what it is given and does not require the whole scope, so leaving a row out changes nothing, while
+sending one row too many fails everything.
+
+`planner_series_delete` keeps the unmargined cut: it applies `starts_at >= now()` itself and
+refuses nothing, so a boundary row is deleted or it is not, never an error.
+
+A refusal that still arrives rolls back exactly as before (`rollbackPlannerRows` on `onError`) and
+now reaches the existing error path — the dialog, or the grid alert — as a plain sentence instead
+of the Postgres text: *"Some of these occurrences have just started or already passed, so nothing
+was changed. Close this and open the event again."*
+
+**PM decision 2 needs nothing:** 083 reads the cut's local date in the series' own zone
+(`p_from at time zone v_zone`) in both `planner_series_update` and `planner_series_delete`.
+
+## 3. 083's offset rule (W-35's note)
+
+083 casts `starts_at` / `ends_at` straight from the strings sent and refuses any without an
+explicit offset. Every instant the web builds comes from `toISOString()`, so it ends in `Z` — and
+that is now stated rather than assumed: `hasExplicitOffset` in `planner-recurrence.ts` mirrors
+083's own regex, `validatedRows` refuses an offsetless row at the boundary with no request, and
+tests pin it over `expandSeries`, `restateSeriesRows`, both RPC payloads and a property over
+random rules and zones.
+
+## 4. Layering: the popover, the form and the scope question
+
+A real gap, now fixed. `PlannerItemPopover` closes on an outside **press**, but activating a
+planner-event block from the keyboard fires a click and no press — so the popover and the event
+form could be up together, one Escape would dismiss both, and each would hand focus back to a
+different opener. Opening the event form now closes the popover first (wiring in
+`PlannerWeek.tsx`; both openers covered). Verified as a regression test: with the wiring removed,
+both new cases fail.
+
+The other direction needs nothing: the form's backdrop and focus trap mean no popover can be
+opened behind it. And Escape on the scope question still closes only the scope question — it is
+caught in the capture phase — which is now also checked through the real stack, with the form's
+edit intact and nothing written.
+
+## Gates
+
+| Package | Result |
+|---|---|
+| `web` — `npm run typecheck` | clean |
+| `web` — `npm run lint` | 0 errors, 27 warnings (all pre-existing, none in the planner series files) |
+| `web` — `npm run test` | **1753 passed**, 104 files (1739 before this integration; +14) |
+| `web` — `npm run build` | compiled, 10 static pages |
+
+Tests added while integrating: 6 in `queries.plannerSeries.test.tsx` (the margin cut, the
+optimistic scope, the plain refusal, the offset guard and two payload checks), 3 in
+`planner-recurrence.test.ts`, 1 property in `planner-recurrence.props.test.ts`, 4 in
+`PlannerWeek.series.test.tsx` (layering).
+
+Both other packages needed an install first (neither had `node_modules` in this worktree), and
+both are green afterwards: `mcp-server` **88 passed** in 5 files, `desktop` **549 passed** in 28
+files (coverage 96.7% statements / 98.2% lines). Neither package was touched by any of this work.
