@@ -60,6 +60,7 @@ import { PlannerEventForm } from './PlannerEventForm';
 import { PlannerItemPopover } from './PlannerItemPopover';
 import { PlannerSeriesScopeDialog } from './PlannerSeriesScopeDialog';
 import type { SlotPosition } from './PlannerSlots';
+import type { EventActions } from './PlannerEventBlock';
 import { WeekHeader } from './PlannerWeekHeader';
 import { usePlannerEventEditor } from './usePlannerEventEditor';
 import type { ItemActions } from './PlannerItem';
@@ -158,6 +159,22 @@ function PlannerWeekScreen() {
 
   const actions = itemActions(view, setStatus, popover, setPopover);
 
+  // One layer at a time. The popover closes itself on an outside *press*, but a
+  // keyboard activation (Enter on a block) fires no press, so opening the event
+  // form closes it here instead — otherwise both would be up at once and one
+  // Escape would dismiss the pair.
+  const eventActions: EventActions = {
+    ...editor.actions,
+    edit: (event, opener) => {
+      closePopover();
+      editor.actions.edit(event, opener);
+    },
+    create: (prefill, opener) => {
+      closePopover();
+      editor.actions.create(prefill, opener);
+    },
+  };
+
   const itemCount = data.placedItems.timed.length + data.placedItems.allDay.length;
   const isEmpty =
     !data.loading &&
@@ -197,7 +214,7 @@ function PlannerWeekScreen() {
         view={view}
         data={data}
         actions={actions}
-        eventActions={editor.actions}
+        eventActions={eventActions}
         activeSlot={activeSlot}
         onActivateSlot={setActiveSlot}
         isEmpty={isEmpty}

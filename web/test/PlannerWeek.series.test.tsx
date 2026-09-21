@@ -21,6 +21,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makePlannerEvent } from './factories.plannerEvents';
+import { makeWorkItem } from './factories';
 
 /* ---------------------------------------------------------------------------
  * Mocks
@@ -126,11 +127,11 @@ function weeklyStudio(overrides: Record<string, unknown> = {}) {
   }));
 }
 
-function seed(events: unknown[] = []) {
+function seed(events: unknown[] = [], items: unknown[] = []) {
   db.rows = {
     meetings: [],
     sessions: [],
-    v_work_items: [],
+    v_work_items: items,
     terms: TERM,
     courses: [],
     planner_events: events,
@@ -448,6 +449,91 @@ describe('deleting an occurrence', () => {
 /* ---------------------------------------------------------------------------
  * Events that do not repeat
  * ------------------------------------------------------------------------ */
+
+/* ---------------------------------------------------------------------------
+ * Layering: the item popover (T-2), the event form and the scope question
+ * ------------------------------------------------------------------------ */
+
+describe('one layer at a time', () => {
+  const LAB = makeWorkItem({
+    item_id: 'IST.323/lab-1',
+    title: 'Lab #1',
+    course_id: 'IST.323',
+    due_on: '2026-09-17',
+    due_at: '2026-09-17T18:00:00Z',
+  });
+
+  const popover = () => document.querySelector('[data-planner-popover="true"]');
+
+  async function openPopover(): Promise<void> {
+    const link = await waitFor(() => {
+      const found = Array.from(document.querySelectorAll('a')).find(
+        (anchor) => anchor.textContent === 'Lab #1',
+      );
+      if (!found) throw new Error('no due item');
+      return found;
+    });
+    fireEvent.click(link);
+    await waitFor(() => expect(popover()).not.toBeNull());
+  }
+
+  it('closes an open item popover when the event form opens', async () => {
+    seed(weeklyStudio(), [LAB]);
+    renderPlanner();
+    await openPopover();
+
+    // Activating a block from the keyboard fires a click but no press, so the
+    // popover's own outside-press rule never sees it. Both dialogs would be up
+    // at once, and one Escape would dismiss the pair.
+    fireEvent.click(await findTitle('Studio'));
+
+    expect(formDialog()).toBeInTheDocument();
+    await waitFor(() => expect(popover()).toBeNull());
+  });
+
+  it('closes it when the create form opens from an empty slot too', async () => {
+    seed(weeklyStudio(), [LAB]);
+    renderPlanner();
+    await openPopover();
+
+    fireEvent.click(await findLabelled('New event, Wed Sep 16, 2:30 PM'));
+
+    expect(formDialog()).toBeInTheDocument();
+    await waitFor(() => expect(popover()).toBeNull());
+  });
+
+  it('Escape on the scope question closes only the scope question', async () => {
+    seed(weeklyStudio());
+    renderPlanner();
+    fireEvent.click(await findTitle('Studio'));
+    fireEvent.change(within(formDialog()).getByLabelText('Title'), { target: { value: 'Studio B' } });
+    fireEvent.click(buttonIn(formDialog(), 'Save'));
+    await waitFor(scopeDialog);
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+
+    await waitFor(() => expect(scopeDialogOrNull()).toBeNull());
+    // The form is still up, with the edit intact and nothing written.
+    expect(within(formDialog()).getByLabelText('Title')).toHaveValue('Studio B');
+    expect(db.writes).toEqual([]);
+    expect(db.rpc).toEqual([]);
+  });
+
+  it('a second Escape then closes the form', async () => {
+    seed(weeklyStudio());
+    renderPlanner();
+    fireEvent.click(await findTitle('Studio'));
+    fireEvent.click(buttonIn(formDialog(), 'Save'));
+    await waitFor(scopeDialog);
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(scopeDialogOrNull()).toBeNull());
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    expect(db.writes).toEqual([]);
+  });
+});
 
 describe('an event that is not in a series', () => {
   it('is deleted without being asked anything', async () => {
