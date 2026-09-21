@@ -364,6 +364,11 @@ focus returns to the item; it flips to stay in the viewport. "See full details" 
 route `/course/[id]/assignment/[assignmentId]`, a page that renders what `AssignmentPopout`
 renders today (one shared body component, no copy). Every other screen keeps `?item=` popouts.
 
+*Contract corrections after W-37 (2026-09-21, accepted by the PM):* the route is the catch-all
+`/course/[id]/assignment/[...assignmentId]`, because every `assignments.id` contains a `/`
+(`IST.323/lab-1`) and a `%2F` single segment is decoded by proxies; and an assignment on a child
+shell (`parent_course_id`, GEO 103's recitation) is accepted under the parent course's URL.
+
 ### Tail workers (disjoint files)
 
 | Worker | Branch · worktree | Owns |
