@@ -143,6 +143,70 @@ Stack's answer 15 — deleting a series leaves the past alone. Neither `v_calend
    the one wall-clock reading in 082–083 and it is the unambiguous direction (instant → local
    date). `until_date` is metadata about the rule — nothing expands it — so it cannot move an event.
 
+## Round 2 — migration 088 (TR-3, TR-4, the SQL half of TR-6)
+
+`/code-review main high` of the tail branch raised ten findings; three are SQL and land in
+`db/migrations/088_planner_series_split_fixes.sql`, a `create or replace` of
+`planner_series_update` and `planner_series_delete` only. Same signatures, same grants, same
+`security invoker`, same `search_path`. **082 and 083 are untouched and stay byte-frozen.**
+
+| | applied as | version | md5 of the repo file (LF, the git blob) |
+|---|---|---|---|
+| `088_planner_series_split_fixes.sql` | `088_planner_series_split_fixes` | recorded 2026-09-21 | `049d825d0adb7d6fbc385b3b8477fdc0` |
+
+Dry-run in `begin; … rollback;` before applying, as before; the repo file is byte-identical to
+what was applied.
+
+### What changed
+
+* **TR-3** — the `following` split now has two sets. The **moved** set is *every* row of the
+  series at or after the cut, detached ones included; they change `series_id` and nothing else.
+  The **scope** set is the non-detached part of that stretch and is still the only thing `p_rows`
+  may name (a detached row named in `p_rows` is still refused). Before 088 a detached occurrence
+  after the cut stayed on the old series, where no later "all events" could reach it and a delete
+  of the old series would have taken it away with the past.
+* **TR-4** — a `following` update or delete that leaves the old series with zero rows now deletes
+  the series row in the same transaction. There is no `ON DELETE SET NULL` hazard here (a series
+  with no rows has nothing to null, so 082's detached check cannot fire); delete-`all` still
+  clears `series_detached` first, because it deletes a series that *does* leave rows behind.
+* **TR-6 (SQL half)** — the new series' `until_date` is `greatest(old until_date, max local date
+  of its rows)`, computed **after** `p_rows` has been applied, each row read in its own
+  `time_zone`. Before 088 the new series copied the old `until_date` unshifted, so a split that
+  moved the remaining occurrences later claimed to end before its own last occurrence. The
+  direction is instant → local date, which is unambiguous; 067's K-9 still holds.
+
+### RED → GREEN
+
+Run against 083's bodies restored inside a rolled-back transaction, the three checks report:
+
+```
+RED on 083: TR-3: detached row series_id = OLD SERIES (RED); old series still holds 3 rows.
+            TR-6: new until_date = 2026-11-12 (088 expects 2026-11-20).
+            TR-4: emptied old series row still present = true with 0 rows (088 deletes it).
+```
+
+With 088 applied, the same checks pass. They are section **8b** of
+`db/tests/phase12b_082_083_planner_series.sql` (md5 `90ed6d23de72d56cb08941de4de1224a`), four
+blocks, 16 assertions:
+
+| block | proves |
+|---|---|
+| split with a detached row after the cut | the detached row moves, keeps `series_detached` and every column, the old series keeps only its two earlier rows, the new `until_date` becomes 2026-11-20, the old one 2026-10-28, and naming the moved detached row in `p_rows` still refuses the call |
+| a split that moves rows **earlier** | `until_date` stays at the old 2026-12-31 — `greatest`, not "last row wins" |
+| split, then delete, both from the **first** occurrence | the emptied series row is gone in each case |
+| a `following` delete that leaves rows | the series row survives and `until_date` shortens to 2026-10-21 |
+
+**The whole file re-run against prod: `phase12b_082_083_planner_series (with 088): PASS`**, both
+tables back to their starting counts (1 planner event, 0 series). One pre-existing assertion moved
+with the fix: §7's new-series `until_date` is now 2026-11-13 rather than 2026-11-12, because that
+split moves its last row to the 13th — that is TR-6 working, and the reason is in the file.
+
+`get_advisors(security)` after 088: **no new findings** — the same 7 `function_search_path_mutable`,
+2 security-definer (`app_owner`, `calendar_push_now`) and 1 auth setting as before.
+
+**No push proof re-run**: 088 changes neither `v_calendar_push_items` nor `calendar-push`, and it
+moves no row's `id`, so the mirror's behaviour is exactly what runs 37–41 above already showed.
+
 ## For the PM
 
 * `database.types.ts` needs regenerating at integration: three new RPCs and two new

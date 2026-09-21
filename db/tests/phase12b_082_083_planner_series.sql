@@ -10,6 +10,8 @@
 --   6. following     the split makes a new series, keeps the row ids, shortens until_date
 --   7. all           only future, non-detached rows change
 --   8. delete        "all" leaves past rows behind with series_id null and the flag cleared
+--   8b. round 2      088's TR-3 (the split moves detached rows too), TR-4 (an emptied series
+--                    row is deleted) and TR-6 (the new until_date is the later of the two)
 --   9. boundary      another uid sees nothing and changes nothing; anon holds nothing
 --
 -- RUN IT: paste the whole file into one `execute_sql` call, or `psql "$DATABASE_URL" -f <file>`.
@@ -386,9 +388,14 @@ begin
   end if;
 
   -- The new series carries the old rule; the old one now ends the day before the cut.
+  -- The new series keeps the old frequency; its until_date is the later of the old one
+  -- (2026-11-12) and the last moved row's own local date, which the edit moved to 2026-11-13
+  -- (088, TR-6).
   if (select freq from planner_event_series where id = v_new) <> 'weekly'
-     or (select until_date from planner_event_series where id = v_new) <> date '2026-11-12' then
-    raise exception 'FAIL the new series does not carry the old rule';
+     or (select until_date from planner_event_series where id = v_new) <> date '2026-11-13' then
+    raise exception 'FAIL the new series rule or until_date is wrong: % until %',
+      (select freq from planner_event_series where id = v_new),
+      (select until_date from planner_event_series where id = v_new);
   end if;
   if (select until_date from planner_event_series where id = v_series) <> date '2026-11-04' then
     raise exception 'FAIL the old series until_date is %, expected 2026-11-04',
@@ -470,6 +477,185 @@ begin
   -- remaining (future) row, which "all events" takes with it.
   delete from planner_events where id = v_r1;
   perform planner_series_delete(v_new, 'all', null);
+end $$;
+
+-- =============================================================================================
+-- 8b. Round 2 (migration 088): TR-3, TR-4, TR-6
+--   Each block fails against 083's bodies and passes against 088's. Every block builds and
+--   removes its own fixture, so section 11's count check still covers them.
+-- =============================================================================================
+
+-- TR-3 (the split left detached rows behind) + TR-6 (the new until_date was not extended).
+do $$
+declare
+  v_s uuid; v_new uuid; v_ids uuid[]; v_n int;
+begin
+  v_s := planner_series_create('weekly', date '2026-11-12', jsonb_build_array(
+    jsonb_build_object('kind','event','title','[W-35 r2] r1','starts_at','2026-10-15T18:00:00-04:00',
+      'ends_at','2026-10-15T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] r2','starts_at','2026-10-22T18:00:00-04:00',
+      'ends_at','2026-10-22T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] r3','starts_at','2026-10-29T18:00:00-04:00',
+      'ends_at','2026-10-29T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] r4','starts_at','2026-11-05T18:00:00-05:00',
+      'ends_at','2026-11-05T19:00:00-05:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] r5','starts_at','2026-11-12T18:00:00-05:00',
+      'ends_at','2026-11-12T19:00:00-05:00','time_zone','America/New_York','all_day',false)));
+
+  -- "This one" on the fourth occurrence.
+  update planner_events set series_detached = true, title = '[W-35 r2] r4 detached'
+   where series_id = v_s and title = '[W-35 r2] r4';
+
+  select array_agg(id order by starts_at) into v_ids from planner_events where series_id = v_s;
+
+  -- Split at the third; the scope is r3 and r5, but r4 must travel with them.
+  v_n := planner_series_update(v_s, 'following', timestamptz '2026-10-29 18:00:00-04',
+    jsonb_build_array(
+      jsonb_build_object('id', v_ids[3], 'kind','event','title','[W-35 r2] r3 moved',
+        'starts_at','2026-10-30T18:00:00-04:00','ends_at','2026-10-30T19:00:00-04:00',
+        'time_zone','America/New_York','all_day',false),
+      jsonb_build_object('id', v_ids[5], 'kind','event','title','[W-35 r2] r5 moved',
+        'starts_at','2026-11-20T18:00:00-05:00','ends_at','2026-11-20T19:00:00-05:00',
+        'time_zone','America/New_York','all_day',false)));
+  if v_n <> 2 then
+    raise exception 'FAIL the split reported % rows, expected 2', v_n;
+  end if;
+
+  select series_id into v_new from planner_events where id = v_ids[3];
+
+  -- TR-3: the detached row moved, and only its series_id changed.
+  if (select series_id from planner_events where id = v_ids[4]) is distinct from v_new then
+    raise exception 'FAIL TR-3 the detached row was left on the old series';
+  end if;
+  if not (select series_detached from planner_events where id = v_ids[4])
+     or (select title from planner_events where id = v_ids[4]) <> '[W-35 r2] r4 detached'
+     or (select starts_at from planner_events where id = v_ids[4])
+        <> timestamptz '2026-11-05 18:00:00-05' then
+    raise exception 'FAIL TR-3 the detached row was rewritten instead of moved';
+  end if;
+  if (select count(*) from planner_events where series_id = v_s) <> 2 then
+    raise exception 'FAIL the old series should keep exactly its two rows before the cut';
+  end if;
+
+  -- TR-6: the last moved row now starts 2026-11-20, later than the old rule's 2026-11-12.
+  if (select until_date from planner_event_series where id = v_new) <> date '2026-11-20' then
+    raise exception 'FAIL TR-6 the new until_date is %, expected 2026-11-20',
+      (select until_date from planner_event_series where id = v_new);
+  end if;
+  if (select until_date from planner_event_series where id = v_s) <> date '2026-10-28' then
+    raise exception 'FAIL the old until_date is %, expected 2026-10-28',
+      (select until_date from planner_event_series where id = v_s);
+  end if;
+
+  -- A moved detached row is still refused when p_rows names it (083's rule, unchanged).
+  begin
+    perform planner_series_update(v_new, 'all', null, jsonb_build_array(
+      jsonb_build_object('id', v_ids[4], 'kind','event','title','x',
+        'starts_at','2026-11-05T18:00:00-05:00','ends_at','2026-11-05T19:00:00-05:00',
+        'time_zone','America/New_York','all_day',false)));
+    raise exception 'FAIL a moved detached row was accepted in p_rows';
+  exception when sqlstate '22023' then null;
+  end;
+
+  perform planner_series_delete(v_new, 'all', null);
+  perform planner_series_delete(v_s, 'all', null);
+  delete from planner_events where id = any(v_ids);
+  delete from planner_event_series where id in (v_s, v_new);
+end $$;
+
+-- TR-6, the other direction: moving rows EARLIER must not pull until_date below the old value.
+do $$
+declare v_s uuid; v_new uuid; v_ids uuid[];
+begin
+  v_s := planner_series_create('weekly', date '2026-12-31', jsonb_build_array(
+    jsonb_build_object('kind','event','title','[W-35 r2] a','starts_at','2026-10-15T18:00:00-04:00',
+      'ends_at','2026-10-15T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] b','starts_at','2026-10-22T18:00:00-04:00',
+      'ends_at','2026-10-22T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
+  select array_agg(id order by starts_at) into v_ids from planner_events where series_id = v_s;
+
+  perform planner_series_update(v_s, 'following', timestamptz '2026-10-22 18:00:00-04',
+    jsonb_build_array(jsonb_build_object('id', v_ids[2], 'kind','event','title','[W-35 r2] b',
+      'starts_at','2026-10-23T18:00:00-04:00','ends_at','2026-10-23T19:00:00-04:00',
+      'time_zone','America/New_York','all_day',false)));
+
+  select series_id into v_new from planner_events where id = v_ids[2];
+  if (select until_date from planner_event_series where id = v_new) <> date '2026-12-31' then
+    raise exception 'FAIL TR-6 the new until_date is %, expected the old 2026-12-31',
+      (select until_date from planner_event_series where id = v_new);
+  end if;
+
+  perform planner_series_delete(v_new, 'all', null);
+  perform planner_series_delete(v_s, 'all', null);
+  delete from planner_events where id = any(v_ids);
+  delete from planner_event_series where id in (v_s, v_new);
+end $$;
+
+-- TR-4: a split or a delete from the FIRST occurrence leaves no empty rule row behind.
+do $$
+declare v_s uuid; v_new uuid; v_ids uuid[]; v_n int;
+begin
+  v_s := planner_series_create('weekly', date '2026-11-12', jsonb_build_array(
+    jsonb_build_object('kind','event','title','[W-35 r2] x1','starts_at','2026-10-15T18:00:00-04:00',
+      'ends_at','2026-10-15T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] x2','starts_at','2026-10-22T18:00:00-04:00',
+      'ends_at','2026-10-22T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
+  select array_agg(id order by starts_at) into v_ids from planner_events where series_id = v_s;
+
+  v_n := planner_series_update(v_s, 'following', timestamptz '2026-10-15 18:00:00-04',
+    jsonb_build_array(
+      jsonb_build_object('id', v_ids[1], 'kind','event','title','[W-35 r2] x1b',
+        'starts_at','2026-10-16T18:00:00-04:00','ends_at','2026-10-16T19:00:00-04:00',
+        'time_zone','America/New_York','all_day',false),
+      jsonb_build_object('id', v_ids[2], 'kind','event','title','[W-35 r2] x2b',
+        'starts_at','2026-10-23T18:00:00-04:00','ends_at','2026-10-23T19:00:00-04:00',
+        'time_zone','America/New_York','all_day',false)));
+  if v_n <> 2 then
+    raise exception 'FAIL the split reported % rows, expected 2', v_n;
+  end if;
+  if exists (select 1 from planner_event_series where id = v_s) then
+    raise exception 'FAIL TR-4 the emptied old series row survived the split';
+  end if;
+
+  select series_id into v_new from planner_events where id = v_ids[1];
+  if v_new is null then
+    raise exception 'FAIL the rows lost their series in the split';
+  end if;
+
+  v_n := planner_series_delete(v_new, 'following', timestamptz '2026-10-16 18:00:00-04');
+  if v_n <> 2 then
+    raise exception 'FAIL the delete reported % rows, expected 2', v_n;
+  end if;
+  if exists (select 1 from planner_event_series where id = v_new) then
+    raise exception 'FAIL TR-4 the emptied series row survived the delete';
+  end if;
+
+  delete from planner_events where id = any(v_ids);
+end $$;
+
+-- ... and a "following" delete that DOES leave rows keeps its series row and shortens the rule.
+do $$
+declare v_s uuid; v_ids uuid[];
+begin
+  v_s := planner_series_create('weekly', date '2026-11-12', jsonb_build_array(
+    jsonb_build_object('kind','event','title','[W-35 r2] k1','starts_at','2026-10-15T18:00:00-04:00',
+      'ends_at','2026-10-15T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] k2','starts_at','2026-10-22T18:00:00-04:00',
+      'ends_at','2026-10-22T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
+  select array_agg(id order by starts_at) into v_ids from planner_events where series_id = v_s;
+
+  perform planner_series_delete(v_s, 'following', timestamptz '2026-10-22 18:00:00-04');
+  if not exists (select 1 from planner_event_series where id = v_s) then
+    raise exception 'FAIL a series that still has rows was deleted';
+  end if;
+  if (select until_date from planner_event_series where id = v_s) <> date '2026-10-21' then
+    raise exception 'FAIL the until_date is %, expected 2026-10-21',
+      (select until_date from planner_event_series where id = v_s);
+  end if;
+
+  perform planner_series_delete(v_s, 'all', null);
+  delete from planner_events where id = any(v_ids);
+  delete from planner_event_series where id = v_s;
 end $$;
 
 -- =============================================================================================
