@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { assignmentIdFromSegments } from '@/lib/assignment-page';
+import { assignmentIdFromSegments, decodePathSegment } from '@/lib/assignment-page';
 import { CourseAssignment } from './CourseAssignment';
 
 export const metadata: Metadata = {
@@ -18,6 +18,11 @@ export const metadata: Metadata = {
  * The path is a catch-all because `assignments.id` carries a slash; see
  * `@/lib/assignment-page` for why that is not a `%2F` single segment.
  *
+ * TR-5: every segment arrives percent-encoded and is decoded here — the course
+ * id the way the sibling pages decode theirs, and each assignment segment in
+ * `assignmentIdFromSegments`. A URL carrying a malformed escape names nothing,
+ * so it is a 404 rather than an unhandled `URIError`.
+ *
  * Next 16: `params` is a promise.
  */
 export default async function CourseAssignmentPage({
@@ -26,8 +31,9 @@ export default async function CourseAssignmentPage({
   params: Promise<{ id: string; assignmentId: string[] }>;
 }) {
   const { id, assignmentId } = await params;
+  const courseId = decodePathSegment(id);
   const resolved = assignmentIdFromSegments(assignmentId);
-  if (resolved === null) notFound();
+  if (courseId === null || resolved === null) notFound();
 
-  return <CourseAssignment courseId={decodeURIComponent(id)} assignmentId={resolved} />;
+  return <CourseAssignment courseId={courseId} assignmentId={resolved} />;
 }

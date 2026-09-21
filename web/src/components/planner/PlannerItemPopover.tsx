@@ -45,6 +45,12 @@ import styles from './PlannerItemPopover.module.css';
 /** The board the popover must stay inside — `PlannerBoard` stamps this. */
 const BOARD_SELECTOR = '[data-planner-board="true"]';
 
+/**
+ * The grid's one tab stop (`PlannerSlots`). Where focus goes when the card the
+ * popover was opened from is no longer on the page to take it back (TR-7).
+ */
+const BOARD_FOCUS_SELECTOR = `${BOARD_SELECTOR} [data-slot][tabindex="0"]`;
+
 /** What the popover is called while it has no title to be called after. */
 const LOADING_TITLE = 'Loading assignment…';
 
@@ -115,6 +121,13 @@ export function PlannerItemPopover({
   const measure = useCallback(() => {
     const panel = panelRef.current;
     if (!panel) return;
+    // TR-7: a card that has left the document measures as a zero rect, which
+    // would park the popover in the board's top-left corner. There is nothing
+    // left to be anchored to, so it closes instead.
+    if (!anchor.isConnected) {
+      onClose();
+      return;
+    }
     const board = document.querySelector(BOARD_SELECTOR);
     setAt(
       placePopover({
@@ -124,7 +137,18 @@ export function PlannerItemPopover({
         bounds: board instanceof HTMLElement ? rectOf(board.getBoundingClientRect()) : null,
       }),
     );
-  }, [anchor]);
+  }, [anchor, onClose]);
+
+  /*
+   * TR-7, the other half. A re-render is the usual way the card disappears —
+   * a refetch re-places the due item, the Assignments band collapses from the
+   * keyboard — and neither fires a scroll or a resize, so nothing would have
+   * called `measure`. No dependency array on purpose: this asks after every
+   * render, which is the only moment the answer can have changed.
+   */
+  useEffect(() => {
+    if (!anchor.isConnected) onClose();
+  });
 
   /*
    * Measure, then place. The panel is rendered hidden until this has run once,
@@ -146,13 +170,23 @@ export function PlannerItemPopover({
     };
   }, [measure, assignment, grade, progress]);
 
-  // Remember what opened it, and hand focus back on the way out.
+  /*
+   * Remember what opened it, and hand focus back on the way out.
+   *
+   * TR-7: the card may be gone by then — a refetch replaced it, or the band it
+   * sat in collapsed. Focus falls back to the grid's own tab stop rather than
+   * to `<body>`, which would strand a keyboard reader at the top of the page.
+   */
   useEffect(() => {
     openerRef.current = openerOf(anchor);
     panelRef.current?.focus();
     return () => {
       const opener = openerRef.current;
-      if (opener && document.contains(opener)) opener.focus();
+      if (opener && opener.isConnected) {
+        opener.focus();
+        return;
+      }
+      document.querySelector<HTMLElement>(BOARD_FOCUS_SELECTOR)?.focus();
     };
   }, [anchor]);
 

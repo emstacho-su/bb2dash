@@ -8,7 +8,18 @@ import {
   assignmentBelongsToCourse,
   assignmentIdFromSegments,
   assignmentPagePath,
+  decodePathSegment,
 } from '@/lib/assignment-page';
+
+/**
+ * What the route actually receives. Next hands a catch-all's segments over
+ * exactly as they appear in the path — still percent-encoded — so this is the
+ * round trip that matters: build the path, split it the way the router does,
+ * and ask for the id back.
+ */
+function segmentsOf(path: string): string[] {
+  return path.split('/assignment/')[1].split('/');
+}
 
 describe('assignmentPagePath', () => {
   it('puts the assignment under its course, one path segment per id part', () => {
@@ -28,8 +39,63 @@ describe('assignmentPagePath', () => {
 
   it('round-trips through the segments the route hands back', () => {
     const path = assignmentPagePath('IST.323', 'IST.323/lab-1');
-    const segments = path.split('/assignment/')[1].split('/').map(decodeURIComponent);
-    expect(assignmentIdFromSegments(segments)).toBe('IST.323/lab-1');
+    expect(assignmentIdFromSegments(segmentsOf(path))).toBe('IST.323/lab-1');
+  });
+});
+
+/**
+ * TR-5. The segments arrive encoded, so every id a URL cannot carry verbatim
+ * came back mangled — an id with a space, an ampersand, an apostrophe or a
+ * non-ASCII letter simply 404ed, and the `%2F` form this route documents never
+ * rebuilt at all.
+ */
+describe('assignmentIdFromSegments — the segments arrive encoded', () => {
+  const AWKWARD = [
+    ['a space', 'IST.466/week 1 case'],
+    ['an ampersand', 'IST.466/law & ethics'],
+    ['an apostrophe', "IST.466/o'brien reading"],
+    ['a non-ASCII letter', 'GEO.103/café study'],
+    ['a hash and a question mark', 'IST.323/lab #1?'],
+    ['a plus sign', 'ECN.304/pset 1 + 2'],
+  ] as const;
+
+  it.each(AWKWARD)('round-trips an id with %s', (_what, id) => {
+    const course = id.split('/')[0];
+    const path = assignmentPagePath(course, id);
+    expect(assignmentIdFromSegments(segmentsOf(path))).toBe(id);
+  });
+
+  it('rebuilds the single-segment %2F form this route documents', () => {
+    expect(assignmentIdFromSegments(['IST.323%2Flab-1'])).toBe('IST.323/lab-1');
+    expect(assignmentIdFromSegments('IST.323%2Flab-1')).toBe('IST.323/lab-1');
+  });
+
+  it('leaves an already-legal segment exactly as it is', () => {
+    expect(assignmentIdFromSegments(['IST.323', 'lab-1'])).toBe('IST.323/lab-1');
+  });
+
+  it('is null for a malformed escape rather than throwing', () => {
+    expect(() => assignmentIdFromSegments(['IST.323', '%zz'])).not.toThrow();
+    expect(assignmentIdFromSegments(['IST.323', '%zz'])).toBeNull();
+    expect(assignmentIdFromSegments(['%'])).toBeNull();
+    expect(assignmentIdFromSegments(['IST.323', '%E0%A4%A'])).toBeNull();
+  });
+
+  it('drops a segment that is only an encoded space', () => {
+    expect(assignmentIdFromSegments(['IST.323', '%20', 'lab-1'])).toBe('IST.323/lab-1');
+  });
+});
+
+describe('decodePathSegment', () => {
+  it('decodes what a path cannot carry verbatim', () => {
+    expect(decodePathSegment('week%201')).toBe('week 1');
+    expect(decodePathSegment('caf%C3%A9')).toBe('café');
+    expect(decodePathSegment('GEO.103')).toBe('GEO.103');
+  });
+
+  it('answers null instead of throwing on a malformed escape', () => {
+    expect(decodePathSegment('%')).toBeNull();
+    expect(decodePathSegment('%zz')).toBeNull();
   });
 });
 
