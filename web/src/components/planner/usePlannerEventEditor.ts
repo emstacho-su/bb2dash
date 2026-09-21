@@ -28,6 +28,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  plannerEventChanges,
   useCreatePlannerEvent,
   useDeletePlannerEvent,
   useUpdatePlannerEvent,
@@ -195,7 +196,10 @@ export function usePlannerEventEditor(): PlannerEventEditor {
               );
               return;
             }
-            if (ask('edit', target.event, draft)) return;
+            // A Save that changes nothing is not worth a decision, and must
+            // not detach the occurrence — it falls through to a no-op write
+            // that simply closes the dialog (TR-8).
+            if (plannerEventChanges(target.event, draft) && ask('edit', target.event, draft)) return;
             runDialogWrite(session.id, failure, () =>
               update.mutateAsync({ current: target.event, patch: draft }),
             );

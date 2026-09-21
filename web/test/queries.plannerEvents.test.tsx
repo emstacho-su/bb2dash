@@ -264,6 +264,56 @@ describe('useUpdatePlannerEvent', () => {
     expect(queryClient.getQueryData(NEXT_WEEK_KEY)).toEqual([]);
   });
 
+  it('sends only the columns that actually changed (TR-8)', async () => {
+    const event = makePlannerEvent();
+    stub.result = { data: event, error: null };
+    const { result } = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(client()) });
+
+    // The form always hands over the whole draft; only the title moved.
+    result.current.mutate({
+      current: event,
+      patch: { ...makePlannerEventDraft(), title: 'Advising meeting B' },
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(opsOf('update')[0].args[0]).toEqual({ title: 'Advising meeting B' });
+  });
+
+  it('writes nothing at all — and never detaches — when no column changed (TR-8)', async () => {
+    const event = makePlannerEvent({ series_id: 'series-1' });
+    const { result } = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(client()) });
+
+    // "This event" on a form the reader opened and closed without editing.
+    result.current.mutate({ current: event, patch: makePlannerEventDraft(), detach: true });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(stub.calls).toEqual([]);
+    expect(result.current.data).toEqual(event);
+  });
+
+  it('detaches alongside a real edit', async () => {
+    const event = makePlannerEvent({ series_id: 'series-1' });
+    stub.result = { data: { ...event, title: 'B', series_detached: true }, error: null };
+    const { result } = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(client()) });
+
+    result.current.mutate({ current: event, patch: { title: 'B' }, detach: true });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(opsOf('update')[0].args[0]).toEqual({ title: 'B', series_detached: true });
+  });
+
+  it('leaves the cache alone when nothing changed', async () => {
+    const event = makePlannerEvent({ series_id: 'series-1' });
+    const queryClient = client();
+    queryClient.setQueryData(WEEK_KEY, [event]);
+    const { result } = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(queryClient) });
+
+    result.current.mutate({ current: event, patch: makePlannerEventDraft(), detach: true });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData(WEEK_KEY)).toEqual([event]);
+  });
+
   it('refuses to edit a row that is still being created', async () => {
     const { result } = renderHook(() => useUpdatePlannerEvent(), { wrapper: wrapper(client()) });
     result.current.mutate({

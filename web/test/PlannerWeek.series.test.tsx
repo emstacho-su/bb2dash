@@ -307,10 +307,25 @@ describe('an occurrence on the grid', () => {
     expect(db.rpc).toEqual([]);
   });
 
+  it('is not asked when Save changes nothing, and nothing is detached (TR-8)', async () => {
+    seed(weeklyStudio());
+    renderPlanner();
+    fireEvent.click(await findTitle('Studio'));
+
+    // Opened and saved without typing anything.
+    fireEvent.click(buttonIn(formDialog(), 'Save'));
+
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    expect(scopeDialogOrNull()).toBeNull();
+    expect(db.writes).toEqual([]);
+    expect(db.rpc).toEqual([]);
+  });
+
   it('writes nothing when the question is cancelled', async () => {
     seed(weeklyStudio());
     renderPlanner();
     fireEvent.click(await findTitle('Studio'));
+    fireEvent.change(within(formDialog()).getByLabelText('Title'), { target: { value: 'Studio B' } });
     fireEvent.click(buttonIn(formDialog(), 'Save'));
 
     const scope = await waitFor(scopeDialog);
@@ -523,6 +538,7 @@ describe('one layer at a time', () => {
     seed(weeklyStudio());
     renderPlanner();
     fireEvent.click(await findTitle('Studio'));
+    fireEvent.change(within(formDialog()).getByLabelText('Title'), { target: { value: 'Studio B' } });
     fireEvent.click(buttonIn(formDialog(), 'Save'));
     await waitFor(scopeDialog);
 

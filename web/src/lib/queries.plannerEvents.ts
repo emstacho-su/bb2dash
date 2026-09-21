@@ -336,15 +336,51 @@ export interface PlannerEventUpdate {
 /** T-1 "This event": the one column that cuts a row out of its series. */
 const DETACHED = { series_detached: true } as const;
 
+/**
+ * The patched columns whose validated value is not already the row's (TR-8).
+ *
+ * The form hands over the whole draft every time, so without this a Save with
+ * nothing typed would still be a write — and, with "This event", would detach
+ * an occurrence from its series for no reason. Every column here is a string,
+ * a boolean or null, so `Object.is` is the whole comparison.
+ */
+function changedColumns(
+  current: PlannerEventRow,
+  value: PlannerEventDraft,
+  patch: Partial<PlannerEventDraft>,
+): Partial<PlannerEventDraft> {
+  const columns: Partial<PlannerEventDraft> = {};
+  for (const column of Object.keys(patch) as (keyof PlannerEventDraft)[]) {
+    if (!Object.is(value[column], current[column])) {
+      Object.assign(columns, { [column]: value[column] });
+    }
+  }
+  return columns;
+}
+
 function mergedUpdate({ current, patch }: PlannerEventUpdate) {
   if (isOptimisticEvent(current)) {
     throw new Error('This event is still being saved — try again in a moment.');
   }
   const value = validated({ ...writableColumns(current), ...patch });
-  const columns = Object.fromEntries(
-    (Object.keys(patch) as (keyof PlannerEventDraft)[]).map((column) => [column, value[column]]),
-  ) as Partial<PlannerEventDraft>;
-  return { value, columns };
+  return { value, columns: changedColumns(current, value, patch) };
+}
+
+/**
+ * Would this patch change anything? The editor asks before putting the scope
+ * question up: a Save that changes nothing is not worth a decision, and must
+ * not detach the occurrence (TR-8). An unusable patch counts as a change, so
+ * the ordinary path still reports why it was refused.
+ */
+export function plannerEventChanges(
+  current: PlannerEventRow,
+  patch: Partial<PlannerEventDraft>,
+): boolean {
+  try {
+    return Object.keys(mergedUpdate({ current, patch }).columns).length > 0;
+  } catch {
+    return true;
+  }
 }
 
 export function useUpdatePlannerEvent() {
@@ -353,11 +389,10 @@ export function useUpdatePlannerEvent() {
   return useMutation<PlannerEventRow, Error, PlannerEventUpdate, RowPatch>({
     mutationKey: plannerEventKeys.writes(),
     mutationFn: async (update) => {
-      const columns = {
-        ...mergedUpdate(update).columns,
-        ...(update.detach ? DETACHED : {}),
-      };
-      if (Object.keys(columns).length === 0) return update.current;
+      const changed = mergedUpdate(update).columns;
+      // Nothing changed: no write, and therefore no detach either (TR-8).
+      if (Object.keys(changed).length === 0) return update.current;
+      const columns = { ...changed, ...(update.detach ? DETACHED : {}) };
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('planner_events')
@@ -372,11 +407,10 @@ export function useUpdatePlannerEvent() {
     onMutate: async (update) => {
       let next: PlannerEventRow;
       try {
-        next = {
-          ...update.current,
-          ...mergedUpdate(update).value,
-          ...(update.detach ? DETACHED : {}),
-        };
+        const { value, columns } = mergedUpdate(update);
+        // Nothing to show either: the write will not happen (TR-8).
+        if (Object.keys(columns).length === 0) return NO_PATCH;
+        next = { ...update.current, ...value, ...(update.detach ? DETACHED : {}) };
       } catch {
         // mutationFn re-validates and throws; there is nothing to patch.
         return NO_PATCH;
