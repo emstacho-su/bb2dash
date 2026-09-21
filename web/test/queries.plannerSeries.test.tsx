@@ -182,6 +182,29 @@ describe('useCreatePlannerSeries', () => {
     expect(thisWeek[0].id.startsWith(OPTIMISTIC_ID_PREFIX)).toBe(true);
   });
 
+  it('writes each cached week once, however many rows it patches (TR-9)', async () => {
+    stub.rpc = { data: null, error: { message: 'insert refused' } };
+    const queryClient = client();
+    queryClient.setQueryData(WEEK_KEY, []);
+    queryClient.setQueryData(NEXT_WEEK_KEY, []);
+    const setQueryData = vi.spyOn(queryClient, 'setQueryData');
+    const { result } = renderHook(() => useCreatePlannerSeries(), {
+      wrapper: wrapper(queryClient),
+    });
+
+    await expect(
+      result.current.mutateAsync({ freq: 'weekly', until: '2026-09-30', rows: weekly() }),
+    ).rejects.toThrow();
+
+    // Three rows across two cached weeks: two writes going out, two coming
+    // back — not six and six. Every write notifies every observer of that week.
+    const windowWrites = setQueryData.mock.calls.filter(
+      ([key]) => Array.isArray(key) && key[1] === 'window',
+    );
+    expect(windowWrites).toHaveLength(4);
+    setQueryData.mockRestore();
+  });
+
   it('puts the weeks back when the RPC refuses the series', async () => {
     stub.rpc = { data: null, error: { message: 'series would exceed 52 rows' } };
     const queryClient = client();

@@ -127,51 +127,17 @@ async function patchRow(
   id: string,
   next: PlannerEventRow | null,
 ): Promise<RowPatch> {
-  await queryClient.cancelQueries({ queryKey: plannerEventKeys.windows() });
-  return patchRowNow(queryClient, id, next);
-}
-
-/** `patchRow` without the cancel, so a many-row write cancels once. */
-function patchRowNow(
-  queryClient: QueryClient,
-  id: string,
-  next: PlannerEventRow | null,
-): RowPatch {
-  const changes: RowChange[] = [];
-  for (const [key, rows] of queryClient.getQueriesData<PlannerEventRow[]>({
-    queryKey: plannerEventKeys.windows(),
-  })) {
-    if (!rows) continue;
-    const updated = next ? upsertInWindow(rows, next, key) : rows.filter((row) => row.id !== id);
-    // Read `after` back from the cache: structural sharing stores a copy, and
-    // the rollback compares against what is actually there.
-    const stored = queryClient.setQueryData<PlannerEventRow[]>(key, updated);
-    changes.push({
-      key,
-      before: rows.find((row) => row.id === id),
-      after: stored?.find((row) => row.id === id),
-    });
-  }
-  return { id, changes };
+  const [patch] = await patchPlannerRows(queryClient, [{ id, next }]);
+  return patch ?? { id, changes: [] };
 }
 
 /**
- * Undo one write's patch, row by row. Where the row has moved on since (another
- * write patched it after this one), it is left alone: that write owns it now,
- * and the refetch on settle has the last word.
+ * Undo one write's patch. Where the row has moved on since (another write
+ * patched it after this one), it is left alone: that write owns it now, and
+ * the refetch on settle has the last word.
  */
 function rollbackRow(queryClient: QueryClient, patch: RowPatch | undefined) {
-  if (!patch) return;
-  for (const { key, before, after } of patch.changes) {
-    const rows = queryClient.getQueryData<PlannerEventRow[]>(key);
-    if (!rows) continue;
-    if (rows.find((row) => row.id === patch.id) !== after) continue;
-    const without = rows.filter((row) => row.id !== patch.id);
-    queryClient.setQueryData<PlannerEventRow[]>(
-      key,
-      before ? upsertInWindow(without, before, key) : without,
-    );
-  }
+  if (patch) rollbackPlannerRows(queryClient, [patch]);
 }
 
 /* ---------------------------------------------------------------------------
@@ -185,24 +151,83 @@ export interface RowEntry {
 }
 
 /**
- * Patch several rows across every cached week in one pass. A series write
- * touches up to 52 rows, so the cancel happens once rather than per row; the
- * patches come back per row, which is what keeps rollback per row.
+ * Patch several rows across every cached week in one pass (TR-9).
+ *
+ * One `setQueryData` per cached week, not one per row per week: a 52-row
+ * series over a handful of open weeks was hundreds of cache writes, and every
+ * one of them notifies every observer of that week. The cancel happens once
+ * too. What comes back is still one patch per row, which is what keeps
+ * rollback per row — two writes in flight cannot undo each other.
  */
 export async function patchPlannerRows(
   queryClient: QueryClient,
   entries: readonly RowEntry[],
 ): Promise<RowPatch[]> {
   await queryClient.cancelQueries({ queryKey: plannerEventKeys.windows() });
-  return entries.map((entry) => patchRowNow(queryClient, entry.id, entry.next));
+  const changes = new Map<string, RowChange[]>(entries.map((entry) => [entry.id, []]));
+
+  for (const [key, rows] of queryClient.getQueriesData<PlannerEventRow[]>({
+    queryKey: plannerEventKeys.windows(),
+  })) {
+    if (!rows) continue;
+    const before = new Map(entries.map((entry) => [entry.id, rows.find((row) => row.id === entry.id)]));
+    let updated = rows;
+    for (const entry of entries) {
+      updated = entry.next
+        ? upsertInWindow(updated, entry.next, key)
+        : updated.filter((row) => row.id !== entry.id);
+    }
+    // Read `after` back from the cache: structural sharing stores a copy, and
+    // the rollback compares against what is actually there.
+    const stored = queryClient.setQueryData<PlannerEventRow[]>(key, updated);
+    for (const entry of entries) {
+      changes.get(entry.id)?.push({
+        key,
+        before: before.get(entry.id),
+        after: stored?.find((row) => row.id === entry.id),
+      });
+    }
+  }
+  return entries.map((entry) => ({ id: entry.id, changes: changes.get(entry.id) ?? [] }));
 }
 
-/** Undo a many-row patch, row by row, with `patchRow`'s own rules. */
+/** Undo a many-row patch — again one `setQueryData` per week (TR-9). */
 export function rollbackPlannerRows(
   queryClient: QueryClient,
   patches: readonly RowPatch[] | undefined,
 ) {
-  for (const patch of patches ?? []) rollbackRow(queryClient, patch);
+  if (!patches || patches.length === 0) return;
+  const byWindow = new Map<string, { key: QueryKey; undo: RowUndo[] }>();
+  for (const patch of patches) {
+    for (const change of patch.changes) {
+      const hash = JSON.stringify(change.key);
+      const bucket = byWindow.get(hash) ?? { key: change.key, undo: [] };
+      bucket.undo.push({ id: patch.id, before: change.before, after: change.after });
+      byWindow.set(hash, bucket);
+    }
+  }
+
+  for (const { key, undo } of byWindow.values()) {
+    const rows = queryClient.getQueryData<PlannerEventRow[]>(key);
+    if (!rows) continue;
+    let updated = rows;
+    let touched = false;
+    for (const { id, before, after } of undo) {
+      // Another write has patched this row since; it owns it now.
+      if (updated.find((row) => row.id === id) !== after) continue;
+      const without = updated.filter((row) => row.id !== id);
+      updated = before ? upsertInWindow(without, before, key) : without;
+      touched = true;
+    }
+    if (touched) queryClient.setQueryData<PlannerEventRow[]>(key, updated);
+  }
+}
+
+/** One row's way back, inside one cached week. */
+interface RowUndo {
+  id: string;
+  before: PlannerEventRow | undefined;
+  after: PlannerEventRow | undefined;
 }
 
 /** The cached rows matching `predicate`, once each, whichever weeks they sit in. */
