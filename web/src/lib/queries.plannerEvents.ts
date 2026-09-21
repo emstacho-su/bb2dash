@@ -34,6 +34,7 @@ import {
   type PlannerEventRow,
 } from './planner-events';
 import { eventWindowBounds, overlapsWindow } from './planner-events-grid';
+import { SERIES_COLUMNS } from './planner-series-types';
 
 /* ---------------------------------------------------------------------------
  * Keys and columns
@@ -51,6 +52,14 @@ export const plannerEventKeys = {
 // One literal, not a concatenation: supabase-js types the rows from this string.
 export const PLANNER_EVENT_COLUMNS =
   'id, kind, title, starts_at, ends_at, time_zone, all_day, location_kind, location, notes, done, course_id, created_at, updated_at';
+
+/**
+ * The same columns plus 082's two (T-1). Sent as the select string; the cast
+ * keeps the *typed* result at `PlannerEventRow` because the generated types do
+ * not know the new columns yet — they are read back through
+ * `planner-series-types.ts`, which goes away with it at integration.
+ */
+export const PLANNER_EVENT_COLUMNS_WITH_SERIES = `${PLANNER_EVENT_COLUMNS}, ${SERIES_COLUMNS}` as typeof PLANNER_EVENT_COLUMNS;
 
 /** Rows shown before the insert returns carry this id prefix. */
 export const OPTIMISTIC_ID_PREFIX = 'optimistic:';
@@ -78,7 +87,7 @@ export function plannerEventsWindowOptions(from: string, to: string) {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('planner_events')
-        .select(PLANNER_EVENT_COLUMNS)
+        .select(PLANNER_EVENT_COLUMNS_WITH_SERIES)
         .lt('starts_at', bounds.end)
         .gte('ends_at', bounds.start)
         .order('starts_at', { ascending: true })
@@ -106,7 +115,7 @@ interface RowChange {
 }
 
 /** What a write patched, so a failure can put back exactly that row. */
-interface RowPatch {
+export interface RowPatch {
   id: string;
   changes: RowChange[];
 }
@@ -123,6 +132,15 @@ async function patchRow(
   next: PlannerEventRow | null,
 ): Promise<RowPatch> {
   await queryClient.cancelQueries({ queryKey: plannerEventKeys.windows() });
+  return patchRowNow(queryClient, id, next);
+}
+
+/** `patchRow` without the cancel, so a many-row write cancels once. */
+function patchRowNow(
+  queryClient: QueryClient,
+  id: string,
+  next: PlannerEventRow | null,
+): RowPatch {
   const changes: RowChange[] = [];
   for (const [key, rows] of queryClient.getQueriesData<PlannerEventRow[]>({
     queryKey: plannerEventKeys.windows(),
@@ -160,12 +178,59 @@ function rollbackRow(queryClient: QueryClient, patch: RowPatch | undefined) {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Shared with the series writes (`queries.plannerSeries.ts`)
+ * ------------------------------------------------------------------------ */
+
+/** One row's optimistic destination: the new row, or null to take it out. */
+export interface RowEntry {
+  id: string;
+  next: PlannerEventRow | null;
+}
+
+/**
+ * Patch several rows across every cached week in one pass. A series write
+ * touches up to 52 rows, so the cancel happens once rather than per row; the
+ * patches come back per row, which is what keeps rollback per row.
+ */
+export async function patchPlannerRows(
+  queryClient: QueryClient,
+  entries: readonly RowEntry[],
+): Promise<RowPatch[]> {
+  await queryClient.cancelQueries({ queryKey: plannerEventKeys.windows() });
+  return entries.map((entry) => patchRowNow(queryClient, entry.id, entry.next));
+}
+
+/** Undo a many-row patch, row by row, with `patchRow`'s own rules. */
+export function rollbackPlannerRows(
+  queryClient: QueryClient,
+  patches: readonly RowPatch[] | undefined,
+) {
+  for (const patch of patches ?? []) rollbackRow(queryClient, patch);
+}
+
+/** The cached rows matching `predicate`, once each, whichever weeks they sit in. */
+export function cachedPlannerEvents(
+  queryClient: QueryClient,
+  predicate: (row: PlannerEventRow) => boolean,
+): PlannerEventRow[] {
+  const found = new Map<string, PlannerEventRow>();
+  for (const [, rows] of queryClient.getQueriesData<PlannerEventRow[]>({
+    queryKey: plannerEventKeys.windows(),
+  })) {
+    for (const row of rows ?? []) {
+      if (!found.has(row.id) && predicate(row)) found.set(row.id, row);
+    }
+  }
+  return [...found.values()];
+}
+
 /**
  * Refetch the weeks once no other planner-event write is still in flight — a
  * refetch landing mid-write would wipe that write's optimistic row. During
  * `onSettled` the settling mutation still counts as pending, hence `<= 1`.
  */
-function invalidateWhenIdle(queryClient: QueryClient) {
+export function invalidateWhenIdle(queryClient: QueryClient) {
   if (queryClient.isMutating({ mutationKey: plannerEventKeys.writes() }) > 1) return;
   void queryClient.invalidateQueries({ queryKey: plannerEventKeys.all() });
 }
