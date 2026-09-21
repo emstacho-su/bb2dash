@@ -62,6 +62,8 @@ inferred. `inferred` = existence inferred (placeholders like "quiz series").
 | `bb_file_text` | extracted text unit (slide/page/doc/sheet) per file | bb-course-pull |
 | `course_maps` | versioned per-course pull plan (jsonb) | bb-course-map |
 | `bb_text_embeddings` | vector embedding per (text unit, model, part) | embed job (pending) |
+| `planner_events` | something you put on your week: event, task, out of office, focus time, working location, appointment slot | **you** |
+| `planner_event_series` | one repeat rule a set of planner occurrences was expanded from | **you** |
 
 Views: `v_upcoming` (not-yet-due, not finished), `v_overdue` (past due, still open),
 `v_course_corpus` (files/stored/with-text per course+bucket), `v_course_map_latest`,
@@ -116,6 +118,40 @@ Two retrieval tiers over the corpus, both scoped by course when wanted:
 `due_at` / `event_start` are `timestamptz`, entered with explicit offsets: `-04` (EDT) through
 2026-11-01 02:00, `-05` (EST) after. `due_date` is used when only the day is known. Query
 `due_at at time zone 'America/New_York'` for local display.
+
+## Planner events and recurrence (migrations 067–069, 082–083)
+
+A `planner_events` row is something you put on your own week; nothing here links to an assignment
+and ticking a task writes `done` on this table only. `starts_at` / `ends_at` are **instants**;
+`time_zone` is the IANA zone the event was entered in and only decides how Google and the grid
+display it. **SQL never converts a wall clock into an instant** — Postgres resolves a DST fall-back
+the opposite way from Temporal's `compatible` rule, so the web converts once and stores the result.
+A trigger enforces the zone rule (`UTC` or an `Area/Location` name the server knows; POSIX strings
+such as `UTC+3` are refused) and the all-day shape (00:00 local at both ends, exclusive end).
+
+**Recurrence.** `planner_event_series` holds only the rule — `freq` (`daily` / `weekly` /
+`monthly`) and a mandatory `until_date`, the last local date an occurrence may start on. The
+occurrences are ordinary `planner_events` rows carrying `series_id`, expanded by the web
+(`planner-recurrence.ts`), never by SQL, so the Google push is untouched and Google gets real
+events. A series holds at most **52** occurrences — `planner_series_max_occurrences()` in SQL,
+`MAX_SERIES_OCCURRENCES` in the web — enforced by an after-statement trigger. The rule is not
+editable after creation: to change it, delete "this and following" and create a new series.
+Weekly means the same weekday; monthly the same day-of-month, skipping a month that lacks it.
+
+* **"This event"** needs no RPC: update the row and set `series_detached = true`. A detached row
+  keeps its `series_id` (a check enforces that) and is skipped by every later series edit.
+* **`planner_series_create(p_freq, p_until, p_rows)`** → the new series `uuid`.
+* **`planner_series_update(p_series_id, p_scope, p_from, p_rows)`** → rows updated. `following`
+  splits: a new series takes the old rule, the non-detached rows from `p_from` on move to it, the
+  old `until_date` is shortened to the day before. `all` rewrites the non-detached future rows.
+* **`planner_series_delete(p_series_id, p_scope, p_from)`** → rows deleted. `all` removes the
+  future rows and the series row; **past occurrences stay** with `series_id` null.
+
+All three are `security invoker` with `search_path = public, pg_temp`, executable by
+`authenticated` only, and refuse (never skip) a row that is out of scope or detached. `p_rows` is
+a jsonb array of 1–52 objects carrying the `planner_events` insert columns, shape-checked with
+strict jsonpath; `starts_at` / `ends_at` must carry an explicit offset. Updates are **by id**, so
+the Google mirror sees patches, never delete + insert.
 
 ## Seed state (2026-09-02)
 
