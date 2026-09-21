@@ -219,3 +219,58 @@ optimistic scope, the plain refusal, the offset guard and two payload checks), 3
 Both other packages needed an install first (neither had `node_modules` in this worktree), and
 both are green afterwards: `mcp-server` **88 passed** in 5 files, `desktop` **549 passed** in 28
 files (coverage 96.7% statements / 98.2% lines). Neither package was touched by any of this work.
+
+---
+
+# Round 2 — code-review findings TR-1, TR-2, TR-6, TR-8, TR-9
+
+Worked in `bb2dash-wt-12b-tail-recur` on `fix/page-pass-12b-tail-recur`, fast-forwarded to the
+integrated tail. Failing test first for each; one commit per finding.
+
+**TR-1 — a scoped edit never changes `done`.** `restateSeriesRows` copied the opened occurrence's
+`done` onto every row in scope, so ticking one week's task and then renaming the series marked the
+whole term done. Each row now carries its own. The kind still decides what 067 accepts: a row that
+has just become a task starts not done, one that has stopped being a task loses the flag.
+
+**TR-2 — the occurrence Stack had open.** `all` runs from `now()`, so an occurrence already
+started, in progress, or inside the 60 s margin was left behind — silently keeping its old values
+on the very block he had just edited. After the RPC the update now writes that one row plainly
+(the whole draft, by id, **no** `series_detached` — he asked to change the series, not to leave
+it) and the delete removes it by name. An error from either call goes down the same error path,
+and the optimistic patch covers the row too. With nothing else in scope the RPC is skipped rather
+than refused; `following` needs none of this, since its cut *is* that occurrence.
+
+A note for the record: the second delete tolerates zero rows, because 083's own `now()` may have
+taken the row a moment earlier. The returned count is the sum of both calls and is not shown
+anywhere.
+
+**TR-6 — the rule the form reads back.** Every series write now invalidates the
+`['planner-series', …]` keys as well as the weeks. A create adds a rule, a `following` split makes
+a second and shortens the first's `until_date` (088), an `all` delete removes the row outright.
+The split's new id never comes back to the browser, so the whole prefix is invalidated rather than
+two named keys — there are only ever a handful.
+
+**TR-8 — no change, no write.** The form hands over the whole draft on every Save, so an untouched
+Save was a write, and with "This event" it cut the occurrence out of its series for nothing.
+`mergedUpdate` now sends only the columns whose validated value differs from the row's; an empty
+set skips the request altogether, so the detach goes with it; and the editor asks the scope
+question only when something actually changed. Saving an unedited form just closes it. This also
+made R2-4's fold test stronger: the untouched instants are no longer merely unchanged in the
+payload, they are not in it at all.
+
+**TR-9 — one cache write per week.** `patchPlannerRows` walked every cached week once per row, so
+a 52-row series over a handful of open weeks was hundreds of `setQueryData` calls, each notifying
+every observer of that week; rollback repeated it. Both group by window and write once, while
+still returning and undoing one patch per row — two writes in flight still cannot undo each other.
+The single-row paths now go through the same implementation.
+
+**088 and the optimistic cache.** 088 moves detached rows after a `following` cut to the new
+series. The delete's optimistic scope already includes detached rows, matching 083. The update's
+does not touch their columns, which is right — 088 moves them without rewriting them — and the
+client cannot set the new `series_id` because the RPC does not return it. The rows' membership is
+therefore stale between the write and the refetch that `onSettled` triggers; nothing visible
+depends on it (a detached row carries no repeat mark either way), and the refetch has the last
+word.
+
+**Gates:** `typecheck` clean · `lint` 0 errors, 27 warnings (all pre-existing) · `test`
+**1772 passed**, 104 files (1753 before round 2; +19) · `build` compiled.
