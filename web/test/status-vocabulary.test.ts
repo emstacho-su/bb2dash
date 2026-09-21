@@ -74,7 +74,9 @@ describe('the status vocabulary lives in one file', () => {
 
     for (const screen of [
       'components/tracker/StatusSelect.tsx',
-      'components/popout/AssignmentPopout.tsx',
+      // T-2 split the popout: `AssignmentPopout.tsx` is now the name the app
+      // opens, and this is the body both it and the full-details page render.
+      'components/popout/AssignmentDetailBody.tsx',
       'app/(app)/course/[id]/classwork/CourseScreen.tsx',
       // F-1: the course Stream was the one screen this list had missed, and it
       // was spelling its own labels the whole time.
