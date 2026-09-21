@@ -95,7 +95,12 @@ function chainFor(table: string): StubChain {
     lte: () => chain,
     order: () => chain,
     limit: () => chain,
-    maybeSingle: async () => result,
+    // A `.maybeSingle()` read wants one row, not the list: the popover's four
+    // reads (assignment, planner row, course, gradebook mirror) all use it.
+    maybeSingle: async () => ({
+      data: Array.isArray(result.data) ? (result.data[0] ?? null) : result.data,
+      error: result.error,
+    }),
     upsert: async (payload: unknown) => {
       db.writes.push({ table, payload });
       applyProgressWrite(table, payload);
@@ -183,12 +188,41 @@ const TERM = [
   { id: 'fall-2026', name: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-11' },
 ];
 
+/** What the popover reads once a due item is clicked (T-2). */
+const ASSIGNMENTS = [
+  {
+    id: 'IST.323/lab-1',
+    course_id: 'IST.323',
+    title: 'Lab #1',
+    type: 'lab',
+    due_date: '2026-09-17',
+    due_at: '2026-09-17T18:00:00Z',
+    due_rule: null,
+    points_possible: 25,
+    source: 'blackboard',
+    source_ref: null,
+    series_key: null,
+    sequence_no: null,
+    confidence: 'confirmed',
+    component_id: null,
+    is_group: false,
+    is_extra_credit: false,
+    description: null,
+  },
+];
+
+const COURSES = [
+  { id: 'IST.323', bb_url: 'https://blackboard.syracuse.edu/course/IST323', parent_course_id: null },
+];
+
 function seedDefaults() {
   db.rows = {
     meetings: MEETINGS,
     sessions: SESSIONS,
     v_work_items: WORK_ITEMS,
     terms: TERM,
+    assignments: ASSIGNMENTS,
+    courses: COURSES,
   };
   db.errors = {};
   db.writes = [];
@@ -334,13 +368,16 @@ describe('PlannerWeek — due items', () => {
 
     expect(await within(thursday).findByText('Lab #1')).toBeInTheDocument();
     expect(within(thursday).getByText('2:00 PM')).toBeInTheDocument();
+    // T-2: the title now points at the full-details page under the course. The
+    // popover is what a plain click opens; this href is what a modified one
+    // (new tab, new window) gets.
     expect(within(thursday).getByRole('link', { name: 'Lab #1' })).toHaveAttribute(
       'href',
-      '/planner?item=assignment%3AIST.323%2Flab-1',
+      '/course/IST.323/assignment/IST.323/lab-1',
     );
   });
 
-  it('carries the paged week on the popout link so closing it does not lose the week', async () => {
+  it('keeps the same full-details href on a paged week', async () => {
     nav.params = new URLSearchParams('week=2026-09-21');
     db.rows.v_work_items = [
       makeWorkItem({
@@ -354,7 +391,7 @@ describe('PlannerWeek — due items', () => {
 
     expect(await screen.findByRole('link', { name: 'Lab #2' })).toHaveAttribute(
       'href',
-      '/planner?item=assignment%3AIST.323%2Flab-2&week=2026-09-21',
+      '/course/IST.323/assignment/IST.323/lab-2',
     );
   });
 
@@ -463,13 +500,15 @@ describe('PlannerWeek — a due item inside its own class', () => {
 });
 
 /* ---------------------------------------------------------------------------
- * The whole card opens the popout
+ * The whole card opens the small popover (T-2, P-planner-5)
+ *
+ * `/planner` is the one screen that does not open the `?item=` panel: Stack
+ * asked for "almost localized", with the full details one click further on.
+ * Nothing here may call the router.
  * ------------------------------------------------------------------------ */
 
-const LAB_HREF = '/planner?item=assignment%3AIST.323%2Flab-1';
-
 describe('PlannerWeek — clicking a due item', () => {
-  it('opens the popout from anywhere on a grid block, not just the title', async () => {
+  it('opens the popover from anywhere on a grid block, not just the title', async () => {
     renderPlanner();
     await within(dayColumn('2026-09-17')).findByText('Lab #1');
 
@@ -477,10 +516,12 @@ describe('PlannerWeek — clicking a due item', () => {
     expect(block).toHaveAttribute('data-block', 'item');
     fireEvent.click(block);
 
-    expect(nav.push).toHaveBeenCalledWith(LAB_HREF, { scroll: false });
+    const dialog = await screen.findByRole('dialog', { name: 'Lab #1' });
+    expect(dialog).toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it('opens the popout from a band chip', async () => {
+  it('opens the popover from a band chip', async () => {
     db.rows.v_work_items = [
       makeWorkItem({ item_id: 'IST.323/lab-1', title: 'Lab #1', due_on: '2026-09-18', due_at: null }),
     ];
@@ -489,10 +530,15 @@ describe('PlannerWeek — clicking a due item', () => {
 
     const chip = (await screen.findByText('Lab #1')).closest('[data-open="true"]');
     fireEvent.click(chip as HTMLElement);
-    expect(nav.push).toHaveBeenCalledWith(LAB_HREF, { scroll: false });
+
+    expect(await screen.findByRole('dialog', { name: 'Lab #1' })).toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it('opens the assignment popout from a chip nested in a class, never a session', async () => {
+  it('opens the assignment popover from a chip nested in a class, never a session', async () => {
+    db.rows.assignments = [
+      { ...ASSIGNMENTS[0], id: 'IST.323/quiz-3', title: 'Quiz 3', type: 'quiz' },
+    ];
     db.rows.v_work_items = [
       makeWorkItem({
         item_id: 'IST.323/quiz-3',
@@ -507,20 +553,31 @@ describe('PlannerWeek — clicking a due item', () => {
 
     const meetingBlock = blocksIn('2026-09-16')[0];
     expect(meetingBlock).toHaveAttribute('data-block', 'meeting');
-    // The class block itself opens nothing — there is no session popout here.
+    // The class block itself opens nothing — there is no session detail here.
     expect(meetingBlock).not.toHaveAttribute('data-open');
 
     const chip = within(meetingBlock).getByText('Quiz 3').closest('[data-open="true"]');
     fireEvent.click(chip as HTMLElement);
 
-    expect(nav.push).toHaveBeenCalledTimes(1);
-    expect(nav.push).toHaveBeenCalledWith('/planner?item=assignment%3AIST.323%2Fquiz-3', {
-      scroll: false,
-    });
+    expect(await screen.findByRole('dialog', { name: 'Quiz 3' })).toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it('keeps the paged week on the href it opens', async () => {
+  it('opens one popover at a time, and the same card again closes it', async () => {
+    renderPlanner();
+    await within(dayColumn('2026-09-17')).findByText('Lab #1');
+
+    const block = blocksIn('2026-09-17')[0];
+    fireEvent.click(block);
+    await screen.findByRole('dialog', { name: 'Lab #1' });
+
+    fireEvent.click(block);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('opens the popover on a paged week too', async () => {
     nav.params = new URLSearchParams('week=2026-09-21');
+    db.rows.assignments = [{ ...ASSIGNMENTS[0], id: 'IST.323/lab-2', title: 'Lab #2' }];
     db.rows.v_work_items = [
       makeWorkItem({
         item_id: 'IST.323/lab-2',
@@ -533,13 +590,11 @@ describe('PlannerWeek — clicking a due item', () => {
     await within(dayColumn('2026-09-23')).findByText('Lab #2');
 
     fireEvent.click(blocksIn('2026-09-23')[0]);
-    expect(nav.push).toHaveBeenCalledWith(
-      '/planner?item=assignment%3AIST.323%2Flab-2&week=2026-09-21',
-      { scroll: false },
-    );
+    expect(await screen.findByRole('dialog', { name: 'Lab #2' })).toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it('does not navigate when the status quick-edit is used', async () => {
+  it('does not open anything when the status quick-edit is used', async () => {
     renderPlanner();
     const select = await screen.findByLabelText('Status for Lab #1');
 
@@ -548,16 +603,18 @@ describe('PlannerWeek — clicking a due item', () => {
     fireEvent.change(select, { target: { value: 'in_progress' } });
 
     await waitFor(() => expect(db.writes).toHaveLength(1));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it('leaves a reading card unclickable — a reading has no popout', async () => {
+  it('leaves a reading card unclickable — a reading has no detail', async () => {
     renderPlanner();
     await openBand();
     const chip = (await screen.findByText('Chapter 4')).closest('span[data-category]');
     expect(chip).not.toHaveAttribute('data-open');
 
     fireEvent.click(chip as HTMLElement);
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(nav.push).not.toHaveBeenCalled();
   });
 });

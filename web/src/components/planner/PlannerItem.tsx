@@ -13,14 +13,23 @@
  * What a due item can do travels as one `ItemActions`, so adding another does
  * not thread a prop through every caller.
  *
- * CLICKING. The whole card opens the assignment popout, not only its title
+ * CLICKING. The whole card opens the assignment detail, not only its title
  * (Stack, 2026-09-16) — a chip is a small target and the title is smaller
  * still. `itemCardProps` is that behaviour, shared by the grid block, the
  * Assignments band chip and the chip nested in a class, so the three cannot
- * drift. The title stays a real `<a href>`: it is the keyboard path, and it is
- * what tells a screen reader the card leads somewhere. Everything inside the
- * card that is itself interactive — the status select, the title link — stops
- * the click before it reaches the card, so changing a status never navigates.
+ * drift. The status select stops the click before it reaches the card, so
+ * changing a status never opens anything.
+ *
+ * WHAT IT OPENS (Phase 12b, T-2 / P-planner-5). On `/planner` the card opens
+ * the small anchored popover, not the full `?item=` panel — Stack asked for
+ * "almost localized", with the full thing one click further on. Every file in
+ * this folder is the planner's alone, so no other screen changes.
+ *
+ * The title stays a real `<a href>`, now pointing at the full-details page: it
+ * is what tells a screen reader the card leads somewhere, and a middle- or
+ * modified click still opens that page. A plain click (or Enter, which fires
+ * one) is cancelled and left to bubble to the card, which opens the popover —
+ * so the mouse and the keyboard do the same thing.
  */
 
 import type { MouseEvent as ReactMouseEvent } from 'react';
@@ -43,12 +52,14 @@ const GLYPH_CLASS: Record<WorkCategory, string> = {
 
 /** Everything a due item on the grid can do, as one prop. */
 export interface ItemActions {
-  /** The popout href for an assignment id, week parameter included. */
-  href: (assignmentId: string) => string;
-  /** Navigate to that href — what clicking anywhere on the card does. */
-  open: (assignmentId: string) => void;
+  /** The full-details page for this item — where the title link points. */
+  href: (item: WorkItem) => string;
+  /** Open the small popover against the card — what clicking anywhere does. */
+  open: (assignmentId: string, anchor: HTMLElement) => void;
   onStatusChange: (item: WorkItem, status: ProgressStatus) => void;
   pendingItemId: string | null;
+  /** The assignment whose popover is open, if one is. */
+  openItemId: string | null;
 }
 
 /** The props that make a card open the popout. Empty for a reading: it has none. */
@@ -58,9 +69,19 @@ export interface ItemCardProps {
   'data-open'?: string;
 }
 
-/** Keep a click on something interactive from also opening the popout. */
+/** Keep a click on something interactive from also opening the popover. */
 function stopCardClick(event: ReactMouseEvent<HTMLElement>) {
   event.stopPropagation();
+}
+
+/**
+ * A click the reader meant for the browser rather than for the app: a new tab,
+ * a new window, a download. The card must not swallow one.
+ */
+function isModifiedClick(event: ReactMouseEvent<HTMLElement>): boolean {
+  return (
+    event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+  );
 }
 
 export function itemCardProps(
@@ -68,12 +89,13 @@ export function itemCardProps(
   actions: ItemActions,
 ): ItemCardProps {
   const item = placed.item;
-  // Only assignments have a popout; a reading card is text, as it is on Today.
+  // Only assignments have a detail; a reading card is text, as it is on Today.
   if (item.item_kind !== 'assignment') return {};
   return {
     onClick: (event) => {
+      if (isModifiedClick(event)) return;
       event.stopPropagation();
-      actions.open(item.item_id);
+      actions.open(item.item_id, event.currentTarget);
     },
     title: `Open ${item.title}`,
     'data-open': 'true',
@@ -139,8 +161,17 @@ export function MeetingContent({
  * Due items
  * ------------------------------------------------------------------------ */
 
-function ItemTitle({ item, href }: { item: WorkItem; href: string }) {
-  // Only assignments have a popout; a reading row is text, as it is on Today.
+function ItemTitle({
+  item,
+  href,
+  expanded,
+}: {
+  item: WorkItem;
+  href: string;
+  /** Whether this item's popover is the one that is open. */
+  expanded: boolean;
+}) {
+  // Only assignments have a detail; a reading row is text, as it is on Today.
   if (item.item_kind !== 'assignment') {
     return <span className={styles.blockTitle}>{item.title}</span>;
   }
@@ -149,7 +180,15 @@ function ItemTitle({ item, href }: { item: WorkItem; href: string }) {
       className={`${styles.blockTitle} ${styles.blockLink}`}
       href={href}
       scroll={false}
-      onClick={stopCardClick}
+      aria-haspopup="dialog"
+      aria-expanded={expanded}
+      onClick={(event) => {
+        // A modified click is the reader asking for the page itself; a plain
+        // one belongs to the card, which opens the popover — so it is cancelled
+        // here and deliberately left to bubble.
+        if (isModifiedClick(event)) return;
+        event.preventDefault();
+      }}
     >
       {item.title}
     </Link>
@@ -173,7 +212,11 @@ export function ItemContent({
         <span className={styles.blockCode}>{courseCodeFromId(item.course_id)}</span>
         {placed.timeText !== '' && <span className={styles.blockTime}>{placed.timeText}</span>}
       </span>
-      <ItemTitle item={item} href={actions.href(item.item_id)} />
+      <ItemTitle
+        item={item}
+        href={actions.href(item)}
+        expanded={actions.openItemId === item.item_id}
+      />
       <span className={styles.blockStatus} onClick={stopCardClick} onMouseDown={stopCardClick}>
         <StatusSelect
           item={item}
