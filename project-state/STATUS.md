@@ -1,6 +1,6 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-22** (Inbox feedback loop, automation half: `/inbox-apply` skill, migration 090 archived state live, first run archived 31 rows, Inbox "Apply answers" button; **PR open**, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) on `feat/inbox-apply`; row 16 under "What has been done"). Before that, **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
+> Updated upon each PR. Last update: **2026-09-22** (**sprint 1 closed** — see "Sprint 1 — closed"; planning docs reorganised by sprint under `docs/planning/`, index in `docs/planning/README.md`; Phase 13 skipped; sprint 2 intake open). Earlier the same day: Inbox feedback loop, automation half: `/inbox-apply` skill, migration 090 archived state live, first run archived 31 rows, Inbox "Apply answers" button; **PR open**, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) on `feat/inbox-apply`; row 16 under "What has been done"). Before that, **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
 > ([PR #15](https://github.com/emstacho-su/bb2dash/pull/15), `c1e471d`, production deployed: engine `web/src/lib/grade-model/`, "Our model" on `/grades` and the
 > course Grades tab, what-if + target solver + "Counts toward…" picker + score history;
 > migrations 057–058 and 080–081 live; V-1 stubbed by Stack, so the model leaves out parts with
@@ -64,14 +64,14 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    local plan superseded — see reconciliation doc). Migrations **014–019** (planner columns,
    effort model, work items, course display, files-current, sync contract — renumbered from
    012–017 on 2026-09-10 after merging main; see
-   `docs/planning/41_RECONCILIATION_gui_vs_retrieval-mcp.md`). Four screens built by parallel
+   `docs/planning/sprint-0-foundation/41_RECONCILIATION_gui_vs_retrieval-mcp.md`). Four screens built by parallel
    Opus workers in isolated worktrees: Today (14-day effort tracker), Course (week rail + lanes +
    AI policy), Materials (signed-URL Open ladder), ⌘K hybrid search (0.80 "keyword match" label +
    speaker-notes scrubbing; verified compatible with search v3 — same result columns). Full tree
    typecheck + build green after the merge. Recovered local planning round in `docs/planning/`.
    Merged 2026-09-10 (`aef5dee`); W-9 RLS hardening landed right after as migration 020.
 7. **Phase 7 — Retrieval polish** (`feat/retrieval-polish`, 2026-09-10; brief and frozen
-   contract in `docs/planning/50_PHASE7_retrieval_polish.md`, evidence in
+   contract in `docs/planning/sprint-0-foundation/50_PHASE7_retrieval_polish.md`, evidence in
    `51_W10_VERIFICATION.md`). Two Opus workers on their own branches/worktrees, PM-integrated.
    **021** `matched_snippets`: `hybrid_search_file_text` returns the passage that matched —
    `ts_headline` (plain text) over the best embedding part's slice for FTS-arm hits, that slice's
@@ -135,7 +135,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    automated. Stopped/deferred: `stage_courses` never writes `meetings` (no schedule payload
    shape seen yet); `announcements.author` null until the crawler key is confirmed live.
 10. **Phase 10a — Grades: mirror, screens, submissions** (`feat/grades-10a`, [PR #13](https://github.com/emstacho-su/bb2dash/pull/13), **merged 2026-09-16**;
-   brief + frozen contract + Stack's ten answers in `docs/planning/67_PHASE10A_grades.md`,
+   brief + frozen contract + Stack's ten answers in `docs/planning/sprint-1-hub/briefs/67_PHASE10A_grades.md`,
    evidence in `66_W17_VERIFICATION.md`). Two Opus workers (W-17 db + ingest, W-18 web) on
    their own branches and worktrees, PM-integrated from a phase worktree. Migrations **046–051**:
    `bb_gradebook` + `stage_gradebook` (append per run, keyed `(run_id, course_id, column_id)`,
@@ -170,7 +170,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    from the `main` checkout, so the attempts probe and step 4b wait for the first post-merge
    sync. Stack: "looks good for now", then "merge".
 11. **Phase 11 — Planner, Google Calendar push, bell** (`feat/planner-11`, [PR #12](https://github.com/emstacho-su/bb2dash/pull/12), **merged 2026-09-16**; brief
-   and frozen Contract in `docs/planning/69_PHASE11_planner.md`, evidence in `69a_W21_VERIFICATION.md`).
+   and frozen Contract in `docs/planning/sprint-1-hub/briefs/69_PHASE11_planner.md`, evidence in `69a_W21_VERIFICATION.md`).
    Two Opus workers (W-21 db + calendar, W-22 web) on their own branches, PM-integrated in a separate
    worktree because the main checkout was Phase 10a's. Migrations **060–066**: `calendar_events`
    mirror + `calendar_event_id()` + `v_calendar_push_items` (event instant resolved in SQL: `due_at`,
@@ -203,7 +203,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    "not recorded": the live crawl carries no creator key and the crawler is 10a's file this sprint.
 12. **Phase 11b — Planner events** (`feat/planner-events-11b`, [PR #14](https://github.com/emstacho-su/bb2dash/pull/14), **merged 2026-09-16**; brief, frozen
    Contract with Stack's five answers, PM kickoff notes K-1..K-11 and the round 2 table in
-   `docs/planning/69b_PHASE11B_planner_events.md`; evidence in `69c_W23_VERIFICATION.md`). Two Opus
+   `docs/planning/sprint-1-hub/briefs/69b_PHASE11B_planner_events.md`; evidence in `69c_W23_VERIFICATION.md`). Two Opus
    workers (W-23 db + push, W-24 web), PM-integrated from a phase worktree while Phase 10b ran in
    another PM session. Migrations **067–069**: `planner_events` (six kinds, instants + own IANA
    zone checked by trigger against `pg_timezone_names`, all-day rows as local midnights with an
@@ -242,7 +242,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    (now vertical), and a due item nested in its class block drawn over its own title and status
    (class lines keep their height; the chip is two lines). Web tests 792.
 13. **Phase 10b — Grade model, what-if, score history** (`feat/grades-10b`, [PR #15](https://github.com/emstacho-su/bb2dash/pull/15), **merged 2026-09-16**; brief,
-   frozen Contract, Stack's four answers and rounds 1b/1c/2 in `docs/planning/68_PHASE10B_grade_model.md`,
+   frozen Contract, Stack's four answers and rounds 1b/1c/2 in `docs/planning/sprint-1-hub/briefs/68_PHASE10B_grade_model.md`,
    evidence in `68a_W20_VERIFICATION.md`). Preconditions: 10a on `main` and 18 scored item columns
    held; **V-1 sign-off waived** — Stack stubbed V-1 as a data-accuracy task. Stack's answers: the
    strict rule stands (an unscored hand-graded part hides the model), a "Counts toward…" picker
@@ -276,7 +276,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    has nothing graded, IST.471 is qualitative.
 
 14. **Phase 12b — Fine-tooth-comb pass** (`fix/page-pass-12b`, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), **MVP merged 2026-09-17**; brief, Stack's 18
-   answers, MVP, DoD and the 28-row item task list in `docs/planning/80c_PHASE12B_page_pass.md`;
+   answers, MVP, DoD and the 28-row item task list in `docs/planning/sprint-1-hub/briefs/80c_PHASE12B_page_pass.md`;
    research `research/80c_RESEARCH_phase12b_findings.md`; evidence `80d` walk, `80e` grade-method
    comparison, `80f` attempts endpoint, `80g`–`80k` worker notes). Input was Stack's list of 33
    bugs and changes by page plus 8 PM carry-ins (41 intake ids): five Sonnet researchers, one batch of
@@ -327,7 +327,7 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    event → this and following → all-events delete, all proven on prod and Google (push run 42 inserted 4;
    test rows deleted), popover and page walked. Tests: web 1812 (from 1582), mcp-server 88, desktop 549.
    Known: deleting a series' last detached row plainly leaves an empty series row (`80o` W-3).
-16. **Inbox feedback loop, automation half — `/inbox-apply`** (`feat/inbox-apply`, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) open 2026-09-22;
+16. **Inbox feedback loop, automation half — `/inbox-apply`** (`feat/inbox-apply`, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23), **merged 2026-09-22**;
    plan `~/.claude/plans/inbox-apply-skill.md`; Stack's brief in the bb-sync session for request 34).
    The worker migration 077 left a queue for. **090** `attention_items.state = 'archived'` + `archived_at`,
    `archived_by`, `decision`; `archive_attention_item()` (refuses open and already-archived rows);
@@ -381,7 +381,41 @@ prod. **Do not re-apply 014–019.**
    uid sees zero, anon insert + `search` edge function both still work. **Signups still to be
    disabled** (item 3) before any public URL carries data.
 
-## What's next — Requirements v2 (`docs/planning/60_REQUIREMENTS_v2.md`)
+## Sprint 1 — closed 2026-09-22
+
+**Dates** 2026-09-10 → 2026-09-22 (13 days). **PRs** #7–#23 (17 merged). **Migrations** 026–090
+(059 held for V-1; 070–072 unused). **Docs** `docs/planning/sprint-1-hub/` (index: `docs/planning/README.md`).
+
+**Shipped:** Classroom-style course page (8) · automated sync loop + Inbox (9) · gradebook mirror,
+Grades screens, submissions, staged upload (10a) · grade model → replaced by one "graded so far" figure
+(10b → 12b) · planner week grid, Google Calendar push, bell + Announcements (11) · planner events pushed
+to Google (11b) · Electron shell, tray, toasts, Sync button (12) · fine-tooth-comb pass over every page,
+six statuses, crawler v4 attempts (12b) · recurring events, planner popover + assignment page, due-day
+fix (12b tail) · `/inbox-apply` worker + Apply answers, Inbox drained to 0 (#23).
+
+**Proven live at close:** sync request 34 (2026-09-22, crawler v4, no dry run): 26 attempts across 5
+courses, 55 gradebook columns, 21 items auto-graded; calendar push mirror 68 = Google; production
+`main` = PR #23; desktop app on the production URL.
+
+**Open at close (carried into sprint 2 planning):**
+* Submission **bytes** are not pulled: 2 `my_submissions` rows catalogued by v4, 0 with a checksum
+  (bb-sync step 4b did not fetch them; PR #23's `pull_files.mjs` pulled course files, not attempts).
+* V-1 grading validation still stubbed (`059` held); 21 placeholders without points; IST.323's
+  13-point proposal column counts toward two parts.
+* V-2 session archival (R-27) planned in `~/agentic-harness`, not started here.
+* Phase 13 styling **skipped** by Stack; C-1..C-3 parked (`sprint-2/parked/81_`).
+* Phase 14 containers brief + 6 research files ready; Stack places it in the sprint 2 list.
+* Known issues below: empty series row after a plain delete of a series' last row; IST.466 duplicate
+  content paths (P-data-1); `numeric(9,3)` scores (declined); 7 mutable `search_path` functions.
+* Desktop unpacked build rebuilt from `main` at close (it lacked 12b's extra navigation guard).
+
+## What's next — Sprint 2
+
+Stack closes sprint 1 to add development phases before any styling. Planning runs the Phase 12b way:
+his list → ids → triage → researchers → one batch of questions → briefs. Intake file:
+`docs/planning/sprint-2/90_SPRINT2_INTAKE.md`. Migration range from **091**.
+
+## Sprint 1 record — Requirements v2 (`docs/planning/sprint-1-hub/60_REQUIREMENTS_v2.md`)
 
 Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of clarification;
 `60_REQUIREMENTS_v2.md` (R-01..R-26) supersedes every earlier backlog. Phase order (§4 there):
@@ -397,20 +431,21 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **merged** (PR #12, 2026-09-16; migrations 060–066 live, calendar push live and proven; Stack signed off the six-step script) |
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar | `69b_PHASE11B_planner_events.md` | **merged** (PR #14 + display follow-up PR #16, 2026-09-16; migrations 067–069 live, `calendar-push` v5 live, live proof and browser walk done) |
 | 12 | Electron shell, tray, desktop notifications, Sync button runs the command | `80_PHASE12_electron.md` | **merged** (PR #19, 2026-09-17; Stack walked acceptance steps 1–5 and the tray on the unpacked build and said merge; the three toasts are still to be seen live, after the first real sync or posted grade). His first launch found one bug, fixed before merge: the app was named `bb2dash-desktop`, so it read its config from the wrong `%APPDATA%` folder (`productName` now pins `bb2dash`). Shipped: `desktop/` package, Electron 44.4.1, unpacked build `desktop/dist/win-unpacked/bb2dash.exe`; window + single instance + tray (close hides), navigation allowlist, poller with on-disk watermark and the three toasts, Sync button runs `claude '/bb-sync <id>'` in Windows Terminal (`syncDryRun` prints it instead); `core/` has no `electron` import (R-28). 535 unit + 19 e2e tests; `/code-review main high` 10 findings fixed (brief §Round 2), `/security-review` none ≥ 8/10; zero changes under `web/`; no migrations. Notes: `80a`, `80b`, `80d`. **Not yet proven, only Stack can:** real Windows toasts, a real `wt.exe` sync run, the clipboard copy inside the shell, staying signed in after hours in the tray. Carried to 12b: `web/src/lib/supabase/proxy-session.ts` drops refreshed auth cookies on its two redirect branches; low-priority hardening: police `will-redirect` / `will-frame-navigate` |
-| 13 | Styling pass | `81_PHASE13_styling.md` | last; carries C-1..C-3 from Phase 10b's browser walk (phone-width overflow, rank weights shown per exam, favicon) |
-| 12b | Fine-tooth-comb pass over every page and feature | `80c_PHASE12B_page_pass.md` | **MVP merged** (PR #20, 2026-09-17; migrations 073–079, 084–087 live; gates run; PM walk in `80d`); v4 proof sync owed; **tail PR open 2026-09-21** (T-1 recurring events + T-2 popover and assignment page; migrations 082–083, 088–089 live; gates run; walk in `80o`); P-data-1 deferred, P-db-3 declined |
-| 14 | Containers (R-28): every local process in Docker | `82_PHASE14_containers.md` + `research/82_RESEARCH_phase14_R1…R6` | planned 2026-09-16; after 13; Stack's 16 answers recorded, open questions in the brief; migration range 090–099 |
+| 13 | Styling pass | `sprint-2/parked/81_PHASE13_styling.md` | **skipped** (Stack, 2026-09-22: more development phases first); its carry-ins C-1..C-3 (phone-width overflow, rank weights shown per exam, favicon) stay parked in the brief |
+| 12b | Fine-tooth-comb pass over every page and feature | `80c_PHASE12B_page_pass.md` | **MVP merged** (PR #20, 2026-09-17; migrations 073–079, 084–087 live; gates run; PM walk in `80d`); **tail merged** ([PR #22](https://github.com/emstacho-su/bb2dash/pull/22), 2026-09-21: T-1 recurring events + T-2 popover and assignment page; migrations 082–083, 088–089 live; walk in `80o`); v4 proof sync **done 2026-09-22** (request 34: 26 attempts, 55 gradebook columns, 21 auto-graded); P-data-1 deferred, P-db-3 declined |
+| — | Inbox feedback loop, automation half (`/inbox-apply`, Apply answers button) | `skills/inbox-apply/SKILL.md` | **merged** (PR #23, 2026-09-22; migration 090 live; Inbox 0 open / 134 archived) |
+| 14 | Containers (R-28): every local process in Docker | `sprint-2/82_PHASE14_containers.md` + `sprint-2/research/82_RESEARCH_phase14_R1…R6` | planned 2026-09-16; **sprint 2 candidate** — Stack decides its place in the sprint 2 list; migration range 091–099 |
 
 **MVP, definition of done, task loops (2026-09-14, PR #11):** every remaining phase and stream
 now has an explicit MVP in Stack's words, a DoD checklist (SOP gates + his acceptance script +
 research-derived items), and a looped task table with an executable check per task — in each
 brief (`62`, `63`, `66`, `67`, `68`, `69`, `80`, `81`) and indexed in
-`docs/planning/70_MVP_INDEX.md`, whose §5 lists the open questions Stack answers when each
-phase's PM session freezes its Contract. Research behind them: `docs/planning/research/`.
+`docs/planning/sprint-1-hub/70_MVP_INDEX.md`, whose §5 lists the open questions Stack answers when each
+phase's PM session freezes its Contract. Research behind them: `docs/planning/sprint-1-hub/research/`.
 
 Migration ranges: Phase 8 = 026–029, Phase 9 = 030–045 (030–040 plus its review-fix rounds 041–045), Phase 10 = 046–059
 (10a took 046–056; **10b took 057–058**; **059 held for V-1's reconciliation**), Phase 11 = 060–066,
-Phase 11b = 067–072 (used 067–069; 070–072 free), Phase 12 = 073–079 if needed, Phase 10b review rounds = 080–081; **Phase 12b = 073–089** (MVP 073–079, 084–087; tail 082–083, 088–089 — the range is used up; Phase 14 starts at 090). Both phase branches cut from `main`
+Phase 11b = 067–072 (used 067–069; 070–072 free), Phase 12 = 073–079 if needed, Phase 10b review rounds = 080–081; **Phase 12b = 073–089** (MVP 073–079, 084–087; tail 082–083, 088–089 — the range is used up); **090 = inbox-apply**; sprint 2 starts at **091**. Both phase branches cut from `main`
 (Phase 7 is merged). The professional-side stub is dropped (Stack, 2026-09-10).
 
 Phase 7 leftovers folded into the plan: automatic `superseded_by` on re-uploaded files and the
