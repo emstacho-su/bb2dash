@@ -98,7 +98,7 @@ Recorded verbatim in intent. Where an answer changes Requirements v2, the change
 ## 2. Research plan (executed 2026-09-14)
 
 One Opus researcher per phase/stream, ~30 minutes, read-only web research, no repo changes.
-Each writes `docs/planning/research/7N_RESEARCH_<phase>.md` (≤ 900 words) with:
+Each writes `docs/planning/sprint-1-hub/research/7N_RESEARCH_<phase>.md` (≤ 900 words) with:
 
 1. **Comparables** — 3–5 products or open-source projects that ship the feature; one line each on
    how they do it, with links.

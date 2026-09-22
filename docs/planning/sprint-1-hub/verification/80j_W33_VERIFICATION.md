@@ -268,7 +268,7 @@ after W-32 lands and confirm it lists exactly the six.
 ## Round 2 — F-2 (P-planner-4), from the PM's browser walk
 
 Everything else in PL-1..PL-3 passed the walk, including the click below a grown hour.
-`80d_PHASE12B_WALK.md` finding **F-2** had two halves, both visible in `walk-12b/planner.png`.
+`80d_PHASE12B_WALK.md` finding **F-2** had two halves, both visible in `../walks/walk-12b/planner.png`.
 
 | gate | round 1 | round 2 |
 |---|---|---|
