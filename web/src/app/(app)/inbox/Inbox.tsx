@@ -21,8 +21,9 @@
  * grouping and the per-kind resolve payloads can be tested without a client.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { InboxApplyButton } from '@/components/inbox/InboxApplyButton';
 import tokens from '@/styles/tokens.module.css';
 import shell from '../Shell.module.css';
 import styles from './Inbox.module.css';
@@ -30,8 +31,10 @@ import {
   ATTENTION_KIND_HEADING,
   ATTENTION_KIND_LABEL,
   INBOX_APPLY_HELP,
+  INBOX_APPLY_REQUEST_HELP,
   NOTE_MAX_LENGTH,
   appliesAutomatically,
+  decisionLine,
   describeDetails,
   fieldPhrase,
   fieldValueText,
@@ -164,6 +167,10 @@ export default function Inbox() {
 
   return (
     <InboxView
+      // The button is handed in rather than mounted inside `InboxView`, so the
+      // view stays renderable without a query client — which is the whole
+      // reason the two are separate files' worth of component.
+      applyButton={<InboxApplyButton />}
       items={itemsQuery.data ?? []}
       status={statusQuery.data ?? null}
       loading={itemsQuery.isPending}
@@ -186,6 +193,8 @@ export default function Inbox() {
 export interface InboxViewProps {
   items: readonly AttentionItem[];
   status: SyncStatus | null;
+  /** The "Apply answers" request button, mounted by the data component. */
+  applyButton?: ReactNode;
   loading?: boolean;
   error?: Error | null;
   pendingId?: number | null;
@@ -198,6 +207,7 @@ export interface InboxViewProps {
 export function InboxView({
   items,
   status,
+  applyButton = null,
   loading = false,
   error = null,
   pendingId = null,
@@ -206,12 +216,23 @@ export function InboxView({
   onResolve,
 }: InboxViewProps) {
   const [showDismissed, setShowDismissed] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
-  const { groups, dismissed, openCount } = useMemo(() => {
-    const live = items.filter((item) => item.state !== 'dismissed');
+  /**
+   * Three lists, not two. `archived` (090) is a row `/inbox-apply` has already
+   * acted on and written a decision for: it is finished work, so it belongs
+   * neither in the live queue nor among the rows Stack waved away. It stays
+   * reachable because the decision line is the only place the worker's
+   * reasoning shows up in the app at all.
+   */
+  const { groups, dismissed, archived, openCount } = useMemo(() => {
+    const live = items.filter(
+      (item) => item.state !== 'dismissed' && item.state !== 'archived',
+    );
     return {
       groups: groupByKind(live),
       dismissed: items.filter((item) => item.state === 'dismissed'),
+      archived: items.filter((item) => item.state === 'archived'),
       openCount: items.filter((item) => item.state === 'open').length,
     };
   }, [items]);
@@ -223,6 +244,7 @@ export function InboxView({
           <span className={shell.kicker}>What the sync could not decide</span>
           <h1 className={shell.title}>Inbox</h1>
         </div>
+        {applyButton}
         <div className={styles.headerMeta}>
           <span className={styles.headerCount}>
             {loading ? 'loading…' : `${openCount} open item${openCount === 1 ? '' : 's'}`}
@@ -231,8 +253,12 @@ export function InboxView({
         </div>
       </header>
 
-      {/* I-2: the rule stated once, so it is not only implied row by row. */}
-      <p className={styles.applyHelp}>{INBOX_APPLY_HELP}</p>
+      {/* I-2: the rules stated once, so they are not only implied row by row —
+          what the transform applies, and who applies everything else. */}
+      <div className={styles.help}>
+        <p className={styles.applyHelp}>{INBOX_APPLY_HELP}</p>
+        <p className={styles.applyHelp}>{INBOX_APPLY_REQUEST_HELP}</p>
+      </div>
 
       {error && (
         <p className={styles.problem} role="alert">
@@ -240,7 +266,7 @@ export function InboxView({
         </p>
       )}
 
-      {!loading && groups.length === 0 && dismissed.length === 0 && (
+      {!loading && groups.length === 0 && dismissed.length === 0 && archived.length === 0 && (
         <p className={styles.empty}>
           Nothing needs you. The last sync answered every question it could on its own.
         </p>
@@ -288,6 +314,29 @@ export function InboxView({
             ))}
         </section>
       )}
+
+      {archived.length > 0 && (
+        <section className={styles.group}>
+          <button
+            type="button"
+            className={styles.dismissedToggle}
+            aria-expanded={showArchived}
+            onClick={() => setShowArchived((open) => !open)}
+          >
+            {showArchived ? '▾' : '▸'} archived ({archived.length})
+          </button>
+          {showArchived &&
+            archived.map((item) => (
+              <InboxRow
+                key={item.id}
+                item={item}
+                pending={false}
+                failure={resolveErrorId === item.id ? resolveError : null}
+                onResolve={onResolve}
+              />
+            ))}
+        </section>
+      )}
     </>
   );
 }
@@ -315,6 +364,9 @@ function Outcome({ item, action }: { item: AttentionItem; action: OutcomeAction 
  */
 function StateChip({ item }: { item: AttentionItem }) {
   if (item.state === 'open') return null;
+  // 090: the worker has been through this one and written down what it did.
+  // That outranks the other chips — none of them is true of it any more.
+  if (item.state === 'archived') return <span className={tokens.tagNeutral}>archived</span>;
   if (item.state === 'dismissed') return <span className={tokens.tagNeutral}>dismissed</span>;
   if (item.applied_at !== null) return <span className={tokens.tagNeutral}>applied</span>;
   if (!appliesAutomatically(item)) {
@@ -341,6 +393,8 @@ export function InboxRow({
   const answerType = answerTypeFor(item);
   const done = item.state !== 'open';
   const href = sourceHref(item);
+  /** What `/inbox-apply` recorded, as one line — never the jsonb it came from. */
+  const decision = decisionLine(item);
   /** What the stage knew when it raised this — as words, never as jsonb. */
   const details = describeDetails(item.suggested);
 
@@ -408,11 +462,14 @@ export function InboxRow({
       )}
 
       {done ? (
-        <p className={styles.answered}>
-          {item.resolution_note
-            ? `“${item.resolution_note}”`
-            : 'answered without a note'}
-        </p>
+        <>
+          <p className={styles.answered}>
+            {item.resolution_note
+              ? `“${item.resolution_note}”`
+              : 'answered without a note'}
+          </p>
+          {decision && <p className={styles.decision}>{decision}</p>}
+        </>
       ) : (
         <div className={styles.controls}>
           <label className={styles.noteField}>

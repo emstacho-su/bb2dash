@@ -48,14 +48,33 @@ export type AttentionKind =
   | 'deadline'
   | 'data_gap';
 
-/** `attention_items.state`. */
-export type AttentionState = 'open' | 'resolved' | 'dismissed';
+/**
+ * `attention_items.state`.
+ *
+ * `archived` (migration 090) is the worker's, not the app's: `/inbox-apply`
+ * reads an answered row, makes the change, records what it decided and then
+ * archives the row so it leaves the live queue. Nothing in this module ever
+ * writes it — see `ResolutionPatch`, whose `state` cannot express it.
+ */
+export type AttentionState = 'open' | 'resolved' | 'dismissed' | 'archived';
 
 /** `sync_runs.status` (migration 019). */
 export type SyncRunStatus = 'running' | 'ok' | 'partial' | 'failed';
 
-/** `agent_requests.kind` — this phase's check constraint lists only these two. */
-export type AgentRequestKind = 'sync' | 'transform';
+/**
+ * `agent_requests.kind` — the check constraint, as migration 077 left it:
+ * `check (kind in ('sync','transform','inbox_feedback'))`. `inbox_feedback` is
+ * the Inbox's "Apply answers" button asking a Claude session to run
+ * `/inbox-apply`.
+ */
+export type AgentRequestKind = 'sync' | 'transform' | 'inbox_feedback';
+
+/** The same list at runtime — what `createAgentRequest` will actually insert. */
+export const AGENT_REQUEST_KINDS: readonly AgentRequestKind[] = [
+  'sync',
+  'transform',
+  'inbox_feedback',
+];
 
 /** `agent_requests.state`. */
 export type AgentRequestState = 'queued' | 'claimed' | 'done' | 'failed' | 'cancelled';
@@ -81,6 +100,12 @@ export interface AttentionItem {
   resolution_note: string | null;
   /** Set by the transform once the resolution has been applied. */
   applied_at: string | null;
+  /** 090 — when `/inbox-apply` archived the row. Null until it has. */
+  archived_at?: string | null;
+  /** 090 — which worker archived it (`archive_attention_item`'s third argument). */
+  archived_by?: string | null;
+  /** 090 — the worker's own record of what it did. jsonb: trust no inner shape. */
+  decision?: Record<string, unknown> | null;
 }
 
 /** One row of `agent_requests` (migration 032). */
@@ -198,6 +223,14 @@ export const syncKeys = {
   attentionAll: () => ['attention-items'] as const,
   agentRequest: (id: number) => ['agent-request', id] as const,
   openSyncRequest: () => ['agent-request', 'open-sync'] as const,
+  /**
+   * The open-request lookup, per kind. Sync keeps its own older key so the
+   * caches (and the tests that name them) do not move; every other kind — the
+   * Inbox's `inbox_feedback` today — is keyed here. Two buttons sharing one
+   * key would each show the other's request as its own.
+   */
+  openRequest: (kind: AgentRequestKind) => ['agent-request', 'open', kind] as const,
+  inboxQueueCount: () => ['inbox-queue-count'] as const,
   activity: (limit: number) => ['activity', limit] as const,
 } as const;
 
@@ -278,9 +311,14 @@ export type ResolveInput =
     }
   | { id: number; kind: 'deadline' | 'data_gap'; note?: string | null };
 
-/** The exact column patch a resolution writes. `applied_at` is the agent's. */
+/**
+ * The exact column patch a resolution writes. `applied_at` is the agent's, and
+ * so is `archived` — the app answers a row, it never files it away. Typing
+ * `state` as the two states the app can write makes that a compile error
+ * rather than a convention.
+ */
 export interface ResolutionPatch {
-  state: AttentionState;
+  state: Extract<AttentionState, 'resolved' | 'dismissed'>;
   resolved_at: string;
   resolution: Record<string, unknown>;
   resolution_note: string | null;
@@ -528,6 +566,18 @@ export function syncCommand(requestId: number): string {
   return `claude "/bb-sync ${requestId}"`;
 }
 
+/**
+ * The command Stack pastes to have a Claude session apply his Inbox answers.
+ *
+ * Same contract as `syncCommand`: the string IS the interface with the
+ * `/inbox-apply` skill, so the id is validated before it is interpolated
+ * rather than after a bad command has already been copied.
+ */
+export function inboxApplyCommand(requestId: number): string {
+  assertRowId(requestId, 'agent request id');
+  return `claude "/inbox-apply ${requestId}"`;
+}
+
 /** Group attention items by kind, in Inbox order, dropping empty groups. */
 export function groupByKind(
   items: readonly AttentionItem[],
@@ -649,6 +699,25 @@ export const INBOX_APPLY_HELP =
   'applied by the next transform, usually within a couple of minutes. Every ' +
   'other answer is recorded for you and for a later agent to act on — each ' +
   'button says which below it.';
+
+/** The one line under the Inbox's "Apply answers" button, so the loop is stated. */
+export const INBOX_APPLY_REQUEST_HELP =
+  'Answers are applied by /inbox-apply, which records a decision and archives the row.';
+
+/**
+ * What the worker says it changed, as one line — or null.
+ *
+ * `attention_items.decision` is jsonb a Claude session wrote, so nothing about
+ * its inner shape is trusted: only a non-empty `change` string is shown, and it
+ * is shown as prose. The rest of the record (the log path, whatever else the
+ * worker chose to keep) belongs in the decision file, not on a row in a queue.
+ */
+export function decisionLine(item: Pick<AttentionItem, 'decision'>): string | null {
+  const change = asRecord(item.decision)?.change;
+  if (typeof change !== 'string') return null;
+  const trimmed = change.trim();
+  return trimmed.length > 0 ? `worker: ${trimmed}` : null;
+}
 
 /**
  * Is `ref` an assignment id, as opposed to one of the prefixed pseudo-refs the
@@ -897,7 +966,10 @@ export function syncStatusOptions() {
 
 const ATTENTION_COLUMNS =
   'id, raised_at, raised_by, kind, course_id, entity, ref, field, from_value, to_value, ' +
-  'question, suggested, state, resolved_at, resolution, resolution_note, applied_at';
+  'question, suggested, state, resolved_at, resolution, resolution_note, applied_at, ' +
+  // 090: what `/inbox-apply` stamped on the way out. The Inbox shows the
+  // change the worker recorded, so the column has to be asked for by name.
+  'archived_at, archived_by, decision';
 
 /**
  * `attention_items`. Pass a state to scope the list (the Home row wants only
@@ -957,14 +1029,33 @@ export function agentRequestOptions(id: number | null) {
  * the button re-copies that request's command instead of inserting another.
  */
 export function openSyncRequestOptions() {
+  return openRequestQuery('sync', syncKeys.openSyncRequest());
+}
+
+/**
+ * The same lookup for any other kind — `inbox_feedback` today. Kept separate
+ * from `openSyncRequestOptions()` by cache key: one button must not read the
+ * other's open request and refuse to file its own because of it.
+ */
+export function openRequestOptions(kind: AgentRequestKind) {
+  return openRequestQuery(kind, syncKeys.openRequest(kind));
+}
+
+/** The Inbox's "Apply answers" button: the newest open `inbox_feedback` row. */
+export function openInboxApplyRequestOptions() {
+  return openRequestOptions('inbox_feedback');
+}
+
+/** One lookup, two keys — the only thing that varies is the kind it filters on. */
+function openRequestQuery(kind: AgentRequestKind, queryKey: readonly unknown[]) {
   return queryOptions({
-    queryKey: syncKeys.openSyncRequest(),
+    queryKey,
     queryFn: async (): Promise<AgentRequest | null> => {
       const supabase = untypedClient();
       const { data, error } = await supabase
         .from('agent_requests')
         .select(AGENT_REQUEST_COLUMNS)
-        .eq('kind', 'sync')
+        .eq('kind', kind)
         .in('state', ['queued', 'claimed'])
         .order('created_at', { ascending: false })
         .limit(1)
@@ -975,6 +1066,28 @@ export function openSyncRequestOptions() {
     // Same cadence as agentRequestOptions: only a Claude session moves these rows.
     refetchInterval: (query) => (query.state.data ? 10 * 1000 : false),
     staleTime: 0,
+  });
+}
+
+/**
+ * How many answered rows `/inbox-apply` still has to work through.
+ *
+ * `v_inbox_queue` (migration 090) is every resolved or dismissed row the worker
+ * has not archived yet. Only the number is wanted — the button says "Apply 3
+ * answers" — so this is a head count, not a fetch of the rows themselves.
+ */
+export function inboxQueueCountOptions() {
+  return queryOptions({
+    queryKey: syncKeys.inboxQueueCount(),
+    queryFn: async (): Promise<number> => {
+      const supabase = untypedClient();
+      const { count, error } = await supabase
+        .from('v_inbox_queue')
+        .select('id', { count: 'exact', head: true });
+      if (error) throw error;
+      return count ?? 0;
+    },
+    staleTime: 60 * 1000,
   });
 }
 
@@ -1077,7 +1190,7 @@ export interface CreateAgentRequestInput {
  * Blackboard's session lives in Stack's browser behind NetID plus Duo.
  */
 export async function createAgentRequest(input: CreateAgentRequestInput): Promise<AgentRequest> {
-  if (input.kind !== 'sync' && input.kind !== 'transform') {
+  if (!AGENT_REQUEST_KINDS.includes(input.kind)) {
     throw new Error(`agent request kind "${String(input.kind)}" is not allowed this phase`);
   }
   const scope =
@@ -1132,6 +1245,14 @@ export function useOpenSyncRequest() {
   return useQuery(openSyncRequestOptions());
 }
 
+export function useOpenInboxApplyRequest() {
+  return useQuery(openInboxApplyRequestOptions());
+}
+
+export function useInboxQueueCount() {
+  return useQuery(inboxQueueCountOptions());
+}
+
 export function useActivity(limit = 8) {
   return useQuery(activityOptions(limit));
 }
@@ -1148,13 +1269,24 @@ export function useResolveAttentionItem() {
   });
 }
 
-/** File an agent request (the Sync button), then refresh the open-request check. */
+/**
+ * File an agent request (the Sync button, the Inbox's Apply button), then
+ * refresh the open-request checks.
+ *
+ * Both keys are invalidated, not just the one this request used: the Sync
+ * button keeps its own older key and the per-kind key is the general one, so a
+ * `sync` request has to refresh both or one of the two buttons would go on
+ * believing nothing is open. The Inbox queue count goes with them — a filed
+ * request is about to change how many rows are waiting.
+ */
 export function useCreateAgentRequest() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createAgentRequest,
-    onSettled: () => {
+    onSettled: (_data, _error, variables) => {
       void queryClient.invalidateQueries({ queryKey: syncKeys.openSyncRequest() });
+      void queryClient.invalidateQueries({ queryKey: syncKeys.openRequest(variables.kind) });
+      void queryClient.invalidateQueries({ queryKey: syncKeys.inboxQueueCount() });
     },
   });
 }
