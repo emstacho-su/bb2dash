@@ -22,6 +22,7 @@
  * pure functions rather than trusted field by field.
  */
 
+import { useEffect } from 'react';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
@@ -1265,6 +1266,9 @@ export function useResolveAttentionItem() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: syncKeys.attentionAll() });
       void queryClient.invalidateQueries({ queryKey: syncKeys.status() });
+      // Answering a row is what changes the worker's queue, so the Apply button's
+      // count moves here — not when a request is filed.
+      void queryClient.invalidateQueries({ queryKey: syncKeys.inboxQueueCount() });
     },
   });
 }
@@ -1289,4 +1293,21 @@ export function useCreateAgentRequest() {
       void queryClient.invalidateQueries({ queryKey: syncKeys.inboxQueueCount() });
     },
   });
+}
+
+/**
+ * When a polled `inbox_feedback` request reaches `done` or `failed`, the worker
+ * has archived rows and moved the queue count; the Inbox list, the Home counts
+ * and the Apply button's label refresh on that transition rather than on a
+ * reload. Filing a request changes nothing yet, so this is the moment that
+ * matters. Idempotent: a state that has not moved invalidates nothing.
+ */
+export function useRefreshInboxOnSettled(state: AgentRequestState | null) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (state !== 'done' && state !== 'failed') return;
+    void queryClient.invalidateQueries({ queryKey: syncKeys.attentionAll() });
+    void queryClient.invalidateQueries({ queryKey: syncKeys.status() });
+    void queryClient.invalidateQueries({ queryKey: syncKeys.inboxQueueCount() });
+  }, [queryClient, state]);
 }

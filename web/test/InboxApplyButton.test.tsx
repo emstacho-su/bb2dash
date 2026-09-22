@@ -19,8 +19,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mutateAsync = vi.fn();
 const createState = { isPending: false, isError: false, error: null as Error | null };
 const requestState = { data: null as { state: string } | null };
-const openState = { data: null as { id: number; state: string } | null };
+const openState = { data: null as { id: number; state: string } | null, isPending: false };
 const queueState = { data: undefined as number | undefined };
+const refreshOnSettled = vi.fn();
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn() }),
@@ -34,6 +35,7 @@ vi.mock('@/lib/queries.sync', async (importOriginal) => {
     useAgentRequest: () => requestState,
     useOpenInboxApplyRequest: () => openState,
     useInboxQueueCount: () => queueState,
+    useRefreshInboxOnSettled: refreshOnSettled,
   };
 });
 
@@ -48,6 +50,7 @@ beforeEach(() => {
   createState.error = null;
   requestState.data = null;
   openState.data = null;
+  openState.isPending = false;
   queueState.data = undefined;
   writeText.mockResolvedValue(undefined);
   Object.defineProperty(globalThis.navigator, 'clipboard', {
@@ -185,5 +188,25 @@ describe('Apply answers — nothing to apply', () => {
     openState.data = { id: 8, state: 'claimed' };
     render(<InboxApplyButton />);
     expect(screen.getByRole('button', { name: 'applying…' })).toBeEnabled();
+  });
+
+  it('waits for the open-request lookup before it can be pressed, so no second request is filed', () => {
+    queueState.data = 5;
+    openState.isPending = true;
+    render(<InboxApplyButton />);
+    expect(screen.getByRole('button', { name: 'Apply 5 answers' })).toBeDisabled();
+  });
+});
+
+describe('Apply answers — when the worker closes the request', () => {
+  it('asks the Inbox to refresh on the polled request state', () => {
+    requestState.data = { state: 'done' };
+    render(<InboxApplyButton />);
+    expect(refreshOnSettled).toHaveBeenLastCalledWith('done');
+  });
+
+  it('passes null while nothing has been filed from this tab', () => {
+    render(<InboxApplyButton />);
+    expect(refreshOnSettled).toHaveBeenLastCalledWith(null);
   });
 });

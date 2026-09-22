@@ -55,6 +55,7 @@ function builder(table: string) {
   const chain: Record<string, unknown> = {
     select: record('select'),
     insert: record('insert'),
+    update: record('update'),
     eq: record('eq'),
     in: record('in'),
     order: record('order'),
@@ -80,6 +81,7 @@ const {
   openSyncRequestOptions,
   syncKeys,
   useCreateAgentRequest,
+  useResolveAttentionItem,
 } = await import('@/lib/queries.sync');
 
 beforeEach(() => {
@@ -210,6 +212,34 @@ describe('useCreateAgentRequest — what a filed request refreshes', () => {
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(syncKeys.openSyncRequest());
     expect(keys).toContainEqual(syncKeys.openRequest('inbox_feedback'));
+    expect(keys).toContainEqual(syncKeys.inboxQueueCount());
+  });
+});
+
+describe('useResolveAttentionItem — answering a row moves the queue count', () => {
+  function wrapper(queryClient: QueryClient) {
+    return function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    };
+  }
+
+  it('invalidates the queue count as well as the list and the status', async () => {
+    stub.result.data = null;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useResolveAttentionItem(), {
+      wrapper: wrapper(queryClient),
+    });
+    await result.current.mutateAsync({ id: 7, kind: 'conflict', accept: 'keep' });
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(syncKeys.attentionAll());
+    expect(keys).toContainEqual(syncKeys.status());
+    expect(keys).toContainEqual(syncKeys.inboxQueueCount());
   });
 });
 

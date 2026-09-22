@@ -266,7 +266,8 @@ export function InboxView({
         </p>
       )}
 
-      {!loading && groups.length === 0 && dismissed.length === 0 && archived.length === 0 && (
+      {/* Archived rows are finished work and never leave, so they do not keep this sentence away. */}
+      {!loading && groups.length === 0 && dismissed.length === 0 && (
         <p className={styles.empty}>
           Nothing needs you. The last sync answered every question it could on its own.
         </p>

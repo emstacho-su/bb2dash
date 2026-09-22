@@ -30,6 +30,7 @@ import {
   useCreateAgentRequest,
   useInboxQueueCount,
   useOpenInboxApplyRequest,
+  useRefreshInboxOnSettled,
   type AgentRequestState,
 } from '@/lib/queries.sync';
 import styles from './InboxApplyButton.module.css';
@@ -70,6 +71,10 @@ export function InboxApplyButton() {
   const state = request.data?.state ?? openRequest?.state ?? null;
   const count = queue.data ?? null;
 
+  // When the worker closes the request it has archived rows and moved the count;
+  // the list and the label refresh on that transition, not on a reload.
+  useRefreshInboxOnSettled(request.data?.state ?? null);
+
   // The toast is transient; the request state below the button is not.
   useEffect(() => {
     if (!toast) return;
@@ -99,10 +104,13 @@ export function InboxApplyButton() {
   }
 
   const busy = create.isPending;
+  // Until the open-request lookup has answered, "nothing open" is not known —
+  // a click now could file a second request beside one another tab holds.
+  const lookingForOpen = open.isPending === true;
   // Known to be empty and nothing already filed: there is nothing to ask for.
   // An unknown count is not an empty one, so the button stays live until the
   // view has answered.
-  const nothingToApply = count === 0 && openRequest === null;
+  const nothingToApply = count === 0 && openRequest === null && !lookingForOpen;
   const label = busy ? 'requesting…' : state ? STATE_LABEL[state] : applyLabel(count);
 
   return (
@@ -111,7 +119,7 @@ export function InboxApplyButton() {
         type="button"
         className={styles.button}
         onClick={() => void requestApply()}
-        disabled={busy || nothingToApply}
+        disabled={busy || lookingForOpen || nothingToApply}
         title="Ask a Claude session to apply your Inbox answers"
       >
         <ApplyIcon />
