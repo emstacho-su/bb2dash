@@ -395,7 +395,13 @@ fix (12b tail) · `/inbox-apply` worker + Apply answers, Inbox drained to 0 (#23
 
 **Proven live at close:** sync request 34 (2026-09-22, crawler v4, no dry run): 26 attempts across 5
 courses, 55 gradebook columns, 21 items auto-graded; calendar push mirror 68 = Google; production
-`main` = PR #23; desktop app on the production URL.
+`main` = PR #23; desktop app on the production URL. **UX pass on production 2026-09-22** (PM in a
+logged-in Playwright session, screenshots read): planner popover → "See full details" page renders
+with the New York due day; the IST.471 popout's submission block lists the pulled PDF with its
+checksum and an Open button; Materials shows both pulled files under "My submissions" ("submitted
+copy · In library"). Two findings: a **direct load** of the assignment page was a 404 (fixed in this
+PR — `CourseAssignment` treated a pending, not-yet-fetching query as "missing" on the server render;
+two RED-first tests), and React #418 on `?item=` popout URLs (S2-carry-9, pre-existing).
 
 **Open at close (carried into sprint 2 planning):**
 * ~~Submission bytes not pulled~~ — **fixed in this close-out PR**: `bb-sync` step 4b is now the
