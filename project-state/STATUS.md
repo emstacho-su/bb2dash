@@ -347,6 +347,14 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    Major Case group numbers disagree across group_notes, the assignment rows and DECISIONS.md).
    **Web:** Inbox "Apply answers" button (files `inbox_feedback`, copies `claude "/inbox-apply <id>"`,
    one open request at a time) and an `archived (n)` group; archived rows leave the live list.
+   **Later the same day**, on Stack's authority ("use context to answer or simply write outdated"), the
+   worker closed every remaining open item: 101 in one run (12 tentative columns confirmed under their
+   components, IST.323 lab-1 merged with its Blackboard row, 17 course-map seeds "already reflected",
+   the rest outdated with the reason on the row; seven questions only Stack can answer carry a
+   `FLAG for Stack` in their notes) and the 14 file-byte gaps by actually pulling the files through the
+   Playwright browser (12 stored + text extracted + embedded; 117 and 118 are gone from Blackboard,
+   superseded by the Week 4 schedules). Inbox: 0 open, 134 archived; 134 decision notes in the vault
+   collection `bb2dash-inbox-decisions`.
 
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's
