@@ -10,7 +10,7 @@ Migration range starts at **091**. Planning docs for this sprint live in this fo
 
 | id | area | item | source | size |
 |---|---|---|---|---|
-| S2-carry-1 | ingest | **Submission bytes are not pulled.** Crawler v4 catalogues attempt files (2 rows on 2026-09-22) but `bb-sync` step 4b is prose the session must perform by hand and it did not; fix = route 4b through `ingest/pull_files.mjs` (manifest filtered to `bucket = 'my_submissions'`) + one test for the `attempt-<id>/` path | sprint 1 close-out | S |
+| S2-carry-1 | ingest | ~~Submission bytes are not pulled~~ **Fixed in the close-out PR (#25)**: `bb-sync` step 4b now runs `ingest/pull_files.mjs --bucket my_submissions`; rows 140 and 141 pulled, stored, extracted and embedded on 2026-09-22 | sprint 1 close-out | done |
 | S2-carry-2 | grades | V-1 grading validation still stubbed: 21 placeholders without points, IST.323's 13-point proposal column counts toward two parts, migration 059 held | `sprint-1-hub/briefs/63_GRADING_VALIDATION.md` | Stack's sittings + one data migration |
 | S2-carry-3 | harness | V-2 session archival / RAG hand-off (R-27) — stream in `~/agentic-harness`; may already be underway there | `sprint-1-hub/briefs/66_SESSION_ARCHIVAL_RAG.md` | — |
 | S2-carry-4 | containers | Phase 14 (R-28): brief + six research files ready; Stack places it in this sprint or after | `82_PHASE14_containers.md` | L |
