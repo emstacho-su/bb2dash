@@ -398,8 +398,11 @@ courses, 55 gradebook columns, 21 items auto-graded; calendar push mirror 68 = G
 `main` = PR #23; desktop app on the production URL.
 
 **Open at close (carried into sprint 2 planning):**
-* Submission **bytes** are not pulled: 2 `my_submissions` rows catalogued by v4, 0 with a checksum
-  (bb-sync step 4b did not fetch them; PR #23's `pull_files.mjs` pulled course files, not attempts).
+* ~~Submission bytes not pulled~~ — **fixed in this close-out PR**: `bb-sync` step 4b is now the
+  scripted pull (`ingest/pull_files.mjs --bucket my_submissions`, two-way bucket gate, Blackboard's
+  declared mime kept, a 409 fails a submission; tests 12 → 17). The two v4-catalogued files
+  (IST.352 Role of Systems Analyst, IST.471 proposal agreement) were pulled through a logged-in tab
+  on 2026-09-22: stored, mirrored, 3 text units extracted and embedded.
 * V-1 grading validation still stubbed (`059` held); 21 placeholders without points; IST.323's
   13-point proposal column counts toward two parts.
 * V-2 session archival (R-27) planned in `~/agentic-harness`, not started here.
