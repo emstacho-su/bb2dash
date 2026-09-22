@@ -4,7 +4,7 @@ Two `bb_raw` course payloads, both **synthetic**, for `db/tests/phase12b_085_sta
 
 | file | crawler | what it is |
 |---|---|---|
-| `attempts_v4.json` | 4 | the chain of `docs/planning/80f_ATTEMPTS_ENDPOINT.md`, four columns |
+| `attempts_v4.json` | 4 | the chain of `docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md`, four columns |
 | `attempts_v3_empty.json` | 3 | what v3 really produced: every column `200` with `results: []` |
 
 **No real value appears in either file.** The Blackboard shell and column ids are real (the fixture

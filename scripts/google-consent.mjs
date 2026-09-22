@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // bb2dash :: scripts/google-consent.mjs
 // The one-time Google consent Stack runs on his own machine, once, by hand.
-// Phase 11 (docs/planning/69_PHASE11_planner.md, "One-time setup Stack does himself", step 4).
+// Phase 11 (docs/planning/sprint-1-hub/briefs/69_PHASE11_planner.md, "One-time setup Stack does himself", step 4).
 //
 //   $env:GOOGLE_CLIENT_ID = '...'; $env:GOOGLE_CLIENT_SECRET = '...'
 //   $env:GCAL_CALENDAR_ID = '...@group.calendar.google.com'

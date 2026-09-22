@@ -5,7 +5,7 @@
  * has scored no longer hides the whole course. It is ungraded work like any
  * other — out of both sides of the figure, and named under it by the screen.
  * That one rule silenced three of Stack's six courses
- * (`docs/planning/80e_GRADE_METHOD_COMPARISON.md`, fixtures F12–F14).
+ * (`docs/planning/sprint-1-hub/evidence/80e_GRADE_METHOD_COMPARISON.md`, fixtures F12–F14).
  *
  * What is left are the three facts that genuinely mean there is no percentage:
  * no rules recorded, a qualitative scheme, or a rule we cannot read.

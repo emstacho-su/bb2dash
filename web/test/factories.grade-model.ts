@@ -2,7 +2,7 @@
  * Fixtures for Phase 10b.
  *
  * Row builders for migration 058's views and 057's tables, with values taken
- * from prod on 2026-09-16 (`docs/planning/68a_W20_VERIFICATION.md`): IST.466's
+ * from prod on 2026-09-16 (`docs/planning/sprint-1-hub/verification/68a_W20_VERIFICATION.md`): IST.466's
  * two major-case columns linked `tentative`, IST.323's Total Score with
  * `bb_running = true`, GEO 103's recitation Attendance column under the
  * lecture's scheme, IST.323 Quiz #3 going from ungraded to 10.

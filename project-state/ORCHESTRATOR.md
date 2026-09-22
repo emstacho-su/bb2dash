@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-21** (Phase 12b tail in a PR; earlier that day the post-merge reconciliation PR #21: Phase 12b MVP merged 2026-09-17, PR #20; Phase 12 merged, PR #19; before that the post-merge reconciliation: Phase 10b PR #15 merged after Phase 11b's PR #14 and its display follow-up #16; Phase 10a PR #13 merged after Phase 11's PR #12).
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-22** (**sprint 1 closed**: Phase 12b tail merged PR #22, inbox-apply PR #23; Phase 13 skipped; planning docs by sprint under `docs/planning/`, index `docs/planning/README.md`; sprint 2 intake open. Before that, 2026-09-21: Phase 12b tail in a PR; earlier that day the post-merge reconciliation PR #21: Phase 12b MVP merged 2026-09-17, PR #20; Phase 12 merged, PR #19; before that the post-merge reconciliation: Phase 10b PR #15 merged after Phase 11b's PR #14 and its display follow-up #16; Phase 10a PR #13 merged after Phase 11's PR #12).
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement
@@ -33,7 +33,7 @@ planner week grid, Google Calendar push, announcements bell (Phase 11); planner 
 Google (Phase 11b); grade model + what-if (Phase 10b). Prod is Supabase
 `goultdzqcavefcgnifdy`; migrations 001–058, 060–069, 073–089 live (082–083, 088–089 on the tail branch;
 059 held for V-1). Fine-tooth-comb pass MVP (Phase 12b): one
-"graded so far" figure, six statuses, crawler v4. No open PRs after Phase 12b (#20). The materials MCP
+"graded so far" figure, six statuses, crawler v4. Sprint 1 closed 2026-09-22 (PRs #7–#23; migrations 026–090; 090 = inbox-apply). Sprint 2 planning open: `docs/planning/sprint-2/90_SPRINT2_INTAKE.md`, migrations from 091. The materials MCP
 server (`mcp-server/`) is registered at user scope and points at
 `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`. The 10a / 11 / V-1 / V-2 sprint
 started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
@@ -59,9 +59,9 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell + tray + desktop notifications | merged Sep 17 (W-25 shell + W-26 notifications; round 2 = ten code-review findings fixed; security review clean; Stack accepted steps 1–5 + tray; toasts still to be seen live) | #19 | none used (073–079 stay free) |
-| 13 | Styling pass | planned; last; carries C-1..C-3 from Phase 10b's browser walk (brief §Carried in) | — | — |
+| 13 | Styling pass | **skipped** (Stack, 2026-09-22: development phases first); C-1..C-3 parked in `sprint-2/parked/81_PHASE13_styling.md` | — | — |
 | 12b | Fine-tooth-comb pass: Stack's list of bugs and changes by page → triage → research → MVP (`80c_PHASE12B_page_pass.md`) | **MVP merged Sep 17** (41 intake ids, Stack's 18 answers, five workers W-30..W-34, grade method picked from `80e`, crawler v4, gates run); **tail PR open Sep 21** (T-1 recurring events, T-2 popover + assignment page, 089 due-day fix; W-35..W-37; gates run; walk `80o`) | #20, tail PR | 073–089 (all used) |
-| 14 | Containers (R-28): deterministic `sync-runner` + noVNC Blackboard login, harness jobs with a catch-up scheduler, vault → private git repo, dev container, umbrella repo `bb2dash-stack` (`82_PHASE14_containers.md`, research `research/82_*`) | planned; **after 13**; brief + Stack's 16 answers + six-researcher synthesis written 2026-09-16; one PR per repo (three repos) | — | 090–099 (090–091 expected) |
+| 14 | Containers (R-28): deterministic `sync-runner` + noVNC Blackboard login, harness jobs with a catch-up scheduler, vault → private git repo, dev container, umbrella repo `bb2dash-stack` (`82_PHASE14_containers.md`, research `docs/planning/sprint-2/research/82_*`) | planned; **after 13**; brief + Stack's 16 answers + six-researcher synthesis written 2026-09-16; one PR per repo (three repos) | — | 090–099 (090–091 expected) |
 
 ## 2. Execution order and what each phase hands to the next
 
@@ -107,7 +107,7 @@ the term.
    `git fetch` — and compare `origin/main` with the local checkout. Assume another session may
    have moved things.
 2. **Define the phase.** Pick from §1 in order unless Stack says otherwise. Write
-   `docs/planning/NN_PHASE<n>_<name>.md`: why, a **frozen contract** (routes, views, RPC
+   `docs/planning/sprint-<N>-<sprint>/briefs/NN_PHASE<n>_<name>.md`: why, a **frozen contract** (routes, views, RPC
    signatures, return columns, request fields, file names), the worker list with branch and
    worktree names, seams with any parallel phase, out-of-scope, integration steps, and the
    reserved migration range. Cite R-numbers from `60_REQUIREMENTS_v2.md`.
@@ -194,8 +194,8 @@ Learned in Phase 12 (2026-09-17):
 * Phase 12 is merged and runs from `desktop/dist/win-unpacked` in the `main` checkout. Still his to
   see: the three toasts (first real sync or posted grade), and staying signed in after hours in the
   tray. `syncDryRun` is `true` in his `%APPDATA%\bb2dash\config.json` until he flips it.
-* Phase 12b (MVP merged, PR #20): run one sync from the `main` checkout (crawler v4; none has run since the merge as of 2026-09-21) — it should fill `bb_attempts` and "My submissions"; place ECN.304 Quiz 2 and Attendance with "Counts toward…". The tail (recurring events, popover, 089) is in a PR: walk the preview, then say merge.
-* Decide when R-28 (container migration after development) gets its own brief; after Phase 13.
+* Sync 34 (2026-09-22, crawler v4) filled `bb_attempts` (26) but **submission bytes were not pulled** (S2-carry-1 in the sprint 2 intake); say "fix 4b" for the small fix. Place ECN.304 Quiz 2 and Attendance with "Counts toward…" on its Grades tab.
+* Sprint 2: paste the list of features and changes (grouped as you like) into a PM session with the Sprint 2 prompt in §6; say where Phase 14 (containers) sits in it.
 * Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and start V-2.
   V-1's reconciliation migration is `059_grading_reconciliation.sql`.
 * Answer V-1's *ask the professor* items as they come up.
@@ -208,12 +208,12 @@ Read in this order. Each line says what the file is for and what to look for.
 |---|---|---|
 | 1 | `project-state/STATUS.md` | Where the product is, what shipped last, the "What's next" table with live PR numbers. Diff its header date against `git log -1 origin/main` to see if another session moved `main`. |
 | 2 | `project-state/DECISIONS.md` (tail ~15 rows) | The newest decisions: worker branches per stream, matched-passage rules, the accepted query-time trade-off, `[notes]` handling, Phase 10 split. Do not relitigate silently. |
-| 3 | `docs/planning/60_REQUIREMENTS_v2.md` §3–§4 | The R-numbers every brief cites, the confirmed phase order, the reversals that each need a DECISIONS row when adopted, and §6.2's residual assumptions (PM's calls Stack has not contradicted). |
-| 4 | `docs/planning/61_PHASE8_course_dimension.md`, `62_PHASE9_sync_loop.md` | The two in-flight contracts and their frozen seam (`stage_content`). Needed to judge the 8-then-9 merge order and any conflict at rebase time. |
-| 5 | `docs/planning/63_GRADING_VALIDATION.md` + `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | V-1's method and the claim under test; §4 of the export is the seed question list. The export is a snapshot — regenerate it if `grading_schemes` changed. |
-| 6 | `docs/planning/66_SESSION_ARCHIVAL_RAG.md` | R-27 contract for the harness work: frozen frontmatter fields, two-PR split, acceptance. Implementation lives in `~/agentic-harness`. |
-| 6a | `docs/planning/70_MVP_INDEX.md` + `research/7N_*.md` | Stack's MVP/DoD answers per phase and the comparables research behind each brief's DoD checklist and task loops. |
-| 7 | `docs/planning/50_PHASE7_retrieval_polish.md` + `51_W10_VERIFICATION.md` | The template for a brief with a round-2 fix section, and what a worker verification note should contain (before/after evidence, md5 of applied migrations, advisor diff). Copy the shape. |
+| 3 | `docs/planning/sprint-1-hub/60_REQUIREMENTS_v2.md` §3–§4 | The R-numbers every brief cites, the confirmed phase order, the reversals that each need a DECISIONS row when adopted, and §6.2's residual assumptions (PM's calls Stack has not contradicted). |
+| 4 | `docs/planning/sprint-1-hub/briefs/61_PHASE8_course_dimension.md`, `62_PHASE9_sync_loop.md` | The two in-flight contracts and their frozen seam (`stage_content`). Needed to judge the 8-then-9 merge order and any conflict at rebase time. |
+| 5 | `docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md` + `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | V-1's method and the claim under test; §4 of the export is the seed question list. The export is a snapshot — regenerate it if `grading_schemes` changed. |
+| 6 | `docs/planning/sprint-1-hub/briefs/66_SESSION_ARCHIVAL_RAG.md` | R-27 contract for the harness work: frozen frontmatter fields, two-PR split, acceptance. Implementation lives in `~/agentic-harness`. |
+| 6a | `docs/planning/sprint-1-hub/70_MVP_INDEX.md` + `docs/planning/sprint-1-hub/research/7N_*.md` | Stack's MVP/DoD answers per phase and the comparables research behind each brief's DoD checklist and task loops. |
+| 7 | `docs/planning/sprint-0-foundation/50_PHASE7_retrieval_polish.md` + `51_W10_VERIFICATION.md` | The template for a brief with a round-2 fix section, and what a worker verification note should contain (before/after evidence, md5 of applied migrations, advisor diff). Copy the shape. |
 | 8 | `CLAUDE.md` (repo root) | The SOP: branches, one PR per phase, migrations byte-identical, visual sign-off, no service key client-side. Overrides habits. |
 | 9 | `DATA_SYNTAX.md` §search layer | Current meaning of `part_range`, `snippet_source`, supersession chains — the retrieval contract clients depend on. |
 | 10 | `web/README.md` | Scripts (`typecheck`, `build`, `test`), the type-regeneration step, the `queries.*.ts` convention. |
@@ -222,7 +222,7 @@ Read in this order. Each line says what the file is for and what to look for.
 | 13 | Auto-memory `MEMORY.md` for this project | Session-scoped facts: the PM/worker arrangement, the session-capture collection gap, the MCP path fix. Verify any path or flag it names still exists before relying on it. |
 | 14 | `~/.claude/plans/abundant-gathering-wirth.md` | The harness plan; V-2 is its Phase 6b in effect. Read only when V-2 is the phase at hand. |
 
-Not to read at start: `docs/planning/10_–31_*` (superseded by Requirements v2), `30_PHASED_PLAN.md`
+Not to read at start: `docs/planning/sprint-0-foundation/superseded/10_–31_*` (superseded by Requirements v2), `30_PHASED_PLAN.md`
 (Docker-era plan; only its term calendar survives, copied above), the eval/POC docs
 (`EVAL_EMBEDDING_POC.md`, `PLAN_EMBEDDING_POC.md`) unless retrieval quality is the topic.
 
@@ -245,7 +245,7 @@ new scope is verified before development begins).
 **Phase 10a — grades: mirror, screens, submissions**
 
 > `/bb2dash-pm` Start Phase 10a (R-10 gradebook mirror, R-11 Grades screens, R-17 submission
-> pull-back, R-18 upload drop zone). Complete the **Contract** section of `docs/planning/67_PHASE10A_grades.md` (MVP, DoD and task loops are already frozen there; migration range 041–059), and the seams with Phase 11 and V-1 (V-1 owns
+> pull-back, R-18 upload drop zone). Complete the **Contract** section of `docs/planning/sprint-1-hub/briefs/67_PHASE10A_grades.md` (MVP, DoD and task loops are already frozen there; migration range 041–059), and the seams with Phase 11 and V-1 (V-1 owns
 > `grading_schemes`/`grade_components` data; 10a reads them, never writes). Put your open
 > questions to me and wait for my answers. Then branch `feat/grades-10a` off `main`, create the
 > worker worktrees, and spawn Opus workers. Stop at the PR.
@@ -256,13 +256,13 @@ new scope is verified before development begins).
 > `main`, `bb_gradebook` holds more than ten non-attendance scores, and
 > `65_GRADING_VALIDATION_SUMMARY.md` shows every course signed off with its reconciliation
 > migration applied. Verify all three and stop if any fails. Then complete the Contract section of
-> `docs/planning/68_PHASE10B_grade_model.md`, ask your open questions, wait, and build the way
+> `docs/planning/sprint-1-hub/briefs/68_PHASE10B_grade_model.md`, ask your open questions, wait, and build the way
 > 10a was built. Every computed figure is labelled as a model; IST.471 shows not-computable.
 
 **Phase 11 — planner and calendar** (in parallel with 10a)
 
 > `/bb2dash-pm` Start Phase 11 (R-19 planner week grid, R-25 push-only Google Calendar sync,
-> R-20 bell + Announcements page, R-16 data gaps). Complete the Contract section of `docs/planning/69_PHASE11_planner.md`
+> R-20 bell + Announcements page, R-16 data gaps). Complete the Contract section of `docs/planning/sprint-1-hub/briefs/69_PHASE11_planner.md`
 > (MVP, DoD and task loops are frozen there; migration range 060–069); Phase 10a is running in parallel on
 > `feat/grades-10a`, so declare the seams (announcements table from Phase 9, popout from
 > Phase 8) and touch nothing under 10a's range. Google OAuth for the single user is server-side
@@ -281,7 +281,7 @@ new scope is verified before development begins).
 **V-2 — session archival and RAG hand-off** (a session in `~/agentic-harness`, not bb2dash)
 
 > You are the PM for stream V-2 of bb2dash, working in `C:/Users/estac/agentic-harness`. Read
-> `C:/Users/estac/projects/bb2dash/docs/planning/66_SESSION_ARCHIVAL_RAG.md` in full — it is the
+> `C:/Users/estac/projects/bb2dash/docs/planning/sprint-1-hub/briefs/66_SESSION_ARCHIVAL_RAG.md` in full — it is the
 > frozen contract (R-27) — then this repo's `README.md`, `docs/ingestion.md`,
 > `docs/retrieval.md`, `~/.claude/hooks/session-capture.mjs`, and a sample note under the vault's
 > `projects/bb2dash-retrieval/sessions/`. Confirm the five gaps in the brief still hold. Two
@@ -294,7 +294,7 @@ new scope is verified before development begins).
 regenerated `database.types.ts`.)
 
 > `/bb2dash-pm` Start Phase 11b (planner events created in bb2dash and pushed to the `bb2dash`
-> calendar). The brief `docs/planning/69b_PHASE11B_planner_events.md` is frozen with my answers of
+> calendar). The brief `docs/planning/sprint-1-hub/briefs/69b_PHASE11B_planner_events.md` is frozen with my answers of
 > 2026-09-16 (own time zone per event, optional physical or online location, working location as
 > an ordinary kind, appointment slot kept, no task→assignment link, kind colour wins). Migration
 > range 067–072; Phase 12 moves to 073–079. Cut `feat/planner-events-11b` from `main` in its own
@@ -306,7 +306,7 @@ regenerated `database.types.ts`.)
 **Phase 12 — Electron shell** (ran 2026-09-16; Contract and answers in `80_`; the brief file is `80_`, not `70_`)
 
 > `/bb2dash-pm` Start Phase 12 (R-23 Electron shell, R-26 desktop notifications). Complete the Contract section of
-> `docs/planning/80_PHASE12_electron.md`: a new `desktop/` package that loads the deployed web
+> `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md`: a new `desktop/` package that loads the deployed web
 > app, zero renderer changes, jobs = mirror files to `course context/<course>/<bucket>/`,
 > desktop notifications, Sync button that opens Windows Terminal with the sync command ready;
 > no crawl, no `shell.openPath` from the mirror, no installer. Ask your open questions
@@ -317,13 +317,13 @@ regenerated `database.types.ts`.)
 
 > `/bb2dash-pm` Start Phase 13 (R-21 styling). First list every screen and component in `web/`
 > and confirm none is a stub. Propose three visual directions as a design canvas for me to pick
-> from; wait. Then complete `docs/planning/81_PHASE13_styling.md`, branch `feat/styling-13`, and
+> from; wait. Then complete `docs/planning/sprint-2/parked/81_PHASE13_styling.md`, branch `feat/styling-13`, and
 > spawn workers: CSS custom properties only, no Tailwind, no layout changes, no new
 > dependencies. Vercel preview before the PR; stop there.
 
 **Phase 12b — fine-tooth-comb pass** (after 12 merges, before 13)
 
-> `/bb2dash-pm` Start Phase 12b. Read `docs/planning/80c_PHASE12B_page_pass.md` and follow its
+> `/bb2dash-pm` Start Phase 12b. Read `docs/planning/sprint-1-hub/briefs/80c_PHASE12B_page_pass.md` and follow its
 > Method exactly. My list of bugs and changes by page follows below. Give every item an id,
 > triage it, spawn Sonnet researchers (one per page) to reproduce, locate and size, then bring me
 > your questions in one batch. After my answers, write the MVP, DoD and task loops into the brief
@@ -331,12 +331,24 @@ regenerated `database.types.ts`.)
 >
 > <the list, grouped by page>
 
-**Phase 14 — containers (R-28)** (after 13 merges)
+**Phase 14 — containers (R-28)** (Stack places it in sprint 2)
 
-> `/bb2dash-pm` Start Phase 14. Read `docs/planning/82_PHASE14_containers.md` and the six
+> `/bb2dash-pm` Start Phase 14. Read `docs/planning/sprint-2/82_PHASE14_containers.md` and the six
 > `research/82_RESEARCH_phase14_*` files. Re-check R5's Electron seam against the merged
 > `desktop/src/main/` code. Put the brief's open questions to me and wait. Then freeze the
 > Contract, create the `bb2dash-stack` and `vault` repos with me, run task 2 (the noVNC login
 > spike) as a gate before anything else, and only if it passes cut worktrees in bb2dash and
 > agentic-harness, spawn W-27 / W-28 / W-29, integrate, run the gates on all three PRs, and stop
 > at "ready when you say so". Keep the Windows path working until my acceptance sitting.
+
+**Sprint 2 — planning** (added 2026-09-22 at the sprint 1 close)
+
+> `/bb2dash-pm` Start sprint 2 planning. Read `docs/planning/sprint-2/90_SPRINT2_INTAKE.md` (the carried-in
+> items) and `docs/planning/README.md` (where planning docs live now). My list of features and changes
+> follows below, grouped by area. Give every item an id, add it to the intake, triage into phases, spawn
+> Sonnet researchers (one per area) to size and locate, then bring me your questions in ONE batch with a
+> default each. After my answers, write one brief per phase under `docs/planning/sprint-2/briefs/` with a
+> frozen Contract, MVP in my words, DoD and task loops, reserve migration ranges from 091, and stop for my
+> approval before spawning any worker. Phase 14 (containers) goes where I say in the list.
+>
+> <the list, grouped by area>

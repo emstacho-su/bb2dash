@@ -16,7 +16,7 @@
 -- Blackboard session. The column ids, the course and the assignment links are real; the attempts,
 -- files and receipts are invented. What this file proves is that the stage reads the FROZEN shape
 -- correctly - not that Blackboard's real key names are what the fixture guesses. That is settled
--- by the `keys` probe after Stack's acceptance crawl; see docs/planning/66_W17_VERIFICATION.md.
+-- by the `keys` probe after Stack's acceptance crawl; see docs/planning/sprint-1-hub/verification/66_W17_VERIFICATION.md.
 
 -- =============================================================================================
 -- 0. Gradebook first, exactly as the driver orders it
@@ -319,7 +319,7 @@ end $$;
 
 -- The narrowed anon INSERT policy, asserted on its own text rather than by attempting an insert
 -- as anon: a policy violation aborts the surrounding transaction, which would take the whole test
--- with it. The live "anon really is refused" check is in docs/planning/66_W17_VERIFICATION.md,
+-- with it. The live "anon really is refused" check is in docs/planning/sprint-1-hub/verification/66_W17_VERIFICATION.md,
 -- run as `set local role anon` against prod.
 do $$
 declare v text;

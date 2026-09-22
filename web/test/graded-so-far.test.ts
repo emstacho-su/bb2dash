@@ -2,7 +2,7 @@
  * `gradedSoFar()` — the one figure the app shows (Phase 12b, G-1 / G-2).
  *
  * This is the permanent regression suite for Stack's pick. The same fixtures
- * that decided it in `docs/planning/80e_GRADE_METHOD_COMPARISON.md` are run
+ * that decided it in `docs/planning/sprint-1-hub/evidence/80e_GRADE_METHOD_COMPARISON.md` are run
  * against the production function here, so the arithmetic he chose cannot drift
  * without a test naming the fixture that moved. Every fixture carries a
  * hand-written derivation in its own file and asserts it there; this file only

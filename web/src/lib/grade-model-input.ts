@@ -9,7 +9,7 @@
  * ROW TYPES — `v_grade_model_items` and `v_gradebook_history` are created by
  * migration 058. The generated view types make every column nullable (Postgres
  * reports no not-null on a view), so the interfaces below are hand-narrowed to
- * the frozen column lists in `docs/planning/68_PHASE10B_grade_model.md` §058 —
+ * the frozen column lists in `docs/planning/sprint-1-hub/briefs/68_PHASE10B_grade_model.md` §058 —
  * the 10a precedent.
  *
  * Phase 12b (G-1): `GradeScenarioRow`, `GradeModelTotalRow` and their parsers

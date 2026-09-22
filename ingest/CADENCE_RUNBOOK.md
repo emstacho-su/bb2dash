@@ -15,7 +15,8 @@ runs steps 1–2 → `transform_tick()` on pg_cron does step 3 and step 5 → `b
 Blackboard holds for what Stack actually handed in — are pulled by `bb-sync` step 4b while the
 logged-in tab is still alive, because nothing else can reach them. They are the `bb_files` rows with
 `bucket = 'my_submissions'`, `classified_by = 'blackboard'` and `storage_path is null`, catalogued
-by `stage_attempts` (migration 050). Course files are untouched by that and still wait for Electron.
+by `stage_attempts` (migration 050). Since 2026-09-22 4b runs the same script as step 4, gated by
+`--bucket my_submissions`; the two halves never see each other's rows.
 
 ## Inputs
 - Logged-in Blackboard tab (built-in browser, tab `seed`) with `installCrawler` from
@@ -57,7 +58,9 @@ by `stage_attempts` (migration 050). Course files are untouched by that and stil
      blank.
 4. **Pull new COURSE files. Scripted since 2026-09-22 — `ingest/pull_files.mjs`.** (Submission
    files are not this step: they are `bb-sync` step 4b, which runs inside the sync while the
-   Blackboard session is still open.) The browser half still needs a logged-in tab: from a
+   Blackboard session is still open. Since 2026-09-22 it runs this same script with
+   `--bucket my_submissions`; without that flag a run takes course rows only, so neither half can
+   write the other's rows.) The browser half still needs a logged-in tab: from a
    Playwright session, `page.waitForEvent('download')` around an anchor click on each durable
    `source_url` (+`?xythos-download=true`) saves `<file_id>_<name>` into a downloads folder; the
    script's header has the snippet and the manifest query. Then

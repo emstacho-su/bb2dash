@@ -10,7 +10,7 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
 1. `project-state/STATUS.md` — where the product is, what's done, what's next. **Start here.**
 2. `project-state/DECISIONS.md` — why things are the way they are. Don't relitigate silently.
 3. `DATA_SYNTAX.md` — data dictionary, ID conventions, enums, search layer.
-4. `docs/planning/40_RECONCILIATION_2026-09-09.md` — how the local planning round and the
+4. `docs/planning/sprint-0-foundation/40_RECONCILIATION_2026-09-09.md` — how the local planning round and the
    cloud work were reconciled; `gui research context/gui/README.md` — the GUI layout spec.
 
 ## Workflow SOP (Stack's rules — follow them)

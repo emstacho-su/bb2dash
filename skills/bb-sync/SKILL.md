@@ -129,73 +129,72 @@ select id, run_id, status, started_at, finished_at, summary, open_attention
 - `partial` means some stage failed. Read `sync_stage_runs` for that `sync_run_id` and name the
   failing stage and its `error` in the report. A partial run is still a real result.
 
-## Step 4b — Pull the submission files (new in Phase 10a)
+## Step 4b — Pull the submission files (Phase 10a; scripted since 2026-09-22)
 
 Once the transform has closed, `stage_attempts` has catalogued every file Blackboard says Stack
 handed in — but not the bytes. They are behind the same session cookie the crawl used, so this is
-the one thing only a logged-in tab can do, and it has to happen before that tab goes away.
+the one thing only a logged-in tab can do, and it has to happen before that tab goes away. It is
+runbook step 4's procedure with `--bucket my_submissions`: a browser half, then `ingest/pull_files.mjs`.
 
-Find the rows that need bytes:
+**The manifest.** Save this array to `<scratch>/manifest.json`. `null` back → say "no new
+submission files" and go to step 5.
 
 ```sql
-select f.id, f.course_id, f.file_name, f.source_url, f.attempt_id,
-       bb_file_relpath(f.id) as relpath
+select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
+         'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
+         'bucket', f.bucket, 'attempt_id', f.attempt_id) order by f.id)
   from bb_files f
- where f.bucket = 'my_submissions'
-   and f.classified_by = 'blackboard'
-   and f.storage_path is null
-   and f.superseded_by is null
- order by f.course_id, f.file_name;
+ where f.bucket = 'my_submissions' and f.classified_by = 'blackboard'
+   and f.storage_path is null and f.superseded_by is null;
 ```
 
-None → say "no new submission files" and go to step 5. Otherwise, for each row:
+**Half one — the browser.** One call per row in the logged-in tab, the snippet runbook step 4 uses:
 
-1. **Download** `source_url` in the logged-in tab, the way the file pull does it: start the
-   navigation and take the file from Playwright's `waitForEvent('download')`, then `saveAs` into the
-   scratch directory. A 401/403 means the session died mid-sync — stop, report it, and leave the row
-   alone; the next sync picks it up because `storage_path` is still null.
-   Since crawler v4 (Phase 12b) `source_url` is Blackboard's own durable
-   `bbcswebdav/xid-<n>_1` link, read from the attempt detail's `file.permanentUrl` — the same kind
-   of URL step 4 already pulls, and it behaves the same way. Before v4 it was a REST download route
-   the crawler built, which no student session could open; that is why this step has never had a
-   row to pull.
-2. **sha256** the saved file, and record its byte count and Content-Type.
-3. **Upload** to Storage at `bb_file_relpath(id)` — which since migration 052 carries an
-   `attempt-<digits>/` segment for a pulled-back file, so it can never land on the key of a file
-   Stack staged under the same name. `POST /storage/v1/object/bb-files/<relpath>` with `apikey` +
-   `Authorization: Bearer` (the publishable key — never the service key) and the real Content-Type,
-   and **no `x-upsert`**: anon is insert-only, so a changed file gets a new key rather than
-   overwriting one.
-
-   **A 409 is not "done".** It means something already occupies that key, and this step does not
-   know what — so it must not point a Blackboard row at bytes it did not write. Leave
-   `storage_path` null, name the row in the report (course, file, relpath, "Storage key already
-   occupied"), and move on. The next sync retries it; a human decides whether the object there is
-   the same file.
-4. **Mirror** to `course context/<relpath>` (PowerShell `Move-Item`, creating directories) so the
-   local tree matches the bucket, exactly as step 4 of the runbook does for course files.
-5. **Update the row** — this is what makes it visible in Materials and the popout:
-
-```sql
-update bb_files
-   set storage_path  = 'bb-files/' || bb_file_relpath(id),
-       local_path    = 'course context/' || bb_file_relpath(id),
-       bytes         = $bytes,
-       sha256        = $sha256,
-       mime_type     = coalesce(mime_type, $mime),
-       downloaded_at = now()
- where id = $id and storage_path is null;
+```js
+const [dl] = await Promise.all([
+  page.waitForEvent('download', { timeout: 60000 }),
+  page.evaluate((u) => { const a = document.createElement('a'); a.href = u; a.download = '';
+    document.body.appendChild(a); a.click(); a.remove(); }, source_url + '?xythos-download=true'),
+]);
+await dl.saveAs(`${downloads}/${id}_${dl.suggestedFilename()}`);
 ```
 
-`coalesce(mime_type, $mime)`, not `$mime`: since migration 085 the catalogue row already carries
-the mime type Blackboard declared for the submission (`file.mimeType`), and a bbcswebdav download
-often answers `application/octet-stream`. Keep what Blackboard said; use the observed type only
-when the row has none, which is what a pre-v4 row looks like.
+Since crawler v4 (Phase 12b) `source_url` is Blackboard's own durable `bbcswebdav/xid-<n>_1` link,
+read from the attempt detail's `file.permanentUrl` — the same kind of URL step 4 already pulls, and
+it behaves the same way. Before v4 it was a REST download route the crawler built, which no student
+session could open; that is why this step has never had a row to pull. **401/403** = the session
+died mid-sync: stop, report it, leave the row alone (the next sync picks it up, `storage_path` is
+still null). **404** = the file is gone from Blackboard: leave the row and report it.
+
+**Half two — the script.** `--dry-run` first to see the keys, then for real:
+
+```
+node ingest/pull_files.mjs --manifest <scratch>/manifest.json --downloads <scratch>/downloads \
+     --bucket my_submissions --out <scratch>/4b.sql
+```
+
+It checks size and magic bytes, mirrors to `course context/<relpath>`, POSTs to Storage
+`bb-files/<key>` with the publishable key in `SB_ANON_KEY` (never the service key, no `x-upsert`),
+extracts the text into `bb_file_text` — Stack's own documents belong in the corpus — and writes one
+`update bb_files …` per file to `--out`. The key is `bb_file_relpath(id)`, which since migration 052
+carries an `attempt-<digits>/` segment, so it can never land on the key of a file Stack staged under
+the same name. `--bucket my_submissions` is what keeps this run off course rows; omitting it makes
+it a course-file run instead.
+
+Then run `<scratch>/4b.sql` through `execute_sql` — the script never writes `bb_files` itself. Its
+update sets `mime_type = coalesce(mime_type, <observed>)`, not the observed type: since migration
+085 the catalogue row already carries what Blackboard declared (`file.mimeType`) and a bbcswebdav
+download often answers `application/octet-stream`. Read the script's per-row JSON lines for the
+report; a line with `error` did not land.
 
 Rules that apply to this step and no other:
 
+- **A 409 is not "done".** Something already occupies that key and this step does not know what, so
+  it must not point a Blackboard row at bytes it did not write. The script fails such a row
+  (`Storage key already occupied`) and emits no SQL for it. Name it in the report; the next sync
+  retries it and a human decides whether the object there is the same file.
 - Rows with `classified_by = 'stack'` are files **Stack** staged in bb2dash. They have no
-  `source_url` and are never touched here.
+  `source_url`, the manifest query excludes them, and they are never touched here.
 - Never `insert` a `bb_files` row from this step. `stage_attempts` is the only writer of submission
   catalog rows; this step only fills in bytes on rows it already created.
 - Report the count in step 6 as "N submitted file(s) now downloadable", **and name every row you
@@ -239,7 +238,7 @@ Grades and due dates are facts from Blackboard. Planner state — `assignment_pr
 - Never resolve an `attention_items` row on Stack's behalf. Raising one is the agent's job; answering
   is his, in the Inbox.
 - Durable URLs only, deep-scan every item — the crawler already does both; do not hand-edit payloads.
-- **Course** file bytes are not downloaded here. That is `CADENCE_RUNBOOK.md` step 4, and it stays
-  manual until Electron. **Submission** file bytes are different: they need the same logged-in tab
-  the crawl used and nothing else can reach them, so step 4b above does them while the session is
-  still alive.
+- **Course** file bytes are not downloaded here. That is `CADENCE_RUNBOOK.md` step 4 — the same
+  script, run without `--bucket`, outside the sync. **Submission** file bytes are different: they
+  need the same logged-in tab the crawl used and nothing else can reach them, so step 4b above does
+  them while the session is still alive.

@@ -6,7 +6,7 @@
 -- regenerates this file in memory and fails if the committed copy differs.
 --
 -- Opens a transaction, registers one fixture crawl, and loads one bb_raw row per shell:
--- one crawler v4 payload (the chain of docs/planning/80f_ATTEMPTS_ENDPOINT.md, with every
+-- one crawler v4 payload (the chain of docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md, with every
 -- id, name, URL and sentence invented) and one crawler v3 payload with the empty results
 -- every column really returned, so migration 085 can prove it still folds both.
 --

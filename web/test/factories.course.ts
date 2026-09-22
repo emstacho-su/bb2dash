@@ -4,7 +4,7 @@
  * `v_course_stream` and `v_content_tree` are created by migrations 026-027 in
  * the same phase, so no test may reach the database for their shape: these
  * builders are the frozen column lists from
- * `docs/planning/61_PHASE8_course_dimension.md`, and the row types they return
+ * `docs/planning/sprint-1-hub/briefs/61_PHASE8_course_dimension.md`, and the row types they return
  * are the ones the screens consume.
  */
 

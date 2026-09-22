@@ -193,6 +193,27 @@ describe('CourseAssignment — states it must not guess at', () => {
     expect(notFound).not.toHaveBeenCalled();
   });
 
+  it('treats a pending query that is not fetching yet as loading — the server render', () => {
+    // On the server, and on the first client render before the fetch starts,
+    // TanStack reports isPending without isFetching. That is not evidence of
+    // absence: deciding not-found there made every direct load of the page a
+    // 404 in production (2026-09-22).
+    hooks.assignment = stub(undefined, { isPending: true, isFetching: false });
+    render(<CourseAssignment courseId="IST.323" assignmentId="IST.323/lab-1" />);
+
+    expect(screen.getByText('Loading assignment…')).toBeInTheDocument();
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
+  it('waits for a pending course row that is not fetching yet, too', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, course_id: 'GEO.103.R' });
+    hooks.course = stub(undefined, { isPending: true, isFetching: false });
+
+    render(<CourseAssignment courseId="GEO.103" assignmentId="GEO.103.R/quiz-1" />);
+    expect(screen.getByText('Loading assignment…')).toBeInTheDocument();
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
   it('reports a failed read rather than raising not-found', () => {
     hooks.assignment = stub(undefined, { isError: true, error: new Error('permission denied') });
     render(<CourseAssignment courseId="IST.323" assignmentId="IST.323/lab-1" />);
