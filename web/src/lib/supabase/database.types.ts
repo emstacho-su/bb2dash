@@ -1978,6 +1978,27 @@ export type Database = {
           },
         ]
       }
+      planner_event_series: {
+        Row: {
+          created_at: string
+          freq: string
+          id: string
+          until_date: string
+        }
+        Insert: {
+          created_at?: string
+          freq: string
+          id?: string
+          until_date: string
+        }
+        Update: {
+          created_at?: string
+          freq?: string
+          id?: string
+          until_date?: string
+        }
+        Relationships: []
+      }
       planner_events: {
         Row: {
           all_day: boolean
@@ -1990,6 +2011,8 @@ export type Database = {
           location: string | null
           location_kind: string | null
           notes: string | null
+          series_detached: boolean
+          series_id: string | null
           starts_at: string
           time_zone: string
           title: string
@@ -2006,6 +2029,8 @@ export type Database = {
           location?: string | null
           location_kind?: string | null
           notes?: string | null
+          series_detached?: boolean
+          series_id?: string | null
           starts_at: string
           time_zone?: string
           title: string
@@ -2022,6 +2047,8 @@ export type Database = {
           location?: string | null
           location_kind?: string | null
           notes?: string | null
+          series_detached?: boolean
+          series_id?: string | null
           starts_at?: string
           time_zone?: string
           title?: string
@@ -2055,6 +2082,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "planner_events_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "planner_event_series"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -3821,6 +3855,28 @@ export type Database = {
           unit_kind: string
           unit_no: number
         }[]
+      }
+      planner_series_check_rows: {
+        Args: { p_require_id: boolean; p_rows: Json }
+        Returns: undefined
+      }
+      planner_series_create: {
+        Args: { p_freq: string; p_rows: Json; p_until: string }
+        Returns: string
+      }
+      planner_series_delete: {
+        Args: { p_from: string; p_scope: string; p_series_id: string }
+        Returns: number
+      }
+      planner_series_max_occurrences: { Args: never; Returns: number }
+      planner_series_update: {
+        Args: {
+          p_from: string
+          p_rows: Json
+          p_scope: string
+          p_series_id: string
+        }
+        Returns: number
       }
       raise_attention: {
         Args: {

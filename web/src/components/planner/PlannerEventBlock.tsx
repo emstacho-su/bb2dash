@@ -19,7 +19,12 @@
 
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { courseCodeFromId } from '@/lib/queries.today';
-import { PLANNER_EVENT_KIND_LABELS, isHttpUrl, type PlannerEventRow } from '@/lib/planner-events';
+import {
+  PLANNER_EVENT_KIND_LABELS,
+  isHttpUrl,
+  isSeriesMember,
+  type PlannerEventRow,
+} from '@/lib/planner-events';
 import type { PlacedAllDayEvent, PlacedEventSegment } from '@/lib/planner-events-grid';
 import type { PlannerEventPrefill } from './planner-event-form-state';
 import { isOptimisticEvent } from '@/lib/queries.plannerEvents';
@@ -118,10 +123,24 @@ function EventLocation({ event }: { event: PlannerEventRow }) {
   return <span className={styles.blockRoom}>{location}</span>;
 }
 
+/**
+ * The repeat mark (T-1). A detached occurrence has been edited out of its
+ * series, so it carries no mark: it no longer moves with the others.
+ */
+function RepeatMark({ event }: { event: PlannerEventRow }) {
+  if (!isSeriesMember(event)) return null;
+  return (
+    <span className={styles.repeatMark} role="img" aria-label="Repeats">
+      ↻
+    </span>
+  );
+}
+
 function KindLine({ event, time }: { event: PlannerEventRow; time: string | null }) {
   return (
     <>
       <span className={styles.eventKind}>{PLANNER_EVENT_KIND_LABELS[event.kind]}</span>
+      <RepeatMark event={event} />
       {event.course_id && (
         <span className={styles.blockCode}>{courseCodeFromId(event.course_id)}</span>
       )}

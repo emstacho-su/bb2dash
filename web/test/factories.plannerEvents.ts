@@ -17,6 +17,8 @@ export function makePlannerEvent(overrides: Partial<PlannerEventRow> = {}): Plan
     notes: null,
     done: null,
     course_id: null,
+    series_id: null,
+    series_detached: false,
     created_at: '2026-09-15T12:00:00.000Z',
     updated_at: '2026-09-15T12:00:00.000Z',
     ...overrides,

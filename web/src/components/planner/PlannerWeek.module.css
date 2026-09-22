@@ -748,6 +748,17 @@
   background: color-mix(in srgb, var(--color-bg) 45%, transparent);
 }
 
+/* T-1: an occurrence of a repeating event. Small enough not to compete with
+   the kind line, and named for assistive tech by an aria-label on the span. */
+.repeatMark {
+  flex: none;
+  align-self: flex-start;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
 .eventLink {
   min-width: 0;
   overflow: hidden;

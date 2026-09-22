@@ -472,11 +472,13 @@ describe('opening PlannerEventForm', () => {
     fireEvent.click(classBlock);
     expect(openDialog()).toBeNull();
 
-    // The Phase 11 click-to-popout on a due card still navigates, and only that.
+    // T-2: a due card opens the small assignment popover — never the event
+    // form, and no longer the `?item=` panel.
     const dueCard = (await within(dayColumn('2026-09-17')).findByText('Lab #1')).closest('[data-block]') as HTMLElement;
     fireEvent.click(dueCard);
-    expect(nav.push).toHaveBeenCalledWith('/planner?item=assignment%3AIST.323%2Flab-1', { scroll: false });
-    expect(openDialog()).toBeNull();
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-planner-popover="true"]')).not.toBeNull();
+    expect(document.querySelector('[role="dialog"][aria-label="New planner event"]')).toBeNull();
 
     fireEvent.click(blockOf('Advising'));
     const edit = dialogNamed('Edit planner event');
@@ -621,12 +623,12 @@ describe('R2-4 — editing keeps a stored instant the owner did not change', () 
       table: 'planner_events',
       op: 'update',
       id: 'fold',
-      payload: {
-        title: 'Late call (moved room)',
-        starts_at: '2026-11-01T06:30:00.000Z',
-        ends_at: '2026-11-01T07:00:00.000Z',
-      },
+      payload: { title: 'Late call (moved room)' },
     });
+    // Stronger than R2-4 asked for since TR-8: the instants are not merely
+    // unchanged, they are not in the write at all, so nothing can move them.
+    expect(db.writes[0].payload).not.toHaveProperty('starts_at');
+    expect(db.writes[0].payload).not.toHaveProperty('ends_at');
   });
 });
 

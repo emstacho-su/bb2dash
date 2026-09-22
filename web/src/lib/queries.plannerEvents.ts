@@ -48,9 +48,14 @@ export const plannerEventKeys = {
   window: (from: string, to: string) => ['planner-events', 'window', from, to] as const,
 } as const;
 
-// One literal, not a concatenation: supabase-js types the rows from this string.
+// One literal, not a concatenation: supabase-js types the rows from this
+// string. 082's `series_id` and `series_detached` are in it, so every read
+// knows whether a row is an occurrence of a series (T-1).
 export const PLANNER_EVENT_COLUMNS =
-  'id, kind, title, starts_at, ends_at, time_zone, all_day, location_kind, location, notes, done, course_id, created_at, updated_at';
+  'id, kind, title, starts_at, ends_at, time_zone, all_day, location_kind, location, notes, done, course_id, series_id, series_detached, created_at, updated_at';
+
+/** The two 082 columns a fresh one-off row has. */
+export const NOT_IN_A_SERIES = { series_id: null, series_detached: false } as const;
 
 /** Rows shown before the insert returns carry this id prefix. */
 export const OPTIMISTIC_ID_PREFIX = 'optimistic:';
@@ -106,7 +111,7 @@ interface RowChange {
 }
 
 /** What a write patched, so a failure can put back exactly that row. */
-interface RowPatch {
+export interface RowPatch {
   id: string;
   changes: RowChange[];
 }
@@ -122,42 +127,123 @@ async function patchRow(
   id: string,
   next: PlannerEventRow | null,
 ): Promise<RowPatch> {
+  const [patch] = await patchPlannerRows(queryClient, [{ id, next }]);
+  return patch ?? { id, changes: [] };
+}
+
+/**
+ * Undo one write's patch. Where the row has moved on since (another write
+ * patched it after this one), it is left alone: that write owns it now, and
+ * the refetch on settle has the last word.
+ */
+function rollbackRow(queryClient: QueryClient, patch: RowPatch | undefined) {
+  if (patch) rollbackPlannerRows(queryClient, [patch]);
+}
+
+/* ---------------------------------------------------------------------------
+ * Shared with the series writes (`queries.plannerSeries.ts`)
+ * ------------------------------------------------------------------------ */
+
+/** One row's optimistic destination: the new row, or null to take it out. */
+export interface RowEntry {
+  id: string;
+  next: PlannerEventRow | null;
+}
+
+/**
+ * Patch several rows across every cached week in one pass (TR-9).
+ *
+ * One `setQueryData` per cached week, not one per row per week: a 52-row
+ * series over a handful of open weeks was hundreds of cache writes, and every
+ * one of them notifies every observer of that week. The cancel happens once
+ * too. What comes back is still one patch per row, which is what keeps
+ * rollback per row — two writes in flight cannot undo each other.
+ */
+export async function patchPlannerRows(
+  queryClient: QueryClient,
+  entries: readonly RowEntry[],
+): Promise<RowPatch[]> {
   await queryClient.cancelQueries({ queryKey: plannerEventKeys.windows() });
-  const changes: RowChange[] = [];
+  const changes = new Map<string, RowChange[]>(entries.map((entry) => [entry.id, []]));
+
   for (const [key, rows] of queryClient.getQueriesData<PlannerEventRow[]>({
     queryKey: plannerEventKeys.windows(),
   })) {
     if (!rows) continue;
-    const updated = next ? upsertInWindow(rows, next, key) : rows.filter((row) => row.id !== id);
+    const before = new Map(entries.map((entry) => [entry.id, rows.find((row) => row.id === entry.id)]));
+    let updated = rows;
+    for (const entry of entries) {
+      updated = entry.next
+        ? upsertInWindow(updated, entry.next, key)
+        : updated.filter((row) => row.id !== entry.id);
+    }
     // Read `after` back from the cache: structural sharing stores a copy, and
     // the rollback compares against what is actually there.
     const stored = queryClient.setQueryData<PlannerEventRow[]>(key, updated);
-    changes.push({
-      key,
-      before: rows.find((row) => row.id === id),
-      after: stored?.find((row) => row.id === id),
-    });
+    for (const entry of entries) {
+      changes.get(entry.id)?.push({
+        key,
+        before: before.get(entry.id),
+        after: stored?.find((row) => row.id === entry.id),
+      });
+    }
   }
-  return { id, changes };
+  return entries.map((entry) => ({ id: entry.id, changes: changes.get(entry.id) ?? [] }));
 }
 
-/**
- * Undo one write's patch, row by row. Where the row has moved on since (another
- * write patched it after this one), it is left alone: that write owns it now,
- * and the refetch on settle has the last word.
- */
-function rollbackRow(queryClient: QueryClient, patch: RowPatch | undefined) {
-  if (!patch) return;
-  for (const { key, before, after } of patch.changes) {
+/** Undo a many-row patch — again one `setQueryData` per week (TR-9). */
+export function rollbackPlannerRows(
+  queryClient: QueryClient,
+  patches: readonly RowPatch[] | undefined,
+) {
+  if (!patches || patches.length === 0) return;
+  const byWindow = new Map<string, { key: QueryKey; undo: RowUndo[] }>();
+  for (const patch of patches) {
+    for (const change of patch.changes) {
+      const hash = JSON.stringify(change.key);
+      const bucket = byWindow.get(hash) ?? { key: change.key, undo: [] };
+      bucket.undo.push({ id: patch.id, before: change.before, after: change.after });
+      byWindow.set(hash, bucket);
+    }
+  }
+
+  for (const { key, undo } of byWindow.values()) {
     const rows = queryClient.getQueryData<PlannerEventRow[]>(key);
     if (!rows) continue;
-    if (rows.find((row) => row.id === patch.id) !== after) continue;
-    const without = rows.filter((row) => row.id !== patch.id);
-    queryClient.setQueryData<PlannerEventRow[]>(
-      key,
-      before ? upsertInWindow(without, before, key) : without,
-    );
+    let updated = rows;
+    let touched = false;
+    for (const { id, before, after } of undo) {
+      // Another write has patched this row since; it owns it now.
+      if (updated.find((row) => row.id === id) !== after) continue;
+      const without = updated.filter((row) => row.id !== id);
+      updated = before ? upsertInWindow(without, before, key) : without;
+      touched = true;
+    }
+    if (touched) queryClient.setQueryData<PlannerEventRow[]>(key, updated);
   }
+}
+
+/** One row's way back, inside one cached week. */
+interface RowUndo {
+  id: string;
+  before: PlannerEventRow | undefined;
+  after: PlannerEventRow | undefined;
+}
+
+/** The cached rows matching `predicate`, once each, whichever weeks they sit in. */
+export function cachedPlannerEvents(
+  queryClient: QueryClient,
+  predicate: (row: PlannerEventRow) => boolean,
+): PlannerEventRow[] {
+  const found = new Map<string, PlannerEventRow>();
+  for (const [, rows] of queryClient.getQueriesData<PlannerEventRow[]>({
+    queryKey: plannerEventKeys.windows(),
+  })) {
+    for (const row of rows ?? []) {
+      if (!found.has(row.id) && predicate(row)) found.set(row.id, row);
+    }
+  }
+  return [...found.values()];
 }
 
 /**
@@ -165,7 +251,7 @@ function rollbackRow(queryClient: QueryClient, patch: RowPatch | undefined) {
  * refetch landing mid-write would wipe that write's optimistic row. During
  * `onSettled` the settling mutation still counts as pending, hence `<= 1`.
  */
-function invalidateWhenIdle(queryClient: QueryClient) {
+export function invalidateWhenIdle(queryClient: QueryClient) {
   if (queryClient.isMutating({ mutationKey: plannerEventKeys.writes() }) > 1) return;
   void queryClient.invalidateQueries({ queryKey: plannerEventKeys.all() });
 }
@@ -232,6 +318,7 @@ export function useCreatePlannerEvent() {
       const now = new Date().toISOString();
       const optimistic: PlannerEventRow = {
         ...result.value,
+        ...NOT_IN_A_SERIES,
         id: `${OPTIMISTIC_ID_PREFIX}${now}:${Math.random().toString(36).slice(2)}`,
         created_at: now,
         updated_at: now,
@@ -263,6 +350,37 @@ export interface PlannerEventUpdate {
   current: PlannerEventRow;
   /** Only these columns are sent — the task checkbox sends `done` alone. */
   patch: Partial<PlannerEventDraft>;
+  /**
+   * T-1 "This event": also set `series_detached`, cutting this occurrence out
+   * of its series so no later scoped write moves it again. Forward only —
+   * nothing here ever re-attaches a row.
+   */
+  detach?: boolean;
+}
+
+/** T-1 "This event": the one column that cuts a row out of its series. */
+const DETACHED = { series_detached: true } as const;
+
+/**
+ * The patched columns whose validated value is not already the row's (TR-8).
+ *
+ * The form hands over the whole draft every time, so without this a Save with
+ * nothing typed would still be a write — and, with "This event", would detach
+ * an occurrence from its series for no reason. Every column here is a string,
+ * a boolean or null, so `Object.is` is the whole comparison.
+ */
+function changedColumns(
+  current: PlannerEventRow,
+  value: PlannerEventDraft,
+  patch: Partial<PlannerEventDraft>,
+): Partial<PlannerEventDraft> {
+  const columns: Partial<PlannerEventDraft> = {};
+  for (const column of Object.keys(patch) as (keyof PlannerEventDraft)[]) {
+    if (!Object.is(value[column], current[column])) {
+      Object.assign(columns, { [column]: value[column] });
+    }
+  }
+  return columns;
 }
 
 function mergedUpdate({ current, patch }: PlannerEventUpdate) {
@@ -270,10 +388,24 @@ function mergedUpdate({ current, patch }: PlannerEventUpdate) {
     throw new Error('This event is still being saved — try again in a moment.');
   }
   const value = validated({ ...writableColumns(current), ...patch });
-  const columns = Object.fromEntries(
-    (Object.keys(patch) as (keyof PlannerEventDraft)[]).map((column) => [column, value[column]]),
-  ) as Partial<PlannerEventDraft>;
-  return { value, columns };
+  return { value, columns: changedColumns(current, value, patch) };
+}
+
+/**
+ * Would this patch change anything? The editor asks before putting the scope
+ * question up: a Save that changes nothing is not worth a decision, and must
+ * not detach the occurrence (TR-8). An unusable patch counts as a change, so
+ * the ordinary path still reports why it was refused.
+ */
+export function plannerEventChanges(
+  current: PlannerEventRow,
+  patch: Partial<PlannerEventDraft>,
+): boolean {
+  try {
+    return Object.keys(mergedUpdate({ current, patch }).columns).length > 0;
+  } catch {
+    return true;
+  }
 }
 
 export function useUpdatePlannerEvent() {
@@ -282,8 +414,10 @@ export function useUpdatePlannerEvent() {
   return useMutation<PlannerEventRow, Error, PlannerEventUpdate, RowPatch>({
     mutationKey: plannerEventKeys.writes(),
     mutationFn: async (update) => {
-      const { columns } = mergedUpdate(update);
-      if (Object.keys(columns).length === 0) return update.current;
+      const changed = mergedUpdate(update).columns;
+      // Nothing changed: no write, and therefore no detach either (TR-8).
+      if (Object.keys(changed).length === 0) return update.current;
+      const columns = { ...changed, ...(update.detach ? DETACHED : {}) };
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('planner_events')
@@ -298,7 +432,10 @@ export function useUpdatePlannerEvent() {
     onMutate: async (update) => {
       let next: PlannerEventRow;
       try {
-        next = { ...update.current, ...mergedUpdate(update).value };
+        const { value, columns } = mergedUpdate(update);
+        // Nothing to show either: the write will not happen (TR-8).
+        if (Object.keys(columns).length === 0) return NO_PATCH;
+        next = { ...update.current, ...value, ...(update.detach ? DETACHED : {}) };
       } catch {
         // mutationFn re-validates and throws; there is nothing to patch.
         return NO_PATCH;

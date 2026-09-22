@@ -12,10 +12,13 @@ import { useId, type ReactNode } from 'react';
 import tokens from '@/styles/tokens.module.css';
 import { courseCode, useCourses } from '@/lib/queries';
 import { COMMON_TIME_ZONES } from '@/lib/planner-zone';
+import { SERIES_FREQS, SERIES_FREQ_LABELS, type SeriesFreq } from '@/lib/planner-recurrence';
 import {
+  NO_REPEAT,
   OTHER_ZONE,
   type FormErrors,
   type PlannerEventFormState,
+  type RepeatChoice,
 } from './planner-event-form-state';
 import styles from './PlannerEventForm.module.css';
 interface ControlProps {
@@ -172,6 +175,111 @@ export function ZoneField({
               placeholder="Europe/Berlin"
               value={state.customZone}
               onChange={(e) => set('customZone', e.target.value)}
+            />
+          )}
+        </Field>
+      )}
+    </div>
+  );
+}
+
+/** The rule of a series already saved, as far as the planner knows it. */
+export interface ExistingRepeat {
+  freq: SeriesFreq | null;
+  /** The last local date an occurrence may start on. */
+  until: string | null;
+}
+
+/**
+ * How to change a rule that is already saved. The tail ships no rule editor on
+ * purpose (PM's call), so the form says what to do instead of hiding it.
+ */
+const LOCKED_NOTE =
+  'How often it repeats cannot be changed here. Delete this and the following events, then create the new pattern.';
+
+const UNKNOWN_RULE = 'This event is part of a repeating event.';
+
+/**
+ * "Repeats" and its end date (T-1).
+ *
+ * On a new event both are editable and the end date is required, with the
+ * occurrence count live underneath. On an event already in a series they are
+ * read-only: the rule is frozen for this tail.
+ */
+export function RepeatFields({
+  state,
+  set,
+  errors,
+  count,
+  existing,
+}: {
+  state: PlannerEventFormState;
+  set: Setter;
+  errors: FormErrors;
+  /** '12 occurrences', or undefined while the rule is incomplete. */
+  count?: string;
+  /** Edit mode: the saved rule, or null when this event does not repeat. */
+  existing?: ExistingRepeat | null;
+}) {
+  if (existing) {
+    // Read into consts: the callbacks below are closures, and a narrowed
+    // parameter property does not stay narrowed inside one.
+    const { freq, until } = existing;
+    if (freq === null) {
+      return (
+        <p className={styles.note}>
+          {UNKNOWN_RULE} {LOCKED_NOTE}
+        </p>
+      );
+    }
+    return (
+      <div className={styles.row}>
+        <Field label="Repeats" note={LOCKED_NOTE}>
+          {(props) => (
+            <select {...props} className={tokens.input} value={freq} disabled>
+              <option value={freq}>{SERIES_FREQ_LABELS[freq]}</option>
+            </select>
+          )}
+        </Field>
+        {until !== null && (
+          <Field label="Ends on">
+            {(props) => (
+              <input {...props} type="date" className={tokens.input} value={until} readOnly disabled />
+            )}
+          </Field>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.row}>
+      <Field label="Repeats" error={errors.repeat}>
+        {(props) => (
+          <select
+            {...props}
+            className={tokens.input}
+            value={state.repeat}
+            onChange={(e) => set('repeat', e.target.value as RepeatChoice)}
+          >
+            <option value={NO_REPEAT}>Does not repeat</option>
+            {SERIES_FREQS.map((freq) => (
+              <option key={freq} value={freq}>
+                {SERIES_FREQ_LABELS[freq]}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+      {state.repeat !== NO_REPEAT && (
+        <Field label="Ends on" error={errors.repeatUntil} note={count}>
+          {(props) => (
+            <input
+              {...props}
+              type="date"
+              className={tokens.input}
+              value={state.repeatUntil}
+              onChange={(e) => set('repeatUntil', e.target.value)}
             />
           )}
         </Field>

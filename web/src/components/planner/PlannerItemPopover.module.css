@@ -1,0 +1,120 @@
+/* The planner's small assignment popover (Phase 12b, T-2 / P-planner-5).
+
+   Layout only — every colour, radius and spacing value is a token from
+   globals.css, and the reusable primitives (tag, kicker, buttons) come from
+   tokens.module.css via the TSX. The panel is `position: fixed` because
+   `placePopover` works in viewport co-ordinates, which is what
+   `getBoundingClientRect()` hands it. */
+
+.panel {
+  position: fixed;
+  top: var(--popover-top, 0);
+  left: var(--popover-left, 0);
+  z-index: 55; /* under the `?item=` popout's backdrop (60), over the grid */
+  width: min(300px, calc(100vw - 2 * var(--space-4)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Measured before it is placed: the first paint would otherwise flash at the
+   top-left corner of the window. */
+.panel[data-placed='false'] {
+  visibility: hidden;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-right: var(--space-6);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.close {
+  all: unset;
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--color-neutral-400);
+}
+.close:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.close:focus-visible {
+  outline: 2px solid var(--color-accent);
+}
+
+.line {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.control {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+}
+.control:disabled {
+  opacity: 0.6;
+}
+.control:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.problem {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+}
+
+.links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-divider);
+}

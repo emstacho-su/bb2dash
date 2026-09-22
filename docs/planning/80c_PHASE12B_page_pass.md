@@ -303,6 +303,102 @@ unpacked Electron build for P-shell-2), one screenshot per check into `80d`.
 | T-1 (post-MVP) | P-planner-6 | W-33 + W-30 | 082–083 SQL tests (bounds, DST, detach, split); push proof: N inserts, zero-write re-run, one-occurrence edit = 1 patch, series delete leaves past rows; test rows deleted in the same sitting | create weekly until a date → occurrences on the grid and in Google; edit one; edit all following; delete the series |
 | T-2 (post-MVP) | P-planner-5 | W-33 | popover unit tests (anchoring, escape, focus return); new route renders the full details | click a due item on `/planner` → small anchored popover; "See full details" → the page under the course |
 
+## Post-MVP tail — frozen contract (PM, 2026-09-21)
+
+Stack said continue on 2026-09-21, after the MVP merged as PR #20. Branch `fix/page-pass-12b-tail`
+(worktree `bb2dash-wt-12b-tail`), cut from `main` at `6f20a00`; one follow-up PR. Product calls are
+his answers 14 and 15; everything below is the PM's reading of them. Names here are frozen.
+
+### T-1 Recurring planner events (P-planner-6)
+
+**Where occurrences come from.** The web layer expands the rule with `planner-zone.ts` and sends
+finished rows. SQL never converts a planner wall clock (its DST fall-back rule differs from
+Temporal `compatible`; see STATUS known issues). Each occurrence is an ordinary `planner_events`
+row, so `v_calendar_push_items` and `calendar-push` are **not touched**.
+
+**082 `planner_event_series`** (owner-only RLS on four verbs, `(select auth.uid())` form, anon revoked):
+
+| column | type | rule |
+|---|---|---|
+| `id` | uuid pk | `gen_random_uuid()` |
+| `freq` | text | `daily` / `weekly` / `monthly` |
+| `until_date` | date not null | last local date an occurrence may start on |
+| `created_at` | timestamptz | `now()` |
+
+`planner_events` gains `series_id uuid references planner_event_series(id) on delete set null`
+(indexed) and `series_detached boolean not null default false`, with a check that
+`series_detached` implies `series_id is not null`. A trigger refuses a 53rd row in one series
+(`MAX_SERIES_OCCURRENCES = 52`, the same constant in `planner-recurrence.ts`).
+
+**083 RPCs** (`security invoker`, `search_path = public, pg_temp`, execute for `authenticated` only;
+each is one transaction). `p_rows` is a jsonb array; every element carries the `planner_events`
+insert columns (`kind, title, starts_at, ends_at, time_zone, all_day, location_kind, location,
+notes, done, course_id`), plus `id` where rows are updated. Shape checked with strict jsonpath
+(080's lesson); 1–52 elements.
+
+| RPC | does | returns |
+|---|---|---|
+| `planner_series_create(p_freq text, p_until date, p_rows jsonb)` | inserts the series and its rows | the series `uuid` |
+| `planner_series_update(p_series_id uuid, p_scope text, p_from timestamptz, p_rows jsonb)` | `p_scope = 'following'`: creates a new series with the old rule, moves the non-detached rows with `starts_at >= p_from` to it, updates them **by id** from `p_rows`, sets the old series' `until_date` to the day before `p_from`. `'all'`: updates by id the non-detached rows with `starts_at >= now()`. Rows not in scope or detached are refused, not skipped | rows updated (`int`) |
+| `planner_series_delete(p_series_id uuid, p_scope text, p_from timestamptz)` | `'following'`: deletes rows (detached too) with `starts_at >= p_from`, shortens `until_date`. `'all'`: deletes rows with `starts_at >= now()`, then the series row; past rows stay with `series_id` null | rows deleted (`int`) |
+
+"This one" needs no RPC: the existing update sets `series_detached = true`; the existing delete
+removes the row. Updates keep row ids, so Google sees patches, never delete + insert.
+
+**Cut from the tail (PM's call):** the rule itself (`freq`, `until_date`) is not editable after
+creation. To change it, delete "all following" and create a new series. Weekly means the same
+weekday; monthly means the same day-of-month, and a month without that day is skipped.
+
+**Web.** New `web/src/lib/planner-recurrence.ts` (pure: `expandSeries(draft, freq, until, zone)`
+→ rows, bounds, the 52 cap, DST by wall clock, monthly skip; `fast-check` properties). Form gains
+"Repeats" (none / daily / weekly / monthly) + a required end date when it repeats. Editing or
+deleting a series row asks "This event / This and following / All events" first. A repeat mark on
+series blocks. `queries.plannerEvents.ts` gains `useCreatePlannerSeries`, `useUpdatePlannerSeries`,
+`useDeletePlannerSeries` (optimistic, rollback per call).
+
+### T-2 Small assignment popover (P-planner-5)
+
+On `/planner` only, clicking a due item opens an anchored popover (title, course, due, status
+select, points/score line, Blackboard link, "See full details"). Escape and outside click close it;
+focus returns to the item; it flips to stay in the viewport. "See full details" goes to the new
+route `/course/[id]/assignment/[assignmentId]`, a page that renders what `AssignmentPopout`
+renders today (one shared body component, no copy). Every other screen keeps `?item=` popouts.
+
+*Contract corrections after W-37 (2026-09-21, accepted by the PM):* the route is the catch-all
+`/course/[id]/assignment/[...assignmentId]`, because every `assignments.id` contains a `/`
+(`IST.323/lab-1`) and a `%2F` single segment is decoded by proxies; and an assignment on a child
+shell (`parent_course_id`, GEO 103's recitation) is accepted under the parent course's URL.
+
+### Tail workers (disjoint files)
+
+| Worker | Branch · worktree | Owns |
+|---|---|---|
+| W-35 db | `fix/page-pass-12b-tail-db` · `bb2dash-wt-12b-tail-db` | `db/migrations/082–083`, `db/tests/`, the push proof (SQL-inserted, labelled, deleted in the same sitting), `DATA_SYNTAX.md` planner section |
+| W-36 recurrence web | `fix/page-pass-12b-tail-recur` · `bb2dash-wt-12b-tail-recur` | `planner-recurrence.ts`, `planner-events*.ts`, `queries.plannerEvents.ts`, `PlannerEvent*.tsx`, the scope dialog |
+| W-37 popover | `fix/page-pass-12b-tail-popover` · `bb2dash-wt-12b-tail-popover` | `PlannerItem.tsx`, `web/src/components/popout/`, the new popover component, the new route |
+
+`PlannerBoard.tsx` / `PlannerWeek.tsx`: W-36 and W-37 may each add wiring only; the PM resolves the
+merge. `database.types.ts` is the PM's at integration; W-36 types the three RPCs locally from this
+contract until then. Checks are rows T-1 and T-2 of §Item task list.
+
+### Tail round 2 — `/code-review main high`, 2026-09-21 (10 findings, all accepted)
+
+| # | Finding | Fix | Owner |
+|---|---|---|---|
+| TR-1 | A "following" / "all" edit copies the opened occurrence's `done` onto every row in scope | a series edit never changes `done`: each row in `p_rows` carries its own current `done` | W-36 |
+| TR-2 | "All events" from a past or in-progress occurrence leaves that occurrence out, silently (the 60 s margin and 083's `now()`) | after the RPC, the opened row is also written by the plain update (no detach) or plain delete when it is outside the RPC's scope; an error on either shows the error path | W-36 |
+| TR-3 | The "following" split leaves detached rows after the cut on the old series | **088**: the split moves detached rows with `starts_at >= p_from` to the new series too (moved, not updated) | W-35 |
+| TR-4 | A "following" update or delete from the first occurrence leaves an empty series row | **088**: a series left with zero rows is deleted in the same transaction | W-35 |
+| TR-5 | The catch-all route never decodes its segments | decode each segment the way the sibling pages decode `id`; test with a space, `&`, an apostrophe and `%2F` | W-37 |
+| TR-6 | Series writes never invalidate `['planner-series', id]`; the split copies the old `until_date` unshifted | invalidate the rule keys on every series write (W-36); **088**: the new series' `until_date` is the later of the old one and the last moved row's local date (W-35) | W-36 + W-35 |
+| TR-7 | The popover measures a detached anchor and jumps to the board's corner | close when the anchor is no longer connected; focus falls back to the board | W-37 |
+| TR-8 | "This event" with no edits still detaches the occurrence | no changed column → no write, no detach, and the scope dialog is not asked | W-36 |
+| TR-9 | `patchPlannerRows` writes every cached window once per row (52 × W) | group per window, one `setQueryData` per window; same for rollback | W-36 |
+| TR-10 | No `project-state/` update on the branch | STATUS, DECISIONS, ORCHESTRATOR in this PR | PM |
+
+088 is `088_planner_series_split_fixes.sql`: `create or replace` of the two RPCs only; 083 stays
+byte-frozen. 089 stays free.
+
 ## Out of scope
 
 * Visual restyling (Phase 13) — a layout **bug** is in; a taste change is 13's.

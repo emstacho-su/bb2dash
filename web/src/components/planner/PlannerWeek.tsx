@@ -33,10 +33,10 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { todayIso } from '@/components/tracker/anchor';
 import { useHydrated } from '@/lib/use-hydrated';
-import { itemHref } from '@/lib/queries.popout';
+import { assignmentPagePath } from '@/lib/assignment-page';
 import { useSetItemStatus, type WorkItem } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
 import {
@@ -57,7 +57,10 @@ import {
 import { reservedBoardHeightPx } from '@/lib/planner-rows';
 import { WeekBoard, type BandToggle } from './PlannerBoard';
 import { PlannerEventForm } from './PlannerEventForm';
+import { PlannerItemPopover } from './PlannerItemPopover';
+import { PlannerSeriesScopeDialog } from './PlannerSeriesScopeDialog';
 import type { SlotPosition } from './PlannerSlots';
+import type { EventActions } from './PlannerEventBlock';
 import { WeekHeader } from './PlannerWeekHeader';
 import { usePlannerEventEditor } from './usePlannerEventEditor';
 import type { ItemActions } from './PlannerItem';
@@ -119,10 +122,15 @@ function PlannerWeekSkeleton() {
   );
 }
 
+/** Which assignment's popover is open, and the card it is anchored to (T-2). */
+interface PopoverTarget {
+  assignmentId: string;
+  anchor: HTMLElement;
+}
+
 function PlannerWeekScreen() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const router = useRouter();
 
   // `?week=` is untrusted input; `weekAnchor` validates it and falls back to
   // the current week rather than throwing.
@@ -138,7 +146,34 @@ function PlannerWeekScreen() {
   const [activeSlot, setActiveSlot] = useState<SlotPosition>({ dayIndex: 0, slot: 0 });
   const band = useBandState();
 
-  const actions = itemActions(pathname, view, setStatus, router);
+  // T-2: one popover at a time, anchored to the card that opened it. Paging the
+  // week takes that card off the page, so the target is dropped during the
+  // render that changes weeks rather than left pointing at a detached element.
+  const [popover, setPopover] = useState<PopoverTarget | null>(null);
+  const [popoverWeek, setPopoverWeek] = useState(view.weekStart);
+  if (popoverWeek !== view.weekStart) {
+    setPopoverWeek(view.weekStart);
+    setPopover(null);
+  }
+  const closePopover = useCallback(() => setPopover(null), []);
+
+  const actions = itemActions(view, setStatus, popover, setPopover);
+
+  // One layer at a time. The popover closes itself on an outside *press*, but a
+  // keyboard activation (Enter on a block) fires no press, so opening the event
+  // form closes it here instead — otherwise both would be up at once and one
+  // Escape would dismiss the pair.
+  const eventActions: EventActions = {
+    ...editor.actions,
+    edit: (event, opener) => {
+      closePopover();
+      editor.actions.edit(event, opener);
+    },
+    create: (prefill, opener) => {
+      closePopover();
+      editor.actions.create(prefill, opener);
+    },
+  };
 
   const itemCount = data.placedItems.timed.length + data.placedItems.allDay.length;
   const isEmpty =
@@ -179,7 +214,7 @@ function PlannerWeekScreen() {
         view={view}
         data={data}
         actions={actions}
-        eventActions={editor.actions}
+        eventActions={eventActions}
         activeSlot={activeSlot}
         onActivateSlot={setActiveSlot}
         isEmpty={isEmpty}
@@ -193,31 +228,45 @@ function PlannerWeekScreen() {
       </div>
 
       {editor.form !== null && <PlannerEventForm key={editor.form.sessionId} {...editor.form} />}
+
+      {popover !== null && (
+        <PlannerItemPopover
+          key={popover.assignmentId}
+          assignmentId={popover.assignmentId}
+          anchor={popover.anchor}
+          onClose={closePopover}
+        />
+      )}
+      {editor.scope !== null && <PlannerSeriesScopeDialog {...editor.scope} />}
     </section>
   );
 }
 
 /**
- * The three things a due item on the grid can do.
+ * What a due item on the grid can do (T-2).
  *
- * Opening the popout must not silently page the grid back to this week, so a
- * paged week rides along on the href. `itemHref` still builds the `?item=`
- * part; `ItemPopout` drops only that parameter when it closes.
+ * Clicking opens the small popover against the card, and clicking the same card
+ * again closes it — which is also what makes a press on the card while its own
+ * popover is up mean "shut this", rather than closing and reopening.
+ *
+ * The title's href is the full-details page under the course, so a modified
+ * click still opens something real. Nothing here navigates: `/planner` no
+ * longer opens the `?item=` panel.
  */
 function itemActions(
-  pathname: string,
   view: PlannerWeekModel,
   setStatus: ReturnType<typeof useSetItemStatus>,
-  router: ReturnType<typeof useRouter>,
+  popover: PopoverTarget | null,
+  setPopover: (next: PopoverTarget | null) => void,
 ): ItemActions {
-  const weekSuffix = view.isCurrentWeek ? '' : `&week=${view.weekStart}`;
-  const href = (id: string) => `${itemHref(pathname, { kind: 'assignment', id })}${weekSuffix}`;
   return {
-    href,
-    open: (id) => router.push(href(id), { scroll: false }),
+    href: (item: WorkItem) => assignmentPagePath(item.course_id, item.item_id),
+    open: (id: string, anchor: HTMLElement) =>
+      setPopover(popover?.assignmentId === id ? null : { assignmentId: id, anchor }),
     onStatusChange: (item: WorkItem, status: ProgressStatus) =>
       setStatus.mutate({ item: { item_kind: item.item_kind, item_id: item.item_id }, status }),
     pendingItemId: setStatus.isPending ? (setStatus.variables?.item.item_id ?? null) : null,
+    openItemId: popover?.assignmentId ?? null,
   };
 }
 
