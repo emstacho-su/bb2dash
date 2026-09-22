@@ -17,7 +17,6 @@
 
 import { notFound } from 'next/navigation';
 import { AssignmentDetailBody } from '@/components/popout/AssignmentDetailBody';
-import { isQueryLoading } from '@/components/shared/QueryState';
 import { assignmentBelongsToCourse } from '@/lib/assignment-page';
 import { useCourse } from '@/lib/queries';
 import { useAssignment } from '@/lib/queries.popout';
@@ -37,7 +36,12 @@ export function CourseAssignment({
   // the body uses, so this is the cache entry rather than a second request.
   const ownerQ = useCourse(assignment?.course_id ?? '');
 
-  if (isQueryLoading(assignmentQ)) {
+  // `isPending` alone, not `isQueryLoading`: on the server, and on the first
+  // client render before the fetch starts, TanStack reports a pending query
+  // that is not fetching. That is not evidence of absence — deciding not-found
+  // there made every direct load of this page a 404 in production
+  // (2026-09-22). Only a settled query may say the assignment is missing.
+  if (assignmentQ.isPending) {
     return <p className={styles.state}>Loading assignment…</p>;
   }
 
@@ -55,7 +59,7 @@ export function CourseAssignment({
   if (!ownCourse) {
     // Only the shell case needs the course row, and only then is it worth
     // waiting for one.
-    if (isQueryLoading(ownerQ)) {
+    if (ownerQ.isPending) {
       return <p className={styles.state}>Loading assignment…</p>;
     }
     const parent = ownerQ.data?.parent_course_id ?? null;
