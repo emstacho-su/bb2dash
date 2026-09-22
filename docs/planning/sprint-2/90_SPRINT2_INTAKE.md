@@ -1,10 +1,14 @@
 # Sprint 2 — intake
 
-Opened 2026-09-22 at sprint 1's close. Product manager: Stack. Method: the Phase 12b one
-(`../sprint-1-hub/briefs/80c_PHASE12B_page_pass.md` §Method) — his list → one id per item → triage
-→ one Sonnet researcher per area → ONE batch of questions with a default each → briefs → workers.
-Migration range starts at **091**. Planning docs for this sprint live in this folder
-(`briefs/`, `research/`, `verification/`, `evidence/`, `walks/`, `parked/`).
+Opened 2026-09-22 at sprint 1's close. Product manager: Stack. **Method (Stack, 2026-09-22):** four
+stages in one planning session, each ending in a stop — (A) translate the unfinished sprint 1 phases
+into requirements in `91_REQUIREMENTS_v3.md` (§1 carried, §2 PM-added, §3 Stack's new items, §4 still
+declined); (B) one Sonnet researcher per conceptual area → `research/92_*` + `93_` synthesis + one
+question batch; (C) `94_SPRINT2_PHASES.md` + one brief per phase with deterministic per-task checks;
+(D) one prompt per session and the ORCHESTRATOR refresh. The prompt is the last entry of ORCHESTRATOR
+§6. The carried items below are the seed for stage A. Migration range starts at **091**. Planning docs
+for this sprint live in this folder (`briefs/`, `research/`, `verification/`, `evidence/`, `walks/`,
+`parked/`).
 
 ## Carried in from sprint 1 (PM's list; Stack adds his own below)
 
