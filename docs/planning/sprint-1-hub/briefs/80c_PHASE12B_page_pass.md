@@ -409,7 +409,7 @@ byte-frozen. 089 stays free.
 ## Session prompt (copy-paste)
 
 > `/bb2dash-pm` Start Phase 12b (fine-tooth-comb pass). Read
-> `docs/planning/80c_PHASE12B_page_pass.md` and follow its Method exactly. My list of bugs and
+> `docs/planning/sprint-1-hub/briefs/80c_PHASE12B_page_pass.md` and follow its Method exactly. My list of bugs and
 > changes by page follows below. Give every item an id, triage it, spawn Sonnet researchers (one
 > per page) to reproduce, locate and size, then bring me your questions in one batch. After my
 > answers, write the MVP, DoD and task loops into the brief and stop for my approval before

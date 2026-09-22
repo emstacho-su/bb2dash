@@ -1,7 +1,7 @@
 # W-25 verification — Phase 12 shell (C-1 to C-6, C-8, C-10, C-12, C-13)
 
 Branch `feat/electron-12-shell`, worktree `bb2dash-wt-electron-12-shell`, cut from `cb718ca`.
-Contract: `docs/planning/80_PHASE12_electron.md`, as amended by Stack's answers Q1–Q9.
+Contract: `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md`, as amended by Stack's answers Q1–Q9.
 
 The stream was resumed after its first agent died mid-task 9. Everything below was re-run
 by the second agent on 2026-09-16/17; nothing is carried over on trust, including the PM's

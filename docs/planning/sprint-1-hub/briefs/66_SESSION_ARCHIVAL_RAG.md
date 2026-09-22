@@ -81,7 +81,7 @@ parent_session: <id> | null         # for subagent transcripts, the spawning ses
 child_sessions: [<id>, …]
 memory_files: [pm-worker-arrangement, bb2dash-phase7-retrieval-polish]   # auto-memory files written
 plan_file: abundant-gathering-wirth | null
-docs_touched: [docs/planning/50_PHASE7_retrieval_polish.md, …]           # repo-relative, scratchpad and temp paths dropped
+docs_touched: [docs/planning/sprint-0-foundation/50_PHASE7_retrieval_polish.md, …]           # repo-relative, scratchpad and temp paths dropped
 artifacts: [<artifact url>, …]
 ```
 
@@ -132,7 +132,7 @@ hook never removes a manual tag on rewrite and ingest keeps them (Stack, 2026-09
 
 ## Definition of done
 
-Source: Stack's answers (`70_MVP_INDEX.md` §1, V-2) + research `research/76_RESEARCH_v2_session_archival.md` §5.
+Source: Stack's answers (`70_MVP_INDEX.md` §1, V-2) + research `../research/76_RESEARCH_v2_session_archival.md` §5.
 Stack's check is this list, PM-verified, with the evidence pasted in the two harness PRs.
 
 - [ ] One note per session id for all Phase 7–9 sessions under `vault/projects/bb2dash/sessions/`;

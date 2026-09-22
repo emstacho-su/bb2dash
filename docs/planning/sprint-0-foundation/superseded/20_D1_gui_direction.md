@@ -1,6 +1,6 @@
 # D1 GUI direction: re-planning the product around the data that exists
 
-Date: 2026-09-08. Agent: D1 (product and GUI direction). Inputs read in full: `docs/planning/10_R1_gui_binding_audit.md`, `11_R2_data_inventory.md`, `12_R3_pipeline_and_runtime.md`, `docs/planning/DB_VIEWS_2026-09-08.sql`, `db/migrations/001_schema.sql` and `005_file_corpus.sql` (enum definitions), `gui research context/gui/README.md`, `00-mvp-plan.dc.html`, `13-home-v2.dc.html`, `14-course-v2.dc.html`, `03-lecture.dc.html`, `04-assignment.dc.html`.
+Date: 2026-09-08. Agent: D1 (product and GUI direction). Inputs read in full: `docs/planning/sprint-0-foundation/superseded/10_R1_gui_binding_audit.md`, `11_R2_data_inventory.md`, `12_R3_pipeline_and_runtime.md`, `docs/planning/sprint-0-foundation/DB_VIEWS_2026-09-08.sql`, `db/migrations/001_schema.sql` and `005_file_corpus.sql` (enum definitions), `gui research context/gui/README.md`, `00-mvp-plan.dc.html`, `13-home-v2.dc.html`, `14-course-v2.dc.html`, `03-lecture.dc.html`, `04-assignment.dc.html`.
 
 Everything below cites an R1, R2 or R3 finding or a file and column. Where I am making a judgment call rather than reporting a fact, I say so. Where I disagree with a researcher I say so and why.
 

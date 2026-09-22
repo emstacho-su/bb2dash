@@ -1,7 +1,7 @@
 # 68a — W-20 verification (Phase 10b grade model, database + web)
 
 Worker: W-20. Branch `feat/grades-10b-web`, worktree `bb2dash-wt-gm-web`.
-Contract: `docs/planning/68_PHASE10B_grade_model.md` § "Contract (frozen 2026-09-16)".
+Contract: `docs/planning/sprint-1-hub/briefs/68_PHASE10B_grade_model.md` § "Contract (frozen 2026-09-16)".
 Date: 2026-09-16. Project `goultdzqcavefcgnifdy` (prod — there is no staging).
 
 Everything below was run against prod. Numbers are what the database returned.

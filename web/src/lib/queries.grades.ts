@@ -8,7 +8,7 @@
  * ROW TYPES — migrations 046-051 are applied and `database.types.ts` was
  * regenerated, so every read here goes through the ordinary typed client. The
  * four view row types below stay hand-narrowed to the frozen column lists in
- * `docs/planning/67_PHASE10A_grades.md` §047/§050: Postgres reports no not-null
+ * `docs/planning/sprint-1-hub/briefs/67_PHASE10A_grades.md` §047/§050: Postgres reports no not-null
  * constraint on a view, so the generated row types make every column nullable,
  * and the Contract is stricter than that. Each of those reads therefore carries
  * one documented cast at the call site — the Phase 8 precedent, see the header

@@ -4,7 +4,7 @@
  * `v_gradebook_latest`, `v_assignment_grade`, `v_course_grade` and
  * `v_assignment_attempts` are created by migrations 047/050 in the same phase,
  * so no test may reach the database for their shape: these builders are the
- * frozen column lists from `docs/planning/67_PHASE10A_grades.md`, and the
+ * frozen column lists from `docs/planning/sprint-1-hub/briefs/67_PHASE10A_grades.md`, and the
  * values are the ones that Contract quotes out of the live crawl (run
  * `bf2f81e5-…`, 2026-09-14) — IST.323's one `isCalc` total at 5/104, a GRADED
  * quiz at 10/10, an IST.352 row SUBMITTED with no score and a NEEDS_GRADING

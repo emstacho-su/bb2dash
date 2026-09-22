@@ -84,4 +84,5 @@ W-7 Materials; W-8 cmd-K search UI; W-9 RLS hardening to `auth.uid() = app_owner
 (required before real data sits behind a public URL).
 
 Full analysis with file/section citations lives in the PM session transcript of
-2026-09-09; source docs: `docs/planning/00–31`, `gui research context/gui/README.md`.
+2026-09-09; source docs: `docs/planning/sprint-0-foundation/00–31` (the `10_`–`31_` set now under
+`sprint-0-foundation/superseded/`), `gui research context/gui/README.md`.

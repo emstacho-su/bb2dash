@@ -98,7 +98,7 @@ Two retrieval tiers over the corpus, both scoped by course when wanted:
   `{q, course?, mode: fts|vector|hybrid, limit?, min_similarity?, include_superseded?}`).
   **Hub default mode = hybrid** per `EVAL_EMBEDDING_POC.md` (hybrid/vector hit@1 9/10 vs FTS
   1/10 on conversational queries). Evidence for the 021–023 round:
-  `docs/planning/51_W10_VERIFICATION.md`.
+  `docs/planning/sprint-0-foundation/51_W10_VERIFICATION.md`.
 
 ## Enums
 

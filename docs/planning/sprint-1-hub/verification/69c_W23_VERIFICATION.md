@@ -2,7 +2,7 @@
 
 Worker: W-23. Branch `feat/planner-events-11b-db`, worktree `bb2dash-wt-pe-db`, cut from
 `feat/planner-events-11b` at `ddc8bba`.
-Contract: `docs/planning/69b_PHASE11B_planner_events.md` § "Contract (frozen)" and PM kickoff notes
+Contract: `docs/planning/sprint-1-hub/briefs/69b_PHASE11B_planner_events.md` § "Contract (frozen)" and PM kickoff notes
 K-1..K-11. Date: 2026-09-16. Project `goultdzqcavefcgnifdy` (prod; there is no staging).
 
 Everything below was captured against prod. All times are UTC.

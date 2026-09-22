@@ -30,7 +30,7 @@ import {
 } from '../../src/core/poller/sources';
 import type { RestGet } from '../../src/core/types';
 
-/** The query strings exactly as `docs/planning/80_PHASE12_electron.md` C-6 freezes them. */
+/** The query strings exactly as `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md` C-6 freezes them. */
 const CONTRACT = {
   R1: 'select=id,run_id,status,started_at,finished_at,trigger,summary',
   R2: 'seen_at=gt.<lastSeenAt>&score=not.is.null&select=shell_course_id,column_id,name,run_id,seen_at,score,possible,previous_score&order=seen_at.asc&limit=200',

@@ -1,7 +1,7 @@
 # 66 — W-17 verification (Phase 10a grades, database + ingest)
 
 Worker: W-17. Branch `feat/grades-10a-db`, worktree `bb2dash-wt-g-db`.
-Contract: `docs/planning/67_PHASE10A_grades.md` § "Contract (frozen 2026-09-15)".
+Contract: `docs/planning/sprint-1-hub/briefs/67_PHASE10A_grades.md` § "Contract (frozen 2026-09-15)".
 Date: 2026-09-15. Project `goultdzqcavefcgnifdy` (prod — there is no staging).
 
 Everything below was run against prod. Numbers are what the database returned, not what the

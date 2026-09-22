@@ -82,7 +82,7 @@ cause in `embed-corpus` so new rows are correct. Keep repo copy byte-identical t
 
 Deliverables: migrations 021, 022, 023 (as needed); `search` v4 source + deployed; `embed-corpus`
 fix + deployed; `db/README` / migration index updated if one exists; a verification note
-`docs/planning/51_W10_VERIFICATION.md` with the SQL + curl evidence (before/after snippets for
+`docs/planning/sprint-0-foundation/51_W10_VERIFICATION.md` with the SQL + curl evidence (before/after snippets for
 ≥5 queries incl. one long-unit hit, superseded rows absent by default and present with the flag,
 part_range audit counts, edge smoke HTTP 200s).
 

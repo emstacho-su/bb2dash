@@ -1,7 +1,7 @@
 /**
  * bb2dash — the one grade figure the app shows (Phase 12b, G-1 / G-2).
  *
- * Stack read `docs/planning/80e_GRADE_METHOD_COMPARISON.md` and picked the
+ * Stack read `docs/planning/sprint-1-hub/evidence/80e_GRADE_METHOD_COMPARISON.md` and picked the
  * Phase 10b engine's arithmetic with its two silencing rules taken off — the
  * "gates off" row of that table, which reproduced every hand-derived grade in
  * the fixture set exactly. This module is that configuration, and it is the

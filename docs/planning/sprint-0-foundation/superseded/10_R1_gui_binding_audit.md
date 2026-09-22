@@ -1,6 +1,6 @@
 # R1 GUI binding audit: what the artboards display vs what the database holds
 
-Date: 2026-09-08. Agent: R1 (research). Sources read: `gui research context/gui/README.md`, `00-mvp-plan.dc.html`, `13-home-v2.dc.html`, `14-course-v2.dc.html`, `03-lecture.dc.html`, `04-assignment.dc.html`, `support.js`, `12-home-options.dc.html` (ids only), `db/migrations/001..009`, `db/seed/002`, `docs/planning/DB_VIEWS_2026-09-08.sql`, `docs/planning/DB_PROFILE_2026-09-08.json`, `DATA_SYNTAX.md`, `PHASE2_FINDINGS.md`, `NOTES.md`, `ingest/bb_crawler.js`.
+Date: 2026-09-08. Agent: R1 (research). Sources read: `gui research context/gui/README.md`, `00-mvp-plan.dc.html`, `13-home-v2.dc.html`, `14-course-v2.dc.html`, `03-lecture.dc.html`, `04-assignment.dc.html`, `support.js`, `12-home-options.dc.html` (ids only), `db/migrations/001..009`, `db/seed/002`, `docs/planning/sprint-0-foundation/DB_VIEWS_2026-09-08.sql`, `docs/planning/sprint-0-foundation/DB_PROFILE_2026-09-08.json`, `DATA_SYNTAX.md`, `PHASE2_FINDINGS.md`, `NOTES.md`, `ingest/bb_crawler.js`.
 
 ## How to read this
 

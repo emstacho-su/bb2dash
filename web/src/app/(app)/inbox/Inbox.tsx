@@ -11,7 +11,7 @@
  * until the next run folds it in — and "answered · recorded only" (F-4) when
  * the transform will never act on that kind of answer at all.
  *
- * Controls per kind, frozen in docs/planning/62_PHASE9_sync_loop.md:
+ * Controls per kind, frozen in docs/planning/sprint-1-hub/briefs/62_PHASE9_sync_loop.md:
  *   conflict                     Accept Blackboard / Keep mine
  *   stack_must_confirm, missing  a text or date input
  *   deadline, data_gap           Dismiss

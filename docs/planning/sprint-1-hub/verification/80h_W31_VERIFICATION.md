@@ -21,7 +21,7 @@ Baseline on the branch before any of this work: **87 test files, 1342 tests, all
 | `web/test/grade-fixtures/fixtures/01…18-*.ts` | **18 fixtures**, one file each, every one carrying its hand-written derivation as a comment |
 | `web/test/grade-fixtures/methods.ts` | the methods behind one signature; the **only** file that imported `grade-model/` |
 | `web/test/grade-fixtures/report.ts` | scoring and the markdown |
-| `web/test/grade-fixtures/comparison.test.ts` | the run; wrote `docs/planning/80e_GRADE_METHOD_COMPARISON.md` |
+| `web/test/grade-fixtures/comparison.test.ts` | the run; wrote `docs/planning/sprint-1-hub/evidence/80e_GRADE_METHOD_COMPARISON.md` |
 
 > The three files above were **deleted by G-1** once Stack had picked: `80e` is frozen as the
 > record, and regenerating it with fewer columns would falsify it. The folder was renamed from
@@ -396,7 +396,7 @@ build and the full suite are green at every one of those points.
 ### Proposed DECISIONS row
 
 > **2026-09-17 — Phase 10b's strict rule and what-if layer are reversed (P-grades-3, G-1).**
-> Stack read `docs/planning/80e_GRADE_METHOD_COMPARISON.md` — eighteen dummy-data fixtures, each
+> Stack read `docs/planning/sprint-1-hub/evidence/80e_GRADE_METHOD_COMPARISON.md` — eighteen dummy-data fixtures, each
 > with a hand-derived grade, measured against four candidates — and picked the 10b engine's
 > arithmetic with its two silencing rules removed. That configuration reproduced every
 > hand-derived grade exactly; the raw points ratio was 3.9 points out on average and printed

@@ -221,14 +221,14 @@ identically from a Linux scheduler container, PowerShell, or a `Makefile`.
     predates the merged R-27/V-2 work; the collection-by-git-remote fix it
     describes as needed is **already live** (verified against
     `hooks/lib/collection.mjs` and README's "Status" table showing R-27
-    merged 2026-09-16 via PRs referenced in `docs/planning/66_SESSION_ARCHIVAL_RAG.md`).
+    merged 2026-09-16 via PRs referenced in `docs/planning/sprint-1-hub/briefs/66_SESSION_ARCHIVAL_RAG.md`).
   - **Writes**: one note per session,
     `vault/<projects|classes>/<collection>/sessions/<session_id>.md`
     (rewritten/merged on every `SessionEnd`), plus one per subagent at
     `sessions/<session_id>--<agent_id>.md` on `SubagentStop`. Frontmatter
     schema v2 — the **frozen field list** is in `hooks/README.md` (Identity,
     Location, Lifecycle, Git, Context, Work, Volume, Provenance groups) and
-    matches the R-27 contract in `docs/planning/66_SESSION_ARCHIVAL_RAG.md`
+    matches the R-27 contract in `docs/planning/sprint-1-hub/briefs/66_SESSION_ARCHIVAL_RAG.md`
     verbatim (see below — this is the "frozen field names" the vault move
     must not break).
   - **Redaction**: every prompt and tool-input string passes through
@@ -313,7 +313,7 @@ University/vault` — it won't be, so set it explicitly), (2) update the three
 `.ps1` script defaults or their container-env equivalents, (3) nothing to
 change in `ingest/` itself.
 
-### Frozen fields the move must not break (`docs/planning/66_SESSION_ARCHIVAL_RAG.md`)
+### Frozen fields the move must not break (`docs/planning/sprint-1-hub/briefs/66_SESSION_ARCHIVAL_RAG.md`)
 
 The R-27 contract freezes the session-note frontmatter schema (schema v2) —
 `id`, `collection`/`collection_source`, `status`/`concluded_at`/`supersedes`/

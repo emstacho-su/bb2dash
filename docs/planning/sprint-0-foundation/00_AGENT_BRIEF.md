@@ -7,8 +7,8 @@ Date: 2026-09-08. Owner: Stack (Evan Stachowiak), senior at Syracuse iSchool, 7 
 Phases 1-3 are done: syllabi seeded into a typed Supabase schema, Blackboard Ultra crawled through its internal `/learn/api/v1` JSON into `bb_raw`, SQL transforms into typed tables, and every course file (64) harvested into Supabase Storage + a local OneDrive mirror with text extracted (534 text units). A validate → diff → bridge runbook (`ingest/CADENCE_RUNBOOK.md`) exists and will become a scheduled Claude task. Read `NOTES.md`, `DATA_SYNTAX.md`, `PHASE2_FINDINGS.md`, `ingest/AGENT_BRIEF.md`, `ingest/FILE_HARVEST_SPEC.md`, `ingest/VALIDATION_RUN_2026-09-08.md`, `db/migrations/*.sql`, `db/seed/*.sql`, `maps/*.v2.json`, `skills/*/SKILL.md`.
 
 Live DB snapshot for this planning round (do not re-query unless you need something specific; the Supabase MCP `execute_sql` on project `goultdzqcavefcgnifdy` is available if you do, read-only please):
-- `docs/planning/DB_PROFILE_2026-09-08.json`: per-table coverage/quality profile (which columns are actually populated, per course and type).
-- `docs/planning/DB_VIEWS_2026-09-08.sql`: live views + row counts. Note `v_course_grade` does NOT exist yet.
+- `docs/planning/sprint-0-foundation/DB_PROFILE_2026-09-08.json`: per-table coverage/quality profile (which columns are actually populated, per course and type).
+- `docs/planning/sprint-0-foundation/DB_VIEWS_2026-09-08.sql`: live views + row counts. Note `v_course_grade` does NOT exist yet.
 
 ## The GUI research preview
 

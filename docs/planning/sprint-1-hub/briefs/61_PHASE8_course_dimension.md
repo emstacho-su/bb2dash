@@ -178,7 +178,7 @@ Migrations 026 (`stage_content`), 027 (`v_course_stream`, `v_content_tree`), 028
 `v_course_display` recreate). Run `stage_content` on the latest run and record counts. Dry-run
 every migration in `begin; … rollback;` via `execute_sql` first; apply with `apply_migration`
 under the file's name; repo file byte-identical to what was applied. Verification note
-`docs/planning/63_W12_VERIFICATION.md`: row counts before/after, the 11 `ultraDocumentBody`
+`docs/planning/sprint-1-hub/verification/63_W12_VERIFICATION.md`: row counts before/after, the 11 `ultraDocumentBody`
 titles resolved, tree sample for IST 323, stream sample for one course, RLS check (owner sees
 rows, another uid sees zero) on every new view. Never touch 001–025.
 

@@ -354,7 +354,7 @@ Filled in by the PM session from Stack's reply before the workers were spawned.
 
 ## Definition of done
 
-Source: Stack's answers (`70_MVP_INDEX.md` §1.3) + research `research/72_RESEARCH_phase10a_grades.md` §5.
+Source: Stack's answers (`70_MVP_INDEX.md` §1.3) + research `../research/72_RESEARCH_phase10a_grades.md` §5.
 
 - [ ] **Stack's acceptance script (on the preview):** (0) press Sync on the preview and run
       `/bb-sync <id>` with the new crawler in a logged-in tab (his MFA); the transform lands
@@ -437,7 +437,7 @@ branch or `main`, and never touch `project-state/`.
   `skills/bb-sync/SKILL.md` step 4b, fixtures under `db/fixtures/phase10a/` (gradebook payloads
   from run `bf2f81e5-…` for ≥ 3 courses, a synthetic attempts payload in the frozen shape),
   SQL tests under `db/tests/phase10a_*.sql`, verification note
-  `docs/planning/66_W17_VERIFICATION.md` (shape of `51_W10_VERIFICATION.md`: what shipped with
+  `docs/planning/sprint-1-hub/verification/66_W17_VERIFICATION.md` (shape of `51_W10_VERIFICATION.md`: what shipped with
   prod migration versions and md5s, before/after counts, the reconciliation SQL and its output,
   idempotency proof, RLS check, advisor diff).
 * **W-18 web** (`feat/grades-10a-web`, worktree `bb2dash-wt-g-web`): `queries.grades.ts`,

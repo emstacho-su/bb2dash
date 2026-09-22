@@ -1,7 +1,7 @@
 # W-15 verification — Phase 9 database + scheduler
 
 Date: 2026-09-10 (UTC 2026-09-11). Worker: W-15, branch `feat/sync-loop-db`, worktree
-`bb2dash-wt-sl-db`. Brief: `docs/planning/62_PHASE9_sync_loop.md` §Workers W-15, plus three
+`bb2dash-wt-sl-db`. Brief: `docs/planning/sprint-1-hub/briefs/62_PHASE9_sync_loop.md` §Workers W-15, plus three
 mid-phase PM corrections (course resolution, view security, `bb_raw` authorisation) and W-16's
 frozen resolution shapes.
 

@@ -322,7 +322,7 @@ Duo), which is the open problem of that migration and not this phase's.
 
 ## Definition of done
 
-Source: Stack's answers (`70_MVP_INDEX.md` §1.7) + research `research/77_RESEARCH_phase12_electron.md` §5.
+Source: Stack's answers (`70_MVP_INDEX.md` §1.7) + research `../research/77_RESEARCH_phase12_electron.md` §5.
 
 - [ ] **Stack's acceptance script (on his laptop, from the unpacked build):** (1) double-click
       the shortcut: bb2dash opens in its own window with its own taskbar button, signed in;

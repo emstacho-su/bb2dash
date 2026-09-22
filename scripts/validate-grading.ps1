@@ -1,5 +1,5 @@
 # bb2dash :: scripts/validate-grading.ps1
-# Launches the V-1 grading-validation session (docs/planning/63_GRADING_VALIDATION.md):
+# Launches the V-1 grading-validation session (docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md):
 # a Claude Code session that can see ONLY the bb2dash materials MCP server plus the four
 # file tools, scoped to the validation documents. It cannot reach Supabase, the rag server,
 # or a shell. Run from the repo root in PowerShell.
@@ -28,25 +28,25 @@ if (-not (Test-Path $server.args[0])) { throw "bb2dash server build missing: $($
 $tmp = Join-Path $env:TEMP ("bb2dash-validate-mcp-" + [guid]::NewGuid().ToString("N") + ".json")
 @{ mcpServers = @{ bb2dash = $server } } | ConvertTo-Json -Depth 6 | Set-Content -Path $tmp -Encoding utf8
 
-$brief  = "docs/planning/63_GRADING_VALIDATION.md"
-$export = "docs/planning/64_GRADING_SCHEMA_EXPORT_2026-09-14.md"
+$brief  = "docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md"
+$export = "docs/planning/sprint-1-hub/briefs/64_GRADING_SCHEMA_EXPORT_2026-09-14.md"
 
 $scope = if ($Course) { "Validate course $Course only." } else { "Validate every course in the brief's order, one at a time, stopping for Stack between courses." }
 $prompt = @"
 You are the V-1 grading-validation session for bb2dash. Read $brief in full, then $export.
 $scope
 Use ONLY the bb2dash MCP tools (list_courses, search_materials, get_material_text) as evidence. Never fill a gap from general knowledge; write 'not in materials'.
-Write each course's verdict file to docs/planning/65_GRADING_VALIDATION_<course_id>.md using the table in the brief, and walk every open row with Stack before writing his call and his why.
+Write each course's verdict file to docs/planning/sprint-1-hub/verification/65_GRADING_VALIDATION_<course_id>.md using the table in the brief, and walk every open row with Stack before writing his call and his why.
 "@
 
 $allowed = @(
   "mcp__bb2dash__list_courses",
   "mcp__bb2dash__search_materials",
   "mcp__bb2dash__get_material_text",
-  "Read(docs/planning/*)",
-  "Glob(docs/planning/*)",
-  "Grep(docs/planning/*)",
-  "Write(docs/planning/65_GRADING_VALIDATION_*)"
+  "Read(docs/planning/**)",
+  "Glob(docs/planning/**)",
+  "Grep(docs/planning/**)",
+  "Write(docs/planning/sprint-1-hub/verification/65_GRADING_VALIDATION_*)"
 ) -join ","
 
 $disallowed = @(

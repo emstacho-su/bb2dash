@@ -44,7 +44,7 @@ import {
  * `ContentTreeRow` in `course-dimension.ts`): Postgres reports no not-null
  * constraints on a view, so the generated row types make every column
  * nullable, and the frozen contract in
- * `docs/planning/61_PHASE8_course_dimension.md` is stricter than that. Each of
+ * `docs/planning/sprint-1-hub/briefs/61_PHASE8_course_dimension.md` is stricter than that. Each of
  * those two reads therefore carries one documented cast at the call site — no
  * field is reshaped, and nothing else in this module needs one.
  */

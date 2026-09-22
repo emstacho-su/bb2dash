@@ -1,7 +1,7 @@
 # 51 — W-10 verification (Phase 7 retrieval polish, database + edge)
 
 Worker: W-10. Branch `feat/retrieval-polish-db`, worktree `bb2dash-wt-db`.
-Contract: `docs/planning/50_PHASE7_retrieval_polish.md` § "Contract (frozen)".
+Contract: `docs/planning/sprint-0-foundation/50_PHASE7_retrieval_polish.md` § "Contract (frozen)".
 Date: 2026-09-10. Project `goultdzqcavefcgnifdy` (prod — there is no staging).
 
 Everything below was captured against prod. "Before" rows come from `search` v3 with

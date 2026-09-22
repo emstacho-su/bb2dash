@@ -16,7 +16,7 @@
 //
 // The event_at rule, the in_workload filter and absent_from_blackboard live in SQL (migrations
 // 060 and 065, v_calendar_push_items), so the authoritative test for them is the fixture
-// transaction recorded in docs/planning/69a_W21_VERIFICATION.md §4. The instants below are its
+// transaction recorded in docs/planning/sprint-1-hub/verification/69a_W21_VERIFICATION.md §4. The instants below are its
 // output, and the assertions here prove the TypeScript side does not move them: a date-only exam
 // keeps its class-start instant and a date-only quiz its 23:59, on both sides of the 2026-11-01
 // fall-back, and a meeting- or attendance-typed row never reaches the pusher at all.

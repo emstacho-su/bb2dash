@@ -12,7 +12,7 @@
  * Row types are hand-declared because the relations they describe are created
  * by migrations 026-028 in the same phase. Every column list is transcribed
  * verbatim from the frozen contract in
- * `docs/planning/61_PHASE8_course_dimension.md`.
+ * `docs/planning/sprint-1-hub/briefs/61_PHASE8_course_dimension.md`.
  */
 
 /**

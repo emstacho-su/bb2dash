@@ -1,7 +1,7 @@
 # 69a — W-21 verification (Phase 11, database + Google Calendar push)
 
 Worker: W-21. Branch `feat/planner-11-db`, worktree `bb2dash-wt-p11-db`.
-Contract: `docs/planning/69_PHASE11_planner.md` § "Contract (frozen)", task loops 5–10.
+Contract: `docs/planning/sprint-1-hub/briefs/69_PHASE11_planner.md` § "Contract (frozen)", task loops 5–10.
 Date: 2026-09-15. Project `goultdzqcavefcgnifdy` (prod — there is no staging).
 
 Everything below was captured against prod. The live three-run proof against Stack's Google

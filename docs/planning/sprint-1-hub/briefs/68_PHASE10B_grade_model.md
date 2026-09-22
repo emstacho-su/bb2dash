@@ -458,7 +458,7 @@ named. The agreement uses real scores only. Nothing is rounded before display.
 ## Definition of done
 
 Source: Stack's answers (`70_MVP_INDEX.md` §1.4 and the 2026-09-16 answers above) + research
-`research/73_RESEARCH_phase10b_grade_model.md` §5, amended for V-1's stub.
+`../research/73_RESEARCH_phase10b_grade_model.md` §5, amended for V-1's stub.
 
 - [ ] **Stack's acceptance script (on the preview):** (1) `/grades`: IST.323 shows Blackboard's
       14.8 / 104 and "Model not computed — Class Participation not scored yet"; IST.471 "graded
@@ -534,7 +534,7 @@ to the phase branch or `main`, and never touch `project-state/`.
   `fast-check` devDependency. No database writes (read-only SQL to cut fixtures), no components.
 * **W-20 db + web** (`feat/grades-10b-web`, worktree `bb2dash-wt-gm-web`): migrations 057–058,
   `db/tests/phase10b_*.sql`, `queries.grade-model.ts`, the components and screen edits, their
-  tests, verification note `docs/planning/68a_W20_VERIFICATION.md` (shape of
+  tests, verification note `docs/planning/sprint-1-hub/verification/68a_W20_VERIFICATION.md` (shape of
   `51_W10_VERIFICATION.md`: migration versions + md5, SQL test output, RLS check, advisor diff).
   Until W-19 lands, container tests use a fake `projectCourse` returning typed `ModelResult`
   fixtures.

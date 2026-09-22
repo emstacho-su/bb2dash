@@ -1,6 +1,6 @@
 # D3 risk and scope review: what is true, what is over-built, and what has to ship by when
 
-Date: 2026-09-08. Agent: D3 (adversarial review). Sources read in full: `docs/planning/00_AGENT_BRIEF.md`, `10_R1_gui_binding_audit.md`, `11_R2_data_inventory.md`, `12_R3_pipeline_and_runtime.md`, `gui research context/gui/README.md`, `NOTES.md`, `ingest/CADENCE_RUNBOOK.md`, `ingest/VALIDATION_RUN_2026-09-08.md`, `ingest/bb_crawler.js`, `db/migrations/001_schema.sql`, plus read-only SQL against `goultdzqcavefcgnifdy` on 2026-09-08.
+Date: 2026-09-08. Agent: D3 (adversarial review). Sources read in full: `docs/planning/sprint-0-foundation/00_AGENT_BRIEF.md`, `10_R1_gui_binding_audit.md`, `11_R2_data_inventory.md`, `12_R3_pipeline_and_runtime.md`, `gui research context/gui/README.md`, `NOTES.md`, `ingest/CADENCE_RUNBOOK.md`, `ingest/VALIDATION_RUN_2026-09-08.md`, `ingest/bb_crawler.js`, `db/migrations/001_schema.sql`, plus read-only SQL against `goultdzqcavefcgnifdy` on 2026-09-08.
 
 Everything marked verified was read in this repo or returned by SQL today. Everything marked inference is my judgment.
 

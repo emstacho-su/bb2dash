@@ -143,7 +143,7 @@ open the Inbox, resolve one item, and write why. Nothing I wrote in the planner 
 
 ## Definition of done
 
-Source: Stack's answers (`70_MVP_INDEX.md` §1.1–1.2) + research `research/79_RESEARCH_phase9_sync_loop.md` §5.
+Source: Stack's answers (`70_MVP_INDEX.md` §1.1–1.2) + research `../research/79_RESEARCH_phase9_sync_loop.md` §5.
 Phase 9 is already integrated; these are the checks the hand-in session must show green in
 `64_W15_VERIFICATION.md` (or a `64b` addendum) before the PR is ready.
 
@@ -216,7 +216,7 @@ or only to a toast.
 Migrations 030–035. Dry-run each in `begin; … rollback;`; apply with `apply_migration` under the
 file's name; byte-identical repo copy. Run `run_transform` against the latest run (`6b122650-…`)
 and against the 9/2 run in order, and show the second run raises no duplicate attention rows.
-Verification note `docs/planning/64_W15_VERIFICATION.md`: bucket check, per-stage counts, the
+Verification note `docs/planning/sprint-1-hub/verification/64_W15_VERIFICATION.md`: bucket check, per-stage counts, the
 `ultraDocumentBody` rows gone (Phase 8's function, called here), conflicts raised with
 from/to values, a resolution applied end-to-end, reaper test (insert a stale running row, tick,
 observe failed), cron job listed in `cron.job`, RLS check on every new table/view. Never touch
@@ -260,7 +260,7 @@ when you say so".
 `/code-review` of the integrated phase branch found nine confirmed bugs. Workers W-18a and W-18b
 fixed them on `feat/sync-loop-fixes`; migration numbers **041–045 were reserved for this round**
 and 041–044 were used. 001–040 stayed byte-frozen. Evidence for every line below, with the exact
-queries, is in `docs/planning/65_W18_VERIFICATION.md`.
+queries, is in `docs/planning/sprint-1-hub/verification/65_W18_VERIFICATION.md`.
 
 | Migration | Finding | The rule it changes |
 |---|---|---|

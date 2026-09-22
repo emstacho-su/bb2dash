@@ -47,7 +47,7 @@
  *  `200 {"results": []}` on every column — 21 of 21 in crawl 1b5e8da5 — so v3 catalogued nothing
  *  and `bb_attempts` / the `my_submissions` bucket stayed empty. Blackboard's own UI never calls
  *  that route. The PM read the requests the Ultra gradebook page actually makes
- *  (docs/planning/80f_ATTEMPTS_ENDPOINT.md); it walks THREE requests per column:
+ *  (docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md); it walks THREE requests per column:
  *      1. `/gradebook/columns/<col>/grades?expand=attemptsLeft&userId=<me>`  -> the GRADE ID
  *      2. `/gradebook/columns/<col>/grades/<gradeId>/attempts`               -> the attempt rows
  *      3. `/gradebook/attempts/<attemptId>?columnId=<col>&expand=…`          -> the FILES
@@ -194,7 +194,7 @@ const assertRunId = (runId) => {
 
 /**
  * v4 (P-grades-4): the key names Blackboard's own gradebook page uses, read off its requests and
- * written down in docs/planning/80f_ATTEMPTS_ENDPOINT.md. v3's candidate lists were guesses and
+ * written down in docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md. v3's candidate lists were guesses and
  * are cut to these. Two entries per field at most, and only where BOTH are real: the attempt
  * DETAIL (step 3) carries `attemptReceipt.submissionDate`, the attempt LIST (step 2) carries only
  * `attemptDate`, and a column whose detail request failed falls back to the list row.

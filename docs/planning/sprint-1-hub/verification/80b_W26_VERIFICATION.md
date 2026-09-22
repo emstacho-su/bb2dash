@@ -1,7 +1,7 @@
 # W-26 verification — Phase 12 notifications (C-7, the delivery half of C-6, C-10, C-13)
 
 Worker: W-26. Branch `feat/electron-12-notify`, worktree `bb2dash-wt-electron-12-notify`.
-Date: 2026-09-16. Contract: `docs/planning/80_PHASE12_electron.md`, frozen 2026-09-16 with
+Date: 2026-09-16. Contract: `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md`, frozen 2026-09-16 with
 Stack's answers Q1–Q9 and the C-12 / C-13 amendments.
 
 Task loops 6, 7 and 8. Zero changes under `web/`, `project-state/` or any file W-25 owns.

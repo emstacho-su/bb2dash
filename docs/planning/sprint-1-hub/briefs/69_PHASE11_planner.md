@@ -361,7 +361,7 @@ No migration and no code. Recorded by the PM **the Inbox way** (`resolution` jso
 
 ## Definition of done
 
-Source: Stack's answers (`70_MVP_INDEX.md` §1.6) + research `research/74_RESEARCH_phase11_planner.md` §5.
+Source: Stack's answers (`70_MVP_INDEX.md` §1.6) + research `../research/74_RESEARCH_phase11_planner.md` §5.
 
 - [ ] **Stack's acceptance script (on the preview + his Google Calendar):** (1) open `/planner`:
       this week's class blocks with rooms at the right times, due items on their days, today
@@ -521,7 +521,7 @@ sprint; the announcements creator key stays unverified), a "push now" button in 
 
 * **W-21 database + calendar** (`feat/planner-11-db`, worktree
   `C:/Users/estac/projects/bb2dash-wt-p11-db`): 060–064, `calendar-push` function and its
-  tests, `scripts/google-consent.mjs`, verification note `docs/planning/69a_W21_VERIFICATION.md`
+  tests, `scripts/google-consent.mjs`, verification note `docs/planning/sprint-1-hub/verification/69a_W21_VERIFICATION.md`
   with the three-run proof against Stack's calendar (after his setup), md5 of applied
   migrations, advisor diff.
 * **W-22 web** (`feat/planner-11-web`, worktree `C:/Users/estac/projects/bb2dash-wt-p11-web`):

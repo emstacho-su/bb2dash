@@ -13,7 +13,7 @@
  * by migrations 031/032/035 (worker W-15) in the same phase, so the checked-in
  * `database.types.ts` does not describe them yet and this module may not edit it.
  * The interfaces below are transcribed by hand from the frozen contract in
- * `docs/planning/62_PHASE9_sync_loop.md` and are cast at the call site.
+ * `docs/planning/sprint-1-hub/briefs/62_PHASE9_sync_loop.md` and are cast at the call site.
  * // PM: replace with generated types at integration
  *
  * BOUNDARY VALIDATION. Nothing reaches Postgres unchecked: ids must be positive

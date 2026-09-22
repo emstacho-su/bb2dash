@@ -10,7 +10,7 @@
  * own gradebook page walks three requests instead (grade → attempts → attempt detail), and only
  * the third carries `studentSubmissionFiles[]` with a durable `file.permanentUrl`. The key names
  * below are no longer candidates: they were read off those requests
- * (docs/planning/80f_ATTEMPTS_ENDPOINT.md).
+ * (docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md).
  *
  * WHAT THIS PROVES, AND WHAT IT CANNOT. That the mappers produce the shape migration 050/055
  * reads, keep Stack's prose out of the flat columns, bound the chain, and record what Blackboard

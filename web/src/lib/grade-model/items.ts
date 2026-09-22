@@ -6,8 +6,8 @@
  * item's score is Blackboard's score or nothing, and a row with no Blackboard
  * column (`kind === 'placeholder'`) never enters the arithmetic at all.
  *
- * Contract: `docs/planning/68_PHASE10B_grade_model.md` §Engine, Semantics
- * "Item fraction", as amended by `docs/planning/80c_PHASE12B_page_pass.md`.
+ * Contract: `docs/planning/sprint-1-hub/briefs/68_PHASE10B_grade_model.md` §Engine, Semantics
+ * "Item fraction", as amended by `docs/planning/sprint-1-hub/briefs/80c_PHASE12B_page_pass.md`.
  */
 
 import type { ComponentInput, ItemInput } from './types';

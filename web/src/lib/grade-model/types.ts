@@ -2,7 +2,7 @@
  * bb2dash — grade model types.
  *
  * Phase 10b froze this as a contract mirroring
- * `docs/planning/68_PHASE10B_grade_model.md` §Engine. Phase 12b (G-1,
+ * `docs/planning/sprint-1-hub/briefs/68_PHASE10B_grade_model.md` §Engine. Phase 12b (G-1,
  * P-grades-3) reverses part of that brief on Stack's instruction — "keep the
  * engine's math, remove the layer around it" — so what is left here is the
  * arithmetic's own vocabulary and nothing else.
@@ -11,7 +11,7 @@
  * so far survives), `TargetResult` and the solver, `BlackboardTotal` /
  * `Agreement` / `DeltaReason` and the agrees-with-Blackboard sentence,
  * `ItemStates`, the `manual_unscored` reason and the `muted` component state.
- * The reasons why are in `docs/planning/80e_GRADE_METHOD_COMPARISON.md`.
+ * The reasons why are in `docs/planning/sprint-1-hub/evidence/80e_GRADE_METHOD_COMPARISON.md`.
  *
  * Every numeric field is unrounded. Display rounds once, in the component.
  */

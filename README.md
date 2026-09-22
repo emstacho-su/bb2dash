@@ -26,7 +26,7 @@ psql "$DATABASE_URL" -f db/migrations/001_schema.sql -f db/migrations/002_raw_la
 ```
 Migrations are additive and numbered; the repo file is byte-identical to what was applied to prod.
 Prod's `schema_migrations` records 014–019 under their pre-reconciliation names (012–017) — a
-name-level artifact, not drift; see `docs/planning/41_RECONCILIATION_gui_vs_retrieval-mcp.md`.
+name-level artifact, not drift; see `docs/planning/sprint-0-foundation/41_RECONCILIATION_gui_vs_retrieval-mcp.md`.
 
 ## Ingest
 Open Blackboard in Claude's built-in browser, log in, then in page context:

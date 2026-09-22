@@ -1,7 +1,7 @@
 # Phase 10a fixtures — gradebook and attempts
 
 What the Grades work is tested against, so nobody has to hold a Blackboard session to run a test.
-Brief: `docs/planning/67_PHASE10A_grades.md`. Verification note: `docs/planning/66_W17_VERIFICATION.md`.
+Brief: `docs/planning/sprint-1-hub/briefs/67_PHASE10A_grades.md`. Verification note: `docs/planning/sprint-1-hub/verification/66_W17_VERIFICATION.md`.
 
 ## What is here
 

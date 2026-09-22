@@ -1,5 +1,5 @@
 /**
- * PM-owned shared signatures for Phase 12 (docs/planning/80_PHASE12_electron.md, C-5, C-6,
+ * PM-owned shared signatures for Phase 12 (docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md, C-5, C-6,
  * C-7, C-13). W-25 implements `rest` and `session-decode` against these; W-26 builds the poller
  * against them. Changing a name or shape here is a numbered note in the verification file first.
  *

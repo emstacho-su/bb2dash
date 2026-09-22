@@ -256,7 +256,7 @@ mirror count. The second-uid RLS check runs in `begin; … rollback;`.
 PM regenerates the types again at integration, after 068.
 
 **K-11 Test floors.** Neither package may end below its count at `5b84b01`; each worker reports
-before and after. W-23 writes `docs/planning/69c_W23_VERIFICATION.md` in the shape of
+before and after. W-23 writes `docs/planning/sprint-1-hub/verification/69c_W23_VERIFICATION.md` in the shape of
 `69a_W21_VERIFICATION.md` (git-blob md5 per its §1.1, the K-5 timestamps, the K-8 runs, RLS,
 advisor diff).
 

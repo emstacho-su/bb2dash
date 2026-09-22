@@ -311,7 +311,7 @@ renderer change; mobile Obsidian sync.
 
 ## Session prompt (copy-paste, after Phase 13 merges)
 
-> `/bb2dash-pm` Start Phase 14 (R-28 containers). Read `docs/planning/82_PHASE14_containers.md`
+> `/bb2dash-pm` Start Phase 14 (R-28 containers). Read `docs/planning/sprint-2/82_PHASE14_containers.md`
 > and the six `research/82_RESEARCH_phase14_*` files. Re-check R5's Electron seam against the
 > merged `desktop/src/main/` code. Put the brief's open questions to me and wait. Then freeze
 > the Contract, create the `bb2dash-stack` and `vault` repos with me, run task 2 (the noVNC login

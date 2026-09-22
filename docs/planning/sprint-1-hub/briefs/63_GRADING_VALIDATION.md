@@ -24,11 +24,11 @@ everything has reconciled correctly.
 
 ### What the session can see and touch
 
-* **Reads:** `docs/planning/63_GRADING_VALIDATION.md` (this file),
-  `docs/planning/64_GRADING_SCHEMA_EXPORT_2026-09-14.md` (the claim under test), and the
+* **Reads:** `docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md` (this file),
+  `docs/planning/sprint-1-hub/briefs/64_GRADING_SCHEMA_EXPORT_2026-09-14.md` (the claim under test), and the
   materials corpus through the `bb2dash` MCP server only: `list_courses`, `search_materials`,
   `get_material_text`.
-* **Writes:** one file per course, `docs/planning/65_GRADING_VALIDATION_<course_id>.md`.
+* **Writes:** one file per course, `docs/planning/sprint-1-hub/verification/65_GRADING_VALIDATION_<course_id>.md`.
 * **Nothing else.** No Supabase MCP, no `rag` server, no shell, no edits to any other file. The
   launcher (`scripts/validate-grading.ps1`) enforces this with `--strict-mcp-config`,
   `--restricted` and an explicit tool allow-list. The session cannot change the database; the
@@ -100,7 +100,7 @@ rank weights, parent), every assignment's component link and points, and the ari
 
 ## Definition of done
 
-Source: Stack's answers (`70_MVP_INDEX.md` §1.5) + research `research/75_RESEARCH_v1_grading_validation.md` §5.
+Source: Stack's answers (`70_MVP_INDEX.md` §1.5) + research `../research/75_RESEARCH_v1_grading_validation.md` §5.
 Supersedes the Acceptance list above where they overlap.
 
 - [ ] **Stack's acceptance:** he has sat every course (seven verdict files; GEO lecture +

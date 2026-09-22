@@ -2,7 +2,7 @@
 
 Date: 2026-09-08. Agent: R2 (research). Scope: what the project actually holds, what a school-hub GUI could do with it that the current preview does not, and where the data will embarrass the app on day one.
 
-Sources read: `docs/planning/DB_PROFILE_2026-09-08.json`, `docs/planning/DB_VIEWS_2026-09-08.sql`, `db/migrations/001..009`, `db/seed/002..004`, `DATA_SYNTAX.md`, `NOTES.md`, `PHASE2_FINDINGS.md`, `ingest/AGENT_BRIEF.md`, `ingest/FILE_HARVEST_SPEC.md`, `ingest/HARVEST_RUN_2026-09-03.md`, `ingest/VALIDATION_RUN_2026-09-08.md`, `ingest/bb_crawler.js`, `maps/*.v2.json`, `gui research context/gui/README.md` and `00-mvp-plan.dc.html`. Live read-only SQL against `goultdzqcavefcgnifdy` where the profile was not enough; every number below tagged "verified" came from that SQL on 2026-09-08. Inferences are marked.
+Sources read: `docs/planning/sprint-0-foundation/DB_PROFILE_2026-09-08.json`, `docs/planning/sprint-0-foundation/DB_VIEWS_2026-09-08.sql`, `db/migrations/001..009`, `db/seed/002..004`, `DATA_SYNTAX.md`, `NOTES.md`, `PHASE2_FINDINGS.md`, `ingest/AGENT_BRIEF.md`, `ingest/FILE_HARVEST_SPEC.md`, `ingest/HARVEST_RUN_2026-09-03.md`, `ingest/VALIDATION_RUN_2026-09-08.md`, `ingest/bb_crawler.js`, `maps/*.v2.json`, `gui research context/gui/README.md` and `00-mvp-plan.dc.html`. Live read-only SQL against `goultdzqcavefcgnifdy` where the profile was not enough; every number below tagged "verified" came from that SQL on 2026-09-08. Inferences are marked.
 
 Effort tags: S = a day or less inside the app, M = a few days or a new view plus UI, L = a new ingest path, new table, or a real engine.
 

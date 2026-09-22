@@ -1,7 +1,7 @@
 # 80l — W-35 (db) verification: Phase 12b post-MVP tail, T-1 recurring planner events
 
 Worker W-35, branch `fix/page-pass-12b-tail-db`, worktree `bb2dash-wt-12b-tail-db`, cut from
-`main` at `6f20a00`. Contract: `docs/planning/80c_PHASE12B_page_pass.md`, "Post-MVP tail — frozen
+`main` at `6f20a00`. Contract: `docs/planning/sprint-1-hub/briefs/80c_PHASE12B_page_pass.md`, "Post-MVP tail — frozen
 contract (PM, 2026-09-21)", T-1 and row T-1 of §Item task list; Stack's answer 15.
 
 Everything below was measured on the production project `goultdzqcavefcgnifdy` on 2026-09-21.

@@ -97,11 +97,11 @@ anywhere in the repo today — this is greenfield.
 | **Name** | `scripts/validate-grading.ps1` |
 | **How started today** | Stack runs `.\scripts\validate-grading.ps1 [Course]` from the repo root **in PowerShell**. |
 | **Runtime** | Windows PowerShell (`$ErrorActionPreference`, `Split-Path -Parent $PSScriptRoot`, `Get-Content ... ConvertFrom-Json`, `Join-Path $env:USERPROFILE`, `$env:TEMP` — every one of these is PowerShell-only syntax; no bash equivalent in-repo). |
-| **What it does** | Reads the `bb2dash` MCP server entry (command/args/env, **including the service key**) out of `~/.claude.json` (`$env:USERPROFILE\.claude.json`), writes it to a **temp file** (`$env:TEMP\bb2dash-validate-mcp-<guid>.json`) so `claude --mcp-config` can use it without the secret touching the repo, then launches `claude --strict-mcp-config --mcp-config <tmp> --restricted ... --allowedTools ... --disallowedTools ...` with a locked-down prompt confined to `docs/planning/*` and the three `mcp__bb2dash__*` tools. Deletes the temp file in a `finally` block. |
+| **What it does** | Reads the `bb2dash` MCP server entry (command/args/env, **including the service key**) out of `~/.claude.json` (`$env:USERPROFILE\.claude.json`), writes it to a **temp file** (`$env:TEMP\bb2dash-validate-mcp-<guid>.json`) so `claude --mcp-config` can use it without the secret touching the repo, then launches `claude --strict-mcp-config --mcp-config <tmp> --restricted ... --allowedTools ... --disallowedTools ...` with a locked-down prompt confined to `docs/planning/**` and the three `mcp__bb2dash__*` tools. Deletes the temp file in a `finally` block. |
 | **OS-bound assumptions** | Entirely PowerShell: `$PSScriptRoot`, `$env:USERPROFILE`, `$env:TEMP`, `ConvertTo-Json -Depth 6`, `Push-Location`/`Pop-Location`. No `.exe`/`explorer.exe`/`wt.exe` calls, but 100% non-portable syntax. |
 | **Secrets/config** | Reads the bb2dash MCP server's env block (service key) from `~/.claude.json` — **never prints it**, only re-serializes it into a throwaway temp JSON file for `--mcp-config`, deleted after the run. |
 | **Network** | None directly — delegates entirely to `claude` CLI + the already-registered MCP server. |
-| **Disk I/O** | `%TEMP%\bb2dash-validate-mcp-*.json` (transient), reads `docs/planning/63_GRADING_VALIDATION.md` / `64_...md`, writes `docs/planning/65_GRADING_VALIDATION_<course>.md`. |
+| **Disk I/O** | `%TEMP%\bb2dash-validate-mcp-*.json` (transient), reads `docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md` / `64_...md`, writes `docs/planning/sprint-1-hub/verification/65_GRADING_VALIDATION_<course>.md`. |
 | **Container verdict** | **Rewrite as a cross-platform Node script** (matches Stack's frozen answer 13: "PowerShell scripts get rewritten cross-platform"). This one is the simplest of the two PowerShell scripts to port: no Windows-only APIs are load-bearing, just PowerShell syntax for reading `~/.claude.json`, building a temp MCP config, and shelling out to `claude`. A ~40-line Node script (`fs.readFileSync`, `os.tmpdir()`, `child_process.spawn('claude', [...])`) reproduces it exactly and runs identically in the dev container. |
 | **Concrete changes needed** | Port to `scripts/validate-grading.mjs` (Node), same flag set; keep the PowerShell version only if Stack wants a native-Windows fallback outside the container. |
 
@@ -113,7 +113,7 @@ anywhere in the repo today — this is greenfield.
 | **How started today (local)** | `npm run dev` (Next 16.3.4, Turbopack) on Stack's laptop for local iteration; `npm run build` for production builds (deployed to Vercel, out of Phase 14 scope per Stack's answer 2). |
 | **Runtime + version** | Node (no `engines` pinned in `web/package.json` — Next 16.3.4 requires Node ≥ 20.9 per Next's own docs), React 19.3.0, `@supabase/ssr` 0.12.7, `@supabase/supabase-js` 2.116.0. |
 | **Tests** | `npm test` → `vitest run` (jsdom environment, `web/vitest.config.mts`, `web/test/setup.ts`), ~85 test files under `web/test/`. **No Playwright/e2e suite exists in `web/` today** — confirmed by grep: zero Playwright references under `web/` (only `web/package-lock.json` transitively, and the Phase 12 Electron worktree's separate `desktop/` package). Playwright appears only in prose (bb-sync's manual browser downloads, and planning docs for a *future* Electron e2e suite) and as the ad-hoc MCP browser tool (`.gitignore` ignores `.playwright-mcp/` — screenshot/snapshot output from the Playwright **MCP tool**, not an in-repo test suite). |
-| **Type regeneration** | `web/src/lib/supabase/database.types.ts` is **regenerated manually by the PM** at integration time via the Supabase MCP's `generate_typescript_types` tool (confirmed: `docs/planning/21_D2_architecture_direction.md:1129`, `project-state/ORCHESTRATOR.md:153` — "returns ~140 KB, more than a tool result can carry; the harness saves..."). **No `supabase` CLI config exists in the repo** (`supabase/config.toml` absent) — type generation and edge function deploys both go through the Supabase MCP or ad-hoc `supabase functions deploy` (see next section), never a local `supabase start`. |
+| **Type regeneration** | `web/src/lib/supabase/database.types.ts` is **regenerated manually by the PM** at integration time via the Supabase MCP's `generate_typescript_types` tool (confirmed: `docs/planning/sprint-0-foundation/superseded/21_D2_architecture_direction.md:1129`, `project-state/ORCHESTRATOR.md:153` — "returns ~140 KB, more than a tool result can carry; the harness saves..."). **No `supabase` CLI config exists in the repo** (`supabase/config.toml` absent) — type generation and edge function deploys both go through the Supabase MCP or ad-hoc `supabase functions deploy` (see next section), never a local `supabase start`. |
 | **OS-bound assumptions** | None found in `web/src` proper (`web/src/proxy.ts` is portable Next.js middleware). |
 | **Secrets/config** | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (`web/.env.example`) — both browser-safe by design, RLS is the boundary. |
 | **Network** | `goultdzqcavefcgnifdy.supabase.co` (REST, Storage, Auth) at runtime; Vercel for deploys (out of scope). |
@@ -126,7 +126,7 @@ anywhere in the repo today — this is greenfield.
 | | |
 |---|---|
 | **Name** | `supabase/functions/{calendar-push,embed-corpus,search}` |
-| **How started today** | **Not run locally at all.** Deployed to Supabase's managed Edge Runtime via either `supabase functions deploy <name> --project-ref goultdzqcavefcgnifdy` (Supabase CLI, per `mcp-server/README.md:224`) **or** the Supabase MCP's `deploy_edge_function` tool (used interchangeably per docs, e.g. `mcp-server/README.md:227`, `docs/planning/62_PHASE9_sync_loop.md`). No `supabase/config.toml` exists, so there is no local Supabase stack (`supabase start`) in this project — confirmed absent from the repo. |
+| **How started today** | **Not run locally at all.** Deployed to Supabase's managed Edge Runtime via either `supabase functions deploy <name> --project-ref goultdzqcavefcgnifdy` (Supabase CLI, per `mcp-server/README.md:224`) **or** the Supabase MCP's `deploy_edge_function` tool (used interchangeably per docs, e.g. `mcp-server/README.md:227`, `docs/planning/sprint-1-hub/briefs/62_PHASE9_sync_loop.md`). No `supabase/config.toml` exists, so there is no local Supabase stack (`supabase start`) in this project — confirmed absent from the repo. |
 | **Runtime** | Deno, inside Supabase's managed Edge Runtime (cloud-only — Stack's answer 2 keeps Supabase fully managed, no local Supabase). |
 | **OS-bound assumptions** | None — these are cloud-only TypeScript/Deno files. |
 | **Secrets/config** | `calendar-push` reads Vault secrets (`google_client_id`, `google_client_secret`, `google_refresh_token`, `calendar_push_secret`) server-side in Supabase, and authenticates via an `x-push-secret` header (per repo `CLAUDE.md`); `verify_jwt` is off only for this function. `search`/`embed-corpus` run behind `verify_jwt` normally. |
@@ -140,7 +140,7 @@ anywhere in the repo today — this is greenfield.
 | | |
 |---|---|
 | **Name** | `db/migrations/*.sql` (81 files), `db/seed/*.sql`, `db/fixtures/phase10a/*`, `db/tests/*.sql` |
-| **How started today** | **Migrations**: dry-run inside `begin; ...; rollback;` via the Supabase MCP's `execute_sql`, then applied for real with `apply_migration` under the file's exact basename (confirmed pattern repeated across every phase's verification doc, e.g. `docs/planning/50_PHASE7_retrieval_polish.md:89-91`, `docs/planning/67_PHASE10A_grades.md:64-65`). Never applied by a local `psql` against prod. **SQL tests** (`db/tests/*.sql`): concatenated and piped to `psql "$DATABASE_URL"`, **or** — the actual method used in practice, per `db/fixtures/phase10a/README.md:48-49` and `docs/planning/66_W17_VERIFICATION.md:639-640` ("No `psql` connection is available to this session") — pasted into one `execute_sql` MCP call. **Fixture loader regeneration**: `node db/fixtures/phase10a/build_load_sql.js` regenerates `db/tests/phase10a_load_fixtures.sql` from the JSON fixtures; `web/test/fixtures.phase10a.test.ts` re-runs the generator in-memory and fails if the committed `.sql` drifted. |
+| **How started today** | **Migrations**: dry-run inside `begin; ...; rollback;` via the Supabase MCP's `execute_sql`, then applied for real with `apply_migration` under the file's exact basename (confirmed pattern repeated across every phase's verification doc, e.g. `docs/planning/sprint-0-foundation/50_PHASE7_retrieval_polish.md:89-91`, `docs/planning/sprint-1-hub/briefs/67_PHASE10A_grades.md:64-65`). Never applied by a local `psql` against prod. **SQL tests** (`db/tests/*.sql`): concatenated and piped to `psql "$DATABASE_URL"`, **or** — the actual method used in practice, per `db/fixtures/phase10a/README.md:48-49` and `docs/planning/sprint-1-hub/verification/66_W17_VERIFICATION.md:639-640` ("No `psql` connection is available to this session") — pasted into one `execute_sql` MCP call. **Fixture loader regeneration**: `node db/fixtures/phase10a/build_load_sql.js` regenerates `db/tests/phase10a_load_fixtures.sql` from the JSON fixtures; `web/test/fixtures.phase10a.test.ts` re-runs the generator in-memory and fails if the committed `.sql` drifted. |
 | **Runtime** | Plain SQL (Postgres 17 dialect) + one Node build script (no extra deps). |
 | **OS-bound assumptions** | None. |
 | **Secrets/config** | The `psql "$DATABASE_URL"` path implies a Postgres connection string with credentials, which is **not present anywhere in the repo today** (no `DATABASE_URL` in `.env.example`) — meaning `psql` against prod is documented as an option but has **never actually been available/used** in a session per the verification notes; `execute_sql` (project-owner auth via the MCP, no key needed client-side) is the real, load-bearing path. |
@@ -170,11 +170,11 @@ Phase 12 is **mid-build** (per user memory: "W-25/W-26 on their worktrees" as of
 `desktop/src/core/*` and a handful of `desktop/src/main/*` files exist on this worktree; the actual
 `src/main/index.ts` (window bootstrap), `sync-terminal.ts` (the wt.exe spawn), `window.ts`, and
 `navigation.ts` are **not yet written** on this branch — they are W-25's deliverables per the
-Contract (`docs/planning/80_PHASE12_electron.md:52-72`). So the "Sync button code path" cannot be
+Contract (`docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:52-72`). So the "Sync button code path" cannot be
 read as committed code yet; it is fully specified in the frozen Contract instead (C-8, amended by
 Stack's Q9 answer).
 
-### The Sync button seam (from the frozen Contract, `docs/planning/80_PHASE12_electron.md`)
+### The Sync button seam (from the frozen Contract, `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md`)
 
 - **Detection** (C-8, lines 189-198): the shell watches `session.webRequest.onCompleted` for the web
   app's own `POST /rest/v1/agent_requests` (the button already does this — "zero renderer changes").
@@ -200,7 +200,7 @@ Stack's Q9 answer).
 
 ### C-13 Portability split — what's already plain Node and reusable
 
-`docs/planning/80_PHASE12_electron.md:309-320` (C-13, driven by Stack's Q7 answer, recorded as **R-28**)
+`docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:309-320` (C-13, driven by Stack's Q7 answer, recorded as **R-28**)
 freezes an explicit Electron/container split:
 
 - **`desktop/src/core/`** — plain Node, **zero `electron` imports**, enforced by a dedicated unit test
@@ -246,24 +246,28 @@ Searched the whole `bb2dash` main checkout (excluding `node_modules`, `.next`) f
 | `C:/Users/estac` | `mcp-server/scripts/smoke.mjs:33` | Default `--env-file` fallback: `'C:/Users/estac/projects/bb2dash/.env'`. |
 | `Users/estac` (via `$env:USERPROFILE`) | `scripts/validate-grading.ps1:20` | `Join-Path $env:USERPROFILE ".claude.json"` — not literally hard-coded but 100% PowerShell/Windows-profile-shaped. |
 | `.ps1` | `scripts/validate-grading.ps1` (whole file) | Entire script is PowerShell; see process table above. |
-| `.ps1` | referenced (not present in electron worktree yet) `scripts/make-shortcut.ps1` per `docs/planning/80_PHASE12_electron.md:68,239-242` | Planned Desktop/Start-Menu shortcut creator — Windows-only by nature (shortcuts). |
+| `.ps1` | referenced (not present in electron worktree yet) `scripts/make-shortcut.ps1` per `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:68,239-242` | Planned Desktop/Start-Menu shortcut creator — Windows-only by nature (shortcuts). |
 | `explorer.exe` | `scripts/google-consent.mjs:151-152` | `process.platform === "win32" → ["explorer.exe", [url]]` — already branches correctly per-OS (see process table). |
 | `wt.exe` | `desktop/test/unit/test-hook.test.ts:95,108` (electron worktree) | Fixture spawn recording `['wt.exe', '-d', 'C:/repo']`. |
-| `wt.exe` | `docs/planning/80_PHASE12_electron.md` multiple (C-8, DoD) | Sync button's terminal spawn target, not yet in committed `desktop/src/main` code on this worktree. |
+| `wt.exe` | `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md` multiple (C-8, DoD) | Sync button's terminal spawn target, not yet in committed `desktop/src/main` code on this worktree. |
 | `win32` | `scripts/google-consent.mjs:151` | The one legitimate cross-platform branch (`win32`/`darwin`/else) — a **model** for how the rest of the OS-bound code should be written. |
-| `powershell.exe` | `docs/planning/80_PHASE12_electron.md:202,207,292` | Sync-terminal spawn command target (Contract text; not yet committed code). |
+| `powershell.exe` | `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:202,207,292` | Sync-terminal spawn command target (Contract text; not yet committed code). |
 | `OneDrive` | `ingest/CADENCE_RUNBOOK.md:25` | `Device:` inputs list `OneDrive bb2dash/course context/` as where the local mirror lives. |
-| `OneDrive` | `docs/planning/80_PHASE12_electron.md:219` | Withdrawn C-9 file-mirror's default root, `C:\Users\estac\OneDrive - Syracuse University\...` — explicitly dropped from Phase 12 scope in favor of the container direction (Stack's Q7 answer), consistent with Phase 14's answer 7 (vault moves out of OneDrive). |
+| `OneDrive` | `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:219` | Withdrawn C-9 file-mirror's default root, `C:\Users\estac\OneDrive - Syracuse University\...` — explicitly dropped from Phase 12 scope in favor of the container direction (Stack's Q7 answer), consistent with Phase 14's answer 7 (vault moves out of OneDrive). |
 
 ### Prose-only occurrences (planning docs, `project-state/*`, `NOTES.md`, `AUDIT_2026-09-09.md`, `gui research context/`, `maps/*.json`, lock files) were found but are **not executable code** — they describe the same facts already captured above (repo path, OneDrive location, PowerShell moves) and are not separately actionable. Full file list from the sweep, for completeness:
 
 ```
 project-state/ORCHESTRATOR.md, project-state/STATUS.md, project-state/DECISIONS.md,
-docs/planning/{00_AGENT_BRIEF,10_R1_gui_binding_audit,11_R2_data_inventory,12_R3_pipeline_and_runtime,
-20_D1_gui_direction,21_D2_architecture_direction,22_D3_risk_and_scope_review,30_PHASED_PLAN,
-31_PLAN_REVIEW,40_RECONCILIATION_2026-09-09,60_REQUIREMENTS_v2,63_GRADING_VALIDATION,
-66_SESSION_ARCHIVAL_RAG,69_PHASE11_planner,69a_W21_VERIFICATION,70_MVP_INDEX,
-80_PHASE12_electron,research/77_RESEARCH_phase12_electron}.md,
+docs/planning/sprint-0-foundation/{00_AGENT_BRIEF,40_RECONCILIATION_2026-09-09}.md,
+docs/planning/sprint-0-foundation/superseded/{10_R1_gui_binding_audit,11_R2_data_inventory,
+12_R3_pipeline_and_runtime,20_D1_gui_direction,21_D2_architecture_direction,
+22_D3_risk_and_scope_review,30_PHASED_PLAN,31_PLAN_REVIEW}.md,
+docs/planning/sprint-1-hub/{60_REQUIREMENTS_v2,70_MVP_INDEX}.md,
+docs/planning/sprint-1-hub/briefs/{63_GRADING_VALIDATION,66_SESSION_ARCHIVAL_RAG,
+69_PHASE11_planner,80_PHASE12_electron}.md,
+docs/planning/sprint-1-hub/verification/69a_W21_VERIFICATION.md,
+docs/planning/sprint-1-hub/research/77_RESEARCH_phase12_electron.md,
 CLAUDE.md, NOTES.md, AUDIT_2026-09-09.md, PLAN_EMBEDDING_POC.md,
 skills/{bb-course-map,bb-course-pull}/SKILL.md, skills/bb-sync/SKILL.md,
 ingest/{AGENT_BRIEF,CADENCE_RUNBOOK,FILE_HARVEST_SPEC,PILOT_IST352}.md,
@@ -344,7 +348,7 @@ run inside the dev container but gains nothing from a dedicated service).
   for the extraction container.
 - The Electron worktree's `src/main/index.ts`, `sync-terminal.ts`, `window.ts`, `navigation.ts` are
   **not yet committed** on `bb2dash-wt-electron-12` — everything reported about the actual spawn code
-  is from the frozen Contract document (`docs/planning/80_PHASE12_electron.md`) plus the one test
+  is from the frozen Contract document (`docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md`) plus the one test
   fixture that already references `wt.exe`, not from a committed implementation. If Phase 12 merges
   with changes from the Contract, this section should be re-checked against the real
   `sync-terminal.ts`.

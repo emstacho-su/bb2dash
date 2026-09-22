@@ -1,6 +1,6 @@
 # D2. Technical architecture direction: a GUI that can trust its data, and an agent layer beside it
 
-Date: 2026-09-08. Agent: D2 (direction). Inputs read in full: `docs/planning/10_R1_gui_binding_audit.md`,
+Date: 2026-09-08. Agent: D2 (direction). Inputs read in full: `docs/planning/sprint-0-foundation/superseded/10_R1_gui_binding_audit.md`,
 `11_R2_data_inventory.md`, `12_R3_pipeline_and_runtime.md`, `ingest/bb_crawler.js`,
 `ingest/CADENCE_RUNBOOK.md`, `db/migrations/001..009`, `skills/bb-course-map/SKILL.md`,
 `skills/bb-course-pull/SKILL.md`, `gui research context/gui/README.md`, `NOTES.md`, `CLAUDE.md`,

@@ -2,7 +2,7 @@
 
 Five Sonnet researchers, one per page, code + read-only SQL against prod (no browser: five agents
 cannot share one logged-in session; the PM checks the true bugs in a browser before the freeze).
-Ids match the intake table in `../80c_PHASE12B_page_pass.md`.
+Ids match the intake table in `../briefs/80c_PHASE12B_page_pass.md`.
 
 ## Home
 * **P-home-1** one-hue ramp: `--type-*` vars in `web/src/app/globals.css:112-121`, mapped in `UpcomingTracker.tsx:103-116`, `Today.tsx:65-71`. Token swap only.
