@@ -55,9 +55,17 @@ by `stage_attempts` (migration 050). Course files are untouched by that and stil
    - ~~Calendar: new items → sessions/assignments as appropriate.~~ → the calendar row is what marks a
      crawl complete; `ical_poll()` is scheduled daily and is skipped while `app_settings.ical_url` is
      blank.
-4. **Pull new COURSE files. MANUAL — until Electron.** (Submission files are not this step: they are
-   `bb-sync` step 4b, which runs inside the sync while the Blackboard session is still open.)
-   This is the one step no automation replaces yet:
+4. **Pull new COURSE files. Scripted since 2026-09-22 — `ingest/pull_files.mjs`.** (Submission
+   files are not this step: they are `bb-sync` step 4b, which runs inside the sync while the
+   Blackboard session is still open.) The browser half still needs a logged-in tab: from a
+   Playwright session, `page.waitForEvent('download')` around an anchor click on each durable
+   `source_url` (+`?xythos-download=true`) saves `<file_id>_<name>` into a downloads folder; the
+   script's header has the snippet and the manifest query. Then
+   `node ingest/pull_files.mjs --manifest <json> --downloads <dir>` does the rest (mirror, Storage,
+   text units, one `update bb_files` per file for execute_sql), and `embed-corpus` with
+   `max_parts: 3` finishes the embeddings. A 404 on a durable URL means the file is gone: mark the
+   row `superseded_by` its replacement. First run: 12 files, 2026-09-22 (Inbox request 38).
+   The original manual procedure, kept for the record:
    `bbcswebdav` URLs 302 to a cross-origin CDN with no CORS, so bytes cannot be fetched from page JS,
    and a browser download needs a real browser. `bb.downloadAll(urls)` in ONE call; claim `<uuid>.tmp`
    by size + magic + text; PowerShell move into `course context/<relpath>`; stage → sha256 → Storage
