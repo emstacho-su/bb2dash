@@ -49,13 +49,25 @@ the run is auditable: `insert into agent_requests (kind, scope, state, claimed_a
 values ('inbox_feedback', 'all', 'claimed', now(), 'inbox-apply session') returning id`.
 Under `--dry-run`, skip this step entirely.
 
-## Step 2 — Read the queue and the remainder
+## Step 2 — Let the transform apply what it can, then read the queue
 
 ```sql
+select apply_resolutions();                                                  -- 042, idempotent
 select * from v_inbox_queue order by course_id, resolved_at;                 -- the work
 select kind, entity, count(*) from attention_items where state = 'open'
  group by 1, 2 order by 1, 2;                                                 -- what still needs Stack
 ```
+
+`apply_resolutions()` first, always. It is the transform's own writer for the four assignment
+fields and for "Keep mine" on an assignment, and it only ever runs inside a fold or a queued
+`transform` request. An answer given between folds is therefore still `applied_at null` when
+this skill reads the queue; archiving it would pull it out of 042's `state = 'resolved'` scan
+for good, the field would never be written, and the next fold would raise the same conflict
+again. Calling it here costs nothing when there is nothing to apply, and every row it stamps
+arrives in the queue as `was_applied = true`. Under `--dry-run` skip the call and instead list
+the rows it would have taken (`kind in ('conflict','stack_must_confirm','missing')`, entity
+`assignment`, `applied_at is null`, and `field in ('due_at','due_date','points_possible','bb_url')`
+or `accept = 'keep'`) as "waiting for the transform", not as work.
 
 `v_inbox_queue` is every `resolved` or `dismissed` row not yet archived. An empty queue is a
 valid result: close the request (`done`, result `{"archived":0}`) and report the open counts.
