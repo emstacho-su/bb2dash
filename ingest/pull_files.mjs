@@ -2,10 +2,18 @@
 // bb2dash :: ingest/pull_files.mjs
 //
 //   node ingest/pull_files.mjs --manifest <manifest.json> --downloads <dir> [--mirror <dir>]
-//                              [--only 119,152] [--out <sql path>] [--dry-run]
+//                              [--bucket my_submissions] [--only 119,152] [--out <sql path>]
+//                              [--dry-run]
 //
 // CADENCE_RUNBOOK step 4, the one step no automation replaced: store the bytes of the bb_files
 // rows the transform catalogued with `storage_path is null`. First run 2026-09-22 (12 files).
+//
+// TWO CALLERS, ONE GATE. Course files are runbook step 4; Stack's own submitted files are bb-sync
+// step 4b, catalogued by `stage_attempts` with `bucket = 'my_submissions'`. They differ in three
+// small ways and nothing else: `--bucket my_submissions` selects them (with no flag the run takes
+// course rows only, so neither caller can ever write the other's rows), their update keeps the mime
+// Blackboard declared (`coalesce`, see below) and their notes line names step 4b. A manifest row
+// with no `bucket` key — every manifest written before 2026-09-22 — is a course file.
 //
 // THE SHAPE. Two halves, because bbcswebdav URLs 302 to a cross-origin CDN with no CORS:
 //   1. A real browser downloads the bytes. From a Playwright session logged into Blackboard,
@@ -28,13 +36,17 @@
 //
 // THE MANIFEST. One JSON array from this query (execute_sql), saved to a file:
 //   select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
-//            'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url))
+//            'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
+//            'bucket', f.bucket, 'attempt_id', f.attempt_id))
 //     from bb_files f where f.storage_path is null and f.superseded_by is null;
 //   `mime` may be null: it is then inferred from the extension. An optional `key` overrides the
-//   Storage key (a re-upload of an already-stored file needs its own; see file 145).
+//   Storage key (a re-upload of an already-stored file needs its own; see file 145). `attempt_id`
+//   is carried for the operator's report only; nothing here reads it.
 //
 // STORAGE KEYS. Supabase Storage rejects `#` in a key; the key drops it, the mirror keeps the real
-// name, and `storage_path` records the key. Nothing else is renamed.
+// name, and `storage_path` records the key. Nothing else is renamed — in particular the
+// `attempt-<digits>/` segment migration 052 gives a submission relpath survives into the key, which
+// is what keeps a pulled-back submission off the key of a file Stack staged under the same name.
 //
 // Importing this module runs nothing: every helper is pure and exported for pull_files.test.mjs.
 
@@ -46,6 +58,8 @@ import { pathToFileURL } from 'node:url';
 
 export const DEFAULT_SUPABASE_URL = 'https://goultdzqcavefcgnifdy.supabase.co';
 export const BUCKET = 'bb-files';
+/** The one `bb_files.bucket` value that means "Stack handed this in" — bb-sync step 4b's rows. */
+export const SUBMISSION_BUCKET = 'my_submissions';
 export const MIN_BYTES = 1000;
 export const MIME_BY_EXT = {
   '.pdf': 'application/pdf',
@@ -99,10 +113,21 @@ export function findDownload(fileNames, id) {
   return fileNames.find((f) => f.startsWith(`${id}_`)) ?? null;
 }
 
-/** Keep only the manifest rows in --only (comma-separated ids); empty means all. */
-export function filterManifest(rows, only) {
+/** Is this a submission row? A manifest row with no `bucket` key predates 4b and is a course file. */
+export function isSubmissionRow(row) {
+  return row?.bucket === SUBMISSION_BUCKET;
+}
+
+/**
+ * The rows this run may touch: --only (comma-separated ids; empty means all), then the bucket gate.
+ * `--bucket my_submissions` keeps submission rows alone; no flag keeps course rows alone. The gate
+ * is why a 4b run can never write a course row, or runbook step 4 a submission.
+ */
+export function filterManifest(rows, only, bucket) {
   const ids = String(only ?? '').split(',').map((s) => s.trim()).filter(Boolean).map(Number);
-  return ids.length === 0 ? rows : rows.filter((r) => ids.includes(Number(r.id)));
+  const byId = ids.length === 0 ? rows : rows.filter((r) => ids.includes(Number(r.id)));
+  const wantSubmissions = bucket === SUBMISSION_BUCKET;
+  return byId.filter((r) => isSubmissionRow(r) === wantSubmissions);
 }
 
 /** extract_text.py prints `[{file, status, units}]`; the units of the first (only) file, or []. */
@@ -124,12 +149,20 @@ export function isDuplicateAnswer(status, body) {
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
-/** The one statement the owner runs per file; the script never writes bb_files itself. */
-export function bbFilesUpdateSql({ id, key, relpath, sha256, size, mime, textStatus, pulledOn }) {
+/**
+ * The one statement the owner runs per file; the script never writes bb_files itself.
+ * A submission row differs twice: `mime_type` is `coalesce`d, because since migration 085 the
+ * catalogue already carries the type Blackboard declared and a bbcswebdav download often answers
+ * `application/octet-stream` — keep what Blackboard said, fall back to the observed type only for a
+ * pre-v4 row that has none. And its notes line names the step that pulled it.
+ */
+export function bbFilesUpdateSql({ id, key, relpath, sha256, size, mime, textStatus, pulledOn, submission = false }) {
+  const mimeAssign = submission ? `mime_type = coalesce(mime_type, ${q(mime)})` : `mime_type = ${q(mime)}`;
+  const pulledBy = submission ? 'bb-sync step 4b' : 'ingest/pull_files.mjs';
   return (
     `update bb_files set storage_path = ${q(`${BUCKET}/${key}`)}, local_path = ${q(`course context/${relpath}`)}, ` +
-    `sha256 = ${q(sha256)}, bytes = ${size}, mime_type = ${q(mime)}, downloaded_at = now(), ` +
-    `text_status = ${q(textStatus)}, notes = coalesce(notes, '') || ${q(` | bytes pulled ${pulledOn} by ingest/pull_files.mjs`)} ` +
+    `sha256 = ${q(sha256)}, bytes = ${size}, ${mimeAssign}, downloaded_at = now(), ` +
+    `text_status = ${q(textStatus)}, notes = coalesce(notes, '') || ${q(` | bytes pulled ${pulledOn} by ${pulledBy}`)} ` +
     `where id = ${id} and storage_path is null;`
   );
 }
@@ -154,7 +187,9 @@ async function pullOne(row, ctx) {
   if (!bytesLookValid(bytes, mime)) return { id: row.id, error: `bad bytes: ${bytes.length} bytes, magic ${bytes.subarray(0, 4).toString('hex')}` };
   const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
   const storageKey = storageKeyFor(row);
-  if (dryRun) return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), dryRun: true };
+  const submission = isSubmissionRow(row);
+  const tag = submission ? { submission: true } : {};
+  if (dryRun) return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, dryRun: true };
 
   const dest = path.join(mirror, row.relpath);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -177,14 +212,18 @@ async function pullOne(row, ctx) {
     if (!tr.ok) return { id: row.id, error: `bb_file_text ${tr.status}: ${(await tr.text()).slice(0, 200)}` };
   }
   const textStatus = units.length ? 'extracted' : 'failed';
-  const sql = bbFilesUpdateSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, textStatus, pulledOn });
-  return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), storage: up.status, units: units.length, textStatus, extractError, sql };
+  const sql = bbFilesUpdateSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, textStatus, pulledOn, submission });
+  return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, storage: up.status, units: units.length, textStatus, extractError, sql };
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const args = parseArgs(argv);
   if (!args.manifest || !args.downloads) {
-    console.error('usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--only ids] [--out <sql>] [--dry-run]');
+    console.error('usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--bucket my_submissions] [--only ids] [--out <sql>] [--dry-run]');
+    return 2;
+  }
+  if (args.bucket !== undefined && args.bucket !== SUBMISSION_BUCKET) {
+    console.error(`--bucket takes only '${SUBMISSION_BUCKET}' (bb-sync step 4b); omit it for course files`);
     return 2;
   }
   const key = env.SB_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY;
@@ -198,7 +237,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     key, ingestDir, dryRun: args['dry-run'] === true,
     pulledOn: new Date().toISOString().slice(0, 10),
   };
-  const rows = filterManifest(JSON.parse(fs.readFileSync(args.manifest, 'utf8')), args.only);
+  const rows = filterManifest(JSON.parse(fs.readFileSync(args.manifest, 'utf8')), args.only, args.bucket);
   const results = [];
   for (const row of rows) results.push(await pullOne(row, ctx));
   const sql = results.filter((r) => r.sql).map((r) => `-- file ${r.id}\n${r.sql}`).join('\n');
