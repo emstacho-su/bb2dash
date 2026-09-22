@@ -27,6 +27,15 @@ sync with no id, create the request yourself in step 2 instead of claiming one.
 
 Post a one-line status after every step. A sync takes minutes; a silent run looks stalled.
 
+## Step 0 — Apply Stack's Inbox answers first
+
+A crawl raises new Inbox questions; the answered ones should be applied and archived before that
+happens, so the Inbox never mixes old answers with new questions. Run `/inbox-apply` (the skill
+in `skills/inbox-apply/SKILL.md`) with no argument: it files its own `inbox_feedback` request,
+processes `v_inbox_queue`, records each decision, archives the rows and reports. Then continue
+here. Skip it only when `select count(*) from v_inbox_queue` is 0, or when an `inbox_feedback`
+request is already `claimed` (another session is on it); say which in the status line.
+
 ## Step 1 — Login check (always first, never skipped)
 
 Probe the tab's `location.href` in page context. If it is on NetID, `login.microsoftonline.com`, or

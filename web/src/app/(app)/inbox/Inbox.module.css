@@ -160,9 +160,16 @@
   color: var(--color-neutral-400);
 }
 
-/* The one-line rule at the top of the screen. */
+/* The rules at the top of the screen: what applies itself, and who applies
+   the rest. Stacked, so neither reads as a footnote of the other. */
+.help {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .applyHelp {
-  margin: 0 0 var(--space-4);
+  margin: 0;
   max-width: 88ch;
   font-size: var(--text-sm);
   color: var(--color-muted);
@@ -172,6 +179,16 @@
   margin: var(--space-2) 0 0;
   font-size: var(--text-sm);
   color: var(--color-neutral-400);
+}
+
+/* What /inbox-apply recorded on an archived row — one muted line under the
+   answer, quieter than the answer itself because it is the worker talking. */
+.decision {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+  max-width: 80ch;
+  overflow-wrap: anywhere;
 }
 
 .dismissedToggle {

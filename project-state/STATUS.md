@@ -1,6 +1,6 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
+> Updated upon each PR. Last update: **2026-09-22** (Inbox feedback loop, automation half: `/inbox-apply` skill, migration 090 archived state live, first run archived 31 rows, Inbox "Apply answers" button; **PR open**, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) on `feat/inbox-apply`; row 16 under "What has been done"). Before that, **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
 > ([PR #15](https://github.com/emstacho-su/bb2dash/pull/15), `c1e471d`, production deployed: engine `web/src/lib/grade-model/`, "Our model" on `/grades` and the
 > course Grades tab, what-if + target solver + "Counts toward…" picker + score history;
 > migrations 057–058 and 080–081 live; V-1 stubbed by Stack, so the model leaves out parts with
@@ -327,6 +327,34 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    event → this and following → all-events delete, all proven on prod and Google (push run 42 inserted 4;
    test rows deleted), popover and page walked. Tests: web 1812 (from 1582), mcp-server 88, desktop 549.
    Known: deleting a series' last detached row plainly leaves an empty series row (`80o` W-3).
+16. **Inbox feedback loop, automation half — `/inbox-apply`** (`feat/inbox-apply`, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) open 2026-09-22;
+   plan `~/.claude/plans/inbox-apply-skill.md`; Stack's brief in the bb-sync session for request 34).
+   The worker migration 077 left a queue for. **090** `attention_items.state = 'archived'` + `archived_at`,
+   `archived_by`, `decision`; `archive_attention_item()` (refuses open and already-archived rows);
+   `v_inbox_queue` (every resolved / dismissed row not yet archived, note or not);
+   `attention_keep_stands()` honours archived rows so a kept staff name is not re-raised. A state, not
+   a table, because 041's do-not-re-ask rules key off rows still being present. Live under the same
+   name; `db/tests/inbox_apply_090_attention_archive.sql` PASS. (Phase 14 had pencilled in 090–099;
+   it starts at 091.) **Skill** `skills/inbox-apply/SKILL.md` (+ `~/.claude/skills/` copy): Sonnet
+   context agents (answer, current row, Blackboard facts, course precedent, grading rule, prior
+   decisions) → one Opus change agent under rules (only assignments / assignment_progress /
+   course_staff / group_notes / applied_at; new questions via `raise_attention()`; merges and code
+   changes flagged, never done) → the session records one vault note per item
+   (`projects/bb2dash/decisions/inbox-<id>.md`, `collection: bb2dash-inbox-decisions`, ingested into
+   the rag store) + `docs/inbox-decisions/<date>.md`, then archives. **bb-sync step 0** runs it before
+   the crawl. **First run** = request 35 (kind `inbox_feedback`): 31 rows archived (7 changed, 24
+   recorded only), raised 528 (ECN.304 quiz-2 vs quiz-02 may be one quiz) and 535 (IST.466 Ethics /
+   Major Case group numbers disagree across group_notes, the assignment rows and DECISIONS.md).
+   **Web:** Inbox "Apply answers" button (files `inbox_feedback`, copies `claude "/inbox-apply <id>"`,
+   one open request at a time) and an `archived (n)` group; archived rows leave the live list.
+   **Later the same day**, on Stack's authority ("use context to answer or simply write outdated"), the
+   worker closed every remaining open item: 101 in one run (12 tentative columns confirmed under their
+   components, IST.323 lab-1 merged with its Blackboard row, 17 course-map seeds "already reflected",
+   the rest outdated with the reason on the row; seven questions only Stack can answer carry a
+   `FLAG for Stack` in their notes) and the 14 file-byte gaps by actually pulling the files through the
+   Playwright browser (12 stored + text extracted + embedded; 117 and 118 are gone from Blackboard,
+   superseded by the Week 4 schedules). Inbox: 0 open, 134 archived; 134 decision notes in the vault
+   collection `bb2dash-inbox-decisions`.
 
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's

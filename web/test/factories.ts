@@ -75,6 +75,10 @@ export function makeAttentionItem(overrides: Partial<AttentionItem> = {}): Atten
     resolution: null,
     resolution_note: null,
     applied_at: null,
+    // 090: the three columns `/inbox-apply` stamps when it archives a row.
+    archived_at: null,
+    archived_by: null,
+    decision: null,
     ...overrides,
   };
 }

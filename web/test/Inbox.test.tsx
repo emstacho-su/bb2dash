@@ -23,9 +23,8 @@ vi.mock('next/link', () => ({
 const { InboxView, answerTypeFor, failureText, sourceHref, sourceText } = await import(
   '@/app/(app)/inbox/Inbox',
 );
-const { normalizeSyncStatus, INBOX_APPLY_HELP, RECORDED_ONLY } = await import(
-  '@/lib/queries.sync',
-);
+const { normalizeSyncStatus, INBOX_APPLY_HELP, INBOX_APPLY_REQUEST_HELP, RECORDED_ONLY } =
+  await import('@/lib/queries.sync');
 
 const status = normalizeSyncStatus(makeSyncStatusRow());
 
@@ -640,5 +639,109 @@ describe('Inbox — the outcome under each button', () => {
   it('states the rule once, at the top of the screen', () => {
     renderInbox([makeAttentionItem({ id: 1 })]);
     expect(screen.getByText(INBOX_APPLY_HELP)).toBeInTheDocument();
+  });
+});
+
+/* -----------------------------------------------------------------------
+ * Archived rows — what `/inbox-apply` leaves behind (090)
+ * -------------------------------------------------------------------- */
+
+describe('Inbox — archived rows', () => {
+  /**
+   * A row the worker has processed: it carries the decision it made and the
+   * fourth state migration 090 added. The Inbox is the live queue, so an
+   * archived row must leave it — but it must still be reachable, because the
+   * decision is the only place the reasoning was written down.
+   */
+  function archivedItem() {
+    return makeAttentionItem({
+      id: 5,
+      kind: 'conflict',
+      question: 'Quiz 2 moved.',
+      state: 'archived',
+      resolved_at: '2026-09-10T10:00:00.000Z',
+      resolution: { accept: 'blackboard' },
+      resolution_note: 'the syllabus agrees',
+      applied_at: '2026-09-10T11:00:00.000Z',
+      archived_at: '2026-09-11T09:00:00.000Z',
+      archived_by: 'inbox-apply',
+      decision: {
+        change: 'set IST.323/quiz-2 due 2026-09-09',
+        log: 'docs/inbox-decisions/2026-09-11-quiz-2.md',
+      },
+    });
+  }
+
+  it('keeps an archived row out of the live list', () => {
+    renderInbox([
+      makeAttentionItem({ id: 1, kind: 'conflict', question: 'Still open.' }),
+      archivedItem(),
+    ]);
+
+    const conflicts = screen.getByRole('region', { name: 'Conflicts' });
+    expect(within(conflicts).getByText('Still open.')).toBeInTheDocument();
+    expect(within(conflicts).queryByText('Quiz 2 moved.')).toBeNull();
+    expect(screen.queryByText('Quiz 2 moved.')).toBeNull();
+  });
+
+  it('collapses them under an "archived (n)" toggle of their own', () => {
+    renderInbox([makeAttentionItem({ id: 1, question: 'Still open.' }), archivedItem()]);
+
+    const toggle = screen.getByRole('button', { name: /archived \(1\)/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(toggle);
+    expect(screen.getByText('Quiz 2 moved.')).toBeInTheDocument();
+    expect(screen.getByText('archived')).toBeInTheDocument();
+  });
+
+  it('does not count an archived row as dismissed', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 2,
+        kind: 'data_gap',
+        question: 'Already dismissed.',
+        state: 'dismissed',
+        resolved_at: '2026-09-09T10:00:00.000Z',
+      }),
+      archivedItem(),
+    ]);
+
+    expect(screen.getByRole('button', { name: /dismissed \(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /archived \(1\)/ })).toBeInTheDocument();
+  });
+
+  it('shows what the worker changed as one line, and never as jsonb', () => {
+    renderInbox([archivedItem()]);
+    fireEvent.click(screen.getByRole('button', { name: /archived \(1\)/ }));
+
+    const line = screen.getByText('worker: set IST.323/quiz-2 due 2026-09-09');
+    expect(line).toBeInTheDocument();
+
+    const row = line.closest('article');
+    expect(row).not.toBeNull();
+    expect(row?.textContent ?? '').not.toContain('{');
+    expect(row?.textContent ?? '').not.toContain('"change"');
+    expect(row?.textContent ?? '').not.toContain('docs/inbox-decisions');
+  });
+
+  it('says nothing about a decision that carries no change line', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 6,
+        state: 'archived',
+        question: 'No change recorded.',
+        decision: { note: 'nothing to do' },
+      }),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: /archived \(1\)/ }));
+
+    expect(screen.getByText('No change recorded.')).toBeInTheDocument();
+    expect(screen.queryByText(/^worker:/)).toBeNull();
+  });
+
+  it('names /inbox-apply once, near the button that asks for it', () => {
+    renderInbox([makeAttentionItem({ id: 1 })]);
+    expect(screen.getByText(INBOX_APPLY_REQUEST_HELP)).toBeInTheDocument();
   });
 });
