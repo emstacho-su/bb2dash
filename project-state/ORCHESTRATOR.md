@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-21** (Phase 12b tail in a PR; earlier that day the post-merge reconciliation PR #21: Phase 12b MVP merged 2026-09-17, PR #20; Phase 12 merged, PR #19; before that the post-merge reconciliation: Phase 10b PR #15 merged after Phase 11b's PR #14 and its display follow-up #16; Phase 10a PR #13 merged after Phase 11's PR #12).
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-22** (**sprint 1 closed**: Phase 12b tail merged PR #22, inbox-apply PR #23; Phase 13 skipped; planning docs by sprint under `docs/planning/`, index `docs/planning/README.md`; sprint 2 intake open. Before that, 2026-09-21: Phase 12b tail in a PR; earlier that day the post-merge reconciliation PR #21: Phase 12b MVP merged 2026-09-17, PR #20; Phase 12 merged, PR #19; before that the post-merge reconciliation: Phase 10b PR #15 merged after Phase 11b's PR #14 and its display follow-up #16; Phase 10a PR #13 merged after Phase 11's PR #12).
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement
@@ -33,7 +33,7 @@ planner week grid, Google Calendar push, announcements bell (Phase 11); planner 
 Google (Phase 11b); grade model + what-if (Phase 10b). Prod is Supabase
 `goultdzqcavefcgnifdy`; migrations 001–058, 060–069, 073–089 live (082–083, 088–089 on the tail branch;
 059 held for V-1). Fine-tooth-comb pass MVP (Phase 12b): one
-"graded so far" figure, six statuses, crawler v4. No open PRs after Phase 12b (#20). The materials MCP
+"graded so far" figure, six statuses, crawler v4. Sprint 1 closed 2026-09-22 (PRs #7–#23; migrations 026–090; 090 = inbox-apply). Sprint 2 planning open: `docs/planning/sprint-2/90_SPRINT2_INTAKE.md`, migrations from 091. The materials MCP
 server (`mcp-server/`) is registered at user scope and points at
 `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`. The 10a / 11 / V-1 / V-2 sprint
 started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
@@ -59,7 +59,7 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
 | 12 | Electron shell + tray + desktop notifications | merged Sep 17 (W-25 shell + W-26 notifications; round 2 = ten code-review findings fixed; security review clean; Stack accepted steps 1–5 + tray; toasts still to be seen live) | #19 | none used (073–079 stay free) |
-| 13 | Styling pass | planned; last; carries C-1..C-3 from Phase 10b's browser walk (brief §Carried in) | — | — |
+| 13 | Styling pass | **skipped** (Stack, 2026-09-22: development phases first); C-1..C-3 parked in `sprint-2/parked/81_PHASE13_styling.md` | — | — |
 | 12b | Fine-tooth-comb pass: Stack's list of bugs and changes by page → triage → research → MVP (`80c_PHASE12B_page_pass.md`) | **MVP merged Sep 17** (41 intake ids, Stack's 18 answers, five workers W-30..W-34, grade method picked from `80e`, crawler v4, gates run); **tail PR open Sep 21** (T-1 recurring events, T-2 popover + assignment page, 089 due-day fix; W-35..W-37; gates run; walk `80o`) | #20, tail PR | 073–089 (all used) |
 | 14 | Containers (R-28): deterministic `sync-runner` + noVNC Blackboard login, harness jobs with a catch-up scheduler, vault → private git repo, dev container, umbrella repo `bb2dash-stack` (`82_PHASE14_containers.md`, research `docs/planning/sprint-2/research/82_*`) | planned; **after 13**; brief + Stack's 16 answers + six-researcher synthesis written 2026-09-16; one PR per repo (three repos) | — | 090–099 (090–091 expected) |
 
@@ -194,8 +194,8 @@ Learned in Phase 12 (2026-09-17):
 * Phase 12 is merged and runs from `desktop/dist/win-unpacked` in the `main` checkout. Still his to
   see: the three toasts (first real sync or posted grade), and staying signed in after hours in the
   tray. `syncDryRun` is `true` in his `%APPDATA%\bb2dash\config.json` until he flips it.
-* Phase 12b (MVP merged, PR #20): run one sync from the `main` checkout (crawler v4; none has run since the merge as of 2026-09-21) — it should fill `bb_attempts` and "My submissions"; place ECN.304 Quiz 2 and Attendance with "Counts toward…". The tail (recurring events, popover, 089) is in a PR: walk the preview, then say merge.
-* Decide when R-28 (container migration after development) gets its own brief; after Phase 13.
+* Sync 34 (2026-09-22, crawler v4) filled `bb_attempts` (26) but **submission bytes were not pulled** (S2-carry-1 in the sprint 2 intake); say "fix 4b" for the small fix. Place ECN.304 Quiz 2 and Attendance with "Counts toward…" on its Grades tab.
+* Sprint 2: paste the list of features and changes (grouped as you like) into a PM session with the Sprint 2 prompt in §6; say where Phase 14 (containers) sits in it.
 * Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and start V-2.
   V-1's reconciliation migration is `059_grading_reconciliation.sql`.
 * Answer V-1's *ask the professor* items as they come up.
@@ -331,7 +331,7 @@ regenerated `database.types.ts`.)
 >
 > <the list, grouped by page>
 
-**Phase 14 — containers (R-28)** (after 13 merges)
+**Phase 14 — containers (R-28)** (Stack places it in sprint 2)
 
 > `/bb2dash-pm` Start Phase 14. Read `docs/planning/sprint-2/82_PHASE14_containers.md` and the six
 > `research/82_RESEARCH_phase14_*` files. Re-check R5's Electron seam against the merged
@@ -340,3 +340,15 @@ regenerated `database.types.ts`.)
 > spike) as a gate before anything else, and only if it passes cut worktrees in bb2dash and
 > agentic-harness, spawn W-27 / W-28 / W-29, integrate, run the gates on all three PRs, and stop
 > at "ready when you say so". Keep the Windows path working until my acceptance sitting.
+
+**Sprint 2 — planning** (added 2026-09-22 at the sprint 1 close)
+
+> `/bb2dash-pm` Start sprint 2 planning. Read `docs/planning/sprint-2/90_SPRINT2_INTAKE.md` (the carried-in
+> items) and `docs/planning/README.md` (where planning docs live now). My list of features and changes
+> follows below, grouped by area. Give every item an id, add it to the intake, triage into phases, spawn
+> Sonnet researchers (one per area) to size and locate, then bring me your questions in ONE batch with a
+> default each. After my answers, write one brief per phase under `docs/planning/sprint-2/briefs/` with a
+> frozen Contract, MVP in my words, DoD and task loops, reserve migration ranges from 091, and stop for my
+> approval before spawning any worker. Phase 14 (containers) goes where I say in the list.
+>
+> <the list, grouped by area>
