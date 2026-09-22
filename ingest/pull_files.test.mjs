@@ -16,6 +16,7 @@ import {
   anonHeaders,
   bbFilesUpdateSql,
   bytesLookValid,
+  duplicateIsAcceptable,
   encodeKey,
   filterManifest,
   findDownload,
@@ -106,6 +107,11 @@ test('isDuplicateAnswer: only a non-200 whose body says the object exists', () =
   assert.equal(isDuplicateAnswer(400, '{"error":"Duplicate","message":"The resource already exists"}'), true);
   assert.equal(isDuplicateAnswer(400, '{"error":"InvalidKey"}'), false);
   assert.equal(isDuplicateAnswer(200, 'Duplicate'), false);
+});
+
+test('duplicateIsAcceptable: fine for a course file, never for a submission (a 409 is not "done")', () => {
+  assert.equal(duplicateIsAcceptable(false), true);
+  assert.equal(duplicateIsAcceptable(true), false);
 });
 
 test('bbFilesUpdateSql writes the key as storage_path, the real name as local_path, and guards on null', () => {

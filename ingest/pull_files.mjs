@@ -9,11 +9,12 @@
 // rows the transform catalogued with `storage_path is null`. First run 2026-09-22 (12 files).
 //
 // TWO CALLERS, ONE GATE. Course files are runbook step 4; Stack's own submitted files are bb-sync
-// step 4b, catalogued by `stage_attempts` with `bucket = 'my_submissions'`. They differ in three
+// step 4b, catalogued by `stage_attempts` with `bucket = 'my_submissions'`. They differ in four
 // small ways and nothing else: `--bucket my_submissions` selects them (with no flag the run takes
 // course rows only, so neither caller can ever write the other's rows), their update keeps the mime
-// Blackboard declared (`coalesce`, see below) and their notes line names step 4b. A manifest row
-// with no `bucket` key — every manifest written before 2026-09-22 — is a course file.
+// Blackboard declared (`coalesce`, see below), their notes line names step 4b, and an occupied
+// Storage key fails the row instead of counting as done. A manifest row with no `bucket` key —
+// every manifest written before 2026-09-22 — is a course file.
 //
 // THE SHAPE. Two halves, because bbcswebdav URLs 302 to a cross-origin CDN with no CORS:
 //   1. A real browser downloads the bytes. From a Playwright session logged into Blackboard,
@@ -147,6 +148,17 @@ export function isDuplicateAnswer(status, body) {
   return status !== 200 && /already exists|Duplicate/i.test(String(body));
 }
 
+/**
+ * Is that duplicate answer good enough to go on? For a course file yes: the key is derived from the
+ * catalogue, so the object under it is this file. For a submission NO — migration 052's
+ * `attempt-<digits>` segment means nothing should ever share the key, so an occupied one holds
+ * bytes this step did not write and must not point a Blackboard row at. bb-sync step 4b reports the
+ * row, leaves `storage_path` null, and a human decides.
+ */
+export function duplicateIsAcceptable(submission) {
+  return !submission;
+}
+
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 /**
@@ -199,7 +211,10 @@ async function pullOne(row, ctx) {
     method: 'POST', headers: anonHeaders(key, mime), body: bytes,
   });
   const upBody = await up.text();
-  if (!up.ok && !isDuplicateAnswer(up.status, upBody)) return { id: row.id, error: `storage ${up.status}: ${upBody.slice(0, 200)}` };
+  if (!up.ok) {
+    if (!isDuplicateAnswer(up.status, upBody)) return { id: row.id, error: `storage ${up.status}: ${upBody.slice(0, 200)}` };
+    if (!duplicateIsAcceptable(submission)) return { id: row.id, key: storageKey, ...tag, error: `Storage key already occupied (${up.status}); a human decides whether those bytes are this file` };
+  }
 
   let units = [];
   let extractError = null;
