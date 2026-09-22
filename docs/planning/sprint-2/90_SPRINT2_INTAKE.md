@@ -19,7 +19,7 @@ Migration range starts at **091**. Planning docs for this sprint live in this fo
 | S2-carry-7 | styling | Phase 13 skipped; C-1 phone-width overflow, C-2 rank weights invisible, C-3 favicon | `parked/81_PHASE13_styling.md` | — |
 | S2-carry-8 | db | 7 functions with a mutable `search_path` (advisor, pre-existing) | advisors | S |
 | S2-carry-9 | web | React #418 (hydration mismatch) in the console on every load of a `?item=assignment:…` popout URL (e.g. `/course/IST.471/classwork?item=assignment:IST.471/a1-proposal`); the plain page is clean. Same shape as the `/planner` one Phase 11b fixed with `useHydrated` (persisted query cache restored before the popout's first client render) | UX pass 2026-09-22 | S |
-| S2-carry-10 | web | ~~Direct load of `/course/[id]/assignment/…` was a 404~~ **fixed in PR #25** (`CourseAssignment` decided not-found on a pending, not-yet-fetching query — the server render); verify on the preview, then on production after the merge | UX pass 2026-09-22 | done |
+| S2-carry-10 | web | ~~Direct load of `/course/[id]/assignment/…` was a 404~~ **fixed in PR #25** (`CourseAssignment` decided not-found on a pending, not-yet-fetching query — the server render); verified on the PR #25 preview 2026-09-22 (direct loads of the IST.471 and IST.352 pages render, submission block included) | UX pass 2026-09-22 | done |
 
 ## Stack's list (verbatim, filled by the PM session)
 
