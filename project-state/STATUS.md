@@ -31,16 +31,16 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 
 | Layer | State |
 |---|---|
-| Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` **v3** (anon insert, unique per run/kind/shell; `crawler.version = 3` envelope; attempts + attempt-files probe with a `keys` list; `runAll({ runId })`); last pull 2026-09-16 (run `c877b0cc-…`, 48 gradebook columns — made with v2 from the `main` checkout, so no `attempts` key yet). Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
-| Typed warehouse | migrations 001–058, 060–069, 073–089 (repo numbering; see note below; all on `main` and live); **`grade_scenarios`** (one saved what-if per scheme course) and **`grade_column_links`** (Stack's column → part links and "Not graded"), both owner-only, never touched by a sync; views `v_grade_model_items` (77 items: 41 item + 5 attendance + 31 placeholder on 9/16), `v_grade_model_total` (`bb_running` read from the total's formula; IST.323 true), `v_gradebook_history` (5 changed columns); 7 courses, 80 assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings` (+ `gcal_*`, `web_base_url`), `calendar_events` mirror (keyed `(source, ref_id)` since 068), `calendar_push_runs`, `v_calendar_push_items` (assignment + planner arms), **`planner_events`** (owner-only, own IANA zone per row, 0 rows until Stack creates some), `v_announcements_unread`; **`bb_gradebook`** (append-per-run mirror: 45 rows from the 9/14 crawl + 48 from 9/16; IST.323 total 14.8/104), **`bb_attempts`** (empty until the first v3 crawl); every public view `security_invoker`, anon revoked |
+| Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` **v4** (anon insert, unique per run/kind/shell; versioned envelope; attempts read the way Blackboard's UI does — grade → attempts → detail, `80f`; `runAll({ runId })`); last pull 2026-09-24 (`sync_runs` 63; sync 34 on 2026-09-22 was the v4 proof: 26 attempts, 55 gradebook columns; 52 attempt rows and 58 latest columns on 2026-09-24). Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
+| Typed warehouse | migrations 001–058, 060–069, 073–089 (repo numbering; see note below; all on `main` and live); **`grade_scenarios`** (one saved what-if per scheme course) and **`grade_column_links`** (Stack's column → part links and "Not graded"), both owner-only, never touched by a sync; views `v_grade_model_items` (77 items: 41 item + 5 attendance + 31 placeholder on 9/16), `v_grade_model_total` (`bb_running` read from the total's formula; IST.323 true), `v_gradebook_history` (5 changed columns); 7 courses, 80 assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings` (+ `gcal_*`, `web_base_url`), `calendar_events` mirror (keyed `(source, ref_id)` since 068), `calendar_push_runs`, `v_calendar_push_items` (assignment + planner arms), **`planner_events`** (owner-only, own IANA zone per row, 0 rows until Stack creates some), `v_announcements_unread`; **`bb_gradebook`** (append-per-run mirror: 45 rows from the 9/14 crawl + 48 from 9/16; IST.323 total 14.8/104), **`bb_attempts`** (52 rows on 2026-09-24; filled since sync 34); every public view `security_invoker`, anon revoked |
 | Gradebook mirror (10a) | `stage_gradebook` + `stage_attempts` in `run_transform` after `stage_assignments`; `v_gradebook_latest` (`column_kind` item / attendance / total / calc_other / letter, `assignment_id`, `linked_assignments`, `counts_toward_grade`), `v_assignment_grade`, `v_course_grade`, `v_attempts_latest`, `v_assignment_attempts`; registered runs only; reconciliation 45/45 columns and scores against `bb_raw` on the 9/14 crawl; every figure carries `seen_at`, nothing summed |
 | Effort model | migration 015 `effort_base` (19 types) + 016 `v_work_items` (152 items, effort + source) |
-| Document corpus | 64 files (100% in Storage + local mirror + sha256), 534 text units extracted; 4 stale IST.466 files marked `superseded_by` (migration 022) → `v_bb_files_current` = 60 |
+| Document corpus | 84 current files on 2026-09-24 (93 rows, 9 superseded), all with bytes in Storage; 82 text-extracted, 2 image-only (`text_status = na`, R-16's OCR pair); 784 text units; supersession seeded by 022 and by re-uploads since (a re-upload gets its own key and supersedes the older row, 2026-09-22) |
 | Search: FTS | tsvector+GIN on file text / content / announcements; `search_file_text(…, p_include_superseded)` |
-| Search: vectors | 1,195 gte-small embeddings (384-dim), 100% coverage; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
+| Search: vectors | 1,545 gte-small embeddings (384-dim) on 2026-09-24, 0 units without one; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
 | Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`), `calendar-push` **v5** (Google Calendar upsert/delete by deterministic event id — `bb…` for due dates, `pe…` for planner events; planner body carries the kind in the title, a per-kind colour, `✓` on a done task, `dateTime` + `timeZone` or an all-day date pair; both sides read page by page, a partial read aborts; `verify_jwt` off, `x-push-secret` from Vault; fired by pg_cron `bb2dash-calendar-push` when `app_settings.gcal_dirty`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
-| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (Phase 10a) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list, **Grades** (`/grades` by course: "Blackboard's number, as of <seen_at>" / "Blackboard publishes no total" / "not synced yet"; item rows with status pill, `score / possible`, seen, feedback disclosure; uncounted attendance, letter and non-total calculated columns in a collapsed group), **course Grades tab** (same table for the course's shells), **popout submission block** (status, attempt N of M, pulled-back and staged files with a sha256 match chip; no score), **staged-upload drop zone** (popout + Classwork rows → Storage + `bb_files` row, "Staged in bb2dash — attach in Blackboard ↗"; no control reads "Submit"), **Planner** (`/planner?week=`, Mon–Sun week grid: class blocks with room + session topic, due items by New York wall clock or nested in their class block, Assignments band, today + now-line, quick-edit, click-to-popout; **planner events** (Phase 11b): click an empty half-hour slot or an Events-band cell → `PlannerEventForm` (six kinds, zone picker, in-person or online location, notes, course), per-kind blocks placed by New York wall clock with a zone chip for other zones, task checkbox, Events band for all-day, edit/delete from the block), **bell** (unread badge from `v_announcements_unread`; opening marks seen), **Announcements** (`/announcements`, all courses newest-first), public `/privacy` + `/terms` (for the Google consent screen), **grade model** (Phase 10b: "Our model" line under Blackboard's number on `/grades` and the course tab — graded so far, zeros on the rest, best case, agreement with Blackboard from an enum, or a not-computed sentence naming why; course tab adds what-if cells (points, or % on pointless placeholders), "Not in Blackboard yet" placeholder rows, target solver, Reset scenario, "Counts toward…" picker, score history); vitest 1336 tests |
+| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (Phase 10a) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list, **Grades** (`/grades` by course: "Blackboard's number, as of <seen_at>" / "Blackboard publishes no total" / "not synced yet"; item rows with status pill, `score / possible`, seen, feedback disclosure; uncounted attendance, letter and non-total calculated columns in a collapsed group), **course Grades tab** (same table for the course's shells), **popout submission block** (status, attempt N of M, pulled-back and staged files with a sha256 match chip; no score), **staged-upload drop zone** (popout + Classwork rows → Storage + `bb_files` row, "Staged in bb2dash — attach in Blackboard ↗"; no control reads "Submit"), **Planner** (`/planner?week=`, Mon–Sun week grid: class blocks with room + session topic, due items by New York wall clock or nested in their class block, Assignments band, today + now-line, quick-edit, click-to-popout; **planner events** (Phase 11b): click an empty half-hour slot or an Events-band cell → `PlannerEventForm` (six kinds, zone picker, in-person or online location, notes, course), per-kind blocks placed by New York wall clock with a zone chip for other zones, task checkbox, Events band for all-day, edit/delete from the block), **bell** (unread badge from `v_announcements_unread`; opening marks seen), **Announcements** (`/announcements`, all courses newest-first), public `/privacy` + `/terms` (for the Google consent screen), **grade model** (Phase 10b: "Our model" line under Blackboard's number on `/grades` and the course tab — graded so far, zeros on the rest, best case, agreement with Blackboard from an enum, or a not-computed sentence naming why; course tab adds what-if cells (points, or % on pointless placeholders), "Not in Blackboard yet" placeholder rows, target solver, Reset scenario, "Counts toward…" picker, score history); vitest 1812 tests (2026-09-21, row 15) |
 | Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
 
 ## What has been done (by phase)
@@ -409,9 +409,9 @@ two RED-first tests), and React #418 on `?item=` popout URLs (S2-carry-9, pre-ex
   declared mime kept, a 409 fails a submission; tests 12 → 17). The two v4-catalogued files
   (IST.352 Role of Systems Analyst, IST.471 proposal agreement) were pulled through a logged-in tab
   on 2026-09-22: stored, mirrored, 3 text units extracted and embedded.
-* V-1 grading validation still stubbed (`059` held); 21 placeholders without points; IST.323's
+* V-1 grading validation still stubbed (`059` held); 18 placeholders without points (21 on 2026-09-16); IST.323's
   13-point proposal column counts toward two parts.
-* V-2 session archival (R-27) planned in `~/agentic-harness`, not started here.
+* V-2 session archival (R-27) is **built** in `~/agentic-harness` (its PRs #1–#4, 2026-09-16: capture 2.0 with subagent notes, tag vocabulary, one-time vault migration, ingest on capture, nightly reconcile, metadata-filtered retrieval); the vault itself moved into git realms there on 2026-09-23/24. Carried: bb2dash's acceptance walk of `66_SESSION_ARCHIVAL_RAG.md` and the doc closure (S2-carry-3).
 * Phase 13 styling **skipped** by Stack; C-1..C-3 parked (`docs/planning/sprint-2/parked/81_PHASE13_styling.md`).
 * Phase 14 containers brief + 6 research files ready; Stack places it in the sprint 2 list.
 * Known issues below: empty series row after a plain delete of a series' last row; IST.466 duplicate
@@ -420,8 +420,7 @@ two RED-first tests), and React #418 on `?item=` popout URLs (S2-carry-9, pre-ex
 
 ## What's next — Sprint 2
 
-Stack closes sprint 1 to add development phases before any styling. Planning runs the Phase 12b way:
-his list → ids → triage → researchers → one batch of questions → briefs. Intake file:
+Stack closes sprint 1 to add development phases before any styling. Planning is in progress on branch `docs/sprint2-planning` (Stack's four-stage method of 2026-09-22, PR #26: requirements `91_REQUIREMENTS_v3.md` → research `92_*` + `93_` synthesis → phases `94_` + briefs → session prompts and the ORCHESTRATOR refresh; a stage stops only where Stack's input is required). Intake file:
 `docs/planning/sprint-2/90_SPRINT2_INTAKE.md`. Migration range from **091**.
 
 ## Sprint 1 record — Requirements v2 (`docs/planning/sprint-1-hub/60_REQUIREMENTS_v2.md`)
@@ -436,7 +435,7 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | 10a | Grades: gradebook mirror, Grades screens, submission pull-back, staged upload | `67_PHASE10A_grades.md` | **merged** (PR #13, 2026-09-16; migrations 046–056 live). Mirror verified by Stack's 9/16 sync; the attempts probe and step 4b run on the first post-merge sync |
 | 10b | Grades: methodology model + what-if | `68_PHASE10B_grade_model.md` | **merged** (PR #15, 2026-09-16; migrations 057–058, 080–081 live; PM browser walk 7/7 + round 3) |
 | V-1 | Grading schema validation (stream, Stack + a materials-only session) | `63_GRADING_VALIDATION.md`, `64_GRADING_SCHEMA_EXPORT_2026-09-14.md` | **stubbed for later** (Stack, 2026-09-16: a data-accuracy task, no longer a gate for 10b); reconciliation migration stays 059; it should fold `grade_column_links` into `assignments` and fill placeholder points. Launch: `scripts/validate-grading.ps1` |
-| V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | added 2026-09-14 |
+| V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | **built in the harness** (its PRs #1–#4, 2026-09-16); the acceptance walk from bb2dash's side and the doc closure are carried into sprint 2; recorded here 2026-09-24 |
 | 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **merged** (PR #12, 2026-09-16; migrations 060–066 live, calendar push live and proven; Stack signed off the six-step script) |
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar | `69b_PHASE11B_planner_events.md` | **merged** (PR #14 + display follow-up PR #16, 2026-09-16; migrations 067–069 live, `calendar-push` v5 live, live proof and browser walk done) |
 | 12 | Electron shell, tray, desktop notifications, Sync button runs the command | `80_PHASE12_electron.md` | **merged** (PR #19, 2026-09-17; Stack walked acceptance steps 1–5 and the tray on the unpacked build and said merge; the three toasts are still to be seen live, after the first real sync or posted grade). His first launch found one bug, fixed before merge: the app was named `bb2dash-desktop`, so it read its config from the wrong `%APPDATA%` folder (`productName` now pins `bb2dash`). Shipped: `desktop/` package, Electron 44.4.1, unpacked build `desktop/dist/win-unpacked/bb2dash.exe`; window + single instance + tray (close hides), navigation allowlist, poller with on-disk watermark and the three toasts, Sync button runs `claude '/bb-sync <id>'` in Windows Terminal (`syncDryRun` prints it instead); `core/` has no `electron` import (R-28). 535 unit + 19 e2e tests; `/code-review main high` 10 findings fixed (brief §Round 2), `/security-review` none ≥ 8/10; zero changes under `web/`; no migrations. Notes: `80a`, `80b`, `80d`. **Not yet proven, only Stack can:** real Windows toasts, a real `wt.exe` sync run, the clipboard copy inside the shell, staying signed in after hours in the tray. Carried to 12b: `web/src/lib/supabase/proxy-session.ts` drops refreshed auth cookies on its two redirect branches; low-priority hardening: police `will-redirect` / `will-frame-navigate` |
@@ -471,8 +470,7 @@ catalogue row are invisible; the pull step uploads with the publishable key); `b
 `bb_attempts` owner-only, stage functions `service_role` only; `grade_scenarios` /
 `grade_column_links` owner-only with the initplan-safe `(select auth.uid())` form, the three model
 views `security_invoker` and revoked from anon (`/security-review` of Phase 10b: no findings).
-Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's policies (wrap
-`auth.uid()` in `(select …)`), 7 pre-existing mutable search_path functions.
+Remaining advisor items (2026-09-22): 7 pre-existing mutable `search_path` functions (`set_updated_at`, `classify_bb_file`, `bb_file_relpath`, `suggested_start`, `search_file_text`, `match_file_text`, `hybrid_search_file_text`), two SECURITY DEFINER functions callable by `authenticated` (`app_owner`, accepted 2026-09-10; `calendar_push_now`), and Auth's leaked-password protection off; the 21 `auth_rls_initplan` warnings were fixed by 076.
 
 ## Known issues / operational notes
 
@@ -485,7 +483,7 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
 * **IST.323's 13-point proposal column** bundles the 11-point proposal and the 2-point final log
   (one column cannot count toward two parts), so once graded and linked the agreement reads
   "no known reason". V-1 data; not a code fix.
-* **21 placeholders carry no points** (V-1 data). Confirmed ones in fraction-based parts take a
+* **18 placeholders carry no points** (V-1 data; 21 on 2026-09-16, 18 on 2026-09-22). Confirmed ones in fraction-based parts take a
   what-if as a percentage; `sum` parts (IST.323 `fp-packet`, IST.352 `term-project`) and unsure
   series placeholders take none.
 * **Post-merge reconciliation (2026-09-16, after PR #15):** every repo migration is recorded on prod
@@ -493,24 +491,20 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
   match once the repo file's final newline is dropped (applied without it — no content drift). Prod's
   `schema_migrations` also holds six `create_rag_*` / `rag_search_*` / `drop_rag_schema_relocated_to_harness_memory`
   rows from the harness RAG store before it moved to `harness-memory`; they are not bb2dash migrations.
-  No prod migration after 081, so `database.types.ts` on `main` is current. No open PRs; only `main`
+  Prod migrations now run through 090 (version `20260922165710`, 2026-09-22). No open PRs; only `main`
   remains locally and on GitHub.
 * **Phase 11b merged first** (PR #14 and #16, 2026-09-16). Phase 10b's branch then merged `main`,
   regenerated `database.types.ts` from prod (both phases' objects) and reconciled the three docs;
   the migrations never overlapped and no source file was shared.
 
-* **Attempts: v3's endpoint answers empty for a student (2026-09-17 sync, 21 of 21 columns); crawler v4 (Phase 12b, `80f`) walks grade → attempts → detail. Proof is the first v4 sync.** Older note — attempts key names were unverified until the first crawler-v3 sync — the next `/bb-sync`
+* **Attempts — proven 2026-09-22 (sync 34, crawler v4: 26 attempts across 5 courses, 2 submission files pulled; 52 attempt rows by 2026-09-24).** History: v3's endpoint answered empty for a student (2026-09-17 sync, 21 of 21 columns); v4 (Phase 12b, `80f`) walks grade → attempts → detail. Older note — attempts key names were unverified until the first crawler-v3 sync — the next `/bb-sync`
   from the `main` checkout. `bb_attempts.raw->'keys'` and `bb_content`'s `detailSource` probe
   name the real keys; the candidate lists in `bb_crawler.js` are then cut to one name each
-  (`66_W17_VERIFICATION.md` §10). Until then `bb_attempts` is empty and the popout shows
-  Blackboard's `lastAttempt` timestamp only.
+  (`66_W17_VERIFICATION.md` §10). (Superseded: `bb_attempts` is populated.)
 * Mirrored scores are stored `numeric(9,3)`: ECN.304 Attendance 83.33333 renders as 83.333 (one
   value of 45, third decimal of a percentage). Widening the column means recreating the five
   views that depend on it; deferred unless a score needs to be bit-exact.
-* `IST.323/fp-proposal` and `IST.323/fp-log-final` share one `bb_item_id` / `bb_column_id`;
-  `stage_assignments` re-stamps neither row's `bb_last_seen`, so `v_calendar_push_items` counts
-  both absent and the calendar push skips them (conservative, nothing deleted). A Phase 9 staging
-  question for the next transform touch; details in `69a_W21_VERIFICATION.md` §4.1.
+* ~~`IST.323/fp-proposal` / `IST.323/fp-log-final` skipped by the calendar push~~ — **fixed by 075 + 084 (Phase 12b)**: a column shared on purpose is restamped, not a conflict; both rows are in `v_calendar_push_items` and on the Google calendar since 2026-09-17. History in `69a_W21_VERIFICATION.md` §4.1.
 * `calendar-push` is the one edge function with `verify_jwt` off; it authenticates the tick's
   `x-push-secret` header. Nothing else should call it.
 * **Planner events are real the moment they are saved**, on the preview as on prod: the push puts
@@ -529,8 +523,7 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
   `security_invoker`; `v_course_display` gets that from Phase 8's 028. Prod holds both already;
   the rule keeps a fresh replay of `db/migrations` in README order working.
 
-* Migration 020's RLS policies call `auth.uid()` per row (advisor `auth_rls_initplan`, 21
-  policies); a later migration should rewrite them as `(select auth.uid()) = …`.
+* ~~Migration 020's RLS policies call `auth.uid()` per row~~ — fixed by 076 (Phase 12b): 22 policies rewritten as `(select auth.uid())`; the advisor shows none.
 * `bb_crawler.js` generates `run_id` inside `runAll`; the skill registers it right after the
   crawl returns and migration 039's grace window covers the gap. A `runId` parameter on
   `runAll` would let the skill register first (one-line change, next time the crawler is touched).
@@ -539,8 +532,7 @@ Remaining advisor items: 21 `auth_rls_initplan` warnings on migration 020's poli
   functions server-side via `pg_net` (`net.http_post`); pg_net is enabled and load-bearing.
 * Edge CPU budget caps embedding at ~8–9 parts per invocation; `embed-corpus` resumes per-part.
 * ~~`part_range` on text 276 is one char long~~ — fixed (023 + `embed-corpus` v5, Phase 7).
-* `bb_raw` run 19 (2026-09-08 crawl) still lists the IST.466 "Wk2x" root item that the notes
-  say was removed on 9/8 — the crawl ran earlier that day. Harmless; the next crawl clears it.
+* ~~`bb_raw` run 19 still lists the IST.466 "Wk2x" root item~~ — cleared by later crawls (gone from the content tree by 2026-09-22).
 * Hybrid `snippet` length is a word budget (`MaxWords=40`, two fragments), not a char budget:
   observed 81–791 chars. Clients truncate for display.
 * A matched-passage snippet cut from part ≥2 of a PPTX unit would start *after* the `[notes]`

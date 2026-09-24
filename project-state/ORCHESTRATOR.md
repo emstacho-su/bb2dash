@@ -31,8 +31,7 @@ Classroom-style course page (Phase 8); automated sync loop with Inbox (Phase 9);
 mirrored and shown as Blackboard's numbers, submissions catalogued, staged uploads (Phase 10a);
 planner week grid, Google Calendar push, announcements bell (Phase 11); planner events pushed to
 Google (Phase 11b); grade model + what-if (Phase 10b). Prod is Supabase
-`goultdzqcavefcgnifdy`; migrations 001–058, 060–069, 073–089 live (082–083, 088–089 on the tail branch;
-059 held for V-1). Fine-tooth-comb pass MVP (Phase 12b): one
+`goultdzqcavefcgnifdy`; migrations 001–058, 060–069, 073–090 live (059 held for V-1; 070–072 unused). Fine-tooth-comb pass MVP (Phase 12b): one
 "graded so far" figure, six statuses, crawler v4. Sprint 1 closed 2026-09-22 (PRs #7–#23; migrations 026–090; 090 = inbox-apply). Sprint 2 planning open: `docs/planning/sprint-2/90_SPRINT2_INTAKE.md`, migrations from 091. The materials MCP
 server (`mcp-server/`) is registered at user scope and points at
 `C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js`. The 10a / 11 / V-1 / V-2 sprint
@@ -57,11 +56,11 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | 11 | Planner week grid, Google Calendar push, bell + Announcements page, data gaps | merged Sep 16; calendar push live and proven | #12 | 060–066 |
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | merged Sep 16 (brief + answers + K-notes + round 2 in `69b`, evidence `69c`; `calendar-push` v5 live, live proof and browser walk done; display follow-up #16 merged the same minute) | #14, #16 | 067–069 (070–072 free) |
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
-| V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | planned; parallel with 10a | — | none here |
+| V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | **built in the harness** (its PRs #1–#4, 2026-09-16); bb2dash-side acceptance walk + doc closure carried into sprint 2 | harness #1–#4 | none here |
 | 12 | Electron shell + tray + desktop notifications | merged Sep 17 (W-25 shell + W-26 notifications; round 2 = ten code-review findings fixed; security review clean; Stack accepted steps 1–5 + tray; toasts still to be seen live) | #19 | none used (073–079 stay free) |
 | 13 | Styling pass | **skipped** (Stack, 2026-09-22: development phases first); C-1..C-3 parked in `sprint-2/parked/81_PHASE13_styling.md` | — | — |
 | 12b | Fine-tooth-comb pass: Stack's list of bugs and changes by page → triage → research → MVP (`80c_PHASE12B_page_pass.md`) | **MVP merged Sep 17** (41 intake ids, Stack's 18 answers, five workers W-30..W-34, grade method picked from `80e`, crawler v4, gates run); **tail PR open Sep 21** (T-1 recurring events, T-2 popover + assignment page, 089 due-day fix; W-35..W-37; gates run; walk `80o`) | #20, tail PR | 073–089 (all used) |
-| 14 | Containers (R-28): deterministic `sync-runner` + noVNC Blackboard login, harness jobs with a catch-up scheduler, vault → private git repo, dev container, umbrella repo `bb2dash-stack` (`82_PHASE14_containers.md`, research `docs/planning/sprint-2/research/82_*`) | planned; **after 13**; brief + Stack's 16 answers + six-researcher synthesis written 2026-09-16; one PR per repo (three repos) | — | 090–099 (090–091 expected) |
+| 14 | Containers (R-28): deterministic `sync-runner` + noVNC Blackboard login, harness jobs with a catch-up scheduler, vault → private git repo, dev container, umbrella repo `bb2dash-stack` (`82_PHASE14_containers.md`, research `docs/planning/sprint-2/research/82_*`) | planned; **sprint 2** (13 skipped; Stack places it in Stage C); brief + Stack's 16 answers + six-researcher synthesis 2026-09-16; the harness has since moved the vault into git realms itself (2026-09-23/24), superseding C-4; one PR per repo | — | 091–099 (091–092 expected) |
 
 ## 2. Execution order and what each phase hands to the next
 
@@ -186,18 +185,14 @@ Learned in Phase 12 (2026-09-17):
 
 ## 4. Open items that are Stack's, not the PM's
 
-* Run the next `/bb-sync` from the `main` checkout (now crawler v3): it settles Blackboard's
-  attempt key names and pulls the first submission files (step 4b). Then tick acceptance step
-  (3) of Phase 10a on the live app.
-* Phase 10b is live: no course shows "Our model" until he links a column on a course Grades tab
-  (e.g. ECN.304 Attendance → Participation, if the syllabus means that) or a hand-graded score posts.
+* ~~Run the next `/bb-sync` (crawler v3)~~ — done: sync 34 (2026-09-22, v4) filled `bb_attempts` and step 4b pulled the submissions; syncs 62–63 followed on 2026-09-23/24.
+* Grades since 12b: every course shows "graded so far"; ECN.304 Quiz 2 and Attendance still wait for his "Counts toward…" placement on the course Grades tab.
 * Phase 12 is merged and runs from `desktop/dist/win-unpacked` in the `main` checkout. Still his to
   see: the three toasts (first real sync or posted grade), and staying signed in after hours in the
   tray. `syncDryRun` is `true` in his `%APPDATA%\bb2dash\config.json` until he flips it.
-* Sync 34 (2026-09-22, crawler v4) filled `bb_attempts` (26) but **submission bytes were not pulled** (S2-carry-1 in the sprint 2 intake); say "fix 4b" for the small fix. Place ECN.304 Quiz 2 and Attendance with "Counts toward…" on its Grades tab.
-* Sprint 2: paste the list of features and changes (grouped as you like) into a PM session with the Sprint 2 prompt in §6; say where Phase 14 (containers) sits in it.
-* Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323) and start V-2.
-  V-1's reconciliation migration is `059_grading_reconciliation.sql`.
+* ~~Submission bytes not pulled (S2-carry-1)~~ — fixed in PR #25 (step 4b scripted as `ingest/pull_files.mjs`; rows 140/141 pulled 2026-09-22).
+* Sprint 2: his list is transcribed in `docs/planning/sprint-2/91_REQUIREMENTS_v3.md` §3 (2026-09-23); next from him: Stage B's question batch and Phase 14's place in the Stage C phase plan.
+* Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323); its reconciliation migration is `059_grading_reconciliation.sql` (or a sprint 2 number — a Stage B question). V-2 needs no start: it is built.
 * Answer V-1's *ask the professor* items as they come up.
 
 ## 5. Context the orchestrator reviews at session start
@@ -220,7 +215,7 @@ Read in this order. Each line says what the file is for and what to look for.
 | 11 | `mcp-server/README.md` | How the materials server is registered and run; the `include_superseded` and excerpt-label semantics. |
 | 12 | `gh pr list --state open` · `git worktree list` · `git branch -r` | Live state that no document captures: which phases are in a PR, which worktrees exist (foreign ones stay untouched), which branches other sessions pushed. |
 | 13 | Auto-memory `MEMORY.md` for this project | Session-scoped facts: the PM/worker arrangement, the session-capture collection gap, the MCP path fix. Verify any path or flag it names still exists before relying on it. |
-| 14 | `~/.claude/plans/abundant-gathering-wirth.md` | The harness plan; V-2 is its Phase 6b in effect. Read only when V-2 is the phase at hand. |
+| 14 | `~/agentic-harness/README.md`, `hooks/README.md`, `docs/portable.md`, `docs/vault-migration-requirements.md` | V-2 is built there; the vault moved into git realms on 2026-09-23 (its Phase C) and the store was re-ingested on 2026-09-24 (Phase D). Read when a phase touches the harness; Phase 14's C-4 is superseded by it. |
 
 Not to read at start: `docs/planning/sprint-0-foundation/superseded/10_–31_*` (superseded by Requirements v2), `30_PHASED_PLAN.md`
 (Docker-era plan; only its term calendar survives, copied above), the eval/POC docs

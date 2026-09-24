@@ -14,7 +14,7 @@ is) and `project-state/DECISIONS.md` (why). This folder is the record behind the
 |---|---|---|---|
 | `sprint-0-foundation/` | Sep 2 – 10, 2026 | 1–7: data syntax, Blackboard capture, search schema, embedding POC, retrieval MCP, GUI v1, retrieval polish | #1–#6 |
 | `sprint-1-hub/` | Sep 10 – 22, 2026 | 8–12b plus the V-1 and V-2 streams: course dimension, sync loop, grades (10a/10b), planner + calendar (11/11b), Electron shell (12), the page pass (12b) | #7–#23 |
-| `sprint-2/` | being planned | 14 (containers, R-28). Phase 13 is parked | none yet |
+| `sprint-2/` | being planned (from 2026-09-22) | `91_REQUIREMENTS_v3.md` in progress: sprint 1's leftovers as requirements, Stack's list, Phase 14 (containers, R-28); Phase 13 parked | #26 (the prompt); the planning PR to come |
 
 **Sprint 0** predates Requirements v2. Its Sep 8 research-and-direction round
 (`10_`–`31_`) was superseded wholesale and sits under `superseded/` with a note saying so.
