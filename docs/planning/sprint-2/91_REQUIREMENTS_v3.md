@@ -2,7 +2,7 @@
 
 Date: 2026-09-22, §1–§2 and §5–§6 rendered 2026-09-24. Author: PM session (Fable), Stage A of the sprint 2 planning prompt
 (`project-state/ORCHESTRATOR.md` §6, "Sprint 2 — planning"). Product manager: Stack.
-Status: **DRAFT for Stack's read — §1 (81 carried requirements, R-29..R-109), §2 (65 PM-added steps), §3 (his eight items, fields to confirm), §4 (still declined), §5 (54 items closed at Stage A), §6 (49 questions carried to Stage B's batch).** Phase briefs may
+Status: **DRAFT for Stack's read — §1 (81 carried requirements, R-29..R-109), §2 (65 PM-added + 48 research-added steps), §3 (his eight items, fields to confirm), §4 (still declined), §5 (54 items closed at Stage A), §6 (49 questions carried to Stage B's batch).** Phase briefs may
 cite R-numbers from this file once Stack has confirmed it (Stage C).
 
 This file continues `../sprint-1-hub/60_REQUIREMENTS_v2.md` (R-01..R-28). It does not restate
@@ -1188,6 +1188,250 @@ size S
 size S
 * **Why:** D-2 and CLAUDE.md name the 2026-09-17 graded advance as the only exception ('Nothing else.'), but /inbox-apply, which runs as bb-sync step 0, wrote assignment_progress on 2026-09-22 and 2026-09-23.
 * **Backed by:** The scope reviewer's verdict on docs-still-declined-sep8 judged amending v2 §5 unneeded and the D-2 correction genuine. PM reading of docs/planning/sprint-2/91_REQUIREMENTS_v3.md:163, CLAUDE.md 'Project facts', DECISIONS line 151 Why ('CLAUDE.md's project fact is amended to name the exception') and docs/inbox-decisions/2026-09-22.md:54, :88 and 2026-09-23.md:15, :35
+
+### 2.1 Research-added (Stage B, 2026-09-24)
+
+48 steps the ten research notes added, P-66..P-113; each is explained in 93_SPRINT2_RESEARCH_SYNTHESIS.md §1 under its requirement.
+
+#### P-66 · `manual.ts` distinguishes "no score posted" from "posted a zero" *(research-added)*
+size S · for R-30, P-1
+* **Why:** the GEO/ECN 0.0 % figure recurs on any future unlinked 0/100 column
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-67 · A script that extracts and runs each verdict file's YAML `recheck` SQL *(research-added)*
+size S · for R-31, R-33
+* **Why:** research 75's field is inert until something reads it
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-68 · Launcher fix: drop `--restricted` / `--tools`; scope writes with `Edit(...)` rules *(research-added)*
+size S · for R-34
+* **Why:** both are live defects against the current CLI
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-69 · A shared wheel/drag horizontal-scroll hook *(research-added)*
+size S · for S2-home-1
+* **Why:** the same gap recurs on any horizontal strip
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-70 · Lift `materials-collapse.ts` into a shared two-level collapse-state module *(research-added)*
+size S · for S2-home-2, S2-materials-1
+* **Why:** three near-identical implementations otherwise
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-71 · One shared heartbeat/freshness view for the transform tick and the calendar-push tick *(research-added)*
+size M · for R-41, R-52
+* **Why:** the same dead-man's switch twice
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-72 · A written steady-state exclusion convention for sync-summary counts *(research-added)*
+size S · for R-58
+* **Why:** cluster C's future counts re-derive it otherwise
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-73 · A reusable hydration-test harness extracted from `PlannerWeek.hydration.test.tsx` *(research-added)*
+size S · for R-43
+* **Why:** second component needing the same scaffold
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-74 · Commit the export-generating `.sql` beside the dated export *(research-added)*
+size S · for R-35
+* **Why:** only the output was versioned last time
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-75 · One citation syntax, `bb_file:<id>#unit:<n>`, in verdict files and `assignments.source_ref` *(research-added)*
+size S · for R-33
+* **Why:** two dialects from six sittings would defeat the recheck
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-76 · Reuse the sidebar's inline boot script for `html[data-theme]` *(research-added)*
+size S · for R-53
+* **Why:** one FOUC mechanism, already proven
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-77 · Three-state Auto / Light / Dark toggle, default Auto, persist only on an explicit pick *(research-added)*
+size S · for R-53
+* **Why:** "prefers-color-scheme and a toggle" needs a "not chosen" state
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-78 · `color-scheme` driven off `data-theme` *(research-added)*
+size S · for R-53
+* **Why:** wrong native controls under a static dark value
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-79 · The 390 px check asserts every nav item stays reachable (focus, `aria-expanded`, keyboard) *(research-added)*
+size S · for R-46
+* **Why:** a folded nav can pass a width check while dropping a link
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-80 · `apple-icon.png` beside `favicon.ico` *(research-added)*
+size S · for R-50
+* **Why:** free in the same PR
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-81 · Token-budget check on embed-corpus's chunker against gte-small's 512-token ceiling *(research-added)*
+size S · for R-61, S2-rag-1
+* **Why:** a character proxy with no margin and no check
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-82 · Part-level coverage read from embed-corpus's `dry_run` *(research-added)*
+size S · for R-61, P-24
+* **Why:** the only correct copy of the chunk boundaries
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-83 · Router: heuristic + optional Haiku classifier, tier → model map *(research-added)*
+size S · for S2-workspace-1
+* **Why:** no decision procedure exists
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-84 · Provider seam: `claude-cli.ts` implemented, `ollama.ts` / `frontier-api.ts` typed stubs *(research-added)*
+size S · for S2-workspace-1
+* **Why:** makes the local/frontier ask checkable
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-85 · Container service + `claude -p` invocation, dead-letter sweep, `workspace_reader` / `workspace_runner` roles and RPCs *(research-added)*
+size M · for S2-workspace-1, R-84, R-91, R-92
+* **Why:** the load-bearing piece, on Phase 14's seams
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-86 · `workspace_conversations` / `workspace_messages` / `workspace_requests` + owner RLS + query layer *(research-added)*
+size M · for S2-workspace-1
+* **Why:** no storage contract exists
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-87 · Streaming over Realtime Broadcast (private channel) + a hook + an RLS spike before the transport is frozen *(research-added)*
+size M · for S2-workspace-1
+* **Why:** first Realtime use in the app
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-88 · Tool allowlist and safety: read-only MCP tools only, zero write RPCs, egress allowlist, non-root *(research-added)*
+size S · for S2-workspace-1, R-84
+* **Why:** named in scope, not specced
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-89 · Every coverage and eval query scoped to current files *(research-added)*
+size S · for R-61, P-24, S2-rag-1
+* **Why:** superseded rows would report false gaps
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-90 · A reproducible retrieval-eval runner over the golden set *(research-added)*
+size S · for S2-rag-1
+* **Why:** nothing replays the ten queries today
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-91 · Re-validate the golden set's ground truth before each run *(research-added)*
+size S · for S2-rag-1
+* **Why:** renumbered files would read as regressions
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-92 · "Who embeds pulled files" decided once: the skill/script call, no new cron job *(research-added)*
+size S · for P-23, P-37
+* **Why:** asked twice from the same evidence
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-93 · Re-ground the session-lifetime write-up in Entra Conditional Access + KMSI *(research-added)*
+size S · for R-82
+* **Why:** SU authenticates through Entra SAML
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-94 · Sanitise `bb_content.body` / `description` before any render *(research-added)*
+size S · for R-76
+* **Why:** Blackboard's rich-text dialect; CLAUDE.md's rule
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-95 · Carry `contentHandler` into `bb_content` in R-64's migration *(research-added)*
+size S · for R-64, R-69, R-63
+* **Why:** free once `stage_content` is re-created; three consumers
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-96 · Cache `creatorUserId` → display name per run (`course_staff` first, one `/users/{id}` per miss) *(research-added)*
+size S · for R-70
+* **Why:** one round trip per announcement otherwise
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-97 · Log a zero-match count on every key probe instead of a silent null *(research-added)*
+size S · for R-66, R-70
+* **Why:** the live bug is a silent default
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-98 · One vanish convention (`missing_since_run`) across the history record and the ghost collapse *(research-added)*
+size S · for R-71, R-64
+* **Why:** do not invent a second column in one phase
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-99 · Runner exit-code contract: non-zero on any FAIL *(research-added)*
+size S · for R-79
+* **Why:** what makes "one command" scriptable
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-100 · A dedicated `db_test_runner` role granted exactly what the 18 files need *(research-added)*
+size S · for R-79, P-31
+* **Why:** least privilege, matching `sync_runner`
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-101 · Timestamp-agnostic drift guard for `fixtures.phase10a.test.ts` *(research-added)*
+size S · for R-79, P-30
+* **Why:** P-30 breaks the byte-for-byte guard otherwise
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-102 · Chromium sandbox = non-root + Playwright's `seccomp_profile.json`; on the /security-review list *(research-added)*
+size S · for R-82
+* **Why:** settles P-39 to current practice
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-103 · VNC stack = x11vnc + noVNC/websockify *(research-added)*
+size S · for R-82
+* **Why:** settles the open half of P-38
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-104 · Dead-letter sweep pairs the time threshold with an attempts counter; 091's grants enumerate the queue read and raise path; copy-then-unlink across the volume boundary *(research-added)*
+size S · for R-83, R-84, R-81
+* **Why:** least privilege and EXDEV
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-105 · `[windows] set shell := ["powershell.exe", …]` in the umbrella justfile *(research-added)*
+size S · for R-88
+* **Why:** `just` defaults to `sh` on Windows
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-106 · State that node-cron's `missedExecutionTolerance` is drift tolerance, not catch-up *(research-added)*
+size S · for R-90
+* **Why:** a worker would substitute the wrong mechanism
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-107 · Grep for stray `console.log` in the materials server's DoD *(research-added)*
+size S · for R-91
+* **Why:** one breaks every MCP stdio call
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-108 · Fork the reference devcontainer at `node:22-bookworm`; drop `statsig.anthropic.com` from the allowlist *(research-added)*
+size S · for R-92
+* **Why:** upstream is `node:20`; the hostname has no public DNS
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-109 · Keep base-image manifest checks and real per-image arm64 builds separate in note 82a *(research-added)*
+size S · for R-90, R-94
+* **Why:** a manifest proves nothing about native bindings
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-110 · Shared config-resolution helper for `HARNESS_VAULT` / `HARNESS_MACHINE_ENV` *(research-added)*
+size S · for R-97, R-103
+* **Why:** one bug, two files, a third likely
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-111 · Count-based early trigger beside the weekly cadence *(research-added)*
+size S · for R-103
+* **Why:** 228 + 114 unclassified already
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-112 · The extra-rules loader runs through the 18 MB budget fixture *(research-added)*
+size S · for R-106
+* **Why:** a slow custom regex would ship invisibly
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
+
+#### P-113 · A behavioural fixture proving the checkpoint's rule table equals `redact.mjs`'s *(research-added)*
+size S · for R-98
+* **Why:** a byte pin catches drift, not a shared bug
+* **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
 
 ## 3. Stack's new features and requirements
 
