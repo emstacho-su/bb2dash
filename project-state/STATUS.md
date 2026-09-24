@@ -1,6 +1,6 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-23** (operations only, no code: sync request 39 → `sync_runs` 62 `ok`, 7 courses, 3 new tentative gradebook columns, 3 new course files; `/inbox-apply` request 40 archived 537–540 and raised #544 (ECN.304 Quiz 3 date), log in `docs/inbox-decisions/2026-09-23.md`; files 155–157 pulled and embedded — the Playwright `download` event now crashes the MCP browser, so the bytes came from the signed CDN link at the end of the bbcswebdav redirects, fetched with curl; `ingest/pull_files.mjs` unchanged; ~~Inbox open: 3 data gaps awaiting Stack's dismiss, #544~~ — corrected 2026-09-24: Stack answered #544 at 20:15Z and dismissed 541–543 at 20:28Z that evening, so 0 are open and those 4 wait in `v_inbox_queue` for the next `/inbox-apply`). Before that, **2026-09-22** (**sprint 1 closed** — see "Sprint 1 — closed"; planning docs reorganised by sprint under `docs/planning/`, index in `docs/planning/README.md`; Phase 13 skipped; sprint 2 intake open). Earlier the same day: Inbox feedback loop, automation half: `/inbox-apply` skill, migration 090 archived state live, first run archived 31 rows, Inbox "Apply answers" button; **PR open**, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) on `feat/inbox-apply`; row 16 under "What has been done"). Before that, **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
+> Updated upon each PR. Last update: **2026-09-24** (**sprint 2 planned** on `docs/sprint2-planning`, PR open: requirements `91_`, research `92_*`/`93_`, phases `94_`, briefs `95_`–`103_`; state docs corrected to the truth the same day — see "What's next — Sprint 2"; the calendar push was down 2026-09-23 19:57Z → 2026-09-24 17:03Z, see Known issues). Before that, **2026-09-23** (operations only, no code: sync request 39 → `sync_runs` 62 `ok`, 7 courses, 3 new tentative gradebook columns, 3 new course files; `/inbox-apply` request 40 archived 537–540 and raised #544 (ECN.304 Quiz 3 date), log in `docs/inbox-decisions/2026-09-23.md`; files 155–157 pulled and embedded — the Playwright `download` event now crashes the MCP browser, so the bytes came from the signed CDN link at the end of the bbcswebdav redirects, fetched with curl; `ingest/pull_files.mjs` unchanged; ~~Inbox open: 3 data gaps awaiting Stack's dismiss, #544~~ — corrected 2026-09-24: Stack answered #544 at 20:15Z and dismissed 541–543 at 20:28Z that evening, so 0 are open and those 4 wait in `v_inbox_queue` for the next `/inbox-apply`). Before that, **2026-09-22** (**sprint 1 closed** — see "Sprint 1 — closed"; planning docs reorganised by sprint under `docs/planning/`, index in `docs/planning/README.md`; Phase 13 skipped; sprint 2 intake open). Earlier the same day: Inbox feedback loop, automation half: `/inbox-apply` skill, migration 090 archived state live, first run archived 31 rows, Inbox "Apply answers" button; **PR open**, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) on `feat/inbox-apply`; row 16 under "What has been done"). Before that, **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
 > ([PR #15](https://github.com/emstacho-su/bb2dash/pull/15), `c1e471d`, production deployed: engine `web/src/lib/grade-model/`, "Our model" on `/grades` and the
 > course Grades tab, what-if + target solver + "Counts toward…" picker + score history;
 > migrations 057–058 and 080–081 live; V-1 stubbed by Stack, so the model leaves out parts with
@@ -426,8 +426,26 @@ two RED-first tests), and React #418 on `?item=` popout URLs (S2-carry-9, pre-ex
 
 ## What's next — Sprint 2
 
-Stack closes sprint 1 to add development phases before any styling. Planning is in progress on branch `docs/sprint2-planning` (Stack's four-stage method of 2026-09-22, PR #26: requirements `91_REQUIREMENTS_v3.md` → research `92_*` + `93_` synthesis → phases `94_` + briefs → session prompts and the ORCHESTRATOR refresh; a stage stops only where Stack's input is required). Intake file:
-`docs/planning/sprint-2/90_SPRINT2_INTAKE.md`. Migration range from **091**.
+Planned 2026-09-24 on `docs/sprint2-planning` (PR open): requirements `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`
+(R-29..R-109 carried, P-1..P-113 PM- and research-added, Stack's eight items in §3, 22 still-declined rows in §4),
+research `research/92_*` and the synthesis `93_SPRINT2_RESEARCH_SYNTHESIS.md` (its §5 is the one question batch,
+59 items with defaults), the phase plan `94_SPRINT2_PHASES.md`, and one brief per phase under `briefs/` with a
+deterministic check on every task. Every product call is provisional until Stack answers the batch and approves
+the plan (DECISIONS 2026-09-23).
+
+| Phase | Name | Brief | Migrations | Order |
+|---|---|---|---|---|
+| 15 | Database hygiene and the SQL test runner | `95_PHASE15_db_hygiene.md` | 100–104 | first |
+| 16 | Grades: V-1 sittings and the reconciliation migration | `96_PHASE16_grades_v1.md` | 105–109 | after 15; Stack's sittings, IST.323 before 2026-12-03 |
+| 17 | Web polish: quick fixes, carried bugs, Inbox/planner leftovers, proofs | `97_PHASE17_web_polish.md` | 110–119 | with 18 |
+| 18 | Ingest and corpus | `98_PHASE18_ingest_corpus.md` | 120–129 | with 17 |
+| 19 | Content identity, per-crawl history, sync honesty | `99_PHASE19_content_history.md` | 130–139 | after 17 and 18 |
+| 14 | Containers (R-28) | `100_PHASE14_containers.md` | 091–099 | long pole from the start; spike gate first |
+| 20 | Harness closure (V-2 on record, note quality, checkpoint redaction) | `101_PHASE20_harness_closure.md` | none here | beside everything; R-97 first |
+| 21 | Workspace chat on the subscription | `102_PHASE21_workspace.md` | 140–149 | after 14 |
+| 22 | Styling | `103_PHASE22_styling.md` | none | last |
+
+Stack's standing items are ORCHESTRATOR §4. The sessions that run these phases are ORCHESTRATOR §6.
 
 ## Sprint 1 record — Requirements v2 (`docs/planning/sprint-1-hub/60_REQUIREMENTS_v2.md`)
 
