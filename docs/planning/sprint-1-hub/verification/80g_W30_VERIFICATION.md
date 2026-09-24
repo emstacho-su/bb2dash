@@ -358,11 +358,16 @@ tests passed**; `npm run typecheck` (including tests) clean.
 
 ## Open risks
 
-1. **`IST.466/ethics-team-2-practice` is still labelled and dated for Team 2** (see H-4). Stack has
-   no 9/22 practice on his planner. One statement, above, fixes it if he wants it.
-2. **The GEO.103 file pull has not run.** 18 readings stay "Off-platform" and M-2's front-end check
+1. ~~**`IST.466/ethics-team-2-practice` is still labelled and dated for Team 2** (see H-4). Stack has
+   no 9/22 practice on his planner. One statement, above, fixes it if he wants it.~~ Closed by
+   migration 079 (`079_ethics_practice_team3`, 2026-09-17): "Ethics Team 3 practice presentation
+   (30 min)", due 2026-09-22 (noted 2026-09-24).
+2. ~~**The GEO.103 file pull has not run.** 18 readings stay "Off-platform" and M-2's front-end check
    cannot show "In library" for them until it does. The link step is in place and will pick them up
-   on the next fold.
+   on the next fold.~~ Closed: GEO.103 files 142 and 143 were pulled 2026-09-22 and linked to readings
+   51 and 50; no current GEO.103 file lacks bytes. Of the 16 GEO.103 readings still without a file,
+   10 are textbook chapters behind the ebook LTI, 1 is an external link and 4 are not released yet;
+   only reading 46 waits on Stack checking Blackboard (noted 2026-09-24).
 3. **078 wrote 14 rows of planner state outside a sync** (the sanctioned write, applied once). If
    Stack expected to see it happen *on* a sync instead, the rows are the same ones either way.
 4. **The `supabase_admin` default-privilege row still grants TRUNCATE** on tables created by that

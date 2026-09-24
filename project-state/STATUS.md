@@ -1,6 +1,6 @@
 # bb2dash — Project State
 
-> Updated upon each PR. Last update: **2026-09-23** (operations only, no code: sync request 39 → `sync_runs` 62 `ok`, 7 courses, 3 new tentative gradebook columns, 3 new course files; `/inbox-apply` request 40 archived 537–540 and raised #544 (ECN.304 Quiz 3 date), log in `docs/inbox-decisions/2026-09-23.md`; files 155–157 pulled and embedded — the Playwright `download` event now crashes the MCP browser, so the bytes came from the signed CDN link at the end of the bbcswebdav redirects, fetched with curl; `ingest/pull_files.mjs` unchanged; Inbox open: 3 data gaps awaiting Stack's dismiss, #544). Before that, **2026-09-22** (**sprint 1 closed** — see "Sprint 1 — closed"; planning docs reorganised by sprint under `docs/planning/`, index in `docs/planning/README.md`; Phase 13 skipped; sprint 2 intake open). Earlier the same day: Inbox feedback loop, automation half: `/inbox-apply` skill, migration 090 archived state live, first run archived 31 rows, Inbox "Apply answers" button; **PR open**, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) on `feat/inbox-apply`; row 16 under "What has been done"). Before that, **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
+> Updated upon each PR. Last update: **2026-09-23** (operations only, no code: sync request 39 → `sync_runs` 62 `ok`, 7 courses, 3 new tentative gradebook columns, 3 new course files; `/inbox-apply` request 40 archived 537–540 and raised #544 (ECN.304 Quiz 3 date), log in `docs/inbox-decisions/2026-09-23.md`; files 155–157 pulled and embedded — the Playwright `download` event now crashes the MCP browser, so the bytes came from the signed CDN link at the end of the bbcswebdav redirects, fetched with curl; `ingest/pull_files.mjs` unchanged; ~~Inbox open: 3 data gaps awaiting Stack's dismiss, #544~~ — corrected 2026-09-24: Stack answered #544 at 20:15Z and dismissed 541–543 at 20:28Z that evening, so 0 are open and those 4 wait in `v_inbox_queue` for the next `/inbox-apply`). Before that, **2026-09-22** (**sprint 1 closed** — see "Sprint 1 — closed"; planning docs reorganised by sprint under `docs/planning/`, index in `docs/planning/README.md`; Phase 13 skipped; sprint 2 intake open). Earlier the same day: Inbox feedback loop, automation half: `/inbox-apply` skill, migration 090 archived state live, first run archived 31 rows, Inbox "Apply answers" button; **PR open**, [PR #23](https://github.com/emstacho-su/bb2dash/pull/23) on `feat/inbox-apply`; row 16 under "What has been done"). Before that, **2026-09-21** (Phase 12b **tail PR open**: recurring planner events, planner popover + assignment page, migrations 082–083, 088–089 live; row 15 under "What has been done"). Earlier the same day (post-merge reconciliation, PR #21): Phase 12b fine-tooth-comb pass MVP **merged**, [PR #20](https://github.com/emstacho-su/bb2dash/pull/20), `6f20a00`, 2026-09-17, production deployed; row 14 under "What has been done"; its post-MVP tail — recurring events, small popover — waits for Stack's go; the crawler v4 proof sync has not run yet). Earlier on 2026-09-17: Phase 12 Electron shell **merged**, PR #19. Before that, 2026-09-16 (post-merge reconciliation), Phase 10b grade model + what-if **merged**
 > ([PR #15](https://github.com/emstacho-su/bb2dash/pull/15), `c1e471d`, production deployed: engine `web/src/lib/grade-model/`, "Our model" on `/grades` and the
 > course Grades tab, what-if + target solver + "Counts toward…" picker + score history;
 > migrations 057–058 and 080–081 live; V-1 stubbed by Stack, so the model leaves out parts with
@@ -18,7 +18,7 @@
 
 ## Where the product is
 
-**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8); sync loop live (Phase 9); gradebook mirrored and shown as Blackboard's numbers, submissions catalogued, staged uploads (Phase 10a); planner week grid, Google Calendar push and announcements bell (Phase 11); planner events created in bb2dash and pushed to Google (Phase 11b); grade model, what-if and target solver on the Grades screens (Phase 10b).**
+**Backend foundation complete and live; GUI v1 deployed; retrieval polished; course page rebuilt Classroom-style (Phase 8); sync loop live (Phase 9); gradebook mirrored and shown as Blackboard's numbers, submissions catalogued, staged uploads (Phase 10a); planner week grid, Google Calendar push and announcements bell (Phase 11); planner events created in bb2dash and pushed to Google (Phase 11b); grade model on the Grades screens (Phase 10b), since Phase 12b one deterministic "graded so far" figure per course (10b's what-if and target solver removed).**
 The Blackboard → Supabase pipeline, typed warehouse, document corpus, and two-tier search API
 are all in prod. The Next.js hub app (`web/`) — all four v1 screens — is merged to `main`
 (PR #4) and deployed to Vercel at `https://web-xi-ten-uy9xk6c6p0.vercel.app`; the owner account
@@ -31,17 +31,17 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
 
 | Layer | State |
 |---|---|
-| Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` **v4** (anon insert, unique per run/kind/shell; versioned envelope; attempts read the way Blackboard's UI does — grade → attempts → detail, `80f`; `runAll({ runId })`); last pull 2026-09-24 (`sync_runs` 63; sync 34 on 2026-09-22 was the v4 proof: 26 attempts, 55 gradebook columns; 52 attempt rows and 58 latest columns on 2026-09-24). Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
-| Typed warehouse | migrations 001–058, 060–069, 073–089 (repo numbering; see note below; all on `main` and live); **`grade_scenarios`** (one saved what-if per scheme course) and **`grade_column_links`** (Stack's column → part links and "Not graded"), both owner-only, never touched by a sync; views `v_grade_model_items` (77 items: 41 item + 5 attendance + 31 placeholder on 9/16), `v_grade_model_total` (`bb_running` read from the total's formula; IST.323 true), `v_gradebook_history` (5 changed columns); 7 courses, 80 assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings` (+ `gcal_*`, `web_base_url`), `calendar_events` mirror (keyed `(source, ref_id)` since 068), `calendar_push_runs`, `v_calendar_push_items` (assignment + planner arms), **`planner_events`** (owner-only, own IANA zone per row, 0 rows until Stack creates some), `v_announcements_unread`; **`bb_gradebook`** (append-per-run mirror: 45 rows from the 9/14 crawl + 48 from 9/16; IST.323 total 14.8/104), **`bb_attempts`** (52 rows on 2026-09-24; filled since sync 34); every public view `security_invoker`, anon revoked |
+| Raw capture | `bb_raw` crawls via `ingest/bb_crawler.js` **v4** (anon insert, unique per run/kind/shell; versioned envelope; attempts read the way Blackboard's UI does — grade → attempts → detail, `80f`; `runAll({ runId })`); last crawl 2026-09-23 19:56Z (`sync_runs` 62; `sync_runs` 63 on 2026-09-24 is the daily iCal poll, not a crawl; sync 34 on 2026-09-22 was the v4 proof: 26 attempts, 55 gradebook columns; 52 attempt rows and 58 latest columns on 2026-09-24). Folded automatically: `transform_tick()` on pg_cron every 2 min stages only crawls registered on an owner-claimed `agent_requests` row; unregistered runs are quarantined once |
+| Typed warehouse | migrations 001–058, 060–069, 073–089 (repo numbering; see note below; all on `main` and live); **`grade_scenarios`** (10b's saved what-ifs; unused since 12b removed what-if, 0 rows, kept in the DB) and **`grade_column_links`** (Stack's column → part links and "Not graded"), both owner-only, never touched by a sync; views `v_grade_model_items` (77 items: 41 item + 5 attendance + 31 placeholder on 9/16), `v_grade_model_total` (`bb_running` read from the total's formula; IST.323 true; no app reader since 12b), `v_gradebook_history` (5 changed columns); 7 courses, 80 assignments, 145 sessions, planner tables; `attention_items`, `agent_requests`, `app_settings` (+ `gcal_*`, `web_base_url`), `calendar_events` mirror (keyed `(source, ref_id)` since 068), `calendar_push_runs`, `v_calendar_push_items` (assignment + planner arms), **`planner_events`** (owner-only, own IANA zone per row, 0 rows until Stack creates some), `v_announcements_unread`; **`bb_gradebook`** (append-per-run mirror: 45 rows from the 9/14 crawl + 48 from 9/16; IST.323 total 14.8/104), **`bb_attempts`** (52 rows on 2026-09-24; filled since sync 34); every public view `security_invoker`, anon revoked |
 | Gradebook mirror (10a) | `stage_gradebook` + `stage_attempts` in `run_transform` after `stage_assignments`; `v_gradebook_latest` (`column_kind` item / attendance / total / calc_other / letter, `assignment_id`, `linked_assignments`, `counts_toward_grade`), `v_assignment_grade`, `v_course_grade`, `v_attempts_latest`, `v_assignment_attempts`; registered runs only; reconciliation 45/45 columns and scores against `bb_raw` on the 9/14 crawl; every figure carries `seen_at`, nothing summed |
 | Effort model | migration 015 `effort_base` (19 types) + 016 `v_work_items` (152 items, effort + source) |
-| Document corpus | 84 current files on 2026-09-24 (93 rows, 9 superseded), all with bytes in Storage; 82 text-extracted, 2 image-only (`text_status = na`, R-16's OCR pair); 784 text units; supersession seeded by 022 and by re-uploads since (a re-upload gets its own key and supersedes the older row, 2026-09-22) |
+| Document corpus | 84 current files on 2026-09-24 (93 rows, 9 superseded), all with bytes in Storage (file 17 only through file 15's key); 82 text-extracted, 2 `text_status = na` (~~image-only, R-16's OCR pair~~ corrected 2026-09-24: 17, a duplicate of 15, and 68, a legacy GEO.103 `.doc` with no extractor; neither is image-only); 784 text units; supersession seeded by 022 and by re-uploads since (a re-upload gets its own key and supersedes the older row, 2026-09-22) |
 | Search: FTS | tsvector+GIN on file text / content / announcements; `search_file_text(…, p_include_superseded)` |
 | Search: vectors | 1,545 gte-small embeddings (384-dim) on 2026-09-24, 0 units without one; `part_range` = code points, audit clean (023); `match_file_text()`, `hybrid_search_file_text()` (`p_min_similarity` floor, single-source `similarity`, **matched-passage `snippet` + `part_no` + `snippet_source`**, superseded filter — migrations 012–013, 021, 024–025); keyword snippets come from the highest-`ts_rank` part that actually contains the query, ~27 ms at limit 12 |
 | Edge functions | `embed-corpus` **v5** (resume-safe batch embedder; chunks by code point), `search` **v5** (retrieval API; **default mode: hybrid**; optional `min_similarity` floor; optional `include_superseded`), `calendar-push` **v5** (Google Calendar upsert/delete by deterministic event id — `bb…` for due dates, `pe…` for planner events; planner body carries the kind in the title, a per-kind colour, `✓` on a done task, `dateTime` + `timeZone` or an all-day date pair; both sides read page by page, a partial read aborts; `verify_jwt` off, `x-push-secret` from Vault; fired by pg_cron `bb2dash-calendar-push` when `app_settings.gcal_dirty`) |
 | Retrieval MCP | `mcp-server/` — stdio MCP server for Claude Code: `search_materials` (+ `include_superseded`) / `get_material_text` / `list_courses`; 86 vitest tests |
-| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (Phase 10a) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list, **Grades** (`/grades` by course: "Blackboard's number, as of <seen_at>" / "Blackboard publishes no total" / "not synced yet"; item rows with status pill, `score / possible`, seen, feedback disclosure; uncounted attendance, letter and non-total calculated columns in a collapsed group), **course Grades tab** (same table for the course's shells), **popout submission block** (status, attempt N of M, pulled-back and staged files with a sha256 match chip; no score), **staged-upload drop zone** (popout + Classwork rows → Storage + `bb_files` row, "Staged in bb2dash — attach in Blackboard ↗"; no control reads "Submit"), **Planner** (`/planner?week=`, Mon–Sun week grid: class blocks with room + session topic, due items by New York wall clock or nested in their class block, Assignments band, today + now-line, quick-edit, click-to-popout; **planner events** (Phase 11b): click an empty half-hour slot or an Events-band cell → `PlannerEventForm` (six kinds, zone picker, in-person or online location, notes, course), per-kind blocks placed by New York wall clock with a zone chip for other zones, task checkbox, Events band for all-day, edit/delete from the block), **bell** (unread badge from `v_announcements_unread`; opening marks seen), **Announcements** (`/announcements`, all courses newest-first), public `/privacy` + `/terms` (for the Google consent screen), **grade model** (Phase 10b: "Our model" line under Blackboard's number on `/grades` and the course tab — graded so far, zeros on the rest, best case, agreement with Blackboard from an enum, or a not-computed sentence naming why; course tab adds what-if cells (points, or % on pointless placeholders), "Not in Blackboard yet" placeholder rows, target solver, Reset scenario, "Counts toward…" picker, score history); vitest 1812 tests (2026-09-21, row 15) |
-| Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups still to be disabled |
+| GUI (`web/`) | Next.js 16 + TS, Supabase Auth. Screens: Today (56-day fetch, 14 visible, ◂ ▸ paging; needs-attention row from `v_sync_status`), Course = Stream / Classwork (Blackboard folder tree, `?view=timeline` keeps the week rail) / Grades (Phase 10a) / Info, Materials, ⌘K search, `?item=` assignment + session popouts, **courses sidebar** (☰ toggles it; on the right, `--sidebar-side` flips; overlay drawer under 1024px), **Inbox** (`/inbox`, resolve + why-note per row), Sync button (enqueues `agent_requests`, copies `claude "/bb-sync <id>"`), Activity list, **Grades** (`/grades` by course: "Blackboard's number, as of <seen_at>" / "Blackboard publishes no total" / "not synced yet"; item rows with status pill, `score / possible`, seen, feedback disclosure; uncounted attendance, letter and non-total calculated columns in a collapsed group), **course Grades tab** (same table for the course's shells), **popout submission block** (status, attempt N of M, pulled-back and staged files with a sha256 match chip; no score line; feedback and score history moved in by 12b), **staged-upload drop zone** (popout + Classwork rows → Storage + `bb_files` row, "Staged in bb2dash — attach in Blackboard ↗"; no control reads "Submit"), **Planner** (`/planner?week=`, Mon–Sun week grid: class blocks with room + session topic, due items by New York wall clock or nested in their class block, Assignments band, today + now-line, quick-edit, click-to-popout; **planner events** (Phase 11b): click an empty half-hour slot or an Events-band cell → `PlannerEventForm` (six kinds, zone picker, in-person or online location, notes, course), per-kind blocks placed by New York wall clock with a zone chip for other zones, task checkbox, Events band for all-day, edit/delete from the block), **bell** (unread badge from `v_announcements_unread`; opening marks seen), **Announcements** (`/announcements`, all courses newest-first), public `/privacy` + `/terms` (for the Google consent screen), **graded so far** (Phase 12b replaced 10b's "Our model" line, projections, agreement sentence, what-if cells, placeholder rows, target solver and Reset scenario with one deterministic figure per course from mirrored scores, `grade_components` and column links, naming under it the parts it leaves out; the "Counts toward…" picker stays; score history moved to the popout); vitest 1812 tests (2026-09-21, row 15) |
+| Auth | one user (`emstacho@syr.edu`, uid `fd0b7c9d…`) created; **RLS owner-scoped** (migration 020, W-9 done) — every authenticated policy is `auth.uid() = public.app_owner()`, owner resolved by email; signups disabled 2026-09-10 per Stack (a dashboard setting SQL cannot read; 1 auth user on 2026-09-24) |
 
 ## What has been done (by phase)
 
@@ -127,13 +127,16 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    follow-ups, fixed in-PR: **045** `question_date_text` (date-only due dates in conflict text
    printed a day early) and the Sync button reuses an open `sync` request instead of filing a
    second one (the tick never closes `kind = sync` rows). `bb_url` still null:
-   assessment items carry no `detail` in the crawl (crawler change, later). First fold of the 9/8 and 9/2 crawls: 93 attention rows
+   ~~assessment items carry no `detail` in the crawl (crawler change, later)~~ (corrected 2026-09-24:
+   since crawler v3 test items carry `detail` — points and due date — but still no item url). First fold of the 9/8 and 9/2 crawls: 93 attention rows
    (conflict 11, data_gap 14, missing 16, stack_must_confirm 52), zero duplicates on replay, a
    resolution applied end-to-end in all three shapes. Web: Inbox, needs-attention row, Sync
    button, Activity (vitest 117 tests); crawler announcements mapper (creator key unverified until a live crawl);
    `skills/bb-sync` (claim → crawl → register run_id → wait → close). Runbook steps 3 and 5
-   automated. Stopped/deferred: `stage_courses` never writes `meetings` (no schedule payload
-   shape seen yet); `announcements.author` null until the crawler key is confirmed live.
+   automated. Stopped/deferred: `stage_courses` never writes `meetings` (~~no schedule payload
+   shape seen yet~~ corrected 2026-09-24: the course payload's `schedule` key has been empty on every
+   crawl and the calendar feed holds only gradebook items, so there is nothing to read; `meetings`
+   are still the seed rows that Phase 2's course maps confirmed); `announcements.author` null until the crawler key is confirmed live.
 10. **Phase 10a — Grades: mirror, screens, submissions** (`feat/grades-10a`, [PR #13](https://github.com/emstacho-su/bb2dash/pull/13), **merged 2026-09-16**;
    brief + frozen contract + Stack's ten answers in `docs/planning/sprint-1-hub/briefs/67_PHASE10A_grades.md`,
    evidence in `66_W17_VERIFICATION.md`). Two Opus workers (W-17 db + ingest, W-18 web) on
@@ -215,7 +218,8 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    the zone (069, round 2: a task tick 47 ms → 0.1–0.5 ms). `calendar-push` v4 then **v5** (round 2:
    paged reads that abort on a partial side, mirror write errors thrown, writer split into
    `store.ts`); kind colours Event 9 / Task 1 / Out of office 4 / Focus time 8 / Working location 2 /
-   Appointment slot 5, pending Stack's nod. **Live proof 2026-09-16** on the real calendar (runs
+   Appointment slot 5, pending Stack's nod (2026-09-24: no nod recorded; kept as picked, no colour item in
+   the 12b intake; keep-or-change is R-59, sprint 2 question batch item 31, default keep). **Live proof 2026-09-16** on the real calendar (runs
    17–24): 9 SQL-inserted test rows (one per kind + Los Angeles + all-day + online) → 9 inserts,
    zero-write re-run, time move + ✓ on a ticked task (2 patches), timed→all-day + cleared location
    (2 patches), 9 deletes, zero-write re-run; due-date events 0 writes in every run; end state Google
@@ -288,7 +292,8 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    and graded so far. **Planner:** Assignments band collapsed by default with counts, rows grow by what
    overlapping items need (`planner-rows.ts`, one `slotToPx`), no inner scrollbars, wrapped text, PR
    #16's three CSS risks fixed. **Inbox:** each button says what it does for that row ("recorded only"
-   where nothing applies), rows show source, age and a link, `v_inbox_feedback` hook for a later agent.
+   where nothing applies), rows show source, age and a link, `v_inbox_feedback` hook for a later agent (2026-09-24: that agent is
+   `/inbox-apply`, row 16; it reads 090's `v_inbox_queue`, and nothing reads `v_inbox_feedback`).
    **Grades:** Stack read the dummy-data comparison (`80e`) and kept the 10b engine's arithmetic with
    the what-if layer and both silencing rules removed — one deterministic "graded so far" per course
    with the parts it leaves out named under it; courses collapse; title is the link; feedback and
@@ -378,8 +383,8 @@ prod. **Do not re-apply 014–019.**
    now `auth.uid() = public.app_owner()`, plus `storage.objects` `bb_files_auth_all` owner-scoped
    (bucket + owner). `app_owner()` resolves the owner **by email** (recreation-proof). The five
    anon INSERT-only paths and service_role are untouched. Verified: owner sees all rows, any other
-   uid sees zero, anon insert + `search` edge function both still work. **Signups still to be
-   disabled** (item 3) before any public URL carries data.
+   uid sees zero, anon insert + `search` edge function both still work. ~~**Signups still to be
+   disabled** (item 3) before any public URL carries data.~~ Done: item 3, 2026-09-10.
 
 ## Sprint 1 — closed 2026-09-22
 
@@ -410,7 +415,8 @@ two RED-first tests), and React #418 on `?item=` popout URLs (S2-carry-9, pre-ex
   (IST.352 Role of Systems Analyst, IST.471 proposal agreement) were pulled through a logged-in tab
   on 2026-09-22: stored, mirrored, 3 text units extracted and embedded.
 * V-1 grading validation still stubbed (`059` held); 18 placeholders without points (21 on 2026-09-16); IST.323's
-  13-point proposal column counts toward two parts.
+  13-point proposal column ~~counts toward two parts~~ counts toward one part, the 11-point proposal, since
+  a "Counts toward…" link of 2026-09-22, so it overfills that part (see Known issues).
 * V-2 session archival (R-27) is **built** in `~/agentic-harness` (its PRs #1–#4, 2026-09-16: capture 2.0 with subagent notes, tag vocabulary, one-time vault migration, ingest on capture, nightly reconcile, metadata-filtered retrieval); the vault itself moved into git realms there on 2026-09-23/24. Carried: bb2dash's acceptance walk of `66_SESSION_ARCHIVAL_RAG.md` and the doc closure (S2-carry-3).
 * Phase 13 styling **skipped** by Stack; C-1..C-3 parked (`docs/planning/sprint-2/parked/81_PHASE13_styling.md`).
 * Phase 14 containers brief + 6 research files ready; Stack places it in the sprint 2 list.
@@ -438,10 +444,10 @@ Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of cl
 | V-2 | Session archival, context tagging, RAG hand-off (R-27; stream in `~/agentic-harness`) | `66_SESSION_ARCHIVAL_RAG.md` | **built in the harness** (its PRs #1–#4, 2026-09-16); the acceptance walk from bb2dash's side and the doc closure are carried into sprint 2; recorded here 2026-09-24 |
 | 11 | Planner + Google Calendar push, announcements bell/page, data gaps | `69_PHASE11_planner.md` | **merged** (PR #12, 2026-09-16; migrations 060–066 live, calendar push live and proven; Stack signed off the six-step script) |
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar | `69b_PHASE11B_planner_events.md` | **merged** (PR #14 + display follow-up PR #16, 2026-09-16; migrations 067–069 live, `calendar-push` v5 live, live proof and browser walk done) |
-| 12 | Electron shell, tray, desktop notifications, Sync button runs the command | `80_PHASE12_electron.md` | **merged** (PR #19, 2026-09-17; Stack walked acceptance steps 1–5 and the tray on the unpacked build and said merge; the three toasts are still to be seen live, after the first real sync or posted grade). His first launch found one bug, fixed before merge: the app was named `bb2dash-desktop`, so it read its config from the wrong `%APPDATA%` folder (`productName` now pins `bb2dash`). Shipped: `desktop/` package, Electron 44.4.1, unpacked build `desktop/dist/win-unpacked/bb2dash.exe`; window + single instance + tray (close hides), navigation allowlist, poller with on-disk watermark and the three toasts, Sync button runs `claude '/bb-sync <id>'` in Windows Terminal (`syncDryRun` prints it instead); `core/` has no `electron` import (R-28). 535 unit + 19 e2e tests; `/code-review main high` 10 findings fixed (brief §Round 2), `/security-review` none ≥ 8/10; zero changes under `web/`; no migrations. Notes: `80a`, `80b`, `80d`. **Not yet proven, only Stack can:** real Windows toasts, a real `wt.exe` sync run, the clipboard copy inside the shell, staying signed in after hours in the tray. Carried to 12b: `web/src/lib/supabase/proxy-session.ts` drops refreshed auth cookies on its two redirect branches; low-priority hardening: police `will-redirect` / `will-frame-navigate` |
+| 12 | Electron shell, tray, desktop notifications, Sync button runs the command | `80_PHASE12_electron.md` | **merged** (PR #19, 2026-09-17; Stack walked the shell steps and the tray on the unpacked build and said merge — his "steps 1–5" take in the toast steps 4–5, which stay open; the three toasts are still to be seen live). His first launch found one bug, fixed before merge: the app was named `bb2dash-desktop`, so it read its config from the wrong `%APPDATA%` folder (`productName` now pins `bb2dash`). Shipped: `desktop/` package, Electron 44.4.1, unpacked build `desktop/dist/win-unpacked/bb2dash.exe`; window + single instance + tray (close hides), navigation allowlist, poller with on-disk watermark and the three toasts, Sync button runs `claude '/bb-sync <id>'` in Windows Terminal (`syncDryRun` prints it instead); `core/` has no `electron` import (R-28). 535 unit + 19 e2e tests; `/code-review main high` 10 findings fixed (brief §Round 2), `/security-review` none ≥ 8/10; zero changes under `web/`; no migrations. Notes: `80a`, `80b`, `80d`. ~~**Not yet proven, only Stack can:** real Windows toasts, a real `wt.exe` sync run, the clipboard copy inside the shell, staying signed in after hours in the tray.~~ **Proven since (2026-09-24):** a real `wt.exe` sync run (request 39 → `sync_runs` 62, 2026-09-23; `syncDryRun` false since 2026-09-22) and staying signed in hidden in the tray (19.5 h and 17 hidden-window reloads, `main.log` 1079–1359); Windows received the toasts (12 "showed toast" lines, Action Center). **Still Stack's (R-108):** seeing a toast and clicking one, and the clipboard copy inside the shell. ~~Carried to 12b: `web/src/lib/supabase/proxy-session.ts` drops refreshed auth cookies on its two redirect branches; low-priority hardening: police `will-redirect` / `will-frame-navigate`~~ Both fixed in 12b (P-shell-1 `81ac532`, P-shell-2 `493c4a0`, PR #20) |
 | 13 | Styling pass | `docs/planning/sprint-2/parked/81_PHASE13_styling.md` | **skipped** (Stack, 2026-09-22: more development phases first); its carry-ins C-1..C-3 (phone-width overflow, rank weights shown per exam, favicon) stay parked in the brief |
 | 12b | Fine-tooth-comb pass over every page and feature | `80c_PHASE12B_page_pass.md` | **MVP merged** (PR #20, 2026-09-17; migrations 073–079, 084–087 live; gates run; PM walk in `80d`); **tail merged** ([PR #22](https://github.com/emstacho-su/bb2dash/pull/22), 2026-09-21: T-1 recurring events + T-2 popover and assignment page; migrations 082–083, 088–089 live; walk in `80o`); v4 proof sync **done 2026-09-22** (request 34: 26 attempts, 55 gradebook columns, 21 auto-graded); P-data-1 deferred, P-db-3 declined |
-| — | Inbox feedback loop, automation half (`/inbox-apply`, Apply answers button) | `skills/inbox-apply/SKILL.md` | **merged** (PR #23, 2026-09-22; migration 090 live; Inbox 0 open / 134 archived) |
+| — | Inbox feedback loop, automation half (`/inbox-apply`, Apply answers button) | `skills/inbox-apply/SKILL.md` | **merged** (PR #23, 2026-09-22; migration 090 live; Inbox 0 open / 134 archived at merge; 2026-09-24: 0 open, 138 archived, 4 in `v_inbox_queue` — 541–543 dismissed, 544 answered) |
 | 14 | Containers (R-28): every local process in Docker | `docs/planning/sprint-2/82_PHASE14_containers.md` + `docs/planning/sprint-2/research/82_RESEARCH_phase14_R1…R6` | planned 2026-09-16; **sprint 2 candidate** — Stack decides its place in the sprint 2 list; migration range 091–099 |
 
 **MVP, definition of done, task loops (2026-09-14, PR #11):** every remaining phase and stream
@@ -470,7 +476,7 @@ catalogue row are invisible; the pull step uploads with the publishable key); `b
 `bb_attempts` owner-only, stage functions `service_role` only; `grade_scenarios` /
 `grade_column_links` owner-only with the initplan-safe `(select auth.uid())` form, the three model
 views `security_invoker` and revoked from anon (`/security-review` of Phase 10b: no findings).
-Remaining advisor items (2026-09-22): 7 pre-existing mutable `search_path` functions (`set_updated_at`, `classify_bb_file`, `bb_file_relpath`, `suggested_start`, `search_file_text`, `match_file_text`, `hybrid_search_file_text`), two SECURITY DEFINER functions callable by `authenticated` (`app_owner`, accepted 2026-09-10; `calendar_push_now`), and Auth's leaked-password protection off; the 21 `auth_rls_initplan` warnings were fixed by 076.
+Remaining advisor items (2026-09-22): 7 pre-existing mutable `search_path` functions (`set_updated_at`, `classify_bb_file`, `bb_file_relpath`, `suggested_start`, `search_file_text`, `match_file_text`, `hybrid_search_file_text`), two SECURITY DEFINER functions callable by `authenticated` (`app_owner`, accepted 2026-09-10; `calendar_push_now`), and Auth's leaked-password protection off (a Pro-plan feature; the org is on Free, 2026-09-24; signups were disabled 2026-09-10 per Stack); the 21 `auth_rls_initplan` warnings were fixed by 076. INFO level (2026-09-24, none recorded as accepted yet): 15 foreign keys without a covering index and 4 unused indexes (`announcements_fts_idx`, `bb_content_fts_idx`, `bb_text_embeddings_hnsw`, `bb_attempts_sync_run_idx`).
 
 ## Known issues / operational notes
 
@@ -481,11 +487,14 @@ Remaining advisor items (2026-09-22): 7 pre-existing mutable `search_path` funct
   IST.466 needs a first score or a what-if value; its Major Cases and AI Team Assignment are left
   out while their links are unsure.
 * **IST.323's 13-point proposal column** bundles the 11-point proposal and the 2-point final log
-  (one column cannot count toward two parts), so once graded and linked the agreement reads
-  "no known reason". V-1 data; not a code fix.
-* **18 placeholders carry no points** (V-1 data; 21 on 2026-09-16, 18 on 2026-09-22). Confirmed ones in fraction-based parts take a
+  (one column cannot count toward two parts)~~, so once graded and linked the agreement reads
+  "no known reason"~~ (12b removed the agreement sentence). Since a "Counts toward…" link of 2026-09-22 16:14Z it
+  counts toward the 11-point proposal part only, so a 13-point item overfills that part and the final
+  log's 2 points are never graded (R-30). V-1 data; not a code fix.
+* **18 placeholders carry no points** (V-1 data; 21 on 2026-09-16, 18 on 2026-09-22). ~~Confirmed ones in fraction-based parts take a
   what-if as a percentage; `sum` parts (IST.323 `fp-packet`, IST.352 `term-project`) and unsure
-  series placeholders take none.
+  series placeholders take none.~~ Since 12b removed what-if (2026-09-17), a placeholder never enters
+  the figure; a Blackboard column that binds to one fills its points (084).
 * **Post-merge reconciliation (2026-09-16, after PR #15):** every repo migration is recorded on prod
   (70 files = 70 bb2dash rows). 046–058, 067–069 and 080–081 are byte-identical; Phase 11's 060–066
   match once the repo file's final newline is dropped (applied without it — no content drift). Prod's
@@ -500,10 +509,14 @@ Remaining advisor items (2026-09-22): 7 pre-existing mutable `search_path` funct
 * **Attempts — proven 2026-09-22 (sync 34, crawler v4: 26 attempts across 5 courses, 2 submission files pulled; 52 attempt rows by 2026-09-24).** History: v3's endpoint answered empty for a student (2026-09-17 sync, 21 of 21 columns); v4 (Phase 12b, `80f`) walks grade → attempts → detail. Older note — attempts key names were unverified until the first crawler-v3 sync — the next `/bb-sync`
   from the `main` checkout. `bb_attempts.raw->'keys'` and `bb_content`'s `detailSource` probe
   name the real keys; the candidate lists in `bb_crawler.js` are then cut to one name each
-  (`66_W17_VERIFICATION.md` §10). (Superseded: `bb_attempts` is populated.)
-* Mirrored scores are stored `numeric(9,3)`: ECN.304 Attendance 83.33333 renders as 83.333 (one
-  value of 45, third decimal of a percentage). Widening the column means recreating the five
-  views that depend on it; deferred unless a score needs to be bit-exact.
+  (`66_W17_VERIFICATION.md` §10). (Superseded: `bb_attempts` is populated. Not cut, and should not be:
+  both `submitted` candidate names are live, 3 of 26 attempts use the second; attempt feedback arrives as
+  `feedbackToUser`, which the mapper does not read — 2026-09-24.)
+* Mirrored scores are stored `numeric(9,3)`: ECN.304 Attendance ~~83.33333 renders as 83.333 (one
+  value of 45)~~ 88.88888 renders as 88.889 (2026-09-24: the only rounded value among 27 scored of the
+  58 latest columns, plus 1 of 47 scored attempts in `bb_attempts.score`; third decimal of a percentage).
+  Widening the column means recreating the ~~five~~ eight views that depend on it; **declined**
+  2026-09-17 (P-db-3).
 * ~~`IST.323/fp-proposal` / `IST.323/fp-log-final` skipped by the calendar push~~ — **fixed by 075 + 084 (Phase 12b)**: a column shared on purpose is restamped, not a conflict; both rows are in `v_calendar_push_items` and on the Google calendar since 2026-09-17. History in `69a_W21_VERIFICATION.md` §4.1.
 * `calendar-push` is the one edge function with `verify_jwt` off; it authenticates the tick's
   `x-push-secret` header. Nothing else should call it.
@@ -514,7 +527,15 @@ Remaining advisor items (2026-09-22): 7 pre-existing mutable `search_path` funct
   A creation on a DST fall-back hour takes the earlier instant (Temporal `compatible`); Postgres
   would pick the later, which is why SQL never converts a planner wall clock.
 * ~~`calendar_events` grants `TRUNCATE` to `authenticated`~~ — fixed by 076 (it was 79 grants across `public`, to anon and authenticated; all revoked, default privileges too).
-* The kind colours are W-23's pick (DECISIONS 2026-09-16) until Stack confirms them on the walk.
+* The kind colours are W-23's pick (DECISIONS 2026-09-16) until Stack confirms them on the walk
+  (2026-09-24: no nod recorded; R-59, sprint 2 question batch item 31, default keep).
+* **Calendar push outage 2026-09-23 19:57Z → 2026-09-24 17:03Z.** Runs 51–683 (633, one every
+  2 minutes) failed with "refresh token revoked or expired"; the first token (minted 2026-09-15
+  21:35:55Z) died between the last ok run (50, 2026-09-22 19:07Z) and run 51, a window that brackets
+  mint + 7 days. Stack re-minted it 2026-09-24 17:02:50Z; run 684 was ok and inserted the 3 missed
+  events (push set 73 = mirror 73). Cause unverified: the consent screen's publishing status is not
+  recorded, and a Testing-state token dies again about 2026-10-01 17:03Z. Nothing on any screen showed
+  the failure (R-52; DECISIONS 2026-09-24).
 
 * IST.466 publishes two sibling content branches with identical `path`s; `bb_content`'s
   `(course_id, path)` key holds one, so Classwork shows one branch. Needs a key change
@@ -525,8 +546,10 @@ Remaining advisor items (2026-09-22): 7 pre-existing mutable `search_path` funct
 
 * ~~Migration 020's RLS policies call `auth.uid()` per row~~ — fixed by 076 (Phase 12b): 22 policies rewritten as `(select auth.uid())`; the advisor shows none.
 * `bb_crawler.js` generates `run_id` inside `runAll`; the skill registers it right after the
-  crawl returns and migration 039's grace window covers the gap. A `runId` parameter on
-  `runAll` would let the skill register first (one-line change, next time the crawler is touched).
+  crawl returns and migration 039's grace window covers the gap. ~~A `runId` parameter on
+  `runAll` would let the skill register first (one-line change, next time the crawler is touched).~~
+  `runAll({ runId })` exists since crawler v3; the skill still registers after the crawl on purpose
+  (DECISIONS 2026-09-15) until the tick checks a crawl is complete before folding it.
 
 * Sandboxed Claude sessions cannot reach `*.supabase.co` (org egress policy) — invoke edge
   functions server-side via `pg_net` (`net.http_post`); pg_net is enabled and load-bearing.
@@ -538,9 +561,14 @@ Remaining advisor items (2026-09-22): 7 pre-existing mutable `search_path` funct
 * A matched-passage snippet cut from part ≥2 of a PPTX unit would start *after* the `[notes]`
   marker; since 024 the function prefixes `[notes] ` to such a snippet (and the whole-unit
   fallback headlines only the text before the marker) so the marker-based client scrubbers
-  still label it. Verified on synthetic fixtures only — 51 units carry `[notes]` today and none
-  is multi-part. The ingest cadence work (backlog 1) should re-run that check after every crawl.
+  still label it. ~~Verified on synthetic fixtures only — 51 units carry `[notes]` today and none
+  is multi-part. The ingest cadence work (backlog 1) should re-run that check after every crawl.~~
+  2026-09-24: 109 units carry `[notes]` and one is multi-part (text 750); a read-only live check
+  passed there (part 2 snippet prefixed `[notes] `). No per-crawl check exists, and a snippet cut from
+  the notes region of a part that holds the marker still comes back unlabelled.
 * Hybrid keyword snippets recompute `to_tsvector` per covering part at query time: 27 ms at
-  limit 12 on the 534-unit corpus. See backlog 5 for the stored-tsvector fix.
+  limit 12 on the 534-unit corpus (18–22 ms on 784 units, 2026-09-24). ~~See backlog 5 for the
+  stored-tsvector fix.~~ The stored per-part `tsvector` stays deferred until the palette feels slow
+  (DECISIONS 2026-09-10); the old STATUS backlog is superseded by Requirements v2.
 * Function search-path advisor warnings (pre-existing pattern) on the search RPCs.
 * Never ship the service key to a browser; anon key is insert-only by design.

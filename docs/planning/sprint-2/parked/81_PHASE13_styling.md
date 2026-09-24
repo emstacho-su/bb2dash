@@ -71,7 +71,7 @@ acceptance checklist.
 | # | Finding | Evidence | Expected |
 |---|---|---|---|
 | C-1 | **Phone width scrolls sideways**: at 390 px the document is 636 px wide; the top nav (links + Sync + ☰) does not wrap or collapse, and the gradebook table (with the "Counts toward…" picker) is 576 px inside a ~350 px column | `document.documentElement.scrollWidth` 636 at `innerWidth` 390 on `/course/IST.466/grades` | no horizontal page scroll at 390 px on every route; wide tables scroll inside their own container |
-| C-2 | **Rank weights are invisible**: on a `rank_weighted` part (ECN.304 Exams 30 / 25 / 20) the re-order only shows as a changed total; nothing says which exam holds which weight | ECN.304 exams 90 / 70 / 50 → 76.6 %, Exam 1 → 40 → 63.6 % | each exam row (or the part's explanation) shows its current rank weight; wording frozen in `web/src/lib/grade-model/labels.ts` |
+| C-2 | **Rank weights are invisible**: on a `rank_weighted` part (ECN.304 Exams 30 / 25 / 20) the re-order only shows as a changed total; nothing says which exam holds which weight | ECN.304 exams 90 / 70 / 50 → 76.6 %, Exam 1 → 40 → 63.6 % (typed into 10b's what-if, which 12b removed; now reproducible only once ECN.304's exam scores post — noted 2026-09-24) | each exam row (or the part's explanation) shows its current rank weight; wording frozen in `web/src/lib/grade-model/labels.ts` (which today holds only the column-link labels) |
 | C-3 | **No favicon**: `/favicon.ico` returns 404 on every page | browser console on the preview | a favicon in the chosen direction |
 
 ## Out of scope

@@ -609,3 +609,9 @@ every smoke profile directory and every screenshot from this session has been de
 Unchanged from Round 1, and R2-4 adds one: **that the app is still signed in after a long
 spell hidden in the tray** — the hidden-window reload is unit-tested against a faked cookie
 jar, but nothing here has watched a real token expire and be rotated by the real proxy.
+
+*Update 2026-09-24:* the tray item and Round 1's item 3 are proven from `main.log` and prod. The
+shell stayed signed in 19.5 h hidden (17 hidden-window reloads, lines 1079–1359), and request 39
+opened a real `wt.exe` run to `sync_runs` 62 on 2026-09-23. Windows received the toasts (12
+"showed toast" lines). Still Stack's (R-108): seeing and clicking a toast, and the clipboard copy
+inside the shell.

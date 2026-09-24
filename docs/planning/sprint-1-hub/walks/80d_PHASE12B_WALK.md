@@ -69,7 +69,7 @@ his list; no before-screenshots were taken (the list is the record).
 | row | check | result |
 |---|---|---|
 | X-3 | the two IST.323 final-project events reach Google | **pass** — `calendar_events` rows `IST.323/fp-proposal` and `IST.323/fp-log-final` are `live`, pushed 2026-09-17 16:17 UTC, no error; the relabelled ethics practice row was re-pushed 17:01 UTC after 079 |
-| suites | integrated tree | web typecheck + build clean, `npm run lint` exits 0 (27 warnings, inventoried in the config), vitest 1582 / 93 files; desktop 549 / 28; mcp-server 88 / 5 |
+| suites | integrated tree | web typecheck + build clean, `npm run lint` exits 0 (27 warnings, ~~inventoried in the config~~ corrected 2026-09-24: 25 React Compiler + 2 exhaustive-deps; the config inventories 24 compiler warnings and 6 set-state sites, missing `UpcomingTracker.tsx:285`), vitest 1582 / 93 files; desktop 549 / 28; mcp-server 88 / 5 |
 | gates | `/code-review main high` | 10 findings: 8 fixed in round 3 (CR-1, 2, 3, 5, 7, 8, 9, 10), CR-4 = the docs in this PR, CR-6 checked on prod (no action) |
 | gates | `/security-review` | no finding at or above 8 / 10 |
 

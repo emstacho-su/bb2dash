@@ -30,7 +30,7 @@ Backend foundation live; GUI v1 merged and deployed to Vercel; retrieval polishe
 Classroom-style course page (Phase 8); automated sync loop with Inbox (Phase 9); gradebook
 mirrored and shown as Blackboard's numbers, submissions catalogued, staged uploads (Phase 10a);
 planner week grid, Google Calendar push, announcements bell (Phase 11); planner events pushed to
-Google (Phase 11b); grade model + what-if (Phase 10b). Prod is Supabase
+Google (Phase 11b); grade model (Phase 10b; its what-if layer removed in 12b). Prod is Supabase
 `goultdzqcavefcgnifdy`; migrations 001–058, 060–069, 073–090 live (059 held for V-1; 070–072 unused). Fine-tooth-comb pass MVP (Phase 12b): one
 "graded so far" figure, six statuses, crawler v4. Sprint 1 closed 2026-09-22 (PRs #7–#23; migrations 026–090; 090 = inbox-apply). Sprint 2 planning open: `docs/planning/sprint-2/90_SPRINT2_INTAKE.md`, migrations from 091. The materials MCP
 server (`mcp-server/`) is registered at user scope and points at
@@ -57,9 +57,9 @@ started 2026-09-15 from `main` at `570a869`; 10a and 11 merged 2026-09-16.
 | 11b | Planner events created in bb2dash and pushed to the `bb2dash` calendar (Stack's ask after the Phase 11 walk) | merged Sep 16 (brief + answers + K-notes + round 2 in `69b`, evidence `69c`; `calendar-push` v5 live, live proof and browser walk done; display follow-up #16 merged the same minute) | #14, #16 | 067–069 (070–072 free) |
 | V-1 | Grading schema validation (stream, COLLABORATE) | **stubbed for later** (Stack, Sep 16); when it runs it also folds `grade_column_links` into `assignments` and fills placeholder points | — | **059** (held; nothing else takes it) |
 | V-2 | Session archival, context tags, RAG hand-off (R-27; stream in `~/agentic-harness`) | **built in the harness** (its PRs #1–#4, 2026-09-16); bb2dash-side acceptance walk + doc closure carried into sprint 2 | harness #1–#4 | none here |
-| 12 | Electron shell + tray + desktop notifications | merged Sep 17 (W-25 shell + W-26 notifications; round 2 = ten code-review findings fixed; security review clean; Stack accepted steps 1–5 + tray; toasts still to be seen live) | #19 | none used (073–079 stay free) |
+| 12 | Electron shell + tray + desktop notifications | merged Sep 17 (W-25 shell + W-26 notifications; round 2 = ten code-review findings fixed; security review clean; Stack accepted the shell steps + tray, his "steps 1–5" taking in toast steps 4–5, which stay open; `wt.exe` run and tray sign-in proven 2026-09-23/24; toast sighting/click and in-shell clipboard still his, R-108) | #19 | none used (073–079 stay free) |
 | 13 | Styling pass | **skipped** (Stack, 2026-09-22: development phases first); C-1..C-3 parked in `sprint-2/parked/81_PHASE13_styling.md` | — | — |
-| 12b | Fine-tooth-comb pass: Stack's list of bugs and changes by page → triage → research → MVP (`80c_PHASE12B_page_pass.md`) | **MVP merged Sep 17** (41 intake ids, Stack's 18 answers, five workers W-30..W-34, grade method picked from `80e`, crawler v4, gates run); **tail PR open Sep 21** (T-1 recurring events, T-2 popover + assignment page, 089 due-day fix; W-35..W-37; gates run; walk `80o`) | #20, tail PR | 073–089 (all used) |
+| 12b | Fine-tooth-comb pass: Stack's list of bugs and changes by page → triage → research → MVP (`80c_PHASE12B_page_pass.md`) | **MVP merged Sep 17** (41 intake ids, Stack's 18 answers, five workers W-30..W-34, grade method picked from `80e`, crawler v4, gates run); **tail merged Sep 21** (T-1 recurring events, T-2 popover + assignment page, 089 due-day fix; W-35..W-37; gates run; walk `80o`) | #20, #22 | 073–089 (all used) |
 | 14 | Containers (R-28): deterministic `sync-runner` + noVNC Blackboard login, harness jobs with a catch-up scheduler, vault → private git repo, dev container, umbrella repo `bb2dash-stack` (`82_PHASE14_containers.md`, research `docs/planning/sprint-2/research/82_*`) | planned; **sprint 2** (13 skipped; Stack places it in Stage C); brief + Stack's 16 answers + six-researcher synthesis 2026-09-16; the harness has since moved the vault into git realms itself (2026-09-23/24), superseding C-4; one PR per repo | — | 091–099 (091–092 expected) |
 
 ## 2. Execution order and what each phase hands to the next
@@ -185,11 +185,15 @@ Learned in Phase 12 (2026-09-17):
 
 ## 4. Open items that are Stack's, not the PM's
 
-* ~~Run the next `/bb-sync` (crawler v3)~~ — done: sync 34 (2026-09-22, v4) filled `bb_attempts` and step 4b pulled the submissions; syncs 62–63 followed on 2026-09-23/24.
+* ~~Run the next `/bb-sync` (crawler v3)~~ — done: sync 34 (2026-09-22, v4) filled `bb_attempts` and step 4b pulled the submissions; sync 62 followed on 2026-09-23 (`sync_runs` 63 on 2026-09-24 is the daily iCal poll, not a crawl).
 * Grades since 12b: every course shows "graded so far"; ECN.304 Quiz 2 and Attendance still wait for his "Counts toward…" placement on the course Grades tab.
-* Phase 12 is merged and runs from `desktop/dist/win-unpacked` in the `main` checkout. Still his to
+* Phase 12 is merged and runs from `desktop/dist/win-unpacked` in the `main` checkout. ~~Still his to
   see: the three toasts (first real sync or posted grade), and staying signed in after hours in the
-  tray. `syncDryRun` is `true` in his `%APPDATA%\bb2dash\config.json` until he flips it.
+  tray. `syncDryRun` is `true` in his `%APPDATA%\bb2dash\config.json` until he flips it.~~ Corrected
+  2026-09-24: staying signed in hidden in the tray (19.5 h, 17 hidden-window reloads) and a real
+  `wt.exe` run (request 39 → `sync_runs` 62) are proven, and `syncDryRun` is `false` since
+  2026-09-22 13:22Z. Still his to confirm (R-108): that he saw the toasts and a click on one opened
+  the right screen, and that the Sync button's copy lands inside the shell.
 * ~~Submission bytes not pulled (S2-carry-1)~~ — fixed in PR #25 (step 4b scripted as `ingest/pull_files.mjs`; rows 140/141 pulled 2026-09-22).
 * Sprint 2: his list is transcribed in `docs/planning/sprint-2/91_REQUIREMENTS_v3.md` §3 (2026-09-23); next from him: Stage B's question batch and Phase 14's place in the Stage C phase plan.
 * Say when to un-stub V-1 (`scripts/validate-grading.ps1`, first sitting IST.323); its reconciliation migration is `059_grading_reconciliation.sql` (or a sprint 2 number — a Stage B question). V-2 needs no start: it is built.
