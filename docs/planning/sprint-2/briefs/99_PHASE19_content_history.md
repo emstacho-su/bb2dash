@@ -33,7 +33,7 @@ driver that folds only complete crawls (94 §3 "19 → 14"), so this phase settl
 R-41 also asks for a per-stream `{stream, last_seen_at, state}` read computed in SQL, with expected
 streams so "never synced" shows. `v_data_freshness` has no row for a stage with no real attempt, so
 today nothing can say a stage never ran. The PM's seam decision puts that read in 137 here (task 16),
-and brief 97 points here for it.
+and brief 97 §Seams (its "Phase 19" bullet) points here for it.
 
 The work goes into one phase because the same function, `stage_content`, carries the key change, the
 change count, the newest-crawl guard and the history. P-98 sets one vanish convention for the history
@@ -49,6 +49,7 @@ and the ghost collapse, and 93 §4 names this "sequencing debt". The phase runs 
 | B-19 | Stale Classwork nodes (Q10) | 93's default is "hidden, with a toggle for the three really gone; nothing deleted" (the hide and toggle ship in Phase 17, R-39). *PM reading, not part of the default:* the 16 ghost rows are **merged into their live twin** (R-64 still missing (2), P-25). The merge deletes 16 rows after carrying their links, paths and children. They are second copies of items Blackboard still lists, so no item Blackboard lists loses its row. It still departs from the default's literal "nothing deleted" and needs Stack's yes. After the merge 5 stale rows remain (3 gone, 2 re-created in WK05 under new ids), not the 3 in the question | "Keep the ghost rows": T-3 is dropped, T-4 builds a partial unique index `where detail->>'missing_since' is null` and the upsert infers it, and the Classwork toggle then shows 21 | PROVISIONAL |
 | B-20 | Freshness and heartbeat (Q11) | 93's B-20 default covers only Phase 9's thresholds and the two-stage late/missing heartbeat (Phase 17, P-71). *The terminal rule is not in the batch.* It is R-65 still missing (2), which names two options, and the PM picks one here: "running" from claim, and "interrupted" once a claimed crawl has not completed after 30 minutes (the existing reaper interval). The request is then closed as failed and one Inbox item is raised. No attempts column is added, although 93 §1.4 suggests one for R-65: the rule never retries, so there is nothing to count. P-104's counter is Phase 14's | A shorter cut-off, such as the heartbeat's roughly 10 minutes, changes one constant in 136 and the fixtures of T-2 and T-14. "Fold an incomplete crawl as partial" replaces T-14's terminal branch with a `run_transform` call and a partial label. Freshness thresholds other than Phase 9's one day change 137's one constant (the per-stream `stale` cut-off) and T-16's fixtures | PROVISIONAL |
 | B-39 | Item descriptions on Classwork (Q31) | No. Close with a DECISIONS row. `stage_content` keeps capturing them in `detail->'description'` (11 rows). If they are ever shown, they are sanitised first | Yes adds one task after T-4. W-52 re-creates `v_content_tree` with `description` appended. W-54 renders it as React text in Classwork, never HTML, with T-23 as the guard. R-76 grows from S to M | PROVISIONAL |
+| B-42 | A database credential for the test runner (Q33); Phase 15's call, which this phase inherits | 93's default: "yes; a direct or session-pooler connection string (never the transaction pooler) in a gitignored `.env.local` as `BB2DASH_TEST_DB_URL`, for a dedicated `db_test_runner` role; pgTAP is not adopted." The role is Phase 15's migration 100 (brief 95 §Stack's calls, row B-42), and 131, 132, 134, 135 and 136 grant it what this phase's tests call (**Test role**, in the Contract) | "No credential": the role never exists, so the `db_test_runner` grant lines in 131, 132, 134, 135 and 136 are omitted (the `db_test_runner` clause of six RPC-table rows, and the **Test role** paragraph). Each `node scripts/db-test.mjs --only <file>` check (tasks 1, 2, 4, 5, 7, 9, 10, 12, 13, 14, 15 and 16) becomes that file pasted into one `execute_sql` call (a loader and its test file together, as brief 95 §Stack's calls row B-42 sets), expecting its `: PASS` row; the before-apply RED runs of tasks 1 and 2 expect its `FAIL …` exception instead. Task 25's full-suite `node scripts/db-test.mjs` and the DoD's `node scripts/db-test.mjs` gate become the same pastes, one per `db/tests/*.sql` unit. Task 26 still counts 8, because no migration is added or dropped. "An owner-level DSN instead of the role": the same grant lines are omitted, and every runner line stands as written (the runner connects as `postgres`) | PROVISIONAL |
 
 ## Contract (frozen when Stack approves the phase plan)
 
@@ -79,10 +80,13 @@ No SECURITY DEFINER function here is callable by `anon` or `authenticated`; `syn
 `set search_path = public, pg_temp`, except the pure helper, which pins `''`. Grants are re-asserted
 at the foot of each migration, as prod holds them.
 
-**Test role** (B-42, **PROVISIONAL** via brief 95). Phase 15's `db_test_runner` (brief 95, migration
-100) holds execute on exactly the functions the suite calls, and write grants on exactly the tables it
-writes. It already holds `run_transform(uuid, text)`, `transform_tick()` and `sync_change_lines(jsonb)`
-(today's `phase10a_stage_gradebook.sql:301` calls the last; brief 97's 117 note says 100 grants it).
+**Test role** (B-42, **PROVISIONAL**, Phase 15's call; the B-42 row in "Stack's calls" names what drops
+if Stack answers otherwise). Phase 15's `db_test_runner` (migration 100; brief 95 §RPC signatures,
+functions, the role, and the runner's command contract) holds execute on exactly the functions the
+suite calls, and write grants on exactly the tables it writes. It already holds
+`run_transform(uuid, text)`, `transform_tick()` and `sync_change_lines(jsonb)` (today's
+`phase10a_stage_gradebook.sql:301` calls the last; brief 97 §RPC signatures, in migration 117's
+comment block, says 117 does not re-grant it because 100's list comes from today's suite).
 Each Phase 19 migration grants it only what that migration's own test file needs: execute on
 `stage_content(uuid)` and `bb_content_path_history(jsonb, jsonb, text, text)` (131) and
 `material_history_record(uuid)` (132); 134, 135 and 136 re-assert the execute 100 gave it on the
@@ -93,13 +97,13 @@ The trigger function needs no grant, because firing a trigger checks no `EXECUTE
 
 | Function | Migration | Full signature | Security | Grants |
 |---|---|---|---|---|
-| `stage_content` (re-created, signature frozen by DECISIONS 2026-09-10) | 131 | `public.stage_content(p_run_id uuid) returns jsonb` | definer; owner guard kept (`auth.uid()` null or `app_owner()`) | revoke all from `public, anon, authenticated`; execute to `service_role` (prod ACL on 2026-09-24 is `postgres, service_role` only; 029 revoked `authenticated`); execute to `db_test_runner` (test role, brief 95) |
-| `bb_content_path_history` (new) | 131 | `public.bb_content_path_history(p_old jsonb, p_new jsonb, p_old_path text, p_new_path text) returns jsonb`, `language sql immutable`, `set search_path = ''` | invoker | revoke all from `public, anon, authenticated`; execute to `service_role`; execute to `db_test_runner` (test role, brief 95) |
-| `material_history_record` (new) | 132 | `public.material_history_record(p_run_id uuid) returns jsonb` | definer; same owner guard | revoke all from `public, anon, authenticated`; execute to `service_role`; execute to `db_test_runner` (test role, brief 95) |
-| `sync_change_lines` (re-created from the live body Phase 17's R-58 left) | 134 | `public.sync_change_lines(p_stages jsonb) returns jsonb`, `immutable` | invoker | revoke all from `public, anon`; execute to `authenticated, service_role` (as 051); execute to `db_test_runner` (test role, brief 95; held since 100, re-asserted) |
+| `stage_content` (re-created, signature frozen by DECISIONS 2026-09-10) | 131 | `public.stage_content(p_run_id uuid) returns jsonb` | definer; owner guard kept (`auth.uid()` null or `app_owner()`) | revoke all from `public, anon, authenticated`; execute to `service_role` (prod ACL on 2026-09-24 is `postgres, service_role` only; 029 revoked `authenticated`); execute to `db_test_runner` (the test role, migration 100) |
+| `bb_content_path_history` (new) | 131 | `public.bb_content_path_history(p_old jsonb, p_new jsonb, p_old_path text, p_new_path text) returns jsonb`, `language sql immutable`, `set search_path = ''` | invoker | revoke all from `public, anon, authenticated`; execute to `service_role`; execute to `db_test_runner` (the test role, migration 100) |
+| `material_history_record` (new) | 132 | `public.material_history_record(p_run_id uuid) returns jsonb` | definer; same owner guard | revoke all from `public, anon, authenticated`; execute to `service_role`; execute to `db_test_runner` (the test role, migration 100) |
+| `sync_change_lines` (re-created from the live body Phase 17's R-58 left) | 134 | `public.sync_change_lines(p_stages jsonb) returns jsonb`, `immutable` | invoker | revoke all from `public, anon`; execute to `authenticated, service_role` (as 051); execute to `db_test_runner` (the test role; held since migration 100, re-asserted) |
 | `sync_request_open_run` (new trigger function) | 135 | `public.sync_request_open_run() returns trigger` | definer | revoke all from `public, anon, authenticated` |
-| `run_transform` (re-created from live) | 135 | `public.run_transform(p_run_id uuid, p_trigger text default 'manual') returns bigint` | definer | revoke all from `public, anon, authenticated`; execute to `service_role` (as 051); execute to `db_test_runner` (test role, brief 95; held since 100, re-asserted) |
-| `transform_tick` (re-created from 044) | 136 | `public.transform_tick() returns jsonb` | definer | revoke all from `public, anon, authenticated`; execute to `service_role` (as 044); execute to `db_test_runner` (test role, brief 95; held since 100, re-asserted) |
+| `run_transform` (re-created from live) | 135 | `public.run_transform(p_run_id uuid, p_trigger text default 'manual') returns bigint` | definer | revoke all from `public, anon, authenticated`; execute to `service_role` (as 051); execute to `db_test_runner` (the test role; held since migration 100, re-asserted) |
+| `transform_tick` (re-created from 044) | 136 | `public.transform_tick() returns jsonb` | definer | revoke all from `public, anon, authenticated`; execute to `service_role` (as 044); execute to `db_test_runner` (the test role; held since migration 100, re-asserted) |
 
 Behaviour frozen here:
 
@@ -127,7 +131,11 @@ Behaviour frozen here:
     that are **kept**. New keys: `unchanged, missing_cleared, older_run`.
 * **`material_history_record(p_run_id)`**
   * Diffs this run's `bb_raw` course rows against the **predecessor**: the newest registered crawl
-    that has a real (non-`unregistered`) `sync_runs` row and an older `bb_raw` row for the same course.
+    whose `sync_runs` row was folded (`status in ('ok','partial')`) and that has an older `bb_raw`
+    row for the same course. That excludes a claim-opened `running` row, a reaped `failed` row
+    (`interrupted_at is not null`, 135 and 136) and 051's driver-error `failed`, whose fold rolled
+    back. None of those crawls was folded or diffed, so a reaped run whose course row lies between two
+    folded runs is skipped, and the later run diffs against the earlier folded run.
   * Content is keyed on `(course_id, item id)`. Files are keyed on `(course_id, item id, file name)`
     from `embeddedFiles`.
   * A content item has **changed** when `title`, `path`, `url` or `modified` differs. A file has
@@ -220,7 +228,7 @@ read it started from (051's rule).
 |---|---|---|
 | 130 | `db/migrations/130_bb_content_ghost_collapse.sql` | **Data.** For each `(course_id, bb_item_id)` pair of one live and one `missing_since` row: `assignment_id` is carried to the live row where it is null (idempotent after Phase 17's P-11); the ghost's path is appended to the live row's `detail->'previous_paths'`; any child of the ghost is re-pointed; the ghost is deleted. A closing block raises if a pair remains (16 pairs on 2026-09-24) |
 | 131 | `db/migrations/131_bb_content_item_key.sql` | `bb_item_id` set not null (0 nulls); unique `bb_content_course_item_key (course_id, bb_item_id)`; drop `bb_content_course_id_path_key`; index `bb_content_course_path_idx (course_id, path)`; `bb_content_path_history`; `stage_content` re-created; `comment on view v_content_tree` stops saying path is unique (027's file stays frozen); re-folds the newest registered crawl chosen by the 056 predicate, never a literal id. One transaction |
-| 132 | `db/migrations/132_material_history.sql` | Table `bb_material_history` (below); RLS on; policy `bb_material_history_owner_read` for select to `authenticated` using `((select auth.uid()) = (select app_owner()))`; no write policy; anon revoked; `material_history_record`; backfill over registered folded crawls, oldest first |
+| 132 | `db/migrations/132_material_history.sql` | Table `bb_material_history` (below); RLS on; policy `bb_material_history_owner_read` for select to `authenticated` using `((select auth.uid()) = (select app_owner()))`; no write policy; anon revoked; `material_history_record`; backfill over registered folded crawls, oldest first; then, after the backfill, a **data** restamp: each `bb_content` row with `detail->>'missing_since'` set whose item's newest `vanished` history row (by `seen_at`) carries a different run gets `detail->'missing_since'` set to that row's `run_id` (P-98). Rows with no stamp are untouched. On 2026-09-27 that is 2 rows, GEO.103.lecture `_13177625_1` and `_13177626_1`, `bf2f81e5` → `6b122650` |
 | 133 | `db/migrations/133_course_stream_history.sql` | `create or replace view v_course_stream` from Phase 17's live body. The two material arms are replaced by history arms: files join `v_bb_files_current` on `bb_file_id`; nodes use 027's item kinds and not-claimed rule; Phase 17's `my_submissions` and missing filters are kept; `meta` gains `change` and `run_id`. The same 8 columns in the same order; the announcement and assignment arms and every `meta` key Phase 17 added are unchanged; `security_invoker`; anon revoked; authenticated select re-asserted |
 | 134 | `db/migrations/134_sync_change_lines_materials.sql` | `sync_change_lines` from the live body, with the three material lines |
 | 135 | `db/migrations/135_sync_run_open_at_claim.sql` | `sync_runs.interrupted_at timestamptz null`; `sync_request_open_run` + trigger; `run_transform` re-created |
@@ -252,7 +260,12 @@ kept in full through the term (B-18, **PROVISIONAL**), with no prune.
 
 **One vanish convention (P-98).** A vanish is always the run id that first missed the item: in
 `bb_content.detail->>'missing_since'`, in `bb_files.notes` as `missing_since_run=<uuid>`, and in
-`bb_material_history.run_id` on a `vanished` row. No stored `missing_since*` column is added anywhere
+`bb_material_history.run_id` on a `vanished` row. Two stamps on prod predate this: GEO.103.lecture
+`_13177625_1` and `_13177626_1` carry `missing_since` = `bf2f81e5-ea4c-4b64-bc43-129fd53d4616`, but
+both are in `3e12fd89-1ac8-4ab1-bd2a-0dce984a90fc`'s `bb_raw` row for the course and absent from
+`6b122650-49f3-4a70-a801-c177fbf27f1a`'s and `bf2f81e5`'s, so the run that first missed them is
+`6b122650`. 132's backfill records their `vanished` rows at `6b122650`, and its restamp then sets
+both stamps to that run, so task 8's first check holds. No stored `missing_since*` column is added anywhere
 (0 on tables today); Phase 17's 111 surfaces `detail->>'missing_since'` only as the view column
 `v_content_tree.missing_since`.
 
@@ -285,7 +298,13 @@ Changed, by owner (the sets are disjoint):
 * **W-53:** the three files `135`–`137` and their two tests.
   * `skills/bb-sync/SKILL.md`: steps 2, 3, 3a and 4 only. Step 2 claims and sets `run_id` in one
     update; step 3 is `bb.runAll({ termName: 'Fall 2026', runId })`; step 3a is removed; step 4 waits
-    on the running row. Step 4b and the embed step stay Phase 18's.
+    on the running row. Step 3 gains a failure path, in these words: "If `runAll` throws or the tab
+    closes, report it and leave the request `claimed`; 136's terminal rule closes it within 30 minutes
+    and raises the one Inbox item." The skill then stops without running step 5, because the terminal
+    rule closes a request, and raises its Inbox item, only while the request is `claimed`: a request
+    the skill closed itself would raise no Inbox item and fail acceptance step 5. Step 5's "Never leave a request `claimed`" is not edited; step 4 at
+    `main` a5042fa already makes the same exception when the tick is not firing. Step 4b and the
+    embed step stay Phase 18's.
   * `ingest/CADENCE_RUNBOOK.md`: step 5 only.
   * `ingest/bb_crawler.js`: comment lines only (the `runAll({ runId })` header block, lines 83–95 at
     `main` a5042fa, and the comment above `runAll`). The v5 code is Phase 18's.
@@ -310,7 +329,9 @@ Changed, by owner (the sets are disjoint):
 
 * **Phase 15.**
   * Every `phase19_*.sql` runs through Phase 15's runner (`scripts/db-test.mjs` per 94 §3; brief 95
-    freezes the name), which exits non-zero on any FAIL (P-99). It runs as the `db_test_runner` role.
+    §RPC signatures, functions, the role, and the runner's command contract freezes the name), which
+    exits non-zero on any FAIL (P-99). It runs as the `db_test_runner` role (B-42, **PROVISIONAL**;
+    the B-42 row in "Stack's calls" names what changes otherwise).
   * Phase 15's `db/tests/phase9_transform_states.sql` (P-8) must stay PASS after 135 and 136. The
     reaper keeps `status = 'failed'` and the `interrupted (reaped)` note.
 * **Phase 17.**
@@ -321,7 +342,8 @@ Changed, by owner (the sets are disjoint):
   * The heartbeat view (P-12, P-71), the thresholds and `freshnessLine`'s staleness half
     (`stalenessLine`) are 17's and untouched here. This phase adds the run-state word and R-41's
     per-stream read with "never synced" (137's `streams`, task 16, rendered by tasks 19–20). The
-    PM's seam decision puts that read here, and brief 97 points here for it.
+    PM's seam decision puts that read here, and brief 97 §Seams (its "Phase 19" bullet) points here
+    for it.
   * 134 starts from the live `sync_change_lines` body that R-58 left.
 * **Phase 18.**
   * `stage_files` is re-created once in 18 and **never touched here**. The history maps files by
@@ -329,8 +351,8 @@ Changed, by owner (the sets are disjoint):
   * `bb_crawler.js` v5 and `skills/bb-sync` step 4b (pull and embed) are 18's.
   * The DECISIONS 2026-09-17 deferral binds Phase 18 not to touch `stage_content`.
   * 136 keeps `ical_collect()` in `transform_tick`. Phase 18's 127 unschedules the daily poll, which
-    makes the call a no-op. Brief 98 says 19 *may* drop the call. It does not, so the tick changes
-    only where R-65 needs it.
+    makes the call a no-op. Brief 98 §Seams (its "18 → 19" bullet) says 19 *may* drop the call. It
+    does not, so the tick changes only where R-65 needs it.
   * Phase 18's 126 reads `bb_content.bb_type` for R-69's URL. The key change keeps the column and
     its values (task 6).
 * **Phase 14** (94 §3 "19 → 14"). `sync_register_run` adopts these semantics:
@@ -415,7 +437,7 @@ SOP gates:
       conventional commits). Nothing is committed to `main`. The merge happens only when Stack asks
       for it in that conversation.
 - [ ] `/code-review main high`: CRITICAL and HIGH cleared, and the findings table is in the PR.
-- [ ] `/security-review`: required (four definer functions new or re-created, a trigger on
+- [ ] `/security-review`: required (five definer functions new or re-created, a trigger on
       `agent_requests`, a new RLS table, grant changes). CRITICAL and HIGH are cleared.
 - [ ] The Supabase security advisor reports 0 findings naming a Phase 19 object.
 - [ ] All eight migrations are applied under their file names, byte-identical (task 26).
@@ -447,8 +469,8 @@ What proves each requirement:
 * **R-38:** task 9's SQL (every material post traces to a history row) and screenshot 03.
 * **R-41 (run states and the per-stream read):** tasks 2, 12, 14, 15, 16, 19, 20 and 24; screenshots
   04–06. Task 16 builds R-41's per-stream `{stream, last_seen_at, state}` read in SQL, with expected
-  streams so "never synced" shows (137's `streams`; the PM's seam decision, and brief 97 points here
-  for it). Tasks 19 and 20 render it on Home and the Inbox header through `freshnessLine`. The
+  streams so "never synced" shows (137's `streams`; the PM's seam decision, and brief 97 §Seams, its
+  "Phase 19" bullet, points here for it). Tasks 19 and 20 render it on Home and the Inbox header through `freshnessLine`. The
   thresholds and heartbeat half is Phase 17's (P-12, P-71), merged before this phase. STATUS marks
   R-41 met only when both halves are on `main`.
 * **R-64:** tasks 3 and 4 (no duplicate pair, the path key gone, files 17 and 19 in the tree);
@@ -464,9 +486,11 @@ What proves each requirement:
 ## Task list
 
 Checks run against prod after the task's migration is applied. `node scripts/db-test.mjs` is
-Phase 15's runner, and brief 95 freezes its output: one line per unit, `PASS  <file>` or
+Phase 15's runner, and brief 95 freezes its output (§RPC signatures, functions, the role, and the
+runner's command contract, the `node scripts/db-test.mjs` row): one line per unit, `PASS  <file>` or
 `FAIL  <file>  <error>`, then `db-test: passed <p>, failed <f>, units <n>`, with exit 0 only when
-`f = 0`. `--only <file>` runs one unit. Check forms: (a) a named test and its exact command; (b) SQL
+`f = 0`. `--only <file>` runs one unit. Every runner check assumes B-42's default (**PROVISIONAL**);
+the B-42 row in "Stack's calls" says what each becomes otherwise. Check forms: (a) a named test and its exact command; (b) SQL
 with its expected value; (c) a screenshot path and what must be visible; (d) a count and the command
 that produces it.
 
@@ -478,8 +502,8 @@ that produces it.
 | 4 | 131 key swap, `stage_content` re-created, newest crawl re-folded | R-64 | W-52 | (b) `select count(*) from pg_constraint where conrelid = 'public.bb_content'::regclass and conname = 'bb_content_course_id_path_key'` → 0; the same query for `bb_content_course_item_key` → 1; `select count(*) from v_content_tree where file_id in (17, 19)` → 2 (both are current in `v_bb_files_current` on 2026-09-24 and have no node today); (a) `node scripts/db-test.mjs --only phase19_131_stage_content_item_key.sql` → `db-test: passed 1, failed 0, units 1` | "IST.466 Classwork shows both Information lessons and the two missing files" |
 | 5 | `stage_content` counts real changes and writes only as the newest crawl (in 131) | R-71 | W-52 | (a) `node scripts/db-test.mjs --only phase19_131_stage_content_item_key.sql` → `db-test: passed 1, failed 0, units 1`. Its blocks assert that a second fold of the same run returns `updated` = 0 and `unchanged` = item count, and that the older fixture run returns `older_run = true` and changes 0 rows | "a sync with nothing new says Nothing changed for content" |
 | 6 | Keep `bb_type` = `contentHandler` through the re-fold (P-95 met, recorded) | P-95 | W-52 | (b) With `<run>` = the run 131 re-folds (its id recorded in `99_W52_VERIFICATION.md`): `select count(*) from bb_content b join (select bb_resolve_course(r.bb_course_id) as course_id, e->>'id' as bb_item_id, e->>'type' as type from bb_raw r cross join lateral jsonb_array_elements(r.payload->'content') e where r.run_id = '<run>' and r.kind = 'course') x on x.course_id = b.course_id and x.bb_item_id = b.bb_item_id where b.bb_type is distinct from x.type` → 0; `select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'bb_content' and column_name ilike '%handler%'` → 0 (no second column) | — |
-| 7 | 132: `bb_material_history`, `material_history_record`, backfill | R-71, R-38 | W-52 | (a) `node scripts/db-test.mjs --only phase19_132_material_history.sql` → `db-test: passed 1, failed 0, units 1` (its blocks: appeared, changed and vanished; baseline writes 0; older run writes 0; a re-run writes 0; `has_table_privilege('anon', 'public.bb_material_history', 'select')` is false; `set local role authenticated` with a non-owner `request.jwt.claims` sub reads 0 rows; its prod block runs the `bb_raw` diff of the newest registered folded crawl against its predecessor, and `except` in both directions against the history rows returns 0 rows); (b) `select has_function_privilege('authenticated', 'public.material_history_record(uuid)', 'execute')` → false | — |
-| 8 | One vanish convention; retention recorded | P-98, R-71 | W-52 | (b) `select count(*) from bb_content b where b.detail->>'missing_since' is not null and exists (select 1 from bb_material_history h where h.run_id = (b.detail->>'missing_since')::uuid) and not exists (select 1 from bb_material_history h where h.entity = 'content' and h.change = 'vanished' and h.course_id = b.course_id and h.bb_item_id = b.bb_item_id and h.run_id = (b.detail->>'missing_since')::uuid)` → 0; `select count(*) from information_schema.columns c join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name where c.table_schema = 'public' and t.table_type = 'BASE TABLE' and c.column_name like 'missing_since%'` → 0 | — |
+| 7 | 132: `bb_material_history`, `material_history_record`, backfill | R-71, R-38 | W-52 | (a) `node scripts/db-test.mjs --only phase19_132_material_history.sql` → `db-test: passed 1, failed 0, units 1` (its blocks: appeared, changed and vanished; baseline writes 0; older run writes 0; a re-run writes 0; `has_table_privilege('anon', 'public.bb_material_history', 'select')` is false; `set local role authenticated` with a non-owner `request.jwt.claims` sub reads 0 rows; a registered run whose course row lies between two folded runs, with its `sync_runs` row `failed` and notes ending `interrupted (reaped)` (the reaper's shape; the fixture leaves out `interrupted_at`, which is 135's column), and again with it `running` (the claim-opened shape), is skipped: the later folded run diffs against the earlier one, so an item first carried by the skipped run is recorded `appeared` at the later run; its prod block runs the `bb_raw` diff of the newest registered folded crawl against its predecessor, and `except` in both directions against the history rows returns 0 rows; and its restamp block counts `bb_content` rows with `detail->>'missing_since'` set whose item's newest `vanished` history row carries a different run, expecting 0); (b) `select has_function_privilege('authenticated', 'public.material_history_record(uuid)', 'execute')` → false | — |
+| 8 | One vanish convention; retention recorded | P-98, R-71 | W-52 | (b) `select count(*) from bb_content b where b.detail->>'missing_since' is not null and exists (select 1 from bb_material_history h where h.run_id = (b.detail->>'missing_since')::uuid) and not exists (select 1 from bb_material_history h where h.entity = 'content' and h.change = 'vanished' and h.course_id = b.course_id and h.bb_item_id = b.bb_item_id and h.run_id = (b.detail->>'missing_since')::uuid)` → 0 (after 132's restamp; on 2026-09-27 it would be 2 without it, the two GEO.103.lecture rows the Contract's vanish convention names); `select count(*) from information_schema.columns c join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name where c.table_schema = 'public' and t.table_type = 'BASE TABLE' and c.column_name like 'missing_since%'` → 0 | — |
 | 9 | 133: the Stream's material posts come from history | R-38 | W-52 | (b) `select string_agg(attname, ',' order by attnum) from pg_attribute where attrelid = 'public.v_course_stream'::regclass and attnum > 0 and not attisdropped` → `course_id,post_kind,posted_at,ref_kind,ref_id,title,body,meta`; `select count(*) from v_course_stream s where s.post_kind = 'material' and not exists (select 1 from bb_material_history h where h.run_id::text = s.meta->>'run_id')` → 0; (a) `node scripts/db-test.mjs --only phase19_133_course_stream_history.sql` → `db-test: passed 1, failed 0, units 1` (its blocks: `security_invoker`, no anon select, `my_submissions` and missing items excluded) | "material posts say New or Changed, dated by crawl" |
 | 10 | 134: Activity names up to three materials | R-71 | W-52 | (a) `node scripts/db-test.mjs --only phase19_134_sync_change_lines.sql` → `db-test: passed 1, failed 0, units 1` (fixture stages give the exact lines "2 new material(s): A, B" and "1 material(s) no longer in Blackboard: C"); `node scripts/db-test.mjs --only phase10a_stage_gradebook.sql` → `db-test: passed 1, failed 0, units 1` | "Activity says which files were new" |
 | 11 | `DATA_SYNTAX.md` names the new key and the history table | R-64, R-71 | W-52 | (d) `grep -c 'bb_material_history' DATA_SYNTAX.md` → ≥ 1; `grep -c 'course_id, bb_item_id' DATA_SYNTAX.md` → ≥ 1 (both 0 at `main` a5042fa) | — |
@@ -487,8 +511,8 @@ that produces it.
 | 13 | 136: a registered run folds only on its calendar row; the drain uses the same test | R-65 | W-53 | (a) `node scripts/db-test.mjs --only phase19_135_136_sync_driver.sql` → `db-test: passed 1, failed 0, units 1` (its 136 blocks: 5-min-old run with no calendar row → 0 folds; with the calendar row → 1 fold; the drain skips an incomplete newest run; quarantine unchanged); `node scripts/db-test.mjs --only phase9_transform_states.sql` → `db-test: passed 1, failed 0, units 1`; (b) `select schedule from cron.job where jobname = 'bb2dash-transform-tick'` → `*/2 * * * *` | — |
 | 14 | 136 terminal rule: interrupted, the request closed, one Inbox item | R-65, R-41 | W-53 | (a) `node scripts/db-test.mjs --only phase19_135_136_sync_driver.sql` → `db-test: passed 1, failed 0, units 1` (its terminal-rule blocks: 31-min `running` row → `failed`, `interrupted_at` not null, notes contain `interrupted (reaped)`, request `failed`, exactly 1 open item with ref `agent_request:<id>`; a second tick adds 0; a claimed request with no run id, aged 31 min → `failed` + 1 item) | "a dead sync frees the Sync button and leaves one Inbox item" |
 | 15 | 137: `v_sync_status` carries `notes` and `interrupted` (and `streams`, task 16) | R-41 | W-53 | (b) `select string_agg(attname, ',' order by attnum) from pg_attribute where attrelid = 'public.v_sync_status'::regclass and attnum > 0 and not attisdropped` → `id,run_id,status,started_at,finished_at,trigger,summary,open_attention,freshness,notes,interrupted,streams` (the first nine are prod's list on 2026-09-27); `select has_table_privilege('anon', 'public.v_sync_status', 'select')` → false; (a) `node scripts/db-test.mjs --only phase19_137_sync_status.sql` → `db-test: passed 1, failed 0, units 1` (its run-state blocks: a reaped run reads `interrupted` = true, with `notes` ending `interrupted (reaped)`) | — |
-| 16 | 137's `streams`: R-41's per-stream `{stream, last_seen_at, state}` read in SQL over the nine expected streams, `never` for a stream with no `ok` finish (the PM's seam decision; brief 97 points here for it) | R-41 | W-53 | (a) `node scripts/db-test.mjs --only phase19_137_sync_status.sql` → `db-test: passed 1, failed 0, units 1` (its stream blocks, inside the rolled-back unit: with every `history` stage row deleted, the `history` element reads `never` with a null `last_seen_at`; with one `failed` `history` row it still reads `never`; with one `ok` row finished two days ago it reads `stale`; with one finished now, `fresh`); (b) `select string_agg(e->>'stream', ',' order by e->>'stream') from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e` → `announcements,assignments,attempts,content,courses,files,gaps,gradebook,history`; (b) `select count(*) from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e left join v_data_freshness f on f.stage = e->>'stream' where coalesce(e->>'state', '') not in ('fresh', 'stale', 'never') or (e->>'state' = 'never') is distinct from (f.fresh_as_of is null) or (e->>'last_seen_at')::timestamptz is distinct from f.fresh_as_of` → 0; (b) `begin; select set_config('request.jwt.claims', json_build_object('sub', public.app_owner(), 'role', 'authenticated')::text, true); set local role authenticated; select jsonb_array_length(streams) from v_sync_status; rollback;` → 9; (b) recorded in `99_W53_VERIFICATION.md` before the first fold after 135 (task 27): `select count(*) from sync_stage_runs where stage = 'history'` → 0 (0 on 2026-09-27) and `select e->>'state' from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e where e->>'stream' = 'history'` → `never`; right after task 27, the same state query → `fresh` | "Home names a kind of data that has never synced" |
-| 17 | `skills/bb-sync/SKILL.md` goes register-first. It lands only after 136 is applied | R-65 | W-53 | (d) `grep -c '^## Step 3a' skills/bb-sync/SKILL.md` → 0; `grep -c 'Do not pass' skills/bb-sync/SKILL.md` → 0; `grep -c "runAll({ termName: 'Fall 2026', runId })" skills/bb-sync/SKILL.md` → 1 | — |
+| 16 | 137's `streams`: R-41's per-stream `{stream, last_seen_at, state}` read in SQL over the nine expected streams, `never` for a stream with no `ok` finish (the PM's seam decision; brief 97 §Seams, its "Phase 19" bullet, points here for it) | R-41 | W-53 | (a) `node scripts/db-test.mjs --only phase19_137_sync_status.sql` → `db-test: passed 1, failed 0, units 1` (its stream blocks, inside the rolled-back unit: with every `history` stage row deleted, the `history` element reads `never` with a null `last_seen_at`; with one `failed` `history` row it still reads `never`; with one `ok` row finished two days ago it reads `stale`; with one finished now, `fresh`); (b) `select string_agg(e->>'stream', ',' order by e->>'stream') from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e` → `announcements,assignments,attempts,content,courses,files,gaps,gradebook,history`; (b) `select count(*) from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e left join v_data_freshness f on f.stage = e->>'stream' where coalesce(e->>'state', '') not in ('fresh', 'stale', 'never') or (e->>'state' = 'never') is distinct from (f.fresh_as_of is null) or (e->>'last_seen_at')::timestamptz is distinct from f.fresh_as_of` → 0; (b) `begin; select set_config('request.jwt.claims', json_build_object('sub', public.app_owner(), 'role', 'authenticated')::text, true); set local role authenticated; select jsonb_array_length(streams) from v_sync_status; rollback;` → 9; (b) recorded in `99_W53_VERIFICATION.md` before the first fold after 135 (task 27): `select count(*) from sync_stage_runs where stage = 'history'` → 0 (0 on 2026-09-27) and `select e->>'state' from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e where e->>'stream' = 'history'` → `never`; right after task 27, the same state query → `fresh` | "Home names a kind of data that has never synced" |
+| 17 | `skills/bb-sync/SKILL.md` goes register-first. It lands only after 136 is applied. Step 3 carries the failure path the Contract quotes: "If `runAll` throws or the tab closes, report it and leave the request `claimed`; 136's terminal rule closes it within 30 minutes and raises the one Inbox item." | R-65 | W-53 | (d) `grep -c '^## Step 3a' skills/bb-sync/SKILL.md` → 0; `grep -c 'Do not pass' skills/bb-sync/SKILL.md` → 0; `grep -c "runAll({ termName: 'Fall 2026', runId })" skills/bb-sync/SKILL.md` → 1; `grep -c "136's terminal rule closes it within 30 minutes and raises the one Inbox item" skills/bb-sync/SKILL.md` → 1 (0 at `main` a5042fa) | — |
 | 18 | Runbook step 5 and the crawler comments match the new driver (comments only) | R-65 | W-53 | (d) `grep -c 'opened when the sync request is claimed' ingest/CADENCE_RUNBOOK.md` → 1; `grep -c 'WHY THE SKILL STILL REGISTERS AFTER THE CRAWL' ingest/bb_crawler.js` → 0; `grep -c 'It is NOT yet safe' ingest/bb_crawler.js` → 0; (a) `cd web && npx vitest run test/crawler.announcements.test.ts test/crawler.attempts.test.ts` → 0 failures | — |
 | 19 | `sync-run-state.ts` with fixtures for every state and for the streams | R-41 | W-54 | (a) `cd web && npx vitest run test/sync-run-state.test.ts` → 0 failures (running → "sync running"; partial → "last run partial"; failed → "last run failed"; interrupted → "last sync interrupted"; ok → null; no row → "no sync recorded yet" from `freshnessLine`; `neverSyncedLine` on streams with `history` `never` → "history never synced", with `history` and `content` `never` → "content, history never synced", with none `never` → null; `normalizeStreams` drops an element with no `stream` or an unknown `state`) | — |
 | 20 | `freshnessLine` uses it; `SyncStatus` carries the three columns | R-41 | W-54 | (d) `git diff --numstat main -- web/src/lib/queries.sync.ts` → first field ≤ 15; (a) `cd web && npx vitest run test/queries.sync.test.ts test/NeedsAttention.test.tsx test/Inbox.test.tsx` → 0 failures (added fixtures: every `freshness` row fresh and `streams` holding `history` `never` → the line ends "· history never synced"; a `freshness` row stale 2 days → the line ends "· files stale 2 days" and names no never-synced stream; a row with no `streams` key → the same string `main` returns) | "Home reads last sync interrupted, not failed" |
@@ -500,7 +524,7 @@ that produces it.
 | 26 | Migrations recorded; advisors clean | all | PM | (b) `select count(*) from supabase_migrations.schema_migrations where name in ('130_bb_content_ghost_collapse', '131_bb_content_item_key', '132_material_history', '133_course_stream_history', '134_sync_change_lines_materials', '135_sync_run_open_at_claim', '136_transform_tick_register_first', '137_sync_status_run_state')` → 8; (b) for each of the eight, `select md5(statements[1]) from supabase_migrations.schema_migrations where name = '<name>'` equals `git show HEAD:db/migrations/<file> \| md5sum` (the LF form, as `80k_W34_VERIFICATION.md` recorded it): 8 of 8 equal, table in the PR; (d) `get_advisors` (security) findings naming `bb_material_history`, `material_history_record`, `bb_content_path_history` or `sync_request_open_run` → 0 | — |
 | 27 | First register-first sync, live (Stack runs it; the PM checks) | R-65 | Stack + PM | (b) `select s.started_at < (select min(b.captured_at) from bb_raw b where b.run_id = s.run_id) and s.finished_at > s.started_at from sync_runs s where s.source = 'blackboard' and s.scope = 'all' order by s.id desc limit 1` → true | "press Sync; it runs and lands as before" |
 | 28 | PM walk on the preview | R-38, R-41, R-64 | PM | (c) `docs/planning/sprint-2/walks/walk-19/` holds exactly these six: `01-ist466-classwork.png` (both "Information" lessons expanded; "Ethics Criteria.pptx" and "LectureM3_IST466Fall 2026 (2).pptx" visible); `02-ist352-classwork.png` (one WK01 folder); `03-stream-history.png` (a material post labelled New with its crawl date); `04-home-sync-running.png` (during task 27: "sync running"); `05-home-interrupted.png` (after acceptance step 5: "last sync interrupted"); `06-inbox-interrupted.png` (the one Inbox item). (d) `ls docs/planning/sprint-2/walks/walk-19/*.png \| wc -l` → 6 | — |
-| 29 | Docs: nine DECISIONS rows, STATUS, ORCHESTRATOR | R-76, all | PM | (d) `grep -c '^\| 2026-' project-state/DECISIONS.md` → `git show main:project-state/DECISIONS.md \| grep -c '^\| 2026-'` + 9. The rows: key swap and path constraint dropped; ghost merge; history table, retention and vanish convention; Stream material posts and the baseline; register-first (supersedes 2026-09-15); open at claim and quarantined runs refused; the terminal rule (departs from 2026-09-15's Why); R-76 closed (B-39, text-only if ever shown); P-95 met by `bb_type`. `git diff --stat main -- project-state/STATUS.md project-state/ORCHESTRATOR.md` → 2 files changed | "read the nine rows in the PR" |
+| 29 | Docs: nine DECISIONS rows, STATUS, ORCHESTRATOR | R-76, all | PM | (d) `grep -c '^\| 2026-' project-state/DECISIONS.md` → `git show main:project-state/DECISIONS.md \| grep -c '^\| 2026-'` + 9. The rows: key swap and path constraint dropped; ghost merge; history table, retention and vanish convention (naming 132's restamp of the two pre-convention `missing_since` stamps); Stream material posts and the baseline; register-first (supersedes 2026-09-15); open at claim and quarantined runs refused; the terminal rule (departs from 2026-09-15's Why); R-76 closed (B-39, text-only if ever shown); P-95 met by `bb_type`. `git diff --stat main -- project-state/STATUS.md project-state/ORCHESTRATOR.md` → 2 files changed | "read the nine rows in the PR" |
 
 Order: tasks 1–2, then 3 → 4 → 5–6 → 7 → 8 → 9–11 for W-52. W-53's task 12 applies 135, which calls
 `material_history_record` (132). Prod order must equal name order, so 133 and 134 go first and task
@@ -562,7 +586,7 @@ docs (tasks 25–29).
 
 > `/bb2dash-pm` Start Phase 19 (content identity, per-crawl history and sync honesty). Phases 15, 17
 > and 18 are merged to `main`. Read `docs/planning/sprint-2/briefs/99_PHASE19_content_history.md`.
-> Check that my answers to 93 §5 items B-18, B-19, B-20 and B-39 are recorded in DECISIONS. Where an
+> Check that my answers to 93 §5 items B-18, B-19, B-20, B-39 and B-42 are recorded in DECISIONS. Where an
 > answer differs from the default, re-cut the tasks the "Stack's calls" table names and show me the
 > diff before building. B-19's merge and B-20's terminal rule are PM picks, not 93 defaults; build
 > them only on Stack's explicit yes. Re-measure S₀, D₀ and N₀ (task 3) and files 17 and 19 (task 4)
