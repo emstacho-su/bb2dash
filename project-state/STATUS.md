@@ -430,8 +430,9 @@ Planned 2026-09-24 on `docs/sprint2-planning` (PR open): requirements `docs/plan
 (R-29..R-109 carried, P-1..P-113 PM- and research-added, Stack's eight items in §3, 22 still-declined rows in §4),
 research `research/92_*` and the synthesis `93_SPRINT2_RESEARCH_SYNTHESIS.md` (its §5 is the one question batch,
 59 items with defaults), the phase plan `94_SPRINT2_PHASES.md`, and one brief per phase under `briefs/` with a
-deterministic check on every task. Every product call is provisional until Stack answers the batch and approves
-the plan (DECISIONS 2026-09-23).
+deterministic check on every task, drafted, critiqued and verified in three Opus rounds on 2026-09-27 (the record and
+the 31 residual minor notes: `105_BRIEF_VERIFICATION_2026-09-27.md`). Every product call is provisional until Stack answers the batch and approves
+the plan (DECISIONS 2026-09-23 and 2026-09-24).
 
 | Phase | Name | Brief | Migrations | Order |
 |---|---|---|---|---|

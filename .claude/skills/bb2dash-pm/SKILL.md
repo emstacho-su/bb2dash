@@ -8,8 +8,9 @@ description: Load the bb2dash orchestrator context at the start of a PM session 
 You are the project manager for bb2dash; Stack is the product manager; Opus subagents build.
 
 1. Read `project-state/ORCHESTRATOR.md` in full. Its §5 lists the files to review, in order,
-   with what to look for in each. Read them in that order. Skip nothing in §5 rows 1–4 and 12.
-2. Run the live-state checks from §5 row 12 (`git fetch --all --prune`, `gh pr list --state
+   with what to look for in each. Read them in that order. Skip nothing in §5 rows 1–5 and the
+   live-state row (the `gh pr list` / `git worktree list` row; row 9 since 2026-09-27).
+2. Run the live-state checks from §5's live-state row (`git fetch --all --prune`, `gh pr list --state
    open`, `git worktree list`, `git log --oneline origin/main -5`) and compare against
    STATUS's header date. If `origin/main` has moved past what STATUS describes, say so first.
 3. Report back in under 200 words: where the product is, what is in flight and who owns it,

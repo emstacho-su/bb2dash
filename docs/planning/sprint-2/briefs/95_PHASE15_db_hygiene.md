@@ -405,8 +405,8 @@ prod.
 
 ## Out of scope
 
-* R-54's browser walk, R-41's run-state UI and the P-71 heartbeat: **Phase 17**. The run-state semantics and the
-  transform driver: **Phase 19**.
+* R-54's browser walk and the P-71 heartbeat: **Phase 17**. R-41's run states, UI included (brief 99 §Task list,
+  tasks 19–20), the run-state semantics and the transform driver: **Phase 19**.
 * V-1's invariants, the reconciliation migration, P-67's recheck script and V-1's migration number: **Phase 16**.
 * P-24's post-embed checks, `stage_files` and the search RPC bodies: **Phase 18**. `stage_content`: **Phase 19**.
 * `sync_runner`, `secrets/`, the dev container, psql in a container, any scheduled job: **Phase 14**.

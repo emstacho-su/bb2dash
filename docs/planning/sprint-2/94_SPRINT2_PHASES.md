@@ -52,9 +52,12 @@ Rules that fall out of the graph:
 3. **19 after 17 and 18** because it re-creates `stage_content`, adds the history table the Stream
    reads (R-38 wires the view 17 migrated) and redefines the transform driver (R-65); its
    register-first semantics are frozen before 14's `sync_register_run` is written.
-4. **14 is the long pole** and can start with 15: the spike (R-82) gates only its sync half; its
-   infrastructure half (images, secrets, umbrella repo, harness jobs, dev container) needs nothing
-   from 16–19. It inherits 18's scripted fetch and embed step (P-36) rather than rebuilding them.
+4. **14 is the long pole** and can start with 15: its task 1 (the freeze) and Task 0 (the idle probes)
+   come first; the spike (R-82) gates its sync half; W-57 and W-58 (harness jobs, umbrella repo, dev
+   container) may be cut after task 1, while W-55 and W-56 (sync runner; images, MCP and desktop) are
+   cut only after the spike's PASS with 15, 18 and 19 on `main` (brief 100 §Workers, corrected
+   2026-09-27 from "needs nothing from 16–19"). It inherits 18's scripted fetch and embed step (P-36)
+   rather than rebuilding them.
 5. **21 after 14**, **22 last** (Stack's "cleaning" placement; the Workspace page is in 22's inventory).
 6. **Migration ranges with slack**: 091–099 (14), 100–104 (15), 105–109 (16), 110–119 (17),
    120–129 (18), 130–139 (19), 140–149 (21). A phase that runs out takes the next free block of ten
@@ -78,8 +81,9 @@ Term calendar (unchanged from sprint 1): weeks 9 (Oct 19–25) and 11 (Nov 2–8
 ## 4. Coverage
 
 Every R-29..R-109, P-1..P-113 and S2 id is assigned exactly once: to a phase above, to Stage D, or
-to the unscheduled list in §1. The map is `stageC-phases.json` in the PM's session; the check is
-rerun before Stage D.
+to the unscheduled list in §1. The map is `stageC-phases.json` in the PM's session; the check was
+rerun after each of the three brief-verification rounds of 2026-09-27: all 187 ids covered exactly once,
+no migration number or worker id owned by two briefs (`105_BRIEF_VERIFICATION_2026-09-27.md` §1).
 
 ## 5. Sessions (sketched here, written as prompts in Stage D)
 

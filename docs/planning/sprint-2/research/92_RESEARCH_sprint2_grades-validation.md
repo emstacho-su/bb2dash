@@ -13,8 +13,10 @@ already picked the right comparables (Great Expectations suite-as-data, dbt sing
 accounting preparer/reviewer sign-off); this note deepens that with fetched, concrete examples and
 sharpens three open calls (machine-block re-check, invariant tolerance, where citations live).
 **Biggest risk, newly found:** `scripts/validate-grading.ps1` cannot be trusted to "stay confined"
-even once its JSON-parse crash is fixed — two of its four confinement mechanisms are either
-non-existent CLI flags or silently-ignored permission rules (§6 below), so the session today would
+even once its JSON-parse crash is fixed — ~~two of its four confinement mechanisms are either
+non-existent CLI flags or silently-ignored permission rules~~ one of its confinement mechanisms is a
+silently-ignored permission rule (§6 below; corrected 2026-09-27: its two CLI flags, `--restricted`
+and `--tools`, are documented by `claude --help` on 2.1.283 and stay), so the session today would
 run with an unscoped `Write` tool if launched as written. **Second risk:** R-32's arithmetic
 invariants ("weights sum to 100", "children sum to parent") currently hold only because nobody has
 corrected a row yet — an untested invariant is not an invariant, and a real open-source example
@@ -211,10 +213,18 @@ S/M and mostly wait on Stack's answers, not new engineering. Nothing here should
    external analog: Claude Code ships **two separate mechanisms** for this and R-34's launcher
    currently uses neither correctly.
 2. **Fetched this round, and this is the requirement's real finding:**
-   - `code.claude.com/docs/en/cli-reference` (fetched 2026-09-24): **`--restricted` and `--tools`
+   - `code.claude.com/docs/en/cli-reference` (fetched 2026-09-24): ~~**`--restricted` and `--tools`
      are not documented CLI flags.** `scripts/validate-grading.ps1` line ~55 passes
      `--restricted --tools "Read,Write,Glob,Grep"` — these do nothing today (or error); they are
-     not a second confinement layer, they're dead text. `--strict-mcp-config` and `--mcp-config`
+     not a second confinement layer, they're dead text.~~ **Corrected 2026-09-27:** `claude --help`
+     on 2.1.283 (read 2026-09-27) documents `--restricted` as removing the built-in tools that run
+     commands or code, and WebFetch, unless `--tools` names them, ignoring user, project and local
+     settings files, and confining the file tools to the working directories, and `--tools` as the
+     list of available built-in tools. `scripts/validate-grading.ps1` line 61 passes
+     `--restricted --tools "Read,Write,Glob,Grep"`, and both flags stay (brief 96 §Contract,
+     Launcher): without them the user-level allow rules apply and, once a prompt is approved, the
+     file tools reach past the worktree, `~/.claude.json` (which holds the service key) included.
+     `--strict-mcp-config` and `--mcp-config`
      *are* real and current (confirmed via `code.claude.com/docs/en/mcp`, search-returned
      2026-09-24: "starts a Claude Code session using only the MCP servers you pass with
      `--mcp-config`" and exits at startup if a managed MCP config is also deployed) — those two
@@ -232,7 +242,8 @@ S/M and mostly wait on Stack's answers, not new engineering. Nothing here should
    - `code.claude.com/docs/en/sandboxing` (fetched 2026-09-24): the OS-level Bash sandbox "runs on
      macOS, Linux, and WSL2. **Native Windows is not supported.**" It's moot here anyway (the
      launcher denies `Bash` entirely), but it means "stays confined" on this machine, today, is a
-     **Claude-Code-enforced** boundary (permission rules), never an **OS-enforced** one — the
+     **Claude-Code-enforced** boundary (~~permission rules~~ restricted mode and the permission
+     rules; corrected 2026-09-27), never an **OS-enforced** one — the
      stronger guarantee only exists once the session runs inside Phase 14's Linux dev container
      (already named as a seam in R-34; this confirms *why* that seam matters, not just that it
      exists).
@@ -251,11 +262,13 @@ S/M and mostly wait on Stack's answers, not new engineering. Nothing here should
 5. **Size & seams:** M. Blocks A-3 sitting 1. The service-role key still passing through a copied
    `~/.claude.json` entry into a temp file is a `/security-review` item regardless of the flag
    fixes (R-34's own note).
-6. **What research changes:** **adds two concrete fixes** to R-34's "Still missing" that the
-   requirement as written does not name: (a) drop `--restricted --tools "..."` (non-existent,
-   inert) from the launcher; (b) replace the `Write(...)` scoping rule with an `Edit(...)` rule
-   covering the same glob, since `Write` path rules are documented as never consulted. Both are
-   Research-added #3 below. Everything else in R-34 (Node twin, deny rules, container seam) is
+6. **What research changes:** **adds ~~two concrete fixes~~ one concrete fix** to R-34's "Still
+   missing" that the requirement as written does not name: ~~(a) drop `--restricted --tools "..."`
+   (non-existent, inert) from the launcher;~~ (b) replace the `Write(...)` scoping rule with an
+   `Edit(...)` rule covering the same glob, since `Write` path rules are documented as never
+   consulted. ~~Both are~~ It is Research-added #3 below. (Corrected 2026-09-27: (a) is withdrawn;
+   `claude --help` on 2.1.283 documents both flags and the launcher keeps them, brief 96 §Contract,
+   Launcher.) Everything else in R-34 (Node twin, deny rules, container seam) is
    already correctly scoped by the requirement.
 
 ## 7. R-35 · The grading export V-1 tests matches prod on the first sitting day
@@ -334,11 +347,14 @@ S/M and mostly wait on Stack's answers, not new engineering. Nothing here should
    it the machine block is inert YAML, the exact "sign-off drift" risk research 75 warns about,
    just deferred to the next term instead of the next PR. *Size:* S (parse YAML, run each
    `recheck` SELECT, diff against `stored`). *For:* R-31, R-33.
-3. **Launcher fix: drop `--restricted --tools "..."`, replace the `Write(...)` scoping rule with
-   `Edit(...)`.** *Why:* §6.2 above — both are concrete, sourced defects in
-   `scripts/validate-grading.ps1` beyond the already-known JSON-parse crash; R-34's "Still missing"
-   says "keeps the same flags and prompt," which would carry both bugs into the Node twin
-   unchanged. *Size:* S (a few lines in the twin). *For:* R-34.
+3. **Launcher fix: ~~drop `--restricted --tools "..."`,~~ replace the `Write(...)` scoping rule with
+   `Edit(...)`.** *Why:* §6.2 above — ~~both are concrete, sourced defects~~ the `Write(...)` rule is
+   a concrete, sourced defect in `scripts/validate-grading.ps1` beyond the already-known JSON-parse
+   crash; R-34's "Still missing" says "keeps the same flags and prompt," which would carry
+   ~~both bugs~~ that bug into the Node twin unchanged. (Corrected 2026-09-27: keeping the same
+   flags is right; `claude --help` on 2.1.283 documents `--restricted` and `--tools`, and the
+   launcher keeps both, brief 96 §Contract, Launcher.) *Size:* S (a few lines in the twin).
+   *For:* R-34.
 4. **Commit the grading-schema export's generating query as a tracked `.sql` file.** *Why:* R-35
    §6 above — `64_`'s omissions (no `grade_column_links`, wrong syllabus version, UTC due dates)
    were possible because the query itself was never versioned, only its output. *Size:* S.
@@ -357,11 +373,12 @@ stand as recorded in §6 with no change.
 1. **§6 Q3, refined default.** *Un-stub V-1 now, or keep it stubbed?* The recorded default is
    "un-stub it inside the sprint-2 grades phase; sitting 1 (IST.323) runs once the launcher works
    and the export is regenerated." This research does not change that call, but sharpens what
-   "the launcher works" must mean before sitting 1: not just "the JSON bug is fixed," but "the
-   `--restricted/--tools` no-op flags are gone and the write-scope rule is `Edit(...)`, not
-   `Write(...)`" (§6.2 above) — otherwise "confined" is not true even though the launcher runs
+   "the launcher works" must mean before sitting 1: not just "the JSON bug is fixed," but
+   "~~the `--restricted/--tools` no-op flags are gone and~~ the write-scope rule is `Edit(...)`, not
+   `Write(...)`" (§6.2 above; corrected 2026-09-27: `claude --help` on 2.1.283 documents both flags
+   and the launcher keeps them) — otherwise "confined" is not true even though the launcher runs
    without error. **Default (refined):** same as recorded (un-stub, sitting 1 after the launcher
-   works), with "the launcher works" now including both fixes in Research-added #3. *Why:* a
+   works), with "the launcher works" now including ~~both fixes~~ the fix in Research-added #3. *Why:* a
    silently-unscoped `Write` tool during a live sitting with Stack watching is a correctness risk
    (a stray write into `course context/` or outside `verification/`), not just a tidiness one, and
    costs a few lines to close before, not after, the first sitting.
@@ -381,7 +398,8 @@ Fetched or search-confirmed this session (2026-09-24):
 
 * `https://code.claude.com/docs/en/cli-reference` — fetched; confirms `--allowedTools`,
   `--disallowedTools`, `--permission-mode`, `--mcp-config`, `--append-system-prompt` are current;
-  confirms `--restricted` and `--tools` are **not** documented flags.
+  ~~confirms `--restricted` and `--tools` are **not** documented flags.~~ (Corrected 2026-09-27:
+  `claude --help` on 2.1.283 documents both; see §6.2.)
 * `https://code.claude.com/docs/en/mcp` — search-returned content confirms `--strict-mcp-config`
   is current and documented ("starts a Claude Code session using only the MCP servers you pass
   with `--mcp-config`").

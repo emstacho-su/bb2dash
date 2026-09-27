@@ -1,7 +1,8 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-24** (**sprint 2 planned**:
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-27** (the briefs verified in three
+> rounds, record `105_BRIEF_VERIFICATION_2026-09-27.md`; §6's prompts rewritten to them). Before that, **2026-09-24** (**sprint 2 planned**:
 > requirements `91_REQUIREMENTS_v3.md`, research `92_*` + `93_SPRINT2_RESEARCH_SYNTHESIS.md`, phases
 > `94_SPRINT2_PHASES.md`, briefs `95_`–`103_`; planning PR open on `docs/sprint2-planning`; every
 > product call provisional until Stack answers the batch in `93_` §5 and approves `94_`. Before that,
@@ -49,11 +50,11 @@ The materials MCP server (`mcp-server/`) is registered at user scope from `~/.cl
 |---|---|---|---|---|---|
 | 15 | Database hygiene and the SQL test runner | `briefs/95_PHASE15_db_hygiene.md` | R-78..R-80, R-54 | 100–104 | planned; first |
 | 16 | Grades: V-1 sittings and the reconciliation migration | `briefs/96_PHASE16_grades_v1.md` | R-29..R-36 | 105–109 | planned; Stack's six sittings, IST.323 before 2026-12-03 |
-| 17 | Web polish: quick fixes, carried bugs, Inbox/planner leftovers, live proofs | `briefs/97_PHASE17_web_polish.md` | R-37..R-45, R-47..R-52, R-55..R-59, R-108; S2-home-1/2, S2-materials-1, S2-bugs-1 | 110–119 | planned; with 18 |
+| 17 | Web polish: quick fixes, carried bugs, Inbox/planner leftovers, live proofs | `briefs/97_PHASE17_web_polish.md` | R-37, R-39 (interim), R-40, R-42..R-45, R-47..R-52, R-55..R-59, R-108; S2-home-1/2, S2-materials-1, S2-bugs-1 | 110–119 | planned; with 18 |
 | 18 | Ingest and corpus | `briefs/98_PHASE18_ingest_corpus.md` | R-60..R-63, R-66..R-70, R-72..R-75, R-77; S2-rag-1 | 120–129 | planned; with 17 |
 | 19 | Content identity, per-crawl history, sync honesty | `briefs/99_PHASE19_content_history.md` | R-38, R-41, R-64, R-65, R-71, R-76 | 130–139 | planned; after 17 and 18 |
-| 14 | Containers (R-28) | `briefs/100_PHASE14_containers.md` (supersedes `82_`'s Contract) | R-81..R-96; S2-containers-1 | 091–099 | planned; the spike gates its sync half; three repos, one PR each |
-| 20 | Harness closure: V-2 on record, note quality, checkpoint redaction | `briefs/101_PHASE20_harness_closure.md` | R-97..R-104, R-106 | none here | planned; harness repo; R-97 first |
+| 14 | Containers (R-28) | `briefs/100_PHASE14_containers.md` (supersedes `82_`'s Contract) | R-81..R-96; S2-containers-1 | 091–099 | planned; the spike gates its sync half, whose workers (W-55, W-56) also wait for 15, 18 and 19 on `main`; three repos, one PR per repo plus the early `syncLauncher` PR (B-51) |
+| 20 | Harness closure: V-2 on record, note quality, checkpoint redaction | `briefs/101_PHASE20_harness_closure.md` | R-97..R-104, R-106 | none here | planned; harness repo plus bb2dash, three PRs (PR-A for R-97 first, PR-B harness, PR-C bb2dash docs) |
 | 21 | Workspace: chat routed by complexity, on the subscription | `briefs/102_PHASE21_workspace.md` | S2-workspace-1 | 140–149 | planned; after 14 |
 | 22 | Styling | `briefs/103_PHASE22_styling.md` | R-53, R-46; S2-styling-1 | none | planned; last |
 
@@ -68,23 +69,28 @@ Stack adopts the reversal.
                            ├──► 17 (web polish) ──────────────► 19 (content identity + history) ──┐
                            ├──► 18 (ingest + corpus) ─────────► 19                                │
                            └──► 14 (containers; spike gate first) ──► 21 (workspace) ──► 22 (styling, last)
- 20 (harness closure) runs beside everything in the harness repo; R-97 lands first.
+ 20 (harness closure) runs beside everything, in the harness repo plus two bb2dash PRs; R-97 lands first.
 ```
 
 Rules that fall out of the graph:
 
 1. **15 first and short.** Its runner, test role and `search_path` pin are what every later SQL check
    runs through; its trigger (R-54) is one migration.
-2. **16, 17, 18 run in parallel** on disjoint files: 16 is Stack's sittings plus `db/`, `scripts/` and
-   the grades engine's `manual.ts`; 17 is `web/` screens, the 027/063-shaped view migrations and the
+2. **16, 17, 18 run in parallel** on disjoint files, except the named hunks 17 and 18 share (`CourseScreen.tsx`;
+   §6 Session B notes where briefs 97 and 98 differ): 16 is Stack's sittings plus `db/`, `scripts/`,
+   `skills/inbox-apply/SKILL.md` and the grades files in `web/` (R-36's rule line; `manual.ts` only if Stack
+   asks for a rule, brief 96 open item 1); 17 is `web/` screens, the 027/063-shaped view migrations and the
    Inbox; 18 is `ingest/`, `skills/bb-sync`, `stage_files`, the search RPCs and `db/tests`. Frozen seams:
    17 owns the `v_course_stream` / `v_content_tree` migrations; 18 owns `stage_files` and the search
    functions; neither touches `stage_content` (19's, DECISIONS 2026-09-17).
 3. **19 after 17 and 18** because it re-creates `stage_content`, adds the history table the Stream reads
    and redefines the transform driver (R-65); its register-first semantics are frozen before 14's
    `sync_register_run` is written.
-4. **14 is the long pole** and can start with 15: the spike (R-82) gates only its sync half; its
-   infrastructure half needs nothing from 16–19. It inherits 18's scripted fetch and embed step (P-36).
+4. **14 is the long pole** and can start with 15: task 1's freeze and Task 0's probes (B-47: start now)
+   come first, the spike (R-82, task 4) gates its sync half, and W-57 (harness jobs) and W-58 (umbrella,
+   dev container) may be cut after task 1. W-55 (sync runner and database) and W-56 (images, MCP, desktop,
+   repo hygiene) are cut only after the spike's PASS, with 15, 18 and 19 on `main` (brief 100). It
+   inherits 18's scripted fetch and embed step (P-36) and 19's register-first driver.
 5. **21 after 14**, **22 last** (Stack's "cleaning" placement; the Workspace page is in 22's inventory).
 6. **Migration ranges with slack**: 091–099 (14), 100–104 (15), 105–109 (16), 110–119 (17), 120–129 (18),
    130–139 (19), 140–149 (21). A phase that runs out takes the next free block of ten and records it in
@@ -104,15 +110,17 @@ is Thanksgiving; Nov 30 – Dec 13 is a code freeze. Phase 16's IST.323 sitting 
    `docs/planning/sprint-<N>-<sprint>/briefs/NN_PHASE<n>_<name>.md`: why, a **frozen contract** (routes, views, RPC
    signatures, return columns, request fields, file names), the worker list with branch and
    worktree names, seams with any parallel phase, out-of-scope, integration steps, and the
-   reserved migration range. Cite R-numbers from `60_REQUIREMENTS_v2.md`.
+   reserved migration range. Cite R-numbers from the sprint's requirements file (sprint 2:
+   `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`).
 3. **Branch and worktrees.** `feat/<phase>` off `origin/main` **as its own worktree**
    (`bb2dash-wt-<phase>`), pushed; the brief is committed there, never in the shared checkout.
    One `feat/<phase>-<stream>` branch + worktree per worker, cut from the phase branch after
    the brief is committed. Park any brief draft in the session scratchpad until the worktree
    exists.
 4. **Spawn Opus workers** (`Agent`, `model: "opus"`, one per stream) with the brief path, the
-   rules below, and a report format capped at ~300 words. Workers apply additive migrations to
-   prod via `apply_migration` under the file's name, dry-run first in `begin; … rollback;`,
+   rules below, and a report format capped at ~300 words. Workers (or the PM, where the brief's
+   §Workers says so: Phases 16 and 17) apply additive migrations to prod via `apply_migration`
+   under the file's name, dry-run first in `begin; … rollback;`,
    keep the repo file byte-identical, and never touch earlier migrations. Workers never touch
    `project-state/`.
 5. **Integrate.** Merge worker branches into the phase branch; regenerate
@@ -201,7 +209,8 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 * Read the Google OAuth consent screen's publishing status; if it is still Testing, publish it and re-run
   the consent, or the calendar token dies again about 2026-10-01 17:03Z (batch item 28).
 * Run Task 0's Blackboard session probes (batch item 47); the Duo remember-me window takes 14 days.
-* Phase 16 sittings, IST.323 first, before 2026-12-03 (batch item 11).
+* Phase 16's six sittings, IST.323 first, one a week (none in weeks 9 and 11), sitting 6 by 2026-11-18 so
+  that 106 is applied by 2026-11-20, before the 2026-11-30 freeze (brief 96 open item 4; batch item 11).
 * Phase 12 proofs still his: see the three toasts and click one from a banner and one from the Action
   Center; press Sync inside the shell and confirm "command copied" (batch items 57–58).
 * Place ECN.304 Quiz 2 and Attendance with "Counts toward…" on the course Grades tab if the figure
@@ -217,7 +226,7 @@ Read in this order. Each line says what the file is for and what to look for.
 | 2 | `project-state/DECISIONS.md` (tail ~20 rows) | The newest decisions, including the 2026-09-23/24 planning rows; do not relitigate silently. |
 | 3 | `docs/planning/README.md` + `docs/planning/sprint-2/90_SPRINT2_INTAKE.md` | Where every planning doc lives (numbers never restart) and the sprint's carried-in list. |
 | 4 | `docs/planning/sprint-2/91_REQUIREMENTS_v3.md` §1–§4 | The R-numbers every sprint 2 brief cites; §2 the PM- and research-added steps; §3 Stack's items; §4 what stays declined. |
-| 5 | `docs/planning/sprint-2/94_SPRINT2_PHASES.md` + the brief of the phase at hand (`briefs/95_`–`103_`) | The plan, the graph, the seams; the frozen Contract, MVP, DoD and task list with a deterministic check per task. |
+| 5 | `docs/planning/sprint-2/94_SPRINT2_PHASES.md` + the brief of the phase at hand (`briefs/95_`–`103_`) + `docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md` §3 | The plan, the graph, the seams; the frozen Contract, MVP, DoD and task list with a deterministic check per task; that brief's residual round-3 notes, fixed or struck in the phase's own PR before workers are cut. |
 | 6 | `docs/planning/sprint-2/93_SPRINT2_RESEARCH_SYNTHESIS.md` §1 and §6; `research/92_*` for the area | What the research changed about each requirement, and the defaults taken; for Phase 14 also `82_` and `research/82_*`. |
 | 7 | `CLAUDE.md` (repo root) | The SOP and the project facts, corrected 2026-09-24. |
 | 8 | `DATA_SYNTAX.md` §search layer · `web/README.md` · `mcp-server/README.md` | The retrieval contract; the web scripts and type-regeneration step; the materials server's registration. |
@@ -228,67 +237,146 @@ Read in this order. Each line says what the file is for and what to look for.
 Not to read at start: `docs/planning/sprint-0-foundation/superseded/*`, the eval/POC docs unless retrieval
 quality is the topic, and `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPTS.md` (history).
 
-## 6. Session prompts, one per session (copy-paste; sprint 2, written 2026-09-24)
+## 6. Session prompts, one per phase in five sessions (copy-paste; sprint 2, rewritten 2026-09-27 to the verified briefs)
 
-Every bb2dash prompt starts with `/bb2dash-pm` so the session loads this file and runs the live-state
-checks before acting. A session may run several phases with parallel Opus subagents; each prompt says
-which and why. Every brief is PROVISIONAL until Stack answers `93_` §5 and approves `94_`; the prompts
-assume he has. The used sprint 1 prompts are history in
+One prompt per phase, grouped into the five sessions below; a session pastes its prompts in the order shown, when
+its heading says. The bb2dash prompts (A1, A2, B1, B2, B3, C1, C2, E) start with `/bb2dash-pm` so the session loads
+this file and runs the live-state checks before acting; Session D runs in the harness repo, so its prompt starts by
+naming `C:/Users/estac/agentic-harness`. Every brief is PROVISIONAL until Stack answers `93_` §5 and approves `94_`;
+the prompts assume he has, and each phase's PM first records his answers against its brief's B-table. Before cutting
+workers, the phase's PM reads that brief's residual notes in `docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`
+§3 and fixes or strikes each one in the phase's own PR. The used sprint 1 prompts are history in
 `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPTS.md`.
 
-Every prompt starts with `/bb2dash-pm`. One session may run several phases with parallel Opus
-subagents; the prompt says which and why. Each stops at "ready when you say so". Every brief is
-PROVISIONAL until Stack answers `93_` §5 and approves `94_`; the prompts assume he has.
+**Session A — Phase 15 then Phase 16** (one session: 15 is a morning; paste A2 once 15's PR is open, without waiting for its merge, since 16's SQL checks run through 15's runner from its branch)
 
-**Session A — Phase 15 then Phase 16** (one session: 15 is a morning and 16's first tasks reuse its runner)
+A1 — Phase 15
 
-> `/bb2dash-pm` Start Phase 15 (R-78, R-79, R-80, R-54; brief `docs/planning/sprint-2/briefs/95_PHASE15_db_hygiene.md`,
-> migrations 100–104). Cut `feat/db-hygiene-15` from `origin/main` as its own worktree, spawn the workers the brief
-> names (Opus), run every task's check, integrate, run `/code-review main high` and `/security-review`, update
-> STATUS, DECISIONS and ORCHESTRATOR, open the PR and stop. Then, without merging, start Phase 16 in a second
-> worktree cut from `origin/main` (R-29..R-36; `96_PHASE16_grades_v1.md`, migrations 105–109): fix the launcher,
-> regenerate the export from a committed query, run the invariants baseline through Phase 15's runner (on its
-> branch until it merges), and stop before sitting 1 with the exact `validate-grading` command for me. I run
-> the sittings (IST.323 first); after each one you spot-check three citations, and after the sixth you write
-> the reconciliation migration, run the invariants again, and open the PR.
+> `/bb2dash-pm` Start Phase 15: `docs/planning/sprint-2/briefs/95_PHASE15_db_hygiene.md`, R-78, R-79, R-80, R-54.
+> PROVISIONAL until I answer 93 §5 (B-41, B-42, B-16) and approve 94: rewrite §Stack's calls to my answers and show me
+> any task whose check changed. Nothing gates it; it runs first. Create worktree `bb2dash-wt-15` on
+> `feat/db-hygiene-15` from `origin/main`, cut the three worker worktrees and spawn W-38, W-39, W-40 (Opus) on their
+> disjoint files, every check failing first. Migrations 100–104 only; one PR, no exception taken; nothing visual, so
+> no Vercel preview. Stop when 100 is on prod and put acceptance step 1's snippet on my clipboard (task 5): I set the
+> `db_test_runner` password and write `.env.local`. After my `--ping` passes, finish tasks 6–24 and open the PR. I
+> then run steps 2–4, read the advisors (step 5), open the signups setting for your screenshot (step 6, task 20) and
+> read the six DECISIONS rows (step 7). Change no Auth setting. Stop at "ready when you say so".
 
-**Session B — Phases 17 and 18 in parallel, then 19** (disjoint files: web/ vs ingest/ + stage_files; 19 needs both merged)
+A2 — Phase 16
 
-> `/bb2dash-pm` Start Phases 17 and 18 together. Cut `feat/web-polish-17` and `feat/ingest-corpus-18` from
-> `origin/main` as two worktrees; the seams are frozen in `94_SPRINT2_PHASES.md` §3 (17 owns the
-> `v_course_stream` / `v_content_tree` migrations 110–119, 18 owns `stage_files` and the search RPCs in
-> 120–129, neither touches `stage_content`). Spawn each brief's workers (Opus) in their own worktrees, run
-> every deterministic check, integrate each phase on its branch, run the gates, open two PRs with Vercel
-> previews, and stop. Book the one logged-in probe sitting (P-27) and the proofs sitting (R-47, R-55, R-59,
-> R-108) with me before the PRs. When both are merged (my word), start Phase 19 (`99_PHASE19_content_history.md`,
-> 130–139) on their seams the same way.
+> `/bb2dash-pm` Start Phase 16 without waiting for Phase 15's merge: `docs/planning/sprint-2/briefs/96_PHASE16_grades_v1.md`,
+> R-29, R-30, R-31, R-32, R-33, R-34, R-35, R-36. PROVISIONAL until I answer 93 §5 (B-9, B-10, B-11, B-12, B-13,
+> B-14, B-15, B-16, plus B-23 and B-42) and approve 94. Worktree `bb2dash-wt-16` on `feat/grades-v1-16` from
+> `origin/main`; W-41, W-42, W-43 (Opus); migrations 105–109; one PR, no exception taken (open item 4 names the one
+> contingency). Gate: every SQL check runs through Phase 15's runner, from 15's branch until it merges; apply 105
+> only after 100–104 are on prod and task 10a's commit is on `feat/db-hygiene-15`. Run tasks 1–15, then stop with
+> `.\scripts\validate-grading.ps1 IST.323` on my clipboard. I launch it (step 2) and sit six courses, one a week,
+> none in weeks 9 and 11: IST.323 first, then IST.466, IST.352, ECN.304, GEO.103, IST.471; you spot-check three
+> citations after each. After sitting 6, write 106, rerun the invariants and open the PR with a preview, 106 applied
+> and the PR open by 2026-11-20. I walk steps 5–10 (step 9 after ECN.304 Exam 1 posts).
+> Stop at "ready when you say so".
 
-**Session C — Phase 14, then Phase 21** (three repos; 21 reuses 14's container, token and MCP image)
+**Session B — Phases 17 and 18 in parallel, then 19** (paste B1 and B2 one after the other: each phase in its own worktrees, seams frozen in `94_` §3; paste B3 once both are merged, because 19 builds on both)
 
-> `/bb2dash-pm` Start Phase 14 (R-81..R-96; `100_PHASE14_containers.md`, which supersedes `82_`'s Contract;
-> migrations 091–099). First put the brief's open items to me and wait; then create `bb2dash-stack` with me,
-> run the noVNC login spike (R-82) as a gate before any sync-side task, and only if it passes cut
-> `feat/containers-14` in bb2dash and `feat/containers` in agentic-harness as worktrees, spawn the workers
-> (Opus), integrate, run the gates on all three PRs (one per repo, recorded in DECISIONS), and stop. Keep the
-> Windows path working until my acceptance sitting. After the merge, start Phase 21 (`102_PHASE21_workspace.md`,
-> 140–149) as a fourth service in the umbrella, read-only tools only, on my subscription token.
+B1 — Phase 17
 
-**Session D — Phase 20** (harness repo; can run first of all: R-97 is a live bug)
+> `/bb2dash-pm` Start Phase 17 beside Phase 18 (B2, this session): `docs/planning/sprint-2/briefs/97_PHASE17_web_polish.md`,
+> R-37, R-39 (the interim hide only), R-40, R-42, R-43, R-44, R-45, R-47, R-48, R-49, R-50, R-51, R-52, R-55, R-56,
+> R-57, R-58, R-59, R-108; S2-home-1, S2-home-2, S2-materials-1, S2-bugs-1. PROVISIONAL until I answer 93 §5 (B-1,
+> B-2, B-3, B-7, B-17, B-19, B-20, B-21, B-22, B-23, B-25, B-26, B-27, B-28, B-29, B-30, B-31, B-57, B-58; and B-42
+> through Phase 15) and approve 94. Gate: Phase 15's runner on `main`. Ask me B-7's "anything else?" once. Worktree
+> `bb2dash-wt-17` on `feat/web-polish-17`; W-44..W-47 (Opus); migrations 110–119 (110–117 used). One PR, no
+> exception of its own; Phase 22's test-only tasks 1–2 may ride it as 22's commits under brief 103's B-6 exception,
+> whose DECISIONS row is written the day I answer B-6. My sittings: the desktop shell (T-24), the production planner
+> and staging walk (T-26), the consent-screen read before 2026-10-01 17:03Z (T-27), then the acceptance script on the
+> preview. Stop at "ready when you say so".
 
-> You are the PM for Phase 20 of bb2dash, working in `C:/Users/estac/agentic-harness` with the bb2dash worktree
-> beside it. Read `C:/Users/estac/projects/bb2dash/docs/planning/sprint-2/briefs/101_PHASE20_harness_closure.md`
-> in full. Fix R-97 first (the `/inbox-apply` vault path) on a bb2dash branch and open its PR the same day.
-> Then the harness work on `feat/v2-closure`: the phase-spelling decision, the tags fixture, the backfill pass,
-> the checkpoint redaction payload, the untagged cadence; walk the V-2 acceptance list live and write the
-> verification note under `docs/planning/sprint-2/verification/`. Migrations to `harness-memory` under the
-> file's name, byte-identical. One PR per repo; do not merge.
+B2 — Phase 18
+
+> `/bb2dash-pm` Start Phase 18 beside Phase 17 (B1): `docs/planning/sprint-2/briefs/98_PHASE18_ingest_corpus.md`,
+> R-60, R-61, R-62, R-63, R-66, R-67, R-68, R-69, R-70, R-72, R-73, R-74, R-75, R-77; S2-rag-1. PROVISIONAL until I
+> answer 93 §5 (B-8, B-32, B-33, B-34, B-35, B-36, B-37, B-38, B-40) and approve 94. Gate: Phase 15 merged and
+> `node scripts/db-test.mjs` exits 0 on `main`. Worktree `bb2dash-wt-18` on `feat/ingest-corpus-18`; W-48, W-49,
+> W-50, W-51 (Opus), with `.env.local` copied into each worktree and `--ping` passing there (L3); migrations 120–129;
+> one PR, no exception taken. Stop when tasks 2–5 and 15 are on the phase branch: I run the sync gate (task 16) by
+> hand from `bb2dash-wt-18`, never with the desktop Sync button, and stay for the probe sitting. Stop again when task
+> 18 is on the branch (unless B-36's fallback ran): I run the second sync (L7). Then finish tasks 17–29, walk the
+> preview into `walks/walk-18/` and open the PR; I walk the acceptance script on the preview. Merge and the `search`
+> redeploy only on my word. Stop at "ready when you say so".
+
+(brief 97 §Seams says Phase 17 edits neither `AssignmentDetailBody.tsx` nor `PlannerItemPopover.tsx` and shares only `CourseScreen.tsx` with 18; brief 98 §Seams says both phases touch all three, named hunks only.)
+
+B3 — Phase 19
+
+> `/bb2dash-pm` Start Phase 19: `docs/planning/sprint-2/briefs/99_PHASE19_content_history.md`, R-38, R-41 (run
+> states and the per-stream read), R-64, R-65, R-71, R-76. PROVISIONAL until I answer 93 §5 (B-18, B-19, B-20, B-39,
+> and B-42 through Phase 15's test role) and approve 94. Gate: Phases 17 and 18 merged to `main`, with Phase 15's
+> runner. B-19's ghost merge and B-20's terminal rule are PM picks: build them only on my explicit yes. Re-measure S₀,
+> D₀ and N₀ (task 3) and files 17 and 19 (task 4) on prod. Worktree `bb2dash-wt-content-history-19` on
+> `feat/content-history-19`; W-52, W-53, W-54 (Opus); migrations 130–139; one PR, no exception. I run the first
+> register-first sync (task 27). Open the PR with its Vercel preview; I walk the acceptance script there, one sync
+> interrupted on purpose (step 5) included, and read the nine DECISIONS rows. Stop at "ready when you say so".
+
+(brief 95 §Out of scope says R-41's run-state UI is Phase 17's; briefs 97 §Out of scope and 99 give R-41's run states, UI included, to Phase 19.)
+
+**Session C — Phase 14, then Phase 21** (three repos; paste C2 after Phase 14 merges: 21 reuses 14's container, token and MCP image)
+
+C1 — Phase 14
+
+> `/bb2dash-pm` Start Phase 14: `docs/planning/sprint-2/briefs/100_PHASE14_containers.md` (it supersedes `82_`'s
+> Contract), R-81, R-82, R-83, R-84, R-85, R-86, R-87 (conditional on B-45), R-88, R-89, R-90, R-91, R-92, R-93,
+> R-94, R-95, R-96 (the deferred list); S2-containers-1. PROVISIONAL until I answer 93 §5 (B-4, B-43, B-44, B-45,
+> B-46, B-47, B-48, B-49, B-50, B-51; its live SQL on Phase 15's B-42) and approve 94. Put open items 1–6 to me;
+> task 1 then freezes it in eleven DECISIONS rows, row (5) the exception: one PR per repo, plus the early
+> `syncLauncher` PR. Branches `feat/containers-14` (bb2dash), `feat/containers` (agentic-harness),
+> `feat/containers-14-stack` (bb2dash-stack, which I create first); worktree `bb2dash-wt-containers-14`;
+> W-55..W-58 (Opus); migrations 091–099. W-57 and W-58 may be cut after task 1; the noVNC spike (task 4) gates every
+> sync-side task, and W-55 and W-56 wait for its PASS with Phases 15, 18 and 19 on `main`. My stops: Task 0 probes
+> (task 3), the spike's Duo login, the `sync_runner` password, the MCP key move (task 17), the live proofs (task 28),
+> the launcher PR merged before A1, then A1–A9 across at least one night. The Windows path keeps working until then.
+> Stop at "ready when you say so".
+
+C2 — Phase 21
+
+> `/bb2dash-pm` Start Phase 21: `docs/planning/sprint-2/briefs/102_PHASE21_workspace.md`, S2-workspace-1.
+> PROVISIONAL until I answer 93 §5 (B-5; and B-42, B-48, B-51 through Phases 15 and 14) and approve 94. Gate: task
+> 1's seam gate, Phases 14 and 15 merged to `main`; then put open items O-1..O-5 to me, with B-5 if unanswered, and
+> wait. Worktree `bb2dash-wt-21` on `feat/workspace-21`, and `feat/workspace-21` in bb2dash-stack; W-63..W-66 (Opus);
+> migrations 140–149. One PR per repo, the same exception Phase 14 takes under B-51 (its row, written at 14's freeze;
+> task 24 records this phase's); until that row exists, the bb2dash-stack change is a second PR opened after this
+> one, not beside it. The Realtime spike (task 5) gates the transport, in my logged-in preview. Hand me the one
+> `workspace_runner` password line before task 12's health check (task 19); never put it in a file. Walk the preview
+> and the desktop shell and open both PRs with the preview link; after Phase 14's acceptance I walk the acceptance
+> script and say "accepted" on the D-1 reversal row. Stop at "ready when you say so".
+
+**Session D — Phase 20** (the harness repo plus two bb2dash PRs; can run first of all: R-97 is a live bug)
+
+> You are the PM for Phase 20 of bb2dash, working in `C:/Users/estac/agentic-harness` with bb2dash beside it. Read
+> `C:/Users/estac/projects/bb2dash/docs/planning/sprint-2/briefs/101_PHASE20_harness_closure.md` in full: R-97, R-98,
+> R-99, R-100 (the home-pc half), R-101, R-102, R-103, R-104, R-106. PROVISIONAL until I answer 93 §5 (B-52, B-53,
+> B-54, B-55, B-56) and approve 94. First record my 93 §5 answers against the brief's B-table; before cutting workers,
+> read its residual notes in `C:/Users/estac/projects/bb2dash/docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`
+> §3 and fix or strike each in PR-C. Nothing gates the start. Day 1: R-97 on bb2dash `fix/inbox-apply-vault-20` in
+> `bb2dash-wt-inbox-vault-20`, PR-A opened that day; until it merges I hold Apply answers and `/bb-sync`. Then
+> agentic-harness `feat/v2-closure` in `C:/Users/estac/agentic-harness-wt-v2-closure` (PR-B) and bb2dash
+> `docs/harness-closure-20` in `bb2dash-wt-harness-closure-20` (PR-C); W-59, W-60, W-61, W-62 (Opus). Migrations: none
+> in bb2dash. Three PRs, an exception to one PR per phase that needs its own DECISIONS row at the freeze. Live steps
+> wait until three consecutive nightly runs log `committed -> pulled -> pushed` (or up-to-date) for both realms. My
+> stops: `gitleaks` installed (task 20), Apply answers after PR-A merges, the hook reinstall (L20-a), "go L20-b" after
+> the dry run, the credential test, the resume chain, a cloud `/checkpoint`, then my word on `101a`.
+> Stop at "ready when you say so".
+
+(brief 96 §Seams says whichever of Phases 16 and 20 lands second rebases its `skills/inbox-apply/SKILL.md` lines onto the other's; brief 101 §Seams says the second merges `main` into its branch and never rebases a pushed branch.)
 
 **Session E — Phase 22** (last, after every screen exists)
 
-> `/bb2dash-pm` Start Phase 22 (R-53, R-46; `103_PHASE22_styling.md`). First list every route and shared
-> component in `web/` (the Workspace page included) and confirm none is a stub; land the token audit as a
-> test-only ratchet if Phase 17 did not; propose three style tiles as Artifact pages with a live toggle and
-> wait for my pick. Then cut `feat/styling-22`, spawn workers (CSS custom properties only, no Tailwind, no
-> new dependencies, no layout change except C-1 and the toggle), walk every screen light and dark on the
-> preview, and stop at the PR.
+> `/bb2dash-pm` Start Phase 22: `docs/planning/sprint-2/briefs/103_PHASE22_styling.md`, R-53, R-46; S2-styling-1.
+> PROVISIONAL until I answer 93 §5 (B-6, B-23, B-24) and approve 94. Gate: Phases 16, 17, 18, 19, 14 and 21 merged,
+> so every screen exists (task 4), `web/src/app/(app)/workspace/page.tsx` included; check whether tasks 1–2 already
+> rode Phase 17's PR (if not, they are this branch's first commits). Put open items 1–5 to me and wait. Worktree
+> `bb2dash-wt-22` on `feat/styling-22`; W-67..W-70 (Opus); migrations: none. One PR; its one exception is tasks 1–2
+> riding Phase 17's PR, whose DECISIONS row is written the day I answer B-6. Publish the three style tiles (task 6)
+> and wait for my pick (task 7) while W-68..W-70 do tasks 12–15; task 8 gates the sweeps. Walk both specs on the
+> phase preview, run the gates and open the PR with the preview and `WALK.md`; I walk the acceptance script: the theme
+> control, 58 surface lines, 390 px, the Menu, the desktop build in light mode. Stop at "ready when you say so".
 

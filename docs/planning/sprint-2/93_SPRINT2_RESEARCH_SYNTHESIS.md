@@ -25,7 +25,7 @@ Sizes are the researcher's, checked by the PM.
 | R-31 | L | Confirmed against Great Expectations, dbt reconciliation PRs and accounting preparer/reviewer practice. Research 75's YAML `recheck` field is inert until something reads it (P-67). |
 | R-32 | M (L if a view or column changes) | Invariants use **exact equality**, not a tolerance (exact numerics; D-14 keeps `numeric(9,3)`). P-2's two breaking lines in `db/tests/phase10b_grade_model.sql` (171–172, 251–255) are pinpointed. |
 | R-33 | S | Keep the notes / `source_ref` default; one citation syntax everywhere, `bb_file:<id>#unit:<n>`, in verdict files and in `assignments.source_ref`. |
-| R-34 | M | Two live defects in `scripts/validate-grading.ps1` beyond the known JSON crash: it passes `--restricted` and `--tools`, which the current Claude Code CLI does not have, and its `Write(...)` path rule is accepted but never consulted (only Read/Edit path rules are), so the "confined" session would have an unscoped Write tool. Claude Code's OS sandbox does not run on native Windows: confinement is permission rules only until the session runs in Phase 14's Linux dev container. |
+| R-34 | M | ~~Two live defects~~ One live defect in `scripts/validate-grading.ps1` beyond the known JSON crash: ~~it passes `--restricted` and `--tools`, which the current Claude Code CLI does not have, and~~ its `Write(...)` path rule is accepted but never consulted (only Read/Edit path rules are), so the "confined" session would have an unscoped Write tool. (Corrected 2026-09-27: `claude --help` on 2.1.283 documents both flags, `--restricted` as removing the built-in tools that run commands or code, and WebFetch, unless `--tools` names them, ignoring user, project and local settings files, and confining the file tools to the working directories, and `--tools` as the list of available built-in tools; the launcher keeps both, brief 96 §Contract, Launcher.) Claude Code's OS sandbox does not run on native Windows: confinement is ~~permission rules only~~ Claude Code's own (restricted mode and the permission rules) until the session runs in Phase 14's Linux dev container. |
 | R-35 | S | Commit the export's generating SQL as a tracked file beside the dated markdown; the 2026-09-14 export drifted because only its output was versioned. |
 | R-36 | S (rule line) | The sentence names the weights in **ranked order** (highest / median / lowest), which is how `rank-weighted.ts` applies them, not by exam number. Ships on its own, independent of Phase 13. |
 
@@ -196,7 +196,7 @@ What the research settles:
 |---|---|---|---|---|
 | P-66 | S | R-30, P-1 | `manual.ts` distinguishes "no score posted" from "posted a zero" | the GEO/ECN 0.0 % figure recurs on any future unlinked 0/100 column |
 | P-67 | S | R-31, R-33 | A script that extracts and runs each verdict file's YAML `recheck` SQL | research 75's field is inert until something reads it |
-| P-68 | S | R-34 | Launcher fix: drop `--restricted` / `--tools`; scope writes with `Edit(...)` rules | both are live defects against the current CLI |
+| P-68 | S | R-34 | Launcher fix: ~~drop `--restricted` / `--tools`;~~ keep `--restricted` / `--tools`; scope writes with `Edit(...)` rules | ~~both are live defects against the current CLI~~ corrected 2026-09-27: the `Write(...)` rule is a live defect; the flags are documented by `claude --help` on 2.1.283 and stay, so P-68 is delivered as its `Edit(...)` half (brief 96 §Contract, Launcher) |
 | P-69 | S | S2-home-1 | A shared wheel/drag horizontal-scroll hook | the same gap recurs on any horizontal strip |
 | P-70 | S | S2-home-2, S2-materials-1 | Lift `materials-collapse.ts` into a shared two-level collapse-state module | three near-identical implementations otherwise |
 | P-71 | M | R-41, R-52 | One shared heartbeat/freshness view for the transform tick and the calendar-push tick | the same dead-man's switch twice |
@@ -245,10 +245,12 @@ What the research settles:
 
 ## 3. Corrections to the record
 
-* `scripts/validate-grading.ps1` passes `--restricted` and `--tools`, which the current CLI does not
-  document; its `Write(...)` path rule is accepted but never consulted.
+* ~~`scripts/validate-grading.ps1` passes `--restricted` and `--tools`, which the current CLI does not document;~~
+  `scripts/validate-grading.ps1`'s `Write(...)` path rule is accepted but never consulted.
+  (Corrected 2026-09-27: `claude --help` on 2.1.283 documents `--restricted` and `--tools`, and the
+  launcher keeps both; brief 96 §Contract, Launcher.)
 * Claude Code's OS-level sandbox runs on macOS, Linux and WSL2 only; on native Windows, confinement is
-  permission rules.
+  ~~permission rules~~ Claude Code's own (restricted mode and the permission rules; corrected 2026-09-27).
 * SU signs in through Microsoft Entra SAML, not Shibboleth; research R1's lifetime ceilings do not apply.
 * Supabase Edge Functions: 2 s CPU / 150–400 s wall clock. No chat backend there.
 * Playwright's docs do not recommend `--no-sandbox`; the shipped seccomp profile is the current shape.
@@ -297,7 +299,7 @@ research questions.
 
 9. Presentation dates (Q1). Default: keep SITN on 11/4 as recorded, individual presentation undated and tentative, major-project-1 back to tentative to match #2. The first individual slot is 2026-09-30.
 10. GEO.103 "Absences" / "Attendance" 0/100 read as graded (Q2). Default: "Not graded" via the picker until the GEO sitting; plus the engine fix so a posted zero and no score are distinct.
-11. Un-stub V-1 (Q3). Default: yes, inside the grades phase; sitting 1 (IST.323) after the launcher is fixed (dead flags dropped, Edit-scoped writes) and the export regenerated from a committed query.
+11. Un-stub V-1 (Q3). Default: yes, inside the grades phase; sitting 1 (IST.323) after the launcher is fixed (~~dead flags dropped,~~ Edit-scoped writes; corrected 2026-09-27: `--restricted` and `--tools` are documented by `claude --help` on 2.1.283 and stay, brief 96 §Contract, Launcher) and the export regenerated from a committed query.
 12. IST.323 "Proposal and Appendices" 13 pts (Q4). Default: re-cut components to 13 / 1 in the reconciliation migration, decided in the IST.323 sitting before 2026-12-03.
 13. IST.466's three attendance/participation columns (Q5). Default: leave today's links; unscored columns are named under the figure until linked.
 14. How V-1 marks a checked row (Q6). Default: notes for schemes and components, `source_ref` for assignments, one syntax `bb_file:<id>#unit:<n>` everywhere; from-memory answers `STACK_OVERRIDE` + confirmed with your why; the invariants filed in `db/tests` (rerun by the suite, not wired into the sync).

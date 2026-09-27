@@ -1203,9 +1203,9 @@ size S · for R-31, R-33
 * **Why:** research 75's field is inert until something reads it
 * **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
 
-#### P-68 · Launcher fix: drop `--restricted` / `--tools`; scope writes with `Edit(...)` rules *(research-added)*
+#### P-68 · Launcher fix: ~~drop `--restricted` / `--tools`;~~ keep `--restricted` / `--tools`; scope writes with `Edit(...)` rules *(research-added)*
 size S · for R-34
-* **Why:** both are live defects against the current CLI
+* **Why:** ~~both are live defects against the current CLI~~ corrected 2026-09-27: the `Write(...)` path rule is a live defect (accepted, never consulted); the two flags are not. `claude --help` on 2.1.283 (read 2026-09-27) documents `--restricted` as removing the built-in tools that run commands or code, and WebFetch, unless `--tools` names them, ignoring user, project and local settings files, and confining the file tools to the working directories, and `--tools` as the list of available built-in tools. Without them the user-level allow rules apply and, once a prompt is approved, the file tools reach past the worktree, `~/.claude.json` (which holds the service key) included. Both flags stay and P-68 is delivered as its `Edit(...)` half (brief 96 §Contract, Launcher). The 2026-09-24 reading that the CLI lacked them rested on a docs page fetched that day (research 92 §6).
 * **Backed by:** 93_SPRINT2_RESEARCH_SYNTHESIS.md §2 and the research note it cites
 
 #### P-69 · A shared wheel/drag horizontal-scroll hook *(research-added)*
