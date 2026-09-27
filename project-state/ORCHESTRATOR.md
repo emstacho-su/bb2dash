@@ -323,7 +323,7 @@ B3 — Phase 19
 
 (brief 95 §Out of scope says R-41's run-state UI is Phase 17's; briefs 97 §Out of scope and 99 give R-41's run states, UI included, to Phase 19.)
 
-**Session C — Phase 14, then Phase 21** (three repos; paste C1 as soon as Phase 15 starts, per `94_` §2 rule 4 and §4's default; paste C2 after Phase 14 merges: 21 reuses 14's container, token and MCP image)
+**Session C — Phase 14, then Phase 21** (three repos; paste C1 as soon as Phase 15 starts, per `94_` §2 rule 4 and §6's default (Phase 14 starts with 15); paste C2 after Phase 14 merges: 21 reuses 14's container, token and MCP image)
 
 C1 — Phase 14
 
