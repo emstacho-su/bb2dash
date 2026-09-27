@@ -207,9 +207,15 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
   items, each with the default the PM took) and approve the phase plan (`94_`); say where Phase 14 sits
   (default: it starts with Phase 15).~~ Done by delegation 2026-09-27 (DECISIONS rows of that date; Phase 14 starts
   with Phase 15). Stack may still overturn any row by saying so; the phase's PM then rewrites the B-table row.
+* **Hold the Inbox "Apply answers" button and `/bb-sync` until Phase 20's PR-A (R-97) merges:** `/inbox-apply` still
+  writes its decision notes to the OneDrive stub, not the realm vault (inbox-541..544.md landed there on 2026-09-27);
+  the PM copies those four notes into the realm when PR-A lands (brief 101 §Seams). Found by the 2026-09-27 decision panel.
+* Start Task 0's Blackboard session probes by 2026-09-28 so the 14-day Duo window closes before exam week (batch item 47;
+  brief 100 Task 0); say whether you answered Yes to "Stay signed in?".
+* Before 2026-09-30, name the presentation slot (batch item 9): whether 11/4 was the SITN pick or the individual slot, and
+  which individual slot is yours (9/30, 10/14, 10/26, 11/4 or 11/16); each answer goes in as an Inbox value resolution.
 * Read the Google OAuth consent screen's publishing status; if it is still Testing, publish it and re-run
   the consent, or the calendar token dies again about 2026-10-01 17:03Z (batch item 28).
-* Run Task 0's Blackboard session probes (batch item 47); the Duo remember-me window takes 14 days.
 * Phase 16's six sittings, IST.323 first, one a week (none in weeks 9 and 11), sitting 6 by 2026-11-18 so
   that 106 is applied by 2026-11-20, before the 2026-11-30 freeze (brief 96 open item 4; batch item 11).
 * Phase 12 proofs still his: see the three toasts and click one from a banner and one from the Action
