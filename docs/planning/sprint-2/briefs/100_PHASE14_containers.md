@@ -23,6 +23,8 @@ workers). 82 stays the record of Stack's sixteen decisions (quoted below), the M
 that closes 93 §1.7 decides (Playwright's seccomp profile by default, `--no-sandbox` only as the spike's
 fallback).
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-4, B-42, B-43, B-44, B-45, B-46, B-47, B-48, B-49, B-50, B-51), changed: B-45 (Reversal adopted (Requirements v2 §5 row "scheduled or in-Electron crawls (Duo)", in part), following Stack's decision #6 and the MVP he confirmed on 2026-09-16. pg_cron queues one container `sync` request each morning when none is open: daily at 07:00 New York for now, re-set from Task 0's numbers, and off (null) until the cut-over. A login_required item is a failure report, not a nag. In-Electron crawls stay declined.); the rest resolved to their defaults. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 R-28 says the local pieces move into containers once development is done, so the whole thing can be

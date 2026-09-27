@@ -16,6 +16,8 @@ Inputs: `91_REQUIREMENTS_v3.md` §1.1 and §2, `93_SPRINT2_RESEARCH_SYNTHESIS.md
 runner's frozen CLI). Prod facts below were read with SELECTs on 2026-09-24 and re-read by the Stage C
 critic the same day (counts, column names, function signatures, link rows, attention rows 2–163).
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-9, B-10, B-11, B-12, B-13, B-14, B-15, B-16, B-23, B-42), changed: B-10 (Both GEO columns (_3602583_1 lecture Absences, _3602445_1 recitation Attendance) are marked "Not graded" until the GEO sitting. Migration 105 writes them as excluded grade_column_links rows, because the picker is not offered on a confirmed link. The engine-fix half is dropped: no rule treats a posted zero as unposted, and P-66 ships as three pinning tests only.); the rest resolved to their defaults. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 Sprint 1 built the one "graded so far" figure on grading rows nobody has checked. V-1 was stubbed on

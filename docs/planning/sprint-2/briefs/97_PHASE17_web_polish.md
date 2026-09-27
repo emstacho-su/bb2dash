@@ -12,6 +12,8 @@ tasks 1–2 (P-15, P-16) ride this PR as 22's commits (see Seams)
 Status: **PROVISIONAL until Stack answers 93 §5** (B-1, B-2, B-3, B-7, B-17, B-19, B-20, B-21, B-22, B-23, B-25, B-26,
 B-27, B-28, B-29, B-30, B-31, B-57, B-58; and B-42 through Phase 15)
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-1, B-2, B-3, B-6, B-7, B-17, B-19, B-20, B-21, B-22, B-23, B-25, B-26, B-27, B-28, B-29, B-30, B-31, B-42, B-57, B-58), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 Stack's list for sprint 2 opens with three quick fixes and one line, "bug fixing" (S2-home-1, S2-home-2,

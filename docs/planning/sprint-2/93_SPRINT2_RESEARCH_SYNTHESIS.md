@@ -286,92 +286,92 @@ research questions.
 
 **A. Stack's list (his fields, filled with proposed defaults)**
 
-1. **S2-home-1 upcoming work scrollable.** Diagnosis: a plain mouse gets neither wheel nor drag on the strip (trackpad and touch work). Default: must; fix as one shared hook; acceptance "I can wheel-scroll and drag the strip on Home and the course page, and ◂ ▸ still work"; must not change what the strip shows.
-2. **S2-home-2 Undated collapsed, at the bottom.** Default: must; two pieces, collapse and move; placed just above the needs-attention row (12b made that the page's last word); **collapsed on first visit** as you asked (the app's other sections default open; say if you want the same here), remembered after; nothing leaves Undated.
-3. **S2-materials-1 whole section collapses.** Default: must; the whole course header row is one accessible button (the text included); buckets keep their own toggles; no change to file rows.
-4. **S2-containers-1 (Phase 14).** Default: must; runs as the sprint's long pole in parallel with the grades and web phases; the noVNC spike gates its sync half; $0 and the Windows path until acceptance.
-5. **S2-workspace-1 chatbot.** Default: **should**, built after Phase 14's container, token and MCP-image seams exist (it reuses them); v1 is **read-only** (zero write tools on every tier); backend is the `claude` CLI with your subscription token; router is a hand-written heuristic, Haiku classifier only if it misroutes; a soft $1-per-turn cap that fails the turn plainly; harness store scoped to an allowlist of bb2dash collections; the paused metering plan (§4) accepted as a risk. Acceptance: "on a Workspace page I ask a question; simple lookups answer from the two stores, harder ones go to a stronger model; every answer names the tier; nothing costs API credits."
-6. **S2-styling-1.** Default: should, last in the sprint; three style-tile directions as live Artifact pages; three-state Auto/Light/Dark toggle in the top-nav menu (a named exception); the token audit lands early as a test-only ratchet; C-1 stays with it.
-7. **S2-bugs-1.** Default: a scoped pass (steps 3–9 of the 12b method) over the bugs already in §1 plus your three quick fixes, not a fresh page-by-page intake (about a worker-week vs about a phase).
-8. **S2-rag-1.** Default: must; a background check the PM runs after each corpus change (no UI surface this sprint); embedding runs as a step of the pull (no new cron job); a committed eval runner with the golden set re-validated first.
+1. **S2-home-1 upcoming work scrollable.** Diagnosis: a plain mouse gets neither wheel nor drag on the strip (trackpad and touch work). Default: must; fix as one shared hook; acceptance "I can wheel-scroll and drag the strip on Home and the course page, and ◂ ▸ still work"; must not change what the strip shows. **Decided 2026-09-27 (delegated): default.**
+2. **S2-home-2 Undated collapsed, at the bottom.** Default: must; two pieces, collapse and move; placed just above the needs-attention row (12b made that the page's last word); **collapsed on first visit** as you asked (the app's other sections default open; say if you want the same here), remembered after; nothing leaves Undated. **Decided 2026-09-27 (delegated): default.**
+3. **S2-materials-1 whole section collapses.** Default: must; the whole course header row is one accessible button (the text included); buckets keep their own toggles; no change to file rows. **Decided 2026-09-27 (delegated): default.**
+4. **S2-containers-1 (Phase 14).** Default: must; runs as the sprint's long pole in parallel with the grades and web phases; the noVNC spike gates its sync half; $0 and the Windows path until acceptance. **Decided 2026-09-27 (delegated): default.**
+5. **S2-workspace-1 chatbot.** Default: **should**, built after Phase 14's container, token and MCP-image seams exist (it reuses them); v1 is **read-only** (zero write tools on every tier); backend is the `claude` CLI with your subscription token; router is a hand-written heuristic, Haiku classifier only if it misroutes; a soft $1-per-turn cap that fails the turn plainly; harness store scoped to an allowlist of bb2dash collections; the paused metering plan (§4) accepted as a risk. Acceptance: "on a Workspace page I ask a question; simple lookups answer from the two stores, harder ones go to a stronger model; every answer names the tier; nothing costs API credits." **Decided 2026-09-27 (delegated): default.**
+6. **S2-styling-1.** Default: should, last in the sprint; three style-tile directions as live Artifact pages; three-state Auto/Light/Dark toggle in the top-nav menu (a named exception); the token audit lands early as a test-only ratchet; C-1 stays with it. **Decided 2026-09-27 (delegated): default.**
+7. **S2-bugs-1.** Default: a scoped pass (steps 3–9 of the 12b method) over the bugs already in §1 plus your three quick fixes, not a fresh page-by-page intake (about a worker-week vs about a phase). **Decided 2026-09-27 (delegated): default.**
+8. **S2-rag-1.** Default: must; a background check the PM runs after each corpus change (no UI surface this sprint); embedding runs as a step of the pull (no new cron job); a committed eval runner with the golden set re-validated first. **Decided 2026-09-27 (delegated): default.**
 
 **B. Grades and V-1**
 
-9. Presentation dates (Q1). Default: keep SITN on 11/4 as recorded, individual presentation undated and tentative, major-project-1 back to tentative to match #2. The first individual slot is 2026-09-30.
-10. GEO.103 "Absences" / "Attendance" 0/100 read as graded (Q2). Default: "Not graded" via the picker until the GEO sitting; plus the engine fix so a posted zero and no score are distinct.
-11. Un-stub V-1 (Q3). Default: yes, inside the grades phase; sitting 1 (IST.323) after the launcher is fixed (~~dead flags dropped,~~ Edit-scoped writes; corrected 2026-09-27: `--restricted` and `--tools` are documented by `claude --help` on 2.1.283 and stay, brief 96 §Contract, Launcher) and the export regenerated from a committed query.
-12. IST.323 "Proposal and Appendices" 13 pts (Q4). Default: re-cut components to 13 / 1 in the reconciliation migration, decided in the IST.323 sitting before 2026-12-03.
-13. IST.466's three attendance/participation columns (Q5). Default: leave today's links; unscored columns are named under the figure until linked.
-14. How V-1 marks a checked row (Q6). Default: notes for schemes and components, `source_ref` for assignments, one syntax `bb_file:<id>#unit:<n>` everywhere; from-memory answers `STACK_OVERRIDE` + confirmed with your why; the invariants filed in `db/tests` (rerun by the suite, not wired into the sync).
-15. C-2 rank weights (Q7). Default: the rule line only, in ranked order, shipped in the grades phase now; per-exam weights stay parked.
-16. V-1's migration number. Default: a sprint-2 number in the grades phase's range; 059 stays unused (a 059 applied after 090 would replay out of order).
+9. Presentation dates (Q1). Default: keep SITN on 11/4 as recorded, individual presentation undated and tentative, major-project-1 back to tentative to match #2. The first individual slot is 2026-09-30. **Decided 2026-09-27 (delegated): default.**
+10. GEO.103 "Absences" / "Attendance" 0/100 read as graded (Q2). Default: "Not graded" via the picker until the GEO sitting; plus the engine fix so a posted zero and no score are distinct. **Decided 2026-09-27 (delegated): changed, Both GEO columns (_3602583_1 lecture Absences, _3602445_1 recitation Attendance) are marked "Not graded" until the GEO sitting. Migration 105 writes them as excluded grade_column_links rows, because the picker is not offered on a confirmed link. The engine-fix half is dropped: no rule treats a posted zero as unposted, and P-66 ships as three pinning tests only..**
+11. Un-stub V-1 (Q3). Default: yes, inside the grades phase; sitting 1 (IST.323) after the launcher is fixed (~~dead flags dropped,~~ Edit-scoped writes; corrected 2026-09-27: `--restricted` and `--tools` are documented by `claude --help` on 2.1.283 and stay, brief 96 §Contract, Launcher) and the export regenerated from a committed query. **Decided 2026-09-27 (delegated): default.**
+12. IST.323 "Proposal and Appendices" 13 pts (Q4). Default: re-cut components to 13 / 1 in the reconciliation migration, decided in the IST.323 sitting before 2026-12-03. **Decided 2026-09-27 (delegated): default.**
+13. IST.466's three attendance/participation columns (Q5). Default: leave today's links; unscored columns are named under the figure until linked. **Decided 2026-09-27 (delegated): default.**
+14. How V-1 marks a checked row (Q6). Default: notes for schemes and components, `source_ref` for assignments, one syntax `bb_file:<id>#unit:<n>` everywhere; from-memory answers `STACK_OVERRIDE` + confirmed with your why; the invariants filed in `db/tests` (rerun by the suite, not wired into the sync). **Decided 2026-09-27 (delegated): default.**
+15. C-2 rank weights (Q7). Default: the rule line only, in ranked order, shipped in the grades phase now; per-exam weights stay parked. **Decided 2026-09-27 (delegated): default.**
+16. V-1's migration number. Default: a sprint-2 number in the grades phase's range; 059 stays unused (a 059 applied after 090 would replay out of order). **Decided 2026-09-27 (delegated): default.**
 
 **C. Web**
 
-17. Stream "unread" (Q8). Default: follows the bell (`read_at` null and not `is_read`).
-18. Stream material diffs (Q9). Default: one post per file or content item new or changed in a registered crawl, from an append-per-run history table, full history kept; built in the ingest phase with R-71.
-19. Stale Classwork nodes (Q10). Default: hidden, with a toggle for the three really gone; nothing deleted.
-20. Freshness and heartbeat (Q11). Default: Phase 9's thresholds; a two-stage heartbeat, late at one missed tick, missing at five (about 10 min), one shared design for the transform and calendar ticks.
-21. "Apply answers now" control (Q12). Default: build it (S, no migration), labelled apart from the existing button.
-22. Info groups (Q13). Default: remove the false caption now; no panel this sprint.
-23. Phase 13 carry-ins (Q14). Default, a change from `91_` §6: **C-2's rule line and C-3's favicon ship early** as small items (the eclipse-ring icon, plus `apple-icon.png`); C-1 stays with the styling phase because it needs the nav redesign. Say no if all three should wait.
-24. Phone-width nav (Q15). Default: fold links and Search into one menu at the existing 720 px step (replacing it), reachable by keyboard.
-25. R-18 proof rows on production (Q16). Default: stage your byte-identical originals (their rows stay); the "differs" draft is removed by SQL and Storage delete in the same sitting.
-26. R-26's web half (Q17). Default: close it with a DECISIONS row once you confirm the desktop toasts.
-27. IST.466 attendance marker (Q18). Default: mark the starred sessions with the schedule's own words, answered with 13.
-28. Failing calendar push (Q19). Default: a Home needs-attention line after three consecutive failed pushes, clearing on the next ok run. **And a manual step for you:** read the OAuth consent screen's publishing status; if it is still Testing, publish it and re-run the consent, or the token dies again about 2026-10-01.
-29. Machine-closed Inbox gaps (Q20). Default: yes for `stage_gaps`' four conditions, archived with a "closed itself" record; a gap that reopens twice in a day is surfaced once instead.
-30. New Activity lines (Q21). Default: add auto_graded, reading_links (linked) and missing_cleared when above 0; leave out the two steady-state counts, under a written convention.
-31. Planner kind colours (Q22). Default: keep; DECISIONS row closes the "pending nod".
+17. Stream "unread" (Q8). Default: follows the bell (`read_at` null and not `is_read`). **Decided 2026-09-27 (delegated): default.**
+18. Stream material diffs (Q9). Default: one post per file or content item new or changed in a registered crawl, from an append-per-run history table, full history kept; built in the ingest phase with R-71. **Decided 2026-09-27 (delegated): default.**
+19. Stale Classwork nodes (Q10). Default: hidden, with a toggle for the three really gone; nothing deleted. **Decided 2026-09-27 (delegated): default.**
+20. Freshness and heartbeat (Q11). Default: Phase 9's thresholds; a two-stage heartbeat, late at one missed tick, missing at five (about 10 min), one shared design for the transform and calendar ticks. **Decided 2026-09-27 (delegated): default.**
+21. "Apply answers now" control (Q12). Default: build it (S, no migration), labelled apart from the existing button. **Decided 2026-09-27 (delegated): default.**
+22. Info groups (Q13). Default: remove the false caption now; no panel this sprint. **Decided 2026-09-27 (delegated): default.**
+23. Phase 13 carry-ins (Q14). Default, a change from `91_` §6: **C-2's rule line and C-3's favicon ship early** as small items (the eclipse-ring icon, plus `apple-icon.png`); C-1 stays with the styling phase because it needs the nav redesign. Say no if all three should wait. **Decided 2026-09-27 (delegated): default.**
+24. Phone-width nav (Q15). Default: fold links and Search into one menu at the existing 720 px step (replacing it), reachable by keyboard. **Decided 2026-09-27 (delegated): default.**
+25. R-18 proof rows on production (Q16). Default: stage your byte-identical originals (their rows stay); the "differs" draft is removed by SQL and Storage delete in the same sitting. **Decided 2026-09-27 (delegated): default.**
+26. R-26's web half (Q17). Default: close it with a DECISIONS row once you confirm the desktop toasts. **Decided 2026-09-27 (delegated): default.**
+27. IST.466 attendance marker (Q18). Default: mark the starred sessions with the schedule's own words, answered with 13. **Decided 2026-09-27 (delegated): default.**
+28. Failing calendar push (Q19). Default: a Home needs-attention line after three consecutive failed pushes, clearing on the next ok run. **And a manual step for you:** read the OAuth consent screen's publishing status; if it is still Testing, publish it and re-run the consent, or the token dies again about 2026-10-01. **Decided 2026-09-27 (delegated): default.**
+29. Machine-closed Inbox gaps (Q20). Default: yes for `stage_gaps`' four conditions, archived with a "closed itself" record; a gap that reopens twice in a day is surfaced once instead. **Decided 2026-09-27 (delegated): default.**
+30. New Activity lines (Q21). Default: add auto_graded, reading_links (linked) and missing_cleared when above 0; leave out the two steady-state counts, under a written convention. **Decided 2026-09-27 (delegated): default.**
+31. Planner kind colours (Q22). Default: keep; DECISIONS row closes the "pending nod". **Decided 2026-09-27 (delegated): default.**
 
 **D. Ingest and data**
 
-32. iCal feed job (Q24). Default: retire it (unschedule; amend R-15's clause).
-33. GEO.103 textbook chapters (Q25). Default: ebooks behind Orange Instant Access → Off-platform; the phys.org link recorded; Huber stays tagged until you find it.
-34. Two live copies of one file; the three IST.352 decks (Q26). Default: keep both copies current; link decks 31 / 47 / 32 to sessions 129 / 130 / 131.
-35. Week and session links for files (Q27). Default: yes, its own ingest item outside V-1, per-course rules, an Inbox question when a file fits several sessions.
-36. Announcement author (Q28). Default: probe on the next sync; a resolvable `creatorUserId` is expected (resolve via `course_staff`, then `/users/{id}` cached per run); drop the author segment only if nothing is there.
-37. Course files pulled inside the sync (Q29). Default: in the skill now with the scripted signed-CDN fetch; the Phase 14 runner inherits it.
-38. Per-item Blackboard links (Q30). Default, a change from `91_` §6: **build `bb_url` now** from the confirmed public template (`/ultra/courses/_<courseId>_1/outline/<type>/_<itemId>_1`); your tab confirms, it does not gate.
-39. Item descriptions on Classwork (Q31). Default: no; close with a DECISIONS row; if ever shown, sanitised first.
-40. One logged-in probe sitting (P-27). Default: with your next sync, five facts in one sitting (announcement shape, per-item URL, meeting times, `feedbackToUser`, group-attempt files).
+32. iCal feed job (Q24). Default: retire it (unschedule; amend R-15's clause). **Decided 2026-09-27 (delegated): default.**
+33. GEO.103 textbook chapters (Q25). Default: ebooks behind Orange Instant Access → Off-platform; the phys.org link recorded; Huber stays tagged until you find it. **Decided 2026-09-27 (delegated): default.**
+34. Two live copies of one file; the three IST.352 decks (Q26). Default: keep both copies current; link decks 31 / 47 / 32 to sessions 129 / 130 / 131. **Decided 2026-09-27 (delegated): default.**
+35. Week and session links for files (Q27). Default: yes, its own ingest item outside V-1, per-course rules, an Inbox question when a file fits several sessions. **Decided 2026-09-27 (delegated): default.**
+36. Announcement author (Q28). Default: probe on the next sync; a resolvable `creatorUserId` is expected (resolve via `course_staff`, then `/users/{id}` cached per run); drop the author segment only if nothing is there. **Decided 2026-09-27 (delegated): default.**
+37. Course files pulled inside the sync (Q29). Default: in the skill now with the scripted signed-CDN fetch; the Phase 14 runner inherits it. **Decided 2026-09-27 (delegated): default.**
+38. Per-item Blackboard links (Q30). Default, a change from `91_` §6: **build `bb_url` now** from the confirmed public template (`/ultra/courses/_<courseId>_1/outline/<type>/_<itemId>_1`); your tab confirms, it does not gate. **Decided 2026-09-27 (delegated): default.**
+39. Item descriptions on Classwork (Q31). Default: no; close with a DECISIONS row; if ever shown, sanitised first. **Decided 2026-09-27 (delegated): default.**
+40. One logged-in probe sitting (P-27). Default: with your next sync, five facts in one sitting (announcement shape, per-item URL, meeting times, `feedbackToUser`, group-attempt files). **Decided 2026-09-27 (delegated): default.**
 
 **E. Database**
 
-41. Leaked-password protection (Q32). Default: the org is on the Free plan; record it as accepted, stay on Free.
-42. A database credential for the test runner (Q33). Default: yes; a direct or session-pooler connection string (never the transaction pooler) in a gitignored `.env.local` as `BB2DASH_TEST_DB_URL`, for a dedicated `db_test_runner` role; pgTAP is not adopted.
+41. Leaked-password protection (Q32). Default: the org is on the Free plan; record it as accepted, stay on Free. **Decided 2026-09-27 (delegated): default.**
+42. A database credential for the test runner (Q33). Default: yes; a direct or session-pooler connection string (never the transaction pooler) in a gitignored `.env.local` as `BB2DASH_TEST_DB_URL`, for a dedicated `db_test_runner` role; pgTAP is not adopted. **Decided 2026-09-27 (delegated): default.**
 
 **F. Phase 14, the sync half**
 
-43. Sync without an LLM (Q34). Default: yes, the deterministic runner with a templated report; the skill stays the Windows fallback.
-44. `/inbox-apply` step 0 in the container sync (Q35). Default: skipped; your answers apply from the Inbox button.
-45. Scheduled morning sync (Q36). Default: **stays declined until you adopt it in writing**; if yes, 07:00 New York daily as a provisional hour, off until cut-over.
-46. Login death (Q37). Default: Inbox item only; a toast is post-MVP.
-47. Task 0 probes (Q38). Default: start now (the Duo window takes 14 days), written up as an Entra Conditional Access / KMSI measurement, not Shibboleth.
+43. Sync without an LLM (Q34). Default: yes, the deterministic runner with a templated report; the skill stays the Windows fallback. **Decided 2026-09-27 (delegated): default.**
+44. `/inbox-apply` step 0 in the container sync (Q35). Default: skipped; your answers apply from the Inbox button. **Decided 2026-09-27 (delegated): default.**
+45. Scheduled morning sync (Q36). Default: **stays declined until you adopt it in writing**; if yes, 07:00 New York daily as a provisional hour, off until cut-over. **Decided 2026-09-27 (delegated): changed, Reversal adopted (Requirements v2 §5 row "scheduled or in-Electron crawls (Duo)", in part), following Stack's decision #6 and the MVP he confirmed on 2026-09-16. pg_cron queues one container `sync` request each morning when none is open: daily at 07:00 New York for now, re-set from Task 0's numbers, and off (null) until the cut-over. A login_required item is a failure report, not a nag. In-Electron crawls stay declined..**
+46. Login death (Q37). Default: Inbox item only; a toast is post-MVP. **Decided 2026-09-27 (delegated): default.**
+47. Task 0 probes (Q38). Default: start now (the Duo window takes 14 days), written up as an Entra Conditional Access / KMSI measurement, not Shibboleth. **Decided 2026-09-27 (delegated): default.**
 
 **G. Phase 14, the infrastructure half**
 
-48. Dev container vs the harness's "the VM replaces it" (Q39). Default: keep it, in `bb2dash-stack` only, built last in the phase.
-49. Container scheduler vs Task Scheduler (Q40). Default: the container replaces the two jobs on home-pc only; the `.ps1` scripts stay as fallback and for the work VM; the curator stays a host task.
-50. Vault access for the jobs container (Q41). Default: bind-mount the Windows realm checkouts as home-pc after a lock and `safe.directory` test; separate clones only if it fails.
-51. `bb2dash-stack`, `just`, one PR per repo (Q42). Default: yes to all three, each a DECISIONS row at the freeze.
+48. Dev container vs the harness's "the VM replaces it" (Q39). Default: keep it, in `bb2dash-stack` only, built last in the phase. **Decided 2026-09-27 (delegated): default.**
+49. Container scheduler vs Task Scheduler (Q40). Default: the container replaces the two jobs on home-pc only; the `.ps1` scripts stay as fallback and for the work VM; the curator stays a host task. **Decided 2026-09-27 (delegated): default.**
+50. Vault access for the jobs container (Q41). Default: bind-mount the Windows realm checkouts as home-pc after a lock and `safe.directory` test; separate clones only if it fails. **Decided 2026-09-27 (delegated): default.**
+51. `bb2dash-stack`, `just`, one PR per repo (Q42). Default: yes to all three, each a DECISIONS row at the freeze. **Decided 2026-09-27 (delegated): default.**
 
 **H. Harness and V-2**
 
-52. V-2's four research defaults (Q43). Default: adopt all four in one row, the tag cap noted as policy pending R-102's fix.
-53. The Phase 7 acceptance query (Q44). Default: re-run on the first sprint-2 phase after the phase-spelling decision and R-101 ship.
-54. `machine: home-pc` on older notes (Q45). Default: fill only where the transcript is on this PC.
-55. gitleaks gate (Q46). Default: drop the recurring gate; run one `gitleaks detect` over each realm's history before Phase 14.
-56. `/checkpoint`'s hand-written no-node fallback. Default: remove it (the skill requires node), since it can commit a secret with no redaction.
+52. V-2's four research defaults (Q43). Default: adopt all four in one row, the tag cap noted as policy pending R-102's fix. **Decided 2026-09-27 (delegated): default.**
+53. The Phase 7 acceptance query (Q44). Default: re-run on the first sprint-2 phase after the phase-spelling decision and R-101 ship. **Decided 2026-09-27 (delegated): default.**
+54. `machine: home-pc` on older notes (Q45). Default: fill only where the transcript is on this PC. **Decided 2026-09-27 (delegated): default.**
+55. gitleaks gate (Q46). Default: drop the recurring gate; run one `gitleaks detect` over each realm's history before Phase 14. **Decided 2026-09-27 (delegated): default.**
+56. `/checkpoint`'s hand-written no-node fallback. Default: remove it (the skill requires node), since it can commit a secret with no redaction. **Decided 2026-09-27 (delegated): default.**
 
 **I. Shell proofs and C-7 wording**
 
-57. Toasts (Q47). Default: you report the three sightings and one click each from a banner and from the Action Center; if a click does nothing, the toast is held until expiry under the frozen C-7 rule.
-58. Two C-7 outputs (Q48). Default: fix "1 grades posted" with no score and "1 / 0" on zero-point columns under a row amending rule 2; Attendance keeps toasting.
+57. Toasts (Q47). Default: you report the three sightings and one click each from a banner and from the Action Center; if a click does nothing, the toast is held until expiry under the frozen C-7 rule. **Decided 2026-09-27 (delegated): default.**
+58. Two C-7 outputs (Q48). Default: fix "1 grades posted" with no score and "1 / 0" on zero-point columns under a row amending rule 2; Attendance keeps toasting. **Decided 2026-09-27 (delegated): default.**
 
 **J. Decisions**
 
-59. `/inbox-apply` writing `assignment_progress` (Q49). Default: sanctioned narrowly in one row: only rows named in an Inbox item you answered yourself, status only when your words say so, scores as Blackboard shows them, every write in that day's log; `reading_progress` untouched; D-2 and CLAUDE.md corrected to match.
+59. `/inbox-apply` writing `assignment_progress` (Q49). Default: sanctioned narrowly in one row: only rows named in an Inbox item you answered yourself, status only when your words say so, scores as Blackboard shows them, every write in that day's log; `reading_progress` untouched; D-2 and CLAUDE.md corrected to match. **Decided 2026-09-27 (delegated): default.**
 
 ## 6. Defaults Stage C takes if Stack says nothing
 
@@ -387,3 +387,4 @@ Every "Default:" in §5, plus these PM calls that need no answer:
   (P-3, P-4, P-34, P-64, P-65, R-109) are done on this branch in Stage D, not as phase tasks.
 * Every product call made here is provisional until Stack answers and is written to DECISIONS with
   the date he answers, not the date it was drafted.
+  Answered by delegation on 2026-09-27: the DECISIONS rows of that date carry every item.

@@ -7,6 +7,8 @@ One PR per phase (DECISIONS 2026-09-09; no exception) · Depends on: Phases 17 a
 (94 §2 rule 3) and Phase 15's SQL test runner · Status: **PROVISIONAL until Stack answers 93 §5
 (B-18, B-19, B-20, B-39, and B-42 through Phase 15's test role)** and approves `94_SPRINT2_PHASES.md`.
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-18, B-19, B-20, B-39, B-42), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 Sprint 1 shipped the course Stream "w/o diffs" (`60_REQUIREMENTS_v2.md:252`) and deferred the

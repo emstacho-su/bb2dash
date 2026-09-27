@@ -16,6 +16,8 @@ its live steps wait until three consecutive nightly runs each log `committed -> 
 up-to-date) for both realms, the harness live-lane prerequisite; none had by 2026-09-27 · Status: **PROVISIONAL
 until Stack answers 93 §5 (B-52, B-53, B-54, B-55, B-56)** and approves `94_SPRINT2_PHASES.md`.
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-51, B-52, B-53, B-54, B-55, B-56), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 V-2 (R-27) was built in `~/agentic-harness` on 2026-09-16 and recorded as built on 2026-09-24; bb2dash

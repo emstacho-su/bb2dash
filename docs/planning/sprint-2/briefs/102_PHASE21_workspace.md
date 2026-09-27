@@ -18,6 +18,8 @@ Contract); `briefs/100_PHASE14_containers.md` (the names Phase 14 freezes: `mcp-
 on 2026-09-24 against `main` a5042fa, prod (`goultdzqcavefcgnifdy`, SELECT only), the harness rag store
 and the installed Claude Code CLI (2.1.282); re-checked by the Stage C critic the same day.
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-5, B-42, B-48, B-51), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 Stack's S2-workspace-1 asks for a Workspace section that "functions as a chatbot interface that

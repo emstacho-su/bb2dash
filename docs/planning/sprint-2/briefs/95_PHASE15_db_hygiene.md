@@ -14,6 +14,8 @@ B-numbers are the item numbers of `93_SPRINT2_RESEARCH_SYNTHESIS.md` §5. Prod f
 extension-owned; 15 foreign keys without a covering index; 4 unused non-unique indexes; `planner_event_series` 0 rows,
 0 orphans; `postgres` holds `bypassrls`, `createrole` and admin option on `anon`, `authenticated`, `service_role`.
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-16, B-41, B-42), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 Sprint 1 left the database's own checks half done. `db/tests/` holds 17 test files and 2 generated loaders. Fourteen

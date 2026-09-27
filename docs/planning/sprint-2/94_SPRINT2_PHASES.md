@@ -96,5 +96,8 @@ no migration number or worker id owned by two briefs (`105_BRIEF_VERIFICATION_20
 
 ## 6. Open at this stage
 
-Stack's answers to 93 §5 (59 items, defaults taken meanwhile), his placement of Phase 14 (default:
-starts with 15), and his approval of this plan. Every product call above is provisional until then.
+~~Stack's answers to 93 §5 (59 items, defaults taken meanwhile), his placement of Phase 14 (default:
+starts with 15), and his approval of this plan. Every product call above is provisional until then.~~
+**Closed 2026-09-27:** Stack delegated the answers and the approval to the PM; the DECISIONS rows of 2026-09-27
+hold all 59 answers (departures from the defaults: item 10, item 45), approve this plan as written and place Phase 14
+with Phase 15. Actions only Stack can take are listed in ORCHESTRATOR §4.

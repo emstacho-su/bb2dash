@@ -16,6 +16,8 @@ Stack as S2-styling-1: it **supersedes the Contract of `../parked/81_PHASE13_sty
 Stack's 2026-09-14 DoD and the 2026-09-16 carry-ins C-1..C-3. Runs **last** (94 §2 rule 5), after Phases 16, 17,
 18, 19, 14 and 21 have merged, so every sprint-2 screen, the Workspace page included, exists before it starts.
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-6, B-23, B-24), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 R-53 is R-21's definition of done, fixed on 2026-09-14 and never started: every screen on signed-off tokens, in

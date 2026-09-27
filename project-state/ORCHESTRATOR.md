@@ -203,9 +203,10 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 
 ## 4. Open items that are Stack's, not the PM's
 
-* Answer the sprint 2 question batch (`docs/planning/sprint-2/93_SPRINT2_RESEARCH_SYNTHESIS.md` §5, 59
+* ~~Answer the sprint 2 question batch (`docs/planning/sprint-2/93_SPRINT2_RESEARCH_SYNTHESIS.md` §5, 59
   items, each with the default the PM took) and approve the phase plan (`94_`); say where Phase 14 sits
-  (default: it starts with Phase 15).
+  (default: it starts with Phase 15).~~ Done by delegation 2026-09-27 (DECISIONS rows of that date; Phase 14 starts
+  with Phase 15). Stack may still overturn any row by saying so; the phase's PM then rewrites the B-table row.
 * Read the Google OAuth consent screen's publishing status; if it is still Testing, publish it and re-run
   the consent, or the calendar token dies again about 2026-10-01 17:03Z (batch item 28).
 * Run Task 0's Blackboard session probes (batch item 47); the Duo remember-me window takes 14 days.
@@ -242,7 +243,7 @@ quality is the topic, and `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPT
 One prompt per phase, grouped into the five sessions below; a session pastes its prompts in the order shown, when
 its heading says. The bb2dash prompts (A1, A2, B1, B2, B3, C1, C2, E) start with `/bb2dash-pm` so the session loads
 this file and runs the live-state checks before acting; Session D runs in the harness repo, so its prompt starts by
-naming `C:/Users/estac/agentic-harness`. Every brief is PROVISIONAL until Stack answers `93_` §5 and approves `94_`;
+naming `C:/Users/estac/agentic-harness`. Every brief was PROVISIONAL until Stack answered `93_` §5 and approved `94_`, which he did by delegation on 2026-09-27 (DECISIONS rows of that date);
 the prompts carry the PROVISIONAL line, and each phase's PM first records whatever answers he has given against its
 brief's B-table. Before cutting workers, the phase's PM reads that brief's residual notes in
 `docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`

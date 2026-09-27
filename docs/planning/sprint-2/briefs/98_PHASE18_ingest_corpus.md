@@ -13,6 +13,8 @@ per-item URL and "B-33" for the iCal job; by §5's own list those are **B-38** a
 Starts after Phase 15 merges (its runner, test role and search_path pin); runs beside Phases 16 and 17; Phase 19
 starts after it (94 §2 rule 3).
 
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-8, B-32, B-33, B-34, B-35, B-36, B-37, B-38, B-39, B-40), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
 ## Why
 
 Sprint 1 built the file pipeline in pieces and left the joins to hand work. `ingest/pull_files.mjs` stores, mirrors and

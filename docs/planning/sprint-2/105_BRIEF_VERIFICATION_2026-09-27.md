@@ -1,7 +1,7 @@
 # Brief verification record — sprint 2 briefs 95–103 (2026-09-27)
 
 Date 2026-09-27 · PM: the Fable session · Product manager: Stack · Scope: `briefs/95_PHASE15_db_hygiene.md` … `103_PHASE22_styling.md` ·
-Status: **every product call in the briefs is PROVISIONAL** until Stack answers `93_SPRINT2_RESEARCH_SYNTHESIS.md` §5 and approves `94_SPRINT2_PHASES.md` (DECISIONS 2026-09-24).
+Status: **every product call in the briefs is PROVISIONAL** until Stack answers `93_SPRINT2_RESEARCH_SYNTHESIS.md` §5 and approves `94_SPRINT2_PHASES.md` (DECISIONS 2026-09-24). **Answered by delegation 2026-09-27:** the DECISIONS rows of that date hold all 59 answers and the plan approval.
 
 ## 1. How the briefs were produced and checked
 
