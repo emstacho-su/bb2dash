@@ -5,7 +5,8 @@ Requirements: R-37, R-39 (the interim hide only), R-40, R-42, R-43, R-44, R-45, 
 R-55, R-56, R-57, R-58, R-59, R-108; S2-home-1, S2-home-2, S2-materials-1, S2-bugs-1
 PM-added steps: P-7, P-9, P-10, P-11, P-12, P-14, P-19, P-69, P-70, P-71, P-72, P-73, P-80; P-63 rides this phase's
 desktop touch (94 §1)
-Branch `feat/web-polish-17` · Worktree `bb2dash-wt-17` · Migration range **110–119** (110–117 used, 118–119 slack)
+Branch `feat/web-polish-17` · Worktree `bb2dash-wt-17` · Migration range **110–119** (110–117 used, 118–119 slack;
+110–116 used and 117–119 slack if B-42's answer leaves no `db_test_runner` role, see the B-42 row)
 One PR per phase. No exception of this phase's own. Brief 103's provisional B-6 exception lets Phase 22's test-only
 tasks 1–2 (P-15, P-16) ride this PR as 22's commits (see Seams)
 Status: **PROVISIONAL until Stack answers 93 §5** (B-1, B-2, B-3, B-7, B-17, B-19, B-20, B-21, B-22, B-23, B-25, B-26,
@@ -60,6 +61,7 @@ Every row is **PROVISIONAL** until Stack answers 93 §5. "Defaults, except …" 
 | B-29 | Machine-closed Inbox gaps (Q20) | Yes, for `stage_gaps`' four conditions, archived with a "closed itself" record. A key that closes itself twice within 24 h stays open once, flagged. R-56 also asks whether a self-closed row counts in `attention_answered`. The PM reads B-29's "surfaced once" as "a hole that reopens is asked again", so a self-closed row does **not** count (114's carve-out; **PROVISIONAL**) | "No": T-07 and the R-56 half of T-18 drop out; R-56 closes by a DECISIONS row. "A reopened hole is not asked again": 114 keeps 041's `attention_answered` body and T-07's re-raise case flips |
 | B-30 | New Activity lines (Q21) | Add `auto_graded`, `reading_links.linked` and `missing_cleared` when above 0. Leave out the two steady-state counts, under a written convention (P-72) | "Include the steady-state counts": two extra sentences in 115 (T-08) |
 | B-31 | Planner kind colours (Q22) | Keep. A DECISIONS row closes the pending nod | "Change kind X": one constant in `google.ts`, calendar-push v6 redeployed, 1 event re-patched (appointment_slot) |
+| B-42 | A database credential for the test runner (Q33); Phase 15's call, which this phase inherits | 93's default: a session-pooler or direct connection string in a gitignored `.env.local` as `BB2DASH_TEST_DB_URL`, for a dedicated `db_test_runner` role. This phase's files run through `scripts/db-test.mjs`, and 117 grants the role what they call | "No credential": 117 is not written. Every "`<file>` PASS" check, T-08's full runner run and the DoD's `node scripts/db-test.mjs` line become MCP `execute_sql` pastes, each ending in its `: PASS` row (§Seams, Phase 15). T-10 counts 7 migrations (110–116) and its md5 table is 7 of 7; its two `db_test_runner` checks and its `--list` count drop. The header reads 110–116 used. "An owner-level DSN instead of the role": 117 is not written, T-10 counts 7 and drops its two `db_test_runner` checks, and every runner line stands |
 | B-57 | Toasts (Q47) | Stack reports the three sightings, one banner click and one Action Center click. If the Action Center click does nothing, the toast is held until expiry | "Clicks work": T-25 skips the `notify.ts` change |
 | B-58 | Two C-7 outputs (Q48) | Fix "1 grades posted" (no score) and "1 / 0" on zero-point columns, under a row amending C-7 rule 2. Attendance keeps toasting | "Leave C-7 as frozen": T-25 keeps only P-63 |
 
@@ -130,6 +132,7 @@ No new route and no new page. What changes, screen by screen:
     (PM's wording).
 * **Home heartbeat lines** (PM's wording; one line per job whose stage calls for it, and nothing at `ok` or `late`):
   * transform `missing`: "The sync scheduler has not run since <relative>; new crawls will not fold until it does."
+  * transform `failing`: "The sync scheduler has failed <n> times since <relative>: <last_error>".
   * calendar push `failing`: "Google Calendar push has failed <n> times since <relative>: <last_error>".
     `last_error` already names the fix ("re-run scripts/google-consent.mjs").
   * calendar push `missing`: "Google Calendar push has not run since <relative>."
@@ -166,6 +169,9 @@ create function private.scheduler_heartbeat()
   -- pushes on 2026-09-23/24 all sat under 'succeeded' cron rows).
   -- calendar_push: consecutive_failures = failed calendar_push_runs rows after the newest 'ok' row;
   -- last_error = the newest failed row's error; active = cron.job.active and app_settings.gcal_enabled.
+  -- transform: consecutive_failures = cron.job_run_details rows with status 'failed' newer (by runid) than the
+  -- newest 'succeeded' row; last_error = that newest failed row's return_message; active = cron.job.active.
+  -- (Prod on 2026-09-27: 12,095 transform-tick rows, all 'succeeded', so the transform reads 0 failures today.)
   -- Returns rows only when (select auth.uid()) = public.app_owner(). Revoke all from public, anon;
   -- execute to authenticated, service_role.
 create view public.v_scheduler_heartbeat with (security_invoker = true) as
@@ -214,7 +220,8 @@ the convention (P-72): *a count that repeats the same value on every fold is ste
 `phase10a_stage_gradebook.sql:301` asserts for an older-run replay.
 
 ```sql
--- 117 · db_test_runner grants for this phase's test files (the rule brief 95's Phase 16 seam row sets with 107:
+-- 117 · written only under B-42's default (the db_test_runner role exists; see the B-42 row).
+-- db_test_runner grants for this phase's test files (the rule brief 95's Phase 16 seam row sets with 107:
 -- grants beyond 100 go in the phase's own range, never through service_role membership). Exactly what the seven
 -- phase17_*.sql files call or write as the session role and 100 does not already hold, by identity signature:
 -- usage on schema private; execute on private.heartbeat_stage(timestamptz,timestamptz,integer,boolean),
@@ -242,7 +249,7 @@ Additive only. No table is created or altered. Each file is dry-run inside `begi
 | 114 | `db/migrations/114_gap_self_close.sql` | `close_cleared_gaps`, the `bb_files` statement trigger and its function, `stage_gaps` re-created (054 + the call), `attention_answered` re-created (041 + the carve-out) (R-56) | `db/tests/phase17_114_close_cleared_gaps.sql` |
 | 115 | `db/migrations/115_sync_change_lines_counts.sql` | `sync_change_lines` re-created (051 + three sentences + the P-72 comment) (R-58) | `db/tests/phase17_115_sync_change_lines.sql` |
 | 116 | `db/migrations/116_retire_inbox_feedback.sql` | `drop view v_inbox_feedback`. The `agent_requests.kind = 'inbox_feedback'` value stays, because it is /inbox-apply's kind (R-57, PM's default: retire). `db/tests/phase12b_077_inbox_feedback.sql` is deleted and its kind assertion moves to the new test | `db/tests/phase17_116_retire_inbox_feedback.sql` |
-| 117 | `db/migrations/117_db_test_runner_grants_phase17.sql` (new) | The `db_test_runner` grants above, enumerated by signature, with the guard block. Applied after 116 and **before** the seven `phase17_*.sql` files first run through the runner | checked by T-10's SQL |
+| 117 | `db/migrations/117_db_test_runner_grants_phase17.sql` (new) | The `db_test_runner` grants above, enumerated by signature, with the guard block. Applied after 116 and **before** the seven `phase17_*.sql` files first run through the runner. Not written if B-42's answer leaves no `db_test_runner` role ("no credential" or an owner-level DSN; the B-42 row) | checked by T-10's SQL |
 | 118–119 | — | slack; a need past 119 takes the next free block of ten and records it in DECISIONS (94 §2 rule 6) | — |
 
 Every `phase17_*.sql` follows brief 95's rules. `begin;` is its first statement and `rollback;` its last, with no
@@ -253,7 +260,8 @@ top-level `commit` or `end`. Its last result row's first column ends in `: PASS`
 
 New files:
 
-* `db/migrations/110_course_stream_unread_filters.sql` … `117_db_test_runner_grants_phase17.sql` (the eight above)
+* `db/migrations/110_course_stream_unread_filters.sql` … `117_db_test_runner_grants_phase17.sql` (the eight above; seven when
+  B-42 drops 117)
 * `db/tests/phase17_110_course_stream.sql`, `phase17_111_content_tree.sql`, `phase17_112_knowledge_check_rehome.sql`,
   `phase17_113_scheduler_heartbeat.sql`, `phase17_114_close_cleared_gaps.sql`, `phase17_115_sync_change_lines.sql`,
   `phase17_116_retire_inbox_feedback.sql`
@@ -267,9 +275,9 @@ New files:
   brief 103 uses; it writes screenshots to `walk-17/`, and brief 103 does not edit it), `web/e2e/login.mjs`,
   `web/e2e/harness.spec.ts`, `web/e2e/item-popout.spec.ts`, `web/e2e/walk17.spec.ts` (P-7). `harness.spec.ts` holds two
   tests with frozen titles, `signed in` (T-01, `01-harness-home.png`) and `no 404` (T-20). `item-popout.spec.ts`
-  takes `02-popout-pasted.png` (T-11). `walk17.spec.ts` holds every other screenshot and the forced-failed-read case
-  the task list names. The session is saved to `web/e2e/.auth/state.json`. `web/.gitignore` ignores it, and it is
-  deleted at phase end.
+  takes `02-popout-pasted.png` (T-11). `walk17.spec.ts` holds every other screenshot (03–21), the test titled
+  `staged link` (T-26) and the forced-failed-read case the task list names. The session is saved to
+  `web/e2e/.auth/state.json`. `web/.gitignore` ignores it, and it is deleted at phase end.
 * `web/test/hydration-harness.tsx` (P-73), `web/test/ItemPopout.hydration.test.tsx`, `web/test/attendance-marker.test.tsx`,
   `web/test/use-horizontal-scroll.test.tsx`, `web/test/collapse-state.test.ts`, `web/test/ApplyNowButton.test.tsx`,
   `web/test/NeedsAttention.heartbeat.test.tsx`, `web/test/fc-params.seed.test.ts`
@@ -285,9 +293,12 @@ Changed and deleted files are listed by owner. The four worker sets are **disjoi
 | W-46 home | `web/src/app/(app)/Today.tsx` (+ `Today.module.css`), `NeedsAttention.tsx` (+ css), `web/src/components/tracker/UpcomingTracker.tsx` (+ css), `web/src/app/(app)/materials/MaterialsBrowser.tsx` (+ `Materials.module.css`), `web/src/lib/materials-collapse.ts`, `web/src/app/(app)/inbox/Inbox.tsx` (+ css), the new home, inbox and heartbeat files above; tests `TodayLayout.test.tsx`, `UpcomingTracker.test.tsx`, `UpcomingTracker.scroll.test.tsx`, `MaterialsCollapse.test.tsx`, `NeedsAttention.test.tsx`, `Inbox.test.tsx`; new `use-horizontal-scroll.test.tsx`, `collapse-state.test.ts`, `ApplyNowButton.test.tsx`, `NeedsAttention.heartbeat.test.tsx` |
 | W-47 shell | `web/src/components/shell/usePopover.ts`, `Bell.tsx`, `TopNav.tsx`, `ActivityMenu.tsx`, `SidebarProvider.tsx`, `CommandPalette.tsx`, `web/src/lib/queries.announcements.ts`, `web/eslint.config.mjs`, `web/vitest.config.mts`, `web/package.json` + `package-lock.json` (`@playwright/test` 1.63.0 exact, desktop's pin), `web/test/grade-model/fc-params.ts`, `web/src/components/planner/PlannerWeek.module.css`, `web/test/planner-css.test.ts`, `Bell.test.tsx`, `CommandPalette.test.tsx`, `CourseSidebar.test.tsx`, new `fc-params.seed.test.ts`, `web/.gitignore` (not the root file, which Phase 14 edits), `web/e2e/**` (the config included), the favicon files, `desktop/src/core/poller/reducer.ts`, `desktop/src/main/notify.ts`, `desktop/test/unit/reducer.test.ts`, `notify.test.ts`, `audit.test.ts` |
 
-No path appears in two rows. Two tasks cross a row only by *running* another owner's file: W-45's T-11 runs
-W-47's `e2e/item-popout.spec.ts`, and W-46's T-18 runs the unchanged `InboxApplyButton.test.tsx`. T-23's lint fix is
-split by site, and each worker edits only the sites in its own row.
+No path appears in two rows. Tasks cross a row only by running another owner's file: W-45's T-11 runs W-47's
+`e2e/item-popout.spec.ts`; W-46's T-18 runs the unchanged `InboxApplyButton.test.tsx`; and the (c) screenshots 03–08
+of T-12, T-13, T-15, T-17 and T-19 are taken by W-47's `walk17.spec.ts`, which fulfils `v_scheduler_heartbeat` for 08
+from the `failing` fixture in `web/test/NeedsAttention.heartbeat.test.tsx` (the row is copied into the spec, not
+imported, so neither worker edits the other's file). T-23's lint fix is split by site, and each worker edits only
+the sites in its own row.
 
 ### Seams
 
@@ -295,9 +306,13 @@ split by site, and each worker edits only the sites in its own row.
   * Every `db/tests/phase17_*.sql` runs through Phase 15's runner, `scripts/db-test.mjs` (**new in Phase 15**; if
     brief 95 freezes another name, every check below reads that name). The runner exits non-zero on any FAIL
     (P-99) and runs as the `db_test_runner` role over `BB2DASH_TEST_DB_URL`.
-    The role and the DSN are B-42's default (**PROVISIONAL**, brief 95). If Stack answers "no credential", 117 is
-    not written; each "`<file>` PASS" check becomes that file pasted into one MCP execute_sql call, ending in its
-    `: PASS` row; and T-10's two db_test_runner checks and its --list count drop.
+    The role and the DSN are B-42's default (**PROVISIONAL**, brief 95; this brief's B-42 row). If Stack answers
+    "no credential", 117 is not written. Each "`<file>` PASS" check becomes that file pasted into one MCP
+    `execute_sql` call, ending in its `: PASS` row. T-08's full runner run and the DoD's `node scripts/db-test.mjs`
+    line become the same pastes, one per unit the runner would run (a loader and its test file together, as brief
+    95's B-42 row sets), each ending in its `: PASS` row. T-10's migration count and md5 table become 7 (110–116),
+    and its two `db_test_runner` checks and its `--list` count drop. On an owner-level DSN, 117 is not written
+    either: T-10 counts 7 and drops its two `db_test_runner` checks, and every runner line stands.
   * New functions pin `search_path = public, pg_temp`, so the advisor count 15 leaves does not grow.
   * `db_test_runner` (100) holds execute only on the functions today's suite calls. What this phase's files need
     beyond that is granted in 117, inside this phase's range, on the rule brief 95's Phase 16 seam row sets with
@@ -318,6 +333,8 @@ split by site, and each worker edits only the sites in its own row.
   * 18's new `stage_files` counts get Activity sentences only under P-72's convention.
   * `CourseScreen.tsx` is touched by both phases, named hunks only, and the second to merge rebases. This phase
     does not edit `AssignmentDetailBody.tsx` or `PlannerItemPopover.tsx`.
+  * 18's task 23 repoints `SubmissionBlock`'s staged link to the item URL; T-26's staged-link spec reads the
+    expected href from SQL, so it holds in either merge order.
   * Brief 98's W-51 may touch `web/src/lib/queries.announcements.ts`, `web/src/components/shell/Bell.tsx` and the
     not-recorded cases of `web/test/Bell.test.tsx` as a fallback (its task 18). All three are W-47's here (T-23). If 18 uses the fallback, the same named-hunk rule
     applies, and the second phase to merge re-runs `npx eslint . --max-warnings 0` after its rebase.
@@ -332,8 +349,9 @@ split by site, and each worker edits only the sites in its own row.
   * 19 reads `v_scheduler_heartbeat` and adds only the run-state word (R-41's other half).
   * R-41 is 19's in the phase map. Brief 99 names "the per-class thresholds" as 17's. Here they are B-20's
     default, "Phase 9's thresholds", so this phase builds no threshold change. R-41's per-stream
-    `{stream, last_seen_at, state}` read with "never synced" is scheduled in neither brief. It stays with R-41 in
-    Phase 19, and the PM records the gap at Stage D rather than building it here.
+    `{stream, last_seen_at, state}` read with "never synced" is scheduled in Phase 19, in its
+    `db/migrations/137_sync_status_run_state.sql` (brief 99; the PM's seam decision). This brief points there and
+    does not schedule it. R-41's run-state half stays with 19 as well.
   * 19's 134 re-creates `sync_change_lines` from **115's** body and keeps P-72.
   * `stage_content`, the `bb_item_id` key, the partial-unique-constraint pitfall and the ghost delete (P-25) are all
     19's. This phase changes no key or constraint.
@@ -434,8 +452,9 @@ recurring events, the popover, the toasts) have been used once, on production, a
 - [ ] `cd web; npx eslint . --max-warnings 0` exits 0.
 - [ ] `cd desktop; npm run typecheck; npx vitest run` passes. mcp-server is untouched, so its suite is not run.
 - [ ] `node scripts/db-test.mjs` prints `failed 0` and exits 0, with every `phase17_*.sql` PASS. Every file rolls
-      back.
-- [ ] Migrations 110–117 are applied under their file names, byte-identical to the repo. `database.types.ts` is
+      back. (B-42 "no credential": every unit is pasted through MCP `execute_sql` instead and ends in its `: PASS`
+      row, as §Seams, Phase 15 sets.)
+- [ ] Migrations 110–117 (110–116 when B-42 drops 117) are applied under their file names, byte-identical to the repo. `database.types.ts` is
       regenerated with only this phase's objects (DECISIONS 2026-09-16).
 - [ ] `web/e2e/.auth/state.json` is deleted and was never committed (`git log --all --oneline -- web/e2e/.auth` prints
       nothing).
@@ -459,7 +478,8 @@ recurring events, the popover, the toasts) have been used once, on production, a
    * Your two submission files are not posted as Material.
    * No announcement says unread once the bell is opened.
 3. **Classwork.** Open IST.352 → Classwork.
-   * WK01 appears once, and its three Knowledge Checks carry the drop zone.
+   * "WK01 - The Systems Development Environment" appears once, with no old "WK01 - Chapter 1" folder beside it,
+     and its three Knowledge Checks carry the drop zone.
    * "Show 2 items Blackboard no longer lists" reveals two labelled rows (B-19, PROVISIONAL: the PM's reading).
    * Hovering a file shows its note.
 4. **Info and timeline.**
@@ -473,10 +493,10 @@ recurring events, the popover, the toasts) have been used once, on production, a
    * Press it again while it runs: nothing new is filed.
    * The Inbox refreshes when it settles.
 8. **Planner sitting, with the PM, on production.**
-   * Create a daily series.
+   * Create a daily series from Nov 9 to Nov 13: five rows.
    * Create a monthly series from Oct 31 to Dec 31: two rows, November skipped.
-   * The form refuses 53 occurrences.
-   * A Los Angeles 09:00 weekly series across Nov 1 stays at 12:00 on the grid.
+   * The form refuses 53 occurrences, and nothing is saved.
+   * A Los Angeles 09:00 weekly series from Oct 26 to Nov 9 (across Nov 1) stays at 12:00 on the grid.
    * A due-item popover near the bottom opens above its card, and one in the Sunday column clamps right.
    * Deleting the last row of each series leaves 0 series.
    * Everything is deleted and pushed away in the same sitting.
@@ -485,6 +505,9 @@ recurring events, the popover, the toasts) have been used once, on production, a
    * Stage your original *Internship Proposal Agreement v2* on IST.471's A1 popout: it reads "matches".
    * Stage *Role_of_Systems_Analyst.docx* from its IST.352 Classwork row: it reads "matches".
    * Stage an earlier draft: it reads "differs", and is removed in the same sitting.
+   * Materials → IST.471 lists the staged original under My submissions.
+   * The popout's "Staged in bb2dash — attach in Blackboard ↗" link opens IST.471 in Blackboard. No control reads
+     "Submit".
 10. **Desktop shell.**
     * Report the grade, due-tomorrow and sync-landed toasts.
     * Click one banner and one older Action Center entry: each opens the right screen.
@@ -503,15 +526,19 @@ recurring events, the popover, the toasts) have been used once, on production, a
 * **R-43:** T-11's hydration test and harness spec, plus step 6.
 * **R-44:** T-21's CSS test and screenshots, the CR-1, CR-5 and CR-7 screenshots in T-26, and T-24's X-2 log line.
 * **R-45:** T-14's grep count of 0, plus step 4.
-* **R-47:** T-26's SQL counts and chip screenshots, plus step 9.
+* **R-47:** T-26's SQL counts (the rows, their `assignment_id`, sha256 and Storage key), its chip and My submissions
+  screenshots, the staged link's `href` assertion and `audits.test.ts`'s no-"Submit" block, plus step 9.
 * **R-48:** T-29's DECISIONS row closing the web half, after T-24.
 * **R-49:** T-15's test and screenshot, plus step 4.
 * **R-50:** T-20's `cmp` and HTTP 200s, plus step 12.
-* **R-51:** T-22's coverage run and seed test, and T-23's `--max-warnings 0`.
+* **R-51:** T-22's coverage run, recorded figure and seed test, T-23's `--max-warnings 0`, and T-29's STATUS coverage
+  line.
 * **R-52:** T-06's stage fixtures, T-19's Home-line test, and T-27's post-2026-10-01 SQL.
-* **R-55:** T-26's before and after counts and screenshots, plus step 8.
+* **R-55:** T-26's before and after counts, its daily, monthly and Los Angeles series SQL, the 53-occurrence refusal
+  and its screenshots, plus step 8.
 * **R-56:** T-07's fixture test and T-18's reopened-row line.
-* **R-57:** T-09's `to_regclass` null and the file count.
+* **R-57:** T-09's `to_regclass` null and the file count, and T-29's repointed STATUS rows, its R-57 DECISIONS row and
+  the `decided_by` count over the vault's decision notes.
 * **R-58:** T-08's sentence test, with `phase10a_stage_gradebook.sql` still PASS.
 * **R-59:** T-29's DECISIONS row and the struck STATUS lines.
 * **R-108:** T-24's log counts and T-25's reducer tests.
@@ -524,11 +551,11 @@ recurring events, the popover, the toasts) have been used once, on production, a
 Checks run from the repo root unless they start with `cd`. Check forms: (a) a named test or spec with its exact
 command and result; (b) SQL with its expected value; (c) a screenshot path and exactly what must be visible in it;
 (d) a count or exit code with its exact command; (e) an HTTP status for a URL. Inside the table, `\|` is Markdown's
-escaped pipe: the shell command has a plain `|`. A W-44 task's (b) checks run once the PM has applied its migration;
-its (a) runner check runs once 117 is applied (T-10). "`<file>` PASS" means
+escaped pipe: the shell command or SQL has a plain `|`. A W-44 task's (b) checks run once the PM has applied its migration;
+its (a) runner check runs once 117 is applied (T-10), or once 116 is when B-42 drops 117. "`<file>` PASS" means
 `node scripts/db-test.mjs --only <file>` (Phase 15's runner, brief 95) prints `PASS  <file>` and
-`db-test: passed 1, failed 0, units 1`, then exits 0. Screenshots go under
-`docs/planning/sprint-2/walks/walk-17/`. Harness runs set `WALK_BASE_URL` to the phase preview (or production where
+`db-test: passed 1, failed 0, units 1`, then exits 0 (under B-42 "no credential", the MCP paste §Seams, Phase 15
+describes). Screenshots go under `docs/planning/sprint-2/walks/walk-17/`. Harness runs set `WALK_BASE_URL` to the phase preview (or production where
 the row says so) and use the saved session.
 
 | # | task | covers | owner | deterministic check | demo line for Stack |
@@ -542,33 +569,34 @@ the row says so) and use the saved session.
 | T-07 | Migration 114: gap self-close | R-56 | W-44 | (a) `phase17_114_close_cleared_gaps.sql` PASS, with fixture cases: an open storage_path gap whose file gets a `storage_path` by an owner UPDATE → `state = 'archived'`, `archived_by = 'stage_gaps'`, `decision->>'closed_itself' = 'true'`; `attention_answered` for that key → false; a second self-close within 24 h → the row stays open with `suggested->>'reopened_within_24h' = 'true'`; a Stack-dismissed key → `attention_answered` true, and no re-raise; `archive_attention_item` on an open row still raises; each of the other three conditions closes on `stage_gaps`; `has_function_privilege('authenticated','public.close_cleared_gaps(bigint,text)','execute')` → false | "A gap closes itself when the file lands; one that keeps coming back stays for you once." |
 | T-08 | Migration 115: `sync_change_lines` + three sentences + the P-72 comment | R-58, P-72 | W-44 | (a) `phase17_115_sync_change_lines.sql` PASS, asserting (b) `select jsonb_array_length(sync_change_lines('{"gradebook":{"auto_graded":2},"files":{"reading_links":{"linked":2},"missing_cleared":1},"assignments":{"conflicts_settled":6,"shared_columns":1}}'::jsonb))` → 3; `select sync_change_lines('{"assignments":{"conflicts_settled":6,"shared_columns":1}}'::jsonb) = '["Nothing changed"]'::jsonb` → true (051:110-112's closing rule: the steady counts add no sentence); (a) the full runner run keeps `phase10a_stage_gradebook.sql` PASS | "Activity names auto-graded items, linked readings and returned files, and stops repeating the steady counts." |
 | T-09 | Migration 116: retire `v_inbox_feedback`; delete its 077 test | R-57 | W-44 | (a) `phase17_116_retire_inbox_feedback.sql` PASS, asserting (b) `select to_regclass('public.v_inbox_feedback')` → null, an `agent_requests` insert of kind `inbox_feedback` accepted in-transaction, and `v_inbox_queue` selectable by the owner; (d) `ls db/tests \| grep -c phase12b_077` → 0 | — (why-notes live in the decisions store) |
-| T-10 | PM integration: apply 110–117 to prod under their names, in number order, as W-44 hands each over (117 last, once W-44's dry run of the seven `phase17_*.sql` files has named every grant they need); regenerate `database.types.ts`; merge the worker branches | P-9, P-10, P-12 | PM | (b) `select count(*) from supabase_migrations.schema_migrations where name ~ '^11[0-7]_'` → 8; (b) for each of the eight, `select md5(statements[1]) from supabase_migrations.schema_migrations where name = '<name>'` equals `git show HEAD:db/migrations/<file> \| md5sum` (the LF form, as `80k_W34_VERIFICATION.md` recorded it): 8 of 8 equal, table in `97w_PHASE17_WALK.md`; (b) `select has_function_privilege('db_test_runner', 'private.scheduler_heartbeat()', 'execute') and has_function_privilege('db_test_runner', 'public.close_cleared_gaps(bigint,text)', 'execute') and has_function_privilege('db_test_runner', 'public.stage_gaps(uuid,bigint)', 'execute')` → true; `select count(*) from pg_auth_members m join pg_roles g on g.oid = m.roleid join pg_roles u on u.oid = m.member where u.rolname = 'db_test_runner' and g.rolname in ('service_role', 'postgres')` → 0; (d) `node scripts/db-test.mjs --list \| grep -c "phase17_"` → 7; (d) `grep -c "v_inbox_feedback" web/src/lib/supabase/database.types.ts` → 0 and `grep -c "v_scheduler_heartbeat" web/src/lib/supabase/database.types.ts` → ≥ 1 | — |
+| T-10 | PM integration: apply 110–117 to prod under their names, in number order, as W-44 hands each over (117 last, once W-44's dry run of the seven `phase17_*.sql` files has named every grant they need; 110–116 only when B-42 drops 117); regenerate `database.types.ts`; merge the worker branches | P-9, P-10, P-12 | PM | (b) `select count(*) from supabase_migrations.schema_migrations where name ~ '^11[0-7]_'` → 8 (7 when B-42 drops 117); (b) for each of the eight (seven), `select md5(statements[1]) from supabase_migrations.schema_migrations where name = '<name>'` equals `git show HEAD:db/migrations/<file> \| md5sum` (the LF form, as `80k_W34_VERIFICATION.md` recorded it; prod's `statements[1]` held the whole file for 085, 088 and 090 on 2026-09-27): 8 of 8 equal (7 of 7 when B-42 drops 117), table in `97w_PHASE17_WALK.md`; B-42's default only: (b) `select has_function_privilege('db_test_runner', 'private.scheduler_heartbeat()', 'execute') and has_function_privilege('db_test_runner', 'public.close_cleared_gaps(bigint,text)', 'execute') and has_function_privilege('db_test_runner', 'public.stage_gaps(uuid,bigint)', 'execute')` → true; `select count(*) from pg_auth_members m join pg_roles g on g.oid = m.roleid join pg_roles u on u.oid = m.member where u.rolname = 'db_test_runner' and g.rolname in ('service_role', 'postgres')` → 0; unless B-42 is "no credential": (d) `node scripts/db-test.mjs --list \| grep -c "phase17_"` → 7; always: (d) `grep -c "v_inbox_feedback" web/src/lib/supabase/database.types.ts` → 0 and `grep -c "v_scheduler_heartbeat" web/src/lib/supabase/database.types.ts` → ≥ 1 | — |
 | T-11 | `ItemPopout` hydration gate; one hydration test per `?item=` kind | R-43, P-73 | W-45 | (a) `cd web; npx vitest run test/ItemPopout.hydration.test.tsx test/ItemPopout.test.tsx` → 0 failures (assignment and session, warm cache, `onRecoverableError` called 0 times); (d) `grep -c "useHydrated" web/src/components/popout/AssignmentDetailBody.tsx` → 0; (c) `02-popout-pasted.png` shows the IST.471 A1 assignment popout open over IST.471 Classwork after a cold load of the pasted URL; (a) `cd web; npx playwright test -c e2e/playwright.config.ts e2e/item-popout.spec.ts` → exit 0, 0 failed (0 console messages matching `/418/` on `/course/IST.471/classwork?item=assignment:IST.471/a1-proposal`, one `?item=session:` URL taken from IST.466's timeline, and `/course/IST.471/assignment/IST.471/a1-proposal`, each loaded with the cache warm and then cleared) | "Paste any popout link: it opens clean." |
 | T-12 | Stream: links per `ref_kind`, `StatusSelect` on assignment rows, the `course-stream` cache branch, the unread tag from `is_unread` | R-37 | W-45 | (a) `cd web; npx vitest run test/course-stream.test.tsx test/progress-cache.test.tsx test/StatusSelect.test.tsx` → 0 failures; (c) `03-stream-ist352.png` shows an assignment post with its status select and a file post with its Open action | "Every Stream post opens its thing; status changes right there." |
-| T-13 | Classwork: ghosts never rendered, stale-with-no-twin behind the toggle, file note as title + `·note` | R-39, R-40, P-11 | W-45 | (a) `cd web; npx vitest run test/course-classwork.test.ts test/CourseClasswork.test.tsx` → 0 failures; (c) `04-classwork-ist352.png` shows one "WK01 - The Systems Development Environment" folder, the three Knowledge Check rows with the drop zone, and the toggle "Show 2 items Blackboard no longer lists" (B-19, PROVISIONAL: the PM's reading) | "Classwork shows Blackboard's tree once; hover a file for its note." |
+| T-13 | Classwork: ghosts never rendered, stale-with-no-twin behind the toggle, file note as title + `·note` | R-39, R-40, P-11 | W-45 | (a) `cd web; npx vitest run test/course-classwork.test.ts test/CourseClasswork.test.tsx` → 0 failures; (c) `04-classwork-ist352.png` shows one "WK01 - The Systems Development Environment" folder and no "WK01 - Chapter 1" folder (its ghost, `bb_content` 50), the three Knowledge Check rows with the drop zone, and the toggle "Show 2 items Blackboard no longer lists" (B-19, PROVISIONAL: the PM's reading) | "Classwork shows Blackboard's tree once; hover a file for its note." |
 | T-14 | Info: drop `GROUPS_CAPTION`; `group_notes` still verbatim | R-45 | W-45 | (d) `grep -rl "Blackboard disagrees" web/src \| wc -l` → 0 (1 today, `CourseInfo.tsx:41`); (a) `cd web; npx vitest run test/CourseInfo.test.tsx test/course-info.test.tsx` → 0 failures | "Info no longer says your groups are unresolved." |
 | T-15 | IST.466 attendance marker on `SessionRow`, `SessionPanel` and `SessionPopout`, worded from the schedule | R-49 | W-45 | (a) `cd web; npx vitest run test/attendance-marker.test.tsx test/SessionPopout.test.tsx` → 0 failures (a marker shows for `counts_attendance` true only, and never for a non-IST.466 course); (c) `05-ist466-timeline.png` shows the marker on 9/29 and 10/1 and on no unstarred session | "Starred IST.466 days say attendance counts." |
 | T-16 | `useHorizontalScroll` (wheel `deltaY` → `scrollLeft` when `deltaX` ≈ 0; drag past 5 px scrolls and swallows the click) on `UpcomingTracker` | S2-home-1, P-69 | W-46 | (a) `cd web; npx vitest run test/use-horizontal-scroll.test.tsx test/UpcomingTracker.scroll.test.tsx test/UpcomingTracker.test.tsx` → 0 failures (cases: wheel moves; horizontal delta untouched; a 3 px press still opens the item; a 20 px drag does not; ◂ ▸ still page 14 days) | "Wheel or drag the strip with a mouse." |
 | T-17 | `collapse-state.ts` lift; Undated folded above Needs attention; Materials course header as one button | S2-home-2, S2-materials-1, P-70 | W-46 | (a) `cd web; npx vitest run test/collapse-state.test.ts test/TodayLayout.test.tsx test/MaterialsCollapse.test.tsx` → 0 failures (Undated is the section right before `NeedsAttentionRow` and starts collapsed; a pre-phase `bb2dash.materials.collapsed` value reads back unchanged; the course header is a `button` with `aria-expanded` whose accessible name contains the course name); (c) `06-home-undated.png` shows "Undated (N)" folded directly above Needs attention; `07-materials-folded.png` shows one course folded to its header | "Undated waits folded at the bottom; click a course name to fold Materials." |
 | T-18 | `ApplyNowButton` (one open `transform` request at a time); Inbox line for a reopened gap | R-42, R-56 | W-46 | (a) `cd web; npx vitest run test/ApplyNowButton.test.tsx test/Inbox.test.tsx test/InboxApplyButton.test.tsx` → 0 failures (one insert of kind `transform`; a second press while queued makes 0 inserts; attention items invalidated on settle; the reopened line renders); (b) after Stack's press on the preview: `select state from agent_requests where kind = 'transform' order by id desc limit 1` → `done` | "Apply dates and points without a sync." |
-| T-19 | `queries.heartbeat.ts` + the NeedsAttention lines | P-12, P-71, R-52 | W-46 | (a) `cd web; npx vitest run test/NeedsAttention.heartbeat.test.tsx test/NeedsAttention.test.tsx` → 0 failures (fixtures: transform `missing` → 1 line; `late` → 0; calendar push `failing` with 3 → a line containing `re-run scripts/google-consent.mjs`; all `ok` → 0); (c) `08-home-push-failing.png`, taken by the harness with `v_scheduler_heartbeat` fulfilled from the fixture, shows the failing-push line | "A dead calendar push or a stopped scheduler says so on Home." |
-| T-20 | Favicon + apple icon | R-50, P-80 | W-47 | (d) `cmp web/src/app/favicon.ico desktop/build/icon.ico` → exit 0 and `cmp web/src/app/apple-icon.png desktop/build/icon.png` → exit 0; (e) `curl -s -o /dev/null -w "%{http_code} %{content_type}" <preview>/favicon.ico` → `200 image/x-icon` and `<preview>/apple-icon.png` → `200 image/png`; (a) `cd web; npx playwright test -c e2e/playwright.config.ts e2e/harness.spec.ts -g "no 404"` → 1 passed (0 console messages and 0 responses with status 404 on `/`, `/login` and `/course/IST.352/stream`) | "The tab shows the eclipse ring." |
+| T-19 | `queries.heartbeat.ts` + the NeedsAttention lines | P-12, P-71, R-52 | W-46 | (a) `cd web; npx vitest run test/NeedsAttention.heartbeat.test.tsx test/NeedsAttention.test.tsx` → 0 failures (fixtures: transform `missing` → 1 line; `late` → 0; transform `failing` with 3 → 1 line containing its `last_error`; calendar push `failing` with 3 → a line containing `re-run scripts/google-consent.mjs`; all `ok` → 0); (c) `08-home-push-failing.png`, taken by the harness with `v_scheduler_heartbeat` fulfilled from the fixture, shows the failing-push line | "A dead calendar push or a stopped scheduler says so on Home." |
+| T-20 | Favicon + apple icon | R-50, P-80 | W-47 | (d) `cmp web/src/app/favicon.ico desktop/build/icon.ico` → exit 0 and `cmp web/src/app/apple-icon.png desktop/build/icon.png` → exit 0; (e) `curl -s -o /dev/null -w "%{http_code} %{content_type}" <preview>/favicon.ico` → `200 image/x-icon` and `<preview>/apple-icon.png` → `200 image/png` (through `vercel curl` when deployment protection answers 401; same expected status and type); (a) `cd web; npx playwright test -c e2e/playwright.config.ts e2e/harness.spec.ts -g "no 404"` → 1 passed (0 console messages and 0 responses with status 404 on `/`, `/login` and `/course/IST.352/stream`) | "The tab shows the eclipse ring." |
 | T-21 | `.blockTime` wraps | R-44 | W-47 | (a) `cd web; npx vitest run test/planner-css.test.ts` → 0 failures, with a new case asserting `.blockTime` has `white-space: normal` and no `nowrap`; (c) `09-planner-1440.png` at 1440 px shows Friday's GEO.103.recitation block with "11:40 AM – 12:35 PM" whole; `10-planner-1040.png` at 1040 px with the sidebar open shows the same block with the range whole, on two lines | "Planner times wrap instead of clipping." |
-| T-22 | `coverage.include` widened to every suite-driven module; the measured figure recorded; a floor threshold; `fcParams()` defaults to a fixed seed with an `FC_SEED=random` opt-in | R-51 | W-47 | (a) `cd web; npx vitest run --coverage` → exit 0 with `coverage.thresholds` at the recorded figure rounded down; (d) `grep -c "thresholds" web/vitest.config.mts` → 1 (0 today); (a) `cd web; npx vitest run test/fc-params.seed.test.ts` → 0 failures (`fcParams().seed` equals the fixed seed when `FC_SEED` is unset) | — (test hygiene) |
+| T-22 | `coverage.include` widened to every suite-driven module; the measured figure recorded; a floor threshold; `fcParams()` defaults to a fixed seed with an `FC_SEED=random` opt-in | R-51 | W-47 | (a) `cd web; npx vitest run --coverage` → exit 0 with `coverage.thresholds` at the recorded figure rounded down; (d) `grep -c "^T-22 coverage lines " docs/planning/sprint-2/walks/walk-17/97w_PHASE17_WALK.md` → 1 (the measured line %, recorded by the PM), and `grep -c "lines: <that figure rounded down>" web/vitest.config.mts` → 1; (d) `grep -c "thresholds" web/vitest.config.mts` → 1 (0 today); (a) `cd web; npx vitest run test/fc-params.seed.test.ts` → 0 failures (`fcParams().seed` equals the fixed seed when `FC_SEED` is unset) | — (test hygiene) |
 | T-23 | `usePopover` reshaped for `Bell`, `TopNav` and `ActivityMenu`; the 7 set-state-in-effect sites (W-45: `CourseInfo`; W-46: `MaterialsBrowser`, `UpcomingTracker`; W-47: `SidebarProvider`, `ActivityMenu`, `CommandPalette`, `queries.announcements.ts`) and 2 exhaustive-deps (W-45: `CourseScreen.tsx`) fixed; both React Compiler rules at `error` | R-51 | W-47 (+ W-45, W-46 at their sites) | (a) `cd web; npx eslint . --max-warnings 0` → exit 0 (27 warnings on `main` a5042fa: refs 18, set-state-in-effect 7, exhaustive-deps 2); (d) `grep -c "'warn'" web/eslint.config.mjs` → 0 (2 today); (a) `cd web; npx vitest run test/Bell.test.tsx test/CommandPalette.test.tsx test/CourseSidebar.test.tsx` → 0 failures | — (menus behave as before) |
 | T-24 | Stack's desktop sitting on the unpacked build: three toasts seen, one banner and one Action Center click, a second Sync press, one Blackboard link (X-2) | R-108, R-44 | Stack + PM | (d) `cat "$APPDATA/bb2dash/logs/main.log"* \| grep -c "navigated to"` → ≥ 2 (0 on 2026-09-24); `cat "$APPDATA/bb2dash/logs/main.log"* \| grep "blackboard.syracuse.edu handed to the default browser" \| awk '$1 > "2026-09-22T20:40"' \| wc -l` → ≥ 1 (0 on 2026-09-24); (d) `grep -c "^T-24 Stack 2026-" docs/planning/sprint-2/walks/walk-17/97w_PHASE17_WALK.md` → 1 (one line, `T-24 Stack <date>: …`, naming the three toasts he saw, the screen each click opened and what the second Sync press said) | "The toasts open the right screens." |
 | T-25 | C-7 rule 2 outputs (B-58); `notify.ts` hold only if T-24 shows no Action Center navigation; audit patterns for `blackboard.syracuse.edu`, `<webview`/`webviewTag: true`, `setLoginItemSettings` and `OneDrive` | R-108, P-63 | W-47 | (a) `cd desktop; npx vitest run test/unit/reducer.test.ts test/unit/audit.test.ts test/unit/notify.test.ts` → 0 failures (a coalesced group of one → the detail toast; `possible = 0` → a body with no "/ 0"; `audit.test.ts` flags a planted `blackboard.syracuse.edu` string); (d) `grep -c "syracuse" desktop/test/unit/audit.test.ts` → ≥ 1 (0 today; line 81 matches `blackboard.syr.edu`) | "One grade reads as one grade; a zero-point column shows no '/ 0'." |
-| T-26 | Production sitting (PM + Stack): planner recurrence and popover walk with the cleanup SQL ready (P-19); both last-row deletes under Phase 15's series trigger; the R-47 staging; the R-44 round-3 screenshots (CR-1, CR-5 in the week of 2026-09-28, CR-7 through the harness's forced failed read) | R-55, P-19, R-47, R-44 | PM + Stack | (b) `select count(*) from calendar_events where source = 'planner'` equal before and after (1 on 2026-09-24); `select count(*) from planner_event_series` → 0 at the end; `select count(*) from bb_files where bucket = 'my_submissions' and classified_by = 'stack' and source_url is null and sha256 = (select sha256 from bb_files where id = 141)` → 1 and the same with `id = 140` → 1; `select count(*) from bb_files where bucket = 'my_submissions' and classified_by = 'stack'` → 2 at the end (the "differs" draft removed, B-25); while the monthly series exists, `select count(*) from planner_events where title like 'bb2dash test · monthly%' and series_id is not null` → 2 (the sitting names its rows `bb2dash test · <case>`); (c) `11-monthly-oct31.png`: `/planner` for the week of 2026-10-26 with the `bb2dash test · monthly` event on Saturday Oct 31; `12-popover-above.png`: a due-item popover opened on a card in the grid's lower half, drawn above its card (`walk17.spec.ts` asserts `data-placement="above"` before the shot); `13-popover-right-clamp.png`: a due-item popover opened in the Sunday column of `?week=2026-09-21`, its right edge inside the grid; `14-chip-matches.png`: IST.471's A1 popout with the staged original and the chip "matches"; `15-chip-differs.png`: the staged earlier draft with the chip "differs", taken before it is removed; `16-cr1-return-today.png`: Home's Upcoming strip after a free scroll and one ◂ press, with today's card first in view; `17-cr5-ist323.png`: IST.323 Monday 3:45–5:05 PM with Quiz #5 nested, week of 2026-09-28; `18-cr7-could-not-load.png`: a Home course card reading "could not be loaded" under Blackboard and "could not be worked out" under Graded so far, both reads aborted by the harness | "Built in sprint 1, used once on production, and it works." |
-| T-27 | P-14: Stack reads the consent screen's publishing status; if Testing, publishes and re-mints; the DECISIONS row records it | P-14, R-52 | Stack | (b) after 2026-10-01 17:03Z: `select count(*) from calendar_push_runs where status = 'ok' and started_at > '2026-10-01 17:03:00+00'` → ≥ 1 and `select count(*) from calendar_push_runs where error like 'refresh token revoked%' and started_at > '2026-10-01 17:03:00+00'` → 0 | "The calendar push outlives seven days." |
-| T-28 | S2-bugs-1 ledger: every id in this brief plus anything Stack adds at the freeze ends fixed, deferred (with its phase) or declined (with his word). PM walk of every touched screen on the preview | S2-bugs-1 | PM | (d) `grep -c "\| open \|" docs/planning/sprint-2/walks/walk-17/97w_PHASE17_WALK.md` → 0 (a literal `open` state cell); (d) `ls docs/planning/sprint-2/walks/walk-17/{01..18}-*.png \| wc -l` → 18 (one file for each number the task list names); (d) `test -e web/e2e/.auth/state.json` → exit 1 (session file deleted) | "Your list and mine, every line closed." |
-| T-29 | Docs: STATUS, ORCHESTRATOR and 13 DECISIONS rows (R-45 caption; 027 column list widened (P-10); C-3 early (B-23); the web half of v2's in-app notices closed (B-26); gap self-close as a second way into `archived` (B-29); `v_inbox_feedback` retired (R-57); the P-72 convention; kind colours kept (B-31); the consent status (P-14); C-7 rule 2 amended (B-58); `@playwright/test` in `web/`; schema `private` for definer reads; toasts confirmed (R-108)) | R-48, R-59, R-108, P-72 | PM | (d) `git diff main -- project-state/DECISIONS.md \| grep -c "^+\| 2026-"` → 13 (new table rows); `grep -n "pending Stack.s nod" project-state/STATUS.md \| grep -vc "~~"` → 0 | — |
+| T-26 | Production sitting (PM + Stack): planner recurrence and popover walk with the cleanup SQL ready (P-19); both last-row deletes under Phase 15's series trigger; the R-47 staging; the R-44 round-3 screenshots (CR-1, CR-5 in the week of 2026-09-28, CR-7 through the harness's forced failed read) | R-55, P-19, R-47, R-44 | PM + Stack | (b) `select count(*) from calendar_events where source = 'planner'` equal before and after (1 on 2026-09-24 and on 2026-09-27); `select count(*) from planner_event_series` → 0 at the end; `select count(*) from bb_files where bucket = 'my_submissions' and classified_by = 'stack' and source_url is null and assignment_id = 'IST.471/a1-proposal' and sha256 = (select sha256 from bb_files where id = 141)` → 1 and the same with `assignment_id = 'IST.352/role-of-systems-analyst'` and `id = 140` → 1 (140 and 141 are the pulled-back `Role_of_Systems_Analyst.docx` and `Internship Proposal Agreement v2 (1).pdf`, read 2026-09-27); `select count(*) from bb_files where bucket = 'my_submissions' and classified_by = 'stack'` → 2 at the end (the "differs" draft removed, B-25; 0 on 2026-09-27); the Storage key: `select count(*) from bb_files f join storage.objects o on o.bucket_id = 'bb-files' and o.name = substr(f.storage_path, length('bb-files/') + 1) where f.bucket = 'my_submissions' and f.classified_by = 'stack' and o.name = f.course_id \|\| '/my_submissions/' \|\| split_part(f.assignment_id, '/', 2) \|\| '/' \|\| f.file_name` → 2 at the end (`<course>/my_submissions/<slug>/<file>`, no `attempt-` segment); `select count(*) from storage.objects where bucket_id = 'bb-files' and name like '%/my_submissions/%' and name not like '%/attempt-%'` → 2 at the end (0 on 2026-09-27; the draft's object is deleted too); the sitting names its rows `bb2dash test · <case>`; while the daily series (Nov 9 to Nov 13, 2026) exists, `select count(*) from planner_events e join planner_event_series s on s.id = e.series_id where e.title like 'bb2dash test · daily%' and s.freq = 'daily'` → 5; while the monthly series exists, `select count(*) from planner_events where title like 'bb2dash test · monthly%' and series_id is not null` → 2; the 53-occurrence refusal (daily, Nov 9 to Dec 31, 2026): `select count(*) from planner_event_series` equal right before and right after the refused save; while the Los Angeles series (weekly, 09:00 America/Los_Angeles, Oct 26 to Nov 9, 2026) exists, `select count(*), count(*) filter (where (starts_at at time zone 'America/Los_Angeles')::time = '09:00' and (starts_at at time zone 'America/New_York')::time = '12:00') from planner_events where title like 'bb2dash test · la-weekly%' and time_zone = 'America/Los_Angeles' and series_id is not null` → 3 and 3 (Oct 26, Nov 2, Nov 9: both sides of Nov 1, every row at 09:00 Los Angeles and 12:00 New York); (c) `11-monthly-oct31.png`: `/planner` for the week of 2026-10-26 with the `bb2dash test · monthly` event on Saturday Oct 31; `12-popover-above.png`: a due-item popover opened on a card in the grid's lower half, drawn above its card (`walk17.spec.ts` asserts `data-placement="above"` before the shot); `13-popover-right-clamp.png`: a due-item popover opened in the Sunday column of `?week=2026-09-21`, its right edge inside the grid; `14-chip-matches.png`: IST.471's A1 popout with the staged original, the chip "matches" and the link "Staged in bb2dash — attach in Blackboard ↗"; `15-chip-differs.png`: the staged earlier draft with the chip "differs", taken before it is removed; `16-cr1-return-today.png`: Home's Upcoming strip after a free scroll and one ◂ press, with today's card first in view; `17-cr5-ist323.png`: IST.323 Monday 3:45–5:05 PM with Quiz #5 nested, week of 2026-09-28; `18-cr7-could-not-load.png`: a Home course card reading "could not be loaded" under Blackboard and "could not be worked out" under Graded so far, both reads aborted by the harness; `19-refuse-53.png`: the new-event form with Repeats daily from Nov 9 to Dec 31, 2026 and the message "A repeating event is limited to 52 occurrences — choose an earlier end date." (`web/src/lib/planner-recurrence.ts:118`); `20-la-weekly-nov2.png`: `/planner?week=2026-11-02` with `bb2dash test · la-weekly` at 12:00 on Monday Nov 2; `21-materials-my-submissions.png`: `/materials` with IST.471's "My submissions" group listing the staged original; (a) with `WALK_BASE_URL` on production, `cd web; npx playwright test -c e2e/playwright.config.ts e2e/walk17.spec.ts -g "staged link"` → 1 passed (on IST.471's A1 popout the link named "Staged in bb2dash — attach in Blackboard ↗" has `href` equal to `select coalesce(a.bb_url, c.bb_url) from assignments a join courses c on c.id = a.course_id where a.id = 'IST.471/a1-proposal'`: the course URL, `https://blackboard.syracuse.edu/ultra/courses/_570161_1/outline` on 2026-09-27 (`assignments.bb_url` null), until Phase 18's R-69 (brief 98 task 23) is on production, and the item URL after; and 0 buttons or links have a name matching `/\bSubmit\b/`); (a) `cd web; npx vitest run test/audits.test.ts` → 0 failures (its `no control anywhere reads "Submit"` block scans all of `web/src`) | "Built in sprint 1, used once on production, and it works." |
+| T-27 | P-14: Stack reads the consent screen's publishing status; if Testing, publishes and re-mints; the DECISIONS row records it | P-14, R-52 | Stack | (b) after 2026-10-01 17:03Z: `select count(*) from calendar_push_runs where status = 'ok' and started_at > '2026-10-01 17:03:00+00'` → ≥ 1 and `select count(*) from calendar_push_runs where error like 'refresh token revoked%' and started_at > '2026-10-01 17:03:00+00'` → 0 (a push row is written only when `app_settings.gcal_dirty` is set: on 2026-09-27 the newest `calendar_push_runs` row was still 2026-09-24 17:03Z, so both counts are read after the first change past 2026-10-01 17:03Z that sets it: an assignment change from a sync, or a planner event edit, 061 and 067) | "The calendar push outlives seven days." |
+| T-28 | S2-bugs-1 ledger: every id in this brief plus anything Stack adds at the freeze ends fixed, deferred (with its phase) or declined (with his word). PM walk of every touched screen on the preview | S2-bugs-1 | PM | (d) `grep -c "\| open \|" docs/planning/sprint-2/walks/walk-17/97w_PHASE17_WALK.md` → 0 (a literal `open` state cell); (d) `ls docs/planning/sprint-2/walks/walk-17/{01..21}-*.png \| wc -l` → 21 (one file for each number the task list names); (d) `test -e web/e2e/.auth/state.json` → exit 1 (session file deleted) | "Your list and mine, every line closed." |
+| T-29 | Docs: STATUS, ORCHESTRATOR and 13 DECISIONS rows (R-45 caption; 027 column list widened (P-10); C-3 early (B-23); the web half of v2's in-app notices closed (B-26); gap self-close as a second way into `archived` (B-29); `v_inbox_feedback` retired (R-57); the P-72 convention; kind colours kept (B-31); the consent status (P-14); C-7 rule 2 amended (B-58); `@playwright/test` in `web/`; schema `private` for definer reads; toasts confirmed (R-108)). The R-57 row names the decisions store as the why-notes' home and each vault note's `decided_by` field as the record of who wrote it (Stack, or a session on his authority). STATUS gains the line `web coverage (T-22): <n> % lines` (R-51); row 14's `v_inbox_feedback` lines name 116, and the "Inbox feedback loop, automation half" table row points its counts at `/inbox-apply`, `v_inbox_queue` and the decisions store (R-57) | R-48, R-51, R-57, R-59, R-108, P-72 | PM | (d) `git diff main -- project-state/DECISIONS.md \| grep -c "^+\| 2026-"` → 13 (new table rows); `grep -n "pending Stack.s nod" project-state/STATUS.md \| grep -vc "~~"` → 0; (d) `grep -c "web coverage (T-22): " project-state/STATUS.md` → 1 (0 today); `grep -n "v_inbox_feedback" project-state/STATUS.md \| grep -Evc "116\|~~"` → 0 (2 today, STATUS:295-296); `grep "^\| — \| Inbox feedback loop" project-state/STATUS.md \| grep -c "bb2dash-inbox-decisions"` → 1 (0 today); `git diff main -- project-state/DECISIONS.md \| grep "^+\| 2026-" \| grep -c "decided_by"` → ≥ 1; `grep -L "^decided_by:" C:/Users/estac/vault/projects/bb2dash/decisions/*.md \| wc -l` → 0 (138 notes, every one carrying it, on 2026-09-27) | — |
 
 ## Workers
 
 Workers commit and push per task id (`fix(T-13): …`), never touch `project-state/`, and dry-run every migration
 inside `begin; … rollback;` before handing it to the PM, who applies it: 110–116 in number order as each is handed
-over, then 117 (T-10). Front-end checks are run by the PM against the phase preview. `database.types.ts` is the PM's
-at T-10; until then workers type the new view columns locally from this Contract. Worker ids W-44..W-47 are the next
+over, then 117 (T-10; not written when B-42 leaves no `db_test_runner` role). Front-end checks are run by the PM
+against the phase preview. `database.types.ts` is the PM's at T-10; until then workers type the new view columns
+locally from this Contract. Worker ids W-44..W-47 are the next
 free after Phase 16's W-41..W-43 in the sprint-wide table (Phase 18 starts at W-48; the W-51 in §Seams is Phase 18's).
 
 | worker | stream | branch | worktree | owns (disjoint; full list in Contract §Files) | tasks |
@@ -578,7 +606,7 @@ free after Phase 16's W-41..W-43 in the sprint-wide table (Phase 18 starts at W-
 | W-46 | home + materials + inbox | `feat/web-polish-17-home` | `bb2dash-wt-17-home` | `Today`, `NeedsAttention`, `UpcomingTracker`, `MaterialsBrowser`, `materials-collapse.ts`, `Inbox`, the new hook, collapse, heartbeat and apply-now files | T-16 … T-19, its T-23 sites |
 | W-47 | shell + harness + planner CSS + desktop | `feat/web-polish-17-shell` | `bb2dash-wt-17-shell` | the three menus, `usePopover`, `SidebarProvider`, `CommandPalette`, `queries.announcements.ts`, lint, vitest and package config, `fc-params.ts`, `PlannerWeek.module.css`, `web/e2e/**`, the favicon files, `desktop/` reducer, notify and audit | T-01, T-20 … T-23, T-25 |
 
-The PM owns T-10, T-24 and T-26 … T-29, plus integration.
+The PM owns T-10, T-28 and T-29 and integration; T-24 and T-26 are PM + Stack sittings, and T-27 is Stack's manual step.
 
 ## Out of scope
 
@@ -619,7 +647,7 @@ The PM owns T-10, T-24 and T-26 … T-29, plus integration.
 ## Session prompt (Stage D finalises it in ORCHESTRATOR)
 
 > `/bb2dash-pm` Start Phase 17 (web polish). Read `docs/planning/sprint-2/briefs/97_PHASE17_web_polish.md`. Confirm
-> Phase 15's runner is on `main` and migrations 100–102 (and 103, if Phase 15 needed it) are applied, and record my
-> 93 §5 answers against the B-table. Ask me the B-7 "anything else?" question once. Then cut `feat/web-polish-17`
-> in `bb2dash-wt-17`, spawn W-44 … W-47 on their disjoint files, and run the task list in order. Stop at "ready when
-> you say so" with the preview link.
+> Phase 15's runner is on `main` and migrations 100–102 (and 103, if Phase 15 needed it; 100 only if B-42 kept the
+> `db_test_runner` role) are applied, and record my 93 §5 answers against the B-table. Ask me the B-7 "anything
+> else?" question once. Then cut `feat/web-polish-17` in `bb2dash-wt-17`, spawn W-44 … W-47 on their disjoint files,
+> and run the task list in order. Stop at "ready when you say so" with the preview link.

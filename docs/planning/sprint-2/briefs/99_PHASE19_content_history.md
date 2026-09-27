@@ -1,11 +1,11 @@
 # Phase 19 — Content identity, per-crawl history and sync honesty
 
-Date 2026-09-24 · PM: the Fable session · Product manager: Stack · Requirements: R-38, R-41 (the
-run-state half), R-64, R-65, R-71, R-76 · PM-added steps: P-25, P-94, P-95, P-98 · Branch
+Date 2026-09-24 · PM: the Fable session · Product manager: Stack · Requirements: R-38, R-41 (run
+states and the per-stream read), R-64, R-65, R-71, R-76 · PM-added steps: P-25, P-94, P-95, P-98 · Branch
 `feat/content-history-19` · Worktree `bb2dash-wt-content-history-19` · Migration range **130–139** ·
 One PR per phase (DECISIONS 2026-09-09; no exception) · Depends on: Phases 17 and 18 merged to `main`
 (94 §2 rule 3) and Phase 15's SQL test runner · Status: **PROVISIONAL until Stack answers 93 §5
-(B-18, B-19, B-20, B-39)** and approves `94_SPRINT2_PHASES.md`.
+(B-18, B-19, B-20, B-39, and B-42 through Phase 15's test role)** and approves `94_SPRINT2_PHASES.md`.
 
 ## Why
 
@@ -18,8 +18,9 @@ are 16 `(course_id, bb_item_id)` pairs (32 rows), one live and one stamped `miss
 the 3 ghost rows hold the only IST.352 Knowledge Check assignment links. R-71 and R-38: nothing
 records what a crawl added, changed or removed. `stage_content` reports every row it sees as
 "updated" (192 on sync 62) and overwrites `run_id`, and `v_course_stream` posts every current file
-and node (94 material posts) with no crawl reference. Stack asked for the Stream to carry "new/changed
-materials". R-76 rides here because any change to how descriptions are captured is a `stage_content`
+and node (94 material posts) with no crawl reference. Stack's Stream answer, as the PM recorded it
+from the sprint 1 clarification rounds (`60_REQUIREMENTS_v2.md` §6.1), lists new or changed
+materials. R-76 rides here because any change to how descriptions are captured is a `stage_content`
 edit. Its default is to close it (B-39).
 
 R-65 and the run-state half of R-41: `transform_tick` (044) folds a registered crawl once its newest
@@ -29,6 +30,10 @@ run only after `bb.runAll` returns (DECISIONS 2026-09-15). `run_transform` opens
 "running", and the reaper has nothing to reap. When a crawl dies, its request stays `claimed` and the
 Sync button says "syncing…" indefinitely. Phase 14's `sync_register_run` must be written against a
 driver that folds only complete crawls (94 §3 "19 → 14"), so this phase settles those semantics first.
+R-41 also asks for a per-stream `{stream, last_seen_at, state}` read computed in SQL, with expected
+streams so "never synced" shows. `v_data_freshness` has no row for a stage with no real attempt, so
+today nothing can say a stage never ran. The PM's seam decision puts that read in 137 here (task 16),
+and brief 97 points here for it.
 
 The work goes into one phase because the same function, `stage_content`, carries the key change, the
 change count, the newest-crawl guard and the history. P-98 sets one vanish convention for the history
@@ -42,8 +47,8 @@ and the ghost collapse, and 93 §4 names this "sequencing debt". The phase runs 
 |---|---|---|---|---|
 | B-18 | Stream material diffs (Q9) | One post per file or content item new or changed in a registered crawl, from an append-per-run history table, full history kept. 93 placed the build "in the ingest phase with R-71". 94 moved it here because the table is written beside `stage_content` under the 2026-09-17 row | "A view over `bb_raw`, no table": T-7 becomes a view migration and T-8 to T-10 read it. "Keep every current file on the Stream": T-9 is dropped and R-38 closes by a DECISIONS row. "Prune after N crawls": T-7 adds a prune step and a DECISIONS retention row | PROVISIONAL |
 | B-19 | Stale Classwork nodes (Q10) | 93's default is "hidden, with a toggle for the three really gone; nothing deleted" (the hide and toggle ship in Phase 17, R-39). *PM reading, not part of the default:* the 16 ghost rows are **merged into their live twin** (R-64 still missing (2), P-25). The merge deletes 16 rows after carrying their links, paths and children. They are second copies of items Blackboard still lists, so no item Blackboard lists loses its row. It still departs from the default's literal "nothing deleted" and needs Stack's yes. After the merge 5 stale rows remain (3 gone, 2 re-created in WK05 under new ids), not the 3 in the question | "Keep the ghost rows": T-3 is dropped, T-4 builds a partial unique index `where detail->>'missing_since' is null` and the upsert infers it, and the Classwork toggle then shows 21 | PROVISIONAL |
-| B-20 | Freshness and heartbeat (Q11) | 93's B-20 default covers only Phase 9's thresholds and the two-stage late/missing heartbeat (Phase 17, P-71). *The terminal rule is not in the batch.* It is R-65 still missing (2), which names two options, and the PM picks one here: "running" from claim, and "interrupted" once a claimed crawl has not completed after 30 minutes (the existing reaper interval). The request is then closed as failed and one Inbox item is raised. No attempts column is added, although 93 §1.4 suggests one for R-65: the rule never retries, so there is nothing to count. P-104's counter is Phase 14's | A shorter cut-off, such as the heartbeat's roughly 10 minutes, changes one constant in 136 and the fixtures of T-2 and T-14. "Fold an incomplete crawl as partial" replaces T-14's terminal branch with a `run_transform` call and a partial label | PROVISIONAL |
-| B-39 | Item descriptions on Classwork (Q31) | No. Close with a DECISIONS row. `stage_content` keeps capturing them in `detail->'description'` (11 rows). If they are ever shown, they are sanitised first | Yes adds one task after T-4. W-52 re-creates `v_content_tree` with `description` appended. W-54 renders it as React text in Classwork, never HTML, with T-22 as the guard. R-76 grows from S to M | PROVISIONAL |
+| B-20 | Freshness and heartbeat (Q11) | 93's B-20 default covers only Phase 9's thresholds and the two-stage late/missing heartbeat (Phase 17, P-71). *The terminal rule is not in the batch.* It is R-65 still missing (2), which names two options, and the PM picks one here: "running" from claim, and "interrupted" once a claimed crawl has not completed after 30 minutes (the existing reaper interval). The request is then closed as failed and one Inbox item is raised. No attempts column is added, although 93 §1.4 suggests one for R-65: the rule never retries, so there is nothing to count. P-104's counter is Phase 14's | A shorter cut-off, such as the heartbeat's roughly 10 minutes, changes one constant in 136 and the fixtures of T-2 and T-14. "Fold an incomplete crawl as partial" replaces T-14's terminal branch with a `run_transform` call and a partial label. Freshness thresholds other than Phase 9's one day change 137's one constant (the per-stream `stale` cut-off) and T-16's fixtures | PROVISIONAL |
+| B-39 | Item descriptions on Classwork (Q31) | No. Close with a DECISIONS row. `stage_content` keeps capturing them in `detail->'description'` (11 rows). If they are ever shown, they are sanitised first | Yes adds one task after T-4. W-52 re-creates `v_content_tree` with `description` appended. W-54 renders it as React text in Classwork, never HTML, with T-23 as the guard. R-76 grows from S to M | PROVISIONAL |
 
 ## Contract (frozen when Stack approves the phase plan)
 
@@ -53,43 +58,48 @@ No new route. Changed:
 
 * `/course/[id]/stream` (`web/src/app/(app)/course/[id]/stream/CourseStream.tsx`). Material posts
   come only from `bb_material_history`: one post per file or node **appeared** or **changed** in a
-  registered crawl. Each post is dated by that crawl and labelled "New" or "Changed". Vanished items
-  are not posted. The React key gains the run id, because one file can post once per crawl it
-  changed in.
+  registered crawl (B-18, **PROVISIONAL**). Each post is dated by that crawl and labelled "New" or
+  "Changed". Vanished items are not posted. The React key gains the run id, because one file can post
+  once per crawl it changed in.
 * `/course/[id]/classwork`. No code change is expected. The data change adds IST.466's five same-path
   nodes (files 17 and 19 appear under them) and leaves IST.352 with one WK01. Phase 17's
   stale-node toggle lists what is really gone.
 * Home sync line (`NeedsAttention.tsx:96`) and Inbox header (`Inbox.tsx:252`), both through
   `freshnessLine`. They read "sync running" from the moment a sync is claimed, and "last sync
-  interrupted" instead of "last run failed" for a reaped run.
+  interrupted" instead of "last run failed" for a reaped run. When `stalenessLine` returns null (no
+  stage stale, failed or never synced in `freshness`), they also name every expected stream whose
+  state is `never` ("history never synced"), from `v_sync_status.streams` (task 16).
 * Desktop toast (C-7 rule 1). An interrupted run toasts "Sync interrupted".
 * Activity menu. Material lines name up to three items.
 
 ### RPC signatures
 
-No function here is callable by `anon` or `authenticated`. Every function pins
+No SECURITY DEFINER function here is callable by `anon` or `authenticated`; `sync_change_lines`
+(invoker, immutable) keeps 051's `authenticated` grant. Every function pins
 `set search_path = public, pg_temp`, except the pure helper, which pins `''`. Grants are re-asserted
 at the foot of each migration, as prod holds them.
 
-**Test role.** Phase 15's `db_test_runner` (brief 95, migration 100) holds execute on exactly the
-functions the suite calls, and write grants on exactly the tables it writes. It already holds
-`run_transform(uuid, text)` and `transform_tick()`. Each Phase 19 migration grants it only what that
-migration's own test file needs: execute on `stage_content(uuid)` and
-`bb_content_path_history(jsonb, jsonb, text, text)` (131), `material_history_record(uuid)` (132) and
-`sync_change_lines(jsonb)` (134), plus `insert, update, delete` on any table its fixtures write that
-100 does not already cover. Each grant is named in the migration. 100's guard block must still pass:
-no `service_role` membership, and nothing on `vault`, `storage`, `auth`, `cron` or `net`. The
-trigger function needs no grant, because firing a trigger checks no `EXECUTE` privilege.
+**Test role** (B-42, **PROVISIONAL** via brief 95). Phase 15's `db_test_runner` (brief 95, migration
+100) holds execute on exactly the functions the suite calls, and write grants on exactly the tables it
+writes. It already holds `run_transform(uuid, text)`, `transform_tick()` and `sync_change_lines(jsonb)`
+(today's `phase10a_stage_gradebook.sql:301` calls the last; brief 97's 117 note says 100 grants it).
+Each Phase 19 migration grants it only what that migration's own test file needs: execute on
+`stage_content(uuid)` and `bb_content_path_history(jsonb, jsonb, text, text)` (131) and
+`material_history_record(uuid)` (132); 134, 135 and 136 re-assert the execute 100 gave it on the
+function each re-creates. Any migration also grants `insert, update, delete` on a table its fixtures
+write that 100 does not already cover. Each grant is named in the migration. 100's guard block must
+still pass: no `service_role` membership, and nothing on `vault`, `storage`, `auth`, `cron` or `net`.
+The trigger function needs no grant, because firing a trigger checks no `EXECUTE` privilege.
 
 | Function | Migration | Full signature | Security | Grants |
 |---|---|---|---|---|
-| `stage_content` (re-created, signature frozen by DECISIONS 2026-09-10) | 131 | `public.stage_content(p_run_id uuid) returns jsonb` | definer; owner guard kept (`auth.uid()` null or `app_owner()`) | revoke all from `public, anon, authenticated`; execute to `service_role` (prod ACL on 2026-09-24 is `postgres, service_role` only; 029 revoked `authenticated`) |
-| `bb_content_path_history` (new) | 131 | `public.bb_content_path_history(p_old jsonb, p_new jsonb, p_old_path text, p_new_path text) returns jsonb`, `language sql immutable`, `set search_path = ''` | invoker | revoke all from `public, anon, authenticated`; execute to `service_role` |
-| `material_history_record` (new) | 132 | `public.material_history_record(p_run_id uuid) returns jsonb` | definer; same owner guard | revoke all from `public, anon, authenticated`; execute to `service_role` |
-| `sync_change_lines` (re-created from the live body Phase 17's R-58 left) | 134 | `public.sync_change_lines(p_stages jsonb) returns jsonb`, `immutable` | invoker | revoke all from `public, anon`; execute to `authenticated, service_role` (as 051) |
+| `stage_content` (re-created, signature frozen by DECISIONS 2026-09-10) | 131 | `public.stage_content(p_run_id uuid) returns jsonb` | definer; owner guard kept (`auth.uid()` null or `app_owner()`) | revoke all from `public, anon, authenticated`; execute to `service_role` (prod ACL on 2026-09-24 is `postgres, service_role` only; 029 revoked `authenticated`); execute to `db_test_runner` (test role, brief 95) |
+| `bb_content_path_history` (new) | 131 | `public.bb_content_path_history(p_old jsonb, p_new jsonb, p_old_path text, p_new_path text) returns jsonb`, `language sql immutable`, `set search_path = ''` | invoker | revoke all from `public, anon, authenticated`; execute to `service_role`; execute to `db_test_runner` (test role, brief 95) |
+| `material_history_record` (new) | 132 | `public.material_history_record(p_run_id uuid) returns jsonb` | definer; same owner guard | revoke all from `public, anon, authenticated`; execute to `service_role`; execute to `db_test_runner` (test role, brief 95) |
+| `sync_change_lines` (re-created from the live body Phase 17's R-58 left) | 134 | `public.sync_change_lines(p_stages jsonb) returns jsonb`, `immutable` | invoker | revoke all from `public, anon`; execute to `authenticated, service_role` (as 051); execute to `db_test_runner` (test role, brief 95; held since 100, re-asserted) |
 | `sync_request_open_run` (new trigger function) | 135 | `public.sync_request_open_run() returns trigger` | definer | revoke all from `public, anon, authenticated` |
-| `run_transform` (re-created from live) | 135 | `public.run_transform(p_run_id uuid, p_trigger text default 'manual') returns bigint` | definer | revoke all from `public, anon, authenticated`; execute to `service_role` (as 051) |
-| `transform_tick` (re-created from 044) | 136 | `public.transform_tick() returns jsonb` | definer | revoke all from `public, anon, authenticated`; execute to `service_role` (as 044) |
+| `run_transform` (re-created from live) | 135 | `public.run_transform(p_run_id uuid, p_trigger text default 'manual') returns bigint` | definer | revoke all from `public, anon, authenticated`; execute to `service_role` (as 051); execute to `db_test_runner` (test role, brief 95; held since 100, re-asserted) |
+| `transform_tick` (re-created from 044) | 136 | `public.transform_tick() returns jsonb` | definer | revoke all from `public, anon, authenticated`; execute to `service_role` (as 044); execute to `db_test_runner` (test role, brief 95; held since 100, re-asserted) |
 
 Behaviour frozen here:
 
@@ -160,7 +170,7 @@ Behaviour frozen here:
      `and s.status <> 'running'`. Without it, the row opened at claim would stop every registered
      run from folding. The drain's `v_was_folded` uses the same test.
   2. Quarantine is unchanged: the three-minute idle rule stays, for unregistered runs only.
-  3. **Terminal rule**, replacing the reaper:
+  3. **Terminal rule** (the PM's pick under B-20, **PROVISIONAL**), replacing the reaper:
      * A `running` row whose `started_at` is older than 30 minutes becomes `status = 'failed'` with
        `interrupted_at = now()` and `finished_at = coalesce(finished_at, now())`, as 044 does.
        `notes` still **ends with** `interrupted (reaped)`, appended as 044 does, and the tick still
@@ -176,12 +186,28 @@ Behaviour frozen here:
   5. `ical_collect()` is kept.
 
   Return keys are kept, plus `interrupted_requests`.
+* **`v_sync_status` (137)**
+  * The live body (035) is kept, with its one-row `limit 1` and its filters. Three columns are
+    appended after `freshness`, in this order: `notes text` (the row's `sync_runs.notes`),
+    `interrupted boolean` (`interrupted_at is not null`) and `streams jsonb`.
+  * `streams` is R-41's per-stream `{stream, last_seen_at, state}` read, computed in SQL: one element
+    per **expected stream**, ordered by `stream`. The expected streams are the nine stages
+    `run_transform` writes once 135 is applied: the eight live ones (`announcements`, `assignments`,
+    `attempts`, `content`, `courses`, `files`, `gaps`, `gradebook`; `v_data_freshness` held exactly
+    these on 2026-09-27) plus `history`. They are one named array constant in 137. `ical` and
+    `crawl` are not expected: their only rows are `skipped` bookkeeping, which `v_data_freshness`
+    ignores (040).
+  * `last_seen_at` is `v_data_freshness.fresh_as_of` for that stage, or null when the view has no
+    row for it. `state` is `never` when `last_seen_at` is null, `stale` when it is older than one day
+    (Phase 9's threshold, `queries.sync.ts:541` at `main` a5042fa; B-20, **PROVISIONAL**, one named
+    constant in 137), and `fresh` otherwise. So a stage with no `ok` finish reads `never`, including
+    a stage `v_data_freshness` has no row for, which is what lets "never synced" show.
 
 ### Tables and migrations
 
 The schema changes are additive, with **two named exceptions**, each under its own DECISIONS row:
 131 drops `bb_content_course_id_path_key`, and 130 deletes the 16 duplicate rows after carrying their
-data. DECISIONS 2026-09-16 calls 068's key swap "A one-off exception to "migrations are additive"
+data (the PM's reading under B-19, **PROVISIONAL**). DECISIONS 2026-09-16 calls 068's key swap "A one-off exception to "migrations are additive"
 … not a precedent", so this change carries its own row. Every file is dry-run in `begin; … rollback;`, then applied with
 `mcp__Supabase__apply_migration` under the file's name, byte-identical to the repo. 130 and 131 are
 applied back to back while no `sync` request is `queued` or `claimed`, and so are 135 and 136.
@@ -199,7 +225,7 @@ read it started from (051's rule).
 | 134 | `db/migrations/134_sync_change_lines_materials.sql` | `sync_change_lines` from the live body, with the three material lines |
 | 135 | `db/migrations/135_sync_run_open_at_claim.sql` | `sync_runs.interrupted_at timestamptz null`; `sync_request_open_run` + trigger; `run_transform` re-created |
 | 136 | `db/migrations/136_transform_tick_register_first.sql` | `transform_tick` re-created; the cron job and its schedule are untouched |
-| 137 | `db/migrations/137_sync_status_run_state.sql` | `v_sync_status` from the live body, appending `notes text` and `interrupted boolean` (`interrupted_at is not null`) after its last column; `security_invoker`; anon revoked; grants re-asserted |
+| 137 | `db/migrations/137_sync_status_run_state.sql` | `v_sync_status` from the live body, appending `notes text`, `interrupted boolean` (`interrupted_at is not null`) and `streams jsonb` (R-41's per-stream read, above) after its last column; `security_invoker`; anon revoked; grants re-asserted |
 | 138–139 | — | Unused slack. A phase that runs out takes the next free block of ten (94 §2 rule 6) |
 
 `bb_material_history` (append-per-run, shaped like `bb_gradebook`, DECISIONS 2026-09-15):
@@ -222,7 +248,7 @@ read it started from (051's rule).
 
 Unique `bb_material_history_key (run_id, entity, course_id, bb_item_id, file_name)`; index
 `bb_material_history_course_run_idx (course_id, run_id)`. **Retention:** `bb_raw` and this table are
-kept in full through the term (B-18), with no prune.
+kept in full through the term (B-18, **PROVISIONAL**), with no prune.
 
 **One vanish convention (P-98).** A vanish is always the run id that first missed the item: in
 `bb_content.detail->>'missing_since'`, in `bb_files.notes` as `missing_since_run=<uuid>`, and in
@@ -241,8 +267,11 @@ New:
   `db/tests/phase19_137_sync_status.sql`. Each follows Phase 15's frozen unit rules: `begin;` first,
   `rollback;` last, no top-level `commit`, and one result row whose first column ends in `: PASS`.
 * `web/src/lib/sync-run-state.ts`: pure `runStateWord(status)` → `'sync running' | 'last run
-  partial' | 'last run failed' | 'last sync interrupted' | null`. `queries.sync.ts` is 1,313 lines,
-  so new logic goes in its own file (91 R-41 seams).
+  partial' | 'last run failed' | 'last sync interrupted' | null`; type `StreamState`
+  (`{stream, last_seen_at, state: 'fresh' | 'stale' | 'never'}`); `normalizeStreams(value)`, which
+  drops malformed elements; and `neverSyncedLine(streams)` → `'<stream>, <stream> never synced'`
+  (the `never` streams, sorted) or null. `queries.sync.ts` is 1,313 lines, so new logic goes in its
+  own file (91 R-41 seams).
 * `web/test/sync-run-state.test.ts`, `web/test/course-stream.history.test.tsx`,
   `web/test/course-classwork.samepath.test.ts`, `web/test/raw-html.audit.test.ts`.
 * `docs/planning/sprint-2/verification/99_W52_VERIFICATION.md`, `99_W53_VERIFICATION.md`,
@@ -262,8 +291,10 @@ Changed, by owner (the sets are disjoint):
     `main` a5042fa, and the comment above `runAll`). The v5 code is Phase 18's.
 * **W-54:**
   * `web/src/lib/sync-run-state.ts`.
-  * `web/src/lib/queries.sync.ts`: 10 added lines at most. `SyncStatus` gains `notes` and
-    `interrupted`, `normalizeSyncStatus` reads them, and `freshnessLine` calls `runStateWord`.
+  * `web/src/lib/queries.sync.ts`: 15 added lines at most. `SyncStatus` gains `notes`,
+    `interrupted` and `streams`, `normalizeSyncStatus` reads them, and `freshnessLine` calls
+    `runStateWord`, then appends `neverSyncedLine(status.streams)` only when `stalenessLine` returns
+    null. `stalenessLine` itself is not changed.
   * `web/src/lib/course-dimension.ts`: `CourseStreamMeta` gains `change` and `run_id`.
   * `web/src/app/(app)/course/[id]/stream/CourseStream.tsx` and `.module.css`: the label, the date
     and the key, using existing tokens only.
@@ -287,8 +318,10 @@ Changed, by owner (the sets are disjoint):
     after 17's P-10 migration; its column list is 17's.
   * P-11's three link moves come first; 130 re-checks them.
   * R-39's hide and toggle are what Classwork shows after the collapse.
-  * The heartbeat view (P-12, P-71), the thresholds and `freshnessLine`'s staleness half are 17's and
-    untouched here. This phase adds only the run-state word.
+  * The heartbeat view (P-12, P-71), the thresholds and `freshnessLine`'s staleness half
+    (`stalenessLine`) are 17's and untouched here. This phase adds the run-state word and R-41's
+    per-stream read with "never synced" (137's `streams`, task 16, rendered by tasks 19–20). The
+    PM's seam decision puts that read here, and brief 97 points here for it.
   * 134 starts from the live `sync_change_lines` body that R-58 left.
 * **Phase 18.**
   * `stage_files` is re-created once in 18 and **never touched here**. The history maps files by
@@ -305,7 +338,8 @@ Changed, by owner (the sets are disjoint):
     opens the running row.
   * A quarantined run is refused.
   * A registered run folds only on its calendar row.
-  * The terminal rule is 30 minutes. Its Inbox item's ref is `agent_request:<id>`, so the runner's
+  * The terminal rule is 30 minutes (B-20, **PROVISIONAL**; a different answer changes 136's
+    constant and this seam). Its Inbox item's ref is `agent_request:<id>`, so the runner's
     dead-letter item (R-83) collapses onto it through `attention_items_open_dedupe_idx`. That works
     only if the runner raises with the same kind (`stack_must_confirm`), a null course and a null
     field, because the index keys on `(kind, course_id, ref, field)` while `state = 'open'` (041).
@@ -314,7 +348,8 @@ Changed, by owner (the sets are disjoint):
   * `stage_content` (026), `v_course_stream` / `v_content_tree` (027, byte-frozen), `v_sync_status`
     (035), `transform_tick` (044), `run_transform` / `sync_change_lines` (051), `raise_attention` and
     the open-dedupe index (041).
-  * `v_data_freshness` (040) is untouched; a `history` stage row appears in it.
+  * `v_data_freshness` (040) is untouched; a `history` stage row appears in it, and 137's `streams`
+    reads it.
   * The views that gate on a `sync_runs` row (`v_gradebook_history`, `v_gradebook_latest`,
     `v_attempts_latest`, `v_calendar_push_items`) read per-run tables written only during a fold, so
     a claim-opened `running` row changes none of them.
@@ -351,13 +386,16 @@ Changed, by owner (the sets are disjoint):
 
 *PM wording, built from his answers; his own words are quoted.* Every clause that rests on B-18
 (one post per change, dated by crawl), B-19 (the merge), B-20 (the 30-minute cut-off) or B-39
-(descriptions not shown) is **PROVISIONAL** until he answers 93 §5. The course page stays "Google
-Classroom style", and its Stream is what he asked for in sprint 1: "Announcements, new/changed
-materials, assignments opening and due" (his answers, `60_REQUIREMENTS_v2.md` §6.1). A material
-appears once, when a sync finds it new or changed, dated by that crawl, and not again unless it
-changes again. Classwork is "By Blackboard folder" (same table), with each Blackboard item exactly
-once: IST.466's five same-named items and its two missing files appear, IST.352's renamed week
-folder appears once, and nothing Blackboard still lists is hidden. A sync always shows its true state.
+(descriptions not shown) is **PROVISIONAL** until he answers 93 §5. The course page stays as
+DECISIONS 2026-09-10 records his direction: "course page is **Google Classroom-style** (Stream
+landing, Classwork by Blackboard folder, Grades, Info)". Its Stream carries announcements, new or
+changed materials, and assignments opening and due, which is his Stream answer as the PM recorded it
+from the sprint 1 clarification rounds (`60_REQUIREMENTS_v2.md` §6.1; PM's record, not quoted). A
+material appears once, when a sync finds it new or changed, dated by that crawl, and not again unless
+it changes again. Classwork is grouped by Blackboard folder (the same DECISIONS row), with each
+Blackboard item exactly once: IST.466's five same-named items and its two missing files appear,
+IST.352's renamed week folder appears once, and nothing Blackboard still lists is hidden. A sync
+always shows its true state, and a kind of data that has never synced says so.
 From the moment it is claimed, Home says it is running. Only a complete crawl is folded. A crawl that
 never finishes is called interrupted within about half an hour, never "failed" and never
 "syncing…" indefinitely, and it leaves one Inbox item and a working Sync button. Item descriptions
@@ -380,12 +418,12 @@ SOP gates:
 - [ ] `/security-review`: required (four definer functions new or re-created, a trigger on
       `agent_requests`, a new RLS table, grant changes). CRITICAL and HIGH are cleared.
 - [ ] The Supabase security advisor reports 0 findings naming a Phase 19 object.
-- [ ] All eight migrations are applied under their file names, byte-identical (task 25).
-- [ ] `project-state/STATUS.md`, `DECISIONS.md` (nine rows, task 28) and `ORCHESTRATOR.md` are
+- [ ] All eight migrations are applied under their file names, byte-identical (task 26).
+- [ ] `project-state/STATUS.md`, `DECISIONS.md` (nine rows, task 29) and `ORCHESTRATOR.md` are
       updated in the PR.
 - [ ] The PR is open against `main` with its Vercel preview link. Stack's OK comes before merge,
       because this phase changes the Stream, Classwork and Home visually.
-- [ ] `walk-19/01`–`06` exist as task 27 names them.
+- [ ] `walk-19/01`–`06` exist as task 28 names them.
 
 Stack's acceptance script, walked on the preview:
 
@@ -407,17 +445,21 @@ Stack's acceptance script, walked on the preview:
 What proves each requirement:
 
 * **R-38:** task 9's SQL (every material post traces to a history row) and screenshot 03.
-* **R-41 (run states):** tasks 2, 12, 14, 15, 18, 19 and 23; screenshots 04–06. The thresholds and
-  heartbeat half is Phase 17's (P-12, P-71), merged before this phase. STATUS marks R-41 met only
-  when both halves are on `main`.
+* **R-41 (run states and the per-stream read):** tasks 2, 12, 14, 15, 16, 19, 20 and 24; screenshots
+  04–06. Task 16 builds R-41's per-stream `{stream, last_seen_at, state}` read in SQL, with expected
+  streams so "never synced" shows (137's `streams`; the PM's seam decision, and brief 97 points here
+  for it). Tasks 19 and 20 render it on Home and the Inbox header through `freshnessLine`. The
+  thresholds and heartbeat half is Phase 17's (P-12, P-71), merged before this phase. STATUS marks
+  R-41 met only when both halves are on `main`.
 * **R-64:** tasks 3 and 4 (no duplicate pair, the path key gone, files 17 and 19 in the tree);
   screenshots 01 and 02.
-* **R-65:** tasks 12–14 (open at claim, fold only when complete, terminal rule), 16 (register-first
-  skill) and 26 (live proof).
+* **R-65:** tasks 12–14 (open at claim, fold only when complete, terminal rule), 17 (register-first
+  skill) and 27 (live proof).
 * **R-71:** tasks 5, 7, 8 and 10 (real change count, the history table matching the `bb_raw` diff, one
   vanish convention, named Activity lines).
-* **R-76:** closed by the DECISIONS row in task 28 (B-39); task 22 guards the "if ever shown" half.
-* **P-25:** task 3. **P-94:** task 22. **P-95:** task 6. **P-98:** task 8.
+* **R-76:** closed by the DECISIONS row in task 29 (B-39 default, **PROVISIONAL**); task 23 guards the
+  "if ever shown" half.
+* **P-25:** task 3. **P-94:** task 23. **P-95:** task 6. **P-98:** task 8.
 
 ## Task list
 
@@ -430,52 +472,53 @@ that produces it.
 
 | # | task | covers | owner | deterministic check | demo line for Stack |
 |---|---|---|---|---|---|
-| 1 | Write `phase19_130_ghost_collapse.sql` and `phase19_131_stage_content_item_key.sql` first. Use a synthetic IST.466-shaped payload (two sibling lessons named Information with same-path children), a renamed node, a re-fold of the same run and an older crawl | R-64, R-71 | W-52 | (a) Before 130/131 are applied, `node scripts/db-test.mjs --only phase19_130_ghost_collapse.sql` and `--only phase19_131_stage_content_item_key.sql` each print `FAIL  <file>  …` and `db-test: passed 0, failed 1, units 1`, exit 1 (lines copied into `99_W52_VERIFICATION.md`). After tasks 3–4, each prints `db-test: passed 1, failed 0, units 1`, exit 0 | — |
-| 2 | Write `phase19_135_136_sync_driver.sql` and `phase19_137_sync_status.sql` first. Fixtures: a claim with `run_id`; a claim naming a quarantined run; a registered run with course rows and no calendar row, aged 5 min; the same with its calendar row; a `running` row aged 31 min; a claimed request with no `run_id`, aged 31 min | R-65, R-41 | W-53 | (a) Before 135–137 are applied, `node scripts/db-test.mjs --only phase19_135_136_sync_driver.sql` and `--only phase19_137_sync_status.sql` each print `db-test: passed 0, failed 1, units 1`, exit 1 (lines in `99_W53_VERIFICATION.md`). After tasks 12–15, each prints `db-test: passed 1, failed 0, units 1`, exit 0 | — |
+| 1 | Write `phase19_130_ghost_collapse.sql` and `phase19_131_stage_content_item_key.sql` first. Use a synthetic IST.466-shaped payload (two sibling lessons named Information with same-path children), a renamed node, a re-fold of the same run and an older crawl | R-64, R-71 | W-52 | (a) Before 130/131 are applied, `node scripts/db-test.mjs --only phase19_130_ghost_collapse.sql` and `node scripts/db-test.mjs --only phase19_131_stage_content_item_key.sql` each print `FAIL  <file>  …` and `db-test: passed 0, failed 1, units 1`, exit 1 (lines copied into `99_W52_VERIFICATION.md`). After tasks 3–4, each prints `db-test: passed 1, failed 0, units 1`, exit 0 | — |
+| 2 | Write `phase19_135_136_sync_driver.sql` and `phase19_137_sync_status.sql` first. Fixtures for the driver: a claim with `run_id`; a claim naming a quarantined run; a registered run with course rows and no calendar row, aged 5 min; the same with its calendar row; a `running` row aged 31 min; a claimed request with no `run_id`, aged 31 min. Fixtures for 137: a reaped run; the `history` stage with no row, with one `failed` row, with one `ok` row finished two days ago, and with one finished now | R-65, R-41 | W-53 | (a) Before 135–137 are applied, `node scripts/db-test.mjs --only phase19_135_136_sync_driver.sql` and `node scripts/db-test.mjs --only phase19_137_sync_status.sql` each print `db-test: passed 0, failed 1, units 1`, exit 1 (lines in `99_W53_VERIFICATION.md`). Once task 13 has applied 136, the first prints `db-test: passed 1, failed 0, units 1`, exit 0; once task 15 has applied 137, the second prints the same, exit 0 | — |
 | 3 | 130 ghost collapse: carry links and paths, then delete the 16 ghost rows | R-64, P-25 | W-52 | (b) Recorded in `99_W52_VERIFICATION.md` immediately before 130: `select count(*) from agent_requests where kind = 'sync' and state in ('queued','claimed')` → 0; S₀ = `select count(*) from bb_content where detail->>'missing_since' is not null` (21 on 2026-09-24); D₀ = `select count(*) from (select course_id, bb_item_id from bb_content group by 1, 2 having count(*) > 1) d` (16); N₀ = `select count(*) from bb_content` (218). After 130: the D₀ query → 0; `select count(*) from bb_content where assignment_id is not null and detail->>'missing_since' is not null` → 0; the S₀ query → S₀ − D₀ (5 on 2026-09-24); the N₀ query → N₀ − D₀ (202) | "IST.352 Classwork has one WK01 folder" |
 | 4 | 131 key swap, `stage_content` re-created, newest crawl re-folded | R-64 | W-52 | (b) `select count(*) from pg_constraint where conrelid = 'public.bb_content'::regclass and conname = 'bb_content_course_id_path_key'` → 0; the same query for `bb_content_course_item_key` → 1; `select count(*) from v_content_tree where file_id in (17, 19)` → 2 (both are current in `v_bb_files_current` on 2026-09-24 and have no node today); (a) `node scripts/db-test.mjs --only phase19_131_stage_content_item_key.sql` → `db-test: passed 1, failed 0, units 1` | "IST.466 Classwork shows both Information lessons and the two missing files" |
-| 5 | `stage_content` counts real changes and writes only as the newest crawl (in 131) | R-71 | W-52 | (a) `phase19_131` PASS. Its blocks assert that a second fold of the same run returns `updated` = 0 and `unchanged` = item count, and that the older fixture run returns `older_run = true` and changes 0 rows | "a sync with nothing new says Nothing changed for content" |
+| 5 | `stage_content` counts real changes and writes only as the newest crawl (in 131) | R-71 | W-52 | (a) `node scripts/db-test.mjs --only phase19_131_stage_content_item_key.sql` → `db-test: passed 1, failed 0, units 1`. Its blocks assert that a second fold of the same run returns `updated` = 0 and `unchanged` = item count, and that the older fixture run returns `older_run = true` and changes 0 rows | "a sync with nothing new says Nothing changed for content" |
 | 6 | Keep `bb_type` = `contentHandler` through the re-fold (P-95 met, recorded) | P-95 | W-52 | (b) With `<run>` = the run 131 re-folds (its id recorded in `99_W52_VERIFICATION.md`): `select count(*) from bb_content b join (select bb_resolve_course(r.bb_course_id) as course_id, e->>'id' as bb_item_id, e->>'type' as type from bb_raw r cross join lateral jsonb_array_elements(r.payload->'content') e where r.run_id = '<run>' and r.kind = 'course') x on x.course_id = b.course_id and x.bb_item_id = b.bb_item_id where b.bb_type is distinct from x.type` → 0; `select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'bb_content' and column_name ilike '%handler%'` → 0 (no second column) | — |
-| 7 | 132: `bb_material_history`, `material_history_record`, backfill | R-71, R-38 | W-52 | (a) `phase19_132` PASS (appeared, changed and vanished; baseline writes 0; older run writes 0; a re-run writes 0; `has_table_privilege('anon', 'public.bb_material_history', 'select')` is false; `set local role authenticated` with a non-owner `request.jwt.claims` sub reads 0 rows; its prod block runs the `bb_raw` diff of the newest registered folded crawl against its predecessor, and `except` in both directions against the history rows returns 0 rows); (b) `select has_function_privilege('authenticated', 'public.material_history_record(uuid)', 'execute')` → false | — |
+| 7 | 132: `bb_material_history`, `material_history_record`, backfill | R-71, R-38 | W-52 | (a) `node scripts/db-test.mjs --only phase19_132_material_history.sql` → `db-test: passed 1, failed 0, units 1` (its blocks: appeared, changed and vanished; baseline writes 0; older run writes 0; a re-run writes 0; `has_table_privilege('anon', 'public.bb_material_history', 'select')` is false; `set local role authenticated` with a non-owner `request.jwt.claims` sub reads 0 rows; its prod block runs the `bb_raw` diff of the newest registered folded crawl against its predecessor, and `except` in both directions against the history rows returns 0 rows); (b) `select has_function_privilege('authenticated', 'public.material_history_record(uuid)', 'execute')` → false | — |
 | 8 | One vanish convention; retention recorded | P-98, R-71 | W-52 | (b) `select count(*) from bb_content b where b.detail->>'missing_since' is not null and exists (select 1 from bb_material_history h where h.run_id = (b.detail->>'missing_since')::uuid) and not exists (select 1 from bb_material_history h where h.entity = 'content' and h.change = 'vanished' and h.course_id = b.course_id and h.bb_item_id = b.bb_item_id and h.run_id = (b.detail->>'missing_since')::uuid)` → 0; `select count(*) from information_schema.columns c join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name where c.table_schema = 'public' and t.table_type = 'BASE TABLE' and c.column_name like 'missing_since%'` → 0 | — |
-| 9 | 133: the Stream's material posts come from history | R-38 | W-52 | (b) `select string_agg(attname, ',' order by attnum) from pg_attribute where attrelid = 'public.v_course_stream'::regclass and attnum > 0 and not attisdropped` → `course_id,post_kind,posted_at,ref_kind,ref_id,title,body,meta`; `select count(*) from v_course_stream s where s.post_kind = 'material' and not exists (select 1 from bb_material_history h where h.run_id::text = s.meta->>'run_id')` → 0; (a) `phase19_133` PASS (`security_invoker`, no anon select, `my_submissions` and missing items excluded) | "material posts say New or Changed, dated by crawl" |
-| 10 | 134: Activity names up to three materials | R-71 | W-52 | (a) `phase19_134` PASS (fixture stages give the exact lines "2 new material(s): A, B" and "1 material(s) no longer in Blackboard: C"); `db/tests/phase10a_stage_gradebook.sql` PASS | "Activity says which files were new" |
+| 9 | 133: the Stream's material posts come from history | R-38 | W-52 | (b) `select string_agg(attname, ',' order by attnum) from pg_attribute where attrelid = 'public.v_course_stream'::regclass and attnum > 0 and not attisdropped` → `course_id,post_kind,posted_at,ref_kind,ref_id,title,body,meta`; `select count(*) from v_course_stream s where s.post_kind = 'material' and not exists (select 1 from bb_material_history h where h.run_id::text = s.meta->>'run_id')` → 0; (a) `node scripts/db-test.mjs --only phase19_133_course_stream_history.sql` → `db-test: passed 1, failed 0, units 1` (its blocks: `security_invoker`, no anon select, `my_submissions` and missing items excluded) | "material posts say New or Changed, dated by crawl" |
+| 10 | 134: Activity names up to three materials | R-71 | W-52 | (a) `node scripts/db-test.mjs --only phase19_134_sync_change_lines.sql` → `db-test: passed 1, failed 0, units 1` (fixture stages give the exact lines "2 new material(s): A, B" and "1 material(s) no longer in Blackboard: C"); `node scripts/db-test.mjs --only phase10a_stage_gradebook.sql` → `db-test: passed 1, failed 0, units 1` | "Activity says which files were new" |
 | 11 | `DATA_SYNTAX.md` names the new key and the history table | R-64, R-71 | W-52 | (d) `grep -c 'bb_material_history' DATA_SYNTAX.md` → ≥ 1; `grep -c 'course_id, bb_item_id' DATA_SYNTAX.md` → ≥ 1 (both 0 at `main` a5042fa) | — |
-| 12 | 135: running row opened at claim; `run_transform` adopts it and records `history` | R-65, R-41 | W-53 | (b) Immediately before 135: `select count(*) from agent_requests where kind = 'sync' and state in ('queued','claimed')` → 0; (a) `phase19_135_136` PASS (a claim with `run_id` opens exactly 1 `running` row; a registered run holding that row and its calendar row folds into the same row; a quarantined run id raises 42501; the fold keeps the same `sync_runs.id`; `finished_at > started_at`); (b) `select count(*) from pg_trigger where tgname = 'agent_requests_open_sync_run'` → 1; `select has_function_privilege('authenticated', 'public.sync_request_open_run()', 'execute')` → false | "Home says sync running as soon as the sync starts" |
-| 13 | 136: a registered run folds only on its calendar row; the drain uses the same test | R-65 | W-53 | (a) `phase19_135_136` PASS (5-min-old run with no calendar row → 0 folds; with the calendar row → 1 fold; the drain skips an incomplete newest run; quarantine unchanged); `db/tests/phase9_transform_states.sql` PASS; (b) `select schedule from cron.job where jobname = 'bb2dash-transform-tick'` → `*/2 * * * *` | — |
-| 14 | 136 terminal rule: interrupted, the request closed, one Inbox item | R-65, R-41 | W-53 | (a) `phase19_135_136` PASS (31-min `running` row → `failed`, `interrupted_at` not null, notes contain `interrupted (reaped)`, request `failed`, exactly 1 open item with ref `agent_request:<id>`; a second tick adds 0; a claimed request with no run id, aged 31 min → `failed` + 1 item) | "a dead sync frees the Sync button and leaves one Inbox item" |
-| 15 | 137: `v_sync_status` carries `notes` and `interrupted` | R-41 | W-53 | (b) `select string_agg(attname, ',' order by attnum) like '%,notes,interrupted' from pg_attribute where attrelid = 'public.v_sync_status'::regclass and attnum > 0 and not attisdropped` → true; `select has_table_privilege('anon', 'public.v_sync_status', 'select')` → false; (a) `phase19_137` PASS | — |
-| 16 | `skills/bb-sync/SKILL.md` goes register-first. It lands only after 136 is applied | R-65 | W-53 | (d) `grep -c '^## Step 3a' skills/bb-sync/SKILL.md` → 0; `grep -c 'Do not pass' skills/bb-sync/SKILL.md` → 0; `grep -c "runAll({ termName: 'Fall 2026', runId })" skills/bb-sync/SKILL.md` → 1 | — |
-| 17 | Runbook step 5 and the crawler comments match the new driver (comments only) | R-65 | W-53 | (d) `grep -c 'opened when the sync request is claimed' ingest/CADENCE_RUNBOOK.md` → 1; `grep -c 'WHY THE SKILL STILL REGISTERS AFTER THE CRAWL' ingest/bb_crawler.js` → 0; `grep -c 'It is NOT yet safe' ingest/bb_crawler.js` → 0; (a) `cd web && npx vitest run test/crawler.announcements.test.ts test/crawler.attempts.test.ts` → 0 failures | — |
-| 18 | `sync-run-state.ts` with fixtures for every state | R-41 | W-54 | (a) `cd web && npx vitest run test/sync-run-state.test.ts` → 0 failures (running → "sync running"; partial → "last run partial"; failed → "last run failed"; interrupted → "last sync interrupted"; ok → null; no row → "no sync recorded yet" from `freshnessLine`) | — |
-| 19 | `freshnessLine` uses it; `SyncStatus` carries the two columns | R-41 | W-54 | (d) `git diff --numstat main -- web/src/lib/queries.sync.ts` → first field ≤ 10; (a) `cd web && npx vitest run test/queries.sync.test.ts test/NeedsAttention.test.tsx test/Inbox.test.tsx` → 0 failures | "Home reads last sync interrupted, not failed" |
-| 20 | Stream shows the label and date, keyed per run | R-38 | W-54 | (a) `cd web && npx vitest run test/course-stream.history.test.tsx test/course-stream.test.tsx` → 0 failures (New/Changed label; crawl date; one file posted by two runs renders twice with a spied `console.error` never called for duplicate keys) | — |
-| 21 | Classwork keeps two nodes that share a path | R-64 | W-54 | (a) `cd web && npx vitest run test/course-classwork.samepath.test.ts test/course-classwork.test.ts test/CourseClasswork.test.tsx` → 0 failures | — |
-| 22 | Raw-HTML guard for Blackboard rich text | P-94, R-76 | W-54 | (a) `cd web && npx vitest run test/raw-html.audit.test.ts` → 0 failures; (d) `grep -rl "dangerouslySetInnerHTML=" web/src` → exactly one path, `web/src/app/(app)/layout.tsx` | — |
-| 23 | Desktop toast for an interrupted run | R-41 | W-54 | (a) `cd desktop && npx vitest run test/unit/reducer.test.ts test/unit/sources.test.ts` → 0 failures (interrupted → title "Sync interrupted"; `syncQuery()` selects `interrupted`) | "the desktop says Sync interrupted" |
-| 24 | Integrate: regenerate types, run the full suites | all | PM | (d) `grep -c 'bb_material_history: {' web/src/lib/supabase/database.types.ts` → 1; (a) `cd web && npm run typecheck && npm run build && npx vitest run` → exit 0; `cd desktop && npm run typecheck && npx vitest run` → exit 0; `node scripts/db-test.mjs` → exit 0 | — |
-| 25 | Migrations recorded; advisors clean | all | PM | (b) `select count(*) from supabase_migrations.schema_migrations where name in ('130_bb_content_ghost_collapse', '131_bb_content_item_key', '132_material_history', '133_course_stream_history', '134_sync_change_lines_materials', '135_sync_run_open_at_claim', '136_transform_tick_register_first', '137_sync_status_run_state')` → 8; (b) for each of the eight, `select md5(statements[1]) from supabase_migrations.schema_migrations where name = '<name>'` equals `git show HEAD:db/migrations/<file> | md5sum` (the LF form, as `80k_W34_VERIFICATION.md` recorded it): 8 of 8 equal, table in the PR; (d) `get_advisors` (security) findings naming `bb_material_history`, `material_history_record`, `bb_content_path_history` or `sync_request_open_run` → 0 | — |
-| 26 | First register-first sync, live (Stack runs it; the PM checks) | R-65 | Stack + PM | (b) `select s.started_at < (select min(b.captured_at) from bb_raw b where b.run_id = s.run_id) and s.finished_at > s.started_at from sync_runs s where s.source = 'blackboard' and s.scope = 'all' order by s.id desc limit 1` → true | "press Sync; it runs and lands as before" |
-| 27 | PM walk on the preview | R-38, R-41, R-64 | PM | (c) `docs/planning/sprint-2/walks/walk-19/` holds exactly these six: `01-ist466-classwork.png` (both "Information" lessons expanded; "Ethics Criteria.pptx" and "LectureM3_IST466Fall 2026 (2).pptx" visible); `02-ist352-classwork.png` (one WK01 folder); `03-stream-history.png` (a material post labelled New with its crawl date); `04-home-sync-running.png` (during task 26: "sync running"); `05-home-interrupted.png` (after acceptance step 5: "last sync interrupted"); `06-inbox-interrupted.png` (the one Inbox item). (d) `ls docs/planning/sprint-2/walks/walk-19/*.png | wc -l` → 6 | — |
-| 28 | Docs: nine DECISIONS rows, STATUS, ORCHESTRATOR | R-76, all | PM | (d) `grep -c '^| 2026-' project-state/DECISIONS.md` → `git show main:project-state/DECISIONS.md | grep -c '^| 2026-'` + 9. The rows: key swap and path constraint dropped; ghost merge; history table, retention and vanish convention; Stream material posts and the baseline; register-first (supersedes 2026-09-15); open at claim and quarantined runs refused; the terminal rule (departs from 2026-09-15's Why); R-76 closed (B-39, text-only if ever shown); P-95 met by `bb_type`. `git diff --stat main -- project-state/STATUS.md project-state/ORCHESTRATOR.md` → 2 files changed | "read the nine rows in the PR" |
+| 12 | 135: running row opened at claim; `run_transform` adopts it and records `history` | R-65, R-41 | W-53 | (b) Immediately before 135: `select count(*) from agent_requests where kind = 'sync' and state in ('queued','claimed')` → 0; (a) once task 13 has applied 136 (applied back to back with 135), `node scripts/db-test.mjs --only phase19_135_136_sync_driver.sql` → `db-test: passed 1, failed 0, units 1` (its 135 blocks: a claim with `run_id` opens exactly 1 `running` row; a registered run holding that row and its calendar row folds into the same row; a quarantined run id raises 42501; the fold keeps the same `sync_runs.id`; `finished_at > started_at`); (b) `select count(*) from pg_trigger where tgname = 'agent_requests_open_sync_run'` → 1; `select has_function_privilege('authenticated', 'public.sync_request_open_run()', 'execute')` → false | "Home says sync running as soon as the sync starts" |
+| 13 | 136: a registered run folds only on its calendar row; the drain uses the same test | R-65 | W-53 | (a) `node scripts/db-test.mjs --only phase19_135_136_sync_driver.sql` → `db-test: passed 1, failed 0, units 1` (its 136 blocks: 5-min-old run with no calendar row → 0 folds; with the calendar row → 1 fold; the drain skips an incomplete newest run; quarantine unchanged); `node scripts/db-test.mjs --only phase9_transform_states.sql` → `db-test: passed 1, failed 0, units 1`; (b) `select schedule from cron.job where jobname = 'bb2dash-transform-tick'` → `*/2 * * * *` | — |
+| 14 | 136 terminal rule: interrupted, the request closed, one Inbox item | R-65, R-41 | W-53 | (a) `node scripts/db-test.mjs --only phase19_135_136_sync_driver.sql` → `db-test: passed 1, failed 0, units 1` (its terminal-rule blocks: 31-min `running` row → `failed`, `interrupted_at` not null, notes contain `interrupted (reaped)`, request `failed`, exactly 1 open item with ref `agent_request:<id>`; a second tick adds 0; a claimed request with no run id, aged 31 min → `failed` + 1 item) | "a dead sync frees the Sync button and leaves one Inbox item" |
+| 15 | 137: `v_sync_status` carries `notes` and `interrupted` (and `streams`, task 16) | R-41 | W-53 | (b) `select string_agg(attname, ',' order by attnum) from pg_attribute where attrelid = 'public.v_sync_status'::regclass and attnum > 0 and not attisdropped` → `id,run_id,status,started_at,finished_at,trigger,summary,open_attention,freshness,notes,interrupted,streams` (the first nine are prod's list on 2026-09-27); `select has_table_privilege('anon', 'public.v_sync_status', 'select')` → false; (a) `node scripts/db-test.mjs --only phase19_137_sync_status.sql` → `db-test: passed 1, failed 0, units 1` (its run-state blocks: a reaped run reads `interrupted` = true, with `notes` ending `interrupted (reaped)`) | — |
+| 16 | 137's `streams`: R-41's per-stream `{stream, last_seen_at, state}` read in SQL over the nine expected streams, `never` for a stream with no `ok` finish (the PM's seam decision; brief 97 points here for it) | R-41 | W-53 | (a) `node scripts/db-test.mjs --only phase19_137_sync_status.sql` → `db-test: passed 1, failed 0, units 1` (its stream blocks, inside the rolled-back unit: with every `history` stage row deleted, the `history` element reads `never` with a null `last_seen_at`; with one `failed` `history` row it still reads `never`; with one `ok` row finished two days ago it reads `stale`; with one finished now, `fresh`); (b) `select string_agg(e->>'stream', ',' order by e->>'stream') from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e` → `announcements,assignments,attempts,content,courses,files,gaps,gradebook,history`; (b) `select count(*) from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e left join v_data_freshness f on f.stage = e->>'stream' where coalesce(e->>'state', '') not in ('fresh', 'stale', 'never') or (e->>'state' = 'never') is distinct from (f.fresh_as_of is null) or (e->>'last_seen_at')::timestamptz is distinct from f.fresh_as_of` → 0; (b) `begin; select set_config('request.jwt.claims', json_build_object('sub', public.app_owner(), 'role', 'authenticated')::text, true); set local role authenticated; select jsonb_array_length(streams) from v_sync_status; rollback;` → 9; (b) recorded in `99_W53_VERIFICATION.md` before the first fold after 135 (task 27): `select count(*) from sync_stage_runs where stage = 'history'` → 0 (0 on 2026-09-27) and `select e->>'state' from v_sync_status v cross join lateral jsonb_array_elements(v.streams) e where e->>'stream' = 'history'` → `never`; right after task 27, the same state query → `fresh` | "Home names a kind of data that has never synced" |
+| 17 | `skills/bb-sync/SKILL.md` goes register-first. It lands only after 136 is applied | R-65 | W-53 | (d) `grep -c '^## Step 3a' skills/bb-sync/SKILL.md` → 0; `grep -c 'Do not pass' skills/bb-sync/SKILL.md` → 0; `grep -c "runAll({ termName: 'Fall 2026', runId })" skills/bb-sync/SKILL.md` → 1 | — |
+| 18 | Runbook step 5 and the crawler comments match the new driver (comments only) | R-65 | W-53 | (d) `grep -c 'opened when the sync request is claimed' ingest/CADENCE_RUNBOOK.md` → 1; `grep -c 'WHY THE SKILL STILL REGISTERS AFTER THE CRAWL' ingest/bb_crawler.js` → 0; `grep -c 'It is NOT yet safe' ingest/bb_crawler.js` → 0; (a) `cd web && npx vitest run test/crawler.announcements.test.ts test/crawler.attempts.test.ts` → 0 failures | — |
+| 19 | `sync-run-state.ts` with fixtures for every state and for the streams | R-41 | W-54 | (a) `cd web && npx vitest run test/sync-run-state.test.ts` → 0 failures (running → "sync running"; partial → "last run partial"; failed → "last run failed"; interrupted → "last sync interrupted"; ok → null; no row → "no sync recorded yet" from `freshnessLine`; `neverSyncedLine` on streams with `history` `never` → "history never synced", with `history` and `content` `never` → "content, history never synced", with none `never` → null; `normalizeStreams` drops an element with no `stream` or an unknown `state`) | — |
+| 20 | `freshnessLine` uses it; `SyncStatus` carries the three columns | R-41 | W-54 | (d) `git diff --numstat main -- web/src/lib/queries.sync.ts` → first field ≤ 15; (a) `cd web && npx vitest run test/queries.sync.test.ts test/NeedsAttention.test.tsx test/Inbox.test.tsx` → 0 failures (added fixtures: every `freshness` row fresh and `streams` holding `history` `never` → the line ends "· history never synced"; a `freshness` row stale 2 days → the line ends "· files stale 2 days" and names no never-synced stream; a row with no `streams` key → the same string `main` returns) | "Home reads last sync interrupted, not failed" |
+| 21 | Stream shows the label and date, keyed per run | R-38 | W-54 | (a) `cd web && npx vitest run test/course-stream.history.test.tsx test/course-stream.test.tsx` → 0 failures (New/Changed label; crawl date; one file posted by two runs renders twice with a spied `console.error` never called for duplicate keys) | — |
+| 22 | Classwork keeps two nodes that share a path | R-64 | W-54 | (a) `cd web && npx vitest run test/course-classwork.samepath.test.ts test/course-classwork.test.ts test/CourseClasswork.test.tsx` → 0 failures | — |
+| 23 | Raw-HTML guard for Blackboard rich text | P-94, R-76 | W-54 | (a) `cd web && npx vitest run test/raw-html.audit.test.ts` → 0 failures; (d) `grep -rl "dangerouslySetInnerHTML=" web/src` → exactly one path, `web/src/app/(app)/layout.tsx` | — |
+| 24 | Desktop toast for an interrupted run | R-41 | W-54 | (a) `cd desktop && npx vitest run test/unit/reducer.test.ts test/unit/sources.test.ts` → 0 failures (interrupted → title "Sync interrupted"; `syncQuery()` selects `interrupted`) | "the desktop says Sync interrupted" |
+| 25 | Integrate: regenerate types, run the full suites | all | PM | (d) `grep -c 'bb_material_history: {' web/src/lib/supabase/database.types.ts` → 1; (a) `cd web && npm run typecheck && npm run build && npx vitest run` → exit 0; `cd desktop && npm run typecheck && npx vitest run` → exit 0; `node scripts/db-test.mjs` → exit 0 | — |
+| 26 | Migrations recorded; advisors clean | all | PM | (b) `select count(*) from supabase_migrations.schema_migrations where name in ('130_bb_content_ghost_collapse', '131_bb_content_item_key', '132_material_history', '133_course_stream_history', '134_sync_change_lines_materials', '135_sync_run_open_at_claim', '136_transform_tick_register_first', '137_sync_status_run_state')` → 8; (b) for each of the eight, `select md5(statements[1]) from supabase_migrations.schema_migrations where name = '<name>'` equals `git show HEAD:db/migrations/<file> \| md5sum` (the LF form, as `80k_W34_VERIFICATION.md` recorded it): 8 of 8 equal, table in the PR; (d) `get_advisors` (security) findings naming `bb_material_history`, `material_history_record`, `bb_content_path_history` or `sync_request_open_run` → 0 | — |
+| 27 | First register-first sync, live (Stack runs it; the PM checks) | R-65 | Stack + PM | (b) `select s.started_at < (select min(b.captured_at) from bb_raw b where b.run_id = s.run_id) and s.finished_at > s.started_at from sync_runs s where s.source = 'blackboard' and s.scope = 'all' order by s.id desc limit 1` → true | "press Sync; it runs and lands as before" |
+| 28 | PM walk on the preview | R-38, R-41, R-64 | PM | (c) `docs/planning/sprint-2/walks/walk-19/` holds exactly these six: `01-ist466-classwork.png` (both "Information" lessons expanded; "Ethics Criteria.pptx" and "LectureM3_IST466Fall 2026 (2).pptx" visible); `02-ist352-classwork.png` (one WK01 folder); `03-stream-history.png` (a material post labelled New with its crawl date); `04-home-sync-running.png` (during task 27: "sync running"); `05-home-interrupted.png` (after acceptance step 5: "last sync interrupted"); `06-inbox-interrupted.png` (the one Inbox item). (d) `ls docs/planning/sprint-2/walks/walk-19/*.png \| wc -l` → 6 | — |
+| 29 | Docs: nine DECISIONS rows, STATUS, ORCHESTRATOR | R-76, all | PM | (d) `grep -c '^\| 2026-' project-state/DECISIONS.md` → `git show main:project-state/DECISIONS.md \| grep -c '^\| 2026-'` + 9. The rows: key swap and path constraint dropped; ghost merge; history table, retention and vanish convention; Stream material posts and the baseline; register-first (supersedes 2026-09-15); open at claim and quarantined runs refused; the terminal rule (departs from 2026-09-15's Why); R-76 closed (B-39, text-only if ever shown); P-95 met by `bb_type`. `git diff --stat main -- project-state/STATUS.md project-state/ORCHESTRATOR.md` → 2 files changed | "read the nine rows in the PR" |
 
 Order: tasks 1–2, then 3 → 4 → 5–6 → 7 → 8 → 9–11 for W-52. W-53's task 12 applies 135, which calls
 `material_history_record` (132). Prod order must equal name order, so 133 and 134 go first and task
-12 follows task 10. W-53 then runs 13 → 14 → 15 → 16 → 17. W-54's tasks 18–23 use fixtures and run
-from the start. Tasks 24–28 come last.
+12 follows task 10. W-53 then runs 13 → 14 → 15 → 16 → 17 → 18 (15 and 16 are the one migration,
+137). W-54's tasks 19–24 use fixtures and run from the start. Tasks 25–29 come last.
 
 ## Workers
 
 | Worker | Stream | Branch | Worktree | Owns (disjoint) | Tasks |
 |---|---|---|---|---|---|
 | W-52 | content identity and history | `feat/content-history-19-content` | `bb2dash-wt-content-history-19-content` | `db/migrations/130`–`134`, `db/tests/phase19_130`–`134`, `DATA_SYNTAX.md`, `99_W52_VERIFICATION.md` | 1, 3–11 |
-| W-53 | sync honesty (driver) | `feat/content-history-19-driver` | `bb2dash-wt-content-history-19-driver` | `db/migrations/135`–`137`, `db/tests/phase19_135_136_sync_driver.sql`, `db/tests/phase19_137_sync_status.sql`, `skills/bb-sync/SKILL.md` steps 2–4, `ingest/CADENCE_RUNBOOK.md` step 5, `ingest/bb_crawler.js` comments, `99_W53_VERIFICATION.md` | 2, 12–17 |
-| W-54 | screens and desktop | `feat/content-history-19-screens` | `bb2dash-wt-content-history-19-screens` | `web/src/lib/sync-run-state.ts`, `queries.sync.ts` (10 added lines at most), `course-dimension.ts` (`CourseStreamMeta`), `CourseStream.tsx` + `.module.css`, the four new web tests, `web/test/queries.sync.test.ts` (additions), `desktop/src/core/types.ts`, `desktop/src/core/poller/sources.ts`, `desktop/src/core/poller/reducer.ts`, `desktop/test/unit/reducer.test.ts`, `desktop/test/unit/sources.test.ts`, `99_W54_VERIFICATION.md` | 18–23 |
+| W-53 | sync honesty (driver) | `feat/content-history-19-driver` | `bb2dash-wt-content-history-19-driver` | `db/migrations/135`–`137`, `db/tests/phase19_135_136_sync_driver.sql`, `db/tests/phase19_137_sync_status.sql`, `skills/bb-sync/SKILL.md` steps 2–4, `ingest/CADENCE_RUNBOOK.md` step 5, `ingest/bb_crawler.js` comments, `99_W53_VERIFICATION.md` | 2, 12–18 |
+| W-54 | screens and desktop | `feat/content-history-19-screens` | `bb2dash-wt-content-history-19-screens` | `web/src/lib/sync-run-state.ts`, `queries.sync.ts` (15 added lines at most), `course-dimension.ts` (`CourseStreamMeta`), `CourseStream.tsx` + `.module.css`, the four new web tests, `web/test/queries.sync.test.ts` (additions), `desktop/src/core/types.ts`, `desktop/src/core/poller/sources.ts`, `desktop/src/core/poller/reducer.ts`, `desktop/test/unit/reducer.test.ts`, `desktop/test/unit/sources.test.ts`, `99_W54_VERIFICATION.md` | 19–24 |
 
 The workers are Opus (DECISIONS 2026-09-23). Each commits and pushes per task
 (`feat(19-T4): …`), never touches `project-state/`, and applies migrations only in number order
 after a `begin; … rollback;` dry run. The PM owns `database.types.ts`, integration, the walk and the
-docs (tasks 24–28).
+docs (tasks 25–29).
 
 ## Out of scope
 
@@ -486,10 +529,12 @@ docs (tasks 24–28).
   embed step (P-22, P-23, P-36), crawler v5's key names, step 4b of the skill, and R-69's per-item URL
   (which reads `bb_type`) all belong to **Phase 18**.
 * `sync_claim`, `sync_register_run`, `sync_close`, the `sync_runner` role, the dead-letter attempts
-  counter (P-104), the container runner and any scheduled sync (D-3 stays declined, B-45) belong to
+  counter (P-104), the container runner and any scheduled sync (D-3 stays declined, B-45's default,
+  **PROVISIONAL**) belong to
   **Phase 14**.
 * Styling the new labels beyond existing tokens belongs to **Phase 22**.
-* A search arm over `bb_content`, rendering descriptions (B-39 = no), pruning `bb_raw`, and dropping
+* A search arm over `bb_content`, rendering descriptions (B-39 default no, **PROVISIONAL**), pruning
+  `bb_raw`, and dropping
   `bb_content_detail_merge` (left in place, unused) belong to no phase.
 * Writes to `assignment_progress` / `reading_progress`: none (D-2).
 
@@ -507,7 +552,9 @@ docs (tasks 24–28).
 * **B-20.** 93's default covers Phase 9's thresholds and the heartbeat only. **PM pick for the
   terminal rule (PROVISIONAL, B-20):** a registered crawl that never completes is never folded.
   After 30 minutes it is "interrupted", the request fails, one Inbox item is raised and the Sync
-  button is freed. The alternatives are a shorter cut-off, or folding it labelled partial.
+  button is freed. The alternatives are a shorter cut-off, or folding it labelled partial. The
+  per-stream read (task 16) calls a stream stale after Phase 9's one day, B-20's default
+  (**PROVISIONAL**); other numbers change one constant in 137.
 * **B-39.** Default: descriptions stay captured (11 rows) and are not shown, and R-76 closes by a
   DECISIONS row. If shown, they appear as plain text on Classwork, never HTML.
 

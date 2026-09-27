@@ -32,9 +32,9 @@ Phase 16's V-1 invariants, Phase 14's negative-grant tests, Phase 18's post-embe
 tests all land on (94 §3). Each of those arrives as a `db/tests` file that has to run from disk in one command and fail
 loudly. The `search_path` pin is one migration in 038's shape. The trigger is one migration with its own test.
 
-The research settled the method (92 db-hygiene-tests; 93 §1.5). pgTAP and `supabase test db` are not adopted: they
-would put about fifty functions on the PostgREST surface, and they want the declined local stack. The runner is a small
-node-postgres CLI that keeps the repo's own convention (`raise exception 'FAIL …'`, `begin … rollback`). It must
+The research recommends the method (92 db-hygiene-tests; 93 §1.5). pgTAP is not adopted (B-42's default,
+**PROVISIONAL**): it would put about fifty functions on the PostgREST surface. `supabase test db` wants the local
+stack D-20 declines. The runner is a small node-postgres CLI that keeps the repo's own convention (`raise exception 'FAIL …'`, `begin … rollback`). It must
 connect directly or through the **session** pooler, never the transaction pooler on 6543, because four files
 (`phase10b_grade_model`, `phase12b_076_…`, `phase12b_082_083_…`, `phase12b_089_…`) `set local role` mid-transaction,
 eight switches in all, into `anon` or `authenticated` only. (91 and 93 count nine switches in five files; the fifth,
@@ -45,8 +45,8 @@ two figures: unused indexes are **4**, not 5, and the org is on the **Free** pla
 
 | B | Question (93 §5) | Default taken (93 §5, verbatim) | Tasks that change if Stack answers otherwise |
 |---|---|---|---|
-| B-41 | Leaked-password protection (Q32) | "the org is on the Free plan; record it as accepted, stay on Free." **PROVISIONAL** | If he moves to Pro: task 19 expects `auth_leaked_password_protection` = 0 after his dashboard toggle; task 23's leaked-password row records the toggle, not an acceptance. Task 20 stays. |
-| B-42 | A database credential for the test runner (Q33) | "yes; a direct or session-pooler connection string (never the transaction pooler) in a gitignored `.env.local` as `BB2DASH_TEST_DB_URL`, for a dedicated `db_test_runner` role; pgTAP is not adopted." **PROVISIONAL** | **No credential:** tasks 4, 5 and 7 drop and migration 100 stays free. R-79 then closes as the runner and its offline checks (tasks 1–3, plus task 6's `commits.sql` case), with the suite pasted through MCP, and the one-command live run moves to Phase 14's dev container (B-48, **PROVISIONAL**). **An owner-level DSN instead of the role:** migration 100 and task 7 drop, and task 5 prints `postgres`. **pgTAP:** this brief is re-cut. |
+| B-41 | Leaked-password protection (Q32) | "the org is on the Free plan; record it as accepted, stay on Free." **PROVISIONAL** | If he moves to Pro: task 19 expects `auth_leaked_password_protection` = 0 after his dashboard toggle; task 23's leaked-password row records the toggle, not an acceptance. Task 20 stays. Acceptance step 5 then expects no leaked-password line, and the MVP's leaked-password clause is struck. |
+| B-42 | A database credential for the test runner (Q33) | "yes; a direct or session-pooler connection string (never the transaction pooler) in a gitignored `.env.local` as `BB2DASH_TEST_DB_URL`, for a dedicated `db_test_runner` role; pgTAP is not adopted." **PROVISIONAL** | **No credential:** tasks 4, 5 and 7 drop and migration 100 stays free. The live runner checks of tasks 6 (`passes.sql`, `fails.sql`), 9–15, 17 and 25, the DoD's `node scripts/db-test.mjs` gate and acceptance steps 2–4 change: each live run becomes one `execute_sql` paste per unit (a loader and its test file together), each expecting its `: PASS` row (its `FAIL …` exception where the row expects RED or runs `fails.sql`); step 2's `--ping` and task 25's `db-test: passed 21` grep have no paste form and drop. R-79 then closes as the runner and its offline checks (tasks 1–3, plus task 6's `commits.sql` case), with the suite pasted through MCP, and the one-command live run moves to Phase 14's dev container (B-48, **PROVISIONAL**). **An owner-level DSN instead of the role:** migration 100 and task 7 drop, and task 5 prints `postgres`. **pgTAP:** this brief is re-cut. |
 | B-16 (numbers only) | V-1's migration number | "a sprint-2 number in the grades phase's range; 059 stays unused (a 059 applied after 090 would replay out of order)." **PROVISIONAL** | Phase 15 only records the sprint-2 allocation (task 21, P-18). A different allocation changes that row and 94 §1, not any file here. |
 
 PM calls taken without a question (DECISIONS 2026-09-23, "proceeds on stated defaults"), recorded in the rows under
@@ -78,15 +78,17 @@ None. No web, desktop or MCP source file changes. The only file under `web/` tha
 
 **The trigger body** does one statement and returns `null`:
 `delete from public.planner_event_series s where s.id in (select distinct o.series_id from old_rows o where o.series_id is not null) and not exists (select 1 from public.planner_events e where e.series_id = s.id)`.
-It ignores nulls, never raises, and matches zero rows without complaint. It fires at the end of the inner
-`delete from planner_events` in 083/088's RPCs, before their own series delete, which then matches 0 rows. It never
-cascades, and a series with rows left is never touched.
+It ignores nulls, never raises, and matches zero rows without complaint. In `planner_series_delete`, the trigger
+fires at the end of the inner delete. If that delete empties the series, the RPC's own series delete then matches 0
+rows. If rows remain ("all" with past occurrences), the trigger leaves the series and the RPC deletes it as before.
+`planner_series_update` empties a series by UPDATE, which the trigger does not see, so its TR-4 delete is unchanged
+(088:161-164). It never cascades, and a series with rows left is never touched.
 
-**The role `db_test_runner` (migration 100).** The file carries no password, ever.
+**The role `db_test_runner` (migration 100).** (B-42, **PROVISIONAL**.) The file carries no password, ever.
 `create role db_test_runner with login bypassrls nosuperuser nocreatedb nocreaterole noreplication connection limit 2`;
 `alter role db_test_runner set statement_timeout = '60s'` and `set idle_in_transaction_session_timeout = '30s'`;
 `grant anon, authenticated to db_test_runner with inherit false`, so it can `set local role` into either but inherits
-neither. It gets `usage` on schema `public`, `select` on all tables and views in `public`, and `alter default privileges
+neither. It gets `usage` on schemas `public` and `extensions` (the two vector search functions resolve `operator(extensions.<=>)` as the caller), `select` on all tables and views in `public`, and `alter default privileges
 for role postgres in schema public grant select on tables to db_test_runner`. It gets `insert, update, delete` on
 exactly the tables the suite writes as the session role, `usage` on their sequences, and `execute` on exactly the
 functions the suite calls as the session role. Those lists are enumerated in the file by identity signature and
@@ -110,7 +112,7 @@ committed lockfile; install with `npm --prefix scripts ci`).
 | `node scripts/db-test.mjs` | runs every unit in `db/tests/` in name order | one line per unit: `PASS  <file>` or `FAIL  <file>  <first line of the server error>`; last line `db-test: passed <p>, failed <f>, units <n>` | 0 iff `f = 0`; 1 if any FAIL; 2 on usage, config, lint or connection error |
 | `node scripts/db-test.mjs --only <file.sql>` | runs one `db/tests` file (with its loader, if it has one) | same | same |
 | `node scripts/db-test.mjs --file <path.sql>` | runs one file from anywhere (the fixtures under `scripts/fixtures/db-test/`) | same | same |
-| `node scripts/db-test.mjs <path.sql>` | the positional form of `--file`, which briefs 96 and 100 use as written (`node scripts/db-test.mjs db/tests/grading_invariants.sql`); a path under `db/tests/` that the loader map names also gets its loader | same | same |
+| `node scripts/db-test.mjs <path.sql>` | the positional form of `--file`, the runner's own convenience: no sibling brief uses it (briefs 96, 97, 98, 100 and 102 call `--only <basename>` or the full suite); a path under `db/tests/` that the loader map names also gets its loader | same | same |
 | `node scripts/db-test.mjs --list` | prints the plan without connecting | one line per unit: `unit <NN>  <file>` or `unit <NN>  <loader> + <file>` | 0 |
 | any of the above, on a unit that fails lint | refuses before connecting | `db-test: lint <file>: <rule broken>` | 2 |
 | `node scripts/db-test.mjs --ping` | connects, prints the role | `db-test: connected as <current_user>` | 0 or 2 |
@@ -118,7 +120,7 @@ committed lockfile; install with `npm --prefix scripts ci`).
 * **Units.** A unit is a test file, or a loader followed by its test file sent as one text. The loader map is frozen
   as a constant: `phase10a_load_fixtures.sql` before `phase10a_stage_gradebook.sql` and before
   `phase10a_stage_attempts.sql`; `phase12b_load_fixture.sql` before `phase12b_085_stage_attempts_v4.sql`. Loader files
-  never run alone.
+  never run alone. `<file>` in every output line is the file's basename, whichever form named it.
 * **Pass rule.** A unit passes only if the server raises nothing **and** one result row's first column ends in `: PASS`.
   Today all 17 files end that way; every new file must too.
 * **Lint, before connecting (exit 2).** Comments and dollar-quoted bodies are stripped first. The unit must then begin
@@ -127,12 +129,12 @@ committed lockfile; install with `npm --prefix scripts ci`).
 * **One connection.** One `pg.Client` (never `Pool.query`, per node-postgres's transaction docs) runs each unit as one
   simple-protocol query. On an error the runner sends `rollback` and goes on to the next unit. One broken file never
   hides the rest.
-* **Credential.** `BB2DASH_TEST_DB_URL` is read from the process environment, or else from `.env.local` at the root of
+* **Credential** (B-42, **PROVISIONAL**). `BB2DASH_TEST_DB_URL` is read from the process environment, or else from `.env.local` at the root of
   the checkout the script lives in (`process.loadEnvFile`; this laptop runs Node v24.13.0). A DSN on port 6543 is
   refused with exit 2. No output ever contains the DSN or its password; every error message is redacted.
 * **Exports.** Importing the module has no side effects. `loadDsn()` and `openClient()` are exported so a later Node
   script reuses this credential rather than adding a second one. None is planned: Phase 16's P-67 checker is
-  `scripts/v1_recheck.py` (brief 96, Python), which emits `db/tests/phase16_v1_recheck.sql` for this runner to run.
+  `scripts/v1_recheck.py` (brief 96, Python), which emits `db/tests/phase16_106_v1_recheck.sql` for this runner to run.
 
 ### Tables and migrations
 
@@ -189,12 +191,13 @@ and the README supersedes them.
 
 | With | The seam |
 |---|---|
-| Phase 16 | V-1's invariants (B-14, **PROVISIONAL**: "the invariants filed in `db/tests` (rerun by the suite, not wired into the sync)") and P-67's generated `db/tests/phase16_v1_recheck.sql` run through `scripts/db-test.mjs` as `db_test_runner`, in the positional form brief 96 writes. Brief 96's files are `grading_invariants.sql`, `phase16_105_pre_sitting_fixes.sql`, `phase16_106_grading_reconciliation.sql` and `phase16_v1_recheck.sql`; each must end in a `: PASS` row and pass lint. Any grant they need beyond 100's goes in 96's reserved `db/migrations/107_db_test_runner_grants_phase16.sql`, never through `service_role` membership. |
+| Phase 16 | V-1's invariants (B-14, **PROVISIONAL**: "the invariants filed in `db/tests` (rerun by the suite, not wired into the sync)") and P-67's generated `db/tests/phase16_106_v1_recheck.sql` run through `scripts/db-test.mjs` as `db_test_runner`, in the `--only <file.sql>` form brief 96 writes. Brief 96's files are `grading_invariants.sql`, `phase16_105_pre_sitting_fixes.sql`, `phase16_106_grading_reconciliation.sql` and `phase16_106_v1_recheck.sql`; each must end in a `: PASS` row and pass lint. Any grant they need beyond 100's goes in 96's reserved `db/migrations/107_db_test_runner_grants_phase16.sql`, never through `service_role` membership. |
 | Phase 17 | Walks R-54's browser proof (brief 97, T-26): a detached last row's plain delete, then "This event" on the last attached row, then the orphan `SELECT` returns 0. The rows are labelled and deleted in the same sitting (DECISIONS 2026-09-16). R-41's run states on Home are the states P-8's file proves. |
 | Phase 18 | P-24's post-embed checks are one `db/tests` file run by the runner. Grants beyond 100 go in its 120–129 range (brief 98 reserves 128). 121 copies 101's `search_path` value onto the search functions it replaces. |
 | Phase 19 | Its `stage_content` and register-first tests run through the runner. `phase9_transform_states.sql` must stay PASS after its driver change, and the `interrupted (reaped)` note text is what the file asserts. |
 | Phase 14 | Its negative-grant tests for `sync_runner` run through the runner and read `has_function_privilege('sync_runner', …)` / `has_table_privilege('sync_runner', …)`. Its privilege reads need no membership. Its behaviour tests use `set local role sync_runner`, which brief 100's `094_sync_runner_test_membership.sql` (**PROVISIONAL**, its open item 6) grants to `db_test_runner` with inherit false. W-55 adds one loader-map entry (`phase14_load_crawl_v4.sql` before `phase14_091_sync_runner.sql`). Brief 100 runs them with `--only phase14_091_sync_runner.sql`. **Replay order:** 091–099 are likely applied after 100–104 (Phase 14 starts beside 15, but its spike gates its first migration; B-4, **PROVISIONAL**) and replay before them by name, so no 091–093 file may reference `db_test_runner` or the 102 trigger; 094 is the one exception and replays after 100. The runner is a plain CLI that runs unchanged in the dev container (B-48's default, **PROVISIONAL**) with `BB2DASH_TEST_DB_URL` from `secrets/`. |
-| Sprint 1 objects | 036's view guard and 038's revoke loop are the shapes 101 reuses. 082's function conventions carry over. 083/088's RPCs keep their TR-4 delete, which becomes a 0-row match. 087's newest-run guard is unchanged: the fixture moves, not the guard. `queries.plannerSeries.ts:411-415` `deleteOpenedRow` runs after `series_id` is already null, and the trigger ignores nulls. Every unit rolls back, so the calendar push cron (`1-59/2`) and `transform_tick` never see a test row. |
+| Phases 14 and 21 (memberships) | `db/tests/phase15_100_db_test_runner_role.sql` asserts `db_test_runner`'s memberships as exactly the roles granted so far (`anon`, `authenticated`, inherit false), and every later migration that grants it a further membership (094 in brief 100 / Phase 14, `sync_runner`; 142 in brief 102 / Phase 21, `workspace_runner`) extends that expected list in the same PR. |
+| Sprint 1 objects | 036's view guard and 038's revoke loop are the shapes 101 reuses. 082's function conventions carry over. 083/088's RPCs keep their TR-4 delete (0 rows after a delete that emptied the series; unchanged in `planner_series_update`). 087's newest-run guard is unchanged: the fixture moves, not the guard. `queries.plannerSeries.ts:411-415` `deleteOpenedRow` runs after `series_id` is already null, and the trigger ignores nulls. Every unit rolls back, so the calendar push cron (`1-59/2`) and `transform_tick` never see a test row. |
 
 ### Must respect (verbatim)
 
@@ -270,8 +273,8 @@ empty series behind.* (PM's wording, not a quote.)
 SOP gates:
 
 - [ ] `node --test scripts/db-test.test.mjs scripts/google-consent.test.mjs` → 0 failures.
-- [ ] `web/`: `npm run typecheck` exit 0; `npm test` → 0 failures, with a `Test Files` count not below the figure the
-      PM records from `main` a5042fa in 95w before integration (task 18); `npm run build` exit 0 (only a test file
+- [ ] `web/`: `npm run typecheck` exit 0; `npm test` → 0 failures, with a `Test Files` count ≥ 107 (main a5042fa: 107
+      files match vitest's `test/**/*.test.{ts,tsx}`; task 18); `npm run build` exit 0 (only a test file
       changed, but the Vercel PR build runs anyway).
 - [ ] `mcp-server/`: `npm run build` exit 0 and `node scripts/smoke.mjs` exit 0 (task 16). `desktop/` is untouched
       and not rerun.
@@ -298,14 +301,14 @@ Stack's acceptance script (he walks it after the PR is open; the PM puts every c
 3. `node scripts/db-test.mjs` → 21 `PASS` lines and `db-test: passed 21, failed 0, units 21`.
 4. `node scripts/db-test.mjs --file scripts/fixtures/db-test/fails.sql` → one `FAIL` line, and the exit code is 1.
 5. Supabase → Advisors → Security: no "Function Search Path Mutable"; the two SECURITY DEFINER lines and the
-   leaked-password line remain. Performance: 15 unindexed foreign keys and 4 unused indexes.
+   leaked-password line remain (B-41, **PROVISIONAL**). Performance: 15 unindexed foreign keys and 4 unused indexes.
 6. Supabase → Authentication settings: new-user signups are off. The PM saves the screenshot as `01-auth-signups-off.png`.
 7. Read the six DECISIONS rows. Say "merge" (or name what is wrong).
 
 What proves each item in scope:
 
 * **R-78** — task 15: 0 unpinned public functions (7 today). Task 16: three search modes answer 200 and the hybrid median
-  is ≤ 60 ms. Task 19: advisor 0 / 2 / 1. Task 23: rows 1 and 2.
+  is ≤ 60 ms. Task 19: advisor 0 / 2 / 1 (the 1 rests on B-41, **PROVISIONAL**). Task 23: rows 1 and 2.
 * **R-79** — task 17: `db-test: passed 21, failed 0, units 21`, exit 0.
 * **R-80** — task 19: advisor INFO 15 + 4 by today's names. Task 23: row 3.
 * **R-54** — task 13: `phase15_102` PASS after RED, TR-4 still PASS, prod orphan count 0.
@@ -313,6 +316,8 @@ What proves each item in scope:
   **P-99** — tasks 1 and 6. **P-100** — tasks 4 and 7. **P-101** — task 8.
 
 ## Task loops (the phase cycle; §Task list's rows are step 4)
+
+In both tables below, `\|` is the markdown escape for `|`, whether a shell pipe or a literal pipe in a grep pattern.
 
 | # | step | executable check | owner |
 |---|---|---|---|
@@ -328,8 +333,8 @@ What proves each item in scope:
 
 Tasks 8–16 are written in parallel with 1–7. Their checks run once task 5 has put a DSN on the machine; the PM copies
 `.env.local` (gitignored) into each worker worktree. Commands run from the checkout root in Git Bash (`$?`), or in
-PowerShell with `$LASTEXITCODE`. "runner → X" means that command's last line equals X. Inside the table, `\|` is the
-markdown escape for a shell pipe `|`. W-39 and W-40 merge `feat/db-hygiene-15` into their branches once the PM has
+PowerShell with `$LASTEXITCODE`. "runner → X" means that command's last line equals X (the `\|` escape is explained under §Task
+loops). W-39 and W-40 merge `feat/db-hygiene-15` into their branches once the PM has
 integrated W-38's tasks 1–4 there, so the runner is on disk before their first live check; until then they write files
 and run only offline checks. Each worktree's `.env.local` copy is deleted with the worktree.
 
@@ -341,7 +346,7 @@ and run only offline checks. Each worktree's `.env.local` copy is deleted with t
 | 4 | Migration 100: dry run in `begin … rollback`, apply as `100_db_test_runner_role` | P-100, P-31 | W-38 | `select rolcanlogin, rolbypassrls, rolsuper, rolcreaterole, rolcreatedb, rolconnlimit from pg_roles where rolname = 'db_test_runner'` → `t, t, f, f, f, 2`; `select count(*) from supabase_migrations.schema_migrations where name = '100_db_test_runner_role'` → 1 | "The tests get their own login that can't create anything or read your Google secrets." |
 | 5 | **Stack:** password + `.env.local` (acceptance step 1) | P-31 | Stack | `node scripts/db-test.mjs --ping` → `db-test: connected as db_test_runner`, exit 0 | "The laptop can reach the test database as the test role." |
 | 6 | Live exit contract on the three fixtures | P-99 | W-38 | `node scripts/db-test.mjs --file scripts/fixtures/db-test/passes.sql; echo $?` → `db-test: passed 1, failed 0, units 1` then 0; `fails.sql` → `db-test: passed 0, failed 1, units 1` then 1; `commits.sql` → one line starting `db-test: lint commits.sql:`, then 2 (task 1's unit test asserts no client was opened) | "A failing test is loud and non-zero; a committing file never runs." |
-| 7 | `phase15_100_db_test_runner_role.sql`: attributes, memberships exactly `anon`, `authenticated` (plus `sync_runner` once 094 is on prod), each inherit false, no `service_role`/`postgres`/`authenticator`/`pg_read_all_data` membership, 0 owned objects, no `CREATE` on `public`, no execute on `calendar_secrets()` / `calendar_secret_set(text, text)` | P-100 | W-38 | runner `--only phase15_100_db_test_runner_role.sql` → `db-test: passed 1, failed 0, units 1` | "The role's limits are a test, so they can't quietly widen." |
+| 7 | `phase15_100_db_test_runner_role.sql`: attributes, memberships exactly the roles granted so far, `anon` and `authenticated`, each inherit false (a later membership migration extends this list in its own PR, §Seams), no `service_role`/`postgres`/`authenticator`/`pg_read_all_data` membership, 0 owned objects, no `CREATE` on `public`, the only schemas whose ACL grants it `USAGE` are `public` and `extensions` (`extensions` the only non-public one; `pg_catalog`, `information_schema` and `net` reach it through `PUBLIC`, prod 2026-09-27), no execute on `calendar_secrets()` / `calendar_secret_set(text, text)` | P-100 | W-38 | runner `--only phase15_100_db_test_runner_role.sql` → `db-test: passed 1, failed 0, units 1` | "The role's limits are a test, so they can't quietly widen." |
 | 8 | P-30 + P-101: generator emits `now()`-relative `captured_at`; loader regenerated; guard case added | P-30, P-101 | W-39 | `cd web && npx vitest run test/fixtures.phase10a.test.ts` → 0 failures; `grep -c "'::timestamptz);" db/tests/phase10a_load_fixtures.sql` → 0 (3 today) | "The fixture no longer ages out when a newer sync lands." |
 | 9 | The phase10a pair green on today's prod | P-30, R-79 | W-39 | runner `--only phase10a_stage_gradebook.sql` → `db-test: passed 1, failed 0, units 1`; same for `--only phase10a_stage_attempts.sql` | "The gradebook test that went red when newer syncs landed is green again." |
 | 10 | P-2: rewrite `phase10b_grade_model.sql` lines 171–172 and §4f | P-2 | W-39 | runner `--only phase10b_grade_model.sql` → `db-test: passed 1, failed 0, units 1` (RED before the edit recorded in 95b) | "The grade-model test reads today's links instead of September's." |
@@ -352,14 +357,14 @@ and run only offline checks. Each worktree's `.env.local` copy is deleted with t
 | 15 | Migration 101 applied as `101_search_path_pin` | R-78 | W-40 | runner `--only phase15_101_search_path_pin.sql` → `db-test: passed 1, failed 0, units 1`; `select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e') and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c where c like 'search_path=%')` → 0 (7 today) | "No function can be tricked into reading someone else's table." |
 | 16 | Search after the pin: re-time and all three modes over HTTP | R-78 | W-40 | `explain (analyze, format json) select * from public.hybrid_search_file_text('final exam date', (select embedding from public.bb_text_embeddings where model = 'gte-small' order by id limit 1), 'gte-small', null, 12)` run 5 times through `execute_sql` → median `Execution Time` ≤ 60.0 ms (the 5 figures in 95c); `curl -s -o /dev/null -w "%{http_code}" -X POST https://goultdzqcavefcgnifdy.supabase.co/functions/v1/search -H "Authorization: Bearer $ANON_JWT" -H "Content-Type: application/json" -d '{"q":"attendance policy","mode":"fts"}'` → 200, and the same → 200 for `"vector"` and `"hybrid"` (`$ANON_JWT` = the legacy anon JWT from `get_publishable_keys`, public by design; `verify_jwt` refuses the `sb_publishable_` key); `npm --prefix mcp-server run build && node mcp-server/scripts/smoke.mjs` → exit 0 | "⌘K still answers in all three modes, well under its 60 ms ceiling." |
 | 17 | Integrate W-38/39/40 into `feat/db-hygiene-15`; any missing grant goes in 103 (W-38) before this check | R-79 | PM | `node scripts/db-test.mjs; echo $?` → `db-test: passed 21, failed 0, units 21` then 0; `ls db/tests/*.sql \| wc -l` → 23 (19 today). A red unit other than the three repaired here stops the PM, who brings its FAIL line to Stack; no unit is skipped or excluded to reach 21 | "One command, every database test, all green." |
-| 18 | Other suites after integration | R-79, P-101 | PM | `cd web && npm run typecheck && npm test` → 0 failures, and the `Test Files` count ≥ the figure the PM recorded from `main` a5042fa in 95w before integration; `node --test scripts/db-test.test.mjs scripts/google-consent.test.mjs` → 0 failures | "Nothing else broke." |
-| 19 | Advisor and plan re-read | R-78, R-80 | PM | `get_advisors` security → `function_search_path_mutable` 0, `authenticated_security_definer_function_executable` 2, `auth_leaked_password_protection` 1; performance → `unindexed_foreign_keys` 15, `unused_index` 4 (the four names above); `get_organization` → `"plan":"free"` | "The advisor list is exactly what we decided to accept." |
+| 18 | Other suites after integration | R-79, P-101 | PM | `cd web && npm run typecheck && npm test` → 0 failures, and the `Test Files` count ≥ 107 (main a5042fa: 107 files match vitest's `test/**/*.test.{ts,tsx}`, from `find web/test -name '*.test.ts' -o -name '*.test.tsx' \| wc -l` → 107); `node --test scripts/db-test.test.mjs scripts/google-consent.test.mjs` → 0 failures | "Nothing else broke." |
+| 19 | Advisor and plan re-read | R-78, R-80 | PM | `get_advisors` security → `function_search_path_mutable` 0, `authenticated_security_definer_function_executable` 2, `auth_leaked_password_protection` 1 (B-41, **PROVISIONAL**; 0 if Stack moves to Pro); performance → `unindexed_foreign_keys` 15, `unused_index` 4 (the four names above); `get_organization` → `"plan":"free"` | "The advisor list is exactly what we decided to accept." |
 | 20 | **Stack:** signups-off screenshot | R-78 | Stack + PM | `docs/planning/sprint-2/walks/walk-15/01-auth-signups-off.png` shows project `goultdzqcavefcgnifdy`'s Authentication settings with the allow-new-user-signups toggle **off** | "Only your account can ever sign in, which is why leaked-password checks can wait." |
 | 21 | Migration hygiene | P-18 | PM | `ls db/migrations \| grep -c "^10[0-4]_"` → 3 (4 if 103 was needed, and row 4 then names it); `select count(*) from supabase_migrations.schema_migrations where name in ('100_db_test_runner_role', '101_search_path_pin', '102_planner_series_orphan_trigger')` → 3; `select string_agg(name, ',' order by version) from supabase_migrations.schema_migrations where name ~ '^10[0-4]_'` → `100_db_test_runner_role,101_search_path_pin,102_planner_series_orphan_trigger` (with `,103_db_test_runner_grants` at the end if 103 was needed); `git log --format=%H -- db/migrations/<file> \| wc -l` → 1 for each of 100–102 (committed once, never edited after apply) | "Repo and prod hold the same three migrations, in order." |
 | 22 | Review gates | R-78, R-79 | PM | `/code-review main high` → 0 CRITICAL, 0 HIGH without outcome `fixed`; `/security-review` → 0 HIGH open | "Two reviews, nothing serious left." |
 | 23 | DECISIONS: the six rows | R-78, R-80, R-54, P-18, P-31 | PM | each of `grep -c "calendar_push_now" project-state/DECISIONS.md`, `grep -c "leaked-password" …`, `grep -c "bb_text_embeddings_hnsw" …`, `grep -c "100–104" …`, `grep -c "BB2DASH_TEST_DB_URL" …`, `grep -c "planner_events_delete_empty_series" …` → 1 (all 0 today) | "Every warning we keep has a dated reason." |
 | 24 | STATUS §Security (the accepted INFO line added) and known issues struck (named migrations), ORCHESTRATOR row 15, PR open | R-78, R-80, R-54 | PM | `grep -c "101_search_path_pin" project-state/STATUS.md` → 2 (Security line + struck known issue); `grep -c "102_planner_series_orphan_trigger" project-state/STATUS.md` → 1; `grep -c "Accepted INFO (R-80): 15 unindexed foreign keys, 4 unused indexes" project-state/STATUS.md` → 1 (0 today); `grep "^\| 15 \|" project-state/ORCHESTRATOR.md \| grep -c "planned"` → 0 (the row reads `planned; first` today) and `… \| grep -c "PR #"` → 1; `gh pr list --head feat/db-hygiene-15 --json number --jq length` → 1 | "The status page says what's true." |
-| 25 | Stack's acceptance run, recorded | R-79, R-78, R-80, R-54 | PM + Stack | `grep -c "db-test: passed 21, failed 0, units 21" docs/planning/sprint-2/walks/walk-15/95w_PHASE15_WALK.md` → 1 (pasted from Stack's own step 3); `grep -c "^- \[x\] Step [1-7] " docs/planning/sprint-2/walks/walk-15/95w_PHASE15_WALK.md` → 7 | "You ran it yourself and it passed." |
+| 25 | Stack's acceptance run, recorded | R-79, R-78, R-80, R-54 | PM + Stack | `grep -c "^- \[x\] Step 3 .*db-test: passed 21, failed 0, units 21" docs/planning/sprint-2/walks/walk-15/95w_PHASE15_WALK.md` → 1 (Stack's own step-3 line, with his output pasted on it; task 17's copy of the same output does not match); `grep -c "^- \[x\] Step [1-7] " docs/planning/sprint-2/walks/walk-15/95w_PHASE15_WALK.md` → 7 | "You ran it yourself and it passed." |
 
 ## Workers
 
@@ -383,8 +388,8 @@ dry run. 101 and 102 are applied only once 100 is on prod.
 * `sync_runner`, `secrets/`, the dev container, psql in a container, any scheduled job: **Phase 14**.
 * Creating the 15 foreign-key indexes, dropping the FTS or HNSW indexes, dropping `grade_scenarios`, and the 057
   policies' subquery wrap: not this sprint's defaults; each needs its own row from Stack.
-* pgTAP, `supabase test db`, a local Supabase, a Supabase branch, CI or a pre-commit hook for the runner: declined
-  (D-20; 93 §1.5).
+* pgTAP: not adopted (B-42, **PROVISIONAL**). `supabase test db` (it needs a local Supabase), a local Supabase, CI:
+  declined (D-20). A Supabase branch or a pre-commit hook for the runner: not this sprint's default.
 * The Pro plan and the leaked-password toggle (B-41), and any Auth or dashboard setting beyond reading the signup toggle.
 * The state-doc refresh steps (P-5, P-13, P-20, P-29, P-32, P-41, P-62): Stage D on the planning branch.
 * Rewriting the 17 existing files' "RUN IT" headers: the README supersedes them.

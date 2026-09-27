@@ -4,8 +4,9 @@ Date 2026-09-24 · PM: the Fable session · Product manager: Stack
 Requirements: R-53, R-46; S2-styling-1
 PM-added steps: P-15, P-16, P-17, P-76, P-77, P-78, P-79
 Branch `feat/styling-22` · Worktree `bb2dash-wt-22` · Migration range: **none** (no number reserved, 94 §1)
-One PR per phase. **One exception, provisional:** tasks 1–2 (P-15, P-16, test files only) ride Phase 17's PR
-under B-6's default ("the token audit lands early as a test-only ratchet"). No DECISIONS row covers this yet; the
+One PR per phase. **One exception, provisional:** tasks 1–2 (P-15, P-16, test files only) ride Phase 17's PR, as
+its last commits after its workers merge, under B-6's default ("the token audit lands early as a test-only
+ratchet"). No DECISIONS row covers this yet; the
 row is written on the day Stack answers B-6 (93 §6). If Phase 17 merges without them, they are the first commits
 on this branch and the exception disappears.
 Status: **PROVISIONAL until Stack answers 93 §5** (B-6, B-23, B-24) and approves `94_SPRINT2_PHASES.md`.
@@ -42,7 +43,10 @@ earlier in Phases 16 and 17.
 Why now and in this shape (94 §1, the phase map's "why"): last, after every sprint-2 screen exists; three style
 tiles, Stack's pick, the tokens applied on every screen in both themes, the top-nav fold at the existing 720 px
 step, walked per screen. The token audit itself changes nothing on screen, so it lands early as a test-only
-ratchet (P-15, P-16) and keeps Phases 17 and 21 from adding hard-codes the sweep would then have to undo.
+ratchet (P-15, P-16): tasks 1–2 land as the last commits of Phase 17's PR, after its workers merge, so the ratchet
+binds every phase that merges after it (16 and 18 when they merge later, since 94 §2 rule 2 runs them beside 17;
+then 19, 14 and 21) and keeps those phases from adding hard-codes the sweep would then have to undo
+(PROVISIONAL: B-6 for the tiles and the audit's timing, B-24 for the 720 px fold).
 
 ## Stack's calls this brief rests on
 
@@ -55,7 +59,7 @@ Worker ids W-67..W-70 follow brief 102's W-63..W-66 (W-66 is Phase 21's web work
 |---|---|---|---|
 | B-6 | S2-styling-1: must or should, placement, how directions are shown, the toggle, when the audit lands, C-1 | **Should**, last in the sprint; three style-tile directions as live Artifact pages; a three-state Auto / Light / Dark control in the top-nav account menu, named as an exception to "no behaviour change"; the token audit lands early as a test-only ratchet; C-1 stays with styling | "Must": order only, no task changes. No toggle (follow the OS only): task 10 drops, task 9 keeps the boot script without storage, P-77 closes by a DECISIONS row. Toggle elsewhere: task 10's mount line moves to that file's owner. Audit waits: tasks 1–2 open this branch and the header exception goes. Directions shown another way: task 6 changes; an in-app page would be a new screen and needs a row against 81:79-80. C-1 leaves: tasks 5, 12–15 and 21 move to Phase 17 with P-79. |
 | B-23 | Phase 13 carry-ins (Q14): which of C-1..C-3 ship early | C-2's rule line (R-36) ships in Phase 16 and C-3's favicon (R-50, with P-80's `apple-icon.png`) in Phase 17, using the eclipse-ring icon; **C-1 stays here** | "All three wait": two tasks join this phase: new `web/src/app/favicon.ico` + `web/src/app/apple-icon.png` in the picked direction (W-67; check `curl -s -o /dev/null -w "%{http_code} %{content_type}" <preview>/favicon.ico` → `200 image/x-icon`) and R-36's rule sentence in `web/src/lib/grade-model/labels.ts` + `web/src/components/grades/GradedSoFarFigure.tsx` (W-70, with its RTL test; `labels.ts` joins W-70's set). The inventory is unchanged. |
-| B-24 | Phone-width nav (Q15) | Fold the page links (five today, six once Phase 21 adds Workspace) and Search into one Menu at the **existing 720 px step** (replacing today's "tighten and hide Search" step), reachable by keyboard | "Wrap to two rows": task 12 becomes a two-row bar at ≤720 px with Search as an icon button; P-79's menu cases become "each link and Search visible and focusable with no menu"; the nav-menu open-state case leaves `phone-width.spec.ts` (51 cases → 49). A different breakpoint: task 2's frozen breakpoint set changes and a DECISIONS row records it. |
+| B-24 | Phone-width nav (Q15) | Fold the page links (five today, six once Phase 21 adds Workspace) and Search into one Menu at the **existing 720 px step** (replacing today's "tighten and hide Search" step), reachable by keyboard | "Wrap to two rows": task 12 becomes a two-row bar at ≤720 px with Search as an icon button; P-79's menu cases become "each link and Search visible and focusable with no menu"; the nav-menu open-state case leaves `phone-width.spec.ts` (52 cases → 50). A different breakpoint: task 2's frozen breakpoint set changes and a DECISIONS row records it. |
 
 ## Contract (PROVISIONAL until B-6, B-23 and B-24 are answered; frozen when Stack approves the phase plan)
 
@@ -108,8 +112,10 @@ Planner, Inbox, Grades, Materials and the Workspace entry brief 102 adds after M
 one with `aria-current="page"`, then a "Search" button that dispatches `bb2dash:command-palette` (the event
 `TopNav.tsx` already sends). Escape closes it and returns focus to Menu; an outside click or a pathname change
 closes it; Menu and the account menu close each other; ☰ closes Menu; Menu never writes `html[data-sidebar]` or
-`localStorage['bb2dash.sidebar']`. At ≤720 px the brand word is visually hidden with the existing `.sr-only`
-rule of `globals.css` (the mark stays and the link's accessible name stays "bb2dash"; PROVISIONAL, open item 2):
+`localStorage['bb2dash.sidebar']`. At ≤720 px the brand word, wrapped in a `.brandWord` span, gets `.sr-only`'s
+declarations (`globals.css:219-230`, which has no media query and is W-67's file, so it is copied, not edited)
+inside `TopNav.module.css`'s `(max-width: 720px)` block (the mark stays and the link's accessible name stays
+"bb2dash"; PROVISIONAL, open item 2):
 at 390 px the bar row is 362 px and brand, Menu, Sync, the four icons and gaps come to about 375 px (PM estimate from the rules in `TopNav.module.css` and `SyncButton.module.css`, not measured).
 Above 720 px the bar renders as today. The hook is `usePopover` as Phase 17's R-51 leaves it; this phase does not
 reshape it again.
@@ -165,10 +171,12 @@ radii and shadows. It does **not** change these
 values, which hold layout: `--space-1..12`, `--nav-height`, `--content-max`, `--sidebar-width`, `--sidebar-side`,
 the `--text-*` sizes, and the planner geometry mirrored by `web/src/lib/planner-rows.ts`.
 
-**Token audit (P-15, P-16).** A hand-rolled vitest scan (D-19 rules out stylelint, postcss and css-tree; none is in
-`web/`'s tree). Scope: every file under `web/src` ending `.css`, `.module.css`, `.ts` or `.tsx`, except
-`web/src/app/globals.css`. `tokens.module.css` **is audited**: Stack's own answer (70 §1.8, 81:17-19) says "outside
-`globals.css`"; 81:44-45 adds `tokens.module.css` as a second exemption that his answer does not contain, so it is
+**Token audit (P-15, P-16).** A hand-rolled vitest scan (D-19 rules out stylelint, postcss and css-tree; none is a
+direct dependency of `web/`, and postcss and css-tree, present in `web/package-lock.json` only transitively
+(postcss through `next` and `vite`, css-tree through `jsdom`), are not imported). Scope: every file under `web/src`
+ending `.css`, `.module.css`, `.ts` or `.tsx`, except `web/src/app/globals.css`. `tokens.module.css` **is
+audited**: the PM's record of Stack's answer (70 §1.8, "recorded verbatim in intent"; 81:17-19) says "outside
+`globals.css`"; 81:44-45 adds `tokens.module.css` as a second exemption that the answer does not contain, so it is
 dropped. Per file it counts:
 
 1. colour literals in declaration values: `#hex`, `rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`,
@@ -189,7 +197,8 @@ dropped. Per file it counts:
 Allowlist, frozen at task 2 in `web/test/token-audit.allowlist.ts` (new) and not edited after:
 **A1** `@media` width conditions use a value from {620px, 640px, 720px, 820px, 900px, 1023.98px} (today's 14 width
 queries; custom properties cannot sit in a media condition without a PostCSS dependency); any other value fails.
-**A2** the values `1px` and `2px` in any property (hairlines, outlines, nudges). **A3** declarations a test pins
+**A2** the values `1px` and `2px`, with or without a leading minus (21 signed ones in modules on `main`, and
+`.sr-only`'s `margin: -1px` that task 12 copies), in any property (hairlines, outlines, nudges). **A3** declarations a test pins
 literally or a TS constant mirrors, one entry each as (file, selector, property, value, reason), with the test
 asserting the value still equals its constant: e.g. `PlannerWeek.module.css` `.block` `line-height: 14px`
 (`planner-css.test.ts:111`, `PLANNER_BLOCK_LINE_PX` = 14), `.board` `--planner-slot: 24px`
@@ -244,10 +253,12 @@ sites in `not-found.tsx`); `web/test/token-audit.scan.ts`; `web/test/token-audit
 `web/test/theme-contrast.test.ts`; `web/test/theme-preference.test.ts`; `web/test/ThemeMenu.test.tsx`;
 `web/test/TopNav.fold.test.tsx`; `web/test/planner-phone-width.css.test.ts`;
 `web/test/gradebook-phone-width.css.test.ts`; `web/e2e/phone-width.spec.ts` and `web/e2e/theme-walk.spec.ts`
-(inside Phase 17's P-7 walk harness, `web/e2e/`, which brief 97 §Seams (97:338-342) names as the folder this brief
-assumes; both run with `-c e2e/playwright.config.ts`, the config brief 97 §Files (97:266-268) freezes, and both write their screenshots by
-explicit path into `docs/planning/sprint-2/walks/walk-22/`, because that config writes to `walk-17/` and is **not
-edited** here); `desktop/src/main/window-background.ts`; `desktop/test/unit/window-background.test.ts`;
+(inside Phase 17's P-7 walk harness, `web/e2e/`, which brief 97 §Files (97:274-280) and its Phase 22 seam
+(97:356-365) name as the folder this brief assumes; both run with `-c e2e/playwright.config.ts`, the config brief
+97 §Files (97:274-275) freezes, and both write their screenshots by explicit path into
+`docs/planning/sprint-2/walks/walk-22/`, because that config writes to `walk-17/` and is **not edited** here; the
+specs write screenshots only when `WALK_SHOTS=1`, which the PM sets at tasks 21–22, so a worker's harness run
+writes none and workers never commit under `docs/planning/sprint-2/walks/`); `desktop/src/main/window-background.ts`; `desktop/test/unit/window-background.test.ts`;
 `docs/planning/sprint-2/evidence/103_style_tiles/tile-a.html`,
 `docs/planning/sprint-2/evidence/103_style_tiles/tile-b.html`,
 `docs/planning/sprint-2/evidence/103_style_tiles/tile-c.html` (the `evidence/` folder is new);
@@ -264,9 +275,10 @@ Changed, by owner (the four sets are **disjoint**; a file not listed is not touc
   `web/src/app/login/Login.module.css`, `web/src/app/login/LoginForm.tsx`, `web/src/app/login/page.tsx`,
   `web/src/app/privacy/page.tsx`, `web/src/app/terms/page.tsx`, `web/src/app/not-found.tsx`,
   `web/test/type-tokens.contrast.test.ts`, `web/vitest.config.mts` (coverage entries for the two new modules, only
-  if R-51 left `coverage.include` an explicit list), `desktop/src/main/window.ts`; plus every new file above except
+  if R-51 left `coverage.include` an explicit list), `desktop/src/main/window.ts`, `desktop/test/unit/window.test.ts` (its electron mock gains
+  `nativeTheme: { shouldUseDarkColors: true }` and nothing else); plus every new file above except
   those listed under W-68..W-70 and the PM (so: `theme-preference.ts`, `ThemeMenu.*`, `NotFound.module.css`, the
-  four `token-audit.*` modules and `foundation.json`, `css-tokens.ts`, the four theme tests, `web/e2e/theme-walk.spec.ts`,
+  three `token-audit.*` modules and `token-audit.baseline/foundation.json`, `css-tokens.ts`, the four theme tests, `web/e2e/theme-walk.spec.ts`,
   `window-background.ts` and its test, `103_W67_VERIFICATION.md`).
 * **W-68 shell and phone width:** every file in `web/src/components/shell/` except `ThemeMenu.*` (`TopNav.tsx`,
   `TopNav.module.css`, `Bell.tsx`, `Bell.module.css`, `ActivityMenu.tsx`, `SyncButton.tsx`, `SyncButton.module.css`,
@@ -289,18 +301,25 @@ Changed, by owner (the four sets are **disjoint**; a file not listed is not touc
 
 Two crossings, resolved by order, not by shared edits: W-68 adds the one `<ThemeMenu />` line to `TopNav.tsx`
 after W-67's `ThemeMenu` commit is on the phase branch; W-67 creates all four baseline JSONs at task 1 and each
-passes to its owner from then on. No pre-existing test file is edited except `type-tokens.contrast.test.ts`.
+passes to its owner from then on. No pre-existing test file is edited except `type-tokens.contrast.test.ts` and the electron mock line of
+`desktop/test/unit/window.test.ts`.
 
 ### Seams
 
 * **Phase 17 (brief 97):** tasks 1–2 ride its PR (B-6); its P-7 harness hosts both e2e specs and supplies the
   logged-in session (`web/e2e/login.mjs` → `web/e2e/.auth/state.json`, gitignored; Phase 17 deletes it at its end,
-  so this phase re-runs `login.mjs` before task 5 and deletes the file again at task 24), the preview base URL
-  (`WALK_BASE_URL`) and the forced failed read; its R-51 reshape of `usePopover` is reused as
+  so this phase re-runs `login.mjs` once per host it walks, each worker preview before that worker's first harness
+  run and the phase preview once before task 21, as the task-list preamble says, and deletes the file again at
+  task 24), the preview base URL (`WALK_BASE_URL`) and the forced failed read; its R-51 reshape of `usePopover` is reused as
   is; its R-50 favicon and P-80 `apple-icon.png` and Phase 16's R-36 rule line are already shipped (B-23,
   PROVISIONAL; if Stack says all three wait, the B-23 row above adds them here); its
-  S2-home-2 and S2-materials-1 changes are in the screens this phase sweeps. From task 1 on, any literal a later
-  phase adds fails `npm test` unless it becomes a token or the baseline is raised in the open.
+  S2-home-2 and S2-materials-1 changes are in the screens this phase sweeps. Tasks 1–2 land as the last commits of
+  Phase 17's PR, after its workers merge, so brief 97's workers never meet the ratchet (97:363-364: the ride
+  touches no file in its §Files). From task 1 on, any literal a later phase adds fails `npm test` unless it
+  becomes a token or the baseline is raised in the open: a later phase's worker who changes a literal count (up or
+  down, since a count below its baseline also fails) updates that cluster's baseline JSON in the same commit. The
+  PM adds `web/test/token-audit.baseline/` to brief 102 W-66's file set (Phase 21's only `web/` worker), and to any
+  other later worker set that edits `web/src`.
 * **Phase 21 (brief 102):** the Workspace page is inventory row 12 and W-70's sweep. Brief 102 builds it on
   "existing tokens only, both themes readable, no new colours", adds one `NAV_LINKS` entry (Workspace, after
   Materials) and changes nothing else in `TopNav.tsx`. Its two folders, `web/src/app/(app)/workspace/` and
@@ -349,13 +368,13 @@ Frozen brief lines this phase inherits (81, 2026-09-14 and 2026-09-16; 80c, 2026
 
 ## MVP (in Stack's words)
 
-Stack's own words for this phase are two. On 2026-09-23 he wrote S2-styling-1 as "styling", filed under
-"cleaning" (91 §3.3; his other four fields there still read "_to confirm_"). On 2026-09-14 he answered the MVP
-questionnaire; DECISIONS records it as "Stack's answer" in the row "Styling direction is decided **after
-functionality is achieved**; Phase 13's DoD is fixed now (every screen on tokens, light + dark, Stack approves
-each)", and the questionnaire's own record (`docs/planning/sprint-1-hub/70_MVP_INDEX.md` §1.8, line 82) reads:
-"**Every screen on tokens, light + dark, Stack approves each**: no hard-coded colours or sizes outside
-`globals.css`; both themes; per-screen preview checklist." The parked brief's MVP line (81:23-24) is headed "in
+Stack's own words for this phase are two: "styling", which he wrote for S2-styling-1 on 2026-09-23, filed under
+"cleaning" (91 §3.3; his other four fields there still read "_to confirm_"); and the DECISIONS 2026-09-14 row
+recorded as "Stack's answer" to the MVP questionnaire: "Styling direction is decided **after functionality is
+achieved**; Phase 13's DoD is fixed now (every screen on tokens, light + dark, Stack approves each)". *PM wording,
+not his:* the PM's record of that answer (`docs/planning/sprint-1-hub/70_MVP_INDEX.md` §1.8, line 82, under §1's
+"Recorded verbatim in intent") reads: "**Every screen on tokens, light + dark, Stack approves each**: no
+hard-coded colours or sizes outside `globals.css`; both themes; per-screen preview checklist." The parked brief's MVP line (81:23-24) is headed "in
 Stack's words" but traces to no recorded answer, so it is treated as PM wording. *PM wording, built on the B-6
 and B-24 defaults, for Stack to confirm or rewrite:* "I picked one of three style tiles. On the preview every
 screen and overlay on the checklist is in that direction, in light and in dark, and I ticked each pair. The
@@ -386,6 +405,8 @@ SOP gates:
 - [ ] The PM stops at "ready when you say so": merge to `main` only on Stack's word in that conversation
       (DECISIONS 2026-09-09, SOP).
 
+Steps 1, 2 and 6 rest on B-6 and step 5 on B-24 (PROVISIONAL).
+
 Stack's acceptance script (he walks it on the preview, Chrome, laptop):
 
 1. Open the account menu: Auto is checked. Switch Windows between light and dark mode: the app follows without a
@@ -407,7 +428,7 @@ What proves each requirement in scope:
 * **R-53:** the four baseline JSONs sum to 0, unresolved references 0, the allowlist unchanged since task 2
   (tasks 16–20); `theme-contrast.test.ts` and `type-tokens.contrast.test.ts` green in both blocks (task 8); 58
   walk screenshots (task 22); 60 ticked lines in `WALK.md` (task 25).
-* **R-46:** `phone-width.spec.ts` → 51 passed, 0 failed on the preview (task 21), after it failed first on
+* **R-46:** `phone-width.spec.ts` → 52 passed, 0 failed on the preview (task 21), after it failed first on
   `/course/IST.466/grades` (task 5).
 * **S2-styling-1:** three tiles committed and the "Phase 22 direction" DECISIONS row (tasks 6–7).
 * **P-15:** `token-audit.test.ts` runs in `npm test` and its fixture cases pass (task 1).
@@ -422,21 +443,32 @@ What proves each requirement in scope:
 ## Task list
 
 Commands run from the repo root unless they start with `cd`. `:walk_start` is the UTC timestamp the spec prints
-when it starts. "Harness run" means `cd web && WALK_BASE_URL=<phase preview URL> npx playwright test -c
-e2e/playwright.config.ts <spec>` after `node e2e/login.mjs` has saved `web/e2e/.auth/state.json` (brief 97 T-01).
-For a worker task (5, 13, 14, 15) the harness targets that worker branch's own Vercel preview URL. The PM merges
-W-68's task-5 commit into `feat/styling-22`, and W-69 and W-70 rebase onto it before tasks 14–15. The page-width
-half of tasks 14–15 also needs W-68's fold: it runs after the PM has merged W-68's task-12 commit into
-`feat/styling-22` and W-69 and W-70 have merged `feat/styling-22` into their branches. The saved session is
-host-only (`web/src/lib/supabase/` sets no cookie `domain`), so before each worker's first harness run the PM runs
-`node e2e/login.mjs` against that worker's preview URL and copies the resulting `web/e2e/.auth/state.json` into
-that worker's worktree. Task 24's `test -e web/e2e/.auth/state.json` → exit 1 is run in all five worktrees.
-The phone-width spec's test titles are frozen so `-g` selects them: `route <path> [<theme>]` (16 × 2),
-`popout assignment [<theme>]` (1 × 2), `open state <n> <name> [<theme>]` (the seven of §Contract, run on `/`,
-7 × 2), `reachability [<theme>]` (1 × 2), `sidebar toggle` (1). "No-writes SQL" is, run read-only through
+when it starts. "Harness run" means `cd web && WALK_BASE_URL=<URL> npx playwright test -c
+e2e/playwright.config.ts <spec>` with a `web/e2e/.auth/state.json` that `login.mjs` (brief 97 T-01) saved against
+the host of that same `<URL>`: the saved session is host-only (`web/src/lib/supabase/` sets no cookie `domain`),
+so a harness run always uses a `state.json` saved against the URL it targets. `login.mjs` and `WALK_BASE_URL` are
+used as brief 97 defines them, with no other argument. For a worker task (5, 13, 14, 15) `<URL>` is that worker
+branch's own Vercel preview URL: before each worker's first harness run the PM runs
+`cd web && WALK_BASE_URL=<that preview URL> node e2e/login.mjs`, signs in, and copies the resulting
+`web/e2e/.auth/state.json` into that worker's worktree. For the PM's tasks 21–22 `<URL>` is the phase preview URL:
+once, before task 21, the PM runs `cd web && WALK_BASE_URL=<phase preview URL> node e2e/login.mjs` in
+`bb2dash-wt-22` and signs in, and tasks 21 and 22 both use that file; they are also the only runs with
+`WALK_SHOTS=1` set, so they alone write screenshots. Before any harness run,
+`node -e "const s=require('./web/e2e/.auth/state.json');console.log(s.cookies.some(c=>c.domain==='<host of URL>'))"`
+→ `true` (on `false` the PM signs in again and the run does not start). Task 24's
+`test -e web/e2e/.auth/state.json` → exit 1 is run in all five worktrees. Workers sync by merge, never by
+rebasing a pushed branch: the PM merges W-68's task-5 commit into `feat/styling-22`, and W-69 and W-70 merge
+`feat/styling-22` into their branches before tasks 14–15. The page-width half of tasks 14–15 also needs W-68's
+fold: it runs after the PM has merged W-68's task-12 commit into `feat/styling-22` and W-69 and W-70 have merged
+`feat/styling-22` into their branches again. The phone-width spec's test titles are frozen so `-g` selects them,
+52 cases in all: `route <path> [<theme>]` for the path of each inventory row 01–16 (the first path in its "How the
+walk reaches it" cell), in that order (16 × 2); `popout assignment [<theme>]` (1 × 2); `open state <n> <name>
+[<theme>]` (the seven of §Contract, run on `/`, 7 × 2); `reachability [<theme>]` (1 × 2); `sidebar toggle` (1);
+`unfolded bar at 721` (1: viewport 721 × 900, prints `nav[aria-label="Primary"]` `scrollWidth` and asserts only
+that the nav is visible, so it passes whatever width it prints; task 5 reads the number). "No-writes SQL" is, run read-only through
 `execute_sql` with the run's `:walk_start`:
 `select (select count(*) from agent_requests where created_at >= :walk_start) + (select count(*) from planner_events where created_at >= :walk_start or updated_at >= :walk_start) + (select count(*) from planner_event_series where created_at >= :walk_start) + (select count(*) from announcements where read_at >= :walk_start) + (select count(*) from assignment_progress where updated_at >= :walk_start) + (select count(*) from attention_items where resolved_at >= :walk_start)`
-(every column confirmed on prod 2026-09-24). Inside the table below, `\|` is Markdown's escaped pipe: the command
+(all seven columns confirmed on prod 2026-09-27 by a read-only `information_schema.columns` select). Inside the table below, `\|` is Markdown's escaped pipe: the command
 is typed with a plain `|`. "Baseline sum" is
 `node -e "const fs=require('fs'),d='web/test/token-audit.baseline',F=/^shell\.json$/;let s=0;for(const f of fs.readdirSync(d).filter(f=>F.test(f)))for(const n of Object.values(JSON.parse(fs.readFileSync(d+'/'+f,'utf8'))))s+=n;console.log(s)"`
 with `F` set to the cluster's file name (shown here for `shell`) or to `/\.json$/` for all four.
@@ -447,14 +479,14 @@ with `F` set to the cluster's file name (shown here for `shell`) or to `/\.json$
 | 2 | Freeze the allowlist A1–A4 in `token-audit.allowlist.ts`; `tokens.module.css` audited | P-16, R-53 | W-67 (rides with 1) | `cd web && npx vitest run test/token-audit.test.ts` → 0 failures, including "breakpoint set equals {620, 640, 720, 820, 900, 1023.98}" and "every A3 entry matches a live declaration and equals its TS constant" (0 stale); at the PR, `git diff --numstat <task-2 sha> HEAD -- web/test/token-audit.allowlist.ts \| wc -l` → 0 (sha in `103_W67_VERIFICATION.md`) | — |
 | 3 | Block-aware token reader `css-tokens.ts`; `type-tokens.contrast.test.ts` runs per block | P-17 | W-67 | `cd web && npx vitest run test/type-tokens.contrast.test.ts test/theme-tokens.test.ts` → 0 failures, including: appending `:root[data-theme='light'] { --color-surface: #ffffff; }` to the fixture leaves the dark map's `--color-surface` = `#232532`; the reader composites in floating point and rounds only when it prints a hex: `color-mix(in srgb, #e9e9ed 16%, transparent)` over `#232532` prints `#434450` (0.16 × `#e9e9ed` + 0.84 × `#232532`, today's `--color-divider` on the card); contrast is computed from the unrounded composite, so on the live `globals.css` the reader reports `--color-neutral-600` on `--color-surface` = 3.52 and `--color-danger` on `--color-danger-bg` over `--color-surface` = 3.94 (two decimals) | — |
 | 4 | Inventory confirmed: no stub screen, route count as frozen | R-53 | PM | `grep -rl "ScreenStub" web/src/app \| wc -l` → 0; `find web/src/app -name page.tsx \| wc -l` → 16 (15 on `main` a5042fa plus Phase 21's `workspace/page.tsx`) | — |
-| 5 | `phone-width.spec.ts` written first and run RED on W-68's first branch preview (before tasks 12–15) | R-46, P-79 | W-68 | harness run of `e2e/phone-width.spec.ts` against W-68's first branch preview → exit ≠ 0, ≥ 1 failed, `route /course/IST.466/grades [dark]` among the failures with its `scrollWidth` (> 390) printed; the same run sets the viewport to 721 × 900 (unfolded) and prints `nav[aria-label="Primary"]` `scrollWidth` (the unfolded bar's content width; above 721 means the bar overflows; open item 3 turns on this number); `grep -c "route /course/IST.466/grades" docs/planning/sprint-2/verification/103_W68_VERIFICATION.md` → ≥ 1 and `grep -c "Primary.*721" docs/planning/sprint-2/verification/103_W68_VERIFICATION.md` → ≥ 1 (the pasted output) | — |
-| 6 | Three style tiles as Artifact pages (fragments: top bar with Menu, buttons, graded-so-far figure, a gradebook row, the five tracker chips, one planner block per kind, an Inbox row, an error notice, a popout header), each with a live Auto / Light / Dark control and the real token names; HTML committed | S2-styling-1, R-53 | PM | `ls docs/planning/sprint-2/evidence/103_style_tiles/tile-*.html \| wc -l` → 3; `node -e "const fs=require('fs');const n=[...new Set(fs.readFileSync('web/src/app/globals.css','utf8').match(/--color-[a-z0-9-]+(?=\s*:)/g))];for(const t of 'abc'){const s=fs.readFileSync('docs/planning/sprint-2/evidence/103_style_tiles/tile-'+t+'.html','utf8');console.log(t,n.filter(x=>!s.includes(x+':')).length)}"` → `a 0`, `b 0`, `c 0`; for each tile `grep -c "prefers-color-scheme" <tile>` → ≥ 1 and `grep -c "data-theme" <tile>` → ≥ 1 (the live control); the three published Artifact URLs listed in the task's commit message (`git log -1 --format=%B -- docs/planning/sprint-2/evidence/103_style_tiles \| grep -c "claude.ai"` → 3) | "I opened three tiles and flipped each between Auto, Light and Dark." |
+| 5 | `phone-width.spec.ts` written first and run RED on W-68's first branch preview (before tasks 12–15) | R-46, P-79 | W-68 | harness run of `e2e/phone-width.spec.ts` against W-68's first branch preview → exit ≠ 0, ≥ 1 failed, `route /course/IST.466/grades [dark]` among the failures with its `scrollWidth` (> 390) printed; in the same run the frozen case `unfolded bar at 721` (viewport 721 × 900, unfolded) passes and prints `nav[aria-label="Primary"]` `scrollWidth` (the unfolded bar's content width; above 721 means the bar overflows; open item 3 turns on this number); `grep -c "route /course/IST.466/grades" docs/planning/sprint-2/verification/103_W68_VERIFICATION.md` → ≥ 1 and `grep -c "Primary.*721" docs/planning/sprint-2/verification/103_W68_VERIFICATION.md` → ≥ 1 (the pasted output) | — |
+| 6 | Three style tiles as Artifact pages (fragments: top bar with Menu, buttons, graded-so-far figure, a gradebook row, the five tracker chips, one planner block per kind, an Inbox row, an error notice, a popout header), each with a live Auto / Light / Dark control and the real token names; HTML committed | S2-styling-1, R-53 | PM | `ls docs/planning/sprint-2/evidence/103_style_tiles/tile-*.html \| wc -l` → 3; `node -e "const fs=require('fs');const n=[...new Set(fs.readFileSync('web/src/app/globals.css','utf8').match(/--color-[a-z0-9-]+(?=\s*:)/g))];for(const t of 'abc'){const s=fs.readFileSync('docs/planning/sprint-2/evidence/103_style_tiles/tile-'+t+'.html','utf8');console.log(t,n.filter(x=>!s.includes(x+':')).length)}"` → `a 0`, `b 0`, `c 0`; for each tile `grep -c "prefers-color-scheme" <tile>` → ≥ 1 and `grep -c "data-theme" <tile>` → ≥ 1 (the live control); the three published Artifact URLs, one per line, in the task's commit message (`git log -1 --format=%B -- docs/planning/sprint-2/evidence/103_style_tiles \| grep -c "claude.ai"` → 3) | "I opened three tiles and flipped each between Auto, Light and Dark." |
 | 7 | Stack picks a tile (gate before task 8) | S2-styling-1 | Stack + PM | `grep -cE "Phase 22 direction.*tile [abc]" project-state/DECISIONS.md` → 1 on the phase branch (the row names the tile and is dated the day Stack picks) | "I picked tile …" |
 | 8 | Token set for the pick: `:root` (dark) and `:root[data-theme='light']`, `color-scheme` per block, the new names the sweep needs (at today's values), the two sub-AA pairs fixed | R-53, P-78 | W-67 | `cd web && npx vitest run test/theme-tokens.test.ts test/theme-contrast.test.ts test/type-tokens.contrast.test.ts` → 0 failures: the light block lacks 0 of `:root`'s `--color-*` / `--shadow-*` names; `color-scheme` is `dark` / `light`; the 11 layout tokens (`--space-1..12`, `--nav-height`, `--content-max`, `--sidebar-width`, `--sidebar-side`) equal `main`'s values; every frozen pair ≥ 4.5 (text) or ≥ 3 (non-text) in both blocks | "Home on the preview wears the picked colours." |
 | 9 | `theme-preference.ts`, `THEME_BOOT_SCRIPT` in the root layout, `THEME_COLOR` for `viewport.themeColor` | P-76, P-78, R-53 | W-67 | `cd web && npx vitest run test/theme-preference.test.ts` → 0 failures: `resolveTheme` table (stored light, stored dark, none + OS light, none + OS dark, junk, storage throws); the script, run in jsdom for each case, stamps the expected `data-theme` and writes no storage; `THEME_BG.dark` / `.light` equal the blocks' `--color-bg`; `grep -c "#161826" web/src/app/layout.tsx` → 0; `grep -c "__html: THEME_BOOT_SCRIPT" web/src/app/layout.tsx` → 1 | — |
 | 10 | `ThemeMenu` (Auto / Light / Dark) and its mount in the account menu | P-77, R-53 | W-67 (component), W-68 (mount) | `cd web && npx vitest run test/ThemeMenu.test.tsx` → 0 failures: three `menuitemradio`, Auto checked with no key; Light → `data-theme="light"`, key `light`, every `theme-color` meta = `THEME_BG.light`; Auto → key removed, attribute follows a mocked `matchMedia` and re-stamps on its `change`; Dark stays dark on an OS change; a throwing storage still stamps; `grep -c "<ThemeMenu" web/src/components/shell/TopNav.tsx` → 1 | "Account menu → Light, reload, still light; Auto follows Windows." |
 | 11 | Desktop window background from the tokens | R-53 | W-67 | `cd desktop && npx vitest run test/unit/window-background.test.ts test/unit/window.test.ts` → 0 failures (`DARK` / `LIGHT` equal the two `--color-bg` values read from `../web/src/app/globals.css`; `windowBackground(true)` = `DARK`, `(false)` = `LIGHT`); `grep -c "12131a" desktop/src/main/window.ts` → 0 | "The desktop window opens on the app's own background." |
-| 12 | Nav fold at the 720 px step, brand word hidden at ≤720 px | R-46, P-79 | W-68 | `cd web && npx vitest run test/TopNav.fold.test.tsx` → 0 failures: Menu `aria-expanded` false → true, `aria-controls="primary-nav-menu"`; the panel holds one link per `NAV_LINKS` entry (6), in order, with `aria-current` on the active one, then Search dispatching `bb2dash:command-palette`; Escape closes and focus returns to Menu; a pathname change closes it; Menu and the account menu close each other; ☰ closes Menu and keeps `aria-controls="course-sidebar"`; CSS cases: the `(max-width: 720px)` block hides `.links` and `.cmdk` and shows Menu, and Menu is `display: none` outside it | "At phone width the bar shows Menu; it lists every page and Search." |
+| 12 | Nav fold at the 720 px step, brand word hidden at ≤720 px | R-46, P-79 | W-68 | `cd web && npx vitest run test/TopNav.fold.test.tsx` → 0 failures: Menu `aria-expanded` false → true, `aria-controls="primary-nav-menu"`; the panel holds one link per `NAV_LINKS` entry (6), in order, with `aria-current` on the active one, then Search dispatching `bb2dash:command-palette`; Escape closes and focus returns to Menu; a pathname change closes it; Menu and the account menu close each other; ☰ closes Menu and keeps `aria-controls="course-sidebar"`; CSS cases: the `(max-width: 720px)` block hides `.links` and `.cmdk` and shows Menu, and Menu is `display: none` outside it; the `(max-width: 720px)` block gives `.brandWord` `clip-path: inset(50%)` and no rule outside it does; the brand link's accessible name is "bb2dash" (`getByRole('link', { name: 'bb2dash' })` finds exactly 1) | "At phone width the bar shows Menu; it lists every page and Search." |
 | 13 | The seven open states of §Contract (Bell, Activity, account with the theme control, nav menu, Sync toast, Sync error toast, command palette) inside the viewport at ≤720 px; Bell and Activity panels capped at `min(360px, calc(100vw - 28px))` (91 R-46) | R-46 | W-68 | harness run of `e2e/phone-width.spec.ts` with `-g "open state"` → 14 passed, 0 failed (7 × 2 themes), each asserting the panel's rect `left ≥ 0` and `right ≤ innerWidth` at 390 px; `phone-width.spec.ts` intercepts `**/rest/v1/rpc/mark_announcements_seen` and the `agent_requests` POST and poll in every case, as `theme-walk.spec.ts` does for rows 04, 23 and 28 | "Bell and Activity open fully on a phone." |
 | 14 | Gradebook scrolls inside its own box | R-46 | W-70 | `cd web && npx vitest run test/GradesTables.layout.test.tsx test/gradebook-phone-width.css.test.ts` → 0 failures (the layout test unedited; the new one asserts the wrapper rule has `overflow-x: auto` and no `th` / `td` rule gains `overflow` or `display`); harness run of `e2e/phone-width.spec.ts` with `-g "route /course/IST.466/grades "` → 2 passed, 0 failed (page `scrollWidth` ≤ 390; wrapper `scrollWidth` > `clientWidth`) | "IST.466 Grades at phone width: the table slides inside its box." |
 | 15 | Planner board scrolls inside itself | R-46 | W-69 | `cd web && npx vitest run test/planner-css.test.ts test/planner-phone-width.css.test.ts` → 0 failures (no `min-width` on `.board` in any block; the 760 px floor on its tracks or an inner element); harness run of `e2e/phone-width.spec.ts` with `-g "route /planner "` → 2 passed, 0 failed (page `scrollWidth` ≤ 390; `.board` `scrollWidth` > `clientWidth`) | "The week slides at phone width; the page does not." |
@@ -463,8 +495,8 @@ with `F` set to the cluster's file name (shown here for `shell`) or to `/\.json$
 | 18 | Sweep screens A (Home, planner, tracker, Inbox, Announcements; the 8 `PlannerBoard.tsx` `style=` sites keep only `--` keys) | R-53 | W-69 | baseline sum with `F=/^screens-a\.json$/` → 0 and `cd web && npm test` → 0 failures | — |
 | 19 | Sweep screens B (course tabs, assignment page, Grades, Materials, Workspace; dead `GradeModel.module.css` classes may be deleted instead) | R-53 | W-70 | baseline sum with `F=/^screens-b\.json$/` → 0 and `cd web && npm test` → 0 failures | — |
 | 20 | Integrate: full suites, all baselines zero, no edited old tests, no new dependency | R-53 | PM | `cd web && npm run typecheck && npm run build && npm test && npm run test:coverage` → 0 failures, exit 0; `cd desktop && npm run typecheck && npm test` → 0 failures; baseline sum with `F=/\.json$/` → 0; `git diff --diff-filter=M --name-only origin/main...HEAD -- web/test \| grep -cE "\.test\.tsx?$"` → 1 (`type-tokens.contrast.test.ts`; the baseline JSONs are not test files, so the count is the same whether tasks 1–2 rode Phase 17 or not); `git diff --name-only origin/main...HEAD -- web/e2e/playwright.config.ts web/e2e/login.mjs \| wc -l` → 0; `git diff --numstat origin/main...HEAD -- web/package.json web/package-lock.json desktop/package.json desktop/package-lock.json \| wc -l` → 0 | — |
-| 21 | 390 px walk green on the preview, no writes | R-46, P-79 | PM (runs W-68's spec) | harness run of `e2e/phone-width.spec.ts` against the phase preview → 51 passed, 0 failed (16 routes × 2 themes, 1 popout × 2, 7 open states × 2, reachability × 2, ☰ still toggles `html[data-sidebar]` × 1); no-writes SQL with this run's `:walk_start` → 0; screenshots `docs/planning/sprint-2/walks/walk-22/30-phone-home.png` (brand mark, Menu, Sync and four icons in one row, no horizontal scrollbar), `31-phone-nav-menu.png` (Home, Planner, Inbox, Grades, Materials, Workspace, Search listed), `32-phone-course-grades.png` (table cut at its box edge with its own scrollbar), `33-phone-planner.png` (week cut at the board edge), `34-phone-bell.png` and `35-phone-activity.png` (both panel edges inside the screen) | "At 390 px nothing scrolls sideways." |
-| 22 | Theme walk: 58 screenshots | R-53, P-76 | PM (runs W-67's spec) | harness run of `e2e/theme-walk.spec.ts` against the phase preview → 58 passed, 0 failed (each case: `html[data-theme]` = its theme, computed `body` background = `THEME_BG[theme]`, 0 console messages matching `/hydrat\|#418/`); no-writes SQL with this run's `:walk_start` → 0; `ls docs/planning/sprint-2/walks/walk-22/[0-2][0-9]-*-light.png \| wc -l` → 29 and the same for `-dark.png` → 29, each named `NN-<surface>-<theme>.png` with `NN` and the surface from the inventory table, and showing that surface open on its theme's ground | — |
+| 21 | 390 px walk green on the preview, no writes | R-46, P-79 | PM (runs W-68's spec) | harness run, with `WALK_SHOTS=1` and the phase-preview session saved just before it (preamble), of `e2e/phone-width.spec.ts` against the phase preview → 52 passed, 0 failed (16 routes × 2 themes, 1 popout × 2, 7 open states × 2, reachability × 2, ☰ still toggles `html[data-sidebar]` × 1, `unfolded bar at 721` × 1); no-writes SQL with this run's `:walk_start` → 0; screenshots `docs/planning/sprint-2/walks/walk-22/30-phone-home.png` (brand mark, Menu, Sync and four icons in one row, no horizontal scrollbar), `31-phone-nav-menu.png` (Home, Planner, Inbox, Grades, Materials, Workspace, Search listed), `32-phone-course-grades.png` (table cut at its box edge with its own scrollbar), `33-phone-planner.png` (week cut at the board edge), `34-phone-bell.png` and `35-phone-activity.png` (both panel edges inside the screen) | "At 390 px nothing scrolls sideways." |
+| 22 | Theme walk: 58 screenshots | R-53, P-76 | PM (runs W-67's spec) | harness run, with `WALK_SHOTS=1` and the session saved before task 21, of `e2e/theme-walk.spec.ts` against the phase preview → 58 passed, 0 failed (each case: `html[data-theme]` = its theme, computed `body` background = `THEME_BG[theme]`, 0 console messages matching `/hydrat\|#418/`); no-writes SQL with this run's `:walk_start` → 0; `ls docs/planning/sprint-2/walks/walk-22/[0-2][0-9]-*-light.png \| wc -l` → 29 and the same for `-dark.png` → 29, each named `NN-<surface>-<theme>.png` with `NN` and the surface from the inventory table, and showing that surface open on its theme's ground | — |
 | 23 | Gates: `/code-review main high`, `/security-review` | R-53 | PM | `grep -cE "^## /(code-review main high\|security-review)$" docs/planning/sprint-2/verification/103_PHASE22_REVIEW.md` → 2 (both gates ran and are recorded); `grep -c "\| open \|" docs/planning/sprint-2/verification/103_PHASE22_REVIEW.md` → 0 (every CRITICAL / HIGH row reads fixed or declined-by-Stack) | — |
 | 24 | STATUS, DECISIONS (rows owed, see DoD), ORCHESTRATOR; PR with preview | R-53, R-46, S2-styling-1 | PM | `git diff --name-only origin/main...HEAD -- project-state \| wc -l` → 3; `gh pr view feat/styling-22 --json state -q .state` → `OPEN`; `curl -s -o /dev/null -w "%{http_code}" <preview>/login` → 200 (through `vercel curl` if deployment protection answers 401); `test -e web/e2e/.auth/state.json` → exit 1 (the walk session deleted) | — |
 | 25 | Stack's acceptance walk | R-53, R-46, S2-styling-1 | Stack | `grep -c "^- \[x\]" docs/planning/sprint-2/walks/walk-22/WALK.md` → 60 (58 surface lines, the C-1 line, the toggle line) and `grep -c "^- \[ \]" docs/planning/sprint-2/walks/walk-22/WALK.md` → 0 | "I walked every screen in light and dark and said yes." |
@@ -473,7 +505,7 @@ with `F` set to the cluster's file name (shown here for `shell`) or to `/\.json$
 
 | Worker | Stream | Branch · worktree | Owns (Contract §Files has the full list) | Tasks |
 |---|---|---|---|---|
-| W-67 | Foundation: audit, tokens, theme, desktop, public pages | `feat/styling-22-foundation` · `bb2dash-wt-22-foundation` | `globals.css`, root `layout.tsx`, `tokens.module.css`, `login/`, `privacy/`, `terms/`, `not-found.tsx`, `theme-preference.ts`, `ThemeMenu.*`, the audit, token and theme tests, `e2e/theme-walk.spec.ts`, `desktop/src/main/window*.ts` and its test | 1, 2, 3, 8, 9, 10 (component), 11, 16 |
+| W-67 | Foundation: audit, tokens, theme, desktop, public pages | `feat/styling-22-foundation` · `bb2dash-wt-22-foundation` | `globals.css`, root `layout.tsx`, `tokens.module.css`, `login/`, `privacy/`, `terms/`, `not-found.tsx`, `theme-preference.ts`, `ThemeMenu.*`, the audit, token and theme tests, `e2e/theme-walk.spec.ts`, `desktop/src/main/window*.ts` and their tests | 1, 2, 3, 8, 9, 10 (component), 11, 16 |
 | W-68 | Shell and phone width | `feat/styling-22-shell` · `bb2dash-wt-22-shell` | `web/src/components/shell/` except `ThemeMenu.*`, `(app)/Shell.module.css`, `(app)/layout.tsx`, `components/popout/`, `QueryState.tsx`, `TopNav.fold.test.tsx`, `e2e/phone-width.spec.ts` | 5, 10 (mount), 12, 13, 17 |
 | W-69 | Screens A | `feat/styling-22-screens-a` · `bb2dash-wt-22-screens-a` | Home files, `planner/`, `inbox/`, `announcements/` (routes and components), `tracker/`, `planner-phone-width.css.test.ts` | 15, 18 |
 | W-70 | Screens B | `feat/styling-22-screens-b` · `bb2dash-wt-22-screens-b` | `course/`, `grades/`, `materials/`, `workspace/` (routes and components), `gradebook-phone-width.css.test.ts` | 14, 19 |
@@ -482,7 +514,12 @@ Order: tasks 1–2 first (on Phase 17's branch, or this one); W-67's task 3 and 
 with Stack while W-68, W-69 and W-70 do the direction-free C-1 work (12–15); task 8 gates every sweep (16–19).
 Workers commit and push per task (`feat(22-T8): …`), run their own checks, write RED → GREEN evidence in their
 `103_W<nn>_VERIFICATION.md`, lower their own baseline JSON in the commit that removes the literals, and never
-touch `project-state/`. The PM merges W-67 first, then W-68, W-69, W-70, and runs tasks 20–24.
+touch `project-state/`. Merges into `feat/styling-22` are all merges (a pushed branch is never rebased). First
+the interim merges, each made once its commit is pushed and followed by the workers who need it merging
+`feat/styling-22` into their own branches: W-68's task-5 commit (before W-69's and W-70's tasks 14–15), W-68's
+task-12 commit (before the page-width half of tasks 14–15), W-67's task-8 commit (before the sweeps 17–19) and
+W-67's task-10 component commit (before W-68's mount). Then the final merges: W-67 first, then W-68, W-69, W-70.
+The PM then runs tasks 20–24.
 
 ## Out of scope
 
@@ -527,9 +564,11 @@ Only what B-6, B-23 and B-24 leave open; each has the default this brief builds 
 > `docs/planning/sprint-2/briefs/103_PHASE22_styling.md` in full. Confirm Phases 16, 17, 18, 19, 14 and 21 are
 > merged, that `web/src/app/(app)/workspace/page.tsx` exists on `main`, and whether tasks 1–2 already landed with
 > Phase 17 (if not, they are this branch's first commits). Record my answers to B-6, B-23 and B-24 against the
-> brief's table and put open items 1–5 to me; wait for them. Then cut `feat/styling-22` in `bb2dash-wt-22`, re-run
-> `web/e2e/login.mjs`, and spawn W-67..W-70 (Opus) in their own worktrees on their disjoint files in the brief's
-> order: W-67's task 3 and W-68's task 5 (RED on the first preview) first; publish the three style tiles (task 6)
-> and wait for my pick while W-68..W-70 do tasks 12–15; task 8 after my pick gates the sweeps (16–19). Integrate
-> W-67 → W-70, walk both specs on the preview, run `/code-review main high` and `/security-review`, update STATUS,
+> brief's table and put open items 1–5 to me; wait for them. Then cut `feat/styling-22` in `bb2dash-wt-22` and
+> spawn W-67..W-70 (Opus) in their own worktrees on their disjoint files in the brief's order, running
+> `web/e2e/login.mjs` against each host before its first harness run (the task-list preamble): W-67's task 3 and
+> W-68's task 5 (RED on the first preview) first; publish the three style tiles (task 6) and wait for my pick
+> while W-68..W-70 do tasks 12–15; task 8 after my pick gates the sweeps (16–19). Make the interim merges the
+> Workers "Order" paragraph lists, then integrate W-67 → W-70, run `login.mjs` against the phase preview, walk
+> both specs on it with `WALK_SHOTS=1`, run `/code-review main high` and `/security-review`, update STATUS,
 > DECISIONS and ORCHESTRATOR, open the PR with the preview link and `WALK.md`, and stop at "ready when you say so".
