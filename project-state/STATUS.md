@@ -426,7 +426,7 @@ two RED-first tests), and React #418 on `?item=` popout URLs (S2-carry-9, pre-ex
 
 ## What's next — Sprint 2
 
-Planned 2026-09-24 on `docs/sprint2-planning` (PR open): requirements `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`
+Planned 2026-09-24 on `docs/sprint2-planning` ([PR #28](https://github.com/emstacho-su/bb2dash/pull/28), opened 2026-09-27): requirements `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`
 (R-29..R-109 carried, P-1..P-113 PM- and research-added, Stack's eight items in §3, 22 still-declined rows in §4),
 research `research/92_*` and the synthesis `93_SPRINT2_RESEARCH_SYNTHESIS.md` (its §5 is the one question batch,
 59 items with defaults), the phase plan `94_SPRINT2_PHASES.md`, and one brief per phase under `briefs/` with a
