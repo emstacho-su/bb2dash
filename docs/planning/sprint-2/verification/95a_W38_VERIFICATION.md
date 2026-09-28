@@ -377,6 +377,184 @@ Commit: `feat(15-04): migration 100 — the db_test_runner login role, applied t
 
 ---
 
+## Task 5 (Stack's) — the credential, as W-38 saw it
+
+Not W-38's row, recorded because tasks 6 and 7 rest on it. From `bb2dash-wt-15-runner`, with the
+PM's copy of the gitignored `.env.local` in place:
+
+```
+$ node scripts/db-test.mjs --ping
+db-test: connected as db_test_runner
+EXIT=0
+```
+
+The DSN ends `?uselibpqcompat=true&sslmode=require`. A bare `sslmode=require` fails on this machine:
+`pg` 8.23 aliases `require` to `verify-full`, and the Supabase pooler chains to a private root, so
+the runner reports `db-test: connection failed: self-signed certificate in certificate chain` and
+exits 2 — correctly, and with the DSN redacted. `uselibpqcompat=true` restores libpq's own `require`
+(encrypted, no chain check), which is what `psql` does and what research 92 assumed. The PM is
+recording it in DECISIONS row 5; `db/tests/README.md` now carries a paragraph on it, since the next
+person to write this DSN by hand will hit it. No change to `scripts/db-test.mjs`: the runner refuses
+6543 and redacts, and takes whatever else the DSN says.
+
+---
+
+## Task 6 — live exit contract on the three fixtures
+
+Brief's check: `passes.sql` → `db-test: passed 1, failed 0, units 1` then 0; `fails.sql` →
+`db-test: passed 0, failed 1, units 1` then 1; `commits.sql` → one line starting
+`db-test: lint commits.sql:` then 2 (task 1's unit test asserts no client was opened).
+
+```
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/passes.sql; echo $?
+PASS  passes.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/fails.sql; echo $?
+FAIL  fails.sql  FAIL this fixture always fails, on purpose
+db-test: passed 0, failed 1, units 1
+EXIT=1
+
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/commits.sql; echo $?
+db-test: lint commits.sql: top-level `commit` is not allowed; a unit must roll back
+EXIT=2
+```
+
+All three as the row gives them. `fails.sql`'s FAIL line is the first line of the real server error
+(the `CONTEXT: PL/pgSQL function inline_code_block` line behind it is dropped), and `commits.sql`
+never opened a connection — the offline half of that is task 1's
+`assert.equal(factory.opened.length, 0)`, asserted both with and without a DSN present.
+
+**Task 6: PASS.**
+
+Commit: `feat(15-06): live exit contract on the three fixtures; DSN sslmode note in the README`
+
+---
+
+## Task 7 — `db/tests/phase15_100_db_test_runner_role.sql`
+
+Brief's check: runner `--only phase15_100_db_test_runner_role.sql` →
+`db-test: passed 1, failed 0, units 1`.
+
+Six sections, covering the row's list: (1) `current_user` is `db_test_runner` and its attributes are
+LOGIN + BYPASSRLS, not superuser / createrole / createdb / replication, `connection limit 2`;
+(2) the two per-role settings 100 set; (3) memberships **exactly** `anon` and `authenticated`, each
+`inherit=f` (and `set=t`, which is what lets the four units switch into them), plus a separate list
+that names `service_role`, `postgres`, `authenticator`, `pg_read_all_data` and eight more privileged
+roles and raises if any of them is a membership; (4) 0 owned objects (`pg_shdepend` deptype `'o'`,
+which is every object in the cluster this role owns) and no `CREATE` on `public` or `extensions`;
+(5) the only schemas whose ACL names it are `public` and `extensions`, `has_schema_privilege` is
+false on `vault`, `storage`, `auth` and `cron`, and true on `pg_catalog`, `information_schema` and
+`net`, which it reaches only through PUBLIC — the reason section 5's ACL list is short; (6) neither
+Vault RPC is executable by it, by `anon` or by `authenticated`.
+
+Section 3 carries the comment the §Seams row asks for: a later migration that grants a further
+membership (brief 100's 094 `sync_runner`, brief 102's 142 `workspace_runner`) extends the expected
+list in the same PR.
+
+### RED
+
+The file asserts facts that are already true, so it cannot be red as written without weakening it.
+Section 3's guard was shown to have teeth instead: its body, **unchanged**, was run through
+`execute_sql` as `postgres` inside `begin; … rollback;` with one fact falsified by
+`grant pg_read_all_data to db_test_runner`:
+
+```
+ERROR:  P0001: FAIL db_test_runner memberships are anon(inherit=f,set=t), authenticated(inherit=f,set=t), pg_read_all_data(inherit=t,set=t), expected anon(inherit=f,set=t), authenticated(inherit=f,set=t)
+CONTEXT:  PL/pgSQL function inline_code_block line 17 at RAISE
+```
+
+The raise aborted the transaction, so the falsified grant never landed:
+
+```
+select … from pg_auth_members … where g.rolname = 'db_test_runner';
+[{"memberships_now":"anon(inherit=f), authenticated(inherit=f)"}]
+```
+
+### GREEN
+
+```
+$ node scripts/db-test.mjs --only phase15_100_db_test_runner_role.sql; echo $?
+PASS  phase15_100_db_test_runner_role.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```
+
+The unit's own summary row, read back as `db_test_runner` through the module's exported
+`loadDsn()` / `openClient()` (which is also the first use of those two exports):
+
+```
+{"result":"phase15_100_db_test_runner_role: PASS","ran_as":"db_test_runner","conn_limit":2,
+ "memberships":"2","schemas_granted":"2","write_grants":"37","callable_public_fns":"25"}
+```
+
+The plan is now 18 units on this branch, not 17, as task 3's note says, and `db/tests` holds 20
+`.sql` files:
+
+```
+$ node scripts/db-test.mjs --list | grep -c "^unit "
+18
+$ ls db/tests/*.sql | wc -l
+20
+```
+
+**Task 7: PASS.** No grant gap: nothing in this wave produced a `permission denied`, so no 103.
+
+Commit: `feat(15-07): phase15_100 - the role's limits as a test unit`
+
+---
+
+## Diagnostic: the whole suite on today's prod (not a task row)
+
+Run once after the credential arrived, to find grant gaps before W-40 puts 102 on prod. **No unit
+failed on a privilege** — every FAIL below is an assertion about prod data, so **no 103 is needed
+from this wave**.
+
+```
+$ node scripts/db-test.mjs; echo $?
+PASS  inbox_apply_090_attention_archive.sql
+FAIL  phase10a_stage_attempts.sql  FAIL IST.323/quiz-01 has 3 attempt row(s), expected 2
+FAIL  phase10a_stage_gradebook.sql  FAIL 2 course(s) disagree on column count between bb_raw and v_gradebook_latest
+FAIL  phase10b_grade_model.sql  duplicate key value violates unique constraint "grade_column_links_pkey"
+PASS  phase10b_round2.sql
+PASS  phase12b_073_workload_visibility.sql
+PASS  phase12b_074_reading_file_links.sql
+PASS  phase12b_075_shared_column_restamp.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+FAIL  phase12b_077_inbox_feedback.sql  FAIL v_inbox_feedback is empty - prod has closed rows with notes
+FAIL  phase12b_078_status_fold_and_auto_graded.sql  FAIL 0 of the 4 advanceable rows read graded
+PASS  phase12b_082_083_planner_series.sql
+FAIL  phase12b_084_shared_column_conflict.sql  FAIL the IST.323 shared-column row is not dismissed
+PASS  phase12b_085_stage_attempts_v4.sql
+PASS  phase12b_086_reading_link_settles.sql
+PASS  phase12b_087_auto_graded_sticks.sql
+FAIL  phase12b_089_work_items_due_on.sql  FAIL the Lab #1 fixture row is gone from v_work_items
+db-test: passed 10, failed 7, units 17
+EXIT=1
+```
+
+(This run predates task 7's file, hence 17 units.) Three of the seven are the ones this phase
+repairs — `phase10a_stage_attempts`, `phase10a_stage_gradebook` (W-39 task 9, P-30) and
+`phase10b_grade_model` (W-39 task 10, P-2). **Four are not**, and by the brief's task 17 rule a red
+unit other than the three repaired here stops the PM:
+
+| Unit | FAIL line | Cause, checked as `postgres` |
+|---|---|---|
+| `phase12b_077_inbox_feedback.sql` | `FAIL v_inbox_feedback is empty - prod has closed rows with notes` | `v_inbox_feedback` 0 rows and `attention_items` with state `resolved`/`dismissed` and a note: 0. 142 rows are now `archived`, so the view the unit expects to be non-empty is legitimately empty. |
+| `phase12b_084_shared_column_conflict.sql` | `FAIL the IST.323 shared-column row is not dismissed` | `ref = 'column:_3569973_1'` reads `archived resolved_at=2026-09-17 19:10:19.200505+00`. The note assertion just above it still passes; only the `state = 'dismissed'` clause fails. |
+| `phase12b_089_work_items_due_on.sql` | `FAIL the Lab #1 fixture row is gone from v_work_items` | `assignments` holds 0 rows for `IST.323/lab-1-performing-a-ransomware-attack`. The assignment itself is gone from prod, not just from the view. |
+| `phase12b_078_status_fold_and_auto_graded.sql` | `FAIL 0 of the 4 advanceable rows read graded` | Fixture-dependent, not reduced to a one-line probe. Its shape matches the others: `assignment_progress` has moved under `/inbox-apply` and the 12b fold since sprint 1. |
+
+Every figure above is identical when read as `postgres` through `execute_sql`, so none of it is
+caused by `db_test_runner`, `BYPASSRLS` or the `inherit false` memberships. The theme is the same
+one P-30 names for `phase10a`: units that assert on prod rows which later syncs, the 090 archive and
+`/inbox-apply` have since moved. It is open item 6's risk ("some existing units build rows on
+literal future dates") arriving a row earlier than expected, and it is the PM's call, not W-38's —
+these are not W-38's files.
+
+---
+
 ## Notes for the PM
 
 1. **A grant the brief did not name.** `public.calendar_event_id(text)` (see task 4). It is in 100,

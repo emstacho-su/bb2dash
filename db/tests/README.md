@@ -25,6 +25,13 @@ The DSN must be a **direct** or **session-pooler** connection (port 5432). The r
 6543, the transaction pooler: four units run `set local role` mid-transaction, which needs a
 session-scoped connection.
 
+It must also end `?uselibpqcompat=true&sslmode=require`, not `?sslmode=require` on its own. `pg`
+8.23 reads a bare `sslmode=require` as libpq's `verify-full`, and the Supabase pooler's certificate
+chains to a private root, so the connection dies with
+`db-test: connection failed: self-signed certificate in certificate chain` and exit 2.
+`uselibpqcompat=true` restores libpq's own `require` — encrypted, no chain check — which is what
+`psql` does. Anyone writing this DSN by hand needs both parameters.
+
 ## Running it
 
 | Command | Does |
