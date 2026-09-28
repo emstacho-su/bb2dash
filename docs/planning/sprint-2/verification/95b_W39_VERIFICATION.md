@@ -640,3 +640,32 @@ PASS  phase12b_077_inbox_feedback.sql
 db-test: passed 1, failed 0, units 1
 exit=0
 ```
+
+## `phase12b_084_shared_column_conflict.sql` — `archived` counts as closed
+
+RED: `FAIL the IST.323 shared-column row is not dismissed` (line 43).
+
+Cause, verified first-hand — the same 090 drift. The row is there, with 084's own note intact, but
+`/inbox-apply` has archived it (prod 2026-09-27):
+
+```
+id 137 | state archived | resolved_at set | archived_at set | archived_by 'inbox-apply request 35'
+note   Closed by 084: a shared gradebook column is handled by 075; nothing to decide.
+```
+
+The fix: `state in ('dismissed', 'archived')`. `resolved_at is not null` stays, so a row archived
+without ever having been resolved still fails. §2's `v_after = v_before` was left exactly as it is,
+as instructed — it is the one assertion a concurrent committed `/inbox-apply` could break.
+
+What it still proves: the shared-column conflict is closed, never re-raised, carries 084's own note,
+and no `bb_column_id` conflict on a `column:%` ref is open. Only where a *closed* row is filed stopped
+being asserted, and archiving is a one-way move out of the Inbox that never re-opens a row.
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase12b_084_shared_column_conflict.sql
+PASS  phase12b_084_shared_column_conflict.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```

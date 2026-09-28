@@ -37,8 +37,14 @@ begin
     raise exception 'FAIL the IST.323 row carries the wrong note: %', coalesce(note, '<null>');
   end if;
 
+  -- `archived` counts as closed here (Phase 15). Migration 090 added a fourth state and
+  -- `/inbox-apply` has since archived this very row -- `archived_by = 'inbox-apply request 35'`,
+  -- 084's own note intact (prod 2026-09-27). Archiving is a one-way move out of the Inbox that
+  -- never re-opens a row, so insisting on the literal `dismissed` asserted where a closed row is
+  -- filed, not that it is closed. Its `resolved_at` is still required, so a row that was archived
+  -- without ever being resolved would still fail.
   if not exists (select 1 from attention_items
-                  where ref = 'column:_3569973_1' and state = 'dismissed'
+                  where ref = 'column:_3569973_1' and state in ('dismissed', 'archived')
                     and resolved_at is not null) then
     raise exception 'FAIL the IST.323 shared-column row is not dismissed';
   end if;
