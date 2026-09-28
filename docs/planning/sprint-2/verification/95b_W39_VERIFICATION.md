@@ -388,6 +388,7 @@ On 2026-09-27 the PM extended W-39's file set to `db/tests/phase10a_stage_gradeb
 two assertions to be **scoped to the fixture's own rows** — never weakened, never deleted. The
 brief's error (§Why's "two files are red" is three, and §Files lists neither of these) goes in the
 phase PR. Lines 167–168 of `phase10b_grade_model.sql` remain untouched.
+
 ### `db/tests/phase10a_stage_attempts.sql` — §5, the first three clauses
 
 RED (already captured above, unchanged by task 8):
@@ -415,3 +416,92 @@ GREEN (2026-09-27), loader + file pasted as one `execute_sql` call:
 {"result":"phase10a_stage_attempts: PASS","attempt_rows":4,"pulled_back_files":3,"view_rows":14}
 ```
 
+
+### `db/tests/phase10a_stage_gradebook.sql` — §4a, and then §4d
+
+RED, §4a (already captured above):
+
+```
+Failed to run sql query: ERROR:  P0001: FAIL 2 course(s) disagree on column count between bb_raw and v_gradebook_latest
+CONTEXT:  PL/pgSQL function inline_code_block line 14 at RAISE
+```
+
+What changed in §4a: the view side of the join is scoped to the fixture run —
+`select course_id, count(*) as view_cols from v_gradebook_latest where run_id in (select run_id from
+_fx) group by 1` — and the join became a `left join` with `coalesce(vc.view_cols, 0)`, so a course
+that vanished from the view is a disagreement rather than a row the inner join quietly dropped. The
+message text is unchanged.
+
+What it still proves: per course, every gradebook column in the fixture's `bb_raw` payload is
+mirrored exactly once in `v_gradebook_latest` under that run — 6 / 12 / 2 for IST.471 / IST.323 /
+ECN.304. It reads that way only because the fixture crawl is now the newest one (task 8): with the
+old 2026-09-14 literals the real crawls' rows would win the view's `distinct on` and the scoped
+count would have been 0.
+
+Scoping §4a moved the failure on to **§4d**, which the first pass never reached:
+
+```
+Failed to run sql query: ERROR:  P0001: FAIL IST.323 item_count = 14, expected 10
+CONTEXT:  PL/pgSQL function inline_code_block line 60 at RAISE
+```
+
+§4d could not be scoped the same way. `v_course_grade` aggregates the whole of `v_gradebook_latest`
+per course through a lateral and exposes no run at all (`pg_get_viewdef`, read 2026-09-27), so its
+`item_count` and `graded_item_count` are today's gradebook by construction: IST.323 read 10 items
+when these payloads were cut and 14 on 2026-09-27. Rather than pin a new literal that would rot the
+same way, each count is now asserted against the same view computed independently by
+`column_kind`, plus the exclusion that is the actual property — the course carries kinds that are
+not items, and `item_count` must be strictly below its column count. A guard in front refuses to
+let the case go quiet: if IST.323 ever loses its total or its letter column, or ECN.304 its
+attendance column, it raises `FAIL the fixture courses no longer carry a total, a letter and an
+attendance column, so 4d proves nothing`.
+
+What it still proves: `item_count` counts items and only items, `graded_item_count` counts the
+scored ones and never exceeds `item_count`, and both exclude the total, the letter and the
+attendance column. Prod, read 2026-09-27: IST.323 14 items (7 scored) of 16 columns, ECN.304 4 items
+of 5.
+
+GREEN (2026-09-27), loader + file pasted as one `execute_sql` call:
+
+```json
+{"result":"phase10a_stage_gradebook: PASS","gradebook_rows":355,"latest_rows":60,"courses_with_gradebook":7,"courses_with_total":1,"kinds":{"item":53,"total":1,"letter":1,"attendance":5}}
+```
+
+Sections 5, 5b, 6 and 7 ran for the first time on this prod and needed no change: they are already
+fixture-scoped (`run_id in (select run_id from _fx)`, `raised_by in (select sync_run_id from _fx)`)
+or derive their expectation from the counts the stage itself returned.
+
+### All four units green together (2026-09-27)
+
+Re-run from the final working tree, each unit pasted as one `execute_sql` call, in one sitting:
+
+```json
+{"result":"phase10a_stage_gradebook: PASS","gradebook_rows":355,"latest_rows":60,"courses_with_gradebook":7,"courses_with_total":1,"kinds":{"item":53,"total":1,"letter":1,"attendance":5}}
+{"result":"phase10a_stage_attempts: PASS","attempt_rows":4,"pulled_back_files":3,"view_rows":14}
+{"result":"phase10b_grade_model: PASS","model_items":85,"kinds":{"item":53,"attendance":5,"placeholder":27},"unsure_links":7,"ist323_bb_running":true,"history_changed_columns":10}
+{"result":"phase9_transform_states: PASS","folded_status":"partial","stages":"announcements=failed, assignments=ok, attempts=ok, content=ok, courses=ok, files=ok, gaps=ok, gradebook=ok","reaped_notes":"phase9 fixture: died with its session | interrupted (reaped)","fresh_status":"running"}
+```
+
+Residue after all four, every figure as it was before them:
+
+```
+bb_raw, fixture run ids (10a0- and 0900-)          0
+agent_requests, fixture run ids                    0
+grade_column_links                                 5 rows
+IST.323/_3598132_1                                 component_id null, excluded true, updated_at 2026-09-22 16:16:57.448326+00
+grade_scenarios                                    0
+sync_runs running or reaped                        0
+announcements 'phase9-broken-timestamp'            0
+```
+
+Two figures in those rows are live-data drift the files are written to absorb, not failures:
+`history_changed_columns` reads 10 against a floor of 5 (the mirror is append-only, so the floor can
+only grow), and `view_rows` reads 14 because real attempts share the fixture's columns — which is
+exactly why §5 now names its own attempt ids.
+
+### Still needs the runner (wave 2)
+
+`node scripts/db-test.mjs --only phase10a_stage_gradebook.sql` and `--only
+phase10a_stage_attempts.sql` → `db-test: passed 1, failed 0, units 1` each, with the loader in front
+of both (the frozen loader map). Both files keep their lint shape: first statement `begin;`, last
+`rollback;`, no top-level `commit`/`end`, `: PASS` row at the end.
