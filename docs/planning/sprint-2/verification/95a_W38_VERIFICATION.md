@@ -250,4 +250,150 @@ only: `--list` needed no new code beyond task 1's.
 
 ## Task 4 — migration 100
 
-_(pending in this wave — filled in below when run)_
+Brief's checks:
+`select rolcanlogin, rolbypassrls, rolsuper, rolcreaterole, rolcreatedb, rolconnlimit from pg_roles
+where rolname = 'db_test_runner'` → `t, t, f, f, f, 2`;
+`select count(*) from supabase_migrations.schema_migrations where name = '100_db_test_runner_role'` → 1.
+
+### How the three grant lists were derived
+
+`db/migrations/100_db_test_runner_role.sql` carries no password. The lists were derived by reading
+every file in `db/tests/` with a script that strips comments, tracks `set local role` / `reset role`
+and reports each DML statement and each public-function call with the **effective** role, so
+statements that run as `anon` or `authenticated` (on those roles' own grants) are excluded.
+
+Tables written as the session role, 12 in all — `agent_requests`, `assignment_progress`,
+`assignments`, `attention_items`, `bb_files`, `bb_gradebook`, `bb_raw`, `courses`,
+`grade_column_links`, `grade_scenarios`, `readings`, `sync_runs`. `planner_events` and
+`planner_event_series` are deliberately absent: every write to them in
+`phase12b_082_083_planner_series.sql` sits between its `set local role authenticated` (line 34) and
+`reset role` (line 664), and `phase12b_089`'s `assignments` writes are inside its own authenticated
+block too (26–148), which is why `assignments` is on the list only for `phase12b_075:88` and
+`phase12b_084:77,168`.
+
+One grant is derived rather than read off a statement: `assignments_mark_calendar_dirty()` is a
+SECURITY INVOKER statement trigger on `assignments`, and its body is
+`update app_settings set gcal_dirty = true where id and not gcal_dirty`. That UPDATE runs as this
+role whenever `phase12b_075` or `phase12b_084` touches `assignments`, so 100 grants `update` (only)
+on `public.app_settings`.
+
+One function grant is derived the same way and is **not named in the brief**:
+`public.calendar_event_id(text)` has no PUBLIC execute, and it is called inside
+`v_calendar_push_items`, which is `security_invoker` (036) and is read by `phase12b_075` (4 places),
+`phase12b_084` (3) and `phase12b_089:183`, all as the session role. Without it those three units
+would have gone red and cost a 103. Every public view's definition was checked against every public
+function that lacks PUBLIC execute; `calendar_event_id` is the only hit.
+
+`suggested_start(text, date, numeric)` (behind `v_work_items`), `classify_bb_file(text, text, text)`
+and `set_updated_at()` still hold PUBLIC execute on prod, so they need no grant. Trigger functions
+are not granted: Postgres checks EXECUTE on a trigger function at CREATE TRIGGER time, not when it
+fires — which is why `authenticated`, with no execute on `assignments_mark_calendar_dirty()`, can
+insert `assignments` in `phase12b_089` today.
+
+The 22 function grants are written by identity signature, so a later overload cannot inherit one.
+The six sequence grants are on identity sequences (`attidentity = 'a'` on all six), which Postgres
+advances without a USAGE check; they are in the file because the contract names them.
+
+### Dry run
+
+The whole file was sent through `mcp__plugin_supabase__execute_sql` inside `begin; … rollback;`,
+with a probe select before the rollback. It needed no fix:
+
+```
+[{"result":"dry run 100: reached the end","attrs":"true,true,false,false,false,2","memberships":2,
+  "dml_grants":37,"temp_ok":true,"can_stage":true}]
+```
+
+`attrs` is `rolcanlogin,rolbypassrls,rolsuper,rolcreaterole,rolcreatedb,rolconnlimit`; `dml_grants`
+37 = 12 tables x 3 + app_settings UPDATE; `temp_ok` confirms the brief's
+`has_database_privilege(…, 'TEMP')` fact still holds for the four units that create temp tables.
+
+**`BYPASSRLS` was accepted on a login role.** Open item 1's fallback is not needed, and nothing in
+the brief changes.
+
+### Apply
+
+Applied with `mcp__plugin_supabase__apply_migration`, name `100_db_test_runner_role`, the file's
+bytes unchanged (12748 bytes, LF):
+
+```
+{"success":true}
+```
+
+```
+$ md5sum db/migrations/100_db_test_runner_role.sql
+ec1f7d3d80a222d356cf59571f0b46db *db/migrations/100_db_test_runner_role.sql
+```
+
+```
+select count(*), md5(array_to_string(statements, '')), array_length(statements, 1), version
+  from supabase_migrations.schema_migrations where name = '100_db_test_runner_role';
+[{"migration_rows":1,"applied_md5":"ec1f7d3d80a222d356cf59571f0b46db","statement_count":1,
+  "version":"20260928021303"}]
+```
+
+The applied md5 equals the file's md5: repo and prod are byte-identical (task 21's pair, matching
+already).
+
+### The brief's two SELECTs
+
+```
+select rolcanlogin, rolbypassrls, rolsuper, rolcreaterole, rolcreatedb, rolconnlimit
+  from pg_roles where rolname = 'db_test_runner';
+[{"rolcanlogin":true,"rolbypassrls":true,"rolsuper":false,"rolcreaterole":false,
+  "rolcreatedb":false,"rolconnlimit":2}]
+```
+
+→ `t, t, f, f, f, 2`, as the row asks.
+
+```
+select count(*) from supabase_migrations.schema_migrations where name = '100_db_test_runner_role';
+1
+```
+
+### What the role actually holds now (the shape task 7 will assert)
+
+```
+[{"memberships":"anon (inherit=false), authenticated (inherit=false)",
+  "schemas_granted":"extensions, public",
+  "select_grants":59,
+  "write_tables":"agent_requests, app_settings, assignment_progress, assignments, attention_items, bb_files, bb_gradebook, bb_raw, courses, grade_column_links, grade_scenarios, readings, sync_runs",
+  "executable_public_fns":25,
+  "usable_sequences":6,
+  "vault":false,"storage":false,"auth":false,"cron":false,"net":true,
+  "create_on_public":false,
+  "vault_rpc_1":false,"vault_rpc_2":false,
+  "owned_objects":0}]
+```
+
+`executable_public_fns` is 25, not 22: the three extra are `classify_bb_file`, `set_updated_at` and
+`suggested_start`, which reach the role through PUBLIC. `net` is true through PUBLIC, as the brief
+records. Nothing on `vault`, `storage`, `auth` or `cron`; no `CREATE` on `public`; no owned objects;
+neither Vault RPC executable.
+
+**Task 4: PASS.**
+
+Commit: `feat(15-04): migration 100 — the db_test_runner login role, applied to prod`
+
+---
+
+## Notes for the PM
+
+1. **A grant the brief did not name.** `public.calendar_event_id(text)` (see task 4). It is in 100,
+   derived and documented inside the file.
+2. **`app_settings` UPDATE.** Also in 100, derived from the `assignments` trigger. It is the one
+   table in the write list that no unit names directly.
+3. **Two existing assertions weaken under a non-inheriting role, but do not go red.**
+   `phase12b_076_rls_initplan_and_truncate.sql:48` and `phase12b_082_083_planner_series.sql:705` read
+   `information_schema.role_table_grants`, which shows only rows whose grantor or grantee is a
+   *currently enabled* role. `db_test_runner` is a member of `anon` and `authenticated` **with
+   inherit false**, so neither is enabled outside a `set local role`, and those two queries will
+   likely return no rows. Both assertions are of the form "must be null / must be 0", so they still
+   pass — vacuously. Rewriting them to `has_table_privilege('anon', …, 'TRUNCATE')` would restore
+   the teeth; that is not W-38's file and not in this brief, so it is flagged, not fixed.
+4. **Table writes by W-40's two new units are not in 100.** The contract derives 100's table list
+   from writes as the session role, and names only *function* additions for the new units
+   (`run_transform`, `transform_tick`, `bb_file_relpath`, the three search functions), all of which
+   are in. If `phase15_102_planner_series_orphan.sql` writes `planner_events` or
+   `planner_event_series` as the session role rather than under `set local role authenticated` (the
+   way `phase12b_082_083` does), it needs a 103. W-38 is ready to write one.
