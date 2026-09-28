@@ -216,3 +216,82 @@ frozen. Recorded here for the PM.
 
 After the runs (`select count(*) from bb_raw` / `agent_requests` where `run_id` is either fixture
 run): `0` and `0`.
+
+---
+
+## Task 10 — P-2: `phase10b_grade_model.sql` lines 171–172 and §4f
+
+Owner W-39. Lines 167–168 (the GEO recitation seed) were **not touched**: they are brief 96's task
+10a (W-42), and the diff shows them as unchanged context.
+
+### The check, as the brief writes it
+
+> runner `--only phase10b_grade_model.sql` → `db-test: passed 1, failed 0, units 1` (RED before the
+> edit recorded in 95b)
+
+### RED (2026-09-27), before the edit
+
+The file pasted alone into one `execute_sql` call:
+
+```
+Failed to run sql query: ERROR:  23505: duplicate key value violates unique constraint "grade_column_links_pkey"
+CONTEXT:  SQL statement "insert into grade_column_links (course_id, column_id, excluded)
+  values ('IST.323', '_3598132_1', true)"
+PL/pgSQL function inline_code_block line 26 at SQL statement
+```
+
+Not a `FAIL …` assertion: an unhandled `23505` from section 3's "Not graded" seed, which killed the
+file before section 4 ran at all. Prod's `grade_column_links`, read the same day:
+
+```
+ECN.304   _3621234_1   component 2     excluded false   2026-09-27 21:17:10.479867+00
+IST.323   _3560527_1   component 13    excluded false   2026-09-22 16:14:26.757772+00
+IST.323   _3560541_1   component 16    excluded false   2026-09-22 16:14:44.234065+00
+IST.323   _3569973_1   component 18    excluded false   2026-09-22 16:14:36.736971+00
+IST.323   _3598132_1   component null   excluded true    2026-09-22 16:16:57.448326+00
+```
+
+Two facts follow, and the edit answers both: the seed's row already exists (line 171–172), and the
+column §4f expected to be *unlinked*, `_3569973_1`, now carries Stack's own override to component
+18.
+
+### The edit
+
+* **Lines 171–172** keep the same seed and add `on conflict (course_id, column_id) do update set
+  excluded = true, component_id = null`. The case's meaning is unchanged — the link exists, is
+  excluded, carries no component — and it now holds whether or not prod already has the row. It is
+  written as the owner through RLS (section 3 sets `request.jwt.claims` and `set local role
+  authenticated` first), so the update path is the owner's own, not a bypass.
+* **§4f** reads `_3569973_1`'s current link state into `lnk` (`select * into lnk from
+  grade_column_links where course_id = 'IST.323' and column_id = '_3569973_1'`) and asserts relative
+  to it. The invariant the case exists for is asserted unconditionally: a column bound to two
+  assignments never resolves to an assignment (`r.assignment_id is not null` → FAIL). The rest
+  follows the table: with a link, 058 must read `link_source = 'override'`, the same `excluded`, and
+  `component_id` = the link's (null when the link is excluded); with no link, no component and no
+  source at all — September's expectation, kept for the day the override goes away. One variable
+  (`lnk record`) was added to section 4's `declare`, which is what "reads … into a variable" needs.
+
+### GREEN (2026-09-27)
+
+Same paste, after the edit. Final result row, exactly as returned:
+
+```
+[{"result":"phase10b_grade_model: PASS","model_items":85,"kinds":{"item":53,"attendance":5,"placeholder":27},"unsure_links":7,"ist323_bb_running":true,"history_changed_columns":10}]
+```
+
+First column: `phase10b_grade_model: PASS`.
+
+### Nothing left behind
+
+The unit now **updates** a real prod row inside its transaction, so this was checked explicitly
+after the rollback. `select course_id, column_id, component_id, excluded, updated_at from
+grade_column_links order by course_id, column_id` returns the same five rows as before the run, row
+for row, `updated_at` included — `IST.323/_3598132_1` still reads `component_id null, excluded true,
+2026-09-22 16:16:57.448326+00`, so the upsert did not restamp it. `select count(*) from
+grade_scenarios` is still `0`.
+
+### Still needs the runner (wave 2)
+
+`node scripts/db-test.mjs --only phase10b_grade_model.sql` → `db-test: passed 1, failed 0, units 1`.
+The file's lint shape is unchanged: first statement `begin;`, last `rollback;`, no top-level
+`commit`/`end`, and it ends in a `: PASS` row.
