@@ -103,6 +103,23 @@ The repo blob and the applied statements must hash the same for each of 100–10
 
 | migration | `git show HEAD:db/migrations/<file> | md5sum` | `md5(array_to_string(statements, ''))` on prod | match |
 |---|---|---|---|
-| `100_db_test_runner_role` | _to fill_ | _to fill_ | _to fill_ |
-| `101_search_path_pin` | _to fill_ | _to fill_ | _to fill_ |
-| `102_planner_series_orphan_trigger` | _to fill_ | _to fill_ | _to fill_ |
+| `100_db_test_runner_role` | `ec1f7d3d80a222d356cf59571f0b46db` | `ec1f7d3d80a222d356cf59571f0b46db` | yes |
+| `101_search_path_pin` | `53c294e0900281d084ec7b19b8436ef8` | `53c294e0900281d084ec7b19b8436ef8` | yes |
+| `102_planner_series_orphan_trigger` | `000134a5d273eabf668eeb9f71ebd923` | `000134a5d273eabf668eeb9f71ebd923` | yes |
+
+Read 2026-09-27. `ls db/migrations | grep -c '^10[0-4]_'` → 3; `git log --format=%H -- db/migrations/<file> | wc -l` → 1 for each;
+`string_agg(name, ',' order by version)` over `^10[0-4]_` → `100_db_test_runner_role,101_search_path_pin,102_planner_series_orphan_trigger`,
+so prod order equals name order. 103 and 104 were never needed: no live check hit a missing grant.
+
+## Integration run (task 17, PM, 2026-09-27)
+
+```
+node scripts/db-test.mjs   →   db-test: passed 21, failed 0, units 21     exit 0
+ls db/tests/*.sql | wc -l  →   23
+```
+
+The first full-set run read `passed 17, failed 4, units 21`. Four units no worker owned were red on committed prod
+state, none of them a product defect; Stack decided Phase 15 absorbs them (task 9b), and they are green above.
+Other suites: `web` typecheck exit 0, `web` tests 107 files / 1852 tests passed, `web` build exit 0,
+`mcp-server` build exit 0 and `smoke: all checks passed`, `node --test scripts/db-test.test.mjs scripts/google-consent.test.mjs`
+51 tests / 0 failures.
