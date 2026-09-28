@@ -25,6 +25,7 @@ import {
   firstLine,
   findPassRow,
   loadDsn,
+  parseEnvFile,
   openClient,
   run,
 } from './db-test.mjs';
@@ -346,6 +347,51 @@ test('loadDsn reads the process environment first and refuses 6543 from it', () 
 
 test('loadDsn fails with a clear config error when nothing sets the variable', () => {
   assert.throws(() => loadDsn({ env: {}, root: emptyDir('db-test-noenv-') }), /BB2DASH_TEST_DB_URL/);
+});
+
+// Round-2 finding 3: the file used to go through process.loadEnvFile, so an explicit `env` without
+// the variable fell back to the ambient one and the call mutated the real process.env.
+test('parseEnvFile handles comments, blanks, an export prefix, quotes and an = inside the value', () => {
+  const parsed = parseEnvFile(
+    [
+      '# a comment',
+      '',
+      'export A=one',
+      'B = two ',
+      'C="three"',
+      "D='four'",
+      'E=postgresql://u:p@h:5432/db?uselibpqcompat=true&sslmode=require',
+      'F=has#hash',
+      'not a key line',
+      '=novalue',
+    ].join('\r\n'),
+  );
+  assert.equal(parsed.A, 'one');
+  assert.equal(parsed.B, 'two');
+  assert.equal(parsed.C, 'three');
+  assert.equal(parsed.D, 'four');
+  assert.equal(parsed.E, 'postgresql://u:p@h:5432/db?uselibpqcompat=true&sslmode=require');
+  assert.equal(parsed.F, 'has#hash');
+  assert.equal('not a key line' in parsed, false);
+});
+
+test('loadDsn reads .env.local without writing anything into process.env', () => {
+  const root = emptyDir('db-test-envfile-');
+  fs.writeFileSync(
+    path.join(root, '.env.local'),
+    `# local only\nBB2DASH_TEST_DB_URL=${DSN}\nDB_TEST_MARKER_R2=must-not-reach-process-env\n`,
+  );
+  assert.equal(loadDsn({ env: {}, root }), DSN);
+  assert.equal(process.env.DB_TEST_MARKER_R2, undefined, 'loadDsn must not mutate process.env');
+});
+
+test('loadDsn with an explicit env does not fall back to the ambient process.env', () => {
+  const root = emptyDir('db-test-envfile2-');
+  const fileDsn = DSN.replace('/postgres?', '/other_db?');
+  fs.writeFileSync(path.join(root, '.env.local'), `BB2DASH_TEST_DB_URL=${fileDsn}\n`);
+  // Only `options.env` and the file are consulted, in that order.
+  assert.equal(loadDsn({ env: {}, root }), fileDsn);
+  assert.equal(loadDsn({ env: { BB2DASH_TEST_DB_URL: DSN }, root }), DSN);
 });
 
 // ---------------------------------------------------------------------------------------------

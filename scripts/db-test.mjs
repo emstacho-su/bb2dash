@@ -292,18 +292,45 @@ export function assertDsnAllowed(dsn) {
 }
 
 /**
+ * Parse a `.env`-shaped file into a plain object. Deliberately small: `KEY=value` lines, `#`
+ * comments, blank lines and an optional `export ` prefix; surrounding matching quotes are stripped.
+ * An unquoted value keeps everything after the first `=`, including any `#`, because a generated
+ * password may contain one.
+ */
+export function parseEnvFile(text) {
+  const out = Object.create(null);
+  for (const raw of String(text ?? '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')) continue;
+    const body = line.startsWith('export ') ? line.slice(7).trim() : line;
+    const eq = body.indexOf('=');
+    if (eq < 1) continue;
+    const key = body.slice(0, eq).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    let value = body.slice(eq + 1).trim();
+    if (value.length >= 2 && (value[0] === '"' || value[0] === "'") && value.at(-1) === value[0]) {
+      value = value.slice(1, -1);
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+/**
  * Read `BB2DASH_TEST_DB_URL` from the process environment, or else from `.env.local` at the root
  * of this checkout. Exported so a later Node script reuses this one credential.
+ *
+ * The file is parsed into a local object, never loaded into `process.env`: importing this module
+ * has no side effects, and calling it must not either. `options.env` is the only environment
+ * consulted, so a caller that passes an explicit `env` cannot silently pick up the ambient
+ * credential for a database it did not mean.
  */
 export function loadDsn(options = {}) {
   const env = options.env ?? process.env;
   const root = options.root ?? REPO_ROOT;
   const envFile = path.join(root, '.env.local');
-  let dsn = env.BB2DASH_TEST_DB_URL;
-  if (!dsn && fs.existsSync(envFile)) {
-    process.loadEnvFile(envFile);
-    dsn = process.env.BB2DASH_TEST_DB_URL;
-  }
+  const fromFile = fs.existsSync(envFile) ? parseEnvFile(fs.readFileSync(envFile, 'utf8')) : {};
+  const dsn = env.BB2DASH_TEST_DB_URL || fromFile.BB2DASH_TEST_DB_URL;
   if (!dsn) {
     throw new RunnerError(
       `BB2DASH_TEST_DB_URL is not set: put it in the process environment or in ${envFile} (gitignored)`,
