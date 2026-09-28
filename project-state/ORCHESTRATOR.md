@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-27** (the briefs verified in three
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
 > rounds, record `105_BRIEF_VERIFICATION_2026-09-27.md`; §6's prompts rewritten to them). Before that, **2026-09-24** (**sprint 2 planned**:
 > requirements `91_REQUIREMENTS_v3.md`, research `92_*` + `93_SPRINT2_RESEARCH_SYNTHESIS.md`, phases
 > `94_SPRINT2_PHASES.md`, briefs `95_`–`103_`; planning PR open on `docs/sprint2-planning`; every
@@ -99,7 +99,7 @@ Rules that fall out of the graph:
 7. **What each phase hands on** is the seam table in `94_SPRINT2_PHASES.md` §3.
 
 ~~Term calendar: week 1 = Aug 24. Weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week 14
-is Thanksgiving;~~ nothing is paced by week (2026-09-27: no date-paced tasks, DECISIONS). Two bounds stand:
+is Thanksgiving;~~ nothing is paced by week (2026-09-27: no date-paced tasks, DECISIONS). Two term-calendar bounds stand:
 Nov 30 – Dec 13 is a code freeze (no merge and no prod apply inside it; it stands, DECISIONS 2026-09-27), and
 Phase 16's migration 106 is on prod before the IST.323 column is graded (2026-12-03), which the freeze makes
 before Nov 30. `docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md`'s header lists every outside bound.
@@ -221,10 +221,10 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 * Read the Google OAuth consent screen's publishing status; if it is still Testing, publish it and re-run
   the consent, or the calendar token dies again about 2026-10-01 17:03Z (batch item 28).
 * Phase 16's six sittings as fast as you can sit them, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103,
-  IST.471; 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03)
+  IST.471; migration 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03)
   is the one bound (brief 96 open item 4; batch item 11; no date-paced tasks, the freeze stands, DECISIONS 2026-09-27).
 * Say whether the Nov 30 – Dec 13 code freeze still stands. Default: it stands, as a window, not pacing (DECISIONS
-  2026-09-27, no-date-paced-tasks row). If you strike it, 106's bound becomes 2026-12-03 and B-6's window goes.
+  2026-09-27, no-date-paced-tasks row). If you strike it, migration 106's bound becomes 2026-12-03 and B-6's window goes.
 * Phase 12 proofs still his: see the three toasts and click one from a banner and one from the Action
   Center; press Sync inside the shell and confirm "command copied" (batch items 57–58).
 * Place ECN.304 Quiz 2 and Attendance with "Counts toward…" on the course Grades tab if the figure
@@ -264,7 +264,7 @@ brief's B-table. Before cutting workers, the phase's PM reads that brief's resid
 §3 and fixes or strikes each one in the phase's own PR. The used sprint 1 prompts are history in
 `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPTS.md`.
 
-**Session A — Phase 15 then Phase 16** (one session: 15 is a morning; paste A2 once 15's PR is open, without waiting for its merge, since 16's SQL checks run through 15's runner from its branch)
+**Session A — Phase 15 then Phase 16** (one session: 15 is size S/M; paste A2 once 15's PR is open, without waiting for its merge, since 16's SQL checks run through 15's runner from its branch)
 
 A1 — Phase 15
 
@@ -289,7 +289,7 @@ A2 — Phase 16
 > only after 100–104 are on prod and task 10a's commit is on `feat/db-hygiene-15` (if 15 has merged without 10a, ask
 > me before task 10). Run tasks 1–15, then stop with `.\scripts\validate-grading.ps1 IST.323` on my clipboard. I
 > launch it (step 2) and sit six courses as fast as I can, in the order IST.323, IST.466, IST.352, ECN.304,
-> GEO.103, IST.471; 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it,
+> GEO.103, IST.471; migration 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it,
 > 2026-12-03) is the one bound. You spot-check three citations after each. After
 > sitting 6, write 106, rerun the invariants and open the PR with a preview. I walk step 1 and steps 5–10 (step 9
 > after ECN.304 Exam 1 posts).
@@ -307,7 +307,7 @@ B1 — Phase 17
 > `bb2dash-wt-17` on `feat/web-polish-17`; W-44..W-47 (Opus); migrations 110–119 (110–117 used). One PR, no
 > exception of its own; Phase 22's test-only tasks 1–2 may ride it as 22's commits under brief 103's B-6 exception,
 > whose DECISIONS row is written the day I answer B-6. My sittings (acceptance steps 8–11): the desktop shell (T-24),
-> the production planner and staging walk (T-26), and the consent-screen read before 2026-10-01 17:03Z (T-27); then
+> the production planner and staging walk (T-26), and the consent-screen read before 2026-10-01 17:03Z (T-27; a bound, not pacing); then
 > acceptance steps 1–7 and 12 on the preview. Stop at "ready when you say so".
 
 B2 — Phase 18
@@ -378,8 +378,8 @@ C2 — Phase 21
 > B-54, B-55, B-56) and approve 94. First record my 93 §5 answers against the brief's B-table; before cutting workers,
 > read its residual notes in `C:/Users/estac/projects/bb2dash/docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`
 > §3, then fix or strike each in PR-C, cut after `docs/sprint2-planning` merges. Nothing gates the start; until that
-> merge, read both files in `C:/Users/estac/projects/bb2dash-wt-sprint2-plan`. Day 1: R-97 on bb2dash
-> `fix/inbox-apply-vault-20` in `bb2dash-wt-inbox-vault-20`, PR-A opened that day; until it merges I hold Apply
+> merge, read both files in `C:/Users/estac/projects/bb2dash-wt-sprint2-plan`. First: R-97 on bb2dash
+> `fix/inbox-apply-vault-20` in `bb2dash-wt-inbox-vault-20`, PR-A opened before anything else; until it merges I hold Apply
 > answers and `/bb-sync`. Then
 > agentic-harness `feat/v2-closure` in `C:/Users/estac/agentic-harness-wt-v2-closure` (PR-B) and bb2dash
 > `docs/harness-closure-20` in `bb2dash-wt-harness-closure-20` (PR-C); W-59, W-60, W-61, W-62 (Opus). Migrations: none
@@ -390,7 +390,7 @@ C2 — Phase 21
 > resume chain, a cloud `/checkpoint`, and my word on `101a`.
 > Stop at "ready when you say so".
 
-(brief 96 §Seams says whichever of Phases 16 and 20 lands second rebases its `skills/inbox-apply/SKILL.md` lines onto the other's; brief 101 §Seams says the second merges `main` into its branch and never rebases a pushed branch.)
+(brief 96 §Seams and brief 101 §Seams agree: whichever of Phases 16 and 20 lands second merges `main` into its branch and re-applies its `skills/inbox-apply/SKILL.md` lines, never rebasing a pushed branch.)
 
 **Session E — Phase 22** (last, after every screen exists)
 
