@@ -295,3 +295,52 @@ state — they are standing guards, not repairs, and the RED comes from (a), (d)
    median `Execution Time` ≤ 60.0 ms, the five figures recorded here), the three `search` edge
    function modes over HTTP → 200 each, and `npm --prefix mcp-server run build && node
    mcp-server/scripts/smoke.mjs` → exit 0.
+
+---
+
+# Wave 2 (2026-09-27)
+
+Migration 100 is on prod (W-38, md5 `ec1f7d3d…`), `scripts/db-test.mjs` and the fixtures are on
+this branch (`git merge origin/feat/db-hygiene-15`), `npm --prefix scripts ci` exit 0, and the
+gitignored `.env.local` is in this worktree. Handshake:
+
+```
+$ node scripts/db-test.mjs --ping
+db-test: connected as db_test_runner
+EXIT=0
+```
+
+`.env.local`'s DSN keeps `?uselibpqcompat=true&sslmode=require` as the PM wrote it. Plain
+`sslmode=require` fails here — pg 8.23 aliases `require` to `verify-full`, and the Supabase pooler
+chains to a private root (`self-signed certificate in certificate chain`, exit 2). Recorded by the
+PM in DECISIONS row 5; not touched here.
+
+## Tasks 12 and 14, runner form — RED captured before anything was applied
+
+These are the checks brief 95 rows 12 and 14 actually name. They are only capturable while 101 and
+102 are off prod, so they were run first, before the dry runs.
+
+```
+$ node scripts/db-test.mjs --only phase15_102_planner_series_orphan.sql
+FAIL  phase15_102_planner_series_orphan.sql  FAIL series b687b24f-38d4-434f-a93b-16a98fd3e3c0 outlived its last occurrence: a detached row deleted the plain way left the rule behind
+db-test: passed 0, failed 1, units 1
+EXIT=1
+```
+
+Row 12's check, verbatim: `db-test: passed 0, failed 1, units 1`, exit 1, on the detached-last-row
+case.
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+FAIL  phase15_101_search_path_pin.sql  FAIL 7 functions without search_path: bb_file_relpath(bigint), classify_bb_file(text,text,text), hybrid_search_file_text(text,extensions.vector,text,text,integer,integer,double precision,boolean), match_file_text(extensions.vector,text,text,integer,boolean), search_file_text(text,text,integer,boolean), set_updated_at(), suggested_start(text,date,numeric)
+db-test: passed 0, failed 1, units 1
+EXIT=1
+
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql | grep -c "FAIL 7 functions without search_path:"
+1
+```
+
+Row 14's check, both halves. One detail worth keeping: as `db_test_runner` the two vector functions
+print as `extensions.vector`, not the bare `vector` the MCP session showed, because the role's
+search_path does not carry `extensions` — the same seven functions either way, and it is
+`extensions.vector` that migration 101's `alter function` needs.
