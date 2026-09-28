@@ -450,3 +450,77 @@ committed, so nothing reached Stack's Google calendar.
 Both pairs match. Each file was committed once and not edited after the apply.
 
 R-54's proof line: `phase15_102` PASS after RED, TR-4 still PASS, prod orphan count 0.
+
+## Task 16 — search after the pin (2026-09-27)
+
+### The re-time: 5 `explain (analyze, format json)` runs, median ≤ 60.0 ms
+
+Statement, exactly as brief 95 row 16 writes it, issued five times as five separate `execute_sql`
+calls after 101 was on prod:
+
+```sql
+explain (analyze, format json) select * from public.hybrid_search_file_text('final exam date',
+  (select embedding from public.bb_text_embeddings where model = 'gte-small' order by id limit 1),
+  'gte-small', null, 12)
+```
+
+| run | `Execution Time` (ms) | `Planning Time` (ms) |
+|---|---|---|
+| 1 | 66.349 | 4.766 |
+| 2 | 33.113 | 0.771 |
+| 3 | 61.880 | 1.830 |
+| 4 | 36.929 | 0.777 |
+| 5 | 33.791 | 0.899 |
+
+Sorted: 33.113, 33.791, **36.929**, 61.880, 66.349 → **median 36.929 ms ≤ 60.0 ms. PASS.**
+
+Read honestly: the spread is wide, and two runs are over the ceiling. Run 1 is the cold one — its
+4.766 ms planning time is six times every later run's, because nothing was cached. Run 3's 61.880
+has an ordinary planning time and is shared-CPU noise on the Free plan; the plan shape is identical
+in all five (one `Function Scan` over `hybrid_search_file_text`, with the embedding subquery as
+`InitPlan 1` on `bb_text_embeddings_pkey`, 12 rows out). The median is the figure the brief asks
+for and it sits well under the ceiling, but the ceiling is not comfortable on every single call, and
+that is worth the PM knowing rather than smoothing over.
+
+For the record, the pin did **not** add a function-scan boundary that was not there before:
+`hybrid_search_file_text` returns a table and was already executed as a `Function Scan`, never
+inlined, so the "pinning stops inlining" cost lands on the scalar SQL functions
+(`suggested_start`, `classify_bb_file`, `bb_file_relpath`) rather than on this one.
+
+### The three modes over HTTP
+
+`$ANON_JWT` = the legacy anon JWT from `get_publishable_keys` (public by design; `verify_jwt`
+refuses the `sb_publishable_` key).
+
+```
+$ for m in fts vector hybrid; do curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+    https://goultdzqcavefcgnifdy.supabase.co/functions/v1/search \
+    -H "Authorization: Bearer $ANON_JWT" -H "Content-Type: application/json" \
+    -d "{\"q\":\"attendance policy\",\"mode\":\"$m\"}"; done
+fts     200
+vector  200
+hybrid  200
+```
+
+All three modes answer 200 after the pin. (This is a laptop session, so `*.supabase.co` is
+reachable directly; the CLAUDE.md egress note applies to sandboxed cloud sessions.)
+
+### mcp-server build and smoke
+
+```
+$ npm --prefix mcp-server run build
+BUILD_EXIT=0
+$ node mcp-server/scripts/smoke.mjs
+PASS  search_materials: bad course id lists real ids
+PASS  get_material_text 400
+PASS  get_material_text: missing id is not an error
+smoke: all checks passed
+SMOKE_EXIT=0
+```
+
+**One setup step the brief does not name:** a fresh worktree has no `mcp-server/node_modules`, so
+`npm --prefix mcp-server run build` first failed with `'tsc' is not recognized`. `npm --prefix
+mcp-server ci` (exit 0) fixes it, and the build and smoke then pass. The PM will hit the same thing
+in `bb2dash-wt-15` at task 16's integration copy — it is a worktree setup step, not a code failure.
+
+R-78's proof line for this row: three search modes answer 200 and the hybrid median is ≤ 60 ms.
