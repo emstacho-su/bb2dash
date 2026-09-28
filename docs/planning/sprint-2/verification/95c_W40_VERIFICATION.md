@@ -344,3 +344,51 @@ Row 14's check, both halves. One detail worth keeping: as `db_test_runner` the t
 print as `extensions.vector`, not the bare `vector` the MCP session showed, because the role's
 search_path does not carry `extensions` — the same seven functions either way, and it is
 `extensions.vector` that migration 101's `alter function` needs.
+
+## Task 15 — 101 applied (2026-09-27)
+
+**Byte-fidelity checked before the apply, not only after.** The text about to be sent was md5'd
+against the committed blob first, so `apply_migration` could not receive a transcription slip:
+
+```
+select md5($w40$<the whole file>$w40$)  -->  53c294e0900281d084ec7b19b8436ef8
+git show HEAD:db/migrations/101_search_path_pin.sql | md5sum
+                                        -->  53c294e0900281d084ec7b19b8436ef8
+```
+
+(The worktree copy is LF here, not CRLF — `file` reports "ASCII text" — so the working copy, the
+committed blob and the applied text are all the same bytes.)
+
+### Dry run, `begin; <101>; rollback;`
+
+```
+[{"result":"101 dry run: PASS","unpinned_after":0}]
+```
+
+### Applied
+
+`mcp__plugin_supabase__apply_migration`, name `101_search_path_pin` → `{"success":true}`.
+
+### Row 15's check
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```
+
+```
+unpinned_now | recorded | prod_md5
+           0 |        1 | 53c294e0900281d084ec7b19b8436ef8
+```
+
+0 unpinned non-extension functions in `public` (7 before), the migration is recorded once under its
+file name, and **prod's `md5(array_to_string(statements,''))` equals the committed blob's md5** —
+the first half of task 21's pair:
+
+| file | prod `md5(array_to_string(statements,''))` | `git show HEAD:<file> \| md5sum` |
+|---|---|---|
+| `101_search_path_pin.sql` | `53c294e0900281d084ec7b19b8436ef8` | `53c294e0900281d084ec7b19b8436ef8` |
+
+R-78's proof line: 0 unpinned functions, down from 7.
