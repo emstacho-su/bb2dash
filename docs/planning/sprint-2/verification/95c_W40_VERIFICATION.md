@@ -392,3 +392,61 @@ the first half of task 21's pair:
 | `101_search_path_pin.sql` | `53c294e0900281d084ec7b19b8436ef8` | `53c294e0900281d084ec7b19b8436ef8` |
 
 R-78's proof line: 0 unpinned functions, down from 7.
+
+## Task 13 — 102 applied (2026-09-27), after 101
+
+Same order as task 15: md5 the text against the committed blob, dry run, apply, check.
+
+```
+select md5($w40$<the whole file>$w40$)  -->  000134a5d273eabf668eeb9f71ebd923
+git show HEAD:db/migrations/102_planner_series_orphan_trigger.sql | md5sum
+                                        -->  000134a5d273eabf668eeb9f71ebd923
+```
+
+### Dry run, `begin; <102>; rollback;`
+
+```
+[{"result":"102 dry run: PASS","trigger_present":1}]
+```
+
+### Applied
+
+`mcp__plugin_supabase__apply_migration`, name `102_planner_series_orphan_trigger` →
+`{"success":true}`. 101 was already on prod, so prod order equals name order.
+
+### Row 13's four checks
+
+```
+$ node scripts/db-test.mjs --only phase15_102_planner_series_orphan.sql
+PASS  phase15_102_planner_series_orphan.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+
+$ node scripts/db-test.mjs --only phase12b_082_083_planner_series.sql
+PASS  phase12b_082_083_planner_series.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```
+
+The second is the one that mattered most: 083/088's TR-4 and the 'all' scope still behave under the
+trigger, including the split fixes' round 2, so the RPCs' counts and `until_date` arithmetic are
+untouched.
+
+```
+prod_orphans | trigger_count | range_order
+           0 |             1 | 100_db_test_runner_role,101_search_path_pin,102_planner_series_orphan_trigger
+```
+
+Prod's own `planner_events` / `planner_event_series` are still 1 and 0 — no test row was ever
+committed, so nothing reached Stack's Google calendar.
+
+### Task 21's md5 pairs, both of W-40's migrations
+
+| file | prod `md5(array_to_string(statements,''))` | `git show HEAD:<file> \| md5sum` |
+|---|---|---|
+| `db/migrations/101_search_path_pin.sql` | `53c294e0900281d084ec7b19b8436ef8` | `53c294e0900281d084ec7b19b8436ef8` |
+| `db/migrations/102_planner_series_orphan_trigger.sql` | `000134a5d273eabf668eeb9f71ebd923` | `000134a5d273eabf668eeb9f71ebd923` |
+
+Both pairs match. Each file was committed once and not edited after the apply.
+
+R-54's proof line: `phase15_102` PASS after RED, TR-4 still PASS, prod orphan count 0.
