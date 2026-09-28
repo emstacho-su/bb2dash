@@ -759,3 +759,40 @@ PASS  phase12b_078_status_fold_and_auto_graded.sql
 db-test: passed 1, failed 0, units 1
 exit=0
 ```
+
+## The whole suite from this branch
+
+`origin/feat/db-hygiene-15` merged again first, which brought W-38's `phase15_100_db_test_runner_role.sql`
+and W-40's `phase15_101_search_path_pin.sql` / `phase15_102_planner_series_orphan.sql` — 23 files in
+`db/tests/`, 21 units. Migrations 101 and 102 are on prod.
+
+```
+$ node scripts/db-test.mjs; echo $?
+PASS  inbox_apply_090_attention_archive.sql
+PASS  phase10a_stage_attempts.sql
+PASS  phase10a_stage_gradebook.sql
+PASS  phase10b_grade_model.sql
+PASS  phase10b_round2.sql
+PASS  phase12b_073_workload_visibility.sql
+PASS  phase12b_074_reading_file_links.sql
+PASS  phase12b_075_shared_column_restamp.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+PASS  phase12b_077_inbox_feedback.sql
+PASS  phase12b_078_status_fold_and_auto_graded.sql
+PASS  phase12b_082_083_planner_series.sql
+PASS  phase12b_084_shared_column_conflict.sql
+PASS  phase12b_085_stage_attempts_v4.sql
+PASS  phase12b_086_reading_link_settles.sql
+PASS  phase12b_087_auto_graded_sticks.sql
+PASS  phase12b_089_work_items_due_on.sql
+PASS  phase15_100_db_test_runner_role.sql
+PASS  phase15_101_search_path_pin.sql
+PASS  phase15_102_planner_series_orphan.sql
+PASS  phase9_transform_states.sql
+db-test: passed 21, failed 0, units 21
+0
+```
+
+No unit outside the four named here needed anything, and nothing in any output names a pinned
+`search_path` or the new planner trigger. W-39's rows of §Task list (8, 9, 10, 11) and the four
+absorbed units have each passed their own check in the form the brief's row names.
