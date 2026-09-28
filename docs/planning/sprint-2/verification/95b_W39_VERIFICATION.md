@@ -295,3 +295,86 @@ grade_scenarios` is still `0`.
 `node scripts/db-test.mjs --only phase10b_grade_model.sql` → `db-test: passed 1, failed 0, units 1`.
 The file's lint shape is unchanged: first statement `begin;`, last `rollback;`, no top-level
 `commit`/`end`, and it ends in a `: PASS` row.
+
+---
+
+## Task 11 — P-8: `db/tests/phase9_transform_states.sql`
+
+Owner W-39. New file; nothing else touched.
+
+### The check, as the brief writes it
+
+> runner `--only phase9_transform_states.sql` → `db-test: passed 1, failed 0, units 1`
+>
+> (task row) A crafted payload makes one stage raise, so `run_transform` leaves
+> `sync_runs.status = 'partial'` with exactly one `sync_stage_runs` row `failed`. A `running` row
+> with `started_at = now() - interval '31 minutes'` reads `failed`, with notes ending
+> `interrupted (reaped)`, after `transform_tick()`, whose result has `reaped` >= 1
+
+### RED (2026-09-27)
+
+Before this commit the file did not exist, so there was no proof of either state: `partial` and a
+reaped `failed` were the two `sync_runs` statuses no test in `db/tests/` ever produced (P-8's
+reason). `--only phase9_transform_states.sql` had nothing to name.
+
+Because "the file did not exist" is a weak RED, the assertions were also shown to bite. The same
+unit was re-run as a **mutation probe** with one character class changed — `created` given a valid
+date (`2026-09-20T12:00:00.000Z`) instead of `the fourteenth of never` — so no stage raises. Pasted
+through `execute_sql`, it fails exactly where it should:
+
+```
+Failed to run sql query: ERROR:  P0001: FAIL run_transform left sync_runs.status = ok, expected partial
+CONTEXT:  PL/pgSQL function inline_code_block line 7 at RAISE
+```
+
+The probe is not in the repo; the committed file is the one below.
+
+### GREEN (2026-09-27)
+
+The whole file pasted as one `execute_sql` call against prod `goultdzqcavefcgnifdy`. Result row:
+
+```
+result:        phase9_transform_states: PASS
+folded_status: partial
+stages:        announcements=failed, assignments=ok, attempts=ok, content=ok, courses=ok, files=ok, gaps=ok, gradebook=ok
+reaped_notes:  phase9 fixture: died with its session | interrupted (reaped)
+fresh_status:  running
+```
+
+Every clause of the brief's row is in that one row: eight stages ran, exactly one (`announcements`)
+is `failed`, the run is `partial`, the 31-minute-old `running` row came back `failed` with notes
+*ending* `interrupted (reaped)` and with the note it already had kept in front of it, and the run
+started a moment ago is still `running` (the 30-minute boundary is a real boundary). The file also
+asserts `transform_tick()`'s own `reaped` >= 1, that the failed stage recorded error text, that the
+run carries its reason in `summary->errors`, that `finished_at` is set, and that the broken stage
+wrote no announcement row.
+
+How the one stage is made to raise: `announcements[0].created` is `the fourteenth of never`, which
+034:715 casts to `timestamptz` inside `stage_announcements`'s own `begin … exception` block. The
+cast raises before the upsert, so the stage records `failed` and writes nothing. No other stage
+reads the `announcements` key, and the payload carries nothing else, so the other seven report `ok`.
+
+### Nothing left behind
+
+After the rollback (same instant, separate `execute_sql` call):
+
+```
+fixture_sync_runs      0
+fixture_bb_raw         0
+fixture_requests       0
+fixture_announcements  0
+running_rows           0
+reaped_rows            0
+```
+
+`transform_tick()` is called inside the transaction. Prod held 0 unfolded registered crawls and 0
+`running` rows when this ran, so the tick folded nothing, quarantined nothing, and the only row it
+reaped was the fixture's — and that rolled back with the rest.
+
+### Still needs the runner (wave 2)
+
+The brief's own form of this check, `node scripts/db-test.mjs --only phase9_transform_states.sql`
+→ `db-test: passed 1, failed 0, units 1`. The file already satisfies the runner's lint rules by
+construction: first statement `begin;`, last statement `rollback;`, no top-level `commit` or `end`
+(`on commit drop` is inside a `create temp table`, and each `end` is inside a dollar-quoted body),
+and it returns a row whose first column ends in `: PASS`.
