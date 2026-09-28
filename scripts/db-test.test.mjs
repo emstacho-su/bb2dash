@@ -229,6 +229,34 @@ test('lint refuses a top-level end', () => {
   assert.match(rule ?? '', /top-level `end`/);
 });
 
+// The `rollback` spelling of the case above. The unit goes to the server as one multi-statement
+// simple query, so a rollback in the middle ends the transaction block and Postgres commits
+// everything after it. This shape used to pass lint (round-2 finding 1).
+test('lint refuses a second top-level rollback, the rollback spelling of the same batch split', () => {
+  const rule = lintUnitText('begin;\nselect 1;\nrollback;\ndelete from planner_events;\nrollback;\n');
+  assert.match(rule ?? '', /only the last statement may be a top-level `rollback`/);
+});
+
+test('lint refuses a second top-level rollback even when nothing follows it', () => {
+  assert.notEqual(lintUnitText('begin;\nselect 1;\nrollback;\nrollback;\n'), null);
+});
+
+test('lint refuses `rollback to savepoint` as the unit terminator', () => {
+  const rule = lintUnitText('begin;\nsavepoint s;\nselect 1;\nrollback to savepoint s;\n');
+  assert.match(rule ?? '', /`rollback to savepoint` does not end the unit/);
+});
+
+test('lint accepts `rollback transaction` and `rollback work`, and refuses `rollback and chain`', () => {
+  assert.equal(lintUnitText('begin;\nselect 1;\nrollback transaction;\n'), null);
+  assert.equal(lintUnitText('begin;\nselect 1;\nrollback work;\n'), null);
+  assert.match(lintUnitText('begin;\nselect 1;\nrollback and chain;\n') ?? '', /plain `rollback;`/);
+});
+
+test('the rollback_then_writes.sql fixture fails lint', () => {
+  const text = fs.readFileSync(path.join(FIXTURES, 'rollback_then_writes.sql'), 'utf8');
+  assert.match(lintUnitText(text) ?? '', /only the last statement may be a top-level `rollback`/);
+});
+
 test('lint refuses a unit with no statements at all', () => {
   assert.match(lintUnitText('-- nothing but a comment\n') ?? '', /no statements/);
 });

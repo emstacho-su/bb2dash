@@ -207,22 +207,59 @@ function firstWord(statement) {
   return match ? match[0].toLowerCase() : '';
 }
 
+function normalize(statement) {
+  return statement.replace(/\s+/g, ' ').trim();
+}
+
+/** `rollback`, `rollback transaction` and `rollback work` end the transaction block. */
+const ROLLBACK_TERMINATOR = /^rollback( transaction| work)?$/i;
+/** `rollback to [savepoint] x` does not: it leaves the explicit block open. */
+const ROLLBACK_TO_SAVEPOINT = /^rollback to\b/i;
+
 /**
  * Lint one unit's text. Returns null when it is safe to run, or the rule it broke.
- * The unit must open its transaction with `begin;`, end it with `rollback;`, and hold no
- * top-level `commit` or `end`.
+ *
+ * The unit goes to the server as ONE multi-statement simple query, so the rules are about that
+ * batch, not about a file read line by line:
+ *
+ *   * the first top-level statement opens the transaction with `begin;`;
+ *   * the last one ends it with a plain `rollback;`;
+ *   * it is the ONLY top-level rollback. A rollback in the middle of the batch ends the
+ *     transaction block, and Postgres then runs everything after it in a fresh implicit
+ *     transaction that it COMMITS when the message completes - so `begin; …A…; rollback; …B…;
+ *     rollback;` would write B to prod. `commit` and `end` split the batch the same way.
+ *   * `rollback to [savepoint] x` is refused as the terminator: it does not end the block. It
+ *     aborts rather than commits, so it is not a write path, but it is not a unit terminator
+ *     either. No file in db/tests uses savepoints today, so it is refused anywhere at top level;
+ *     a unit that needs one changes this rule in its own PR.
  */
 export function lintUnitText(text) {
-  const statements = splitStatements(stripSql(text));
+  const statements = splitStatements(stripSql(text)).map(normalize);
   if (statements.length === 0) return 'no statements found';
   if (firstWord(statements[0]) !== 'begin') return 'first statement must be `begin;`';
-  for (const statement of statements) {
+
+  const rollbacks = [];
+  for (const [i, statement] of statements.entries()) {
     const word = firstWord(statement);
     if (word === 'commit') return 'top-level `commit` is not allowed; a unit must roll back';
     if (word === 'end') return 'top-level `end` is not allowed; a unit must roll back';
+    if (word === 'rollback') rollbacks.push(i);
   }
-  if (firstWord(statements[statements.length - 1]) !== 'rollback') {
-    return 'last statement must be `rollback;`';
+
+  const last = statements[statements.length - 1];
+  if (firstWord(last) !== 'rollback') return 'last statement must be `rollback;`';
+
+  if (rollbacks.length > 1) {
+    return (
+      'only the last statement may be a top-level `rollback`: a rollback in the middle of the ' +
+      'batch ends the transaction, and Postgres commits everything after it'
+    );
+  }
+  if (ROLLBACK_TO_SAVEPOINT.test(last)) {
+    return '`rollback to savepoint` does not end the unit; the last statement must be a plain `rollback;`';
+  }
+  if (!ROLLBACK_TERMINATOR.test(last)) {
+    return `last statement must be a plain \`rollback;\`, not \`${last};\``;
   }
   return null;
 }
