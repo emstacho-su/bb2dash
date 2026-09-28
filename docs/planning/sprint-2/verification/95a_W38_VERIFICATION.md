@@ -575,3 +575,252 @@ these are not W-38's files.
    are in. If `phase15_102_planner_series_orphan.sql` writes `planner_events` or
    `planner_event_series` as the session role rather than under `set local role authenticated` (the
    way `phase12b_082_083` does), it needs a 103. W-38 is ready to write one.
+
+---
+
+# Round 2 — the review-gate findings in W-38's files
+
+Seven findings from `/code-review main high` and `/security-review`, all in
+`scripts/db-test.mjs`, `scripts/db-test.test.mjs`, `db/tests/README.md` and `.env.example`.
+**`db/migrations/100_db_test_runner_role.sql` was not touched**: `git diff` against the phase branch
+shows no change under `db/migrations/`, and `git show HEAD:db/migrations/100_db_test_runner_role.sql
+| md5sum` is still `ec1f7d3d80a222d356cf59571f0b46db`.
+
+`origin/feat/db-hygiene-15` was merged into this branch first, so the suite checks below run against
+the integrated 21 units rather than W-38's 18.
+
+One commit per finding. The unit-test count grew 42 → 59.
+
+## Finding 1 — a second top-level `rollback` used to commit the tail
+
+The real hole. A unit reaches the server as **one multi-statement simple query**, so a `rollback` in
+the middle of the batch ends the transaction block and Postgres runs everything after it in a fresh
+implicit transaction that it **commits** when the message completes. The old rules — first statement
+`begin`, last statement `rollback`, no top-level `commit` or `end` — were all satisfied by
+`begin; …A…; rollback; …B…; rollback;`, which wrote B to prod as a `BYPASSRLS` role holding DELETE on
+the planner-state tables. The `end` spelling of the same batch split was already blocked and tested
+at `db-test.test.mjs:228`; the `rollback` spelling was neither. `db/tests/README.md` sold the old
+rules as the guarantee, so this was a broken control, not a missing one.
+
+`lintUnitText()` now collects every top-level `rollback`, refuses a unit holding more than one, and
+requires the terminator to be a plain one: `rollback transaction` and `rollback work` count,
+`rollback and chain` does not, and `rollback to [savepoint] x` is refused because it leaves the block
+open. That last one **aborts rather than commits**, so it is not a write path — it is rejected as a
+unit terminator, and the message says so. No file in `db/tests` uses savepoints (grep: 0 hits), so it
+is refused at top level anywhere; a unit that needs one changes the rule in its own PR.
+
+A fourth fixture pins it. Its tail is a temp table, not a DELETE, because the fixture is checked in
+and must stay harmless if anyone runs it by hand. It was never run against prod: lint refuses it
+before a client is opened, and it was written in the same commit as the fix.
+
+```
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/rollback_then_writes.sql; echo $?
+db-test: lint rollback_then_writes.sql: only the last statement may be a top-level `rollback`: a rollback in the middle of the batch ends the transaction, and Postgres commits everything after it
+EXIT=2
+```
+
+Five new cases beside the existing `end` one, and every real unit still lints clean:
+
+```
+$ node -e "…buildPlan(readdirSync('db/tests'))… lintUnitText(loader+test)…"
+units 21 lint failures 0
+```
+
+Commit: `0e47f9c fix(15-r2): lint refuses a second top-level rollback, which used to commit the tail`
+
+## Finding 2 — `redact()` missed the bare hostname
+
+`url.host` is `host:port`, and the common driver failure names neither port nor password:
+`getaddrinfo ENOTFOUND aws-0-us-east-1.pooler.supabase.com`. That went through unredacted, against
+the function's own contract. `url.hostname` is now redacted alongside `url.host`, with a test using
+that exact string. Proven on a real failure under finding 5 below.
+
+Commit: `df57144 fix(15-r2): redact the bare hostname, not only host:port`
+
+## Finding 3 — `loadDsn()` fell through to the global `process.env`, and mutated it
+
+It honoured the injected `env` for the first read, then called `process.loadEnvFile(envFile)` and
+read `process.env`. Two consequences: `loadEnvFile` does not override existing values, so a caller
+passing an explicit `env` without the variable silently picked up the ambient credential — an
+intended "different database" call got the default one — and every call mutated the real
+`process.env` with the whole of `.env.local`, a side effect on a module whose header advertises none.
+
+A new exported `parseEnvFile()` reads the file into a local object (`KEY=value`, `#` comments,
+blanks, an optional `export ` prefix, matching quotes stripped, and everything after the first `=`
+kept for an unquoted value, because a generated password may contain a `#`). `loadDsn()` consults
+`options.env` and then that object, and nothing else. Precedence is unchanged: the process
+environment still wins over the file.
+
+Four new cases, one of which writes a marker key into a temp `.env.local` and asserts it never
+reaches `process.env`. The real gitignored file still resolves:
+
+```
+$ node scripts/db-test.mjs --ping
+db-test: connected as db_test_runner
+EXIT=0
+```
+
+Commit: `788ffc4 fix(15-r2): loadDsn parses .env.local locally instead of into process.env`
+
+## Finding 4 — zero units exited 0
+
+`db-test: passed 0, failed 0, units 0` returning 0 meant a relocated script or a renamed directory
+reported green having executed nothing — the worst kind of green, since the DoD gate and Stack's
+acceptance step 3 both read the exit code. The all-units mode now raises
+`no units found in <dir>: nothing was run` and exits 2, printing no summary line at all.
+
+`--only` and `--file` naming a missing file are **unchanged**: they already exit 2, from
+`unitForOnly` / `unitForFile` (`--only nope.sql: no such file in <dir>`, `--file <path>: no such
+file`), and the existing test for that is untouched.
+
+Commit: `7380814 fix(15-r2): zero units in the all-units mode exits 2, not 0`
+
+## Finding 5 — a client was dropped without `end()` when `connect()` rejected
+
+The CLI sets `process.exitCode` rather than calling `process.exit`, so the handle `pg` left behind
+kept the event loop alive and the command hung after a connection failure instead of exiting 2 — the
+one case where a wrong DSN or a down pooler is most likely. `connect()` now awaits
+`endQuietly(client)` before rethrowing.
+
+Two regression tests, for the all-units path and for `--ping`, each asserting the dropped client was
+ended. Also checked live against a host that does not resolve; it returned promptly, and finding 2's
+redaction is visible on a real driver error:
+
+```
+$ BB2DASH_TEST_DB_URL='postgresql://…@no-such-host.invalid:5432/postgres?sslmode=require' node scripts/db-test.mjs --ping; echo $?
+db-test: connection failed: getaddrinfo ENOTFOUND <redacted>
+EXIT=2
+```
+
+Commit: `243fce0 fix(15-r2): end the client when connect() rejects, so a failed connection cannot hang`
+
+## Finding 6 — `.env.example` documented a value that cannot connect
+
+The line was empty, so a DSN written from the template lacked
+`?uselibpqcompat=true&sslmode=require` and died with `self-signed certificate in certificate chain`.
+It now carries the full working shape with `PASSWORD` as the placeholder, and the comment above it
+explains the 5432-not-6543 rule, why both query parameters are needed, and that the runner refuses a
+DSN with no `sslmode` or with `disable`/`allow`/`prefer`. The real value still lives only in the
+gitignored `.env.local`, and the brief's task 2 grep is unaffected:
+
+```
+$ grep -c "^BB2DASH_TEST_DB_URL=" .env.example
+1
+$ node -e "…parseEnvFile('.env.example')… new URL(…)…"
+port 5432 | sslmode require | uselibpqcompat true | password placeholder PASSWORD
+```
+
+Commit: `de56731 fix(15-r2): .env.example carries a DSN shape that can actually connect`
+
+## Finding 7 — the DSN must name an encrypted transport (contract addition)
+
+The only change here that alters behaviour for a DSN that used to be valid.
+`assertDsnAllowed()` validated the port only, so `sslmode=disable` — or no `sslmode` at all, where
+node-postgres connects in cleartext — reached prod unremarked, as a `BYPASSRLS` role. It now accepts
+`require`, `verify-ca`, `verify-full` and `no-verify`, and refuses `disable`, `allow`, `prefer`, an
+unknown spelling, and an absent `sslmode`. The message names the fix and carries no part of the DSN
+beyond the `sslmode` word it is rejecting. Both the URL form and a libpq keyword/value string are
+read.
+
+Deliberately the cheap half of the problem: it stops an accidental cleartext connection without
+pretending to solve chain verification, which needs Supabase's CA from the dashboard and is Stack's
+call. `?uselibpqcompat=true&sslmode=require` keeps working — the test fixture DSN now carries it,
+and `--ping` still connects. Six new cases cover every accepted and refused spelling, the
+keyword/value form, the no-leak property and the exit-2 path through `run()`. The rule is documented
+in `db/tests/README.md` beside the 6543 rule.
+
+Commit: `3c8417f feat(15-r2): the DSN must name an encrypted transport, not only a session port`
+
+## Round 2 — the checks the PM asked for
+
+```
+$ node --test scripts/db-test.test.mjs
+ℹ tests 59
+ℹ pass 59
+ℹ fail 0
+```
+
+The DoD's own gate, both files together:
+
+```
+$ node --test scripts/db-test.test.mjs scripts/google-consent.test.mjs
+ℹ tests 68
+ℹ pass 68
+ℹ fail 0
+EXIT=0
+```
+
+Task 6's row, still as the brief gives it, plus the new fixture:
+
+```
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/passes.sql; echo $?
+PASS  passes.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/fails.sql; echo $?
+FAIL  fails.sql  FAIL this fixture always fails, on purpose
+db-test: passed 0, failed 1, units 1
+EXIT=1
+
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/commits.sql; echo $?
+db-test: lint commits.sql: top-level `commit` is not allowed; a unit must roll back
+EXIT=2
+
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/rollback_then_writes.sql; echo $?
+db-test: lint rollback_then_writes.sql: only the last statement may be a top-level `rollback`: a rollback in the middle of the batch ends the transaction, and Postgres commits everything after it
+EXIT=2
+```
+
+The whole suite from this branch, after merging the phase branch:
+
+```
+$ node scripts/db-test.mjs; echo $?
+PASS  inbox_apply_090_attention_archive.sql
+PASS  phase10a_stage_attempts.sql
+PASS  phase10a_stage_gradebook.sql
+PASS  phase10b_grade_model.sql
+PASS  phase10b_round2.sql
+PASS  phase12b_073_workload_visibility.sql
+PASS  phase12b_074_reading_file_links.sql
+PASS  phase12b_075_shared_column_restamp.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+PASS  phase12b_077_inbox_feedback.sql
+PASS  phase12b_078_status_fold_and_auto_graded.sql
+PASS  phase12b_082_083_planner_series.sql
+PASS  phase12b_084_shared_column_conflict.sql
+PASS  phase12b_085_stage_attempts_v4.sql
+PASS  phase12b_086_reading_link_settles.sql
+PASS  phase12b_087_auto_graded_sticks.sql
+PASS  phase12b_089_work_items_due_on.sql
+PASS  phase15_100_db_test_runner_role.sql
+PASS  phase15_101_search_path_pin.sql
+PASS  phase15_102_planner_series_orphan.sql
+PASS  phase9_transform_states.sql
+db-test: passed 21, failed 0, units 21
+EXIT=0
+```
+
+Files changed in round 2, and nothing else:
+
+```
+$ git diff --stat d0ffe37..HEAD
+ .env.example                                      |   8 +-
+ db/tests/README.md                                |  36 +++-
+ scripts/db-test.mjs                               | 146 +++++++++++++--
+ scripts/db-test.test.mjs                          | 205 +++++++++++++++++++++-
+ scripts/fixtures/db-test/rollback_then_writes.sql |  27 +++
+ 5 files changed, 400 insertions(+), 22 deletions(-)
+```
+
+## One thing the PM should know
+
+Finding 7 changes the Contract table's `--ping` / credential paragraph, which the PM said they would
+amend. Nothing else in round 2 changes a brief check: task 2's grep, task 3's counts, task 6's three
+lines and task 7's unit are all unchanged, and task 17's gate now reads `passed 21, failed 0,
+units 21` from this branch.
+
+The two least-privilege notes still with a reviewer (the forward-dated
+`alter default privileges … grant select`, and `update on app_settings` being table-wide rather than
+column-level) would both need a new migration rather than an edit to 100, which is the PM's call.
+Neither is touched here.

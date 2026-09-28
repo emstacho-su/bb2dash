@@ -25,14 +25,16 @@ import {
   firstLine,
   findPassRow,
   loadDsn,
+  parseEnvFile,
   openClient,
   run,
 } from './db-test.mjs';
 
 const FIXTURES = path.join(import.meta.dirname, 'fixtures', 'db-test');
 const REAL_TESTS_DIR = path.join(import.meta.dirname, '..', 'db', 'tests');
-const DSN =
+const BASE =
   'postgresql://db_test_runner.goultdzqcavefcgnifdy:s3cr3tpw@aws-0-us-east-1.pooler.supabase.com:5432/postgres';
+const DSN = BASE + '?uselibpqcompat=true&sslmode=require';
 
 // A fake pg.Client. `behaviour.onQuery(text, client)` returns a Result, an array of Results, or an
 // Error to throw. `behaviour.connectError` makes connect() throw.
@@ -229,6 +231,34 @@ test('lint refuses a top-level end', () => {
   assert.match(rule ?? '', /top-level `end`/);
 });
 
+// The `rollback` spelling of the case above. The unit goes to the server as one multi-statement
+// simple query, so a rollback in the middle ends the transaction block and Postgres commits
+// everything after it. This shape used to pass lint (round-2 finding 1).
+test('lint refuses a second top-level rollback, the rollback spelling of the same batch split', () => {
+  const rule = lintUnitText('begin;\nselect 1;\nrollback;\ndelete from planner_events;\nrollback;\n');
+  assert.match(rule ?? '', /only the last statement may be a top-level `rollback`/);
+});
+
+test('lint refuses a second top-level rollback even when nothing follows it', () => {
+  assert.notEqual(lintUnitText('begin;\nselect 1;\nrollback;\nrollback;\n'), null);
+});
+
+test('lint refuses `rollback to savepoint` as the unit terminator', () => {
+  const rule = lintUnitText('begin;\nsavepoint s;\nselect 1;\nrollback to savepoint s;\n');
+  assert.match(rule ?? '', /`rollback to savepoint` does not end the unit/);
+});
+
+test('lint accepts `rollback transaction` and `rollback work`, and refuses `rollback and chain`', () => {
+  assert.equal(lintUnitText('begin;\nselect 1;\nrollback transaction;\n'), null);
+  assert.equal(lintUnitText('begin;\nselect 1;\nrollback work;\n'), null);
+  assert.match(lintUnitText('begin;\nselect 1;\nrollback and chain;\n') ?? '', /plain `rollback;`/);
+});
+
+test('the rollback_then_writes.sql fixture fails lint', () => {
+  const text = fs.readFileSync(path.join(FIXTURES, 'rollback_then_writes.sql'), 'utf8');
+  assert.match(lintUnitText(text) ?? '', /only the last statement may be a top-level `rollback`/);
+});
+
 test('lint refuses a unit with no statements at all', () => {
   assert.match(lintUnitText('-- nothing but a comment\n') ?? '', /no statements/);
 });
@@ -270,12 +300,86 @@ test('a session-pooler DSN on 5432 is allowed', () => {
   assert.equal(assertDsnAllowed(DSN), DSN);
 });
 
+// Round-2 finding 7: the DSN must name an encrypted transport. node-postgres connects in cleartext
+// when no sslmode is given, so an absent one is refused as firmly as `disable`.
+test('every sslmode that guarantees encryption is accepted', () => {
+  for (const mode of ['require', 'verify-ca', 'verify-full', 'no-verify']) {
+    const dsn = `${BASE}?sslmode=${mode}`;
+    assert.equal(assertDsnAllowed(dsn), dsn, mode);
+  }
+  // The shape .env.local actually holds must keep working.
+  assert.equal(assertDsnAllowed(`${BASE}?uselibpqcompat=true&sslmode=require`), DSN);
+  assert.equal(
+    assertDsnAllowed(`${BASE}?sslmode=verify-full&uselibpqcompat=true`),
+    `${BASE}?sslmode=verify-full&uselibpqcompat=true`,
+  );
+});
+
+test('an sslmode that permits cleartext is refused, and so is an absent one', () => {
+  for (const mode of ['disable', 'allow', 'prefer']) {
+    assert.throws(
+      () => assertDsnAllowed(`${BASE}?sslmode=${mode}`),
+      (err) => {
+        assert.match(err.message, new RegExp(`sslmode=${mode}`));
+        assert.match(err.message, /uselibpqcompat=true&sslmode=require/);
+        return true;
+      },
+      mode,
+    );
+  }
+  assert.throws(() => assertDsnAllowed(BASE), /names no sslmode/);
+  assert.throws(() => assertDsnAllowed(`${BASE}?uselibpqcompat=true`), /names no sslmode/);
+});
+
+test('a libpq keyword/value DSN is read for sslmode too', () => {
+  const kv = 'host=aws-0-us-east-1.pooler.supabase.com port=5432 user=db_test_runner sslmode=require';
+  assert.equal(assertDsnAllowed(kv), kv);
+  assert.throws(
+    () => assertDsnAllowed('host=aws-0-us-east-1.pooler.supabase.com port=5432 sslmode=disable'),
+    /sslmode=disable/,
+  );
+});
+
+test('a refused sslmode leaks no password or host', () => {
+  try {
+    assertDsnAllowed(`${BASE}?sslmode=disable`);
+    assert.fail('should have thrown');
+  } catch (err) {
+    assert.equal(err.message.includes('s3cr3tpw'), false);
+    assert.equal(err.message.includes('pooler.supabase.com'), false);
+  }
+});
+
+test('run() exits 2 on a cleartext DSN before opening a client', async () => {
+  const dir = tmpTestsDir(['a.sql']);
+  const out = collector();
+  const factory = fakeFactory({ onQuery: () => passResult('x') });
+  const code = await run([], {
+    out: out.write,
+    testsDir: dir,
+    env: { BB2DASH_TEST_DB_URL: `${BASE}?sslmode=disable` },
+    clientFactory: factory,
+  });
+  assert.equal(code, 2);
+  assert.equal(factory.opened.length, 0);
+  assert.match(out.text(), /sslmode=disable/);
+  assert.equal(out.text().includes('s3cr3tpw'), false);
+});
+
 test('redact removes the DSN and its password from any text', () => {
   const msg = 'could not connect to ' + DSN + ' (password s3cr3tpw)';
   const out = redact(msg, DSN);
   assert.equal(out.includes('s3cr3tpw'), false);
   assert.equal(out.includes(DSN), false);
   assert.match(out, /could not connect to/);
+});
+
+// Round-2 finding 2: `url.host` is host:port, and a real driver error names the bare host.
+test('redact removes the bare hostname too, not only host:port', () => {
+  const msg = 'getaddrinfo ENOTFOUND aws-0-us-east-1.pooler.supabase.com';
+  const out = redact(msg, DSN);
+  assert.equal(out.includes('aws-0-us-east-1.pooler.supabase.com'), false);
+  assert.match(out, /getaddrinfo ENOTFOUND/);
 });
 
 test('firstLine takes only the first line of a server error', () => {
@@ -310,6 +414,51 @@ test('loadDsn reads the process environment first and refuses 6543 from it', () 
 
 test('loadDsn fails with a clear config error when nothing sets the variable', () => {
   assert.throws(() => loadDsn({ env: {}, root: emptyDir('db-test-noenv-') }), /BB2DASH_TEST_DB_URL/);
+});
+
+// Round-2 finding 3: the file used to go through process.loadEnvFile, so an explicit `env` without
+// the variable fell back to the ambient one and the call mutated the real process.env.
+test('parseEnvFile handles comments, blanks, an export prefix, quotes and an = inside the value', () => {
+  const parsed = parseEnvFile(
+    [
+      '# a comment',
+      '',
+      'export A=one',
+      'B = two ',
+      'C="three"',
+      "D='four'",
+      'E=postgresql://u:p@h:5432/db?uselibpqcompat=true&sslmode=require',
+      'F=has#hash',
+      'not a key line',
+      '=novalue',
+    ].join('\r\n'),
+  );
+  assert.equal(parsed.A, 'one');
+  assert.equal(parsed.B, 'two');
+  assert.equal(parsed.C, 'three');
+  assert.equal(parsed.D, 'four');
+  assert.equal(parsed.E, 'postgresql://u:p@h:5432/db?uselibpqcompat=true&sslmode=require');
+  assert.equal(parsed.F, 'has#hash');
+  assert.equal('not a key line' in parsed, false);
+});
+
+test('loadDsn reads .env.local without writing anything into process.env', () => {
+  const root = emptyDir('db-test-envfile-');
+  fs.writeFileSync(
+    path.join(root, '.env.local'),
+    `# local only\nBB2DASH_TEST_DB_URL=${DSN}\nDB_TEST_MARKER_R2=must-not-reach-process-env\n`,
+  );
+  assert.equal(loadDsn({ env: {}, root }), DSN);
+  assert.equal(process.env.DB_TEST_MARKER_R2, undefined, 'loadDsn must not mutate process.env');
+});
+
+test('loadDsn with an explicit env does not fall back to the ambient process.env', () => {
+  const root = emptyDir('db-test-envfile2-');
+  const fileDsn = DSN.replace('/postgres?', '/other_db?');
+  fs.writeFileSync(path.join(root, '.env.local'), `BB2DASH_TEST_DB_URL=${fileDsn}\n`);
+  // Only `options.env` and the file are consulted, in that order.
+  assert.equal(loadDsn({ env: {}, root }), fileDsn);
+  assert.equal(loadDsn({ env: { BB2DASH_TEST_DB_URL: DSN }, root }), DSN);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -515,6 +664,60 @@ test('a 6543 DSN exits 2 before any client is opened and never prints the DSN', 
   assert.equal(out.text().includes('s3cr3tpw'), false);
   assert.equal(out.text().includes('pooler.supabase.com'), false);
   assert.match(out.text(), /6543/);
+});
+
+// Round-2 finding 4.
+test('an empty db/tests exits 2 rather than reporting green having run nothing', async () => {
+  const dir = emptyDir('db-test-empty-');
+  const out = collector();
+  const factory = fakeFactory({ onQuery: () => passResult('x') });
+  const code = await run([], {
+    out: out.write,
+    testsDir: dir,
+    env: { BB2DASH_TEST_DB_URL: DSN },
+    clientFactory: factory,
+  });
+  assert.equal(code, 2);
+  assert.equal(factory.opened.length, 0);
+  assert.match(out.lines[0], /^db-test: no units found in /);
+  assert.equal(
+    out.lines.some((l) => l.includes('units 0')),
+    false,
+    'it must not print a green summary',
+  );
+});
+
+// Round-2 finding 5: a half-opened client keeps a handle on the event loop, and the CLI sets
+// process.exitCode rather than calling process.exit, so the command would hang instead of exiting.
+test('a client whose connect() rejects is still ended', async () => {
+  const dir = tmpTestsDir(['a.sql']);
+  const out = collector();
+  const factory = fakeFactory({
+    connectError: new Error('ECONNREFUSED'),
+    onQuery: () => passResult('x'),
+  });
+  const code = await run([], {
+    out: out.write,
+    testsDir: dir,
+    env: { BB2DASH_TEST_DB_URL: DSN },
+    clientFactory: factory,
+  });
+  assert.equal(code, 2);
+  assert.equal(factory.opened.length, 1);
+  assert.equal(factory.opened[0].ended, true, 'the dropped client must be ended');
+});
+
+test('a --ping whose connect() rejects also ends its client', async () => {
+  const out = collector();
+  const factory = fakeFactory({ connectError: new Error('ECONNREFUSED'), onQuery: () => ({ rows: [] }) });
+  const code = await run(['--ping'], {
+    out: out.write,
+    testsDir: REAL_TESTS_DIR,
+    env: { BB2DASH_TEST_DB_URL: DSN },
+    clientFactory: factory,
+  });
+  assert.equal(code, 2);
+  assert.equal(factory.opened[0].ended, true);
 });
 
 test('a connection failure exits 2 and its message is redacted', async () => {

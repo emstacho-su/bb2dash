@@ -25,6 +25,13 @@ The DSN must be a **direct** or **session-pooler** connection (port 5432). The r
 6543, the transaction pooler: four units run `set local role` mid-transaction, which needs a
 session-scoped connection.
 
+It must also **name an encrypted transport**. The runner accepts `sslmode=require`, `verify-ca`,
+`verify-full` and `no-verify`, and refuses `disable`, `allow`, `prefer` and — just as firmly — a DSN
+with no `sslmode` at all, because node-postgres then connects in cleartext. The refusal names the
+fix and prints no part of the DSN. This stops an accidental cleartext connection; it does not
+attempt certificate-chain verification, which needs Supabase's CA from the dashboard and is Stack's
+call.
+
 It must also end `?uselibpqcompat=true&sslmode=require`, not `?sslmode=require` on its own. `pg`
 8.23 reads a bare `sslmode=require` as libpq's `verify-full`, and the Supabase pooler's certificate
 chains to a private root, so the connection dies with
@@ -88,18 +95,35 @@ its own.
 
 ## The lint rules (checked before anything connects)
 
-Comments and dollar-quoted bodies are stripped first, then the unit must:
+A unit is sent to the server as **one multi-statement simple query**, so the rules are about that
+batch, not about a file read line by line. Comments, string literals and dollar-quoted bodies are
+stripped first, then the unit must:
 
-* begin with `begin;` as its first statement (for a loader + test unit, the loader supplies it);
-* end with `rollback;` as its last statement;
-* contain no top-level `commit` or `end` statement.
+* begin with `begin;` as its first top-level statement (for a loader + test unit, the loader
+  supplies it);
+* end with a plain `rollback;` as its last top-level statement (`rollback transaction` and
+  `rollback work` count; `rollback and chain` does not);
+* contain **no other** top-level `rollback`, and no top-level `commit` or `end`.
+
+That third rule is the one doing the work. Any of `commit`, `end` or `rollback` in the middle of the
+batch **ends the transaction block**, and Postgres then runs every statement after it in a fresh
+implicit transaction which it **commits** when the message completes. So
+`begin; …A…; rollback; …B…; rollback;` would leave B on prod even though the file's last line is a
+rollback. `db_test_runner` has `BYPASSRLS` and `DELETE` on the planner-state tables, so that is not
+a theoretical loss.
+
+`rollback to [savepoint] x` is refused as the terminator, because it leaves the explicit block open.
+It aborts rather than commits, so it is not a write path, but it is not a unit terminator either. No
+file here uses savepoints, so it is refused at top level anywhere; a unit that needs one changes the
+rule in its own PR.
 
 A unit that breaks a rule prints `db-test: lint <file>: <rule>` and exits 2 **without opening a
 connection**, so a file that would leave writes behind never reaches prod. `on commit drop`,
 `case … end` and a `;` inside a string literal are not confused for statements.
 
-`scripts/fixtures/db-test/` holds three fixtures that pin this behaviour: `passes.sql`,
-`fails.sql`, and `commits.sql` (refused by lint).
+`scripts/fixtures/db-test/` holds four fixtures that pin this behaviour: `passes.sql`, `fails.sql`,
+`commits.sql` (refused for its top-level `commit`) and `rollback_then_writes.sql` (refused for its
+second top-level `rollback`).
 
 ## Naming
 

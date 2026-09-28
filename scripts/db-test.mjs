@@ -207,22 +207,59 @@ function firstWord(statement) {
   return match ? match[0].toLowerCase() : '';
 }
 
+function normalize(statement) {
+  return statement.replace(/\s+/g, ' ').trim();
+}
+
+/** `rollback`, `rollback transaction` and `rollback work` end the transaction block. */
+const ROLLBACK_TERMINATOR = /^rollback( transaction| work)?$/i;
+/** `rollback to [savepoint] x` does not: it leaves the explicit block open. */
+const ROLLBACK_TO_SAVEPOINT = /^rollback to\b/i;
+
 /**
  * Lint one unit's text. Returns null when it is safe to run, or the rule it broke.
- * The unit must open its transaction with `begin;`, end it with `rollback;`, and hold no
- * top-level `commit` or `end`.
+ *
+ * The unit goes to the server as ONE multi-statement simple query, so the rules are about that
+ * batch, not about a file read line by line:
+ *
+ *   * the first top-level statement opens the transaction with `begin;`;
+ *   * the last one ends it with a plain `rollback;`;
+ *   * it is the ONLY top-level rollback. A rollback in the middle of the batch ends the
+ *     transaction block, and Postgres then runs everything after it in a fresh implicit
+ *     transaction that it COMMITS when the message completes - so `begin; …A…; rollback; …B…;
+ *     rollback;` would write B to prod. `commit` and `end` split the batch the same way.
+ *   * `rollback to [savepoint] x` is refused as the terminator: it does not end the block. It
+ *     aborts rather than commits, so it is not a write path, but it is not a unit terminator
+ *     either. No file in db/tests uses savepoints today, so it is refused anywhere at top level;
+ *     a unit that needs one changes this rule in its own PR.
  */
 export function lintUnitText(text) {
-  const statements = splitStatements(stripSql(text));
+  const statements = splitStatements(stripSql(text)).map(normalize);
   if (statements.length === 0) return 'no statements found';
   if (firstWord(statements[0]) !== 'begin') return 'first statement must be `begin;`';
-  for (const statement of statements) {
+
+  const rollbacks = [];
+  for (const [i, statement] of statements.entries()) {
     const word = firstWord(statement);
     if (word === 'commit') return 'top-level `commit` is not allowed; a unit must roll back';
     if (word === 'end') return 'top-level `end` is not allowed; a unit must roll back';
+    if (word === 'rollback') rollbacks.push(i);
   }
-  if (firstWord(statements[statements.length - 1]) !== 'rollback') {
-    return 'last statement must be `rollback;`';
+
+  const last = statements[statements.length - 1];
+  if (firstWord(last) !== 'rollback') return 'last statement must be `rollback;`';
+
+  if (rollbacks.length > 1) {
+    return (
+      'only the last statement may be a top-level `rollback`: a rollback in the middle of the ' +
+      'batch ends the transaction, and Postgres commits everything after it'
+    );
+  }
+  if (ROLLBACK_TO_SAVEPOINT.test(last)) {
+    return '`rollback to savepoint` does not end the unit; the last statement must be a plain `rollback;`';
+  }
+  if (!ROLLBACK_TERMINATOR.test(last)) {
+    return `last statement must be a plain \`rollback;\`, not \`${last};\``;
   }
   return null;
 }
@@ -231,10 +268,36 @@ export function lintUnitText(text) {
 // The credential
 // ---------------------------------------------------------------------------------------------
 
+/** The sslmode values that guarantee the connection is at least encrypted. */
+const SSLMODE_ALLOWED = new Set(['require', 'verify-ca', 'verify-full', 'no-verify']);
+
+/** The DSN's sslmode, lowercased, or null when it names none. */
+function dsnSslmode(dsn) {
+  let url = null;
+  try {
+    url = new URL(dsn);
+  } catch {
+    url = null;
+  }
+  if (url) {
+    const value = url.searchParams.get('sslmode');
+    return value === null ? null : value.trim().toLowerCase();
+  }
+  // A libpq keyword/value string rather than a URL.
+  const match = /(?:^|[?&\s])sslmode=([A-Za-z-]+)/.exec(dsn);
+  return match ? match[1].toLowerCase() : null;
+}
+
 /**
- * Refuse a transaction-pooler DSN. Four units `set local role` mid-transaction, which needs a
- * session-scoped connection (direct host or the session pooler on 5432). The message carries no
- * part of the DSN.
+ * Refuse a DSN db-test must not use. Two rules, and neither message carries any part of the DSN
+ * beyond the sslmode word it is complaining about:
+ *
+ *   * not the transaction pooler on 6543 - four units `set local role` mid-transaction, which
+ *     needs a session-scoped connection (direct host, or the session pooler on 5432);
+ *   * an encrypted transport, named explicitly. node-postgres connects in cleartext when the DSN
+ *     names no sslmode at all, so an absent one is refused as firmly as `disable`. This stops an
+ *     accidental cleartext connection; it does not attempt chain verification, which needs
+ *     Supabase's CA from the dashboard and is Stack's call.
  */
 export function assertDsnAllowed(dsn) {
   let port = null;
@@ -251,22 +314,64 @@ export function assertDsnAllowed(dsn) {
         'session-pooler connection (5432), because units run `set local role` mid-transaction',
     );
   }
+
+  const sslmode = dsnSslmode(dsn);
+  if (sslmode === null) {
+    throw new RunnerError(
+      'BB2DASH_TEST_DB_URL names no sslmode, and node-postgres then connects in cleartext; append ' +
+        '?uselibpqcompat=true&sslmode=require (see db/tests/README.md)',
+    );
+  }
+  if (!SSLMODE_ALLOWED.has(sslmode)) {
+    throw new RunnerError(
+      `BB2DASH_TEST_DB_URL sets sslmode=${sslmode}, which permits an unencrypted connection; ` +
+        'db-test accepts require, verify-ca, verify-full or no-verify - use ' +
+        '?uselibpqcompat=true&sslmode=require (see db/tests/README.md)',
+    );
+  }
   return dsn;
+}
+
+/**
+ * Parse a `.env`-shaped file into a plain object. Deliberately small: `KEY=value` lines, `#`
+ * comments, blank lines and an optional `export ` prefix; surrounding matching quotes are stripped.
+ * An unquoted value keeps everything after the first `=`, including any `#`, because a generated
+ * password may contain one.
+ */
+export function parseEnvFile(text) {
+  const out = Object.create(null);
+  for (const raw of String(text ?? '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')) continue;
+    const body = line.startsWith('export ') ? line.slice(7).trim() : line;
+    const eq = body.indexOf('=');
+    if (eq < 1) continue;
+    const key = body.slice(0, eq).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    let value = body.slice(eq + 1).trim();
+    if (value.length >= 2 && (value[0] === '"' || value[0] === "'") && value.at(-1) === value[0]) {
+      value = value.slice(1, -1);
+    }
+    out[key] = value;
+  }
+  return out;
 }
 
 /**
  * Read `BB2DASH_TEST_DB_URL` from the process environment, or else from `.env.local` at the root
  * of this checkout. Exported so a later Node script reuses this one credential.
+ *
+ * The file is parsed into a local object, never loaded into `process.env`: importing this module
+ * has no side effects, and calling it must not either. `options.env` is the only environment
+ * consulted, so a caller that passes an explicit `env` cannot silently pick up the ambient
+ * credential for a database it did not mean.
  */
 export function loadDsn(options = {}) {
   const env = options.env ?? process.env;
   const root = options.root ?? REPO_ROOT;
   const envFile = path.join(root, '.env.local');
-  let dsn = env.BB2DASH_TEST_DB_URL;
-  if (!dsn && fs.existsSync(envFile)) {
-    process.loadEnvFile(envFile);
-    dsn = process.env.BB2DASH_TEST_DB_URL;
-  }
+  const fromFile = fs.existsSync(envFile) ? parseEnvFile(fs.readFileSync(envFile, 'utf8')) : {};
+  const dsn = env.BB2DASH_TEST_DB_URL || fromFile.BB2DASH_TEST_DB_URL;
   if (!dsn) {
     throw new RunnerError(
       `BB2DASH_TEST_DB_URL is not set: put it in the process environment or in ${envFile} (gitignored)`,
@@ -305,7 +410,10 @@ export function redact(text, dsn) {
       secrets.push(url.password);
       secrets.push(decodeURIComponent(url.password));
     }
+    // `host` is host:port; `hostname` is the bare host, which is the form a driver error uses
+    // (`getaddrinfo ENOTFOUND aws-0-…pooler.supabase.com` carries no port).
     if (url.host) secrets.push(url.host);
+    if (url.hostname) secrets.push(url.hostname);
   } catch {
     // Not a URL: the whole string is the only secret we know about.
   }
@@ -395,6 +503,12 @@ export async function run(argv, deps = {}) {
     else if (mode === 'only') units = [unitForOnly(target, testsDir)];
     else if (mode === 'file') units = [unitForFile(target, testsDir)];
 
+    // A relocated script or a renamed directory must not report green having run nothing.
+    // `--only` and `--file` already exit 2 on a missing file, from unitForOnly / unitForFile.
+    if (mode === 'all' && units.length === 0) {
+      throw new RunnerError(`no units found in ${testsDir}: nothing was run`);
+    }
+
     // Lint every unit before the credential is read and before any client is opened.
     for (const unit of units) {
       unit.text = readUnitText(unit);
@@ -459,6 +573,10 @@ async function connect(factory) {
     client = await factory();
     await client.connect();
   } catch (err) {
+    // A client `pg` half-opened keeps a handle on the event loop, and the CLI sets
+    // `process.exitCode` rather than calling process.exit, so without this the command hangs
+    // after a connection failure instead of exiting 2.
+    await endQuietly(client);
     throw new RunnerError(`connection failed: ${firstLine(err?.message)}`);
   }
   return client;
