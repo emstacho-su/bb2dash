@@ -562,3 +562,27 @@ PASS  phase10b_grade_model.sql
 db-test: passed 1, failed 0, units 1
 exit=0
 ```
+
+## Task 11 — runner form
+
+```
+$ node scripts/db-test.mjs --only phase9_transform_states.sql
+PASS  phase9_transform_states.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## Residue after the wave-2 runs
+
+Read straight after them, SELECT only:
+
+```
+bb_raw, fixture run ids (10a0- and 0900-)   0
+agent_requests, fixture run ids             0
+grade_column_links                          5
+grade_scenarios                             0
+sync_runs running or reaped                 0
+IST.323/_3598132_1 updated_at               2026-09-22 16:16:57.448326+00
+```
+
+Every W-39 row of the brief's §Task list has now passed its own check in the form the row names.
