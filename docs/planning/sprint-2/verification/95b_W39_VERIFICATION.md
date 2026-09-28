@@ -703,3 +703,59 @@ PASS  phase12b_089_work_items_due_on.sql
 db-test: passed 1, failed 0, units 1
 exit=0
 ```
+
+## `phase12b_078_status_fold_and_auto_graded.sql` — establish the premise, then guard it
+
+RED: `FAIL 0 of the 4 advanceable rows read graded` (line 124).
+
+Cause, verified first-hand. 087 (CR-3) narrowed the auto-graded write to `if v_is_newest and
+v_ins > 0`, and added the per-column predicate `prev.effective_score is distinct from
+round(n.effective_score, 3)`. The file folded the newest **real** crawl, which is already mirrored,
+so the insert (`on conflict (run_id, course_id, column_id) do nothing`) put in 0 rows and the whole
+block was skipped. Nothing is wrong with migration 078, and relaxing the assertion would have
+deleted the property it exists for.
+
+The fix establishes the premise instead of weakening the assertion. §3 now copies the newest real
+crawl's payloads into its own registered fixture crawl (`00000000-0780-…-0001`, `captured_at =
+now()`, so it is the newest), moving `effectiveScore` by +1 for the seven candidate columns and
+leaving every other column exactly as it is. The fold then mirrors rows (`v_ins > 0`), and 087's
+predicate is true for exactly those seven columns — every other column's previous row carries the
+same score, so nothing else can move and `auto_graded = 4` is still an exact count, not a floor.
+
+Two guards make a vacuous pass impossible:
+
+* **before the fold** — each of the four advanceable rows must carry a score 087 will read as new or
+  changed, measured the way 087 measures it (newest row for that column from any other run, compared
+  at the stored scale) and read out of the fixture crawl's **own payload**, so the guard cannot agree
+  with the `+ 1` that produced it;
+* **after the fold** — `inserted` must be above 0, or 087's `v_ins > 0` gate skipped the step.
+
+Both were shown to bite, as mutation probes run through `--file` (not committed):
+
+```
+$ node scripts/db-test.mjs --file probe078_nobump.sql        # the +1 changed to +0
+FAIL  probe078_nobump.sql  FAIL the premise could not be established: 0 of the 4 advanceable rows carry a new or changed score for the fixture crawl, and 087 gates the auto-graded write on that predicate
+
+$ node scripts/db-test.mjs --file probe078_realrun.sql       # _078_run pointed back at the newest real crawl
+FAIL  probe078_realrun.sql  FAIL the premise could not be established: 1 of the 4 advanceable rows carry a new or changed score for the fixture crawl, and 087 gates the auto-graded write on that predicate
+
+$ node scripts/db-test.mjs --file probe078_prefold.sql       # an extra fold first, so the guarded fold mirrors nothing
+FAIL  probe078_prefold.sql  FAIL the premise could not be established: the fold inserted 0 rows, so 087's v_ins > 0 gate skipped the auto-graded step entirely
+```
+
+The second probe is worth reading twice: against the newest real crawl only **1** of the 4 rows
+carries a moved score, so the old design could not have proved this step even with `v_ins > 0`.
+
+What it still proves, unchanged: the four values `AUTO_GRADED_FROM` lists advance to `graded` and
+only those four; `excused` and `missed` survive a fold; nothing but `status` is written (the
+`_078_pre` snapshot comparison is untouched); a replay writes 0; an older crawl writes 0 whatever it
+carries; and `auto_graded` reports exactly 4.
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase12b_078_status_fold_and_auto_graded.sql
+PASS  phase12b_078_status_fold_and_auto_graded.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
