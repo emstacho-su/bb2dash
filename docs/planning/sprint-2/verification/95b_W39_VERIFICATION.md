@@ -378,3 +378,40 @@ The brief's own form of this check, `node scripts/db-test.mjs --only phase9_tran
 construction: first statement `begin;`, last statement `rollback;`, no top-level `commit` or `end`
 (`on commit drop` is inside a `create temp table`, and each `end` is inside a dollar-quoted body),
 and it returns a row whose first column ends in `: PASS`.
+
+---
+
+## Task 9, second pass — both phase10a units green (file set extended by the PM)
+
+On 2026-09-27 the PM extended W-39's file set to `db/tests/phase10a_stage_gradebook.sql` and
+`db/tests/phase10a_stage_attempts.sql`, verified both causes above independently, and asked for the
+two assertions to be **scoped to the fixture's own rows** — never weakened, never deleted. The
+brief's error (§Why's "two files are red" is three, and §Files lists neither of these) goes in the
+phase PR. Lines 167–168 of `phase10b_grade_model.sql` remain untouched.
+### `db/tests/phase10a_stage_attempts.sql` — §5, the first three clauses
+
+RED (already captured above, unchanged by task 8):
+
+```
+Failed to run sql query: ERROR:  P0001: FAIL IST.323/quiz-01 has 3 attempt row(s), expected 2
+CONTEXT:  PL/pgSQL function inline_code_block line 6 at RAISE
+```
+
+What changed: the three clauses that read the column as a whole now name the fixture's own two
+attempt ids. The count becomes `where assignment_id = 'IST.323/quiz-01' and attempt_id in
+('_8100001_1', '_8100002_1')`; the numbering clause compares the two attempts' `attempt_no` to each
+other (`_8100001_1` strictly below `_8100002_1`) instead of asserting that `attempt_no = 1` is
+`_8100001_1`; and `attempts_allowed` is read by `attempt_id = '_8100001_1'` instead of by
+`attempt_no = 1`. The unused `v text` declaration went with the clause that used it.
+
+What it still proves: both of the fixture's attempts reach `v_assignment_attempts`, they are numbered
+oldest first, and `attempts_allowed` is 3 from the gradebook column — the same three properties,
+now stated so that a real attempt on the same column (or a new submission tomorrow) cannot move
+them. Nothing was weakened: no assertion was dropped, and none was replaced by a range.
+
+GREEN (2026-09-27), loader + file pasted as one `execute_sql` call:
+
+```json
+{"result":"phase10a_stage_attempts: PASS","attempt_rows":4,"pulled_back_files":3,"view_rows":14}
+```
+

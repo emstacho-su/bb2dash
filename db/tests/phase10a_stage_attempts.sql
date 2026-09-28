@@ -206,18 +206,36 @@ end $$;
 -- 5. The views
 -- =============================================================================================
 do $$
-declare n int; v text; allowed int;
+declare n int; allowed int;
 begin
-  -- v_assignment_attempts numbers attempts per assignment, oldest first.
-  select count(*) into n from v_assignment_attempts where assignment_id = 'IST.323/quiz-01';
-  if n <> 2 then raise exception 'FAIL IST.323/quiz-01 has % attempt row(s), expected 2', n; end if;
+  -- v_assignment_attempts numbers attempts per assignment, oldest first. Named by the fixture's own
+  -- two attempt ids, not counted over the column: v_attempts_latest is
+  -- `distinct on (course_id, column_id, attempt_id)` over EVERY registered crawl, so a real attempt
+  -- mirrored by a crawl later than the fixture stands beside the fixture's in the same view (prod
+  -- has held _43045300_1 on this column since 2026-09-22). A bare count over the column, or an
+  -- absolute attempt_no, would read today's Blackboard instead of the fixture and move again with
+  -- the next submission.
+  select count(*) into n from v_assignment_attempts
+   where assignment_id = 'IST.323/quiz-01' and attempt_id in ('_8100001_1', '_8100002_1');
+  if n <> 2 then
+    raise exception 'FAIL IST.323/quiz-01 shows % of the fixture''s 2 attempt row(s), expected 2', n;
+  end if;
 
-  select attempt_id into v from v_assignment_attempts
-   where assignment_id = 'IST.323/quiz-01' and attempt_no = 1;
-  if v <> '_8100001_1' then raise exception 'FAIL attempt_no 1 is %, expected the earlier attempt', v; end if;
+  -- Oldest first is the property, and it holds however many other attempts share the column:
+  -- _8100001_1 (submitted 2026-08-31) is numbered below _8100002_1 (2026-09-02).
+  if (select a.attempt_no from v_assignment_attempts a
+       where a.assignment_id = 'IST.323/quiz-01' and a.attempt_id = '_8100001_1')
+     >= (select a.attempt_no from v_assignment_attempts a
+          where a.assignment_id = 'IST.323/quiz-01' and a.attempt_id = '_8100002_1') then
+    raise exception 'FAIL attempts are not numbered oldest first: _8100001_1 is %, _8100002_1 is %',
+      (select a.attempt_no from v_assignment_attempts a
+        where a.assignment_id = 'IST.323/quiz-01' and a.attempt_id = '_8100001_1'),
+      (select a.attempt_no from v_assignment_attempts a
+        where a.assignment_id = 'IST.323/quiz-01' and a.attempt_id = '_8100002_1');
+  end if;
 
   select attempts_allowed into allowed from v_assignment_attempts
-   where assignment_id = 'IST.323/quiz-01' and attempt_no = 1;
+   where assignment_id = 'IST.323/quiz-01' and attempt_id = '_8100001_1';
   if allowed <> 3 then
     raise exception 'FAIL attempts_allowed = %, expected 3 from the gradebook column', allowed;
   end if;
