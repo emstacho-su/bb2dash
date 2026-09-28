@@ -585,3 +585,41 @@ PASS  phase15_101_search_path_pin.sql
 db-test: passed 1, failed 0, units 1
 EXIT=0
 ```
+
+## R2-2 — `set_config(name, NULL, true)` resets a GUC, it does not store NULL
+
+`current_setting` then yields `''`, so the placeholder was silently the wrong type of empty. Two
+consequences: a null `bb_file_relpath` made guard (e) compare `NULL is distinct from ''` and raise
+although both paths agreed, and an empty `bb_files` made `current_setting('w40.file_id')::bigint`
+fail on a cast instead of on the thing the guard is about.
+
+Fixed by storing a `coalesce(…, '<null>')` sentinel in all four header values and comparing against
+it on both sides — in guard (e) and in the "nothing was written" `gcal_dirty` check. `<null>` cannot
+collide with a real value here: a relpath always contains `/`, a file id is digits, `gcal_dirty` is a
+boolean and `search_path` is always set. A new assertion also refuses an empty `bb_files` outright,
+because guards (d) and (e) would otherwise pass by vacuity.
+
+### The failure mode, forced inside a rolled-back transaction
+
+Using an id no `bb_files` row has, so `bb_file_relpath` returns null on both sides — i.e. the two
+paths **agree**, and a correct guard must not raise:
+
+```
+old stored=[] is_null=false
+| OLD GUARD RAISED: FAIL bb_file_relpath returned [null] under an empty search_path and [] under the default
+| NEW GUARD: both paths agree on null, no raise
+| EMPTY GUC CAST: invalid input syntax for type bigint: ""
+```
+
+The first line is the bug itself: `set_config(..., NULL, true)` stored `''`, not null. The second is
+the false FAIL the old code would have raised. The third is the fix. The fourth is the cast an empty
+`bb_files` would have hit.
+
+### Check
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```

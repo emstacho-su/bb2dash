@@ -30,13 +30,28 @@ begin;
 -- =============================================================================================
 -- 0. What the default search_path answers, and what the tables held before
 -- =============================================================================================
+-- Every value below is stored through `coalesce(…, '<null>')`. `set_config(name, NULL, true)` does
+-- NOT store a null — it RESETS the GUC, and `current_setting` then yields `''`. Without the
+-- sentinel, a null `bb_file_relpath` would make guard (e) compare `NULL is distinct from ''` and
+-- raise although both paths agreed, and an empty `bb_files` would make `'' ::bigint` fail on a cast
+-- rather than on the thing the guard is about. `<null>` cannot collide with a real value here: a
+-- relpath always contains '/', a file id is digits, gcal_dirty is a boolean and search_path is set.
 select set_config('w40.file_id',
-  (select min(id)::text from public.bb_files), true);
+  coalesce((select min(id)::text from public.bb_files), '<null>'), true);
 select set_config('w40.relpath_default',
-  (select public.bb_file_relpath((select min(id) from public.bb_files))), true);
+  coalesce((select public.bb_file_relpath((select min(id) from public.bb_files))), '<null>'), true);
 select set_config('w40.gcal_dirty_before',
-  (select gcal_dirty::text from public.app_settings limit 1), true);
-select set_config('w40.search_path_default', current_setting('search_path'), true);
+  coalesce((select gcal_dirty::text from public.app_settings limit 1), '<null>'), true);
+select set_config('w40.search_path_default',
+  coalesce(current_setting('search_path'), '<null>'), true);
+
+-- There must be a file to ask about at all, or (d) and (e) would pass by vacuity.
+do $$
+begin
+  if current_setting('w40.file_id') = '<null>' then
+    raise exception 'FAIL bb_files is empty, so guards (d) and (e) would prove nothing';
+  end if;
+end $$;
 
 -- =============================================================================================
 -- (a) No function in public resolves names against the caller's search_path
@@ -164,14 +179,15 @@ begin
     end if;
   end loop;
 
-  -- (e) Same input, same answer, whichever path the caller happens to hold.
-  v_relpath := public.bb_file_relpath(current_setting('w40.file_id')::bigint);
-  if v_relpath is distinct from current_setting('w40.relpath_default') then
+  -- (e) Same input, same answer, whichever path the caller happens to hold. Both sides carry the
+  -- same '<null>' sentinel the header stored, so "both returned null" agrees instead of raising.
+  v_relpath := coalesce(public.bb_file_relpath(current_setting('w40.file_id')::bigint), '<null>');
+  if v_relpath <> current_setting('w40.relpath_default') then
     raise exception 'FAIL bb_file_relpath(%) returned [%] under an empty search_path and [%] '
                     'under [%]',
       current_setting('w40.file_id'),
-      coalesce(v_relpath, 'null'),
-      coalesce(current_setting('w40.relpath_default'), 'null'),
+      v_relpath,
+      current_setting('w40.relpath_default'),
       current_setting('w40.search_path_default');
   end if;
 end $$;
@@ -213,10 +229,10 @@ select set_config('request.jwt.claim.sub', '', true);
 -- raising, app_settings.gcal_dirty is where that shows, so it is checked rather than assumed.
 do $$
 begin
-  if (select gcal_dirty::text from public.app_settings limit 1)
-     is distinct from current_setting('w40.gcal_dirty_before') then
+  if coalesce((select gcal_dirty::text from public.app_settings limit 1), '<null>')
+     <> current_setting('w40.gcal_dirty_before') then
     raise exception 'FAIL app_settings.gcal_dirty is now %, it was %',
-      (select gcal_dirty::text from public.app_settings limit 1),
+      coalesce((select gcal_dirty::text from public.app_settings limit 1), '<null>'),
       current_setting('w40.gcal_dirty_before');
   end if;
 end $$;
