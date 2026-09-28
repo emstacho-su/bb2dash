@@ -586,3 +586,213 @@ IST.323/_3598132_1 updated_at               2026-09-22 16:16:57.448326+00
 ```
 
 Every W-39 row of the brief's §Task list has now passed its own check in the form the row names.
+
+---
+
+# Wave 3 — the four pre-existing red units (2026-09-27)
+
+Stack decided Phase 15 absorbs them; the PM extended W-39's file set again and writes the DECISIONS
+line (brief open item 6's pattern: a P-30-shaped fix in the phase that finds it). Migrations 101 and
+102 are on prod for every run below. None of the four is a product defect, and no assertion was
+weakened: each was scoped, seeded, or made relative.
+
+Baseline on this branch after merging `origin/feat/db-hygiene-15`, `node scripts/db-test.mjs`:
+
+```
+FAIL  phase12b_077_inbox_feedback.sql  FAIL v_inbox_feedback is empty - prod has closed rows with notes
+FAIL  phase12b_078_status_fold_and_auto_graded.sql  FAIL 0 of the 4 advanceable rows read graded
+FAIL  phase12b_084_shared_column_conflict.sql  FAIL the IST.323 shared-column row is not dismissed
+FAIL  phase12b_089_work_items_due_on.sql  FAIL the Lab #1 fixture row is gone from v_work_items
+db-test: passed 14, failed 4, units 18
+```
+
+exit 1. (18 units, not 21: `phase15_100_db_test_runner_role.sql` and W-40's two `phase15_*` test
+files are not on this branch yet — the merge brought the runner, 100 and the walk doc only. The four
+failures are the four named.)
+
+## `phase12b_077_inbox_feedback.sql` — seed the view's own closed row
+
+RED: `FAIL v_inbox_feedback is empty - prod has closed rows with notes` (line 60).
+
+Cause, verified first-hand: migration 090 added a fourth state, `archived`, and `/inbox-apply` moved
+every closed row into it. `attention_items` on prod holds 5 `open` and 142 `archived` rows and **no**
+`resolved` or `dismissed` row at all, while `v_inbox_feedback` filters
+`state = any (array['resolved','dismissed']) and coalesce(btrim(resolution_note),'') <> ''`
+(`pg_get_viewdef`, 2026-09-27). So `n_view = n_expected = 0`, the count assertion passed on nothing,
+and the emptiness assertion raised.
+
+The fix: the unit seeds its own `resolved` row (`state = 'resolved'`, a note, `resolution
+{"accept": true}`, `applied_at` set) into `attention_items` inside its transaction, records its id in
+a temp table, and asserts the view carries **that** row by id, on top of the assertions already
+there. Nothing was relaxed: the counts must still agree, no `open` row may leak, no row may arrive
+without a note, a `resolved` row must be present, and `was_applied` / `feedback` / `accept` must still
+agree with `attention_items` row for row.
+
+What it still proves: `v_inbox_feedback` returns exactly the closed rows that carry a note, with the
+answer and the applied flag travelling with them — and now it proves it on any database, instead of
+depending on prod holding a state `/inbox-apply` no longer leaves behind.
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase12b_077_inbox_feedback.sql
+PASS  phase12b_077_inbox_feedback.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## `phase12b_084_shared_column_conflict.sql` — `archived` counts as closed
+
+RED: `FAIL the IST.323 shared-column row is not dismissed` (line 43).
+
+Cause, verified first-hand — the same 090 drift. The row is there, with 084's own note intact, but
+`/inbox-apply` has archived it (prod 2026-09-27):
+
+```
+id 137 | state archived | resolved_at set | archived_at set | archived_by 'inbox-apply request 35'
+note   Closed by 084: a shared gradebook column is handled by 075; nothing to decide.
+```
+
+The fix: `state in ('dismissed', 'archived')`. `resolved_at is not null` stays, so a row archived
+without ever having been resolved still fails. §2's `v_after = v_before` was left exactly as it is,
+as instructed — it is the one assertion a concurrent committed `/inbox-apply` could break.
+
+What it still proves: the shared-column conflict is closed, never re-raised, carries 084's own note,
+and no `bb_column_id` conflict on a `column:%` ref is open. Only where a *closed* row is filed stopped
+being asserted, and archiving is a one-way move out of the Inbox that never re-opens a row.
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase12b_084_shared_column_conflict.sql
+PASS  phase12b_084_shared_column_conflict.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## `phase12b_089_work_items_due_on.sql` — the Lab #1 row answers to a different id
+
+RED: `FAIL the Lab #1 fixture row is gone from v_work_items` (line 39; the PASS row at line 192 read
+the same id).
+
+Cause, verified first-hand: the two Lab #1 rows were duplicates of one Blackboard column, and Stack's
+Inbox decision of 2026-09-22 folded them into the shorter id and deleted
+`IST.323/lab-1-performing-a-ransomware-attack`. The surviving row on prod, read 2026-09-27:
+
+```
+item_id  IST.323/lab-1
+title    Lab #1: Performing a Ransomware Attack
+due_at   2026-09-24 03:59:00+00
+due_on   2026-09-23
+confidence confirmed
+```
+
+The fix: both lines now read `item_id = 'IST.323/lab-1'`. Nothing else changed — the three
+assertions on that row (`due_at` is exactly `2026-09-24 03:59+00`, that instant is 11:59 PM in New
+York, `due_on` is `2026-09-23` and not the pre-089 `2026-09-24`) are untouched, and they hold against
+the surviving row because the deadline did not move, only the id it is filed under.
+
+What it still proves: migration 089 derives `due_on` in America/New_York, so an 11:59 PM deadline
+belongs to the day Stack sees it on, not to the UTC day after it.
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase12b_089_work_items_due_on.sql
+PASS  phase12b_089_work_items_due_on.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## `phase12b_078_status_fold_and_auto_graded.sql` — establish the premise, then guard it
+
+RED: `FAIL 0 of the 4 advanceable rows read graded` (line 124).
+
+Cause, verified first-hand. 087 (CR-3) narrowed the auto-graded write to `if v_is_newest and
+v_ins > 0`, and added the per-column predicate `prev.effective_score is distinct from
+round(n.effective_score, 3)`. The file folded the newest **real** crawl, which is already mirrored,
+so the insert (`on conflict (run_id, course_id, column_id) do nothing`) put in 0 rows and the whole
+block was skipped. Nothing is wrong with migration 078, and relaxing the assertion would have
+deleted the property it exists for.
+
+The fix establishes the premise instead of weakening the assertion. §3 now copies the newest real
+crawl's payloads into its own registered fixture crawl (`00000000-0780-…-0001`, `captured_at =
+now()`, so it is the newest), moving `effectiveScore` by +1 for the seven candidate columns and
+leaving every other column exactly as it is. The fold then mirrors rows (`v_ins > 0`), and 087's
+predicate is true for exactly those seven columns — every other column's previous row carries the
+same score, so nothing else can move and `auto_graded = 4` is still an exact count, not a floor.
+
+Two guards make a vacuous pass impossible:
+
+* **before the fold** — each of the four advanceable rows must carry a score 087 will read as new or
+  changed, measured the way 087 measures it (newest row for that column from any other run, compared
+  at the stored scale) and read out of the fixture crawl's **own payload**, so the guard cannot agree
+  with the `+ 1` that produced it;
+* **after the fold** — `inserted` must be above 0, or 087's `v_ins > 0` gate skipped the step.
+
+Both were shown to bite, as mutation probes run through `--file` (not committed):
+
+```
+$ node scripts/db-test.mjs --file probe078_nobump.sql        # the +1 changed to +0
+FAIL  probe078_nobump.sql  FAIL the premise could not be established: 0 of the 4 advanceable rows carry a new or changed score for the fixture crawl, and 087 gates the auto-graded write on that predicate
+
+$ node scripts/db-test.mjs --file probe078_realrun.sql       # _078_run pointed back at the newest real crawl
+FAIL  probe078_realrun.sql  FAIL the premise could not be established: 1 of the 4 advanceable rows carry a new or changed score for the fixture crawl, and 087 gates the auto-graded write on that predicate
+
+$ node scripts/db-test.mjs --file probe078_prefold.sql       # an extra fold first, so the guarded fold mirrors nothing
+FAIL  probe078_prefold.sql  FAIL the premise could not be established: the fold inserted 0 rows, so 087's v_ins > 0 gate skipped the auto-graded step entirely
+```
+
+The second probe is worth reading twice: against the newest real crawl only **1** of the 4 rows
+carries a moved score, so the old design could not have proved this step even with `v_ins > 0`.
+
+What it still proves, unchanged: the four values `AUTO_GRADED_FROM` lists advance to `graded` and
+only those four; `excused` and `missed` survive a fold; nothing but `status` is written (the
+`_078_pre` snapshot comparison is untouched); a replay writes 0; an older crawl writes 0 whatever it
+carries; and `auto_graded` reports exactly 4.
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase12b_078_status_fold_and_auto_graded.sql
+PASS  phase12b_078_status_fold_and_auto_graded.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## The whole suite from this branch
+
+`origin/feat/db-hygiene-15` merged again first, which brought W-38's `phase15_100_db_test_runner_role.sql`
+and W-40's `phase15_101_search_path_pin.sql` / `phase15_102_planner_series_orphan.sql` — 23 files in
+`db/tests/`, 21 units. Migrations 101 and 102 are on prod.
+
+```
+$ node scripts/db-test.mjs; echo $?
+PASS  inbox_apply_090_attention_archive.sql
+PASS  phase10a_stage_attempts.sql
+PASS  phase10a_stage_gradebook.sql
+PASS  phase10b_grade_model.sql
+PASS  phase10b_round2.sql
+PASS  phase12b_073_workload_visibility.sql
+PASS  phase12b_074_reading_file_links.sql
+PASS  phase12b_075_shared_column_restamp.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+PASS  phase12b_077_inbox_feedback.sql
+PASS  phase12b_078_status_fold_and_auto_graded.sql
+PASS  phase12b_082_083_planner_series.sql
+PASS  phase12b_084_shared_column_conflict.sql
+PASS  phase12b_085_stage_attempts_v4.sql
+PASS  phase12b_086_reading_link_settles.sql
+PASS  phase12b_087_auto_graded_sticks.sql
+PASS  phase12b_089_work_items_due_on.sql
+PASS  phase15_100_db_test_runner_role.sql
+PASS  phase15_101_search_path_pin.sql
+PASS  phase15_102_planner_series_orphan.sql
+PASS  phase9_transform_states.sql
+db-test: passed 21, failed 0, units 21
+0
+```
+
+No unit outside the four named here needed anything, and nothing in any output names a pinned
+`search_path` or the new planner trigger. W-39's rows of §Task list (8, 9, 10, 11) and the four
+absorbed units have each passed their own check in the form the brief's row names.
