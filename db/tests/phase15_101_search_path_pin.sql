@@ -42,8 +42,19 @@ select set_config('w40.search_path_default', current_setting('search_path'), tru
 -- (a) No function in public resolves names against the caller's search_path
 -- =============================================================================================
 -- Extension-owned functions are excluded: pgcrypto, pg_net and the rest are not this project's
--- definitions, and the advisor does not count them either. 101's own guard is the same predicate;
--- this is the copy that keeps standing after 101 has been recorded.
+-- definitions, and the advisor does not count them either.
+--
+-- `d.classid = 'pg_proc'::regclass` is load-bearing, not decoration. `pg_depend.objid` is only
+-- meaningful together with `classid` — oids are unique per catalogue, not across catalogues — so
+-- without it ANY extension-dependent entry (a type, a relation, an operator) whose oid happens to
+-- equal a function's oid would silently excuse that function from this guard. The exclusion would
+-- then grow quietly wider every time an extension is installed.
+--
+-- MIGRATION 101 CARRIES THIS FLAW in its own one-time guard block and is left exactly as applied
+-- (`db/migrations/101_search_path_pin.sql`, section 2): it has run, and on the catalogue of
+-- 2026-09-27 its answer was right — the corrected predicate here counts the same 0. It is frozen
+-- because the repo file must stay byte-identical to what was applied. **A future replay of 101
+-- must not be trusted as a check**; this file is the authoritative standing guard for the rule.
 do $$
 declare
   n    int;
@@ -53,7 +64,10 @@ begin
     into n, list
     from pg_proc p
    where p.pronamespace = 'public'::regnamespace
-     and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+     and not exists (select 1 from pg_depend d
+                      where d.classid = 'pg_proc'::regclass
+                        and d.objid = p.oid
+                        and d.deptype = 'e')
      and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c
                       where c like 'search_path=%');
   if n > 0 then
@@ -214,7 +228,9 @@ select 'phase15_101_search_path_pin: PASS'                      as result,
        (select count(*) from pg_proc p
          where p.pronamespace = 'public'::regnamespace
            and not exists (select 1 from pg_depend d
-                            where d.objid = p.oid and d.deptype = 'e')) as public_functions,
+                            where d.classid = 'pg_proc'::regclass
+                              and d.objid = p.oid
+                              and d.deptype = 'e')) as public_functions,
        current_setting('w40.search_path_default')                as default_search_path,
        current_setting('w40.relpath_default')                    as relpath_checked;
 

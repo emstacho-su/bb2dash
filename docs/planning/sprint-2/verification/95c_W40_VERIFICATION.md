@@ -524,3 +524,64 @@ mcp-server ci` (exit 0) fixes it, and the build and smoke then pass. The PM will
 in `bb2dash-wt-15` at task 16's integration copy — it is a worktree setup step, not a code failure.
 
 R-78's proof line for this row: three search modes answer 200 and the hybrid median is ≤ 60 ms.
+
+---
+
+# Round 2 — review-gate findings (2026-09-27)
+
+All four land in `db/tests/phase15_101_search_path_pin.sql`. **Migrations 101 and 102 are on prod
+and were not touched**: their blobs are still `53c294e0900281d084ec7b19b8436ef8` and
+`000134a5d273eabf668eeb9f71ebd923`, one commit each, and nothing was applied in round 2.
+
+## R2-1 — guard (a) needed `d.classid = 'pg_proc'::regclass`
+
+`pg_depend.objid` is only meaningful together with `classid`: oids are unique per catalogue, not
+across catalogues. Without the `classid` term, any extension-dependent entry — a type, a relation,
+an operator — whose oid happened to equal a function's oid would silently excuse that function from
+the guard, and the exclusion would widen every time an extension was installed.
+
+Fixed in both places the predicate appears in the file: guard (a) itself and the summary row's
+`public_functions` count.
+
+### The corrected predicate still counts 0
+
+```
+unpinned_loose_predicate | unpinned_corrected_predicate | loose_predicate_excuses
+                       0 |                            0 | (none today)
+```
+
+### I could not force a RED, and I am not going to claim one
+
+The flaw is **latent, not active**. Making it fire needs an oid collision between a function and a
+non-`pg_proc` extension-dependent catalogue entry, which cannot be manufactured on demand — oids
+come from the server's counter, not from anything a transaction controls. What can be shown is the
+size of the surface it would fire on:
+
+```
+dependent_catalogue | extension_owned_rows | objids_that_also_name_a_function
+pg_operator         |                   40 |                               0
+pg_type             |                   30 |                               0
+pg_opclass          |                   24 |                               0
+pg_opfamily         |                   24 |                               0
+pg_cast             |                   23 |                               0
+pg_class            |                   11 |                               0
+pg_am               |                    2 |                               0
+pg_namespace        |                    2 |                               0
+pg_language         |                    1 |                               0
+```
+
+157 extension-owned `pg_depend` rows sit outside `pg_proc`; none collides with a function oid today.
+So **migration 101's applied result was correct on the catalogue of 2026-09-27** — which is why it
+is left exactly as applied rather than patched. The file now says so in a comment naming 101 and its
+section 2, and states that a future replay of 101 must not be trusted as a check: this test is the
+authoritative standing guard for the rule. No 103 was written — 103 and 104 are reserved for grant
+gaps, and this is not one.
+
+### Check
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```
