@@ -198,3 +198,100 @@ transaction. `apply_migration` was **not** called.
 
 * migration 100 on prod (W-38), then `apply_migration` under the name `101_search_path_pin`
 * `scripts/db-test.mjs` on this branch and Stack's `.env.local`, for the runner form of the check
+
+---
+
+## Task 13 — `db/migrations/102_planner_series_orphan_trigger.sql` written; **the apply is wave 2**
+
+**The check, as brief 95 §Task list row 13 writes it:**
+
+> runner `--only phase15_102_planner_series_orphan.sql` → `db-test: passed 1, failed 0, units 1`;
+> runner `--only phase12b_082_083_planner_series.sql` → same (TR-4 under the trigger);
+> `select count(*) from planner_event_series s where not exists (select 1 from planner_events e where e.series_id = s.id)` → 0;
+> `select count(*) from pg_trigger where tgrelid = 'public.planner_events'::regclass and tgname = 'planner_events_delete_empty_series'` → 1
+
+**Not done yet, and why.** Row 13 itself says "only after task 15 has applied 101", and §Tables and
+migrations fixes 100 → 101 → 102 so prod order equals name order. 100 is not on prod (see task 15),
+so neither 101 nor 102 has been applied. The four sub-checks stand for wave 2; the first two are
+also waiting on `scripts/db-test.mjs`.
+
+**The file.** The function and the statement trigger exactly as brief 95 §Contract gives them,
+including the single-statement body verbatim and the `revoke all on function … from public, anon,
+authenticated` line (082:215's pattern), plus two comments and a guard block in 082/088's shape
+(the trigger is on the table; the function is executable by nobody). Additive only.
+
+### Dry run, 2026-09-27 — `begin; <102>; <the whole task-12 test>; rollback;`
+
+```
+[{"result":"phase15_102_planner_series_orphan: PASS","trigger_present":1,"planner_events_at_start":"1","series_at_start":"0"}]
+```
+
+102's guard raised nothing, all five cases of the task-12 test passed, the whole-table orphan count
+was 0 and both planner tables ended on their starting counts. `apply_migration` was **not** called.
+
+### The three existing delete paths, re-read before writing
+
+* **plain delete** ("this event", detached or not) — the bug. The trigger is the only thing that
+  closes it, because `queries.plannerSeries.ts` deletes the row directly and there is no RPC here.
+* **`planner_series_delete`** (083/088) — the trigger fires at the end of the RPC's inner delete.
+  Confirmed by reading 088:187-249: `v_deleted` is taken by `get diagnostics` **before** either the
+  `update planner_event_series` or the TR-4 / 'all' delete, so when the trigger has already removed
+  an emptied series those two statements match 0 rows and the returned count is unchanged. The
+  task-12 test asserts 2 from both scopes under the trigger, and it got 2.
+* **`planner_series_update`** — empties a series by UPDATE, which an AFTER DELETE trigger does not
+  see, so 088:161-164's own TR-4 delete stays necessary and stays unchanged.
+
+Two secondary interactions checked while reading, both benign:
+
+* deleting a series row fires the FK's `on delete set null` on `planner_events`, which would fire
+  082's `planner_events_series_cap_update` and could collide with 082's "detached implies a series"
+  check — but the trigger only ever deletes a series with **no** referencing rows, so that FK action
+  touches nothing.
+* `planner_events_mark_calendar_dirty` is also an AFTER-statement trigger on `planner_events` and
+  fires on a zero-row delete. It raised nothing as a stranger uid in the task-12 test's case 4.
+
+### Waiting on, for wave 2
+
+* 100 then 101 on prod, then `apply_migration` under the name `102_planner_series_orphan_trigger`
+* `scripts/db-test.mjs`, for both runner sub-checks (including TR-4 under the trigger via
+  `--only phase12b_082_083_planner_series.sql`)
+
+### `DATA_SYNTAX.md`
+
+One sentence added to the **Recurrence** paragraph (nothing else in the file): no rule outlives its
+last occurrence, `planner_events_delete_empty_series` (migration 102) deletes any series a delete
+left with no occurrences, so the plain single-occurrence delete closes the rule too.
+
+---
+
+## Prod is clean
+
+Re-read after every rollback above (SELECT only, 2026-09-27):
+
+```
+unpinned_still | trigger_left | func_left | events_now | series_now | gcal_dirty_now | migrations_10x
+             7 |            0 |         0 |          1 |          0 | false          |              0
+```
+
+The seven functions are still unpinned, neither 102's function nor its trigger exists, both planner
+tables hold what they held, `app_settings.gcal_dirty` is still false (so nothing nudged the calendar
+push), and no migration in the 100–104 range is recorded. Wave 1 changed nothing on prod.
+
+## Nothing in brief 95 was found wrong
+
+The Contract's trigger body applied and behaved exactly as written. The seven signatures match
+prod's `function_search_path_mutable` list one for one, including `extensions.vector` in the two
+vector functions' parameter lists (`pg_proc` renders them as bare `vector` because `extensions` is
+on the default path; `extensions.vector` is what `alter function` needs and it resolves). Guards
+(b), (c) and (f) of task 14 were already green before 101, which the brief implies but does not
+state — they are standing guards, not repairs, and the RED comes from (a), (d) and (e).
+
+## Wave 2, in order (brief 95 §Workers: 15, 13, 16)
+
+1. **task 15** — `begin … rollback` dry run, then `apply_migration` `101_search_path_pin`, once 100
+   is on prod; then the runner check and the 0-unpinned SELECT.
+2. **task 13** — same for `102_planner_series_orphan_trigger`, after 101; then the four sub-checks.
+3. **task 16** — the `hybrid_search_file_text` re-time (5 `explain (analyze, format json)` runs,
+   median `Execution Time` ≤ 60.0 ms, the five figures recorded here), the three `search` edge
+   function modes over HTTP → 200 each, and `npm --prefix mcp-server run build && node
+   mcp-server/scripts/smoke.mjs` → exit 0.
