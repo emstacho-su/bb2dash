@@ -29,7 +29,7 @@ $rng.Dispose()
 
 Set-Clipboard -Value "alter role db_test_runner password '$pw';"
 
-$dsn  = "postgresql://db_test_runner.goultdzqcavefcgnifdy:$pw@${poolerHost}:5432/postgres?sslmode=require"
+$dsn  = "postgresql://db_test_runner.goultdzqcavefcgnifdy:$pw@${poolerHost}:5432/postgres?uselibpqcompat=true&sslmode=require"
 $line = "BB2DASH_TEST_DB_URL=$dsn"
 if (Test-Path $envPath) {
   $kept = @(Get-Content $envPath | Where-Object { $_ -notmatch '^BB2DASH_TEST_DB_URL=' })
@@ -40,13 +40,22 @@ if (Test-Path $envPath) {
 [System.IO.File]::WriteAllText($envPath, (($out -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 ```
 
-Two things the PM could not pre-verify from this session, both settled by step 2's `--ping`:
+Two things the PM could not pre-verify from this session, both settled on 2026-09-27 by the first `--ping`:
 
-* **the pooler host** — `aws-0-us-east-1.pooler.supabase.com` is the default; the dashboard's Connect panel names the
-  real one for this project, and the top line of the snippet is where to change it;
-* **`sslmode`** — `require` is what the snippet writes. If `--ping` returns a certificate error instead of an
-  authentication one, the DSN's `sslmode=require` becomes `sslmode=no-verify` (still encrypted, no chain check), and
-  DECISIONS row 5 records why.
+* **the pooler host** — `aws-0-us-east-1.pooler.supabase.com`, the snippet's default, is correct for this project;
+* **`sslmode`** — `require` alone **fails on this laptop**, and the snippet above is already corrected. Stack ran
+  step 1 as written, the password and the host were both right, and `--ping` still returned
+  `db-test: connection failed: self-signed certificate in certificate chain`, exit 2, with pg's own warning above it:
+  *"The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full' … If you want libpq
+  compatibility now, use 'uselibpqcompat=true&sslmode=require'"*. `pg` 8.23 / pg-connection-string aliases `require` to
+  `verify-full`, and the Supabase pooler chains to a private root, so verification fails. Adding
+  `uselibpqcompat=true` restores libpq's own `require` semantics — the connection is encrypted, the chain is not
+  verified — which is what `psql`'s `require` does and what the brief's research assumed. `--ping` then returned
+  `db-test: connected as db_test_runner`, exit 0. The canonical `.env.local` was patched in place, the password
+  untouched, and the four worktree copies refreshed from it. DECISIONS row 5 records this.
+  The stronger option, `sslmode=verify-full` with `sslrootcert` pointed at Supabase's CA, stays open: it needs the
+  cert from the dashboard's Database → SSL configuration panel, since the old public
+  `supabase.com/downloads/prod-ca-2021.crt` URL now returns 404. It is offered to Stack in the PR, not taken here.
 
 ```
 (no output expected in the SQL editor; it reports "Success. No rows returned")
