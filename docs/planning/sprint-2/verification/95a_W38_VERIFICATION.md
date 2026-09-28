@@ -377,6 +377,61 @@ Commit: `feat(15-04): migration 100 — the db_test_runner login role, applied t
 
 ---
 
+## Task 5 (Stack's) — the credential, as W-38 saw it
+
+Not W-38's row, recorded because tasks 6 and 7 rest on it. From `bb2dash-wt-15-runner`, with the
+PM's copy of the gitignored `.env.local` in place:
+
+```
+$ node scripts/db-test.mjs --ping
+db-test: connected as db_test_runner
+EXIT=0
+```
+
+The DSN ends `?uselibpqcompat=true&sslmode=require`. A bare `sslmode=require` fails on this machine:
+`pg` 8.23 aliases `require` to `verify-full`, and the Supabase pooler chains to a private root, so
+the runner reports `db-test: connection failed: self-signed certificate in certificate chain` and
+exits 2 — correctly, and with the DSN redacted. `uselibpqcompat=true` restores libpq's own `require`
+(encrypted, no chain check), which is what `psql` does and what research 92 assumed. The PM is
+recording it in DECISIONS row 5; `db/tests/README.md` now carries a paragraph on it, since the next
+person to write this DSN by hand will hit it. No change to `scripts/db-test.mjs`: the runner refuses
+6543 and redacts, and takes whatever else the DSN says.
+
+---
+
+## Task 6 — live exit contract on the three fixtures
+
+Brief's check: `passes.sql` → `db-test: passed 1, failed 0, units 1` then 0; `fails.sql` →
+`db-test: passed 0, failed 1, units 1` then 1; `commits.sql` → one line starting
+`db-test: lint commits.sql:` then 2 (task 1's unit test asserts no client was opened).
+
+```
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/passes.sql; echo $?
+PASS  passes.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/fails.sql; echo $?
+FAIL  fails.sql  FAIL this fixture always fails, on purpose
+db-test: passed 0, failed 1, units 1
+EXIT=1
+
+$ node scripts/db-test.mjs --file scripts/fixtures/db-test/commits.sql; echo $?
+db-test: lint commits.sql: top-level `commit` is not allowed; a unit must roll back
+EXIT=2
+```
+
+All three as the row gives them. `fails.sql`'s FAIL line is the first line of the real server error
+(the `CONTEXT: PL/pgSQL function inline_code_block` line behind it is dropped), and `commits.sql`
+never opened a connection — the offline half of that is task 1's
+`assert.equal(factory.opened.length, 0)`, asserted both with and without a DSN present.
+
+**Task 6: PASS.**
+
+Commit: `feat(15-06): live exit contract on the three fixtures; DSN sslmode note in the README`
+
+---
+
 ## Notes for the PM
 
 1. **A grant the brief did not name.** `public.calendar_event_id(text)` (see task 4). It is in 100,
