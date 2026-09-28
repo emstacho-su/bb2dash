@@ -119,12 +119,20 @@ end $$;
 -- =============================================================================================
 -- Exactly two, both recorded: app_owner() because RLS policy evaluation needs it (DECISIONS
 -- 2026-09-10), calendar_push_now() because it is owner-guarded inside, which (f) proves.
+--
+-- `p.proname || '()'` and NOT `p.oid::regprocedure::text`: regprocedure renders schema-qualified
+-- whenever `public` is not on the caller's current path, so the same catalogue would compare as
+-- `[public.app_owner(), public.calendar_push_now()]` and this guard would raise for no reason. That
+-- is not hypothetical here - the file's own header offers "paste the whole file into one
+-- `execute_sql` call" as a supported route, and migration 100 sets no `search_path` for
+-- `db_test_runner`, so the rendering rests on a cluster default nobody in this repo controls.
+-- Both functions take no arguments, so `proname || '()'` is their full signature.
 do $$
 declare
   v_auth text;
   v_anon text;
 begin
-  select coalesce(string_agg(p.oid::regprocedure::text, ', ' order by p.proname), '') into v_auth
+  select coalesce(string_agg(p.proname || '()', ', ' order by p.proname), '') into v_auth
     from pg_proc p
    where p.pronamespace = 'public'::regnamespace
      and p.prosecdef
@@ -134,7 +142,7 @@ begin
                     '[%], expected [app_owner(), calendar_push_now()]', v_auth;
   end if;
 
-  select coalesce(string_agg(p.oid::regprocedure::text, ', ' order by p.proname), '') into v_anon
+  select coalesce(string_agg(p.proname || '()', ', ' order by p.proname), '') into v_anon
     from pg_proc p
    where p.pronamespace = 'public'::regnamespace
      and p.prosecdef
