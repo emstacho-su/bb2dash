@@ -553,3 +553,12 @@ $ cd web && npx vitest run test/fixtures.phase10a.test.ts
    Duration  12.20s (environment 85%, setup 14%, transform 1%)
 exit=0
 ```
+
+## Task 10 — runner form
+
+```
+$ node scripts/db-test.mjs --only phase10b_grade_model.sql
+PASS  phase10b_grade_model.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
