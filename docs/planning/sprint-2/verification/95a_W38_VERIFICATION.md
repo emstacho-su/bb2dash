@@ -191,7 +191,60 @@ Commit: `feat(15-02): scripts package with pg pinned, .env.example line, db/test
 
 ## Task 3 — `--list` over today's suite
 
-_(pending in this wave — filled in below when run)_
+Brief's check: `node scripts/db-test.mjs --list | grep -c "^unit "` → 17 on W-38's branch before
+task 7; `… | grep -c "phase10a_load_fixtures.sql + "` → 2;
+`… | grep -c "phase12b_load_fixture.sql + "` → 1.
+
+```
+$ node scripts/db-test.mjs --list | grep -c "^unit "
+17
+$ node scripts/db-test.mjs --list | grep -c "phase10a_load_fixtures.sql + "
+2
+$ node scripts/db-test.mjs --list | grep -c "phase12b_load_fixture.sql + "
+1
+```
+
+The plan itself, and its exit code:
+
+```
+$ node scripts/db-test.mjs --list
+unit 01  inbox_apply_090_attention_archive.sql
+unit 02  phase10a_load_fixtures.sql + phase10a_stage_attempts.sql
+unit 03  phase10a_load_fixtures.sql + phase10a_stage_gradebook.sql
+unit 04  phase10b_grade_model.sql
+unit 05  phase10b_round2.sql
+unit 06  phase12b_073_workload_visibility.sql
+unit 07  phase12b_074_reading_file_links.sql
+unit 08  phase12b_075_shared_column_restamp.sql
+unit 09  phase12b_076_rls_initplan_and_truncate.sql
+unit 10  phase12b_077_inbox_feedback.sql
+unit 11  phase12b_078_status_fold_and_auto_graded.sql
+unit 12  phase12b_082_083_planner_series.sql
+unit 13  phase12b_084_shared_column_conflict.sql
+unit 14  phase12b_load_fixture.sql + phase12b_085_stage_attempts_v4.sql
+unit 15  phase12b_086_reading_link_settles.sql
+unit 16  phase12b_087_auto_graded_sticks.sql
+unit 17  phase12b_089_work_items_due_on.sql
+EXIT=0
+```
+
+17 units out of the 19 `.sql` files in `db/tests/`: the two loaders are not units of their own. The
+new `db/tests/README.md` is ignored, because the plan takes only `*.sql`. `--list` opened no
+connection (asserted in task 1's suite, and the command needs no DSN, which there is none of on
+this machine yet).
+
+Offline cross-check that the whole suite would get past lint, so no unit is refused when the
+credential arrives:
+
+```
+$ node -e "…buildPlan(readdirSync('db/tests'))… lintUnitText(loader+test)…"
+units 17 lint failures 0
+```
+
+**Task 3: PASS.**
+
+Commit: `feat(15-03): record --list over today's suite (17 units, 3 with loaders)` — the record
+only: `--list` needed no new code beyond task 1's.
 
 ---
 
