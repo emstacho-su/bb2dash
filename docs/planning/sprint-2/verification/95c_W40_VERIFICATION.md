@@ -524,3 +524,237 @@ mcp-server ci` (exit 0) fixes it, and the build and smoke then pass. The PM will
 in `bb2dash-wt-15` at task 16's integration copy — it is a worktree setup step, not a code failure.
 
 R-78's proof line for this row: three search modes answer 200 and the hybrid median is ≤ 60 ms.
+
+---
+
+# Round 2 — review-gate findings (2026-09-27)
+
+All four land in `db/tests/phase15_101_search_path_pin.sql`. **Migrations 101 and 102 are on prod
+and were not touched**: their blobs are still `53c294e0900281d084ec7b19b8436ef8` and
+`000134a5d273eabf668eeb9f71ebd923`, one commit each, and nothing was applied in round 2.
+
+## R2-1 — guard (a) needed `d.classid = 'pg_proc'::regclass`
+
+`pg_depend.objid` is only meaningful together with `classid`: oids are unique per catalogue, not
+across catalogues. Without the `classid` term, any extension-dependent entry — a type, a relation,
+an operator — whose oid happened to equal a function's oid would silently excuse that function from
+the guard, and the exclusion would widen every time an extension was installed.
+
+Fixed in both places the predicate appears in the file: guard (a) itself and the summary row's
+`public_functions` count.
+
+### The corrected predicate still counts 0
+
+```
+unpinned_loose_predicate | unpinned_corrected_predicate | loose_predicate_excuses
+                       0 |                            0 | (none today)
+```
+
+### I could not force a RED, and I am not going to claim one
+
+The flaw is **latent, not active**. Making it fire needs an oid collision between a function and a
+non-`pg_proc` extension-dependent catalogue entry, which cannot be manufactured on demand — oids
+come from the server's counter, not from anything a transaction controls. What can be shown is the
+size of the surface it would fire on:
+
+```
+dependent_catalogue | extension_owned_rows | objids_that_also_name_a_function
+pg_operator         |                   40 |                               0
+pg_type             |                   30 |                               0
+pg_opclass          |                   24 |                               0
+pg_opfamily         |                   24 |                               0
+pg_cast             |                   23 |                               0
+pg_class            |                   11 |                               0
+pg_am               |                    2 |                               0
+pg_namespace        |                    2 |                               0
+pg_language         |                    1 |                               0
+```
+
+157 extension-owned `pg_depend` rows sit outside `pg_proc`; none collides with a function oid today.
+So **migration 101's applied result was correct on the catalogue of 2026-09-27** — which is why it
+is left exactly as applied rather than patched. The file now says so in a comment naming 101 and its
+section 2, and states that a future replay of 101 must not be trusted as a check: this test is the
+authoritative standing guard for the rule. No 103 was written — 103 and 104 are reserved for grant
+gaps, and this is not one.
+
+### Check
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```
+
+## R2-2 — `set_config(name, NULL, true)` resets a GUC, it does not store NULL
+
+`current_setting` then yields `''`, so the placeholder was silently the wrong type of empty. Two
+consequences: a null `bb_file_relpath` made guard (e) compare `NULL is distinct from ''` and raise
+although both paths agreed, and an empty `bb_files` made `current_setting('w40.file_id')::bigint`
+fail on a cast instead of on the thing the guard is about.
+
+Fixed by storing a `coalesce(…, '<null>')` sentinel in all four header values and comparing against
+it on both sides — in guard (e) and in the "nothing was written" `gcal_dirty` check. `<null>` cannot
+collide with a real value here: a relpath always contains `/`, a file id is digits, `gcal_dirty` is a
+boolean and `search_path` is always set. A new assertion also refuses an empty `bb_files` outright,
+because guards (d) and (e) would otherwise pass by vacuity.
+
+### The failure mode, forced inside a rolled-back transaction
+
+Using an id no `bb_files` row has, so `bb_file_relpath` returns null on both sides — i.e. the two
+paths **agree**, and a correct guard must not raise:
+
+```
+old stored=[] is_null=false
+| OLD GUARD RAISED: FAIL bb_file_relpath returned [null] under an empty search_path and [] under the default
+| NEW GUARD: both paths agree on null, no raise
+| EMPTY GUC CAST: invalid input syntax for type bigint: ""
+```
+
+The first line is the bug itself: `set_config(..., NULL, true)` stored `''`, not null. The second is
+the false FAIL the old code would have raised. The third is the fix. The fourth is the cast an empty
+`bb_files` would have hit.
+
+### Check
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```
+
+## R2-3 — guard (b) string-matched a reloption instead of parsing its value
+
+Postgres stores a reloption with the spelling it was given, so `with (security_invoker = on)` is
+stored as `security_invoker=on`. The old exact match on `security_invoker=true` would report such a
+view as running as its owner — a **false FAIL on a view that is in fact safe**. Now the value is
+split off and parsed, accepting the spellings Postgres itself accepts for a boolean reloption:
+`true`, `on`, `1`, `yes`, `t`, `y`.
+
+### The failure mode, forced inside a rolled-back transaction
+
+Three probe views created with the three spellings, one of them genuinely off:
+
+```
+stored_spellings:        w40_probe_1 stores security_invoker=1 | w40_probe_off stores security_invoker=off | w40_probe_on stores security_invoker=on
+old_exact_match_flags:   w40_probe_1, w40_probe_off, w40_probe_on
+new_parsed_value_flags:  w40_probe_off
+```
+
+The old predicate flags all three — two of them wrongly. The new one flags only the view that really
+is owner-run, which is what guard (b) is for. Neither predicate flags any of the 15 real views: 036
+wrote them `security_invoker=true`, which is why this never fired in practice. The three probes went
+with the rollback.
+
+### Check
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```
+
+## R2-4 — section (c) rendered signatures against the caller's `search_path`
+
+`p.oid::regprocedure::text` renders schema-qualified whenever `public` is not on the current path, so
+the same catalogue compared as `[public.app_owner(), public.calendar_push_now()]` against the literal
+`'app_owner(), calendar_push_now()'` and the guard raised for no reason. Not hypothetical: the file's
+own header offers "paste the whole file into one `execute_sql` call" as a supported route, migration
+100 sets no `search_path` for `db_test_runner`, and guard (d) later sets the path to `''` in this very
+file — so the rendering rested on a cluster default nobody in this repo controls. Now compares
+`p.proname || '()'`; both functions take no arguments, so that is their full signature.
+
+### The failure mode, forced inside a rolled-back transaction
+
+`set local search_path = ''` — exactly what guard (d) does later in the same file:
+
+```
+old_regprocedure_render: public.app_owner(), public.calendar_push_now()
+new_proname_render:      app_owner(), calendar_push_now()
+old_would_raise:         true
+new_would_raise:         false
+```
+
+### Check
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```
+
+---
+
+## The whole suite on this branch — and why it is not 21 green
+
+```
+$ node scripts/db-test.mjs; echo $?
+PASS  inbox_apply_090_attention_archive.sql
+FAIL  phase10a_stage_attempts.sql  FAIL IST.323/quiz-01 has 3 attempt row(s), expected 2
+FAIL  phase10a_stage_gradebook.sql  FAIL 2 course(s) disagree on column count between bb_raw and v_gradebook_latest
+FAIL  phase10b_grade_model.sql  duplicate key value violates unique constraint "grade_column_links_pkey"
+PASS  phase10b_round2.sql
+PASS  phase12b_073_workload_visibility.sql
+PASS  phase12b_074_reading_file_links.sql
+PASS  phase12b_075_shared_column_restamp.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+FAIL  phase12b_077_inbox_feedback.sql  FAIL v_inbox_feedback is empty - prod has closed rows with notes
+FAIL  phase12b_078_status_fold_and_auto_graded.sql  FAIL 0 of the 4 advanceable rows read graded
+PASS  phase12b_082_083_planner_series.sql
+FAIL  phase12b_084_shared_column_conflict.sql  FAIL the IST.323 shared-column row is not dismissed
+PASS  phase12b_085_stage_attempts_v4.sql
+PASS  phase12b_086_reading_link_settles.sql
+PASS  phase12b_087_auto_graded_sticks.sql
+FAIL  phase12b_089_work_items_due_on.sql  FAIL the Lab #1 fixture row is gone from v_work_items
+PASS  phase15_101_search_path_pin.sql
+PASS  phase15_102_planner_series_orphan.sql
+db-test: passed 12, failed 7, units 19
+EXIT=1
+```
+
+**`passed 21, failed 0, units 21` is not reachable from this branch, and I am not going to pretend
+it is.** Two of the 21 units do not exist here: `phase15_100_db_test_runner_role.sql` (W-38's task 7)
+and `phase9_transform_states.sql` (W-39's task 11) are both ABSENT, so `--list` counts 19. Three of
+the seven failures are the repairs W-39 owns and has not landed on this branch — `phase10a_stage_gradebook`
+(P-30), `phase10b_grade_model` (P-2, and its message is exactly the P-2 duplicate key) and
+`phase10a_stage_attempts`. Task 17's 21-green run is the PM's, on `feat/db-hygiene-15` after all
+three workers integrate.
+
+### The four others are new, and the PM should see them
+
+`phase12b_077`, `078`, `084` and `089` are red for reasons brief 95 does not account for (it names
+two red files as at 2026-09-24). **They are not mine, and I checked rather than assumed it.**
+
+Decisive test — 101's pin undone inside a rolled-back transaction, then the facts those units assert
+on re-read:
+
+```
+state                                    | unpinned_in_txn | lab1_in_view | lab1_in_assignments | work_items_rows | inbox_feedback_rows
+with 101 UNDONE inside this transaction   |               7 |            0 |                   0 |             176 |                   0
+```
+
+Identical to the pinned readings. The underlying facts are base data, not function behaviour:
+`IST.323/lab-1-performing-a-ransomware-attack` **is not in `assignments` at all** (so 089's row is
+gone from the base table, not filtered out of the view), and `v_inbox_feedback` is empty on prod.
+That looks like sync / `/inbox-apply` drift, plus the date rolling to 2026-09-28 mid-session — which
+is precisely the risk brief 95 §Open items row 6 carries for units built on literal dates. It needs a
+P-30-shaped fix in whichever phase owns it; it is not a Phase 15 migration problem.
+
+Two further reasons 101 cannot change any result: there is **no schema named after the session user**
+(`select count(*) from pg_namespace where nspname = current_user` → 0), so the `"$user"` entry on the
+default path resolved to nothing; and `pg_temp` is named last, so it cannot shadow `public`. 102 is
+inert here too — prod holds 0 `planner_event_series` rows, so its trigger has never matched one.
+
+### Prod after all of round 2's experiments
+
+```
+unpinned_after_rollback | probe_views_left | trigger_present | md5_101                          | md5_102
+                      0 |                0 |               1 | 53c294e0900281d084ec7b19b8436ef8 | 000134a5d273eabf668eeb9f71ebd923
+```
+
+Both migrations are still on prod, byte-identical to their committed blobs. Nothing was applied,
+edited or left behind in round 2: the reset-the-pin experiment and the three probe views all went
+with their rollbacks.
