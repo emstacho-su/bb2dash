@@ -35,15 +35,24 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
 * Facts live in `assignments`; Stack's planner state lives in `assignment_progress` /
   `reading_progress` and is **never overwritten by syncs** — one sanctioned exception (Phase 12b):
   a newly posted or changed Blackboard score advances `assignment_progress.status` to `graded`,
-  forward-only, never from excused or DNF. Status values and labels live in
-  `web/src/lib/progress-status.ts`.
+  forward-only, never from excused or DNF. A second, narrower path: `/inbox-apply` (which runs as
+  `bb-sync` step 0) has written `assignment_progress` from Stack's answered Inbox items (scores,
+  notes, one inserted row; `docs/inbox-decisions/2026-09-22.md`, `2026-09-23.md`); whether it is
+  sanctioned or narrowed is pending Stack's word (sprint 2 batch item 59). `reading_progress` has no
+  such path. Status values and labels live in `web/src/lib/progress-status.ts`.
 * Grades show one deterministic figure, "graded so far" (`web/src/lib/graded-so-far.ts`), computed
   only from mirrored Blackboard scores, `grade_components` and column links; what it leaves out is
   named under it. No what-if, no projections.
 * Blackboard ingest runs inside a logged-in Blackboard Ultra tab (`ingest/bb_crawler.js`)
   → `bb_raw` → SQL transforms populate typed tables. See `PHASE2_FINDINGS.md` and the
   ingest cadence runbook.
-* `course context/` holds professors' materials and is gitignored on purpose.
+* `course context/` holds professors' materials and is gitignored on purpose. The skill-side copy
+  into it (`bb-sync` step 4b, `ingest/pull_files.mjs`) is sanctioned; the declined OneDrive mirror
+  (v3 §4 D-7) is Phase 12's dropped desktop mirror, not this copy.
+* Desktop shell (Phase 12): the Sync button **runs** `claude "/bb-sync <id>"` in Windows Terminal,
+  and the shell's session is the web app's cookie in the `persist:bb2dash` partition. Requirements
+  v2's R-13 "opens the terminal with the command ready" and R-23 "session in `safeStorage`" were
+  superseded on 2026-09-16 (DECISIONS).
 * Retrieval: hybrid mode of the `search` edge function is the default (see EVAL doc).
   Search UIs must scrub/label PPTX `[notes]` speaker-note markers and `Page N` headers.
 * GUI: layout spec = the Nocturne artboards; CSS Modules + custom properties, no Tailwind.

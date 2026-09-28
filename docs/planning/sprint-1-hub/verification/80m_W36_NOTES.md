@@ -82,7 +82,7 @@ Edited: `queries.plannerEvents.ts`, `planner-event-form-state.ts`, `PlannerEvent
 
 * `planner-recurrence.test.ts` — 26 examples: the three rules, both DST directions, the monthly
   skips (31st, 30th, 29 February), all-day midnights, every refusal, `restateSeriesRows`.
-* `planner-recurrence.props.test.ts` — 14 seeded `fast-check` properties over random dates, rules
+* `planner-recurrence.props.test.ts` — 14 ~~seeded~~ `fast-check` properties (corrected 2026-09-24: unseeded unless `FC_SEED` is set; `fc-params.ts` has no default seed) over random dates, rules
   and zones: count bounds (1..52 or a refusal), strictly forward with no repeated date, the same
   local time on every occurrence, DST weeks (where the offsets differ, the instants are *not* a
   fixed +7 days), the day of the month never moves, all-day midnights and spans, the cap is exact,

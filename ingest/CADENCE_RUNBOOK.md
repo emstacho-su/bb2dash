@@ -6,8 +6,9 @@ Blackboard sessions expire overnight, so the task's first action is always a log
 is on NetID / microsoftonline, it stops and reports SESSION EXPIRED instead of guessing.
 
 **Status after Phase 9 (2026-09-10): steps 3, 5 and 6 are automated and struck through below.**
-Steps 1 and 2 are cheap checks a human or a session still runs; step 4 stays manual until Electron
-for COURSE files. The whole loop is now: Stack presses Sync in the app → `claude "/bb-sync <id>"`
+Steps 1 and 2 are cheap checks a human or a session still runs; step 4 stays manual ~~until Electron~~
+for COURSE files (corrected 2026-09-24: Phase 12's Electron shell does no downloads, by R-23; step 4
+is scripted since 2026-09-22 but still runs outside the sync, by hand). The whole loop is now: Stack presses Sync in the app → `claude "/bb-sync <id>"`
 runs steps 1–2 → `transform_tick()` on pg_cron does step 3 and step 5 → `bb-sync` does step 6. See
 `skills/bb-sync/SKILL.md`.
 
@@ -80,8 +81,11 @@ by `stage_attempts` (migration 050). Since 2026-09-22 4b runs the same script as
 5. ~~**Record.**~~ **AUTOMATED (Phase 9).** `run_transform` opens the `sync_runs` row before the first
    read and closes it with `status`, `finished_at` and the `summary` envelope
    (`{stages, changes, attention_raised}`); each stage writes its own `sync_stage_runs` row, which is
-   what `v_data_freshness` and the app's freshness line read. A run that dies leaves a `running` row
-   that the next tick reaps to `failed` after 30 minutes. Do not `insert into sync_runs` by hand.
+   what `v_data_freshness` and the app's freshness line read. ~~A run that dies leaves a `running` row
+   that the next tick reaps to `failed` after 30 minutes.~~ Corrected 2026-09-24: the row is opened and
+   closed inside the transform's one transaction, so no `running` row is ever committed (every prod row
+   has `started_at = finished_at`); a run that dies rolls back with its row, and the 30-minute reaper
+   has nothing to reap. Do not `insert into sync_runs` by hand.
 6. **Report to Stack.** Done by the `bb-sync` skill from `summary->'changes'` and the open
    `attention_items` counts: what changed in plain language (new due dates, items re-created, files
    added) and anything he must confirm, which he answers in the app Inbox at `/inbox`. Grades are

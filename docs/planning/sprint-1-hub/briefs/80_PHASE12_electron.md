@@ -49,6 +49,7 @@ desktop/
   tsconfig.json
   electron-builder.yml        win target "dir"; appId su.stack.bb2dash; productName bb2dash; icon build/icon.ico
   build/icon.ico              placeholder glyph; the real icon is Phase 13's (C-3 carried item)
+                              [superseded by Q4 below: derived from the eclipse-ring build/icon.png; noted 2026-09-24]
   src/main/index.ts           bootstrap: AUMID, single-instance lock, config, window, poller, sync watcher
   src/main/config.ts          schema + defaults + load of userData/config.json
   src/main/window.ts          BrowserWindow factory; window-state persistence
@@ -266,7 +267,9 @@ byte-identical. No other phase is in flight; Phase 13 touches `web/` only.
 * A grade toast follows `v_gradebook_history`'s own rule: first observation of a score, or a score
   that differs from the run before.
 * R-26's "web app shows the same as an in-app toast/list" is not this phase: `web/` is untouched.
-* The taskbar icon is a placeholder glyph until Phase 13.
+* ~~The taskbar icon is a placeholder glyph until Phase 13.~~ Superseded by Q4 below: the icon is the
+  eclipse-ring PNG Stack chose (`desktop/build/icon.png` → `icon.ico`); whether it is the final
+  direction is C-3's question (noted 2026-09-24).
 * The PM writes the exported signatures of `rest.ts` and `session.ts` (types only) into the phase
   branch before worker branches are cut, so W-26 builds against them from day one.
 

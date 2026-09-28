@@ -3,7 +3,9 @@
 Date: 2026-09-14. PM: the Fable session. Reviewer: Stack (this stream is **COLLABORATE** — the
 session does the reading and the reconciliation, Stack makes every call). Runs as a **parallel
 stream in the Phase 10 / 11 sprint**, and is a **prerequisite for R-12** (methodology model +
-what-if): a grade model computed from a wrong scheme is worse than no model.
+what-if): a grade model computed from a wrong scheme is worse than no model. *(Superseded: Stack
+stubbed V-1 on 2026-09-16 and it no longer gates R-12, which shipped in 10b; 12b removed what-if on
+2026-09-17. See DECISIONS 2026-09-16 and 2026-09-17. Noted 2026-09-24.)*
 
 ## Why
 
@@ -83,7 +85,8 @@ rank weights, parent), every assignment's component link and points, and the ari
 * The PM stream turns accepted corrections into **one data migration**
   (`0NN_grading_reconciliation.sql`, number from the Phase 10 range) that updates the rows,
   sets `source = 'syllabus'` or `'blackboard'` as appropriate, `confidence = 'confirmed'`, and
-  writes the citation into `notes`. Applied to prod before Phase 10b (R-12) starts. Rows Stack
+  writes the citation into `notes`. ~~Applied to prod before Phase 10b (R-12) starts.~~ (10b shipped
+  without it once V-1 was stubbed, 2026-09-16.) Rows Stack
   marked *ask the professor* stay `tentative` until answered.
 
 ### Acceptance
