@@ -599,6 +599,27 @@ test('a 6543 DSN exits 2 before any client is opened and never prints the DSN', 
   assert.match(out.text(), /6543/);
 });
 
+// Round-2 finding 4.
+test('an empty db/tests exits 2 rather than reporting green having run nothing', async () => {
+  const dir = emptyDir('db-test-empty-');
+  const out = collector();
+  const factory = fakeFactory({ onQuery: () => passResult('x') });
+  const code = await run([], {
+    out: out.write,
+    testsDir: dir,
+    env: { BB2DASH_TEST_DB_URL: DSN },
+    clientFactory: factory,
+  });
+  assert.equal(code, 2);
+  assert.equal(factory.opened.length, 0);
+  assert.match(out.lines[0], /^db-test: no units found in /);
+  assert.equal(
+    out.lines.some((l) => l.includes('units 0')),
+    false,
+    'it must not print a green summary',
+  );
+});
+
 test('a connection failure exits 2 and its message is redacted', async () => {
   const dir = tmpTestsDir(['a.sql']);
   const out = collector();

@@ -462,6 +462,12 @@ export async function run(argv, deps = {}) {
     else if (mode === 'only') units = [unitForOnly(target, testsDir)];
     else if (mode === 'file') units = [unitForFile(target, testsDir)];
 
+    // A relocated script or a renamed directory must not report green having run nothing.
+    // `--only` and `--file` already exit 2 on a missing file, from unitForOnly / unitForFile.
+    if (mode === 'all' && units.length === 0) {
+      throw new RunnerError(`no units found in ${testsDir}: nothing was run`);
+    }
+
     // Lint every unit before the credential is read and before any client is opened.
     for (const unit of units) {
       unit.text = readUnitText(unit);
