@@ -148,3 +148,53 @@ extensions`.
 'final exam date' / 'attendance policy' loop send the same stored `gte-small` vector; what the
 second iteration adds is a second call. The two phrases exercise the two functions that do take
 text (`search_file_text`, `hybrid_search_file_text`).
+
+---
+
+## Task 15 — `db/migrations/101_search_path_pin.sql` written; **the apply is wave 2**
+
+**The check, as brief 95 §Task list row 15 writes it:**
+
+> runner `--only phase15_101_search_path_pin.sql` → `db-test: passed 1, failed 0, units 1`;
+> `select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and not exists (…deptype = 'e'…) and not exists (…'search_path=%'…)` → 0 (7 today)
+
+**Not done yet, and why.** Brief 95 §Tables and migrations fixes the apply order 100 → 101 → 102,
+and §Workers repeats it: "101 and 102 are applied only once 100 is on prod". Migration 100 (W-38's
+`db_test_runner` role) is not on prod as at this note's writing:
+
+```
+select count(*) from supabase_migrations.schema_migrations where name ~ '^10[0-4]_'   -->  0
+```
+
+So this task's own check is **waiting on 100 being on prod**, and its runner form is additionally
+waiting on `scripts/db-test.mjs` and Stack's `.env.local` (task 5). What is done in wave 1 is the
+file, plus the dry run that proves it applies clean and turns the task-14 test green.
+
+**The file's shape.** 038's `do $$ … foreach f in array array[…] … execute format(…) … $$` loop
+over the seven signatures brief 95 §Contract names, then 036's guard shape (raise if any
+non-extension function in `public` has no `search_path=` entry in `proconfig`). Additive only:
+no drop, no rename, no body change — the only thing that moves on each function is its config.
+
+Two details worth naming:
+
+* `pg_temp` is last in `public, pg_temp` on purpose. A schema that is not first cannot pre-empt
+  `public`, which is the whole point of the pin.
+* `extensions` is deliberately **not** on the list. 021–024 wrote the distance operator as an
+  explicit `operator(extensions.<=>)` in both vector functions, so they need no schema on the path
+  to find it — confirmed by reading `pg_get_functiondef` of both before writing, and proved by the
+  dry run's green (d) guard.
+
+### Dry run, 2026-09-27 — `begin; <101>; <the whole task-14 test>; rollback;`
+
+```
+[{"result":"phase15_101_search_path_pin: PASS","public_functions":52,"default_search_path":"\"$user\", public, extensions","relpath_checked":"IST.323/syllabus_policy/323Fall26V1.3.1.docx"}]
+```
+
+101's own guard block raised nothing, so after the seven `alter function`s there were 0 unpinned
+non-extension functions in `public`, and the test's (a) through (f) all passed in the same
+transaction. `apply_migration` was **not** called.
+
+### Waiting on, for wave 2
+
+* migration 100 on prod (W-38), then `apply_migration` under the name `101_search_path_pin`
+* `scripts/db-test.mjs` on this branch and Stack's `.env.local`, for the runner form of the check
