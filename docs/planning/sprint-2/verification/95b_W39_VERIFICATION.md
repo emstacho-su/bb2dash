@@ -505,3 +505,51 @@ exactly why §5 now names its own attempt ids.
 phase10a_stage_attempts.sql` → `db-test: passed 1, failed 0, units 1` each, with the loader in front
 of both (the frozen loader map). Both files keep their lint shape: first statement `begin;`, last
 `rollback;`, no top-level `commit`/`end`, `: PASS` row at the end.
+
+---
+
+# Wave 2 — the runner form (2026-09-27)
+
+`feat/db-hygiene-15` merged into this branch (merge `bff50c9`), so W-38's `scripts/db-test.mjs`, its
+fixtures and migration 100 are on disk, and `npm --prefix scripts ci` installed `pg`
+(`added 14 packages … found 0 vulnerabilities`; Node v24.13.0). `.env.local` was already in the
+worktree, gitignored (`git check-ignore -q .env.local` → 0), and is neither committed nor printed
+here; its `?uselibpqcompat=true&sslmode=require` is left exactly as the PM wrote it.
+
+The loader map puts `phase10a_load_fixtures.sql` in front of both phase10a units by itself, with no
+argument from me — `node scripts/db-test.mjs --list`:
+
+```
+unit 02  phase10a_load_fixtures.sql + phase10a_stage_attempts.sql
+unit 03  phase10a_load_fixtures.sql + phase10a_stage_gradebook.sql
+unit 04  phase10b_grade_model.sql
+unit 18  phase9_transform_states.sql
+```
+
+## Task 9 — runner form
+
+```
+$ node scripts/db-test.mjs --only phase10a_stage_gradebook.sql
+PASS  phase10a_stage_gradebook.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+
+$ node scripts/db-test.mjs --only phase10a_stage_attempts.sql
+PASS  phase10a_stage_attempts.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+Both match the brief's row. W-40 was applying 101 and then 102 to prod during these runs; no unit
+raised, and nothing in any output names a pinned `search_path` or the new planner trigger.
+
+## Task 8 — the guard re-run on the merged tree
+
+```
+$ cd web && npx vitest run test/fixtures.phase10a.test.ts
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  22:59:44
+   Duration  12.20s (environment 85%, setup 14%, transform 1%)
+exit=0
+```
