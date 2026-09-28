@@ -137,7 +137,55 @@ Commit: `feat(15-01): db-test runner core with its unit tests (RED first)`
 
 ## Task 2 — package, lockfile, `.env.example`, `db/tests/README.md`
 
-_(pending in this wave — filled in below when run)_
+Brief's check: `npm --prefix scripts ci` exit 0; `grep -c "^BB2DASH_TEST_DB_URL=" .env.example` → 1;
+`git check-ignore -q .env.local; echo $?` → 0.
+
+`scripts/package.json` declares one dependency, `pg` **8.23.0**, pinned exact (no range), with
+`scripts/package-lock.json` committed beside it. `scripts/node_modules/` is covered by the repo's
+existing `node_modules/` ignore rule (`git check-ignore -q scripts/node_modules` → 0).
+
+`node_modules` was deleted first, so `npm ci` really installed from the lockfile:
+
+```
+$ rm -rf scripts/node_modules && npm --prefix scripts ci
+npm ci exit=0
+
+added 14 packages, and audited 15 packages in 1s
+
+found 0 vulnerabilities
+```
+
+```
+$ grep -c "^BB2DASH_TEST_DB_URL=" .env.example
+1
+```
+
+```
+$ git check-ignore -q .env.local; echo $?
+0
+```
+
+`db/tests/README.md` is written: the once-per-machine setup (`npm --prefix scripts ci`, the
+`BB2DASH_TEST_DB_URL` line in the gitignored `.env.local`, the 5432-not-6543 rule and why), the six
+commands with their output and exit codes, the loader map as a table with the rule that a loader
+never runs alone, the pass rule (`: PASS` in a result row's first column) with the repo's
+`raise exception 'FAIL …'` convention, the lint rules and that a lint failure exits 2 without
+connecting, the three fixtures, and the `phaseNN_NNN_name.sql` naming convention (`phaseNN_name.sql`
+where there is no single migration) as a convention, not a lint rule. It says outright that it
+supersedes the sprint-1 files' "RUN IT" headers.
+
+Re-run of task 1's check after `scripts/package.json` (`"type": "module"`) landed, to prove it
+changed nothing:
+
+```
+ℹ tests 42
+ℹ pass 42
+ℹ fail 0
+```
+
+**Task 2: PASS.**
+
+Commit: `feat(15-02): scripts package with pg pinned, .env.example line, db/tests README`
 
 ---
 
