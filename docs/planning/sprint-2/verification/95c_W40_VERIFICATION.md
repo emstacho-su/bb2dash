@@ -74,3 +74,77 @@ All five cases pass under the trigger, the whole-table orphan count is 0, and
   holds no TEMP privilege (the `phase12b_082_083` convention).
 * **Nothing was ever committed.** A committed `planner_events` row reaches Stack's real Google
   calendar within two minutes (DECISIONS 2026-09-16), so every unit above ended in `rollback`.
+
+---
+
+## Task 14 — `db/tests/phase15_101_search_path_pin.sql`, RED first
+
+**The check, as brief 95 §Task list row 14 writes it:**
+
+> before 101: runner `--only phase15_101_search_path_pin.sql` →
+> `db-test: passed 0, failed 1, units 1`, and
+> `node scripts/db-test.mjs --only phase15_101_search_path_pin.sql | grep -c "FAIL 7 functions without search_path:"` → 1
+> (guard (a) raises `format('FAIL %s functions without search_path: %s', n, list)`)
+
+**Runner form: waiting on W-38**, as for task 12. The paste form of the same unit was run instead;
+the `grep` half of the check is satisfied by the message text, quoted verbatim below.
+
+**The six guards, exactly as row 14 lists them:**
+
+| | guard | state today |
+|---|---|---|
+| (a) | 0 non-extension public functions lack `search_path` | **RED, 7** |
+| (b) | 0 public views lack `security_invoker` | already green (036) |
+| (c) | SECURITY DEFINER functions executable by `authenticated` = exactly `app_owner()`, `calendar_push_now()`; by `anon` = none | already green (038, 068) |
+| (d) | under `set local search_path = ''`, `search_file_text`, `match_file_text`, `hybrid_search_file_text` each return ≥ 1 row for 'final exam date' and 'attendance policy' (vector = a stored `gte-small` embedding) | **RED** |
+| (e) | `public.bb_file_relpath(id)` equals its value under the default path | **RED** |
+| (f) | `calendar_push_now()` as a stranger uid raises "only the owner" | already green (068) |
+
+(a) is first in the file because its message is what the phase's RED check greps for.
+
+### RED output (2026-09-27) — guard (a)
+
+Command: the file's header and guard (a), pasted into one `execute_sql` call
+(`begin;` … `rollback;`).
+
+```
+ERROR:  P0001: FAIL 7 functions without search_path: bb_file_relpath(bigint), classify_bb_file(text,text,text), hybrid_search_file_text(text,vector,text,text,integer,integer,double precision,boolean), match_file_text(vector,text,text,integer,boolean), search_file_text(text,text,integer,boolean), set_updated_at(), suggested_start(text,date,numeric)
+CONTEXT:  PL/pgSQL function inline_code_block line 14 at RAISE
+```
+
+The line the check greps for is present verbatim: `FAIL 7 functions without search_path:`. The
+seven are exactly the seven brief 95 §Contract names, and they are exactly today's advisor
+`function_search_path_mutable` list (SELECT of `pg_proc` excluding extension-owned functions,
+same predicate as the DoD's task 15 check).
+
+### RED output (2026-09-27) — guards (d) and (e), with (a) taken out of the way
+
+Command: a probe of the same four calls under `set local search_path = ''`, each wrapped in its own
+exception handler so all four report rather than the first one stopping the block:
+
+```
+[{"probe":"fts=RED[42P01 relation \"bb_file_text\" does not exist] vec=RED[42P01 relation \"bb_text_embeddings\" does not exist] hyb=RED[42P01 relation \"bb_file_text\" does not exist] relpath=RED[42P01 relation \"bb_files\" does not exist] "}]
+```
+
+All four resolve their unqualified relation names against the **caller's** path today, which is the
+finding stated as behaviour rather than as a catalogue row.
+
+### GREEN, proved against a dry run of 101 (task 15's evidence too)
+
+Command: migration 101's whole text, then the whole test file minus its own `begin;`/`rollback;`,
+in one `execute_sql` call wrapped in `begin; … rollback;`.
+
+```
+[{"result":"phase15_101_search_path_pin: PASS","public_functions":52,"default_search_path":"\"$user\", public, extensions","relpath_checked":"IST.323/syllabus_policy/323Fall26V1.3.1.docx"}]
+```
+
+So `public, pg_temp` is the right value: all three retrieval functions still answer under an empty
+caller path, and `bb_file_relpath` returns the same string it returns under `"$user", public,
+extensions`.
+
+### Note on guard (d)
+
+`match_file_text` takes no text query — the embedding **is** the query — so both iterations of the
+'final exam date' / 'attendance policy' loop send the same stored `gte-small` vector; what the
+second iteration adds is a second call. The two phrases exercise the two functions that do take
+text (`search_file_text`, `hybrid_search_file_text`).
