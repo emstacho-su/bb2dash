@@ -98,8 +98,11 @@ Rules that fall out of the graph:
    file's name, byte-identical.
 7. **What each phase hands on** is the seam table in `94_SPRINT2_PHASES.md` §3.
 
-Term calendar: week 1 = Aug 24. Weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week 14
-is Thanksgiving; Nov 30 – Dec 13 is a code freeze. Phase 16's IST.323 sitting precedes 2026-12-03.
+~~Term calendar: week 1 = Aug 24. Weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week 14
+is Thanksgiving;~~ nothing is paced by week (2026-09-27: no date-paced tasks, DECISIONS). Two bounds stand:
+Nov 30 – Dec 13 is a code freeze (no merge and no prod apply inside it; it stands, DECISIONS 2026-09-27), and
+Phase 16's migration 106 is on prod before the IST.323 column is graded (2026-12-03), which the freeze makes
+before Nov 30. `docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md`'s header lists every outside bound.
 
 ## 3. The per-phase cycle (what a PM session actually does)
 
@@ -210,14 +213,18 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 * **Hold the Inbox "Apply answers" button and `/bb-sync` until Phase 20's PR-A (R-97) merges:** `/inbox-apply` still
   writes its decision notes to the OneDrive stub, not the realm vault (inbox-541..544.md landed there on 2026-09-27);
   the PM copies those four notes into the realm when PR-A lands (brief 101 §Seams). Found by the 2026-09-27 decision panel.
-* Start Task 0's Blackboard session probes by 2026-09-28 so the 14-day Duo window closes before exam week (batch item 47;
-  brief 100 Task 0); say whether you answered Yes to "Stay signed in?".
-* Before 2026-09-30, name the presentation slot (batch item 9): whether 11/4 was the SITN pick or the individual slot, and
-  which individual slot is yours (9/30, 10/14, 10/26, 11/4 or 11/16); each answer goes in as an Inbox value resolution.
+* Start Task 0's Blackboard session probes now; the Duo window is 14 days from the start (batch item 47; brief 100
+  Task 0; no date-paced tasks, DECISIONS 2026-09-27); say whether you answered Yes to "Stay signed in?".
+* Name the presentation slot whenever you know it; each B-9 answer must land before the day it names (9/30 is the
+  earliest candidate slot), a bound, not pacing (batch item 9): whether 11/4 was the SITN pick or the individual slot,
+  and which individual slot is yours (9/30, 10/14, 10/26, 11/4 or 11/16); each answer goes in as an Inbox value resolution.
 * Read the Google OAuth consent screen's publishing status; if it is still Testing, publish it and re-run
   the consent, or the calendar token dies again about 2026-10-01 17:03Z (batch item 28).
-* Phase 16's six sittings, IST.323 first, one a week (none in weeks 9 and 11), sitting 6 by 2026-11-18 so
-  that 106 is applied by 2026-11-20, before the 2026-11-30 freeze (brief 96 open item 4; batch item 11).
+* Phase 16's six sittings as fast as you can sit them, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103,
+  IST.471; 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03)
+  is the one bound (brief 96 open item 4; batch item 11; no date-paced tasks, the freeze stands, DECISIONS 2026-09-27).
+* Say whether the Nov 30 – Dec 13 code freeze still stands. Default: it stands, as a window, not pacing (DECISIONS
+  2026-09-27, no-date-paced-tasks row). If you strike it, 106's bound becomes 2026-12-03 and B-6's window goes.
 * Phase 12 proofs still his: see the three toasts and click one from a banner and one from the Action
   Center; press Sync inside the shell and confirm "command copied" (batch items 57–58).
 * Place ECN.304 Quiz 2 and Attendance with "Counts toward…" on the course Grades tab if the figure
@@ -233,7 +240,7 @@ Read in this order. Each line says what the file is for and what to look for.
 | 2 | `project-state/DECISIONS.md` (tail ~20 rows) | The newest decisions, including the 2026-09-23/24 planning rows; do not relitigate silently. |
 | 3 | `docs/planning/README.md` + `docs/planning/sprint-2/90_SPRINT2_INTAKE.md` | Where every planning doc lives (numbers never restart) and the sprint's carried-in list. |
 | 4 | `docs/planning/sprint-2/91_REQUIREMENTS_v3.md` §1–§4 | The R-numbers every sprint 2 brief cites; §2 the PM- and research-added steps; §3 Stack's items; §4 what stays declined. |
-| 5 | `docs/planning/sprint-2/94_SPRINT2_PHASES.md` + the brief of the phase at hand (`briefs/95_`–`103_`) + `docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md` §3 | The plan, the graph, the seams; the frozen Contract, MVP, DoD and task list with a deterministic check per task; that brief's residual round-3 notes, fixed or struck in the phase's own PR before workers are cut. |
+| 5 | `docs/planning/sprint-2/94_SPRINT2_PHASES.md` + `docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md` + the brief of the phase at hand (`briefs/95_`–`103_`) + `docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md` §3 | The plan, the graph, the seams; the run sheet (which run is next, its gate, concurrency, checklists, fallbacks; no calendar); the frozen Contract, MVP, DoD and task list with a deterministic check per task; that brief's residual round-3 notes, fixed or struck in the phase's own PR before workers are cut. |
 | 6 | `docs/planning/sprint-2/93_SPRINT2_RESEARCH_SYNTHESIS.md` §1 and §6; `research/92_*` for the area | What the research changed about each requirement, and the defaults taken; for Phase 14 also `82_` and `research/82_*`. |
 | 7 | `CLAUDE.md` (repo root) | The SOP and the project facts, corrected 2026-09-24. |
 | 8 | `DATA_SYNTAX.md` §search layer · `web/README.md` · `mcp-server/README.md` | The retrieval contract; the web scripts and type-regeneration step; the materials server's registration. |
@@ -247,7 +254,8 @@ quality is the topic, and `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPT
 ## 6. Session prompts, one per phase in five sessions (copy-paste; sprint 2, rewritten 2026-09-27 to the verified briefs)
 
 One prompt per phase, grouped into the five sessions below; a session pastes its prompts in the order shown, when
-its heading says. The bb2dash prompts (A1, A2, B1, B2, B3, C1, C2, E) start with `/bb2dash-pm` so the session loads
+its heading says. The order to run them, concurrency, checklists and fallbacks are in
+`docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md` (no calendar). The bb2dash prompts (A1, A2, B1, B2, B3, C1, C2, E) start with `/bb2dash-pm` so the session loads
 this file and runs the live-state checks before acting; Session D runs in the harness repo, so its prompt starts by
 naming `C:/Users/estac/agentic-harness`. Every brief was PROVISIONAL until Stack answered `93_` §5 and approved `94_`, which he did by delegation on 2026-09-27 (DECISIONS rows of that date);
 the prompts carry the PROVISIONAL line, and each phase's PM first records whatever answers he has given against its
@@ -280,10 +288,11 @@ A2 — Phase 16
 > contingency). Gate: every SQL check runs through Phase 15's runner, from 15's branch until it merges; apply 105
 > only after 100–104 are on prod and task 10a's commit is on `feat/db-hygiene-15` (if 15 has merged without 10a, ask
 > me before task 10). Run tasks 1–15, then stop with `.\scripts\validate-grading.ps1 IST.323` on my clipboard. I
-> launch it (step 2) and sit six courses, one a week,
-> none in weeks 9 and 11: IST.323 first, then IST.466, IST.352, ECN.304, GEO.103, IST.471; you spot-check three
-> citations after each. After sitting 6, write 106, rerun the invariants and open the PR with a preview, 106 applied
-> and the PR open by 2026-11-20. I walk step 1 and steps 5–10 (step 9 after ECN.304 Exam 1 posts).
+> launch it (step 2) and sit six courses as fast as I can, in the order IST.323, IST.466, IST.352, ECN.304,
+> GEO.103, IST.471; 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it,
+> 2026-12-03) is the one bound. You spot-check three citations after each. After
+> sitting 6, write 106, rerun the invariants and open the PR with a preview. I walk step 1 and steps 5–10 (step 9
+> after ECN.304 Exam 1 posts).
 > Stop at "ready when you say so".
 
 **Session B — Phases 17 and 18 in parallel, then 19** (paste B1 and B2 one after the other: each phase in its own worktrees, seams frozen in `94_` §2 rule 2 and §3; paste B3 once both are merged, because 19 builds on both)

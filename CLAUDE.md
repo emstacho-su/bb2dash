@@ -37,9 +37,10 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   a newly posted or changed Blackboard score advances `assignment_progress.status` to `graded`,
   forward-only, never from excused or DNF. A second, narrower path: `/inbox-apply` (which runs as
   `bb-sync` step 0) has written `assignment_progress` from Stack's answered Inbox items (scores,
-  notes, one inserted row; `docs/inbox-decisions/2026-09-22.md`, `2026-09-23.md`); whether it is
-  sanctioned or narrowed is pending Stack's word (sprint 2 batch item 59). `reading_progress` has no
-  such path. Status values and labels live in `web/src/lib/progress-status.ts`.
+  notes, one inserted row; `docs/inbox-decisions/2026-09-22.md`, `2026-09-23.md`); sanctioned
+  narrowly on 2026-09-27 (DECISIONS, batch item 59): only rows named in an Inbox item Stack answered
+  himself, status only when his words say so, scores as Blackboard shows them, every write in that
+  day's log. `reading_progress` has no such path. Status values and labels live in `web/src/lib/progress-status.ts`.
 * Grades show one deterministic figure, "graded so far" (`web/src/lib/graded-so-far.ts`), computed
   only from mirrored Blackboard scores, `grade_components` and column links; what it leaves out is
   named under it. No what-if, no projections.
