@@ -28,9 +28,9 @@
 --
 -- NOTHING IS COMMITTED. The file opens its own transaction and its last statement is `rollback`.
 -- It registers one synthetic crawl and writes three `sync_runs` rows, all under fixture run ids
--- (`00000000-0900-…`), never a real crawl's. `transform_tick()` is called inside that transaction:
--- it folds nothing (the fixture crawl already has its `sync_runs` row, and prod held no unfolded
--- registered crawl), and anything it did touch would roll back with the rest. The bb_course_id is
+-- (`00000000-0900-…`), never a real crawl's. `transform_tick()` is called inside that transaction,
+-- and section 2 asserts up front that it has nothing of prod's to fold and no real run to reap -- see
+-- the premise block there; anything it did touch would roll back with the rest. The bb_course_id is
 -- a real shell so `bb_resolve_course` finds a course for the announcement to hang on; the payload
 -- carries no `course` key, so no real `courses` row is even read for an upsert.
 
@@ -117,6 +117,50 @@ end $$;
 -- =============================================================================================
 -- 2. reaped: a run still `running` after 31 minutes reads failed, and a fresh one is left alone
 -- =============================================================================================
+-- THE PREMISE FOR CALLING transform_tick(), ASSERTED RATHER THAN ASSUMED.
+-- The reaper only exists inside `transform_tick()`, so proving it means calling the whole tick, and
+-- the tick does two other things that reach outside this unit: it folds every registered crawl that
+-- is complete and unfolded, and its reaper pass updates EVERY `sync_runs` row still `running` after
+-- thirty minutes. Inside this transaction both roll back, but neither is free: a fold would take
+-- write locks on `bb_raw`, `bb_gradebook` and `sync_runs` for the rest of the unit, a real stale row
+-- would be locked and would also be counted in `reaped`, and the scheduled pg_cron tick runs every
+-- two minutes against the same rows while the unit holds a single 60 s `statement_timeout`
+-- (migration 100). That is a unit that flakes, or briefly blocks the live tick, with nothing wrong in
+-- 035 or 039. So the two things this unit needs are checked first, and it says which one failed in
+-- plain words instead of going red somewhere further down.
+do $$
+declare v_unfolded int; v_stale int;
+begin
+  -- 1. Nothing for the tick's fold pass to pick up. Same predicate as the tick's own loop (044 §1).
+  select count(*) into v_unfolded
+    from agent_requests a
+   where a.kind = 'sync' and a.run_id is not null
+     and a.state in ('claimed', 'done')
+     and not exists (select 1 from sync_runs s
+                      where s.run_id = a.run_id and s.scope is distinct from 'unregistered')
+     and exists (select 1 from bb_raw b where b.run_id = a.run_id and b.kind = 'course')
+     and (exists (select 1 from bb_raw b where b.run_id = a.run_id and b.kind = 'calendar')
+          or (select max(b.captured_at) from bb_raw b where b.run_id = a.run_id)
+             < now() - interval '3 minutes');
+  if v_unfolded > 0 then
+    raise exception 'FAIL premise: % registered crawl(s) are waiting to be folded, so transform_tick() '
+                    'would fold real data inside this test transaction. The scheduled tick drains them '
+                    'every two minutes; run this unit again once it has.', v_unfolded;
+  end if;
+
+  -- 2. No real run is already old enough to reap, so the reaper touches nothing but this unit's own
+  --    row and the `reaped` count it reports is this unit's own. Checked before the seed below, so
+  --    every row it can see is a real one.
+  select count(*) into v_stale
+    from sync_runs s
+   where s.status = 'running' and s.started_at < now() - interval '30 minutes';
+  if v_stale > 0 then
+    raise exception 'FAIL premise: % real sync_runs row(s) are already stale enough to reap, so this '
+                    'unit would lock them and its reaped count would not be its own. The scheduled '
+                    'tick reaps them within two minutes; run this unit again once it has.', v_stale;
+  end if;
+end $$;
+
 -- The stale row keeps a note of its own, so the assertion also proves the reaper APPENDS
 -- `interrupted (reaped)` rather than overwriting what the driver had already recorded.
 insert into sync_runs (run_id, status, started_at, trigger, source, scope, notes)
