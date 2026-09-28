@@ -669,3 +669,37 @@ PASS  phase12b_084_shared_column_conflict.sql
 db-test: passed 1, failed 0, units 1
 exit=0
 ```
+
+## `phase12b_089_work_items_due_on.sql` — the Lab #1 row answers to a different id
+
+RED: `FAIL the Lab #1 fixture row is gone from v_work_items` (line 39; the PASS row at line 192 read
+the same id).
+
+Cause, verified first-hand: the two Lab #1 rows were duplicates of one Blackboard column, and Stack's
+Inbox decision of 2026-09-22 folded them into the shorter id and deleted
+`IST.323/lab-1-performing-a-ransomware-attack`. The surviving row on prod, read 2026-09-27:
+
+```
+item_id  IST.323/lab-1
+title    Lab #1: Performing a Ransomware Attack
+due_at   2026-09-24 03:59:00+00
+due_on   2026-09-23
+confidence confirmed
+```
+
+The fix: both lines now read `item_id = 'IST.323/lab-1'`. Nothing else changed — the three
+assertions on that row (`due_at` is exactly `2026-09-24 03:59+00`, that instant is 11:59 PM in New
+York, `due_on` is `2026-09-23` and not the pre-089 `2026-09-24`) are untouched, and they hold against
+the surviving row because the deadline did not move, only the id it is filed under.
+
+What it still proves: migration 089 derives `due_on` in America/New_York, so an 11:59 PM deadline
+belongs to the day Stack sees it on, not to the UTC day after it.
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase12b_089_work_items_due_on.sql
+PASS  phase12b_089_work_items_due_on.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
