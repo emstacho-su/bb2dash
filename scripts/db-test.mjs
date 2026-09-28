@@ -532,6 +532,10 @@ async function connect(factory) {
     client = await factory();
     await client.connect();
   } catch (err) {
+    // A client `pg` half-opened keeps a handle on the event loop, and the CLI sets
+    // `process.exitCode` rather than calling process.exit, so without this the command hangs
+    // after a connection failure instead of exiting 2.
+    await endQuietly(client);
     throw new RunnerError(`connection failed: ${firstLine(err?.message)}`);
   }
   return client;

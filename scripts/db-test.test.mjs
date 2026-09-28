@@ -620,6 +620,39 @@ test('an empty db/tests exits 2 rather than reporting green having run nothing',
   );
 });
 
+// Round-2 finding 5: a half-opened client keeps a handle on the event loop, and the CLI sets
+// process.exitCode rather than calling process.exit, so the command would hang instead of exiting.
+test('a client whose connect() rejects is still ended', async () => {
+  const dir = tmpTestsDir(['a.sql']);
+  const out = collector();
+  const factory = fakeFactory({
+    connectError: new Error('ECONNREFUSED'),
+    onQuery: () => passResult('x'),
+  });
+  const code = await run([], {
+    out: out.write,
+    testsDir: dir,
+    env: { BB2DASH_TEST_DB_URL: DSN },
+    clientFactory: factory,
+  });
+  assert.equal(code, 2);
+  assert.equal(factory.opened.length, 1);
+  assert.equal(factory.opened[0].ended, true, 'the dropped client must be ended');
+});
+
+test('a --ping whose connect() rejects also ends its client', async () => {
+  const out = collector();
+  const factory = fakeFactory({ connectError: new Error('ECONNREFUSED'), onQuery: () => ({ rows: [] }) });
+  const code = await run(['--ping'], {
+    out: out.write,
+    testsDir: REAL_TESTS_DIR,
+    env: { BB2DASH_TEST_DB_URL: DSN },
+    clientFactory: factory,
+  });
+  assert.equal(code, 2);
+  assert.equal(factory.opened[0].ended, true);
+});
+
 test('a connection failure exits 2 and its message is redacted', async () => {
   const dir = tmpTestsDir(['a.sql']);
   const out = collector();
