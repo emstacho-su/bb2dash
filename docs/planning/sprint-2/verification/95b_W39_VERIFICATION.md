@@ -586,3 +586,57 @@ IST.323/_3598132_1 updated_at               2026-09-22 16:16:57.448326+00
 ```
 
 Every W-39 row of the brief's §Task list has now passed its own check in the form the row names.
+
+---
+
+# Wave 3 — the four pre-existing red units (2026-09-27)
+
+Stack decided Phase 15 absorbs them; the PM extended W-39's file set again and writes the DECISIONS
+line (brief open item 6's pattern: a P-30-shaped fix in the phase that finds it). Migrations 101 and
+102 are on prod for every run below. None of the four is a product defect, and no assertion was
+weakened: each was scoped, seeded, or made relative.
+
+Baseline on this branch after merging `origin/feat/db-hygiene-15`, `node scripts/db-test.mjs`:
+
+```
+FAIL  phase12b_077_inbox_feedback.sql  FAIL v_inbox_feedback is empty - prod has closed rows with notes
+FAIL  phase12b_078_status_fold_and_auto_graded.sql  FAIL 0 of the 4 advanceable rows read graded
+FAIL  phase12b_084_shared_column_conflict.sql  FAIL the IST.323 shared-column row is not dismissed
+FAIL  phase12b_089_work_items_due_on.sql  FAIL the Lab #1 fixture row is gone from v_work_items
+db-test: passed 14, failed 4, units 18
+```
+
+exit 1. (18 units, not 21: `phase15_100_db_test_runner_role.sql` and W-40's two `phase15_*` test
+files are not on this branch yet — the merge brought the runner, 100 and the walk doc only. The four
+failures are the four named.)
+
+## `phase12b_077_inbox_feedback.sql` — seed the view's own closed row
+
+RED: `FAIL v_inbox_feedback is empty - prod has closed rows with notes` (line 60).
+
+Cause, verified first-hand: migration 090 added a fourth state, `archived`, and `/inbox-apply` moved
+every closed row into it. `attention_items` on prod holds 5 `open` and 142 `archived` rows and **no**
+`resolved` or `dismissed` row at all, while `v_inbox_feedback` filters
+`state = any (array['resolved','dismissed']) and coalesce(btrim(resolution_note),'') <> ''`
+(`pg_get_viewdef`, 2026-09-27). So `n_view = n_expected = 0`, the count assertion passed on nothing,
+and the emptiness assertion raised.
+
+The fix: the unit seeds its own `resolved` row (`state = 'resolved'`, a note, `resolution
+{"accept": true}`, `applied_at` set) into `attention_items` inside its transaction, records its id in
+a temp table, and asserts the view carries **that** row by id, on top of the assertions already
+there. Nothing was relaxed: the counts must still agree, no `open` row may leak, no row may arrive
+without a note, a `resolved` row must be present, and `was_applied` / `feedback` / `accept` must still
+agree with `attention_items` row for row.
+
+What it still proves: `v_inbox_feedback` returns exactly the closed rows that carry a note, with the
+answer and the applied flag travelling with them — and now it proves it on any database, instead of
+depending on prod holding a state `/inbox-apply` no longer leaves behind.
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase12b_077_inbox_feedback.sql
+PASS  phase12b_077_inbox_feedback.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
