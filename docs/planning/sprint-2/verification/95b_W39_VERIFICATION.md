@@ -829,3 +829,72 @@ PASS  phase10b_grade_model.sql
 db-test: passed 1, failed 0, units 1
 exit=0
 ```
+
+## Finding 2 — `phase9_transform_states.sql` rested on a snapshot, not an invariant
+
+(Written 2026-09-28; finding 1 above was fixed late on 2026-09-27.)
+
+The header claimed `transform_tick()` "folds nothing (prod held no unfolded registered crawl)", which
+was an observation on the day it was written. The tick does two things that reach outside the unit: it
+folds every registered crawl that is complete and unfolded, and its reaper pass updates **every**
+`sync_runs` row still `running` after thirty minutes. Both roll back, but a fold would take write
+locks on `bb_raw`, `bb_gradebook` and `sync_runs` for the rest of the unit, a real stale row would be
+locked and counted in `reaped`, and the pg_cron tick runs against the same rows every two minutes
+while the unit holds one 60 s `statement_timeout` — a unit that flakes, or briefly blocks the live
+tick, with nothing wrong in 035 or 039.
+
+I kept the call (the reaper only exists inside the tick, so the property cannot be proved without it)
+and made the premise explicit, exactly where the coordinator asked for it: a block before the seed
+asserts (1) no registered crawl matches the tick's own fold predicate — the same one 044 §1 loops over
+— and (2) no real `sync_runs` row is already old enough to reap, so the reaper touches nothing but
+this unit's row and the `reaped` figure it reports is this unit's own. It is checked before the seed,
+so every row it can see is a real one. The reaped-row property is unchanged and still scoped to the
+unit's own row by id, and the header now points at the assertion instead of asserting in prose.
+
+Both guards forced to raise, in copies run through `--file` (not committed):
+
+```
+$ node scripts/db-test.mjs --file probe9_unfolded.sql
+FAIL  probe9_unfolded.sql  FAIL premise: 1 registered crawl(s) are waiting to be folded, so transform_tick() would fold real data inside this test transaction. The scheduled tick drains them every two minutes; run this unit again once it has.
+
+$ node scripts/db-test.mjs --file probe9_stale.sql
+FAIL  probe9_stale.sql  FAIL premise: 1 real sync_runs row(s) are already stale enough to reap, so this unit would lock them and its reaped count would not be its own. The scheduled tick reaps them within two minutes; run this unit again once it has.
+```
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase9_transform_states.sql
+PASS  phase9_transform_states.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## The whole suite after round 2
+
+```
+$ node scripts/db-test.mjs; echo $?
+PASS  inbox_apply_090_attention_archive.sql
+PASS  phase10a_stage_attempts.sql
+PASS  phase10a_stage_gradebook.sql
+PASS  phase10b_grade_model.sql
+PASS  phase10b_round2.sql
+PASS  phase12b_073_workload_visibility.sql
+PASS  phase12b_074_reading_file_links.sql
+PASS  phase12b_075_shared_column_restamp.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+PASS  phase12b_077_inbox_feedback.sql
+PASS  phase12b_078_status_fold_and_auto_graded.sql
+PASS  phase12b_082_083_planner_series.sql
+PASS  phase12b_084_shared_column_conflict.sql
+PASS  phase12b_085_stage_attempts_v4.sql
+PASS  phase12b_086_reading_link_settles.sql
+PASS  phase12b_087_auto_graded_sticks.sql
+PASS  phase12b_089_work_items_due_on.sql
+PASS  phase15_100_db_test_runner_role.sql
+PASS  phase15_101_search_path_pin.sql
+PASS  phase15_102_planner_series_orphan.sql
+PASS  phase9_transform_states.sql
+db-test: passed 21, failed 0, units 21
+0
+```
