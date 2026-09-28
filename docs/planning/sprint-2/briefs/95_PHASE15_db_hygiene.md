@@ -153,6 +153,15 @@ committed lockfile; install with `npm --prefix scripts ci`).
 * **One connection.** One `pg.Client` (never `Pool.query`, per node-postgres's transaction docs) runs each unit as one
   simple-protocol query. On an error the runner sends `rollback` and goes on to the next unit. One broken file never
   hides the rest.
+* **Transport refusals** (amended 2026-09-27, round 2 finding 7). The runner refuses, before connecting, with exit 2: a
+  DSN on port 6543 (the transaction pooler, which breaks `set local role`), and a DSN whose transport is unencrypted or
+  unstated — `sslmode` must be one of `require`, `verify-ca`, `verify-full` or `no-verify`, so `disable`, `allow`,
+  `prefer` and an absent `sslmode` are refused. Without that second rule a hand-written DSN can reach prod in
+  cleartext. This laptop's working value is `?uselibpqcompat=true&sslmode=require`: pg 8.23 aliases bare `require` to
+  `verify-full`, and the session pooler chains to a private root, so the flag restores libpq's own `require` — encrypted,
+  chain not verified. Full chain verification (`verify-full` with `sslrootcert`) needs Supabase's CA from the dashboard
+  and is Stack's call, open, not taken here: a security reviewer judged the verification gap a hardening note on
+  test-only tooling rather than a vulnerability, since the DSN is operator configuration with no attacker path into it.
 * **Credential** (B-42, answered 2026-09-27: default). `BB2DASH_TEST_DB_URL` is read from the process environment, or else from `.env.local` at the root of
   the checkout the script lives in (`process.loadEnvFile`; this laptop runs Node v24.13.0). The canonical copy is
   `C:/Users/estac/projects/bb2dash/.env.local` in the main checkout (acceptance step 1); worktrees hold copies. A DSN on port 6543 is
@@ -474,3 +483,94 @@ answer leaves open, plus one risk the PM carries; none of it is a question waiti
 > task rows. Every task starts with its check failing. Stop when migration 100 is on prod and put acceptance step 1's
 > snippet on my clipboard (task 5). After my `--ping` passes, finish tasks 6–24, open the PR and stop at "ready when
 > you say so". Do not merge, apply anything outside 100–104, or change any Auth setting until I say so.
+
+## Round 2 — the review gates (2026-09-27, task 22)
+
+Both gates ran against the integrated branch after task 17 was green. Neither produced a CRITICAL or a HIGH, so the
+DoD's two gate lines are met as written. The findings below were still sent back to the worker who owns each file,
+because several of them are the difference between a check that proves something and a check that cannot fail.
+
+**`/code-review main high`** — 0 CRITICAL, 0 HIGH, 1 MEDIUM, 11 LOW.
+**`/security-review`** — 0 HIGH. Two MEDIUM candidates were raised and both fell below the review's own
+confidence-8 bar on filtering: the lint hole (kept as LOW — real, but no untrusted input reaches it; the realistic
+path is an honest test author, not an attacker) and the TLS-verification posture (dropped at confidence 3 — a
+hardening note on test-only tooling, since the DSN is operator configuration with no attacker path into it). Four
+areas were examined and found sound, and are worth keeping on record: `BYPASSRLS` with `inherit false` memberships
+creates no escalation path (`check_enable_rls()` reads the effective role's own attribute, so `set local role anon`
+really is subject to RLS and the suite's negative assertions mean something); migration 100's guard block genuinely
+proves the role cannot reach `vault`, `storage`, `auth`, `cron` or either Vault RPC; the granted SECURITY DEFINER
+transform functions contain no data-driven `execute format`, so a payload written to `bb_raw` by this role cannot
+become SQL run as the owner; and 102's trigger is correctly SECURITY INVOKER with a pinned path, so it cannot reach a
+series its caller could not already delete.
+
+### Sent back to W-38 (`scripts/db-test.mjs`, its test, `db/tests/README.md`, `.env.example`)
+
+1. **The lint hole (MEDIUM, both gates, independently).** `lintUnitText()` checks the first and last top-level
+   statements and bans top-level `commit`/`end`, but not a *second* top-level `rollback`. The unit is sent as one
+   multi-statement simple query, where an explicit `rollback` ends the transaction block and the statements after it
+   run in a fresh implicit transaction that Postgres commits. So `begin; …A…; rollback; …B…; rollback;` passes the lint
+   and writes B to prod as a `BYPASSRLS` role. `db/tests/README.md` advertises the lint as the guarantee that such a
+   file never reaches prod, and `db-test.test.mjs` already blocks the `end` spelling of the identical shape, so this is
+   a broken control rather than a missing one. Fixed by refusing more than one top-level `rollback` or any statement
+   after the first, with the untested spelling added to the test file. `rollback to savepoint …` is also refused as a
+   terminator, though it commits nothing (ending the session aborts the open block).
+2. `redact()` strips `url.host` (host:port) but not `url.hostname`, so a DNS error names the bare host.
+3. `loadDsn()` re-reads `process.env` after `loadEnvFile` instead of the injected `env`, and mutates the real
+   `process.env` — a side effect on a module whose header advertises none.
+4. Zero units exits 0, so a relocated script could report green having run nothing.
+5. A client is dropped without `end()` when `connect()` rejects, which hangs the CLI instead of exiting 2.
+6. `.env.example` documented a value that cannot connect (no `uselibpqcompat` suffix).
+7. **Contract addition:** `assertDsnAllowed()` now also refuses an unencrypted or unstated transport (see §Contract,
+   Transport refusals). The cheap half of the dropped TLS finding, taken because it prevents an accidental cleartext
+   connection to prod and costs nothing; chain verification stays open as Stack's call.
+
+### Sent back to W-40 (`db/tests/phase15_101_search_path_pin.sql`)
+
+8. **The extension-owned exclusion tests `pg_depend.objid` without `classid`**, so an unrelated catalog entry sharing an
+   oid could excuse a function from the pin. Fixed in the standing test, which is the authoritative guard from here on.
+   **Migration 101 carries the same flaw in its one-time guard and is left exactly as applied** — it is on prod and
+   byte-frozen, and its result was correct on today's catalogue. A comment in the test names 101 so a future replay is
+   not trusted blindly. No 103 for this: 103 and 104 are reserved for grant gaps.
+9. `set_config(..., NULL, true)` resets a GUC rather than storing NULL, which can raise a spurious FAIL in guard (e).
+10. The `security_invoker` reloption is matched as an exact string, so a view stored as `security_invoker=on` would be
+    misreported.
+11. Section (c) renders `regprocedure` schema-qualified when `public` is off the caller's path, which breaks its
+    comparison against a bare literal — and the file's own header offers the MCP paste route, where that happens.
+
+### Sent back to W-39 (`phase10b_grade_model.sql`, `phase9_transform_states.sql`)
+
+12. §4f's `select … into` leaves the record all-NULL when the view row is absent, and every later branch then passes.
+    Tolerating the link's current state was the point; tolerating the column vanishing was not. `phase12b_089` checks
+    `not found` at its equivalent line, so the two now agree.
+13. `phase9_transform_states.sql` calls `transform_tick()` against prod on a premise that was an observation, not an
+    invariant: an unfolded registered crawl would be folded inside the unit, taking write locks for the rest of it and
+    contending with the two-minute pg_cron tick under one 60 s statement timeout. The premise is now asserted, and
+    fails loudly in words when it does not hold.
+
+### Not fixed here, on the record
+
+* `phase12b_076` and `phase12b_082_083` read `information_schema.role_table_grants`, which lists only *enabled* roles,
+  so under a membership held with `inherit false` those two assertions pass without proving anything. A Phase 18
+  test-pass item, in DECISIONS 2026-09-27.
+* Two least-privilege notes on migration 100 — the forward-dated `alter default privileges … grant select on tables`,
+  and `update` on all of `app_settings` where only `gcal_dirty` is needed — were raised and then **dropped on review**
+  (confidence 3 and 2). The first grants nothing beyond the enumerated `grant select on all tables in schema public`
+  one line above; it only keeps that read posture from decaying, and schema-wide forward-dated grants are already this
+  schema's established idiom (076 revokes TRUNCATE the same way, and Supabase's own defaults hand future `public`
+  relations to `anon` and `authenticated` first). The second is a correct code-quality nit — `grant update (gcal_dirty)
+  on public.app_settings` would suffice for 061's trigger — but it closes no capability, for the reason in the next
+  bullet. Neither is taken: 100 is applied and byte-frozen, and a follow-up migration would spend a number reserved
+  for grant gaps to buy nothing.
+* **What the role is and is not**, recorded because the brief and DECISIONS row 5 both call it least-privilege, which
+  is true in one sense and misleading in another. It is least-privilege against *accident*: the enumerated grants keep
+  a stray statement from touching what the suite does not use, and the `anon` / `authenticated` memberships held with
+  `inherit false` are what make the suite's "anon cannot read X" assertions mean something. It is **not** a containment
+  boundary against whoever holds the DSN. Membership permits `set role authenticated`, `auth.uid()` reads
+  `request.jwt.claims`, and any session can `set_config` that — so a DSN holder can satisfy the owner-scoped RLS
+  policies and reach what `authenticated` is granted, whatever migration 100 enumerates. That is a property of
+  owner-by-email RLS over a direct connection (DECISIONS 2026-09-10), not something this phase introduced, and it is
+  why the guard block's real work is the negative list: no `service_role` or `postgres` membership, no reach into
+  `vault`, `storage`, `auth` or `cron`, and neither Vault RPC executable, so the Google secrets stay out of reach.
+  Treat `BB2DASH_TEST_DB_URL` as an owner-level credential for data, and a strictly limited one for secrets.
+* Full TLS chain verification (`verify-full` with `sslrootcert` pointed at Supabase's CA, which now comes only from the
+  dashboard). Offered to Stack in the PR.
