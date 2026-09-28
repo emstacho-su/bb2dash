@@ -33,9 +33,11 @@ flagged for him, where he cannot see them (R-29).
 
 Why now: the calendar is Stack's, not the PM's. Six sittings (IST.323, IST.466, IST.352, ECN.304,
 GEO.103 lecture + recitation, IST.471), IST.323 first because its 13-point column is graded on
-2026-12-03, inside the Nov 30 – Dec 13 code freeze, so the correction has to be on prod before Nov 30.
-ECN.304 Exam 1 (2026-10-01) posts the first rank-weighted score of the term. Weeks 9 (Oct 19–25) and
-11 (Nov 2–8) are exam-heavy and hold no sitting.
+2026-12-03, inside the Nov 30 – Dec 13 code freeze, so the correction has to be on prod before Nov 30:
+the one bound, not pacing (2026-09-27: no date-paced tasks; the freeze stands, DECISIONS).
+ECN.304 Exam 1 (2026-10-01) posts the first rank-weighted score of the term. ~~Weeks 9 (Oct 19–25) and
+11 (Nov 2–8) are exam-heavy and hold no sitting.~~ The sittings run as fast as Stack can sit them, in the
+order above (2026-09-27: no date-paced tasks, DECISIONS).
 
 Everything else in this phase (the launcher fix, the export from a committed query, the invariants,
 the machine-block checker, the migration, the rule line) exists to make each sitting cheap and its
@@ -232,7 +234,7 @@ table …` inside the file (078's shape), so nothing is left behind.
 | 106 | `db/migrations/106_grading_reconciliation.sql` | Writes the accepted corrections of `96d`, course by course in sitting order, each carrying its citation string, and appends each checked row's citation string (P-75 form, from its machine-block row, `matches` / `keep` rows included) to `notes` / `source_ref` (91 R-33's backfill; a `grade_column_links` target has no citation column and is never citation-only); B-12's re-cut as UPDATEs of components 18 and 19 (never delete / recreate: `grade_column_links.component_id` cascades); the fold writes `assignments.component_id` from a non-excluded link only where the column binds exactly one assignment and the value differs, never `confidence`, and deletes no link row (P-3); rows left "not in materials" or `ask_professor` become `tentative` and are listed in 96d with 084's overwrite consequence. `_106_before` snapshot (078's pattern); guards: planner-state tables unchanged; no `points_possible` written on a row with `bb_column_id is null` (no invented values); `grade_components` row count unchanged; no `grade_column_links` row deleted, and rows added equal the link inserts 96d lists; changed rows, counted per distinct row against `_106_before` across the four tables (an inserted `grade_column_links` row counts as changed), equal 96d's correction count plus its citation-only count (both printed by `v1_recheck.py --summary` and defined in §V-1 tooling) plus two terms the file counts from `_106_before` itself: left-tentative rows that were not already `tentative`, and rows only the fold changes |
 | 107 | `db/migrations/107_db_test_runner_grants_phase16.sql` | Reserved: only if Phase 15's `db_test_runner` role (`100_db_test_runner_role.sql`) lacks a grant this phase's tests need (EXECUTE on `stage_assignments` for the replay, reads of the grading tables); never through `service_role` membership (brief 95 seams); otherwise unused |
 | 108 | `db/migrations/108_grading_reconciliation_fixes.sql` | Reserved for whichever of two needs it first (applied once, then frozen): `/code-review` fixes found after 106 is applied (106 stays byte-frozen), or a B-9 date Stack gives after 105 is applied, when `raise_attention()` refuses the re-ask (Open items 2), under that date's own DECISIONS row. If a date takes it, a later fix to 106 needs a number the PM asks Stack for; otherwise unused |
-| 109 | `db/migrations/109_grading_reconciliation_after_freeze.sql` | Reserved for Open items 4's contingency only (the non-IST.323 corrections if sitting 6 slips past 2026-11-20, applied after the freeze under their own DECISIONS row); otherwise unused |
+| 109 | `db/migrations/109_grading_reconciliation_after_freeze.sql` (name kept from the Contract; the freeze window is why the split exists) | Reserved for Open items 4's contingency only (the non-IST.323 corrections if ~~sitting 6 slips past 2026-11-20, applied after the freeze~~ sitting 6 will not be done in time for 106 to be written, reviewed and applied before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03), applied once the other sittings are done and never inside the freeze, under their own DECISIONS row; 2026-09-27: no date-paced tasks, DECISIONS); otherwise unused |
 
 Every `db/tests` file this phase adds obeys brief 95's lint and pass rule (`begin;` first, `rollback;`
 last, no top-level `commit` / `end`, one result row whose first column ends in `: PASS`) and brief 95's
@@ -378,7 +380,10 @@ SOP gates (CLAUDE.md Workflow SOP and DECISIONS 2026-09-09 / 2026-09-15):
       file; the checker turns document text into executed SQL; 105 writes an owner table).
 - [ ] STATUS, DECISIONS and ORCHESTRATOR updated in the PR; intake S2-carry-2 and 81's C-2 row closed.
 - [ ] PR open with a Vercel preview (the rule line is visual; Stack sees it before merge).
-- [ ] 106 applied and the PR open by 2026-11-20; merged before the 2026-11-30 freeze, on Stack's word.
+- [ ] ~~106 applied and the PR open by 2026-11-20; merged before the 2026-11-30 freeze, on Stack's word.~~
+      106 applied before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03),
+      the one bound; merged on Stack's word, never inside the freeze (2026-09-27: no date-paced tasks; the
+      freeze stands, DECISIONS).
 
 Stack's acceptance script:
 
@@ -388,7 +393,10 @@ Stack's acceptance script:
    `.env` (refused) and to write a file under `briefs/` (a prompt; he answers No).
 3. Sitting 1, IST.323: he walks every open row and the questions block, the 13-point column included
    (B-12); the session writes `96b_GRADING_VALIDATION_IST.323.md`; he stops.
-4. Sittings 2–6 the same, one a week, none in weeks 9 and 11: IST.466, IST.352, ECN.304, GEO.103, IST.471.
+4. Sittings 2–6 the same, ~~one a week, none in weeks 9 and 11: IST.466, IST.352, ECN.304, GEO.103, IST.471.~~
+   as fast as Stack can sit them, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103, IST.471; the one
+   bound is 106 on prod before the Nov 30 – Dec 13 code freeze, inside which the IST.323 column is graded
+   (2026-12-03) (2026-09-27: no date-paced tasks; the freeze stands, DECISIONS).
 5. He reads `96d_GRADING_VALIDATION_SUMMARY.md`: counts, corrections as plain statements, professor
    questions with status, the rows left `tentative` and what a sync may overwrite on them.
 6. In 96e, screenshot 05 (taken after 105) shows GEO.103 reading "Nothing that counts toward the grade
@@ -466,7 +474,10 @@ type `|` when running a command.
 | 29 | Gates and PR: `/code-review main high`, `/security-review`, PR with preview | all | PM | (d) `gh pr view <n> --json state -q .state` → `OPEN`; `gh pr checks <n> \| grep -cE "^Vercel[[:space:]]+pass"` → 1; `gh pr checks <n> \| grep -c fail` → 0 (the repo has no CI; Vercel's check is the one PR #22 carried) | "Ready when you say so." |
 
 Order: 1–15 run before the stop (Session A stops with the exact `validate-grading` command on Stack's
-clipboard); 16 is recorded at his first launch, before sitting 1; 17–20 follow Stack's calendar; 21–29
+clipboard); 16 is recorded at his first launch, before sitting 1; 17–20 follow ~~Stack's calendar~~
+Stack's sittings, as fast as he can sit them, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103,
+IST.471; the one bound is 106 on prod before the Nov 30 – Dec 13 code freeze, inside which the IST.323
+column is graded (2026-12-03) (2026-09-27: no date-paced tasks; the freeze stands, DECISIONS); 21–29
 follow sitting 6, except 27, which follows ECN.304 Exam 1. Task 10 waits for Phase 15's 100–104 on prod
 and for task 10a's commit on Phase 15's branch (§Seams). Tasks 11–14 and screenshots 05 and 06 (task
 10b) need nothing from the sittings: 11–14 run beside 3–10; 05 is taken once task 10 has applied 105,
@@ -530,11 +541,16 @@ there when adopted; Stack's answer replaces it and is dated the day he gives it.
 3. **Does a date answer confirm a component link (R-33)?** `apply_resolutions()` sets `confirmed` on any
    applied date, and `confidence` is one flag per row. Default: no code change; the citation string in
    `source_ref` is what marks a checked link, and invariant F counts only that.
-4. **Sitting calendar.** Default: one sitting a week in weeks 6, 7, 8, 10, 12 and 13 (none in 9 and
-   11), sitting 6 by 2026-11-18, 106 applied by 2026-11-20. If sitting 6 slips past 2026-11-20, the PM
-   asks you to split: IST.323's rows in 106 first, the rest in
-   `db/migrations/109_grading_reconciliation_after_freeze.sql` after the freeze, with a DECISIONS row
-   (the only exception to "one reviewed migration" this brief foresees; 107 stays the grants slot).
+4. **Sitting ~~calendar~~ order.** Default: ~~one sitting a week in weeks 6, 7, 8, 10, 12 and 13 (none in 9 and
+   11), sitting 6 by 2026-11-18, 106 applied by 2026-11-20~~ as fast as Stack can sit them, in the order
+   IST.323, IST.466, IST.352, ECN.304, GEO.103, IST.471; the one bound is 106 on prod before the Nov 30 –
+   Dec 13 code freeze, inside which the IST.323 column is graded (2026-12-03) (2026-09-27: no date-paced
+   tasks; the freeze stands, DECISIONS). If ~~sitting 6 slips past 2026-11-20~~ sitting 6 will not be done
+   in time for 106 to be written, reviewed and applied before that bound, the PM asks you to split as soon
+   as that is plain, not when the bound arrives: IST.323's rows in 106 first, the rest in
+   `db/migrations/109_grading_reconciliation_after_freeze.sql` ~~after the freeze~~ once the other sittings
+   are done and never inside the freeze, with a DECISIONS row (the only exception to "one reviewed
+   migration" this brief foresees; 107 stays the grants slot).
 5. **Link rows after the fold (R-32 "may delete").** Default: keep every `grade_column_links` row; the
    model's result is identical and your picker choices stay reversible.
 6. **GEO.103 lecture + recitation.** Default: one verdict file, one sitting (brief 63 allows either).

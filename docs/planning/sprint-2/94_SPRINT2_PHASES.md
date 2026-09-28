@@ -63,8 +63,10 @@ Rules that fall out of the graph:
    120–129 (18), 130–139 (19), 140–149 (21). A phase that runs out takes the next free block of ten
    and records it in DECISIONS, never a number inside another phase's block.
 
-Term calendar (unchanged from sprint 1): weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week
-14 is Thanksgiving; Nov 30 – Dec 13 is a code freeze. 16's IST.323 sitting must precede 2026-12-03.
+~~Term calendar (unchanged from sprint 1): weeks 9 (Oct 19–25) and 11 (Nov 2–8) are exam-heavy; week
+14 is Thanksgiving;~~ nothing is paced by week (2026-09-27: no date-paced tasks, DECISIONS). Nov 30 – Dec 13 is
+a code freeze, a window, not pacing (no merge and no prod apply inside it; it stands, DECISIONS 2026-09-27). 16's
+migration 106 is on prod before the IST.323 column is graded (2026-12-03), which the freeze makes before Nov 30.
 
 ## 3. What each phase hands to the next
 
@@ -87,7 +89,7 @@ no migration number or worker id owned by two briefs (`105_BRIEF_VERIFICATION_20
 
 ## 5. Sessions (sketched here, written as prompts in Stage D)
 
-* **Session A — 15 then 16:** the db phase is a morning; the grades phase is Stack's sittings with the
+* **Session A — 15 then 16:** the db phase is size S/M; the grades phase is Stack's sittings with the
   PM in between (launcher, export, migration).
 * **Session B — 17 and 18 in parallel worktrees**, then 19 on their seams.
 * **Session C — 14 across three repos**, spike first; **21** follows in the same session shape.
