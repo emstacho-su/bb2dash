@@ -264,6 +264,12 @@ begin
   select * into lnk from grade_column_links
    where course_id = 'IST.323' and column_id = '_3569973_1';
   select * into r from v_grade_model_items where item_key = 'col:IST.323:_3569973_1';
+  -- The row itself has to be there. Without this, a vanished column leaves `r` all-NULL and every
+  -- branch below passes on nothing: tolerating the link's current state is the point of this case,
+  -- tolerating the column's disappearance is not. `phase12b_089` checks `not found` the same way.
+  if not found then
+    raise exception 'FAIL col:IST.323:_3569973_1 is gone from v_grade_model_items';
+  end if;
 
   if r.assignment_id is not null then
     raise exception 'FAIL the doubly-linked column resolved to assignment %', r.assignment_id;

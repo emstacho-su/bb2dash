@@ -796,3 +796,36 @@ db-test: passed 21, failed 0, units 21
 No unit outside the four named here needed anything, and nothing in any output names a pinned
 `search_path` or the new planner trigger. W-39's rows of §Task list (8, 9, 10, 11) and the four
 absorbed units have each passed their own check in the form the brief's row names.
+
+---
+
+# Round 2 — two `/code-review main high` findings (2026-09-27, both LOW)
+
+## Finding 1 — `phase10b_grade_model.sql` §4f could pass on a vanished row
+
+`select * into r from v_grade_model_items where item_key = 'col:IST.323:_3569973_1'` leaves `r`
+all-NULL when nothing matches, and with no hand link on the column every branch after it then passes.
+Tolerating the link's current state is what §4f is for; tolerating the column's disappearance from the
+view is not, and `phase12b_089` already checks `not found` at its equivalent line.
+
+The fix: `if not found then raise exception 'FAIL col:IST.323:_3569973_1 is gone from
+v_grade_model_items'; end if;` immediately after the select, naming the item key.
+
+RED shown by forcing it — the item key made unmatchable in a copy run through `--file` (not
+committed), which is the only way to make the row disappear inside a rolled-back transaction:
+
+```
+$ node scripts/db-test.mjs --file probe10b_missing.sql
+FAIL  probe10b_missing.sql  FAIL col:IST.323:_3569973_1 is gone from v_grade_model_items
+db-test: passed 0, failed 1, units 1
+exit=1
+```
+
+GREEN:
+
+```
+$ node scripts/db-test.mjs --only phase10b_grade_model.sql
+PASS  phase10b_grade_model.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
