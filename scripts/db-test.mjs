@@ -342,7 +342,10 @@ export function redact(text, dsn) {
       secrets.push(url.password);
       secrets.push(decodeURIComponent(url.password));
     }
+    // `host` is host:port; `hostname` is the bare host, which is the form a driver error uses
+    // (`getaddrinfo ENOTFOUND aws-0-…pooler.supabase.com` carries no port).
     if (url.host) secrets.push(url.host);
+    if (url.hostname) secrets.push(url.hostname);
   } catch {
     // Not a URL: the whole string is the only secret we know about.
   }

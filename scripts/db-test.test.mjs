@@ -306,6 +306,14 @@ test('redact removes the DSN and its password from any text', () => {
   assert.match(out, /could not connect to/);
 });
 
+// Round-2 finding 2: `url.host` is host:port, and a real driver error names the bare host.
+test('redact removes the bare hostname too, not only host:port', () => {
+  const msg = 'getaddrinfo ENOTFOUND aws-0-us-east-1.pooler.supabase.com';
+  const out = redact(msg, DSN);
+  assert.equal(out.includes('aws-0-us-east-1.pooler.supabase.com'), false);
+  assert.match(out, /getaddrinfo ENOTFOUND/);
+});
+
 test('firstLine takes only the first line of a server error', () => {
   assert.equal(firstLine('FAIL something\nCONTEXT: PL/pgSQL function\n'), 'FAIL something');
 });
