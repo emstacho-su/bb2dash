@@ -55,6 +55,16 @@ prod: it cannot collide with or overwrite anything even if a transaction were le
 also written to pass against a database that already holds the real crawl of the same columns —
 every assertion that would otherwise depend on that history is scoped to the fixture run.
 
+**The dates float with `now()`** (Phase 15, P-30 / P-101). The JSON fixtures keep the real
+2026-09-14 `captured_at` of the crawl they were cut from, but the generated loader emits each one as
+`now() - interval '<n> seconds'` instead of that literal, keeping the three shells' order and their
+gaps to the microsecond (the newest shell lands on `now()` itself). It has to: migration 087's
+newest-run guard lets only the newest *registered* crawl report score movement, so a fixture pinned
+to 2026-09-14 read as a replay as soon as four real crawls were registered after it, and
+`db/tests/phase10a_stage_gradebook.sql` went red with nothing wrong in it. The guard is unchanged —
+the fixture moved. `web/test/fixtures.phase10a.test.ts` fails if a quoted timestamp literal ever
+feeds `captured_at` again.
+
 ## Regenerating the loader
 
 `db/tests/phase10a_load_fixtures.sql` is generated. After editing any fixture:

@@ -225,4 +225,31 @@ describe('db/tests/phase10a_load_fixtures.sql is in sync with the fixtures', () 
   it('loads every fixture file the generator knows about', () => {
     expect(builder.FIXTURE_FILES).toEqual([...GRADEBOOK_FILES, 'attempts_synthetic.json']);
   });
+
+  // P-101 (Phase 15). The loader used to carry each shell's crawl timestamp as a quoted literal,
+  // and that aged out: once four newer crawls were registered, migration 087's newest-run guard
+  // read the 2026-09-14 fixture as an older run and phase10a_stage_gradebook.sql went red. The
+  // generator now emits `captured_at` as an offset from `now()`, so the fixture crawl is always
+  // the newest registered one. A quoted literal creeping back would start the same rot again.
+  it('feeds captured_at from now(), never a quoted timestamp literal', () => {
+    const sql = builder.build();
+    expect(sql).not.toMatch(/::timestamptz/);
+
+    const offsets = [...sql.matchAll(/^ {3}now\(\) - interval '(\d+(?:\.\d+)?) seconds'\);$/gm)]
+      .map((m) => Number(m[1]));
+    expect(offsets).toHaveLength(GRADEBOOK_FILES.length);
+
+    // Order and spacing survive the move: the oldest shell still carries the largest offset, and
+    // the gaps between the offsets are the gaps between the fixtures' own captured_at values, to
+    // the microsecond. Parsed by hand because Date.parse truncates at milliseconds.
+    const micros = (iso: string): number => {
+      const m = /^(.+?)(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(iso);
+      expect(m, `${iso} is not a timestamp this test can read`).not.toBeNull();
+      return Date.parse(`${m![1]}${m![3]}`) * 1000 + Number((m![2] ?? '').padEnd(6, '0').slice(0, 6));
+    };
+    const shells = GRADEBOOK_FILES.map(load)
+      .sort((a, b) => a.bb_course_id.localeCompare(b.bb_course_id));
+    const anchor = Math.max(...shells.map((s) => micros(s.captured_at)));
+    expect(offsets).toEqual(shells.map((s) => (anchor - micros(s.captured_at)) / 1e6));
+  });
 });
