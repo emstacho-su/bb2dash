@@ -25,6 +25,13 @@ The DSN must be a **direct** or **session-pooler** connection (port 5432). The r
 6543, the transaction pooler: four units run `set local role` mid-transaction, which needs a
 session-scoped connection.
 
+It must also **name an encrypted transport**. The runner accepts `sslmode=require`, `verify-ca`,
+`verify-full` and `no-verify`, and refuses `disable`, `allow`, `prefer` and — just as firmly — a DSN
+with no `sslmode` at all, because node-postgres then connects in cleartext. The refusal names the
+fix and prints no part of the DSN. This stops an accidental cleartext connection; it does not
+attempt certificate-chain verification, which needs Supabase's CA from the dashboard and is Stack's
+call.
+
 It must also end `?uselibpqcompat=true&sslmode=require`, not `?sslmode=require` on its own. `pg`
 8.23 reads a bare `sslmode=require` as libpq's `verify-full`, and the Supabase pooler's certificate
 chains to a private root, so the connection dies with

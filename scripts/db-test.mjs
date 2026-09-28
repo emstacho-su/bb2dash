@@ -268,10 +268,36 @@ export function lintUnitText(text) {
 // The credential
 // ---------------------------------------------------------------------------------------------
 
+/** The sslmode values that guarantee the connection is at least encrypted. */
+const SSLMODE_ALLOWED = new Set(['require', 'verify-ca', 'verify-full', 'no-verify']);
+
+/** The DSN's sslmode, lowercased, or null when it names none. */
+function dsnSslmode(dsn) {
+  let url = null;
+  try {
+    url = new URL(dsn);
+  } catch {
+    url = null;
+  }
+  if (url) {
+    const value = url.searchParams.get('sslmode');
+    return value === null ? null : value.trim().toLowerCase();
+  }
+  // A libpq keyword/value string rather than a URL.
+  const match = /(?:^|[?&\s])sslmode=([A-Za-z-]+)/.exec(dsn);
+  return match ? match[1].toLowerCase() : null;
+}
+
 /**
- * Refuse a transaction-pooler DSN. Four units `set local role` mid-transaction, which needs a
- * session-scoped connection (direct host or the session pooler on 5432). The message carries no
- * part of the DSN.
+ * Refuse a DSN db-test must not use. Two rules, and neither message carries any part of the DSN
+ * beyond the sslmode word it is complaining about:
+ *
+ *   * not the transaction pooler on 6543 - four units `set local role` mid-transaction, which
+ *     needs a session-scoped connection (direct host, or the session pooler on 5432);
+ *   * an encrypted transport, named explicitly. node-postgres connects in cleartext when the DSN
+ *     names no sslmode at all, so an absent one is refused as firmly as `disable`. This stops an
+ *     accidental cleartext connection; it does not attempt chain verification, which needs
+ *     Supabase's CA from the dashboard and is Stack's call.
  */
 export function assertDsnAllowed(dsn) {
   let port = null;
@@ -286,6 +312,21 @@ export function assertDsnAllowed(dsn) {
     throw new RunnerError(
       'BB2DASH_TEST_DB_URL points at port 6543, the transaction pooler; db-test needs a direct or ' +
         'session-pooler connection (5432), because units run `set local role` mid-transaction',
+    );
+  }
+
+  const sslmode = dsnSslmode(dsn);
+  if (sslmode === null) {
+    throw new RunnerError(
+      'BB2DASH_TEST_DB_URL names no sslmode, and node-postgres then connects in cleartext; append ' +
+        '?uselibpqcompat=true&sslmode=require (see db/tests/README.md)',
+    );
+  }
+  if (!SSLMODE_ALLOWED.has(sslmode)) {
+    throw new RunnerError(
+      `BB2DASH_TEST_DB_URL sets sslmode=${sslmode}, which permits an unencrypted connection; ` +
+        'db-test accepts require, verify-ca, verify-full or no-verify - use ' +
+        '?uselibpqcompat=true&sslmode=require (see db/tests/README.md)',
     );
   }
   return dsn;

@@ -32,8 +32,9 @@ import {
 
 const FIXTURES = path.join(import.meta.dirname, 'fixtures', 'db-test');
 const REAL_TESTS_DIR = path.join(import.meta.dirname, '..', 'db', 'tests');
-const DSN =
+const BASE =
   'postgresql://db_test_runner.goultdzqcavefcgnifdy:s3cr3tpw@aws-0-us-east-1.pooler.supabase.com:5432/postgres';
+const DSN = BASE + '?uselibpqcompat=true&sslmode=require';
 
 // A fake pg.Client. `behaviour.onQuery(text, client)` returns a Result, an array of Results, or an
 // Error to throw. `behaviour.connectError` makes connect() throw.
@@ -297,6 +298,72 @@ test('a transaction-pooler DSN on port 6543 is refused, and the message holds no
 
 test('a session-pooler DSN on 5432 is allowed', () => {
   assert.equal(assertDsnAllowed(DSN), DSN);
+});
+
+// Round-2 finding 7: the DSN must name an encrypted transport. node-postgres connects in cleartext
+// when no sslmode is given, so an absent one is refused as firmly as `disable`.
+test('every sslmode that guarantees encryption is accepted', () => {
+  for (const mode of ['require', 'verify-ca', 'verify-full', 'no-verify']) {
+    const dsn = `${BASE}?sslmode=${mode}`;
+    assert.equal(assertDsnAllowed(dsn), dsn, mode);
+  }
+  // The shape .env.local actually holds must keep working.
+  assert.equal(assertDsnAllowed(`${BASE}?uselibpqcompat=true&sslmode=require`), DSN);
+  assert.equal(
+    assertDsnAllowed(`${BASE}?sslmode=verify-full&uselibpqcompat=true`),
+    `${BASE}?sslmode=verify-full&uselibpqcompat=true`,
+  );
+});
+
+test('an sslmode that permits cleartext is refused, and so is an absent one', () => {
+  for (const mode of ['disable', 'allow', 'prefer']) {
+    assert.throws(
+      () => assertDsnAllowed(`${BASE}?sslmode=${mode}`),
+      (err) => {
+        assert.match(err.message, new RegExp(`sslmode=${mode}`));
+        assert.match(err.message, /uselibpqcompat=true&sslmode=require/);
+        return true;
+      },
+      mode,
+    );
+  }
+  assert.throws(() => assertDsnAllowed(BASE), /names no sslmode/);
+  assert.throws(() => assertDsnAllowed(`${BASE}?uselibpqcompat=true`), /names no sslmode/);
+});
+
+test('a libpq keyword/value DSN is read for sslmode too', () => {
+  const kv = 'host=aws-0-us-east-1.pooler.supabase.com port=5432 user=db_test_runner sslmode=require';
+  assert.equal(assertDsnAllowed(kv), kv);
+  assert.throws(
+    () => assertDsnAllowed('host=aws-0-us-east-1.pooler.supabase.com port=5432 sslmode=disable'),
+    /sslmode=disable/,
+  );
+});
+
+test('a refused sslmode leaks no password or host', () => {
+  try {
+    assertDsnAllowed(`${BASE}?sslmode=disable`);
+    assert.fail('should have thrown');
+  } catch (err) {
+    assert.equal(err.message.includes('s3cr3tpw'), false);
+    assert.equal(err.message.includes('pooler.supabase.com'), false);
+  }
+});
+
+test('run() exits 2 on a cleartext DSN before opening a client', async () => {
+  const dir = tmpTestsDir(['a.sql']);
+  const out = collector();
+  const factory = fakeFactory({ onQuery: () => passResult('x') });
+  const code = await run([], {
+    out: out.write,
+    testsDir: dir,
+    env: { BB2DASH_TEST_DB_URL: `${BASE}?sslmode=disable` },
+    clientFactory: factory,
+  });
+  assert.equal(code, 2);
+  assert.equal(factory.opened.length, 0);
+  assert.match(out.text(), /sslmode=disable/);
+  assert.equal(out.text().includes('s3cr3tpw'), false);
 });
 
 test('redact removes the DSN and its password from any text', () => {
