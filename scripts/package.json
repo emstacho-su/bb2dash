@@ -1,0 +1,17 @@
+{
+  "name": "bb2dash-scripts",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Node helpers that run from the repo root: the SQL test runner for db/tests, and the Google consent helper.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test db-test.test.mjs google-consent.test.mjs",
+    "db-test": "node db-test.mjs"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
+  }
+}
