@@ -623,3 +623,35 @@ PASS  phase15_101_search_path_pin.sql
 db-test: passed 1, failed 0, units 1
 EXIT=0
 ```
+
+## R2-3 — guard (b) string-matched a reloption instead of parsing its value
+
+Postgres stores a reloption with the spelling it was given, so `with (security_invoker = on)` is
+stored as `security_invoker=on`. The old exact match on `security_invoker=true` would report such a
+view as running as its owner — a **false FAIL on a view that is in fact safe**. Now the value is
+split off and parsed, accepting the spellings Postgres itself accepts for a boolean reloption:
+`true`, `on`, `1`, `yes`, `t`, `y`.
+
+### The failure mode, forced inside a rolled-back transaction
+
+Three probe views created with the three spellings, one of them genuinely off:
+
+```
+stored_spellings:        w40_probe_1 stores security_invoker=1 | w40_probe_off stores security_invoker=off | w40_probe_on stores security_invoker=on
+old_exact_match_flags:   w40_probe_1, w40_probe_off, w40_probe_on
+new_parsed_value_flags:  w40_probe_off
+```
+
+The old predicate flags all three — two of them wrongly. The new one flags only the view that really
+is owner-run, which is what guard (b) is for. Neither predicate flags any of the 15 real views: 036
+wrote them `security_invoker=true`, which is why this never fired in practice. The three probes went
+with the rollback.
+
+### Check
+
+```
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+EXIT=0
+```

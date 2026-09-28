@@ -93,6 +93,11 @@ end $$;
 -- =============================================================================================
 -- (b) Every view in public is security_invoker
 -- =============================================================================================
+-- The VALUE is parsed, never string-matched. Postgres stores a reloption with the spelling it was
+-- given, so `with (security_invoker = on)` is stored as `security_invoker=on` and `= 1` as
+-- `security_invoker=1`. An exact match on `security_invoker=true` would report either of those as
+-- running as its owner - a false FAIL on a view that is in fact safe. Postgres accepts true/on/1/
+-- yes/t/y (and their false counterparts) for a boolean reloption, so all of them are honoured here.
 do $$
 declare list text;
 begin
@@ -100,8 +105,10 @@ begin
     from pg_class c
    where c.relnamespace = 'public'::regnamespace
      and c.relkind = 'v'
-     and coalesce((select o = 'security_invoker=true'
-                     from unnest(c.reloptions) o where o like 'security_invoker=%'), false) is false;
+     and coalesce((select lower(split_part(o, '=', 2))
+                          in ('true', 'on', '1', 'yes', 't', 'y')
+                     from unnest(c.reloptions) o
+                    where split_part(o, '=', 1) = 'security_invoker'), false) is false;
   if list is not null then
     raise exception 'FAIL these public views still run as their owner: %', list;
   end if;
