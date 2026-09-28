@@ -5,16 +5,17 @@ Requirements: R-78, R-79, R-80, R-54 (no S2 item of its own; R-54 and R-78 are f
 PM-added steps: P-2, P-8, P-18, P-30, P-31, P-99, P-100, P-101
 Branch `feat/db-hygiene-15` · Worktree `bb2dash-wt-15` · Migration range **100–104** · One PR per phase (no exception taken)
 Size S/M · Depends on nothing; runs first (94 §2 rule 1) · Nothing visual: no route, no screen, no Vercel preview walk
-Status: **PROVISIONAL until Stack answers 93 §5** (B-41, B-42, and B-16 for the migration numbering) and approves `94_SPRINT2_PHASES.md`.
+Status: **frozen 2026-09-27** — Stack answered 93 §5 (B-41, B-42 and B-16) by delegation and approved `94_SPRINT2_PHASES.md` (DECISIONS 2026-09-27). All three came back as their defaults, so no task's check changed.
 DECISIONS 2026-09-24 governs every default in this brief: "a brief may not cite a default as decided before then". Each
-default is marked **PROVISIONAL** where it is used, including the PM's own calls below.
+default was marked **PROVISIONAL** where it is used; the marks that rested on B-41, B-42 and B-16 are struck as of
+2026-09-27, and the PM's own calls below stay marked until Stack reads their DECISIONS rows at acceptance step 7.
 
 B-numbers are the item numbers of `93_SPRINT2_RESEARCH_SYNTHESIS.md` §5. Prod facts below were re-read on 2026-09-24
 (SELECT only): latest migration `090_attention_archive`; 7 public functions without a pinned `search_path`, none
 extension-owned; 15 foreign keys without a covering index; 4 unused non-unique indexes; `planner_event_series` 0 rows,
 0 orphans; `postgres` holds `bypassrls`, `createrole` and admin option on `anon`, `authenticated`, `service_role`.
 
-**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-16, B-41, B-42), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+**Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-16, B-41, B-42), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6). **Done at this phase's start (2026-09-27):** the three B rows below carry the answer and its date, every PROVISIONAL mark that rested on them is struck, no task's check changed, and `105_BRIEF_VERIFICATION_2026-09-27.md` §3's two open notes on this brief are fixed here (the B-41 row's `get_organization` clause and open item 4; the B-42 no-credential branch's step count). §3's third note on this brief was already fixed in Stage E. The sibling-phase B-numbers this brief cites in §Seams (B-14, B-4, B-48) were answered the same day, each as its default (DECISIONS batch items 14, 4, 48); their **PROVISIONAL** marks stay as written here, because each is frozen in its own phase's PR, not this one.
 
 ## Why
 
@@ -35,7 +36,7 @@ tests all land on (94 §3). Each of those arrives as a `db/tests` file that has 
 loudly. The `search_path` pin is one migration in 038's shape. The trigger is one migration with its own test.
 
 The research recommends the method (92 db-hygiene-tests; 93 §1.5). pgTAP is not adopted (B-42's default,
-**PROVISIONAL**): it would put about fifty functions on the PostgREST surface. `supabase test db` wants the local
+answered 2026-09-27: default): it would put about fifty functions on the PostgREST surface. `supabase test db` wants the local
 stack D-20 declines. The runner is a small node-postgres CLI that keeps the repo's own convention (`raise exception 'FAIL …'`, `begin … rollback`). It must
 connect directly or through the **session** pooler, never the transaction pooler on 6543, because four files
 (`phase10b_grade_model`, `phase12b_076_…`, `phase12b_082_083_…`, `phase12b_089_…`) `set local role` mid-transaction,
@@ -47,13 +48,13 @@ two figures: unused indexes are **4**, not 5, and the org is on the **Free** pla
 
 | B | Question (93 §5) | Default taken (93 §5, verbatim) | Tasks that change if Stack answers otherwise |
 |---|---|---|---|
-| B-41 | Leaked-password protection (Q32) | "the org is on the Free plan; record it as accepted, stay on Free." **PROVISIONAL** | If he moves to Pro: task 19 expects `auth_leaked_password_protection` = 0 after his dashboard toggle; task 23's leaked-password row records the toggle, not an acceptance. Task 20 stays. Acceptance step 5 then expects no leaked-password line, and the MVP's leaked-password clause is struck. |
-| B-42 | A database credential for the test runner (Q33) | "yes; a direct or session-pooler connection string (never the transaction pooler) in a gitignored `.env.local` as `BB2DASH_TEST_DB_URL`, for a dedicated `db_test_runner` role; pgTAP is not adopted." **PROVISIONAL** | **No credential:** tasks 4, 5 and 7 drop and migration 100 stays free. The live runner checks of tasks 6 (`passes.sql`, `fails.sql`), 9–15, 17 and 25, the DoD's `node scripts/db-test.mjs` gate and acceptance steps 2–4 change: each live run becomes one `execute_sql` paste per unit (a loader and its test file together), each expecting its `: PASS` row (its `FAIL …` exception where the row expects RED or runs `fails.sql`); step 2's `--ping` and task 25's `db-test: passed 21` grep have no paste form and drop. R-79 then closes as the runner and its offline checks (tasks 1–3, plus task 6's `commits.sql` case), with the suite pasted through MCP, and the one-command live run moves to Phase 14's dev container (B-48, **PROVISIONAL**). **An owner-level DSN instead of the role** (also open item 1's fallback if the platform refuses `bypassrls`): migration 100 (task 4) and task 7 drop, 103 and 104 cannot arise, row 5 records P-100 as not built, task 5 and step 2 expect `db-test: connected as postgres`, and step 1 writes the owner DSN into `.env.local` instead of setting a role password. **In both branches** task 7's file is never written, so wherever a check survives: every "21" becomes "20" (task 17, the DoD's runner gate, step 3, task 25, the MVP, R-79's proof line), task 17's `ls` count becomes 22, task 3 stays at 17, and task 21 and the DoD's migration line expect the two files 101 and 102 (counts 2, order `101_search_path_pin,102_planner_series_orphan_trigger`). **pgTAP:** this brief is re-cut. |
-| B-16 (numbers only) | V-1's migration number | "a sprint-2 number in the grades phase's range; 059 stays unused (a 059 applied after 090 would replay out of order)." **PROVISIONAL** | Phase 15 only records the sprint-2 allocation (task 21, P-18). A different allocation changes that row and 94 §1, not any file here. |
+| B-41 | Leaked-password protection (Q32) | "the org is on the Free plan; record it as accepted, stay on Free." — **Stack answered 2026-09-27 (by delegation, DECISIONS batch item 41): the default.** | If he moves to Pro: task 19 expects `auth_leaked_password_protection` = 0 after his dashboard toggle and `get_organization` → `"plan":"pro"`; task 23's leaked-password row records the toggle, not an acceptance. Task 20 stays. Acceptance step 5 then expects no leaked-password line, and the MVP's leaked-password clause is struck. |
+| B-42 | A database credential for the test runner (Q33) | "yes; a direct or session-pooler connection string (never the transaction pooler) in a gitignored `.env.local` as `BB2DASH_TEST_DB_URL`, for a dedicated `db_test_runner` role; pgTAP is not adopted." — **Stack answered 2026-09-27 (by delegation, DECISIONS batch item 42): the default.** | **No credential:** tasks 4, 5 and 7 drop and migration 100 stays free. The live runner checks of tasks 6 (`passes.sql`, `fails.sql`), 9–15, 17 and 25, the DoD's `node scripts/db-test.mjs` gate and acceptance steps 2–4 change: each live run becomes one `execute_sql` paste per unit (a loader and its test file together), each expecting its `: PASS` row (its `FAIL …` exception where the row expects RED or runs `fails.sql`); step 2's `--ping` and task 25's `db-test: passed 21` grep have no paste form and drop, and with acceptance steps 1 and 2 both gone task 25's second check expects 5 ticked steps, not 7. R-79 then closes as the runner and its offline checks (tasks 1–3, plus task 6's `commits.sql` case), with the suite pasted through MCP, and the one-command live run moves to Phase 14's dev container (B-48, **PROVISIONAL**). **An owner-level DSN instead of the role** (also open item 1's fallback if the platform refuses `bypassrls`): migration 100 (task 4) and task 7 drop, 103 and 104 cannot arise, row 5 records P-100 as not built, task 5 and step 2 expect `db-test: connected as postgres`, and step 1 writes the owner DSN into `.env.local` instead of setting a role password. **In both branches** task 7's file is never written, so wherever a check survives: every "21" becomes "20" (task 17, the DoD's runner gate, step 3, task 25, the MVP, R-79's proof line), task 17's `ls` count becomes 22, task 3 stays at 17, and task 21 and the DoD's migration line expect the two files 101 and 102 (counts 2, order `101_search_path_pin,102_planner_series_orphan_trigger`). **pgTAP:** this brief is re-cut. |
+| B-16 (numbers only) | V-1's migration number | "a sprint-2 number in the grades phase's range; 059 stays unused (a 059 applied after 090 would replay out of order)." — **Stack answered 2026-09-27 (by delegation, DECISIONS batch item 16): the default, `db/migrations/106_grading_reconciliation.sql`.** | Phase 15 only records the sprint-2 allocation (task 21, P-18). A different allocation changes that row and 94 §1, not any file here. |
 
 PM calls taken without a question (DECISIONS 2026-09-23, "proceeds on stated defaults"), recorded in the rows under
-§Contract. They are 91's stated defaults, not 93 §5 items, and they are **PROVISIONAL** all the same (DECISIONS
-2026-09-24) until Stack reads the rows in the PR:
+§Contract. They are 91's stated defaults, not 93 §5 items, so the 2026-09-27 delegation does not cover them: they stay
+**PROVISIONAL** (DECISIONS 2026-09-24) until Stack reads their rows in the PR at acceptance step 7:
 
 * `calendar_push_now()`'s WARN is recorded as accepted (Phase 11's R2-3). No revoke: it is owner-guarded inside, and
   nothing in the app calls it.
@@ -86,7 +87,7 @@ rows. If rows remain ("all" with past occurrences), the trigger leaves the serie
 `planner_series_update` empties a series by UPDATE, which the trigger does not see, so its TR-4 delete is unchanged
 (088:161-164). It never cascades, and a series with rows left is never touched.
 
-**The role `db_test_runner` (migration 100).** (B-42, **PROVISIONAL**.) The file carries no password, ever.
+**The role `db_test_runner` (migration 100).** (B-42, answered 2026-09-27: default.) The file carries no password, ever.
 `create role db_test_runner with login bypassrls nosuperuser nocreatedb nocreaterole noreplication connection limit 2`;
 `alter role db_test_runner set statement_timeout = '60s'` and `set idle_in_transaction_session_timeout = '30s'`;
 `grant anon, authenticated to db_test_runner with inherit false`, so it can `set local role` into either but inherits
@@ -144,7 +145,7 @@ committed lockfile; install with `npm --prefix scripts ci`).
 * **One connection.** One `pg.Client` (never `Pool.query`, per node-postgres's transaction docs) runs each unit as one
   simple-protocol query. On an error the runner sends `rollback` and goes on to the next unit. One broken file never
   hides the rest.
-* **Credential** (B-42, **PROVISIONAL**). `BB2DASH_TEST_DB_URL` is read from the process environment, or else from `.env.local` at the root of
+* **Credential** (B-42, answered 2026-09-27: default). `BB2DASH_TEST_DB_URL` is read from the process environment, or else from `.env.local` at the root of
   the checkout the script lives in (`process.loadEnvFile`; this laptop runs Node v24.13.0). The canonical copy is
   `C:/Users/estac/projects/bb2dash/.env.local` in the main checkout (acceptance step 1); worktrees hold copies. A DSN on port 6543 is
   refused with exit 2. No output ever contains the DSN or its password; every error message is redacted.
@@ -249,8 +250,9 @@ and the README supersedes them.
 
 ### Decision rows this phase owes (PM, in the PR, dated the day Stack answers — 93 §6)
 
-Each row carries one marker so task 23 can count it. Every row is **PROVISIONAL** until Stack answers: rows 2, 4 and 5
-rest on B-41, B-16 and B-42; rows 1, 3 and 6 on 91's stated defaults (DECISIONS 2026-09-24).
+Each row carries one marker so task 23 can count it. Rows 2, 4 and 5 rest on B-41, B-16 and B-42, all answered
+2026-09-27, and are written as decided, dated that day. Rows 1, 3 and 6 rest on 91's stated defaults, which the
+delegation did not cover: they stay **PROVISIONAL** (DECISIONS 2026-09-24) until Stack reads them at acceptance step 7.
 
 1. `calendar_push_now` — R2-3 on record. The lint-0029 WARN is accepted: it is owner-guarded inside, it follows
    `app_owner()`'s pattern, and nothing in the app calls it (grep of `main` a5042fa). `phase15_101` proves a stranger
@@ -282,7 +284,7 @@ R-78 are filed under it. For R-54 there is also his recurring-events answer, as 
 leaves past occurrences — **and single-occurrence edit/delete ships with it, not later.**" A single-occurrence delete
 that leaves an empty rule behind is the gap in that answer this phase closes (PM reading). His acceptance field for
 S2-bugs-1 is still "_to confirm_", so everything below is **PM wording for Stack to confirm**, built from the B-41 and
-B-42 defaults (**PROVISIONAL**): *One command on my laptop runs every database test against prod and ends "passed 21, failed 0"; a failing test makes it say FAIL and exit non-zero; nothing it runs stays in the
+B-42 defaults (both answered 2026-09-27): *One command on my laptop runs every database test against prod and ends "passed 21, failed 0"; a failing test makes it say FAIL and exit non-zero; nothing it runs stays in the
 database. The security advisor no longer lists mutable search paths; what it still lists (two owner-guarded functions,
 leaked-password protection on the Free plan) and the performance INFO list (15 foreign keys, 4 unused indexes) each
 have a dated DECISIONS row that gives the true reason. Deleting the last occurrence of a repeating event leaves no
@@ -325,14 +327,14 @@ Stack's acceptance script (he walks it after the PR is open; the PM puts every c
 3. `node scripts/db-test.mjs` → 21 `PASS` lines and `db-test: passed 21, failed 0, units 21`.
 4. `node scripts/db-test.mjs --file scripts/fixtures/db-test/fails.sql` → one `FAIL` line, and the exit code is 1.
 5. Supabase → Advisors → Security: no "Function Search Path Mutable"; the two SECURITY DEFINER lines and the
-   leaked-password line remain (B-41, **PROVISIONAL**). Performance: 15 unindexed foreign keys and 4 unused indexes.
+   leaked-password line remain (B-41, answered 2026-09-27: default). Performance: 15 unindexed foreign keys and 4 unused indexes.
 6. Supabase → Authentication settings: new-user signups are off. The PM saves the screenshot as `01-auth-signups-off.png`.
 7. Read the six DECISIONS rows. Say "merge" (or name what is wrong).
 
 What proves each item in scope:
 
 * **R-78** — task 15: 0 unpinned public functions (7 today). Task 16: three search modes answer 200 and the hybrid median
-  is ≤ 60 ms. Task 19: advisor 0 / 2 / 1 (the 1 rests on B-41, **PROVISIONAL**). Task 23: rows 1 and 2.
+  is ≤ 60 ms. Task 19: advisor 0 / 2 / 1 (the 1 rests on B-41's answered default). Task 23: rows 1 and 2.
 * **R-79** — task 17: `db-test: passed 21, failed 0, units 21`, exit 0.
 * **R-80** — task 19: advisor INFO 15 + 4 by today's names. Task 23: row 3.
 * **R-54** — task 13: `phase15_102` PASS after RED, TR-4 still PASS, prod orphan count 0.
@@ -383,7 +385,7 @@ stays, since later phases run the suite on `main` (brief 98 §Task loops, row L2
 | 16 | Search after the pin: re-time and all three modes over HTTP | R-78 | W-40 | `explain (analyze, format json) select * from public.hybrid_search_file_text('final exam date', (select embedding from public.bb_text_embeddings where model = 'gte-small' order by id limit 1), 'gte-small', null, 12)` run 5 times through `execute_sql` → median `Execution Time` ≤ 60.0 ms (the 5 figures in 95c); `curl -s -o /dev/null -w "%{http_code}" -X POST https://goultdzqcavefcgnifdy.supabase.co/functions/v1/search -H "Authorization: Bearer $ANON_JWT" -H "Content-Type: application/json" -d '{"q":"attendance policy","mode":"fts"}'` → 200, and the same → 200 for `"vector"` and `"hybrid"` (`$ANON_JWT` = the legacy anon JWT from `get_publishable_keys`, public by design; `verify_jwt` refuses the `sb_publishable_` key); `npm --prefix mcp-server run build && node mcp-server/scripts/smoke.mjs` → exit 0 | "⌘K still answers in all three modes, well under its 60 ms ceiling." |
 | 17 | Integrate W-38/39/40 into `feat/db-hygiene-15`; any missing grant a worker reported is already in 103 or 104 (W-38, §Tables and migrations); one first found here goes in 103 if 103 is not yet on prod, else in 104, before this check; one found after 104 is on prod stops the PM (§Tables and migrations, 104) | R-79 | PM | `node scripts/db-test.mjs; echo $?` → `db-test: passed 21, failed 0, units 21` then 0; `ls db/tests/*.sql \| wc -l` → 23 (19 today). A red unit other than the three repaired here stops the PM, who brings its FAIL line to Stack; no unit is skipped or excluded to reach 21 | "One command, every database test, all green." |
 | 18 | Other suites after integration | R-79, P-101 | PM | `cd web && npm run typecheck && npm test` → 0 failures, and the `Test Files` count ≥ 107 (main a5042fa: 107 files match vitest's `test/**/*.test.{ts,tsx}`, from `find web/test -name '*.test.ts' -o -name '*.test.tsx' \| wc -l` → 107); `node --test scripts/db-test.test.mjs scripts/google-consent.test.mjs` → 0 failures | "Nothing else broke." |
-| 19 | Advisor and plan re-read | R-78, R-80 | PM | `get_advisors` security → `function_search_path_mutable` 0, `authenticated_security_definer_function_executable` 2, `auth_leaked_password_protection` 1 (B-41, **PROVISIONAL**; 0 if Stack moves to Pro); performance → `unindexed_foreign_keys` 15, `unused_index` 4 (the four names above); `get_organization` → `"plan":"free"` | "The advisor list is exactly what we decided to accept." |
+| 19 | Advisor and plan re-read | R-78, R-80 | PM | `get_advisors` security → `function_search_path_mutable` 0, `authenticated_security_definer_function_executable` 2, `auth_leaked_password_protection` 1 (B-41, answered 2026-09-27: default; 0, and `get_organization` → `"plan":"pro"`, if Stack ever moves to Pro); performance → `unindexed_foreign_keys` 15, `unused_index` 4 (the four names above); `get_organization` → `"plan":"free"` | "The advisor list is exactly what we decided to accept." |
 | 20 | **Stack:** signups-off screenshot | R-78 | Stack + PM | `docs/planning/sprint-2/walks/walk-15/01-auth-signups-off.png` shows project `goultdzqcavefcgnifdy`'s Authentication settings with the allow-new-user-signups toggle **off** | "Only your account can ever sign in, which is why leaked-password checks can wait." |
 | 21 | Migration hygiene | P-18 | PM | `ls db/migrations \| grep -c "^10[0-4]_"` → 3 (4 if 103 was needed, 5 if 104 was too; row 4 then names each); `select count(*) from supabase_migrations.schema_migrations where name in ('100_db_test_runner_role', '101_search_path_pin', '102_planner_series_orphan_trigger')` → 3; `select string_agg(name, ',' order by version) from supabase_migrations.schema_migrations where name ~ '^10[0-4]_'` → `100_db_test_runner_role,101_search_path_pin,102_planner_series_orphan_trigger` (with `,103_db_test_runner_grants` appended if 103 was needed, then `,104_db_test_runner_grants_2` if 104 was); `git log --format=%H -- db/migrations/<file> \| wc -l` → 1 for each of 100–102 (and 103, 104; committed once, never edited after apply); for each of 100–102 (and 103, 104), `select md5(array_to_string(statements, '')) from supabase_migrations.schema_migrations where name = '<name>'` equals the hash from `git show HEAD:db/migrations/<file> \| md5sum` (the committed blob, not the CRLF working copy that `core.autocrlf=true` leaves on this laptop; the pair matched for 088, 089 and 090 on 2026-09-27), both printed in 95w | "Repo and prod hold the same three migrations, in order." |
 | 22 | Review gates | R-78, R-79 | PM | `/code-review main high` → 0 CRITICAL, 0 HIGH without outcome `fixed`; `/security-review` → 0 HIGH open | "Two reviews, nothing serious left." |
@@ -414,7 +416,7 @@ prod.
 * `sync_runner`, `secrets/`, the dev container, psql in a container, any scheduled job: **Phase 14**.
 * Creating the 15 foreign-key indexes, dropping the FTS or HNSW indexes, dropping `grade_scenarios`, and the 057
   policies' subquery wrap: not this sprint's defaults; each needs its own row from Stack.
-* pgTAP: not adopted (B-42, **PROVISIONAL**). `supabase test db` (it needs a local Supabase), a local Supabase, CI:
+* pgTAP: not adopted (B-42, answered 2026-09-27: default). `supabase test db` (it needs a local Supabase), a local Supabase, CI:
   declined (D-20). A Supabase branch or a pre-commit hook for the runner: not this sprint's default.
 * The Pro plan and the leaked-password toggle (B-41), and any Auth or dashboard setting beyond reading the signup toggle.
 * The state-doc refresh steps (P-5, P-13, P-20, P-29, P-32, P-41, P-62): Stage D on the planning branch.
@@ -422,7 +424,8 @@ prod.
 
 ## Open items for Stack
 
-Only what B-41, B-42 and B-16 leave open, each with the default the PM takes; every default here is **PROVISIONAL**:
+B-41, B-42 and B-16 are answered (2026-09-27, all three as their defaults). What is left below is the fallback each
+answer leaves open, plus one risk the PM carries; none of it is a question waiting on Stack:
 
 1. **B-42, the role's `BYPASSRLS`.** Task 4's dry run is the first time this project creates a login role with
    `bypassrls`. If the platform refuses it, the default fallback is research 92's own: an owner-level DSN in
@@ -437,7 +440,8 @@ Only what B-41, B-42 and B-16 leave open, each with the default the PM takes; ev
    in an unsaved SQL-editor tab. If `/security-review` asks for it, the snippet sends a pre-computed SCRAM verifier
    instead of the plain password, and nothing else changes.
 4. **B-41, after a future upgrade.** If Stack ever moves to Pro, row 2 is superseded by his dashboard toggle and the
-   advisor's leaked-password count goes to 0. There is no other change.
+   advisor's leaked-password count goes to 0. The only other change is task 19's `get_organization` check, which then
+   expects `"plan":"pro"` instead of `"plan":"free"`.
 5. **B-16.** Nothing is left open here: Phase 15 records the ranges, and V-1's number inside 105–109 is Phase 16's call.
 6. **Not a question, a risk the PM carries.** Some existing units build rows on literal future dates:
    `phase12b_082_083_planner_series.sql` creates series from 2026-10-15 onward, and 088's "all" scope counts from
