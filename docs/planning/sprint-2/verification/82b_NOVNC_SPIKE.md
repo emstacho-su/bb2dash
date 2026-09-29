@@ -38,6 +38,7 @@ probes are separate: the same Chrome profile reopened after the browser was clos
 | probe-2 | 2026-09-29T16:07:13Z | 0:41 | 200 | idle, tab open; next probe ~30 min |
 | probe-3 | 2026-09-29T16:39:15Z | 1:14 | 200 | idle, tab open; cadence widens to ~60 min |
 | probe-4 | 2026-09-29T17:40:14Z | 2:15 | 200 | idle; the tab now shows `/ultra/course` (Blackboard or Stack moved it; no click by the loop) |
+| probe-5 | 2026-09-29T18:41:21Z | 3:16 | 200 | tab in active use by Stack (a course file page), so this hour was not idle; the login is alive either way |
 
 ### Reopen probes (same profile, browser closed in between)
 
