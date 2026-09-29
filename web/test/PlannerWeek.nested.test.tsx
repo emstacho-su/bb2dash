@@ -185,3 +185,47 @@ describe('R3-8 — a class with three due items in it', () => {
     expect(nestedChipPx('Quiz 3')).toBeLessThan(nestedChipPx(TITLES[0]));
   });
 });
+
+/*
+ * The walk finding (1c9a538, 1040 px, sidebar open): a real browser drew the
+ * "Quiz #5" chip, status select included, taller than the estimate allowed,
+ * and it overflowed its class. The estimate is a floor now; what the browser
+ * measures is what the block gets. jsdom does no layout, so the test plays the
+ * browser: a ResizeObserver that reports, and a body whose scrollHeight is the
+ * content as the 1040 px column laid it out.
+ */
+describe('R3-8 — the block takes what the browser measured', () => {
+  /** The nested content's height at 1040 px, select included, above any estimate. */
+  const MEASURED_CONTENT_PX = 1200;
+
+  class ReportingObserver {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe() {
+      queueMicrotask(() => this.callback([], this as unknown as ResizeObserver));
+    }
+    unobserve() {}
+    disconnect() {}
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', ReportingObserver);
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-block-body') ? MEASURED_CONTENT_PX : 0;
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('grows a class block to its measured content, status selects and all', async () => {
+    const block = await lectureBlock();
+    expect(within(block).getAllByRole('combobox')).toHaveLength(3);
+    await vi.waitFor(() =>
+      expect(px(block, '--height-px')).toBeGreaterThanOrEqual(MEASURED_CONTENT_PX + PLANNER_BLOCK_PADDING_PX - 0.001),
+    );
+    const body = block.querySelector('[data-block-body]') as HTMLElement;
+    expect(px(body, '--content-px')).toBeGreaterThanOrEqual(MEASURED_CONTENT_PX - 0.001);
+  });
+});

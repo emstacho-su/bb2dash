@@ -18,6 +18,7 @@
  * same map instead.
  */
 
+import { useEffect, useRef } from 'react';
 import {
   PLANNER_SLOT_COUNT,
   plannerHours,
@@ -352,6 +353,23 @@ function Block({
   actions: ItemActions;
   eventActions: EventActions;
 }) {
+  const nested = block.kind === 'meeting' && block.nested.length > 0;
+  const bodyRef = useRef<HTMLSpanElement>(null);
+  const report = actions.measureNested;
+  const blockKey = block.key;
+
+  // R3-8: measure, don't guess. The body clips, so its scrollHeight is the
+  // content as this column laid it out — status selects, wrapped titles and
+  // all. Watching the nested list catches a chip that changes size later.
+  useEffect(() => {
+    const bodyNode = bodyRef.current;
+    if (!nested || !bodyNode || !report || typeof ResizeObserver === 'undefined') return;
+    const list = bodyNode.querySelector('[data-nested-list]') ?? bodyNode;
+    const observer = new ResizeObserver(() => report(blockKey, bodyNode.scrollHeight));
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [nested, report, blockKey]);
+
   const { topPx, heightPx } = spanPx(block.top, block.height, heights);
   // A due card spans one slot but is *drawn* at `.itemBlock`'s minimum, and it
   // is the drawn height its text has to be counted from.
@@ -367,7 +385,6 @@ function Block({
   // line starts rather than through the middle of one (F-2). A class carrying
   // nested items was sized to fit them (R3-8), so its text area is the whole
   // block: a whole-line cut there would take the bottom off the last chip.
-  const nested = block.kind === 'meeting' && block.nested.length > 0;
   const contentPx = nested ? Math.max(0, drawnPx - PLANNER_BLOCK_PADDING_PX) : blockContentPx(drawnPx);
   const body = { ['--content-px' as string]: `${contentPx}px` };
 
@@ -400,7 +417,7 @@ function Block({
       {...(block.kind === 'item' ? itemCardProps(block.item, actions) : {})}
       style={style}
     >
-      <span className={styles.blockBody} data-block-body="true" style={body}>
+      <span className={styles.blockBody} data-block-body="true" style={body} ref={bodyRef}>
         {block.kind === 'meeting' ? (
           <MeetingContent meeting={block.meeting} nested={block.nested} actions={actions} />
         ) : (

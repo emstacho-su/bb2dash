@@ -144,7 +144,17 @@ function PlannerWeekScreen() {
     [searchParams, today],
   );
 
-  const data = usePlannerWeekData(view);
+  // R3-8: what the browser laid each nested class block's content out at. A
+  // change under half a pixel is layout noise and does not re-render the grid.
+  const [measured, setMeasured] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const measureNested = useCallback((blockKey: string, contentPx: number) => {
+    setMeasured((current) =>
+      Math.abs((current.get(blockKey) ?? 0) - contentPx) < MEASURE_TOLERANCE_PX
+        ? current
+        : new Map(current).set(blockKey, contentPx),
+    );
+  }, []);
+  const data = usePlannerWeekData(view, measured);
   const setStatus = useSetItemStatus();
   const editor = usePlannerEventEditor();
   // R3-9: the dialog the editor opens is the wizard when "+" opened it. It is
@@ -165,7 +175,7 @@ function PlannerWeekScreen() {
   }
   const closePopover = useCallback(() => setPopover(null), []);
 
-  const actions = itemActions(view, setStatus, popover, setPopover);
+  const actions: ItemActions = { ...itemActions(view, setStatus, popover, setPopover), measureNested };
 
   // One layer at a time. The popover closes itself on an outside *press*, but a
   // keyboard activation (Enter on a block) fires no press, so opening the event
@@ -309,6 +319,9 @@ function useBandState(): BandToggle {
   }, [state]);
   return { expanded: state === 'open', toggle };
 }
+
+/** A measured height change smaller than this is layout noise (R3-8). */
+const MEASURE_TOLERANCE_PX = 0.5;
 
 /** Where "+" starts a new event when the day is not today: 9 AM. */
 const WIZARD_DEFAULT_MINUTE = 9 * 60;
