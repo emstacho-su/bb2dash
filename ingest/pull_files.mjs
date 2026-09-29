@@ -3,7 +3,8 @@
 //
 //   node ingest/pull_files.mjs --manifest <manifest.json> --downloads <dir> [--mirror <dir>]
 //                              [--bucket my_submissions] [--only 119,152] [--out <sql path>]
-//                              [--dry-run]
+//                              [--dry-run] [--no-embed] [--fetch] [--restale]
+//   node ingest/pull_files.mjs --restale-post --downloads <dir> [--only ids] [--no-embed]
 //
 // CADENCE_RUNBOOK step 4, the one step no automation replaced: store the bytes of the bb_files
 // rows the transform catalogued with `storage_path is null`. First run 2026-09-22 (12 files).
@@ -38,10 +39,11 @@
 //      reported, and a human marks it `superseded_by` its replacement. A `session_expired` outcome
 //      (401/403 on the first hop) stops the whole run: every remaining row would fail the same way.
 //
-// TWO MODES, ALWAYS EXCLUSIVE. Course files (no flag) and Stack's submissions (`--bucket
+// THE MODES, ALWAYS EXCLUSIVE. Course files (no flag) and Stack's submissions (`--bucket
 // my_submissions`) each take their own rows and can never write the other's. Re-pulling a file
-// whose stored bytes went stale is deliberately NOT here: it replaces text already in the corpus,
-// so it belongs in a step someone runs on purpose, not in every sync.
+// whose stored bytes went stale is `--restale` then `--restale-post` (see the --restale block
+// below): it replaces text already in the corpus, so it runs on its own rows and in its own runs,
+// and it never puts document text into the owner SQL.
 //
 // THE MANIFEST. One JSON array from this query (execute_sql), saved to a file:
 //   select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
@@ -143,6 +145,8 @@ export function isSubmissionRow(row) {
 
 /** Which of the two exclusive runs this is. */
 export function modeOf(args) {
+  if (args?.['restale-post']) return 'restale-post';
+  if (args?.restale) return 'restale';
   return args?.bucket === SUBMISSION_BUCKET ? 'submissions' : 'course';
 }
 
@@ -195,11 +199,143 @@ export function isDuplicateAnswer(status, body) {
  * bytes this step did not write and must not point a Blackboard row at. bb-sync step 4b reports the
  * row, leaves `storage_path` null, and a human decides.
  */
-export function duplicateIsAcceptable(submission) {
-  return !submission;
+export function duplicateIsAcceptable(submission, { restale = false } = {}) {
+  // A restale key is new by construction (it carries the new bytes' sha). If something already
+  // occupies it, this run did not put it there, so it is refused rather than assumed.
+  return !submission && !restale;
 }
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
+
+// ---------------------------------------------------------------------------------------------
+// --restale: re-pull a row whose stored bytes went stale.
+//
+// `stage_files` (074 and its predecessors) appends `; stored bytes may be stale` to a row's notes
+// when the instructor re-uploads a file under the same item (same content id and name, new rid).
+// The stored bytes and their text may then be out of date. This mode re-fetches them.
+//
+// THE RULE IT KEEPS (PR #32's security review): professor-authored document text never lands in
+// SQL an agent reads and hands to a privileged execute_sql. Text goes over PostgREST exactly as the
+// normal pull posts it. The owner SQL carries only ids, Storage keys, hashes, a mime shape, a date
+// and this script's own constant wording, and each of those is shape-checked before it is written.
+//
+// WHY TWO RUNS. `bb_file_text` is unique on (file_id, unit_kind, unit_no) and anon can insert but
+// not select or delete, so the new units cannot be posted while the old ones are there, and only
+// the owner can remove the old ones. So:
+//   1. `--restale` fetches the bytes and hashes them. Unchanged bytes → owner SQL that only clears
+//      the note. Changed bytes → a NEW Storage key (a `restale-<sha12>/` segment; the old object is
+//      never overwritten and stays where it is), a mirror copy at that new path, the units staged
+//      on local disk (`<downloads>/restale_units/<id>.json`), and one owner transaction per row:
+//      delete the old units (their embeddings cascade), point the row at the new key and sha, and
+//      replace the marker with a dated "re-pulled" note. Both statements are guarded on the old
+//      sha, so a row that changed since the manifest was read is left alone.
+//   2. The owner runs that SQL through execute_sql.
+//   3. `--restale-post` posts each staged file's units to /rest/v1/bb_file_text and runs the embed
+//      step. A 409 there means step 2 has not run for that row yet; the file stays staged.
+//
+// THE MANIFEST for --restale adds three keys to the normal one (ids, hashes and a boolean only):
+//   select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
+//            'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
+//            'bucket', f.bucket, 'storage_path', f.storage_path, 'sha256', f.sha256,
+//            'stale', true) order by f.id)
+//     from bb_files f
+//    where f.superseded_by is null and f.storage_path is not null
+//      and f.notes like '%stored bytes may be stale%';
+// ---------------------------------------------------------------------------------------------
+
+/** The exact wording stage_files appends (034, 037, 043, 053, 074); prod rows 72 and 144 carry it. */
+export const STALE_MARKER = '; stored bytes may be stale';
+const RESTALE_BY = 'ingest/pull_files.mjs --restale';
+const SHA_RE = /^[0-9a-f]{64}$/;
+const MIME_RE = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ID_RE = /^\d+$/;
+// A key or relpath is a catalogue path: one line, no control characters.
+const NO_CONTROL_RE = /^[^\u0000-\u001f\u007f]+$/;
+
+function mustMatch(value, re, what) {
+  if (!re.test(String(value))) throw new Error(`restale: refusing a malformed ${what}`);
+  return String(value);
+}
+
+/** Rows --restale may take: flagged stale, bytes already stored, a well-formed sha, not a submission. */
+export function filterRestale(rows, only) {
+  const ids = String(only ?? '').split(',').map((s) => s.trim()).filter(Boolean).map(Number);
+  return rows.filter((r) => (ids.length === 0 || ids.includes(Number(r.id)))
+    && r.stale === true && Boolean(r.storage_path) && SHA_RE.test(String(r.sha256))
+    && ID_RE.test(String(r.id)) && !isSubmissionRow(r));
+}
+
+/** The relpath for re-pulled bytes: the same folder plus a `restale-<sha12>/` segment. */
+export function restaleRelpath(relpath, sha256) {
+  const p = String(relpath);
+  const cut = p.lastIndexOf('/');
+  const dir = cut >= 0 ? p.slice(0, cut + 1) : '';
+  return `${dir}restale-${mustMatch(sha256, SHA_RE, 'sha256').slice(0, 12)}/${p.slice(cut + 1)}`;
+}
+
+/** The owner transaction for a row whose bytes changed. Ids, keys and hashes only. */
+export function restaleSql({ id, oldSha, newSha, key, relpath, size, mime, pulledOn }) {
+  const fid = mustMatch(id, ID_RE, 'id');
+  const was = q(mustMatch(oldSha, SHA_RE, 'old sha256'));
+  const now = q(mustMatch(newSha, SHA_RE, 'new sha256'));
+  const bytes = mustMatch(size, ID_RE, 'size');
+  const type = q(mustMatch(mime, MIME_RE, 'mime'));
+  const day = mustMatch(pulledOn, DATE_RE, 'date');
+  mustMatch(key, NO_CONTROL_RE, 'key');
+  mustMatch(relpath, NO_CONTROL_RE, 'relpath');
+  return [
+    'begin;',
+    `delete from bb_file_text where file_id = ${fid} and exists (select 1 from bb_files where id = ${fid} and sha256 = ${was});`,
+    `update bb_files set storage_path = ${q(`${BUCKET}/${key}`)}, local_path = ${q(`course context/${relpath}`)}, ` +
+      `sha256 = ${now}, bytes = ${bytes}, mime_type = ${type}, downloaded_at = now(), text_status = 'extracted', ` +
+      `notes = replace(notes, ${q(STALE_MARKER)}, ${q(`; bytes re-pulled ${day} by ${RESTALE_BY}`)}) ` +
+      `where id = ${fid} and sha256 = ${was};`,
+    'commit;',
+  ].join('\n');
+}
+
+/** The owner transaction for a row whose bytes turned out unchanged: the note only. */
+export function restaleUnchangedSql({ id, sha, pulledOn }) {
+  const fid = mustMatch(id, ID_RE, 'id');
+  const was = q(mustMatch(sha, SHA_RE, 'sha256'));
+  const day = mustMatch(pulledOn, DATE_RE, 'date');
+  return [
+    'begin;',
+    `update bb_files set notes = replace(notes, ${q(STALE_MARKER)}, ${q(`; bytes re-checked ${day} by ${RESTALE_BY}: unchanged`)}) ` +
+      `where id = ${fid} and sha256 = ${was};`,
+    'commit;',
+  ].join('\n');
+}
+
+/** What --restale stages on disk for --restale-post: the PostgREST rows, never SQL. */
+export function stagedUnits({ id, sha256, units }) {
+  return { id, sha256, rows: textRows(id, units) };
+}
+
+export function stagedUnitsPath(downloads, id) {
+  return path.join(downloads, 'restale_units', `${id}.json`);
+}
+
+/** A --restale-post answer: posted, or the owner SQL has not removed the old units yet, or an error. */
+export function restalePostOutcome(status, body) {
+  if (status >= 200 && status < 300) return 'posted';
+  if (status === 409 || /23505/.test(String(body))) return 'owner_sql_pending';
+  return 'error';
+}
+
+const USAGE = 'usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--bucket my_submissions] [--fetch] [--restale] [--only ids] [--out <sql>] [--dry-run] [--no-embed]\n' +
+  '       node ingest/pull_files.mjs --restale-post --downloads <dir> [--only ids] [--no-embed]';
+
+/** The argument error for this run, or null. */
+export function argError(args) {
+  if (args.restale && args['restale-post']) return '--restale and --restale-post are exclusive: run --restale, then the owner SQL, then --restale-post';
+  if (args['restale-post']) return args.downloads && args.bucket === undefined ? null : USAGE;
+  if (!args.manifest || !args.downloads) return USAGE;
+  if (args.bucket !== undefined && args.bucket !== SUBMISSION_BUCKET) return `--bucket takes only '${SUBMISSION_BUCKET}' (bb-sync step 4b); omit it for course files`;
+  if (args.restale && args.bucket !== undefined) return '--restale takes course rows only; it does not combine with --bucket';
+  return null;
+}
 
 /**
  * The one statement the owner runs per file; the script never writes bb_files itself.
@@ -268,6 +404,7 @@ async function pullOne(row, ctx) {
   const mime = mimeFor(row);
   if (!bytesLookValid(bytes, mime)) return { id: row.id, error: `bad bytes: ${bytes.length} bytes, magic ${bytes.subarray(0, 4).toString('hex')}` };
   const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (ctx.restale) return restaleOne(row, ctx, { localPath, bytes, mime, sha256 });
   const submission = isSubmissionRow(row);
   const storageKey = storageKeyFor(row);
   const tag = submission ? { submission: true } : {};
@@ -309,17 +446,104 @@ async function pullOne(row, ctx) {
   return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, storage: up.status, units: units.length, unitsPosted, textStatus, extractError, sql };
 }
 
+/**
+ * --restale, per row, once the fresh bytes are on disk and hashed. Unchanged bytes → the note-only
+ * SQL. Changed bytes → new key, mirror at the new path, Storage POST (an occupied key is refused),
+ * extract, stage the units on disk, and the one owner transaction. A row whose extraction yields
+ * nothing gets no SQL: its old text is better than none.
+ */
+async function restaleOne(row, ctx, { localPath, bytes, mime, sha256 }) {
+  const { mirror, supabaseUrl, key, ingestDir, dryRun, pulledOn, downloads } = ctx;
+  if (sha256 === row.sha256) {
+    return { id: row.id, restale: 'unchanged', sha256: sha256.slice(0, 12), ...(dryRun ? { dryRun: true } : { sql: restaleUnchangedSql({ id: row.id, sha: sha256, pulledOn }) }) };
+  }
+  const relpath = restaleRelpath(row.relpath, sha256);
+  const storageKey = storageKeyFor({ relpath });
+  if (dryRun) return { id: row.id, restale: 'changed', key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), dryRun: true };
+
+  const dest = path.join(mirror, relpath);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(localPath, dest);
+
+  const up = await fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${encodeKey(storageKey)}`, {
+    method: 'POST', headers: anonHeaders(key, mime), body: bytes,
+  });
+  const upBody = await up.text();
+  if (!up.ok) {
+    const occupied = isDuplicateAnswer(up.status, upBody) && !duplicateIsAcceptable(false, { restale: true });
+    return { id: row.id, key: storageKey, error: occupied ? `Storage key already occupied (${up.status}); a human decides` : `storage ${up.status}: ${upBody.slice(0, 200)}` };
+  }
+
+  let units = [];
+  try { units = extractUnits(ingestDir, localPath); } catch (e) { return { id: row.id, key: storageKey, error: `extract failed: ${String(e).slice(0, 200)}` }; }
+  if (!units.length) return { id: row.id, key: storageKey, error: 'extract gave no units; the old text is kept and no SQL is written' };
+
+  const staged = stagedUnitsPath(downloads, row.id);
+  fs.mkdirSync(path.dirname(staged), { recursive: true });
+  fs.writeFileSync(staged, JSON.stringify(stagedUnits({ id: Number(row.id), sha256, units })));
+  const sql = restaleSql({ id: row.id, oldSha: row.sha256, newSha: sha256, key: storageKey, relpath, size: bytes.length, mime, pulledOn });
+  return { id: row.id, restale: 'changed', key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), units: units.length, staged, sql };
+}
+
+/** The embed step, shared by the pull and --restale-post. Returns the note and an exit code. */
+async function embedStep(env, supabaseUrl) {
+  const jwt = env.SB_ANON_JWT;
+  if (!jwt) return { note: '; embed step skipped (SB_ANON_JWT is not set) — run ingest/embed_corpus.mjs', code: 0 };
+  const embed = await runEmbedLoop({ post: makePost(supabaseUrl, jwt), maxParts: DEFAULT_MAX_PARTS, log: (line) => console.log(line) });
+  if (embed.exitCode !== 0) { console.error(embed.error); return { note: `; EMBED FAILED — ${embed.error}`, code: 1 }; }
+  return { note: '; embeddings finished', code: 0 };
+}
+
+/**
+ * --restale-post: post each staged file's units over PostgREST, exactly as the normal pull posts
+ * text. A posted file is renamed `<id>.json.posted` so a re-run never posts it twice. A 409 means
+ * the owner SQL has not deleted that row's old units yet: the file stays staged for the next run.
+ */
+async function restalePost(args, env) {
+  const key = env.SB_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY;
+  if (!key) { console.error('SB_ANON_KEY (the publishable key) is not set'); return 2; }
+  const supabaseUrl = env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const dir = path.dirname(stagedUnitsPath(args.downloads, 0));
+  const only = String(args.only ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /^\d+\.json$/.test(n)) : [];
+  const picked = names.filter((n) => only.length === 0 || only.includes(n.replace('.json', '')));
+  const results = [];
+  for (const name of picked) {
+    const file = path.join(dir, name);
+    const staged = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const id = Number(name.replace('.json', ''));
+    if (staged.id !== id || !Array.isArray(staged.rows) || staged.rows.some((r) => r.file_id !== id)) {
+      results.push({ id, error: 'staged file does not match its name; not posted' });
+      continue;
+    }
+    const tr = await fetch(`${supabaseUrl}/rest/v1/bb_file_text`, {
+      method: 'POST', headers: { ...anonHeaders(key, 'application/json'), Prefer: 'return=minimal' },
+      body: JSON.stringify(staged.rows),
+    });
+    const body = tr.ok ? '' : await tr.text();
+    const outcome = restalePostOutcome(tr.status, body);
+    if (outcome === 'posted') fs.renameSync(file, `${file}.posted`);
+    results.push({ id, outcome, unitsPosted: outcome === 'posted' ? staged.rows.length : 0, ...(outcome === 'error' ? { error: `bb_file_text ${tr.status}: ${body.slice(0, 200)}` } : {}) });
+  }
+  for (const r of results) console.log(JSON.stringify(r));
+  const unitsPosted = results.reduce((n, r) => n + (r.unitsPosted || 0), 0);
+  let embed = { note: '', code: 0 };
+  if (shouldEmbed({ dryRun: false, noEmbed: args['no-embed'] === true, unitsPosted })) embed = await embedStep(env, supabaseUrl);
+  const pending = results.filter((r) => r.outcome === 'owner_sql_pending').map((r) => r.id);
+  console.log(`${results.filter((r) => r.outcome === 'posted').length} of ${picked.length} staged file(s) posted (restale-post)` +
+    (pending.length ? `; owner SQL not run yet for ${pending.join(', ')}` : '') + embed.note);
+  return results.some((r) => r.outcome !== 'posted') || embed.code ? 1 : 0;
+}
+
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const args = parseArgs(argv);
-  if (!args.manifest || !args.downloads) {
-    console.error('usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--bucket my_submissions] [--fetch] [--only ids] [--out <sql>] [--dry-run] [--no-embed]');
-    console.error('note: --dry-run writes nothing to Storage, the mirror or the database, but with --fetch it still downloads the bytes, because the key and sha it reports are computed from them.');
+  const bad = argError(args);
+  if (bad) {
+    console.error(bad);
+    if (bad === USAGE) console.error('note: --dry-run writes nothing to Storage, the mirror or the database, but with --fetch it still downloads the bytes, because the key and sha it reports are computed from them.');
     return 2;
   }
-  if (args.bucket !== undefined && args.bucket !== SUBMISSION_BUCKET) {
-    console.error(`--bucket takes only '${SUBMISSION_BUCKET}' (bb-sync step 4b); omit it for course files`);
-    return 2;
-  }
+  if (args['restale-post']) return restalePost(args, env);
   const key = env.SB_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY;
   if (!key && !args['dry-run']) { console.error('SB_ANON_KEY (the publishable key) is not set'); return 2; }
   const ingestDir = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
@@ -336,12 +560,14 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     supabaseUrl: env.SUPABASE_URL || DEFAULT_SUPABASE_URL,
     key, ingestDir, dryRun: args['dry-run'] === true,
     fetchMode: args.fetch === true,
+    restale: args.restale === true,
     fetchImpl: (url) => fetch(url),
     pulledOn: new Date().toISOString().slice(0, 10),
   };
   if (ctx.fetchMode) fs.mkdirSync(args.downloads, { recursive: true });
 
-  const rows = filterManifest(JSON.parse(fs.readFileSync(args.manifest, 'utf8')), args.only, args.bucket);
+  const manifest = JSON.parse(fs.readFileSync(args.manifest, 'utf8'));
+  const rows = ctx.restale ? filterRestale(manifest, args.only) : filterManifest(manifest, args.only, args.bucket);
   const results = [];
   let stopped = null;
   for (const row of rows) {
@@ -363,22 +589,15 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const unitsPosted = results.reduce((n, r) => n + (r.unitsPosted || 0), 0);
   let embedNote = '';
   if (shouldEmbed({ dryRun: ctx.dryRun, noEmbed: args['no-embed'] === true, unitsPosted })) {
-    const jwt = env.SB_ANON_JWT;
-    if (!jwt) {
-      embedNote = '; embed step skipped (SB_ANON_JWT is not set) — run ingest/embed_corpus.mjs';
-    } else {
-      const embed = await runEmbedLoop({
-        post: makePost(ctx.supabaseUrl, jwt),
-        maxParts: DEFAULT_MAX_PARTS,
-        log: (line) => console.log(line),
-      });
-      embedNote = embed.exitCode === 0 ? '; embeddings finished' : `; EMBED FAILED — ${embed.error}`;
-      if (embed.exitCode !== 0) {
-        console.error(embed.error);
-        console.log(`${results.filter((r) => r.sql).length} of ${rows.length} pulled (${mode}); bb_files updates in ${out}${embedNote}`);
-        return 1;
-      }
+    const embed = await embedStep(env, ctx.supabaseUrl);
+    embedNote = embed.note;
+    if (embed.code !== 0) {
+      console.log(`${results.filter((r) => r.sql).length} of ${rows.length} pulled (${mode}); bb_files updates in ${out}${embedNote}`);
+      return 1;
     }
+  }
+  if (ctx.restale && !ctx.dryRun) {
+    console.log('restale: run the SQL file through execute_sql, then `node ingest/pull_files.mjs --restale-post --downloads <same dir>` to post the staged units');
   }
 
   if (ctx.dryRun) {

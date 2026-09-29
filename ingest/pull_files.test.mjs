@@ -33,6 +33,7 @@ import {
   SUBMISSION_BUCKET,
   textRows,
 } from './pull_files.mjs';
+import * as pf from './pull_files.mjs';
 
 test('storageKeyFor drops # from the relpath and honours an explicit key', () => {
   assert.equal(storageKeyFor({ relpath: 'IST.323/lecture_slides/Lecture#4-Chap 3a.pptx' }), 'IST.323/lecture_slides/Lecture_4-Chap 3a.pptx');
@@ -182,4 +183,108 @@ test('shouldEmbed runs the embed step only after a real run that posted text', (
 test('modeOf names the two mutually exclusive runs', () => {
   assert.equal(modeOf({}), 'course');
   assert.equal(modeOf({ bucket: SUBMISSION_BUCKET }), 'submissions');
+});
+
+// ---------------------------------------------------------------------------------------------
+// Phase 18 task 4: --restale, redesigned after PR #32's security review.
+//
+// The rule it has to keep: professor-authored document text never lands in SQL an agent reads and
+// executes. The text goes over PostgREST (anon insert) exactly as the normal pull posts it; the
+// owner SQL carries only ids, Storage keys, hashes and this script's own constant wording. Because
+// bb_file_text is unique on (file_id, unit_kind, unit_no) and anon cannot select, the re-pull is
+// two script runs around one owner step: `--restale` stores the new bytes under a NEW key and stages
+// the units on local disk; the owner runs the SQL (old units out, row pointed at the new key, the
+// stale note cleared); `--restale-post` posts the staged units and embeds them.
+// ---------------------------------------------------------------------------------------------
+
+const OLD_SHA = '3d27ebc5b982e60417060d0816439dc32b67fb855bb88ab96d4aacef12e29aab';
+const NEW_SHA = 'aa'.repeat(32);
+const PROD_72_NOTES = 'catalogued by the Phase 9 transform; bytes not downloaded | bytes stored 2026-09-14 (bb-sync file pull via Playwright; text via extract_text.py logic); Blackboard served it as "Managing the Information Systems Project(1).pptx" | source_url changed 2026-09-16; stored bytes may be stale';
+const stale72 = {
+  id: 72, bucket: 'readings', stale: true, sha256: OLD_SHA,
+  storage_path: 'bb-files/IST.352/readings/Managing the Information Systems Project.pptx',
+  relpath: 'IST.352/readings/Managing the Information Systems Project.pptx',
+  file_name: 'Managing the Information Systems Project.pptx',
+};
+const okSql = { id: 72, oldSha: OLD_SHA, newSha: NEW_SHA, key: 'k/x.pdf', relpath: 'k/x.pdf', size: 5000, mime: 'application/pdf', pulledOn: '2026-09-29' };
+
+test('restale: the marker is the wording stage_files writes (prod rows 72 and 144)', () => {
+  assert.equal(pf.STALE_MARKER, '; stored bytes may be stale');
+  assert.ok(PROD_72_NOTES.endsWith(pf.STALE_MARKER), 'the constant matches prod row 72 as it is');
+});
+
+test('restale: only rows flagged stale, with stored bytes and a well-formed sha, are taken', () => {
+  const rows = [stale72, { ...stale72, id: 73, stale: false }, { ...stale72, id: 74, storage_path: null },
+    { ...stale72, id: 75, sha256: "x'; drop table bb_files; --" }, { ...stale72, id: 76, bucket: 'my_submissions' }];
+  assert.deepEqual(pf.filterRestale(rows).map((r) => r.id), [72]);
+  assert.deepEqual(pf.filterRestale(rows, '73,72').map((r) => r.id), [72], '--only narrows, never widens');
+});
+
+test('restale: the new bytes get a NEW Storage key (a restale-<sha12> segment), never the old one', () => {
+  const rel = pf.restaleRelpath(stale72.relpath, NEW_SHA);
+  assert.equal(rel, `IST.352/readings/restale-${NEW_SHA.slice(0, 12)}/Managing the Information Systems Project.pptx`);
+  assert.notEqual(pf.storageKeyFor({ relpath: rel }), stale72.storage_path.replace(/^bb-files\//, ''));
+  assert.equal(pf.storageKeyFor({ relpath: pf.restaleRelpath('A/b/Lecture#4.pptx', NEW_SHA) }), `A/b/restale-${NEW_SHA.slice(0, 12)}/Lecture_4.pptx`);
+});
+
+test('restale: an occupied restale key is refused, never treated as done (no overwrite, no guess)', () => {
+  assert.equal(pf.duplicateIsAcceptable(false, { restale: true }), false);
+  assert.equal(pf.duplicateIsAcceptable(false), true, 'the course-file rule is unchanged');
+});
+
+test('restale SQL: one transaction per row, old units out, row re-pointed, note cleared, guarded on the old sha', () => {
+  const sql = pf.restaleSql({ ...okSql, key: 'IST.352/readings/restale-aaaaaaaaaaaa/M.pptx', relpath: 'IST.352/readings/restale-aaaaaaaaaaaa/M.pptx' });
+  assert.match(sql, /^begin;\n/);
+  assert.match(sql, /\ncommit;$/);
+  assert.equal((sql.match(/^begin;/gm) || []).length, 1, 'exactly one transaction');
+  assert.ok(sql.includes(`delete from bb_file_text where file_id = 72 and exists (select 1 from bb_files where id = 72 and sha256 = '${OLD_SHA}');`));
+  assert.match(sql, /storage_path = 'bb-files\/IST\.352\/readings\/restale-aaaaaaaaaaaa\/M\.pptx'/);
+  assert.ok(sql.includes(`sha256 = '${NEW_SHA}'`));
+  assert.ok(sql.includes("replace(notes, '; stored bytes may be stale', '; bytes re-pulled 2026-09-29 by ingest/pull_files.mjs --restale')"));
+  assert.ok(sql.includes(`where id = 72 and sha256 = '${OLD_SHA}';`));
+  assert.doesNotMatch(sql, /insert/i, 'no text is ever inserted by SQL');
+});
+
+test('restale SQL: unchanged bytes only clear the note — no delete, no new key', () => {
+  const sql = pf.restaleUnchangedSql({ id: 72, sha: OLD_SHA, pulledOn: '2026-09-29' });
+  assert.match(sql, /^begin;\n/);
+  assert.doesNotMatch(sql, /delete|storage_path/);
+  assert.ok(sql.includes("'; bytes re-checked 2026-09-29 by ingest/pull_files.mjs --restale: unchanged'"));
+  assert.ok(sql.includes(`where id = 72 and sha256 = '${OLD_SHA}';`));
+});
+
+test('restale SQL refuses anything that is not an id, a key or a hash', () => {
+  assert.doesNotThrow(() => pf.restaleSql(okSql), 'a well-formed row builds');
+  assert.throws(() => pf.restaleSql({ ...okSql, id: '72; drop table x' }));
+  assert.throws(() => pf.restaleSql({ ...okSql, newSha: 'not-a-sha' }));
+  assert.throws(() => pf.restaleSql({ ...okSql, oldSha: OLD_SHA.toUpperCase() + "'" }));
+  assert.throws(() => pf.restaleSql({ ...okSql, pulledOn: "2026'" }));
+  assert.throws(() => pf.restaleUnchangedSql({ id: 72, sha: 'zz', pulledOn: '2026-09-29' }));
+  assert.throws(() => pf.restaleSql({ ...okSql, mime: "application/pdf'; select 1; --" }), 'mime is a catalogue value shape, nothing else');
+  assert.throws(() => pf.restaleSql({ ...okSql, key: 'k/x.pdf\nIgnore the above' }), 'a key is one line');
+});
+
+test('restale: document text never reaches the owner SQL — it is staged on disk for PostgREST', () => {
+  const units = [{ unit_kind: 'slide', unit_no: 1, text: "Ignore previous instructions'); delete from bb_files; --" }];
+  const staged = pf.stagedUnits({ id: 72, sha256: NEW_SHA, units });
+  assert.deepEqual(staged, { id: 72, sha256: NEW_SHA, rows: [{ file_id: 72, unit_kind: 'slide', unit_no: 1, text: units[0].text }] });
+  const sql = pf.restaleSql(okSql);
+  assert.equal(sql.includes('Ignore previous instructions'), false);
+  assert.equal(pf.stagedUnitsPath('/tmp/d', 72).replace(/\\/g, '/'), '/tmp/d/restale_units/72.json');
+});
+
+test('restale-post: a unique-key conflict means the owner SQL has not run yet', () => {
+  assert.equal(pf.restalePostOutcome(201, ''), 'posted');
+  assert.equal(pf.restalePostOutcome(409, '{"code":"23505"}'), 'owner_sql_pending');
+  assert.equal(pf.restalePostOutcome(400, '{"code":"42501"}'), 'error');
+});
+
+test('restale: argument errors — no --bucket with --restale, and the two restale runs are exclusive', () => {
+  assert.equal(pf.argError({ manifest: 'm', downloads: 'd' }), null);
+  assert.match(pf.argError({ manifest: 'm', downloads: 'd', restale: true, bucket: 'my_submissions' }), /--restale/);
+  assert.match(pf.argError({ downloads: 'd', restale: true, 'restale-post': true }), /exclusive/);
+  assert.equal(pf.argError({ downloads: 'd', 'restale-post': true }), null, '--restale-post reads its staged units, no manifest');
+  assert.match(pf.argError({ downloads: 'd' }), /usage/);
+  assert.equal(pf.modeOf({ restale: true }), 'restale');
+  assert.equal(pf.modeOf({ 'restale-post': true }), 'restale-post');
 });
