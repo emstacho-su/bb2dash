@@ -26,16 +26,29 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/course/IST.352/stream',
 }));
 
+/**
+ * The tracker is stubbed to record what the Stream hands it: its scrolling is
+ * UpcomingTracker's own suite (UpcomingTracker.scroll.test.tsx, R3-1).
+ */
+const trackerProps = vi.hoisted(() => ({ calls: [] as Record<string, unknown>[] }));
+vi.mock('@/components/tracker/UpcomingTracker', () => ({
+  UpcomingTracker: (props: Record<string, unknown>) => {
+    trackerProps.calls.push(props);
+    return <h2>{props.title as string}</h2>;
+  },
+}));
+
 const { CourseStream } = await import('@/app/(app)/course/[id]/stream/CourseStream');
 const { streamDayKey } = await import('@/lib/course-dimension');
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-09-29T14:00:00Z'));
+  trackerProps.calls = [];
   state.byTable = {
     v_course_display: [makeCourseDisplay({ display_id: 'IST.352', code: 'IST 352', shell_ids: ['IST.352'] })],
     courses: [{ id: 'IST.352', term_id: 'fall-2026' }],
-    terms: [{ id: 'fall-2026', start_date: '2026-08-24' }],
+    terms: [{ id: 'fall-2026', name: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-11' }],
   };
 });
 
@@ -65,6 +78,31 @@ describe('CourseStream — the tracker over the timeline', () => {
       </QueryClientProvider>,
     );
     await waitFor(() => expect(screen.getByText('No course with id NOPE.101.')).toBeInTheDocument());
+  });
+});
+
+describe('CourseStream — the strip reaches back to the term start (R3-1)', () => {
+  it('hands the tracker the term’s first day, the same source Home uses, and no anchor', async () => {
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="IST.352" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(trackerProps.calls.at(-1)?.startIso).toBe('2026-08-24'));
+    // No anchor from the Stream: the strip still opens on today.
+    for (const props of trackerProps.calls) expect(props.anchor).toBeUndefined();
+  });
+
+  it('passes no start when the term has not begun, so nothing before today is invented', async () => {
+    state.byTable.terms = [{ id: 'spring-2027', name: 'Spring 2027', start_date: '2027-01-19', end_date: '2027-05-07' }];
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="IST.352" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(trackerProps.calls.length).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(trackerProps.calls.at(-1)?.startIso ?? null).toBeNull();
   });
 });
 
