@@ -24,6 +24,7 @@
 import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import { courseCodeFromId } from '@/lib/queries.today';
+import { BLACKBOARD_LINK_TITLE, blackboardLink } from '@/lib/blackboard-link';
 // S-1 (P-grades-7): the one status vocabulary, and the one menu that knows
 // what to do with a retired value still stored on a row.
 import { statusLabel } from '@/lib/progress-status';
@@ -88,6 +89,7 @@ export function AssignmentDetailBody({ assignmentId }: { assignmentId: string })
   const scheme = schemeQ.data ?? null;
   const series = seriesQ.data ?? [];
   const course = courseQ.data ?? null;
+  const bbLink = blackboardLink(assignment, course);
   const clock = formatClock(assignment.due_at);
 
   return (
@@ -210,7 +212,7 @@ export function AssignmentDetailBody({ assignmentId }: { assignmentId: string })
       <SubmissionBlock
         assignmentId={assignmentId}
         courseId={assignment.course_id}
-        blackboardUrl={course?.bb_url ?? null}
+        blackboardUrl={bbLink?.href ?? null}
       />
 
       <div className={styles.footer}>
@@ -218,15 +220,21 @@ export function AssignmentDetailBody({ assignmentId }: { assignmentId: string })
           <Link className={tokens.btnGhost} href={`/course/${assignment.course_id}/grades`}>
             Grades →
           </Link>
-          {course?.bb_url ? (
+          {bbLink ? (
             <a
               className={tokens.btnSecondary}
-              href={course.bb_url}
+              href={bbLink.href}
               target="_blank"
               rel="noreferrer"
-              title="Course-level link — Blackboard has no stable per-item URL here."
+              title={BLACKBOARD_LINK_TITLE[bbLink.scope]}
             >
-              Open in Blackboard ↗ <span className={styles.footerNote}>(course)</span>
+              Open in Blackboard ↗
+              {bbLink.scope === 'course' && (
+                <>
+                  {' '}
+                  <span className={styles.footerNote}>(course)</span>
+                </>
+              )}
             </a>
           ) : (
             <span className={styles.footerNote}>No Blackboard link recorded for this course.</span>
