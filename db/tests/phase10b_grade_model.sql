@@ -164,8 +164,8 @@ begin
 
   -- A GEO 103 recitation column may count toward a lecture component: the recitation rolls up to
   -- the lecture's scheme (courses.parent_course_id).
-  insert into grade_column_links (course_id, column_id, component_id)
-  values ('GEO.103.recitation', '_3602445_1', 5);   -- Attendance -> Discussion Section Participation
+  insert into grade_column_links (course_id, column_id, component_id, excluded)
+  values ('GEO.103.recitation', '_3602445_1', 5, false) on conflict (course_id, column_id) do update set component_id = excluded.component_id, excluded = false;
 
   -- "Not graded" needs no component and passes the trigger untouched. Conflict-safe since P-2
   -- (Phase 15): Stack excluded this very column on prod on 2026-09-22, so the plain insert this
