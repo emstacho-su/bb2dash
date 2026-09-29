@@ -98,6 +98,21 @@ the browser and when*: only the login needs it, on the laptop where Stack is; th
 tools do not. That is the whole case for the sprint, and it is also why Task 0's numbers decide
 how useful the result is.
 
+**Stack's concern, 2026-09-29, before any planning goes further:** "consider the feasibility of doing this given
+the 2fa barrier and failure of keep me signed in... These are what forced me to use a crawler initially and I am
+unsure of any workarounds." The PM's answer, on the record: no MCP server and no client-side design gets around
+Duo or Entra; every legitimate client lives inside the session one human approval creates, the tab crawler
+included. Two clocks bound that session (Blackboard's inactivity `timeout` in `BbRouter`; Entra's sign-in
+frequency and persistent-session policy, which "stay signed in" failing at SU suggests is narrowed). The only
+route that takes Duo out of the loop is route A (official REST with three-legged OAuth and refresh tokens),
+which needs an SU administrator. So the research phase is **reordered: the two lifetime numbers come first**
+(Task 0 for the Entra clock; `scripts/bb-probe.mjs` for Blackboard's clock, one run), and the design decision
+is made from them: a login that lasts about a day makes a cookie client plus one Duo tap each morning a real
+improvement; a login that lasts hours leaves the ITS request or "sync only while signed in" as the honest
+options, and shrinks the MCP's value to "no browser in the sync" plus interactive tools. §6 Q1's default stands
+as (iii). The one input only Stack can give: what "keep me signed in" failing looks like in practice (Duo on
+every Chrome launch, once a day, or after some idle hours).
+
 ## 4. The B-43 tension, and the shape the PM proposes (a default, §6 Q2)
 
 B-43 keeps Claude away from the SU cookie and keeps an LLM out of the sync path. A Blackboard MCP
