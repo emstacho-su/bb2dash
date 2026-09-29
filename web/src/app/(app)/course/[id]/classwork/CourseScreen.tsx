@@ -23,6 +23,8 @@ import {
 // started" while the same item read "not opened" on Home.
 import { statusLabel as progressStatusLabel } from '@/lib/progress-status';
 import type { ProgressStatus } from '@/lib/queries';
+// T-15: the IST.466 attendance marker and the syllabus's every-class line.
+import { AttendanceMarker, AttendanceRule } from '@/components/popout/SessionPopout';
 import styles from './CourseScreen.module.css';
 
 /* -- small pure helpers ---------------------------------------------------- */
@@ -425,7 +427,7 @@ function AiPolicyCard({
   );
 }
 
-function SessionRow({
+export function SessionRow({
   session,
   fileCount,
   active,
@@ -455,6 +457,7 @@ function SessionRow({
             <span className={styles.kindTag}>{session.kind.replace(/_/g, ' ')}</span>
           )}
           {tentative && <span className={styles.tentativeTag}>tentative</span>}
+          <AttendanceMarker session={session} className={styles.attendanceTag} />
         </span>
         <span className={styles.sessionTitle}>{session.topic ?? 'Untitled session'}</span>
         <span className={styles.sessionSub}>
@@ -487,7 +490,7 @@ function AssignmentRow({ item, termStart }: { item: WorkItem; termStart: string 
   );
 }
 
-function SessionPanel({
+export function SessionPanel({
   session,
   files,
   onClose,
@@ -505,6 +508,7 @@ function SessionPanel({
           <span className={styles.kindTag}>{session.kind.replace(/_/g, ' ')}</span>
         )}
         {tentative && <span className={styles.tentativeTag}>tentative — date/detail inferred</span>}
+        <AttendanceMarker session={session} className={styles.attendanceTag} />
         <button type="button" className={styles.panelClose} onClick={onClose} aria-label="Close">
           ✕
         </button>
@@ -515,6 +519,7 @@ function SessionPanel({
         <span>·</span>
         <span>{files.length} material{files.length === 1 ? '' : 's'}</span>
       </div>
+      <AttendanceRule courseId={session.course_id} className={styles.attendanceRule} />
       {files.length > 0 && (
         <ul className={styles.panelFiles}>
           {files.map((f) => (

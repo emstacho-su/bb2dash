@@ -131,3 +131,35 @@ describe('SessionPopout — files', () => {
     expect(screen.getByText('materials unavailable')).toBeInTheDocument();
   });
 });
+
+describe('SessionPopout — the IST.466 attendance marker (T-15, R-49)', () => {
+  const IST466 = { ...SESSION, id: 42, course_id: 'IST.466', session_date: '2026-09-29' };
+
+  it('marks a starred IST.466 session and quotes the syllabus rule', () => {
+    state.session = answered({ ...IST466, counts_attendance: true });
+    render(<SessionPopout sessionId={42} />);
+
+    const marker = screen.getByText('Attendance and participation count');
+    expect(marker).toHaveAttribute('title', 'IST 466 schedule; this course only');
+    const rule = screen.getByText('Every class earns attendance points (syllabus)');
+    expect(rule.getAttribute('title')).toContain(
+      'A student earns up to 5 points for on-time attendance per class.',
+    );
+  });
+
+  it('never lets an unstarred IST.466 class read as free: no marker, the rule line stays', () => {
+    state.session = answered({ ...IST466, counts_attendance: false });
+    render(<SessionPopout sessionId={42} />);
+
+    expect(screen.queryByText('Attendance and participation count')).toBeNull();
+    expect(screen.getByText('Every class earns attendance points (syllabus)')).toBeInTheDocument();
+  });
+
+  it('says nothing about attendance for another course, even if the flag were set', () => {
+    state.session = answered({ ...SESSION, counts_attendance: true });
+    render(<SessionPopout sessionId={7} />);
+
+    expect(screen.queryByText('Attendance and participation count')).toBeNull();
+    expect(screen.queryByText(/attendance points/)).toBeNull();
+  });
+});
