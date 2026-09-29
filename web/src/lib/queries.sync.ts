@@ -298,14 +298,30 @@ export function parseTextAnswer(value: string): string {
  * What Stack can answer, per kind (brief, Web surfaces):
  *   conflict                     Accept Blackboard / Keep mine
  *   stack_must_confirm, missing  a text or date input
- *   deadline, data_gap           Dismiss
+ *   data_gap                     a text or date input, or Dismiss
+ *   deadline                     Dismiss
  * Every variant carries the optional free-text "why".
+ *
+ * A `data_gap` used to offer Dismiss alone, which meant the only thing Stack
+ * could say about a hole in the data was "stop asking". He can now answer one
+ * instead — what to do about the missing file, where the real date came from —
+ * and `/inbox-apply` reads it out of `v_inbox_queue` and acts on it. The
+ * transform still never applies a gap answer (042 takes only conflict /
+ * stack_must_confirm / missing on an assignment), so the sentence under the
+ * button says so.
  */
 export type ResolveInput =
   | { id: number; kind: 'conflict'; accept: 'blackboard' | 'keep'; note?: string | null }
   | {
       id: number;
       kind: 'stack_must_confirm' | 'missing';
+      answer: string;
+      answerType: 'text' | 'date';
+      note?: string | null;
+    }
+  | {
+      id: number;
+      kind: 'data_gap';
       answer: string;
       answerType: 'text' | 'date';
       note?: string | null;
@@ -361,8 +377,29 @@ export function buildResolutionPatch(input: ResolveInput, now: Date = new Date()
         resolution_note,
       };
     }
-    case 'deadline':
     case 'data_gap': {
+      // Two answers share this kind. An answered gap resolves and carries a
+      // value, exactly as a stack_must_confirm does, so `/inbox-apply` reads it
+      // through the same `{value, value_type}` shape and needs no new branch.
+      // A gap with nothing typed is still a dismissal.
+      if ('answer' in input) {
+        const value =
+          input.answerType === 'date' ? parseDateAnswer(input.answer) : parseTextAnswer(input.answer);
+        return {
+          state: 'resolved',
+          resolved_at,
+          resolution: { value, value_type: input.answerType },
+          resolution_note,
+        };
+      }
+      return {
+        state: 'dismissed',
+        resolved_at,
+        resolution: { dismissed: true },
+        resolution_note,
+      };
+    }
+    case 'deadline': {
       return {
         state: 'dismissed',
         resolved_at,
@@ -609,7 +646,11 @@ export function resolvedAction(item: AttentionItem): OutcomeAction | null {
   if (!resolution) return null;
   if (resolution.accept === 'blackboard') return 'accept_blackboard';
   if (resolution.accept === 'keep') return 'keep_mine';
-  if (typeof resolution.value === 'string') return 'save';
+  // An answered gap writes the same `{value, value_type}` shape a stack_must_confirm does, so the
+  // kind is the only thing that tells them apart. Without this the chip would read "answered,
+  // applies on next sync" for a row `apply_resolutions()` never touches — the contradiction the
+  // block comment above says must not exist.
+  if (typeof resolution.value === 'string') return item.kind === 'data_gap' ? 'save_gap' : 'save';
   if (resolution.dismissed === true) return 'dismiss';
   return null;
 }
@@ -731,7 +772,21 @@ export function isAssignmentRef(ref: string | null): boolean {
 }
 
 /** The controls a row can offer, one sentence each. */
-export type OutcomeAction = 'accept_blackboard' | 'keep_mine' | 'save' | 'dismiss';
+export type OutcomeAction = 'accept_blackboard' | 'keep_mine' | 'save' | 'save_gap' | 'dismiss';
+
+/**
+ * The sentence under a data gap's Save.
+ *
+ * Two things have to be said plainly. The transform will not act on it — a gap
+ * is about a file or a reading, never an assignment field, so
+ * `apply_resolutions()` skips it by design (042) and `/inbox-apply` is the
+ * reader. And answering closes the row for good: `raise_attention` refuses to
+ * re-ask a `data_gap` key that has any non-open row (041), so the gap will not
+ * come back even if the hole is still there.
+ */
+export const GAP_ANSWER_OUTCOME =
+  'Recorded for /inbox-apply to act on. The row closes and this gap is never raised again, ' +
+  'even if the data is still missing.';
 
 /**
  * Will `apply_resolutions()` act on this answer? Mirrors 042 branch for branch.
@@ -742,6 +797,9 @@ export type OutcomeAction = 'accept_blackboard' | 'keep_mine' | 'save' | 'dismis
  */
 export function outcomeApplies(item: AttentionItem, action: OutcomeAction): boolean {
   if (action === 'dismiss') return false;
+  // A gap answer is never applied by the transform: 042 takes only conflict,
+  // stack_must_confirm and missing, and a gap's entity is a file or a reading.
+  if (action === 'save_gap') return false;
   if (item.entity !== 'assignment' || !isAssignmentRef(item.ref)) return false;
   if (action === 'keep_mine') return true;
   return item.field !== null && APPLIED_FIELDS.includes(item.field);
@@ -887,6 +945,8 @@ export function outcomeText(
   if (action === 'dismiss') {
     return `${RECORDED_ONLY} The row closes and the sync stops asking.`;
   }
+
+  if (action === 'save_gap') return GAP_ANSWER_OUTCOME;
 
   if (!outcomeApplies(item, action)) return RECORDED_ONLY;
 

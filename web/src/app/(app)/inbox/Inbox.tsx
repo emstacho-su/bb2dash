@@ -405,6 +405,10 @@ export function InboxRow({
   const answerKind =
     item.kind === 'stack_must_confirm' || item.kind === 'missing' ? item.kind : null;
   const dismissKind = item.kind === 'deadline' || item.kind === 'data_gap' ? item.kind : null;
+  // A data gap takes an answer as well as a dismissal: Stack can say what to do
+  // about the hole and `/inbox-apply` acts on it. It is its own const for the
+  // same reason `answerKind` is — the narrowing does not survive the closure.
+  const gapKind = item.kind === 'data_gap' ? item.kind : null;
 
   /**
    * One place where a control's payload is handed up. There is no try/catch
@@ -539,13 +543,43 @@ export function InboxRow({
             </div>
           )}
 
+          {gapKind && (
+            <div className={styles.choice}>
+              <div className={styles.buttons}>
+                <input
+                  type={answerType}
+                  className={tokens.input}
+                  value={answer}
+                  maxLength={NOTE_MAX_LENGTH}
+                  aria-label={`Answer for item ${item.id}`}
+                  placeholder="what should happen about this"
+                  onChange={(event) => setAnswer(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className={tokens.btnPrimary}
+                  disabled={pending || answer.trim().length === 0}
+                  onClick={() =>
+                    send({ id: item.id, kind: gapKind, answer, answerType, note })
+                  }
+                >
+                  Save
+                </button>
+              </div>
+              <Outcome item={item} action="save_gap" />
+            </div>
+          )}
+
           {dismissKind && (
             <div className={styles.choice}>
               <div className={styles.buttons}>
                 <button
                   type="button"
                   className={tokens.btnSecondary}
-                  disabled={pending}
+                  // A gap shows Save and Dismiss side by side, and Dismiss sends no answer. Typing
+                  // one and then pressing Dismiss would discard it silently, so while there is
+                  // something typed, Save is the only way out.
+                  disabled={pending || (gapKind !== null && answer.trim().length > 0)}
                   onClick={() => send({ id: item.id, kind: dismissKind, note })}
                 >
                   Dismiss

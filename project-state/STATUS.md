@@ -449,6 +449,46 @@ two RED-first tests), and React #418 on `?item=` popout URLs (S2-carry-9, pre-ex
   ~~7 mutable `search_path` functions~~ (fixed by `101_search_path_pin`, Phase 15).
 * Desktop unpacked build rebuilt from `main` at close (it lacked 12b's extra navigation guard).
 
+## Out-of-phase work delivered early (2026-09-29)
+
+On Stack's word, two things were built ahead of their planned phases, on
+`feat/sync-file-pull-and-gap-feedback` (**PR open, merges when Stack says so**).
+
+**Files are pulled inside the sync** — Phase 18 tasks 2, 4 and 15 (R-60), delivered early.
+`bb-sync` step 4b is now "Pull the files" and takes course rows as well as submission rows, so a
+sync no longer catalogues a file, raises an Inbox `data_gap` saying it cannot be opened, and leaves
+both for a human. `ingest/fetch_signed.mjs` (new, 17 tests) walks the `bbcswebdav` redirect chain
+to its signed CDN URL, bounded at 3 hops with the final host checked at a domain boundary;
+`ingest/pull_files.mjs --fetch` downloads it. That retires Playwright's `download` event, which
+crashed the MCP browser on 2026-09-23 and cost that sync three files. `ingest/embed_corpus.mjs`
+(new, 11 tests) is the embed loop that was run by hand; `--check` prints `missing_parts_before`.
+`pull_files.mjs` also gains `--no-embed`; its 17 existing tests are unchanged and 8 are added.
+`agent_requests.result` gains `files_pulled` and `files_not_pulled`. Phase 18 keeps its other
+tasks and its migration block 120–129; nothing in the database changed.
+
+**A data gap can be answered, not only dismissed.** The Inbox gives a `data_gap` the same answer
+input a `stack_must_confirm` row has, beside Dismiss; an answered gap resolves with
+`{value, value_type}`, which is the shape `/inbox-apply` already reads. `apply_resolutions()` is
+untouched and still never applies a gap, and the sentence under Save says so and says that answering
+closes the row for good (041 never re-asks a closed `data_gap` key).
+
+Both reviews ran and their findings are fixed in `0df6ba9`. The security review's two MEDIUM
+findings drove two changes: the redirect walk is now gated on every hop (https, a Blackboard or CDN
+host, no bare IPs) rather than only at its endpoint, and `--restale` was dropped, which removes the
+path that put professor-authored document text into a `.sql` file an agent reads and then hands to
+a service-role `execute_sql`. The code review's two HIGH findings went with it: a CDN 401/403 is an
+expired signature rather than a dead session and no longer aborts the run, and the stale-marker bug
+left with the mode.
+
+**Not done and still open:** **no live proof.** The new pull has never run against prod — the
+current work list is empty of course files with no bytes except the four open `data_gap` rows, and
+nothing has exercised `--fetch` end to end. R-60's remaining clauses (stale rows 72 and 144
+re-pulled, `stage_gaps` no longer raising a gap for a file the same sync pulls) are **not** in this
+branch and stay Phase 18's. The installed skill copy at `~/.claude/skills/bb-sync/SKILL.md` still
+holds `main`'s version, so `/bb-sync` keeps running the old step 4b until that copy is refreshed
+from this branch — deliberately untouched, because overwriting it from an unmerged branch is the
+merging session's call.
+
 ## What's next — Sprint 2
 
 Planned 2026-09-24 on `docs/sprint2-planning` ([PR #28](https://github.com/emstacho-su/bb2dash/pull/28), merged as 67269b5 on 2026-09-27): requirements `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`

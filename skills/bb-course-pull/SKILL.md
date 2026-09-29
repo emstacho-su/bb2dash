@@ -30,16 +30,21 @@ Diff against the manifest: replace changed URLs (instructors re-upload; the old 
 catalog lacks, and insert/patch `bb_files` before downloading. Lessons: the pilot had 1 stale URL of 6
 and 1 missing file; the 9/8 validation found 3 files that only the deep scan sees.
 
-## Step 1 — Download the whole course in ONE call (no per-file prompts)
-- Build the URL list from the refreshed manifest (`source_url` + `?xythos-download=true`).
-- In the logged-in tab run `bb.downloadAll(urls)` (from `ingest/bb_crawler.js`): hidden anchor clicks
-  ~1.5 s apart. The page stays put; files land in `~/Downloads` under their Blackboard display names
-  (collisions get `(1)` appended). Any browser permission prompt appears once for the batch, never per
-  file. Do NOT navigate the tab per file.
-- Verify by listing `~/Downloads` (names + sizes), not by tool messages. Re-fire only the missing ones.
-- Under concurrency files often land as `<uuid>.tmp` and are never renamed. Claim each by size + magic
-  bytes (`504b0304` zip/OOXML, `%PDF`) + a text signature (slide 1 / first page / docProps date) before
-  renaming on move; size alone mis-files near-identical decks.
+## Step 1 — Fetch the bytes (no browser downloads)
+- Build the manifest from the refreshed catalog, exactly as `ingest/pull_files.mjs`' header describes.
+- **The browser downloads nothing.** In the logged-in tab, walk each `source_url`
+  (+ `?xythos-download=true`) to its signed CDN URL with `resolveSignedUrl` from
+  `ingest/fetch_signed.mjs`, one hop at a time (`maxRedirects: 0`), and write the resulting `hops`
+  onto the manifest row. Then `node ingest/pull_files.mjs --manifest <json> --downloads <dir> --fetch`
+  does the rest: download, magic-byte check, mirror, Storage, text, and the embed step.
+- A chain that ends anywhere but `.content.blackboardcdn.com`, or runs past three hops, is refused
+  and reported — never followed.
+- 401/403 on the first hop means the Blackboard session died: stop the run and say so. A 404 means
+  the file is gone; leave the row and mark it `superseded_by` its replacement.
+- The crawler's anchor-click batch download and Playwright's `download` event are **not** used any
+  more: the download event crashed the MCP browser on 2026-09-23, and the `<uuid>.tmp` files the
+  batch route left behind had to be claimed by size and magic bytes, which mis-filed near-identical
+  decks. The fetch path has neither problem.
 - Progress: after every step post a one-line status to Stack (files landed / stored / extracted / DB
   updated) so a long run never looks stalled.
 - Files only: never click test, survey, discussion, or attempt controls.

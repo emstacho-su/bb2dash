@@ -26,6 +26,10 @@ import {
   parseArgs,
   parseExtractOutput,
   storageKeyFor,
+  safeBasename,
+  hopsForRow,
+  shouldEmbed,
+  modeOf,
   SUBMISSION_BUCKET,
   textRows,
 } from './pull_files.mjs';
@@ -141,4 +145,41 @@ test('anonHeaders sends the publishable key both ways, as every anon insert here
 test('parseArgs reads --name value pairs and bare --flags', () => {
   assert.deepEqual(parseArgs(['--manifest', 'm.json', '--dry-run', '--only', '1,2']), { manifest: 'm.json', 'dry-run': true, only: '1,2' });
   assert.deepEqual(parseArgs(['--bucket', 'my_submissions']), { bucket: 'my_submissions' });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Phase 18 task 4: --fetch and the embed step.
+//
+// The pull no longer depends on the browser's download event (ingest/fetch_signed.mjs). The
+// browser half now records the redirect chain; the script validates it and downloads the signed
+// URL itself. The gate that matters here is the same one as before: the two modes stay mutually
+// exclusive, so one run can never write the other's rows.
+// ---------------------------------------------------------------------------------------------
+
+test('safeBasename strips the characters Blackboard allows and Windows forbids', () => {
+  assert.equal(safeBasename('Lecture 3: "Intro" | part?.pptx'), 'Lecture 3_ _Intro_ _ part_.pptx');
+  assert.equal(safeBasename('a/b/c.pdf'), 'c.pdf', 'it is still a basename');
+  assert.equal(safeBasename('plain.docx'), 'plain.docx');
+  assert.notEqual(safeBasename(''), '', 'never an empty name');
+});
+
+test('hopsForRow validates the chain the browser half recorded', () => {
+  const signed = 'https://eu.content.blackboardcdn.com/x/y.pdf?X-Amz-Signature=a';
+  const durable = 'https://blackboard.syracuse.edu/bbcswebdav/pid-1-dt-c-rid-2_1/xid-3_1';
+  assert.deepEqual(hopsForRow({ hops: [durable, signed] }), { outcome: 'ok', signedUrl: signed });
+  assert.equal(hopsForRow({ hops: [durable, 'https://evil.com/y.pdf'] }).outcome, 'refused');
+  assert.equal(hopsForRow({}).outcome, 'refused', 'a --fetch row with no hops is refused, never guessed');
+  assert.equal(hopsForRow({ hops: [] }).outcome, 'refused');
+});
+
+test('shouldEmbed runs the embed step only after a real run that posted text', () => {
+  assert.equal(shouldEmbed({ dryRun: false, noEmbed: false, unitsPosted: 3 }), true);
+  assert.equal(shouldEmbed({ dryRun: false, noEmbed: false, unitsPosted: 0 }), false, 'nothing new to embed');
+  assert.equal(shouldEmbed({ dryRun: true, noEmbed: false, unitsPosted: 3 }), false, 'a dry run writes nothing');
+  assert.equal(shouldEmbed({ dryRun: false, noEmbed: true, unitsPosted: 3 }), false, '--no-embed is explicit');
+});
+
+test('modeOf names the two mutually exclusive runs', () => {
+  assert.equal(modeOf({}), 'course');
+  assert.equal(modeOf({ bucket: SUBMISSION_BUCKET }), 'submissions');
 });
