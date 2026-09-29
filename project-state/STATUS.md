@@ -578,9 +578,10 @@ Remaining advisor items: ~~7 pre-existing mutable `search_path` functions (`set_
 
 * **`stack-laptop` stand-up (2026-09-29).** `.env.local` with the `db_test_runner` DSN (Phase 15 acceptance step 1) was
   recreated on 2026-09-29 (the walk-15 snippet re-run with this machine's paths, password reset in the dashboard by Stack);
-  walk steps 2–4 and the gate-out on `main` are green. Still missing: the materials MCP server is not
-  registered in `~/.claude.json` and `mcp-server/dist` is not built; Phase 16's sittings need both, and the service
-  key comes from Stack's environment, never a chat. The Google consent screen stays in Testing by Stack's choice
+  walk steps 2–4 and the gate-out on `main` are green. The materials MCP server was built and registered the same
+  day (`mcp-server/README.md` §Setup: `.env` written by Stack in PowerShell, smoke all checks passed, `claude mcp list`
+  → Connected), so Phase 16's sittings can start. The runner password was rotated once that day after an
+  `alter role` line was saved in the SQL editor by mistake (walk 95w step 1 re-run; the old password is dead). The Google consent screen stays in Testing by Stack's choice
   (2026-09-29): the token minted 2026-09-24 17:02:50Z dies about 2026-10-01 17:03Z, and he re-mints with
   `scripts/google-consent.mjs` then (DECISIONS 2026-09-29). Task 0's probes run through Claude in Chrome; the record is
   `docs/planning/sprint-2/verification/82b_NOVNC_SPIKE.md`.
