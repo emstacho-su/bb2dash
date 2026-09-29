@@ -424,6 +424,37 @@ two RED-first tests), and React #418 on `?item=` popout URLs (S2-carry-9, pre-ex
   content paths (P-data-1); `numeric(9,3)` scores (declined); 7 mutable `search_path` functions.
 * Desktop unpacked build rebuilt from `main` at close (it lacked 12b's extra navigation guard).
 
+## Out-of-phase work delivered early (2026-09-29)
+
+On Stack's word, two things were built ahead of their planned phases, on
+`feat/sync-file-pull-and-gap-feedback` (**PR open, merges when Stack says so**).
+
+**Files are pulled inside the sync** — Phase 18 tasks 2, 4 and 15 (R-60), delivered early.
+`bb-sync` step 4b is now "Pull the files" and takes course rows as well as submission rows, so a
+sync no longer catalogues a file, raises an Inbox `data_gap` saying it cannot be opened, and leaves
+both for a human. `ingest/fetch_signed.mjs` (new, 17 tests) walks the `bbcswebdav` redirect chain
+to its signed CDN URL, bounded at 3 hops with the final host checked at a domain boundary;
+`ingest/pull_files.mjs --fetch` downloads it. That retires Playwright's `download` event, which
+crashed the MCP browser on 2026-09-23 and cost that sync three files. `ingest/embed_corpus.mjs`
+(new, 11 tests) is the embed loop that was run by hand; `--check` prints `missing_parts_before`.
+`pull_files.mjs` also gains `--restale` (a new Storage key, never an overwrite, text swapped in one
+transaction) and `--no-embed`; its 17 existing tests are unchanged and 11 are added.
+`agent_requests.result` gains `files_pulled` and `files_not_pulled`. Phase 18 keeps its other
+tasks and its migration block 120–129; nothing in the database changed.
+
+**A data gap can be answered, not only dismissed.** The Inbox gives a `data_gap` the same answer
+input a `stack_must_confirm` row has, beside Dismiss; an answered gap resolves with
+`{value, value_type}`, which is the shape `/inbox-apply` already reads. `apply_resolutions()` is
+untouched and still never applies a gap, and the sentence under Save says so and says that answering
+closes the row for good (041 never re-asks a closed `data_gap` key).
+
+**Not done and still open:** no live proof — the Supabase connector lost its session auth mid-run on
+2026-09-29, so `/inbox-apply` did not run against Stack's answers and the new pull has never
+executed against prod. R-60's remaining clauses (stale rows 72 and 144 re-pulled, `stage_gaps`
+no longer raising a gap for a file the same sync pulls) are **not** in this branch and stay Phase 18's.
+The installed skill copy at `~/.claude/skills/bb-sync/SKILL.md` still holds `main`'s version, so
+`/bb-sync` runs the old step 4b until that copy is refreshed from this branch.
+
 ## What's next — Sprint 2
 
 Planned 2026-09-24 on `docs/sprint2-planning` ([PR #28](https://github.com/emstacho-su/bb2dash/pull/28), merged as 67269b5 on 2026-09-27): requirements `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`
