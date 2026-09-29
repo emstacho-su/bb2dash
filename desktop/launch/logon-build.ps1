@@ -178,7 +178,10 @@ function Invoke-ToolWithTimeout {
     $err = [IO.Path]::GetTempFileName()
     $out = [IO.Path]::GetTempFileName()
     try {
-        $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -PassThru `
+        # PS 5.1 joins -ArgumentList with spaces and never quotes, so a path with a
+        # space (`OneDrive - Syracuse University`) would arrive as several arguments.
+        $quoted = $Arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
+        $p = Start-Process -FilePath $Exe -ArgumentList ($quoted -join ' ') -NoNewWindow -PassThru `
             -RedirectStandardError $err -RedirectStandardOutput $out
         $null = $p.Handle   # PS 5.1: without the handle cached, ExitCode reads back null after a timed wait
         if (-not $p.WaitForExit($TimeoutSeconds * 1000)) {
@@ -361,7 +364,13 @@ function Invoke-ContainerBuild {
     if (Test-Path $out) { Remove-Item -Recurse -Force $out }   # a partial earlier attempt
     New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-    $cmd = Get-BuildCommand -ComposeFile $ComposeBuildFile
+    # The compose file that matches the source being built: the worktree's copy at the
+    # build ref when it exists (a commit that bumps the builder image or Electron must
+    # build with its own file, or every logon retries the same failing build), else
+    # the installed copy.
+    $composeFile = Join-Path $BuildWorktree 'desktop\launch\compose.build.yaml'
+    if (-not (Test-Path $composeFile)) { $composeFile = $ComposeBuildFile }
+    $cmd = Get-BuildCommand -ComposeFile $composeFile
     Invoke-Tool $Docker @('rm', '-f', $cmd.ContainerName) | Out-Null   # a container a killed run left behind
     $env:BB2DASH_BUILD_SRC = (Join-Path $BuildWorktree 'desktop') -replace '\\', '/'
     $env:BB2DASH_BUILD_OUT = $out -replace '\\', '/'
@@ -424,6 +433,14 @@ function Invoke-BuildStep {
     # its folder still exists. A recorded hash whose folder is gone is not a
     # build, so it never masks a needed rebuild.
     $lastBuilt = if ($tree -ne '' -and $tree -eq (Get-ActiveTree)) { $tree } elseif (Test-BuildOnDisk $state.LastBuiltSha) { $state.LastBuiltSha } else { '' }
+
+    # The build ref came back to the active tree while a newer build was waiting in
+    # state.json: forget the waiting build, or the next logon would activate a tree
+    # that is no longer on the build ref and then rebuild the active one over it.
+    if ($tree -ne '' -and $tree -eq (Get-ActiveTree) -and $state.LastBuiltSha -ne $tree) {
+        Write-Log 'INFO' "build ref is the active build $tree again; forgetting the waiting build '$($state.LastBuiltSha)'"
+        Write-State (New-LaunchState -Previous $state -LastBuiltSha $tree -LastResult 'ok' -Now (Get-Date))
+    }
 
     $needDocker = Test-DockerNeeded -RemoteSha $tree -LastBuiltSha $lastBuilt -ComposeFileExists $composeExists
     $wait = if ($WaitForDocker -or $needDocker) { $DockerWaitSeconds } else { 0 }
