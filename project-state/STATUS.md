@@ -447,12 +447,22 @@ input a `stack_must_confirm` row has, beside Dismiss; an answered gap resolves w
 untouched and still never applies a gap, and the sentence under Save says so and says that answering
 closes the row for good (041 never re-asks a closed `data_gap` key).
 
-**Not done and still open:** no live proof — the Supabase connector lost its session auth mid-run on
-2026-09-29, so `/inbox-apply` did not run against Stack's answers and the new pull has never
-executed against prod. R-60's remaining clauses (stale rows 72 and 144 re-pulled, `stage_gaps`
-no longer raising a gap for a file the same sync pulls) are **not** in this branch and stay Phase 18's.
-The installed skill copy at `~/.claude/skills/bb-sync/SKILL.md` still holds `main`'s version, so
-`/bb-sync` runs the old step 4b until that copy is refreshed from this branch.
+Both reviews ran and their findings are fixed in `0df6ba9`. The security review's two MEDIUM
+findings drove two changes: the redirect walk is now gated on every hop (https, a Blackboard or CDN
+host, no bare IPs) rather than only at its endpoint, and `--restale` was dropped, which removes the
+path that put professor-authored document text into a `.sql` file an agent reads and then hands to
+a service-role `execute_sql`. The code review's two HIGH findings went with it: a CDN 401/403 is an
+expired signature rather than a dead session and no longer aborts the run, and the stale-marker bug
+left with the mode.
+
+**Not done and still open:** **no live proof.** The new pull has never run against prod — the
+current work list is empty of course files with no bytes except the four open `data_gap` rows, and
+nothing has exercised `--fetch` end to end. R-60's remaining clauses (stale rows 72 and 144
+re-pulled, `stage_gaps` no longer raising a gap for a file the same sync pulls) are **not** in this
+branch and stay Phase 18's. The installed skill copy at `~/.claude/skills/bb-sync/SKILL.md` still
+holds `main`'s version, so `/bb-sync` keeps running the old step 4b until that copy is refreshed
+from this branch — deliberately untouched, because overwriting it from an unmerged branch is the
+merging session's call.
 
 ## What's next — Sprint 2
 
