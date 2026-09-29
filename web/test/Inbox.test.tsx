@@ -321,6 +321,53 @@ describe('Inbox — the resolve payload per kind', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
+  it('a data gap takes an answer, and sends it the way a needs-your-input row does', () => {
+    const onResolve = renderInbox([
+      makeAttentionItem({ id: 21, kind: 'data_gap', entity: 'bb_file', ref: '117', field: 'storage_path' }),
+    ]);
+    typeNote(21, 'it moved to the module page');
+    fireEvent.change(screen.getByLabelText('Answer for item 21'), {
+      target: { value: 'pull it next sync' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onResolve).toHaveBeenCalledWith({
+      id: 21,
+      kind: 'data_gap',
+      answer: 'pull it next sync',
+      answerType: 'text',
+      note: 'it moved to the module page',
+    });
+  });
+
+  it("a data gap's Save waits for an answer, while Dismiss never does", () => {
+    renderInbox([makeAttentionItem({ id: 22, kind: 'data_gap', entity: 'bb_file', ref: '117' })]);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeEnabled();
+  });
+
+  it('a data gap on a date field offers a date picker, as a missing row does', () => {
+    renderInbox([
+      makeAttentionItem({ id: 23, kind: 'data_gap', entity: 'reading', ref: '41', field: 'for_date' }),
+    ]);
+    expect(screen.getByLabelText('Answer for item 23')).toHaveAttribute('type', 'date');
+  });
+
+  it('says plainly that answering a gap closes it for good and who acts on it', () => {
+    renderInbox([
+      makeAttentionItem({ id: 24, kind: 'data_gap', entity: 'bb_file', ref: '117', field: 'storage_path' }),
+    ]);
+    const save = screen.getByRole('button', { name: 'Save' });
+    const choice = save.closest('[class*="choice"]');
+    expect(choice?.textContent).toContain('/inbox-apply');
+    expect(choice?.textContent).toContain('never raised again');
+  });
+
+  it('a deadline still offers Dismiss alone — only a data gap gained an answer', () => {
+    renderInbox([makeAttentionItem({ id: 25, kind: 'deadline' })]);
+    expect(screen.queryByLabelText('Answer for item 25')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
+  });
+
   it.each(['data_gap', 'deadline'] as const)(
     '%s: Dismiss sends only the kind and the note',
     (kind) => {
@@ -628,7 +675,8 @@ describe('Inbox — the outcome under each button', () => {
           button.textContent ?? '',
         ),
       );
-    expect(controls).toHaveLength(4);
+    // conflict: 2, missing: 1, data_gap: Save + Dismiss = 2.
+    expect(controls).toHaveLength(5);
     for (const control of controls) {
       const choice = control.closest('[class*="choice"]');
       expect(choice, control.textContent ?? '').not.toBeNull();

@@ -91,7 +91,31 @@ describe('buildResolutionPatch — one shape per kind, the note always along', (
     expect(patch.resolution_note).toBe('roster email');
   });
 
-  it('deadline and data_gap dismiss rather than resolve, and still keep the why', () => {
+  it('an answered data_gap resolves and carries the value, so /inbox-apply can act on it', () => {
+    const patch = buildResolutionPatch(
+      { id: 3, kind: 'data_gap', answer: 'pull it next sync', answerType: 'text', note: 'still on Blackboard' },
+      NOW,
+    );
+    expect(patch.state).toBe('resolved');
+    expect(patch.resolution).toEqual({ value: 'pull it next sync', value_type: 'text' });
+    expect(patch.resolution_note).toBe('still on Blackboard');
+  });
+
+  it('an answered data_gap on a date field parses the date at the same boundary', () => {
+    const patch = buildResolutionPatch(
+      { id: 4, kind: 'data_gap', answer: '2026-10-14', answerType: 'date' },
+      NOW,
+    );
+    expect(patch.resolution).toEqual({ value: '2026-10-14', value_type: 'date' });
+    expect(() =>
+      buildResolutionPatch({ id: 4, kind: 'data_gap', answer: '2026-02-31', answerType: 'date' }, NOW),
+    ).toThrow();
+    expect(() =>
+      buildResolutionPatch({ id: 4, kind: 'data_gap', answer: '   ', answerType: 'text' }, NOW),
+    ).toThrow();
+  });
+
+  it('deadline and an unanswered data_gap dismiss rather than resolve, and still keep the why', () => {
     for (const kind of ['deadline', 'data_gap'] as const) {
       const patch = buildResolutionPatch({ id: 3, kind, note: 'not a real gap' }, NOW);
       expect(patch.state).toBe('dismissed');
