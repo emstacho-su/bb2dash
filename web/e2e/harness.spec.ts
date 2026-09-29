@@ -26,7 +26,7 @@ test('signed in', async ({ page, context }, testInfo) => {
   await openSignedIn(page, '/');
   await expect(page.getByTitle(SYNC_TITLE)).toBeVisible();
   // "Undated" today, "Undated (N)" once W-46's T-17 lands.
-  await expect(page.getByText(/^Undated\b/).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Undated\b/ })).toBeVisible();
 
   await page.screenshot({ path: shotPath(testInfo, '01-harness-home.png'), fullPage: true });
   assertNoWrites(writes);
@@ -43,7 +43,7 @@ test('no 404', async ({ page, context }) => {
 
   for (const path of ['/', '/login', '/course/IST.352/stream']) {
     await page.goto(path);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
   }
 
   // The icons Next injects from src/app (T-20): each answers 200 with its type.

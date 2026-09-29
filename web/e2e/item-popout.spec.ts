@@ -40,14 +40,14 @@ async function loadWarmThenCold(page: Page, url: string): Promise<string[]> {
   const context = page.context();
   const messages = collectConsole(page);
   await openSignedIn(page, url);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
   await page.reload();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
 
   // From here on every navigation in this context starts with no persisted cache.
   await coldCache(context);
   await openSignedIn(page, url);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
   return messages.filter((line) => HYDRATION_ERROR.test(line));
 }
 

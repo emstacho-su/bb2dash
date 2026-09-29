@@ -71,7 +71,7 @@ function heartbeatFixture(now: Date): Record<string, unknown>[] {
 async function openPlanner(page: Page, query = ''): Promise<void> {
   await openSignedIn(page, `/planner${query}`);
   await expect(page.getByRole('button', { name: 'Next week' })).toBeVisible();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
 }
 
 /** Pages forward a week at a time until `target` shows, or fails after MAX_WEEKS_FORWARD. */
@@ -79,7 +79,7 @@ async function weekHolding(page: Page, target: Locator): Promise<void> {
   for (let week = 0; week <= MAX_WEEKS_FORWARD; week += 1) {
     if (await target.first().isVisible()) return;
     await page.getByRole('button', { name: 'Next week' }).click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
   }
   await expect(target.first(), `not found within ${MAX_WEEKS_FORWARD} weeks`).toBeVisible();
 }
@@ -105,7 +105,7 @@ async function openWithSidebar(context: BrowserContext, state: 'open' | 'closed'
 test.describe('screens (T-12 … T-21)', () => {
   test('03 stream IST.352', async ({ page }, testInfo) => {
     await openSignedIn(page, '/course/IST.352/stream');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
     await expect(page.getByRole('combobox').first()).toBeVisible();
     await page.screenshot({ path: shotPath(testInfo, '03-stream-ist352.png'), fullPage: true });
   });
