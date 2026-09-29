@@ -105,6 +105,14 @@ describe('F-2 — nothing is clipped, sideways or through a line', () => {
     expect(ruleBody('.blockHead')).toMatch(/flex-wrap:\s*wrap/);
   });
 
+  it('R-44 — lets a time range wrap inside its block instead of clipping it', () => {
+    // A Friday GEO.103.recitation block clipped "11:40 AM – 12:35 PM" at about
+    // 90 px; the range now breaks onto a second line when the column is narrow.
+    const body = ruleBody('.blockTime');
+    expect(body).toMatch(/white-space:\s*normal/);
+    expect(body).not.toMatch(/nowrap/);
+  });
+
   it('gives a block an exact line box, so whole lines are countable', () => {
     // `line-height: 1.25` on 11px is 13.75px, and three of those end 0.75px
     // past a 42px text area — which is how a line gets half drawn.

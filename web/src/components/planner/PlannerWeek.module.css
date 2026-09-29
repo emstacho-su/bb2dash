@@ -394,7 +394,8 @@
   font-size: var(--text-xs);
   color: inherit;
   opacity: 0.75;
-  white-space: nowrap;
+  /* R-44: a range wraps onto a second line rather than clipping at ~90 px. */
+  white-space: normal;
 }
 
 /* TEXT WRAPS (P-planner-4). Stack asked for Google Calendar's behaviour: a
