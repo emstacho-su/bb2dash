@@ -26,8 +26,15 @@ const UA = 'bb2dash-probe/0.1 (+sprint 3 research; read-only)';
 /** The xsrf token Blackboard embeds in the BbRouter cookie (`...,xsrf:<uuid>,...`), or null. */
 export const xsrfFromCookie = (cookie) => {
   if (typeof cookie !== 'string') return null;
-  const m = cookie.match(/(?:^|[;\s,])xsrf:([0-9a-f-]{8,})/i);
+  const m = cookie.match(/(?:^|[;\s,=])xsrf:([0-9a-f-]{8,})/i);
   return m ? m[1] : null;
+};
+
+/** BbRouter's own clock: `expires:<unix seconds>` and `timeout:<seconds>`, as numbers; null when absent. */
+export const bbRouterClock = (cookie, nowMs = Date.now()) => {
+  if (typeof cookie !== 'string') return { expiresInSec: null, timeoutSec: null };
+  const ex = cookie.match(/(?:^|[;\s,=])expires:(\d{9,})/); const to = cookie.match(/(?:^|[;\s,=])timeout:(\d+)/);
+  return { expiresInSec: ex ? Number(ex[1]) - Math.floor(nowMs / 1000) : null, timeoutSec: to ? Number(to[1]) : null };
 };
 
 /** Top-level key names of a parsed JSON body, plus the keys of results[0] when it is a list. */
@@ -52,6 +59,7 @@ export const buildProbes = ({ userId, courseId }) => {
     { id: 'pub-me', path: '/learn/api/public/v1/users/me', why: 'Task 0 baseline; login check' },
     { id: 'pub-courses', path: `/learn/api/public/v1/users/${userId || 'me'}/courses?limit=100`, why: 'public course list' },
     { id: 'v1-memberships', path: `/learn/api/v1/users/${userId}/memberships?expand=course.effectiveAvailability,course.permissions,courseRole&includeCount=true&limit=10000`, why: 'crawler 597', needs: 'userId' },
+    { id: 'v1-session-clock', path: '/learn/api/v1/utilities/timeUntilBbSessionInactive', why: 'ms until Blackboard inactivity timeout (109 R1 §2); never keepBbSessionActive' },
     { id: 'v1-calendars', path: '/learn/api/v1/calendars?limit=10000', why: 'crawler 598' },
     { id: 'v1-calendarItems', path: `/learn/api/v1/calendars/calendarItems?since=${enc(daysFromNow(-7))}&until=${enc(daysFromNow(60))}`, why: 'crawler 598, completion marker' },
     { id: 'v1-course', path: `/learn/api/v1/courses/${courseId}?expand=effectiveAvailability`, why: 'crawler 582', needs: 'courseId' },
@@ -93,7 +101,8 @@ async function main() {
   const out = [];
   const say = (s) => out.push(redact(s, secrets));
 
-  say(`# bb-probe ${new Date().toISOString()} base=${BASE} xsrf=${xsrf ? 'present' : 'absent'}`);
+  const clock = bbRouterClock(cookie);
+  say(`# bb-probe ${new Date().toISOString()} base=${BASE} xsrf=${xsrf ? 'present' : 'absent'} BbRouter.expires_in_s=${clock.expiresInSec ?? 'absent'} BbRouter.timeout_s=${clock.timeoutSec ?? 'absent'}`);
   say('');
   say('| id | xsrf | status | type | ms | top keys | results[0] keys | note |');
   say('|---|---|---|---|---|---|---|---|');
