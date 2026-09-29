@@ -14,7 +14,7 @@
  * `Today` calls is replaced, so nothing here reaches Supabase or TanStack.
  */
 
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCourseDisplay, makeWorkItem } from './factories';
 
@@ -23,6 +23,7 @@ const TODAY = '2026-09-10';
 const stub = vi.hoisted(() => ({
   window: [] as unknown[],
   undated: [] as unknown[],
+  undatedPending: false,
   courses: [] as unknown[],
   grades: { data: [] as unknown[], isPending: false, error: null as Error | null },
   figures: {} as Record<string, { figure: unknown; error: string | null }>,
@@ -40,7 +41,10 @@ vi.mock('@/lib/queries.today', async (importOriginal) => {
   return {
     ...actual,
     useWorkItemsWindow: () => ({ ...idle, data: stub.window }),
-    useUndatedWorkItems: () => ({ ...idle, data: stub.undated }),
+    useUndatedWorkItems: () =>
+      stub.undatedPending
+        ? { ...idle, isPending: true, isFetching: true, data: undefined }
+        : { ...idle, data: stub.undated },
     useCourseDisplay: () => ({ ...idle, data: stub.courses }),
     useTerm: () => ({ ...idle, data: null }),
     useSetItemStatus: () => ({ isPending: false, variables: undefined, mutate: vi.fn() }),
@@ -78,6 +82,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 8, 10, 9, 0, 0));
   stub.window = [makeWorkItem({ item_id: 'a-today', title: 'Reading for today', due_on: TODAY })];
   stub.undated = [];
+  stub.undatedPending = false;
   stub.courses = [makeCourseDisplay({ display_id: 'IST.323', code: 'IST 323' })];
   stub.grades = { data: [], isPending: false, error: null };
   stub.figures = {};
@@ -331,5 +336,64 @@ describe('Home — the course card grade slot', () => {
     render(<Today />);
     expect(card().getByText(/14\.8 \/ 104/)).toBeInTheDocument();
     expect(card().queryByText('Graded so far')).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * S2-home-2 / B-2 — Undated sits folded just above Needs attention
+ * ------------------------------------------------------------------------ */
+
+describe('Home — the Undated tray (S2-home-2)', () => {
+  const HOME_KEY = 'bb2dash.home.collapsed';
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    stub.undated = [
+      makeWorkItem({ item_id: 'u-1', title: 'Case write-up', due_on: null }),
+      makeWorkItem({ item_id: 'u-2', title: 'Reflection', due_on: null }),
+    ];
+  });
+  afterEach(() => window.localStorage.clear());
+
+  const undatedToggle = () => screen.getByRole('button', { name: /^Undated \(2\)/ });
+
+  it('is the section right before Needs attention', () => {
+    const { container } = render(<Today />);
+    const sections = Array.from(container.querySelectorAll('section')) as HTMLElement[];
+    const needs = sections.findIndex((s) => s.getAttribute('aria-label') === 'Needs attention');
+    expect(needs).toBeGreaterThan(0);
+    expect(sections[needs - 1].getAttribute('aria-label')).toBe('Undated');
+  });
+
+  it('starts collapsed on a first visit, its count in the header', () => {
+    render(<Today />);
+    expect(undatedToggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Case write-up')).toBeNull();
+  });
+
+  it('opens on a click and remembers it under its own key', () => {
+    const first = render(<Today />);
+    fireEvent.click(undatedToggle());
+    expect(undatedToggle()).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Case write-up')).toBeInTheDocument();
+    expect(window.localStorage.getItem(HOME_KEY)).toBe('[]');
+    first.unmount();
+
+    render(<Today />);
+    expect(undatedToggle()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('points its button at the list it folds', () => {
+    render(<Today />);
+    const controls = undatedToggle().getAttribute('aria-controls');
+    expect(controls).toBeTruthy();
+    expect(document.getElementById(controls!)).not.toBeNull();
+  });
+
+  it('claims no count while the read is in flight', () => {
+    stub.undatedPending = true;
+    render(<Today />);
+    const toggle = screen.getByRole('button', { name: /^Undated/ });
+    expect(toggle.textContent).not.toMatch(/\(\d+\)/);
   });
 });
