@@ -138,12 +138,24 @@ export async function runEmbedLoop({
 /** The real `post`: one HTTPS call to the edge function with the legacy anon JWT. */
 export function makePost(supabaseUrl, jwt) {
   return async (body) => {
-    const res = await fetch(`${supabaseUrl}/functions/v1/embed-corpus`, {
-      method: 'POST',
-      headers: { apikey: jwt, Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const text = await res.text();
+    // The loop's contract is that `post` never throws: a rejected fetch here would escape
+    // runEmbedLoop, and when the pull calls it that means a stack trace instead of the summary
+    // line telling the operator where the bb_files updates were written. A transport failure is
+    // reported as a retryable status instead.
+    let res;
+    try {
+      res = await fetch(`${supabaseUrl}/functions/v1/embed-corpus`, {
+        method: 'POST',
+        headers: { apikey: jwt, Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      return { status: 503, body: { error: `request failed: ${String((e && e.message) || e)}` } };
+    }
+    let text;
+    try { text = await res.text(); } catch (e) {
+      return { status: 503, body: { error: `read failed: ${String((e && e.message) || e)}` } };
+    }
     let parsed = null;
     try { parsed = JSON.parse(text); } catch { parsed = { raw: text.slice(0, 400) }; }
     return { status: res.status, body: parsed };

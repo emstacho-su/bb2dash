@@ -576,7 +576,10 @@ export function InboxRow({
                 <button
                   type="button"
                   className={tokens.btnSecondary}
-                  disabled={pending}
+                  // A gap shows Save and Dismiss side by side, and Dismiss sends no answer. Typing
+                  // one and then pressing Dismiss would discard it silently, so while there is
+                  // something typed, Save is the only way out.
+                  disabled={pending || (gapKind !== null && answer.trim().length > 0)}
                   onClick={() => send({ id: item.id, kind: dismissKind, note })}
                 >
                   Dismiss

@@ -437,8 +437,7 @@ to its signed CDN URL, bounded at 3 hops with the final host checked at a domain
 `ingest/pull_files.mjs --fetch` downloads it. That retires Playwright's `download` event, which
 crashed the MCP browser on 2026-09-23 and cost that sync three files. `ingest/embed_corpus.mjs`
 (new, 11 tests) is the embed loop that was run by hand; `--check` prints `missing_parts_before`.
-`pull_files.mjs` also gains `--restale` (a new Storage key, never an overwrite, text swapped in one
-transaction) and `--no-embed`; its 17 existing tests are unchanged and 11 are added.
+`pull_files.mjs` also gains `--no-embed`; its 17 existing tests are unchanged and 8 are added.
 `agent_requests.result` gains `files_pulled` and `files_not_pulled`. Phase 18 keeps its other
 tasks and its migration block 120–129; nothing in the database changed.
 

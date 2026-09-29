@@ -646,7 +646,11 @@ export function resolvedAction(item: AttentionItem): OutcomeAction | null {
   if (!resolution) return null;
   if (resolution.accept === 'blackboard') return 'accept_blackboard';
   if (resolution.accept === 'keep') return 'keep_mine';
-  if (typeof resolution.value === 'string') return 'save';
+  // An answered gap writes the same `{value, value_type}` shape a stack_must_confirm does, so the
+  // kind is the only thing that tells them apart. Without this the chip would read "answered,
+  // applies on next sync" for a row `apply_resolutions()` never touches — the contradiction the
+  // block comment above says must not exist.
+  if (typeof resolution.value === 'string') return item.kind === 'data_gap' ? 'save_gap' : 'save';
   if (resolution.dismissed === true) return 'dismiss';
   return null;
 }

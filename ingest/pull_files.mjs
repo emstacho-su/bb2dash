@@ -38,20 +38,16 @@
 //      reported, and a human marks it `superseded_by` its replacement. A `session_expired` outcome
 //      (401/403 on the first hop) stops the whole run: every remaining row would fail the same way.
 //
-// THREE MODES, ALWAYS EXCLUSIVE. Course files (no flag), Stack's submissions (`--bucket
-// my_submissions`) and stale re-pulls (`--restale`) each take their own rows and can never write
-// another mode's. A stale row is one already carrying bytes that Blackboard has since replaced;
-// it is the one mode that does NOT overwrite — it uploads under a key derived from the new
-// content hash and emits one transaction that swaps the row's text and repoints it.
+// TWO MODES, ALWAYS EXCLUSIVE. Course files (no flag) and Stack's submissions (`--bucket
+// my_submissions`) each take their own rows and can never write the other's. Re-pulling a file
+// whose stored bytes went stale is deliberately NOT here: it replaces text already in the corpus,
+// so it belongs in a step someone runs on purpose, not in every sync.
 //
 // THE MANIFEST. One JSON array from this query (execute_sql), saved to a file:
 //   select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
 //            'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
 //            'bucket', f.bucket, 'attempt_id', f.attempt_id))
 //     from bb_files f where f.storage_path is null and f.superseded_by is null;
-//   For a `--restale` run the predicate is the stale marker instead, and each row carries
-//   `'restale', true`:
-//     where f.superseded_by is null and f.notes like '%stored bytes may be stale%'
 //   With `--fetch`, the browser half adds `hops` to every row before this script reads it.
 //   `mime` may be null: it is then inferred from the extension. An optional `key` overrides the
 //   Storage key (a re-upload of an already-stored file needs its own; see file 145). `attempt_id`
@@ -113,6 +109,16 @@ export function storageKeyFor(row) {
   return String(row.relpath).replace(/#/g, '_');
 }
 
+/**
+ * A file name that Windows will actually accept. Blackboard display names carry `:`, `?`, `*`,
+ * `"` and `|`, none of which may appear in a path here, and a failed write would be reported as a
+ * byte-fetch problem rather than the naming problem it is. Only the scratch download name is
+ * cleaned; the Storage key and the mirror keep the catalogue's own spelling.
+ */
+export function safeBasename(name) {
+  return path.basename(String(name)).replace(/[:?*"<>|]/g, '_') || 'file';
+}
+
 /** Encode a key for the Storage URL, one path segment at a time (slashes stay). */
 export function encodeKey(key) {
   return key.split('/').map(encodeURIComponent).join('/');
@@ -135,48 +141,21 @@ export function isSubmissionRow(row) {
   return row?.bucket === SUBMISSION_BUCKET;
 }
 
-/**
- * Is this a re-pull of a row that already holds bytes? Only the manifest's explicit flag says so —
- * never inferred, because guessing wrong here would overwrite good bytes.
- */
-export function isStaleRow(row) {
-  return row?.restale === true;
-}
-
-/** Which of the three exclusive runs this is. `--restale` wins so a stray --bucket cannot widen it. */
+/** Which of the two exclusive runs this is. */
 export function modeOf(args) {
-  if (args?.restale === true) return 'restale';
-  if (args?.bucket === SUBMISSION_BUCKET) return 'submissions';
-  return 'course';
+  return args?.bucket === SUBMISSION_BUCKET ? 'submissions' : 'course';
 }
 
 /**
- * The rows this run may touch: --only (comma-separated ids; empty means all), then two gates.
- *
- * The stale gate comes first: a row that already holds bytes is only ever taken by a `--restale`
- * run, and a `--restale` run takes nothing else. Then the bucket gate, unchanged:
- * `--bucket my_submissions` keeps submission rows alone; no flag keeps course rows alone. Together
- * they are why one run can never write another run's rows.
+ * The rows this run may touch: --only (comma-separated ids; empty means all), then the bucket gate.
+ * `--bucket my_submissions` keeps submission rows alone; no flag keeps course rows alone. The gate
+ * is why a submission pass can never write a course row, or a course pass a submission.
  */
-export function filterManifest(rows, only, bucket, { restale = false } = {}) {
+export function filterManifest(rows, only, bucket) {
   const ids = String(only ?? '').split(',').map((s) => s.trim()).filter(Boolean).map(Number);
   const byId = ids.length === 0 ? rows : rows.filter((r) => ids.includes(Number(r.id)));
-  if (restale) return byId.filter((r) => isStaleRow(r));
   const wantSubmissions = bucket === SUBMISSION_BUCKET;
-  return byId.filter((r) => !isStaleRow(r) && isSubmissionRow(r) === wantSubmissions);
-}
-
-/**
- * The Storage key for a re-pulled file. Storage is insert-only for anon and the old bytes still
- * occupy the plain key, so a stale row needs its own. The new content's hash is the discriminator:
- * identical bytes land on the same key (so a repeated run is idempotent rather than littering),
- * different bytes on a different one, and neither can ever be the key the old bytes hold.
- */
-export function restaleKeyFor(row, sha256) {
-  const base = storageKeyFor(row);
-  const ext = path.extname(base);
-  const stem = ext ? base.slice(0, -ext.length) : base;
-  return `${stem}.${String(sha256).slice(0, 12)}${ext}`;
+  return byId.filter((r) => isSubmissionRow(r) === wantSubmissions);
 }
 
 /**
@@ -240,35 +219,6 @@ export function bbFilesUpdateSql({ id, key, relpath, sha256, size, mime, textSta
   );
 }
 
-/**
- * The one transaction the owner runs per re-pulled file.
- *
- * A stale row differs from a fresh one in three ways, and every one of them needs the database:
- * its old `bb_file_text` rows must go (anon cannot delete, and leaving them would double the
- * file in search), the new units must replace them in the same transaction (so a failure leaves
- * neither half), and the row already has a `storage_path`, so the `storage_path is null` guard
- * that protects a fresh pull would match nothing here. The stale marker is cleared in the same
- * statement — leaving it would put the row back on the next run's work list forever.
- */
-export function bbFilesRestaleSql({ id, key, relpath, sha256, size, mime, pulledOn, units = [] }) {
-  const rows = units.map((u) => `(${id}, ${q(u.unit_kind)}, ${u.unit_no}, ${q(u.text)})`);
-  const textStatus = rows.length ? 'extracted' : 'failed';
-  const insert = rows.length
-    ? `insert into bb_file_text (file_id, unit_kind, unit_no, text) values\n  ${rows.join(',\n  ')};\n`
-    : '';
-  return (
-    `begin;\n` +
-    `delete from bb_file_text where file_id = ${id};\n` +
-    insert +
-    `update bb_files set storage_path = ${q(`${BUCKET}/${key}`)}, local_path = ${q(`course context/${relpath}`)}, ` +
-    `sha256 = ${q(sha256)}, bytes = ${size}, mime_type = ${q(mime)}, downloaded_at = now(), ` +
-    `text_status = ${q(textStatus)}, ` +
-    `notes = replace(coalesce(notes, ''), ' | stored bytes may be stale', '') || ${q(` | bytes re-pulled ${pulledOn} by ingest/pull_files.mjs --restale`)} ` +
-    `where id = ${id};\n` +
-    `commit;`
-  );
-}
-
 /** Headers for the publishable key: apikey + bearer, as every anon insert in this repo does. */
 export function anonHeaders(key, contentType) {
   return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': contentType };
@@ -299,7 +249,7 @@ async function bytesOnDisk(row, ctx) {
   if (chain.outcome !== 'ok') {
     return { error: `hops ${chain.outcome}: ${chain.reason ?? 'no signed URL'}`, outcome: chain.outcome };
   }
-  const dest = path.join(downloads, `${row.id}_${path.basename(row.file_name || row.relpath)}`);
+  const dest = path.join(downloads, `${row.id}_${safeBasename(row.file_name || row.relpath)}`);
   const got = await downloadTo(fetchImpl, chain.signedUrl, dest);
   if (got.outcome !== 'ok') {
     return { error: `download ${got.outcome}: ${got.reason}`, outcome: got.outcome, fatal: got.outcome === 'session_expired' };
@@ -308,7 +258,7 @@ async function bytesOnDisk(row, ctx) {
 }
 
 async function pullOne(row, ctx) {
-  const { mirror, supabaseUrl, key, ingestDir, dryRun, pulledOn, restale } = ctx;
+  const { mirror, supabaseUrl, key, ingestDir, dryRun, pulledOn } = ctx;
 
   const got = await bytesOnDisk(row, ctx);
   if (got.error) return { id: row.id, error: got.error, outcome: got.outcome, fatal: got.fatal };
@@ -319,9 +269,8 @@ async function pullOne(row, ctx) {
   if (!bytesLookValid(bytes, mime)) return { id: row.id, error: `bad bytes: ${bytes.length} bytes, magic ${bytes.subarray(0, 4).toString('hex')}` };
   const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
   const submission = isSubmissionRow(row);
-  // A stale row's old bytes still occupy the plain key, so its new bytes get a content-derived one.
-  const storageKey = restale ? restaleKeyFor(row, sha256) : storageKeyFor(row);
-  const tag = { ...(submission ? { submission: true } : {}), ...(restale ? { restale: true } : {}) };
+  const storageKey = storageKeyFor(row);
+  const tag = submission ? { submission: true } : {};
   if (dryRun) return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, dryRun: true };
 
   const dest = path.join(mirror, row.relpath);
@@ -334,10 +283,9 @@ async function pullOne(row, ctx) {
   const upBody = await up.text();
   if (!up.ok) {
     if (!isDuplicateAnswer(up.status, upBody)) return { id: row.id, error: `storage ${up.status}: ${upBody.slice(0, 200)}` };
-    // A stale key embeds this content's hash, so an occupied one holds these very bytes; a course
-    // key is derived from the catalogue, so it holds this file. Only a submission key must never
-    // be assumed (migration 052: nothing should ever share it).
-    if (!restale && !duplicateIsAcceptable(submission)) {
+    // A course key is derived from the catalogue, so an occupied one holds this same file. Only a
+    // submission key must never be assumed (migration 052: nothing should ever share it).
+    if (!duplicateIsAcceptable(submission)) {
       return { id: row.id, key: storageKey, ...tag, error: `Storage key already occupied (${up.status}); a human decides whether those bytes are this file` };
     }
   }
@@ -346,10 +294,8 @@ async function pullOne(row, ctx) {
   let extractError = null;
   try { units = extractUnits(ingestDir, localPath); } catch (e) { extractError = String(e).slice(0, 200); }
 
-  // A stale row's text is swapped inside the emitted transaction, not POSTed: the old units have
-  // to go in the same breath as the new ones arrive, and anon cannot delete.
   let unitsPosted = 0;
-  if (!restale && units.length) {
+  if (units.length) {
     const tr = await fetch(`${supabaseUrl}/rest/v1/bb_file_text`, {
       method: 'POST', headers: { ...anonHeaders(key, 'application/json'), Prefer: 'return=minimal' },
       body: JSON.stringify(textRows(row.id, units)),
@@ -359,16 +305,15 @@ async function pullOne(row, ctx) {
   }
 
   const textStatus = units.length ? 'extracted' : 'failed';
-  const sql = restale
-    ? bbFilesRestaleSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, pulledOn, units })
-    : bbFilesUpdateSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, textStatus, pulledOn, submission });
+  const sql = bbFilesUpdateSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, textStatus, pulledOn, submission });
   return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, storage: up.status, units: units.length, unitsPosted, textStatus, extractError, sql };
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const args = parseArgs(argv);
   if (!args.manifest || !args.downloads) {
-    console.error('usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--bucket my_submissions] [--restale] [--fetch] [--only ids] [--out <sql>] [--dry-run] [--no-embed]');
+    console.error('usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--bucket my_submissions] [--fetch] [--only ids] [--out <sql>] [--dry-run] [--no-embed]');
+    console.error('note: --dry-run writes nothing to Storage, the mirror or the database, but with --fetch it still downloads the bytes, because the key and sha it reports are computed from them.');
     return 2;
   }
   if (args.bucket !== undefined && args.bucket !== SUBMISSION_BUCKET) {
@@ -381,18 +326,22 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const mode = modeOf(args);
   const ctx = {
     downloads: args.downloads,
-    downloadNames: fs.existsSync(args.downloads) ? fs.readdirSync(args.downloads) : [],
+    // Only --fetch may name a directory that does not exist yet; it creates it below. Without
+    // --fetch a wrong path must fail here, not as a wall of "no download" plus a late ENOENT
+    // when the .sql file is written into that same missing directory.
+    downloadNames: args.fetch === true
+      ? (fs.existsSync(args.downloads) ? fs.readdirSync(args.downloads) : [])
+      : fs.readdirSync(args.downloads),
     mirror: args.mirror || path.join(ingestDir, '..', 'course context'),
     supabaseUrl: env.SUPABASE_URL || DEFAULT_SUPABASE_URL,
     key, ingestDir, dryRun: args['dry-run'] === true,
     fetchMode: args.fetch === true,
     fetchImpl: (url) => fetch(url),
-    restale: mode === 'restale',
     pulledOn: new Date().toISOString().slice(0, 10),
   };
   if (ctx.fetchMode) fs.mkdirSync(args.downloads, { recursive: true });
 
-  const rows = filterManifest(JSON.parse(fs.readFileSync(args.manifest, 'utf8')), args.only, args.bucket, { restale: ctx.restale });
+  const rows = filterManifest(JSON.parse(fs.readFileSync(args.manifest, 'utf8')), args.only, args.bucket);
   const results = [];
   let stopped = null;
   for (const row of rows) {

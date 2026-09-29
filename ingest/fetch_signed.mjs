@@ -35,6 +35,9 @@ import path from 'node:path';
 /** The only host suffix signed Blackboard file URLs are accepted from. */
 export const SIGNED_HOST_SUFFIX = '.content.blackboardcdn.com';
 
+/** The institution's Blackboard host — where a durable URL starts and redirects may pass. */
+export const BLACKBOARD_ORIGIN = 'blackboard.syracuse.edu';
+
 /** The most URLs one chain may contain, the durable URL included. */
 export const MAX_HOPS = 3;
 
@@ -47,6 +50,35 @@ export function isSignedHost(url) {
   try { host = new URL(String(url)).hostname.toLowerCase(); } catch { return false; }
   const bare = SIGNED_HOST_SUFFIX.replace(/^\./, '');
   return host === bare || host.endsWith(SIGNED_HOST_SUFFIX);
+}
+
+/** A bare IP literal, v4 or v6. Never a host we are willing to request. */
+function isIpLiteral(host) {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith('[') || host.includes(':');
+}
+
+/**
+ * May we issue a request to this URL at all?
+ *
+ * The final-host rule says where bytes may come FROM; this says where a request may GO. They are
+ * not the same question, and conflating them was a real hole: `source_url` is read out of
+ * `data-bbfile` attributes in course content, and the crawler's `durableUrl` falls back to any URL
+ * string when nothing matches the bbcswebdav pattern. A course-content author could therefore point
+ * the walk at `http://127.0.0.1:…` or any internal host, and — because the walk runs inside
+ * Playwright's request context, which carries the logged-in profile's cookies — turn it into a
+ * credentialed GET whose status came back in the report as an oracle.
+ *
+ * So: https only, and the host must be Blackboard or the CDN. Bare IPs are refused outright, which
+ * also closes loopback, link-local and the RFC1918 ranges.
+ */
+export function isFollowable(url) {
+  let u;
+  try { u = new URL(String(url)); } catch { return false; }
+  if (u.protocol !== 'https:') return false;
+  const host = u.hostname.toLowerCase();
+  if (isIpLiteral(host)) return false;
+  if (host === BLACKBOARD_ORIGIN || host.endsWith(`.${BLACKBOARD_ORIGIN}`)) return true;
+  return isSignedHost(u.href);
 }
 
 /**
@@ -90,6 +122,12 @@ export async function resolveSignedUrl(get, durableUrl) {
   const hops = [String(durableUrl)];
   let current = String(durableUrl);
 
+  // Checked before the first request, not after it: an off-origin starting URL must cost zero
+  // credentialed round trips.
+  if (!isFollowable(current)) {
+    return { outcome: 'refused', reason: `starting URL is not followable (origin or scheme)`, hops };
+  }
+
   for (let i = 0; i < MAX_HOPS; i++) {
     let answer;
     try {
@@ -120,11 +158,14 @@ export async function resolveSignedUrl(get, durableUrl) {
       return { outcome: 'refused', reason: `unparsable Location: ${String(location).slice(0, 120)}`, hops };
     }
 
-    hops.push(next);
-    if (isSignedHost(next)) {
-      const verdict = validateHops(hops);
-      return verdict.outcome === 'ok' ? { ...verdict, hops } : { ...verdict, hops };
+    if (!isFollowable(next)) {
+      // The redirect target is whatever the remote server chose. Record it, never request it.
+      hops.push(next);
+      return { outcome: 'refused', reason: 'redirect target is not followable (origin or scheme)', hops };
     }
+
+    hops.push(next);
+    if (isSignedHost(next)) return { ...validateHops(hops), hops };
     if (hops.length >= MAX_HOPS) {
       return { outcome: 'refused', reason: `chain reached the ${MAX_HOPS}-hop ceiling without the CDN`, hops };
     }
@@ -156,7 +197,14 @@ export async function downloadTo(fetchImpl, signedUrl, destPath) {
 
   const status = Number(res?.status);
   if (!res?.ok) {
-    if (status === 401 || status === 403) return { outcome: 'session_expired', reason: `status ${status}` };
+    // A 401/403 HERE is not a dead Blackboard session. The signed URL carries its own, time-limited
+    // authorisation and no cookie, so the CDN refusing it means the signature expired — which
+    // happens normally when the browser half walked many rows' hops before the download started.
+    // Calling it `session_expired` would abort the whole run and tell Stack to log in again when
+    // nothing is wrong with his session. Only `resolveSignedUrl`'s first hop can say that.
+    if (status === 401 || status === 403) {
+      return { outcome: 'refused', reason: `signed URL rejected (status ${status}); its signature has probably expired — re-walk the hops for this row` };
+    }
     if (status === 404) return { outcome: 'gone', reason: 'status 404' };
     return { outcome: 'refused', reason: `status ${status}` };
   }

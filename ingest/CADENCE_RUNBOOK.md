@@ -73,10 +73,6 @@ chain to its signed CDN URL instead, and `ingest/pull_files.mjs --fetch` downloa
    URL itself, because a signed URL carries its own authorisation and needs no session. The chain is
    bounded at three hops and must end on `.content.blackboardcdn.com`.
 
-   Still run deliberately, outside a sync: `ingest/pull_files.mjs --restale`, for rows whose stored
-   bytes Blackboard has since replaced. It is the one file job that is not self-healing, because it
-   removes text that is already in the corpus and swaps it inside one transaction.
-
    For the record: the first scripted run was 12 files on 2026-09-22 (Inbox request 38); before the
    script the procedure claimed `<uuid>.tmp` files by size and magic bytes and moved them into
    `course context/<relpath>` by hand.

@@ -20,9 +20,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  BLACKBOARD_ORIGIN,
   MAX_HOPS,
   SIGNED_HOST_SUFFIX,
   downloadTo,
+  isFollowable,
   isSignedHost,
   resolveSignedUrl,
   validateHops,
@@ -168,10 +170,12 @@ test('downloadTo falls back to copy-then-unlink when rename raises EXDEV', async
   }
 });
 
-test('downloadTo maps 401/403 to session_expired and 404 to gone, and writes nothing', async () => {
+test('downloadTo calls a CDN 401/403 an expired signature, not a dead session', async () => {
+  // The signed URL carries no cookie, so the CDN refusing it says nothing about Blackboard. Calling
+  // it session_expired would abort the whole run on a stale signature.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bb2dash-fetch-'));
   const dest = path.join(dir, 'out.pdf');
-  for (const [status, outcome] of [[401, 'session_expired'], [403, 'session_expired'], [404, 'gone']]) {
+  for (const [status, outcome] of [[401, 'refused'], [403, 'refused'], [404, 'gone']]) {
     const fetchImpl = async () => ({ ok: false, status, arrayBuffer: async () => Buffer.alloc(0) });
     const got = await downloadTo(fetchImpl, SIGNED, dest);
     assert.equal(got.outcome, outcome, `status ${status}`);
@@ -190,4 +194,76 @@ test('downloadTo refuses a url outside the CDN suffix without fetching', async (
   assert.equal(called, false);
   assert.deepEqual(fs.readdirSync(dir), []);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------------------------
+// The walk is gated, not just its endpoint (security review, finding 1).
+//
+// Every hop is fetched by Playwright's request context, which carries the logged-in profile's
+// cookies. The final-host check alone did not stop the walk from being pointed at an arbitrary
+// origin: `source_url` comes from `data-bbfile` attributes in course content, and the crawler's
+// durableUrl falls back to any URL string when no bbcswebdav pattern matches. So a course-content
+// author could aim a credentialed GET at localhost or any internal host and read the outcome back
+// as a status oracle. Nothing is fetched now unless its origin is allowed.
+// ---------------------------------------------------------------------------------------------
+
+test('isFollowable allows Blackboard and the CDN over https, and nothing else', () => {
+  assert.equal(isFollowable(DURABLE), true);
+  assert.equal(isFollowable(SIGNED), true);
+  assert.equal(isFollowable('https://blackboard.syracuse.edu/webapps/x'), true);
+  assert.equal(isFollowable('http://blackboard.syracuse.edu/webapps/x'), false, 'cleartext is refused');
+  assert.equal(isFollowable('https://evil.com/x'), false);
+  assert.equal(isFollowable('https://blackboard.syracuse.edu.evil.com/x'), false);
+  assert.equal(isFollowable('not a url'), false);
+});
+
+test('isFollowable refuses loopback, private and link-local hosts outright', () => {
+  for (const u of [
+    'http://127.0.0.1:8080/admin',
+    'https://127.0.0.1/admin',
+    'https://localhost/admin',
+    'https://10.0.0.5/x',
+    'https://192.168.1.1/x',
+    'https://172.16.0.1/x',
+    'https://169.254.169.254/latest/meta-data/',
+    'https://[::1]/x',
+  ]) {
+    assert.equal(isFollowable(u), false, u);
+  }
+});
+
+test('BLACKBOARD_ORIGIN is the institution host the walk starts from', () => {
+  assert.equal(BLACKBOARD_ORIGIN, 'blackboard.syracuse.edu');
+});
+
+test('resolveSignedUrl refuses a starting URL off Blackboard without fetching it', async () => {
+  let called = false;
+  const get = async () => { called = true; throw new Error('should not be called'); };
+  const got = await resolveSignedUrl(get, 'http://127.0.0.1:8080/admin/shutdown');
+  assert.equal(got.outcome, 'refused');
+  assert.match(got.reason, /not followable|origin/i);
+  assert.equal(called, false, 'no credentialed request is issued at all');
+});
+
+test('resolveSignedUrl refuses a redirect to an off-origin host and never fetches it', async () => {
+  const calls = [];
+  const evil = 'https://evil.com/collect';
+  const get = fakeGet({ [DURABLE]: redirect(evil) }, calls);
+  const got = await resolveSignedUrl(get, DURABLE);
+  assert.equal(got.outcome, 'refused');
+  assert.deepEqual(calls, [DURABLE], 'the off-origin hop is never requested');
+});
+
+test('resolveSignedUrl refuses a redirect to loopback', async () => {
+  const calls = [];
+  const get = fakeGet({ [DURABLE]: redirect('http://127.0.0.1:9000/x') }, calls);
+  const got = await resolveSignedUrl(get, DURABLE);
+  assert.equal(got.outcome, 'refused');
+  assert.deepEqual(calls, [DURABLE]);
+});
+
+test('downloadTo refuses a cleartext CDN url', async () => {
+  const fetchImpl = async () => { throw new Error('should not be called'); };
+  const got = await downloadTo(fetchImpl, 'http://eu.content.blackboardcdn.com/x.pdf', '/tmp/x.pdf');
+  assert.equal(got.outcome, 'refused');
 });

@@ -182,7 +182,7 @@ CDN or ran past three hops; report it and pull nothing.
 Do **not** use Playwright's `download` event. It crashed the MCP browser on 2026-09-23 and cost a
 sync three files; the hop walk above is what replaced it.
 
-**Half two — the script.** `--dry-run` first to see the keys, then the three passes:
+**Half two — the script.** `--dry-run` first to see the keys, then the two passes and the check:
 
 ```
 node ingest/pull_files.mjs --manifest <scratch>/manifest.json --downloads <scratch>/downloads \
@@ -222,8 +222,6 @@ Rules that apply to this step and no other:
   `source_url`, the manifest query excludes them, and they are never touched here.
 - Never `insert` a `bb_files` row from this step. `stage_files` and `stage_attempts` are the only
   writers of catalog rows; this step only fills in bytes on rows they already created.
-- Re-pulling a file whose stored bytes went stale is **not** this step: that is
-  `--restale`, run deliberately, because it replaces text that is already in the corpus.
 - Report the counts in step 6, **and name every row you could not pull, with the reason** (session
   expired, gone from Blackboard, refused chain, 409 on the Storage key). Since migration 054 the
   transform raises no Inbox `data_gap` for a submission file whose bytes have not arrived, so this
@@ -276,5 +274,5 @@ Grades and due dates are facts from Blackboard. Planner state — `assignment_pr
 - Durable URLs only, deep-scan every item — the crawler already does both; do not hand-edit payloads.
 - **Every file the sync catalogues is pulled before the sync reports** — course materials and
   Stack's submissions alike, in step 4b, while the session is still alive. `CADENCE_RUNBOOK.md`
-  step 4 is no longer a separate manual pass; it points here. The one file job still run
-  deliberately and outside a sync is `--restale`, because it replaces text already in the corpus.
+  step 4 is no longer a separate manual pass; it points here. Re-pulling a file whose stored bytes
+  Blackboard has since replaced is not part of a sync and is still Phase 18's.

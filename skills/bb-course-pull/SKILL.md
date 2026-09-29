@@ -47,8 +47,6 @@ and 1 missing file; the 9/8 validation found 3 files that only the deep scan see
   decks. The fetch path has neither problem.
 - Progress: after every step post a one-line status to Stack (files landed / stored / extracted / DB
   updated) so a long run never looks stalled.
-- Progress: after every step post a one-line status to Stack (files landed / stored / extracted / DB
-  updated) so a long run never looks stalled.
 - Files only: never click test, survey, discussion, or attempt controls.
 - Per file: sha256, bytes, mime. If a `bb_files` row with the same sha already has `storage_path`,
   mark duplicate and skip upload/extraction.
