@@ -37,6 +37,7 @@ probes are separate: the same Chrome profile reopened after the browser was clos
 | probe-1 | 2026-09-29T15:31:42Z | 0:06 | 200 | first self-paced probe; the loop then widens to ~30 min, then ~60 min |
 | probe-2 | 2026-09-29T16:07:13Z | 0:41 | 200 | idle, tab open; next probe ~30 min |
 | probe-3 | 2026-09-29T16:39:15Z | 1:14 | 200 | idle, tab open; cadence widens to ~60 min |
+| probe-4 | 2026-09-29T17:40:14Z | 2:15 | 200 | idle; the tab now shows `/ultra/course` (Blackboard or Stack moved it; no click by the loop) |
 
 ### Reopen probes (same profile, browser closed in between)
 
