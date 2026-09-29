@@ -35,6 +35,7 @@ probes are separate: the same Chrome profile reopened after the browser was clos
 |---|---|---|---|---|
 | probe-0 | 2026-09-29T15:25:39Z | 0:00 | 200 | baseline; fresh tab of the same profile, `/ultra/institution-page` |
 | probe-1 | 2026-09-29T15:31:42Z | 0:06 | 200 | first self-paced probe; the loop then widens to ~30 min, then ~60 min |
+| probe-2 | 2026-09-29T16:07:13Z | 0:41 | 200 | idle, tab open; next probe ~30 min |
 
 ### Reopen probes (same profile, browser closed in between)
 
