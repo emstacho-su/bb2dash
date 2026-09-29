@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import { fileIsPresent, resolveWtPath, wtCandidates } from '../../src/main/wt';
 
-const LOCAL_APP_DATA = 'C:\\Users\\estac\\AppData\\Local';
+const LOCAL_APP_DATA = 'C:\\Users\\stack\\AppData\\Local';
 const ALIAS = joinWin32(LOCAL_APP_DATA, 'Microsoft', 'WindowsApps', 'wt.exe');
 
 describe('wtCandidates', () => {

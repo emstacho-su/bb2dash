@@ -146,7 +146,7 @@ committed lockfile; install with `npm --prefix scripts ci`).
   hides the rest.
 * **Credential** (B-42, **PROVISIONAL**). `BB2DASH_TEST_DB_URL` is read from the process environment, or else from `.env.local` at the root of
   the checkout the script lives in (`process.loadEnvFile`; this laptop runs Node v24.13.0). The canonical copy is
-  `C:/Users/estac/projects/bb2dash/.env.local` in the main checkout (acceptance step 1); worktrees hold copies. A DSN on port 6543 is
+  `C:/Users/stack/projects/bb2dash/.env.local` in the main checkout (acceptance step 1); worktrees hold copies. A DSN on port 6543 is
   refused with exit 2. No output ever contains the DSN or its password; every error message is redacted.
 * **Exports.** Importing the module has no side effects. `loadDsn()` and `openClient()` are exported so a later Node
   script reuses this credential rather than adding a second one. None is planned: Phase 16's P-67 checker is
@@ -315,7 +315,7 @@ SOP gates:
 Stack's acceptance script (he walks it after the PR is open; the PM puts every command on his clipboard):
 
 1. Once: run the PM's PowerShell snippet. It generates a random password locally, copies an `alter role
-   db_test_runner password '…'` line for the dashboard SQL editor, and writes `C:/Users/estac/projects/bb2dash/.env.local`
+   db_test_runner password '…'` line for the dashboard SQL editor, and writes `C:/Users/stack/projects/bb2dash/.env.local`
    (the main checkout keeps the canonical copy) with the session-pooler DSN (user
    `db_test_runner.goultdzqcavefcgnifdy`, port 5432). Paste the line into an unsaved editor tab, run it, and close the
    tab. The password never passes through a chat. The PM then copies that file into `bb2dash-wt-15` and each worker
@@ -356,7 +356,7 @@ In both tables below, `\|` is the markdown escape for `|`, whether a shell pipe 
 ## Task list
 
 Tasks 8–16 are written in parallel with 1–7. Their checks run once task 5 has put a DSN on the machine; the PM copies
-the canonical `C:/Users/estac/projects/bb2dash/.env.local` (gitignored) into `bb2dash-wt-15` and each worker worktree. Commands run from the checkout root in Git Bash (`$?`), or in
+the canonical `C:/Users/stack/projects/bb2dash/.env.local` (gitignored) into `bb2dash-wt-15` and each worker worktree. Commands run from the checkout root in Git Bash (`$?`), or in
 PowerShell with `$LASTEXITCODE`. "runner → X" means that command's last line equals X (the `\|` escape is explained under §Task
 loops). W-39 and W-40 merge `feat/db-hygiene-15` into their branches once the PM has
 integrated W-38's tasks 1–4 there, so the runner is on disk before their first live check; until then they write files

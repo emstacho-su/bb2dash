@@ -7,7 +7,7 @@ with this one (auth, browser MCP).
 
 ## 0. Inventory: what lives in `~/.claude` and `~/.claude.json` that a container needs
 
-Read directly off `C:/Users/estac/.claude` and `C:/Users/estac/.claude.json` (names only, no
+Read directly off `C:/Users/stack/.claude` and `C:/Users/stack/.claude.json` (names only, no
 values printed anywhere in this research).
 
 ### `~/.claude` — essential to port
@@ -126,7 +126,7 @@ project that already treats "no secrets in images" and isolation as hard require
 
 ## 2. Where the source lives
 
-**Bind-mount from NTFS (`C:/Users/estac/projects/bb2dash` straight in) vs a WSL2-native clone vs
+**Bind-mount from NTFS (`C:/Users/stack/projects/bb2dash` straight in) vs a WSL2-native clone vs
 a named volume:**
 
 - Docker Desktop's own WSL2 best-practices guidance: store code being bind-mounted into Linux
@@ -149,7 +149,7 @@ a named volume:**
 filesystem — e.g. `~/dev/bb2dash` as seen from *inside* Ubuntu, reachable from Windows at
 `\\wsl.localhost\Ubuntu\home\<user>\dev\bb2dash` if Stack ever wants to peek from Explorer or VS
 Code's native Windows mode — and bind-mount that into the devcontainer. This is a **second, independent
-clone** of the same GitHub remote, not the same files as `C:/Users/estac/projects/bb2dash`. The two
+clone** of the same GitHub remote, not the same files as `C:/Users/stack/projects/bb2dash`. The two
 stay in sync the ordinary way: push/pull through `origin`, never by sharing a mount. That satisfies
 the "Windows path keeps working" guardrail literally — the existing Windows checkout is untouched
 and still works standalone — while giving the container native ext4 speed and working inotify.
@@ -182,7 +182,7 @@ worktrees as siblings — `bb2dash-wt-<name>` next to `bb2dash` itself
 2. **Worktree admin files pin absolute paths, and Git has no automatic cross-mount reconciliation.**
    Each worktree's `.git` file and the main repo's `.git/worktrees/<name>/gitdir` record the
    absolute path used at `git worktree add` time. If a worktree is ever created from *one* side
-   (say, Windows-native `C:\Users\estac\projects\bb2dash-wt-foo`) and then the *same clone* is
+   (say, Windows-native `C:\Users\stack\projects\bb2dash-wt-foo`) and then the *same clone* is
    later opened from the container at a different absolute path, those pointers go stale and git
    commands fail to find the common `.git` dir. Because the container uses a **separate clone**
    (per the recommendation above), this collision doesn't arise by construction — but if Stack ever
@@ -204,8 +204,8 @@ the project slug is the absolute working-directory path with separators replaced
 (`/home/user/work/my-repo` → `-home-user-work-my-repo`), and the docs say explicitly: *"Moving a
 project to a new path creates a new slug and separate memory... previous sessions/memory at the
 old path are still in `~/.claude/projects/` but won't be accessed."* This machine's own directory
-names confirm the same convention for Windows paths (`C:/Users/estac/projects/bb2dash` →
-`C--Users-estac-projects-bb2dash`, observed directly).
+names confirm the same convention for Windows paths (`C:/Users/stack/projects/bb2dash` →
+`C--Users-stack-projects-bb2dash`, observed directly).
 
 So the first time a PM session runs with `cwd=/workspaces/bb2dash` (or `~/dev/bb2dash`, wherever
 `workspaceFolder` ends up), Claude Code slugifies *that* path and starts a brand-new, empty
@@ -500,7 +500,7 @@ cases) is already covered by the `api.github.com/meta` CIDR block the reference 
 - [ ] Create `.gitattributes` in `bb2dash` (`* text=auto eol=lf`, `*.crt text eol=lf`), then
       `git add --renormalize .` in one commit.
 - [ ] Clone bb2dash inside the WSL2 Ubuntu distro's filesystem (e.g. `~/dev/bb2dash`), separate
-      from the existing `C:/Users/estac/projects/bb2dash` checkout; same for `agentic-harness`.
+      from the existing `C:/Users/stack/projects/bb2dash` checkout; same for `agentic-harness`.
 - [ ] Write `.devcontainer/Dockerfile` + `devcontainer.json` per the sketch above; widen
       `init-firewall.sh`'s allowlist.
 - [ ] Generate a `claude setup-token`; store as `CLAUDE_CODE_OAUTH_TOKEN` in the umbrella repo's
@@ -509,7 +509,7 @@ cases) is already covered by the `api.github.com/meta` CIDR block the reference 
 - [ ] Build the container once; `docker compose exec dev claude` to confirm auth, then set global
       `git config user.name`/`user.email` inside it (or bake into the Dockerfile — not secret).
 - [ ] Seed `~/.claude/projects/<container-slug>/memory/` from the current Windows
-      `C--Users-estac-projects-bb2dash/memory/` (one-time copy; see §3 for how to compute the slug).
+      `C--Users-stack-projects-bb2dash/memory/` (one-time copy; see §3 for how to compute the slug).
 - [ ] Confirm (don't assume) the harness vault has moved out of OneDrive into its own git repo
       (frozen answer 7) before relying on `HARNESS_VAULT` inside the container — until then,
       `session-capture.mjs`'s ingest-enqueue step will silently no-op there (by design, never

@@ -378,7 +378,7 @@ harness rag store). The questions below are new, from this research.
 - `docs/planning/sprint-2/82_PHASE14_containers.md` — read directly
 - `docs/planning/sprint-2/91_REQUIREMENTS_v3.md` §§1 (R-84, R-91, R-92), 3 (S2-workspace-1), 4 (D-1, D-2, D-4, D-21), 6 — read directly
 - `project-state/ORCHESTRATOR.md`, `project-state/DECISIONS.md`, `project-state/STATUS.md` — read directly
-- `C:/Users/estac/agentic-harness/README.md` — read directly
+- `C:/Users/stack/agentic-harness/README.md` — read directly
 - `web/src/lib/queries.sync.ts`, `db/migrations/032_agent_requests.sql`, `web/src/app/(app)/*`, `web/package.json`, `web/README.md`, `mcp-server/src/*` — read directly (this repo)
-- `C:\Users\estac\.claude\CLAUDE.md` (this session's own environment) — read directly, for the existing Haiku/Sonnet/Opus tiering convention cited in §1.2
+- `C:\Users\stack\.claude\CLAUDE.md` (this session's own environment) — read directly, for the existing Haiku/Sonnet/Opus tiering convention cited in §1.2
 - WebSearch results (open-webui architecture, LibreChat architecture, Claude Agent SDK subagents/billing, Anthropic Agent SDK credit status) — queried 2026-09-24, used to locate the primary pages above, not cited as standalone fact sources where a primary fetch confirms the same claim

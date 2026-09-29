@@ -30,7 +30,7 @@ function readEnvFile(path) {
 
 const args = process.argv.slice(2);
 const envFileIndex = args.indexOf('--env-file');
-const envFile = envFileIndex >= 0 ? args[envFileIndex + 1] : 'C:/Users/estac/projects/bb2dash/.env';
+const envFile = envFileIndex >= 0 ? args[envFileIndex + 1] : 'C:/Users/stack/projects/bb2dash/.env';
 const fileEnv = process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY)
   ? {}
   : readEnvFile(envFile);

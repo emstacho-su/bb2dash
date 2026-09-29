@@ -308,7 +308,7 @@ block; `project-state/` is the PM's. Worker ids W-63..W-66 are the next free aft
   diff) the worker runs itself, plus one demo line for the acceptance script; a task without a check
   is not a task"
 * [2026-09-15] "Parallel PM sessions never branch or commit in the shared checkout
-  `C:/Users/estac/projects/bb2dash`; each phase branch is its **own worktree** (`bb2dash-wt-<phase>`)
+  `C:/Users/stack/projects/bb2dash`; each phase branch is its **own worktree** (`bb2dash-wt-<phase>`)
   and the brief is edited there"
 * [2026-09-16] "Phase 14 research calls, proposed (frozen when its PM session runs): … Claude in
   containers uses the subscription token from `claude setup-token`"

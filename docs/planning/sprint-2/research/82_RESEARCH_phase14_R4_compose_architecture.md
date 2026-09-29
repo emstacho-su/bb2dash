@@ -20,7 +20,7 @@ Docker Desktop on Windows 11/WSL2 gotchas, and one-person observability. Repos i
 | Compose `include:` of per-repo files | Each included file resolves its own relative paths against *its own* file location, not the includer's directory ([docs.docker.com/reference/compose-file/include](https://docs.docker.com/reference/compose-file/include/)) | Good — edit a repo, `docker compose up` from umbrella picks it up if repo is a sibling checkout | **Recommended** |
 | `-f a.yml -f b.yml` merge | All paths resolve relative to the *first* file / CWD, so merging files that live in different repos gets fragile fast | Works but path bugs are easy | Fallback only |
 | Git submodules | Umbrella repo owns submodule pointers into bb2dash/agentic-harness | Adds submodule-update friction to a one-person workflow; not what the PM/worker git flow already does | Reject |
-| Sibling checkouts (no submodule) + umbrella repo/folder referencing them by relative path | Same as `include:` above | Matches how the repos already sit on disk (`C:/Users/estac/projects/bb2dash`, `C:/Users/estac/agentic-harness`) | **Recommended (this is what `include:` runs against)** |
+| Sibling checkouts (no submodule) + umbrella repo/folder referencing them by relative path | Same as `include:` above | Matches how the repos already sit on disk (`C:/Users/stack/projects/bb2dash`, `C:/Users/stack/agentic-harness`) | **Recommended (this is what `include:` runs against)** |
 
 **Known caveat (verified):** `env_file:` on an `include:` entry is documented to resolve
 against `project_directory` (default: the included file's own directory), but there's an
@@ -419,7 +419,7 @@ tension with the project's $0 hard rule.
   individuals, students, non-commercial open source, and small businesses (<250 employees
   AND <$10M revenue) — Stack's personal-project use qualifies cleanly
   ([docker.com/pricing](https://www.docker.com/pricing/)).
-- **Memory limits**: `.wslconfig` at `C:\Users\estac\.wslconfig`, `[wsl2]` section:
+- **Memory limits**: `.wslconfig` at `C:\Users\stack\.wslconfig`, `[wsl2]` section:
   ```ini
   [wsl2]
   memory=8GB

@@ -130,7 +130,7 @@ describe('decidePermission (R2-5)', () => {
     ['a different host', 'https://evil.example/page'],
     ['http against an https app', 'http://web-xi-ten-uy9xk6c6p0.vercel.app/'],
     ['a lookalike host', 'https://web-xi-ten-uy9xk6c6p0.vercel.app.evil.example/'],
-    ['a file URL', 'file:///C:/Users/estac/x.html'],
+    ['a file URL', 'file:///C:/Users/stack/x.html'],
   ])('denies the clipboard write from %s', (_label, from) => {
     expect(decidePermission(ALLOWED_PERMISSION, from, APP).allow).toBe(false);
   });
