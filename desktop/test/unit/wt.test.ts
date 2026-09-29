@@ -4,13 +4,16 @@
  * `fs.existsSync`.
  */
 
+// Two joins: node:path for real files on whichever platform runs the suite (the
+// logon build runs it on Linux), path/win32 for the Windows-literal candidates.
 import { join } from 'node:path';
+import { join as joinWin32 } from 'node:path/win32';
 import { describe, expect, it } from 'vitest';
 
 import { fileIsPresent, resolveWtPath, wtCandidates } from '../../src/main/wt';
 
-const LOCAL_APP_DATA = 'C:\\Users\\estac\\AppData\\Local';
-const ALIAS = join(LOCAL_APP_DATA, 'Microsoft', 'WindowsApps', 'wt.exe');
+const LOCAL_APP_DATA = 'C:\\Users\\stack\\AppData\\Local';
+const ALIAS = joinWin32(LOCAL_APP_DATA, 'Microsoft', 'WindowsApps', 'wt.exe');
 
 describe('wtCandidates', () => {
   it('puts the Store execution alias first, then every PATH entry', () => {

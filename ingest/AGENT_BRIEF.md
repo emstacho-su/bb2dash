@@ -49,13 +49,13 @@ Pilot notes: `/home/claude/bb2dash/ingest/PILOT_IST352.md`. Spec: `/home/claude/
   click it, remove it, wait ~1500 ms. Do not navigate the tab per file.
 
 ## Downloads folder (SHARED with the other agents; be careful)
-- C:\Users\estac\Downloads == `$HOME/mnt/Downloads` in `mcp__remote-devices__device_bash`.
+- C:\Users\stack\Downloads == `$HOME/mnt/Downloads` in `mcp__remote-devices__device_bash`.
 - Before firing: `ls -la --time-style=+%s $HOME/mnt/Downloads` and remember the names you expect (from your
   manifest). After firing, wait ~5 s, list again; claim ONLY new files whose base name matches your manifest
   (a `(1)`/`(2)` suffix may appear if another course has the same filename; treat `<name>(1).ext` as yours only
   if `<name>.ext` was already present before your batch or belongs to another course's manifest). Verify size > 0.
 - Move IMMEDIATELY with `mcp__remote-devices__Windows-MCP__PowerShell` (`Move-Item -Force`) into
-  `C:\Users\estac\OneDrive - Syracuse University\.fall2026\.projects2026\bb2dash\course context\<relpath-without-course-prefix>`
+  `C:\Users\stack\projects\bb2dash\course context\<relpath-without-course-prefix>`
   under your course folder, renaming `(1)` suffixes back to the manifest name. Also move any hand-placed copies
   already sitting in your course folder into the layout (same name → keep the newer/identical one).
 - device_bash cannot delete inside mounts; PowerShell can.

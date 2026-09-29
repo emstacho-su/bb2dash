@@ -13,6 +13,8 @@
  * for one on every run).
  */
 
+import { homedir } from 'node:os';
+import { win32 } from 'node:path';
 import { z } from 'zod';
 
 import { HH_MM } from './patterns';
@@ -21,10 +23,13 @@ import { HH_MM } from './patterns';
 export const CONFIG_DEFAULTS = Object.freeze({
   appUrl: 'https://web-xi-ten-uy9xk6c6p0.vercel.app',
   supabaseUrl: 'https://goultdzqcavefcgnifdy.supabase.co',
-  // Backslashes are escaped: an unescaped `\b` here is a backspace character and
-  // `\U` / `\e` / `\p` silently drop their backslash, which turned this default
-  // into the unusable `C:Usersestacprojects\x08b2dash`.
-  repoDir: 'C:\\Users\\estac\\projects\\bb2dash',
+  /**
+   * The `main` checkout the Sync terminal runs in: `<profile>\projects\bb2dash`
+   * for whoever is signed in (`C:\Users\stack\projects\bb2dash` on stack-laptop).
+   * Derived, never spelled out: a username baked in here broke on the first new
+   * machine, and a hand-typed backslash path once shipped with a `\b` backspace.
+   */
+  repoDir: win32.join(homedir(), 'projects', 'bb2dash'),
   /** Q3: 15 minutes, raised from the brief's original 5. */
   pollIntervalMinutes: 15,
   /** Q5: one "due tomorrow" check a day, at this New York wall-clock time. */

@@ -45,7 +45,7 @@ the terminal somewhere unintended.
   "appUrl": "https://web-xi-ten-uy9xk6c6p0.vercel.app",
   "supabaseUrl": "https://goultdzqcavefcgnifdy.supabase.co",
   "supabaseAnonKey": "paste the project legacy anon JWT here",
-  "repoDir": "C:\\Users\\estac\\projects\\bb2dash",
+  "repoDir": "C:\\Users\\stack\\projects\\bb2dash",
   "pollIntervalMinutes": 15,
   "dueReminderTime": "18:00"
 }
@@ -56,7 +56,7 @@ the terminal somewhere unintended.
 | `appUrl` | the Vercel deployment above | the deployed web app; one of the only two origins the window may navigate to |
 | `supabaseUrl` | the project URL above | PostgREST and Storage; the second allowed origin |
 | `supabaseAnonKey` | **required** | the project's legacy anon JWT — the same value `web/` already ships in its browser bundle |
-| `repoDir` | `C:\Users\estac\projects\bb2dash` | working directory for the Sync terminal: the `main` checkout, where `/bb-sync` runs |
+| `repoDir` | `<profile>\projects\bb2dash`, derived from the signed-in user's home folder (`C:\Users\stack\projects\bb2dash` on stack-laptop) | working directory for the Sync terminal: the `main` checkout, where `/bb-sync` runs |
 | `pollIntervalMinutes` | `15` | how often the notification poller ticks while the app runs |
 | `dueReminderTime` | `18:00` | New York wall-clock time the once-a-day "due tomorrow" check runs |
 | `syncDryRun` | `false` | when true the Sync terminal prints the command instead of running it |

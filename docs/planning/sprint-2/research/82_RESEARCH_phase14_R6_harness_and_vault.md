@@ -5,7 +5,7 @@ variable names and where they live.
 
 ---
 
-## Part A — inventory of `C:/Users/estac/agentic-harness`
+## Part A — inventory of `C:/Users/stack/agentic-harness`
 
 ### Shape of the repo (from README.md / CONTEXT.md)
 
@@ -90,14 +90,14 @@ piece of the harness that needs a real model-cache volume, not just code.
 - **Starts today**: spawned by the Claude Code process itself as a stdio
   child, registered user-scope in `~/.claude.json` (not `settings.json`) via
   `claude mcp add-json rag <json> -s user`. Command:
-  `"C:/Program Files/nodejs/node.exe" "C:/Users/estac/agentic-harness/mcp-server/dist/index.js"`.
+  `"C:/Program Files/nodejs/node.exe" "C:/Users/stack/agentic-harness/mcp-server/dist/index.js"`.
 - **Runtime**: Node ≥20.11 (dev'd on 24.13.0). `@modelcontextprotocol/sdk`,
   `fastembed` (npm, 2.1.0 — a **different** package from the Python one, but
   verified bit-parity, see CONTEXT.md:163-175), `pg`, `zod`.
 - **Windows/OneDrive assumptions**: none at the code level — `mcp-server/src/config.ts`
   reads everything from env. The README's setup snippet
   (`README.md:214-219`, `mcp-server/README.md:174-184`) hardcodes
-  `C:/Program Files/nodejs/node.exe` and a `C:/Users/estac/...` path only
+  `C:/Program Files/nodejs/node.exe` and a `C:/Users/stack/...` path only
   because that's how a **stdio** MCP server is registered — the client
   (Claude Code) must be told an absolute command + args to exec. This is the
   one place containerizing changes the *registration mechanism*, not the
@@ -504,7 +504,7 @@ installed yet).
 
 - **Workstation mode (this laptop, Obsidian open)**: **bind-mount the host's
   vault working copy** into the ingest/hooks containers
-  (`-v C:/Users/estac/vault:/vault`, or the WSL2-integrated path Docker
+  (`-v C:/Users/stack/vault:/vault`, or the WSL2-integrated path Docker
   Desktop uses). Obsidian is a native Windows app and needs direct filesystem
   access to the real working copy — it cannot open a vault "inside" a
   container — so the working copy has to live on the host filesystem
@@ -532,11 +532,11 @@ require re-deriving this.
 
 1. **Stop every writer first**: `./scripts/register-nightly-ingest.ps1 -Unregister`,
    `./scripts/register-checkpoint-collect.ps1 -Unregister`, close Obsidian.
-2. **Copy, don't move**, `C:/Users/estac/OneDrive - Syracuse University/vault`
+2. **Copy, don't move**, `C:/Users/stack/OneDrive - Syracuse University/vault`
    → a new location **outside OneDrive** (matching the existing convention
    for `agentic-harness` itself and both fastembed caches, all explicitly
    kept off OneDrive for the same git/OneDrive-corrupts-each-other reason) —
-   e.g. `C:/Users/estac/vault`. Keeping the original in place until cleanup
+   e.g. `C:/Users/stack/vault`. Keeping the original in place until cleanup
    is the rollback: nothing is destroyed until step 9.
 3. **One-time gitleaks audit of the copy** before it ever becomes a commit —
    these files have never been through a secret scanner, only through

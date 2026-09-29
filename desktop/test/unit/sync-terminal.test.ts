@@ -61,14 +61,14 @@ import { createSyncWatcher } from '../../src/main/sync-terminal';
 import type { DesktopConfig } from '../../src/core/config';
 import type { RestGet } from '../../src/core/types';
 
-const WT = 'C:\\Users\\estac\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe';
+const WT = 'C:\\Users\\stack\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe';
 const POWERSHELL = 'powershell.exe';
 
 const CONFIG = {
   appUrl: 'http://127.0.0.1:4321',
   supabaseUrl: 'http://127.0.0.1:4321',
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiJ9.anon.signature',
-  repoDir: 'C:\\Users\\estac\\projects\\bb2dash',
+  repoDir: 'C:\\Users\\stack\\projects\\bb2dash',
   pollIntervalMinutes: 15,
   dueReminderTime: '18:00',
   syncDryRun: false,

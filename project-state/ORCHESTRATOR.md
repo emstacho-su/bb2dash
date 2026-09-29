@@ -18,14 +18,14 @@
   defines the phase, writes the brief and frozen contract, spawns Opus execution subagents, and
   integrates. It never merges to `main`.
 * **Opus workers** build. One per work stream, each on its own branch in its own git worktree
-  (`C:/Users/estac/projects/bb2dash-wt-<name>`), cut from the phase branch. They commit and
+  (`C:/Users/stack/projects/bb2dash-wt-<name>`), cut from the phase branch. They commit and
   push to their branch; the PM merges into the phase branch.
 * Other Claude sessions may be active on the repo and on prod at the same time. Fetch before
   acting, never force-push, and treat any worktree or branch you did not create as someone
   else's until proven otherwise.
-* **The shared checkout `C:/Users/estac/projects/bb2dash` stays on `main` and is never branched
+* **The shared checkout `C:/Users/stack/projects/bb2dash` stays on `main` and is never branched
   or committed in.** A PM session creates its phase branch as its own worktree
-  (`git worktree add C:/Users/estac/projects/bb2dash-wt-<phase> -b feat/<phase> origin/main`)
+  (`git worktree add C:/Users/stack/projects/bb2dash-wt-<phase> -b feat/<phase> origin/main`)
   and edits the brief there. On 2026-09-15 two PM sessions edited two briefs in that one
   working tree inside 25 seconds; nothing was lost only because one of them checked
   `git status` first.
@@ -36,10 +36,11 @@ Sprint 1 closed 2026-09-22 (PRs #7–#25; migrations 026–090 live; 059 and 070
 on Vercel with the Blackboard → Supabase pipeline, the Classroom-style course page, the sync loop and
 Inbox, the gradebook mirror and one "graded so far" figure, the planner with Google Calendar push and
 recurring events, the Electron shell, and the `/inbox-apply` worker. Prod is Supabase `goultdzqcavefcgnifdy`.
-The materials MCP server (`mcp-server/`) is registered at user scope from `~/.claude.json` and runs
-`C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js` with the service key inline in that entry
-(Phase 14 moves the key to a file; `dist` predates `src` commit 57f1e2e and needs a rebuild). The harness
-(`~/agentic-harness`) holds V-2 (built 2026-09-16) and the vault as git realms at `C:/Users/estac/vault`
+The materials MCP server (`mcp-server/`) is **not yet registered on `stack-laptop`** (2026-09-29): on the old
+machine it ran at user scope from `~/.claude.json` as `C:/Users/stack/projects/bb2dash/mcp-server/dist/index.js`
+with the service key inline in that entry; here `dist` is not built and `~/.claude.json` has no `bb2dash` entry
+(`mcp-server/README.md` §Setup; Phase 14 moves the key to a file; Phase 16's sittings need it first). The harness
+(`~/agentic-harness`) holds V-2 (built 2026-09-16) and the vault as git realms at `C:/Users/stack/vault`
 (2026-09-23/24). Sprint 1's phase table is STATUS's "Sprint 1 record"; the record behind every phase is
 `docs/planning/sprint-1-hub/`.
 
@@ -138,7 +139,7 @@ before Nov 30. `docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md`'s header l
    worktrees and branches, update memory.
 
 **Two PM sessions at once (learned 2026-09-15):** when another phase's PM session owns the main
-checkout (`C:/Users/estac/projects/bb2dash`), cut the phase branch as its own worktree
+checkout (`C:/Users/stack/projects/bb2dash`), cut the phase branch as its own worktree
 (`bb2dash-wt-<phase>`) straight from `origin/main` and never commit in the shared checkout. Each
 session regenerates `database.types.ts` for its own PR; the second to merge regenerates again.
 Vercel is GitHub-linked, so every pushed branch already has a preview at
@@ -213,13 +214,18 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 * **Hold the Inbox "Apply answers" button and `/bb-sync` until Phase 20's PR-A (R-97) merges:** `/inbox-apply` still
   writes its decision notes to the OneDrive stub, not the realm vault (inbox-541..544.md landed there on 2026-09-27);
   the PM copies those four notes into the realm when PR-A lands (brief 101 §Seams). Found by the 2026-09-27 decision panel.
-* Start Task 0's Blackboard session probes now; the Duo window is 14 days from the start (batch item 47; brief 100
-  Task 0; no date-paced tasks, DECISIONS 2026-09-27); say whether you answered Yes to "Stay signed in?".
+  On `stack-laptop` there is no OneDrive stub: the 2026-09-29 run (request 186) wrote inbox-752..756 straight into the
+  realm `C:/Users/stack/vault/projects/bb2dash/decisions/`, so PR-A's copy covers only the four notes from the old machine.
+* Task 0's Blackboard session probes **started 2026-09-29 15:25Z** (baseline `200`): the record `docs/planning/sprint-2/verification/82b_NOVNC_SPIKE.md` holds
+  the baseline row; once a login is confirmed the PM spawns idle probes periodically, self-paced, for as long as the login lives (your call 2026-09-29: not an hourly clock), each read-only through Claude in Chrome and written as a row (batch item 47; brief 100
+  Task 0). Your part: keep the Chrome extension connected, the Blackboard tab open and the laptop awake while the idle series runs,
+  and let the reopen probes happen on their days. "Stay signed in?" is **yes**, always (your standing rule, 2026-09-29).
 * Name the presentation slot whenever you know it; each B-9 answer must land before the day it names (9/30 is the
   earliest candidate slot), a bound, not pacing (batch item 9): whether 11/4 was the SITN pick or the individual slot,
   and which individual slot is yours (9/30, 10/14, 10/26, 11/4 or 11/16); each answer goes in as an Inbox value resolution.
-* Read the Google OAuth consent screen's publishing status; if it is still Testing, publish it and re-run
-  the consent, or the calendar token dies again about 2026-10-01 17:03Z (batch item 28).
+* The Google OAuth consent screen **stays in Testing for now** (your call, 2026-09-29; you know how to publish it):
+  the calendar token dies again about 2026-10-01 17:03Z, and you re-mint with `scripts/google-consent.mjs` when the
+  push starts failing, or publish first and then re-mint (batch item 28; DECISIONS 2026-09-29).
 * Phase 16's six sittings as fast as you can sit them, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103,
   IST.471; migration 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03)
   is the one bound (brief 96 open item 4; batch item 11; no date-paced tasks, the freeze stands, DECISIONS 2026-09-27).
@@ -257,7 +263,7 @@ One prompt per phase, grouped into the five sessions below; a session pastes its
 its heading says. The order to run them, concurrency, checklists and fallbacks are in
 `docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md` (no calendar). The bb2dash prompts (A1, A2, B1, B2, B3, C1, C2, E) start with `/bb2dash-pm` so the session loads
 this file and runs the live-state checks before acting; Session D runs in the harness repo, so its prompt starts by
-naming `C:/Users/estac/agentic-harness`. Every brief was PROVISIONAL until Stack answered `93_` §5 and approved `94_`, which he did by delegation on 2026-09-27 (DECISIONS rows of that date);
+naming `C:/Users/stack/agentic-harness`. Every brief was PROVISIONAL until Stack answered `93_` §5 and approved `94_`, which he did by delegation on 2026-09-27 (DECISIONS rows of that date);
 the prompts carry the PROVISIONAL line, and each phase's PM first records whatever answers he has given against its
 brief's B-table. Before cutting workers, the phase's PM reads that brief's residual notes in
 `docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`
@@ -372,16 +378,16 @@ C2 — Phase 21
 
 **Session D — Phase 20** (the harness repo plus two bb2dash PRs; can run first of all: R-97 is a live bug)
 
-> You are the PM for Phase 20 of bb2dash, working in `C:/Users/estac/agentic-harness` with bb2dash beside it. Read
-> `C:/Users/estac/projects/bb2dash/docs/planning/sprint-2/briefs/101_PHASE20_harness_closure.md` in full: R-97, R-98,
+> You are the PM for Phase 20 of bb2dash, working in `C:/Users/stack/agentic-harness` with bb2dash beside it. Read
+> `C:/Users/stack/projects/bb2dash/docs/planning/sprint-2/briefs/101_PHASE20_harness_closure.md` in full: R-97, R-98,
 > R-99, R-100 (the home-pc half), R-101, R-102, R-103, R-104, R-106. PROVISIONAL until I answer 93 §5 (B-52, B-53,
 > B-54, B-55, B-56) and approve 94. First record my 93 §5 answers against the brief's B-table; before cutting workers,
-> read its residual notes in `C:/Users/estac/projects/bb2dash/docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`
+> read its residual notes in `C:/Users/stack/projects/bb2dash/docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`
 > §3, then fix or strike each in PR-C, cut after `docs/sprint2-planning` merges. Nothing gates the start; until that
-> merge, read both files in `C:/Users/estac/projects/bb2dash-wt-sprint2-plan`. First: R-97 on bb2dash
+> merge, read both files in `C:/Users/stack/projects/bb2dash-wt-sprint2-plan`. First: R-97 on bb2dash
 > `fix/inbox-apply-vault-20` in `bb2dash-wt-inbox-vault-20`, PR-A opened before anything else; until it merges I hold Apply
 > answers and `/bb-sync`. Then
-> agentic-harness `feat/v2-closure` in `C:/Users/estac/agentic-harness-wt-v2-closure` (PR-B) and bb2dash
+> agentic-harness `feat/v2-closure` in `C:/Users/stack/agentic-harness-wt-v2-closure` (PR-B) and bb2dash
 > `docs/harness-closure-20` in `bb2dash-wt-harness-closure-20` (PR-C); W-59, W-60, W-61, W-62 (Opus). Migrations: none
 > in bb2dash. Three PRs, an exception to one PR per phase that needs its own DECISIONS row at the freeze.
 > Tasks 17–19, 21–26 wait for PR-B's merge and three consecutive nightly runs logging `committed -> pulled -> pushed`
