@@ -56,7 +56,16 @@ beforeEach(() => {
 
   originals.clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
   originals.scrollLeft = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollLeft');
+  originals.scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth');
 
+  // S2-home-1: the wheel hook needs to know how far the strip can go. The
+  // fixture strip is 44 columns, whatever the container width.
+  Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+    configurable: true,
+    get() {
+      return (width / 14) * 44;
+    },
+  });
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
     configurable: true,
     get() {
@@ -263,5 +272,63 @@ describe('UpcomingTracker — the strip’s own scrolling is not read as a drag'
 
     expect(screen.getByText('Window · Sep 24 – Oct 7')).toBeInTheDocument();
     expect(strip().scrollLeft).toBe(14 * COLUMN);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * S2-home-1 — a plain mouse moves the strip (useHorizontalScroll)
+ * ------------------------------------------------------------------------ */
+
+describe('UpcomingTracker — wheel and drag with a plain mouse (S2-home-1)', () => {
+  function wheel(init: WheelEventInit): boolean {
+    const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, ...init });
+    strip().dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  function press(target: HTMLElement, fromX: number, toX: number) {
+    fireEvent.pointerDown(target, { pointerType: 'mouse', button: 0, clientX: fromX });
+    fireEvent.pointerMove(target, { pointerType: 'mouse', buttons: 1, clientX: toX });
+    fireEvent.pointerUp(target, { pointerType: 'mouse', button: 0, clientX: toX });
+    fireEvent.click(target);
+  }
+
+  it('a vertical wheel moves the strip sideways', async () => {
+    await renderTracker();
+    expect(wheel({ deltaY: 3 * COLUMN, deltaX: 0 })).toBe(true);
+    expect(strip().scrollLeft).toBe(3 * COLUMN);
+  });
+
+  it('leaves a native horizontal delta to the browser', async () => {
+    await renderTracker();
+    expect(wheel({ deltaY: 0, deltaX: 40 })).toBe(false);
+    expect(strip().scrollLeft).toBe(0);
+  });
+
+  it('a 3 px press on a day still opens it', async () => {
+    await renderTracker();
+    const day = screen.getAllByRole('tab')[4];
+    press(day, 200, 203);
+    expect(day).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('a 20 px drag moves the strip and does not open the day under the pointer', async () => {
+    await renderTracker();
+    const day = screen.getAllByRole('tab')[4];
+    press(day, 200, 180);
+    expect(strip().scrollLeft).toBe(20);
+    expect(day).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('◂ ▸ still page fourteen days after a wheel', async () => {
+    await renderTracker();
+    wheel({ deltaY: 2 * COLUMN, deltaX: 0 });
+    fireEvent.scroll(strip());
+    fireEvent.click(pagerForward());
+    await settle();
+    expect(strip().scrollLeft).toBe(16 * COLUMN);
+    fireEvent.click(pagerBack());
+    await settle();
+    expect(strip().scrollLeft).toBe(2 * COLUMN);
   });
 });

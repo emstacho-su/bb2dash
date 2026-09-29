@@ -45,6 +45,7 @@ import {
 } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
 import { itemQuery } from '@/lib/queries.popout';
+import { useHorizontalScroll } from '@/lib/use-horizontal-scroll';
 import { StatusSelect } from './StatusSelect';
 import {
   DEFAULT_HORIZON_DAYS,
@@ -202,6 +203,8 @@ export function UpcomingTracker({
   const programmatic = useRef(false);
   /** The timer that releases that guard, so it can be cleared and cleaned up. */
   const releaseTimer = useRef<number | null>(null);
+  /** S2-home-1: a plain mouse wheels and drags the strip (P-69). */
+  useHorizontalScroll(scrollerRef);
 
   /**
    * Anchor and selection are self-managed as `null` = "follow today", not as a
