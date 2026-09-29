@@ -87,8 +87,10 @@ export function CourseScreen({ courseId }: { courseId: string }) {
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
 
   const termStart = term.data?.start_date ?? null;
-  const sessions = sessionsQ.data ?? [];
-  const workItems = workItemsQ.data ?? [];
+  // Memoised so a pending query's `[]` fallback is one stable array, not a new
+  // one per render that re-runs the bucketing below (T-23, exhaustive-deps).
+  const sessions = useMemo(() => sessionsQ.data ?? [], [sessionsQ.data]);
+  const workItems = useMemo(() => workItemsQ.data ?? [], [workItemsQ.data]);
 
   /* Bucket everything by week; collect undated items separately. */
   const { weeks, maxWeek, undated, totalLectureItems } = useMemo(() => {
