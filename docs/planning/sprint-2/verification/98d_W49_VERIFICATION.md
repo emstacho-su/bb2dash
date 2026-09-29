@@ -58,3 +58,32 @@ Smoke (scratch manifest, no network): `--restale --dry-run` → `{"id":72,"resta
 
 `skills/bb-sync/SKILL.md` step 4b gains the "Stale bytes (`--restale`)" paragraph (manifest query, the three commands).
 `ingest/CADENCE_RUNBOOK.md` does not list the script's modes (step 4 points at the skill), so it is unchanged.
+
+## Task 21 — `ingest/token_budget.py`
+
+RED (test file first, no module):
+
+```
+uv run --with tokenizers --with "psycopg[binary]" --with pytest python -m pytest ingest/test_token_budget.py -q
+E   ModuleNotFoundError: No module named 'token_budget'
+1 error in 0.73s
+```
+
+GREEN (first cut): `8 passed`. The first live run then failed with `invalid URI query parameter: "uselibpqcompat"`
+(the runner's DSN carries node-pg's `uselibpqcompat`, which libpq refuses). A case for `libpq_dsn` went RED
+(`1 failed, 8 passed`), then GREEN:
+
+```
+uv run --with tokenizers --with "psycopg[binary]" --with pytest python -m pytest ingest/test_token_budget.py -q
+9 passed
+```
+
+Live (DSN from the worktree's `.env.local`, `db_test_runner`):
+
+```
+uv run --with tokenizers --with "psycopg[binary]" python ingest/token_budget.py
+parts=1502 max_tokens=485 over_budget=0
+exit=0
+```
+
+Open item 4 (parts over 512 tokens): none. 1,502 current gte-small parts, the longest 485 tokens.
