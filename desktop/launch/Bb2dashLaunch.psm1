@@ -113,6 +113,25 @@ function Get-BuildDecision {
     return [pscustomobject]@{ Actions = [string[]] $actions; Reason = $reason; Warning = $warning }
 }
 
+<#
+.SYNOPSIS
+  Whether the build step has any reason to wait for Docker at all: a rebuild
+  is wanted, or a compose stack exists. Kept here, next to Get-BuildDecision,
+  so the script never re-derives "is a rebuild wanted" on its own.
+#>
+function Test-DockerNeeded {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()][string] $RemoteSha,
+        [AllowEmptyString()][string] $LastBuiltSha,
+        [bool] $ComposeFileExists
+    )
+    Assert-Sha -Name 'RemoteSha' -Value $RemoteSha
+    Assert-Sha -Name 'LastBuiltSha' -Value $LastBuiltSha
+    $rebuild = ($RemoteSha -ne '') -and ($RemoteSha -ne $LastBuiltSha)
+    return [bool] ($rebuild -or $ComposeFileExists)
+}
+
 function New-EmptyLaunchState {
     param([bool] $Invalid = $false)
     return [pscustomobject]@{
@@ -192,16 +211,17 @@ function ConvertTo-LaunchStateJson {
   The ephemeral build: `docker compose run --rm --name bb2dash-build build`.
   `run --rm` creates a container for this one command and removes it on exit;
   only the named volumes survive. The fixed name lets a later run remove a
-  container a killed script left behind before starting its own.
+  container a killed script left behind before starting its own. Arguments
+  only: the script supplies the docker.exe it resolved, because a scheduled
+  task's PATH may not carry docker.
 #>
 function Get-BuildCommand {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $ComposeFile)
     return [pscustomobject]@{
-        Executable    = 'docker'
         ContainerName = 'bb2dash-build'
         Arguments     = [string[]] @('compose', '-f', $ComposeFile, 'run', '--rm', '--name', 'bb2dash-build', 'build')
     }
 }
 
-Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand

@@ -147,11 +147,33 @@ Describe 'New-LaunchState' {
     }
 }
 
+Describe 'Test-DockerNeeded' {
+
+    It 'is false when desktop/ is unchanged and there is no compose file' {
+        Test-DockerNeeded -RemoteSha $SHA_A -LastBuiltSha $SHA_A -ComposeFileExists $false | Should Be $false
+    }
+
+    It 'is true when the tree hash moved' {
+        Test-DockerNeeded -RemoteSha $SHA_B -LastBuiltSha $SHA_A -ComposeFileExists $false | Should Be $true
+    }
+
+    It 'is true when nothing was ever built' {
+        Test-DockerNeeded -RemoteSha $SHA_A -LastBuiltSha '' -ComposeFileExists $false | Should Be $true
+    }
+
+    It 'is false when the tree hash is unknown (nothing can be built)' {
+        Test-DockerNeeded -RemoteSha '' -LastBuiltSha $SHA_A -ComposeFileExists $false | Should Be $false
+    }
+
+    It 'is true when a compose file exists even with nothing to build' {
+        Test-DockerNeeded -RemoteSha $SHA_A -LastBuiltSha $SHA_A -ComposeFileExists $true | Should Be $true
+    }
+}
+
 Describe 'Get-BuildCommand' {
 
     It 'runs the build service ephemerally through compose, under a fixed container name' {
         $c = Get-BuildCommand -ComposeFile 'C:/x/desktop/launch/compose.build.yaml'
-        $c.Executable | Should Be 'docker'
         $c.ContainerName | Should Be 'bb2dash-build'
         ($c.Arguments -join ' ') | Should Be 'compose -f C:/x/desktop/launch/compose.build.yaml run --rm --name bb2dash-build build'
     }

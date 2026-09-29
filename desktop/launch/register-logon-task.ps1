@@ -82,11 +82,10 @@ if ($Unregister) {
 
 # ---------------------------------------------------------------- validation
 
-$script = Join-Path $RepoDir 'desktop/launch/logon-build.ps1'
-if (-not (Test-Path $script)) {
-    Fail "logon-build.ps1 was not found at $script." 'Pass -RepoDir with the bb2dash checkout, as a C:/... path.'
+$sourceDir = Join-Path $RepoDir 'desktop/launch'
+if (-not (Test-Path (Join-Path $sourceDir 'logon-build.ps1'))) {
+    Fail "logon-build.ps1 was not found under $sourceDir." 'Pass -RepoDir with the bb2dash checkout, as a C:/... path, on a branch that has desktop/launch.'
 }
-$script = (Resolve-Path $script).Path
 
 if (-not (Test-Path (Join-Path $RepoDir '.git'))) {
     Fail "$RepoDir is not a git checkout." 'Clone https://github.com/emstacho-su/bb2dash there first.'
@@ -105,6 +104,22 @@ $appExe = Join-Path $currentDir 'bb2dash.exe'
 if (-not (Test-Path $appExe)) {
     Fail "No built app at $appExe." "Run logon-build.ps1 -NoLaunch once first; it builds and points 'current' at the result."
 }
+
+# ---------------------------------------------------------------- the installed copy
+#
+# The task runs a copy under StateDir, not the checkout: the checkout's branch
+# is whatever you are working on and may not carry desktop/launch at all.
+# logon-build.ps1 refreshes this copy from the build worktree after each
+# successful build, so it follows the ref that was built.
+
+$installedDir = Join-Path $StateDir 'launch'
+New-Item -ItemType Directory -Force -Path $installedDir | Out-Null
+foreach ($name in @('logon-build.ps1', 'Bb2dashLaunch.psm1', 'Bb2dashLaunch.Tests.ps1', 'compose.build.yaml', 'register-logon-task.ps1', 'README.md')) {
+    $from = Join-Path $sourceDir $name
+    if (Test-Path $from) { Copy-Item -Force $from (Join-Path $installedDir $name) }
+}
+$script = Join-Path $installedDir 'logon-build.ps1'
+Write-Output "Installed launch scripts to $installedDir."
 
 $user = "$env:USERDOMAIN\$env:USERNAME"
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited

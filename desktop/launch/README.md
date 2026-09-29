@@ -26,6 +26,7 @@ is never run inside a container. What runs in the container is the build:
 
 ```
 %LOCALAPPDATA%\bb2dash-launch\
+  launch\                                  the installed copy of these scripts; the task runs this
   builds\<tree>\win-unpacked\bb2dash.exe   one folder per built desktop/ tree hash
   current                                  junction -> the active win-unpacked
   state.json                               lastBuiltSha, lastBuildAt, lastResult
@@ -40,7 +41,17 @@ the next logon.
 
 The build reads from a detached `git worktree` at `<repo>-build`, never from
 the checkout the Sync terminal works in, so a rebuild cannot collide with a
-running `/bb-sync`.
+running `/bb-sync`. The task runs the installed copy under `launch\`, not the
+checkout, so the branch you have checked out does not matter; the copy is
+refreshed from the build worktree after each successful build.
+
+## Trust note
+
+Whatever lands on the build ref is built and, at the next logon, run as you.
+That is the feature, and it is the same trust root as running `git pull` and
+`npm run pack` by hand, minus the human step. If push access to `main` is ever
+in doubt, point `-BuildRef` at a tag you move deliberately, or turn on branch
+protection with required reviews. `-BuildRef` is a parameter of both scripts.
 
 ## Two scheduled tasks
 
@@ -64,7 +75,7 @@ powershell -NoProfile -File .\logon-build.ps1 -NoLaunch -Verbose
 # 2. Start Menu shortcut with the AppUserModelID (toasts need it), pointing at the junction
 ..\scripts\make-shortcut.ps1 -ExePath "$env:LOCALAPPDATA\bb2dash-launch\current\bb2dash.exe"
 
-# 3. the two tasks
+# 3. install the copy the task runs, and the two tasks
 .\register-logon-task.ps1
 Start-ScheduledTask -TaskName Bb2dash-LogonBuild     # run it now instead of waiting for a logon
 ```

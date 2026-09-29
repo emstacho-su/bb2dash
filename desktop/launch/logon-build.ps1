@@ -7,22 +7,23 @@
 .DESCRIPTION
   Order matters and is the whole design:
 
-    1. Startup, with no network and no Docker call: if a finished build is
-       waiting and the app is not running, repoint the `current` junction at
-       it (Activate); then Launch. Launch starts the Bb2dash-App scheduled
+    1. Startup, with no network call and no Docker call: if a finished build
+       is waiting and the app is not running, repoint the `current` junction
+       at it (Activate); then Launch. Launch starts the Bb2dash-App scheduled
        task, which runs current\bb2dash.exe at normal priority with no time
        limit, outside this task's process tree; it falls back to
        Start-Process when that task is not registered (a manual run).
     2. git fetch in the main checkout, capped at -FetchTimeoutSeconds, then
        read the tree hash of desktop/ at -BuildRef (origin/main). Nothing is
        pulled or checked out in the checkout you work in: the Sync terminal
-       runs there. Offline, the last fetched ref is used.
-    3. Build, if that hash differs from the last successful build and the
-       Docker engine answers (waiting up to -DockerWaitSeconds for Docker
-       Desktop's own autostart): check the ref out in the detached build
-       worktree, `docker compose run --rm` the build service
-       (compose.build.yaml), land the result in builds\<tree>\win-unpacked,
-       record the hash. Activate now if the app has been quit, otherwise at
+       runs there. Offline, the ref as last fetched is used.
+    3. Build, if that hash differs from the build that is active or last
+       recorded, and the Docker engine answers (waiting up to
+       -DockerWaitSeconds for Docker Desktop's own autostart): check the ref
+       out in the detached build worktree, `docker compose run --rm` the build
+       service (compose.build.yaml), land the result in
+       builds\<tree>\win-unpacked, record the hash, refresh the installed copy
+       of these scripts. Activate now if the app has been quit, otherwise at
        the next logon.
     4. If the repo root has a compose.yaml (Phase 14), `docker compose up -d`.
        Today there is none, so this is a no-op that costs a Test-Path.
@@ -31,13 +32,15 @@
   foreground, then the app is launched.
 
   Layout under -StateDir (%LOCALAPPDATA%\bb2dash-launch):
+    launch\                                  the installed copy of these scripts (the task runs this)
     builds\<tree>\win-unpacked\bb2dash.exe   one folder per built desktop/ tree
     current                                  junction -> the active win-unpacked
     state.json                               lastBuiltSha, lastBuildAt, lastResult
     logs\logon-build.log                     one line per step, rolls at 512 KB
 
   Every step logs; failures set a non-zero exit code and are never swallowed.
-  register-logon-task.ps1 writes the two Task Scheduler entries.
+  register-logon-task.ps1 installs the copy and writes the two Task Scheduler
+  entries.
 
 .PARAMETER RepoDir
   Your bb2dash checkout (fetched, never pulled). Default C:/Users/<you>/projects/bb2dash.
@@ -53,8 +56,8 @@
   How long the build step may wait for the Docker engine. Default 600.
 
 .PARAMETER FetchTimeoutSeconds
-  How long `git fetch` may take before it is killed and the last fetched ref
-  is used instead. Default 45.
+  How long `git fetch` may take before its process tree is killed and the ref
+  as last fetched is used instead. Default 45.
 
 .PARAMETER NoLaunch
   Do everything except start the app (for rehearsals and the first setup).
@@ -91,11 +94,13 @@ $DOCKER_POLL_SECONDS = 10
 $APP_PROCESS_NAME = 'bb2dash'
 $BUILD_MUTEX_NAME = 'Local\Bb2dashLaunchBuild'
 $EXE_NAME = 'bb2dash.exe'
+$LAUNCH_FILES = @('logon-build.ps1', 'Bb2dashLaunch.psm1', 'Bb2dashLaunch.Tests.ps1', 'compose.build.yaml', 'register-logon-task.ps1', 'README.md')
 
 if ($BuildWorktree -eq '') { $BuildWorktree = "$($RepoDir.TrimEnd('/', '\'))-build" }
 
 $ComposeBuildFile = Join-Path $PSScriptRoot 'compose.build.yaml'
 $StackComposeFile = Join-Path $RepoDir 'compose.yaml'
+$InstalledLaunchDir = Join-Path $StateDir 'launch'
 $BuildsRoot = Join-Path $StateDir 'builds'
 $CurrentLink = Join-Path $StateDir 'current'
 $StateFile = Join-Path $StateDir 'state.json'
@@ -125,15 +130,21 @@ function Fail {
 # ---------------------------------------------------------------- tools
 
 function Resolve-Tool {
-    param([string] $Name, [string[]] $Candidates)
+    # Absolute candidates first: a scheduled task does not see PATH edits made
+    # in a shell. -Optional returns $null instead of ending the script.
+    param([string] $Name, [string[]] $Candidates, [switch] $Optional)
     foreach ($c in $Candidates) { if (Test-Path $c) { return $c } }
     $onPath = Get-Command $Name -ErrorAction SilentlyContinue
     if ($onPath) { return $onPath.Source }
-    Fail "$Name was not found. A scheduled task does not see PATH edits made in a shell." $EXIT_VALIDATION
+    if ($Optional) { return $null }
+    Fail "$Name was not found." $EXIT_VALIDATION
 }
 
-$Git = Resolve-Tool 'git' @('C:/Program Files/Git/cmd/git.exe')
-$Docker = Resolve-Tool 'docker' @('C:/Program Files/Docker/Docker/resources/bin/docker.exe')
+# mingw64\bin\git.exe is the real git; cmd\git.exe is Git for Windows' launcher,
+# and killing a launcher on timeout would leave the fetch running underneath.
+$Git = Resolve-Tool 'git' @('C:/Program Files/Git/mingw64/bin/git.exe', 'C:/Program Files/Git/cmd/git.exe')
+# Docker is needed only by the build step; the launch must work without it.
+$Docker = Resolve-Tool 'docker' @('C:/Program Files/Docker/Docker/resources/bin/docker.exe') -Optional
 $env:GIT_TERMINAL_PROMPT = '0'
 
 function Invoke-Tool {
@@ -160,23 +171,26 @@ function Invoke-Tool {
 }
 
 function Invoke-ToolWithTimeout {
-    # Like Invoke-Tool, but kills the process after $TimeoutSeconds. A fetch
-    # against an unreachable github.com otherwise sits in TCP retries for
-    # minutes, and this script is not allowed to make the logon wait for that.
+    # Like Invoke-Tool, but kills the whole process tree after $TimeoutSeconds.
+    # A fetch against an unreachable github.com otherwise sits in TCP retries
+    # for minutes, and this script is not allowed to make the logon wait.
     param([string] $Exe, [string[]] $Arguments, [int] $TimeoutSeconds)
     $err = [IO.Path]::GetTempFileName()
+    $out = [IO.Path]::GetTempFileName()
     try {
         $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -PassThru `
-            -RedirectStandardError $err -RedirectStandardOutput ([IO.Path]::GetTempFileName())
+            -RedirectStandardError $err -RedirectStandardOutput $out
         $null = $p.Handle   # PS 5.1: without the handle cached, ExitCode reads back null after a timed wait
         if (-not $p.WaitForExit($TimeoutSeconds * 1000)) {
-            try { $p.Kill() } catch { }
+            $kill = Invoke-Tool 'taskkill.exe' @('/PID', "$($p.Id)", '/T', '/F')
+            if ($kill.ExitCode -ne 0) { Write-Log 'WARN' "could not kill pid $($p.Id) after timeout: $($kill.Output)" }
             return @{ ExitCode = -1; Output = "timed out after ${TimeoutSeconds}s" }
         }
         $p.WaitForExit()   # flushes the exit code once the timed wait has returned
-        return @{ ExitCode = $p.ExitCode; Output = ((Get-Content -Raw $err -ErrorAction SilentlyContinue) -join '').Trim() }
+        $text = ((Get-Content -Raw $out -ErrorAction SilentlyContinue) + (Get-Content -Raw $err -ErrorAction SilentlyContinue))
+        return @{ ExitCode = $p.ExitCode; Output = ("$text").Trim() }
     } finally {
-        Remove-Item -Force $err -ErrorAction SilentlyContinue
+        Remove-Item -Force $err, $out -ErrorAction SilentlyContinue
     }
 }
 
@@ -189,6 +203,7 @@ function Invoke-Git {
 
 function Test-DockerReady {
     param([int] $TimeoutSeconds)
+    if (-not $Docker) { return $false }
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
         $r = Invoke-Tool $Docker @('version', '--format', '{{.Server.Version}}')
@@ -206,17 +221,19 @@ function Get-DesktopTreeHash {
     # Fetch (bounded), then the tree hash of desktop/ at the build ref. When
     # the fetch fails the ref as last fetched is used, so an offline logon can
     # still build something that was never built. '' only when the ref itself
-    # cannot be resolved.
+    # cannot be resolved. Only a line that is exactly a hash is accepted: git
+    # may print warnings on the same stream.
     $fetch = Invoke-ToolWithTimeout $Git @('-C', $RepoDir, 'fetch', '--quiet', 'origin') $FetchTimeoutSeconds
     if ($fetch.ExitCode -ne 0) {
         Write-Log 'WARN' "git fetch failed (offline?), using ${BuildRef} as last fetched: $($fetch.Output)"
     }
     $tree = Invoke-Git $RepoDir @('rev-parse', '--verify', '--quiet', "${BuildRef}:desktop")
-    if ($tree.ExitCode -ne 0) {
+    $hash = @($tree.Output -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[0-9a-f]{40}$' }) | Select-Object -Last 1
+    if ($tree.ExitCode -ne 0 -or -not $hash) {
         Write-Log 'WARN' "cannot resolve ${BuildRef}:desktop: $($tree.Output)"
         return ''
     }
-    return $tree.Output.Trim()
+    return $hash
 }
 
 function Get-ActiveTree {
@@ -234,6 +251,11 @@ function Get-BuildExe {
     return Join-Path (Join-Path (Join-Path $BuildsRoot $Tree) 'win-unpacked') $EXE_NAME
 }
 
+function Test-BuildOnDisk {
+    param([AllowEmptyString()][string] $Tree)
+    return ($Tree -ne '') -and (Test-Path (Get-BuildExe $Tree))
+}
+
 function Read-State {
     if (-not (Test-Path $StateFile)) { return ConvertTo-LaunchState -Json '' }
     $state = ConvertTo-LaunchState -Json (Get-Content -Raw -Path $StateFile)
@@ -245,7 +267,8 @@ function Write-State {
     param([pscustomobject] $State)
     if (-not (Test-Path $StateDir)) { New-Item -ItemType Directory -Force -Path $StateDir | Out-Null }
     $tmp = "$StateFile.tmp"
-    Set-Content -Path $tmp -Value (ConvertTo-LaunchStateJson -State $State) -Encoding UTF8 -NoNewline
+    # UTF-8 without a BOM: PS 5.1's Set-Content -Encoding UTF8 writes one.
+    [IO.File]::WriteAllText($tmp, (ConvertTo-LaunchStateJson -State $State), (New-Object Text.UTF8Encoding $false))
     Move-Item -Force $tmp $StateFile
 }
 
@@ -299,8 +322,10 @@ function Invoke-Launch {
 }
 
 function Update-BuildWorktree {
-    # Returns $true when the worktree sits at the build ref.
+    # Returns $true when the worktree sits at the build ref. `prune` first: a
+    # worktree folder deleted by hand stays registered and blocks `add`.
     if (-not (Test-Path (Join-Path $BuildWorktree '.git'))) {
+        Invoke-Git $RepoDir @('worktree', 'prune') | Out-Null
         $add = Invoke-Git $RepoDir @('worktree', 'add', '--detach', $BuildWorktree, $BuildRef)
         if ($add.ExitCode -ne 0) { Write-Log 'ERROR' "git worktree add failed: $($add.Output)"; return $false }
         Write-Log 'INFO' "created build worktree $BuildWorktree"
@@ -311,9 +336,27 @@ function Update-BuildWorktree {
     return $true
 }
 
+function Update-InstalledLaunch {
+    # After a successful build, the installed copy of these scripts follows
+    # the ref that was built. Only when running as the installed copy; a run
+    # straight from a checkout leaves the install alone.
+    if ($PSScriptRoot -ne $InstalledLaunchDir) { return }
+    $source = Join-Path (Join-Path $BuildWorktree 'desktop') 'launch'
+    if (-not (Test-Path (Join-Path $source 'logon-build.ps1'))) { return }
+    foreach ($name in $LAUNCH_FILES) {
+        $from = Join-Path $source $name
+        if (Test-Path $from) { Copy-Item -Force $from (Join-Path $InstalledLaunchDir $name) }
+    }
+    Write-Log 'INFO' "installed launch scripts refreshed from $source"
+}
+
 function Invoke-ContainerBuild {
     # The ephemeral build for one desktop/ tree. Returns $true on success.
     param([string] $Tree)
+    if ($Tree -eq (Get-ActiveTree)) {
+        Write-Log 'ERROR' "refusing to rebuild $Tree over the active build"
+        return $false
+    }
     $out = Join-Path $BuildsRoot $Tree
     if (Test-Path $out) { Remove-Item -Recurse -Force $out }   # a partial earlier attempt
     New-Item -ItemType Directory -Force -Path $out | Out-Null
@@ -325,9 +368,9 @@ function Invoke-ContainerBuild {
 
     Write-Log 'INFO' "build start for tree $Tree from $env:BB2DASH_BUILD_SRC"
     $started = Get-Date
-    $r = Invoke-Tool $cmd.Executable $cmd.Arguments
+    $r = Invoke-Tool $Docker $cmd.Arguments
     $seconds = [int] ((Get-Date) - $started).TotalSeconds
-    if ($r.ExitCode -ne 0 -or -not (Test-Path (Get-BuildExe $Tree))) {
+    if ($r.ExitCode -ne 0 -or -not (Test-BuildOnDisk $Tree)) {
         $tail = ($r.Output -split "`n" | Select-Object -Last 20) -join "`n"
         Write-Log 'ERROR' "build failed after ${seconds}s (exit $($r.ExitCode)). Last lines:`n$tail"
         return $false
@@ -354,6 +397,7 @@ function Invoke-Build {
         if ($ok) {
             Invoke-Activate -Tree $Tree
             Remove-OldBuilds -Keep @($Tree, (Get-ActiveTree))
+            Update-InstalledLaunch
         }
         return $ok
     } finally {
@@ -375,12 +419,17 @@ function Invoke-BuildStep {
     $tree = Get-DesktopTreeHash
     $state = Read-State
     $composeExists = Test-Path $StackComposeFile
-    $changed = ($tree -ne '') -and ($tree -ne $state.LastBuiltSha)
-    $wait = if ($WaitForDocker -or $changed -or $composeExists) { $DockerWaitSeconds } else { 0 }
-    $dockerReady = Test-DockerReady -TimeoutSeconds $wait
 
-    $decision = Get-BuildDecision -RemoteSha $tree -LastBuiltSha $state.LastBuiltSha `
-        -DockerReady $dockerReady -ComposeFileExists $composeExists
+    # What counts as "already built": the active build, or the recorded one if
+    # its folder still exists. A recorded hash whose folder is gone is not a
+    # build, so it never masks a needed rebuild.
+    $lastBuilt = if ($tree -ne '' -and $tree -eq (Get-ActiveTree)) { $tree } elseif (Test-BuildOnDisk $state.LastBuiltSha) { $state.LastBuiltSha } else { '' }
+
+    $needDocker = Test-DockerNeeded -RemoteSha $tree -LastBuiltSha $lastBuilt -ComposeFileExists $composeExists
+    $wait = if ($WaitForDocker -or $needDocker) { $DockerWaitSeconds } else { 0 }
+    $dockerReady = if ($needDocker -or $WaitForDocker) { Test-DockerReady -TimeoutSeconds $wait } else { $false }
+
+    $decision = Get-BuildDecision -RemoteSha $tree -LastBuiltSha $lastBuilt -DockerReady $dockerReady -ComposeFileExists $composeExists
     Write-Log 'INFO' "build decision: [$($decision.Actions -join ', ')] because $($decision.Reason)"
     if ($decision.Warning) { Write-Log 'WARN' $decision.Warning }
 
@@ -398,7 +447,7 @@ function Invoke-StartupStep {
     # Step 1: no network, no Docker. Returns $true when the app was (or need not be) launched.
     $state = Read-State
     $activeTree = Get-ActiveTree
-    $nextExists = ($state.LastBuiltSha -ne '') -and ($state.LastBuiltSha -ne $activeTree) -and (Test-Path (Get-BuildExe $state.LastBuiltSha))
+    $nextExists = ($state.LastBuiltSha -ne $activeTree) -and (Test-BuildOnDisk $state.LastBuiltSha)
     $decision = Get-StartupDecision -BuildExists ($activeTree -ne '') -NextBuildExists $nextExists -AppRunning (Test-AppRunning)
     Write-Log 'INFO' "startup decision: [$($decision.Actions -join ', ')] because $($decision.Reason)"
     foreach ($action in $decision.Actions) {
@@ -416,7 +465,7 @@ function Invoke-StartupStep {
 if (-not (Test-Path (Join-Path $RepoDir '.git'))) { Fail "not a git checkout: $RepoDir" $EXIT_VALIDATION }
 if (-not (Test-Path $ComposeBuildFile)) { Fail "missing $ComposeBuildFile" $EXIT_VALIDATION }
 
-Write-Log 'INFO' "logon-build start (repo $RepoDir, ref $BuildRef)"
+Write-Log 'INFO' "logon-build start (repo $RepoDir, ref $BuildRef, scripts $PSScriptRoot)"
 
 $launched = Invoke-StartupStep
 if ($launched) {
