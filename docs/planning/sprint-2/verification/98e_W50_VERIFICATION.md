@@ -67,3 +67,74 @@ What changed in `ingest/bb_crawler.js`:
 * `idShaped` skips the announcement's own `id`, records only `_N_N` strings (never prose), is deduped
   per (key, value) and capped at 50 per course.
 * The header's "STILL UNVERIFIED" / "ALSO NOT" lines are left for task 19.
+
+Commit: `efd424c feat(18-5): crawler v5 probe, bare creator id kept, feedbackToUser first`.
+
+---
+
+## Task 18 — author resolution, fixture half (B-36 default)
+
+Built under B-36's default (Blackboard is expected to send a resolvable `creatorUserId`). The live
+half (the post-fold SQL on `<run2>`) is the PM's, after L7's second sync. The B-36 fallback was
+not built.
+
+Check: `cd web && npx vitest run test/crawler.announcements.test.ts` → 0 failures on
+`db/fixtures/phase18/announcements_v5.json` (a teacher id resolves with 0 fetches; two posts by one
+unknown id → exactly 1 fetch; a 403 → `author: null` plus a miss).
+
+### RED (tests and fixture written, crawler at task 5)
+
+```
+ Test Files  1 failed (1)
+      Tests  15 failed | 27 passed (42)
+```
+
+Failing cases included: `resolves a teacher id with no lookup at all`,
+`looks an unknown id up exactly once, however many posts carry it`,
+`turns a throwing lookup into author null plus a miss, and never throws`,
+`fetches only the distinct ids no teacher row answers, once each`,
+`records the 403 as a miss in the probe`.
+
+### GREEN
+
+```
+$ npx vitest run test/crawler.announcements.test.ts test/crawler.attempts.test.ts test/fixtures.phase12b.test.ts
+ Test Files  3 passed (3)
+      Tests  128 passed (128)
+```
+
+Full suite before stopping:
+
+```
+$ cd web && npx vitest run
+ Test Files  107 passed (107)
+      Tests  1898 passed (1898)
+```
+
+`npx eslint test/crawler.announcements.test.ts --max-warnings 0` → exit 0.
+
+What the fixture holds (all ids and names invented; IST.323's real shell id): one teacher
+(`_30000001_1`) and six announcements: a teacher post (resolves from `teachers`, 0 fetches), two
+posts by one unknown id (`_30000002_1`, one `/users/` fetch → 200 → `users`), one by an id whose
+lookup answers 403 (`_30000003_1` → `author: null`), one that already carries a name (no fetch),
+and one with no creator at all. Expected: fetches `["_30000002_1", "_30000003_1"]`, and
+`misses = { AUTHOR_KEYS: 1, userLookup: 1, authorUnresolved: 1 }`.
+
+Behaviour in `ingest/bb_crawler.js`:
+
+* `resolveAuthors(announcements, teachers, lookupUser, cache)`: teacher rows first, then at most one
+  lookup per distinct id per run. `runAll` owns one `Map` and passes it to every `crawl`, and it
+  caches failures too, so a 403 is not retried in the run.
+* Only `_N_N` ids reach `GET /learn/api/v1/users/{id}` (and they are URL-encoded). A non-2xx answer,
+  a throw or a nameless body is a `userLookup` miss. Each post left without a name adds `authorUnresolved`.
+  Nothing throws.
+* `authorSource` reads `teachers` or `users` for a resolved name. `personName` also reads the public
+  `name: { given, family }` shape.
+* Returns new objects, and the input is never mutated.
+
+Assumptions the probe sitting (98a §1) must confirm:
+
+1. The key is `creatorUserId` and holds a bare `_N_N` id (a user object carrying `id` / `userId` also works).
+2. A student session may read `GET /learn/api/v1/users/{id}` for a course's staff. If it answers 403,
+   authors outside `teachers` stay null, and the probe's `userLookup` count shows it.
+3. `/users/{id}` returns `givenName` / `familyName` (internal) or `name.given` / `name.family` (public).

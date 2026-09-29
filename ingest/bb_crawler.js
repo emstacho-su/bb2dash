@@ -91,6 +91,10 @@
  *  announcement keeps a bare creator id as `authorUserId` beside `author` / `authorSource`; the
  *  id is never shown. Attempt feedback is read from `feedbackToUser` first. The stages ignore
  *  `crawler.probe` and `authorUserId`; one query over bb_raw after the next sync reads them.
+ *  Task 18 resolves `authorUserId` to a name: the course's teacher rows first, then one
+ *  `GET /learn/api/v1/users/{id}` per distinct unresolved id per run (resolveAuthors). A resolved
+ *  name lands in `author` with `authorSource` 'teachers' or 'users'; a failed lookup adds
+ *  `userLookup` and each still-nameless post `authorUnresolved` to `misses`, and never throws.
  *
  * `runAll({ runId })` — WHY THE SKILL STILL REGISTERS AFTER THE CRAWL (round-2 review, R2-1)
  *  `runAll` accepts a caller-supplied run id, and registering it BEFORE the crawl is the order the
@@ -131,6 +135,11 @@ const personName = (v) => {
   const u = v.user && typeof v.user === 'object' ? v.user : v;
   const parts = [u.givenName, u.familyName].filter((x) => typeof x === 'string' && x.trim());
   if (parts.length) return parts.join(' ').trim();
+  // The public REST user shape: `name: { given, family }`.
+  if (u.name && typeof u.name === 'object') {
+    const pub = [u.name.given, u.name.family].filter((x) => typeof x === 'string' && x.trim());
+    if (pub.length) return pub.join(' ').trim();
+  }
   for (const k of ['displayName', 'name', 'fullName', 'userName']) {
     if (typeof u[k] === 'string' && u[k].trim() && !isBbUserId(u[k])) return u[k].trim();
   }
@@ -223,6 +232,56 @@ const mapAnnouncement = (a) => {
     authorUserId,
     body: strip(a.body)?.slice(0, 4000),
   };
+};
+
+/**
+ * Task 18 (R-70, P-96): turn each announcement's bare `authorUserId` into a name.
+ *
+ *  1. The course's own teacher rows (`teachers[].userId`, the ids `course_staff.bb_user_id`
+ *     holds) answer with no request at all.
+ *  2. Anything they miss is looked up through `lookupUser(id)` — in the tab, one
+ *     `GET /learn/api/v1/users/{id}` — at most ONCE per distinct id per run: `cache` is the run's
+ *     (runAll owns it and hands the same Map to every course), and it remembers failures too, so a
+ *     403 is never retried within the run.
+ *
+ * Only `_NNNN_1` ids are ever looked up, so nothing else can reach the URL. A lookup that throws,
+ * answers non-2xx or carries no name is not swallowed: it is reported as a `userLookup` miss, and
+ * each announcement still without a name as `authorUnresolved`, for the caller's probe counter.
+ * The author then stays null — never a guess, never the raw id. Returns new objects; the input
+ * array and its announcements are left as they were.
+ */
+const resolveAuthors = async (announcements, teachers, lookupUser, cache = new Map()) => {
+  const list = Array.isArray(announcements) ? announcements : [];
+  const byTeacher = new Map();
+  for (const t of Array.isArray(teachers) ? teachers : []) {
+    const name = t && typeof t.name === 'string' ? t.name.trim() : '';
+    if (t && isBbUserId(t.userId) && name && !byTeacher.has(t.userId)) byTeacher.set(t.userId, name);
+  }
+  const needsName = (a) => a != null && typeof a === 'object' && !a.author && isBbUserId(a.authorUserId);
+  const misses = [];
+  for (const a of list) {
+    const id = needsName(a) ? a.authorUserId : null;
+    if (id === null || byTeacher.has(id) || cache.has(id)) continue;
+    let name = null;
+    try {
+      name = await lookupUser(id);
+    } catch (e) {
+      name = null; // recorded below as a `userLookup` miss, which is how the probe reports it
+    }
+    name = typeof name === 'string' && name.trim() && !isBbUserId(name) ? name.trim() : null;
+    cache.set(id, name);
+    if (name === null) misses.push('userLookup');
+  }
+  const resolved = list.map((a) => {
+    if (!needsName(a)) return a;
+    const fromTeacher = byTeacher.get(a.authorUserId);
+    if (fromTeacher) return { ...a, author: fromTeacher, authorSource: 'teachers' };
+    const fromUsers = cache.get(a.authorUserId);
+    if (fromUsers) return { ...a, author: fromUsers, authorSource: 'users' };
+    misses.push('authorUnresolved');
+    return a;
+  });
+  return { announcements: resolved, misses };
 };
 
 // ================================================================================================
@@ -663,7 +722,16 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
       out.push(entry);
     }
     return out; };
-  const crawl = async (C) => {
+  // Task 18: one user lookup for resolveAuthors(). Only an id-shaped value reaches the URL, and a
+  // non-2xx answer is a null name (resolveAuthors counts it as a miss); jx never throws.
+  const lookupUser = async (id) => {
+    if (!isBbUserId(id)) return null;
+    const r = await jx(`/learn/api/v1/users/${encodeURIComponent(id)}`);
+    if (!(r.status >= 200 && r.status <= 299)) return null;
+    return personName(r.body);
+  };
+  // `userCache` is the run's author cache (see resolveAuthors); runAll passes one Map to every course.
+  const crawl = async (C, { userCache = new Map() } = {}) => {
     const detail = await j(`/learn/api/v1/courses/${C}?expand=effectiveAvailability`);
     const teach = await j(`/learn/api/v1/courses/${C}/memberships?expand=user,courseRole&limit=50&membershipAvailable=true&roleBucket=TEACHING`);
     const sched = await j(`/learn/api/v1/courses/${C}/schedule?sort=location(desc)`);
@@ -677,8 +745,11 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
     const misses = {};
     const rawAnnouncements = ann.results || [];
     const teachers = (teach.results || []).map(t => ({ name: `${t.user?.givenName || ''} ${t.user?.familyName || ''}`.trim(), email: t.user?.emailAddress || null, role: t.courseRole?.identifier, userId: t.userId }));
-    const announcements = rawAnnouncements.map(mapAnnouncement);
-    countMisses(misses, announcements.filter((a) => !a.author && !a.authorUserId).map(() => 'AUTHOR_KEYS'));
+    const mapped = rawAnnouncements.map(mapAnnouncement);
+    countMisses(misses, mapped.filter((a) => !a.author && !a.authorUserId).map(() => 'AUTHOR_KEYS'));
+    const authors = await resolveAuthors(mapped, teachers, lookupUser, userCache);
+    countMisses(misses, authors.misses);
+    const announcements = authors.announcements;
     const att = await attempts(C, gradebook, { misses });
     const content = await walk(C);
     const annProbe = announcementProbe(rawAnnouncements);
@@ -702,7 +773,8 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
   const runAll = async ({ termName = null, runId = null, since = '2026-08-01T04:00:00.000Z', until = '2027-01-15T04:00:00.000Z' } = {}) => {
     const run_id = assertRunId(runId) || crypto.randomUUID(); const mem = await memberships(); const mine = termName ? mem.filter(m => m.termName === termName) : mem;
     const log = [['memberships', (await post(run_id, 'memberships', null, { results: mem })).status]];
-    for (const m of mine) { const p = await crawl(m.id); log.push([m.name, (await post(run_id, 'course', m.id, p)).status]); }
+    const userCache = new Map(); // one author lookup per distinct id for the whole run (task 18)
+    for (const m of mine) { const p = await crawl(m.id, { userCache }); log.push([m.name, (await post(run_id, 'course', m.id, p)).status]); }
     log.push(['calendar', (await post(run_id, 'calendar', null, await calendar(since, until))).status]);
     return { run_id, log }; };
   // Fire every download from ONE call so the browser's permission prompt (if any) appears once, not per file.
@@ -721,7 +793,7 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
 // Under Node it exposes the pure mappers to the vitest suite in web/test.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { installCrawler, strip, personName, announcementAuthor, mapAnnouncement, AUTHOR_KEYS,
-    userIdOf, announcementProbe, keyListMisses, PROBE_ID_LIMIT,
+    userIdOf, announcementProbe, keyListMisses, resolveAuthors, PROBE_ID_LIMIT,
     mapAttempt, mapAttemptFile, mapGradeRow, mapAttemptDetail, newestAttempts, atPath,
     shouldProbeColumn, assessmentFields, pickKey, assertRunId,
     ATTEMPT_FIELD_KEYS, ATTEMPT_FILE_KEYS, ASSESSMENT_FIELDS, CRAWLER_VERSION, ATTEMPT_LIMIT };
