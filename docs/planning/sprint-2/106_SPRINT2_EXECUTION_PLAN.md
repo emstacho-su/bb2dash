@@ -14,21 +14,21 @@ Stack's steps carry minutes as a rough size of his time, never as a slot. Effort
 
 ## 0. How to use this sheet
 
-Pick the next run whose gate is open. §1 writes each gate as facts you can check, such as a merged PR, a runner exiting 0 on `main`, or a spike PASS, never as a date. Paste the prompt named under that run's heading in ORCHESTRATOR §6; this sheet names the heading and never restates the text. ORCHESTRATOR §6 groups the nine prompts into Sessions A–E, so paste it into its group's session if that session is parked, or into a fresh one. The bb2dash prompts start with `/bb2dash-pm`; Session D's starts in the harness repo. The PM runs the run's pre-flight (§1 for that run, §6 for every run) before it cuts workers. It stops where the run's "Stack acts" and "Stop points" say, and Stack does his step when he can. The PR merges only on his word in that conversation. The PM then does the post-merge steps, which open the next gates, and moves to the next run. Runs listed as concurrent may be started in parallel PM sessions; §2 says how many and which pairs are safe. A run whose gate is closed waits, and nothing else waits for it unless §1 names it as a gate. When an earlier PR merges under a later branch, §3 says what the later run does. When a gate fails, §5 does.
+Pick the next run whose gate is open. §1 writes each gate as facts you can check, such as a merged PR, a runner exiting 0 on `main`, or a spike PASS, never as a date. Paste the prompt named under that run's heading in ORCHESTRATOR §6; this sheet names the heading and never restates the text. ORCHESTRATOR §6 groups the prompts into Sessions A–F, lettered in chronological order since 2026-09-29 (A = Phase 20, B = 17 + 18 then 19, C = 16, D = 14 then 21, E = Stack's open items, F = 22; Phase 15's prompt is kept as Done), so paste it into its group's session if that session is parked, or into a fresh one. The bb2dash prompts start with `/bb2dash-pm`; Session A's starts in the harness repo. The PM runs the run's pre-flight (§1 for that run, §6 for every run) before it cuts workers. It stops where the run's "Stack acts" and "Stop points" say, and Stack does his step when he can. The PR merges only on his word in that conversation. The PM then does the post-merge steps, which open the next gates, and moves to the next run. Runs listed as concurrent may be started in parallel PM sessions; §2 says how many and which pairs are safe. A run whose gate is closed waits, and nothing else waits for it unless §1 names it as a gate. When an earlier PR merges under a later branch, §3 says what the later run does. When a gate fails, §5 does.
 
 ## 1. The runs in dependency order
 
 R1 goes first. R2 to R6 open as soon as Phase 15's runner is on its branch (R2) or on `main` (R3, R4), or they have no gate at all (R5 is pasted as soon as R1 starts; R6 may start before anything). R7 waits for R3 and R4 to merge, R8 waits for R5, and R9 waits for every screen. **Every phase is laptop-led**, because its SQL checks run against prod through the laptop's gitignored `.env.local` and its sittings need Stack's machine. Cloud sessions cannot reach `*.supabase.co` (CLAUDE.md). The cloud-capable pieces named below could be split off, but no brief splits them.
 
-### R1 — A1: Phase 15, database hygiene and the SQL test runner (brief 95, size S/M)
+### R1 — Phase 15 (done 2026-09-29), database hygiene and the SQL test runner (brief 95, size S/M)
 
-* **Prompt:** ORCHESTRATOR §6, Session A, heading `A1 — Phase 15`.
+* **Prompt:** ORCHESTRATOR §6, heading `Done — Phase 15` (it was A1).
 * **Gate in:** none. The brief header says "Depends on nothing; runs first" (94 §2 rule 1), and the brief is on `main` (PR #28 merged).
-* **Runs concurrently with:** R5 (C1 is pasted as soon as Phase 15 starts) and R6. R2 joins once this run's PR is open.
+* **Runs concurrently with:** R5 (D1 is pasted as soon as Phase 15 starts) and R6. R2 joins once this run's PR is open.
 * **Machine:** laptop. Every live check runs the runner against prod through `.env.local`, task 16 curls the `search` function, and Stack's steps 1, 5 and 6 use the Supabase dashboard. Only tasks 1–3 and 8 are offline and cloud-capable, which is too little to split off.
 * **Pre-flight:** 105 §3 has two open notes on brief 95. Fix or strike both in the PR: the B-41 Pro branch also flips task 19's `get_organization` check to `pro`, and the no-credential branch leaves task 25 expecting 5 steps. B-41, B-42 and B-16 all came back as default, so strike PROVISIONAL and the task loop 1 grep then reads 3. Cut worktree `bb2dash-wt-15` on `feat/db-hygiene-15` from `origin/main`, then `bb2dash-wt-15-runner` (W-38), `-suite` (W-39) and `-migrations` (W-40). There is no `.env.local` yet: Stack writes it at task 5. Inside the phase, 100 goes on before 101, 101 before 102, and 103/104 go on only after 102 (brief 95 §Tables and migrations).
 * **Stack acts:**
-  1. Paste A1 and read the freeze note (laptop, ~5).
+  1. Paste the Phase 15 prompt (now Done) and read the freeze note (laptop, ~5).
   2. Task 5 = acceptance step 1: run the PM's snippet, which sets the `db_test_runner` password in the dashboard SQL editor and writes `.env.local` with the session-pooler DSN (laptop + Supabase dashboard, ~10).
   3. Steps 2–4: `--ping`, then the full run (`passed 21, failed 0`), then the fixture file (laptop, ~10).
   4. Step 5: the advisors (dashboard, ~5).
@@ -39,15 +39,15 @@ R1 goes first. R2 to R6 open as soon as Phase 15's runner is on its branch (R2) 
 * **Post-merge:** remove `bb2dash-wt-15` and its three worker worktrees and branches. The canonical `C:/Users/stack/projects/bb2dash/.env.local` keeps `BB2DASH_TEST_DB_URL`; the worktree copies go with their worktrees. `database.types.ts` does not change (brief 95: no new RPC). Update memory. **Gate out:** `node scripts/db-test.mjs` exits 0 on `main`, which opens R3 and R4. R2's checks move from 15's branch to `main`. R1 is also one of the three merges that R5's W-55/W-56 wait for.
 * **Fallback:** If the platform refuses BYPASSRLS on a login role, use an owner-level DSN; 100 shrinks to nothing and the counts fall (brief 95 open item 1). A grant gap goes in 103, then 104; one found after that stops the PM, who brings the FAIL line to Stack. A red unit outside the three repaired here also stops the PM, who brings its FAIL line; no unit is ever skipped. A unit that turns red on a literal date gets a now()-relative fix and a DECISIONS line (open item 6). If `/security-review` objects to the plain password, the snippet sends a SCRAM verifier instead (open item 3).
 
-### R2 — A2: Phase 16, grades: V-1 sittings and the reconciliation migration (brief 96, size L)
+### R2 — C: Phase 16, grades: V-1 sittings and the reconciliation migration (brief 96, size L)
 
-* **Prompt:** ORCHESTRATOR §6, Session A, heading `A2 — Phase 16` (the same session as A1).
-* **Gate in:** R1's PR is open; the A2 heading says not to wait for the merge. Before task 8's baseline: the runner and role are on prod, `--ping` prints `connected as db_test_runner`, and 15's P-2 rewrite and P-30 fixture are green. Before task 10 applies 105: the count of prod migrations named `10[0-4]_` equals the count of those files on `feat/db-hygiene-15` (or `main`), and task 10a's commit is on `feat/db-hygiene-15` (brief 96 task 10, §Seams).
+* **Prompt:** ORCHESTRATOR §6, Session C, heading `C — Phase 16` (its own session).
+* **Gate in:** R1's PR is open; the C heading says not to wait for the merge. Before task 8's baseline: the runner and role are on prod, `--ping` prints `connected as db_test_runner`, and 15's P-2 rewrite and P-30 fixture are green. Before task 10 applies 105: the count of prod migrations named `10[0-4]_` equals the count of those files on `feat/db-hygiene-15` (or `main`), and task 10a's commit is on `feat/db-hygiene-15` (brief 96 task 10, §Seams).
 * **Runs concurrently with:** R1's tail, R3, R4, R5, R6, R7 and R8. The files are disjoint (94 §2 rule 2) except for `skills/inbox-apply/SKILL.md`, which is shared with R6, and `phase10b_grade_model.sql`, which R2 edits after R1's W-39.
 * **Machine:** laptop. The first launch and all six sittings run a confined `claude` session through the local `bb2dash` MCP server in `~/.claude.json`, and every runner check and the 105/106 applies go to prod. Stack also needs Blackboard+Duo for the sync that brings in ECN.304 Exam 1's score, and his Google account for step 8. Cloud-capable: docs tasks 1, 2, 7 and 28; tasks 5 and 6; web tasks 11–14 and 25; task 3's code.
 * **Pre-flight:** 105 §3 has four notes on brief 96. Fix or strike each: the B-9 row should also name task 10's major-project-1 confidence SELECT; B-10's alternative changes counts the row does not name; the confined `claude` should be spawned with cwd = repo root, with a matching task 3 case; the reason the brief gives for keeping `Edit` in `--tools` is wrong. Rewrite the B-10 row, which came back changed ("Not graded" links in 105, no engine rule), and strike PROVISIONAL on the rest. Cut worktree `bb2dash-wt-16` on `feat/grades-v1-16`, with `-scripts` (W-41), `-db` (W-42) and `-web` (W-43). Copy `.env.local` into every worktree that runs the runner. Rebuild `mcp-server/dist` in the shared checkout before the dry run (task 4). Record `origin/main`'s vitest count at the cut (DoD).
 * **Stack acts:**
-  1. Paste A2 once R1's PR is open (laptop, ~2).
+  1. Paste C (Phase 16) once R1's PR is open (laptop, ~2).
   2. B-9 answers, each whenever he knows it and before the day it names (a bound, not pacing, and not gated on this run; see the header), entered as an Inbox value resolution: the presentation slot (SITN pick or individual slot, and which one), the Major Case 1 day and the Major Case 2 day. The slot should ideally come before task 10, so that a refused re-ask can ride 105 (laptop, ~9 in all).
   3. Only if R1 merged before task 10a: tell the PM how to proceed before task 10 (~2).
   4. First launch = step 2 / task 16: `.\scripts\validate-grading.ps1 IST.323`, `/mcp`, `/permissions`, the refused `.env` read and the write prompt (laptop, ~15).
@@ -110,10 +110,10 @@ R1 goes first. R2 to R6 open as soon as Phase 15's runner is on its branch (R2) 
 * **Post-merge:** the `search` source matches `main`, ignoring CRs. The installed `bb-sync` SKILL.md carries step 4b; if the PR does not merge, restore `main`'s copy. After each sync, the mirrored files were copied into the main checkout's `course context/` with `robocopy /E` (never `/MIR` or `/PURGE`). The second of R3/R4 to merge regenerates `database.types.ts`. The desktop Sync route is proven only after the merge. Remove the worktrees and branches and update memory. **Gate out:** together with R3, R4 opens R7, and it is one of R5's three merges for W-55/W-56. R3's T-26 reads whether `web/src/lib/blackboard-link.ts` is on `origin/main`.
 * **Fallback:** If the probe shows no creator id (B-36), W-51 drops the author segment and L7 is skipped. If there is no meeting data (R-73), 129 is not written and a DECISIONS row records why. If parts come out over 512 tokens, the task stops and the count goes to Stack (open item 4). If a before-median is at or above 50 ms, 121 also builds `part_fts`. If PR-A has not merged, task 16 and everything after it waits (§5).
 
-### R5 — C1: Phase 14, containers (brief 100, size L, the long pole)
+### R5 — D1: Phase 14, containers (brief 100, size L, the long pole)
 
-* **Prompt:** ORCHESTRATOR §6, Session C, heading `C1 — Phase 14`.
-* **Gate in:** paste it as soon as R1 starts (the Session C heading; 94 §2 rule 4); §2's two-session default pastes it once R6's PR-A is open, a short delay it allows. Nothing else gates task 1 or Task 0. The internal gates are these: open items 1–6 answered before task 1's freeze; `emstacho-su/bb2dash-stack` exists before W-58 is cut; `desktop/src/core/sync-id.ts` committed and task 2's parity set frozen before any worker branch; the spike's `Verdict: PASS` in 82b before any sync-side task; W-55 and W-56 cut only with R1, R4 and R7 merged; task 7 needs 100, 135, 136 and 137 on prod and 0 PUBLIC-executable SECURITY DEFINER functions; any /bb-sync (task 28's skill path, A9) needs R6's PR-A and obeys §2's installed-copy holds; the first realm write (task 22, A6) needs R6's gitleaks scan (its task 20), the harness realm nights and the R-B4 PAT test; the launcher PR merged before A1.
+* **Prompt:** ORCHESTRATOR §6, Session D, heading `D1 — Phase 14`.
+* **Gate in:** paste it as soon as R1 starts (the Session D heading; 94 §2 rule 4); §2's two-session default pastes it once R6's PR-A is open, a short delay it allows. Nothing else gates task 1 or Task 0. The internal gates are these: open items 1–6 answered before task 1's freeze; `emstacho-su/bb2dash-stack` exists before W-58 is cut; `desktop/src/core/sync-id.ts` committed and task 2's parity set frozen before any worker branch; the spike's `Verdict: PASS` in 82b before any sync-side task; W-55 and W-56 cut only with R1, R4 and R7 merged; task 7 needs 100, 135, 136 and 137 on prod and 0 PUBLIC-executable SECURITY DEFINER functions; any /bb-sync (task 28's skill path, A9) needs R6's PR-A and obeys §2's installed-copy holds; the first realm write (task 22, A6) needs R6's gitleaks scan (its task 20), the harness realm nights and the R-B4 PAT test; the launcher PR merged before A1.
 * **Runs concurrently with:** every run except R8 and R9, which follow it. W-57 and W-58 may be cut after task 1.
 * **Machine:** laptop only: Docker Desktop/WSL2, Blackboard+Duo, the desktop shell, Task Scheduler (A8), the Supabase dashboard and local files. Cloud-capable: tasks 1, 5, 9, 10, 12, 16, 20, 23 and 30, plus parts of 11, 18 and 25. W-55 and W-56 each mix cloud and laptop checks, so the phase stays on the laptop.
 * **Pre-flight:** 105 §3 has three notes. They cover B-48's "Dropped" branch and the `dev` verb, B-49 "No" and the DoD's harness test count, and the sibling defaults the brief rests on (B-37, Phase 19's B-20 terminal rule, B-29). Rewrite the B-45 row, which came back changed: 092 is built, A5 is walked, the R-87 reversal row is written and task 29 counts 9. Fix the brief's cut-over order to follow DECISIONS B-45, because as written it stalls (A5 needs a scheduled sync, but cut-over step 6 sets `sync_schedule_hour` only after A8/A9; the extracts flag it). In the acceptance sitting, right after A4, Stack confirms the hour (07:00 New York or the one Task 0's numbers point to) and the PM sets `sync_schedule_hour`; A5 is walked the next morning; cut-over step 6 records the hour and no longer sets it. Strike PROVISIONAL on the rest. DECISIONS B-50 names three realms for `vault_realm_pat` where open item 4 says two; follow DECISIONS. Put open items 1–6 to Stack and wait. Branches and worktrees: `feat/containers-14` in `bb2dash-wt-containers-14`; `feat/containers` in `C:/Users/stack/agentic-harness-wt-containers`, cut from the harness SHA task 1 records; `feat/containers-14-stack` in `C:/Users/stack/projects/bb2dash-stack-wt-containers`; workers W-55 (`-sync`), W-56 (`-images`, `-launcher`), W-57 and W-58.
@@ -137,12 +137,12 @@ R1 goes first. R2 to R6 open as soon as Phase 15's runner is on its branch (R2) 
   17. Read the freeze rows and the R-87 reversal row, then give the merge word on each PR (~15).
 * **Stop points:** open items 1–6; the repo creation; the spike login; the machine steps; task 7's password; tasks 17 and 19; the launcher PR; task 28; walk-14 before any merge; A1–A4; the scheduled-hour confirmation after A4 (B-45), before `sync_schedule_hour` is set; A5–A9 across at least one night.
 * **Merge:** the B-51 exception, one PR per repo (bb2dash, agentic-harness, bb2dash-stack) plus the early `syncLauncher` PR (`feat/containers-14-launcher`). The launcher PR merges on his word before A1. The three repo PRs merge after walk-14 and A1–A9, each on his word. Nothing is in `web/`, so there is no preview.
-* **Post-merge:** remove the worktrees in all three repos. The PR corrects CLAUDE.md's "There is no Docker during development" and adds 82's superseded-by line. The two AgenticHarness Task Scheduler jobs were unregistered at A8. `sync_schedule_hour` was set in the acceptance sitting right after A4, on the hour Stack confirmed (B-45), and the cut-over's DECISIONS row records it. Update memory. **Gate out:** R8 (C2) opens, R5 counts as one of R9's gates, and R6's container-writer line is proven at A6.
+* **Post-merge:** remove the worktrees in all three repos. The PR corrects CLAUDE.md's "There is no Docker during development" and adds 82's superseded-by line. The two AgenticHarness Task Scheduler jobs were unregistered at A8. `sync_schedule_hour` was set in the acceptance sitting right after A4, on the hour Stack confirmed (B-45), and the cut-over's DECISIONS row records it. Update memory. **Gate out:** R8 (D2) opens, R5 counts as one of R9's gates, and R6's container-writer line is proven at A6.
 * **Fallback:** If the spike fails, see §5. If Chromium fails under the seccomp profile, set `chromiumSandbox: false` and name it in 82b and in `/security-review`. If the B-50 bind-mount test fails, clone the realms into a volume instead. If `log_connections` is refused, the runner's own connect log line stands. If Task 0 never ran, `KEEPALIVE_MINUTES` stays 0 and the spike still gates. A gitleaks hit means Stack rotates the credential before any work continues. The Windows path keeps working until acceptance, and A9 proves it with Docker stopped.
 
 ### R6 — D: Phase 20, harness closure (brief 101, size M; may start first of all)
 
-* **Prompt:** ORCHESTRATOR §6, heading `Session D — Phase 20` (the prompt under it; it starts in `C:/Users/stack/agentic-harness`).
+* **Prompt:** ORCHESTRATOR §6, heading `Session A — Phase 20` (the prompt under it; it starts in `C:/Users/stack/agentic-harness`).
 * **Gate in:** none. It runs beside everything, and R-97 is a live bug (94 §2). PR-A goes first, together with C-H. The internal gates are these: task 20 needs gitleaks installed and the realm checkouts; task 2 needs PR-A merged; tasks 17–19 and 21–26 need PR-B merged, `C:/Users/stack/agentic-harness` pulled `--ff-only` to merged main, and three consecutive nightly runs each logging `committed -> pulled -> pushed` (or up-to-date) for both realms, which is the PM's reading of the live-lane prerequisite; task 22 needs three more such nights after L20-a; task 26 needs a bb2dash PM session that starts after task 17; task 29 needs PR-C merged.
 * **Runs concurrently with:** all runs.
 * **Machine:** laptop, for the real vault, transcripts and hooks, the nightly log, Credential Manager and the harness-memory SQL. `uv run ingest` runs from the main checkout, the only one with a `.env`. Acceptance step 7 must run in a claude.ai/code cloud session. Cloud-capable in principle: worker tasks 4–15, task 1's skill edit and task 28's docs.
@@ -188,9 +188,9 @@ R1 goes first. R2 to R6 open as soon as Phase 15's runner is on its branch (R2) 
 * **Post-merge:** types were regenerated from prod (task 25), and the installed `bb-sync` copy should equal `main`'s register-first skill. Remove the worktrees and branches and update memory. **Gate out:** together with R1, R4 and the spike PASS, R7 lets R5 cut W-55 and W-56. R7 is one of R9's gates. R-41 counts as met only with R3's half also on `main`.
 * **Fallback:** B-19 answered no: a partial unique index, and the toggle shows 21. B-20 answered otherwise: one constant in 136 changes, and Phase 14's DEAD_LETTER_MINUTES stays below it. A sync in flight at a migration window: wait until the count reads 0. Step 5's window is only seconds (a whole crawl took about 26 s): repeat it once the first sync closes, one open sync at a time. Avoid syncs from `main`'s old skill between 135/136 reaching prod and the merge.
 
-### R8 — C2: Phase 21, workspace (brief 102, size L)
+### R8 — D2: Phase 21, workspace (brief 102, size L)
 
-* **Prompt:** ORCHESTRATOR §6, Session C, heading `C2 — Phase 21`.
+* **Prompt:** ORCHESTRATOR §6, Session D, heading `D2 — Phase 21`.
 * **Gate in:** R5 merged in bb2dash and bb2dash-stack. Task 1 (d) checks it: `git ls-files compose.yaml mcp-server/Dockerfile mcp-server/src/env-file.ts | wc -l` returns 3 in bb2dash, and the five secrets/doctor/justfile files return 5 in bb2dash-stack. R1 merged: `select count(*) from pg_roles where rolname in ('sync_runner','db_test_runner')` returns 2 and `--ping` passes. Stack's `claude setup-token` is in `bb2dash-stack/secrets/claude_oauth_token`, Phase 14's B-51 row is written, and the harness `rag` MCP server builds and answers `search_context`. Stack's acceptance (task 26) comes only after R5's acceptance.
 * **Runs concurrently with:** R2 (if still sitting) and R6.
 * **Machine:** laptop-led, for the runner DSN, Docker and the stack secrets, the host `claude` on his subscription for task 9's recordings, and the desktop shell. Cloud-capable: W-64's tasks 7, 8, 10 and 11; W-66's tasks 4, 15 and 16; tasks 23–25.
@@ -209,7 +209,7 @@ R1 goes first. R2 to R6 open as soon as Phase 15's runner is on its branch (R2) 
 
 ### R9 — E: Phase 22, styling (brief 103, size L, last)
 
-* **Prompt:** ORCHESTRATOR §6, heading `Session E — Phase 22`.
+* **Prompt:** ORCHESTRATOR §6, heading `Session F — Phase 22`.
 * **Gate in:** R2, R3, R4, R7, R5 and R8 merged (brief 103 header; 94 §2 rule 5). Task 4 checks it: `grep -rl "ScreenStub" web/src/app | wc -l` returns 0, `find web/src/app -name page.tsx | wc -l` returns 16, and `web/src/app/(app)/workspace/page.tsx` is on `main`. Tasks 1–2 are either on `main` (they rode R3's PR) or become this branch's first commits.
 * **Runs concurrently with:** none of the runs it depends on. R6 may still be open beside it.
 * **Machine:** laptop-hosted: `login.mjs` against each preview, the Playwright walks, the no-writes SQL, DevTools at 390 px and the unpacked desktop build. Cloud-capable in principle: tasks 1–4, 8–12 and 16–20, and the tiles (task 6). Stack's tile pick works in any browser signed into claude.ai, phone included.
@@ -236,7 +236,7 @@ R1 goes first. R2 to R6 open as soon as Phase 15's runner is on its branch (R2) 
 | Lane | Two sessions (default) | Three sessions |
 |---|---|---|
 | 1, bb2dash product | R1 → R2's tasks 1–15, then R2 parked between sittings → R3 + R4 (Session B, both phases) → R7 → R9, with R2 resumed for each sitting's spot-check and after sitting 6 | R1 → R3 + R4 → R7 → R9 |
-| 2, infrastructure | R6's PR-A → R5 (task 1, Task 0 rows, W-57/W-58, the spike) → R6's PR-B → R5's W-55/W-56 once R1, R4 and R7 are on `main` → R8; R6's live steps resume whenever the nights allow. C1 is pasted once R6's PR-A is open, a short delay from R5's gate (§1) that this default allows: PR-A is skill markdown only and lifts the hold every sync waits on | R5 from A1's start (C1 as ORCHESTRATOR §6 Session C says); R6 runs in the same lane while R5 is parked; then R8 |
+| 2, infrastructure | R6's PR-A → R5 (task 1, Task 0 rows, W-57/W-58, the spike) → R6's PR-B → R5's W-55/W-56 once R1, R4 and R7 are on `main` → R8; R6's live steps resume whenever the nights allow. D1 is pasted once R6's PR-A is open, a short delay from R5's gate (§1) that this default allows: PR-A is skill markdown only and lifts the hold every sync waits on | R5 from Phase 15's start (D1 as ORCHESTRATOR §6 Session D says); R6 runs in the same lane while R5 is parked; then R8 |
 | 3, V-1 | (in lane 1) | R2 from R1's open PR to its merge, so the sittings never wait behind another run's stop |
 
 Which runs are safe together:
@@ -255,7 +255,7 @@ Which runs are safe together:
 Shared-file and shared-state rules:
 
 * **`CourseScreen.tsx` (R3/R4):** named hunks only. The second to merge merges `main` in and reruns `cd web && npx eslint . --max-warnings 0`. `DATA_SYNTAX.md` gets entries from both, in separate sections. W-47's Bell and announcements files are shared if R4 takes B-36's fallback. Brief 97 edits neither `AssignmentDetailBody.tsx` nor `PlannerItemPopover.tsx`, so `CourseScreen.tsx` is the only shared screen file (105 §3, brief 98 c11); R4's pre-flight rewords brief 98's seam to match. Both briefs' §Seams say the second to merge "rebases". Read that as merging `main` in, since a pushed branch is never rebased or force-pushed (ORCHESTRATOR §0), and fix the wording in the phase PR.
-* **`skills/inbox-apply/SKILL.md` (R2/R6):** whichever lands second merges `main` in and re-applies its lines, never with a rebase (brief 96 §Seams, brief 101 §Seams). After each merge, the installed copy is refreshed until `cmp` returns 0. The note after ORCHESTRATOR §6 Session D says the same.
+* **`skills/inbox-apply/SKILL.md` (R2/R6):** whichever lands second merges `main` in and re-applies its lines, never with a rebase (brief 96 §Seams, brief 101 §Seams). After each merge, the installed copy is refreshed until `cmp` returns 0. The note after ORCHESTRATOR §6 Session A says the same.
 * **`web/src/lib/supabase/database.types.ts`:** each run regenerates it for its own PR, scoped to its own objects, and the second to merge regenerates it again (ORCHESTRATOR §3).
 * **`db/tests/phase10b_grade_model.sql`:** R1's W-39 rewrites it first (P-2), then R2's W-42 edits lines 167–168 (10a), and that commit is carried onto R1's branch.
 * **`db/tests/phase15_100_db_test_runner_role.sql`:** its membership list is extended by R5's 094 and R8's 142, each in its own PR.
@@ -300,7 +300,7 @@ When an earlier PR merges under a later branch:
 | R4 | R3 | T-26 re-reads whether `blackboard-link.ts` is on `origin/main` to pick the staged link's href |
 | R6 PR-B | R5 | harness `feat/containers` merges `main` |
 | R7 | R5 | cuts W-55 and W-56 (with R1, R4 and the spike PASS); `sync_register_run` adopts register-first |
-| R5 | R8 | C2 is pasted; 142 extends phase15_100's membership list |
+| R5 | R8 | D2 is pasted; 142 extends phase15_100's membership list |
 
 ## 4. Stack's touchpoints, consolidated
 
@@ -308,13 +308,13 @@ In order within each run. "Needs" says what the step needs besides Stack himself
 
 | Run | Touchpoint | Needs | ~min |
 |---|---|---|---|
-| R1 | Paste A1, read the freeze note | laptop | 5 |
+| R1 | Paste the Phase 15 prompt (done), read the freeze note | laptop | 5 |
 | R1 | Step 1 / task 5: runner password, `.env.local` | laptop + Supabase dashboard | 10 |
 | R1 | Steps 2–4: `--ping`, full run, fixture | laptop | 10 |
 | R1 | Step 5: advisors | Supabase dashboard | 5 |
 | R1 | Step 6 / task 20: signups setting screenshot | Supabase dashboard | 5 |
 | R1 | Step 7: six DECISIONS rows, merge word | laptop | 15 |
-| R2 | Paste A2 once R1's PR is open | laptop | 2 |
+| R2 | Paste C (Phase 16) once R1's PR is open | laptop | 2 |
 | R2 | B-9 dates as Inbox value resolutions, each before the day it names (bound, not pacing; not gated on the run) | laptop | 9 |
 | R2 | Only if R1 merged without 10a: how to proceed | laptop | 2 |
 | R2 | First launch (step 2, task 16) | laptop | 15 |

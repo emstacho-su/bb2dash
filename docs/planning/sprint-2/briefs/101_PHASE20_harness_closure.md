@@ -662,7 +662,7 @@ spelling of H-1, the untagged cadence and its threshold of 25 (H-5, H-11), and t
 
 ## Session prompt
 
-ORCHESTRATOR §6 "Session D — Phase 20" is the prompt. In short (the PM's summary, not its text): fix R-97 first on a bb2dash branch and
+ORCHESTRATOR §6 "Session A — Phase 20" (Session D until 2026-09-29) is the prompt. In short (the PM's summary, not its text): fix R-97 first on a bb2dash branch and
 open its PR the same day; then the harness work on `feat/v2-closure`; walk the V-2 acceptance list live
 and write the verification note under `docs/planning/sprint-2/verification/`; one PR per repo; do not
 merge. This brief adds the third PR (PR-C, bb2dash docs) and the live-lane rule of §Seams.
