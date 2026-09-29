@@ -11,8 +11,12 @@
 
 import { useRef } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { DRAG_THRESHOLD_PX, useHorizontalScroll } from '@/lib/use-horizontal-scroll';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  DRAG_THRESHOLD_PX,
+  WHEEL_ARM_HOVER_MS,
+  useHorizontalScroll,
+} from '@/lib/use-horizontal-scroll';
 
 const CLIENT_WIDTH = 300;
 const SCROLL_WIDTH = 1000;
@@ -29,8 +33,11 @@ function Strip({ onItem }: { onItem: () => void }) {
   );
 }
 
-/** Give the strip a layout: 300 px wide over 1000 px of content. */
-function renderStrip(startLeft = 0) {
+/**
+ * Give the strip a layout: 300 px wide over 1000 px of content. By default the
+ * strip is armed with a click first (R3-1), so the wheel cases read the wheel.
+ */
+function renderStrip(startLeft = 0, { armed = true } = {}) {
   const onItem = vi.fn();
   render(<Strip onItem={onItem} />);
   const el = screen.getByTestId('strip');
@@ -44,6 +51,7 @@ function renderStrip(startLeft = 0) {
       left = value;
     },
   });
+  if (armed) fireEvent.click(el);
   return { el, onItem, item: screen.getByRole('button', { name: 'Item' }) };
 }
 
@@ -142,5 +150,71 @@ describe('useHorizontalScroll — the drag', () => {
     const { el, item } = renderStrip(100);
     fireEvent.pointerMove(item, { pointerType: 'mouse', buttons: 0, clientX: 10 });
     expect(el.scrollLeft).toBe(100);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * R3-1 — the wheel is claimed only once the strip is armed
+ * ------------------------------------------------------------------------ */
+
+describe('useHorizontalScroll — arming the wheel (R3-1)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('holds the hover delay at 1.5 s', () => {
+    expect(WHEEL_ARM_HOVER_MS).toBe(1500);
+  });
+
+  it('leaves a wheel to the page before the strip is armed', () => {
+    const { el } = renderStrip(100, { armed: false });
+    const claimed = wheel(el, { deltaY: 120, deltaX: 0 });
+    expect(el.scrollLeft).toBe(100);
+    expect(claimed).toBe(false);
+  });
+
+  it('arms after a 1.5 s hover, and not before', () => {
+    vi.useFakeTimers();
+    const { el } = renderStrip(100, { armed: false });
+    fireEvent.pointerEnter(el, { pointerType: 'mouse' });
+
+    vi.advanceTimersByTime(WHEEL_ARM_HOVER_MS - 1);
+    expect(wheel(el, { deltaY: 50, deltaX: 0 })).toBe(false);
+    expect(el.scrollLeft).toBe(100);
+
+    vi.advanceTimersByTime(1);
+    expect(wheel(el, { deltaY: 50, deltaX: 0 })).toBe(true);
+    expect(el.scrollLeft).toBe(150);
+  });
+
+  it('arms on a click', () => {
+    const { el } = renderStrip(100, { armed: false });
+    fireEvent.click(el);
+    expect(wheel(el, { deltaY: 50, deltaX: 0 })).toBe(true);
+    expect(el.scrollLeft).toBe(150);
+  });
+
+  it('disarms when the pointer leaves', () => {
+    const { el } = renderStrip(100);
+    fireEvent.pointerLeave(el, { pointerType: 'mouse' });
+    expect(wheel(el, { deltaY: 50, deltaX: 0 })).toBe(false);
+    expect(el.scrollLeft).toBe(100);
+  });
+
+  it('a hover cut short by leaving never arms', () => {
+    vi.useFakeTimers();
+    const { el } = renderStrip(100, { armed: false });
+    fireEvent.pointerEnter(el, { pointerType: 'mouse' });
+    vi.advanceTimersByTime(1000);
+    fireEvent.pointerLeave(el, { pointerType: 'mouse' });
+    vi.advanceTimersByTime(1000);
+    expect(wheel(el, { deltaY: 50, deltaX: 0 })).toBe(false);
+  });
+
+  it('keeps the drag rule without arming', () => {
+    const { el, item, onItem } = renderStrip(100, { armed: false });
+    press(item, 50, 30);
+    expect(el.scrollLeft).toBe(120);
+    expect(onItem).not.toHaveBeenCalled();
   });
 });

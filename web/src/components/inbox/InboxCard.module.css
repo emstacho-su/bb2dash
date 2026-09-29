@@ -1,0 +1,187 @@
+/* One Inbox item as a review card (R3-3). Existing tokens only; no new colours. */
+
+.card {
+  gap: var(--space-3);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+  outline: none;
+}
+.card:focus-visible {
+  box-shadow: var(--shadow-sm), 0 0 0 2px var(--color-accent);
+}
+
+/* Context chips: course, kind, source, age, state. */
+.chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-divider);
+  color: var(--color-neutral-300);
+  white-space: nowrap;
+}
+.kindChip {
+  color: var(--color-accent-300);
+}
+.age {
+  color: var(--color-neutral-500);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-md);
+  max-width: 80ch;
+}
+
+/* R-56 (B-29): a gap that closed itself and came back within 24 h. */
+.reopened {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-accent-2);
+  max-width: 80ch;
+}
+
+/* Blackboard's value, what bb2dash has and the suggestion, side by side. */
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.field {
+  color: var(--color-neutral-400);
+}
+.panes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  min-width: 0;
+}
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+.details {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.detail {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.detail dd {
+  margin: 0;
+  min-width: 0;
+}
+.detailLabel {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+}
+
+.meta {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.sourceLink {
+  color: var(--color-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sourceLink:hover {
+  text-decoration: underline;
+}
+
+/* The answer controls, inline: a full-width answer box, the why, the actions. */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+.answerField,
+.noteField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+.answerBox {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.4em;
+  resize: vertical;
+  overflow: hidden;
+  field-sizing: content;
+  font: inherit;
+  line-height: 1.45;
+}
+
+/* I-2: a control and the sentence saying what it does, stacked. */
+.choices {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: 44ch;
+}
+.outcome {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-neutral-400);
+}
+
+.answered {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-400);
+}
+/* What /inbox-apply recorded on an archived row: quieter than the answer. */
+.decision {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+  max-width: 80ch;
+  overflow-wrap: anywhere;
+}
+
+.problem {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}

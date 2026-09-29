@@ -79,6 +79,11 @@ export interface UpcomingTrackerProps {
    * beyond the fetch would render empty and read as "nothing due".
    */
   horizonDays?: number;
+  /**
+   * R3-1: the first day the strip reaches back to (the term start), when the
+   * caller fetched from there. The strip still opens on today. Additive.
+   */
+  startIso?: string | null;
   /** Day columns on screen at once. The strip scrolls; this is the viewport. */
   visibleDays?: number;
   /** 'YYYY-MM-DD' first visible day. Defaults to today; clamped to the range. */
@@ -186,6 +191,7 @@ export function UpcomingTracker({
   items,
   horizonDays = DEFAULT_HORIZON_DAYS,
   visibleDays = DEFAULT_VISIBLE_DAYS,
+  startIso = null,
   anchor,
   onAnchorChange,
   selectedDay,
@@ -235,12 +241,14 @@ export function UpcomingTracker({
   const range = useMemo(
     () =>
       trackerRange({
-        dueDates: items.map((item) => item.due_on),
+        // The term start rides along as one more date, so the strip begins at
+        // it (never after the first item) without changing the range rules.
+        dueDates: [...(startIso ? [startIso] : []), ...items.map((item) => item.due_on)],
         today,
         horizonDays,
         visibleDays,
       }),
-    [items, today, horizonDays, visibleDays],
+    [items, startIso, today, horizonDays, visibleDays],
   );
 
   const strip = useMemo(

@@ -7,9 +7,13 @@
  * shift-wheel, but a plain mouse wheel only ever sends `deltaY`, and nothing
  * lets it drag. This hook adds both, on the element `ref` points at:
  *
- * * **Wheel.** A vertical wheel with no horizontal delta scrolls the strip
- *   sideways. A native horizontal delta (trackpad, tilt wheel) is left to the
- *   browser. At either end of the strip the wheel is not claimed, so the page
+ * * **Wheel.** Once the strip is armed, a vertical wheel with no horizontal
+ *   delta scrolls the strip sideways. It is armed by a click on it or by the
+ *   pointer resting on it for WHEEL_ARM_HOVER_MS, and disarmed when the pointer
+ *   leaves (R3-1): until then the wheel scrolls the page, so a reader scrolling
+ *   down Home is never caught by a strip passing under the pointer. A
+ *   native horizontal delta (trackpad, tilt wheel) is left to the browser.
+ *   At either end of the strip the wheel is not claimed, so the page
  *   still scrolls past it.
  * * **Drag.** A mouse press that travels more than DRAG_THRESHOLD_PX scrolls
  *   the strip with the pointer and swallows the click that follows it, so
@@ -24,6 +28,9 @@ import { useEffect, type RefObject } from 'react';
 
 /** A press must travel further than this to count as a drag. */
 export const DRAG_THRESHOLD_PX = 5;
+
+/** How long the pointer must rest on the strip before the wheel is claimed. */
+export const WHEEL_ARM_HOVER_MS = 1500;
 
 /** A horizontal wheel delta at or above this is the browser's to handle. */
 const HORIZONTAL_DELTA_EPSILON = 1;
@@ -59,11 +66,35 @@ export function useHorizontalScroll(ref: RefObject<HTMLElement | null>): void {
     if (!el) return;
 
     let press: PressState | null = null;
+    /** The wheel is claimed only while armed (R3-1). */
+    let armed = false;
+    let armTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function clearArmTimer() {
+      if (armTimer !== null) clearTimeout(armTimer);
+      armTimer = null;
+    }
+
+    function arm() {
+      clearArmTimer();
+      armed = true;
+    }
+
+    function onPointerEnter(event: PointerEvent) {
+      if (event.pointerType === 'touch' || armed) return;
+      clearArmTimer();
+      armTimer = setTimeout(arm, WHEEL_ARM_HOVER_MS);
+    }
+
+    function onPointerLeave() {
+      clearArmTimer();
+      armed = false;
+    }
     /** Set when a drag ends; the next click on the strip is the drag's, not a choice. */
     let swallowNextClick = false;
 
     function onWheel(event: WheelEvent) {
-      if (!el) return;
+      if (!el || !armed) return;
       if (Math.abs(event.deltaX) >= HORIZONTAL_DELTA_EPSILON) return;
       const delta = wheelPixels(event, el.clientWidth);
       if (delta === 0) return;
@@ -75,6 +106,7 @@ export function useHorizontalScroll(ref: RefObject<HTMLElement | null>): void {
 
     function onPointerDown(event: PointerEvent) {
       swallowNextClick = false;
+      arm();
       if (!el || event.pointerType === 'touch' || event.pointerType === 'pen') return;
       if (event.button !== 0) return;
       press = { startX: event.clientX, startScrollLeft: el.scrollLeft, dragging: false };
@@ -110,6 +142,7 @@ export function useHorizontalScroll(ref: RefObject<HTMLElement | null>): void {
     }
 
     function onClickCapture(event: MouseEvent) {
+      arm();
       if (!swallowNextClick) return;
       swallowNextClick = false;
       event.preventDefault();
@@ -117,13 +150,18 @@ export function useHorizontalScroll(ref: RefObject<HTMLElement | null>): void {
     }
 
     el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('pointerenter', onPointerEnter);
+    el.addEventListener('pointerleave', onPointerLeave);
     el.addEventListener('pointerdown', onPointerDown);
     el.addEventListener('pointermove', onPointerMove);
     el.addEventListener('pointerup', onPointerEnd);
     el.addEventListener('pointercancel', onPointerEnd);
     el.addEventListener('click', onClickCapture, true);
     return () => {
+      clearArmTimer();
       el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerenter', onPointerEnter);
+      el.removeEventListener('pointerleave', onPointerLeave);
       el.removeEventListener('pointerdown', onPointerDown);
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('pointerup', onPointerEnd);
