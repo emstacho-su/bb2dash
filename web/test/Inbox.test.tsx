@@ -793,3 +793,47 @@ describe('Inbox — archived rows', () => {
     expect(screen.getByText(INBOX_APPLY_REQUEST_HELP)).toBeInTheDocument();
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * R-56 / B-29 — a gap that closed itself and came back within 24 h
+ * ------------------------------------------------------------------------ */
+
+describe('Inbox — a reopened gap', () => {
+  const REOPENED = 'Closed itself earlier today and came back';
+
+  it('says the row closed itself and came back', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 9,
+        kind: 'data_gap',
+        question: 'Lecture 4 slides were never stored.',
+        suggested: { source: 'stage_gaps', reopened_within_24h: true },
+      }),
+    ]);
+    expect(screen.getByText(REOPENED)).toBeInTheDocument();
+  });
+
+  it('does not repeat the flag as a raw detail', () => {
+    renderInbox([
+      makeAttentionItem({
+        id: 9,
+        kind: 'data_gap',
+        question: 'Lecture 4 slides were never stored.',
+        suggested: { source: 'stage_gaps', reopened_within_24h: true },
+      }),
+    ]);
+    expect(screen.queryByText(/reopened within 24h/i)).toBeNull();
+  });
+
+  it('says nothing for a row that has not come back', () => {
+    renderInbox([
+      makeAttentionItem({ id: 9, kind: 'data_gap', suggested: { source: 'stage_gaps' } }),
+      makeAttentionItem({
+        id: 10,
+        kind: 'data_gap',
+        suggested: { source: 'stage_gaps', reopened_within_24h: false },
+      }),
+    ]);
+    expect(screen.queryByText(REOPENED)).toBeNull();
+  });
+});

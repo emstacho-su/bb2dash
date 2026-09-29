@@ -63,6 +63,22 @@
   max-width: 80ch;
 }
 
+/* R-56 (B-29): a gap that closed itself and came back within 24 h. */
+.reopened {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-accent-2);
+  max-width: 80ch;
+}
+
+/* R-42 (B-21): "Apply answers" and "Apply answers now", side by side. */
+.applyButtons {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
 /* I-3 row anatomy: age in the head, the source sentence with its link, and the
    stage's own payload as labelled words rather than jsonb. */
 .age {
