@@ -216,6 +216,50 @@ test.describe('screens (T-12 … T-21)', () => {
     await page.screenshot({ path: shotPath(testInfo, '17-cr5-ist323.png'), fullPage: true });
   });
 
+  test('22 R3-1 home strip slider', async ({ page }, testInfo) => {
+    await openSignedIn(page, '/');
+    const strip = page.locator('section[aria-label^="Upcoming work"]').first();
+    await expect(strip).toBeVisible();
+    await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
+    // The strip's scroller reaches back before today (R3-1): scrolled to its start, a past day
+    // is in view, and the scroller is wider than its box, so the slider is drawn.
+    const scrolled = await strip.evaluate((section) => {
+      const scroller = Array.from(section.querySelectorAll<HTMLElement>('*')).find(
+        (el) => el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible',
+      );
+      if (!scroller) return null;
+      scroller.scrollLeft = 0;
+      return { scrollWidth: scroller.scrollWidth, clientWidth: scroller.clientWidth };
+    });
+    expect(scrolled, 'the Upcoming strip has no horizontal scroller').not.toBeNull();
+    await strip.screenshot({ path: shotPath(testInfo, '22-home-strip-slider.png') });
+  });
+
+  test('23 R3-3 inbox', async ({ page }, testInfo) => {
+    await openSignedIn(page, '/inbox');
+    await expect(page.getByRole('button', { name: /Apply answers/ }).first()).toBeVisible();
+    await expect(page.getByText('Apply answers now')).toHaveCount(0);
+    await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
+    await page.screenshot({ path: shotPath(testInfo, '23-inbox.png'), fullPage: true });
+  });
+
+  test('24 R3-4 stream timeline IST.352', async ({ page }, testInfo) => {
+    await openSignedIn(page, '/course/IST.352/stream');
+    await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
+    // The timeline opens anchored on the current week; the term's announcements sit in the weeks
+    // before it, so show every week first.
+    await page.getByRole('button', { name: /^Show weeks/ }).click();
+    await expect(page.getByLabel('Announcement').first()).toBeVisible();
+    await page.screenshot({ path: shotPath(testInfo, '24-stream-timeline-ist352.png'), fullPage: true });
+  });
+
+  test('25 R3-7 grades report card', async ({ page }, testInfo) => {
+    await openSignedIn(page, '/grades');
+    await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
+    await expect(page.getByRole('button', { name: /hide/i })).toHaveCount(0);
+    await page.screenshot({ path: shotPath(testInfo, '25-grades-report-card.png'), fullPage: true });
+  });
+
   test('26 R3-8 nested items whole', async ({ page, context }, testInfo) => {
     await context.addInitScript(
       ([key, value]) => {
