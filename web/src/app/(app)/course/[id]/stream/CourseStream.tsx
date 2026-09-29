@@ -17,8 +17,13 @@
  */
 
 import { useMemo } from 'react';
-import { useCourseDisplay, useCourseWorkItems } from '@/lib/queries.course';
-import { useSetItemStatus, type WorkItem as TrackerWorkItem } from '@/lib/queries.today';
+import { courseToday, useCourseDisplay, useCourseWorkItems } from '@/lib/queries.course';
+import {
+  trackerWindowStart,
+  useSetItemStatus,
+  useTerm,
+  type WorkItem as TrackerWorkItem,
+} from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
 import { isQueryLoading } from '@/components/shared/QueryState';
 import { CourseTimeline } from '@/components/course/CourseTimeline';
@@ -31,6 +36,14 @@ export function CourseStream({ courseId }: { courseId: string }) {
   const shellIds = useMemo(() => display.data?.shell_ids ?? [], [display.data]);
   const workItemsQ = useCourseWorkItems(shellIds);
   const setStatus = useSetItemStatus();
+
+  // R3-1: the strip can scroll back to the term's first day, from the same
+  // term row Home reads (`useTerm` + `trackerWindowStart`); it still opens on
+  // today. Before the term starts there is nothing earlier to reach.
+  const termQ = useTerm();
+  const todayIso = courseToday();
+  const windowStart = trackerWindowStart(termQ.data, todayIso);
+  const startIso = windowStart === todayIso ? null : windowStart;
 
   /**
    * `v_work_items` comes back typed from the generated view, where Postgres
@@ -64,6 +77,7 @@ export function CourseStream({ courseId }: { courseId: string }) {
         items={trackerItems}
         horizonDays={DEFAULT_HORIZON_DAYS}
         visibleDays={DEFAULT_VISIBLE_DAYS}
+        startIso={startIso}
         title={`Upcoming work · ${display.data.code}`}
         onStatusChange={handleStatus}
         pendingItemId={pendingItemId}
