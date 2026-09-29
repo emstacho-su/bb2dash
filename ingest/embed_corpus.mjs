@@ -185,4 +185,11 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (invokedDirectly) main().then((code) => process.exit(code));
+// Set the exit code and let the event loop drain: a hard exit while undici is still closing a
+// fetch handle aborts node on Windows (libuv `!(handle->flags & UV_HANDLE_CLOSING)`, async.c:94).
+if (invokedDirectly) {
+  main().then(
+    (code) => { process.exitCode = code; },
+    (e) => { console.error(String((e && e.stack) || e)); process.exitCode = 1; },
+  );
+}
