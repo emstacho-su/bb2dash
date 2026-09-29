@@ -52,6 +52,7 @@ services:
         npm ci --no-audit --no-fund
         npm run typecheck
         npm test
+        npm run build
         npx electron-builder --win --x64 --dir --config.directories.output=/out
         test -f /out/win-unpacked/bb2dash.exe
 

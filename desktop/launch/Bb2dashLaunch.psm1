@@ -6,6 +6,16 @@
   logic, and Bb2dashLaunch.Tests.ps1 pins the logic.
 
 .DESCRIPTION
+  Two decisions, in the order the script runs them:
+
+    Get-StartupDecision  what to do before any network or Docker call: point
+                         `current` at a finished build (Activate) and start the
+                         app (Launch), or report that nothing is built yet
+                         (FirstRun), or that the app is already up (nothing).
+    Get-BuildDecision    after the fetch: rebuild (Build) when the desktop/
+                         tree hash moved and Docker answers; bring the Phase 14
+                         stack up (Compose) when a compose.yaml exists.
+
   Every function returns a new object and mutates nothing it was handed.
   Inputs are validated at the boundary (a hash is 40 hex characters or empty;
   a state file that does not parse is an empty state, flagged, never a crash).
@@ -32,89 +42,75 @@ function Assert-Sha {
 
 <#
 .SYNOPSIS
-  Turn what logon-build.ps1 observed into an ordered list of actions.
+  What to do at once, before the network is touched.
 
 .OUTPUTS
-  [pscustomobject] Actions (string[] drawn from Activate, Launch, Build,
-  Compose, Skip), Reason (why), Warning ('' or one line).
+  [pscustomobject] Actions (string[] from Activate, Launch, FirstRun), Reason.
 
 .NOTES
-  The order is the point: the app is launched from whatever build is already
-  active before any container runs, so a changed repo never delays the
-  window. Only the very first run, with no build at all, builds first.
-  Activate = repoint the `current` junction at a finished build; it is only
-  ever offered when the app is not running, because the running exe's files
-  are locked.
+  Activate = repoint the `current` junction at a finished build. It is only
+  ever offered while the app is not running: Windows locks a running exe's
+  files. FirstRun means nothing is built anywhere; the script must build in
+  the foreground and launch afterwards.
 #>
-function Get-LaunchDecision {
+function Get-StartupDecision {
+    [CmdletBinding()]
+    param(
+        [bool] $BuildExists,
+        [bool] $NextBuildExists,
+        [bool] $AppRunning
+    )
+    if (-not ($BuildExists -or $NextBuildExists)) {
+        return [pscustomobject]@{ Actions = [string[]] @('FirstRun'); Reason = 'no build exists yet' }
+    }
+    if ($AppRunning) {
+        return [pscustomobject]@{ Actions = [string[]] @(); Reason = 'app already running: no activate (exe is locked) and no relaunch' }
+    }
+    $actions = @()
+    $reasons = @()
+    if ($NextBuildExists) { $actions += 'Activate'; $reasons += 'a finished build is waiting' }
+    $actions += 'Launch'
+    $reasons += 'launching the current build'
+    return [pscustomobject]@{ Actions = [string[]] $actions; Reason = ($reasons -join '; ') }
+}
+
+<#
+.SYNOPSIS
+  Whether to rebuild and whether to bring a compose stack up, once the fetch
+  has answered.
+
+.OUTPUTS
+  [pscustomobject] Actions (string[] from Build, Compose), Reason, Warning.
+#>
+function Get-BuildDecision {
     [CmdletBinding()]
     param(
         [AllowEmptyString()][string] $RemoteSha,
         [AllowEmptyString()][string] $LastBuiltSha,
-        [bool] $BuildExists,
-        [bool] $NextBuildExists,
-        [bool] $AppRunning,
         [bool] $DockerReady,
         [bool] $ComposeFileExists
     )
     Assert-Sha -Name 'RemoteSha' -Value $RemoteSha
     Assert-Sha -Name 'LastBuiltSha' -Value $LastBuiltSha
 
-    if (-not ($BuildExists -or $NextBuildExists)) {
-        return Get-FirstRunDecision -DockerReady $DockerReady
-    }
-
     $actions = @()
-    $reasons = @()
-
-    if ($AppRunning) {
-        $reasons += 'app already running: no activate (exe is locked) and no relaunch'
-    } else {
-        if ($NextBuildExists) { $actions += 'Activate'; $reasons += 'a finished build is waiting' }
-        $actions += 'Launch'
-    }
-
-    $build = Get-BuildVerdict -RemoteSha $RemoteSha -LastBuiltSha $LastBuiltSha -DockerReady $DockerReady
-    if ($build.Build) { $actions += 'Build' }
-    $reasons += $build.Reason
-
-    if ($ComposeFileExists -and $DockerReady) { $actions += 'Compose'; $reasons += 'compose.yaml present' }
-
-    return [pscustomobject]@{
-        Actions = [string[]] $actions
-        Reason  = ($reasons -join '; ')
-        Warning = $build.Warning
-    }
-}
-
-function Get-FirstRunDecision {
-    param([bool] $DockerReady)
-    if (-not $DockerReady) {
-        return [pscustomobject]@{
-            Actions = [string[]] @('Skip')
-            Reason  = 'no build exists yet and Docker is not ready, so nothing can be built or launched'
-            Warning = 'Docker engine unreachable; start Docker Desktop and run again'
-        }
-    }
-    return [pscustomobject]@{
-        Actions = [string[]] @('Build', 'Launch')
-        Reason  = 'first run: no build exists, building before launch'
-        Warning = ''
-    }
-}
-
-function Get-BuildVerdict {
-    param([AllowEmptyString()][string] $RemoteSha, [AllowEmptyString()][string] $LastBuiltSha, [bool] $DockerReady)
+    $warning = ''
     if ($RemoteSha -eq '') {
-        return @{ Build = $false; Reason = 'remote unknown'; Warning = 'git fetch did not yield a tree hash; skipping the build check this time' }
+        $reason = 'desktop/ tree hash unknown'
+        $warning = 'the build ref could not be resolved; skipping the build check this time'
+    } elseif ($RemoteSha -eq $LastBuiltSha) {
+        $reason = 'desktop/ unchanged since the last build'
+    } elseif (-not $DockerReady) {
+        $reason = 'rebuild deferred'
+        $warning = 'desktop/ changed but the Docker engine is not ready; the rebuild waits for the next logon'
+    } else {
+        $actions += 'Build'
+        $reason = 'desktop/ changed: rebuilding'
     }
-    if ($RemoteSha -eq $LastBuiltSha) {
-        return @{ Build = $false; Reason = 'desktop/ unchanged since the last build'; Warning = '' }
-    }
-    if (-not $DockerReady) {
-        return @{ Build = $false; Reason = 'rebuild deferred'; Warning = 'desktop/ changed but the Docker engine is not ready; the rebuild waits for the next logon' }
-    }
-    return @{ Build = $true; Reason = 'desktop/ changed: rebuilding after launch'; Warning = '' }
+
+    if ($ComposeFileExists -and $DockerReady) { $actions += 'Compose'; $reason += '; compose.yaml present' }
+
+    return [pscustomobject]@{ Actions = [string[]] $actions; Reason = $reason; Warning = $warning }
 }
 
 function New-EmptyLaunchState {
@@ -208,4 +204,4 @@ function Get-BuildCommand {
     }
 }
 
-Export-ModuleMember -Function Get-LaunchDecision, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand

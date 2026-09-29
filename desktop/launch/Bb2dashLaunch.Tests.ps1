@@ -7,91 +7,97 @@ Import-Module (Join-Path $here 'Bb2dashLaunch.psm1') -Force
 $SHA_A = 'a' * 40
 $SHA_B = 'b' * 40
 
-function NewInputs {
+function Startup {
     param([hashtable] $Overrides = @{})
-    $base = @{
-        RemoteSha         = $SHA_A
-        LastBuiltSha      = $SHA_A
-        BuildExists       = $true
-        NextBuildExists   = $false
-        AppRunning        = $false
-        DockerReady       = $true
-        ComposeFileExists = $false
-    }
-    foreach ($k in $Overrides.Keys) { $base[$k] = $Overrides[$k] }
-    return $base
+    $inputs = @{ BuildExists = $true; NextBuildExists = $false; AppRunning = $false }
+    foreach ($k in $Overrides.Keys) { $inputs[$k] = $Overrides[$k] }
+    return Get-StartupDecision @inputs
 }
 
-function Decide {
+function Build {
     param([hashtable] $Overrides = @{})
-    $inputs = NewInputs $Overrides
-    return Get-LaunchDecision @inputs
+    $inputs = @{ RemoteSha = $SHA_A; LastBuiltSha = $SHA_A; DockerReady = $true; ComposeFileExists = $false }
+    foreach ($k in $Overrides.Keys) { $inputs[$k] = $Overrides[$k] }
+    return Get-BuildDecision @inputs
 }
 
-Describe 'Get-LaunchDecision' {
+Describe 'Get-StartupDecision (before any network or Docker call)' {
 
-    It 'launches only when the build is current (the common logon: no container at all)' {
-        $d = Decide
+    It 'launches the current build (the common logon)' {
+        $d = Startup
         ($d.Actions -join ',') | Should Be 'Launch'
-        $d.Reason | Should Match 'unchanged'
-    }
-
-    It 'launches the existing build first, then rebuilds when desktop/ changed' {
-        $d = Decide (@{ RemoteSha = $SHA_B })
-        ($d.Actions -join ',') | Should Be 'Launch,Build'
-    }
-
-    It 'builds before launching when no build exists yet (first run)' {
-        $d = Decide (@{ BuildExists = $false; LastBuiltSha = '' })
-        ($d.Actions -join ',') | Should Be 'Build,Launch'
-    }
-
-    It 'does nothing but say why when there is no build and Docker is down' {
-        $d = Decide (@{ BuildExists = $false; LastBuiltSha = ''; DockerReady = $false })
-        ($d.Actions -join ',') | Should Be 'Skip'
-        $d.Reason | Should Match 'Docker'
     }
 
     It 'activates a finished build before launching when the app is not running' {
-        $d = Decide (@{ NextBuildExists = $true })
+        $d = Startup (@{ NextBuildExists = $true })
         ($d.Actions -join ',') | Should Be 'Activate,Launch'
     }
 
     It 'never activates while the app is running (the exe is locked) and does not relaunch it' {
-        $d = Decide (@{ NextBuildExists = $true; AppRunning = $true })
+        $d = Startup (@{ NextBuildExists = $true; AppRunning = $true })
         ($d.Actions -join ',') | Should Be ''
         $d.Reason | Should Match 'running'
     }
 
-    It 'still launches the old build when the remote moved but Docker is not ready, and warns' {
-        $d = Decide (@{ RemoteSha = $SHA_B; DockerReady = $false })
-        ($d.Actions -join ',') | Should Be 'Launch'
-        $d.Warning | Should Match 'Docker'
-    }
-
-    It 'skips the build when the tree hash is unknown (fetch failed)' {
-        $d = Decide (@{ RemoteSha = '' })
-        ($d.Actions -join ',') | Should Be 'Launch'
-        $d.Warning | Should Match 'fetch'
-    }
-
-    It 'brings the Phase 14 compose stack up after the app when a compose file exists' {
-        $d = Decide (@{ ComposeFileExists = $true })
-        ($d.Actions -join ',') | Should Be 'Launch,Compose'
-    }
-
-    It 'does not try compose when Docker is down' {
-        $d = Decide (@{ ComposeFileExists = $true; DockerReady = $false })
-        ($d.Actions -join ',') | Should Be 'Launch'
-    }
-
-    It 'uses a next build that exists even when the current build is missing' {
-        $d = Decide (@{ BuildExists = $false; NextBuildExists = $true })
+    It 'uses a finished build even when the current junction is missing' {
+        $d = Startup (@{ BuildExists = $false; NextBuildExists = $true })
         ($d.Actions -join ',') | Should Be 'Activate,Launch'
     }
 
-    It 'rejects a SHA that is not 40 hex characters' {
-        { Decide (@{ RemoteSha = 'not-a-sha' }) } | Should Throw
+    It 'reports a first run when nothing is built anywhere' {
+        $d = Startup (@{ BuildExists = $false })
+        ($d.Actions -join ',') | Should Be 'FirstRun'
+    }
+}
+
+Describe 'Get-BuildDecision (after the fetch)' {
+
+    It 'does nothing when desktop/ is unchanged: no container at all' {
+        $d = Build
+        ($d.Actions -join ',') | Should Be ''
+        $d.Reason | Should Match 'unchanged'
+        $d.Warning | Should Be ''
+    }
+
+    It 'rebuilds when the desktop/ tree hash moved and Docker answers' {
+        $d = Build (@{ RemoteSha = $SHA_B })
+        ($d.Actions -join ',') | Should Be 'Build'
+    }
+
+    It 'defers the rebuild with a warning when Docker is not ready' {
+        $d = Build (@{ RemoteSha = $SHA_B; DockerReady = $false })
+        ($d.Actions -join ',') | Should Be ''
+        $d.Warning | Should Match 'Docker'
+    }
+
+    It 'skips the build check with a warning when the tree hash is unknown' {
+        $d = Build (@{ RemoteSha = '' })
+        ($d.Actions -join ',') | Should Be ''
+        $d.Warning | Should Match 'build ref'
+    }
+
+    It 'builds when nothing was ever built (empty last hash)' {
+        $d = Build (@{ LastBuiltSha = '' })
+        ($d.Actions -join ',') | Should Be 'Build'
+    }
+
+    It 'brings the Phase 14 compose stack up when a compose file exists' {
+        $d = Build (@{ ComposeFileExists = $true })
+        ($d.Actions -join ',') | Should Be 'Compose'
+    }
+
+    It 'orders Build before Compose when both apply' {
+        $d = Build (@{ RemoteSha = $SHA_B; ComposeFileExists = $true })
+        ($d.Actions -join ',') | Should Be 'Build,Compose'
+    }
+
+    It 'does not try compose when Docker is down' {
+        $d = Build (@{ ComposeFileExists = $true; DockerReady = $false })
+        ($d.Actions -join ',') | Should Be ''
+    }
+
+    It 'rejects a hash that is not 40 hex characters' {
+        { Build (@{ RemoteSha = 'not-a-sha' }) } | Should Throw
     }
 }
 
@@ -110,7 +116,7 @@ Describe 'ConvertTo-LaunchState' {
         $s.Invalid | Should Be $true
     }
 
-    It 'falls back to an empty state when the SHA field is malformed' {
+    It 'falls back to an empty state when the hash field is malformed' {
         $s = ConvertTo-LaunchState -Json '{"lastBuiltSha":"zzz"}'
         $s.LastBuiltSha | Should Be ''
         $s.Invalid | Should Be $true
@@ -143,9 +149,10 @@ Describe 'New-LaunchState' {
 
 Describe 'Get-BuildCommand' {
 
-    It 'runs the build service ephemerally through compose' {
+    It 'runs the build service ephemerally through compose, under a fixed container name' {
         $c = Get-BuildCommand -ComposeFile 'C:/x/desktop/launch/compose.build.yaml'
         $c.Executable | Should Be 'docker'
+        $c.ContainerName | Should Be 'bb2dash-build'
         ($c.Arguments -join ' ') | Should Be 'compose -f C:/x/desktop/launch/compose.build.yaml run --rm --name bb2dash-build build'
     }
 }

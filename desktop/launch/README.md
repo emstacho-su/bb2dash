@@ -2,9 +2,11 @@
 
 Two minutes after you sign in, a hidden task launches bb2dash from the build
 that is already on disk, then, only if `desktop/` changed on `origin/main`,
-rebuilds it in an ephemeral container for the next logon. The common case is
-one `git fetch` and one `Start-ScheduledTask`, a couple of seconds at
-below-normal priority. Docker Desktop's own autostart is not touched.
+rebuilds it in an ephemeral container for the next logon. The launch happens
+before any network or Docker call; the `git fetch` that follows is capped at
+45 s and, offline, the ref as last fetched is used. The common case is one
+`Start-ScheduledTask` and one fetch, about two seconds at below-normal
+priority. Docker Desktop's own autostart is not touched.
 
 The Electron shell is a Windows program (toasts, tray, Windows Terminal), so it
 is never run inside a container. What runs in the container is the build:

@@ -7,26 +7,28 @@
 .DESCRIPTION
   Order matters and is the whole design:
 
-    1. git fetch in the main checkout; read the tree hash of desktop/ at
-       -BuildRef (origin/main). Nothing is pulled or checked out in the
-       checkout you work in: the Sync terminal runs there.
-    2. Decide (Bb2dashLaunch.psm1, pure, tested).
-    3. If a finished build is waiting and the app is not running, repoint the
-       `current` junction at it (Activate).
-    4. Launch: start the Bb2dash-App scheduled task, which runs
-       current\bb2dash.exe at normal priority with no time limit, outside this
-       task's process tree. Falls back to Start-Process when the task is not
-       registered (a manual run). This step never waits on Docker.
-    5. Build, if desktop/ changed and the Docker engine answers (waiting up to
-       -DockerWaitSeconds for Docker Desktop's own autostart): check out the
-       build ref in the detached build worktree, `docker compose run --rm` the
-       build service (compose.build.yaml), land the result in
-       builds\<tree>\win-unpacked, record the tree hash. Activate now if the
-       app has been quit, otherwise at the next logon.
-    6. If the repo root has a compose.yaml (Phase 14), `docker compose up -d`.
+    1. Startup, with no network and no Docker call: if a finished build is
+       waiting and the app is not running, repoint the `current` junction at
+       it (Activate); then Launch. Launch starts the Bb2dash-App scheduled
+       task, which runs current\bb2dash.exe at normal priority with no time
+       limit, outside this task's process tree; it falls back to
+       Start-Process when that task is not registered (a manual run).
+    2. git fetch in the main checkout, capped at -FetchTimeoutSeconds, then
+       read the tree hash of desktop/ at -BuildRef (origin/main). Nothing is
+       pulled or checked out in the checkout you work in: the Sync terminal
+       runs there. Offline, the last fetched ref is used.
+    3. Build, if that hash differs from the last successful build and the
+       Docker engine answers (waiting up to -DockerWaitSeconds for Docker
+       Desktop's own autostart): check the ref out in the detached build
+       worktree, `docker compose run --rm` the build service
+       (compose.build.yaml), land the result in builds\<tree>\win-unpacked,
+       record the hash. Activate now if the app has been quit, otherwise at
+       the next logon.
+    4. If the repo root has a compose.yaml (Phase 14), `docker compose up -d`.
        Today there is none, so this is a no-op that costs a Test-Path.
 
-  First run only (no build anywhere): build in the foreground, then launch.
+  First run only (nothing built anywhere): steps 2 and 3 run first, in the
+  foreground, then the app is launched.
 
   Layout under -StateDir (%LOCALAPPDATA%\bb2dash-launch):
     builds\<tree>\win-unpacked\bb2dash.exe   one folder per built desktop/ tree
@@ -48,8 +50,11 @@
   first use. Default <RepoDir>-build.
 
 .PARAMETER DockerWaitSeconds
-  How long the build half may wait for the Docker engine. The launch half
-  never waits. Default 600.
+  How long the build step may wait for the Docker engine. Default 600.
+
+.PARAMETER FetchTimeoutSeconds
+  How long `git fetch` may take before it is killed and the last fetched ref
+  is used instead. Default 45.
 
 .PARAMETER NoLaunch
   Do everything except start the app (for rehearsals and the first setup).
@@ -66,6 +71,7 @@ param(
     [string] $StateDir = (Join-Path $env:LOCALAPPDATA 'bb2dash-launch'),
     [string] $AppTaskName = 'Bb2dash-App',
     [int] $DockerWaitSeconds = 600,
+    [int] $FetchTimeoutSeconds = 45,
     [switch] $NoLaunch
 )
 
@@ -82,7 +88,6 @@ $EXIT_BUILD_FAILED = 3
 $EXIT_LAUNCH_FAILED = 4
 $LOG_ROLL_BYTES = 512KB
 $DOCKER_POLL_SECONDS = 10
-$KEEP_BUILDS = 2
 $APP_PROCESS_NAME = 'bb2dash'
 $BUILD_MUTEX_NAME = 'Local\Bb2dashLaunchBuild'
 $EXE_NAME = 'bb2dash.exe'
@@ -154,6 +159,27 @@ function Invoke-Tool {
     return @{ ExitCode = $code; Output = ($output -join "`n") }
 }
 
+function Invoke-ToolWithTimeout {
+    # Like Invoke-Tool, but kills the process after $TimeoutSeconds. A fetch
+    # against an unreachable github.com otherwise sits in TCP retries for
+    # minutes, and this script is not allowed to make the logon wait for that.
+    param([string] $Exe, [string[]] $Arguments, [int] $TimeoutSeconds)
+    $err = [IO.Path]::GetTempFileName()
+    try {
+        $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -PassThru `
+            -RedirectStandardError $err -RedirectStandardOutput ([IO.Path]::GetTempFileName())
+        $null = $p.Handle   # PS 5.1: without the handle cached, ExitCode reads back null after a timed wait
+        if (-not $p.WaitForExit($TimeoutSeconds * 1000)) {
+            try { $p.Kill() } catch { }
+            return @{ ExitCode = -1; Output = "timed out after ${TimeoutSeconds}s" }
+        }
+        $p.WaitForExit()   # flushes the exit code once the timed wait has returned
+        return @{ ExitCode = $p.ExitCode; Output = ((Get-Content -Raw $err -ErrorAction SilentlyContinue) -join '').Trim() }
+    } finally {
+        Remove-Item -Force $err -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-Git {
     param([string] $Dir, [string[]] $Arguments)
     return Invoke-Tool $Git (@('-C', $Dir) + $Arguments)
@@ -177,11 +203,13 @@ function Test-AppRunning {
 }
 
 function Get-DesktopTreeHash {
-    # The tree hash of desktop/ at the build ref, or '' when the fetch failed.
-    $fetch = Invoke-Git $RepoDir @('fetch', '--quiet', 'origin')
+    # Fetch (bounded), then the tree hash of desktop/ at the build ref. When
+    # the fetch fails the ref as last fetched is used, so an offline logon can
+    # still build something that was never built. '' only when the ref itself
+    # cannot be resolved.
+    $fetch = Invoke-ToolWithTimeout $Git @('-C', $RepoDir, 'fetch', '--quiet', 'origin') $FetchTimeoutSeconds
     if ($fetch.ExitCode -ne 0) {
-        Write-Log 'WARN' "git fetch failed (offline?): $($fetch.Output)"
-        return ''
+        Write-Log 'WARN' "git fetch failed (offline?), using ${BuildRef} as last fetched: $($fetch.Output)"
     }
     $tree = Invoke-Git $RepoDir @('rev-parse', '--verify', '--quiet', "${BuildRef}:desktop")
     if ($tree.ExitCode -ne 0) {
@@ -341,21 +369,46 @@ function Invoke-StackCompose {
     return $true
 }
 
-function Invoke-Actions {
-    param([pscustomobject] $Decision, [string] $Tree, [string] $WaitingTree)
-    Write-Log 'INFO' "decision: [$($Decision.Actions -join ', ')] because $($Decision.Reason)"
-    if ($Decision.Warning) { Write-Log 'WARN' $Decision.Warning }
+function Invoke-BuildStep {
+    # Steps 2-4: fetch, decide, build and compose. Returns $true when nothing failed.
+    param([bool] $WaitForDocker)
+    $tree = Get-DesktopTreeHash
+    $state = Read-State
+    $composeExists = Test-Path $StackComposeFile
+    $changed = ($tree -ne '') -and ($tree -ne $state.LastBuiltSha)
+    $wait = if ($WaitForDocker -or $changed -or $composeExists) { $DockerWaitSeconds } else { 0 }
+    $dockerReady = Test-DockerReady -TimeoutSeconds $wait
+
+    $decision = Get-BuildDecision -RemoteSha $tree -LastBuiltSha $state.LastBuiltSha `
+        -DockerReady $dockerReady -ComposeFileExists $composeExists
+    Write-Log 'INFO' "build decision: [$($decision.Actions -join ', ')] because $($decision.Reason)"
+    if ($decision.Warning) { Write-Log 'WARN' $decision.Warning }
+
     $ok = $true
-    foreach ($action in $Decision.Actions) {
+    foreach ($action in $decision.Actions) {
         switch ($action) {
-            'Activate' { Invoke-Activate -Tree $WaitingTree }
-            'Launch'   { Invoke-Launch }
-            'Build'    { if (-not (Invoke-Build -Tree $Tree)) { $ok = $false } }
-            'Compose'  { if (-not (Invoke-StackCompose)) { $ok = $false } }
-            'Skip'     { }
+            'Build'   { if (-not (Invoke-Build -Tree $tree)) { $ok = $false } }
+            'Compose' { if (-not (Invoke-StackCompose)) { $ok = $false } }
         }
     }
     return $ok
+}
+
+function Invoke-StartupStep {
+    # Step 1: no network, no Docker. Returns $true when the app was (or need not be) launched.
+    $state = Read-State
+    $activeTree = Get-ActiveTree
+    $nextExists = ($state.LastBuiltSha -ne '') -and ($state.LastBuiltSha -ne $activeTree) -and (Test-Path (Get-BuildExe $state.LastBuiltSha))
+    $decision = Get-StartupDecision -BuildExists ($activeTree -ne '') -NextBuildExists $nextExists -AppRunning (Test-AppRunning)
+    Write-Log 'INFO' "startup decision: [$($decision.Actions -join ', ')] because $($decision.Reason)"
+    foreach ($action in $decision.Actions) {
+        switch ($action) {
+            'Activate' { Invoke-Activate -Tree $state.LastBuiltSha }
+            'Launch'   { Invoke-Launch }
+            'FirstRun' { return $false }
+        }
+    }
+    return $true
 }
 
 # ---------------------------------------------------------------- main
@@ -364,33 +417,14 @@ if (-not (Test-Path (Join-Path $RepoDir '.git'))) { Fail "not a git checkout: $R
 if (-not (Test-Path $ComposeBuildFile)) { Fail "missing $ComposeBuildFile" $EXIT_VALIDATION }
 
 Write-Log 'INFO' "logon-build start (repo $RepoDir, ref $BuildRef)"
-$tree = Get-DesktopTreeHash
-$state = Read-State
-$activeTree = Get-ActiveTree
-$buildExists = $activeTree -ne ''
-$nextExists = ($state.LastBuiltSha -ne '') -and ($state.LastBuiltSha -ne $activeTree) -and (Test-Path (Get-BuildExe $state.LastBuiltSha))
-$composeExists = Test-Path $StackComposeFile
 
-# The launch half gets one quick look at Docker; only a first run waits for it.
-$dockerReady = if ($buildExists -or $nextExists) { Test-DockerReady -TimeoutSeconds 0 } else { Test-DockerReady -TimeoutSeconds $DockerWaitSeconds }
-
-$decision = Get-LaunchDecision -RemoteSha $tree -LastBuiltSha $state.LastBuiltSha `
-    -BuildExists $buildExists -NextBuildExists $nextExists -AppRunning (Test-AppRunning) `
-    -DockerReady $dockerReady -ComposeFileExists $composeExists
-$ok = Invoke-Actions -Decision $decision -Tree $tree -WaitingTree $state.LastBuiltSha
-
-# Second look: the app is up. If Docker was still starting and there is build
-# or compose work to do, wait for it now and do only that work.
-$workPending = ($tree -ne '' -and $tree -ne $state.LastBuiltSha) -or $composeExists
-if (-not $dockerReady -and $workPending -and ($decision.Actions -notcontains 'Skip')) {
-    if (Test-DockerReady -TimeoutSeconds $DockerWaitSeconds) {
-        $later = Get-LaunchDecision -RemoteSha $tree -LastBuiltSha $state.LastBuiltSha `
-            -BuildExists $true -NextBuildExists $false -AppRunning $true `
-            -DockerReady $true -ComposeFileExists $composeExists
-        if (-not (Invoke-Actions -Decision $later -Tree $tree -WaitingTree '')) { $ok = $false }
-    } else {
-        Write-Log 'WARN' "Docker did not come up within ${DockerWaitSeconds}s; build/compose wait for the next logon"
-    }
+$launched = Invoke-StartupStep
+if ($launched) {
+    $ok = Invoke-BuildStep -WaitForDocker $false
+} else {
+    # First run: nothing to launch yet, so build in the foreground, then launch.
+    $ok = Invoke-BuildStep -WaitForDocker $true
+    if ($ok -and (Get-ActiveTree) -ne '') { Invoke-Launch } elseif ($ok) { $ok = $false; Write-Log 'ERROR' 'first run produced no active build' }
 }
 
 Write-Log 'INFO' "logon-build done (ok=$ok)"
