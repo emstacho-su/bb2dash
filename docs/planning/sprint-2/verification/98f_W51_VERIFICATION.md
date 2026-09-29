@@ -57,3 +57,41 @@ $ npx vitest run ... test/SubmissionBlock.test.tsx test/audits.test.ts   # neigh
 $ git grep -c "no stable per-item URL" -- web/src ; echo "exit $?"
 exit 1
 ```
+
+---
+
+## Task 24 — `CourseScreen.tsx`: no "no files" on a course with 0 session-linked files (R-67 interim)
+
+Named hunks only (the seam with Phase 17's W-45): the `SessionRow` call site passes
+`fileCount = null` when `filesBySession` is empty (0 linked files, or the files query not landed),
+and `SessionRow`'s sub-line renders only when `fileCount !== null`. `SessionPanel` and the rest of
+`SessionRow` are untouched. With ≥ 1 linked file the per-session counts are as before, "no files"
+included.
+
+Test: `web/test/course-timeline-files.test.tsx` (new, 3 cases, IST.352 fixture sessions 129–131).
+
+**RED:**
+
+```
+$ npx vitest run test/course-timeline-files.test.tsx
+     × prints no "no files" line on any session when the course has 0 session-linked files
+     × prints nothing while the files query has not landed
+TestingLibraryElementError: Found multiple elements with the text: no files
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+```
+
+(The third case, per-session counts with ≥ 1 linked file, passes before and after: it is today's
+behaviour, kept.)
+
+**GREEN:**
+
+```
+$ npx vitest run test/course-timeline-files.test.tsx
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+```
+
+`npx eslint CourseScreen.tsx --max-warnings 0` reports 2 pre-existing `react-hooks/exhaustive-deps`
+warnings at :88 and :89 (`sessions`, `workItems`); they are on `main` too and are W-45's to fix
+(brief 98 §Seams), so this hunk leaves them alone. 0 errors.

@@ -336,7 +336,11 @@ export function CourseScreen({ courseId }: { courseId: string }) {
                       <SessionRow
                         key={s.id}
                         session={s}
-                        fileCount={(filesBySession.get(s.id) ?? []).length}
+                        fileCount={
+                          // R-67 interim: a course with no session-linked files
+                          // prints no per-session line rather than "no files".
+                          filesBySession.size > 0 ? (filesBySession.get(s.id) ?? []).length : null
+                        }
                         active={s.id === selectedSessionId}
                         onClick={() => setSelectedSessionId(s.id === selectedSessionId ? null : s.id)}
                       />
@@ -432,7 +436,8 @@ function SessionRow({
   onClick,
 }: {
   session: Session;
-  fileCount: number;
+  /** `null` when the course has no session-linked files: then no line at all. */
+  fileCount: number | null;
   active: boolean;
   onClick: () => void;
 }) {
@@ -457,9 +462,11 @@ function SessionRow({
           {tentative && <span className={styles.tentativeTag}>tentative</span>}
         </span>
         <span className={styles.sessionTitle}>{session.topic ?? 'Untitled session'}</span>
-        <span className={styles.sessionSub}>
-          {fileCount > 0 ? `${fileCount} file${fileCount === 1 ? '' : 's'}` : 'no files'}
-        </span>
+        {fileCount !== null && (
+          <span className={styles.sessionSub}>
+            {fileCount > 0 ? `${fileCount} file${fileCount === 1 ? '' : 's'}` : 'no files'}
+          </span>
+        )}
       </span>
     </button>
   );
