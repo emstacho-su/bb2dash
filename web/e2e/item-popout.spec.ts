@@ -24,15 +24,15 @@ const HYDRATION_ERROR = /418/;
 /** The assignment page itself, which shares `AssignmentDetailBody` with the popout. */
 const A1_PAGE = '/course/IST.471/assignment/IST.471/a1-proposal';
 
-/** The first `?item=session:` link on IST.466's timeline. */
-async function sessionPopoutUrl(page: Page): Promise<string> {
-  await openSignedIn(page, '/course/IST.466/classwork?view=timeline');
-  // itemQuery() encodes the colon (`?item=session%3A…`), so match the prefix only.
-  const link = page.locator('a[href*="item=session"]').first();
-  await expect(link, 'IST.466 timeline shows no session link').toBeAttached();
-  const href = await link.getAttribute('href');
-  if (!href) throw new Error('the session link has no href');
-  return href;
+/**
+ * A pasted `?item=session:` URL over IST.466's timeline. The timeline's session rows open a
+ * side panel, not a link, so the URL is built from a real session: IST.466 on 2026-09-29, a
+ * starred day (`sessions` id 105, read 2026-09-29).
+ */
+const IST466_SESSION_ID = 105;
+
+async function sessionPopoutUrl(_page: Page): Promise<string> {
+  return `/course/IST.466/classwork?view=timeline&item=session:${IST466_SESSION_ID}`;
 }
 
 /** Loads `url` warm, then cold, and returns every #418 line either load printed. */

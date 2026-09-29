@@ -70,7 +70,8 @@ function heartbeatFixture(now: Date): Record<string, unknown>[] {
 /** The planner's day-by-day grid is on screen. */
 async function openPlanner(page: Page, query = ''): Promise<void> {
   await openSignedIn(page, `/planner${query}`);
-  await expect(page.getByRole('button', { name: 'Next week' })).toBeVisible();
+  // ◂ ▸ are plain links (PlannerWeekHeader's WeekPager), so a week is linkable.
+  await expect(page.getByRole('link', { name: 'Next week' })).toBeVisible();
   await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
 }
 
@@ -78,7 +79,7 @@ async function openPlanner(page: Page, query = ''): Promise<void> {
 async function weekHolding(page: Page, target: Locator): Promise<void> {
   for (let week = 0; week <= MAX_WEEKS_FORWARD; week += 1) {
     if (await target.first().isVisible()) return;
-    await page.getByRole('button', { name: 'Next week' }).click();
+    await page.getByRole('link', { name: 'Next week' }).click();
     await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
   }
   await expect(target.first(), `not found within ${MAX_WEEKS_FORWARD} weeks`).toBeVisible();
@@ -182,7 +183,13 @@ test.describe('screens (T-12 … T-21)', () => {
     const cards = dueItems(page);
     await expect(cards.first()).toBeVisible();
     // Sunday is the rightmost column: take the card whose left edge is furthest right.
-    const lefts = await cards.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().left));
+    // Hidden duplicates (zero-size boxes) never win: they cannot be clicked.
+    const lefts = await cards.evaluateAll((els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 ? r.left : Number.NEGATIVE_INFINITY;
+      }),
+    );
     const rightmost = lefts.indexOf(Math.max(...lefts));
     await cards.nth(rightmost).click();
     const popover = page.locator('[role="dialog"][data-placement]');

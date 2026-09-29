@@ -51,3 +51,23 @@ registered name of the same ICO type, so the check reads as passed with that not
 | id | item | state |
 |---|---|---|
 | L-1 | ⌘K palette: Keyword mode reads `score`, which `fts` does not return; Semantic mode reads `snippet`, which `vector` does not return (found by Phase 18's W-51, R-74) | pending |
+
+## T-01 / T-11 / preview screenshots (2026-09-29, preview at 1d99f67 and later)
+
+Stack signed in on the preview through `login.mjs` (18:09Z). Harness fixes made at the walk, all in `web/e2e/`:
+`login.mjs` waits for the app host and takes a Vercel share token; every spec waits for `load` plus 2 s, because
+the app polls and `networkidle` never fires; Undated is found by its button; the planner's ◂ ▸ are links; the
+session popout URL is built from IST.466 session 105 (the timeline rows open a panel, not a link); the
+right-clamp card is the rightmost *visible* card. A mid-run push redeployed the preview and moved the branch alias
+off the share cookie's deployment (the bounce was Vercel's `/login`, not the app's; Supabase auth logs show no
+sign-out or 4xx): walk runs happen with no push in flight.
+
+- `harness.spec.ts`: `signed in` 1 passed (01), `no 404` 1 passed (T-20's no-404 half).
+- `item-popout.spec.ts`: 3 passed (assignment popout 02, session 105 popout, assignment page), 0 lines matching
+  `/418/` warm or cold (T-11).
+- `walk17.spec.ts` outside the production sitting: 03–10, 12, 13, 16, 17, 18 taken, each test passed.
+- PM read of the shots: 04 shows one "WK01 - The Systems Development Environment", no "WK01 - Chapter 1", the three
+  Knowledge Checks with "Stage a file", and "Show 2 items Blackboard no longer lists"; 06 shows "Undated (5)" folded
+  directly above Needs attention; 08 shows "Google Calendar push has failed 3 times since 6 hrs ago: refresh token
+  revoked (invalid_grant): re-run scripts/google-consent.mjs".
+- Left for T-26 on production: 11, 14, 15, 19, 20, 21 and `staged link`.
