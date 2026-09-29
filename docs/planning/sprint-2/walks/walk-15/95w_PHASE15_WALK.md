@@ -7,7 +7,7 @@ evidence under each step from Stack's own output; a step is ticked only once he 
 Each step is the brief's acceptance script, verbatim. Steps 2–4 run from `C:/Users/estac/projects/bb2dash-wt-15`,
 where the PM has run `npm --prefix scripts ci` and copied the canonical `.env.local`.
 
-- [ ] Step 1 — run the PM's PowerShell snippet once: it generates the password locally, copies the `alter role db_test_runner password '…'` line for the dashboard SQL editor, and writes `C:/Users/estac/projects/bb2dash/.env.local` with the session-pooler DSN. Paste the line into an unsaved editor tab, run it, close the tab.
+- [x] Step 1 (2026-09-29, stack-laptop: the snippet re-run with `C:/Users/stack/...` paths, password reset in the dashboard by Stack, `.env.local` in the main checkout and `bb2dash-wt-15`) — run the PM's PowerShell snippet once: it generates the password locally, copies the `alter role db_test_runner password '…'` line for the dashboard SQL editor, and writes `C:/Users/estac/projects/bb2dash/.env.local` with the session-pooler DSN. Paste the line into an unsaved editor tab, run it, close the tab.
 
 The snippet as it was put on Stack's clipboard on 2026-09-27 (it holds no secret: the password is generated on his
 machine, copied to his clipboard and written only to the gitignored `.env.local`):
@@ -61,19 +61,19 @@ Two things the PM could not pre-verify from this session, both settled on 2026-0
 (no output expected in the SQL editor; it reports "Success. No rows returned")
 ```
 
-- [ ] Step 2 — `node scripts/db-test.mjs --ping` → `db-test: connected as db_test_runner`
+- [x] Step 2 (2026-09-29 16:0xZ: `db-test: connected as db_test_runner`, exit 0) — `node scripts/db-test.mjs --ping` → `db-test: connected as db_test_runner`
 
 ```
 (paste output here)
 ```
 
-- [ ] Step 3 — `node scripts/db-test.mjs` → 21 `PASS` lines and `db-test: passed 21, failed 0, units 21`
+- [x] Step 3 (2026-09-29: `db-test: passed 21, failed 0, units 21`, exit 0) — `node scripts/db-test.mjs` → 21 `PASS` lines and `db-test: passed 21, failed 0, units 21`
 
 ```
 (paste output here)
 ```
 
-- [ ] Step 4 — `node scripts/db-test.mjs --file scripts/fixtures/db-test/fails.sql` → one `FAIL` line, exit code 1
+- [x] Step 4 (2026-09-29: `FAIL  fails.sql`, `passed 0, failed 1, units 1`, exit 1) — `node scripts/db-test.mjs --file scripts/fixtures/db-test/fails.sql` → one `FAIL` line, exit code 1
 
 ```
 (paste output here)
