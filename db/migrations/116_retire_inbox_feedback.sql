@@ -1,0 +1,21 @@
+-- bb2dash :: 116_retire_inbox_feedback.sql
+-- Phase 17 (docs/planning/sprint-2/briefs/97_PHASE17_web_polish.md), T-09 (R-57).
+-- Worker W-44. 077 is byte-frozen; this drops the one object R-57 retires and nothing else.
+--
+-- 077 made `v_inbox_feedback` the queue for a later agent that would read Stack's why-notes.
+-- 090 then gave every closed Inbox row a fourth state, `archived`, and /inbox-apply moves each
+-- answered row there as it processes it, so the view (resolved | dismissed with a note) drains to
+-- nothing on prod and its 077 test failed on emptiness. The queue that agent actually reads is
+-- 090's `v_inbox_queue`, and the why-notes' durable home is the decisions store (vault notes with
+-- collection bb2dash-inbox-decisions, and docs/inbox-decisions/). So the view goes (the PM's
+-- default for R-57: retire).
+--
+-- What stays: `agent_requests.kind = 'inbox_feedback'`. It is /inbox-apply's request kind
+-- (DECISIONS 2026-09-22), and transform_tick still ignores it. db/tests/phase12b_077_inbox_feedback.sql
+-- is deleted in the same change; its kind assertions move to phase17_116_retire_inbox_feedback.sql.
+--
+-- No view, function or policy depends on v_inbox_feedback (pg_depend and prosrc read 2026-09-29),
+-- so a plain restrict drop is enough; if one had appeared since, this drop fails rather than
+-- cascading.
+
+drop view if exists public.v_inbox_feedback;
