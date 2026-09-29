@@ -2,12 +2,14 @@
 //
 //   node --test ingest/eval_search.test.mjs
 //
-// Phase 18 task 22. The committed eval: ten golden questions, three modes, hit@1/3/10 and MRR.
+// Phase 18 task 22. The committed eval: nine golden questions, three modes, hit@1/3/10 and MRR.
+// Q10 (the IST.323 AI-use disclosure) was removed on 2026-09-29 by Stack's call to take the AI policy
+// out of the app and the corpus (Phase 17 migration 119), not for its ranking.
 // Covered here without the network: the golden set's shape, the rank rule (a text-id truth is
 // matched by unit, a file truth by any unit of the file), the scoring (EVAL_EMBEDDING_POC.md §3's
 // recorded hybrid ranks give MRR 0.950), the drift guard between golden_set.json and
 // db/tests/phase18_golden_truth.sql, the key refusal, the --out default, and a full run through an
-// injected `post` (30 calls, the MRR bar, the report file).
+// injected `post` (27 calls, the MRR bar, the report file).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,9 +25,10 @@ const GOLDEN = path.join(here, 'eval', 'golden_set.json');
 const TRUTH_SQL = path.join(here, '..', 'db', 'tests', 'phase18_golden_truth.sql');
 const golden = () => JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
 
-test('golden set: the ten EVAL_EMBEDDING_POC §2 queries, each well formed', () => {
+test('golden set: EVAL_EMBEDDING_POC §2 queries 1–9, each well formed; Q10 removed (AI policy out of the corpus)', () => {
   const rows = ev.validateGolden(golden());
-  assert.deepEqual(rows.map((r) => r.qid), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(rows.map((r) => r.qid), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.equal(rows.some((r) => /ChatGPT|AI tools/i.test(r.query + r.answer_phrase)), false, 'no AI-policy question remains');
   for (const r of rows) {
     assert.ok(r.query && r.course && r.type && r.answer_phrase, `qid ${r.qid} has every field`);
     assert.ok(r.truth.text_ids.length + r.truth.file_ids.length > 0, `qid ${r.qid} has a truth`);
@@ -33,10 +36,9 @@ test('golden set: the ten EVAL_EMBEDDING_POC §2 queries, each well formed', () 
   assert.throws(() => ev.validateGolden([{ qid: 1 }]), /qid 1/);
 });
 
-test('golden set: Q7 and Q10 moved to the current documents (149 + 150, 151) after migration 120', () => {
+test('golden set: Q7 moved to the current documents (149 + 150) after migration 120', () => {
   const byQ = Object.fromEntries(golden().map((r) => [r.qid, r]));
   assert.deepEqual(byQ[7].truth.file_ids, [149, 150], 'the superseded schedules are gone; both current schedules carry the answer (POC §1: a file set when several near-duplicate files carry it)');
-  assert.deepEqual(byQ[10].truth.file_ids, [151], 'file 2 is superseded; 13 carries no answer phrase');
 });
 
 test('firstHitRank: a text-id truth matches by unit, a file truth by any unit of the file', () => {
@@ -96,19 +98,19 @@ function fakePost(rankFor) {
   return { post, calls };
 }
 
-test('a full run: 30 calls (10 queries x fts/vector/hybrid, limit 10), scored=30, report written, exit 0 at the bar', async () => {
+test('a full run: 27 calls (9 queries x fts/vector/hybrid, limit 10), scored=27, report written, exit 0 at the bar', async () => {
   const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'eval-')), 'r.json');
-  const { post, calls } = fakePost((qid) => (qid === 10 ? 2 : 1));
+  const { post, calls } = fakePost((qid) => (qid === 9 ? 2 : 1));
   const lines = [];
   const code = await ev.main(['--out', out], { SB_ANON_JWT: 'eyJ.legacy.jwt' }, { post, log: (l) => lines.push(l), err: (l) => lines.push(l) });
   assert.equal(code, 0);
-  assert.equal(calls.length, 30);
+  assert.equal(calls.length, 27);
   assert.ok(calls.every((c) => c.limit === 10 && ['fts', 'vector', 'hybrid'].includes(c.mode) && !('course' in c)));
-  assert.ok(lines.includes('scored=30'), lines.join('\n'));
+  assert.ok(lines.includes('scored=27'), lines.join('\n'));
   const report = JSON.parse(fs.readFileSync(out, 'utf8'));
-  assert.equal(report.modes.hybrid.mrr.toFixed(3), '0.950');
-  assert.equal(report.queries.length, 10);
-  assert.equal(report.queries[9].ranks.hybrid, 2);
+  assert.equal(report.modes.hybrid.mrr.toFixed(3), '0.944', '(8 + 1/2) / 9');
+  assert.equal(report.queries.length, 9);
+  assert.equal(report.queries[8].ranks.hybrid, 2);
 });
 
 test('a run below the bar (hybrid MRR < 0.900) exits 1', async () => {
@@ -125,5 +127,5 @@ test('an HTTP error on any call is not scored as a miss: the run fails', async (
   const code = await ev.main(['--out', out], { SB_ANON_JWT: 'eyJ.legacy.jwt' }, { post, log: (l) => lines.push(l), err: (l) => lines.push(l) });
   assert.equal(code, 1);
   assert.match(lines.join('\n'), /401/);
-  assert.ok(!lines.includes('scored=30'));
+  assert.ok(!lines.some((l) => l.startsWith('scored=')));
 });

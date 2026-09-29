@@ -70,13 +70,5 @@
     "type": "paraphrase",
     "truth": { "text_ids": [348], "file_ids": [26] },
     "answer_phrase": "evaluation form will result in no credit"
-  },
-  {
-    "qid": 10,
-    "course": "IST.323",
-    "query": "do I need to admit using ChatGPT on the IST 323 final project",
-    "type": "paraphrase",
-    "truth": { "text_ids": [], "file_ids": [151] },
-    "answer_phrase": "You may use AI tools"
   }
 ]

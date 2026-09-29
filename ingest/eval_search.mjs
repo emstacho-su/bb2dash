@@ -3,9 +3,11 @@
 //
 //   node ingest/eval_search.mjs [--out <path>]
 //
-// Phase 18 task 22 (P-90, P-91, S2-rag-1). The committed re-run of EVAL_EMBEDDING_POC.md: the ten
-// golden questions in ingest/eval/golden_set.json, each POSTed to the `search` edge function in
-// `fts`, `vector` and `hybrid` mode with `limit: 10` and no course filter (30 calls), scored by the
+// Phase 18 task 22 (P-90, P-91, S2-rag-1). The committed re-run of EVAL_EMBEDDING_POC.md: the nine
+// golden questions in ingest/eval/golden_set.json (the POC's Q1–Q9; Q10, the IST.323 AI-use
+// disclosure, was removed on 2026-09-29 by Stack's call to take the AI policy out of the corpus),
+// each POSTed to the `search` edge function in `fts`, `vector` and `hybrid` mode with `limit: 10`
+// and no course filter (27 calls), scored by the
 // rank of the first ground-truth hit: hit@1, hit@3, hit@10 and MRR (a miss scores 0).
 //
 // The rank rule is the POC's: a truth with `text_ids` is matched by unit (another unit of the same
@@ -14,7 +16,7 @@
 // answer phrase in the unit); eval_search.test.mjs fails if the two files drift apart.
 //
 // It writes the report to --out (default ingest/eval/reports/<YYYY-MM-DD>.json), prints
-// `scored=30` when every call answered 200, and exits 1 if any call failed or hybrid MRR is below
+// `scored=27` (queries x modes) when every call answered 200, and exits 1 if any call failed or hybrid MRR is below
 // 0.900 (the PM's bar; the 2026-09-09 baseline is 0.950). Exit 2: no usable key.
 //
 // Key: SB_ANON_JWT, the legacy anon JWT (`search` has verify_jwt on). A `sb_publishable_` value is

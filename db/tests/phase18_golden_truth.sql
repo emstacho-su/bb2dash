@@ -6,9 +6,9 @@
 --   * a file-only truth (no text_ids) has at least one unit that contains the answer_phrase, and
 --     names every current file of that course whose text carries it
 -- Q7's truth is the two current IST.466 schedules (149, and 150 posted in a second place, both
--- carrying the answer) since migration 120 superseded 74, and Q10's
--- is the V1.4 syllabus (151) since 120 superseded file 2; file 13 carries no unit with Q10's
--- phrase, so it is not in the truth.
+-- carrying the answer) since migration 120 superseded 74. Q10 (the IST.323 AI-use disclosure) was
+-- removed on 2026-09-29 by Stack's call to take the AI policy out of the app and the corpus (Phase 17
+-- migration 119), not for its ranking.
 -- The truth rows below are the same as ingest/eval/golden_set.json; ingest/eval_search.test.mjs
 -- parses both and fails on any drift. Keep one truth row per line, in this exact shape.
 -- Collects every failure and raises once. Writes nothing.
@@ -32,8 +32,7 @@ begin
       (6, array[]::bigint[], array[21]::bigint[], 'less than 30 minutes'),
       (7, array[]::bigint[], array[149, 150]::bigint[], 'Deloitte to Visit'),
       (8, array[]::bigint[], array[27]::bigint[], 'penalty of 20%'),
-      (9, array[348]::bigint[], array[26]::bigint[], 'evaluation form will result in no credit'),
-      (10, array[]::bigint[], array[151]::bigint[], 'You may use AI tools')
+      (9, array[348]::bigint[], array[26]::bigint[], 'evaluation form will result in no credit')
     ) as g(qid, text_ids, file_ids, answer_phrase)
     order by qid
   loop

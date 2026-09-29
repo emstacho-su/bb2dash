@@ -202,3 +202,18 @@ scored=30   (exit 0)
 ```
 
 The bar was not changed. Hybrid MRR 0.920 is below the POC's 0.950 only because Q10 fell from rank 2 to rank 5.
+
+## Round 3 (PM, 2026-09-29): Q10 removed on Stack's AI-policy call
+
+Stack decided on 2026-09-29 to take the AI policy out of the app and the search corpus. Phase 17 migration 119 strips
+each course's AI-use policy section from `bb_file_text` and re-embeds (brief 97 "## Round 3", R-6). Golden Q10 ("do I
+need to admit using ChatGPT on the IST 323 final project", truth 151, phrase "You may use AI tools") has no answer after
+that. So Q10 is removed from `ingest/eval/golden_set.json` and `db/tests/phase18_golden_truth.sql` because of that
+product call. **It was not removed for its ranking** (it was rank 5 in round 2). **The bar stays hybrid MRR ≥ 0.900.**
+The eval is now 9 queries × 3 modes, so the brief's line reads `scored=27` in place of `scored=30`.
+
+* RED: `node --test ingest/eval_search.test.mjs` → `tests 11, pass 9, fail 2` (golden qids 1–9, full run 27 calls / `scored=27`)
+* GREEN: `node --test ingest/*.test.mjs` → `tests 79, pass 79, fail 0` (the drift guard is green: the same qids 1–9 on both sides)
+* `node scripts/db-test.mjs --only phase18_golden_truth.sql` → `PASS  phase18_golden_truth.sql`, exit 0
+* Live eval: not run now (119 is not applied yet). The PM re-runs `node ingest/eval_search.mjs --out ingest/eval/reports/<date>.json` after the re-embed.
+  Expected: `scored=27`. Round 2's committed report (`2026-09-29.json`) still holds the 10-query run.
