@@ -160,6 +160,20 @@ describe('CourseInfo — Groups and Staff', () => {
     expect(groups).not.toHaveTextContent('No group assignment is recorded');
   });
 
+  it('prints the group notes verbatim, with no "Blackboard disagrees" caption (R-45)', () => {
+    // False since 2026-09-22: IST.466's group_notes were corrected to match
+    // Blackboard (Ethics Team 3, Major Case Group 2; DECISIONS).
+    const notes = 'Ethics Team 3; Major Case Group 2 (Synchrony 10/20, SU IT 11/17)';
+    state.shells = answered([
+      { id: 'IST.466', location: null, term_id: 'FALL26', kind: 'lecture', group_notes: notes, card_note: null },
+    ]);
+    render(<CourseInfo courseId="IST.466" />);
+
+    const groups = screen.getByLabelText('Groups');
+    expect(groups).toHaveTextContent(notes);
+    expect(groups).not.toHaveTextContent(/disagrees|unresolved/);
+  });
+
   it('does not claim there is no staff when the staff query failed', () => {
     state.staff = failed('staff fetch failed');
     render(<CourseInfo courseId="IST.323" />);

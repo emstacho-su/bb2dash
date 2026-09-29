@@ -82,6 +82,22 @@ describe('StatusSelect — the six', () => {
   });
 });
 
+describe('StatusSelect — any row with a title and a status (T-12)', () => {
+  it('takes a Stream post adapter and hands the same object back', () => {
+    // The course Stream's rows are not `WorkItem`s; the props widen additively
+    // so every existing caller compiles unchanged and the Stream needs no cast.
+    const post = { title: 'Case analysis 1', status: 'not_started' as ProgressStatus, ref_id: 'IST.352/ca-1' };
+    const onChange = vi.fn<(item: typeof post, status: ProgressStatus) => void>();
+    render(<StatusSelect item={post} onChange={onChange} pending={false} />);
+
+    fireEvent.change(screen.getByLabelText('Status for Case analysis 1'), {
+      target: { value: 'submitted' },
+    });
+    expect(onChange).toHaveBeenCalledWith(post, 'submitted');
+    expect(onChange.mock.calls[0][0].ref_id).toBe('IST.352/ca-1');
+  });
+});
+
 describe('StatusSelect — a row still holding a retired value', () => {
   const RETIRED: [ProgressStatus, string][] = [
     ['planned', 'not opened'],

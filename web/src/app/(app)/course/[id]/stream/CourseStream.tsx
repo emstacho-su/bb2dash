@@ -14,8 +14,17 @@
  * actually carries (due date, points, status) and nothing it does not. Body
  * text runs through `scrubSnippet`, so a professor's PPTX speaker notes can
  * never surface here as if they were course content.
+ *
+ * Every post opens what it is about (R-37, T-12), by `ref_kind`:
+ *   assignment   -> the `?item=assignment:<id>` popout over this route
+ *   bb_file      -> the shared `FileOpenAction` ladder, from 110's routes
+ *   bb_content   -> its Blackboard page when `meta.url` is set, else no link
+ *   announcement -> /announcements
+ * An assignment post also carries the status select, written through
+ * `useSetItemStatus` on `ref_id`, and "unread" follows the bell (B-17).
  */
 
+import Link from 'next/link';
 import { useMemo } from 'react';
 import {
   courseToday,
@@ -27,13 +36,17 @@ import {
   type CourseStreamRow,
   type StreamPostKind,
 } from '@/lib/queries.course';
-import { bucketLabel } from '@/lib/queries.materials';
+import { UNKNOWN_ROUTE, bucketLabel, type FileRoutes, type RouteValue } from '@/lib/queries.materials';
+import { itemQuery } from '@/lib/queries.popout';
 import { scrubSnippet } from '@/lib/queries.search';
 import { useSetItemStatus, type WorkItem as TrackerWorkItem } from '@/lib/queries.today';
+import type { ProgressTarget } from '@/lib/progress-cache';
 // S-1 (P-grades-7) / F-1: one status vocabulary, this screen included.
 import { statusLabel } from '@/lib/progress-status';
 import type { ProgressStatus } from '@/lib/queries';
 import { isQueryLoading } from '@/components/shared/QueryState';
+import { FileOpenAction } from '@/components/materials/FileOpenAction';
+import { StatusSelect } from '@/components/tracker/StatusSelect';
 import { UpcomingTracker } from '@/components/tracker/UpcomingTracker';
 import { DEFAULT_HORIZON_DAYS, DEFAULT_VISIBLE_DAYS } from '@/components/tracker/anchor';
 import tokens from '@/styles/tokens.module.css';
@@ -82,10 +95,75 @@ export function formatPoints(points: number | string | null | undefined): string
   return `${text} pt${n === 1 ? '' : 's'}`;
 }
 
+/* -- links per ref_kind ---------------------------------------------------- */
+
+/**
+ * A meta key the view did not carry is unknown, not absent: before migration
+ * 110 a file post has no `storage_path`/`source_url`, and the ladder must say
+ * "Not stored" rather than claim the file has no route.
+ */
+function routeValue(value: string | null | undefined): RouteValue {
+  return value === undefined ? UNKNOWN_ROUTE : value;
+}
+
+/** The Open ladder's routes for a file post; the feed never carries a disk path. */
+export function streamFileRoutes(row: CourseStreamRow): FileRoutes {
+  return {
+    storage_path: routeValue(row.meta?.storage_path),
+    source_url: routeValue(row.meta?.source_url),
+    local_path: UNKNOWN_ROUTE,
+  };
+}
+
+function StreamTitle({ row }: { row: CourseStreamRow }) {
+  const linkClass = `${styles.rowTitle} ${styles.titleLink}`;
+  if (row.ref_kind === 'assignment') {
+    return (
+      <Link
+        className={linkClass}
+        href={itemQuery({ kind: 'assignment', id: row.ref_id })}
+        scroll={false}
+      >
+        {row.title}
+      </Link>
+    );
+  }
+  if (row.ref_kind === 'announcement') {
+    return (
+      <Link className={linkClass} href="/announcements">
+        {row.title}
+      </Link>
+    );
+  }
+  const url = row.ref_kind === 'bb_content' ? row.meta?.url : null;
+  if (url) {
+    return (
+      <a className={linkClass} href={url} target="_blank" rel="noreferrer">
+        {row.title} ↗
+      </a>
+    );
+  }
+  return <span className={styles.rowTitle}>{row.title}</span>;
+}
+
 /* -- one feed row ---------------------------------------------------------- */
 
-export function StreamRow({ row }: { row: CourseStreamRow }) {
+export function StreamRow({
+  row,
+  onStatusChange,
+  pendingItemId = null,
+}: {
+  row: CourseStreamRow;
+  /** Offered on assignment posts only; without it the row just reads the status. */
+  onStatusChange?: (target: ProgressTarget, status: ProgressStatus) => void;
+  /** The assignment id whose status write is in flight, if any. */
+  pendingItemId?: string | null;
+}) {
   const meta = row.meta ?? {};
+  const isAssignment =
+    row.ref_kind === 'assignment' &&
+    (row.post_kind === 'assignment_posted' || row.post_kind === 'assignment_due');
+  const statusEditable = isAssignment && onStatusChange !== undefined;
   const scrubbed = scrubSnippet(row.body);
   const points = formatPoints(meta.points_possible);
 
@@ -101,7 +179,7 @@ export function StreamRow({ row }: { row: CourseStreamRow }) {
     // S-1 / F-1: the shared vocabulary, not this file's own spelling. The view
     // types `status` loosely (string | null), so a value the enum does not
     // carry is spelled out rather than swallowed.
-    if (meta.status) {
+    if (meta.status && !statusEditable) {
       detail.push(statusLabel(meta.status as ProgressStatus) ?? meta.status.replace(/_/g, ' '));
     }
   }
@@ -115,10 +193,10 @@ export function StreamRow({ row }: { row: CourseStreamRow }) {
       <div className={styles.rowBody}>
         <div className={styles.rowHead}>
           <span className={styles.kind}>{KIND_LABEL[row.post_kind]}</span>
-          {row.post_kind === 'announcement' && meta.is_read === false && (
+          {row.post_kind === 'announcement' && meta.is_unread === true && (
             <span className={styles.unread}>unread</span>
           )}
-          <span className={styles.rowTitle}>{row.title}</span>
+          <StreamTitle row={row} />
         </div>
 
         {detail.length > 0 && <div className={styles.rowMeta}>{detail.join(' · ')}</div>}
@@ -132,6 +210,23 @@ export function StreamRow({ row }: { row: CourseStreamRow }) {
           <span className={styles.rowNote}>speaker notes hidden</span>
         )}
       </div>
+
+      {row.ref_kind === 'bb_file' && (
+        <div className={styles.rowAction}>
+          <FileOpenAction routes={streamFileRoutes(row)} />
+        </div>
+      )}
+      {statusEditable && (
+        <div className={styles.rowAction}>
+          <StatusSelect
+            item={{ title: row.title, status: (meta.status ?? 'not_started') as ProgressStatus }}
+            onChange={(_post, status) =>
+              onStatusChange({ item_kind: 'assignment', item_id: row.ref_id }, status)
+            }
+            pending={pendingItemId === row.ref_id}
+          />
+        </div>
+      )}
     </article>
   );
 }
@@ -171,6 +266,10 @@ export function CourseStream({ courseId }: { courseId: string }) {
   const handleStatus = (item: TrackerWorkItem, status: ProgressStatus) => {
     setStatus.mutate({ item: { item_kind: item.item_kind, item_id: item.item_id }, status });
   };
+  const handlePostStatus = (target: ProgressTarget, status: ProgressStatus) => {
+    setStatus.mutate({ item: target, status });
+  };
+  const pendingItemId = setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null;
 
   if (display.isPending) return <p className={styles.state}>Loading course…</p>;
   if (display.isError) return <p className={styles.state}>Could not load this course.</p>;
@@ -186,7 +285,7 @@ export function CourseStream({ courseId }: { courseId: string }) {
         visibleDays={DEFAULT_VISIBLE_DAYS}
         title={`Upcoming work · ${display.data.code}`}
         onStatusChange={handleStatus}
-        pendingItemId={setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null}
+        pendingItemId={pendingItemId}
         isPending={isQueryLoading(workItemsQ)}
         error={workItemsQ.error}
       />
@@ -211,7 +310,12 @@ export function CourseStream({ courseId }: { courseId: string }) {
               </span>
             </div>
             {day.rows.map((row) => (
-              <StreamRow key={`${row.post_kind}:${row.ref_kind}:${row.ref_id}`} row={row} />
+              <StreamRow
+                key={`${row.post_kind}:${row.ref_kind}:${row.ref_id}`}
+                row={row}
+                onStatusChange={handlePostStatus}
+                pendingItemId={pendingItemId}
+              />
             ))}
           </div>
         ))}

@@ -7,7 +7,7 @@
  * the query layer.
  */
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { makeStreamRow } from './factories.course';
 
@@ -34,12 +34,157 @@ describe('StreamRow — announcement', () => {
   });
 
   it('badges an unread announcement, and only an unread one', () => {
-    const { unmount } = renderRow({ meta: { is_read: false } });
+    const { unmount } = renderRow({ meta: { is_read: true, is_unread: true } });
     expect(screen.getByText('unread')).toBeInTheDocument();
     unmount();
 
-    renderRow({ meta: { is_read: true } });
+    renderRow({ meta: { is_read: true, is_unread: false } });
     expect(screen.queryByText('unread')).toBeNull();
+  });
+
+  it('follows the bell (is_unread, 110), not Blackboard’s is_read (B-17)', () => {
+    // Opening the bell stamps read_at; Blackboard's own flag can stay false.
+    renderRow({ meta: { is_read: false, is_unread: false } });
+    expect(screen.queryByText('unread')).toBeNull();
+  });
+
+  it('links an announcement post to /announcements', () => {
+    renderRow();
+    expect(screen.getByRole('link', { name: 'Quiz 2 moves to Thursday' })).toHaveAttribute(
+      'href',
+      '/announcements',
+    );
+  });
+});
+
+describe('StreamRow — links per ref_kind (T-12)', () => {
+  it('opens an assignment post in the ?item= popout on the current route', () => {
+    renderRow({
+      post_kind: 'assignment_posted',
+      ref_kind: 'assignment',
+      ref_id: 'IST.352/case-1',
+      title: 'Case analysis 1',
+      meta: { type: 'homework', due_on: '2026-09-18', points_possible: 40, status: 'not_started' },
+    });
+    expect(screen.getByRole('link', { name: 'Case analysis 1' })).toHaveAttribute(
+      'href',
+      '?item=assignment%3AIST.352%2Fcase-1',
+    );
+  });
+
+  it('gives a file post the Open ladder from its stored route', () => {
+    renderRow({
+      post_kind: 'material',
+      ref_kind: 'bb_file',
+      ref_id: '88',
+      title: 'Syllabus',
+      meta: {
+        bucket: 'syllabus',
+        file_name: 'syllabus.pdf',
+        mime_type: 'application/pdf',
+        storage_path: null,
+        source_url: 'https://blackboard.syracuse.edu/bbcswebdav/xid-1',
+      },
+    });
+    expect(screen.getByRole('link', { name: 'Open ↗' })).toHaveAttribute(
+      'href',
+      'https://blackboard.syracuse.edu/bbcswebdav/xid-1',
+    );
+  });
+
+  it('says a file is not stored when the view does not carry its routes yet', () => {
+    renderRow({
+      post_kind: 'material',
+      ref_kind: 'bb_file',
+      ref_id: '89',
+      title: 'Old slides',
+      meta: { bucket: 'lecture_slides', file_name: 'l1.pptx', mime_type: null },
+    });
+    expect(screen.getByRole('button', { name: 'Not stored' })).toBeDisabled();
+  });
+
+  it('links a content post to its Blackboard url when it has one', () => {
+    renderRow({
+      post_kind: 'material',
+      ref_kind: 'bb_content',
+      ref_id: '1602',
+      title: 'Knowledge Check 1',
+      meta: { bucket: null, url: 'https://blackboard.syracuse.edu/ultra/courses/_1_1/outline' },
+    });
+    const link = screen.getByRole('link', { name: /Knowledge Check 1/ });
+    expect(link).toHaveAttribute('href', 'https://blackboard.syracuse.edu/ultra/courses/_1_1/outline');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('leaves a content post without a url unlinked', () => {
+    renderRow({
+      post_kind: 'material',
+      ref_kind: 'bb_content',
+      ref_id: '1603',
+      title: 'Read me first',
+      meta: { bucket: null, url: null },
+    });
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByText('Read me first')).toBeInTheDocument();
+  });
+});
+
+describe('StreamRow — status from the Stream (T-12)', () => {
+  it.each(['assignment_posted', 'assignment_due'] as const)(
+    'offers the status select on %s and writes through the row’s assignment id',
+    (postKind) => {
+      const onStatusChange = vi.fn();
+      render(
+        <StreamRow
+          row={makeStreamRow({
+            post_kind: postKind,
+            ref_kind: 'assignment',
+            ref_id: 'IST.352/case-1',
+            title: 'Case analysis 1',
+            meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
+          })}
+          onStatusChange={onStatusChange}
+          pendingItemId={null}
+        />,
+      );
+      const select = screen.getByLabelText('Status for Case analysis 1');
+      expect((select as HTMLSelectElement).value).toBe('not_started');
+      fireEvent.change(select, { target: { value: 'in_progress' } });
+      expect(onStatusChange).toHaveBeenCalledWith(
+        { item_kind: 'assignment', item_id: 'IST.352/case-1' },
+        'in_progress',
+      );
+    },
+  );
+
+  it('disables the select while that row’s write is in flight', () => {
+    render(
+      <StreamRow
+        row={makeStreamRow({
+          post_kind: 'assignment_due',
+          ref_kind: 'assignment',
+          ref_id: 'IST.352/case-1',
+          title: 'Case analysis 1',
+          meta: { due_on: '2026-09-18', status: 'in_progress', points_possible: null, type: null },
+        })}
+        onStatusChange={vi.fn()}
+        pendingItemId="IST.352/case-1"
+      />,
+    );
+    expect(screen.getByLabelText('Status for Case analysis 1')).toBeDisabled();
+  });
+
+  it('offers no select on an announcement or a material', () => {
+    for (const row of [
+      makeStreamRow(),
+      makeStreamRow({ post_kind: 'material', ref_kind: 'bb_file', meta: { bucket: 'syllabus' } }),
+    ]) {
+      const { unmount } = render(
+        <StreamRow row={row} onStatusChange={vi.fn()} pendingItemId={null} />,
+      );
+      expect(screen.queryByRole('combobox')).toBeNull();
+      unmount();
+    }
   });
 });
 

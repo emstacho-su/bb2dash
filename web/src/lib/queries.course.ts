@@ -26,7 +26,7 @@ import {
 } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables, Views } from './queries';
-import { COURSE_WORK_ITEMS_KEY } from './progress-cache';
+import { COURSE_STREAM_KEY, COURSE_WORK_ITEMS_KEY } from './progress-cache';
 import {
   normalizeCardNote,
   shellCacheKey,
@@ -101,7 +101,7 @@ export const courseQueryKeys = {
   workItems: (shellIds: string[]) => [...COURSE_WORK_ITEMS_KEY, shellKey(shellIds)] as const,
   gradingScheme: (shellIds: string[]) => ['course-grading-scheme', shellKey(shellIds)] as const,
   sessionFiles: (shellIds: string[]) => ['course-session-files', shellKey(shellIds)] as const,
-  stream: (shellIds: string[]) => ['course-stream', shellKey(shellIds)] as const,
+  stream: (shellIds: string[]) => [...COURSE_STREAM_KEY, shellKey(shellIds)] as const,
   contentTree: (shellIds: string[]) => ['course-content-tree', shellKey(shellIds)] as const,
   staff: (shellIds: string[]) => ['course-staff', shellKey(shellIds)] as const,
 } as const;
@@ -439,6 +439,7 @@ export type {
   StreamDay,
   StreamPostKind,
   StreamRefKind,
+  VanishedSplit,
 } from './course-dimension';
 export {
   CARD_NOTE_MAX_LENGTH,
@@ -454,6 +455,7 @@ export {
   isFolderNode,
   normalizeCardNote,
   orNotRecorded,
+  splitVanishedRows,
   streamDayKey,
   ultraStateLabel,
   validateCardNote,
@@ -469,7 +471,9 @@ const STREAM_COLUMNS = 'course_id, post_kind, posted_at, ref_kind, ref_id, title
 
 const CONTENT_TREE_COLUMNS =
   'course_id, content_id, parent_id, bb_item_id, path, depth, title, item_kind, bb_type, ' +
-  'state, url, modified_at, assignment_id, file_id, file_name, storage_path, bucket';
+  'state, url, modified_at, assignment_id, file_id, file_name, storage_path, bucket, ' +
+  // 111 (Phase 17): the vanish run id and the file's note, appended last.
+  'missing_since, notes';
 
 const COURSE_STAFF_COLUMNS = 'id, course_id, name, role, email, office, office_hours';
 
