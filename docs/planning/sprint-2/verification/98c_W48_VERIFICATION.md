@@ -85,3 +85,66 @@ before_attendance_median_ms=35.456
 Both before-medians are under 50 ms, so 121 does not build `part_fts`:
 
 part_fts=not_built
+
+## Task 7 — migration 121 + `db/tests/phase18_121_search_contract.sql`
+
+The contract test holds (s) the signature literals, `prosecdef`, the pin and the ACL recorded
+above, and (n) a sweep of the notes label rule over the whole current corpus (every part of every
+current `[notes]` unit as a vector-only hit; one notes word per unit in keyword and hybrid mode;
+the three live leaks).
+
+RED (before 121; the message is one line, cut here):
+
+```
+FAIL  phase18_121_search_contract.sql  FAIL (n) snippet crosses the notes marker: hybrid acquisition -> 562, hybrid acquisition -> 564, hybrid Activities -> 27, … (over 100 probe/unit pairs)
+db-test: passed 0, failed 1, units 1
+exit=1
+```
+
+Dry run (`begin; <121's two functions>; <the (n) sweep>; rollback;`): 3,090 probe rows, 194
+labelled, 0 crossing the marker; hybrid `supplicant` on 750 → `750/fts_headline: [notes] encryption (4). …`.
+
+Applied: `apply_migration` name `121_search_notes_label`, version 20260929173148.
+md5 `statements[1]` = `86c19ac23c00bd22d84c2e78934441e8` = `git show HEAD:db/migrations/121_search_notes_label.sql | md5sum`.
+
+GREEN:
+
+```
+PASS  phase18_121_search_contract.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+Post-embed after 121 — (d) no longer appears; (a), (b), (c) wait on the gate sync and task 20:
+
+```
+FAIL  phase18_post_embed_checks.sql  FAIL (a) no text unit: 161, 162, 163, 452; (b) na without twin: 68; (c) parts: 785 no parts, 786 no parts, 787 no parts, 788 no parts
+db-test: passed 0, failed 1, units 1
+exit=1
+```
+
+## Task 8 — after 121 (FAILS the 1.25× rule; blocker for the PM)
+
+Same probe, right after 121 was applied, before 122: final exam date 44.335, 42.089, 36.946,
+36.593, 36.574 ms (median 36.946, 1.79× before); attendance policy 49.771, 49.378, 49.109,
+49.487, 50.382 ms (median 49.487, 1.40× before).
+
+after_final_median_ms=36.946
+after_attendance_median_ms=49.487
+
+Cause, found by dry runs inside `begin; … rollback;` with each body swapped in (5 warm runs each):
+
+| body | final exam date | attendance policy |
+|---|---|---|
+| pre-121 (the old body, re-created in the transaction) | 20.200 | 35.838 |
+| 121 as applied | 36.946 | 49.487 |
+| 121 with lazy `case` in `chosen` only | 36.811 | 48.707 |
+| 121 with `hit as materialized` and `chosen as materialized` | 19.652 | 35.537 |
+
+The planner inlines the chain of single-use CTEs and substitutes each derived column's expression
+at every reference, so the `substring`/`to_tsvector` expressions behind `slice_in_notes`,
+`pre_raw` and `post_raw` are evaluated many times per row. Materializing the 10–12-row `hit` and
+`chosen` CTEs restores parity with the old body (both within 3% of it), and the label rule is
+unchanged. 121 is applied and may not be edited, and every number in 120–129 is already assigned,
+so the repair needs a migration slot the PM names. `part_fts` stays not built (both
+before-medians under 50 ms).
