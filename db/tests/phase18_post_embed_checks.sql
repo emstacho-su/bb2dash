@@ -33,6 +33,10 @@ do $$
 declare
   -- Ids a reviewer has accepted as `na` with no twin. Empty on purpose (brief 98 task 1).
   NA_EXCEPTIONS constant bigint[] := array[]::bigint[];
+  -- Files whose text units were removed on Stack's word, so (a) expects none. File 13 is IST.323's
+  -- "Appendix B: AI Use Statement": Phase 17's migration 150 deleted both of its units on
+  -- 2026-09-29 ("remove IST 323 appendix b as well"); its bytes and catalog row stay.
+  TEXT_REMOVED constant bigint[] := array[13]::bigint[];
   NO_MATCH_QUERY constant text := 'zzqxnomatchzzq';   -- matches no unit: forces a vector-only hit
   PROBE_LIMIT constant int := 50;
   v_fail text[] := array[]::text[];
@@ -47,6 +51,7 @@ begin
     left join bb_file_text t on t.file_id = f.id
    where f.superseded_by is null
      and f.text_status is distinct from 'na'
+     and not (f.id = any (TEXT_REMOVED))
      and t.file_id is null;
   if v_ids is not null then
     v_fail := v_fail || format('(a) no text unit: %s', v_ids);
