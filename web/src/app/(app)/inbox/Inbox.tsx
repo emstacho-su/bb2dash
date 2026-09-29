@@ -33,6 +33,12 @@ import {
   type InboxTab,
 } from '@/components/inbox/inbox-tabs';
 import { useInboxKeys } from '@/components/inbox/use-inbox-keys';
+import {
+  candidateIds,
+  useResolveChoice,
+  useSessionLabels,
+  type ChoiceInput,
+} from '@/lib/queries.inboxChoice';
 import tokens from '@/styles/tokens.module.css';
 import shell from '../Shell.module.css';
 import styles from './Inbox.module.css';
@@ -66,23 +72,45 @@ export default function Inbox() {
   const itemsQuery = useAttentionItems();
   const statusQuery = useSyncStatus();
   const resolve = useResolveAttentionItem();
+  const choose = useResolveChoice();
+  const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
+  const labelIds = useMemo(() => candidateIds(items), [items]);
+  const labelsQuery = useSessionLabels(labelIds);
+
+  // A resolve and a choice are two mutations over the same four columns; the
+  // card that sent the one in flight (or the one that failed) is whichever ran last.
+  const pendingId = resolve.isPending
+    ? (resolve.variables?.id ?? null)
+    : choose.isPending
+      ? (choose.variables?.id ?? null)
+      : null;
+  const failed = choose.error
+    ? { error: choose.error, id: choose.variables?.id ?? null }
+    : resolve.error
+      ? { error: resolve.error, id: resolve.variables?.id ?? null }
+      : null;
 
   return (
     <InboxView
       // The button is handed in rather than mounted inside `InboxView`, so the
       // view stays renderable without a query client.
       applyButton={<InboxApplyButton />}
-      items={itemsQuery.data ?? []}
+      items={items}
       status={statusQuery.data ?? null}
       loading={itemsQuery.isPending}
       error={itemsQuery.error ?? statusQuery.error ?? null}
-      pendingId={resolve.isPending ? (resolve.variables?.id ?? null) : null}
+      pendingId={pendingId}
       // A failed resolve belongs to the row it was sent from. `resolve.variables`
       // still holds that row's input after the mutation settles, so the error is
       // rendered on the card Stack pressed and nowhere else.
-      resolveError={resolve.error ?? null}
-      resolveErrorId={resolve.error ? (resolve.variables?.id ?? null) : null}
+      resolveError={failed?.error ?? null}
+      resolveErrorId={failed?.id ?? null}
       onResolve={(input) => resolve.mutate(input)}
+      onChoose={(input) => choose.mutate(input)}
+      // Labels that failed to load leave the buttons on "loading…" rather than
+      // printing ids; the error itself shows on the screen below.
+      sessionLabels={labelsQuery.data}
+      labelsError={labelsQuery.error ?? null}
     />
   );
 }
@@ -105,6 +133,12 @@ export interface InboxViewProps {
   /** The tab the screen opens on. Needs you unless a caller says otherwise. */
   initialTab?: InboxTab;
   onResolve: (input: ResolveInput) => void;
+  /** A candidate question's choice (a session, or none of them). */
+  onChoose?: (input: ChoiceInput) => void;
+  /** Session id → its date and topic, for the candidate buttons. */
+  sessionLabels?: ReadonlyMap<number, string>;
+  /** The session labels could not be read. */
+  labelsError?: Error | null;
 }
 
 export function InboxView({
@@ -118,6 +152,9 @@ export function InboxView({
   resolveErrorId = null,
   initialTab = 'needs_you',
   onResolve,
+  onChoose,
+  sessionLabels,
+  labelsError = null,
 }: InboxViewProps) {
   const [tab, setTab] = useState<InboxTab>(initialTab);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -168,6 +205,11 @@ export function InboxView({
           Could not load the inbox: {error.message}
         </p>
       )}
+      {labelsError && (
+        <p className={styles.problem} role="alert">
+          Could not load the class sessions to choose from: {labelsError.message}
+        </p>
+      )}
 
       <div
         ref={listRef}
@@ -184,6 +226,8 @@ export function InboxView({
             pending={pendingId === item.id}
             failure={resolveErrorId === item.id ? resolveError : null}
             onResolve={onResolve}
+            onChoose={onChoose}
+            sessionLabels={sessionLabels}
           />
         ))}
       </div>

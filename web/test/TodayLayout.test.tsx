@@ -26,6 +26,7 @@ const stub = vi.hoisted(() => ({
   undatedPending: false,
   term: null as unknown,
   termPending: false,
+  termError: null as Error | null,
   windowCalls: [] as { from: string; to: string; enabled: boolean | undefined }[],
   courses: [] as unknown[],
   grades: { data: [] as unknown[], isPending: false, error: null as Error | null },
@@ -55,7 +56,9 @@ vi.mock('@/lib/queries.today', async (importOriginal) => {
     useTerm: () =>
       stub.termPending
         ? { ...idle, isPending: true, isFetching: true, data: undefined }
-        : { ...idle, data: stub.term },
+        : stub.termError
+          ? { ...idle, isError: true, error: stub.termError, data: undefined }
+          : { ...idle, data: stub.term },
     useSetItemStatus: () => ({ isPending: false, variables: undefined, mutate: vi.fn() }),
   };
 });
@@ -94,6 +97,7 @@ beforeEach(() => {
   stub.undatedPending = false;
   stub.term = null;
   stub.termPending = false;
+  stub.termError = null;
   stub.windowCalls = [];
   stub.courses = [makeCourseDisplay({ display_id: 'IST.323', code: 'IST 323' })];
   stub.grades = { data: [], isPending: false, error: null };
@@ -441,5 +445,28 @@ describe('Home — the Upcoming fetch reaches back to the term start (R3-1)', ()
     stub.term = TERM;
     render(<Today />);
     expect(screen.getByText('Today, Sep 10')).toBeInTheDocument();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * R3-1 review — a fetch waiting on the term row is loading, not empty
+ * ------------------------------------------------------------------------ */
+
+describe('Home — the Upcoming strip while the term row loads (R3-1 review)', () => {
+  it('says loading, not "0 items", while the fetch waits on the term row', () => {
+    stub.termPending = true;
+    stub.window = [];
+    render(<Today />);
+    const strip = screen.getByRole('region', { name: 'Upcoming work' });
+    expect(within(strip).getAllByText('loading…').length).toBeGreaterThan(0);
+    expect(within(strip).queryByText(/0 items/)).toBeNull();
+    expect(within(strip).queryByText(/Nothing due/)).toBeNull();
+  });
+
+  it('names a failed term read, and still shows the strip from this week', () => {
+    stub.termError = new Error('permission denied for table terms');
+    render(<Today />);
+    expect(screen.getByRole('alert')).toHaveTextContent('permission denied for table terms');
+    expect(stub.windowCalls.at(-1)!.from).toBe('2026-09-07');
   });
 });

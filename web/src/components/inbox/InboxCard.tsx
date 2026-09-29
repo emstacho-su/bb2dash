@@ -46,6 +46,7 @@ import {
   sourceText,
   suggestedDetails,
 } from './inbox-row';
+import { parseSessionChoice, type ChoiceInput } from '@/lib/queries.inboxChoice';
 import styles from './InboxCard.module.css';
 
 /** I-2: the sentence under a control — what pressing it actually changes. */
@@ -80,9 +81,48 @@ export interface InboxCardProps {
   /** The resolve that failed for this row, if the last one did. */
   failure?: Error | null;
   onResolve: (input: ResolveInput) => void;
+  /** A candidate question's choice (`queries.inboxChoice.ts`). */
+  onChoose?: (input: ChoiceInput) => void;
+  /** Session id → "Mon, Sep 21 · Requirements"; undefined while it loads. */
+  sessionLabels?: ReadonlyMap<number, string>;
 }
 
-export function InboxCard({ item, pending, failure = null, onResolve }: InboxCardProps) {
+/**
+ * A pane value a person can read: a scalar. A list or an object is machine
+ * data (candidate ids, a payload), so the pane is left out rather than print it.
+ */
+function readableValue(value: unknown): boolean {
+  return value === null || typeof value !== 'object';
+}
+
+/**
+ * The stage's suggestion as a sentence: a plain string or number is one. An
+ * object is internal detail and goes behind the "details" disclosure.
+ */
+function suggestionSentence(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim() !== '' && !/[{}<>]/.test(value)) return value;
+  if (typeof value === 'number') return String(value);
+  return null;
+}
+
+/** An object payload's entries, minus any template or raw-JSON string. */
+function detailEntries(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(
+      ([, inner]) => !(typeof inner === 'string' && /[{}<>]/.test(inner)),
+    ),
+  );
+}
+
+export function InboxCard({
+  item,
+  pending,
+  failure = null,
+  onResolve,
+  onChoose,
+  sessionLabels,
+}: InboxCardProps) {
   const titleId = useId();
   const answerId = useId();
   const [note, setNote] = useState('');
@@ -92,14 +132,21 @@ export function InboxCard({ item, pending, failure = null, onResolve }: InboxCar
   const done = item.state !== 'open';
   const href = sourceHref(item);
   const decision = decisionLine(item);
-  const details = describeDetails(suggestedDetails(item));
   const reopened = reopenedWithin24h(item);
-  const hasValues = item.from_value !== null || item.to_value !== null;
+  const choice = parseSessionChoice(item);
+  const payload = suggestedDetails(item);
+  const sentence = suggestionSentence(payload);
+  // A candidate question's payload is all machinery the buttons already speak for.
+  const details = choice || sentence !== null ? [] : describeDetails(detailEntries(payload));
+  const showTo = item.to_value !== null && readableValue(item.to_value);
+  const showFrom = item.from_value !== null && readableValue(item.from_value);
+  const hasValues = !choice && (showTo || showFrom);
 
   // Narrowed once, here: TypeScript drops a narrowing on `item.kind` inside a
   // click handler's closure, so each control's kind is pinned to a const.
   const answerKind =
-    item.kind === 'stack_must_confirm' || item.kind === 'missing' || item.kind === 'data_gap'
+    !choice &&
+    (item.kind === 'stack_must_confirm' || item.kind === 'missing' || item.kind === 'data_gap')
       ? item.kind
       : null;
   const dismissKind = item.kind === 'deadline' || item.kind === 'data_gap' ? item.kind : null;
@@ -136,37 +183,44 @@ export function InboxCard({ item, pending, failure = null, onResolve }: InboxCar
 
       {reopened && <p className={styles.reopened}>{REOPENED_LINE}</p>}
 
-      {(hasValues || details.length > 0) && (
+      {(hasValues || sentence !== null) && (
         <div className={styles.compare}>
           {hasValues && <span className={`${tokens.kicker} ${styles.field}`}>{fieldPhrase(item.field)}</span>}
           <div className={styles.panes}>
-            {hasValues && (
-              <>
-                <div role="group" aria-label="Blackboard" className={styles.pane}>
-                  <span className={tokens.kicker}>Blackboard</span>
-                  <span className={styles.value}>{fieldValueText(item.field, item.to_value)}</span>
-                </div>
-                <div role="group" aria-label="bb2dash has" className={styles.pane}>
-                  <span className={tokens.kicker}>bb2dash has</span>
-                  <span className={styles.value}>{fieldValueText(item.field, item.from_value)}</span>
-                </div>
-              </>
+            {hasValues && showTo && (
+              <div role="group" aria-label="Blackboard" className={styles.pane}>
+                <span className={tokens.kicker}>Blackboard</span>
+                <span className={styles.value}>{fieldValueText(item.field, item.to_value)}</span>
+              </div>
             )}
-            {details.length > 0 && (
+            {hasValues && showFrom && (
+              <div role="group" aria-label="bb2dash has" className={styles.pane}>
+                <span className={tokens.kicker}>bb2dash has</span>
+                <span className={styles.value}>{fieldValueText(item.field, item.from_value)}</span>
+              </div>
+            )}
+            {sentence !== null && (
               <div role="group" aria-label="Suggestion" className={styles.pane}>
                 <span className={tokens.kicker}>Suggestion</span>
-                <dl className={styles.details}>
-                  {details.map((detail) => (
-                    <div key={detail.label || detail.text} className={styles.detail}>
-                      {detail.label && <dt className={styles.detailLabel}>{detail.label}</dt>}
-                      <dd className={styles.value}>{detail.text}</dd>
-                    </div>
-                  ))}
-                </dl>
+                <span className={styles.value}>{sentence}</span>
               </div>
             )}
           </div>
         </div>
+      )}
+
+      {details.length > 0 && (
+        <details className={styles.more}>
+          <summary className={styles.moreSummary}>details</summary>
+          <dl className={styles.details}>
+            {details.map((detail) => (
+              <div key={detail.label || detail.text} className={styles.detail}>
+                {detail.label && <dt className={styles.detailLabel}>{detail.label}</dt>}
+                <dd className={styles.value}>{detail.text}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       )}
 
       <p className={styles.meta}>
@@ -235,6 +289,44 @@ export function InboxCard({ item, pending, failure = null, onResolve }: InboxCar
           </label>
 
           <div className={styles.choices}>
+            {choice && (
+              <div className={styles.choice}>
+                <div className={styles.options} role="group" aria-label="Choose one">
+                  {choice.candidates.map((candidate, index) => {
+                    const label = sessionLabels?.get(candidate);
+                    return (
+                      <button
+                        key={candidate}
+                        type="button"
+                        className={tokens.btnSecondary}
+                        disabled={pending || !onChoose || sessionLabels === undefined}
+                        onClick={() =>
+                          onChoose?.({ id: item.id, resolution: { [choice.pickKey]: candidate }, note })
+                        }
+                      >
+                        {sessionLabels === undefined
+                          ? 'loading…'
+                          : (label ?? `Session ${index + 1} (no longer listed)`)}
+                      </button>
+                    );
+                  })}
+                  {choice.none !== null && (
+                    <button
+                      type="button"
+                      className={tokens.btnGhost}
+                      disabled={pending || !onChoose}
+                      onClick={() => onChoose?.({ id: item.id, resolution: choice.none ?? {}, note })}
+                    >
+                      None of these
+                    </button>
+                  )}
+                </div>
+                <p className={styles.outcome}>
+                  The next sync applies your pick. None of these leaves it as it is.
+                </p>
+              </div>
+            )}
+
             {item.kind === 'conflict' && (
               <>
                 <div className={styles.choice}>

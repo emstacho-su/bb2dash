@@ -156,7 +156,8 @@ export function Today() {
   const todayKey = isoDate(today);
   const cardHorizonKey = isoDate(addDays(today, CARD_HORIZON_DAYS - 1));
 
-  const failed = windowQ.error ?? undatedQ.error ?? coursesQ.error;
+  // A failed term read is named too; the strip still works from this week's Monday.
+  const failed = windowQ.error ?? undatedQ.error ?? coursesQ.error ?? termQ.error;
 
   /**
    * G-2 / P-home-10 — what the course card is handed to show.
@@ -238,7 +239,9 @@ export function Today() {
         startIso={windowStart === isoDate(weekMonday) ? null : windowStart}
         onStatusChange={handleStatus}
         pendingItemId={pendingId}
-        isPending={isQueryLoading(windowQ)}
+        // R3-1 review: while the fetch waits on the term row it is disabled, and
+        // a disabled query is not "loading", so the wait is counted here.
+        isPending={termQ.isPending || isQueryLoading(windowQ)}
         error={windowQ.error}
       />
 
