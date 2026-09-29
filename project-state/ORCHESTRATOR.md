@@ -8,6 +8,9 @@
 > product call provisional until Stack answers the batch in `93_` §5 and approves `94_`. Before that,
 > 2026-09-22: sprint 1 closed, PR #25; planning docs by sprint under `docs/planning/`, index
 > `docs/planning/README.md`.)
+> **Sprint 3 planning opened 2026-09-29** (research only): `docs/planning/sprint-3-blackboard-mcp/107_SPRINT3_INTAKE.md`
+> (a Blackboard MCP server in place of the crawler; the question batch is its §6), charter `108_`, research `research/109_*`.
+> Sprint 2 runs unchanged until `110_`'s go/no-go; a PM session on sprint 3 reads 107 and 108 after §5's rows 1–5.
 > If STATUS and this file disagree, STATUS is the newer fact; fix this file in the same PR.
 
 ## 0. Roles and the working arrangement

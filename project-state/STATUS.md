@@ -489,6 +489,19 @@ holds `main`'s version, so `/bb-sync` keeps running the old step 4b until that c
 from this branch — deliberately untouched, because overwriting it from an unmerged branch is the
 merging session's call.
 
+## Sprint 3 — planning opened 2026-09-29 (research phase, nothing built)
+
+One goal, Stack's: **an explicit Blackboard MCP server in place of the crawler feature** (`ingest/bb_crawler.js` pasted into a
+logged-in tab by a Claude session; bb-sync steps 1, 3 and the browser half of 4b). Intake `docs/planning/sprint-3-blackboard-mcp/107_SPRINT3_INTAKE.md`:
+the record's facts, the desk-level feasibility read (official REST needs an SU admin to register an integration, so it is not
+the plan; a cookie-session REST client from Node outside any browser is proven elsewhere on a Microsoft-SSO tenant by
+`alejooroncoy/campus-cli`; the SU login and its lifetime are unchanged by any of it, Task 0 stays the measurement), the
+collision with sprint 2's Phases 14 (sync half), 18 (crawler v5 tasks) and 19, and the **question batch §6 (17 items, a
+default each) that Stack answers before anything is built**. Charter `108_` and three Sonnet research streams
+(`research/109_*`: access-routes, comparables-and-parity, mcp-architecture); synthesis `110_` carries the go/no-go.
+Stack's one live step: `scripts/bb-probe.mjs` with a cookie header from Chrome DevTools (status codes and key names only; no
+bodies, no cookie printed). Sprint 3 migrations start at 150. Sprint 2 continues as planned until the synthesis says otherwise.
+
 ## What's next — Sprint 2
 
 Planned 2026-09-24 on `docs/sprint2-planning` ([PR #28](https://github.com/emstacho-su/bb2dash/pull/28), merged as 67269b5 on 2026-09-27): requirements `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`

@@ -2,13 +2,13 @@
   "name": "bb2dash-scripts",
   "private": true,
   "version": "0.0.0",
-  "description": "Node helpers that run from the repo root: the SQL test runner for db/tests, and the Google consent helper.",
+  "description": "Node helpers that run from the repo root: the SQL test runner for db/tests, the Google consent helper, and the sprint 3 Blackboard cookie probe.",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test db-test.test.mjs google-consent.test.mjs",
+    "test": "node --test db-test.test.mjs google-consent.test.mjs bb-probe.test.mjs",
     "db-test": "node db-test.mjs"
   },
   "dependencies": {
