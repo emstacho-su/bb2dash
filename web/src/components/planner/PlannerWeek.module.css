@@ -59,6 +59,14 @@
   margin-left: var(--space-2);
 }
 
+/* R3-9: "+" at the header's top right opens the new-event wizard. */
+.addEvent {
+  composes: btnPrimary from '@/styles/tokens.module.css';
+  min-width: 32px;
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
 /* The pre-hydration pager (P-planner-7): the pager's shape, drawn dim, with no
    link behind it. It exists so the header does not change size when the real
    one arrives. */
