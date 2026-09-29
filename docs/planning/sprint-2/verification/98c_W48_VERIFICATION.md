@@ -129,8 +129,9 @@ Same probe, right after 121 was applied, before 122: final exam date 44.335, 42.
 36.593, 36.574 ms (median 36.946, 1.79× before); attendance policy 49.771, 49.378, 49.109,
 49.487, 50.382 ms (median 49.487, 1.40× before).
 
-after_final_median_ms=36.946
-after_attendance_median_ms=49.487
+History (121 as applied, superseded by 129 below; written without the `=` form so the
+check's grep counts only the current lines): after-121 final median 36.946 ms, after-121
+attendance median 49.487 ms.
 
 Cause, found by dry runs inside `begin; … rollback;` with each body swapped in (5 warm runs each):
 
@@ -311,3 +312,42 @@ PASS  phase18_122_supersede_rule.sql
 db-test: passed 1, failed 0, units 1
 exit=0
 ```
+
+## Round 2 — task 8 repair: migration 129 (PM call)
+
+`db/migrations/129_search_notes_label_materialize.sql`: both search functions re-created from
+121's bodies with `hit` and `chosen` (hybrid) and `chosen` (keyword) `materialized`; nothing
+else changed (a `diff` of the function text against 121 shows only those three lines).
+
+New test `db/tests/phase18_129_search_materialize.sql`: (m) both live bodies are materialized;
+(r) 121's bodies re-created as `pg_temp` functions give the same rows, in order, as the live
+functions for "final exam date" and "attendance policy" (hybrid limit 12 with W10 B3's probe,
+keyword limit 20). It carries no fixed values, so it holds on any corpus.
+
+RED (before 129): `FAIL  phase18_129_search_materialize.sql  FAIL (m) not materialized: hybrid_search_file_text, search_file_text`, exit 1.
+
+Dry run (`begin; <129>; …; rollback;`): results before and after identical (hybrid 12/12 rows
+both queries, keyword 4 and 10 rows); medians 19.535 / 35.598 ms.
+
+Applied: `apply_migration` name `129_search_notes_label_materialize`, version 20260929175709.
+md5 `statements[1]` = `a634e4a02edaac98159de6efa9177048` = `git show HEAD:db/migrations/129_search_notes_label_materialize.sql | md5sum`.
+
+After 129, 5 warm runs each, limit 12. A first run right after apply was contended (final 21.0,
+27.9, 29.8, 33.0, 31.5; attendance 58.6, 58.3, 59.2, 47.6, 36.1 ms, rising and falling within the
+run) and is kept here as history; the re-run a minute later was steady: final exam date 20.780,
+20.578, 19.977, 19.474, 19.449 ms; attendance policy 35.620, 35.755, 35.431, 35.605, 35.699 ms.
+
+after_final_median_ms=19.977
+after_attendance_median_ms=35.62
+
+19.977 ≤ 1.25 × 20.655 (25.82) and 35.62 ≤ 1.25 × 35.456 (44.32): the R-77 rule holds.
+
+GREEN:
+
+```
+PASS  phase18_129_search_materialize.sql
+PASS  phase18_121_search_contract.sql
+FAIL  phase18_post_embed_checks.sql  FAIL (a) no text unit: 161, 162, 163, 452; (b) na without twin: 68
+```
+
+Post-embed (d) no longer appears, so (d) PASSes; (a) and (b) wait on the gate sync and task 20.
