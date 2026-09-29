@@ -297,3 +297,17 @@ drift above) and `phase18_post_embed_checks.sql` (`(a) 161, 162, 163, 452; (b) 6
 sync's and task 20's). Not from 120–128: `phase12b_077_inbox_feedback.sql` (`v_inbox_feedback
 does not exist`) and `phase15_100_db_test_runner_role.sql` (the role has USAGE on a new schema
 `private`); both come from objects changed outside this range.
+
+## Round 2 — task 9 GREEN (PM call)
+
+The PM ruled the third write correct. The brief's "exactly 2" was read before the 2026-09-29
+crawl f24a7ff5, in which IST.466 item `_12939679_1` carries only wK5 (162), replacing wK4 (150).
+Assertion (1) now requires exactly the three links by id: 2→151, 74→149, 150→162.
+
+GREEN:
+
+```
+PASS  phase18_122_supersede_rule.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```

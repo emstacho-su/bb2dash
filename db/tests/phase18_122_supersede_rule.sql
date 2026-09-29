@@ -1,7 +1,10 @@
 -- bb2dash :: db/tests/phase18_122_supersede_rule.sql
 -- Phase 18 (brief 98), task 9. Worker W-48. supersede_replaced_files (122), R-63:
 --   (1) with 2 and 74 un-superseded inside this transaction, the function over the newest
---       registered crawl writes exactly 2 rows: 2 -> 151 and 74 -> 149
+--       registered crawl writes exactly these three links, by id: 2 -> 151, 74 -> 149 and
+--       150 -> 162. The third is the 2026-09-29 crawl f24a7ff5, in which IST.466 item
+--       _12939679_1 carries only IST466_2Schedule_wK5.docx (162), replacing wK4 (150). The
+--       brief's "exactly 2" was read before that crawl (PM call, round 2).
 --   (2) a replay writes 0
 --   (3) 31, 32, 47 (the three IST.352 decks) and 155, 156 are unchanged
 --   (4) rows classified_by 'stack' are unchanged
@@ -54,7 +57,7 @@ begin
   select string_agg(format('%s->%s', f.id, f.superseded_by), ', ' order by f.id) into v_got
     from bb_files f
    where f.superseded_by is distinct from (v_before->>f.id::text)::bigint;
-  if (v_r->>'superseded')::int <> 2 or v_got is distinct from '2->151, 74->149' then
+  if (v_r->>'superseded')::int <> 3 or v_got is distinct from '2->151, 74->149, 150->162' then
     v_fail := v_fail || format('(1) newest run %s wrote %s: %s', v_newest, v_r->>'superseded',
                                coalesce(v_got, 'nothing'));
   end if;
