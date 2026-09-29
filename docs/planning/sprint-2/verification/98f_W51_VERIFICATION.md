@@ -95,3 +95,46 @@ $ npx vitest run test/course-timeline-files.test.tsx
 `npx eslint CourseScreen.tsx --max-warnings 0` reports 2 pre-existing `react-hooks/exhaustive-deps`
 warnings at :88 and :89 (`sessions`, `workItems`); they are on `main` too and are W-45's to fix
 (brief 98 §Seams), so this hunk leaves them alone. 0 errors.
+
+---
+
+## Task 25 (W-51's parts) — search docs state each mode's shape (R-74)
+
+Comments only. `web/src/lib/queries.search.ts`: the header now states per mode what a row holds
+(fts: `rank` + a plain whole-unit headline, no `score` / `similarity` / `part_no` /
+`snippet_source`; vector: `part_no` of the nearest part, `similarity`, `text`, no `snippet` /
+`score` / `snippet_source`; hybrid: `score`, `similarity`, `snippet`, `snippet_source`, `part_no`
+the snippet was cut from), and the `SnippetSource`, `SearchResult`, `score`, `snippet`, `part_no`,
+`snippet_source` and `matchedPart` comments were made mode-aware ("absent on a pre-021 backend"
+is gone). `supabase/functions/search/index.ts`: header comment only — every mode named with its
+row shape, the 025 tie-break (highest `ts_rank`, then vector-best, then lower `part_no`) in place
+of "lowest-numbered", and the version tags dropped. **No code line changed and nothing was
+deployed**; the deployed source differs from the repo's header until the next deploy (§DoD's merge
+bullet). Shapes read from `db/migrations/021_matched_snippets.sql` (`match_file_text`),
+`024_snippet_fixes.sql` (`search_file_text`) and `025_snippet_part_rank.sql`
+(`hybrid_search_file_text`) and the function body. `DATA_SYNTAX.md` (W-48) and
+`EVAL_EMBEDDING_POC.md` (W-49) are not this worker's.
+
+**RED** (before the edits):
+
+```
+$ grep -cF "to each result row" web/src/lib/queries.search.ts
+1
+$ grep -cF "lowest-numbered" supabase/functions/search/index.ts
+1
+$ grep -cF "(v4)" supabase/functions/search/index.ts
+1
+```
+
+**GREEN:**
+
+```
+$ grep -cF "to each result row" web/src/lib/queries.search.ts
+0
+$ grep -cF "lowest-numbered" supabase/functions/search/index.ts
+0
+$ grep -cF "(v4)" supabase/functions/search/index.ts
+0
+$ git diff <both files> | grep '^[+-]' | grep -v '^[+-]\s*(\*|/\*\*|//)'   # non-comment lines
+(none)
+```
