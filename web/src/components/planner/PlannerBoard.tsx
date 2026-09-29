@@ -26,6 +26,7 @@ import {
 } from '@/lib/planner-week';
 import {
   PLANNER_DUE_CARD_MIN_PX,
+  PLANNER_BLOCK_PADDING_PX,
   blockContentPx,
   gridHeightPx,
   slotToPx,
@@ -363,8 +364,12 @@ function Block({
     ['--lane-width' as string]: `${100 / block.lanes}%`,
   };
   // The text area is a whole number of lines, so the clip lands where the next
-  // line starts rather than through the middle of one (F-2).
-  const body = { ['--content-px' as string]: `${blockContentPx(drawnPx)}px` };
+  // line starts rather than through the middle of one (F-2). A class carrying
+  // nested items was sized to fit them (R3-8), so its text area is the whole
+  // block: a whole-line cut there would take the bottom off the last chip.
+  const nested = block.kind === 'meeting' && block.nested.length > 0;
+  const contentPx = nested ? Math.max(0, drawnPx - PLANNER_BLOCK_PADDING_PX) : blockContentPx(drawnPx);
+  const body = { ['--content-px' as string]: `${contentPx}px` };
 
   if (block.kind === 'event') {
     return (
@@ -387,6 +392,7 @@ function Block({
     <div
       className={block.kind === 'meeting' ? styles.meetingBlock : styles.itemBlock}
       data-block={block.kind}
+      data-nested={nested ? 'true' : undefined}
       data-category={block.kind === 'item' ? block.item.item.category : undefined}
       // A class has no popout, so its tooltip is free to carry the lines the
       // block was too short to draw. An item's own `title` wins below.
