@@ -13,10 +13,69 @@ re-installed skills); the exception needs its own DECISIONS row at the freeze, p
 shape as Phase 14's one PR per repo (B-51, itself a **PROVISIONAL** default); the three PRs are a PM
 default, **PROVISIONAL** until Stack approves the phase plan · Size M · Depends on: nothing to start;
 its live steps wait until three consecutive nightly runs each log `committed -> pulled -> pushed` (or
-up-to-date) for both realms, the harness live-lane prerequisite; none had by 2026-09-27 · Status: **PROVISIONAL
-until Stack answers 93 §5 (B-52, B-53, B-54, B-55, B-56)** and approves `94_SPRINT2_PHASES.md`.
+up-to-date) for both realms, the harness live-lane prerequisite; none had by 2026-09-27 · Status: **in
+build since 2026-09-29**; 93 §5 (B-52..B-56) answered default and `94_SPRINT2_PHASES.md` approved, both
+by delegation on 2026-09-27 (see §PM session amendments).
 
 **Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-51, B-52, B-53, B-54, B-55, B-56), every one resolved to its default. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
+## PM session amendments (2026-09-29, Session A, before cutting workers)
+
+These override the text below wherever the two differ. Workers read this section first.
+
+**Done so far.** B-52..B-56 recorded as answered default (§Stack's calls). PR-A is bb2dash #39
+(`fix/inbox-apply-vault-20`, opened 2026-09-29; `/code-review` high: 0 high, 2 low, both fixed;
+`/security-review`: no findings). C-H at `<H>` = `9cffe90` (2026-09-29): eval cases **67**, migration
+files **N = 9**, labels figure **1**. `docs/sprint2-planning` had already merged, so PR-C is cut from
+`main` at `de7c644`.
+
+**Facts that moved since the brief was frozen.**
+
+* R-97's hard-coded path already points at the realm (PR #31, 2026-09-29; inbox-752..756 landed
+  there). PR-A adds H-9's Step 0 guard and removes the hard-coded path. Rows 541–544 were archived by
+  the 2026-09-27 sync, so task 2's check becomes: the first run after PR-A merges prints
+  `realm=projects ok` first, every note it writes is under `<V>/projects/bb2dash/decisions/`, and C-2's
+  OneDrive count is unchanged; `get_document` reads one of that run's notes, whatever its id.
+* The machine is **`stack-laptop`** (was `home-pc`; DECISIONS 2026-09-29). Read "home-pc" in this
+  brief as "this machine". The old machine's transcripts are not here: 5 bb2dash transcripts exist on
+  this laptop against 763 bb2dash notes.
+* The machine file lists **three** realms: `projects`, `classes`, `harness` (all `push`). Every
+  "both realms" in this brief (the live-lane prerequisite, C-22, acceptance step 3) reads "every realm
+  in `HARNESS_REALMS`"; C-22 gains one `harness:` line per night (15 lines over three nights, each `1`).
+  Task 20 scans all three realms (as DECISIONS batch item 55 already says).
+* `gitleaks` is not on PATH (checked 2026-09-29). Task 20 waits for Stack's install.
+* `~/.claude-archive/` does not exist on this laptop; `<B>` is created by the PM under
+  `C:/Users/stack/.claude-archive/<date>/` at task 18.
+
+**PM sub-default under B-52 (new, 2026-09-29): no transcript, no repair.** H-8 replays the classifier
+only where the transcript exists. Where it does not (all but 5 notes here), H-8 writes
+`hook_tags: []` and **leaves `tags` exactly as it is**: under H-3 a note with no `hook_tags` treats
+every tag as hand, so nothing is dropped. The six bb2dash worker notes that carry six tags today
+(`3a1f9923--a267e548…`, `b453d876--a7328416…`, four `c6b39327--…`) have no transcript here, so they
+keep six tags with `hook_tags: []`; D5 ("no note exceeds 5 hook-applied tags") holds for them, and
+`hook_tags_over_cap` counts only notes whose `hook_tags` exceed 5. Task 14's fixture gains a case: a
+six-tag note with no transcript ends unchanged with `hook_tags: []`.
+
+**105 §3 residual notes, each fixed here:**
+
+1. *Task 3 (c2):* the eval runs from `C:/Users/stack/agentic-harness/ingest` (main checkout at `<H>`,
+   which has the `.env`), redirected into the phase worktree's `ingest/eval/baseline-pre-phase20.json`.
+   Task 18's apply, sync and ingest run from `C:/Users/stack/agentic-harness` too.
+2. *Tasks 17, 18, 21, acceptance step 3 (c11):* after PR-B merges and before task 17, the PM runs
+   `git -C C:/Users/stack/agentic-harness pull --ff-only` and pastes the resulting SHA into 101a.
+3. *Task 19 vs C-18 (c2):* C-18's report and task 19's SQL are taken back to back with no bb2dash
+   session or subagent ending in between; both timestamps are pasted into 101a.
+4. *Live-lane rule (c11):* it is **the PM's reading** of the harness live-lane prerequisite (whose
+   text names 2026-09-25..27 and `committed -> pulled -> pushed` only): three consecutive nights,
+   `up-to-date` accepted for a realm with nothing to commit, every realm in `HARNESS_REALMS`.
+5. *Seams "Phases 15–19" (c11):* read "Phases 15–19, 21, 22": the B-53 query runs on whichever of
+   them first has a PM session starting after task 17.
+6. *D11 (c11):* "task 23's two counts" reads "task 23's two result lists (`session-<S>` in the first,
+   not in the second)".
+7. *Task 28 (c11):* "the narrowed Temp exclusion" means the hook ignores only `Temp/claude` paths
+   where 66 said all Temp paths (91 R-99).
+8. *Task 22 (c11):* "three consecutive Apply nights" reads "three consecutive nightly runs after
+   L20-a".
 
 ## Why
 
@@ -55,13 +114,17 @@ harness's own memory sprint (`docs/memory-sprint-requirements.md` and `…-orche
 
 ## Stack's calls this brief rests on
 
-All five are **PROVISIONAL**: the defaults of 93 §5, taken under DECISIONS 2026-09-23 until he answers.
+All five are **answered: default** (Stack's delegation of 2026-09-27; DECISIONS 2026-09-27, batch
+items 52–56; recorded here by the Phase 20 PM on 2026-09-29). PROVISIONAL is struck for every
+B-52..B-56 default in this brief; each *PM sub-default* stays the PM's call, which Stack can veto on
+its own. B-51 (Phase 14) is answered default too (batch item 51), and the three-PR exception was
+approved with the phase plan (DECISIONS 2026-09-27); it still gets its own row at the freeze (task 28).
 
-| B | Question (93 §5) | Default taken | Tasks that change if he answers otherwise |
+| B | Question (93 §5) | Default taken (every row: **answered 2026-09-27, default**) | Tasks that would have changed on another answer |
 |---|---|---|---|
 | B-52 | V-2's four research defaults (Q43): ≤ 5 hook-applied tags per note (hand tags uncapped); class sessions carry the same fields, filed under `classes/<course slug>`; a multi-repo session stays one note listing `repos_touched`; a resume after the 24 h sweep starts a new note | Adopt all four in one DECISIONS row (93 §5 item 52). *PM sub-default under B-52:* the cap holds **per note** through the `hook_tags` provenance field (H-3) | 7, 14, 18, 19: a "per render" answer drops `hook_tags`, P-55 and P-56, and a DECISIONS row restates 66 DoD 5 per render. Any other answer to the other three is a new harness requirement, not a task here |
 | B-53 | The Phase 7 acceptance query (Q44) | Re-run it on the first sprint-2 phase after the phase spelling and R-101 ship (93 §5 item 53). *PM sub-defaults under B-53:* that phase is the first bb2dash phase whose PM session starts after the reinstalled hook (task 17), and Phase 7 keeps what the back-fill can derive | 18, 26, 27: "keep Phase 7" would need `phase-7` on PM note `ac1f5264`, which ran from Phase 7 into Phase 10 planning, against H-1's one-phase rule; the PM brings a spelling amendment first |
-| B-54 | `machine: home-pc` on older notes (Q45) | Fill it only where the note's transcript is on this PC ("derived from the transcript's location", 91 Q45's default); the 2 cloud notes stay `''` | 14, 18: "leave empty" removes the `machine` fill and the DECISIONS row restates the contract as "every field present from 2026-09-22 on" |
+| B-54 | `machine: home-pc` on older notes (Q45) | Fill it only where the note's transcript is on this PC ("derived from the transcript's location", 91 Q45's default); the 2 cloud notes stay `''`. *2026-09-29:* this PC is `stack-laptop` now; 398 bb2dash notes already read `home-pc` and 13 `stack-laptop`, 82 are `''`, and only 5 transcripts are on this laptop, so the fill can only ever write `stack-laptop` on notes whose transcript is here; it never writes `home-pc` | 14, 18: "leave empty" removes the `machine` fill and the DECISIONS row restates the contract as "every field present from 2026-09-22 on" |
 | B-55 | The gitleaks gate brief 82 asked for (Q46) | Drop the recurring gate; run one `gitleaks` scan over each realm's history before Phase 14 | 20: keeping the gate adds a pre-commit scan to `sync-realms.mjs` (a new harness task, and gitleaks becomes a harness dependency) |
 | B-56 | `/checkpoint`'s hand-written no-node fallback | Remove it: the skill requires `node` and stops without it | 13: keeping it means a DECISIONS row accepting the residual risk (a hand-written note is committed unredacted); 12's tests do not change |
 
