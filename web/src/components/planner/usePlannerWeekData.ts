@@ -26,7 +26,8 @@ import {
   type PlacedWorkItems,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
-import { buildSlotHeights, contentRequiredPx, weekSlotDemandPx } from '@/lib/planner-rows';
+import { buildSlotHeights, weekSlotDemandPx } from '@/lib/planner-rows';
+import { growRowsToFit, nestedMeetingRequiredPx } from './nested-fit';
 import { toMeetingPatterns, useMeetings, useSessionsForWeek } from '@/lib/queries.planner';
 import {
   placePlannerEvents,
@@ -89,15 +90,6 @@ export interface PlannerWeekData {
 }
 
 /**
- * A class block's own lines: the course-and-time head, the room, and a topic
- * when a `sessions` row gave it one. What `MeetingContent` renders above the
- * nested chips, and therefore what the block needs room for before them.
- */
-function meetingTextLines(meeting: PlacedMeeting): number {
-  return 2 + (meeting.topic === null ? 0 : 1);
-}
-
-/**
  * Meetings and the timed items that are not inside one share each column, so
  * they share its lanes. An item due during its own class is a chip in that
  * class's block, not a block of its own.
@@ -122,8 +114,15 @@ function buildBlocks(
       // Stack's rule is that hours grow when things collide, not whenever a
       // line does not fit — a class too short for its own topic clips it on a
       // whole line and keeps it on the block's tooltip (F-2).
+      // R3-8: sized from the text of its own lines and of every chip, so each
+      // nested item is drawn whole (`nested-fit.ts`).
       requiredPx:
-        chips.length === 0 ? 0 : contentRequiredPx(meetingTextLines(meeting), chips.length),
+        chips.length === 0
+          ? 0
+          : nestedMeetingRequiredPx(
+              meeting,
+              chips.map((chip) => chip.item.title),
+            ),
       meeting,
       nested: chips,
     });
@@ -203,7 +202,9 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
   }, [placedMeetings, placedItems, placedEvents, view.days.length]);
 
   const slotHeights = useMemo(
-    () => buildSlotHeights(weekSlotDemandPx(blocksByDay)),
+    // Capped as before, then lifted past the cap under a class whose nested
+    // items need it (R3-8): a chip is never clipped to keep a row short.
+    () => growRowsToFit(buildSlotHeights(weekSlotDemandPx(blocksByDay)), blocksByDay),
     [blocksByDay],
   );
 

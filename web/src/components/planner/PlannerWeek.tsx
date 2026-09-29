@@ -40,6 +40,8 @@ import { assignmentPagePath } from '@/lib/assignment-page';
 import { useSetItemStatus, type WorkItem } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
 import {
+  PLANNER_END_MINUTE,
+  PLANNER_START_MINUTE,
   buildPlannerWeek,
   isWithinGridHours,
   localWallClock,
@@ -57,6 +59,8 @@ import {
 import { reservedBoardHeightPx } from '@/lib/planner-rows';
 import { WeekBoard, type BandToggle } from './PlannerBoard';
 import { PlannerEventForm } from './PlannerEventForm';
+import { PlannerEventWizard } from './PlannerEventWizard';
+import type { PlannerEventPrefill } from './planner-event-form-state';
 import { PlannerItemPopover } from './PlannerItemPopover';
 import { PlannerSeriesScopeDialog } from './PlannerSeriesScopeDialog';
 import type { SlotPosition } from './PlannerSlots';
@@ -143,6 +147,10 @@ function PlannerWeekScreen() {
   const data = usePlannerWeekData(view);
   const setStatus = useSetItemStatus();
   const editor = usePlannerEventEditor();
+  // R3-9: the dialog the editor opens is the wizard when "+" opened it. It is
+  // forgotten, during render, as soon as the editor has no dialog open.
+  const [wizardOpen, setWizardOpen] = useState(false);
+  if (wizardOpen && editor.form === null) setWizardOpen(false);
   const [activeSlot, setActiveSlot] = useState<SlotPosition>({ dayIndex: 0, slot: 0 });
   const band = useBandState();
 
@@ -167,12 +175,20 @@ function PlannerWeekScreen() {
     ...editor.actions,
     edit: (event, opener) => {
       closePopover();
+      setWizardOpen(false);
       editor.actions.edit(event, opener);
     },
     create: (prefill, opener) => {
       closePopover();
+      setWizardOpen(false);
       editor.actions.create(prefill, opener);
     },
+  };
+
+  const openWizard = (opener: HTMLElement) => {
+    closePopover();
+    setWizardOpen(true);
+    editor.actions.create(wizardPrefill(view), opener);
   };
 
   const itemCount = data.placedItems.timed.length + data.placedItems.allDay.length;
@@ -193,6 +209,7 @@ function PlannerWeekScreen() {
         meetingCount={data.placedMeetings.length}
         itemCount={itemCount}
         eventCount={data.eventCount}
+        onAdd={openWizard}
       />
 
       {data.error !== null && (
@@ -227,7 +244,12 @@ function PlannerWeekScreen() {
         <span>Click an empty slot to add an event · the grid shows New York time</span>
       </div>
 
-      {editor.form !== null && <PlannerEventForm key={editor.form.sessionId} {...editor.form} />}
+      {editor.form !== null &&
+        (wizardOpen && editor.form.target.mode === 'create' ? (
+          <PlannerEventWizard key={editor.form.sessionId} {...editor.form} target={editor.form.target} />
+        ) : (
+          <PlannerEventForm key={editor.form.sessionId} {...editor.form} />
+        ))}
 
       {popover !== null && (
         <PlannerItemPopover
@@ -286,6 +308,22 @@ function useBandState(): BandToggle {
     writeStoredBand(next);
   }, [state]);
   return { expanded: state === 'open', toggle };
+}
+
+/** Where "+" starts a new event when the day is not today: 9 AM. */
+const WIZARD_DEFAULT_MINUTE = 9 * 60;
+
+/**
+ * Where "+" starts (R3-9): today at the next whole hour when this week holds
+ * today, otherwise the week's Monday at 9 AM — inside the grid's hours either
+ * way, and every value editable on the wizard's second step.
+ */
+function wizardPrefill(view: PlannerWeekModel): PlannerEventPrefill {
+  const today = view.todayIndex >= 0 ? view.days[view.todayIndex] : undefined;
+  if (!today) return { allDay: false, date: view.days[0]?.iso ?? view.weekStart, startMinute: WIZARD_DEFAULT_MINUTE };
+  const nextHour = (Math.floor(localWallClock(new Date()).minute / 60) + 1) * 60;
+  const startMinute = Math.min(Math.max(nextHour, PLANNER_START_MINUTE), PLANNER_END_MINUTE - 60);
+  return { allDay: false, date: today.iso, startMinute };
 }
 
 /**

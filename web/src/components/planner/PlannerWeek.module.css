@@ -59,6 +59,14 @@
   margin-left: var(--space-2);
 }
 
+/* R3-9: "+" at the header's top right opens the new-event wizard. */
+.addEvent {
+  composes: btnPrimary from '@/styles/tokens.module.css';
+  min-width: 32px;
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
 /* The pre-hydration pager (P-planner-7): the pager's shape, drawn dim, with no
    link behind it. It exists so the header does not change size when the real
    one arrives. */
@@ -486,15 +494,20 @@
 .nestedChip > .blockHead {
   display: contents;
 }
+/* R3-8: a nested item is always drawn whole. The class block and its rows are
+   sized to every line of every chip (nested-fit.ts), so the title wraps in full
+   rather than clamping, and the due time takes a line of its own below it —
+   sharing the title's line would squeeze the title into whatever the time left. */
 .nestedChip > .blockTitle {
   flex: 1 1 0;
   min-width: 0;
-  /* A chip is a line or two inside someone else's block, not the block's own
-     title, so it keeps a short leash whatever the class block's height pays for. */
-  -webkit-line-clamp: 2;
+  display: block;
+  -webkit-line-clamp: none;
+  overflow: visible;
 }
 .nestedChip .blockTime {
   order: 1;
+  flex: 1 0 100%;
   margin-left: 0;
 }
 .nestedChip .blockCode {

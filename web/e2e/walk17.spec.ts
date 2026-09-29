@@ -215,6 +215,50 @@ test.describe('screens (T-12 … T-21)', () => {
     await weekHolding(page, page.getByText(/Quiz #5/));
     await page.screenshot({ path: shotPath(testInfo, '17-cr5-ist323.png'), fullPage: true });
   });
+
+  test('26 R3-8 nested items whole', async ({ page, context }, testInfo) => {
+    await context.addInitScript(
+      ([key, value]) => {
+        try {
+          window.localStorage.setItem(key, value);
+        } catch {
+          // Storage disabled: the viewport default applies.
+        }
+      },
+      [SIDEBAR_KEY, 'open'] as const,
+    );
+    await page.setViewportSize({ width: 1040, height: 900 });
+    await openPlanner(page);
+    await weekHolding(page, page.getByText(/Quiz #5/));
+    // Every nested chip sits inside its class block: no chip's bottom edge
+    // passes the block's (R3-8).
+    const overflow = await page.locator('[data-nested="true"]').evaluateAll((blocks) =>
+      blocks.flatMap((block) => {
+        const edge = block.getBoundingClientRect().bottom + 0.5;
+        return Array.from(block.querySelectorAll('[data-open], [class*="nestedChip"]'))
+          .filter((chip) => chip.getBoundingClientRect().bottom > edge)
+          .map((chip) => chip.textContent ?? '');
+      }),
+    );
+    expect(overflow).toEqual([]);
+    await page.screenshot({ path: shotPath(testInfo, '26-planner-nested.png'), fullPage: true });
+  });
+
+  test('27 R3-9 planner wizard', async ({ page }, testInfo) => {
+    await openPlanner(page);
+    await page.getByRole('button', { name: 'New event', exact: true }).click();
+    const wizard = page.getByRole('dialog', { name: 'New planner event' });
+    await expect(wizard.getByText('Step 1 of 5')).toBeVisible();
+    await wizard.getByRole('button', { name: 'Next' }).click();
+    await wizard.getByLabel('Title').fill('bb2dash test · wizard');
+    await expect(wizard.getByRole('button', { name: 'Next' })).toBeEnabled();
+    await page.screenshot({ path: shotPath(testInfo, '27-planner-wizard.png') });
+    // Nothing is saved: Cancel asks, and Discard closes (the write guard would
+    // fail the test on any insert).
+    await wizard.getByRole('button', { name: 'Cancel' }).click();
+    await wizard.getByRole('button', { name: 'Discard' }).click();
+    await expect(wizard).toHaveCount(0);
+  });
 });
 
 test.describe('forced failed read (CR-7)', () => {
