@@ -283,9 +283,20 @@ export function UpcomingTracker({
     [range.firstIso, columnsInView],
   );
 
+  /**
+   * A new anchor forgets the reader's free scroll. Done while rendering, from
+   * the previous anchor, rather than in the scroll effect below (T-23: a set
+   * state inside an effect renders twice). `moveAnchor` clears it itself for
+   * the paging case where the anchor does not change.
+   */
+  const [anchorSeen, setAnchorSeen] = useState(strip.anchor);
+  if (anchorSeen !== strip.anchor) {
+    setAnchorSeen(strip.anchor);
+    setScrolledFirst(null);
+  }
+
   /** Scroll to the anchor when it moves — or when something asks again. */
   useEffect(() => {
-    setScrolledFirst(null);
     scrollToDay(strip.anchor);
   }, [strip.anchor, scrollRequest, scrollToDay]);
 
