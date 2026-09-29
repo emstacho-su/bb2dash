@@ -16,6 +16,11 @@
  * An online shell with nothing for the left lane gets one lane. Undated work
  * is listed after the weeks. Nothing here is computed that the rows do not
  * carry: no invented dates, counts or points.
+ *
+ * The lanes are drawn only once every source has answered. An empty lane, "no
+ * files" or "No class sessions … are recorded" is a claim about the course, so
+ * while any source is in flight the pane says it is loading, and when one
+ * fails it names what could not be loaded and draws no lanes at all.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -36,6 +41,7 @@ import {
 } from '@/lib/queries.course';
 import { useSetItemStatus } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
+import { isQueryLoading, queryErrorMessage, type QueryLike } from '@/components/shared/QueryState';
 import { buildTimeline, filesByAssignment, filesBySession, type TimelineFile } from './timeline-model';
 import { useCourseTimelineFiles } from './timeline-queries';
 import { AnnouncementRow, AssignmentRow, SessionPanel, SessionRow, TimelineFiles } from './TimelineRows';
@@ -103,6 +109,16 @@ export function CourseTimeline({ courseId }: { courseId: string }) {
     setStatus.mutate({ item: { item_kind: item.item_kind, item_id: item.item_id }, status });
   }
   const pendingId = setStatus.isPending ? setStatus.variables?.item.item_id ?? null : null;
+
+  const sources: { query: QueryLike; of: string }[] = [
+    { query: sessionsQ, of: 'the class sessions' },
+    { query: workItemsQ, of: 'the assignments and readings' },
+    { query: streamQ, of: 'the announcements' },
+    { query: filesQ, of: 'the files' },
+    { query: treeQ, of: 'the content links' },
+  ];
+  const failures = sources.filter(({ query }) => query.isError);
+  const loading = sources.some(({ query }) => isQueryLoading(query));
 
   const assignmentRow = (item: WorkItem) => (
     <AssignmentRow
@@ -172,122 +188,136 @@ export function CourseTimeline({ courseId }: { courseId: string }) {
             </span>
           </div>
 
-          {selectedSession && (
-            <SessionPanel
-              session={selectedSession}
-              files={(bySession.get(selectedSession.id) ?? []).map((f) => f.file_name ?? 'Untitled file')}
-              onClose={() => setSelectedSessionId(null)}
-            />
-          )}
-
-          <div className={twoLanes ? styles.laneHead : styles.laneHeadSingle}>
-            <span className={styles.laneSpacer} />
-            {twoLanes && (
-              <span className={styles.laneTitle}>
-                Classes <em>sessions · files · announcements</em>
-              </span>
-            )}
-            <span className={styles.laneTitle}>
-              Assignments <em>due · files · status</em>
-            </span>
-          </div>
-
-          {!twoLanes && (
-            <p className={styles.fallback}>
-              No class sessions or announcements are recorded for this course (an online or
-              internship shell). The assignment lane below still applies.
-            </p>
-          )}
-
-          {mode === 'current' && from > 1 && (
-            <button
-              type="button"
-              className={styles.earlier}
-              onClick={() => { setMode('all'); setSelectedWeek(from - 1); }}
-            >
-              ↑ scroll up for weeks 1–{from - 1}
-            </button>
-          )}
-
-          {visibleWeeks.map((wk) => {
-            const isNow = wk.week === railCurrent;
-            const rowCls = [
-              twoLanes ? styles.weekRow : styles.weekRowSingle,
-              wk.week < currentWeek ? styles.weekPast : '',
-              wk.week === selectedWeek ? styles.weekRowSelected : '',
-            ]
-              .filter(Boolean)
-              .join(' ');
-            return (
-              <div
-                key={wk.week}
-                className={rowCls}
-                data-week={wk.week}
-                ref={(el) => { weekRefs.current.set(wk.week, el); }}
-              >
-                <div className={styles.weekLabel}>
-                  <span className={isNow ? styles.weekLabelNow : undefined}>Week {wk.week}</span>
-                  {termStart && <span className={styles.weekRange}>{weekRangeLabel(wk.week, termStart)}</span>}
-                  {isNow && <span className={styles.nowTag}>this week</span>}
-                </div>
-
-                {twoLanes && (
-                  <div className={styles.lane} data-lane="sessions">
-                    {wk.left.map((entry) =>
-                      entry.kind === 'session' ? (
-                        <div key={`s${entry.session.id}`} className={styles.sessionGroup}>
-                          <SessionRow
-                            session={entry.session}
-                            fileCount={(bySession.get(entry.session.id) ?? []).length}
-                            active={entry.session.id === selectedSessionId}
-                            onClick={() =>
-                              setSelectedSessionId(entry.session.id === selectedSessionId ? null : entry.session.id)
-                            }
-                          />
-                          {/* The session's lecture files, listed under its row. */}
-                          <TimelineFiles files={bySession.get(entry.session.id) ?? NO_FILES} />
-                        </div>
-                      ) : (
-                        <AnnouncementRow key={`a${entry.post.ref_id}`} post={entry.post} day={entry.date} />
-                      ),
-                    )}
-                    {wk.readings.map((r) => (
-                      <div key={r.item_id ?? r.title} className={styles.readingRow}>
-                        <span className={styles.readingDot}>R</span>
-                        <span className={styles.readingTitle}>{r.title}</span>
-                      </div>
-                    ))}
-                    {wk.left.length === 0 && wk.readings.length === 0 && (
-                      <div className={styles.laneEmpty}>No session</div>
-                    )}
-                  </div>
-                )}
-
-                <div className={styles.lane} data-lane="assignments">
-                  {wk.assignments.map(assignmentRow)}
-                  {wk.assignments.length === 0 && <div className={styles.laneEmpty}>Nothing due</div>}
-                </div>
-              </div>
-            );
-          })}
-
-          {undated.length > 0 && (
-            <div className={styles.undated}>
-              <div className={styles.weekLabel}>
-                <span>No date yet</span>
-                <span className={styles.weekRange}>{undated.length} item{undated.length === 1 ? '' : 's'}</span>
-              </div>
-              <div className={styles.lane} data-lane="assignments">
-                {undated.map(assignmentRow)}
-              </div>
+          {failures.length > 0 ? (
+            <div className={styles.state} role="alert">
+              {failures.map(({ query, of }) => (
+                <p key={of} className={styles.stateLine}>
+                  Could not load {of}: {queryErrorMessage(query.error)}
+                </p>
+              ))}
             </div>
-          )}
+          ) : loading ? (
+            <p className={styles.state}>Loading the timeline…</p>
+          ) : (
+            <>
+            {selectedSession && (
+              <SessionPanel
+                session={selectedSession}
+                files={(bySession.get(selectedSession.id) ?? []).map((f) => f.file_name ?? 'Untitled file')}
+                onClose={() => setSelectedSessionId(null)}
+              />
+            )}
 
-          <div className={styles.tail}>
-            {visibleWeeks.length > 0 && visibleWeeks[visibleWeeks.length - 1].week < maxWeek
-              ? `weeks ${visibleWeeks[visibleWeeks.length - 1].week + 1}–${maxWeek} continue ↓`
-              : 'end of semester'}
-          </div>
+            <div className={twoLanes ? styles.laneHead : styles.laneHeadSingle}>
+              <span className={styles.laneSpacer} />
+              {twoLanes && (
+                <span className={styles.laneTitle}>
+                  Classes <em>sessions · files · announcements</em>
+                </span>
+              )}
+              <span className={styles.laneTitle}>
+                Assignments <em>due · files · status</em>
+              </span>
+            </div>
+
+            {!twoLanes && (
+              <p className={styles.fallback}>
+                No class sessions or announcements are recorded for this course (an online or
+                internship shell). The assignment lane below still applies.
+              </p>
+            )}
+
+            {mode === 'current' && from > 1 && (
+              <button
+                type="button"
+                className={styles.earlier}
+                onClick={() => { setMode('all'); setSelectedWeek(from - 1); }}
+              >
+                ↑ scroll up for weeks 1–{from - 1}
+              </button>
+            )}
+
+            {visibleWeeks.map((wk) => {
+              const isNow = wk.week === railCurrent;
+              const rowCls = [
+                twoLanes ? styles.weekRow : styles.weekRowSingle,
+                wk.week < currentWeek ? styles.weekPast : '',
+                wk.week === selectedWeek ? styles.weekRowSelected : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
+              return (
+                <div
+                  key={wk.week}
+                  className={rowCls}
+                  data-week={wk.week}
+                  ref={(el) => { weekRefs.current.set(wk.week, el); }}
+                >
+                  <div className={styles.weekLabel}>
+                    <span className={isNow ? styles.weekLabelNow : undefined}>Week {wk.week}</span>
+                    {termStart && <span className={styles.weekRange}>{weekRangeLabel(wk.week, termStart)}</span>}
+                    {isNow && <span className={styles.nowTag}>this week</span>}
+                  </div>
+
+                  {twoLanes && (
+                    <div className={styles.lane} data-lane="sessions">
+                      {wk.left.map((entry) =>
+                        entry.kind === 'session' ? (
+                          <div key={`s${entry.session.id}`} className={styles.sessionGroup}>
+                            <SessionRow
+                              session={entry.session}
+                              fileCount={(bySession.get(entry.session.id) ?? []).length}
+                              active={entry.session.id === selectedSessionId}
+                              onClick={() =>
+                                setSelectedSessionId(entry.session.id === selectedSessionId ? null : entry.session.id)
+                              }
+                            />
+                            {/* The session's lecture files, listed under its row. */}
+                            <TimelineFiles files={bySession.get(entry.session.id) ?? NO_FILES} />
+                          </div>
+                        ) : (
+                          <AnnouncementRow key={`a${entry.post.ref_id}`} post={entry.post} day={entry.date} />
+                        ),
+                      )}
+                      {wk.readings.map((r) => (
+                        <div key={r.item_id ?? r.title} className={styles.readingRow}>
+                          <span className={styles.readingDot}>R</span>
+                          <span className={styles.readingTitle}>{r.title}</span>
+                        </div>
+                      ))}
+                      {wk.left.length === 0 && wk.readings.length === 0 && (
+                        <div className={styles.laneEmpty}>No session</div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className={styles.lane} data-lane="assignments">
+                    {wk.assignments.map(assignmentRow)}
+                    {wk.assignments.length === 0 && <div className={styles.laneEmpty}>Nothing due</div>}
+                  </div>
+                </div>
+              );
+            })}
+
+            {undated.length > 0 && (
+              <div className={styles.undated}>
+                <div className={styles.weekLabel}>
+                  <span>No date yet</span>
+                  <span className={styles.weekRange}>{undated.length} item{undated.length === 1 ? '' : 's'}</span>
+                </div>
+                <div className={styles.lane} data-lane="assignments">
+                  {undated.map(assignmentRow)}
+                </div>
+              </div>
+            )}
+
+            <div className={styles.tail}>
+              {visibleWeeks.length > 0 && visibleWeeks[visibleWeeks.length - 1].week < maxWeek
+                ? `weeks ${visibleWeeks[visibleWeeks.length - 1].week + 1}–${maxWeek} continue ↓`
+                : 'end of semester'}
+            </div>
+            </>
+          )}
         </div>
       </div>
     </section>

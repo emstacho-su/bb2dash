@@ -11,12 +11,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCourseDisplay } from './factories';
 import { newQueryClient, readChain } from './hydration-harness';
 
-const state = vi.hoisted(() => ({ byTable: {} as Record<string, unknown[]> }));
+const state = vi.hoisted(() => ({ byTable: {} as Record<string, unknown[]>, hangTerms: false }));
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
-    from: (table: string) =>
-      readChain(state.byTable, table, { singleTables: ['v_course_display', 'terms'] }),
+    from: (table: string) => {
+      if (table === 'terms' && state.hangTerms) {
+        const chain: Record<string, unknown> = {};
+        for (const name of ['select', 'eq', 'order', 'limit']) chain[name] = () => chain;
+        chain.maybeSingle = () => new Promise(() => {});
+        return chain;
+      }
+      return readChain(state.byTable, table, { singleTables: ['v_course_display', 'terms'] });
+    },
     auth: { getSession: vi.fn() },
   }),
 }));
@@ -45,6 +52,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-09-29T14:00:00Z'));
   trackerProps.calls = [];
+  state.hangTerms = false;
   state.byTable = {
     v_course_display: [makeCourseDisplay({ display_id: 'IST.352', code: 'IST 352', shell_ids: ['IST.352'] })],
     courses: [{ id: 'IST.352', term_id: 'fall-2026' }],
@@ -103,6 +111,20 @@ describe('CourseStream — the strip reaches back to the term start (R3-1)', () 
     await waitFor(() => expect(trackerProps.calls.length).toBeGreaterThan(0));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(trackerProps.calls.at(-1)?.startIso ?? null).toBeNull();
+  });
+});
+
+describe('CourseStream — the tracker waits for the term (code review)', () => {
+  it('reports the tracker as loading while the term row is in flight', async () => {
+    state.hangTerms = true;
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="IST.352" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(trackerProps.calls.length).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(trackerProps.calls.at(-1)?.isPending).toBe(true);
   });
 });
 
