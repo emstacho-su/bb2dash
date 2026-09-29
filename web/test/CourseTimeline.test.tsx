@@ -19,7 +19,28 @@ import { makeCourseDisplay, makeWorkItem } from './factories';
 import { makeStreamRow, makeTreeRow } from './factories.course';
 import { newQueryClient, readChain } from './hydration-harness';
 
-const state = vi.hoisted(() => ({ byTable: {} as Record<string, unknown[]> }));
+const state = vi.hoisted(() => ({
+  byTable: {} as Record<string, unknown[]>,
+  /** Tables whose read never answers (a query in flight). */
+  hang: new Set<string>(),
+  /** Tables whose read fails. */
+  fail: new Set<string>(),
+}));
+
+/** A chain whose every terminal resolves with `result` (or never, for null). */
+function fixedChain(result: unknown | null): Record<string, unknown> {
+  const chain: Record<string, unknown> = {};
+  const self = () => chain;
+  const settle = () => (result === null ? new Promise(() => {}) : Promise.resolve(result));
+  for (const name of ['select', 'eq', 'neq', 'in', 'is', 'not', 'or', 'gte', 'lt', 'lte', 'order', 'limit']) {
+    chain[name] = self;
+  }
+  chain.maybeSingle = settle;
+  chain.single = settle;
+  chain.then = (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+    settle().then(onFulfilled, onRejected);
+  return chain;
+}
 const redirect = vi.hoisted(() =>
   vi.fn((to: string) => {
     throw new Error(`NEXT_REDIRECT ${to}`);
@@ -28,8 +49,11 @@ const redirect = vi.hoisted(() =>
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
-    from: (table: string) =>
-      readChain(state.byTable, table, { singleTables: ['v_course_display', 'terms'] }),
+    from: (table: string) => {
+      if (state.hang.has(table)) return fixedChain(null);
+      if (state.fail.has(table)) return fixedChain({ data: null, error: new Error(`${table} is unreachable`) });
+      return readChain(state.byTable, table, { singleTables: ['v_course_display', 'terms'] });
+    },
     auth: { getSession: vi.fn() },
   }),
 }));
@@ -84,6 +108,8 @@ const ANNOUNCEMENT = makeStreamRow({
 });
 
 function seed() {
+  state.hang = new Set();
+  state.fail = new Set();
   state.byTable = {
     v_course_display: [makeCourseDisplay({ display_id: 'IST.352', code: 'IST 352', shell_ids: ['IST.352'] })],
     courses: [{ id: 'IST.352', location: null, term_id: 'fall-2026', kind: 'lecture', group_notes: null, card_note: null }],
@@ -210,6 +236,41 @@ describe('CourseTimeline — the right lane', () => {
   });
 });
 
+describe('CourseTimeline — no empties it cannot vouch for (code review)', () => {
+  it.each(['sessions', 'v_work_items', 'v_course_stream', 'bb_files', 'v_content_tree'])(
+    'shows a loading line, not the empty sentences, while %s is in flight',
+    async (table) => {
+      state.hang.add(table);
+      renderTimeline();
+      // The course and term have answered: the week rail is drawn…
+      await waitFor(() => expect(screen.getByRole('navigation', { name: 'Weeks' })).toBeInTheDocument());
+      // …and the lanes wait for the rest.
+      expect(screen.getByText('Loading the timeline…')).toBeInTheDocument();
+      expect(document.querySelector('[data-week]')).toBeNull();
+      expect(screen.queryByText(/No class sessions or announcements are recorded/)).toBeNull();
+      expect(screen.queryByText('No session')).toBeNull();
+      expect(screen.queryByText('Nothing due')).toBeNull();
+      expect(screen.queryByText('no files')).toBeNull();
+    },
+  );
+
+  it.each([
+    ['sessions', 'the class sessions'],
+    ['v_work_items', 'the assignments and readings'],
+    ['v_course_stream', 'the announcements'],
+    ['bb_files', 'the files'],
+    ['v_content_tree', 'the content links'],
+  ])('names the failure when %s fails, and draws no empty lanes', async (table, what) => {
+    state.fail.add(table);
+    renderTimeline();
+    const alert = await waitFor(() => screen.getByRole('alert'));
+    expect(alert).toHaveTextContent(`Could not load ${what}: ${table} is unreachable`);
+    expect(screen.queryByText(/No class sessions or announcements are recorded/)).toBeNull();
+    expect(screen.queryByText('Nothing due')).toBeNull();
+    expect(document.querySelector('[data-week]')).toBeNull();
+  });
+});
+
 describe('Classwork keeps only the folder tree', () => {
   it('has no week-timeline toggle', async () => {
     const client = newQueryClient();
@@ -230,5 +291,29 @@ describe('Classwork keeps only the folder tree', () => {
       }),
     ).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/course/IST.352/stream');
+  });
+
+  it('carries every other query parameter across the redirect, so a pasted ?item= still opens', async () => {
+    redirect.mockClear();
+    await expect(
+      CourseClassworkPage({
+        params: Promise.resolve({ id: 'IST.466' }),
+        searchParams: Promise.resolve({ view: 'timeline', item: 'session:105', tag: ['a b', 'c&d'] }),
+      }),
+    ).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(
+      '/course/IST.466/stream?item=session%3A105&tag=a+b&tag=c%26d',
+    );
+  });
+
+  it('keeps the redirect on this app’s own stream path whatever the id holds', async () => {
+    redirect.mockClear();
+    await expect(
+      CourseClassworkPage({
+        params: Promise.resolve({ id: encodeURIComponent('//evil.example/x') }),
+        searchParams: Promise.resolve({ view: 'timeline' }),
+      }),
+    ).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/course/%2F%2Fevil.example%2Fx/stream');
   });
 });

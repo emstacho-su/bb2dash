@@ -518,3 +518,7 @@
   flex: none;
   margin-left: auto;
 }
+
+.stateLine {
+  margin: 0;
+}

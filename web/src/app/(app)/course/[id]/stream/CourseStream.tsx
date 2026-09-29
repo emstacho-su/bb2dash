@@ -81,7 +81,8 @@ export function CourseStream({ courseId }: { courseId: string }) {
         title={`Upcoming work · ${display.data.code}`}
         onStatusChange={handleStatus}
         pendingItemId={pendingItemId}
-        isPending={isQueryLoading(workItemsQ)}
+        // The start date waits on the term row, so the strip is loading until it answers.
+        isPending={isQueryLoading(workItemsQ) || isQueryLoading(termQ)}
         error={workItemsQ.error}
       />
 

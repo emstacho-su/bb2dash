@@ -14,6 +14,25 @@ export const metadata: Metadata = {
  *
  * Next 16: `params` and `searchParams` are promises.
  */
+/**
+ * Where `?view=timeline` goes: this course's Stream, with every other query
+ * parameter carried over (a pasted `&item=session:105` must still open its
+ * popout). The id is encoded as one path segment, so the target is always
+ * `/course/<id>/stream` on this app — never another origin or path.
+ */
+function streamRedirectPath(
+  courseId: string,
+  query: Record<string, string | string[] | undefined>,
+): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (key === 'view' || value === undefined) continue;
+    for (const one of Array.isArray(value) ? value : [value]) params.append(key, one);
+  }
+  const search = params.toString();
+  return `/course/${encodeURIComponent(courseId)}/stream${search ? `?${search}` : ''}`;
+}
+
 export default async function CourseClassworkPage({
   params,
   searchParams,
@@ -25,6 +44,6 @@ export default async function CourseClassworkPage({
   const courseId = decodeURIComponent(id);
   const view = Array.isArray(query.view) ? query.view[0] : query.view;
 
-  if (view === 'timeline') redirect(`/course/${encodeURIComponent(courseId)}/stream`);
+  if (view === 'timeline') redirect(streamRedirectPath(courseId, query));
   return <CourseClasswork courseId={courseId} />;
 }
