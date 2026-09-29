@@ -460,3 +460,32 @@ def test_usage_errors_exit_2(capsys):
     assert vr.main(["--check"]) == 2
     assert vr.main(["--emit-sql"]) == 2
     assert vr.main(["--nope", str(FIXTURE)]) == 2
+
+
+# --- target.field: a label on a keep entry, a column on a correcting one (PM, 2026-09-29) ------
+
+
+@pytest.mark.parametrize(
+    "label",
+    ["component_id / points_possible", "check: top-level weights sum to 100", "item points_possible (quiz-01..05)"],
+)
+def test_keep_entry_may_name_a_descriptive_field(label):
+    ok = entry(target={"table": "grade_components", "key": {"course_id": "TST.100", "code": "exams"}, "field": label})
+    assert errors_of([ok]) == []
+
+
+@pytest.mark.parametrize("call", ["change_to", "mark_ungraded"])
+def test_correcting_entry_must_name_one_column(call):
+    bad = entry(
+        verdict="differs",
+        call=call,
+        value=12,
+        target={"table": "grade_components", "key": {"course_id": "TST.100", "code": "exams"}, "field": "points / weight_pct"},
+    )
+    assert any("target.field" in e for e in errors_of([bad]))
+
+
+@pytest.mark.parametrize("label", ["", "a\nb", "x" * 121])
+def test_keep_label_is_one_short_line(label):
+    bad = entry(target={"table": "grade_components", "key": {"course_id": "TST.100", "code": "exams"}, "field": label})
+    assert any("target.field" in e for e in errors_of([bad]))

@@ -58,6 +58,7 @@ STACK_OVERRIDE = "STACK_OVERRIDE"
 ID_RE = re.compile(r"^[A-Z]{2,4}\.\d{3}(\.[a-z]+)?-\d{2,}$")
 CITATION_RE = re.compile(r"^bb_file:\d+#unit:\d+$")
 FIELD_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
+FIELD_LABEL_MAX = 120
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MACHINE_HEADING_RE = re.compile(r"^##\s+Machine block\s*$", re.MULTILINE)
 YAML_FENCE_RE = re.compile(r"^```ya?ml[ \t]*\r?\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
@@ -261,7 +262,9 @@ def _has_nul(value) -> bool:
     return False
 
 
-def _check_target(target) -> list[str]:
+def _check_target(target, labels_ok: bool = False) -> list[str]:
+    """labels_ok: a keep / ask_professor entry changes nothing, so its field may be a label
+    (e.g. "component_id / points_possible", "check: weights sum to 100"); its recheck carries the value."""
     if not isinstance(target, dict):
         return ["target must be a mapping {table, key, field}"]
     errs = []
@@ -277,8 +280,11 @@ def _check_target(target) -> list[str]:
         pass
     else:
         errs.append(f"target.key for {table} must be {list(cols)}")
-    if not isinstance(target.get("field"), str) or not FIELD_RE.match(target["field"]):
-        errs.append("target.field must be a column name")
+    field = target.get("field")
+    if not isinstance(field, str) or not field.strip() or len(field) > FIELD_LABEL_MAX or "\n" in field or "\r" in field:
+        errs.append(f"target.field must be one line of at most {FIELD_LABEL_MAX} characters")
+    elif not labels_ok and not FIELD_RE.match(field):
+        errs.append("target.field must be a column name on a change_to / mark_ungraded entry")
     if set(target) - {"table", "key", "field"}:
         errs.append("target has unknown keys")
     return errs
@@ -309,7 +315,7 @@ def check_entry(e) -> list[str]:
         errs.append(f"unknown keys {sorted(map(str, unknown))}")
     if not isinstance(e.get("id"), str) or not ID_RE.match(e["id"]):
         errs.append("id must look like <COURSE>-NN")
-    errs += _check_target(e.get("target"))
+    errs += _check_target(e.get("target"), labels_ok=e.get("call") not in CORRECTING_CALLS)
     verdict = e.get("verdict")
     if verdict not in VERDICTS:
         errs.append(f"verdict must be one of {sorted(VERDICTS)}")
