@@ -89,12 +89,12 @@ no migration number or worker id owned by two briefs (`105_BRIEF_VERIFICATION_20
 
 ## 5. Sessions (sketched here, written as prompts in Stage D)
 
-* **Session A — 15 then 16:** the db phase is size S/M; the grades phase is Stack's sittings with the
+* (Re-lettered 2026-09-29 to chronological order, ORCHESTRATOR §6: A = 20, B = 17 + 18 then 19, C = 16, D = 14 then 21, E = Stack's open items, F = 22; Phase 15 is done.) **Session C — 16:** the grades phase is Stack's sittings with the
   PM in between (launcher, export, migration).
 * **Session B — 17 and 18 in parallel worktrees**, then 19 on their seams.
-* **Session C — 14 across three repos**, spike first; **21** follows in the same session shape.
-* **Session D — 20** in the harness repo (may run first of all: R-97 is live).
-* **Session E — 22**, last.
+* **Session D — 14 across three repos**, spike first; **21** follows in the same session shape.
+* **Session A — 20** in the harness repo (runs first of all: R-97 is live).
+* **Session E — Stack's open items**, any sitting; **Session F — 22**, last.
 
 ## 6. Open at this stage
 
