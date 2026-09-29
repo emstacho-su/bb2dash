@@ -36,6 +36,8 @@
  */
 
 import { evaluateCourse, standingFor } from './grade-model';
+import { usableWeights } from './grade-model/aggregations/rank-weighted';
+import { flattenOutcomes, type NodeOutcome } from './grade-model/evaluate';
 import { isCounted, realScoreOf, unlinkedScoredKeys } from './grade-model/items';
 import type { ItemInput, ModelInput } from './grade-model/types';
 // A pure date formatter that happens to live in the 10a query module, the same
@@ -50,6 +52,20 @@ export type FigureReason =
   | 'qualitative_method'
   | 'unknown_method'
   | 'unknown_aggregation';
+
+/**
+ * A rank-weighted part's rule, as stored (R-36): the weights are the
+ * component's own, read through the engine's `usableWeights`, so the sentence
+ * the screen prints cannot disagree with the arithmetic behind the figure.
+ */
+export interface RankRule {
+  /** The component's name, as the figure's part lists print it. */
+  readonly part: string;
+  /** Highest rank first, exactly as stored. */
+  readonly weights: readonly number[];
+  /** Every slot is graded, so the weights apply now; until then graded ones are averaged. */
+  readonly allGraded: boolean;
+}
 
 export type GradedSoFarResult =
   | {
@@ -73,6 +89,13 @@ export type GradedSoFarResult =
       readonly unlinkedColumns: readonly string[];
       /** Newest `seenAt` among the rows that went into the figure. */
       readonly asOf: string | null;
+      /**
+       * Rank-weighted parts with usable weights, nested ones included, in
+       * syllabus order. `gradedSoFar()` always fills it; it is optional only so
+       * a figure written by hand (a test stub) without it still type-checks,
+       * and a missing list renders as no rules.
+       */
+      readonly rankRules?: readonly RankRule[];
     }
   | { readonly state: 'nothing_graded' }
   | { readonly state: 'not_computable'; readonly reason: FigureReason };
@@ -84,6 +107,17 @@ export function asOfFor(items: readonly ItemInput[]): string | null {
     .flatMap((item) => (typeof item.seenAt === 'string' && item.seenAt !== '' ? [item.seenAt] : []));
   if (stamps.length === 0) return null;
   return stamps.reduce((newest, stamp) => (Date.parse(stamp) > Date.parse(newest) ? stamp : newest));
+}
+
+/** Every rank-weighted part with usable weights, parents' children included, in syllabus order. */
+export function rankRulesFor(outcomes: readonly NodeOutcome[]): readonly RankRule[] {
+  return flattenOutcomes(outcomes).flatMap((outcome) => {
+    const { component } = outcome.node;
+    if (component.aggregation !== 'rank_weighted') return [];
+    const weights = usableWeights(component.rankWeights);
+    if (weights === null) return [];
+    return [{ part: component.name, weights, allGraded: outcome.state === 'graded' }];
+  });
 }
 
 /** Names of the scored columns the picker could still place, in input order. */
@@ -193,5 +227,6 @@ export function gradedSoFar(input: ModelInput): GradedSoFarResult {
     leftOutParts: parts.filter((o) => o.gradedCap <= 0).map((o) => o.node.component.name),
     unlinkedColumns: unlinkedColumnNames(input),
     asOf: asOfFor(input.items),
+    rankRules: rankRulesFor(totals.outcomes),
   };
 }

@@ -154,6 +154,78 @@ describe('GEO.103 absence columns', () => {
   });
 });
 
+/*
+ * R-36 (Phase 16): the rank-weighted rule the figure is built on, stated from
+ * the stored weights (never a literal) through the engine's own
+ * `usableWeights`, so the sentence cannot disagree with the arithmetic.
+ */
+describe('rank rules', () => {
+  const rankPart = (overrides: Partial<Parameters<typeof component>[0]> = {}) =>
+    component({
+      id: 1,
+      name: 'Exams (rank-weighted)',
+      weightPct: 75,
+      aggregation: 'rank_weighted',
+      rankWeights: [30, 25, 20],
+      countExpected: 3,
+      ...overrides,
+    });
+  const exam = (n: number, score: number | null, componentId = 1) =>
+    item({ key: `col:exam${n}`, componentId, possible: 100, score });
+
+  function rulesOf(input: ModelInput) {
+    const figure = gradedSoFar(input);
+    if (figure.state !== 'figure') throw new Error(`expected a figure, got ${figure.state}`);
+    if (figure.rankRules === undefined) throw new Error('gradedSoFar() left rankRules unset');
+    return figure.rankRules;
+  }
+
+  it('states the rule with the stored weights while exams are still ungraded', () => {
+    const input = modelInput({ components: [rankPart()], items: [exam(1, 80), exam(2, null), exam(3, null)] });
+    expect(rulesOf(input)).toEqual([{ part: 'Exams (rank-weighted)', weights: [30, 25, 20], allGraded: false }]);
+  });
+
+  it('marks the rule allGraded once every slot is graded (F11)', () => {
+    const figure = figureFor('F11');
+    expect(figure.state === 'figure' && figure.rankRules).toEqual([
+      { part: 'Exams', weights: [30, 25, 20], allGraded: true },
+    ]);
+  });
+
+  it('takes the weights from the component, not a constant (F12)', () => {
+    const figure = figureFor('F12');
+    expect(figure.state === 'figure' && figure.rankRules).toEqual([
+      { part: 'Exams', weights: [30, 20, 10], allGraded: false },
+    ]);
+  });
+
+  it('finds a rank-weighted part nested under a parent', () => {
+    const input = modelInput({
+      components: [
+        component({ id: 9, name: 'Assessments', weightPct: 100, aggregation: 'sum' }),
+        rankPart({ id: 1, parentId: 9, weightPct: 100 }),
+      ],
+      items: [exam(1, 90)],
+    });
+    expect(rulesOf(input).map((rule) => rule.part)).toEqual(['Exams (rank-weighted)']);
+  });
+
+  it.each([
+    { name: 'null', rankWeights: null },
+    { name: 'empty', rankWeights: [] },
+    { name: 'negative', rankWeights: [30, -5, 20] },
+    { name: 'all zero', rankWeights: [0, 0, 0] },
+  ])('states no rule for a $name weight list', ({ rankWeights }) => {
+    const input = modelInput({ components: [rankPart({ rankWeights })], items: [exam(1, 80)] });
+    expect(rulesOf(input)).toEqual([]);
+  });
+
+  it('is empty for a course with no rank-weighted part (F01)', () => {
+    const figure = figureFor('F01');
+    expect(figure.state === 'figure' && figure.rankRules).toEqual([]);
+  });
+});
+
 describe('what the figure does not cover', () => {
   it('names a part nobody has graded yet (F06)', () => {
     const figure = figureFor('F06');

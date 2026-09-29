@@ -20,8 +20,10 @@ import {
   LEFT_OUT_LABEL,
   NOTHING_GRADED_TEXT,
   UNLINKED_LABEL,
+  rankRuleText,
 } from '@/components/grades/GradedSoFarFigure';
-import type { GradedSoFarResult as Figure } from '@/lib/graded-so-far';
+import { gradedSoFar, type GradedSoFarResult as Figure, type RankRule } from '@/lib/graded-so-far';
+import { component, item, modelInput } from './grade-model/builders';
 
 const FIGURE: Figure = {
   state: 'figure',
@@ -164,6 +166,81 @@ describe("GradedSoFarFigure — Blackboard's own total", () => {
       />,
     );
     expect(screen.getByTestId('blackboard-total')).toBeInTheDocument();
+  });
+});
+
+/*
+ * R-36 (Phase 16): one sentence per rank-weighted part, under the headline,
+ * built from the stored weights. The two strings are the Contract's, frozen.
+ */
+describe('GradedSoFarFigure — the rank-weighted rule', () => {
+  const ECN_RULE: RankRule = { part: 'Exams (rank-weighted)', weights: [30, 25, 20], allGraded: false };
+
+  it('states the rule while not every slot is graded (ECN.304 today)', () => {
+    expect(rankRuleText(ECN_RULE)).toBe(
+      'Exams (rank-weighted): weighted 30 / 25 / 20 from highest score to lowest once all 3 are graded; until then the graded ones are averaged.',
+    );
+  });
+
+  it('states the rule once every slot is graded', () => {
+    expect(rankRuleText({ ...ECN_RULE, allGraded: true })).toBe(
+      'Exams (rank-weighted): weighted 30 / 25 / 20 from highest score to lowest.',
+    );
+  });
+
+  it('prints each weight as stored, without a trailing ".0", and counts them', () => {
+    expect(rankRuleText({ part: 'Quizzes', weights: [12.5, 10, 7.5, 5], allGraded: false })).toBe(
+      'Quizzes: weighted 12.5 / 10 / 7.5 / 5 from highest score to lowest once all 4 are graded; until then the graded ones are averaged.',
+    );
+  });
+
+  it('renders one sentence per rule, after the headline', () => {
+    const rules = [ECN_RULE, { part: 'Quizzes', weights: [2, 1], allGraded: true }];
+    render(<GradedSoFarFigure figure={{ ...FIGURE, rankRules: rules }} />);
+    const lines = screen.getAllByTestId('rank-rule');
+    expect(lines.map((line) => line.textContent)).toEqual(rules.map(rankRuleText));
+    expect(lines[0].tagName).toBe('P');
+    const headline = screen.getByText('87.4%');
+    expect(headline.compareDocumentPosition(lines[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders none on the compact card', () => {
+    render(<GradedSoFarFigure figure={{ ...FIGURE, rankRules: [ECN_RULE] }} compact />);
+    expect(screen.queryByTestId('rank-rule')).toBeNull();
+  });
+
+  it('renders none for a malformed weight list', () => {
+    const figure = gradedSoFar(
+      modelInput({
+        components: [
+          component({ id: 1, name: 'Exams (rank-weighted)', weightPct: 100, aggregation: 'rank_weighted', rankWeights: [30, -5, 20], countExpected: 3 }),
+        ],
+        items: [item({ key: 'col:exam1', componentId: 1, possible: 100, score: 80 })],
+      }),
+    );
+    expect(figure.state).toBe('figure');
+    render(<GradedSoFarFigure figure={figure} />);
+    expect(screen.queryByTestId('rank-rule')).toBeNull();
+  });
+
+  it('takes the weights from the component', () => {
+    const figure = gradedSoFar(
+      modelInput({
+        components: [
+          component({ id: 1, name: 'Midterms', weightPct: 100, aggregation: 'rank_weighted', rankWeights: [3, 2, 1], countExpected: 3 }),
+        ],
+        items: [item({ key: 'col:m1', componentId: 1, possible: 100, score: 80 })],
+      }),
+    );
+    render(<GradedSoFarFigure figure={figure} />);
+    expect(screen.getByTestId('rank-rule').textContent).toBe(
+      'Midterms: weighted 3 / 2 / 1 from highest score to lowest once all 3 are graded; until then the graded ones are averaged.',
+    );
+  });
+
+  it('renders none when the figure carries no rules', () => {
+    render(<GradedSoFarFigure figure={FIGURE} />);
+    expect(screen.queryByTestId('rank-rule')).toBeNull();
   });
 });
 
