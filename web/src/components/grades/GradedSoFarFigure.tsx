@@ -31,6 +31,7 @@ import {
   percentText,
   type FigureReason,
   type GradedSoFarResult as Figure,
+  type RankRule,
 } from '@/lib/graded-so-far';
 import tokens from '@/styles/tokens.module.css';
 import styles from './GradedSoFarFigure.module.css';
@@ -51,6 +52,19 @@ export const NOT_COMPUTABLE_TEXT: Readonly<Record<FigureReason, string>> = {
   unknown_method: 'A grading rule here is one bb2dash cannot read.',
   unknown_aggregation: 'A grading rule here is one bb2dash cannot read.',
 };
+
+/**
+ * A rank-weighted part's rule in one sentence (R-36). The wording is the
+ * Contract's, frozen; the weights are the stored ones, never a literal, and
+ * print as JavaScript prints a number (30, not 30.0; 12.5 stays 12.5).
+ */
+export function rankRuleText(rule: RankRule): string {
+  const weights = rule.weights.map(String).join(' / ');
+  const head = `${rule.part}: weighted ${weights} from highest score to lowest`;
+  return rule.allGraded
+    ? `${head}.`
+    : `${head} once all ${rule.weights.length} are graded; until then the graded ones are averaged.`;
+}
 
 /* -- Blackboard's number, beside ours and never merged with it ------------- */
 
@@ -143,6 +157,14 @@ export function GradedSoFarFigure({
         {fraction && <span className={tokens.mono}>{fraction}</span>}
         <span className={styles.note}>as of {formatSeenAt(figure.asOf)}</span>
       </span>
+
+      {!compact &&
+        (figure.rankRules ?? []).map((rule, index) => (
+          // Two parts may share a name; their order is the syllabus's and fixed.
+          <p key={`${index}:${rule.part}`} className={styles.sentence} data-testid="rank-rule">
+            {rankRuleText(rule)}
+          </p>
+        ))}
 
       {!compact && figure.leftOutParts.length > 0 && (
         <p className={styles.sentence}>

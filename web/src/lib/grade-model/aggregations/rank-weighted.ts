@@ -14,7 +14,7 @@ import { descending, mean, sum } from '../math';
 import { MEAN_RULES, slotAggregate } from './shared';
 import type { Aggregate } from './types';
 
-function usableWeights(weights: readonly number[] | null): readonly number[] | null {
+export function usableWeights(weights: readonly number[] | null): readonly number[] | null {
   if (weights === null || weights.length === 0) return null;
   const valid = weights.every((weight) => Number.isFinite(weight) && weight >= 0);
   return valid && sum(weights) > 0 ? weights : null;
