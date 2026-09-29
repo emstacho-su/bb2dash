@@ -129,3 +129,12 @@ Live eval: **not run by W-49.** `SB_ANON_JWT` is in no gitignored env file on th
 checkout's `.env.local` hold only `BB2DASH_TEST_DB_URL`; `bb2dash/.env` holds the service role, which this script must
 not use). `node ingest/eval_search.mjs --out ingest/eval/reports/2026-09-29.json` → `SB_ANON_JWT (the legacy anon JWT)
 is not set`, exit 2. The PM runs it with the key in the process environment; expected `scored=30`, hybrid MRR ≥ 0.900.
+
+## Task 25 — the one `EVAL_EMBEDDING_POC.md` line (R-74)
+
+One line appended to §1's "Known issue accounted for" paragraph, stating each mode's shape today (vector: whole unit
+text, one row per unit, nearest `part_no` + `similarity`, per `search`'s `bestPartPerUnit`; hybrid: matched passage,
+`snippet_source`, `part_no`; fts: `rank` + whole-unit headline) and naming the committed re-run.
+
+* RED: `grep -cF "Shapes today (Phase 18, 2026-09-29)" EVAL_EMBEDDING_POC.md` → 0
+* GREEN: the same grep → 1
