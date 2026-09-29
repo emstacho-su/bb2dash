@@ -49,7 +49,8 @@ async function main() {
     await page.waitForURL((url) => url.host === appHost && !url.pathname.startsWith('/login'), {
       timeout: SIGN_IN_TIMEOUT_MS,
     });
-    await page.waitForLoadState('networkidle');
+    // Not 'networkidle': the app polls (query refetch, heartbeat), so the network never goes quiet.
+    await page.waitForLoadState('load');
 
     mkdirSync(dirname(STATE_PATH), { recursive: true });
     await context.storageState({ path: STATE_PATH });
