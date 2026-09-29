@@ -1,0 +1,95 @@
+{
+  "_note": "SYNTHETIC. Phase 18 task 18 (R-70, B-36 default). The course shell id is IST.323's real one; every announcement id, user id, name and sentence is invented. Shape assumed from research 92 section 9 (creatorUserId, a bare user id); the probe sitting (98a section 1) confirms or corrects it.",
+  "bb_course_id": "_571529_1",
+  "_rawResponses": {
+    "memberships": {
+      "results": [
+        {
+          "userId": "_30000001_1",
+          "user": { "givenName": "Ada", "familyName": "Teacher", "emailAddress": "ada.teacher@example.invalid" },
+          "courseRole": { "identifier": "Instructor" }
+        }
+      ]
+    },
+    "announcements": {
+      "results": [
+        {
+          "id": "_9000001_1",
+          "title": "Welcome to the course",
+          "createdDate": "2026-08-24T13:00:00.000Z",
+          "modifiedDate": "2026-08-24T13:00:00.000Z",
+          "startDateRestriction": null,
+          "readStatus": { "isRead": true },
+          "creatorUserId": "_30000001_1",
+          "body": { "rawText": "<p>Invented welcome text.</p>" }
+        },
+        {
+          "id": "_9000002_1",
+          "title": "Lab room change",
+          "createdDate": "2026-09-01T12:00:00.000Z",
+          "modifiedDate": "2026-09-01T12:00:00.000Z",
+          "startDateRestriction": null,
+          "readStatus": { "isRead": false },
+          "creatorUserId": "_30000002_1",
+          "body": { "rawText": "<p>Invented room change.</p>" }
+        },
+        {
+          "id": "_9000003_1",
+          "title": "Office hours moved",
+          "createdDate": "2026-09-08T12:00:00.000Z",
+          "modifiedDate": "2026-09-08T12:00:00.000Z",
+          "startDateRestriction": null,
+          "readStatus": { "isRead": false },
+          "creatorUserId": "_30000002_1",
+          "body": { "rawText": "<p>Invented office hours note.</p>" }
+        },
+        {
+          "id": "_9000004_1",
+          "title": "Posted by an account the student cannot read",
+          "createdDate": "2026-09-10T12:00:00.000Z",
+          "modifiedDate": "2026-09-10T12:00:00.000Z",
+          "startDateRestriction": null,
+          "readStatus": { "isRead": false },
+          "creatorUserId": "_30000003_1",
+          "body": { "rawText": "<p>Invented text.</p>" }
+        },
+        {
+          "id": "_9000005_1",
+          "title": "Carries a name already",
+          "createdDate": "2026-09-12T12:00:00.000Z",
+          "modifiedDate": "2026-09-12T12:00:00.000Z",
+          "startDateRestriction": null,
+          "readStatus": { "isRead": false },
+          "creatorUserId": "_30000004_1",
+          "creator": { "givenName": "Named", "familyName": "Directly" },
+          "body": { "rawText": "<p>Invented text.</p>" }
+        },
+        {
+          "id": "_9000006_1",
+          "title": "No creator at all",
+          "createdDate": "2026-09-14T12:00:00.000Z",
+          "modifiedDate": "2026-09-14T12:00:00.000Z",
+          "startDateRestriction": null,
+          "readStatus": { "isRead": false },
+          "body": { "rawText": "<p>Invented text.</p>" }
+        }
+      ]
+    },
+    "users": {
+      "_30000002_1": { "status": 200, "body": { "id": "_30000002_1", "givenName": "Grace", "familyName": "Assistant" } },
+      "_30000003_1": { "status": 403, "body": null }
+    }
+  },
+  "expected": {
+    "authors": [
+      { "id": "_9000001_1", "author": "Ada Teacher", "authorSource": "teachers", "authorUserId": "_30000001_1" },
+      { "id": "_9000002_1", "author": "Grace Assistant", "authorSource": "users", "authorUserId": "_30000002_1" },
+      { "id": "_9000003_1", "author": "Grace Assistant", "authorSource": "users", "authorUserId": "_30000002_1" },
+      { "id": "_9000004_1", "author": null, "authorSource": null, "authorUserId": "_30000003_1" },
+      { "id": "_9000005_1", "author": "Named Directly", "authorSource": "creator", "authorUserId": "_30000004_1" },
+      { "id": "_9000006_1", "author": null, "authorSource": null, "authorUserId": null }
+    ],
+    "userFetches": ["_30000002_1", "_30000003_1"],
+    "misses": { "AUTHOR_KEYS": 1, "userLookup": 1, "authorUnresolved": 1 }
+  }
+}
