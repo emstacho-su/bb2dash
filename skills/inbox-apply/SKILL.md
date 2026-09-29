@@ -17,7 +17,34 @@ session (deterministic SQL and files). Never collapse the stages: the value of t
 that the writer sees a bundle of verified facts, not a raw row.
 
 Argument: the `agent_requests.id` from the Inbox button (`claude "/inbox-apply 57"`), or nothing
-(step 1 files one), or `--dry-run` (steps 1 to 3 only; nothing is written, claimed or archived).
+(step 1 files one), or `--dry-run` (step 0, then steps 1 to 3 only; nothing is written, claimed
+or archived).
+
+## Step 0 — Resolve the vault (every mode, `--dry-run` included)
+
+Before any claim, read or write, resolve where notes go. The shell's `HARNESS_VAULT` and
+`HARNESS_INGEST_PROJECT` win; otherwise read them from the machine file (`$HARNESS_MACHINE_ENV`,
+else `~/.harness/machine.env`). The `projects` realm must say it is the `projects` realm. In
+Git Bash:
+
+```bash
+MF="${HARNESS_MACHINE_ENV:-$HOME/.harness/machine.env}"
+machine_val() { grep -m1 "^$1=" "$MF" 2>/dev/null | cut -d= -f2- | tr -d '\r'; }
+VAULT="${HARNESS_VAULT:-$(machine_val HARNESS_VAULT)}"
+INGEST="${HARNESS_INGEST_PROJECT:-$(machine_val HARNESS_INGEST_PROJECT)}"
+REALM="$( { tr -d '\r\n' < "$VAULT/projects/.realm"; } 2>/dev/null)"
+case "$VAULT$INGEST" in *[\"\'\`\$]*) REALM="unsafe-path" ;; esac
+if [ -n "$VAULT" ] && [ -n "$INGEST" ] && [ -d "$INGEST" ] && [ "$REALM" = projects ]; then
+  echo "vault=$VAULT ingest=$INGEST realm=projects ok"
+else
+  echo "vault=${VAULT:-unset} ingest=${INGEST:-unset} realm=${REALM:-missing} STOP"
+fi
+```
+
+Print that line first. Anything other than `realm=projects ok` stops the run here: nothing
+claimed, nothing written. Report the line and the machine file's path to Stack; never fall back to
+a path of your own, and never write outside the realm. Below, `<vault>` and `<ingest>` are the two
+resolved values, quoted in every command.
 
 ## Inputs
 
@@ -28,10 +55,10 @@ Argument: the `agent_requests.id` from the Inbox button (`claude "/inbox-apply 5
   syllabus and grading rules.
 - The rag store (`mcp__rag__search_context` with `collection: "bb2dash-inbox-decisions"`) for
   prior decisions: how the last such answer was applied is the strongest precedent there is.
-- The vault: `C:/Users/stack/vault/projects/bb2dash/decisions/`.
-  Ingest from `C:/Users/stack/agentic-harness/ingest` with
+- The vault: `"<vault>/projects/bb2dash/decisions/"` (Step 0; `C:/Users/stack/vault` on this
+  laptop). Ingest from `"<ingest>"` with
   `uv run ingest --source obsidian --path "<vault>" --only projects/bb2dash/decisions/<file>.md`.
-- The repo log: `projects/bb2dash/docs/inbox-decisions/YYYY-MM-DD.md` (one file per day).
+- The repo log: `docs/inbox-decisions/YYYY-MM-DD.md` in the bb2dash checkout (one file per day).
 
 Post a one-line status after every step. A run over ten items takes minutes.
 
@@ -142,7 +169,8 @@ Record-only buckets skip this stage; this session writes their decision records 
 ## Step 5 — Record
 
 For every item in the queue (changed or recorded only), write one vault note
-`decisions/inbox-<id>.md` with this frontmatter, then the body from the decision record:
+`"<vault>/projects/bb2dash/decisions/inbox-<id>.md"` (Step 0's `<vault>`, never another folder)
+with this frontmatter, then the body from the decision record:
 
 ```yaml
 ---
@@ -163,8 +191,9 @@ tags: [bb2dash, inbox, decision, <course id>]
 Body headings: **Question**, **Answer (Stack)**, **Context**, **Change**, **Rule**, and
 **Flagged** when non-empty. Keep the note self-contained: it is chunked on its own.
 
-Then ingest every new note in one command (`--only` per file) and append the same entries to the
-day's repo log. `search_context` with the collection is the check that the store took them.
+Then ingest every new note in one command, run from `"<ingest>"` (`uv run ingest --source
+obsidian --path "<vault>" --only projects/bb2dash/decisions/inbox-<id>.md`, one `--only` per file),
+and append the same entries to the day's repo log. `search_context` with the collection is the check that the store took them.
 
 ## Step 6 — Archive
 
