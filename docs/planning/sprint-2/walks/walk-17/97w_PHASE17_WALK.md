@@ -71,3 +71,36 @@ sign-out or 4xx): walk runs happen with no push in flight.
   directly above Needs attention; 08 shows "Google Calendar push has failed 3 times since 6 hrs ago: refresh token
   revoked (invalid_grant): re-run scripts/google-consent.mjs".
 - Left for T-26 on production: 11, 14, 15, 19, 20, 21 and `staged link`.
+
+## R3-6 removed units
+
+W-44, 2026-09-29. The survey behind migration 119 (read-only SQL on prod). Every current
+(`superseded_by is null`) `bb_file_text` unit holding a course's AI-use policy section, with the
+marker that opens the cut and the marker that ends it. A start marker's match is widened back to the
+start of its line; the cut ends at the start of the end marker's line, or at the end of the unit.
+The PM reviews this table before applying 119; 119's guard aborts unless it finds exactly these
+`(text_id, chars removed)` pairs.
+
+| text_id | file_id | course | file_name | start marker | end marker | chars removed | embeddings deleted |
+|---|---|---|---|---|---|---|---|
+| 214 | 23 | ECN.304 | ECN 304 F26 Syllabus_M001.pdf (page 3) | first "artificial intelligence" (case-insensitive; the section has no heading) | `Disability-Related Accommodations` | 589 of 3,578 | 4 |
+| 277 | 42 | GEO.103.lecture | GEO 103 (2026) - syllabus - FINAL.pdf (page 10) | `Limited and Specified Artificial Intelligence Use` | end of unit | 707 of 2,850 | 3 |
+| 374 | 8 | IST.323 | CourseIntro-Fall2026-BA.pptx (slide 13) | `AI Use` (the slide's title) | end of unit: the whole slide, so the unit is deleted | 670 of 670 | 1 |
+| 522 | 3 | IST.323 | Student Policies and Services - syllabus appendix August 2026 .docx | `Artificial Intelligence Language:` | `Disability-Related Accommodations` | 692 of 8,310 | 8 |
+| 733 | 151 | IST.323 | 323Fall26V1.4.docx (syllabus) | `On the use of AI:` (Final Project paragraph) | `Submission format.` | 257 of 16,297 | 16 |
+| 1 | 27 | IST.352 | IST 352 Syllabus Fall 2026.docx | `Zero tolerance for artificial intelligence use` | `Syracuse University values diversity` (next paragraph) | 530 of 17,419 | 16 |
+| 89 | 33 | IST.466 | Student Policies and Services - Syllabus appendix August 2026 .docx | `Artificial Intelligence Language:` | `Disability-Related Accommodations` | 1,678 of 6,971 | 7 |
+| 350 | 26 | IST.471 | IST 471 Syllabus.pdf (page 6) | `Artificial Intelligence Language:` | end of unit | 777 of 2,508 | 3 |
+
+Totals: 8 units in 6 courses (GEO.103.recitation shares the lecture's syllabus), 5,900 characters,
+58 embedding rows. `grading_schemes.ai_policy` is nulled on 6 courses. IST.466's own syllabus (text
+101) names an "AI Team Assignment" but has no policy section.
+
+Left in, for the PM to decide: IST.323's "Appendix B: AI Use Statement" deliverable (text 515, 516,
+file 13), the Final Project packet's line naming that appendix (519) and the deliverables slide
+(383). They are a Final Project hand-in spec rather than a course policy, although 515 opens "You
+may use AI on this assignment". The IST.323 syllabus schedule row "AI and Security" (a lecture topic)
+and the AI subject matter in lecture slides, readings and news decks stay.
+
+Dry run (119 + `phase17_119_no_ai_policy.sql` in one begin…rollback): `phase17_119_no_ai_policy:
+PASS`, 772 current units, 1,492 embeddings left.
