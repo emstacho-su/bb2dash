@@ -231,4 +231,28 @@ describe('Classwork keeps only the folder tree', () => {
     ).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/course/IST.352/stream');
   });
+
+  it('carries every other query parameter across the redirect, so a pasted ?item= still opens', async () => {
+    redirect.mockClear();
+    await expect(
+      CourseClassworkPage({
+        params: Promise.resolve({ id: 'IST.466' }),
+        searchParams: Promise.resolve({ view: 'timeline', item: 'session:105', tag: ['a b', 'c&d'] }),
+      }),
+    ).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(
+      '/course/IST.466/stream?item=session%3A105&tag=a+b&tag=c%26d',
+    );
+  });
+
+  it('keeps the redirect on this app’s own stream path whatever the id holds', async () => {
+    redirect.mockClear();
+    await expect(
+      CourseClassworkPage({
+        params: Promise.resolve({ id: encodeURIComponent('//evil.example/x') }),
+        searchParams: Promise.resolve({ view: 'timeline' }),
+      }),
+    ).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/course/%2F%2Fevil.example%2Fx/stream');
+  });
 });
