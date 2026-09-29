@@ -50,7 +50,7 @@ registered name of the same ICO type, so the check reads as passed with that not
 
 | id | item | state |
 |---|---|---|
-| L-1 | ⌘K palette: Keyword mode reads `score`, which `fts` does not return; Semantic mode reads `snippet`, which `vector` does not return (found by Phase 18's W-51, R-74) | fixed, 91f78d2: Keyword shows its headline with a "keyword match" badge and no number; Semantic shows a scrubbed passage from  and its similarity; hybrid unchanged |
+| L-1 | ⌘K palette: Keyword mode reads `score`, which `fts` does not return; Semantic mode reads `snippet`, which `vector` does not return (found by Phase 18's W-51, R-74) | fixed, 91f78d2: Keyword shows its headline with a "keyword match" badge and no number; Semantic shows a scrubbed passage from `text` and its similarity; hybrid unchanged |
 
 ## T-01 / T-11 / preview screenshots (2026-09-29, preview at 1d99f67 and later)
 
