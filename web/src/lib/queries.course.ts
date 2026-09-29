@@ -439,6 +439,7 @@ export type {
   StreamDay,
   StreamPostKind,
   StreamRefKind,
+  VanishedSplit,
 } from './course-dimension';
 export {
   CARD_NOTE_MAX_LENGTH,
@@ -454,6 +455,7 @@ export {
   isFolderNode,
   normalizeCardNote,
   orNotRecorded,
+  splitVanishedRows,
   streamDayKey,
   ultraStateLabel,
   validateCardNote,
@@ -469,7 +471,9 @@ const STREAM_COLUMNS = 'course_id, post_kind, posted_at, ref_kind, ref_id, title
 
 const CONTENT_TREE_COLUMNS =
   'course_id, content_id, parent_id, bb_item_id, path, depth, title, item_kind, bb_type, ' +
-  'state, url, modified_at, assignment_id, file_id, file_name, storage_path, bucket';
+  'state, url, modified_at, assignment_id, file_id, file_name, storage_path, bucket, ' +
+  // 111 (Phase 17): the vanish run id and the file's note, appended last.
+  'missing_since, notes';
 
 const COURSE_STAFF_COLUMNS = 'id, course_id, name, role, email, office, office_hours';
 

@@ -63,7 +63,10 @@ export interface CourseStreamRow {
   meta: CourseStreamMeta | null;
 }
 
-/** One row of `v_content_tree` (migration 027) — a node, or a node x file pair. */
+/**
+ * One row of `v_content_tree` (migration 027; 111 appends `missing_since` and
+ * `notes`) — a node, or a node x file pair.
+ */
 // Narrower than the generated Views<'v_content_tree'> on purpose (same reason as above).
 export interface ContentTreeRow {
   course_id: string;
@@ -84,6 +87,14 @@ export interface ContentTreeRow {
   file_name: string | null;
   storage_path: string | null;
   bucket: string | null;
+  /**
+   * 111: the P-98 vanish run id (`bb_content.detail->>'missing_since'`) —
+   * set when Blackboard stopped listing the node. A view projection, not a
+   * stored column.
+   */
+  missing_since: string | null;
+  /** 111: the joined file's `bb_files.notes`. */
+  notes: string | null;
 }
 
 /**
@@ -222,6 +233,8 @@ export interface ContentFile {
   fileName: string | null;
   storagePath: string | null;
   bucket: string | null;
+  /** The file's note (111), shown on hover with a ·note marker. */
+  notes?: string | null;
 }
 
 /** One Blackboard content item, with every file that joined to it. */
@@ -243,6 +256,8 @@ export interface ContentNode {
   url: string | null;
   modifiedAt: string | null;
   assignmentId: string | null;
+  /** Set when Blackboard no longer lists the node (111's `missing_since`). */
+  missingSince: string | null;
   files: ContentFile[];
   /** The nodes whose `parentId` is this node's `contentId`, in sibling order. */
   children: ContentNode[];
@@ -273,6 +288,7 @@ function foldContentRows(rows: ContentTreeRow[]): Map<number, ContentNode> {
         url: row.url,
         modifiedAt: row.modified_at,
         assignmentId: row.assignment_id,
+        missingSince: row.missing_since ?? null,
         files: [],
         children: [],
       };
@@ -288,6 +304,7 @@ function foldContentRows(rows: ContentTreeRow[]): Map<number, ContentNode> {
           fileName: row.file_name,
           storagePath: row.storage_path,
           bucket: row.bucket,
+          notes: row.notes ?? null,
         });
       }
     }
@@ -347,6 +364,48 @@ export function buildContentTree(rows: ContentTreeRow[]): ContentNode[] {
     .sort(compareSiblings);
 
   return [...roots, ...orphaned];
+}
+
+/** The rows `v_content_tree` returned, sorted by what Blackboard still lists. */
+export interface VanishedSplit {
+  /** Nodes Blackboard lists today (no `missing_since`). */
+  live: ContentTreeRow[];
+  /** Vanished nodes with no live twin: hidden until the reader asks (B-19). */
+  stale: ContentTreeRow[];
+  /** Vanished nodes whose `bb_item_id` is live in the same shell: never drawn. */
+  ghosts: ContentTreeRow[];
+  /** Distinct stale nodes (a node arrives once per file). */
+  staleCount: number;
+}
+
+/**
+ * Split the tree's rows by what Blackboard still lists (R-39, T-13).
+ *
+ * A vanished node (111's `missing_since` set) is a rename ghost when a live
+ * node in the same shell shares its `bb_item_id` — Blackboard re-listed the
+ * same item under a new content id, so drawing both shows it twice. Phase 19
+ * deletes ghosts; until then they are never rendered. A vanished node with no
+ * live twin is stale. A row that does not carry the column (before 111) is live.
+ */
+export function splitVanishedRows(rows: ContentTreeRow[]): VanishedSplit {
+  const isVanished = (row: ContentTreeRow) => row.missing_since != null;
+  const twinKey = (row: ContentTreeRow) => `${row.course_id} ${row.bb_item_id}`;
+
+  const liveItemKeys = new Set(
+    rows.filter((row) => !isVanished(row) && row.bb_item_id != null).map(twinKey),
+  );
+
+  const live: ContentTreeRow[] = [];
+  const stale: ContentTreeRow[] = [];
+  const ghosts: ContentTreeRow[] = [];
+  for (const row of rows) {
+    if (!isVanished(row)) live.push(row);
+    else if (row.bb_item_id != null && liveItemKeys.has(twinKey(row))) ghosts.push(row);
+    else stale.push(row);
+  }
+
+  const staleCount = new Set(stale.map((row) => row.content_id)).size;
+  return { live, stale, ghosts, staleCount };
 }
 
 /** The tree as a depth-first list: each node immediately before its children. */

@@ -14,21 +14,28 @@
  * carries `storage_path` alone, so "not stored" is honest and "no route" is
  * not).
  *
+ * What Blackboard no longer lists (R-39, T-13; 111's `missing_since`): a rename
+ * ghost — a vanished node whose `bb_item_id` is live in the same shell — is
+ * never drawn, and a vanished node with no live twin waits behind a counted
+ * toggle and is labelled when shown. A file's note is its hover title (R-40).
+ *
  * The old week-rail timeline still lives at `?view=timeline`; the page routes
  * to it, and the link back to it sits in this pane's header.
  */
 
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   buildContentTree,
   flattenContentTree,
   isFolderNode,
+  splitVanishedRows,
   ultraStateLabel,
   useContentTree,
   useCourseDisplay,
   type ContentFile,
   type ContentNode,
+  type ContentTreeRow,
 } from '@/lib/queries.course';
 import { UNKNOWN_ROUTE, fileTitle, fileTypeChip } from '@/lib/queries.materials';
 import { FileOpenAction } from '@/components/materials/FileOpenAction';
@@ -64,7 +71,15 @@ export function ClassworkFileRow({ file, nodeUrl }: { file: ContentFile; nodeUrl
       <span className={styles.chip} aria-hidden="true">
         {chip}
       </span>
-      <span className={styles.fileName}>{title}</span>
+      {/* R-40: the file's note on hover, marked as Materials marks it. */}
+      <span className={styles.fileName} title={file.notes ?? undefined}>
+        {title}
+      </span>
+      {file.notes && (
+        <span className={styles.noteMark} title={file.notes} aria-label="has a note">
+          ·note
+        </span>
+      )}
       {/* `v_content_tree` projects storage_path and nothing else, so the other
           two routes are unknown here rather than absent — see UNKNOWN_ROUTE. */}
       <FileOpenAction
@@ -114,6 +129,7 @@ export function ClassworkNode({ node, depth = 0 }: { node: ContentNode; depth?: 
         <div className={styles.nodeHead}>
           <span className={folder ? styles.folderTitle : styles.itemTitle}>{node.title}</span>
           {kindLabel && <span className={styles.kind}>{kindLabel}</span>}
+          {node.missingSince && <span className={styles.goneChip}>{NO_LONGER_LISTED}</span>}
           {state && <span className={styles.stateChip}>{state}</span>}
           {node.url && (
             <a className={styles.bbLink} href={node.url} target="_blank" rel="noreferrer">
@@ -149,6 +165,50 @@ export function ClassworkNode({ node, depth = 0 }: { node: ContentNode; depth?: 
   );
 }
 
+/* -- the tree, with what Blackboard no longer lists ------------------------- */
+
+/** The label on a stale node the reader chose to see (B-19). */
+export const NO_LONGER_LISTED = 'No longer in Blackboard';
+
+/** "Show 2 items Blackboard no longer lists" / "Hide 1 item …". */
+export function staleToggleLabel(count: number, shown: boolean): string {
+  return `${shown ? 'Hide' : 'Show'} ${count} item${count === 1 ? '' : 's'} Blackboard no longer lists`;
+}
+
+/**
+ * Blackboard's tree as it lists it now (R-39, T-13). Rename ghosts are never
+ * drawn; stale nodes with no live twin wait behind a toggle that counts them
+ * and is not persisted. A course with none shows no toggle.
+ */
+export function ClassworkTree({ rows }: { rows: ContentTreeRow[] }) {
+  const [showStale, setShowStale] = useState(false);
+  const split = useMemo(() => splitVanishedRows(rows), [rows]);
+  const roots = useMemo(
+    () => buildContentTree(showStale ? [...split.live, ...split.stale] : split.live),
+    [split, showStale],
+  );
+
+  return (
+    <>
+      {split.staleCount > 0 && (
+        <button
+          type="button"
+          className={styles.staleToggle}
+          aria-pressed={showStale}
+          onClick={() => setShowStale((shown) => !shown)}
+        >
+          {staleToggleLabel(split.staleCount, showStale)}
+        </button>
+      )}
+      <div className={styles.tree}>
+        {roots.map((node) => (
+          <ClassworkNode key={node.contentId} node={node} />
+        ))}
+      </div>
+    </>
+  );
+}
+
 /* -- the screen ------------------------------------------------------------ */
 
 export function CourseClasswork({ courseId }: { courseId: string }) {
@@ -156,8 +216,12 @@ export function CourseClasswork({ courseId }: { courseId: string }) {
   const shellIds = useMemo(() => display.data?.shell_ids ?? [], [display.data]);
   const treeQ = useContentTree(shellIds);
 
-  const roots = useMemo(() => buildContentTree(treeQ.data ?? []), [treeQ.data]);
-  const nodes = useMemo(() => flattenContentTree(roots), [roots]);
+  const rows = useMemo(() => treeQ.data ?? [], [treeQ.data]);
+  // The header counts what Blackboard lists now, not the hidden nodes.
+  const nodes = useMemo(
+    () => flattenContentTree(buildContentTree(splitVanishedRows(rows).live)),
+    [rows],
+  );
 
   if (display.isPending) return <p className={styles.state}>Loading course…</p>;
   if (display.isError) return <p className={styles.state}>Could not load this course.</p>;
@@ -195,11 +259,7 @@ export function CourseClasswork({ courseId }: { courseId: string }) {
         </p>
       )}
 
-      <div className={styles.tree}>
-        {roots.map((node) => (
-          <ClassworkNode key={node.contentId} node={node} />
-        ))}
-      </div>
+      <ClassworkTree rows={rows} />
     </div>
   );
 }

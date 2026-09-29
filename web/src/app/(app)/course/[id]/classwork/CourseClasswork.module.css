@@ -114,3 +114,23 @@
   font-size: var(--text-base);
   overflow-wrap: anywhere;
 }
+
+/* T-13 (R-40): a file's note, marked the way Materials marks it. */
+.noteMark {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--color-accent-2);
+  cursor: help;
+}
+
+/* T-13 (R-39): a node Blackboard no longer lists, shown on request. */
+.goneChip {
+  composes: tagOutline from '@/styles/tokens.module.css';
+  padding: 0 6px;
+  color: var(--color-neutral-500);
+}
+
+.staleToggle {
+  composes: btnGhost from '@/styles/tokens.module.css';
+  align-self: flex-start;
+}
