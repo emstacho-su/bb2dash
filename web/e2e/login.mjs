@@ -31,10 +31,22 @@ async function main() {
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
+    // A protected Vercel preview answers with its SSO wall. A share token from the Vercel
+    // connector (`get_access_to_vercel_url`) sets the bypass cookie first; the cookie then
+    // rides in the saved state, so the specs reuse it. Never commit the token.
+    const shareToken = process.env.WALK_VERCEL_SHARE;
+    if (shareToken) {
+      const shareUrl = new URL('/', BASE_URL);
+      shareUrl.searchParams.set('_vercel_share', shareToken);
+      await page.goto(shareUrl.toString());
+    }
     await page.goto(loginUrl);
     console.log(`Sign in at ${loginUrl} — waiting up to ${SIGN_IN_TIMEOUT_MS / 60000} minutes.`);
 
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
+    // Done only when the browser is back on the app's own host and past /login: a redirect to
+    // an SSO page on another host must not count as signed in.
+    const appHost = new URL(BASE_URL).host;
+    await page.waitForURL((url) => url.host === appHost && !url.pathname.startsWith('/login'), {
       timeout: SIGN_IN_TIMEOUT_MS,
     });
     await page.waitForLoadState('networkidle');
