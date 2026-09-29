@@ -7,3 +7,6 @@ next-env.d.ts
 .env
 .env.*
 !.env.example
+# Walk harness (Phase 17): the saved session never leaves this machine.
+e2e/.auth/
+e2e/.results/
