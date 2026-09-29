@@ -16,7 +16,7 @@
  * card note.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   CARD_NOTE_MAX_LENGTH,
   meetingPatterns,
@@ -36,9 +36,6 @@ import { FileOpenAction } from '@/components/materials/FileOpenAction';
 import { QueryState, isQueryLoading, isQueryUnresolved } from '@/components/shared/QueryState';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseInfo.module.css';
-
-/** The caption the contract requires on the Groups section, verbatim. */
-const GROUPS_CAPTION = 'as recorded; Blackboard disagrees for IST 466 — unresolved';
 
 /* -- sections -------------------------------------------------------------- */
 
@@ -94,7 +91,9 @@ export function StaffRow({ person }: { person: CourseStaff }) {
  *   - The draft is re-seeded only when `stored` actually changes, and only
  *     while the owner is neither typing nor waiting on a save. Re-seeding on
  *     every render of the still-old prop put the previous note back under the
- *     cursor the moment the save started.
+ *     cursor the moment the save started. The re-seed happens during render,
+ *     against the last `stored` it saw (React's "adjust state when a prop
+ *     changes" pattern), not in an effect that set state after paint (T-23).
  *   - An edit-free blur writes nothing. Blur alone is not an edit, and the
  *     round trip it used to cause could shorten a perfectly legal stored note.
  *   - A failed save keeps the draft. The typed text is the only copy of it;
@@ -113,14 +112,12 @@ export function CardNoteField({
   const [dirty, setDirty] = useState(false);
   const [tooLong, setTooLong] = useState<string | null>(null);
   const save = useUpdateCardNote();
-  const seeded = useRef(stored);
+  const [seeded, setSeeded] = useState(stored);
 
-  useEffect(() => {
-    if (seeded.current === stored) return;
-    seeded.current = stored;
-    if (dirty || save.isPending) return;
-    setDraft(stored ?? '');
-  }, [stored, dirty, save.isPending]);
+  if (seeded !== stored) {
+    setSeeded(stored);
+    if (!dirty && !save.isPending) setDraft(stored ?? '');
+  }
 
   function commit() {
     if (!dirty) return;
@@ -325,7 +322,9 @@ export function CourseInfo({ courseId }: { courseId: string }) {
         ))}
       </Section>
 
-      <Section title="Groups" caption={GROUPS_CAPTION}>
+      {/* R-45: no caption. The old one said Blackboard disagreed for IST 466,
+          which stopped being true when group_notes were corrected (2026-09-22). */}
+      <Section title="Groups">
         <QueryState query={shellsQ} of="the group notes" className={styles.state} />
         {!isQueryUnresolved(shellsQ) && groupNotes.length === 0 && (
           <p className={styles.state}>No group assignment is recorded for this course.</p>
