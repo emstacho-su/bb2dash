@@ -32,7 +32,7 @@ MF="${HARNESS_MACHINE_ENV:-$HOME/.harness/machine.env}"
 machine_val() { grep -m1 "^$1=" "$MF" 2>/dev/null | cut -d= -f2- | tr -d '\r'; }
 VAULT="${HARNESS_VAULT:-$(machine_val HARNESS_VAULT)}"
 INGEST="${HARNESS_INGEST_PROJECT:-$(machine_val HARNESS_INGEST_PROJECT)}"
-REALM="$( { tr -d '\r\n' < "$VAULT/projects/.realm"; } 2>/dev/null)"
+REALM="$( { sed '1s/^\xEF\xBB\xBF//' "$VAULT/projects/.realm" | tr -d '[:space:]'; } 2>/dev/null)"
 case "$VAULT$INGEST" in *[\"\'\`\$]*) REALM="unsafe-path" ;; esac
 if [ -n "$VAULT" ] && [ -n "$INGEST" ] && [ -d "$INGEST" ] && [ "$REALM" = projects ]; then
   echo "vault=$VAULT ingest=$INGEST realm=projects ok"
@@ -43,7 +43,9 @@ fi
 
 Print that line first. Anything other than `realm=projects ok` stops the run here: nothing
 claimed, nothing written. Report the line and the machine file's path to Stack; never fall back to
-a path of your own, and never write outside the realm. Below, `<vault>` and `<ingest>` are the two
+a path of your own, and never write outside the realm. When this skill runs as `/bb-sync` step 0,
+a STOP here stops the sync too: report it and do not crawl, so new questions never land beside
+answers that were not applied. Below, `<vault>` and `<ingest>` are the two
 resolved values, quoted in every command.
 
 ## Inputs
