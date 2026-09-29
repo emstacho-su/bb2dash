@@ -36,10 +36,10 @@ Sprint 1 closed 2026-09-22 (PRs #7–#25; migrations 026–090 live; 059 and 070
 on Vercel with the Blackboard → Supabase pipeline, the Classroom-style course page, the sync loop and
 Inbox, the gradebook mirror and one "graded so far" figure, the planner with Google Calendar push and
 recurring events, the Electron shell, and the `/inbox-apply` worker. Prod is Supabase `goultdzqcavefcgnifdy`.
-The materials MCP server (`mcp-server/`) is **not yet registered on `stack-laptop`** (2026-09-29): on the old
-machine it ran at user scope from `~/.claude.json` as `C:/Users/stack/projects/bb2dash/mcp-server/dist/index.js`
-with the service key inline in that entry; here `dist` is not built and `~/.claude.json` has no `bb2dash` entry
-(`mcp-server/README.md` §Setup; Phase 14 moves the key to a file; Phase 16's sittings need it first). The harness
+The materials MCP server (`mcp-server/`) is registered on `stack-laptop` at user scope from `~/.claude.json` as
+`C:/Users/stack/projects/bb2dash/mcp-server/dist/index.js` with the service key inline in that entry, read from the
+gitignored `.env` at registration (2026-09-29: `dist` built, 88 unit tests, `npm run smoke` all checks passed,
+`claude mcp list` → Connected; Phase 14 moves the key to a file). The harness
 (`~/agentic-harness`) holds V-2 (built 2026-09-16) and the vault as git realms at `C:/Users/stack/vault`
 (2026-09-23/24). Sprint 1's phase table is STATUS's "Sprint 1 record"; the record behind every phase is
 `docs/planning/sprint-1-hub/`.
@@ -257,7 +257,7 @@ Read in this order. Each line says what the file is for and what to look for.
 Not to read at start: `docs/planning/sprint-0-foundation/superseded/*`, the eval/POC docs unless retrieval
 quality is the topic, and `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPTS.md` (history).
 
-## 6. Session prompts, one per phase in five sessions (copy-paste; sprint 2, rewritten 2026-09-27 to the verified briefs)
+## 6. Session prompts, one per phase in six sessions (copy-paste; sprint 2, rewritten 2026-09-27 to the verified briefs; Session F added 2026-09-29)
 
 One prompt per phase, grouped into the five sessions below; a session pastes its prompts in the order shown, when
 its heading says. The order to run them, concurrency, checklists and fallbacks are in
@@ -269,6 +269,12 @@ brief's B-table. Before cutting workers, the phase's PM reads that brief's resid
 `docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`
 §3 and fixes or strikes each one in the phase's own PR. The used sprint 1 prompts are history in
 `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPTS.md`.
+
+**Position on 2026-09-29 (after PRs #30–#36):** A1 is done (Phase 15 merged, gate-out green on `main`), so the open
+prompts are D (first, R-97 is a live bug), B1 + B2 (parallel, then B3), A2 (its own session; the materials MCP server is
+registered on `stack-laptop`, see §1), C1 (Task 0 is running, the spike is next), F (Stack's open items, any sitting),
+then C2 and E last. Every prompt's "PROVISIONAL until I answer 93 §5 and approve 94" line is satisfied since
+2026-09-27; the phase's PM still strikes PROVISIONAL in the brief's B-table at its start.
 
 **Session A — Phase 15 then Phase 16** (one session: 15 is size S/M; paste A2 once 15's PR is open, without waiting for its merge, since 16's SQL checks run through 15's runner from its branch)
 
@@ -412,3 +418,31 @@ C2 — Phase 21
 > the preview and `WALK.md`; I walk the acceptance script: the theme control, 58 surface lines, 390 px, the Menu, the
 > desktop build with Windows in light mode. Stop at "ready when you say so".
 
+
+**Session F — Stack's open items, one sitting, no phase** (any time; repeat whenever §4 has items; docs only, no migration; the PM records, Stack decides)
+
+F — Open items
+
+> `/bb2dash-pm` Session F: take ORCHESTRATOR §4's open items in one sitting, in this order, and record each outcome
+> where it belongs (a DECISIONS row, a STATUS "Known issues" line, an Inbox value resolution, a struck §4 bullet) in
+> one docs PR on `docs/open-items-<date>`; skip an item I say I cannot answer today and leave its bullet standing.
+> (1) The calendar token: read `select id, status, left(error, 60) from calendar_push_runs order by id desc limit 1`;
+> if it is red with "refresh token", put the four env lines from the header of `scripts/google-consent.mjs` and the
+> command on my clipboard (client id and secret from the Cloud project on my personal Gmail, `GCAL_CALENDAR_ID` from
+> `app_settings`, the service key from the dashboard); I run it as `emstacho@g.syr.edu` and say `stored 4 secrets`;
+> you `select calendar_push_now()` and confirm the next run `ok`; T-27's second reading goes in DECISIONS, and if I
+> say I published the screen first, that row says so and the §4 bullet is struck. (2) Task 0: run any reopen probe
+> due today from `docs/planning/sprint-2/verification/82b_NOVNC_SPIKE.md` (Claude in Chrome, the extension's own tab
+> on `https://blackboard.syracuse.edu/ultra/`, read-only, no clicks); if the idle series has ended, write its
+> `Idle lifetime:` line and the closing DECISIONS row that names `KEEPALIVE_MINUTES` and B-45's hour for brief 100.
+> (3) B-9: ask me the three dates once (the presentation slot: SITN pick or individual slot, and which; the Major
+> Case 1 day; the Major Case 2 day); each answer goes in as an Inbox value resolution and a DECISIONS line.
+> (4) Phase 12 proofs (batch items 57–58): with the shell open I watch for the three toasts, click one from a banner
+> and one from the Action Center, press Sync inside the shell and read "command copied"; you record R-108 as proven
+> or name what failed. (5) ECN.304 Quiz 2 and Attendance: I say whether each counts; you place it with "Counts
+> toward…" on the course Grades tab or record "left out" under the figure. (6) The Nov 30 – Dec 13 code freeze: I say
+> whether it stands (default: it stands). (7) The R-97 hold: if Phase 20 PR-A has merged, copy inbox-541..544 from the
+> old machine's OneDrive stub into `C:/Users/stack/vault/projects/bb2dash/decisions/` and strike the hold; if not, say
+> so and leave it. Stop at "ready when you say so".
+
+(Session F never opens a phase branch or a migration; a finding that needs code goes to the phase that owns the file, named in the PR body.)
