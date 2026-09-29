@@ -5,19 +5,20 @@ written to become a scheduled task: every step is standalone, idempotent, and re
 Blackboard sessions expire overnight, so the task's first action is always a login check; if the tab
 is on NetID / microsoftonline, it stops and reports SESSION EXPIRED instead of guessing.
 
-**Status after Phase 9 (2026-09-10): steps 3, 5 and 6 are automated and struck through below.**
-Steps 1 and 2 are cheap checks a human or a session still runs; step 4 stays manual ~~until Electron~~
-for COURSE files (corrected 2026-09-24: Phase 12's Electron shell does no downloads, by R-23; step 4
-is scripted since 2026-09-22 but still runs outside the sync, by hand). The whole loop is now: Stack presses Sync in the app → `claude "/bb-sync <id>"`
-runs steps 1–2 → `transform_tick()` on pg_cron does step 3 and step 5 → `bb-sync` does step 6. See
-`skills/bb-sync/SKILL.md`.
+**Status: every step of this loop is now automated or part of the sync.** Steps 1 and 2 are cheap
+checks a human or a session still runs; steps 3, 5 and 6 are automated and struck through below;
+**step 4 moved into the sync** and is no longer a separate manual pass. The whole loop is: Stack
+presses Sync in the app → `claude "/bb-sync <id>"` runs steps 1–2 → `transform_tick()` on pg_cron
+does step 3 and step 5 → `bb-sync` step 4b pulls every file with no bytes, course and submission
+alike → `bb-sync` does step 6. See `skills/bb-sync/SKILL.md`.
 
-**Phase 10a (2026-09-15) carved one exception out of step 4.** Submission files — the bytes
-Blackboard holds for what Stack actually handed in — are pulled by `bb-sync` step 4b while the
-logged-in tab is still alive, because nothing else can reach them. They are the `bb_files` rows with
-`bucket = 'my_submissions'`, `classified_by = 'blackboard'` and `storage_path is null`, catalogued
-by `stage_attempts` (migration 050). Since 2026-09-22 4b runs the same script as step 4, gated by
-`--bucket my_submissions`; the two halves never see each other's rows.
+**How step 4 got here.** Phase 10a (2026-09-15) first carved submission files out of it, because
+only the logged-in tab can reach them. Course files stayed outside the sync, pulled by hand on
+request — which meant a sync could catalogue a file, raise an Inbox `data_gap` saying it cannot be
+opened, and leave both for a human. The pull is the sync's own unfinished work, so it now finishes
+it. The byte fetch no longer uses Playwright's `download` event either: that crashed the MCP browser
+on 2026-09-23 and cost a sync three files. `ingest/fetch_signed.mjs` walks the `bbcswebdav` redirect
+chain to its signed CDN URL instead, and `ingest/pull_files.mjs --fetch` downloads it.
 
 ## Inputs
 - Logged-in Blackboard tab (built-in browser, tab `seed`) with `installCrawler` from
@@ -57,27 +58,29 @@ by `stage_attempts` (migration 050). Since 2026-09-22 4b runs the same script as
    - ~~Calendar: new items → sessions/assignments as appropriate.~~ → the calendar row is what marks a
      crawl complete; `ical_poll()` is scheduled daily and is skipped while `app_settings.ical_url` is
      blank.
-4. **Pull new COURSE files. Scripted since 2026-09-22 — `ingest/pull_files.mjs`.** (Submission
-   files are not this step: they are `bb-sync` step 4b, which runs inside the sync while the
-   Blackboard session is still open. Since 2026-09-22 it runs this same script with
-   `--bucket my_submissions`; without that flag a run takes course rows only, so neither half can
-   write the other's rows.) The browser half still needs a logged-in tab: from a
-   Playwright session, `page.waitForEvent('download')` around an anchor click on each durable
-   `source_url` (+`?xythos-download=true`) saves `<file_id>_<name>` into a downloads folder; the
-   script's header has the snippet and the manifest query. Then
-   `node ingest/pull_files.mjs --manifest <json> --downloads <dir>` does the rest (mirror, Storage,
-   text units, one `update bb_files` per file for execute_sql), and `embed-corpus` with
-   `max_parts: 3` finishes the embeddings. A 404 on a durable URL means the file is gone: mark the
-   row `superseded_by` its replacement. First run: 12 files, 2026-09-22 (Inbox request 38).
-   The original manual procedure, kept for the record:
-   `bbcswebdav` URLs 302 to a cross-origin CDN with no CORS, so bytes cannot be fetched from page JS,
-   and a browser download needs a real browser. `bb.downloadAll(urls)` in ONE call; claim `<uuid>.tmp`
-   by size + magic + text; PowerShell move into `course context/<relpath>`; stage → sha256 → Storage
-   POST (no `x-upsert`) → `extract_text.py` → `bb_file_text`; set `storage_path`/`local_path` from
-   `bb_file_relpath(id)`. `stage_files` has already catalogued which rows need bytes: they are the
-   `bb_files` rows with `storage_path is null`. An Electron shell with `will-download` plus
-   `item.setSavePath()` deletes this step outright, which is the single largest simplification left in
-   this project (`21_D2_architecture_direction.md` section 5).
+4. ~~**Pull new COURSE files.**~~ **MOVED INTO THE SYNC (2026-09-29).** Course files are no longer
+   a separate manual pass: `bb-sync` step 4b pulls every `bb_files` row with no bytes — course
+   materials and Stack's submissions alike — while the logged-in tab is still alive, and the sync
+   reports what it pulled and what it could not. See `skills/bb-sync/SKILL.md` step 4b for the
+   procedure and `ingest/pull_files.mjs` for the script.
+
+   What changed, and why it is worth knowing: the browser half no longer downloads anything. A
+   `bbcswebdav` URL 302s to a signed CDN URL on another origin with no CORS, so page JavaScript
+   cannot read it and the pull used Playwright's download event — which crashed the MCP browser on
+   2026-09-23 and left that sync unable to store three catalogued files. The browser now only walks
+   the redirect chain (`ingest/fetch_signed.mjs`, `resolveSignedUrl`, one hop at a time with
+   `maxRedirects: 0`) and records the hops; `ingest/pull_files.mjs --fetch` downloads the signed
+   URL itself, because a signed URL carries its own authorisation and needs no session. The chain is
+   bounded at three hops and must end on `.content.blackboardcdn.com`.
+
+   Still run deliberately, outside a sync: `ingest/pull_files.mjs --restale`, for rows whose stored
+   bytes Blackboard has since replaced. It is the one file job that is not self-healing, because it
+   removes text that is already in the corpus and swaps it inside one transaction.
+
+   For the record: the first scripted run was 12 files on 2026-09-22 (Inbox request 38); before the
+   script the procedure claimed `<uuid>.tmp` files by size and magic bytes and moved them into
+   `course context/<relpath>` by hand.
+
 5. ~~**Record.**~~ **AUTOMATED (Phase 9).** `run_transform` opens the `sync_runs` row before the first
    read and closes it with `status`, `finished_at` and the `summary` envelope
    (`{stages, changes, attention_raised}`); each stage writes its own `sync_stage_runs` row, which is

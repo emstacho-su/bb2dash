@@ -17,29 +17,42 @@
 // every manifest written before 2026-09-22 — is a course file.
 //
 // THE SHAPE. Two halves, because bbcswebdav URLs 302 to a cross-origin CDN with no CORS:
-//   1. A real browser downloads the bytes. From a Playwright session logged into Blackboard,
-//      one call per file (Playwright MCP `browser_run_code_unsafe`, or a script on the same page):
-//        const [dl] = await Promise.all([
-//          page.waitForEvent('download', { timeout: 60000 }),
-//          page.evaluate((u) => { const a = document.createElement('a'); a.href = u; a.download = '';
-//            document.body.appendChild(a); a.click(); a.remove(); }, source_url + '?xythos-download=true'),
-//        ]);
-//        await dl.saveAs(`${downloads}/${file_id}_${dl.suggestedFilename()}`);
-//      A 404 means the file is gone from Blackboard: mark the row `superseded_by` its replacement.
-//   2. This script does the rest, per manifest row: find `<id>_*` in --downloads, check size and
-//      magic bytes, copy to the local mirror (`course context/<relpath>`), POST to Storage
-//      `bb-files/<key>` with the publishable key (anon is insert-only, never `x-upsert`; a
-//      Duplicate answer means the object is already there), run extract_text.py under uv with its
-//      three libraries, POST the units to /rest/v1/bb_file_text (anon insert-only; `char_count` is
-//      generated, never sent), and write the `update bb_files …` statements to --out for the owner
-//      to run through execute_sql. Then run embed-corpus (`{"limit":40,"max_parts":3}` repeated;
-//      6 parts hits WORKER_RESOURCE_LIMIT) until remaining_parts is 0.
+//   1. Something holding the Blackboard session records the redirect chain for each file — the
+//      browser half. It follows nothing and downloads nothing; it walks hops one at a time with
+//      `page.context().request.get(u, { maxRedirects: 0 })` through `ingest/fetch_signed.mjs`'s
+//      `resolveSignedUrl`, and writes the resulting `hops` array onto the manifest row. The old
+//      route through Playwright's `download` event is gone: it crashed the MCP browser on
+//      2026-09-23 and left a sync unable to store three catalogued files.
+//   2. This script does the rest, per manifest row. With `--fetch` it validates the row's `hops`
+//      and downloads the signed URL itself (a signed CDN URL carries its own authorisation, so no
+//      session is needed here); without it, it finds an already-downloaded `<id>_*` in --downloads.
+//      Then: check size and magic bytes, copy to the local mirror (`course context/<relpath>`),
+//      POST to Storage `bb-files/<key>` with the publishable key (anon is insert-only, never
+//      `x-upsert`; a Duplicate answer means the object is already there), run extract_text.py
+//      under uv with its three libraries, POST the units to /rest/v1/bb_file_text (anon
+//      insert-only; `char_count` is generated, never sent), and write the `update bb_files …`
+//      statements to --out for the owner to run through execute_sql. Unless `--no-embed`, a run
+//      that posted any unit finishes by calling `ingest/embed_corpus.mjs`'s loop, so the text it
+//      just stored is actually searchable when the run ends.
+//      A `gone` outcome (404) means the file is no longer on Blackboard: the row is left alone and
+//      reported, and a human marks it `superseded_by` its replacement. A `session_expired` outcome
+//      (401/403 on the first hop) stops the whole run: every remaining row would fail the same way.
+//
+// THREE MODES, ALWAYS EXCLUSIVE. Course files (no flag), Stack's submissions (`--bucket
+// my_submissions`) and stale re-pulls (`--restale`) each take their own rows and can never write
+// another mode's. A stale row is one already carrying bytes that Blackboard has since replaced;
+// it is the one mode that does NOT overwrite — it uploads under a key derived from the new
+// content hash and emits one transaction that swaps the row's text and repoints it.
 //
 // THE MANIFEST. One JSON array from this query (execute_sql), saved to a file:
 //   select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
 //            'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
 //            'bucket', f.bucket, 'attempt_id', f.attempt_id))
 //     from bb_files f where f.storage_path is null and f.superseded_by is null;
+//   For a `--restale` run the predicate is the stale marker instead, and each row carries
+//   `'restale', true`:
+//     where f.superseded_by is null and f.notes like '%stored bytes may be stale%'
+//   With `--fetch`, the browser half adds `hops` to every row before this script reads it.
 //   `mime` may be null: it is then inferred from the extension. An optional `key` overrides the
 //   Storage key (a re-upload of an already-stored file needs its own; see file 145). `attempt_id`
 //   is carried for the operator's report only; nothing here reads it.
@@ -56,6 +69,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+
+import { downloadTo, validateHops } from './fetch_signed.mjs';
+import { DEFAULT_MAX_PARTS, makePost, runEmbedLoop } from './embed_corpus.mjs';
 
 export const DEFAULT_SUPABASE_URL = 'https://goultdzqcavefcgnifdy.supabase.co';
 export const BUCKET = 'bb-files';
@@ -120,15 +136,60 @@ export function isSubmissionRow(row) {
 }
 
 /**
- * The rows this run may touch: --only (comma-separated ids; empty means all), then the bucket gate.
- * `--bucket my_submissions` keeps submission rows alone; no flag keeps course rows alone. The gate
- * is why a 4b run can never write a course row, or runbook step 4 a submission.
+ * Is this a re-pull of a row that already holds bytes? Only the manifest's explicit flag says so —
+ * never inferred, because guessing wrong here would overwrite good bytes.
  */
-export function filterManifest(rows, only, bucket) {
+export function isStaleRow(row) {
+  return row?.restale === true;
+}
+
+/** Which of the three exclusive runs this is. `--restale` wins so a stray --bucket cannot widen it. */
+export function modeOf(args) {
+  if (args?.restale === true) return 'restale';
+  if (args?.bucket === SUBMISSION_BUCKET) return 'submissions';
+  return 'course';
+}
+
+/**
+ * The rows this run may touch: --only (comma-separated ids; empty means all), then two gates.
+ *
+ * The stale gate comes first: a row that already holds bytes is only ever taken by a `--restale`
+ * run, and a `--restale` run takes nothing else. Then the bucket gate, unchanged:
+ * `--bucket my_submissions` keeps submission rows alone; no flag keeps course rows alone. Together
+ * they are why one run can never write another run's rows.
+ */
+export function filterManifest(rows, only, bucket, { restale = false } = {}) {
   const ids = String(only ?? '').split(',').map((s) => s.trim()).filter(Boolean).map(Number);
   const byId = ids.length === 0 ? rows : rows.filter((r) => ids.includes(Number(r.id)));
+  if (restale) return byId.filter((r) => isStaleRow(r));
   const wantSubmissions = bucket === SUBMISSION_BUCKET;
-  return byId.filter((r) => isSubmissionRow(r) === wantSubmissions);
+  return byId.filter((r) => !isStaleRow(r) && isSubmissionRow(r) === wantSubmissions);
+}
+
+/**
+ * The Storage key for a re-pulled file. Storage is insert-only for anon and the old bytes still
+ * occupy the plain key, so a stale row needs its own. The new content's hash is the discriminator:
+ * identical bytes land on the same key (so a repeated run is idempotent rather than littering),
+ * different bytes on a different one, and neither can ever be the key the old bytes hold.
+ */
+export function restaleKeyFor(row, sha256) {
+  const base = storageKeyFor(row);
+  const ext = path.extname(base);
+  const stem = ext ? base.slice(0, -ext.length) : base;
+  return `${stem}.${String(sha256).slice(0, 12)}${ext}`;
+}
+
+/**
+ * The validated signed URL for a `--fetch` row, from the hops the browser half recorded.
+ * A row with no hops is refused, never guessed at: the durable URL is not downloadable.
+ */
+export function hopsForRow(row) {
+  return validateHops(row?.hops);
+}
+
+/** The embed step runs once, at the end, and only when this run actually posted new text. */
+export function shouldEmbed({ dryRun, noEmbed, unitsPosted }) {
+  return !dryRun && !noEmbed && Number(unitsPosted) > 0;
 }
 
 /** extract_text.py prints `[{file, status, units}]`; the units of the first (only) file, or []. */
@@ -179,6 +240,35 @@ export function bbFilesUpdateSql({ id, key, relpath, sha256, size, mime, textSta
   );
 }
 
+/**
+ * The one transaction the owner runs per re-pulled file.
+ *
+ * A stale row differs from a fresh one in three ways, and every one of them needs the database:
+ * its old `bb_file_text` rows must go (anon cannot delete, and leaving them would double the
+ * file in search), the new units must replace them in the same transaction (so a failure leaves
+ * neither half), and the row already has a `storage_path`, so the `storage_path is null` guard
+ * that protects a fresh pull would match nothing here. The stale marker is cleared in the same
+ * statement — leaving it would put the row back on the next run's work list forever.
+ */
+export function bbFilesRestaleSql({ id, key, relpath, sha256, size, mime, pulledOn, units = [] }) {
+  const rows = units.map((u) => `(${id}, ${q(u.unit_kind)}, ${u.unit_no}, ${q(u.text)})`);
+  const textStatus = rows.length ? 'extracted' : 'failed';
+  const insert = rows.length
+    ? `insert into bb_file_text (file_id, unit_kind, unit_no, text) values\n  ${rows.join(',\n  ')};\n`
+    : '';
+  return (
+    `begin;\n` +
+    `delete from bb_file_text where file_id = ${id};\n` +
+    insert +
+    `update bb_files set storage_path = ${q(`${BUCKET}/${key}`)}, local_path = ${q(`course context/${relpath}`)}, ` +
+    `sha256 = ${q(sha256)}, bytes = ${size}, mime_type = ${q(mime)}, downloaded_at = now(), ` +
+    `text_status = ${q(textStatus)}, ` +
+    `notes = replace(coalesce(notes, ''), ' | stored bytes may be stale', '') || ${q(` | bytes re-pulled ${pulledOn} by ingest/pull_files.mjs --restale`)} ` +
+    `where id = ${id};\n` +
+    `commit;`
+  );
+}
+
 /** Headers for the publishable key: apikey + bearer, as every anon insert in this repo does. */
 export function anonHeaders(key, contentType) {
   return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': contentType };
@@ -190,22 +280,53 @@ function extractUnits(ingestDir, filePath) {
   return parseExtractOutput(out);
 }
 
+/**
+ * Get this row's bytes onto disk and hand back the local path.
+ *
+ * With `--fetch` that means validating the hops the browser half recorded and downloading the
+ * signed URL; without it, finding the file a browser already saved. A `session_expired` outcome is
+ * marked `fatal` so the caller stops the whole run: the session is gone and every remaining row
+ * would fail identically, which is a page of noise instead of one clear line.
+ */
+async function bytesOnDisk(row, ctx) {
+  const { downloads, downloadNames, fetchMode, fetchImpl } = ctx;
+  if (!fetchMode) {
+    const local = findDownload(downloadNames, row.id);
+    if (!local) return { error: 'no download' };
+    return { localPath: path.join(downloads, local) };
+  }
+  const chain = hopsForRow(row);
+  if (chain.outcome !== 'ok') {
+    return { error: `hops ${chain.outcome}: ${chain.reason ?? 'no signed URL'}`, outcome: chain.outcome };
+  }
+  const dest = path.join(downloads, `${row.id}_${path.basename(row.file_name || row.relpath)}`);
+  const got = await downloadTo(fetchImpl, chain.signedUrl, dest);
+  if (got.outcome !== 'ok') {
+    return { error: `download ${got.outcome}: ${got.reason}`, outcome: got.outcome, fatal: got.outcome === 'session_expired' };
+  }
+  return { localPath: dest };
+}
+
 async function pullOne(row, ctx) {
-  const { downloads, downloadNames, mirror, supabaseUrl, key, ingestDir, dryRun, pulledOn } = ctx;
-  const local = findDownload(downloadNames, row.id);
-  if (!local) return { id: row.id, error: 'no download' };
-  const bytes = fs.readFileSync(path.join(downloads, local));
+  const { mirror, supabaseUrl, key, ingestDir, dryRun, pulledOn, restale } = ctx;
+
+  const got = await bytesOnDisk(row, ctx);
+  if (got.error) return { id: row.id, error: got.error, outcome: got.outcome, fatal: got.fatal };
+  const localPath = got.localPath;
+
+  const bytes = fs.readFileSync(localPath);
   const mime = mimeFor(row);
   if (!bytesLookValid(bytes, mime)) return { id: row.id, error: `bad bytes: ${bytes.length} bytes, magic ${bytes.subarray(0, 4).toString('hex')}` };
   const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
-  const storageKey = storageKeyFor(row);
   const submission = isSubmissionRow(row);
-  const tag = submission ? { submission: true } : {};
+  // A stale row's old bytes still occupy the plain key, so its new bytes get a content-derived one.
+  const storageKey = restale ? restaleKeyFor(row, sha256) : storageKeyFor(row);
+  const tag = { ...(submission ? { submission: true } : {}), ...(restale ? { restale: true } : {}) };
   if (dryRun) return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, dryRun: true };
 
   const dest = path.join(mirror, row.relpath);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.copyFileSync(path.join(downloads, local), dest);
+  fs.copyFileSync(localPath, dest);
 
   const up = await fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${encodeKey(storageKey)}`, {
     method: 'POST', headers: anonHeaders(key, mime), body: bytes,
@@ -213,28 +334,41 @@ async function pullOne(row, ctx) {
   const upBody = await up.text();
   if (!up.ok) {
     if (!isDuplicateAnswer(up.status, upBody)) return { id: row.id, error: `storage ${up.status}: ${upBody.slice(0, 200)}` };
-    if (!duplicateIsAcceptable(submission)) return { id: row.id, key: storageKey, ...tag, error: `Storage key already occupied (${up.status}); a human decides whether those bytes are this file` };
+    // A stale key embeds this content's hash, so an occupied one holds these very bytes; a course
+    // key is derived from the catalogue, so it holds this file. Only a submission key must never
+    // be assumed (migration 052: nothing should ever share it).
+    if (!restale && !duplicateIsAcceptable(submission)) {
+      return { id: row.id, key: storageKey, ...tag, error: `Storage key already occupied (${up.status}); a human decides whether those bytes are this file` };
+    }
   }
 
   let units = [];
   let extractError = null;
-  try { units = extractUnits(ingestDir, path.join(downloads, local)); } catch (e) { extractError = String(e).slice(0, 200); }
-  if (units.length) {
+  try { units = extractUnits(ingestDir, localPath); } catch (e) { extractError = String(e).slice(0, 200); }
+
+  // A stale row's text is swapped inside the emitted transaction, not POSTed: the old units have
+  // to go in the same breath as the new ones arrive, and anon cannot delete.
+  let unitsPosted = 0;
+  if (!restale && units.length) {
     const tr = await fetch(`${supabaseUrl}/rest/v1/bb_file_text`, {
       method: 'POST', headers: { ...anonHeaders(key, 'application/json'), Prefer: 'return=minimal' },
       body: JSON.stringify(textRows(row.id, units)),
     });
     if (!tr.ok) return { id: row.id, error: `bb_file_text ${tr.status}: ${(await tr.text()).slice(0, 200)}` };
+    unitsPosted = units.length;
   }
+
   const textStatus = units.length ? 'extracted' : 'failed';
-  const sql = bbFilesUpdateSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, textStatus, pulledOn, submission });
-  return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, storage: up.status, units: units.length, textStatus, extractError, sql };
+  const sql = restale
+    ? bbFilesRestaleSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, pulledOn, units })
+    : bbFilesUpdateSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, textStatus, pulledOn, submission });
+  return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, storage: up.status, units: units.length, unitsPosted, textStatus, extractError, sql };
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const args = parseArgs(argv);
   if (!args.manifest || !args.downloads) {
-    console.error('usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--bucket my_submissions] [--only ids] [--out <sql>] [--dry-run]');
+    console.error('usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--bucket my_submissions] [--restale] [--fetch] [--only ids] [--out <sql>] [--dry-run] [--no-embed]');
     return 2;
   }
   if (args.bucket !== undefined && args.bucket !== SUBMISSION_BUCKET) {
@@ -244,22 +378,66 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const key = env.SB_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY;
   if (!key && !args['dry-run']) { console.error('SB_ANON_KEY (the publishable key) is not set'); return 2; }
   const ingestDir = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+  const mode = modeOf(args);
   const ctx = {
     downloads: args.downloads,
-    downloadNames: fs.readdirSync(args.downloads),
+    downloadNames: fs.existsSync(args.downloads) ? fs.readdirSync(args.downloads) : [],
     mirror: args.mirror || path.join(ingestDir, '..', 'course context'),
     supabaseUrl: env.SUPABASE_URL || DEFAULT_SUPABASE_URL,
     key, ingestDir, dryRun: args['dry-run'] === true,
+    fetchMode: args.fetch === true,
+    fetchImpl: (url) => fetch(url),
+    restale: mode === 'restale',
     pulledOn: new Date().toISOString().slice(0, 10),
   };
-  const rows = filterManifest(JSON.parse(fs.readFileSync(args.manifest, 'utf8')), args.only, args.bucket);
+  if (ctx.fetchMode) fs.mkdirSync(args.downloads, { recursive: true });
+
+  const rows = filterManifest(JSON.parse(fs.readFileSync(args.manifest, 'utf8')), args.only, args.bucket, { restale: ctx.restale });
   const results = [];
-  for (const row of rows) results.push(await pullOne(row, ctx));
+  let stopped = null;
+  for (const row of rows) {
+    const r = await pullOne(row, ctx);
+    results.push(r);
+    if (r.fatal) {
+      // The Blackboard session died mid-run. Stop: every remaining row fails the same way, and the
+      // rows already pulled keep their SQL so the run is not wasted.
+      stopped = r;
+      break;
+    }
+  }
+
   const sql = results.filter((r) => r.sql).map((r) => `-- file ${r.id}\n${r.sql}`).join('\n');
   const out = args.out || path.join(args.downloads, 'pull_files.sql');
   if (!ctx.dryRun) fs.writeFileSync(out, sql + '\n');
   for (const r of results) console.log(JSON.stringify({ ...r, sql: undefined }));
-  console.log(ctx.dryRun ? `dry run: ${results.filter((r) => r.dryRun).length} of ${rows.length} would be pulled` : `${results.filter((r) => r.sql).length} of ${rows.length} pulled; bb_files updates in ${out}`);
+
+  const unitsPosted = results.reduce((n, r) => n + (r.unitsPosted || 0), 0);
+  let embedNote = '';
+  if (shouldEmbed({ dryRun: ctx.dryRun, noEmbed: args['no-embed'] === true, unitsPosted })) {
+    const jwt = env.SB_ANON_JWT;
+    if (!jwt) {
+      embedNote = '; embed step skipped (SB_ANON_JWT is not set) — run ingest/embed_corpus.mjs';
+    } else {
+      const embed = await runEmbedLoop({
+        post: makePost(ctx.supabaseUrl, jwt),
+        maxParts: DEFAULT_MAX_PARTS,
+        log: (line) => console.log(line),
+      });
+      embedNote = embed.exitCode === 0 ? '; embeddings finished' : `; EMBED FAILED — ${embed.error}`;
+      if (embed.exitCode !== 0) {
+        console.error(embed.error);
+        console.log(`${results.filter((r) => r.sql).length} of ${rows.length} pulled (${mode}); bb_files updates in ${out}${embedNote}`);
+        return 1;
+      }
+    }
+  }
+
+  if (ctx.dryRun) {
+    console.log(`dry run (${mode}): ${results.filter((r) => r.dryRun).length} of ${rows.length} would be pulled`);
+  } else {
+    console.log(`${results.filter((r) => r.sql).length} of ${rows.length} pulled (${mode}); bb_files updates in ${out}${embedNote}`);
+  }
+  if (stopped) console.error(`STOPPED: ${stopped.error} — the Blackboard session is gone; re-run the sync after logging in`);
   return results.some((r) => r.error) ? 1 : 0;
 }
 
