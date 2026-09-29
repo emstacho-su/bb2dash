@@ -24,6 +24,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { InboxApplyButton } from '@/components/inbox/InboxApplyButton';
+import { ApplyNowButton } from '@/components/inbox/ApplyNowButton';
 import tokens from '@/styles/tokens.module.css';
 import shell from '../Shell.module.css';
 import styles from './Inbox.module.css';
@@ -68,6 +69,32 @@ import { itemQuery } from '@/lib/queries.popout';
 export function answerTypeFor(item: Pick<AttentionItem, 'field'>): 'text' | 'date' {
   const field = item.field ?? '';
   return /(^|_)(date|due|start|end|deadline)($|_)|_at$|_date$/i.test(field) ? 'date' : 'text';
+}
+
+/** R-56 (B-29): the Inbox line for a gap that closed itself and came back within 24 h. */
+export const REOPENED_LINE = 'Closed itself earlier today and came back';
+
+/** The key `close_cleared_gaps()` (114) sets on a row it left open because it reopened. */
+const REOPENED_KEY = 'reopened_within_24h';
+
+function suggestedRecord(item: Pick<AttentionItem, 'suggested'>): Record<string, unknown> | null {
+  const value: unknown = item.suggested;
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** True when 114 flagged the row: `suggested->>'reopened_within_24h'` is `true`. */
+export function reopenedWithin24h(item: Pick<AttentionItem, 'suggested'>): boolean {
+  const flag = suggestedRecord(item)?.[REOPENED_KEY];
+  return flag === true || flag === 'true';
+}
+
+/** `suggested` without the reopened flag, which the row says in words instead. */
+function suggestedDetails(item: Pick<AttentionItem, 'suggested'>): unknown {
+  const record = suggestedRecord(item);
+  if (!record || !(REOPENED_KEY in record)) return item.suggested;
+  return Object.fromEntries(Object.entries(record).filter(([key]) => key !== REOPENED_KEY));
 }
 
 /**
@@ -170,7 +197,14 @@ export default function Inbox() {
       // The button is handed in rather than mounted inside `InboxView`, so the
       // view stays renderable without a query client — which is the whole
       // reason the two are separate files' worth of component.
-      applyButton={<InboxApplyButton />}
+      applyButton={
+        // R-42 (B-21): "Apply answers now" files a transform request beside the
+        // /inbox-apply request button; the two are labelled apart.
+        <div className={styles.applyButtons}>
+          <InboxApplyButton />
+          <ApplyNowButton />
+        </div>
+      }
       items={itemsQuery.data ?? []}
       status={statusQuery.data ?? null}
       loading={itemsQuery.isPending}
@@ -397,7 +431,8 @@ export function InboxRow({
   /** What `/inbox-apply` recorded, as one line — never the jsonb it came from. */
   const decision = decisionLine(item);
   /** What the stage knew when it raised this — as words, never as jsonb. */
-  const details = describeDetails(item.suggested);
+  const details = describeDetails(suggestedDetails(item));
+  const reopened = reopenedWithin24h(item);
 
   // Narrowed once, here: TypeScript drops a narrowing on `item.kind` the moment
   // it is read inside a click handler's closure, so the kind each control sends
@@ -436,6 +471,8 @@ export function InboxRow({
       </div>
 
       <p className={styles.question}>{item.question}</p>
+
+      {reopened && <p className={styles.reopened}>{REOPENED_LINE}</p>}
 
       {(item.from_value !== null || item.to_value !== null) && (
         <p className={styles.change}>
