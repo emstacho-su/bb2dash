@@ -29,7 +29,7 @@
  *    `modifiedDate` is proven against live payloads and feeds announcements.modified_at
  *    (migration 033). The creator DISPLAY NAME key is NOT verified — see the TODO on
  *    mapAnnouncement() below; the mapper tries every candidate and records the winner in
- *    `authorSource`, so one query over bb_raw settles it after the first live crawl.
+ *    `authorSource`, and v5's probe (below) records what the payload actually carries.
  *
  * PHASE 10a (crawler version 3) — what changed and what is still unverified
  *  - Every `kind = 'course'` payload now carries `crawler: { version: 3 }`. It is the first
@@ -79,6 +79,18 @@
  *    over bb_raw names Ultra's real path, and the scan can be replaced by reading it directly.
  *    Until then a field Ultra does not expose stays absent rather than being invented; the
  *    gradebook column remains the source of truth for due dates and points (migration 034).
+ *
+ * PHASE 18 (crawler version 5) — the probe (R-66, R-70, P-97)
+ *  Every `kind = 'course'` payload carries
+ *      crawler: { version: 5, probe: { announcementKeys: { <bb course id>: string[] },
+ *                                       idShaped: [{ key, value }], misses: { <key-list name>: n } } }
+ *  `announcementKeys` is the sorted union of the raw announcement keys, `idShaped` every
+ *  `_NNNN_1` value under a dotted key path (never prose), and `misses` counts each key list that
+ *  found nothing: `AUTHOR_KEYS` per announcement with neither a name nor a user id, and
+ *  `ATTEMPT_FIELD_KEYS.<field>` / `ATTEMPT_FILE_KEYS.<field>` per attempt detail / file. A mapped
+ *  announcement keeps a bare creator id as `authorUserId` beside `author` / `authorSource`; the
+ *  id is never shown. Attempt feedback is read from `feedbackToUser` first. The stages ignore
+ *  `crawler.probe` and `authorUserId`; one query over bb_raw after the next sync reads them.
  *
  * `runAll({ runId })` — WHY THE SKILL STILL REGISTERS AFTER THE CRAWL (round-2 review, R2-1)
  *  `runAll` accepts a caller-supplied run id, and registering it BEFORE the crawl is the order the
@@ -132,16 +144,64 @@ const personName = (v) => {
 // `authorSource`, so after the first live crawl `select payload->'announcements' from bb_raw` names
 // the true key and this list can be cut to it. Until then an unknown shape yields author: null —
 // never a guess, and never a raw user id.
-const AUTHOR_KEYS = ['creator', 'createdBy', 'author', 'createdByUser', 'creatorFullName', 'postedBy', 'userName'];
+//
+// v5 (Phase 18, R-70): `creatorUserId` leads the list. Research 92 §9 found it documented on the
+// announcements resource as a bare `_NNNN_1` user id, which personName() rightly refuses to show —
+// so the id is now KEPT as `authorUserId` instead of being dropped, and resolveAuthors() below turns
+// it into a name. The probe sitting (98a §1) confirms the live key.
+const AUTHOR_KEYS = ['creatorUserId', 'creator', 'createdBy', 'author', 'createdByUser', 'creatorFullName', 'postedBy', 'userName'];
 
-/** The creator display name of one announcement, plus which key supplied it. */
+/** A Blackboard user id held by a candidate field: a bare id, or a user object's id / userId. */
+const userIdOf = (v) => {
+  if (isBbUserId(v)) return v;
+  if (v == null || typeof v !== 'object') return null;
+  const u = v.user && typeof v.user === 'object' ? v.user : v;
+  for (const k of ['id', 'userId']) if (isBbUserId(u[k])) return u[k];
+  return null;
+};
+
+/**
+ * The creator display name of one announcement, which key supplied it, and the first user id any
+ * author key carries. The id is never shown; it is what resolveAuthors() looks up.
+ */
 const announcementAuthor = (a) => {
-  if (a == null || typeof a !== 'object') return { author: null, authorSource: null };
+  const none = { author: null, authorSource: null, authorUserId: null };
+  if (a == null || typeof a !== 'object') return none;
+  let authorUserId = null;
+  for (const key of AUTHOR_KEYS) if (authorUserId === null) authorUserId = userIdOf(a[key]);
   for (const key of AUTHOR_KEYS) {
     const name = personName(a[key]);
-    if (name) return { author: name, authorSource: key };
+    if (name) return { author: name, authorSource: key, authorUserId };
   }
-  return { author: null, authorSource: null };
+  return { ...none, authorUserId };
+};
+
+/** Most id-shaped entries one course's probe records. The probe is diagnosis, not a data dump. */
+const PROBE_ID_LIMIT = 50;
+
+/**
+ * v5 probe over one course's RAW announcements (before mapAnnouncement slims them): the union of
+ * their top-level keys, sorted, and every id-shaped string value under a dotted key path, once per
+ * (key, value). The announcement's own `id` is skipped — it is id-shaped on every row and says
+ * nothing about who posted it. Only `_NNNN_1` strings are recorded, never prose, so the probe can
+ * travel in bb_raw without carrying anything a professor wrote.
+ */
+const announcementProbe = (raws) => {
+  const rows = Array.isArray(raws) ? raws.filter((r) => r != null && typeof r === 'object') : [];
+  const keys = new Set(); const idShaped = []; const seen = new Set();
+  const rec = (v, path, depth) => {
+    if (idShaped.length >= PROBE_ID_LIMIT || depth > 3) return;
+    if (isBbUserId(v)) {
+      const tag = `${path}\u0000${v}`;
+      if (path !== 'id' && !seen.has(tag)) { seen.add(tag); idShaped.push({ key: path, value: v }); }
+      return;
+    }
+    if (v == null || typeof v !== 'object') return;
+    if (Array.isArray(v)) { v.forEach((e) => rec(e, `${path}[]`, depth + 1)); return; }
+    for (const k of Object.keys(v)) rec(v[k], path ? `${path}.${k}` : k, depth + 1);
+  };
+  for (const r of rows) { Object.keys(r).forEach((k) => keys.add(k)); rec(r, '', 0); }
+  return { keys: [...keys].sort(), idShaped };
 };
 
 /**
@@ -150,7 +210,7 @@ const announcementAuthor = (a) => {
  * announcements.author; `isRead` keeps mirroring Blackboard's own read state.
  */
 const mapAnnouncement = (a) => {
-  const { author, authorSource } = announcementAuthor(a);
+  const { author, authorSource, authorUserId } = announcementAuthor(a);
   return {
     id: a.id,
     title: a.title,
@@ -160,6 +220,7 @@ const mapAnnouncement = (a) => {
     isRead: a.readStatus?.isRead ?? null,
     author,
     authorSource,
+    authorUserId,
     body: strip(a.body)?.slice(0, 4000),
   };
 };
@@ -169,7 +230,7 @@ const mapAnnouncement = (a) => {
 // ================================================================================================
 
 /** Envelope version stamped on every course payload. Stages read a missing key as version 2. */
-const CRAWLER_VERSION = 4;
+const CRAWLER_VERSION = 5;
 
 /** Newest N attempts per column. A column with ten resubmissions is not worth ten round trips. */
 const ATTEMPT_LIMIT = 3;
@@ -208,7 +269,10 @@ const ATTEMPT_FIELD_KEYS = {
   submitted:         ['attemptReceipt.submissionDate', 'attemptDate'],
   modified:          ['modifiedDate'],
   score:             ['displayGrade.score'],
-  feedback:          ['instructorFeedback.rawText', 'instructorFeedback.displayText'],
+  // v5 (R-66): Blackboard's attempt resource names the feedback `feedbackToUser`; v4's
+  // `instructorFeedback` stays as the fallback until the probe sitting (98a §4) settles it.
+  feedback:          ['feedbackToUser.rawText', 'feedbackToUser.displayText',
+                      'instructorFeedback.rawText', 'instructorFeedback.displayText'],
   studentComments:   ['studentComments'],
   studentSubmission: ['studentSubmission.rawText', 'studentSubmission.displayText'],
   exempt:            ['exempt'],
@@ -249,6 +313,20 @@ const pickKey = (o, keys) => {
     if (v !== undefined && v !== null && v !== '') return v;
   }
   return null;
+};
+
+/**
+ * v5 probe: the names of the key lists that found nothing in `o` — `<prefix>.<field>` for each
+ * field of `lists` whose candidates are all absent. A silent null cannot tell "renamed" from
+ * "never sent"; a per-list miss count in `crawler.probe.misses` can.
+ */
+const keyListMisses = (o, lists, prefix) =>
+  Object.keys(lists).filter((field) => pickKey(o, lists[field]) === null).map((field) => `${prefix}.${field}`);
+
+/** Add one to each named miss. `misses` is a counter the caller owns for one course payload. */
+const countMisses = (misses, names) => {
+  if (misses == null || typeof misses !== 'object') return;
+  for (const n of names) misses[n] = (misses[n] || 0) + 1;
 };
 
 const asString = (v) => (typeof v === 'string' && v.trim() ? v : typeof v === 'number' ? String(v) : null);
@@ -511,7 +589,10 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
   // Nothing here throws: every step records its own status under `steps`, `entry.status` keeps the
   // FIRST non-2xx of the chain (so the stage's error count still means something), and a column
   // that fails at any step is pushed with whatever it got and the crawl carries on.
-  const attempts = async (C, gradebook = [], { limit = ATTEMPT_LIMIT } = {}) => {
+  // v5: `misses` is the course payload's probe counter. Each attempt DETAIL (the shape the key
+  // lists were written for) adds one per ATTEMPT_FIELD_KEYS / ATTEMPT_FILE_KEYS list that found
+  // nothing; a failed detail adds none, because its failure is already in `steps`.
+  const attempts = async (C, gradebook = [], { limit = ATTEMPT_LIMIT, misses = null } = {}) => {
     const ok = (s) => s >= 200 && s <= 299;
     const out = [];
     for (const g of (Array.isArray(gradebook) ? gradebook : [])) {
@@ -561,6 +642,10 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
 
           const rawFiles = (d && Array.isArray(d.studentSubmissionFiles)) ? d.studentSubmissionFiles : [];
           if (rawFiles[0] && entry.keys.file === undefined) entry.keys.file = Object.keys(rawFiles[0]);
+          if (d) {
+            countMisses(misses, keyListMisses(d, ATTEMPT_FIELD_KEYS, 'ATTEMPT_FIELD_KEYS'));
+            for (const f of rawFiles) countMisses(misses, keyListMisses(f, ATTEMPT_FILE_KEYS, 'ATTEMPT_FILE_KEYS'));
+          }
           const files = rawFiles
             .map((f) => mapAttemptFile(f, { base, courseId: C, attemptId: aid }))
             .filter(Boolean);
@@ -587,13 +672,24 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
     // The gradebook is fetched before the attempts probe because it is what decides which columns
     // are worth probing at all (shouldProbeColumn).
     const gradebook = await grades(C);
-    return { crawler: { version: CRAWLER_VERSION },
+    // v5 probe (Phase 18): what this course's announcements really carry, and every key list that
+    // came up empty. `misses` is this payload's own counter; nothing outside crawl() holds it.
+    const misses = {};
+    const rawAnnouncements = ann.results || [];
+    const teachers = (teach.results || []).map(t => ({ name: `${t.user?.givenName || ''} ${t.user?.familyName || ''}`.trim(), email: t.user?.emailAddress || null, role: t.courseRole?.identifier, userId: t.userId }));
+    const announcements = rawAnnouncements.map(mapAnnouncement);
+    countMisses(misses, announcements.filter((a) => !a.author && !a.authorUserId).map(() => 'AUTHOR_KEYS'));
+    const att = await attempts(C, gradebook, { misses });
+    const content = await walk(C);
+    const annProbe = announcementProbe(rawAnnouncements);
+    return { crawler: { version: CRAWLER_VERSION,
+        probe: { announcementKeys: { [C]: annProbe.keys }, idShaped: annProbe.idShaped, misses } },
       course: { id: C, name: detail.name, courseId: detail.courseId, modified: detail.modifiedDate },
-      teachers: (teach.results || []).map(t => ({ name: `${t.user?.givenName || ''} ${t.user?.familyName || ''}`.trim(), email: t.user?.emailAddress || null, role: t.courseRole?.identifier, userId: t.userId })),
+      teachers,
       schedule: sched.results || [],
-      announcements: (ann.results || []).map(mapAnnouncement),
+      announcements,
       gradeCategories: (cats.results || []).map(c => ({ id: c.id, title: c.title, weight: c.weight ?? null })),
-      gradebook, attempts: await attempts(C, gradebook), content: await walk(C) }; };
+      gradebook, attempts: att, content }; };
   const memberships = async () => { const m = await j(`/learn/api/v1/users/${userId}/memberships?expand=course.effectiveAvailability,course.permissions,courseRole&includeCount=true&limit=10000`); return (m.results || []).map(x => ({ id: x.course.id, name: x.course.name, courseId: x.course.courseId, termId: x.course.termId, termName: x.course.term?.name, uuid: x.course.uuid, role: x.role, membershipId: x.id, lastAccess: x.lastAccessDate })); };
   const calendar = async (since, until) => ({ calendars: (await j('/learn/api/v1/calendars?limit=10000')).results || [], items: (await j(`/learn/api/v1/calendars/calendarItems?since=${since}&until=${until}`)).results || [] });
   const post = async (run_id, kind, bb_course_id, payload) => fetch(`${supabaseUrl}/rest/v1/bb_raw`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ run_id, kind, bb_course_id, payload }) });
@@ -625,6 +721,7 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
 // Under Node it exposes the pure mappers to the vitest suite in web/test.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { installCrawler, strip, personName, announcementAuthor, mapAnnouncement, AUTHOR_KEYS,
+    userIdOf, announcementProbe, keyListMisses, PROBE_ID_LIMIT,
     mapAttempt, mapAttemptFile, mapGradeRow, mapAttemptDetail, newestAttempts, atPath,
     shouldProbeColumn, assessmentFields, pickKey, assertRunId,
     ATTEMPT_FIELD_KEYS, ATTEMPT_FILE_KEYS, ASSESSMENT_FIELDS, CRAWLER_VERSION, ATTEMPT_LIMIT };
