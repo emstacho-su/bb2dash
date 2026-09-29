@@ -1,30 +1,30 @@
 {
-  "run_at": "2026-09-29T17:39:42.390Z",
+  "run_at": "2026-09-29T19:12:02.342Z",
   "limit": 10,
   "bar": {
     "hybrid_mrr": 0.9
   },
   "modes": {
     "fts": {
-      "n": 10,
+      "n": 9,
       "hit1": 1,
       "hit3": 1,
       "hit10": 1,
-      "mrr": 0.1
+      "mrr": 0.1111111111111111
     },
     "vector": {
-      "n": 10,
+      "n": 9,
       "hit1": 9,
       "hit3": 9,
-      "hit10": 10,
-      "mrr": 0.9199999999999999
+      "hit10": 9,
+      "mrr": 1
     },
     "hybrid": {
-      "n": 10,
+      "n": 9,
       "hit1": 9,
       "hit3": 9,
-      "hit10": 10,
-      "mrr": 0.9199999999999999
+      "hit10": 9,
+      "mrr": 1
     }
   },
   "queries": [
@@ -125,17 +125,6 @@
         "fts": null,
         "vector": 1,
         "hybrid": 1
-      }
-    },
-    {
-      "qid": 10,
-      "course": "IST.323",
-      "type": "paraphrase",
-      "query": "do I need to admit using ChatGPT on the IST 323 final project",
-      "ranks": {
-        "fts": null,
-        "vector": 5,
-        "hybrid": 5
       }
     }
   ],
