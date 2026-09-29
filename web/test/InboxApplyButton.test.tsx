@@ -59,20 +59,14 @@ beforeEach(() => {
   });
 });
 
-describe('Apply answers — the label', () => {
-  it('counts the rows waiting in v_inbox_queue', () => {
+describe('Apply answers — the label (R3-2)', () => {
+  it('reads "Apply answers" at rest, whatever the count', () => {
     queueState.data = 3;
     render(<InboxApplyButton />);
-    expect(screen.getByRole('button', { name: 'Apply 3 answers' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply answers' })).toBeInTheDocument();
   });
 
-  it('says one answer in the singular', () => {
-    queueState.data = 1;
-    render(<InboxApplyButton />);
-    expect(screen.getByRole('button', { name: 'Apply 1 answer' })).toBeInTheDocument();
-  });
-
-  it('claims no count it does not have yet', () => {
+  it('reads "Apply answers" before the count has arrived', () => {
     render(<InboxApplyButton />);
     expect(screen.getByRole('button', { name: 'Apply answers' })).toBeInTheDocument();
   });
@@ -85,6 +79,12 @@ describe('Apply answers — the label', () => {
       'Ask a Claude session to apply your Inbox answers',
     );
   });
+
+  it('renders nothing but the button while at rest', () => {
+    queueState.data = 2;
+    const { container } = render(<InboxApplyButton />);
+    expect(container.textContent).toBe('Apply answers');
+  });
 });
 
 describe('Apply answers — the clipboard command', () => {
@@ -93,23 +93,28 @@ describe('Apply answers — the clipboard command', () => {
     mutateAsync.mockResolvedValue({ id: 42, state: 'queued' });
     render(<InboxApplyButton />);
 
-    screen.getByRole('button', { name: 'Apply 3 answers' }).click();
+    screen.getByRole('button', { name: 'Apply answers' }).click();
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     expect(writeText).toHaveBeenCalledWith('claude "/inbox-apply 42"');
     expect(mutateAsync).toHaveBeenCalledWith({ kind: 'inbox_feedback', scope: 'all' });
   });
 
-  it('shows the command and the "run it in Claude Code" toast after copying', async () => {
+  it('shows nothing under the button once the command is copied; the title names it', async () => {
     queueState.data = 2;
     mutateAsync.mockResolvedValue({ id: 7, state: 'queued' });
-    render(<InboxApplyButton />);
-    screen.getByRole('button', { name: 'Apply 2 answers' }).click();
+    const { container } = render(<InboxApplyButton />);
+    screen.getByRole('button', { name: 'Apply answers' }).click();
 
-    expect(await screen.findByText('claude "/inbox-apply 7"')).toBeInTheDocument();
-    expect(
-      screen.getByText('command copied — run it in Claude Code'),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole('button')).toHaveAttribute(
+        'title',
+        'Command copied: claude "/inbox-apply 7"',
+      ),
+    );
+    expect(screen.queryByText('claude "/inbox-apply 7"')).toBeNull();
+    expect(container.querySelectorAll('button')).toHaveLength(1);
   });
 
   it('still shows the command when the clipboard is denied, and says it was not copied', async () => {
@@ -117,7 +122,7 @@ describe('Apply answers — the clipboard command', () => {
     mutateAsync.mockResolvedValue({ id: 9, state: 'queued' });
     writeText.mockRejectedValue(new Error('clipboard blocked'));
     render(<InboxApplyButton />);
-    screen.getByRole('button', { name: 'Apply 2 answers' }).click();
+    screen.getByRole('button', { name: 'Apply answers' }).click();
 
     expect(await screen.findByText('claude "/inbox-apply 9"')).toBeInTheDocument();
     expect(screen.getByText('copy this and run it in Claude Code')).toBeInTheDocument();
@@ -125,13 +130,13 @@ describe('Apply answers — the clipboard command', () => {
 });
 
 describe('Apply answers — the request state', () => {
-  it('reads each state in the Inbox vocabulary, not the sync one', () => {
+  it('reads each state in plain words (R3-2)', () => {
     for (const [state, label] of [
-      ['queued', 'apply requested'],
-      ['claimed', 'applying…'],
-      ['done', 'answers applied'],
-      ['failed', 'apply failed'],
-      ['cancelled', 'apply cancelled'],
+      ['queued', 'queued'],
+      ['claimed', 'running'],
+      ['done', 'done'],
+      ['failed', 'failed'],
+      ['cancelled', 'cancelled'],
     ] as const) {
       requestState.data = { state };
       const view = render(<InboxApplyButton />);
@@ -155,19 +160,18 @@ describe('Apply answers — one open request at a time', () => {
     openState.data = { id: 8, state: 'queued' };
     render(<InboxApplyButton />);
 
-    screen.getByRole('button', { name: 'apply requested' }).click();
+    screen.getByRole('button', { name: 'queued' }).click();
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     expect(writeText).toHaveBeenCalledWith('claude "/inbox-apply 8"');
     expect(mutateAsync).not.toHaveBeenCalled();
-    expect(await screen.findByText('claude "/inbox-apply 8"')).toBeInTheDocument();
   });
 
   it('shows a claimed request found on load as applying, before this tab filed anything', () => {
     queueState.data = 3;
     openState.data = { id: 8, state: 'claimed' };
     render(<InboxApplyButton />);
-    expect(screen.getByRole('button', { name: 'applying…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'running' })).toBeInTheDocument();
   });
 });
 
@@ -175,7 +179,7 @@ describe('Apply answers — nothing to apply', () => {
   it('is disabled when the queue is known to be empty and nothing is open', () => {
     queueState.data = 0;
     render(<InboxApplyButton />);
-    expect(screen.getByRole('button', { name: 'Apply 0 answers' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Apply answers' })).toBeDisabled();
   });
 
   it('is live while the count is still unknown', () => {
@@ -187,14 +191,14 @@ describe('Apply answers — nothing to apply', () => {
     queueState.data = 0;
     openState.data = { id: 8, state: 'claimed' };
     render(<InboxApplyButton />);
-    expect(screen.getByRole('button', { name: 'applying…' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'running' })).toBeEnabled();
   });
 
   it('waits for the open-request lookup before it can be pressed, so no second request is filed', () => {
     queueState.data = 5;
     openState.isPending = true;
     render(<InboxApplyButton />);
-    expect(screen.getByRole('button', { name: 'Apply 5 answers' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Apply answers' })).toBeDisabled();
   });
 });
 

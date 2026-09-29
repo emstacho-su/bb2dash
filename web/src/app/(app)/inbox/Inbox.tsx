@@ -24,15 +24,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { InboxApplyButton } from '@/components/inbox/InboxApplyButton';
-import { ApplyNowButton } from '@/components/inbox/ApplyNowButton';
 import tokens from '@/styles/tokens.module.css';
 import shell from '../Shell.module.css';
 import styles from './Inbox.module.css';
 import {
   ATTENTION_KIND_HEADING,
   ATTENTION_KIND_LABEL,
-  INBOX_APPLY_HELP,
-  INBOX_APPLY_REQUEST_HELP,
   NOTE_MAX_LENGTH,
   appliesAutomatically,
   decisionLine,
@@ -197,14 +194,7 @@ export default function Inbox() {
       // The button is handed in rather than mounted inside `InboxView`, so the
       // view stays renderable without a query client — which is the whole
       // reason the two are separate files' worth of component.
-      applyButton={
-        // R-42 (B-21): "Apply answers now" files a transform request beside the
-        // /inbox-apply request button; the two are labelled apart.
-        <div className={styles.applyButtons}>
-          <InboxApplyButton />
-          <ApplyNowButton />
-        </div>
-      }
+      applyButton={<InboxApplyButton />}
       items={itemsQuery.data ?? []}
       status={statusQuery.data ?? null}
       loading={itemsQuery.isPending}
@@ -286,13 +276,6 @@ export function InboxView({
           <span className={styles.headerFreshness}>{freshnessLine(status)}</span>
         </div>
       </header>
-
-      {/* I-2: the rules stated once, so they are not only implied row by row —
-          what the transform applies, and who applies everything else. */}
-      <div className={styles.help}>
-        <p className={styles.applyHelp}>{INBOX_APPLY_HELP}</p>
-        <p className={styles.applyHelp}>{INBOX_APPLY_REQUEST_HELP}</p>
-      </div>
 
       {error && (
         <p className={styles.problem} role="alert">

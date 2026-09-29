@@ -71,13 +71,6 @@
   max-width: 80ch;
 }
 
-/* R-42 (B-21): "Apply answers" and "Apply answers now", side by side. */
-.applyButtons {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
 
 /* I-3 row anatomy: age in the head, the source sentence with its link, and the
    stage's own payload as labelled words rather than jsonb. */
@@ -178,19 +171,6 @@
 
 /* The rules at the top of the screen: what applies itself, and who applies
    the rest. Stacked, so neither reads as a footnote of the other. */
-.help {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.applyHelp {
-  margin: 0;
-  max-width: 88ch;
-  font-size: var(--text-sm);
-  color: var(--color-muted);
-}
-
 .answered {
   margin: var(--space-2) 0 0;
   font-size: var(--text-sm);

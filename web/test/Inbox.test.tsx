@@ -684,9 +684,9 @@ describe('Inbox — the outcome under each button', () => {
     }
   });
 
-  it('states the rule once, at the top of the screen', () => {
+  it('R3-2: carries no help text under the apply button', () => {
     renderInbox([makeAttentionItem({ id: 1 })]);
-    expect(screen.getByText(INBOX_APPLY_HELP)).toBeInTheDocument();
+    expect(screen.queryByText(INBOX_APPLY_HELP)).toBeNull();
   });
 });
 
@@ -788,9 +788,9 @@ describe('Inbox — archived rows', () => {
     expect(screen.queryByText(/^worker:/)).toBeNull();
   });
 
-  it('names /inbox-apply once, near the button that asks for it', () => {
+  it('R3-2: no sentence about /inbox-apply sits under the button', () => {
     renderInbox([makeAttentionItem({ id: 1 })]);
-    expect(screen.getByText(INBOX_APPLY_REQUEST_HELP)).toBeInTheDocument();
+    expect(screen.queryByText(INBOX_APPLY_REQUEST_HELP)).toBeNull();
   });
 });
 
