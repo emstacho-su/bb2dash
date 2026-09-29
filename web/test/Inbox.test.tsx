@@ -23,14 +23,23 @@ vi.mock('next/link', () => ({
 const { InboxView, answerTypeFor, failureText, sourceHref, sourceText } = await import(
   '@/app/(app)/inbox/Inbox',
 );
+const { tabOf } = await import('@/components/inbox/inbox-tabs');
 const { normalizeSyncStatus, INBOX_APPLY_HELP, INBOX_APPLY_REQUEST_HELP, RECORDED_ONLY } =
   await import('@/lib/queries.sync');
 
 const status = normalizeSyncStatus(makeSyncStatusRow());
 
+/**
+ * R3-3: the Inbox opens on its Needs you tab. When none of the rows is open,
+ * this opens the tab that holds them, so a case about an answered or archived
+ * row reads that row.
+ */
 function renderInbox(items: ReturnType<typeof makeAttentionItem>[]) {
   const onResolve = vi.fn();
-  render(<InboxView items={items} status={status} onResolve={onResolve} />);
+  const initialTab = items.some((item) => item.state === 'open') ? 'needs_you' : tabOf(items[0]);
+  render(
+    <InboxView items={items} status={status} onResolve={onResolve} initialTab={initialTab} />,
+  );
   return onResolve;
 }
 
@@ -40,7 +49,7 @@ function typeNote(id: number, text: string) {
 }
 
 describe('Inbox — grouping', () => {
-  it('groups rows by kind, in Inbox order, and skips kinds with no rows', () => {
+  it('orders the cards by kind, in Inbox order (R3-3: one list, the kind on a chip)', () => {
     renderInbox([
       makeAttentionItem({ id: 1, kind: 'missing', question: 'No date on Reading 4.' }),
       makeAttentionItem({ id: 2, kind: 'conflict', question: 'Quiz 2 moved.' }),
@@ -48,16 +57,16 @@ describe('Inbox — grouping', () => {
       makeAttentionItem({ id: 4, kind: 'conflict', question: 'Project 1A moved.' }),
     ]);
 
-    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(['Conflicts', 'Needs your input', 'Missing']);
-
-    const conflicts = screen.getByRole('region', { name: 'Conflicts' });
-    expect(within(conflicts).getByText('Quiz 2 moved.')).toBeInTheDocument();
-    expect(within(conflicts).getByText('Project 1A moved.')).toBeInTheDocument();
-    expect(within(conflicts).queryByText('Supervisor name?')).toBeNull();
+    const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(titles).toEqual([
+      'Quiz 2 moved.',
+      'Project 1A moved.',
+      'Supervisor name?',
+      'No date on Reading 4.',
+    ]);
   });
 
-  it('collapses dismissed rows under a "dismissed (n)" toggle', () => {
+  it('keeps dismissed rows under Answered, not applied', () => {
     renderInbox([
       makeAttentionItem({ id: 1, kind: 'conflict', question: 'Still open.' }),
       makeAttentionItem({
@@ -70,10 +79,7 @@ describe('Inbox — grouping', () => {
     ]);
 
     expect(screen.queryByText('Already dismissed.')).toBeNull();
-    const toggle = screen.getByRole('button', { name: /dismissed \(1\)/ });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-
-    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('tab', { name: /Answered, not applied/ }));
     expect(screen.getByText('Already dismissed.')).toBeInTheDocument();
   });
 
@@ -213,7 +219,7 @@ describe('Inbox — state chip', () => {
         applied_at: null,
       }),
     ]);
-    fireEvent.click(screen.getByRole('button', { name: /dismissed \(1\)/ }));
+    expect(screen.getByText('dismissed')).toBeInTheDocument();
     expect(screen.queryByText('answered, applies on next sync')).toBeNull();
   });
 
@@ -726,19 +732,14 @@ describe('Inbox — archived rows', () => {
       archivedItem(),
     ]);
 
-    const conflicts = screen.getByRole('region', { name: 'Conflicts' });
-    expect(within(conflicts).getByText('Still open.')).toBeInTheDocument();
-    expect(within(conflicts).queryByText('Quiz 2 moved.')).toBeNull();
+    expect(screen.getByText('Still open.')).toBeInTheDocument();
     expect(screen.queryByText('Quiz 2 moved.')).toBeNull();
   });
 
-  it('collapses them under an "archived (n)" toggle of their own', () => {
+  it('keeps them under an Archived tab of their own', () => {
     renderInbox([makeAttentionItem({ id: 1, question: 'Still open.' }), archivedItem()]);
 
-    const toggle = screen.getByRole('button', { name: /archived \(1\)/ });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-
-    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('tab', { name: /Archived/ }));
     expect(screen.getByText('Quiz 2 moved.')).toBeInTheDocument();
     expect(screen.getByText('archived')).toBeInTheDocument();
   });
@@ -755,13 +756,14 @@ describe('Inbox — archived rows', () => {
       archivedItem(),
     ]);
 
-    expect(screen.getByRole('button', { name: /dismissed \(1\)/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /archived \(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Answered, not applied/ }).textContent).toBe(
+      'Answered, not applied1',
+    );
+    expect(screen.getByRole('tab', { name: /Archived/ }).textContent).toBe('Archived1');
   });
 
   it('shows what the worker changed as one line, and never as jsonb', () => {
     renderInbox([archivedItem()]);
-    fireEvent.click(screen.getByRole('button', { name: /archived \(1\)/ }));
 
     const line = screen.getByText('worker: set IST.323/quiz-2 due 2026-09-09');
     expect(line).toBeInTheDocument();
@@ -782,7 +784,6 @@ describe('Inbox — archived rows', () => {
         decision: { note: 'nothing to do' },
       }),
     ]);
-    fireEvent.click(screen.getByRole('button', { name: /archived \(1\)/ }));
 
     expect(screen.getByText('No change recorded.')).toBeInTheDocument();
     expect(screen.queryByText(/^worker:/)).toBeNull();
@@ -835,5 +836,180 @@ describe('Inbox — a reopened gap', () => {
       }),
     ]);
     expect(screen.queryByText(REOPENED)).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * R3-3 — the Inbox as a review queue: tabs, cards, footer, keyboard
+ * ------------------------------------------------------------------------ */
+
+describe('Inbox — R3-3 review queue', () => {
+  const answeredAt = { resolved_at: '2026-09-10T10:00:00.000Z' };
+
+  function mixed() {
+    return [
+      makeAttentionItem({ id: 1, kind: 'conflict', question: 'Open conflict.' }),
+      makeAttentionItem({ id: 2, kind: 'missing', field: 'group_number', question: 'Open missing.' }),
+      makeAttentionItem({ id: 3, state: 'resolved', ...answeredAt, question: 'Answered one.' }),
+      makeAttentionItem({
+        id: 4,
+        kind: 'data_gap',
+        entity: 'bb_file',
+        ref: '117',
+        state: 'dismissed',
+        ...answeredAt,
+        question: 'Dismissed gap.',
+      }),
+      makeAttentionItem({
+        id: 5,
+        state: 'archived',
+        ...answeredAt,
+        archived_at: '2026-09-11T09:00:00.000Z',
+        question: 'Archived one.',
+      }),
+    ];
+  }
+
+  function renderMixed(applyButton: React.ReactNode = <button type="button">Apply answers</button>) {
+    const onResolve = vi.fn();
+    render(
+      <InboxView items={mixed()} status={status} onResolve={onResolve} applyButton={applyButton} />,
+    );
+    return onResolve;
+  }
+
+  it('offers three tabs, each with its count', () => {
+    renderMixed();
+    const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
+    expect(tabs).toEqual(['Needs you2', 'Answered, not applied2', 'Archived1']);
+    expect(screen.getByRole('tab', { name: /Needs you/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('shows only the open cards under Needs you', () => {
+    renderMixed();
+    expect(screen.getByText('Open conflict.')).toBeInTheDocument();
+    expect(screen.getByText('Open missing.')).toBeInTheDocument();
+    expect(screen.queryByText('Answered one.')).toBeNull();
+    expect(screen.queryByText('Archived one.')).toBeNull();
+  });
+
+  it('filters to answered and dismissed rows under Answered, not applied', () => {
+    renderMixed();
+    fireEvent.click(screen.getByRole('tab', { name: /Answered, not applied/ }));
+    expect(screen.getByText('Answered one.')).toBeInTheDocument();
+    expect(screen.getByText('Dismissed gap.')).toBeInTheDocument();
+    expect(screen.queryByText('Open conflict.')).toBeNull();
+  });
+
+  it('filters to archived rows under Archived', () => {
+    renderMixed();
+    fireEvent.click(screen.getByRole('tab', { name: /Archived/ }));
+    expect(screen.getByText('Archived one.')).toBeInTheDocument();
+    expect(screen.queryByText('Answered one.')).toBeNull();
+  });
+
+  it('titles each card with its question', () => {
+    renderMixed();
+    expect(screen.getByRole('heading', { level: 3, name: 'Open conflict.' })).toBeInTheDocument();
+    const card = screen.getByRole('article', { name: 'Open conflict.' });
+    expect(card).toBeInTheDocument();
+  });
+
+  it('carries context chips: course, kind, source and when raised', () => {
+    renderMixed();
+    const card = within(screen.getByRole('article', { name: 'Open conflict.' }));
+    expect(card.getByText('IST 323')).toBeInTheDocument();
+    expect(card.getByText('conflict')).toBeInTheDocument();
+    expect(card.getByText('assignment quiz-2')).toBeInTheDocument();
+    expect(card.getByTitle('2026-09-10T14:00:00.000Z')).toBeInTheDocument();
+  });
+
+  it('sets Blackboard’s value and what bb2dash has side by side', () => {
+    renderMixed();
+    const card = within(screen.getByRole('article', { name: 'Open conflict.' }));
+    const blackboard = card.getByRole('group', { name: 'Blackboard' });
+    const mine = card.getByRole('group', { name: 'bb2dash has' });
+    expect(within(blackboard).getByText('Wed, Sep 9')).toBeInTheDocument();
+    expect(within(mine).getByText('Wed, Sep 2')).toBeInTheDocument();
+  });
+
+  it('shows the stage’s suggestion beside them', () => {
+    render(
+      <InboxView
+        items={[makeAttentionItem({ id: 7, suggested: 'IST.323 Quiz 2' })]}
+        status={status}
+        onResolve={vi.fn()}
+      />,
+    );
+    const suggestion = screen.getByRole('group', { name: 'Suggestion' });
+    expect(within(suggestion).getByText('IST.323 Quiz 2')).toBeInTheDocument();
+  });
+
+  it('accepting the suggestion writes the same resolution the conflict control always wrote', () => {
+    const onResolve = renderMixed();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Blackboard' }));
+    expect(onResolve).toHaveBeenCalledWith({ id: 1, kind: 'conflict', accept: 'blackboard', note: '' });
+  });
+
+  it('types a text answer in a full-width, labelled text box that grows', () => {
+    renderMixed();
+    const box = screen.getByLabelText('Answer for item 2');
+    expect(box.tagName).toBe('TEXTAREA');
+    expect(box.closest('label')?.textContent).toContain('Answer');
+    expect(box).toHaveAttribute('data-answer-box');
+  });
+
+  it('keeps the apply button in a footer with the answered count', () => {
+    renderMixed();
+    const footer = screen.getByRole('region', { name: 'Inbox actions' });
+    expect(within(footer).getByText('2 answered')).toBeInTheDocument();
+    expect(within(footer).getByRole('button', { name: 'Apply answers' })).toBeInTheDocument();
+  });
+
+  it('an answered data gap still reads "Recorded for /inbox-apply to act on"', () => {
+    render(
+      <InboxView
+        items={[
+          makeAttentionItem({
+            id: 9,
+            kind: 'data_gap',
+            entity: 'bb_file',
+            ref: '117',
+            state: 'resolved',
+            ...answeredAt,
+            resolution: { value: 'pull it', value_type: 'text' },
+          }),
+        ]}
+        status={status}
+        onResolve={vi.fn()}
+        initialTab="answered"
+      />,
+    );
+    expect(screen.getByText(/Recorded for \/inbox-apply to act on/)).toBeInTheDocument();
+  });
+
+  it('j and k move focus between cards, and Enter focuses the answer box', () => {
+    renderMixed();
+    const first = screen.getByRole('article', { name: 'Open conflict.' });
+    const second = screen.getByRole('article', { name: 'Open missing.' });
+
+    fireEvent.keyDown(document, { key: 'j' });
+    expect(first).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'j' });
+    expect(second).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'k' });
+    expect(first).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'j' });
+    fireEvent.keyDown(second, { key: 'Enter' });
+    expect(screen.getByLabelText('Answer for item 2')).toHaveFocus();
+  });
+
+  it('leaves j and k alone while typing in a box', () => {
+    renderMixed();
+    const box = screen.getByLabelText('Answer for item 2');
+    box.focus();
+    fireEvent.keyDown(box, { key: 'j' });
+    expect(box).toHaveFocus();
   });
 });
