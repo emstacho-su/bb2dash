@@ -96,7 +96,6 @@ function SearchBody({ onClose }: { onClose: () => void }) {
   const [raw, setRaw] = useState('');
   const [mode, setMode] = useState<SearchMode>('hybrid');
   const [course, setCourse] = useState<string>(''); // '' = all courses
-  const [active, setActive] = useState(0);
 
   const q = useDebounced(raw.trim(), 250);
   const coursesQuery = useCourses();
@@ -104,15 +103,19 @@ function SearchBody({ onClose }: { onClose: () => void }) {
   const search = useSearch({ q, course: course || null, mode });
   const results = useMemo<SearchResult[]>(() => search.data?.results ?? [], [search.data]);
 
+  // The highlighted row belongs to one result set. A new query, mode, course or
+  // answer starts again at the top: derived here during render rather than reset
+  // by an effect (react-hooks/set-state-in-effect).
+  const resultSet = useMemo(() => ({ q, mode, course, data: search.data }), [q, mode, course, search.data]);
+  const [selection, setSelection] = useState({ resultSet, index: 0 });
+  const active = selection.resultSet === resultSet ? selection.index : 0;
+  const setActive = (next: (index: number) => number) =>
+    setSelection({ resultSet, index: next(active) });
+
   // Focus the input on mount.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  // Reset the highlighted row whenever the result set changes.
-  useEffect(() => {
-    setActive(0);
-  }, [q, mode, course, search.data]);
 
   function go(result: SearchResult | undefined) {
     if (!result) return;
@@ -226,7 +229,7 @@ function SearchBody({ onClose }: { onClose: () => void }) {
               key={`${r.file_id}:${r.text_id}:${i}`}
               result={r}
               active={i === active}
-              onMouseEnter={() => setActive(i)}
+              onMouseEnter={() => setActive(() => i)}
               onSelect={() => go(r)}
             />
           ))}

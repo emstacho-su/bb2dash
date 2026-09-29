@@ -14,7 +14,7 @@
  * of them is a reason to break the top bar.
  */
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import {
   readActivitySeen,
   relativeTime,
@@ -27,16 +27,17 @@ import { usePopover } from './usePopover';
 import styles from './TopNav.module.css';
 
 export function ActivityMenu() {
-  const popover = usePopover<HTMLSpanElement>();
+  const [popover, anchor] = usePopover<HTMLSpanElement>();
   const activity = useActivity();
   const entries = activity.data ?? [];
 
-  // 0 until the first client render: localStorage does not exist on the server
-  // and reading it during render would desynchronise hydration.
-  const [seen, setSeen] = useState(0);
-  useEffect(() => {
-    setSeen(readActivitySeen());
-  }, []);
+  // The stored mark is read through useSyncExternalStore: 0 on the server and
+  // during hydration (localStorage does not exist there), the stored value on
+  // every client render after. What this tab opened is kept beside it, so the
+  // badge still clears where storage throws.
+  const storedSeen = useSyncExternalStore(subscribeToStorage, readActivitySeen, serverSeen);
+  const [openedSeen, setOpenedSeen] = useState(0);
+  const seen = Math.max(storedSeen, openedSeen);
 
   const unseen = unseenCount(entries, seen);
   const newest = entries.length > 0 ? Math.max(...entries.map((entry) => entry.runId)) : 0;
@@ -45,12 +46,12 @@ export function ActivityMenu() {
     popover.toggle();
     if (!popover.open && newest > seen) {
       writeActivitySeen(newest);
-      setSeen(newest);
+      setOpenedSeen(newest);
     }
   }
 
   return (
-    <span ref={popover.ref} style={{ display: 'contents' }}>
+    <span ref={anchor} style={{ display: 'contents' }}>
       <button
         type="button"
         className={popover.open ? styles.icOpen : styles.ic}
@@ -83,6 +84,17 @@ export function ActivityMenu() {
       )}
     </span>
   );
+}
+
+/** Another tab opening Activity moves the stored mark; follow it. */
+function subscribeToStorage(onChange: () => void): () => void {
+  window.addEventListener('storage', onChange);
+  return () => window.removeEventListener('storage', onChange);
+}
+
+/** Nothing has been seen as far as the server knows. */
+function serverSeen(): number {
+  return 0;
 }
 
 export function ActivityRow({ entry, unseen }: { entry: ActivityEntry; unseen: boolean }) {
