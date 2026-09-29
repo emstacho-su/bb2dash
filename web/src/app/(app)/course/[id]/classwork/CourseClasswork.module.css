@@ -19,10 +19,6 @@
   color: var(--color-neutral-500);
 }
 
-.head > a {
-  margin-left: auto;
-}
-
 .state {
   font-size: var(--text-base);
   color: var(--color-neutral-500);

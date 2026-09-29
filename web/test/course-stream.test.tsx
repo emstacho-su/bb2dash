@@ -1,360 +1,78 @@
 /**
- * The course Stream: what a feed row shows for each `post_kind`, and how the
- * feed is filtered and grouped before it gets there.
- *
- * The row renders on its own — no router, no query client, no network. The
- * Supabase browser client is mocked because the module graph reaches it through
- * the query layer.
+ * The course Stream since round 3 (R3-4): the Upcoming-work tracker over the
+ * course timeline. The day-grouped post feed is gone; what each lane shows is
+ * covered in `CourseTimeline.test.tsx`. This file pins the page's composition
+ * and the one helper of the old feed that the timeline still uses.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { makeStreamRow } from './factories.course';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeCourseDisplay } from './factories';
+import { newQueryClient, readChain } from './hydration-harness';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const state = vi.hoisted(() => ({ byTable: {} as Record<string, unknown[]> }));
+
 vi.mock('@/lib/supabase/client', () => ({
-  getSupabaseBrowserClient: () => ({ auth: { getSession: vi.fn() } }),
+  getSupabaseBrowserClient: () => ({
+    from: (table: string) =>
+      readChain(state.byTable, table, { singleTables: ['v_course_display', 'terms'] }),
+    auth: { getSession: vi.fn() },
+  }),
+}));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/course/IST.352/stream',
 }));
 
-const { StreamRow, formatPoints, formatDayHeading } = await import(
-  '@/app/(app)/course/[id]/stream/CourseStream'
-);
-const { filterStreamRows, groupStreamByDay } = await import('@/lib/course-dimension');
+const { CourseStream } = await import('@/app/(app)/course/[id]/stream/CourseStream');
+const { streamDayKey } = await import('@/lib/course-dimension');
 
-function renderRow(overrides: Parameters<typeof makeStreamRow>[0] = {}) {
-  return render(<StreamRow row={makeStreamRow(overrides)} />);
-}
-
-describe('StreamRow — announcement', () => {
-  it('names the kind and shows the announcement body', () => {
-    renderRow();
-    expect(screen.getByText('Announcement')).toBeInTheDocument();
-    expect(screen.getByText('Quiz 2 moves to Thursday')).toBeInTheDocument();
-    expect(screen.getByText('The quiz will now open Thursday at 9am.')).toBeInTheDocument();
-  });
-
-  it('badges an unread announcement, and only an unread one', () => {
-    const { unmount } = renderRow({ meta: { is_read: true, is_unread: true } });
-    expect(screen.getByText('unread')).toBeInTheDocument();
-    unmount();
-
-    renderRow({ meta: { is_read: true, is_unread: false } });
-    expect(screen.queryByText('unread')).toBeNull();
-  });
-
-  it('follows the bell (is_unread, 110), not Blackboard’s is_read (B-17)', () => {
-    // Opening the bell stamps read_at; Blackboard's own flag can stay false.
-    renderRow({ meta: { is_read: false, is_unread: false } });
-    expect(screen.queryByText('unread')).toBeNull();
-  });
-
-  it('links an announcement post to /announcements', () => {
-    renderRow();
-    expect(screen.getByRole('link', { name: 'Quiz 2 moves to Thursday' })).toHaveAttribute(
-      'href',
-      '/announcements',
-    );
-  });
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-29T14:00:00Z'));
+  state.byTable = {
+    v_course_display: [makeCourseDisplay({ display_id: 'IST.352', code: 'IST 352', shell_ids: ['IST.352'] })],
+    courses: [{ id: 'IST.352', term_id: 'fall-2026' }],
+    terms: [{ id: 'fall-2026', start_date: '2026-08-24' }],
+  };
 });
 
-describe('StreamRow — links per ref_kind (T-12)', () => {
-  it('opens an assignment post in the ?item= popout on the current route', () => {
-    renderRow({
-      post_kind: 'assignment_posted',
-      ref_kind: 'assignment',
-      ref_id: 'IST.352/case-1',
-      title: 'Case analysis 1',
-      meta: { type: 'homework', due_on: '2026-09-18', points_possible: 40, status: 'not_started' },
-    });
-    expect(screen.getByRole('link', { name: 'Case analysis 1' })).toHaveAttribute(
-      'href',
-      '?item=assignment%3AIST.352%2Fcase-1',
-    );
-  });
-
-  it('gives a file post the Open ladder from its stored route', () => {
-    renderRow({
-      post_kind: 'material',
-      ref_kind: 'bb_file',
-      ref_id: '88',
-      title: 'Syllabus',
-      meta: {
-        bucket: 'syllabus',
-        file_name: 'syllabus.pdf',
-        mime_type: 'application/pdf',
-        storage_path: null,
-        source_url: 'https://blackboard.syracuse.edu/bbcswebdav/xid-1',
-      },
-    });
-    expect(screen.getByRole('link', { name: 'Open ↗' })).toHaveAttribute(
-      'href',
-      'https://blackboard.syracuse.edu/bbcswebdav/xid-1',
-    );
-  });
-
-  it('says a file is not stored when the view does not carry its routes yet', () => {
-    renderRow({
-      post_kind: 'material',
-      ref_kind: 'bb_file',
-      ref_id: '89',
-      title: 'Old slides',
-      meta: { bucket: 'lecture_slides', file_name: 'l1.pptx', mime_type: null },
-    });
-    expect(screen.getByRole('button', { name: 'Not stored' })).toBeDisabled();
-  });
-
-  it('links a content post to its Blackboard url when it has one', () => {
-    renderRow({
-      post_kind: 'material',
-      ref_kind: 'bb_content',
-      ref_id: '1602',
-      title: 'Knowledge Check 1',
-      meta: { bucket: null, url: 'https://blackboard.syracuse.edu/ultra/courses/_1_1/outline' },
-    });
-    const link = screen.getByRole('link', { name: /Knowledge Check 1/ });
-    expect(link).toHaveAttribute('href', 'https://blackboard.syracuse.edu/ultra/courses/_1_1/outline');
-    expect(link).toHaveAttribute('target', '_blank');
-  });
-
-  it('leaves a content post without a url unlinked', () => {
-    renderRow({
-      post_kind: 'material',
-      ref_kind: 'bb_content',
-      ref_id: '1603',
-      title: 'Read me first',
-      meta: { bucket: null, url: null },
-    });
-    expect(screen.queryByRole('link')).toBeNull();
-    expect(screen.getByText('Read me first')).toBeInTheDocument();
-  });
+afterEach(() => {
+  vi.useRealTimers();
 });
 
-describe('StreamRow — status from the Stream (T-12)', () => {
-  it.each(['assignment_posted', 'assignment_due'] as const)(
-    'offers the status select on %s and writes through the row’s assignment id',
-    (postKind) => {
-      const onStatusChange = vi.fn();
-      render(
-        <StreamRow
-          row={makeStreamRow({
-            post_kind: postKind,
-            ref_kind: 'assignment',
-            ref_id: 'IST.352/case-1',
-            title: 'Case analysis 1',
-            meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
-          })}
-          onStatusChange={onStatusChange}
-          pendingItemId={null}
-        />,
-      );
-      const select = screen.getByLabelText('Status for Case analysis 1');
-      expect((select as HTMLSelectElement).value).toBe('not_started');
-      fireEvent.change(select, { target: { value: 'in_progress' } });
-      expect(onStatusChange).toHaveBeenCalledWith(
-        { item_kind: 'assignment', item_id: 'IST.352/case-1' },
-        'in_progress',
-      );
-    },
-  );
-
-  it('disables the select while that row’s write is in flight', () => {
+describe('CourseStream — the tracker over the timeline', () => {
+  it('renders the Upcoming strip and then the week timeline, and no post feed', async () => {
     render(
-      <StreamRow
-        row={makeStreamRow({
-          post_kind: 'assignment_due',
-          ref_kind: 'assignment',
-          ref_id: 'IST.352/case-1',
-          title: 'Case analysis 1',
-          meta: { due_on: '2026-09-18', status: 'in_progress', points_possible: null, type: null },
-        })}
-        onStatusChange={vi.fn()}
-        pendingItemId="IST.352/case-1"
-      />,
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="IST.352" />
+      </QueryClientProvider>,
     );
-    expect(screen.getByLabelText('Status for Case analysis 1')).toBeDisabled();
+
+    const timeline = await waitFor(() => screen.getByRole('region', { name: 'Course timeline' }));
+    expect(screen.getByText('Upcoming work · IST 352')).toBeInTheDocument();
+    expect(timeline.querySelector('[data-week="6"]')).not.toBeNull();
+    expect(screen.queryByRole('region', { name: 'Course stream' })).toBeNull();
   });
 
-  it('offers no select on an announcement or a material', () => {
-    for (const row of [
-      makeStreamRow(),
-      makeStreamRow({ post_kind: 'material', ref_kind: 'bb_file', meta: { bucket: 'syllabus' } }),
-    ]) {
-      const { unmount } = render(
-        <StreamRow row={row} onStatusChange={vi.fn()} pendingItemId={null} />,
-      );
-      expect(screen.queryByRole('combobox')).toBeNull();
-      unmount();
-    }
-  });
-});
-
-describe('StreamRow — material', () => {
-  it('shows the bucket in words and the file name', () => {
-    renderRow({
-      post_kind: 'material',
-      ref_kind: 'bb_file',
-      title: 'Lecture 3 — Planning, Policy and Risk',
-      body: 'Course Content / Week 3',
-      meta: { bucket: 'lecture_slides', file_name: 'Lecture3.pptx', mime_type: null },
-    });
-    expect(screen.getByText('Material')).toBeInTheDocument();
-    expect(screen.getByText(/Lecture slides/)).toBeInTheDocument();
-    expect(screen.getByText(/Lecture3\.pptx/)).toBeInTheDocument();
-  });
-
-  it('never leaks the speaker notes behind a body, and says they were hidden', () => {
-    renderRow({
-      post_kind: 'material',
-      ref_kind: 'bb_file',
-      body: 'What is a system?\n[notes] Remind them about the quiz.',
-      meta: { bucket: 'lecture_slides', file_name: 'Lecture1.pptx', mime_type: null },
-    });
-    expect(screen.getByText('What is a system?')).toBeInTheDocument();
-    expect(screen.queryByText(/Remind them/)).toBeNull();
-    expect(screen.getByText('speaker notes hidden')).toBeInTheDocument();
+  it('says so when the course does not exist', async () => {
+    state.byTable.v_course_display = [];
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="NOPE.101" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('No course with id NOPE.101.')).toBeInTheDocument());
   });
 });
 
-describe('StreamRow — assignments', () => {
-  it('shows what a posted assignment carries and nothing it does not', () => {
-    renderRow({
-      post_kind: 'assignment_posted',
-      ref_kind: 'assignment',
-      title: 'Case analysis 1',
-      body: null,
-      meta: { type: 'homework', due_on: '2026-09-18', points_possible: 40, status: null },
-    });
-    expect(screen.getByText('Assignment posted')).toBeInTheDocument();
-    expect(screen.getByText(/homework/)).toBeInTheDocument();
-    expect(screen.getByText(/due 2026-09-18/)).toBeInTheDocument();
-    expect(screen.getByText(/40 pts/)).toBeInTheDocument();
-  });
-
-  it('renders a due post with its status, and no points when none are recorded', () => {
-    renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      title: 'Case analysis 1',
-      body: null,
-      meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
-    });
-    expect(screen.getByText('Due')).toBeInTheDocument();
-    expect(screen.getByText(/not opened/)).toBeInTheDocument();
-    expect(screen.queryByText(/pts/)).toBeNull();
-  });
-
-  /* -----------------------------------------------------------------------
-   * F-1 (S-1 / P-grades-7) — found on the PM's browser walk.
-   *
-   * The post line built its status label by replacing underscores, so the
-   * Stream read "not started" and "missed" while Home, the tracker, the popout
-   * and the planner chip all read "not opened" and "DNF" for the same item.
-   * It is the last place in web/src that spelled a planner status for itself.
-   * -------------------------------------------------------------------- */
-
-  it.each([
-    ['not_started', 'not opened'],
-    ['in_progress', 'in progress'],
-    ['submitted', 'submitted'],
-    ['graded', 'graded'],
-    ['excused', 'excused'],
-    ['missed', 'DNF'],
-  ])('reads %s as "%s", the same as every other screen', (status, label) => {
-    renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      meta: { due_on: '2026-09-18', status, points_possible: null, type: null },
-    });
-    expect(screen.getByText(new RegExp(label))).toBeInTheDocument();
-  });
-
-  it('never prints the raw enum', () => {
-    const { container } = renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
-    });
-    expect(container.textContent).not.toContain('not started');
-    expect(container.textContent).not.toContain('not_started');
-  });
-
-  it('folds a retired value the way the rest of the app does', () => {
-    // Until migration 078 runs, rows still hold `waived` / `planned`.
-    renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      meta: { due_on: '2026-09-18', status: 'waived', points_possible: null, type: null },
-    });
-    expect(screen.getByText(/excused/)).toBeInTheDocument();
-  });
-
-  it('spells an unrecognised value rather than swallowing it', () => {
-    renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      meta: { due_on: '2026-09-18', status: 'from_the_future', points_possible: null, type: null },
-    });
-    expect(screen.getByText(/from the future/)).toBeInTheDocument();
-  });
-
-  it('marks the row with its kind so the four are distinguishable', () => {
-    const { container } = renderRow({ post_kind: 'assignment_due' });
-    expect(container.querySelector('[data-post-kind="assignment_due"]')).not.toBeNull();
-  });
-});
-
-describe('formatPoints — never invents a number', () => {
-  it('formats what is there, in whole points or one decimal', () => {
-    expect(formatPoints(40)).toBe('40 pts');
-    expect(formatPoints('1')).toBe('1 pt');
-    expect(formatPoints(2.55)).toBe('2.6 pts');
-  });
-
-  it('says nothing at all when the row has no points', () => {
-    expect(formatPoints(null)).toBeNull();
-    expect(formatPoints(undefined)).toBeNull();
-    expect(formatPoints('')).toBeNull();
-    expect(formatPoints('n/a')).toBeNull();
-  });
-});
-
-describe('the feed — filtering and grouping', () => {
-  it('drops an assignment_due outside the ±14-day window and keeps one inside', () => {
-    const rows = [
-      makeStreamRow({ post_kind: 'assignment_due', ref_id: 'near', meta: { due_on: '2026-09-18' } }),
-      makeStreamRow({ post_kind: 'assignment_due', ref_id: 'far', meta: { due_on: '2026-11-30' } }),
-      makeStreamRow({ post_kind: 'assignment_due', ref_id: 'past', meta: { due_on: '2026-06-01' } }),
-    ];
-    const kept = filterStreamRows(rows, '2026-09-10').map((r) => r.ref_id);
-    expect(kept).toEqual(['near']);
-  });
-
-  it('never windows anything that is not a due post', () => {
-    const rows = [
-      makeStreamRow({ post_kind: 'announcement', posted_at: '2026-01-02T14:00:00Z' }),
-      makeStreamRow({ post_kind: 'material', posted_at: '2026-01-03T14:00:00Z' }),
-      makeStreamRow({ post_kind: 'assignment_posted', posted_at: '2026-01-04T14:00:00Z' }),
-    ];
-    expect(filterStreamRows(rows, '2026-09-10')).toHaveLength(3);
-  });
-
-  it('groups by the New York day, newest day and newest post first', () => {
+describe('streamDayKey — the New York day an announcement lands on', () => {
+  it('reads a late-evening UTC time as the same New York evening', () => {
     // 23:30Z on the 8th and 02:00Z on the 9th are the same evening in New York.
-    const rows = [
-      makeStreamRow({ ref_id: 'a', posted_at: '2026-09-08T23:30:00Z' }),
-      makeStreamRow({ ref_id: 'b', posted_at: '2026-09-09T02:00:00Z' }),
-      makeStreamRow({ ref_id: 'c', posted_at: '2026-09-09T18:00:00Z' }),
-    ];
-    const days = groupStreamByDay(rows);
-    expect(days.map((d) => d.day)).toEqual(['2026-09-09', '2026-09-08']);
-    expect(days[1].rows.map((r) => r.ref_id)).toEqual(['b', 'a']);
-    expect(days[0].rows.map((r) => r.ref_id)).toEqual(['c']);
-  });
-});
-
-describe('formatDayHeading', () => {
-  it('says "Today" for today and a weekday for anything else', () => {
-    expect(formatDayHeading('2026-09-10', '2026-09-10')).toBe('Today');
-    expect(formatDayHeading('2026-09-08', '2026-09-10')).toBe('Tue · Sep 8');
+    expect(streamDayKey('2026-09-08T23:30:00Z')).toBe('2026-09-08');
+    expect(streamDayKey('2026-09-09T02:00:00Z')).toBe('2026-09-08');
+    expect(streamDayKey('2026-09-09T18:00:00Z')).toBe('2026-09-09');
   });
 });

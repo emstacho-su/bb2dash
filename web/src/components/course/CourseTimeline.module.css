@@ -1,5 +1,7 @@
-/* W-6 Course page — week rail 1–16, Lecture vs Assignment lanes, session panel,
-   AI policy block. Layout/interaction spec: gui/14-course-v2.dc.html + README 6b.
+/* The course timeline (R3-4; the Stream tab) — week rail 1–16, a classes lane
+   (sessions, their files, announcements) and an assignments lane (due items,
+   their files, status), session panel. Moved from classwork/CourseScreen.
+   Layout/interaction spec: gui/14-course-v2.dc.html + README 6b.
    Tokens live in globals.css; reusable primitives compose from tokens.module.css. */
 
 .screen {
@@ -11,60 +13,6 @@
 .state {
   color: var(--color-muted);
   font-size: var(--text-base);
-}
-
-/* -- AI policy ------------------------------------------------------------- */
-
-.aiCard {
-  composes: cardLg from '@/styles/tokens.module.css';
-  composes: elevSm from '@/styles/tokens.module.css';
-  gap: var(--space-2);
-}
-
-.aiCardStrict {
-  composes: cardLg from '@/styles/tokens.module.css';
-  gap: var(--space-2);
-  background: var(--color-danger-bg);
-  box-shadow: inset 0 0 0 1px var(--color-danger);
-}
-
-.aiHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.aiBadge {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 8px;
-  border-radius: calc(var(--radius-md) * 0.75);
-  font-size: var(--text-xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-bg);
-  background: var(--color-danger);
-}
-
-.aiConfidence {
-  font-size: var(--text-xs);
-  color: var(--color-neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.aiPolicy {
-  margin: 0;
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: var(--color-text);
-  white-space: pre-wrap;
-}
-
-.aiPolicyMissing {
-  margin: 0;
-  font-size: var(--text-base);
-  color: var(--color-muted);
 }
 
 /* -- layout: rail + content ------------------------------------------------ */
@@ -362,11 +310,6 @@
   border: 1px dashed var(--color-accent-600);
 }
 
-.asgStatus {
-  composes: tagNeutral from '@/styles/tokens.module.css';
-  margin-left: auto;
-  font-size: 10px;
-}
 
 /* -- reading rows (secondary in the lecture lane) -------------------------- */
 
@@ -484,4 +427,94 @@
   font-size: var(--text-xs);
   color: var(--color-muted);
   cursor: help;
+}
+
+/* -- R3-4: files under a row, announcements, links ------------------------ */
+
+.sessionGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.fileList {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 calc(32px + var(--space-3) * 2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.asgBody .fileList {
+  padding-left: 0;
+  margin-top: var(--space-1);
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.fileChip {
+  composes: tagNeutral from '@/styles/tokens.module.css';
+  font-size: 9px;
+  flex: none;
+}
+
+.fileName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-neutral-300);
+}
+
+.announcementRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--color-divider);
+}
+
+.avatarAnnouncement {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--color-accent-200);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.avatarAnnouncement svg {
+  width: 16px;
+  height: 16px;
+}
+
+.unreadTag {
+  composes: tagOutline from '@/styles/tokens.module.css';
+  padding: 0 6px;
+  font-size: 9px;
+}
+
+.titleLink {
+  text-decoration: none;
+}
+
+.titleLink:hover,
+.titleLink:focus-visible {
+  text-decoration: underline;
+}
+
+.asgRow > select {
+  flex: none;
+  margin-left: auto;
 }

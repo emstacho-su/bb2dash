@@ -107,10 +107,15 @@ beforeEach(() => {
 });
 
 describe('CourseInfo — Policies', () => {
-  it('prints the recorded policies verbatim once the scheme has loaded', () => {
+  it('prints the late policy verbatim once the scheme has loaded', () => {
     render(<CourseInfo courseId="IST.323" />);
-    expect(screen.getByText(SCHEME.ai_policy)).toBeInTheDocument();
     expect(screen.getByText(SCHEME.late_policy)).toBeInTheDocument();
+  });
+
+  it('shows no AI policy line, even when the scheme row still carries one (R3-5)', () => {
+    render(<CourseInfo courseId="IST.323" />);
+    expect(screen.queryByText(SCHEME.ai_policy)).toBeNull();
+    expect(screen.getByLabelText('Policies')).not.toHaveTextContent(/AI policy/i);
   });
 
   it('never says "not recorded" for a scheme query still in flight', () => {

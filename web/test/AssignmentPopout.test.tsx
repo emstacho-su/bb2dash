@@ -224,17 +224,22 @@ describe('AssignmentPopout — queries that have not landed', () => {
     expect(screen.getByText(/could not load the grade component/i)).toBeInTheDocument();
   });
 
-  it('does not claim the course has no late or AI policy while the scheme loads', () => {
+  it('does not claim the course has no late policy while the scheme loads', () => {
     hooks.scheme = stub(undefined, { isPending: true, isFetching: true });
     render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
     expect(screen.queryByText(/No late policy is recorded/)).toBeNull();
-    expect(screen.queryByText(/No AI policy is recorded/)).toBeNull();
   });
 
   it('says so when the scheme query failed, rather than "no policy recorded"', () => {
     hooks.scheme = stub(undefined, { isError: true, error: new Error('down') });
     render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
-    expect(screen.queryByText(/No AI policy is recorded/)).toBeNull();
+    expect(screen.queryByText(/No late policy is recorded/)).toBeNull();
     expect(screen.getAllByText(/could not load/i).length).toBeGreaterThan(0);
+  });
+
+  it('has no AI policy block, whatever the scheme row carries (R3-5)', () => {
+    render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
+    expect(screen.queryByText('Cite any AI use.')).toBeNull();
+    expect(screen.queryByText(/AI policy/i)).toBeNull();
   });
 });

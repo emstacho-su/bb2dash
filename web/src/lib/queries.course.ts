@@ -14,7 +14,7 @@
  *   - terms             start_date, so week 1 = the week of start_date
  *   - sessions          lecture lane, carries week_no + session_date + topic
  *   - v_work_items      assignment lane + readings, effort/glyph precomputed
- *   - grading_schemes   the AI policy shown verbatim
+ *   - grading_schemes   the late policy and letter scale shown verbatim
  *   - bb_files          harvested files, counted per session
  */
 
@@ -224,11 +224,11 @@ export function courseGradingSchemeOptions(shellIds: string[]) {
       const { data, error } = await supabase
         .from('grading_schemes')
         .select('*')
-        .in('course_id', shellIds);
+        .in('course_id', shellIds)
+        .order('course_id', { ascending: true });
       if (error) throw error;
-      if (!data || data.length === 0) return null;
-      // Prefer a scheme with an ai_policy; otherwise the first row.
-      return data.find((s) => s.ai_policy) ?? data[0];
+      // The first shell's scheme by id order (the lecture shell for GEO 103).
+      return data?.[0] ?? null;
     },
     enabled: shellIds.length > 0,
     staleTime: 30 * 60 * 1000,
@@ -413,15 +413,6 @@ export function realRoomDispute(
   return rooms.some((r) => !known.has(r));
 }
 
-/**
- * A verbatim AI policy reads as "zero tolerance" when it forbids AI outright at
- * every stage. IST 352 is the one such course; surface it prominently.
- */
-export function isZeroToleranceAiPolicy(policy: string | null | undefined): boolean {
-  if (!policy) return false;
-  return /zero[\s-]?tolerance/i.test(policy);
-}
-
 /* ===========================================================================
  * Phase 8 — course dimension (stream, classwork tree, staff, card note)
  *
@@ -436,7 +427,6 @@ export type {
   ContentTreeRow,
   CourseStreamMeta,
   CourseStreamRow,
-  StreamDay,
   StreamPostKind,
   StreamRefKind,
   VanishedSplit,
@@ -444,14 +434,11 @@ export type {
 export {
   CARD_NOTE_MAX_LENGTH,
   COURSE_TIME_ZONE,
-  DUE_WINDOW_DAYS,
   NOT_RECORDED,
   buildContentTree,
   courseToday,
-  filterStreamRows,
   flattenContentTree,
   groupContentTree,
-  groupStreamByDay,
   isFolderNode,
   normalizeCardNote,
   orNotRecorded,
@@ -482,9 +469,9 @@ const COURSE_STAFF_COLUMNS = 'id, course_id, name, role, email, office, office_h
  * ------------------------------------------------------------------------ */
 
 /**
- * The Stream feed for a display course: every post across its shells, newest
- * first. The +/-14-day window on `assignment_due` rows is a client filter (see
- * `filterStreamRows`) so the same fetch can also feed a wider view later.
+ * `v_course_stream` for a display course: every post across its shells, newest
+ * first. The course timeline (R3-4) reads its announcement arm, which carries
+ * the bell's unread flag (110).
  */
 export function courseStreamOptions(shellIds: string[]) {
   return queryOptions({

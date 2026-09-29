@@ -168,65 +168,6 @@ export function courseToday(now: Date = new Date()): string {
   return now.toLocaleDateString('en-CA', { timeZone: COURSE_TIME_ZONE });
 }
 
-/** Whole days between two 'YYYY-MM-DD' dates (b - a), TZ-stable. */
-function dayDelta(aISO: string, bISO: string): number {
-  const [ay, am, ad] = aISO.split('-').map(Number);
-  const [by, bm, bd] = bISO.split('-').map(Number);
-  const a = Date.UTC(ay, (am ?? 1) - 1, ad ?? 1);
-  const b = Date.UTC(by, (bm ?? 1) - 1, bd ?? 1);
-  return Math.round((b - a) / 86_400_000);
-}
-
-/** The feed's due-date horizon: an `assignment_due` post shows within +/-14 days. */
-export const DUE_WINDOW_DAYS = 14;
-
-/**
- * The feed rule from the contract: every post shows, except `assignment_due`
- * posts, which show only when the due date is within +/-`windowDays` of today.
- * A due post with no date at all is dropped — nothing places it on the feed.
- */
-export function filterStreamRows(
-  rows: CourseStreamRow[],
-  todayISO: string,
-  windowDays: number = DUE_WINDOW_DAYS,
-): CourseStreamRow[] {
-  return rows.filter((row) => {
-    if (row.post_kind !== 'assignment_due') return true;
-    const due = row.meta?.due_on ?? (row.posted_at ? streamDayKey(row.posted_at) : null);
-    if (!due) return false;
-    return Math.abs(dayDelta(todayISO, due)) <= windowDays;
-  });
-}
-
-/** One day's worth of feed posts. */
-export interface StreamDay {
-  /** 'YYYY-MM-DD' in the course timezone. */
-  day: string;
-  rows: CourseStreamRow[];
-}
-
-/**
- * Group posts into New York calendar days, newest day first and newest post
- * first inside a day. Input order is not trusted.
- */
-export function groupStreamByDay(rows: CourseStreamRow[]): StreamDay[] {
-  const byDay = new Map<string, CourseStreamRow[]>();
-  for (const row of rows) {
-    const day = streamDayKey(row.posted_at);
-    const bucket = byDay.get(day);
-    if (bucket) bucket.push(row);
-    else byDay.set(day, [row]);
-  }
-  return [...byDay.entries()]
-    .sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0))
-    .map(([day, dayRows]) => ({
-      day,
-      rows: [...dayRows].sort((a, b) =>
-        a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : 0,
-      ),
-    }));
-}
-
 /** A file hanging off a content node. */
 export interface ContentFile {
   fileId: number;

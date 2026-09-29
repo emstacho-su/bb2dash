@@ -9,8 +9,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { makeStaff } from './factories.course';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const schemeRows = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
+
 vi.mock('@/lib/supabase/client', () => ({
-  getSupabaseBrowserClient: () => ({ auth: { getSession: vi.fn() } }),
+  getSupabaseBrowserClient: () => ({
+    auth: { getSession: vi.fn() },
+    from: () => {
+      const chain = {
+        select: () => chain,
+        in: () => chain,
+        order: () => chain,
+        then: (resolve: (value: unknown) => unknown) =>
+          Promise.resolve({ data: schemeRows.rows, error: null }).then(resolve),
+      };
+      return chain;
+    },
+  }),
 }));
 
 const { StaffRow } = await import('@/app/(app)/course/[id]/info/CourseInfo');
@@ -60,5 +74,18 @@ describe('orNotRecorded', () => {
     expect(orNotRecorded('  ')).toBe(NOT_RECORDED);
     expect(orNotRecorded(null)).toBe(NOT_RECORDED);
     expect(orNotRecorded(undefined)).toBe(NOT_RECORDED);
+  });
+});
+
+describe('the course grading scheme — no AI-policy preference (R3-5)', () => {
+  it('takes the first shell’s scheme, not the one that happens to carry an AI policy', async () => {
+    const { courseGradingSchemeOptions } = await import('@/lib/queries.course');
+    schemeRows.rows = [
+      { course_id: 'GEO.103.lecture', late_policy: 'No late work.', ai_policy: null },
+      { course_id: 'GEO.103.recitation', late_policy: null, ai_policy: 'Cite any AI use.' },
+    ];
+    const options = courseGradingSchemeOptions(['GEO.103.lecture', 'GEO.103.recitation']);
+    const scheme = await (options.queryFn as () => Promise<{ course_id: string } | null>)();
+    expect(scheme?.course_id).toBe('GEO.103.lecture');
   });
 });
