@@ -168,28 +168,30 @@ const NO_UNREAD: ReadonlySet<number> = new Set<number>();
  * `active` is the bell's open state; a screen that is simply visited passes
  * `true`. Going inactive forgets the snapshot, so the next activation reads the
  * real state again.
+ *
+ * The snapshot is taken during render (React's "adjust state when an input
+ * changes" pattern), not by a set-state in an effect (R-51); the effect only
+ * fires the mutation, once per snapshot.
  */
 export function useUnreadSnapshot(
   active: boolean,
   ids: readonly number[] | undefined,
 ): ReadonlySet<number> {
   const { mutate: markSeen } = useMarkAnnouncementsSeen();
-  const [snapshot, setSnapshot] = useState<ReadonlySet<number>>(NO_UNREAD);
-  const handled = useRef(false);
+  /** null = no snapshot for this activation yet. */
+  const [snapshot, setSnapshot] = useState<ReadonlySet<number> | null>(null);
+  const markedFor = useRef<ReadonlySet<number> | null>(null);
+
+  if (!active && snapshot !== null) setSnapshot(null);
+  if (active && snapshot === null && ids !== undefined) setSnapshot(new Set(ids));
 
   useEffect(() => {
-    if (!active) {
-      handled.current = false;
-      setSnapshot(NO_UNREAD);
-      return;
-    }
-    if (handled.current || ids === undefined) return;
-    handled.current = true;
-    setSnapshot(new Set(ids));
+    if (snapshot === null || markedFor.current === snapshot) return;
+    markedFor.current = snapshot;
     markSeen();
-  }, [active, ids, markSeen]);
+  }, [snapshot, markSeen]);
 
-  return snapshot;
+  return active && snapshot !== null ? snapshot : NO_UNREAD;
 }
 
 /* ---------------------------------------------------------------------------

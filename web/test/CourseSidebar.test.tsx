@@ -342,3 +342,40 @@ describe('CourseSidebar — the overlay drawer', () => {
     expect(sidebarState()).toBe('open');
   });
 });
+
+describe('TopNav — the account menu (usePopover, reshaped in Phase 17)', () => {
+  const account = () => screen.getByRole('button', { name: 'Account' });
+
+  it('opens on click and says who is signed in', () => {
+    renderShell();
+    expect(account()).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(account());
+    expect(account()).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('stack@syr.edu')).toBeInTheDocument();
+  });
+
+  it('stays open for a press inside it and closes for a press outside it', async () => {
+    renderShell();
+    fireEvent.click(account());
+    fireEvent.mouseDown(screen.getByRole('menuitem', { name: 'Sign out' }));
+    expect(account()).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(account()).toHaveAttribute('aria-expanded', 'false'));
+    expect(screen.queryByRole('menuitem', { name: 'Sign out' })).not.toBeInTheDocument();
+  });
+
+  it('closes on Escape', async () => {
+    renderShell();
+    fireEvent.click(account());
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(account()).toHaveAttribute('aria-expanded', 'false'));
+  });
+
+  it('closes when ☰ is pressed, so only one panel is open', async () => {
+    renderShell();
+    fireEvent.click(account());
+    fireEvent.click(toggle());
+    await waitFor(() => expect(account()).toHaveAttribute('aria-expanded', 'false'));
+  });
+});
