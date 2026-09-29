@@ -24,6 +24,9 @@ const stub = vi.hoisted(() => ({
   window: [] as unknown[],
   undated: [] as unknown[],
   undatedPending: false,
+  term: null as unknown,
+  termPending: false,
+  windowCalls: [] as { from: string; to: string; enabled: boolean | undefined }[],
   courses: [] as unknown[],
   grades: { data: [] as unknown[], isPending: false, error: null as Error | null },
   figures: {} as Record<string, { figure: unknown; error: string | null }>,
@@ -40,13 +43,19 @@ vi.mock('@/lib/queries.today', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/queries.today')>();
   return {
     ...actual,
-    useWorkItemsWindow: () => ({ ...idle, data: stub.window }),
+    useWorkItemsWindow: (from: string, to: string, options?: { enabled?: boolean }) => {
+      stub.windowCalls.push({ from, to, enabled: options?.enabled });
+      return { ...idle, data: stub.window };
+    },
     useUndatedWorkItems: () =>
       stub.undatedPending
         ? { ...idle, isPending: true, isFetching: true, data: undefined }
         : { ...idle, data: stub.undated },
     useCourseDisplay: () => ({ ...idle, data: stub.courses }),
-    useTerm: () => ({ ...idle, data: null }),
+    useTerm: () =>
+      stub.termPending
+        ? { ...idle, isPending: true, isFetching: true, data: undefined }
+        : { ...idle, data: stub.term },
     useSetItemStatus: () => ({ isPending: false, variables: undefined, mutate: vi.fn() }),
   };
 });
@@ -83,6 +92,9 @@ beforeEach(() => {
   stub.window = [makeWorkItem({ item_id: 'a-today', title: 'Reading for today', due_on: TODAY })];
   stub.undated = [];
   stub.undatedPending = false;
+  stub.term = null;
+  stub.termPending = false;
+  stub.windowCalls = [];
   stub.courses = [makeCourseDisplay({ display_id: 'IST.323', code: 'IST 323' })];
   stub.grades = { data: [], isPending: false, error: null };
   stub.figures = {};
@@ -395,5 +407,39 @@ describe('Home — the Undated tray (S2-home-2)', () => {
     render(<Today />);
     const toggle = screen.getByRole('button', { name: /^Undated/ });
     expect(toggle.textContent).not.toMatch(/\(\d+\)/);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * R3-1 — the strip's fetch starts at the term start
+ * ------------------------------------------------------------------------ */
+
+describe('Home — the Upcoming fetch reaches back to the term start (R3-1)', () => {
+  const TERM = { id: 'FALL26', name: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-11' };
+
+  it('fetches from the term’s first day, not from this week', () => {
+    stub.term = TERM;
+    render(<Today />);
+    const last = stub.windowCalls.at(-1)!;
+    expect(last.from).toBe('2026-08-24');
+    expect(last.enabled).not.toBe(false);
+  });
+
+  it('waits for the term row rather than fetching twice', () => {
+    stub.termPending = true;
+    render(<Today />);
+    expect(stub.windowCalls.at(-1)!.enabled).toBe(false);
+  });
+
+  it('falls back to this week’s Monday when there is no term row', () => {
+    stub.term = null;
+    render(<Today />);
+    expect(stub.windowCalls.at(-1)!.from).toBe('2026-09-07');
+  });
+
+  it('still opens the strip on today', () => {
+    stub.term = TERM;
+    render(<Today />);
+    expect(screen.getByText('Today, Sep 10')).toBeInTheDocument();
   });
 });

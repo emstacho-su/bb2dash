@@ -29,6 +29,7 @@ import {
   courseCodeFromId,
   useCourseDisplay,
   useSetItemStatus,
+  trackerWindowStart,
   useTerm,
   useUndatedWorkItems,
   useWorkItemsWindow,
@@ -129,12 +130,17 @@ export function Today() {
   const weekSunday = addDays(weekMonday, 6);
   const horizonEnd = addDays(today, DEFAULT_HORIZON_DAYS - 1);
 
-  // Fetch from the Monday of this week (so the course-card week strip is whole)
-  // through the end of the tracker's 56-day paging horizon.
-  const windowQ = useWorkItemsWindow(isoDate(weekMonday), isoDate(horizonEnd));
+  // R3-1: fetch from the term's first day (or, with no term row, the Monday of
+  // this week, so the course-card week strip is whole) through the end of the
+  // tracker's 56-day paging horizon. The fetch waits for the term row, so the
+  // window is asked for once rather than once per answer.
+  const termQ = useTerm();
+  const windowStart = trackerWindowStart(termQ.data, isoDate(weekMonday));
+  const windowQ = useWorkItemsWindow(windowStart, isoDate(horizonEnd), {
+    enabled: !termQ.isPending,
+  });
   const undatedQ = useUndatedWorkItems();
   const coursesQ = useCourseDisplay();
-  const termQ = useTerm();
   const gradesQ = useCourseGrades();
   const courseFigures = useCourseFigures(coursesQ.data ?? EMPTY_COURSES);
   const setStatus = useSetItemStatus();
@@ -229,6 +235,7 @@ export function Today() {
       {/* ---- 1. Upcoming-work effort tracker (shared component) ---- */}
       <UpcomingTracker
         items={items}
+        startIso={windowStart === isoDate(weekMonday) ? null : windowStart}
         onStatusChange={handleStatus}
         pendingItemId={pendingId}
         isPending={isQueryLoading(windowQ)}

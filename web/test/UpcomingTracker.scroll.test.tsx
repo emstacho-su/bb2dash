@@ -295,6 +295,7 @@ describe('UpcomingTracker — wheel and drag with a plain mouse (S2-home-1)', ()
 
   it('a vertical wheel moves the strip sideways', async () => {
     await renderTracker();
+    fireEvent.click(strip()); // R3-1: armed by a click
     expect(wheel({ deltaY: 3 * COLUMN, deltaX: 0 })).toBe(true);
     expect(strip().scrollLeft).toBe(3 * COLUMN);
   });
@@ -322,6 +323,7 @@ describe('UpcomingTracker — wheel and drag with a plain mouse (S2-home-1)', ()
 
   it('◂ ▸ still page fourteen days after a wheel', async () => {
     await renderTracker();
+    fireEvent.click(strip());
     wheel({ deltaY: 2 * COLUMN, deltaX: 0 });
     fireEvent.scroll(strip());
     fireEvent.click(pagerForward());
@@ -330,5 +332,40 @@ describe('UpcomingTracker — wheel and drag with a plain mouse (S2-home-1)', ()
     fireEvent.click(pagerBack());
     await settle();
     expect(strip().scrollLeft).toBe(2 * COLUMN);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * R3-1 — the strip reaches back to the term's first week and opens on today
+ * ------------------------------------------------------------------------ */
+
+describe('UpcomingTracker — back to the term start (R3-1)', () => {
+  const TERM_START = '2026-08-24';
+  const PAST = makeWorkItem({ item_id: 'a-past', title: 'Syllabus quiz', due_on: '2026-08-28', effort: 1 });
+
+  it('opens with today first in view even when the strip starts in the past', async () => {
+    render(
+      <UpcomingTracker items={[PAST, ...ITEMS]} startIso={TERM_START} onStatusChange={vi.fn()} />,
+    );
+    await settle();
+    // Aug 24 → Sep 10 is 17 columns back.
+    expect(strip().scrollLeft).toBe(17 * COLUMN);
+    expect(screen.getByText('Window · Sep 10 – Sep 23')).toBeInTheDocument();
+  });
+
+  it('can scroll back to the term’s first day', async () => {
+    render(<UpcomingTracker items={ITEMS} startIso={TERM_START} onStatusChange={vi.fn()} />);
+    await settle();
+    freeScrollTo(0);
+    expect(screen.getByText('Window · Aug 24 – Sep 6')).toBeInTheDocument();
+  });
+
+  it('pages back with ◂ into the past weeks', async () => {
+    render(<UpcomingTracker items={ITEMS} startIso={TERM_START} onStatusChange={vi.fn()} />);
+    await settle();
+    expect(pagerBack()).toBeEnabled();
+    fireEvent.click(pagerBack());
+    await settle();
+    expect(strip().scrollLeft).toBe(3 * COLUMN);
   });
 });
