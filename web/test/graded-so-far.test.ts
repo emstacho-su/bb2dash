@@ -27,7 +27,7 @@ import { FIXTURES } from './grade-fixtures/fixtures';
 import type { ComparisonFixture } from './grade-fixtures/types';
 import { modelInputArb } from './grade-model/arbitraries';
 import { assertProperty } from './grade-model/fc-params';
-import { deepFreeze } from './grade-model/builders';
+import { component, deepFreeze, item, modelInput, scheme } from './grade-model/builders';
 
 function modelOf(fixture: ComparisonFixture): ModelInput {
   return {
@@ -102,6 +102,55 @@ describe('both 10b gates are off', () => {
     // 87 %, not the 85.5 % muting used to give by dropping a graded 135/150.
     expect(figure.percent).toBeCloseTo(87, 10);
     expect(figure.countedParts).toContain('Major Cases');
+  });
+});
+
+/*
+ * P-66 / B-10 (Phase 16): GEO.103's two prod columns, both a posted 0.000 out
+ * of 100 (sync 67, 2026-09-27). An absence count is not a score, so migration
+ * 105 marks both "Not graded" (excluded, no component). The pin: with those two
+ * links the course says nothing is graded; linked, the same rows would print
+ * 0.0 %, which is why the links exist.
+ */
+describe('GEO.103 absence columns', () => {
+  const geoComponents = [
+    component({ id: 1, name: 'Exams', weightPct: 50, aggregation: 'average', countExpected: 2 }),
+    component({ id: 4, name: 'Lecture Attendance', weightPct: 10, aggregation: 'manual' }),
+    component({ id: 5, name: 'Discussion Section Attendance & Participation', weightPct: 10, aggregation: 'manual' }),
+    component({ id: 6, name: 'Reading Quizzes', weightPct: 30, aggregation: 'average', countExpected: 10 }),
+  ];
+  const geoRow = (key: string, name: string, componentId: number | null, excluded: boolean) =>
+    item({
+      key,
+      name,
+      componentId,
+      excluded,
+      linkSource: 'override',
+      linkConfidence: 'confirmed',
+      possible: 100,
+      score: 0,
+      kind: 'attendance',
+      seenAt: '2026-09-27T12:00:00.000Z',
+    });
+  const geoInput = (excluded: boolean): ModelInput =>
+    modelInput({
+      scheme: scheme({ courseId: 'GEO.103.lecture' }),
+      components: geoComponents,
+      items: [
+        geoRow('col:GEO.103.lecture:_3602583_1', 'Absences', excluded ? null : 4, excluded),
+        geoRow('col:GEO.103.recitation:_3602445_1', 'Attendance', excluded ? null : 5, excluded),
+      ],
+    });
+
+  it('GEO absences excluded → nothing_graded', () => {
+    expect(gradedSoFar(geoInput(true))).toEqual({ state: 'nothing_graded' });
+  });
+
+  it('the same two rows linked would read as a graded 0 %', () => {
+    const figure = gradedSoFar(geoInput(false));
+    expect(figure.state).toBe('figure');
+    if (figure.state !== 'figure') return;
+    expect(figure.percent).toBe(0);
   });
 });
 
