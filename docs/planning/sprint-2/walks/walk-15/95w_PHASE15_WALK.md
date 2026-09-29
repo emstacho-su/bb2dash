@@ -79,22 +79,23 @@ Two things the PM could not pre-verify from this session, both settled on 2026-0
 (paste output here)
 ```
 
-- [ ] Step 5 — Supabase → Advisors. Security: no "Function Search Path Mutable"; the two SECURITY DEFINER lines and the leaked-password line remain. Performance: 15 unindexed foreign keys and 4 unused indexes.
+- [x] Step 5 (2026-09-29, read by the PM at Stack's request through the Supabase advisors API, the same list the dashboard shows) — Supabase → Advisors. Security: no "Function Search Path Mutable"; the two SECURITY DEFINER lines and the leaked-password line remain. Performance: 15 unindexed foreign keys and **3** unused indexes (brief 95 §Advisors says 3; this line's 4 was the 2026-09-24 count, before `bb_attempts_sync_run_idx` left the list).
 
 ```
-(what the advisor listed)
+Security (observed 2026-09-29T16:03Z): WARN 0029 authenticated_security_definer_function_executable, 2 findings — public.app_owner(), public.calendar_push_now() (both accepted, DECISIONS 2026-09-10 and 2026-09-27); WARN auth_leaked_password_protection, 1 finding (accepted on the Free plan, B-41). No "Function Search Path Mutable" entry.
+Performance: INFO unindexed_foreign_keys, 15 findings (assignments.component_id; bb_content.assignment_id, parent_id; bb_files.assignment_id, reading_id, session_id, superseded_by; course_staff.course_id; courses.parent_course_id, term_id; grade_components.parent_id; meetings.course_id; planner_events.course_id; sync_stage_runs.course_id, sync_run_id); INFO unused_index, 3 findings (bb_text_embeddings_hnsw, bb_content_fts_idx, announcements_fts_idx). All accepted with their reasons (DECISIONS 2026-09-27, R-80 row).
 ```
 
-- [ ] Step 6 — Supabase → Authentication settings: new-user signups are off. Screenshot saved as `01-auth-signups-off.png` (task 20). Change nothing.
+- [x] Step 6 (2026-09-29, the PM in Stack's Chrome through the Claude in Chrome extension, read-only) — Supabase → Authentication → Sign In / Providers: "Allow new users to sign up" is off (manual linking and anonymous sign-ins off, confirm email on). Screenshot saved as `01-auth-signups-off.png` (task 20). Nothing changed.
 
 ```
-(screenshot path once saved)
+docs/planning/sprint-2/walks/walk-15/01-auth-signups-off.png  (1038×740 PNG, taken 2026-09-29 ~16:05Z)
 ```
 
-- [ ] Step 7 — read the six DECISIONS rows and say "merge" (or name what is wrong).
+- [x] Step 7 (2026-09-29) — read the six DECISIONS rows and say "merge" (or name what is wrong).
 
 ```
-(Stack's word)
+Stack, 2026-09-29: "go forward with the merge plan. Setup tasks to ensure that this is completed in it's entirety." — PR #30 merged as 6ef3933, first of the three that day; gate-out `node scripts/db-test.mjs` on `main` → passed 21, failed 0.
 ```
 
 ## Migration hygiene (task 21, PM)
