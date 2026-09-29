@@ -14,6 +14,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeWorkItem } from './factories';
+import { makeStreamRow } from './factories.course';
+import type { CourseStreamRow } from '@/lib/course-dimension';
 
 const spies = vi.hoisted(() => {
   const upsert = vi.fn(async () => ({ error: null as { message: string } | null }));
@@ -30,6 +32,7 @@ const { useSavePlanner } = await import('@/lib/queries.popout');
 const {
   WORK_ITEMS_KEY,
   COURSE_WORK_ITEMS_KEY,
+  COURSE_STREAM_KEY,
   SERIES_KEY,
   assignmentProgressKey,
 } = await import('@/lib/progress-cache');
@@ -137,6 +140,77 @@ describe('useSetItemStatus — the caches it patches', () => {
     expect(statusIn(client, COURSE_KEY)).toBe('planned');
     // The assignment's planner row is a different item and must not move.
     expect(client.getQueryData<{ status: string }>(PROGRESS_KEY)?.status).toBe('not_started');
+  });
+});
+
+describe('useSetItemStatus — the course Stream feed (T-12)', () => {
+  const STREAM_KEY = [...COURSE_STREAM_KEY, 'IST.323'];
+
+  function streamRows() {
+    return [
+      makeStreamRow({
+        post_kind: 'assignment_due',
+        ref_kind: 'assignment',
+        ref_id: ITEM_ID,
+        meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
+      }),
+      makeStreamRow({
+        post_kind: 'assignment_posted',
+        ref_kind: 'assignment',
+        ref_id: 'IST.323/lab-2',
+        meta: { due_on: '2026-09-25', status: 'not_started', points_possible: null, type: null },
+      }),
+      makeStreamRow(),
+    ];
+  }
+
+  function streamStatus(client: QueryClient, refId: string): string | null | undefined {
+    return client
+      .getQueryData<CourseStreamRow[]>(STREAM_KEY)
+      ?.find((row) => row.ref_kind === 'assignment' && row.ref_id === refId)?.meta?.status;
+  }
+
+  it('patches the post of the same assignment, and only that one', async () => {
+    const client = seededClient();
+    client.setQueryData(STREAM_KEY, streamRows());
+    const { result } = renderHook(() => useSetItemStatus(), { wrapper: wrapper(client) });
+
+    result.current.mutate({
+      item: { item_kind: 'assignment', item_id: ITEM_ID },
+      status: 'submitted',
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(streamStatus(client, ITEM_ID)).toBe('submitted');
+    expect(streamStatus(client, 'IST.323/lab-2')).toBe('not_started');
+    expect(client.getQueryState(STREAM_KEY)?.isInvalidated).toBe(true);
+  });
+
+  it('rolls the feed back when the write fails', async () => {
+    spies.upsert.mockImplementation(async () => ({ error: { message: 'permission denied' } }));
+    const client = seededClient();
+    client.setQueryData(STREAM_KEY, streamRows());
+    const { result } = renderHook(() => useSetItemStatus(), { wrapper: wrapper(client) });
+
+    result.current.mutate({
+      item: { item_kind: 'assignment', item_id: ITEM_ID },
+      status: 'graded',
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(streamStatus(client, ITEM_ID)).toBe('not_started');
+  });
+
+  it('leaves the feed alone for a reading, even one whose id matches a post', async () => {
+    const client = seededClient();
+    const rows = streamRows().map((row, index) => (index === 0 ? { ...row, ref_id: '42' } : row));
+    client.setQueryData(STREAM_KEY, rows);
+    const { result } = renderHook(() => useSetItemStatus(), { wrapper: wrapper(client) });
+
+    result.current.mutate({ item: { item_kind: 'reading', item_id: '42' }, status: 'submitted' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(streamStatus(client, '42')).toBe('not_started');
   });
 });
 

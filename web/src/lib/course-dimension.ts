@@ -18,15 +18,27 @@
 /**
  * `v_course_stream.meta` (jsonb). One of three documented shapes depending on
  * `post_kind`, so every key is optional and callers narrow by the kind:
- *   announcement                     -> { is_read }
- *   material                         -> { bucket, file_name, mime_type }
+ *   announcement                     -> { is_read, is_unread (110) }
+ *   material (ref_kind bb_file)      -> { bucket, file_name, mime_type, storage_path, source_url (110) }
+ *   material (ref_kind bb_content)   -> { bucket: null, item_kind, url }
  *   assignment_posted/assignment_due -> { due_on, points_possible, type, status }
+ *
+ * The keys migration 110 adds are typed here from the Phase 17 Contract
+ * (brief 97) ahead of the regenerated types. A key a row does not carry is
+ * `undefined`, which the screens read as "the view did not say", never as false
+ * or "no route".
  */
 export interface CourseStreamMeta {
   is_read?: boolean | null;
+  /** The bell's predicate (063): `read_at is null and is_read is distinct from true`. */
+  is_unread?: boolean | null;
   bucket?: string | null;
   file_name?: string | null;
   mime_type?: string | null;
+  storage_path?: string | null;
+  source_url?: string | null;
+  item_kind?: string | null;
+  url?: string | null;
   due_on?: string | null;
   /** Postgres numeric — supabase-js may return it as a string. */
   points_possible?: number | string | null;

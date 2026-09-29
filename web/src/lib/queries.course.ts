@@ -26,7 +26,7 @@ import {
 } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables, Views } from './queries';
-import { COURSE_WORK_ITEMS_KEY } from './progress-cache';
+import { COURSE_STREAM_KEY, COURSE_WORK_ITEMS_KEY } from './progress-cache';
 import {
   normalizeCardNote,
   shellCacheKey,
@@ -101,7 +101,7 @@ export const courseQueryKeys = {
   workItems: (shellIds: string[]) => [...COURSE_WORK_ITEMS_KEY, shellKey(shellIds)] as const,
   gradingScheme: (shellIds: string[]) => ['course-grading-scheme', shellKey(shellIds)] as const,
   sessionFiles: (shellIds: string[]) => ['course-session-files', shellKey(shellIds)] as const,
-  stream: (shellIds: string[]) => ['course-stream', shellKey(shellIds)] as const,
+  stream: (shellIds: string[]) => [...COURSE_STREAM_KEY, shellKey(shellIds)] as const,
   contentTree: (shellIds: string[]) => ['course-content-tree', shellKey(shellIds)] as const,
   staff: (shellIds: string[]) => ['course-staff', shellKey(shellIds)] as const,
 } as const;

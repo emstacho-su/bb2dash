@@ -53,13 +53,21 @@ export function StatusOptions({ value }: { value: ProgressStatus | null | undefi
     </>
   );
 }
-export function StatusSelect({
+/**
+ * What the control reads off a row: its name for the label, and its status.
+ * A `WorkItem` satisfies it, and so does the course Stream's post adapter
+ * (T-12), so the props widened additively and no existing caller changed.
+ */
+export type StatusSelectItem = Pick<WorkItem, 'title' | 'status'>;
+
+export function StatusSelect<T extends StatusSelectItem = WorkItem>({
   item,
   onChange,
   pending,
 }: {
-  item: WorkItem;
-  onChange: (item: WorkItem, status: ProgressStatus) => void;
+  item: T;
+  /** Called with the same row object it was given, so the owner keeps its own shape. */
+  onChange: (item: T, status: ProgressStatus) => void;
   pending: boolean;
 }) {
   return (
