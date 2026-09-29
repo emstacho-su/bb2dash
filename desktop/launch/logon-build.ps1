@@ -134,9 +134,24 @@ $env:GIT_TERMINAL_PROMPT = '0'
 function Invoke-Tool {
     # Runs a native tool; returns @{ ExitCode; Output } and never throws on a
     # non-zero exit. The caller decides what a failure means.
+    #
+    # Windows PowerShell 5.1 wraps every stderr line of a native command in an
+    # ErrorRecord when it is redirected, and under $ErrorActionPreference =
+    # 'Stop' that ends the script (git's "fatal: unable to access" on an
+    # offline logon did exactly that). So the preference is relaxed for the
+    # call only and the records are unwrapped back into text.
     param([string] $Exe, [string[]] $Arguments)
-    $output = & $Exe @Arguments 2>&1 | ForEach-Object { "$_" }
-    return @{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $Exe @Arguments 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+        }
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    return @{ ExitCode = $code; Output = ($output -join "`n") }
 }
 
 function Invoke-Git {
