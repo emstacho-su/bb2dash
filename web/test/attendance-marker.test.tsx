@@ -24,7 +24,7 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 
 const { SessionRow, SessionPanel } = await import(
-  '@/app/(app)/course/[id]/classwork/CourseScreen'
+  '@/components/course/TimelineRows'
 );
 const { AttendanceMarker, showsAttendanceMarker } = await import(
   '@/components/popout/SessionPopout'

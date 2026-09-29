@@ -427,7 +427,6 @@ export type {
   ContentTreeRow,
   CourseStreamMeta,
   CourseStreamRow,
-  StreamDay,
   StreamPostKind,
   StreamRefKind,
   VanishedSplit,
@@ -435,14 +434,11 @@ export type {
 export {
   CARD_NOTE_MAX_LENGTH,
   COURSE_TIME_ZONE,
-  DUE_WINDOW_DAYS,
   NOT_RECORDED,
   buildContentTree,
   courseToday,
-  filterStreamRows,
   flattenContentTree,
   groupContentTree,
-  groupStreamByDay,
   isFolderNode,
   normalizeCardNote,
   orNotRecorded,
@@ -473,9 +469,9 @@ const COURSE_STAFF_COLUMNS = 'id, course_id, name, role, email, office, office_h
  * ------------------------------------------------------------------------ */
 
 /**
- * The Stream feed for a display course: every post across its shells, newest
- * first. The +/-14-day window on `assignment_due` rows is a client filter (see
- * `filterStreamRows`) so the same fetch can also feed a wider view later.
+ * `v_course_stream` for a display course: every post across its shells, newest
+ * first. The course timeline (R3-4) reads its announcement arm, which carries
+ * the bell's unread flag (110).
  */
 export function courseStreamOptions(shellIds: string[]) {
   return queryOptions({

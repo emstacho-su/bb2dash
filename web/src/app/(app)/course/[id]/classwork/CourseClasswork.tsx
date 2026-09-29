@@ -19,11 +19,10 @@
  * never drawn, and a vanished node with no live twin waits behind a counted
  * toggle and is labelled when shown. A file's note is its hover title (R-40).
  *
- * The old week-rail timeline still lives at `?view=timeline`; the page routes
- * to it, and the link back to it sits in this pane's header.
+ * The week-rail timeline is the Stream tab since round 3 (R3-4); this pane
+ * keeps only Blackboard's folder tree, and `?view=timeline` redirects there.
  */
 
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
   buildContentTree,
@@ -240,12 +239,6 @@ export function CourseClasswork({ courseId }: { courseId: string }) {
             ? 'loading…'
             : `${nodes.length} item${nodes.length === 1 ? '' : 's'} · ${fileCount} file${fileCount === 1 ? '' : 's'}`}
         </span>
-        <Link
-          className={tokens.btnGhost}
-          href={`/course/${encodeURIComponent(courseId)}/classwork?view=timeline`}
-        >
-          Week timeline →
-        </Link>
       </div>
 
       {treeQ.isError && (
