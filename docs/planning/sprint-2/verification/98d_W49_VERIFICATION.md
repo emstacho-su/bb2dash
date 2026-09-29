@@ -138,3 +138,67 @@ text, one row per unit, nearest `part_no` + `similarity`, per `search`'s `bestPa
 
 * RED: `grep -cF "Shapes today (Phase 18, 2026-09-29)" EVAL_EMBEDDING_POC.md` → 0
 * GREEN: the same grep → 1
+
+## Round 2 (PM, 2026-09-29, after the merge into `feat/ingest-corpus-18` at 5cada4d)
+
+The anon JWT was loaded into the process environment only, from the desktop config; it was never printed or written.
+
+### fix(18-3): clean exit (`c057f23`)
+
+The PM's `embed_corpus.mjs --check` printed `missing_parts_before=5` and then node aborted with
+`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 94`: a hard exit while undici was
+still closing a fetch handle. `embed_corpus.mjs`, `eval_search.mjs` and `pull_files.mjs` now set `process.exitCode` and
+let the loop drain, and a rejected `main()` sets exit code 1.
+
+* RED: `node --test ingest/embed_corpus.test.mjs` → `tests 13, pass 12, fail 1` (the guard test: `embed_corpus.mjs calls process.exit()`)
+* GREEN: `node --test ingest/*.test.mjs` → `tests 79, pass 79, fail 0` (the guard test plus a CLI spawn test: no key → exit 2, no assertion)
+* Live: `node ingest/embed_corpus.mjs --check` → `missing_parts_before=5`, exit 1, clean.
+
+### The five missing parts
+
+File 160 (`Performing a Ransomware Attack - Evan Stachowiak.pdf`, IST.323, Stack's submission), units 785, 786, 787 (1
+part each) and 788 (1,669 chars, 2 parts) = 5 parts. Its notes read `bytes pulled 2026-09-27 by bb-sync step 4b`: the
+2026-09-27 sync ran the old step 4b, which posted text and had no embed step (PR #32 added it on 2026-09-29). They are
+not `--restale` rows and not eval truth units. The embed step fixed it:
+
+```
+node ingest/embed_corpus.mjs
+embed-corpus: 3 row(s) in, 2 part(s) left
+embed-corpus: 2 row(s) in, 0 part(s) left      (exit 0)
+node ingest/embed_corpus.mjs --check
+missing_parts_before=0                          (exit 0)
+```
+
+### fix(18-22): eval diagnosis and the Q7 truth
+
+First live run: `hybrid mrr=0.870`, exit 1. All queries were rank 1 except Q7 (vector 2, hybrid 2) and Q10 (vector 5, hybrid 5).
+
+* **Q7: the truth definition was wrong.** Rank 1 was file 150 `IST466_2Schedule_wK4.docx` (text 732, sim 0.901). It is
+  current and carries "Deloitte to Visit", posted in a second place under a different `content_id`. The truth 149 was
+  rank 2. EVAL_EMBEDDING_POC.md §1 defines a file truth as "a file_id set … when several near-duplicate files carry the
+  same answer", and §2 scored Q7 over all four schedule copies at that time. So Q7's truth is now {149, 150}. The truth
+  test gained a completeness check: a file truth must name every current file of that course whose text carries the
+  phrase. RED: `FAIL Q7 current file carries the phrase but is not in the truth: 150`. GREEN: `PASS`. The eval test's
+  Q7 expectation also went RED (`pass 10, fail 1`) and then GREEN.
+* **Q10: a real ranking regression, left as it is.** Ranks 1–4 are file 4 `IST323-Initial-Logon-v2.docx` (text 360,
+  0.857), file 72 `Managing the Information Systems Project.pptx` (589, 0.856) and file 144 `Identifying & Selecting…pptx`
+  (717 0.856, 718 0.853). The last three are IST.352 "Closing / Questions / Next Class" slides. Then 151 at rank 5
+  (733, 0.852). With superseded files included, the old truth file 2 would be rank 7 (0.849), and file 13 is rank 9. In
+  the POC, file 2 was rank 2 behind the same file 4. The drop is corpus growth: decks 72 and 144 were stored on
+  09-14 and 09-22, after the 09-09 POC corpus. The similarity band is tight (0.847–0.857). This is not a truth defect,
+  and none of the 5 missing parts are truth units.
+* **Hybrid = vector is expected, not broken fusion.** FTS (`websearch_to_tsquery`, AND of every term) returns nothing on
+  9 of 10 natural-language queries, as in the POC (fts MRR 0.100 then and now). So RRF reduces to the vector order,
+  exactly as POC §5 describes ("hybrid *is* the vector ordering"). The POC's hybrid hit@1 was 9/10. Today it is again
+  9/10 (fts hits Q2 only).
+
+Final live run: `node ingest/eval_search.mjs --out ingest/eval/reports/2026-09-29.json`
+
+```
+fts: hit@1=1/10 hit@3=1/10 hit@10=1/10 mrr=0.100
+vector: hit@1=9/10 hit@3=9/10 hit@10=10/10 mrr=0.920
+hybrid: hit@1=9/10 hit@3=9/10 hit@10=10/10 mrr=0.920
+scored=30   (exit 0)
+```
+
+The bar was not changed. Hybrid MRR 0.920 is below the POC's 0.950 only because Q10 fell from rank 2 to rank 5.

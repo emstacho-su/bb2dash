@@ -1,0 +1,143 @@
+{
+  "run_at": "2026-09-29T17:39:42.390Z",
+  "limit": 10,
+  "bar": {
+    "hybrid_mrr": 0.9
+  },
+  "modes": {
+    "fts": {
+      "n": 10,
+      "hit1": 1,
+      "hit3": 1,
+      "hit10": 1,
+      "mrr": 0.1
+    },
+    "vector": {
+      "n": 10,
+      "hit1": 9,
+      "hit3": 9,
+      "hit10": 10,
+      "mrr": 0.9199999999999999
+    },
+    "hybrid": {
+      "n": 10,
+      "hit1": 9,
+      "hit3": 9,
+      "hit10": 10,
+      "mrr": 0.9199999999999999
+    }
+  },
+  "queries": [
+    {
+      "qid": 1,
+      "course": "GEO.103.lecture",
+      "type": "paraphrase",
+      "query": "how many lectures can I skip in GEO 103 without being penalized",
+      "ranks": {
+        "fts": null,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 2,
+      "course": "GEO.103.lecture",
+      "type": "exact",
+      "query": "GEO 103 drop lowest quiz score",
+      "ranks": {
+        "fts": 1,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 3,
+      "course": "GEO.103.lecture",
+      "type": "exact-ish",
+      "query": "what date and time is the GEO 103 final exam",
+      "ranks": {
+        "fts": null,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 4,
+      "course": "ECN.304",
+      "type": "paraphrase",
+      "query": "in economics of social issues how much is my worst test worth toward the course grade",
+      "ranks": {
+        "fts": null,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 5,
+      "course": "ECN.304",
+      "type": "exact",
+      "query": "ECN 304 course schedule Exam 1 date",
+      "ranks": {
+        "fts": null,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 6,
+      "course": "IST.466",
+      "type": "paraphrase",
+      "query": "how long does my team have to present the ethics case and what if we wrap up early",
+      "ranks": {
+        "fts": null,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 7,
+      "course": "IST.466",
+      "type": "exact",
+      "query": "when is Deloitte visiting the IST 466 class",
+      "ranks": {
+        "fts": null,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 8,
+      "course": "IST.352",
+      "type": "paraphrase",
+      "query": "how much credit do I lose for handing in IST 352 work after the deadline",
+      "ranks": {
+        "fts": null,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 9,
+      "course": "IST.471",
+      "type": "paraphrase",
+      "query": "what happens if my internship boss never sends back the evaluation paperwork",
+      "ranks": {
+        "fts": null,
+        "vector": 1,
+        "hybrid": 1
+      }
+    },
+    {
+      "qid": 10,
+      "course": "IST.323",
+      "type": "paraphrase",
+      "query": "do I need to admit using ChatGPT on the IST 323 final project",
+      "ranks": {
+        "fts": null,
+        "vector": 5,
+        "hybrid": 5
+      }
+    }
+  ],
+  "errors": []
+}

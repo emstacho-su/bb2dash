@@ -52,7 +52,7 @@
     "course": "IST.466",
     "query": "when is Deloitte visiting the IST 466 class",
     "type": "exact",
-    "truth": { "text_ids": [], "file_ids": [149] },
+    "truth": { "text_ids": [], "file_ids": [149, 150] },
     "answer_phrase": "Deloitte to Visit"
   },
   {

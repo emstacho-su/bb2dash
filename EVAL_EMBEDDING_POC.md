@@ -47,7 +47,7 @@ one of the three compared modes.
 
 **Known issue accounted for.** `vector` mode returns the whole unit text rather than the matched
 part's slice, so hits were judged by **file/unit identity only**, never by displayed snippet.
-*Shapes today (Phase 18, 2026-09-29):* `vector` still returns the whole unit `text`, now one row per unit with the nearest part's `part_no` and `similarity`; `hybrid`'s `snippet` is the matched passage (migrations 024–025) with `snippet_source` and the `part_no` it was cut from; `fts` gives `rank` and a plain whole-unit headline. The re-run is `node ingest/eval_search.mjs` over `ingest/eval/golden_set.json` (Q7's truth is now file 149, Q10's file 151).
+*Shapes today (Phase 18, 2026-09-29):* `vector` still returns the whole unit `text`, now one row per unit with the nearest part's `part_no` and `similarity`; `hybrid`'s `snippet` is the matched passage (migrations 024–025) with `snippet_source` and the `part_no` it was cut from; `fts` gives `rank` and a plain whole-unit headline. The re-run is `node ingest/eval_search.mjs` over `ingest/eval/golden_set.json` (Q7's truth is now files 149 and 150, Q10's file 151).
 
 ---
 

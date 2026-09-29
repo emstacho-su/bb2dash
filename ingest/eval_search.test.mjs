@@ -33,9 +33,9 @@ test('golden set: the ten EVAL_EMBEDDING_POC §2 queries, each well formed', () 
   assert.throws(() => ev.validateGolden([{ qid: 1 }]), /qid 1/);
 });
 
-test('golden set: Q7 and Q10 moved to the current documents (149, 151) after migration 120', () => {
+test('golden set: Q7 and Q10 moved to the current documents (149 + 150, 151) after migration 120', () => {
   const byQ = Object.fromEntries(golden().map((r) => [r.qid, r]));
-  assert.deepEqual(byQ[7].truth.file_ids, [149], 'the four superseded schedules are gone from the truth');
+  assert.deepEqual(byQ[7].truth.file_ids, [149, 150], 'the superseded schedules are gone; both current schedules carry the answer (POC §1: a file set when several near-duplicate files carry it)');
   assert.deepEqual(byQ[10].truth.file_ids, [151], 'file 2 is superseded; 13 carries no answer phrase');
 });
 

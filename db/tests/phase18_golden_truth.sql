@@ -3,8 +3,10 @@
 --   * every truth file exists and is current (superseded_by is null)
 --   * every truth text_id exists, belongs to one of the row's truth files, and contains the
 --     row's answer_phrase
---   * a file-only truth (no text_ids) has at least one unit that contains the answer_phrase
--- Q7's truth is the current IST.466 schedule (149) since migration 120 superseded 74, and Q10's
+--   * a file-only truth (no text_ids) has at least one unit that contains the answer_phrase, and
+--     names every current file of that course whose text carries it
+-- Q7's truth is the two current IST.466 schedules (149, and 150 posted in a second place, both
+-- carrying the answer) since migration 120 superseded 74, and Q10's
 -- is the V1.4 syllabus (151) since 120 superseded file 2; file 13 carries no unit with Q10's
 -- phrase, so it is not in the truth.
 -- The truth rows below are the same as ingest/eval/golden_set.json; ingest/eval_search.test.mjs
@@ -28,7 +30,7 @@ begin
       (4, array[213]::bigint[], array[23]::bigint[], 'Lowest Exam Grade'),
       (5, array[218]::bigint[], array[23]::bigint[], 'Exam 1'),
       (6, array[]::bigint[], array[21]::bigint[], 'less than 30 minutes'),
-      (7, array[]::bigint[], array[149]::bigint[], 'Deloitte to Visit'),
+      (7, array[]::bigint[], array[149, 150]::bigint[], 'Deloitte to Visit'),
       (8, array[]::bigint[], array[27]::bigint[], 'penalty of 20%'),
       (9, array[348]::bigint[], array[26]::bigint[], 'evaluation form will result in no credit'),
       (10, array[]::bigint[], array[151]::bigint[], 'You may use AI tools')
@@ -55,6 +57,19 @@ begin
        and not exists (select 1 from bb_file_text t
                         where t.file_id = any(r.file_ids) and position(r.answer_phrase in t.text) > 0) then
       v_fail := v_fail || format('Q%s no unit of files %s carries its phrase', r.qid, array_to_string(r.file_ids, ','));
+    end if;
+    -- A file truth is the SET of current files carrying the answer (EVAL_EMBEDDING_POC.md §1: "a
+    -- file_id set ... when several near-duplicate files carry the same answer"), so a current file
+    -- of the same course that carries the phrase and is missing from the set is a truth defect.
+    if cardinality(r.text_ids) = 0 then
+      select string_agg(distinct f.id::text, ',') into v_bad
+        from bb_files f join bb_file_text t on t.file_id = f.id
+       where f.superseded_by is null and not (f.id = any(r.file_ids))
+         and f.course_id in (select course_id from bb_files where id = any(r.file_ids))
+         and position(r.answer_phrase in t.text) > 0;
+      if v_bad is not null then
+        v_fail := v_fail || format('Q%s current file carries the phrase but is not in the truth: %s', r.qid, v_bad);
+      end if;
     end if;
   end loop;
 
