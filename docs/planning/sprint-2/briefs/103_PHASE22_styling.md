@@ -575,7 +575,7 @@ Only what B-6, B-23 and B-24 leave open; each has the default this brief builds 
 5. **Pages without JavaScript.** Default: they show the dark theme (the `:root` block); Auto and the toggle
    need the boot script, and a second, media-query copy of the light block is not worth keeping in sync for it.
 
-## Session prompt (draft; Stage D finalises it in ORCHESTRATOR, 94 §5 Session E)
+## Session prompt (draft; Stage D finalises it in ORCHESTRATOR, 94 §5 Session F, Session E until 2026-09-29)
 
 > `/bb2dash-pm` Start Phase 22 (styling: R-53, R-46, S2-styling-1, P-15..P-17, P-76..P-79). Read
 > `docs/planning/sprint-2/briefs/103_PHASE22_styling.md` in full. Confirm Phases 16, 17, 18, 19, 14 and 21 are

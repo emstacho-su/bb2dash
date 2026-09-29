@@ -473,7 +473,7 @@ answer leaves open, plus one risk the PM carries; none of it is a question waiti
    `now()`. A unit that turns red once its dates pass gets a P-30-shaped fix (dates relative to `now()`) in the phase
    that finds it, with a DECISIONS line; the runner never skips it.
 
-## Session prompt (copy-paste; Stage D keeps the canonical copy in ORCHESTRATOR §6, Session A)
+## Session prompt (copy-paste; Stage D keeps the canonical copy in ORCHESTRATOR §6, "Done — Phase 15", formerly Session A1)
 
 > `/bb2dash-pm` Start Phase 15 (database hygiene and the SQL test runner). Read
 > `docs/planning/sprint-2/briefs/95_PHASE15_db_hygiene.md`. First confirm that my answers to
