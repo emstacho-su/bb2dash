@@ -87,3 +87,45 @@ exit=0
 ```
 
 Open item 4 (parts over 512 tokens): none. 1,502 current gte-small parts, the longest 485 tokens.
+
+## Task 22 — golden set, truth test, eval runner
+
+Truth re-read on prod 2026-09-29 (execute_sql, read-only; migration 120 is applied: 2→151, 74→149). Every §2 answer
+phrase was located by `position()` in its unit: Q1/Q2 text 270, Q3 276, Q4 213, Q5 218, Q9 348 (text-id truths);
+Q6 file 21, Q7 file **149** (text 731, "Deloitte to Visit"), Q8 file 27, Q10 file **151** (text 733, "You may use AI
+tools") (file truths). File 13 has no unit with Q10's phrase, so it left the truth. Two §2 phrases did not match
+verbatim (a line break in 270, "site supervisor" hit four IST.471 pages), so the recorded phrases are
+`miss three lectures, no questions asked` and `evaluation form will result in no credit`.
+
+RED (test first, no module):
+
+```
+node --test ingest/eval_search.test.mjs
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '…\ingest\eval_search.mjs'
+ℹ tests 1  ℹ pass 0  ℹ fail 1
+```
+
+RED for the truth test (the file with the 2026-09-09 truth for Q7 = 16/40/58/66 and Q10 = 2/13, as §2 records it):
+
+```
+node scripts/db-test.mjs --only phase18_golden_truth.sql
+FAIL  phase18_golden_truth.sql  FAIL Q7 file not current: 16,40,58,66; Q10 file not current: 2
+db-test: passed 0, failed 1, units 1   (exit 1)
+```
+
+GREEN:
+
+```
+node --test ingest/eval_search.test.mjs
+ℹ tests 11  ℹ pass 11  ℹ fail 0
+node scripts/db-test.mjs --only phase18_golden_truth.sql
+PASS  phase18_golden_truth.sql
+db-test: passed 1, failed 0, units 1   (exit 0)
+node --test ingest/*.test.mjs
+ℹ tests 77  ℹ pass 77  ℹ fail 0
+```
+
+Live eval: **not run by W-49.** `SB_ANON_JWT` is in no gitignored env file on this machine (the worktree's and the main
+checkout's `.env.local` hold only `BB2DASH_TEST_DB_URL`; `bb2dash/.env` holds the service role, which this script must
+not use). `node ingest/eval_search.mjs --out ingest/eval/reports/2026-09-29.json` → `SB_ANON_JWT (the legacy anon JWT)
+is not set`, exit 2. The PM runs it with the key in the process environment; expected `scored=30`, hybrid MRR ≥ 0.900.
