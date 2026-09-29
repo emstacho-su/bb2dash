@@ -2,6 +2,7 @@
  * Shared fast-check parameters for the L2 property suite.
  *
  * - At least 200 runs per property (Contract §Engine tests).
+ * - A fixed seed by default (`FIXED_SEED`); `FC_SEED=random` opts into a fresh one.
  * - `FC_SEED=<integer>` replays a run exactly: `FC_SEED=-1234 npx vitest run test/grade-model/properties`.
  * - The seed of every failing run is printed: fast-check's failure report
  *   carries `{ seed, path }`, and `assertProperty` adds a one-line replay hint
@@ -21,9 +22,22 @@ export function seedFromEnv(raw: string | undefined): number | undefined {
   return seed;
 }
 
+/** The default seed (R-51, T-22). Any safe integer would do; changing it re-rolls every property. */
+export const FIXED_SEED = 20260929;
+
+/** The `FC_SEED` value that opts into a fresh fast-check seed per run. */
+export const RANDOM_SEED_OPT_IN = 'random';
+
+/**
+ * A fixed seed unless `FC_SEED` says otherwise, so a green run is green on every
+ * machine: unset or blank → `FIXED_SEED`; `random` → fast-check picks; an
+ * integer → that seed, replayed exactly.
+ */
 export function fcParams(): { numRuns: number; seed?: number } {
-  const seed = seedFromEnv(process.env.FC_SEED);
-  return seed === undefined ? { numRuns: MIN_RUNS } : { numRuns: MIN_RUNS, seed };
+  const raw = process.env.FC_SEED;
+  if (raw !== undefined && raw.trim() === RANDOM_SEED_OPT_IN) return { numRuns: MIN_RUNS };
+  const seed = seedFromEnv(raw) ?? FIXED_SEED;
+  return { numRuns: MIN_RUNS, seed };
 }
 
 /** Runs a property; a failure is rethrown with the seed to replay it. */
