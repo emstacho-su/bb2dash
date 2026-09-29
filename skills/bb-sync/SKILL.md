@@ -208,6 +208,37 @@ since migration 085 the catalogue row already carries what Blackboard declared (
 and a bbcswebdav download often answers `application/octet-stream`. Read the script's per-row JSON
 lines for the report; a line with `error` did not land.
 
+**Stale bytes (`--restale`).** When an instructor re-uploads a file under the same item, the
+transform keeps the row and appends `; stored bytes may be stale` to its notes. Re-pull those rows
+in the same tab, before the embed check. Their manifest is its own query:
+
+```sql
+select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
+         'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
+         'bucket', f.bucket, 'storage_path', f.storage_path, 'sha256', f.sha256,
+         'stale', true) order by f.id)
+  from bb_files f
+ where f.superseded_by is null and f.storage_path is not null
+   and f.notes like '%stored bytes may be stale%';
+```
+
+Walk the hops for these rows exactly as above, then:
+
+```
+node ingest/pull_files.mjs --manifest <scratch>/restale.json --downloads <scratch>/restale \
+     --fetch --restale --out <scratch>/4b-restale.sql
+# run <scratch>/4b-restale.sql through execute_sql
+node ingest/pull_files.mjs --restale-post --downloads <scratch>/restale
+```
+
+Unchanged bytes only clear the note. Changed bytes get a **new** Storage key (a `restale-<sha12>/`
+segment; the old object is never overwritten), and the `.sql` holds one `begin; … commit;` per row
+that deletes the row's old text units and points it at the new key, guarded on the old sha. That
+file carries only ids, keys and hashes, never document text: the new units wait on local disk
+and `--restale-post` posts them over PostgREST, then embeds them. A `--restale-post` line saying
+"owner SQL not run yet" means the `.sql` was skipped; run it and re-run `--restale-post`. Count the
+re-pulled rows in `files_pulled` and any row with an `error` in `files_not_pulled`.
+
 `node ingest/embed_corpus.mjs --check` prints `missing_parts_before=<n>` and exits non-zero when
 anything is unembedded. Report that number.
 

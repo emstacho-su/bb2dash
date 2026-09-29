@@ -1,0 +1,82 @@
+[
+  {
+    "qid": 1,
+    "course": "GEO.103.lecture",
+    "query": "how many lectures can I skip in GEO 103 without being penalized",
+    "type": "paraphrase",
+    "truth": { "text_ids": [270], "file_ids": [42] },
+    "answer_phrase": "miss three lectures, no questions asked"
+  },
+  {
+    "qid": 2,
+    "course": "GEO.103.lecture",
+    "query": "GEO 103 drop lowest quiz score",
+    "type": "exact",
+    "truth": { "text_ids": [270], "file_ids": [42] },
+    "answer_phrase": "drop your lowest quiz score"
+  },
+  {
+    "qid": 3,
+    "course": "GEO.103.lecture",
+    "query": "what date and time is the GEO 103 final exam",
+    "type": "exact-ish",
+    "truth": { "text_ids": [276], "file_ids": [42] },
+    "answer_phrase": "December 15th"
+  },
+  {
+    "qid": 4,
+    "course": "ECN.304",
+    "query": "in economics of social issues how much is my worst test worth toward the course grade",
+    "type": "paraphrase",
+    "truth": { "text_ids": [213], "file_ids": [23] },
+    "answer_phrase": "Lowest Exam Grade"
+  },
+  {
+    "qid": 5,
+    "course": "ECN.304",
+    "query": "ECN 304 course schedule Exam 1 date",
+    "type": "exact",
+    "truth": { "text_ids": [218], "file_ids": [23] },
+    "answer_phrase": "Exam 1"
+  },
+  {
+    "qid": 6,
+    "course": "IST.466",
+    "query": "how long does my team have to present the ethics case and what if we wrap up early",
+    "type": "paraphrase",
+    "truth": { "text_ids": [], "file_ids": [21] },
+    "answer_phrase": "less than 30 minutes"
+  },
+  {
+    "qid": 7,
+    "course": "IST.466",
+    "query": "when is Deloitte visiting the IST 466 class",
+    "type": "exact",
+    "truth": { "text_ids": [], "file_ids": [149] },
+    "answer_phrase": "Deloitte to Visit"
+  },
+  {
+    "qid": 8,
+    "course": "IST.352",
+    "query": "how much credit do I lose for handing in IST 352 work after the deadline",
+    "type": "paraphrase",
+    "truth": { "text_ids": [], "file_ids": [27] },
+    "answer_phrase": "penalty of 20%"
+  },
+  {
+    "qid": 9,
+    "course": "IST.471",
+    "query": "what happens if my internship boss never sends back the evaluation paperwork",
+    "type": "paraphrase",
+    "truth": { "text_ids": [348], "file_ids": [26] },
+    "answer_phrase": "evaluation form will result in no credit"
+  },
+  {
+    "qid": 10,
+    "course": "IST.323",
+    "query": "do I need to admit using ChatGPT on the IST 323 final project",
+    "type": "paraphrase",
+    "truth": { "text_ids": [], "file_ids": [151] },
+    "answer_phrase": "You may use AI tools"
+  }
+]
