@@ -33,8 +33,14 @@ declare
   v_due  timestamptz;
   v_on   date;
 begin
+  -- `IST.323/lab-1`, not `IST.323/lab-1-performing-a-ransomware-attack` (Phase 15). The two were
+  -- duplicates of one Blackboard column; Stack's Inbox decision of 2026-09-22 folded them into the
+  -- shorter id and deleted the longer one, so the row the browser walk found now answers to
+  -- `IST.323/lab-1` -- same title, same instant: "Lab #1: Performing a Ransomware Attack",
+  -- due_at 2026-09-24 03:59+00, due_on 2026-09-23, confidence confirmed (prod 2026-09-27). The
+  -- deadline this case is about did not move; only the id it is filed under did.
   select due_at, due_on into v_due, v_on
-    from v_work_items where item_id = 'IST.323/lab-1-performing-a-ransomware-attack';
+    from v_work_items where item_id = 'IST.323/lab-1';
   if not found then
     raise exception 'FAIL the Lab #1 fixture row is gone from v_work_items';
   end if;
@@ -189,7 +195,7 @@ end $$;
 -- =============================================================================================
 select 'phase12b_089_work_items_due_on: PASS'                                   as result,
        (select due_on from v_work_items
-         where item_id = 'IST.323/lab-1-performing-a-ransomware-attack')         as lab1_due_on,
+         where item_id = 'IST.323/lab-1')                                        as lab1_due_on,
        current_setting('w35.items_before')                                       as items,
        current_setting('w35.undated_before')                                     as undated;
 

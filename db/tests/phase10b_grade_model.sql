@@ -167,9 +167,16 @@ begin
   insert into grade_column_links (course_id, column_id, component_id)
   values ('GEO.103.recitation', '_3602445_1', 5);   -- Attendance -> Discussion Section Participation
 
-  -- "Not graded" needs no component and passes the trigger untouched.
+  -- "Not graded" needs no component and passes the trigger untouched. Conflict-safe since P-2
+  -- (Phase 15): Stack excluded this very column on prod on 2026-09-22, so the plain insert this
+  -- line used to be raised `duplicate key value violates unique constraint
+  -- "grade_column_links_pkey"` and killed the file before it asserted anything. The upsert states
+  -- what the case needs -- the link exists, excluded, carrying no component -- whether or not prod
+  -- already holds it, and the transaction rolls back either way.
   insert into grade_column_links (course_id, column_id, excluded)
-  values ('IST.323', '_3598132_1', true);           -- Individual Presentation Selection
+  values ('IST.323', '_3598132_1', true)            -- Individual Presentation Selection
+      on conflict (course_id, column_id) do update
+     set excluded = true, component_id = null;
 
   -- The owner reads what the migration role wrote, and updated_at moves on update.
   if (select count(*) from grade_scenarios where course_id = 'IST.466') <> 1 then
@@ -188,7 +195,7 @@ reset role;
 -- =============================================================================================
 do $$
 declare
-  n_view bigint; n_expected bigint; r record;
+  n_view bigint; n_expected bigint; r record; lnk record;   -- lnk: 4f's current link state
 begin
   -- 4a. Row count = latest item + attendance columns + placeholders, computed from the base
   --     relations independently of the view.
@@ -248,11 +255,41 @@ begin
     raise exception 'FAIL IST.323/lab-extra-credit is not flagged extra credit';
   end if;
 
-  -- 4f. The ambiguous column (two linked assignments) reads as unlinked.
+  -- 4f. The ambiguous column (two linked assignments) never resolves to an assignment. That is the
+  --     invariant 084 and 058 hold, and it is the whole point of this case. What it may not assume
+  --     is that nobody has linked the column by hand since: Stack put an override on _3569973_1 on
+  --     2026-09-22, and "reads as unlinked" was September's state, not a rule (P-2, Phase 15). So
+  --     the column's current link state is read first and the view is asserted relative to it --
+  --     an override, or nothing, whichever grade_column_links says today.
+  select * into lnk from grade_column_links
+   where course_id = 'IST.323' and column_id = '_3569973_1';
   select * into r from v_grade_model_items where item_key = 'col:IST.323:_3569973_1';
-  if r.assignment_id is not null or r.component_id is not null or r.link_source is not null then
-    raise exception 'FAIL the doubly-linked column resolved to assignment %, component %',
-      r.assignment_id, r.component_id;
+  -- The row itself has to be there. Without this, a vanished column leaves `r` all-NULL and every
+  -- branch below passes on nothing: tolerating the link's current state is the point of this case,
+  -- tolerating the column's disappearance is not. `phase12b_089` checks `not found` the same way.
+  if not found then
+    raise exception 'FAIL col:IST.323:_3569973_1 is gone from v_grade_model_items';
+  end if;
+
+  if r.assignment_id is not null then
+    raise exception 'FAIL the doubly-linked column resolved to assignment %', r.assignment_id;
+  end if;
+  if lnk.course_id is null then
+    -- No hand link: with no assignment to inherit from, it carries no component and no source.
+    if r.component_id is not null or r.link_source is not null then
+      raise exception 'FAIL the unlinked doubly-linked column reads component %, source %',
+        r.component_id, r.link_source;
+    end if;
+  else
+    -- A hand link: 058 reads it as a confirmed override, and an excluded link contributes no
+    -- component. Either way the component comes from the link, never from an assignment.
+    if r.link_source is distinct from 'override'
+       or r.excluded is distinct from lnk.excluded
+       or r.component_id is distinct from (case when lnk.excluded then null else lnk.component_id end) then
+      raise exception 'FAIL the doubly-linked column reads component %, source %, excluded %, while '
+                      'its grade_column_links row says component %, excluded %',
+        r.component_id, r.link_source, r.excluded, lnk.component_id, lnk.excluded;
+    end if;
   end if;
 end $$;
 

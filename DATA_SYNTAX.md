@@ -137,6 +137,9 @@ events. A series holds at most **52** occurrences — `planner_series_max_occurr
 `MAX_SERIES_OCCURRENCES` in the web — enforced by an after-statement trigger. The rule is not
 editable after creation: to change it, delete "this and following" and create a new series.
 Weekly means the same weekday; monthly the same day-of-month, skipping a month that lacks it.
+No rule outlives its last occurrence: an after-statement trigger on `planner_events`
+(`planner_events_delete_empty_series`, migration 102) deletes any series a delete left with no
+occurrences, so the plain single-occurrence delete closes the rule too, not just the series RPCs.
 
 * **"This event"** needs no RPC: update the row and set `series_detached = true`. A detached row
   keeps its `series_id` (a check enforces that) and is skipped by every later series edit.

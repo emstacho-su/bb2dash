@@ -82,8 +82,49 @@ function jsonLiteral(value) {
   return `$fx$${text}$fx$::jsonb`;
 }
 
+/**
+ * `captured_at` as an offset from `now()` rather than the literal it was cut from (P-30, P-101).
+ *
+ * The three shells were crawled on 2026-09-14 and the loader used to carry those timestamps
+ * verbatim. That made the fixture age out. Migration 087's newest-run guard (056's predicate) lets
+ * only the NEWEST registered crawl report score movement, so once four real crawls were registered
+ * after 2026-09-14 the fixture read as an older run and `db/tests/phase10a_stage_gradebook.sql`
+ * went red on prod through no fault of its own.
+ *
+ * The fix moves the fixture, not the guard. Each shell is emitted relative to `now()`, keeping the
+ * three shells' original ORDER and SPACING to the microsecond: the newest shell lands on `now()`
+ * itself and the other two sit their own real gap behind it. The fixture crawl is therefore always
+ * the newest registered one, and the second, score-movement crawl that
+ * `phase10a_stage_gradebook.sql` §5 derives with `captured_at + interval '1 day'` is newer again.
+ * `now()` is the transaction timestamp, so all three rows share one consistent instant however
+ * long the unit takes to run.
+ */
+const TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/;
+
+/** Microseconds since the epoch. Date.parse alone truncates the fixtures' 6-digit fractions. */
+function microsSinceEpoch(iso) {
+  const m = TIMESTAMP_RE.exec(String(iso));
+  if (!m) {
+    throw new Error(`fixture captured_at is not a timestamp this generator reads: ${iso}`);
+  }
+  const ms = Date.parse(`${m[1]}${m[3]}`);
+  if (Number.isNaN(ms)) throw new Error(`fixture captured_at does not parse: ${iso}`);
+  return ms * 1000 + Number((m[2] || '').padEnd(6, '0').slice(0, 6));
+}
+
+/** The SQL expression for one shell: its own distance behind the newest shell, off `now()`. */
+function capturedAtExpr(iso, anchorMicros) {
+  const behind = anchorMicros - microsSinceEpoch(iso);
+  if (behind < 0) throw new Error(`captured_at ${iso} is newer than the anchor it is measured from`);
+  const seconds =
+    `${Math.floor(behind / 1e6)}.${String(behind % 1e6).padStart(6, '0')}`.replace(/\.?0+$/, '');
+  return `now() - interval '${seconds || '0'} seconds'`;
+}
+
 function build() {
   const shells = mergeShells(FIXTURE_FILES);
+  // The newest shell. Every captured_at is emitted as its distance behind this one.
+  const anchorMicros = Math.max(...shells.map((s) => microsSinceEpoch(s.captured_at)));
   const lines = [];
   const out = (s = '') => lines.push(s);
 
@@ -106,6 +147,11 @@ function build() {
   out('-- attempts payload is synthetic, because no crawl on record carries an `attempts` key.');
   out('-- Everything loads under the fixture run id, never the real one, so nothing here can');
   out('-- collide with or overwrite prod data even if a transaction were left open.');
+  out('--');
+  out('-- `captured_at` is emitted relative to `now()`, not as the 2026-09-14 literal it was cut');
+  out("-- from: the fixture crawl has to stay the NEWEST registered crawl, or migration 087's");
+  out('-- newest-run guard reads it as a replay. The order and the gaps between the three shells');
+  out('-- are the real ones, to the microsecond.');
   out();
   out('begin;');
   out();
@@ -130,7 +176,7 @@ function build() {
     out('insert into bb_raw (run_id, kind, bb_course_id, payload, captured_at) values');
     out(`  ('${FIXTURE_RUN_ID}', 'course', '${shell.bb_course_id}',`);
     out(`   ${jsonLiteral(shell.payload)},`);
-    out(`   '${shell.captured_at}'::timestamptz);`);
+    out(`   ${capturedAtExpr(shell.captured_at, anchorMicros)});`);
   }
 
   out();
