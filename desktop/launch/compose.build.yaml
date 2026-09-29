@@ -1,0 +1,62 @@
+# The ephemeral build for the desktop shell. Driven by logon-build.ps1, which
+# sets the two environment variables; by hand:
+#
+#   $env:BB2DASH_BUILD_SRC = 'C:/Users/<you>/projects/bb2dash-build/desktop'
+#   $env:BB2DASH_BUILD_OUT = "$env:LOCALAPPDATA/bb2dash-launch/builds/<tree>"
+#   docker compose -f desktop/launch/compose.build.yaml run --rm --name bb2dash-build build
+#
+# `run --rm` creates one container for this command and removes it on exit.
+# Nothing keeps running afterwards; what persists is the named volumes, and they
+# are what make the second build take a minute or two instead of five:
+# node_modules, the npm cache, the Electron download cache and electron-builder's
+# tool cache (winCodeSign, which carries the rcedit that stamps the exe icon).
+#
+# The image is electron-builder's own: Linux + wine, which a Windows target
+# needs when it writes build/icon.ico into bb2dash.exe. Pinned by digest, not
+# tag (R-D3 in the harness repo: a floating tag changes under a working build).
+# `--win --x64` is required: on Linux, `--dir` alone would build linux-unpacked.
+#
+# Source is the detached build worktree's desktop/ folder, never the checkout
+# the Sync terminal works in. Output goes to a folder outside every checkout,
+# one per desktop tree hash; logon-build.ps1 repoints the `current` junction
+# at it once the app is not running, because Windows will not let a running
+# exe's files be replaced.
+#
+# node_modules is shadowed by a volume so the Linux install never lands in a
+# Windows node_modules folder. cpus caps the build so a rebuild after logon
+# never takes the whole machine (20 logical CPUs on the laptop).
+
+name: bb2dash-desktop-build
+
+services:
+  build:
+    image: electronuserland/builder:24-wine@sha256:41ae540902461b6cbc988987db79547fcc10cda04d2a6c6367504f59d4b37c64
+    working_dir: /project
+    cpus: "6"
+    environment:
+      CI: "true"
+      ELECTRON_CACHE: /root/.cache/electron
+      ELECTRON_BUILDER_CACHE: /root/.cache/electron-builder
+    volumes:
+      - ${BB2DASH_BUILD_SRC:?set by logon-build.ps1 to the build worktree's desktop folder}:/project
+      - ${BB2DASH_BUILD_OUT:?set by logon-build.ps1 to the per-build output folder}:/out
+      - desktop-node-modules:/project/node_modules
+      - npm-cache:/root/.npm
+      - electron-cache:/root/.cache/electron
+      - electron-builder-cache:/root/.cache/electron-builder
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        npm ci --no-audit --no-fund
+        npm run typecheck
+        npm test
+        npx electron-builder --win --x64 --dir --config.directories.output=/out
+        test -f /out/win-unpacked/bb2dash.exe
+
+volumes:
+  desktop-node-modules:
+  npm-cache:
+  electron-cache:
+  electron-builder-cache:

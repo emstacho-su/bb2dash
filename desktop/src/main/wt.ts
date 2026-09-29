@@ -8,7 +8,10 @@
  */
 
 import { accessSync, constants } from 'node:fs';
-import { join } from 'node:path';
+// `path/win32`, not `path`: these are Windows paths whatever platform runs the
+// suite. The logon build (desktop/launch) runs `npm test` inside a Linux
+// container, where plain `join` would produce `C:\tools/wt.exe`.
+import { join } from 'node:path/win32';
 
 import { pickWtPath } from '../core/sync-command';
 
