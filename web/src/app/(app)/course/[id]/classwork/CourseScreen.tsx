@@ -4,9 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import tokens from '@/styles/tokens.module.css';
 import {
   RAIL_WEEKS,
-  isZeroToleranceAiPolicy,
   useCourseDisplay,
-  useCourseGradingScheme,
   useCourseSessionFiles,
   useCourseSessions,
   useCourseShells,
@@ -79,7 +77,6 @@ export function CourseScreen({ courseId }: { courseId: string }) {
 
   const sessionsQ = useCourseSessions(shellIds);
   const workItemsQ = useCourseWorkItems(shellIds);
-  const schemeQ = useCourseGradingScheme(shellIds);
   const filesQ = useCourseSessionFiles(shellIds);
 
   const [mode, setMode] = useState<'current' | 'all'>('current');
@@ -201,8 +198,6 @@ export function CourseScreen({ courseId }: { courseId: string }) {
     return <p className={styles.state}>No course with id {courseId}.</p>;
   }
 
-  const scheme = schemeQ.data ?? null;
-  const zeroTolerance = isZeroToleranceAiPolicy(scheme?.ai_policy);
   const selectedSession = selectedSessionId
     ? sessions.find((s) => s.id === selectedSessionId) ?? null
     : null;
@@ -212,13 +207,6 @@ export function CourseScreen({ courseId }: { courseId: string }) {
       <h1 className="sr-only">
         {display.data.code} — {display.data.title}
       </h1>
-
-      {/* AI policy — verbatim; prominent when zero-tolerance (IST 352). */}
-      <AiPolicyCard
-        policy={scheme?.ai_policy ?? null}
-        confidence={scheme?.confidence ?? null}
-        zeroTolerance={zeroTolerance}
-      />
 
       <div className={styles.layout}>
         {/* Sticky week rail 1–16. */}
@@ -401,33 +389,6 @@ function sortByDue(a: WorkItem, b: WorkItem): number {
 }
 
 /* -- sub-components --------------------------------------------------------- */
-
-function AiPolicyCard({
-  policy,
-  confidence,
-  zeroTolerance,
-}: {
-  policy: string | null;
-  confidence: string | null;
-  zeroTolerance: boolean;
-}) {
-  return (
-    <section className={zeroTolerance ? styles.aiCardStrict : styles.aiCard} aria-label="AI policy">
-      <div className={styles.aiHead}>
-        <span className={tokens.kicker}>AI policy</span>
-        {zeroTolerance && <span className={styles.aiBadge}>zero tolerance</span>}
-        {confidence && confidence !== 'confirmed' && (
-          <span className={styles.aiConfidence}>{confidence}</span>
-        )}
-      </div>
-      {policy ? (
-        <p className={styles.aiPolicy}>{policy}</p>
-      ) : (
-        <p className={styles.aiPolicyMissing}>No AI policy is recorded for this course.</p>
-      )}
-    </section>
-  );
-}
 
 export function SessionRow({
   session,

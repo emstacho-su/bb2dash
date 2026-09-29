@@ -277,14 +277,6 @@ export function CourseInfo({ courseId }: { courseId: string }) {
         {!isQueryUnresolved(schemeQ) && (
           <>
             <div className={styles.policy}>
-              <span className={styles.policyLabel}>AI policy</span>
-              {scheme?.ai_policy ? (
-                <p className={styles.verbatim}>{scheme.ai_policy}</p>
-              ) : (
-                <p className={styles.state}>not recorded</p>
-              )}
-            </div>
-            <div className={styles.policy}>
               <span className={styles.policyLabel}>Late policy</span>
               {scheme?.late_policy ? (
                 <p className={styles.verbatim}>{scheme.late_policy}</p>
