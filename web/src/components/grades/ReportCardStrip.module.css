@@ -1,0 +1,58 @@
+/* The report card along the top of /grades (Phase 17 round 3, R3-7). Tokens only. */
+
+.strip {
+  min-width: 0;
+}
+
+/* One row of cards; it scrolls sideways rather than wrapping the page wider. */
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 var(--space-2);
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+}
+
+.card {
+  composes: card from '@/styles/tokens.module.css';
+  flex: 0 0 auto;
+  min-width: 11rem;
+  max-width: 16rem;
+  gap: var(--space-1);
+}
+
+.code {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.title {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.figure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.letter {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-xl);
+  color: var(--color-accent);
+}
+
+.absence {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}

@@ -19,20 +19,27 @@
  * The link picker lives on the course tab, never here, and this screen writes
  * nothing. Without `model` the screen is exactly 10a's.
  *
- * Phase 12b: the course title is the link into the course (G-3, P-grades-2),
- * and the score history moved to the assignment popout (G-5, P-grades-8).
+ * Phase 12b: the score history moved to the assignment popout (G-5, P-grades-8).
+ *
+ * Phase 17 round 3 (R3-7): each class header is the fold control, remembered
+ * under `bb2dash.grades.collapsed`; the way into the course sits beside it; and
+ * with figures, a report-card strip runs above the classes, one card per class,
+ * from the same figures the sections render.
  */
 
 import { useMemo } from 'react';
 import { useCourseDisplay } from '@/lib/queries.today';
 import { pickCourseGrade, useCourseGrades, useGradebookLatest } from '@/lib/queries.grades';
-import { bookkeepingSectionKey, courseSectionKey } from '@/lib/grades-sections';
+import { bookkeepingSectionKey } from '@/lib/grades-sections';
+import { useCollapseState } from '@/lib/collapse-state';
 import { CourseGradeCard } from '@/components/grades/CourseGradeCard';
 import { GradebookTable } from '@/components/grades/GradebookTable';
 import { GradedSoFarFigure } from '@/components/grades/GradedSoFarFigure';
+import { ReportCardStrip } from '@/components/grades/ReportCardStrip';
 import { QueryState, isQueryUnresolved } from '@/components/shared/QueryState';
 import { FIGURE_LOADING, type CourseFigureState } from '@/lib/grade-figure-run';
 import type { LinkState } from '@/lib/grade-model-view';
+import { GRADES_COLLAPSE } from './grades-collapse';
 import styles from './GradesScreen.module.css';
 
 /** The read-only figures `/grades` renders (Phase 12b). */
@@ -55,6 +62,11 @@ export function GradesScreen({ model }: { model?: GradesFiguresProps } = {}) {
   );
   const gradesQ = useCourseGrades();
   const gradebookQ = useGradebookLatest(allShellIds);
+  const { collapsed, toggle } = useCollapseState(GRADES_COLLAPSE);
+  const reportCourses = useMemo(
+    () => courses.map((c) => ({ displayId: c.display_id, code: c.code, title: c.title })),
+    [courses],
+  );
 
   if (isQueryUnresolved(coursesQ)) {
     return <QueryState query={coursesQ} of="your courses" className={styles.state} />;
@@ -65,6 +77,8 @@ export function GradesScreen({ model }: { model?: GradesFiguresProps } = {}) {
 
   return (
     <div className={styles.screen}>
+      {model && <ReportCardStrip courses={reportCourses} figures={model.figures} />}
+
       <QueryState query={gradesQ} of="the gradebook totals" className={styles.state} />
       <QueryState query={gradebookQ} of="the gradebook" className={styles.state} />
 
@@ -77,13 +91,15 @@ export function GradesScreen({ model }: { model?: GradesFiguresProps } = {}) {
           <CourseGradeCard
             key={course.display_id}
             title={course.code}
-            // P-grades-2: the title is the way into the course. The "Course
-            // tab →" button that used to sit opposite it is gone.
-            titleHref={`/course/${encodeURIComponent(course.display_id)}`}
+            // P-grades-2: the way into the course, beside the header (R3-7).
+            href={`/course/${encodeURIComponent(course.display_id)}`}
             subtitle={shellIds.length > 1 ? `${course.title} · ${shellIds.join(' + ')}` : course.title}
             row={row}
-            // P-grades-1: the block folds away and remembers it.
-            sectionKey={courseSectionKey(course.display_id)}
+            // R3-7: the header folds the class, remembered per display id.
+            fold={{
+              collapsed: collapsed.has(course.display_id),
+              onToggle: () => toggle(course.display_id),
+            }}
           >
             {model && (
               <GradedSoFarFigure {...(model.figures[course.display_id] ?? FIGURE_LOADING)} />
