@@ -29,3 +29,59 @@ exit=1
 File 68 is named under (b) and `supplicant` under (d), as the brief's RED line requires. GREEN
 needs task 7 (121) for (d), task 20 (file 68, PM) for (b), and the gate sync's pull and embed for
 (a) and (c).
+
+## Task 6 — migration 120 + `db/tests/phase18_120_supersede_file_chains.sql`
+
+Prod re-read before writing (2026-09-29): 2 and 74 current; 151 `unclassified` / `rule` / 0.60;
+file 2's confidence 0.99; IST.323 `syllabus_path` = `IST.323/323Fall26V1.3.1.docx`. The newest
+registered crawls (6923d85d on 9/27, f24a7ff5 on 9/29) still show `_12928159_1` carrying only
+V1.4 and `_12939631_1` only Wk4xyz.
+
+RED:
+
+```
+FAIL  phase18_120_supersede_file_chains.sql  FAIL chains: 2->null, 74->null; 151 bucket: unclassified; 151 classification: rule/0.60; IST.323 syllabus_path: IST.323/323Fall26V1.3.1.docx; search still returns file 2
+db-test: passed 0, failed 1, units 1
+exit=1
+```
+
+Dry run (`begin; <120>; select …; rollback;`): first attempt raised `column reference
+"syllabus_path" is ambiguous` (a PL/pgSQL constant named like the column); renamed to
+`V14_SYLLABUS_KEY`; second dry run: 2→151, 74→149, 151 `syllabus_policy` / `agent` / 0.99,
+`syllabus_path` V1.4, search count for file 2 = 0.
+
+Applied: `apply_migration` name `120_supersede_file_chains`, version 20260929172703.
+md5 `statements[1]` = `505acb95ec9884441baad779539772bc` = `git show HEAD:db/migrations/120_supersede_file_chains.sql | md5sum`.
+
+GREEN:
+
+```
+PASS  phase18_120_supersede_file_chains.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## Recorded before 121 and 124 (prod, 2026-09-29)
+
+* `hybrid_search_file_text` / `search_file_text`: `prosecdef` false; `proconfig`
+  `{"search_path=public, pg_temp"}` (Phase 15's pin); `proacl` (both)
+  `{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,db_test_runner=X/postgres}`.
+* `md5(prosrc)` before 121: hybrid `2fdec94b506ff5813ffcc7a78061c068`, keyword `a26d6b2ab4acbf5f8344deddf5a58584`.
+* `stage_content`: `md5(prosrc)` = `92260a274cb7bcc356de5d0fa9910084` (task 11 compares against this).
+* `stage_files`: `proacl` `{postgres=X/postgres,service_role=X/postgres}`, `md5(prosrc)` `ba12d5b65bdc2f885d7b249f2b3f21b7`.
+
+## Task 8 — R-77 re-measure
+
+W10 B3's probe (`51_W10_VERIFICATION.md` §B3): `explain (analyze, buffers, format json)` of
+`hybrid_search_file_text(q, <stored gte-small embedding of text 277 part 1>, 'gte-small', null, 12)`,
+one warm-up run discarded, then 5 runs per query, median of `Execution Time`.
+
+Before 121 (2026-09-29): final exam date 21.614, 21.173, 20.191, 20.655, 20.298 ms; attendance
+policy 35.750, 35.590, 35.456, 35.350, 35.250 ms.
+
+before_final_median_ms=20.655
+before_attendance_median_ms=35.456
+
+Both before-medians are under 50 ms, so 121 does not build `part_fts`:
+
+part_fts=not_built
