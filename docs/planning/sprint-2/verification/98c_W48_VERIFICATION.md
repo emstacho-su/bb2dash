@@ -148,3 +148,152 @@ at every reference, so the `substring`/`to_tsvector` expressions behind `slice_i
 unchanged. 121 is applied and may not be edited, and every number in 120–129 is already assigned,
 so the repair needs a migration slot the PM names. `part_fts` stays not built (both
 before-medians under 50 ms).
+
+## Migrations applied (all nine md5s match the LF blob at the committing SHA)
+
+| name | version | md5 (statements[1] = `git show HEAD:<file> \| md5sum`) |
+|---|---|---|
+| 120_supersede_file_chains | 20260929172703 | 505acb95ec9884441baad779539772bc |
+| 121_search_notes_label | 20260929173148 | 86c19ac23c00bd22d84c2e78934441e8 |
+| 122_supersede_replaced_files | 20260929173811 | 92239814305baa122606ae1d7a5a6b78 |
+| 123_file_week_session_links | 20260929174144 | 9fb583ba33588ed7cec66b7592501328 |
+| 124_stage_files_rules | 20260929174434 | fb3a1e542f5eecf6601c0e623c793809 |
+| 125_geo103_reading_routes | 20260929174526 | c1e0b4207b98e34ac017adf5f9057a65 |
+| 126_assignment_bb_url | 20260929175023 | 15da113fe17aaf6eec5c56b7bf25b9e7 |
+| 127_retire_ical_poll | 20260929175100 | 8699a61900e0a199b389283ec8b53623 |
+| 128_db_test_runner_phase18_grants | 20260929175130 | 6611ad0d1e551c417c95070881215281 |
+
+Each was dry-run first inside `begin; … rollback;` with the checks its test makes (122, 124 and
+126 also re-created and exercised in the same transaction; 124 and 126 line-diffed against the
+live `prosrc`: only the intended lines differ, plus the old body's trailing `end ` space).
+`get_advisors` (security) after 128: no `function_search_path_mutable` finding (only the two
+accepted lint-0029 WARNs and leaked-password protection).
+
+## Task 9 — migration 122 + `db/tests/phase18_122_supersede_rule.sql` (DRIFT, not green)
+
+RED: `FAIL  phase18_122_supersede_rule.sql  function supersede_replaced_files(uuid, bigint) does not exist`, exit 1.
+
+GREEN run (after 128):
+
+```
+FAIL  phase18_122_supersede_rule.sql  FAIL (1) newest run f24a7ff5-6ee2-4ecd-98b9-6584ec59b5ba wrote 3: 2->151, 74->149, 150->162
+db-test: passed 0, failed 1, units 1
+exit=1
+```
+
+Drift: the brief expects exactly 2 writes. Since it was read, two crawls were registered
+(6923d85d on 9/27, f24a7ff5 on 9/29). In f24a7ff5, IST.466 item `_12939679_1` ("Class Schedule")
+carries only `IST466_2Schedule_wK5.docx` (file 162), replacing `IST466_2Schedule_wK4.docx` (file
+150, current, `missing_since_run=6923d85d…`). So the rule correctly writes a third link,
+150 → 162. Assertions (2)–(6) pass (replay 0; 31/32/47/155/156 and `stack` rows unchanged; older
+run 6923d85d → `older_run` true, 0 writes; the name-only synthetic raises 1 question, writes 0).
+The test keeps the brief's expectation; the PM decides whether (1) becomes the three links. 122
+itself writes no data. 150 stays current in prod until the next real fold, which 124 now
+supersedes to 162.
+
+## Task 10 — migration 123 + `db/tests/phase18_123_file_sessions.sql`
+
+RED: `FAIL  phase18_123_file_sessions.sql  function link_file_sessions(unknown) does not exist`, exit 1.
+
+Backfill counts (dry run and apply): hand links 3; `weeks_set` 18, `sessions_linked` 21,
+`ambiguous` 10, `attention_raised` 10 (open questions for files 6, 7, 8, 18, 19, 30, 44, 119,
+152, 157); replay 0/0/0. `link_confidence` is written only where null, because 4 files (67, 69,
+142, 143) carry 086's reading-link coverage there: a deviation from the brief's "(link_confidence
+1.0)" for those four, noted for the PM. Sessions of kind `no_class` are never candidates (file
+67's reading date 9/7 is Labor Day, so it links to 9/9 through the week at 0.8).
+
+GREEN (after 128):
+
+```
+PASS  phase18_123_file_sessions.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+Prod: `select count(*) from bb_files where (id, session_id) in ((31,129),(47,130),(32,131))` → 3.
+
+## Task 11 — migration 124 + `db/tests/phase18_124_stage_files_replay.sql`
+
+RED: `FAIL  phase18_124_stage_files_replay.sql  permission denied for function stage_files`, exit 1
+(the dry run as the owner showed the old body's `counts` without `superseded_auto` /
+`session_links`).
+
+The test folds the newest crawl once, then replays it. The first fold inside the transaction
+changes one row, 150 (the task 9 drift, superseded to 162); the replay changes 0.
+`stage_content` md5 = `92260a274cb7bcc356de5d0fa9910084`, as recorded before 124.
+
+GREEN (after 128):
+
+```
+PASS  phase18_124_stage_files_replay.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## Task 12 — migration 125 + `db/tests/phase18_125_geo103_reading_routes.sql`
+
+RED:
+
+```
+FAIL  phase18_125_geo103_reading_routes.sql  FAIL (1) still on_blackboard: 39, 41, 44, 49, 52, 58, 59, 60, 61, 62; (2) reading 45 url: null
+db-test: passed 0, failed 1, units 1
+exit=1
+```
+
+GREEN:
+
+```
+PASS  phase18_125_geo103_reading_routes.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+## Task 13 — migration 126 + `db/tests/phase18_126_assignment_bb_url.sql` (count DRIFT)
+
+RED: `FAIL  phase18_126_assignment_bb_url.sql  function assignment_bb_url(unknown, unknown) does not exist`, exit 1.
+
+GREEN (after 128):
+
+```
+PASS  phase18_126_assignment_bb_url.sql
+db-test: passed 1, failed 0, units 1
+exit=0
+```
+
+Prod: `select count(*) from assignments where bb_url like 'https://blackboard.syracuse.edu/ultra/courses/%/outline/assessment/test/%gradeitemView=details'`
+→ **40**, not the brief's 37: assignments grew from 88 to 93 rows since 2026-09-24, and 40 of
+them now point at a `resource/x-bb-asmt-test-link` item (1 survey, 3 with no content row, 19
+column-only stay null). 126's backfill guard holds 40, the count read in its dry run.
+`assignment_bb_url('IST.323','_12928193_1')` = the walk's expected Lab 1 URL (test assertion 1).
+
+## Task 14 — migration 127 (no db/tests file; `execute_sql` reads)
+
+Before: `cron.job` had `bb2dash-ical-poll` (jobid 2, `17 6 * * *`). After apply:
+`select count(*) from cron.job where jobname = 'bb2dash-ical-poll'` → 0;
+`… jobname in ('bb2dash-transform-tick','bb2dash-calendar-push')` → 2.
+
+ical_sync_runs_at_apply=19
+ical_apply_time_utc=2026-09-29 17:51:00 (migration version 20260929175100; last ical row 2026-09-29 06:17:00 UTC)
+
+The 48-hour re-read (`select count(*) from sync_runs where source = 'ical'` → 19) is the PM's.
+
+## Migration 128
+
+`has_function_privilege('db_test_runner', …, 'EXECUTE')` → true for all five functions in the
+dry run. One grant beyond the brief's row: `stage_files(uuid, bigint)`, which task 11's test
+calls (124 keeps 038's service_role-only ACL). Tasks 9, 10, 11 and 13's GREEN runs above were
+taken after 128.
+
+## Task 25 (DATA_SYNTAX part)
+
+`grep -cF "highlighted snippet" DATA_SYNTAX.md` → 1 before, 0 after. The search section now
+states each mode's shape, the notes rule (121), auto-supersession (122/124), week and session
+links (123), `assignment_bb_url` (126); the iCal note records 127.
+
+## Whole suite after 128 (for the PM)
+
+`node scripts/db-test.mjs` → passed 25, failed 4. Mine: `phase18_122_supersede_rule.sql` (task 9
+drift above) and `phase18_post_embed_checks.sql` (`(a) 161, 162, 163, 452; (b) 68`, the gate
+sync's and task 20's). Not from 120–128: `phase12b_077_inbox_feedback.sql` (`v_inbox_feedback
+does not exist`) and `phase15_100_db_test_runner_role.sql` (the role has USAGE on a new schema
+`private`); both come from objects changed outside this range.

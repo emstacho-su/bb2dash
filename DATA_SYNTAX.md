@@ -69,30 +69,57 @@ Views: `v_upcoming` (not-yet-due, not finished), `v_overdue` (past due, still op
 `v_course_corpus` (files/stored/with-text per course+bucket), `v_course_map_latest`,
 `v_file_layout` (canonical storage/local paths + needs_move), `v_embedding_status`.
 
-## Search layer (migrations 010–013, 021)
+## Search layer (migrations 010–013, 021, 024–025, 121)
 
 Two retrieval tiers over the corpus, both scoped by course when wanted:
 
 * **Full-text** — generated `tsvector` + GIN on `bb_file_text.text`, `bb_content` (title+body),
   `announcements` (title+body). Query with `search_file_text(q, course, limit,
-  include_superseded)` → ranked hits with bucket/file context and a highlighted snippet.
+  include_superseded)` → one row per matching text unit: `rank` (`ts_rank`) and a plain-text
+  `snippet` (`ts_headline` with no markup) over the whole unit, on one side of its `[notes]`
+  marker only (121, below). It returns no `part_no`.
 * **Vector** — `bb_text_embeddings` holds `vector(384)` (gte-small, migration 011) per
-  `(text_id, model, part_no)` with an HNSW cosine index. Fully populated: 534 units →
-  1,195 rows. Corpus chunks are embedded with a `"{course} {bucket} — {file_name}: "` context
+  `(text_id, model, part_no)` with an HNSW cosine index. `embed-corpus` fills it; whether every
+  current unit has its parts is checked by `db/tests/phase18_post_embed_checks.sql` (Phase 18),
+  not quoted here as a count. Corpus chunks are embedded with a `"{course} {bucket} — {file_name}: "` context
   header; queries are embedded raw. Query with `match_file_text(query_embedding, model,
   course, limit, include_superseded)` or, preferred, `hybrid_search_file_text(q,
   query_embedding, ...)` (RRF over FTS + vector, deduped to one row per text unit).
 * **`part_range`** is a 0-based half-open range of CHARACTERS (code points, matching Postgres
   `char_length`/`substring` — not JS UTF-16 units) into `bb_file_text.text`, excluding the
   context header. It is the slice that was embedded, and the slice a snippet is cut from.
-* **Snippets (021)** — `hybrid_search_file_text` returns the MATCHED PASSAGE, plain text with
-  no markup, plus `part_no` (which part matched; null when unembedded) and `snippet_source`:
-  `fts_headline` (ts_headline over the best part's slice), `vector_part` (that slice's head),
-  `unit_head` (defensive fallback).
-* **Superseded files (018 + 021 + 022)** — `bb_files.superseded_by` points at the newer version;
-  all three functions take `p_include_superseded boolean default false` and drop those rows
-  before ranking. 4 of 64 files are superseded (IST.466 schedules 58 → 16 → 66, 40 → 66;
-  roster 35 → 37); `v_bb_files_current` is the 60 chain heads.
+* **Snippets per mode (021, 024–025, 121)** — plain text, no markup, in every mode.
+  * `match_file_text` (vector): `part_no` of the nearest part, `similarity`, and the text.
+  * `hybrid_search_file_text`: `score` (RRF), `similarity`, the MATCHED PASSAGE as `snippet`,
+    `part_no` = the part the snippet was cut from (null for the whole-unit fallback), and
+    `snippet_source`: `fts_headline` (`ts_headline` over the highest-ranking part whose slice
+    covers the tsquery; null part → the whole unit), `vector_part` (the nearest part's head),
+    `unit_head` (defensive fallback).
+  * **Speaker notes (121).** A snippet either holds no text from at or after the unit's first
+    `[notes]` marker, or starts with `[notes] ` and holds only text after it. A slice (or unit)
+    that spans the marker is headlined on the side that covers the tsquery, the pre-marker side
+    on a tie; a vector hit shows the pre-marker side; an empty side never wins.
+* **Superseded files (018 + 021 + 022, 120, 122)** — `bb_files.superseded_by` points at the newer
+  version; all three functions take `p_include_superseded boolean default false` and drop those
+  rows before ranking. `v_bb_files_current` is the chain heads. Since Phase 18 the fold writes it
+  itself: `supersede_replaced_files(run_id, sync_run_id)` (122, called by `stage_files` before
+  its missing pass, 124) supersedes a file whose Blackboard item now carries exactly one other
+  file, and asks one `stack_must_confirm` question (ref `supersede/<file id>`) when the item
+  carries several, or when only the file name matches under another item. Only the newest
+  registered crawl writes. 120 closed the two hand chains 2 → 151 (IST.323 syllabus) and
+  74 → 149 (IST.466 schedule).
+* **File weeks and sessions (123, 124)** — `file_week_no(course_id, path, file_name)` holds the
+  per-course week rules (GEO.103.lecture `Week N`, IST.323 `Lecture #N - Week N`, IST.352
+  `WKnn`; null elsewhere). `link_file_sessions(sync_run_id)` fills only null `week_no` /
+  `session_id` on current, non-`stack`, non-`my_submissions` files: through the linked reading's
+  date (`link_confidence` 1.0), else the week's only session (0.8); a week with several sessions
+  asks one question (ref `session_link/<file id>`). `link_confidence` is written only where it is
+  null. `stage_files`' `counts` carry `superseded_auto` and `session_links` (each the function's
+  jsonb). Storage keys are never rewritten.
+* **Per-item Blackboard links (126)** — `assignment_bb_url(course_id, item_id)` composes a test
+  item's Ultra page (`…/ultra/courses/<bb_id>/outline/assessment/test/<item>?courseId=<bb_id>&gradeitemView=details`)
+  when `bb_content` has that item as `resource/x-bb-asmt-test-link`, else null.
+  `stage_assignments` writes it into `assignments.bb_url` only where that is null.
 * **Edge functions** (`supabase/functions/`): `embed-corpus` (batch embedder, part-level
   resume, `max_parts`/`skip_parts` fan-out controls) and `search` v4 (the hub's retrieval API:
   `{q, course?, mode: fts|vector|hybrid, limit?, min_similarity?, include_superseded?}`).
@@ -193,6 +220,9 @@ Blackboard Ultra publishes an **iCal feed** of the calendar (Calendar → settin
 That is the low-cost recurring source for `assignments.due_at`; the browser session is for
 grades, content, announcements and anything the feed does not carry. Capture the feed URL during
 phase 2 and store it in `sync_runs.notes` or a `.env`, never in the repo.
+The daily `bb2dash-ical-poll` cron job was retired in migration 127 (Phase 18, R-72): it wrote an
+"ok" `sync_runs` row every day with no data. `ical_poll()`, `ical_collect()` and
+`app_settings.ical_*` are still defined.
 
 ## Access
 
