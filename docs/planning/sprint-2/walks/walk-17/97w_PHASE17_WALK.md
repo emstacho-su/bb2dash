@@ -104,3 +104,25 @@ and the AI subject matter in lecture slides, readings and news decks stay.
 
 Dry run (119 + `phase17_119_no_ai_policy.sql` in one begin…rollback): `phase17_119_no_ai_policy:
 PASS`, 772 current units, 1,492 embeddings left.
+
+## R3-6b removed units
+
+W-44, 2026-09-29, after Stack's "remove IST 323 appendix b as well". Migration 150 (the first of the
+next free block of ten; 110–119 are full). Re-survey of every current IST.323 unit for "Appendix B",
+"AI use statement", "use of AI" and "disclose": four hits name the appendix. The fifth hit, text 532
+(Week2SecInNews.pptx, "WhatsApp disclosed…"), is unrelated and stays. The syllabus (text 733) says
+"all three appendices" without naming B, and stays. Nothing was added beyond the four units named in
+the brief. 150's guard aborts unless it finds exactly these `(text_id, chars removed)` pairs:
+`383:23,515:2983,516:1963,519:280`.
+
+| text_id | file | marker | end marker | chars removed | embeddings deleted |
+|---|---|---|---|---|---|
+| 515 | 13 · IST323_Appendix_B_AI_Use_Statement.pdf (page 1) | whole unit | whole unit (the unit is deleted) | 2,983 of 2,983 | 4 |
+| 516 | 13 · IST323_Appendix_B_AI_Use_Statement.pdf (page 2) | whole unit | whole unit (the unit is deleted) | 1,963 of 1,963 | 2 |
+| 519 | 10 · IST323_Packet_A_Meridian_Pharmacy.docx | line start of `Appendix B: AI use statement.` | line start of `Appendix C: Your running log.` (that one line only) | 280 of 24,865 | 22 |
+| 383 | 8 · CourseIntro-Fall2026-BA.pptx (slide 22) | `B: AI use statement.` (inline) | `C: Your running log.` (A and C stay on the line) | 23 of 817 | 1 |
+
+Totals: 4 units (2 deleted, 2 trimmed), 5,249 characters, 29 embedding rows. bb_files row 13 and the
+stored bytes are not touched. Dry run (150 plus `phase17_150_no_appendix_b.sql` in one
+begin…rollback): `phase17_150_no_appendix_b: PASS`, with 244 current IST.323 units. Slide 22 then
+reads "A: Ranked risk summary.   C: Your running log.".
