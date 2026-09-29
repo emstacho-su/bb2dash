@@ -4,7 +4,7 @@ Date 2026-09-24 · PM: the Fable session · Product manager: Stack · Requiremen
 R-100 (the home-pc half), R-101, R-102, R-103, R-104, R-106 · PM-added steps: P-52, P-53, P-54, P-55,
 P-56, P-57, P-58, P-61, P-110, P-111, P-112, P-113 · Branch: agentic-harness `feat/v2-closure` (+
 bb2dash `docs/harness-closure-20` for the docs, and `fix/inbox-apply-vault-20` for R-97) · Worktrees
-`C:/Users/estac/agentic-harness-wt-v2-closure`, `bb2dash-wt-harness-closure-20`,
+`C:/Users/stack/agentic-harness-wt-v2-closure`, `bb2dash-wt-harness-closure-20`,
 `bb2dash-wt-inbox-vault-20` · Migration range: **none in bb2dash** (a harness-memory migration, if one
 proves necessary, lives in the harness repo and is applied under the file's name, byte-identical; none
 is planned) · **Three PRs, an exception to one PR per phase** (DECISIONS 2026-09-09): PR-A (bb2dash,
@@ -32,7 +32,7 @@ notes carry a `phase`, two of them wrong, and `repo` is `''` on 156 (R-101, coun
 that falls back to the empty OneDrive folder (R-103).
 
 Two holes are live. **R-97:** `/inbox-apply` still writes its decision notes to
-`C:/Users/estac/OneDrive - Syracuse University/vault/projects/bb2dash/decisions/`, a stub since the
+`C:/Users/stack/vault/projects/bb2dash/decisions/`, a stub since the
 realm cutover of 2026-09-23. `v_inbox_queue` holds four answered rows (541–544, re-checked
 2026-09-24 and again on 2026-09-27: all four in the view, `archived_at` null) and `bb-sync` step 0 runs `/inbox-apply` first, so the next sync writes outside every
 realm; it is fixed first, in its own PR on day 1, and until PR-A merges the PM asks Stack to hold
@@ -202,16 +202,16 @@ include_superseded boolean)` through the `rag` MCP `search_context` tool.
   `node hooks/backfill-fields.mjs --vault <dir> --backup <dir> [--dry-run] [--report] [--json] [--repo
   bb2dash=<path>] [--no-network] [--relocate <session-prefix>=<realm>/<collection>]`. Scope: every
   session note filed under `projects/bb2dash/sessions/`, and every session note filed elsewhere whose
-  `repo` is `emstacho-su/bb2dash` or whose `cwd` is `C:/Users/estac/projects/bb2dash`, a path below
-  it, or a path starting `C:/Users/estac/projects/bb2dash-wt-` (the worktrees); it never moves a note
+  `repo` is `emstacho-su/bb2dash` or whose `cwd` is `C:/Users/stack/projects/bb2dash`, a path below
+  it, or a path starting `C:/Users/stack/projects/bb2dash-wt-` (the worktrees); it never moves a note
   except through `--relocate` (re-filing is R-H3's). It fills, where derivable and never guessed:
   `phase` (H-1, clearing wrong values), `repo` (a `bb2dash-wt-*` cwd resolves to the main checkout's
   origin; a workflow-subagent note, whose `cwd` is under
-  `C:/Users/estac/.claude/projects/C--Users-estac-projects-bb2dash*/`, takes the `repo` of the parent
+  `C:/Users/stack/.claude/projects/C--Users-stack-projects-bb2dash*/`, takes the `repo` of the parent
   note named in its `parent_session` (while that note is not yet written, the `repo` that
   `resolveRepo` gives for the parent transcript's `cwd`, as `subagent.mjs` `parentPlacement` reads
   it); a note whose `cwd` is the pre-move OneDrive checkout
-  `C:/Users/estac/OneDrive - Syracuse University/.fall2026/.projects2026/bb2dash` gets
+  `C:/Users/stack/OneDrive - Syracuse University/.fall2026/.projects2026/bb2dash` gets
   `emstacho-su/bb2dash`), `commits` and `prs` (the main checkout's history and `gh`, as `hooks/lib/backfill.mjs`
   does), `captured_by` and `origin` (from the transcript), `files_modified` (made repo-relative),
   `machine` (B-54), `hook_tags` (the classifier replayed where the transcript exists, else `[]`); on
@@ -234,22 +234,22 @@ include_superseded boolean)` through the `rag` MCP `search_context` tool.
   `projects/estac/sessions/22581e0d-35e4-….md`, move with `--relocate <prefix>=classes/ist466`: the
   note is written to `classes/ist466/sessions/` with `collection: 'ist466'` and `collection_source:
   'folder'` (what the class notes already filed there carry), and the original is **moved** into the
-  `--backup` folder under `C:/Users/estac/.claude-archive/<date>/`, never deleted (the harness
+  `--backup` folder under `C:/Users/stack/.claude-archive/<date>/`, never deleted (the harness
   standing rule: never `rm` in the vault); the next `sync-realms.mjs --push` commits both realms'
   changes. A target that already exists is refused.
 * **H-9 `/inbox-apply` Step 0 (R-97).** A new first step that runs in every mode, `--dry-run`
   included: resolve the vault and the ingest project (PR-A: read `$HARNESS_MACHINE_ENV` or
   `~/.harness/machine.env`, the shell winning; PR-C: `node
-  C:/Users/estac/agentic-harness/hooks/resolve-config.mjs --json --require-realm projects`), print
+  C:/Users/stack/agentic-harness/hooks/resolve-config.mjs --json --require-realm projects`), print
   `vault=<…> ingest=<…> realm=projects ok`, and stop before any claim or write unless
   `<vault>/projects/.realm` reads `projects`. Notes go to
   `<vault>/projects/bb2dash/decisions/inbox-<id>.md`; ingest runs from `HARNESS_INGEST_PROJECT` with
   `uv run ingest --source obsidian --path "<vault>" --only projects/bb2dash/decisions/<file>.md`; the
   repo log is `docs/inbox-decisions/YYYY-MM-DD.md` in the bb2dash checkout. Every resolved path is
   quoted in commands. Lines 31–34 change together. The installed copy
-  `C:/Users/estac/.claude/skills/inbox-apply/SKILL.md` is what runs, so it is a live file: no worker
+  `C:/Users/stack/.claude/skills/inbox-apply/SKILL.md` is what runs, so it is a live file: no worker
   writes it; the PM writes the merged blob over it
-  (`git show origin/main:skills/inbox-apply/SKILL.md > C:/Users/estac/.claude/skills/inbox-apply/SKILL.md`;
+  (`git show origin/main:skills/inbox-apply/SKILL.md > C:/Users/stack/.claude/skills/inbox-apply/SKILL.md`;
   a `cp` from the checkout would carry CRLF endings, since `core.autocrlf` is `true`) only after PR-A
   merges (task 2) and again after PR-C merges (task 29), and `cmp` against the blob then returns 0.
   Until PR-A merges, Stack holds Apply answers and `/bb-sync` (§Why).
@@ -259,19 +259,19 @@ include_superseded boolean)` through the `rag` MCP `search_context` tool.
   `notes-io.mjs` writes each note to a temporary file in the same folder and renames it into place,
   so a concurrent stage sees the old note or the new one, never half of one.
 * **H-11 `/bb2dash-pm` cadence line (R-103).** Step 2 of `.claude/skills/bb2dash-pm/SKILL.md` runs
-  `node C:/Users/estac/agentic-harness/hooks/untagged-sessions.mjs --due`; on exit 3 the PM lists the
+  `node C:/Users/stack/agentic-harness/hooks/untagged-sessions.mjs --due`; on exit 3 the PM lists the
   notes (`--json`), tags each or leaves it on purpose, then runs `--mark-reviewed`, before other work.
 
 ### Tables and migrations
 
 | # | File | Creates / changes |
 |---|---|---|
-| — | none | No bb2dash migration and no harness-memory schema object: `hook_tags`, `phase` and `repo` live in `rag.documents.metadata`, which holds each note's frontmatter verbatim (`ingest/src/ingest/loaders/obsidian.py`). If one proves necessary it is a new 14-digit timestamped file under `C:/Users/estac/agentic-harness/db/migrations/`, applied through `uv run ingest db migrate` under the file's name (a `--dry-run` first, the live apply a live-lane step: harness SC-5), never by editing an applied file |
+| — | none | No bb2dash migration and no harness-memory schema object: `hook_tags`, `phase` and `repo` live in `rag.documents.metadata`, which holds each note's frontmatter verbatim (`ingest/src/ingest/loaders/obsidian.py`). If one proves necessary it is a new 14-digit timestamped file under `C:/Users/stack/agentic-harness/db/migrations/`, applied through `uv run ingest db migrate` under the file's name (a `--dry-run` first, the live apply a live-lane step: harness SC-5), never by editing an applied file |
 
 ### Files
 
-Harness paths are relative to `C:/Users/estac/agentic-harness` (the worker's worktree); bb2dash paths
-to `C:/Users/estac/projects/bb2dash`. Worker owners are disjoint; the PM resolves the two sequenced
+Harness paths are relative to `C:/Users/stack/agentic-harness` (the worker's worktree); bb2dash paths
+to `C:/Users/stack/projects/bb2dash`. Worker owners are disjoint; the PM resolves the two sequenced
 shares at integration (task 16): the goldens (W-60 regenerates them for H-3; the PM regenerates once
 more after merging all four streams) and `hooks/install.mjs` `PAYLOAD` (two entries, one from W-59's
 new module and one from W-61's, added by the PM so no worker edits it). The checkpoint `redact.mjs`
@@ -303,7 +303,7 @@ copy is W-60's file made from W-61's after task 10.
 | bb2dash `skills/inbox-apply/SKILL.md` (PR-A, then PR-C) | changed | W-62 | H-9 |
 | bb2dash `.claude/skills/checkpoint/SKILL.md`, `build-note.mjs`; `.claude/skills/checkpoint/redact.mjs` (new) | changed / new | W-62 | written only by `install-checkpoint.mjs --repo` (PR-C) |
 | bb2dash `.claude/skills/bb2dash-pm/SKILL.md` | changed | W-62 | H-11 |
-| `C:/Users/estac/.claude/skills/inbox-apply/SKILL.md` (installed copy, outside both repos; a live file) | changed | PM | the merged blob written over it (H-9), only after PR-A merges (task 2) and after PR-C merges (task 29) |
+| `C:/Users/stack/.claude/skills/inbox-apply/SKILL.md` (installed copy, outside both repos; a live file) | changed | PM | the merged blob written over it (H-9), only after PR-A merges (task 2) and after PR-C merges (task 29) |
 | bb2dash `docs/planning/sprint-2/verification/101a_V2_VERIFICATION.md` (folder new) | new | PM | P-58: the walk (§DoD table) |
 | bb2dash `project-state/STATUS.md`, `DECISIONS.md`, `ORCHESTRATOR.md`, `docs/planning/sprint-2/90_SPRINT2_INTAKE.md`, `docs/planning/sprint-1-hub/briefs/66_SESSION_ARCHIVAL_RAG.md` (a dated amendment line only) | changed | PM | PR-C |
 
@@ -333,14 +333,14 @@ one row):
 * [2026-09-14] "**Definition of done for every remaining phase = SOP gates + Stack's acceptance script** walked on the Vercel preview; sign-off once per phase, at the PR" (this phase has nothing visual, so its script is walked in the terminal and the vault; §DoD says so)
 * [2026-09-14] "**Every task carries an executable check** (test, SQL assertion, curl, screenshot diff) the worker runs itself, plus one demo line for the acceptance script; a task without a check is not a task"
 * [2026-09-14] "V-2: hook auto-tags with manual additions allowed (hook merges frontmatter), existing notes moved and back-filled from git, a session is concluded after 24 h without a resume; DoD = the brief's acceptance list, PM-verified"
-* [2026-09-15] "Parallel PM sessions never branch or commit in the shared checkout `C:/Users/estac/projects/bb2dash`; each phase branch is its **own worktree** (`bb2dash-wt-<phase>`) and the brief is edited there"
+* [2026-09-15] "Parallel PM sessions never branch or commit in the shared checkout `C:/Users/stack/projects/bb2dash`; each phase branch is its **own worktree** (`bb2dash-wt-<phase>`) and the brief is edited there"
 * [2026-09-16] "**Direction: after development, bb2dash migrates from this laptop into containers (R-28).**"
 * [2026-09-22] "**`/inbox-apply` is the worker 077 left a queue for** (`skills/inbox-apply/SKILL.md`, request kind `inbox_feedback`) … Runs as `bb-sync` step 0 and from the Inbox's "Apply answers" button"
 * [2026-09-22] "**Decisions are stored twice, on purpose:** one vault note per item under `projects/bb2dash/decisions/` with `collection: bb2dash-inbox-decisions` (its own section of the rag store, queried with `search_context({collection})`), and a per-day repo log `docs/inbox-decisions/YYYY-MM-DD.md`"
 * [2026-09-22] "**Planning documents live in one folder per sprint** (`docs/planning/sprint-N-<name>/` with `briefs / research / verification / evidence / walks / parked`); file names and numbers never change, only their folder"
 * [2026-09-23] "**Sprint 2 planning proceeds stage to stage without a stop**; the PM stops only where Stack's input is required (his §3 fields, the question batch, the phase-plan approval) and otherwise proceeds on stated defaults, each recorded here when adopted"
 * [2026-09-23] "Fan-out subagents run on **Opus** (verifiers, reviewers, mergers, builders) or **Sonnet** (researchers); Fable is the PM session only"
-* [2026-09-24] "**V-2 (R-27) is recorded as built** in `~/agentic-harness` (its PRs #1–#4, 2026-09-16); bb2dash carries only the acceptance walk of `66_SESSION_ARCHIVAL_RAG.md` and the doc closure. The vault's move out of OneDrive into git realms (harness PRs #8–#15, 2026-09-23/24: `C:/Users/estac/vault`, realms `projects` and `classes` with private remotes, machine file, commit → merge-pull → push, never rebase) **supersedes Phase 14's C-4** vault plan"
+* [2026-09-24] "**V-2 (R-27) is recorded as built** in `~/agentic-harness` (its PRs #1–#4, 2026-09-16); bb2dash carries only the acceptance walk of `66_SESSION_ARCHIVAL_RAG.md` and the doc closure. The vault's move out of OneDrive into git realms (harness PRs #8–#15, 2026-09-23/24: `C:/Users/stack/vault`, realms `projects` and `classes` with private remotes, machine file, commit → merge-pull → push, never rebase) **supersedes Phase 14's C-4** vault plan"
 
 **Frozen text in other files** (not DECISIONS rows; each quoted verbatim from the file named, checked
 on 2026-09-24 against bb2dash `a5042fa` and harness `main` `b7f3df8`):
@@ -373,7 +373,7 @@ Stack: "**Stack may append tags by hand in the note**; the hook never removes a 
 and ingest keeps them (Stack, 2026-09-14)."
 
 *PM wording, not Stack's, built from the B-52..B-56 defaults (all PROVISIONAL):* when he presses Apply
-answers, the decision notes land in `C:/Users/estac/vault/projects/bb2dash/decisions/` and reach GitHub
+answers, the decision notes land in `C:/Users/stack/vault/projects/bb2dash/decisions/` and reach GitHub
 on the next nightly push, and nothing is written to OneDrive; a `/checkpoint` note never carries a key
 into a repo's history, and the skill no longer has a hand-written path around that; searching by repo
 and phase returns a phase's PM session and its workers, and a note never carries a phase it cannot
@@ -413,18 +413,18 @@ dated verification note walks every line of brief 66 on live data, so V-2 reads 
 
 1. After PR-A merges and the PM has refreshed the installed skill (task 2's first step): press Apply
    answers in the Inbox (or run the next sync). The terminal prints
-   `vault=C:/Users/estac/vault … realm=projects ok` before anything else; notes `inbox-541` … `inbox-544`
-   appear in `C:/Users/estac/vault/projects/bb2dash/decisions/`; the Inbox shows the four archived.
-2. The next morning, `git -C C:/Users/estac/vault/projects log -1 --stat` lists those notes.
+   `vault=C:/Users/stack/vault … realm=projects ok` before anything else; notes `inbox-541` … `inbox-544`
+   appear in `C:/Users/stack/vault/projects/bb2dash/decisions/`; the Inbox shows the four archived.
+2. The next morning, `git -C C:/Users/stack/vault/projects log -1 --stat` lists those notes.
 3. After PR-B merges and three consecutive nightly runs have each logged `committed -> pulled -> pushed`
-   (or up-to-date) for both realms (the harness live-lane prerequisite; none had by 2026-09-27): run `! node C:/Users/estac/agentic-harness/hooks/install.mjs`
+   (or up-to-date) for both realms (the harness live-lane prerequisite; none had by 2026-09-27): run `! node C:/Users/stack/agentic-harness/hooks/install.mjs`
    (it edits `settings.json`, so it is yours to run).
 4. Read the back-fill dry-run file `<B>/backfill-dry-run.txt` (one line per change) and say "go L20-b".
 5. Remove GitHub's stored credential from Windows Credential Manager (the PM gives you the exact
-   `!` command), then run `! node C:/Users/estac/agentic-harness/hooks/sync-realms.mjs --push --vault
-   C:/Users/estac/vault` inside `Measure-Command`: it exits 2 in under 30 s. Restore the credential;
+   `!` command), then run `! node C:/Users/stack/agentic-harness/hooks/sync-realms.mjs --push --vault
+   C:/Users/stack/vault` inside `Measure-Command`: it exits 2 in under 30 s. Restore the credential;
    the next nightly pushes again (task 22).
-6. Open `claude` in `C:/Users/estac/projects/bb2dash`, send one prompt that carries the token the PM
+6. Open `claude` in `C:/Users/stack/projects/bb2dash`, send one prompt that carries the token the PM
    gives you (`v2resume` plus the day's date, e.g. `v2resume20261001`), `/exit`; `claude --resume <id>`,
    one prompt, `/exit`. The PM shows you both notes' frontmatter: the first `superseded`, the second
    naming it under `supersedes`.
@@ -471,8 +471,8 @@ row, `A1`–`A6` and `D1`–`D15`, with its state and pasted evidence)
 
 ## Task list
 
-Harness commands run from the phase worktree `C:/Users/estac/agentic-harness-wt-v2-closure` unless a
-worker's worktree is named; `<V>` is `C:/Users/estac/vault`. SQL marked *hm* runs read-only on
+Harness commands run from the phase worktree `C:/Users/stack/agentic-harness-wt-v2-closure` unless a
+worker's worktree is named; `<V>` is `C:/Users/stack/vault`. SQL marked *hm* runs read-only on
 harness-memory (`hqkytnyiiuxovnnyixye`), never on the bb2dash project. Tasks 17–19 and 21–26 wait
 for PR-B's merge and until three consecutive nightly runs each log `committed -> pulled -> pushed` (or
 up-to-date) for both realms, the harness live-lane prerequisite; none had by 2026-09-27 (task 22's own
@@ -493,7 +493,7 @@ PM rewrites C-15's expected line from `<H>`'s `scripts/nightly-ingest.ps1` befor
 | 3 | P-61 baseline before any change: `uv run ingest eval --json > eval/baseline-pre-phase20.json` (in `ingest/`); the PM also runs task 19's four *hm* counts now and keeps their values for 101a as the before figures (task 19's expected values do not depend on them) | P-61 | PM | (d) `node -p "require('./ingest/eval/baseline-pre-phase20.json').cases.length"` equals `grep -c "^  - id:" ingest/eval/golden.yaml`, which equals C-H's eval case count at `<H>` (67 at `1c917f7`; 25 on 2026-09-24, before unit Q-a's golden coverage) | "Search quality is measured before anything moves." |
 | 4 | H-2 fixture rows, failing first (RED commit) | P-52, P-53 | W-59 | (a) in `-wt-v2-phase`: at the RED commit `node --test hooks/tests/phase-aliases.test.mjs` exits 1; at task 5's commit it exits 0 | — |
 | 5 | H-1: `derivePhase`, `PHASE_TAG_PATTERN`, `phaseTag`, `phase-aliases.mjs`, `analyse.mjs` passes `repo`; `docs/tags.md` phase section and line 126 | R-101, P-52 | W-59 | (a) `node --test hooks/tests/tags.test.mjs hooks/tests/phase-aliases.test.mjs hooks/tests/vocabulary.test.mjs` → 0 failures | "`fix/page-pass-12b` now reads as Phase 12b." |
-| 6 | Worker notes inherit the parent's phase and, when their own `cwd` yields none, its repo (H-1, `subagent.mjs`) | R-101 | W-59 | (a) `node --test hooks/tests/subagent.test.mjs` → 0 failures, with three new cases: a worker on `main` under a `fix/page-pass-12b` parent gets `phase-12b`; a worker on `feat/db-hygiene-15-runner` keeps `phase-15`; a workflow worker whose `cwd` is `C:/Users/estac/.claude/projects/C--Users-estac-projects-bb2dash/<sid>/subagents/workflows/<wf>` under a parent transcript whose `cwd` is the bb2dash checkout gets `repo: 'emstacho-su/bb2dash'` | "Workers file under their PM's phase and repo." |
+| 6 | Worker notes inherit the parent's phase and, when their own `cwd` yields none, its repo (H-1, `subagent.mjs`) | R-101 | W-59 | (a) `node --test hooks/tests/subagent.test.mjs` → 0 failures, with three new cases: a worker on `main` under a `fix/page-pass-12b` parent gets `phase-12b`; a worker on `feat/db-hygiene-15-runner` keeps `phase-15`; a workflow worker whose `cwd` is `C:/Users/stack/.claude/projects/C--Users-stack-projects-bb2dash/<sid>/subagents/workflows/<wf>` under a parent transcript whose `cwd` is the bb2dash checkout gets `repo: 'emstacho-su/bb2dash'` | "Workers file under their PM's phase and repo." |
 | 7 | H-3 (**PROVISIONAL, B-52**: the per-note cap, a PM sub-default under B-52): `hook_tags` field, `mergeFields` replace-not-union, `buildFields`, checkpoint `FIELD_SPEC` copy, `GENERATOR_VERSION` bump, goldens regenerated; P-55 test failing first; `merge.test.mjs`'s 9-tag union reframed as hand tags | R-102, P-55, B-52 | W-60 | (a) in `-wt-v2-cap`: at the test-only commit `node --test hooks/tests/hook-tags.test.mjs` exits 1; then `node --test hooks/tests/hook-tags.test.mjs hooks/tests/merge.test.mjs hooks/tests/golden.test.mjs hooks/tests/checkpoint-build.test.mjs hooks/tests/frontmatter.test.mjs` → 0 failures | "A worker re-captured nine times still carries at most five hook tags." |
 | 8 | H-4: `resolveHarnessConfig` and `hooks/resolve-config.mjs` | P-110, R-97 | W-61 | (a) in `-wt-v2-config`: `node --test hooks/tests/resolve-config.test.mjs hooks/tests/machine-env.test.mjs` → 0 failures, including: shell beats the machine file; `--require-realm projects` on a folder whose `.realm` reads `classes` exits 2 and names the path | — |
 | 9 | H-5: untagged list on the helper, SDK excluded, `--due` / `--mark-reviewed` / `--state`, early trigger 25 | R-103, P-111, P-110 | W-61 | (a) `node --test hooks/tests/untagged.test.mjs` → 0 failures (`--due` exit 3 on no state, a 7-day-old state, and 25 notes since; 0 otherwise); (d) `grep -c DEFAULT_VAULT_SEGMENTS hooks/untagged-sessions.mjs` → 0 | "The untagged list reads the real vault, not OneDrive." |
@@ -501,17 +501,17 @@ PM rewrites C-15's expected line from `<H>`'s `scripts/nightly-ingest.ps1` befor
 | 11 | H-10: sweep takes the realm lock; notes written by temp file and rename | R-100 | W-61 | (a) `node --test hooks/tests/writer-lock.test.mjs hooks/tests/sweep.test.mjs hooks/tests/hook-process.test.mjs` → 0 failures (a held lock defers the sweep's realm and it exits as the collector does; the hook writes while the lock is held; no partial file is ever observable at the note path) | — |
 | 12 | H-7: `skills/checkpoint/redact.mjs` copied after task 10; `build-note.mjs` redacts body and git strings and reports `redactions`; `PAYLOAD` of three; seeded fixture (JWT, `sb_` key, connection string); P-57 byte pin; P-113 same fixture through both modules | R-98, P-57, P-113 | W-60 | (a) `node --test hooks/tests/checkpoint-redact.test.mjs hooks/tests/checkpoint-build.test.mjs hooks/tests/install-checkpoint.test.mjs` → 0 failures; (d) `cmp skills/checkpoint/redact.mjs hooks/lib/redact.mjs` exits 0 | "A pasted key in a checkpoint note comes out `[REDACTED]` before git sees it." |
 | 13 | (**PROVISIONAL, B-56**) Remove the no-node fallback from `skills/checkpoint/SKILL.md` and put H-7's sentence in its place | B-56, R-98 | W-60 | (d) `grep -c "is not available" skills/checkpoint/SKILL.md` → 0; `grep -c "hand-built" skills/checkpoint/SKILL.md` → 0; `grep -c "without it, stop and report that no checkpoint was written" skills/checkpoint/SKILL.md` → 1 | — |
-| 14 | H-8 back-fill tool (after 5, 6, 7, 10), P-56 repair and `--relocate` included (**PROVISIONAL, B-54**: the `machine` fill; **B-52**: the repair) | P-54, P-56, R-101, R-102, B-52, B-54 | W-59 | (a) `node --test hooks/tests/backfill-fields.test.mjs` → 0 failures on a fixture vault: `--dry-run` leaves every file hash unchanged; apply then a second run reports `changes: 0`; a `feat/retrieval-mcp` note tagged `phase-7` ends `phase: ''`; an underivable field stays `''`; the backup holds every changed original; a six-tag note ends with ≤ 5 `hook_tags` and its hand tag kept; a workflow-subagent note (`cwd` under `C:/Users/estac/.claude/projects/C--Users-estac-projects-bb2dash/<sid>/subagents/workflows/`, `repo: ''`) ends with its parent note's `repo`; a note whose `cwd` is `C:/Users/estac/OneDrive - Syracuse University/.fall2026/.projects2026/bb2dash` ends `repo: 'emstacho-su/bb2dash'`; Session facts rows equal the frontmatter | "One pass fills phase, repo and the rest, and shows you every line first." |
+| 14 | H-8 back-fill tool (after 5, 6, 7, 10), P-56 repair and `--relocate` included (**PROVISIONAL, B-54**: the `machine` fill; **B-52**: the repair) | P-54, P-56, R-101, R-102, B-52, B-54 | W-59 | (a) `node --test hooks/tests/backfill-fields.test.mjs` → 0 failures on a fixture vault: `--dry-run` leaves every file hash unchanged; apply then a second run reports `changes: 0`; a `feat/retrieval-mcp` note tagged `phase-7` ends `phase: ''`; an underivable field stays `''`; the backup holds every changed original; a six-tag note ends with ≤ 5 `hook_tags` and its hand tag kept; a workflow-subagent note (`cwd` under `C:/Users/stack/.claude/projects/C--Users-stack-projects-bb2dash/<sid>/subagents/workflows/`, `repo: ''`) ends with its parent note's `repo`; a note whose `cwd` is `C:/Users/stack/OneDrive - Syracuse University/.fall2026/.projects2026/bb2dash` ends `repo: 'emstacho-su/bb2dash'`; Session facts rows equal the frontmatter | "One pass fills phase, repo and the rest, and shows you every line first." |
 | 15 | Harness docs (after 5 and 7): realm vault, Docker as the optional local store, status rows with test counts from an executed run, README layout, the nightly's nine steps (the section carries the line `realms-pull → transcripts → state → checkpoints → sweep → ingest → verify → eval → realms-push` verbatim, the step labels of `scripts/nightly-ingest.ps1`'s closing log line as it reads at `<H>`, C-H's labels figure), `db/README.md` local store, `hooks/README.md` field table (every field, `machine` and `hook_tags` included); R-B1 "pushed or up-to-date"; the lock follow-up struck; the Obsidian Git plugin declined | R-104, R-100 | W-62 | (a) in `-wt-v2-docs`: `node --test hooks/tests/readme-fields.test.mjs` → 0 failures; (d) C-15 (after merging task 5) prints `0`, a number ≥ `1` (`0` on harness `main` at `1c917f7`, before this task), then `1` | "The harness docs say where the vault really is." |
 | 16 | Integrate the four worker branches on `feat/v2-closure`, gates, PR-B | all harness rows | PM | (d) the three suite commands of §DoD exit 0; after the two `PAYLOAD` entries and the golden regeneration, `node --test hooks/tests/install.test.mjs hooks/tests/golden.test.mjs` → 0 failures; `gh pr view <PR-B> --json state -q .state` prints `OPEN` | — |
 | 17 | L20-a: Stack reinstalls the hook | R-101, R-102, R-106 | Stack + PM | (d) C-17 prints `same` six times | "The new capture code is live." |
 | 18 | L20-b (**PROVISIONAL, B-52, B-53, B-54**): back-fill dry-run saved to `<B>/backfill-dry-run.txt` → Stack reads → apply with `--relocate ca25962a=classes/ist466 --relocate 22581e0d=classes/ist466` → `node hooks/sync-realms.mjs --push` → `uv run ingest --source obsidian --path "<V>"` | P-54, P-56, R-101, R-102, B-52, B-53, B-54 | PM | (d) C-18's re-run report shows `changes: 0`, `hook_tags_over_cap: 0`, `unknown_hook_tags: 0`, `absolute_files_modified: 0`, `phase_body_mismatch: 0`, `repo_empty_underivable: 0` and `top_level_notes` = `distinct_top_level_session_ids`; then `phase: ''` twice (today `0e3b3d00` reads `phase-7` and `ac1f5264` reads `phase-10`); then `2` and `0` | "Every bb2dash note now says its phase and repo, or honestly says none." |
-| 19 | (**PROVISIONAL, B-52**: the hook_tags SQL) Store checks after the ingest; P-61 post baseline (`uv run ingest eval --json > "<B>/baseline-post-phase20.json"`, in `C:/Users/estac/agentic-harness/ingest` on merged `main`; not committed, its JSON pasted into 101a) | R-102, R-99, P-61, B-52 | PM | (b) *hm* `select count(*) from rag.documents where source = 'obsidian' and jsonb_array_length(coalesce(metadata->'hook_tags', '[]'::jsonb)) > 5` → 0; *hm* `select count(*) from rag.documents where source = 'obsidian' and collection = 'bb2dash' and metadata->>'type' = 'session' and (coalesce(metadata->>'repo','') = '' or coalesce(metadata->>'status','') = '' or coalesce(metadata->>'schema_version','') = '')` → 0 (task 18's `repo_empty_underivable` is 0); *hm* `select count(*) from rag.documents where source = 'obsidian' and collection = 'bb2dash' and metadata->>'type' = 'session' and coalesce(metadata->>'phase','') = ''` → equals task 18's `phase_underivable_indexed`; *hm* `select count(*) from rag.documents where source = 'obsidian' and collection = 'bb2dash' and metadata->>'type' = 'session' and coalesce(metadata->>'branch','') = ''` → equals task 18's `branch_empty`; (d) from `C:/Users/estac/agentic-harness`, `node -p "require('<B>/baseline-post-phase20.json').hit_rate >= require('./ingest/eval/baseline-pre-phase20.json').hit_rate"` prints `true` | "Search is no worse after the back-fill." |
+| 19 | (**PROVISIONAL, B-52**: the hook_tags SQL) Store checks after the ingest; P-61 post baseline (`uv run ingest eval --json > "<B>/baseline-post-phase20.json"`, in `C:/Users/stack/agentic-harness/ingest` on merged `main`; not committed, its JSON pasted into 101a) | R-102, R-99, P-61, B-52 | PM | (b) *hm* `select count(*) from rag.documents where source = 'obsidian' and jsonb_array_length(coalesce(metadata->'hook_tags', '[]'::jsonb)) > 5` → 0; *hm* `select count(*) from rag.documents where source = 'obsidian' and collection = 'bb2dash' and metadata->>'type' = 'session' and (coalesce(metadata->>'repo','') = '' or coalesce(metadata->>'status','') = '' or coalesce(metadata->>'schema_version','') = '')` → 0 (task 18's `repo_empty_underivable` is 0); *hm* `select count(*) from rag.documents where source = 'obsidian' and collection = 'bb2dash' and metadata->>'type' = 'session' and coalesce(metadata->>'phase','') = ''` → equals task 18's `phase_underivable_indexed`; *hm* `select count(*) from rag.documents where source = 'obsidian' and collection = 'bb2dash' and metadata->>'type' = 'session' and coalesce(metadata->>'branch','') = ''` → equals task 18's `branch_empty`; (d) from `C:/Users/stack/agentic-harness`, `node -p "require('<B>/baseline-post-phase20.json').hit_rate >= require('./ingest/eval/baseline-pre-phase20.json').hit_rate"` prints `true` | "Search is no worse after the back-fill." |
 | 20 | (**PROVISIONAL, B-55**) One `gitleaks` scan over each realm's history (`gitleaks git <V>/projects`, `gitleaks git <V>/classes`, or `gitleaks detect --source …` on a pre-8.19 build); on day 1 beside task 3, outside the PR-B and live-lane wait, and at the latest before Phase 14's first realm write | B-55 | PM | (d) exit code 0 for each of the 2 realms, report "no leaks found"; a hit stops the phase (security protocol: rotate first) | "Both realms' histories are clean." |
-| 21 | PR-C skills (after PR-A and PR-B merge): `node C:/Users/estac/agentic-harness/hooks/install-checkpoint.mjs --repo C:/Users/estac/projects/bb2dash-wt-harness-closure-20-skills`; H-9 swapped to `resolve-config.mjs` (on top of PR-A's Step 0; the installed copy is task 29's); H-11 line | R-98, R-97, P-110, R-103 | W-62 | (d) C-21 prints `equal` three times, then a number ≥ `1` (the resolver call in `skills/inbox-apply/SKILL.md`), then `1` | "Cloud checkpoints in bb2dash run the redacting build." |
+| 21 | PR-C skills (after PR-A and PR-B merge): `node C:/Users/stack/agentic-harness/hooks/install-checkpoint.mjs --repo C:/Users/stack/projects/bb2dash-wt-harness-closure-20-skills`; H-9 swapped to `resolve-config.mjs` (on top of PR-A's Step 0; the installed copy is task 29's); H-11 line | R-98, R-97, P-110, R-103 | W-62 | (d) C-21 prints `equal` three times, then a number ≥ `1` (the resolver call in `skills/inbox-apply/SKILL.md`), then `1` | "Cloud checkpoints in bb2dash run the redacting build." |
 | 22 | R-100 live: three consecutive Apply nights; R-B4 credential test run by Stack | R-100 | Stack + PM | (d) C-22 prints `1` four times for each of three consecutive nights (12 lines); the credential test exits `2` in under 30 s (`Measure-Command` output pasted) | "Three nights pushed on their own; a missing credential fails fast." |
 | 23 | Live resume chain (66 A3, D6) and `include_superseded` (D11) | R-99 | Stack + PM | (d) C-23 prints `1`, then `  - 'session-<S>'` (the second note's `supersedes` names the first note's `id`); (d) `search_context(query="<T>", repo="emstacho-su/bb2dash", limit=50, include_superseded=true)` lists `session-<S>`, and the same call with `include_superseded=false` does not list it (`<T>` is the one-word token acceptance step 6's first prompt carries, so the text arm matches the first note exactly; both result lists pasted into 101a) | "Resume a session and the old note steps aside." |
-| 24 | Store proofs: GIN index and the migration ledger (66 D12, D15) | R-99 | PM | (b) *hm*, `enable_seqscan` left on: `explain (analyze)` the `vec` arm's select (lines 81–93) and then the `txt` arm's select (lines 96–119) of `rag.search`, each exactly as written in `C:/Users/estac/agentic-harness/db/migrations/20260921223612_rag_search_strict_matches_first.sql`, its parameters and locals bound as literals: `filter_metadata` = `'{"repo":"emstacho-su/bb2dash","phase":"phase-<NN>"}'` (`<NN>` is task 26's phase), `query_embedding` = `<E>`, `query_text` = `'phase'` (one lexeme, so the function's `begin` block sets `strict_query` = `websearch_to_tsquery('english', 'phase')` and leaves `loose_query` and `lexemes_needed` null), `match_count` 5, `min_similarity` 0.70 (`keyword_floor` 0.62), `filter_source` and `filter_collection` null, `keep_superseded` true → each plan contains `Bitmap Index Scan on documents_metadata_idx` as the driving node on `documents`, with the chunk scan nested inside it (harness `db/README.md`, "Verifying a filter is index-served, not scanned"); (b) *hm* `select count(*) from rag.search(query_embedding => <E>, query_text => 'phase', match_count => 5, min_similarity => null, filter_metadata => '{"repo":"emstacho-su/bb2dash","phase":"phase-<NN>"}')` → 5 (`min_similarity => null`, so the relevance floor cannot be what cuts the count), run where *hm* `select count(*) from rag.documents where source = 'obsidian' and metadata @> '{"repo":"emstacho-su/bb2dash","phase":"phase-<NN>"}'` ≥ 5; `<E>` is `(select c.embedding from rag.chunks c join rag.documents d on d.id = c.document_id where d.external_id = 'session-<PM id>' order by c.id limit 1)`, task 26's PM note; (d) C-24 prints `N already applied, 0 pending`, then `N`, then the N 14-digit versions and the N `md5sum` lines, where N is C-H's migration file count at `<H>` (7 at `1c917f7`: unit P's L4 applied `20260924201225_rag_retrieval_events` on 2026-09-27, per harness `968f8ff`'s record; a migration that reaches harness `main` after `<H>` is applied by its own live step before this task, otherwise C-24 prints `1 pending`, and N is then re-read at that SHA, both SHAs pasted into 101a); (b) *hm* `select version from rag_meta.schema_migrations order by version` → N rows, the same versions in the same order as C-24's version lines (the ledger `uv run ingest db migrate` writes, `ingest/src/ingest/migrations.py`); (b) *hm* `select version, name, md5(statements[1]) from supabase_migrations.schema_migrations order by version` → one row per file applied through `apply_migration` (6 at `1c917f7`, `20260909175037` through `20260921223612`), each `md5` equal to C-24's `md5sum` of `<version>_<name>.sql`, the pairs pasted into 101a (the harness's own byte-identity check, `db/README.md` §Verifying the mirror; the harness stores and checks out LF, per its `.gitattributes`, so the working file's hash is the blob's); a file applied by `uv run ingest db migrate` (`20260924201225` at `1c917f7`) has no stored statement there and is proved by its `rag_meta` row alone, listed in 101a as such | — |
+| 24 | Store proofs: GIN index and the migration ledger (66 D12, D15) | R-99 | PM | (b) *hm*, `enable_seqscan` left on: `explain (analyze)` the `vec` arm's select (lines 81–93) and then the `txt` arm's select (lines 96–119) of `rag.search`, each exactly as written in `C:/Users/stack/agentic-harness/db/migrations/20260921223612_rag_search_strict_matches_first.sql`, its parameters and locals bound as literals: `filter_metadata` = `'{"repo":"emstacho-su/bb2dash","phase":"phase-<NN>"}'` (`<NN>` is task 26's phase), `query_embedding` = `<E>`, `query_text` = `'phase'` (one lexeme, so the function's `begin` block sets `strict_query` = `websearch_to_tsquery('english', 'phase')` and leaves `loose_query` and `lexemes_needed` null), `match_count` 5, `min_similarity` 0.70 (`keyword_floor` 0.62), `filter_source` and `filter_collection` null, `keep_superseded` true → each plan contains `Bitmap Index Scan on documents_metadata_idx` as the driving node on `documents`, with the chunk scan nested inside it (harness `db/README.md`, "Verifying a filter is index-served, not scanned"); (b) *hm* `select count(*) from rag.search(query_embedding => <E>, query_text => 'phase', match_count => 5, min_similarity => null, filter_metadata => '{"repo":"emstacho-su/bb2dash","phase":"phase-<NN>"}')` → 5 (`min_similarity => null`, so the relevance floor cannot be what cuts the count), run where *hm* `select count(*) from rag.documents where source = 'obsidian' and metadata @> '{"repo":"emstacho-su/bb2dash","phase":"phase-<NN>"}'` ≥ 5; `<E>` is `(select c.embedding from rag.chunks c join rag.documents d on d.id = c.document_id where d.external_id = 'session-<PM id>' order by c.id limit 1)`, task 26's PM note; (d) C-24 prints `N already applied, 0 pending`, then `N`, then the N 14-digit versions and the N `md5sum` lines, where N is C-H's migration file count at `<H>` (7 at `1c917f7`: unit P's L4 applied `20260924201225_rag_retrieval_events` on 2026-09-27, per harness `968f8ff`'s record; a migration that reaches harness `main` after `<H>` is applied by its own live step before this task, otherwise C-24 prints `1 pending`, and N is then re-read at that SHA, both SHAs pasted into 101a); (b) *hm* `select version from rag_meta.schema_migrations order by version` → N rows, the same versions in the same order as C-24's version lines (the ledger `uv run ingest db migrate` writes, `ingest/src/ingest/migrations.py`); (b) *hm* `select version, name, md5(statements[1]) from supabase_migrations.schema_migrations order by version` → one row per file applied through `apply_migration` (6 at `1c917f7`, `20260909175037` through `20260921223612`), each `md5` equal to C-24's `md5sum` of `<version>_<name>.sql`, the pairs pasted into 101a (the harness's own byte-identity check, `db/README.md` §Verifying the mirror; the harness stores and checks out LF, per its `.gitattributes`, so the working file's hash is the blob's); a file applied by `uv run ingest db migrate` (`20260924201225` at `1c917f7`) has no stored statement there and is proved by its `rag_meta` row alone, listed in 101a as such | — |
 | 25 | First untagged review, then mark it | R-103 | PM | (d) `node hooks/untagged-sessions.mjs --due` exits 3 before the review; after tagging or keeping each listed note and `--mark-reviewed`, `--due` exits 0 and `--json` lists 0 notes | "The PM saw every untagged note since the last review." |
 | 26 | (**PROVISIONAL, B-53**) acceptance query on the first sprint-2 bb2dash phase after task 17 (that choice of phase is a PM sub-default under B-53) | R-101, R-99 | PM | (b) *hm*, the proof, on the store's own rows (the notes the ingest wrote after H-8's replay): `select count(*) as family, count(*) filter (where metadata @> '{"repo":"emstacho-su/bb2dash","phase":"phase-<NN>"}') as matched from rag.documents where source = 'obsidian' and (external_id = 'session-<PM id>' or metadata->>'parent_session' = '<PM id>')` → `family` ≥ 1 and `matched` = `family` (missing = 0; the expected count comes from the same query; the containment is the one `rag.search` applies inside both arms, `d.metadata @> filter_metadata`; children whose `repo` was `''` carry the parent's after H-8 and `subagent.mjs`, tasks 6, 14 and 18), the family's `external_id` list pasted into 101a; (d) smoke only: `search_context(query="<that phase's brief title>", repo="emstacho-su/bb2dash", phase="phase-<NN>", limit=50, min_similarity=0, include_superseded=true)` returns ≥ 1 result and every returned id is in *hm* `select external_id from rag.documents where source = 'obsidian' and metadata @> '{"repo":"emstacho-su/bb2dash","phase":"phase-<NN>"}'` (outside = 0); it proves no completeness, since the `rag` MCP passes `max_per_document` 3 and caps `limit` at 50 (harness `mcp-server/src/config.ts`), so one call is guaranteed to reach only 17 distinct notes, fewer than a long PM session's children (34 notes name `ac1f5264`, the Phase 7–10 PM, as `parent_session` in the vault on 2026-09-27) | "Ask for a phase and you get its PM and its workers." |
 | 27 | (**PROVISIONAL, B-53**: rows A1, A2) `101a_V2_VERIFICATION.md`: the 21 lines of the table above, each with state and evidence (the pasted commands and outputs of tasks 2, 17–26) | P-58, R-99 | PM | (d) C-27 prints `21` then `0` (no row with an empty cell) | "V-2's list, walked on live data, in one note." |
@@ -520,66 +520,66 @@ PM rewrites C-15's expected line from `<H>`'s `scripts/nightly-ingest.ps1` befor
 
 **Check commands** (Git Bash; the ones with a pipe live here so the table stays readable). `<D>` is a
 night's UTC date prefix, e.g. `2026-09-28T`; `<B>` is a backup folder under
-`C:/Users/estac/.claude-archive/<date>/`; `<S>` is the session id of acceptance step 6 and `<T>` the
+`C:/Users/stack/.claude-archive/<date>/`; `<S>` is the session id of acceptance step 6 and `<T>` the
 one-word token its first prompt carries (`v2resume<YYYYMMDD>`); `<H>` is the harness SHA C-H records.
 
 ```bash
-# C-1  (C:/Users/estac/projects/bb2dash-wt-inbox-vault-20)
+# C-1  (C:/Users/stack/projects/bb2dash-wt-inbox-vault-20)
 git grep -c OneDrive -- skills/inbox-apply/SKILL.md || echo 0
 grep -c "projects/.realm" skills/inbox-apply/SKILL.md
 grep -c "realm=projects ok" skills/inbox-apply/SKILL.md
 
 # C-H  (PM, the day of task 1: prints <H>, then the three figures read at <H>)
-HR=C:/Users/estac/agentic-harness
+HR=C:/Users/stack/agentic-harness
 git -C $HR fetch -q origin && git -C $HR rev-parse --short origin/main
 git -C $HR show <H>:ingest/eval/golden.yaml | grep -c "^  - id:"
 git -C $HR ls-tree --name-only <H> db/migrations/ | grep -c '\.sql$'
 git -C $HR show <H>:scripts/nightly-ingest.ps1 | grep -cF '(realms-pull $pullCode, transcripts $transcriptCode, state $stateCode, checkpoints $checkpointCode, sweep $sweepCode, ingest $ingestCode, verify $verifyCode, eval $evalCode, realms-push $pushCode)'
 
-# C-2  (C:/Users/estac/projects/bb2dash-wt-inbox-vault-20, after PR-A merges and `git fetch origin`)
-git show origin/main:skills/inbox-apply/SKILL.md | cmp - C:/Users/estac/.claude/skills/inbox-apply/SKILL.md; echo $?
-ls C:/Users/estac/vault/projects/bb2dash/decisions/inbox-54[1-4].md | wc -l
-find "C:/Users/estac/OneDrive - Syracuse University/vault" -name "*.md" | wc -l
+# C-2  (C:/Users/stack/projects/bb2dash-wt-inbox-vault-20, after PR-A merges and `git fetch origin`)
+git show origin/main:skills/inbox-apply/SKILL.md | cmp - C:/Users/stack/.claude/skills/inbox-apply/SKILL.md; echo $?
+ls C:/Users/stack/vault/projects/bb2dash/decisions/inbox-54[1-4].md | wc -l
+find "C:/Users/stack/OneDrive - Syracuse University/vault" -name "*.md" | wc -l
 
-# C-15 (C:/Users/estac/agentic-harness-wt-v2-docs)
+# C-15 (C:/Users/stack/agentic-harness-wt-v2-docs)
 git grep -nE 'OneDrive - Syracuse University[/\]vault' -- README.md CONTEXT.md docs/ingestion.md docs/tags.md hooks/README.md db/README.md | wc -l
 grep -c "realms-pull" docs/ingestion.md
 grep -cF "realms-pull → transcripts → state → checkpoints → sweep → ingest → verify → eval → realms-push" docs/ingestion.md
 
 # C-17
 for f in tags phase-aliases merge redact redact-extra frontmatter; do
-  cmp -s C:/Users/estac/agentic-harness/hooks/lib/$f.mjs C:/Users/estac/.claude/hooks/lib/$f.mjs && echo same
+  cmp -s C:/Users/stack/agentic-harness/hooks/lib/$f.mjs C:/Users/stack/.claude/hooks/lib/$f.mjs && echo same
 done
 
-# C-18 (C:/Users/estac/agentic-harness, after the apply, the sync and the ingest)
-node hooks/backfill-fields.mjs --vault C:/Users/estac/vault --backup "<B>" --dry-run --report --json
-grep -h "^phase:" C:/Users/estac/vault/projects/bb2dash/sessions/0e3b3d00-157a-4323-ae9e-c481e5042e88.md
-grep -h "^phase:" C:/Users/estac/vault/projects/bb2dash/sessions/ac1f5264-046d-4f8f-83be-682428b248d4.md
-ls C:/Users/estac/vault/classes/ist466/sessions | grep -cE "^(ca25962a-1466|22581e0d-35e4)"
-find C:/Users/estac/vault/projects -name "ca25962a-1466*" -o -name "22581e0d-35e4*" | wc -l
+# C-18 (C:/Users/stack/agentic-harness, after the apply, the sync and the ingest)
+node hooks/backfill-fields.mjs --vault C:/Users/stack/vault --backup "<B>" --dry-run --report --json
+grep -h "^phase:" C:/Users/stack/vault/projects/bb2dash/sessions/0e3b3d00-157a-4323-ae9e-c481e5042e88.md
+grep -h "^phase:" C:/Users/stack/vault/projects/bb2dash/sessions/ac1f5264-046d-4f8f-83be-682428b248d4.md
+ls C:/Users/stack/vault/classes/ist466/sessions | grep -cE "^(ca25962a-1466|22581e0d-35e4)"
+find C:/Users/stack/vault/projects -name "ca25962a-1466*" -o -name "22581e0d-35e4*" | wc -l
 
-# C-21 (C:/Users/estac/projects/bb2dash-wt-harness-closure-20-skills)
+# C-21 (C:/Users/stack/projects/bb2dash-wt-harness-closure-20-skills)
 for f in SKILL.md build-note.mjs redact.mjs; do
   a=$(git show HEAD:.claude/skills/checkpoint/$f | sha256sum | cut -d' ' -f1)
-  b=$(git -C C:/Users/estac/agentic-harness show origin/main:skills/checkpoint/$f | sha256sum | cut -d' ' -f1)
+  b=$(git -C C:/Users/stack/agentic-harness show origin/main:skills/checkpoint/$f | sha256sum | cut -d' ' -f1)
   [ "$a" = "$b" ] && echo equal || echo DIFFERENT
 done
 git show HEAD:skills/inbox-apply/SKILL.md | grep -c "resolve-config.mjs --json --require-realm projects"
 grep -c "untagged-sessions.mjs --due" .claude/skills/bb2dash-pm/SKILL.md
 
 # C-22 (run once per night D1, D2, D3; each line prints 1)
-LOG=C:/Users/estac/.claude/hooks/nightly-ingest.log
-grep "^<D>" "$LOG" | grep -c "realms-push : node sync-realms.mjs --push --vault C:/Users/estac/vault$"
+LOG=C:/Users/stack/.claude/hooks/nightly-ingest.log
+grep "^<D>" "$LOG" | grep -c "realms-push : node sync-realms.mjs --push --vault C:/Users/stack/vault$"
 grep "^<D>" "$LOG" | grep -cE "realms-push . projects: .* -> (pushed|up-to-date)$"
 grep "^<D>" "$LOG" | grep -cE "realms-push . classes: .* -> (pushed|up-to-date)$"
 grep "^<D>" "$LOG" | grep -c "realms-push 0) ===$"
 
 # C-23 (after acceptance step 6)
-F=C:/Users/estac/vault/projects/bb2dash/sessions
+F=C:/Users/stack/vault/projects/bb2dash/sessions
 grep -c "^status: 'superseded'$" "$F/<S>.md"
 grep -A1 "^supersedes:$" "$F/<S>-r2.md" | tail -1
 
-# C-24 (C:/Users/estac/agentic-harness/ingest)
+# C-24 (C:/Users/stack/agentic-harness/ingest)
 uv run ingest db migrate --dry-run
 ls ../db/migrations/*.sql | wc -l
 ls ../db/migrations/*.sql | sed -E 's#.*/([0-9]{14})_.*#\1#'
@@ -596,8 +596,8 @@ grep -c "262 of 267" docs/planning/sprint-2/90_SPRINT2_INTAKE.md
 git diff --stat main...docs/harness-closure-20 -- web mcp-server desktop db ingest
 
 # C-29 (bb2dash-wt-harness-closure-20, after PR-C merges and `git fetch origin`)
-git show origin/main:skills/inbox-apply/SKILL.md | cmp - C:/Users/estac/.claude/skills/inbox-apply/SKILL.md; echo $?
-grep -c "resolve-config.mjs --json --require-realm projects" C:/Users/estac/.claude/skills/inbox-apply/SKILL.md
+git show origin/main:skills/inbox-apply/SKILL.md | cmp - C:/Users/stack/.claude/skills/inbox-apply/SKILL.md; echo $?
+grep -c "resolve-config.mjs --json --require-realm projects" C:/Users/stack/.claude/skills/inbox-apply/SKILL.md
 ```
 
 ## Workers
@@ -608,10 +608,10 @@ never write to the vault or the store.
 
 | Worker | Stream | Branch · worktree | Owns (disjoint) | Tasks |
 |---|---|---|---|---|
-| W-59 | phase and back-fill | agentic-harness `feat/v2-closure-phase` · `C:/Users/estac/agentic-harness-wt-v2-phase` | `hooks/lib/tags.mjs`, `vocabulary.mjs`, `analyse.mjs` (one argument), `subagent.mjs`, `phase-aliases.mjs`, `backfill-fields.mjs` (lib and CLI), `docs/tags.md`, tests `tags`, `vocabulary`, `subagent`, `phase-aliases`, `backfill-fields`; never the goldens (W-60's, then the PM's at task 16) | 4, 5, 6, 14 |
-| W-60 | tag cap and checkpoint | agentic-harness `feat/v2-closure-cap` · `C:/Users/estac/agentic-harness-wt-v2-cap` | `hooks/lib/merge.mjs`, `frontmatter.mjs`, `note.mjs` (`buildFields`), `constants.mjs` (`GENERATOR_VERSION`), `skills/checkpoint/*`, `hooks/install-checkpoint.mjs`, tests `merge`, `frontmatter`, `hook-tags`, `checkpoint-build`, `checkpoint-redact`, `install-checkpoint`, `golden` and `hooks/tests/fixtures/golden/` | 7, 12, 13 |
-| W-61 | config, cadence, redaction extras, writers | agentic-harness `feat/v2-closure-config` · `C:/Users/estac/agentic-harness-wt-v2-config` | `hooks/lib/machine-env.mjs`, `resolve-config.mjs`, `untagged-sessions.mjs`, `hooks/lib/redact.mjs`, `redact-extra.mjs`, `session-capture.mjs`, `sweep-transcripts.mjs`, `hooks/lib/sweep.mjs`, `collect-checkpoints.mjs`, `hooks/lib/notes-io.mjs`, tests `machine-env`, `resolve-config`, `untagged`, `redaction`, `redact-extra`, `budget`, `writer-lock`, `sweep`, `hook-process`, `ensure-index` | 8, 9, 10, 11 |
-| W-62 | docs and bb2dash skills | agentic-harness `feat/v2-closure-docs` · `C:/Users/estac/agentic-harness-wt-v2-docs`; bb2dash `fix/inbox-apply-vault-20` · `bb2dash-wt-inbox-vault-20` (PR-A); bb2dash `docs/harness-closure-20-skills` · `bb2dash-wt-harness-closure-20-skills` | harness `README.md`, `CONTEXT.md`, `docs/ingestion.md`, `db/README.md`, `hooks/README.md`, `docs/vault-migration-requirements.md`, `hooks/tests/readme-fields.test.mjs`; bb2dash `skills/inbox-apply/SKILL.md`, `.claude/skills/checkpoint/*` (by the installer only), `.claude/skills/bb2dash-pm/SKILL.md`; never the installed copy `~/.claude/skills/inbox-apply/SKILL.md` (the PM's, tasks 2 and 29) | 1, 15, 21 |
+| W-59 | phase and back-fill | agentic-harness `feat/v2-closure-phase` · `C:/Users/stack/agentic-harness-wt-v2-phase` | `hooks/lib/tags.mjs`, `vocabulary.mjs`, `analyse.mjs` (one argument), `subagent.mjs`, `phase-aliases.mjs`, `backfill-fields.mjs` (lib and CLI), `docs/tags.md`, tests `tags`, `vocabulary`, `subagent`, `phase-aliases`, `backfill-fields`; never the goldens (W-60's, then the PM's at task 16) | 4, 5, 6, 14 |
+| W-60 | tag cap and checkpoint | agentic-harness `feat/v2-closure-cap` · `C:/Users/stack/agentic-harness-wt-v2-cap` | `hooks/lib/merge.mjs`, `frontmatter.mjs`, `note.mjs` (`buildFields`), `constants.mjs` (`GENERATOR_VERSION`), `skills/checkpoint/*`, `hooks/install-checkpoint.mjs`, tests `merge`, `frontmatter`, `hook-tags`, `checkpoint-build`, `checkpoint-redact`, `install-checkpoint`, `golden` and `hooks/tests/fixtures/golden/` | 7, 12, 13 |
+| W-61 | config, cadence, redaction extras, writers | agentic-harness `feat/v2-closure-config` · `C:/Users/stack/agentic-harness-wt-v2-config` | `hooks/lib/machine-env.mjs`, `resolve-config.mjs`, `untagged-sessions.mjs`, `hooks/lib/redact.mjs`, `redact-extra.mjs`, `session-capture.mjs`, `sweep-transcripts.mjs`, `hooks/lib/sweep.mjs`, `collect-checkpoints.mjs`, `hooks/lib/notes-io.mjs`, tests `machine-env`, `resolve-config`, `untagged`, `redaction`, `redact-extra`, `budget`, `writer-lock`, `sweep`, `hook-process`, `ensure-index` | 8, 9, 10, 11 |
+| W-62 | docs and bb2dash skills | agentic-harness `feat/v2-closure-docs` · `C:/Users/stack/agentic-harness-wt-v2-docs`; bb2dash `fix/inbox-apply-vault-20` · `bb2dash-wt-inbox-vault-20` (PR-A); bb2dash `docs/harness-closure-20-skills` · `bb2dash-wt-harness-closure-20-skills` | harness `README.md`, `CONTEXT.md`, `docs/ingestion.md`, `db/README.md`, `hooks/README.md`, `docs/vault-migration-requirements.md`, `hooks/tests/readme-fields.test.mjs`; bb2dash `skills/inbox-apply/SKILL.md`, `.claude/skills/checkpoint/*` (by the installer only), `.claude/skills/bb2dash-pm/SKILL.md`; never the installed copy `~/.claude/skills/inbox-apply/SKILL.md` (the PM's, tasks 2 and 29) | 1, 15, 21 |
 
 Order inside the phase: task 1 first (PR-A, day 1, with C-H); tasks 3, 4, 7, 8 start together; task
 20 runs on day 1 beside task 3 once Stack has installed `gitleaks` (it needs only that and the two realm

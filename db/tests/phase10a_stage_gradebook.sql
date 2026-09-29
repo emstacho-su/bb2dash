@@ -136,15 +136,25 @@ do $$
 declare n int; v text; s numeric;
 begin
   -- 4a. Per course, the column count in bb_raw equals the count in v_gradebook_latest.
+  --     The view side is scoped to the fixture's own run, because v_gradebook_latest is
+  --     newest-per-column across EVERY registered crawl: columns Blackboard has added since these
+  --     payloads were cut are in it too (prod 2026-09-27: ECN.304 5 columns to the fixture's 2,
+  --     IST.323 16 to 12), so an unscoped count compares the fixture against today's gradebook and
+  --     can only disagree. Scoped, the per-course equality is no weaker -- every column the fixture
+  --     carries must be in the view under this run -- and the `left join` with `coalesce` makes a
+  --     course that went missing from the view a disagreement rather than a silent pass. It reads
+  --     this way only because the fixture crawl is the newest one (P-30): otherwise a real crawl's
+  --     row would win the view's `distinct on` and the scoped count would be 0.
   select count(*) into n from (
     select bb_resolve_course(b.bb_course_id) as course_id, count(*) as raw_cols
       from bb_raw b, lateral jsonb_array_elements(bb_jarray(b.payload->'gradebook')) g
      where b.run_id = (select run_id from _fx) and b.kind = 'course'
        and coalesce(g->>'columnId','') <> ''
      group by 1) rc
-   join (select course_id, count(*) as view_cols from v_gradebook_latest group by 1) vc
+   left join (select course_id, count(*) as view_cols from v_gradebook_latest
+               where run_id in (select run_id from _fx) group by 1) vc
      on vc.course_id = rc.course_id
-  where rc.raw_cols <> vc.view_cols;
+  where rc.raw_cols <> coalesce(vc.view_cols, 0);
   if n > 0 then raise exception 'FAIL % course(s) disagree on column count between bb_raw and v_gradebook_latest', n; end if;
 
   -- 4b. Every effective_score equals g->>'effectiveScore' at the column's own scale. numeric(9,3)
@@ -180,12 +190,47 @@ begin
   -- null), and W-18's GradesScreen test covers the rendering of all three states.
 
   -- 4d. item_count / graded_item_count are Blackboard''s items only - no total, no attendance.
+  --     Unlike 4a this cannot be scoped to the fixture run: v_course_grade aggregates the whole of
+  --     v_gradebook_latest per course through a lateral and exposes no run at all, so its numbers
+  --     move with every real crawl (IST.323''s item_count was 10 when these payloads were cut and
+  --     read 14 on 2026-09-27). Each count is therefore asserted against the same view computed
+  --     independently by column_kind, together with the exclusion that IS the property: the course
+  --     carries kinds that are not items, and item_count must be strictly below its column count.
+  --     A guard first refuses to let the case go quiet if those other kinds ever disappear.
+  if not exists (select 1 from v_gradebook_latest where course_id = 'IST.323' and column_kind = 'total')
+     or not exists (select 1 from v_gradebook_latest where course_id = 'IST.323' and column_kind = 'letter')
+     or not exists (select 1 from v_gradebook_latest where course_id = 'ECN.304' and column_kind = 'attendance') then
+    raise exception 'FAIL the fixture courses no longer carry a total, a letter and an attendance column, so 4d proves nothing';
+  end if;
+
   select item_count into n from v_course_grade where course_id = 'IST.323';
-  if n <> 10 then raise exception 'FAIL IST.323 item_count = %, expected 10', n; end if;
+  if n <> (select count(*) from v_gradebook_latest where course_id = 'IST.323' and column_kind = 'item') then
+    raise exception 'FAIL IST.323 item_count = %, expected % (its item columns)', n,
+      (select count(*) from v_gradebook_latest where course_id = 'IST.323' and column_kind = 'item');
+  end if;
+  if n >= (select count(*) from v_gradebook_latest where course_id = 'IST.323') then
+    raise exception 'FAIL IST.323 item_count = % counts every column; its total and letter must be excluded', n;
+  end if;
+
   select graded_item_count into n from v_course_grade where course_id = 'IST.323';
-  if n <> 3 then raise exception 'FAIL IST.323 graded_item_count = %, expected 3', n; end if;
+  if n <> (select count(*) from v_gradebook_latest
+            where course_id = 'IST.323' and column_kind = 'item' and effective_score is not null) then
+    raise exception 'FAIL IST.323 graded_item_count = %, expected % (its scored item columns)', n,
+      (select count(*) from v_gradebook_latest
+        where course_id = 'IST.323' and column_kind = 'item' and effective_score is not null);
+  end if;
+  if n > (select item_count from v_course_grade where course_id = 'IST.323') then
+    raise exception 'FAIL IST.323 graded_item_count = % is above its item_count', n;
+  end if;
+
   select item_count into n from v_course_grade where course_id = 'ECN.304';
-  if n <> 1 then raise exception 'FAIL ECN.304 item_count = %, expected 1 (Attendance is not an item)', n; end if;
+  if n <> (select count(*) from v_gradebook_latest where course_id = 'ECN.304' and column_kind = 'item') then
+    raise exception 'FAIL ECN.304 item_count = %, expected % (Attendance is not an item)', n,
+      (select count(*) from v_gradebook_latest where course_id = 'ECN.304' and column_kind = 'item');
+  end if;
+  if n >= (select count(*) from v_gradebook_latest where course_id = 'ECN.304') then
+    raise exception 'FAIL ECN.304 item_count = % counts its attendance column too', n;
+  end if;
 
   -- 4e. The assignments link. IST.323 _3569973_1 is attached to TWO assignments today, so
   --     assignment_id must be null and linked_assignments 2 - never a coin toss between them.

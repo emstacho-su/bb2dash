@@ -44,6 +44,26 @@ begin
   end if;
 end $$;
 
+-- The view's contents are exercised against a row this file seeds, not against whatever prod
+-- happens to hold (Phase 15, the P-30 family). Migration 090 added a fourth state, `archived`, and
+-- `/inbox-apply` has since moved every closed row into it: prod holds 5 `open` and 142 `archived`
+-- rows and not one `resolved` or `dismissed` row with a note (read 2026-09-27). The block below
+-- therefore found `n_view = n_expected = 0` and raised on emptiness, which says nothing about
+-- migration 077. The seed restores the premise inside the transaction, so every assertion here has
+-- a real row to bite on, on any database, and it rolls back with the rest.
+create temp table _fx77 (id bigint primary key) on commit drop;
+
+with seeded as (
+  insert into attention_items (kind, course_id, entity, ref, field, from_value, to_value, question,
+                               suggested, state, resolved_at, resolution, resolution_note, applied_at)
+  values ('stack_must_confirm', 'IST.323', 'assignment', 'IST.323/_077_fixture', 'due_at',
+          '"2026-09-01T03:59:00+00:00"'::jsonb, '"2026-09-02T03:59:00+00:00"'::jsonb,
+          '077 fixture: is a resolved row with a note carried by v_inbox_feedback?',
+          '{"accept": true}'::jsonb, 'resolved', now(), '{"accept": true}'::jsonb,
+          '077 fixture answer. Test-only row; this transaction rolls back.', now())
+  returning id)
+insert into _fx77 (id) select id from seeded;
+
 do $$
 declare
   n_view     int;
@@ -57,7 +77,12 @@ begin
     raise exception 'FAIL v_inbox_feedback returns % rows, expected %', n_view, n_expected;
   end if;
   if n_view = 0 then
-    raise exception 'FAIL v_inbox_feedback is empty - prod has closed rows with notes';
+    raise exception 'FAIL v_inbox_feedback is empty - this file seeded a resolved row with a note';
+  end if;
+  -- The seeded row itself, by id: the view carries it, not merely something.
+  if not exists (select 1 from v_inbox_feedback where id = (select id from _fx77)) then
+    raise exception 'FAIL the seeded resolved row (id %) did not reach v_inbox_feedback',
+      (select id from _fx77);
   end if;
 
   if exists (select 1 from v_inbox_feedback where state = 'open') then

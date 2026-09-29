@@ -53,7 +53,7 @@ confidently-ranked nonsense. `loadConfig` refuses a `SUPABASE_URL` naming harnes
 ## Setup
 
 ```powershell
-cd C:/Users/estac/projects/bb2dash/mcp-server
+cd C:/Users/stack/projects/bb2dash/mcp-server
 npm install
 npm run build
 npm test
@@ -87,10 +87,10 @@ never appears on a command line:
 
 ```bash
 JSON=$(node -e '
-const env=Object.fromEntries(require("fs").readFileSync("C:/Users/estac/projects/bb2dash/.env","utf8").split(/\r?\n/)
+const env=Object.fromEntries(require("fs").readFileSync("C:/Users/stack/projects/bb2dash/.env","utf8").split(/\r?\n/)
   .filter(l=>/^[A-Z_]+=/.test(l)).map(l=>{const i=l.indexOf("=");return[l.slice(0,i),l.slice(i+1).trim()]}));
 process.stdout.write(JSON.stringify({type:"stdio",command:"C:/Program Files/nodejs/node.exe",
-  args:["C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js"],
+  args:["C:/Users/stack/projects/bb2dash/mcp-server/dist/index.js"],
   env:{SUPABASE_URL:env.SUPABASE_URL,SUPABASE_SERVICE_ROLE:env.SUPABASE_SERVICE_ROLE}}))')
 claude mcp add-json bb2dash "$JSON" -s user
 claude mcp list        # bb2dash: ✔ Connected

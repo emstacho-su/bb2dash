@@ -13,8 +13,8 @@ import {
   syncInitCommand,
 } from '../../src/core/sync-command';
 
-const WT = 'C:\\Users\\estac\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe';
-const REPO = 'C:\\Users\\estac\\projects\\bb2dash';
+const WT = 'C:\\Users\\stack\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe';
+const REPO = 'C:\\Users\\stack\\projects\\bb2dash';
 
 describe('the id check', () => {
   it.each(['1', '42', '999999999999'])('accepts %s', (id) => {
@@ -94,7 +94,7 @@ describe('buildSyncCommand without Windows Terminal', () => {
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      `Set-Location 'C:\\Users\\estac\\projects\\bb2dash'; claude '/bb-sync 9'`,
+      `Set-Location 'C:\\Users\\stack\\projects\\bb2dash'; claude '/bb-sync 9'`,
     ]);
   });
 

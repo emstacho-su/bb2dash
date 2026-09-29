@@ -1,6 +1,6 @@
 # R5 — bb2dash repo process inventory for containerization (Phase 14)
 
-Scope: `C:/Users/estac/projects/bb2dash` (main) + `C:/Users/estac/projects/bb2dash-wt-electron-12`
+Scope: `C:/Users/stack/projects/bb2dash` (main) + `C:/Users/stack/projects/bb2dash-wt-electron-12`
 (Phase 12 branch worktree, `desktop/`). Read-only, code-grounded. No Dockerfile/compose exists
 anywhere in the repo today — this is greenfield.
 
@@ -42,7 +42,7 @@ anywhere in the repo today — this is greenfield.
 | **Name** | bb-sync Step 4b (submission bytes) and the separate `skills/bb-course-pull` skill (course files, manual, "until Electron") |
 | **How started today** | Step 4b runs inside `/bb-sync`; `bb-course-pull` is invoked by Stack ("pull a course"/"harvest a course") after `bb-course-map`. |
 | **Runtime** | Claude Code + logged-in browser tab; `bb.downloadAll(urls)` fires hidden anchor clicks; files land in the OS `~/Downloads` folder. |
-| **OS-bound assumptions** | `skills/bb-course-pull/SKILL.md:60-62`: *"Local mirror: PowerShell `Move-Item` from Downloads to `course context/<relpath>`... The Linux device shell cannot delete from mounted folders, so use PowerShell for moves."* — this is an explicit, already-documented Windows/Linux split: a Linux shell mounting the Windows Downloads folder cannot rename/delete on it, so PowerShell is required today. `ingest/CADENCE_RUNBOOK.md:26`: inputs list `Device: $HOME/mnt/Downloads` (a WSL-style mount) alongside `PowerShell for moves` and `C:\Users\estac\projects\bb2dash` for git — i.e., the current workflow is **already split across a Linux shell and PowerShell on the same machine**, which is direct evidence for Stack's WSL2 host. |
+| **OS-bound assumptions** | `skills/bb-course-pull/SKILL.md:60-62`: *"Local mirror: PowerShell `Move-Item` from Downloads to `course context/<relpath>`... The Linux device shell cannot delete from mounted folders, so use PowerShell for moves."* — this is an explicit, already-documented Windows/Linux split: a Linux shell mounting the Windows Downloads folder cannot rename/delete on it, so PowerShell is required today. `ingest/CADENCE_RUNBOOK.md:26`: inputs list `Device: $HOME/mnt/Downloads` (a WSL-style mount) alongside `PowerShell for moves` and `C:\Users\stack\projects\bb2dash` for git — i.e., the current workflow is **already split across a Linux shell and PowerShell on the same machine**, which is direct evidence for Stack's WSL2 host. |
 | **Secrets/config** | Publishable key (browser-safe) for uploads; Supabase MCP for catalog writes. |
 | **Network** | `blackboard.syracuse.edu` (downloads), Supabase Storage `POST /storage/v1/object/bb-files/<relpath>`. |
 | **Disk I/O** | `~/Downloads` (or `$HOME/mnt/Downloads`) → `course context/<relpath>` (OneDrive, gitignored) → cloud workspace staging for extraction. |
@@ -67,7 +67,7 @@ anywhere in the repo today — this is greenfield.
 | | |
 |---|---|
 | **Name** | `mcp-server/` (`@bb2dash/materials-mcp-server`, bin `bb2dash-materials-mcp`) |
-| **How started today** | Registered as a **user-scoped** stdio MCP server via `claude mcp add-json bb2dash ... -s user`, which writes into `~/.claude.json` (NOT `~/.claude/settings.json`) — command `C:/Program Files/nodejs/node.exe`, args `["C:/Users/estac/projects/bb2dash/mcp-server/dist/index.js"]` (`mcp-server/README.md:88-97`). Claude Code spawns it as a child process over stdio whenever a session needs its tools. |
+| **How started today** | Registered as a **user-scoped** stdio MCP server via `claude mcp add-json bb2dash ... -s user`, which writes into `~/.claude.json` (NOT `~/.claude/settings.json`) — command `C:/Program Files/nodejs/node.exe`, args `["C:/Users/stack/projects/bb2dash/mcp-server/dist/index.js"]` (`mcp-server/README.md:88-97`). Claude Code spawns it as a child process over stdio whenever a session needs its tools. |
 | **Runtime + version** | Node ≥ 20.11 (`mcp-server/package.json:8-10`; "developed on 24.13.0" per README). TypeScript compiled to `dist/` via `tsc`. |
 | **OS-bound assumptions** | The registration example is a **hard-coded Windows path with a native `node.exe`**, and the README explicitly calls out the MSYS/native-binary path gotcha: *"Pass `C:/...` paths to Node, never MSYS `/c/...`"* (`mcp-server/README.md:63`, `README.md:88-97`). This is the exact CLAUDE.md "Windows path gotcha" pattern. No other Windows-isms in the source (`src/*.ts` is plain fetch/HTTP logic). |
 | **Secrets/config** | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE` (alias `SUPABASE_SERVICE_KEY`) — read from the MCP server's env block **inside `~/.claude.json`**, never from the repo (`mcp-server/.env.example` is reference-only). Also `BB2DASH_MIN_SIMILARITY`, `BB2DASH_DEFAULT_LIMIT`, `BB2DASH_MAX_LIMIT`, `BB2DASH_TIMEOUT_MS` (all non-secret tuning). |
@@ -236,15 +236,15 @@ freezes an explicit Electron/container split:
 ## 3. Grep sweep — every hard-coded absolute path / Windows-ism found
 
 Searched the whole `bb2dash` main checkout (excluding `node_modules`, `.next`) for
-`C:/`, `C:\\`, `Users/estac`, `.ps1`, `powershell`, `explorer.exe`, `wt.exe`, `OneDrive`, `win32`.
+`C:/`, `C:\\`, `Users/stack`, `.ps1`, `powershell`, `explorer.exe`, `wt.exe`, `OneDrive`, `win32`.
 
 ### Code files (not just docs/prose) — these are the ones that actually execute
 
 | Pattern | File:line | What it is |
 |---|---|---|
-| `C:/Users/estac` | `mcp-server/README.md:56,90,93` | Setup instructions and a literal Node command-build snippet for `claude mcp add-json` — hard-codes the repo path and `node.exe` path. |
-| `C:/Users/estac` | `mcp-server/scripts/smoke.mjs:33` | Default `--env-file` fallback: `'C:/Users/estac/projects/bb2dash/.env'`. |
-| `Users/estac` (via `$env:USERPROFILE`) | `scripts/validate-grading.ps1:20` | `Join-Path $env:USERPROFILE ".claude.json"` — not literally hard-coded but 100% PowerShell/Windows-profile-shaped. |
+| `C:/Users/stack` | `mcp-server/README.md:56,90,93` | Setup instructions and a literal Node command-build snippet for `claude mcp add-json` — hard-codes the repo path and `node.exe` path. |
+| `C:/Users/stack` | `mcp-server/scripts/smoke.mjs:33` | Default `--env-file` fallback: `'C:/Users/stack/projects/bb2dash/.env'`. |
+| `Users/stack` (via `$env:USERPROFILE`) | `scripts/validate-grading.ps1:20` | `Join-Path $env:USERPROFILE ".claude.json"` — not literally hard-coded but 100% PowerShell/Windows-profile-shaped. |
 | `.ps1` | `scripts/validate-grading.ps1` (whole file) | Entire script is PowerShell; see process table above. |
 | `.ps1` | referenced (not present in electron worktree yet) `scripts/make-shortcut.ps1` per `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:68,239-242` | Planned Desktop/Start-Menu shortcut creator — Windows-only by nature (shortcuts). |
 | `explorer.exe` | `scripts/google-consent.mjs:151-152` | `process.platform === "win32" → ["explorer.exe", [url]]` — already branches correctly per-OS (see process table). |
@@ -253,7 +253,7 @@ Searched the whole `bb2dash` main checkout (excluding `node_modules`, `.next`) f
 | `win32` | `scripts/google-consent.mjs:151` | The one legitimate cross-platform branch (`win32`/`darwin`/else) — a **model** for how the rest of the OS-bound code should be written. |
 | `powershell.exe` | `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:202,207,292` | Sync-terminal spawn command target (Contract text; not yet committed code). |
 | `OneDrive` | `ingest/CADENCE_RUNBOOK.md:25` | `Device:` inputs list `OneDrive bb2dash/course context/` as where the local mirror lives. |
-| `OneDrive` | `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:219` | Withdrawn C-9 file-mirror's default root, `C:\Users\estac\OneDrive - Syracuse University\...` — explicitly dropped from Phase 12 scope in favor of the container direction (Stack's Q7 answer), consistent with Phase 14's answer 7 (vault moves out of OneDrive). |
+| `OneDrive` | `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md:219` | Withdrawn C-9 file-mirror's default root, `C:\Users\stack\OneDrive - Syracuse University\...` — explicitly dropped from Phase 12 scope in favor of the container direction (Stack's Q7 answer), consistent with Phase 14's answer 7 (vault moves out of OneDrive). |
 
 ### Prose-only occurrences (planning docs, `project-state/*`, `NOTES.md`, `AUDIT_2026-09-09.md`, `gui research context/`, `maps/*.json`, lock files) were found but are **not executable code** — they describe the same facts already captured above (repo path, OneDrive location, PowerShell moves) and are not separately actionable. Full file list from the sweep, for completeness:
 

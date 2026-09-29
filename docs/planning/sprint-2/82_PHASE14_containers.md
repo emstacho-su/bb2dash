@@ -167,7 +167,7 @@ desktop app; only its watcher pattern moves), `google-consent.mjs` (one-time, ru
   `SUPABASE_ACCESS_TOKEN` / `VERCEL_TOKEN` (their browser-loopback logins fail in containers).
 * `claude-in-chrome` cannot work in a container; Playwright MCP replaces it.
 * **Memory migration:** project memory is keyed by a slug of the cwd, so `/workspaces/…` starts
-  empty. One scripted copy from `C--Users-estac-projects-bb2dash` to the new slug, checked by
+  empty. One scripted copy from `C--Users-stack-projects-bb2dash` to the new slug, checked by
   opening a session and seeing `MEMORY.md` load.
 * `~/.claude` content (CLAUDE.md, `rules/`, `skills/`, `hooks/`, `settings.json`) is seeded into
   `claude-home` once; hooks are checked for Windows paths (`session-capture.mjs` reads

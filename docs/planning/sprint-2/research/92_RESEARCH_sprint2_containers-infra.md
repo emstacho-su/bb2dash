@@ -66,7 +66,7 @@ both S and resolve to a concrete pick each, not an open question.
    health and the doctor's own clock check unless the doctor re-checks it fresh each run, not
    once at container start.
 4. **Maps onto this stack.** New repo `emstacho-su/bb2dash-stack`, private, sibling to
-   `C:/Users/estac/projects/bb2dash` and `C:/Users/estac/agentic-harness` (matches how `include:`
+   `C:/Users/stack/projects/bb2dash` and `C:/Users/stack/agentic-harness` (matches how `include:`
    resolves paths against each included file's own location). `compose.yaml` `include:`s both
    repos' pieces with `project_directory` pinned on each entry; `secrets/` (gitignored) +
    `secrets.example/` (names only); `justfile` with the frozen verbs `up · down · logs · dev ·
@@ -515,7 +515,7 @@ Size S, for R-86.
 4. **Maps onto this stack.** Port `install-checkpoint.mjs`'s shape (or the `install-skill` skill
    already in this session's own available list, if it can target a local `skills/` source rather
    than only a remote clone) into a small `hooks/install-skill.mjs --skill <name> --repo <path>`
-   run once per skill against this worktree and `C:/Users/estac/projects/bb2dash`, verified by
+   run once per skill against this worktree and `C:/Users/stack/projects/bb2dash`, verified by
    hash; then remove the two stale entries from `~/.claude/skills/synced/` so the bare name
    resolves to one copy. Proven headless on Windows first, then inside the dev container.
 5. **Size S**, matches the brief. Seams: R-92 (the dev container needs the same one-source skills
@@ -608,11 +608,11 @@ Fetched or returned verbatim by a search this session (2026-09-24), in the order
 - https://github.com/docker/for-win/issues/5131 and #10347 — WSL2 clock skew after sleep (from R4,
   re-confirmed live)
 - Internal, read directly this session (not web sources, cited for the exact file/line):
-  `C:/Users/estac/agentic-harness/mcp-server/src/env-file.ts`,
-  `C:/Users/estac/agentic-harness/hooks/doctor.mjs`,
-  `C:/Users/estac/agentic-harness/scripts/nightly-ingest.sh`,
-  `C:/Users/estac/agentic-harness/db/docker-compose.yml`,
-  `C:/Users/estac/agentic-harness/docs/portable.md:190-237`,
-  `C:/Users/estac/agentic-harness/hooks/install-checkpoint.mjs`,
-  `C:/Users/estac/.claude/skills/synced/*/manifest.json`,
-  `C:/Users/estac/projects/bb2dash-wt-sprint2-plan/skills/` (directory listing)
+  `C:/Users/stack/agentic-harness/mcp-server/src/env-file.ts`,
+  `C:/Users/stack/agentic-harness/hooks/doctor.mjs`,
+  `C:/Users/stack/agentic-harness/scripts/nightly-ingest.sh`,
+  `C:/Users/stack/agentic-harness/db/docker-compose.yml`,
+  `C:/Users/stack/agentic-harness/docs/portable.md:190-237`,
+  `C:/Users/stack/agentic-harness/hooks/install-checkpoint.mjs`,
+  `C:/Users/stack/.claude/skills/synced/*/manifest.json`,
+  `C:/Users/stack/projects/bb2dash-wt-sprint2-plan/skills/` (directory listing)

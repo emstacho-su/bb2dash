@@ -28,8 +28,8 @@ Argument: the `agent_requests.id` from the Inbox button (`claude "/inbox-apply 5
   syllabus and grading rules.
 - The rag store (`mcp__rag__search_context` with `collection: "bb2dash-inbox-decisions"`) for
   prior decisions: how the last such answer was applied is the strongest precedent there is.
-- The vault: `C:/Users/estac/OneDrive - Syracuse University/vault/projects/bb2dash/decisions/`.
-  Ingest from `C:/Users/estac/agentic-harness/ingest` with
+- The vault: `C:/Users/stack/vault/projects/bb2dash/decisions/`.
+  Ingest from `C:/Users/stack/agentic-harness/ingest` with
   `uv run ingest --source obsidian --path "<vault>" --only projects/bb2dash/decisions/<file>.md`.
 - The repo log: `projects/bb2dash/docs/inbox-decisions/YYYY-MM-DD.md` (one file per day).
 

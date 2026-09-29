@@ -26,7 +26,7 @@ chain to its signed CDN URL instead, and `ingest/pull_files.mjs --fetch` downloa
 - Supabase `bb2dash` (ref goultdzqcavefcgnifdy), publishable key for REST/Storage, MCP `execute_sql`
   for reads/updates.
 - Device: `$HOME/mnt/Downloads`, OneDrive `bb2dash/course context/`, PowerShell for moves,
-  `C:\Users\estac\projects\bb2dash` for git.
+  `C:\Users\stack\projects\bb2dash` for git.
 
 ## Steps (post a one-line status after each)
 1. **Crawl.** `await bb.runAll({termName: 'Fall 2026'})` → one `bb_raw` row per course + calendar under
