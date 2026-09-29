@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { courseCode, useCourses } from '@/lib/queries';
 import {
+  SEMANTIC_SIMILARITY_MIN,
   isKeywordMatch,
   matchedPart,
   scrubSnippet,
@@ -228,6 +229,7 @@ function SearchBody({ onClose }: { onClose: () => void }) {
             <ResultRow
               key={`${r.file_id}:${r.text_id}:${i}`}
               result={r}
+              mode={search.data?.mode ?? mode}
               active={i === active}
               onMouseEnter={() => setActive(() => i)}
               onSelect={() => go(r)}
@@ -252,22 +254,58 @@ function SearchBody({ onClose }: { onClose: () => void }) {
 }
 
 /**
+ * What each mode's row really carries (L-1; `search` edge function, migrations
+ * 021 and 024). `SearchResult` is hybrid's shape; the other two differ:
+ *   - fts: `rank` and a whole-unit plain headline `snippet`; no similarity,
+ *     no part, no score.
+ *   - vector: `similarity`, `part_no` and the unit's whole `text`; no snippet.
+ * The row reads only what its mode returned, so it never shows a number the
+ * search did not produce.
+ */
+type ModeRow = SearchResult & { text?: string | null };
+
+/** How much of a vector hit's unit text the row shows. */
+const PASSAGE_MAX_CHARS = 240;
+
+/** The head of a scrubbed unit text, cut on a word boundary. */
+function cutPassage(text: string): string {
+  if (text.length <= PASSAGE_MAX_CHARS) return text;
+  const head = text.slice(0, PASSAGE_MAX_CHARS);
+  const space = head.lastIndexOf(' ');
+  const cut = space > PASSAGE_MAX_CHARS / 2 ? head.slice(0, space) : head;
+  return `${cut.trimEnd()}…`;
+}
+
+const KEYWORD_ARM_TITLE =
+  'Matched on exact wording, not meaning — it came in via the keyword (full-text) arm.';
+const KEYWORD_MODE_TITLE =
+  'Keyword mode matches exact wording; it returns no similarity, so none is shown.';
+
+/**
  * One result. Exported for its unit test — the palette itself needs a router
  * and a query client, and this row needs neither.
  */
 export function ResultRow({
   result,
+  mode = 'hybrid',
   active,
   onMouseEnter,
   onSelect,
 }: {
   result: SearchResult;
+  /** The mode that produced `result` (the response's own `mode`). */
+  mode?: SearchMode;
   active: boolean;
   onMouseEnter: () => void;
   onSelect: () => void;
 }) {
-  const scrubbed = useMemo(() => scrubSnippet(result.snippet), [result.snippet]);
-  const keyword = isKeywordMatch(result);
+  const row = result as ModeRow;
+  const source = mode === 'vector' ? row.text : row.snippet;
+  const scrubbed = useMemo(() => scrubSnippet(source), [source]);
+  const bodyText = mode === 'vector' ? cutPassage(scrubbed.text) : scrubbed.text;
+  // Keyword mode has no similarity to judge by: every hit is a wording match.
+  // Semantic mode has no keyword arm: a low similarity is weak, not lexical.
+  const keyword = mode === 'fts' || (mode === 'hybrid' && isKeywordMatch(result));
   // Which part of a long unit the snippet came from; null when it is the head.
   const part = matchedPart(result);
   // A unit with no embedding has no similarity at all; isKeywordMatch is true
@@ -313,9 +351,13 @@ export function ResultRow({
         {keyword ? (
           <span
             className={styles.keywordBadge}
-            title="Matched on exact wording, not meaning — it came in via the keyword (full-text) arm."
+            title={mode === 'fts' ? KEYWORD_MODE_TITLE : KEYWORD_ARM_TITLE}
           >
             keyword match
+          </span>
+        ) : similarity !== null && similarity < SEMANTIC_SIMILARITY_MIN ? (
+          <span className={styles.keywordBadge} title={simTitle}>
+            weak match
           </span>
         ) : (
           pct != null && (
@@ -332,7 +374,7 @@ export function ResultRow({
           This slide is speaker notes only — hidden. Open the course to view it in context.
         </p>
       ) : (
-        scrubbed.text && <p className={styles.snippet}>{scrubbed.text}</p>
+        bodyText && <p className={styles.snippet}>{bodyText}</p>
       )}
 
       {scrubbed.notesHidden && !scrubbed.notesOnly && (
