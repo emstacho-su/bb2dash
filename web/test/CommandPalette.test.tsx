@@ -406,4 +406,28 @@ describe('NavSearch — collapsed and expanded', () => {
     fireEvent.click(icon());
     expect(screen.queryByRole('combobox')).toBeNull();
   });
+
+  it('stays collapsed when the icon press itself blurs an empty field (Safari: no focus on click)', () => {
+    renderNav();
+    fireEvent.click(icon());
+    // Safari leaves focus off a clicked button: the field blurs to nothing on
+    // mousedown, and the click that follows must not reopen it.
+    fireEvent.mouseDown(icon());
+    fireEvent.blur(field(), { relatedTarget: null });
+    fireEvent.click(icon(), { detail: 1 });
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(icon()).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('ignores Escape pressed while focus is outside the search', async () => {
+    renderNav();
+    fireEvent.click(icon());
+    await typeQuery('risk');
+    const elsewhere = screen.getByRole('button', { name: 'elsewhere' });
+    act(() => elsewhere.focus());
+
+    fireEvent.keyDown(elsewhere, { key: 'Escape' });
+    expect(field()).toBeInTheDocument();
+    expect(elsewhere).toHaveFocus();
+  });
 });
