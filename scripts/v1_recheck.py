@@ -425,8 +425,10 @@ def check_entry(e) -> list[str]:
     errs += _check_citation(e)
     if call in CORRECTING_CALLS and "value" not in e:
         errs.append(f"a {call} row needs value")
-    if call == "keep" and "stored" not in e:
-        errs.append("a keep row needs stored")
+    # A correcting entry with no `stored` would compare value with None and could be counted as
+    # already applied (round 2, item 6); keep compares its recheck with stored.
+    if call in RECHECKED_CALLS and "stored" not in e:
+        errs.append(f"a {call} row needs stored")
     if call in RECHECKED_CALLS:
         problem = recheck_error(e.get("recheck")) if "recheck" in e else "is required for keep / change_to / mark_ungraded"
         if problem:

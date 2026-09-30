@@ -606,3 +606,27 @@ def test_all_six_verdict_files_still_pass():
     assert parse_errors == []
     result = vr.check_entries([e for _, e in pairs], [s for s, _ in pairs])
     assert result.errors == []
+
+
+# --- round 2, item 6: stored is required on correcting entries --------------------------------
+
+
+@pytest.mark.parametrize("call", ["change_to", "mark_ungraded", "keep"])
+def test_rechecked_entry_needs_stored(call):
+    row = entry(verdict="differs", call=call, value=12)
+    del row["stored"]
+    assert any("needs stored" in e for e in errors_of([row]))
+
+
+def test_correcting_entry_without_stored_is_not_summarized_as_already_applied(tmp_path, capsys):
+    row = link_entry(verdict="differs", call="mark_ungraded", reason_code="BOOKKEEPING_COLUMN", value=None)
+    del row["stored"]
+    assert vr.main(["--summary", str(verdict_file(tmp_path, [row]))]) != 0
+    out = capsys.readouterr().out
+    assert "needs stored" in out
+    assert "| already applied |" not in out
+
+
+def test_stored_null_is_still_allowed_on_a_correction():
+    row = entry(verdict="differs", call="change_to", stored=None, value=12)
+    assert errors_of([row]) == []
