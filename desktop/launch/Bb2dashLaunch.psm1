@@ -235,6 +235,10 @@ function Get-BuildCommand {
 # so Bb2dashLaunch.Tests.ps1 drives both against a junction under TestDrive.
 
 $script:UpdateExeName = 'bb2dash.exe'
+# The same name logon-build.ps1 uses ($BUILD_MUTEX_NAME); keep the two in step.
+$script:BuildMutexName = 'Local\Bb2dashLaunchBuild'
+# <StateDir>\swap-pending holds the tree a running Update now is switching to.
+$script:PendingSwapFile = 'swap-pending'
 
 <#
 .SYNOPSIS
@@ -322,10 +326,72 @@ function Invoke-UpdateSwap {
         [Parameter(Mandatory)] [scriptblock] $StartApp,
         [Parameter(Mandatory)] [scriptblock] $Log,
         [int] $TimeoutSeconds = 60,
-        [int] $PollMilliseconds = 500
+        [int] $PollMilliseconds = 500,
+        # The builder's own mutex (logon-build.ps1 $BUILD_MUTEX_NAME): while the swap holds
+        # it, no build can finish, repoint `current` or prune the build being switched to.
+        [string] $MutexName = $script:BuildMutexName,
+        [int] $LockWaitSeconds = 120
     )
     if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
 
+    # Named before anything waits, so a build that finishes meanwhile keeps this build
+    # (Get-BuildsToKeep). Removed when the swap is over, whatever happened.
+    $marker = Join-Path $StateDir $script:PendingSwapFile
+    $swap = [pscustomobject]@{ Swapped = $false; Reason = '' }
+    $mutex = $null
+    $locked = $false
+    try {
+        [IO.File]::WriteAllText($marker, $Tree, (New-Object Text.UTF8Encoding $false))
+        $mutex = New-Object System.Threading.Mutex($false, $MutexName)
+        $locked = Wait-BuildMutex -Mutex $mutex -Seconds $LockWaitSeconds -Log $Log
+        if ($locked) {
+            $swap = Invoke-SwapStep -StateDir $StateDir -Tree $Tree -TestAppRunning $TestAppRunning `
+                -Log $Log -TimeoutSeconds $TimeoutSeconds -PollMilliseconds $PollMilliseconds
+        } else {
+            $swap.Reason = "the builder was still running after ${LockWaitSeconds}s: the old build stays current"
+            & $Log 'WARN' $swap.Reason
+        }
+    } finally {
+        if ($locked) { $mutex.ReleaseMutex() }
+        if ($null -ne $mutex) { $mutex.Dispose() }
+        Remove-Item -Force $marker -ErrorAction SilentlyContinue
+    }
+
+    $launched = $false
+    $exe = Join-Path (Join-Path $StateDir 'current') $script:UpdateExeName
+    try {
+        & $StartApp $exe
+        $launched = $true
+        & $Log 'INFO' "app started on $(if ($swap.Swapped) { "build $Tree" } else { 'the old build' })"
+    } catch {
+        & $Log 'ERROR' "the app could not be started: $($_.Exception.Message)"
+    }
+    return [pscustomobject]@{ Swapped = $swap.Swapped; Launched = $launched; Reason = $swap.Reason }
+}
+
+<# Take the builder's mutex, waiting up to -Seconds for a running build. True when held. #>
+function Wait-BuildMutex {
+    param([System.Threading.Mutex] $Mutex, [int] $Seconds, [scriptblock] $Log)
+    try {
+        if ($Mutex.WaitOne(0)) { return $true }
+        & $Log 'INFO' "the builder is running; waiting up to ${Seconds}s for it before switching builds"
+        return $Mutex.WaitOne($Seconds * 1000)
+    } catch [System.Threading.AbandonedMutexException] {
+        # A builder that was killed mid-run: the mutex is ours now.
+        & $Log 'WARN' 'the builder mutex was abandoned by a killed run; taking it'
+        return $true
+    }
+}
+
+<#
+  Under the builder's mutex: wait for the app to exit, re-evaluate what is on disk and
+  current now (a build may have finished while the swap waited), and repoint `current`.
+#>
+function Invoke-SwapStep {
+    param(
+        [string] $StateDir, [string] $Tree, [scriptblock] $TestAppRunning, [scriptblock] $Log,
+        [int] $TimeoutSeconds, [int] $PollMilliseconds
+    )
     $currentLink = Join-Path $StateDir 'current'
     $target = Join-Path (Join-Path (Join-Path $StateDir 'builds') $Tree) 'win-unpacked'
     & $Log 'INFO' "update to $Tree requested; waiting up to ${TimeoutSeconds}s for the app to exit"
@@ -359,17 +425,34 @@ function Invoke-UpdateSwap {
             & $Log 'ERROR' "$($set.Reason); the old build stays current"
         }
     }
-
-    $launched = $false
-    $exe = Join-Path $currentLink $script:UpdateExeName
-    try {
-        & $StartApp $exe
-        $launched = $true
-        & $Log 'INFO' "app started on $(if ($swapped) { "build $Tree" } else { 'the old build' })"
-    } catch {
-        & $Log 'ERROR' "the app could not be started: $($_.Exception.Message)"
-    }
-    return [pscustomobject]@{ Swapped = $swapped; Launched = $launched; Reason = $decision.Reason }
+    return [pscustomobject]@{ Swapped = $swapped; Reason = $decision.Reason }
 }
 
-Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap
+<# The tree a pending Update now is switching to, from its marker; '' when none or malformed. #>
+function Read-PendingSwapTree {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $StateDir)
+    $marker = Join-Path $StateDir $script:PendingSwapFile
+    if (-not (Test-Path $marker)) { return '' }
+    $text = ([string] (Get-Content -Raw -Path $marker -ErrorAction SilentlyContinue)).Trim()
+    if ($text -match $script:ShaPattern) { return $text }
+    return ''
+}
+
+<#
+.SYNOPSIS
+  The build folders pruning must keep: the one just built, the active one, and the one a
+  pending Update now is switching to. Empty and malformed entries are dropped.
+#>
+function Get-BuildsToKeep {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()][string] $NewTree = '',
+        [AllowEmptyString()][string] $ActiveTree = '',
+        [AllowEmptyString()][string] $PendingSwapTree = ''
+    )
+    return [string[]] @(@($NewTree, $ActiveTree, $PendingSwapTree) |
+        Where-Object { $_ -match $script:ShaPattern } | Select-Object -Unique)
+}
+
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Read-PendingSwapTree, Get-BuildsToKeep

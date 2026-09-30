@@ -405,7 +405,8 @@ function Invoke-Build {
         Write-State (New-LaunchState -Previous $previous -LastBuiltSha $recorded -LastResult $result -Now (Get-Date))
         if ($ok) {
             Invoke-Activate -Tree $Tree
-            Remove-OldBuilds -Keep @($Tree, (Get-ActiveTree))
+            # Never the build a pending Update now is switching to (update-now.ps1's marker).
+            Remove-OldBuilds -Keep (Get-BuildsToKeep -NewTree $Tree -ActiveTree (Get-ActiveTree) -PendingSwapTree (Read-PendingSwapTree -StateDir $StateDir))
             Update-InstalledLaunch
         }
         return $ok

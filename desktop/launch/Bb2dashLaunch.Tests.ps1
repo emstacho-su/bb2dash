@@ -328,3 +328,120 @@ Describe 'Set-CurrentBuild' {
         (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
     }
 }
+
+# ---------------------------------------------------------------- code review round (2026-09-30)
+#
+# The swap and the builder share the builder's mutex, so a build finishing mid-swap can
+# neither repoint `current` nor prune the build being switched to; and a pending swap names
+# its build in a marker the builder's pruning keeps.
+
+function Start-MutexHolder {
+    # Holds a named mutex in a separate process (a mutex is re-entrant on its own thread,
+    # so the test thread cannot play "the builder" itself). Returns once it is held.
+    param([string] $Name, [int] $HoldSeconds)
+    $ready = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+    $job = Start-Job -ArgumentList $Name, $HoldSeconds, $ready -ScriptBlock {
+        param($n, $s, $r)
+        $m = New-Object System.Threading.Mutex($false, $n)
+        $null = $m.WaitOne()
+        Set-Content -Path $r -Value 'held'
+        Start-Sleep -Seconds $s
+        $m.ReleaseMutex()
+        $m.Dispose()
+    }
+    $deadline = (Get-Date).AddSeconds(30)
+    while (-not (Test-Path $ready)) {
+        if ((Get-Date) -ge $deadline) { throw 'the mutex holder never started' }
+        Start-Sleep -Milliseconds 100
+    }
+    return $job
+}
+
+function Invoke-TestSwap {
+    param([pscustomobject] $Fixture, [string] $MutexName, [int] $LockWaitSeconds = 5, [scriptblock] $TestAppRunning = { $false })
+    $script:launched = 0
+    $script:lines = @()
+    return Invoke-UpdateSwap -StateDir $Fixture.StateDir -Tree $SHA_B -TimeoutSeconds 1 -PollMilliseconds 10 `
+        -MutexName $MutexName -LockWaitSeconds $LockWaitSeconds `
+        -TestAppRunning $TestAppRunning `
+        -StartApp { param($exe) $script:launched++ } `
+        -Log { param($level, $message) $script:lines += "$level $message" }
+}
+
+Describe 'Invoke-UpdateSwap and the builder mutex' {
+
+    It 'swaps when the builder is idle, and leaves the mutex free afterwards' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $r = Invoke-TestSwap -Fixture $f -MutexName $name
+        $r.Swapped | Should Be $true
+        $m = New-Object System.Threading.Mutex($false, $name)
+        $m.WaitOne(0) | Should Be $true
+        $m.ReleaseMutex(); $m.Dispose()
+    }
+
+    It 'waits for a builder that finishes within the bound, then swaps' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $job = Start-MutexHolder -Name $name -HoldSeconds 2
+        try {
+            $r = Invoke-TestSwap -Fixture $f -MutexName $name -LockWaitSeconds 20
+            $r.Swapped | Should Be $true
+            (Get-CurrentTarget $f.StateDir) | Should Be $f.New
+            ($script:lines -join "`n") | Should Match 'builder'
+        } finally { $job | Wait-Job | Remove-Job -Force }
+    }
+
+    It 'keeps the old build and relaunches it when the builder holds the mutex past the bound' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $job = Start-MutexHolder -Name $name -HoldSeconds 6
+        try {
+            $r = Invoke-TestSwap -Fixture $f -MutexName $name -LockWaitSeconds 1
+            $r.Swapped | Should Be $false
+            $script:launched | Should Be 1
+            (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
+            ($script:lines -join "`n") | Should Match 'builder'
+        } finally { $job | Wait-Job | Remove-Job -Force }
+    }
+
+    It 'names its build in the pending-swap marker while it runs, and removes it after' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $marker = Join-Path $f.StateDir 'swap-pending'
+        $script:seen = ''
+        $r = Invoke-TestSwap -Fixture $f -MutexName $name -TestAppRunning {
+            if (Test-Path $marker) { $script:seen = (Get-Content -Raw $marker).Trim() }
+            return $false
+        }
+        $r.Swapped | Should Be $true
+        $script:seen | Should Be $SHA_B
+        Test-Path $marker | Should Be $false
+    }
+}
+
+Describe 'Get-BuildsToKeep (pruning never deletes a swap target)' {
+
+    It 'keeps the new build, the active build and the pending swap target' {
+        $keep = Get-BuildsToKeep -NewTree $SHA_A -ActiveTree $SHA_B -PendingSwapTree ('c' * 40)
+        ($keep | Sort-Object) -join ',' | Should Be (@($SHA_A, $SHA_B, ('c' * 40)) -join ',')
+    }
+
+    It 'drops empty and malformed entries' {
+        $keep = Get-BuildsToKeep -NewTree $SHA_A -ActiveTree '' -PendingSwapTree '..\evil'
+        ($keep -join ',') | Should Be $SHA_A
+    }
+}
+
+Describe 'Read-PendingSwapTree' {
+
+    It 'reads the marker, and is empty when it is missing or malformed' {
+        $dir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        Read-PendingSwapTree -StateDir $dir | Should Be ''
+        Set-Content -Path (Join-Path $dir 'swap-pending') -Value $SHA_B
+        Read-PendingSwapTree -StateDir $dir | Should Be $SHA_B
+        Set-Content -Path (Join-Path $dir 'swap-pending') -Value 'junk'
+        Read-PendingSwapTree -StateDir $dir | Should Be ''
+    }
+}
