@@ -137,4 +137,4 @@ overflowed its class block at 1040 px (W-47, d8f0034, spec 26); Inbox cards show
 `link_file_sessions` questions (W-46, 0cd2ff8: date-labelled session choices). Code-review gate on the round-3 diff:
 two medium false-empty states (Home's tracker before the term row; the timeline before its five reads), both fixed
 (0cd2ff8, 47fa664). Security gate on c42d934..HEAD: no findings. Open request 183 (inbox_feedback, queued since
-2026-09-29 13:34Z, superseded by 186) keeps the Apply answers button reading "queued"; left for Stack's word.
+2026-09-29 13:34Z, superseded by 186) kept the Apply answers button reading "queued"; the PM cancelled it on 2026-09-30 16:30Z as superseded by 186, after two asks went unanswered (Stack's rule: make the call and note why).
