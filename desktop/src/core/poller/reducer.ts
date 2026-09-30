@@ -112,13 +112,20 @@ export function gradeKey(row: GradeRow): string {
   return `grade:${row.shell_course_id}:${row.column_id}:${row.run_id}`;
 }
 
-function gradeDetailToast(row: GradeRow, courses: readonly CourseLabel[]): Toast {
+/**
+ * The score as a toast prints it. B-58 amends C-7 rule 2: a column worth zero points
+ * (attendance) shows the score alone, because "1 / 0" reads as a broken fraction.
+ */
+function scoreLine(row: GradeRow): string {
   const score = numeric(row.score);
-  const scoreLine = row.possible === null ? score : `${score} / ${numeric(row.possible)}`;
+  if (row.possible === null || row.possible === 0) return score;
+  return `${score} / ${numeric(row.possible)}`;
+}
+
+function gradeDetailToast(row: GradeRow, courses: readonly CourseLabel[]): Toast {
+  const line = scoreLine(row);
   const body =
-    row.previous_score === null
-      ? scoreLine
-      : `${scoreLine}${SEPARATOR}was ${numeric(row.previous_score)}`;
+    row.previous_score === null ? line : `${line}${SEPARATOR}was ${numeric(row.previous_score)}`;
   return {
     key: gradeKey(row),
     title: `${labelFor(courses, row.shell_course_id)}${SEPARATOR}${row.name}`,
@@ -147,6 +154,12 @@ function gradeToasts(rows: readonly GradeRow[], courses: readonly CourseLabel[])
   for (const [courseId, group] of groupByCourse(rows)) {
     const newest = group[group.length - 1];
     if (!newest) continue; // unreachable: a group is never empty.
+    // B-58 (C-7 rule 2 amended): a course with one row in a coalescing tick gets that row's
+    // detail toast, keyed like any single row, never "1 grades posted".
+    if (group.length === 1) {
+      toasts.push(gradeDetailToast(newest, courses));
+      continue;
+    }
     toasts.push({
       // The Contract freezes the per-row key only. A coalesced toast needs one of its own:
       // it is namespaced under the same prefix and carries the newest member's run, so it is

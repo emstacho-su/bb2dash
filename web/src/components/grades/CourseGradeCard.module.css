@@ -27,38 +27,9 @@
   color: var(--color-text);
 }
 
-/*
- * The title as the way into the course (Phase 12b, P-grades-2). It reads as a
- * hyperlink — accent colour, underline on hover — while inheriting the
- * heading's family, weight and size from `.title` above it.
- */
-.titleLink {
-  color: var(--color-accent);
-  text-decoration: none;
-  border-radius: var(--radius-sm);
-}
-
-.titleLink:hover,
-.titleLink:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
-}
-
-.titleLink:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
 .subtitle {
   font-size: var(--text-sm);
   color: var(--color-muted);
-}
-
-/* Fold one course's gradebook away (Phase 12b, P-grades-1). */
-.collapseToggle {
-  composes: btnGhost from '@/styles/tokens.module.css';
-  font-size: var(--text-sm);
-  margin-inline-start: auto;
 }
 
 .pillRow {
@@ -78,4 +49,63 @@
   font-size: var(--text-xs);
   color: var(--color-muted);
   max-width: 62ch;
+}
+
+/*
+ * The class header as the fold control (Phase 17 round 3, R3-7), outlined on
+ * hover and focus as Materials' course headers are. It sits inside the h2 and
+ * inherits the heading's family, weight and size.
+ */
+.foldToggle {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-1) var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+  border-radius: var(--radius-sm);
+  outline: 1px solid transparent;
+}
+
+.foldToggle:hover {
+  background: var(--color-hover);
+  outline-color: var(--color-divider);
+}
+
+.foldToggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.caret {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+/* The way into the course, beside the header (P-grades-2). */
+.openLink {
+  margin-inline-start: auto;
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.openLink:hover,
+.openLink:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.openLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }

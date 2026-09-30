@@ -261,3 +261,61 @@ describe('Materials — an off-platform reading points at the syllabus', () => {
     expect(screen.getAllByText('Off-platform')).toHaveLength(1);
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * S2-materials-1 / B-3 — the whole course folds from its header
+ * ------------------------------------------------------------------------ */
+
+describe('Materials — a course folds to its header (S2-materials-1)', () => {
+  const courseHeader = () => screen.getByRole('button', { name: /IST 466.*Capstone/ });
+
+  it('makes the course header one button, with the course name in it', () => {
+    render(<MaterialsBrowser />);
+    expect(courseHeader().tagName).toBe('BUTTON');
+    expect(courseHeader()).toHaveAttribute('aria-expanded', 'true');
+    const controls = courseHeader().getAttribute('aria-controls');
+    expect(controls).toBeTruthy();
+    expect(document.getElementById(controls!)).not.toBeNull();
+  });
+
+  it('hides every bucket of the course when folded, and keeps the header', () => {
+    render(<MaterialsBrowser />);
+    fireEvent.click(courseHeader());
+    expect(courseHeader()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /Readings/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Syllabus & policy/ })).toBeNull();
+    expect(screen.queryByText('Syllabus.docx')).toBeNull();
+  });
+
+  it('stores the course key in the same set as the buckets', () => {
+    const first = render(<MaterialsBrowser />);
+    fireEvent.click(readingsSection());
+    fireEvent.click(courseHeader());
+    expect(window.localStorage.getItem(MATERIALS_COLLAPSE_KEY)).toBe(
+      '["IST.466","IST.466::readings"]',
+    );
+    first.unmount();
+
+    render(<MaterialsBrowser />);
+    expect(courseHeader()).toHaveAttribute('aria-expanded', 'false');
+    // Unfolding the course brings back the bucket exactly as Stack left it.
+    fireEvent.click(courseHeader());
+    expect(readingsSection()).toHaveAttribute('aria-expanded', 'false');
+    expect(syllabusSection()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('reads a value stored before this phase back unchanged', () => {
+    const prePhase = '["IST.466::readings"]';
+    window.localStorage.setItem(MATERIALS_COLLAPSE_KEY, prePhase);
+    render(<MaterialsBrowser />);
+    expect(courseHeader()).toHaveAttribute('aria-expanded', 'true');
+    expect(readingsSection()).toHaveAttribute('aria-expanded', 'false');
+    expect(window.localStorage.getItem(MATERIALS_COLLAPSE_KEY)).toBe(prePhase);
+  });
+
+  it('keeps the Classwork and Blackboard links outside the button', () => {
+    render(<MaterialsBrowser />);
+    const link = screen.getByRole('link', { name: /Open in Classwork/ });
+    expect(courseHeader()).not.toContainElement(link);
+  });
+});

@@ -37,36 +37,26 @@ export default defineConfig([
     'coverage/**',
   ]),
   {
-    name: 'bb2dash/react-compiler-rules-are-advisory-for-now',
+    name: 'bb2dash/react-compiler-rules-enforced',
     /**
-     * The two React Compiler rules that ship with eslint-config-next 16 report
-     * 24 errors against this tree, and every one of them is a deliberate,
-     * commented pattern rather than a defect. They stay ON, as warnings, so the
-     * findings are in front of whoever reads the output, but they do not fail a
-     * run that has no defect in it. Phase 12b is a bug pass, not the place to
-     * restructure the shell; a phase that takes them on flips these back to
-     * 'error' and clears them with Stack watching the screens.
+     * The two React Compiler rules that ship with eslint-config-next 16, at
+     * 'error' since Phase 17 (R-51). Phase 12b left them as warnings over 24
+     * findings; Phase 17 cleared every site instead of excusing it:
      *
-     * `react-hooks/refs` (18) - all three call sites of `usePopover()`
-     * (`Bell.tsx`, `TopNav.tsx`, `ActivityMenu.tsx`). The hook returns
-     * `{ open, setOpen, toggle, close, ref }`, so the rule treats every read of
-     * that object during render as reading a ref. Not one of the flagged lines
-     * touches `.current`: they read `open`, or pass `toggle` / `close` to an
-     * event handler, or hand `ref` to JSX, which is what refs are for. Clearing
-     * it honestly means changing the hook's shape, which is a refactor of three
-     * live menus.
+     * `react-hooks/refs` - `usePopover()` hands back a callback ref
+     * (`anchor`) instead of a ref object, so reading `open` during render is
+     * no longer a ref read (`Bell`, `TopNav`, `ActivityMenu`), and `TopNav`
+     * destructures the sidebar context rather than reading `toggleRef` off it.
      *
-     * `react-hooks/set-state-in-effect` (6) - `SidebarProvider`, `CourseInfo`,
-     * `MaterialsBrowser`, `ActivityMenu`, `CommandPalette` and
-     * `useUnreadSnapshot`. Each is a mount effect that adopts browser-only
-     * state (a stored preference, a viewport width, an open-time snapshot)
-     * after hydration, which is the pattern that keeps the server and client
-     * renders identical. Removing the setState would reintroduce the hydration
-     * mismatch the surrounding comments say it exists to avoid.
+     * `react-hooks/set-state-in-effect` - browser-only state (a stored
+     * preference, the viewport, the seen mark) is read through
+     * `useSyncExternalStore` with the server value as the server snapshot
+     * (the DECISIONS 2026-09-16 hydration pattern), and state that follows a
+     * prop is derived during render, not copied in an effect.
      */
     rules: {
-      'react-hooks/refs': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/refs': 'error',
+      'react-hooks/set-state-in-effect': 'error',
     },
   },
 ]);

@@ -16,6 +16,7 @@ import {
   flattenContentTree,
   groupContentTree,
   isFolderNode,
+  splitVanishedRows,
   ultraStateLabel,
 } from '@/lib/course-dimension';
 
@@ -163,5 +164,89 @@ describe('node presentation', () => {
     expect(ultraStateLabel('Completed')).toBe('Completed');
     expect(ultraStateLabel('None')).toBeNull();
     expect(ultraStateLabel(null)).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * T-13 (R-39, R-40): nodes Blackboard no longer lists, and file notes.
+ *
+ * 111 projects `missing_since` (the P-98 vanish run id) and the file's `notes`.
+ * A vanished node whose `bb_item_id` is live elsewhere in the same shell is a
+ * rename ghost (16 on 2026-09-24) and is never drawn. A vanished node with no
+ * live twin is stale (5 in all) and waits behind the toggle.
+ * ------------------------------------------------------------------------ */
+
+const RUN = '7f1c7a52-0000-4000-8000-000000000001';
+
+describe('splitVanishedRows — ghosts, stale nodes and live nodes', () => {
+  it('drops a vanished node whose bb_item_id is live in the same shell as a ghost', () => {
+    const split = splitVanishedRows([
+      makeTreeRow({ content_id: 1601, bb_item_id: '_900_1', title: 'WK01 - The Systems Development Environment' }),
+      makeTreeRow({ content_id: 50, bb_item_id: '_900_1', title: 'WK01 - Chapter 1', missing_since: RUN }),
+    ]);
+    expect(split.live.map((r) => r.content_id)).toEqual([1601]);
+    expect(split.ghosts.map((r) => r.content_id)).toEqual([50]);
+    expect(split.stale).toEqual([]);
+  });
+
+  it('keeps a vanished node with no live twin as stale', () => {
+    const split = splitVanishedRows([
+      makeTreeRow({ content_id: 1095, bb_item_id: '_501_1', missing_since: RUN }),
+      makeTreeRow({ content_id: 1630, bb_item_id: '_777_1' }),
+    ]);
+    expect(split.stale.map((r) => r.content_id)).toEqual([1095]);
+    expect(split.ghosts).toEqual([]);
+  });
+
+  it('does not call a node a ghost because another shell reuses the id', () => {
+    const split = splitVanishedRows([
+      makeTreeRow({ course_id: 'GEO.103.lecture', content_id: 99, bb_item_id: '_1_1', missing_since: RUN }),
+      makeTreeRow({ course_id: 'GEO.103.recitation', content_id: 300, bb_item_id: '_1_1' }),
+    ]);
+    expect(split.stale.map((r) => r.content_id)).toEqual([99]);
+  });
+
+  it('does not let one vanished node be the twin of another', () => {
+    const split = splitVanishedRows([
+      makeTreeRow({ content_id: 58, bb_item_id: '_2_1', missing_since: RUN }),
+      makeTreeRow({ content_id: 59, bb_item_id: '_2_1', missing_since: RUN }),
+    ]);
+    expect(split.stale.map((r) => r.content_id)).toEqual([58, 59]);
+  });
+
+  it('reads a row without the column (before 111) as live', () => {
+    const row = makeTreeRow({ content_id: 3 });
+    delete (row as { missing_since?: string | null }).missing_since;
+    expect(splitVanishedRows([row]).live).toHaveLength(1);
+  });
+
+  it('counts stale items by node, not by file row', () => {
+    const split = splitVanishedRows([
+      makeTreeRow({ content_id: 1203, bb_item_id: '_3_1', missing_since: RUN, file_id: 1 }),
+      makeTreeRow({ content_id: 1203, bb_item_id: '_3_1', missing_since: RUN, file_id: 2 }),
+    ]);
+    expect(split.staleCount).toBe(1);
+  });
+});
+
+describe('buildContentTree — what 111 adds to a node', () => {
+  it('carries missing_since on the node and the note on each file', () => {
+    const [node] = buildContentTree([
+      makeTreeRow({
+        content_id: 1095,
+        missing_since: RUN,
+        file_id: 4,
+        file_name: 'criteria.pdf',
+        notes: 'Re-created in WK05',
+      }),
+    ]);
+    expect(node.missingSince).toBe(RUN);
+    expect(node.files[0].notes).toBe('Re-created in WK05');
+  });
+
+  it('reads an absent note or run id as null', () => {
+    const [node] = buildContentTree([makeTreeRow({ content_id: 5, file_id: 6, file_name: 'a.pdf' })]);
+    expect(node.missingSince).toBeNull();
+    expect(node.files[0].notes).toBeNull();
   });
 });

@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "walk:login": "node e2e/login.mjs",
+    "walk": "node e2e/login.mjs && playwright test -c e2e/playwright.config.ts --grep-invert \"production sitting\""
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
@@ -23,6 +25,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",

@@ -52,9 +52,12 @@ export function UploadDropZone({
   // one label opens the other zone's file picker.
   const inputId = useId();
 
-  function send(files: FileList | readonly File[] | null) {
+  function send(picked: FileList | readonly File[] | null) {
     setError(null);
     setStaged(null);
+    // Snapshot first: a picker's `input.files` is live, and resetting the input below empties it
+    // before the mutation reads it ("No file was dropped." — T-26, the first live staging run).
+    const files = picked ? Array.from(picked as ArrayLike<File>) : null;
     stage.mutate(
       { courseId, assignmentId, files },
       {

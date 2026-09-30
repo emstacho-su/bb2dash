@@ -47,6 +47,8 @@ export function makeTreeRow(overrides: Partial<ContentTreeRow> = {}): ContentTre
     file_name: null,
     storage_path: null,
     bucket: null,
+    missing_since: null,
+    notes: null,
     ...overrides,
   };
 }

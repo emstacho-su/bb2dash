@@ -193,17 +193,6 @@ export function AssignmentDetailBody({ assignmentId }: { assignmentId: string })
         )}
       </section>
 
-      <section className={styles.block}>
-        <span className={tokens.kicker}>AI policy</span>
-        {isQueryUnresolved(schemeQ) ? (
-          <QueryState query={schemeQ} of="the AI policy" className={styles.missing} />
-        ) : scheme?.ai_policy ? (
-          <p className={styles.prose}>{scheme.ai_policy}</p>
-        ) : (
-          <p className={styles.missing}>No AI policy is recorded for this course.</p>
-        )}
-      </section>
-
       <AssignmentPlannerBlock assignmentId={assignmentId} progressQ={progressQ} />
 
       {/* Its own <section>; the popout's `.block` spacing lives inside it. */}

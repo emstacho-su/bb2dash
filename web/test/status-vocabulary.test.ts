@@ -77,10 +77,9 @@ describe('the status vocabulary lives in one file', () => {
       // T-2 split the popout: `AssignmentPopout.tsx` is now the name the app
       // opens, and this is the body both it and the full-details page render.
       'components/popout/AssignmentDetailBody.tsx',
-      'app/(app)/course/[id]/classwork/CourseScreen.tsx',
-      // F-1: the course Stream was the one screen this list had missed, and it
-      // was spelling its own labels the whole time.
-      'app/(app)/course/[id]/stream/CourseStream.tsx',
+      // R3-4: the course timeline (the Stream tab, which replaced Classwork's
+      // CourseScreen and the Stream's post feed) shows status only through
+      // StatusSelect, listed above, so neither of its files spells a label.
       'lib/queries.today.ts',
     ]) {
       expect(importers, `${screen} must read the shared vocabulary`).toContain(screen);

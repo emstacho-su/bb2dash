@@ -18,15 +18,27 @@
 /**
  * `v_course_stream.meta` (jsonb). One of three documented shapes depending on
  * `post_kind`, so every key is optional and callers narrow by the kind:
- *   announcement                     -> { is_read }
- *   material                         -> { bucket, file_name, mime_type }
+ *   announcement                     -> { is_read, is_unread (110) }
+ *   material (ref_kind bb_file)      -> { bucket, file_name, mime_type, storage_path, source_url (110) }
+ *   material (ref_kind bb_content)   -> { bucket: null, item_kind, url }
  *   assignment_posted/assignment_due -> { due_on, points_possible, type, status }
+ *
+ * The keys migration 110 adds are typed here from the Phase 17 Contract
+ * (brief 97) ahead of the regenerated types. A key a row does not carry is
+ * `undefined`, which the screens read as "the view did not say", never as false
+ * or "no route".
  */
 export interface CourseStreamMeta {
   is_read?: boolean | null;
+  /** The bell's predicate (063): `read_at is null and is_read is distinct from true`. */
+  is_unread?: boolean | null;
   bucket?: string | null;
   file_name?: string | null;
   mime_type?: string | null;
+  storage_path?: string | null;
+  source_url?: string | null;
+  item_kind?: string | null;
+  url?: string | null;
   due_on?: string | null;
   /** Postgres numeric — supabase-js may return it as a string. */
   points_possible?: number | string | null;
@@ -51,7 +63,10 @@ export interface CourseStreamRow {
   meta: CourseStreamMeta | null;
 }
 
-/** One row of `v_content_tree` (migration 027) — a node, or a node x file pair. */
+/**
+ * One row of `v_content_tree` (migration 027; 111 appends `missing_since` and
+ * `notes`) — a node, or a node x file pair.
+ */
 // Narrower than the generated Views<'v_content_tree'> on purpose (same reason as above).
 export interface ContentTreeRow {
   course_id: string;
@@ -72,6 +87,14 @@ export interface ContentTreeRow {
   file_name: string | null;
   storage_path: string | null;
   bucket: string | null;
+  /**
+   * 111: the P-98 vanish run id (`bb_content.detail->>'missing_since'`) —
+   * set when Blackboard stopped listing the node. A view projection, not a
+   * stored column.
+   */
+  missing_since: string | null;
+  /** 111: the joined file's `bb_files.notes`. */
+  notes: string | null;
 }
 
 /**
@@ -145,71 +168,14 @@ export function courseToday(now: Date = new Date()): string {
   return now.toLocaleDateString('en-CA', { timeZone: COURSE_TIME_ZONE });
 }
 
-/** Whole days between two 'YYYY-MM-DD' dates (b - a), TZ-stable. */
-function dayDelta(aISO: string, bISO: string): number {
-  const [ay, am, ad] = aISO.split('-').map(Number);
-  const [by, bm, bd] = bISO.split('-').map(Number);
-  const a = Date.UTC(ay, (am ?? 1) - 1, ad ?? 1);
-  const b = Date.UTC(by, (bm ?? 1) - 1, bd ?? 1);
-  return Math.round((b - a) / 86_400_000);
-}
-
-/** The feed's due-date horizon: an `assignment_due` post shows within +/-14 days. */
-export const DUE_WINDOW_DAYS = 14;
-
-/**
- * The feed rule from the contract: every post shows, except `assignment_due`
- * posts, which show only when the due date is within +/-`windowDays` of today.
- * A due post with no date at all is dropped — nothing places it on the feed.
- */
-export function filterStreamRows(
-  rows: CourseStreamRow[],
-  todayISO: string,
-  windowDays: number = DUE_WINDOW_DAYS,
-): CourseStreamRow[] {
-  return rows.filter((row) => {
-    if (row.post_kind !== 'assignment_due') return true;
-    const due = row.meta?.due_on ?? (row.posted_at ? streamDayKey(row.posted_at) : null);
-    if (!due) return false;
-    return Math.abs(dayDelta(todayISO, due)) <= windowDays;
-  });
-}
-
-/** One day's worth of feed posts. */
-export interface StreamDay {
-  /** 'YYYY-MM-DD' in the course timezone. */
-  day: string;
-  rows: CourseStreamRow[];
-}
-
-/**
- * Group posts into New York calendar days, newest day first and newest post
- * first inside a day. Input order is not trusted.
- */
-export function groupStreamByDay(rows: CourseStreamRow[]): StreamDay[] {
-  const byDay = new Map<string, CourseStreamRow[]>();
-  for (const row of rows) {
-    const day = streamDayKey(row.posted_at);
-    const bucket = byDay.get(day);
-    if (bucket) bucket.push(row);
-    else byDay.set(day, [row]);
-  }
-  return [...byDay.entries()]
-    .sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0))
-    .map(([day, dayRows]) => ({
-      day,
-      rows: [...dayRows].sort((a, b) =>
-        a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : 0,
-      ),
-    }));
-}
-
 /** A file hanging off a content node. */
 export interface ContentFile {
   fileId: number;
   fileName: string | null;
   storagePath: string | null;
   bucket: string | null;
+  /** The file's note (111), shown on hover with a ·note marker. */
+  notes?: string | null;
 }
 
 /** One Blackboard content item, with every file that joined to it. */
@@ -231,6 +197,8 @@ export interface ContentNode {
   url: string | null;
   modifiedAt: string | null;
   assignmentId: string | null;
+  /** Set when Blackboard no longer lists the node (111's `missing_since`). */
+  missingSince: string | null;
   files: ContentFile[];
   /** The nodes whose `parentId` is this node's `contentId`, in sibling order. */
   children: ContentNode[];
@@ -261,6 +229,7 @@ function foldContentRows(rows: ContentTreeRow[]): Map<number, ContentNode> {
         url: row.url,
         modifiedAt: row.modified_at,
         assignmentId: row.assignment_id,
+        missingSince: row.missing_since ?? null,
         files: [],
         children: [],
       };
@@ -276,6 +245,7 @@ function foldContentRows(rows: ContentTreeRow[]): Map<number, ContentNode> {
           fileName: row.file_name,
           storagePath: row.storage_path,
           bucket: row.bucket,
+          notes: row.notes ?? null,
         });
       }
     }
@@ -335,6 +305,48 @@ export function buildContentTree(rows: ContentTreeRow[]): ContentNode[] {
     .sort(compareSiblings);
 
   return [...roots, ...orphaned];
+}
+
+/** The rows `v_content_tree` returned, sorted by what Blackboard still lists. */
+export interface VanishedSplit {
+  /** Nodes Blackboard lists today (no `missing_since`). */
+  live: ContentTreeRow[];
+  /** Vanished nodes with no live twin: hidden until the reader asks (B-19). */
+  stale: ContentTreeRow[];
+  /** Vanished nodes whose `bb_item_id` is live in the same shell: never drawn. */
+  ghosts: ContentTreeRow[];
+  /** Distinct stale nodes (a node arrives once per file). */
+  staleCount: number;
+}
+
+/**
+ * Split the tree's rows by what Blackboard still lists (R-39, T-13).
+ *
+ * A vanished node (111's `missing_since` set) is a rename ghost when a live
+ * node in the same shell shares its `bb_item_id` — Blackboard re-listed the
+ * same item under a new content id, so drawing both shows it twice. Phase 19
+ * deletes ghosts; until then they are never rendered. A vanished node with no
+ * live twin is stale. A row that does not carry the column (before 111) is live.
+ */
+export function splitVanishedRows(rows: ContentTreeRow[]): VanishedSplit {
+  const isVanished = (row: ContentTreeRow) => row.missing_since != null;
+  const twinKey = (row: ContentTreeRow) => `${row.course_id} ${row.bb_item_id}`;
+
+  const liveItemKeys = new Set(
+    rows.filter((row) => !isVanished(row) && row.bb_item_id != null).map(twinKey),
+  );
+
+  const live: ContentTreeRow[] = [];
+  const stale: ContentTreeRow[] = [];
+  const ghosts: ContentTreeRow[] = [];
+  for (const row of rows) {
+    if (!isVanished(row)) live.push(row);
+    else if (row.bb_item_id != null && liveItemKeys.has(twinKey(row))) ghosts.push(row);
+    else stale.push(row);
+  }
+
+  const staleCount = new Set(stale.map((row) => row.content_id)).size;
+  return { live, stale, ghosts, staleCount };
 }
 
 /** The tree as a depth-first list: each node immediately before its children. */
