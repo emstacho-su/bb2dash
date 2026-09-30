@@ -138,3 +138,24 @@ overflowed its class block at 1040 px (W-47, d8f0034, spec 26); Inbox cards show
 two medium false-empty states (Home's tracker before the term row; the timeline before its five reads), both fixed
 (0cd2ff8, 47fa664). Security gate on c42d934..HEAD: no findings. Open request 183 (inbox_feedback, queued since
 2026-09-29 13:34Z, superseded by 186) kept the Apply answers button reading "queued"; the PM cancelled it on 2026-09-30 16:30Z as superseded by 186, after two asks went unanswered (Stack's rule: make the call and note why).
+
+## T-26 planner half (2026-09-30, production)
+
+Stack's explicit go-ahead, 2026-09-30. Host `https://web-xi-ten-uy9xk6c6p0.vercel.app` (`main`'s sprint-1 planner
+form). Every row was made and deleted through the UI by `web/e2e/sitting26.spec.ts` (describe "production sitting",
+so `npm run walk` skips it; no write guard), titled `bb2dash test · <case>`. SQL was reads only.
+
+| Check | Result |
+|---|---|
+| BEFORE (16:40Z) | `calendar_events` source planner **1**; `planner_event_series` **0**; `planner_events` **1**; `bb2dash test%` rows **0**; newest push run 729 `ok` 16:39Z |
+| Daily Nov 9–13 | series rows **5** (all 09:00 New York) |
+| Monthly Oct 31–Dec 31 | rows **2**: Oct 31 and Dec 31, November skipped |
+| Refuse daily Nov 9–Dec 31 | the form showed "A repeating event is limited to 52 occurrences — choose an earlier end date." and stayed open; `planner_event_series` **3** right before and **3** right after; `bb2dash test · refuse%` rows **0** |
+| LA weekly 09:00 Oct 26–Nov 9 | the brief's SQL → **3 and 3** (Oct 26 16:00Z, Nov 2 17:00Z, Nov 9 17:00Z: 09:00 LA, 12:00 NY on both sides of Nov 1) |
+| Screenshots | `11-monthly-oct31.png`, `20-la-weekly-nov2.png` (block at 12:00 on Mon Nov 2), `19-refuse-53.png`: walk17 tests 11, 19, 20 passed on production unchanged |
+| Deletes (UI) | monthly: Oct 31 "This event", then Dec 31 "This event" (last row); la-weekly: Nov 2 "This and following events", then Oct 26 "This event" (last row); daily: "All events". After: `bb2dash test%` rows **0**, `planner_event_series` **0**, `planner_events` **1** |
+| Push | creations pushed by runs 730 (16:45Z) and 731 (16:47Z), `ok`; `calendar_events` source planner rose to 11 and run 732 (16:51Z, `ok`) removed them: **1** after, equal to BEFORE. Nothing from the sitting is left in Google, ahead of the token's ~17:03Z expiry |
+
+Harness notes: the refuse case opens the 8:00 PM slot of Mon Nov 9, since by then 9:00 AM sits under the daily
+series and 1:00 PM under IST 352's meeting block. walk17's test 19 uses the 9:00 AM slot, so it was run after the
+daily series was deleted (its selectors match `main`, no change).
