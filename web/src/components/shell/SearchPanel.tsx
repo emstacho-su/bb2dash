@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { courseCode, useCourses } from '@/lib/queries';
 import {
+  MIN_QUERY_CHARS,
   SEMANTIC_SIMILARITY_MIN,
   isKeywordMatch,
   matchedPart,
@@ -13,16 +14,17 @@ import {
   type SearchResult,
 } from '@/lib/queries.search';
 import tokens from '@/styles/tokens.module.css';
-import styles from './CommandPalette.module.css';
+import styles from './SearchPanel.module.css';
 
 /**
- * cmd-K command palette.
+ * Materials search — the state, the results panel and the result row.
  *
- * This component owns the keyboard shortcut (⌘K / Ctrl-K), the
- * `bb2dash:command-palette` custom event the top-bar search button dispatches,
- * and the modal surface — that plumbing is a contract W-4 built and other code
- * dispatches into, so it is left exactly as-is. W-8 owns everything *inside* the
- * panel: the live search UI against the `search` edge function.
+ * 2026-09-30 (Stack: "only as a search icon … as the feature is seldom used"):
+ * the centered ⌘K dialog is gone. `NavSearch` owns the icon, the field in the
+ * top bar and the popover; this module owns what the search *is*, once:
+ * `useMaterialSearch` holds the query, debounce, mode, course filter,
+ * highlighted row and the open-course action, the field reads its value and
+ * key handler from it, and `SearchPanel` renders the modes and results.
  *
  * Retrieval rule (CLAUDE.md): results scrub/label PPTX `[notes]` speaker-note
  * markers and page headers so a professor's private notes are never surfaced as
@@ -30,55 +32,16 @@ import styles from './CommandPalette.module.css';
  * "keyword match" rather than presented as confident semantic hits. Both live
  * in `queries.search.ts` (scrubSnippet / isKeywordMatch).
  */
-export function CommandPalette() {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setOpen((v) => !v);
-        return;
-      }
-      if (event.key === 'Escape') setOpen(false);
-    }
-    function onOpenRequest() {
-      setOpen(true);
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('bb2dash:command-palette', onOpenRequest);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('bb2dash:command-palette', onOpenRequest);
-    };
-  }, []);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className={styles.backdrop}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Search course materials"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) setOpen(false);
-      }}
-    >
-      <div className={styles.panel}>
-        {/* Fresh mount per open so the query, debounce and selection reset. */}
-        <SearchBody onClose={() => setOpen(false)} />
-      </div>
-    </div>
-  );
-}
 
 const MODES: { value: SearchMode; label: string; hint: string }[] = [
   { value: 'hybrid', label: 'Hybrid', hint: 'Semantic + keyword (default)' },
   { value: 'vector', label: 'Semantic', hint: 'Meaning only (embeddings)' },
   { value: 'fts', label: 'Keyword', hint: 'Exact terms only (full-text)' },
 ];
+
+/** How long typing must pause before the query runs. */
+const DEBOUNCE_MS = 250;
+
 
 /** Debounce a value by `delay` ms. */
 function useDebounced<T>(value: T, delay: number): T {
@@ -90,15 +53,20 @@ function useDebounced<T>(value: T, delay: number): T {
   return debounced;
 }
 
-function SearchBody({ onClose }: { onClose: () => void }) {
+/**
+ * The one source of truth for a search session. Mount it fresh per expansion
+ * so the query, debounce and selection start clean each time.
+ *
+ * `onDone` runs when a result is opened (the caller collapses the search).
+ */
+export function useMaterialSearch(onDone: () => void) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const [raw, setRaw] = useState('');
   const [mode, setMode] = useState<SearchMode>('hybrid');
   const [course, setCourse] = useState<string>(''); // '' = all courses
 
-  const q = useDebounced(raw.trim(), 250);
+  const q = useDebounced(raw.trim(), DEBOUNCE_MS);
   const coursesQuery = useCourses();
 
   const search = useSearch({ q, course: course || null, mode });
@@ -113,19 +81,15 @@ function SearchBody({ onClose }: { onClose: () => void }) {
   const setActive = (next: (index: number) => number) =>
     setSelection({ resultSet, index: next(active) });
 
-  // Focus the input on mount.
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  function go(result: SearchResult | undefined) {
+  function open(result: SearchResult | undefined) {
     if (!result) return;
-    onClose();
+    onDone();
     // Best-effort deep link: the course page. Per-file/materials deep linking is
     // W-6's surface (the course sub-bar Materials tab is not yet route-driven).
     router.push(`/course/${encodeURIComponent(result.course_id)}`);
   }
 
+  /** ↑/↓ move the highlight, ↵ opens it. Escape belongs to the caller. */
   function onInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -135,37 +99,41 @@ function SearchBody({ onClose }: { onClose: () => void }) {
       setActive((i) => Math.max(i - 1, 0));
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      go(results[active]);
+      open(results[active]);
     }
-    // Escape is handled by the window listener in CommandPalette.
   }
 
   // Every state keys off the debounced query so clearing the input can't briefly
   // show stale results alongside the empty-state hint.
-  const ready = q.length >= 2;
+  const ready = q.length >= MIN_QUERY_CHARS;
+
+  return {
+    raw,
+    setRaw,
+    mode,
+    setMode,
+    course,
+    setCourse,
+    courses: coursesQuery.data,
+    search,
+    results,
+    ready,
+    active,
+    setActive,
+    open,
+    onInputKeyDown,
+  };
+}
+
+export type MaterialSearch = ReturnType<typeof useMaterialSearch>;
+
+/** The popover body under the nav field: modes, course filter, results, key hints. */
+export function SearchPanel({ state, listId }: { state: MaterialSearch; listId: string }) {
+  const { mode, setMode, course, setCourse, courses, search, results, ready, active, setActive, open } =
+    state;
 
   return (
     <>
-      <div className={styles.searchRow}>
-        <SearchGlyph />
-        <input
-          ref={inputRef}
-          className={styles.input}
-          type="text"
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
-          onKeyDown={onInputKeyDown}
-          placeholder="Search course materials…"
-          role="combobox"
-          aria-expanded={ready}
-          aria-controls="cmdk-results"
-          aria-autocomplete="list"
-          autoComplete="off"
-          spellCheck={false}
-        />
-        {search.isFetching && ready && <span className={styles.spinner} aria-hidden="true" />}
-      </div>
-
       <div className={styles.controls}>
         <div className={styles.modeGroup} role="group" aria-label="Search mode">
           {MODES.map((m) => (
@@ -190,7 +158,7 @@ function SearchBody({ onClose }: { onClose: () => void }) {
             onChange={(e) => setCourse(e.target.value)}
           >
             <option value="">All courses</option>
-            {coursesQuery.data?.map((c) => (
+            {courses?.map((c) => (
               <option key={c.id} value={c.id}>
                 {courseCode(c)} · {c.title_short}
               </option>
@@ -199,7 +167,7 @@ function SearchBody({ onClose }: { onClose: () => void }) {
         </label>
       </div>
 
-      <div className={styles.results} id="cmdk-results" role="listbox" aria-label="Results">
+      <div className={styles.results} id={listId} role="listbox" aria-label="Results">
         {!ready && (
           <p className={styles.note}>
             Type at least two characters to search slides, readings, syllabi and schedules across
@@ -232,7 +200,7 @@ function SearchBody({ onClose }: { onClose: () => void }) {
               mode={search.data?.mode ?? mode}
               active={i === active}
               onMouseEnter={() => setActive(() => i)}
-              onSelect={() => go(r)}
+              onSelect={() => open(r)}
             />
           ))}
       </div>
@@ -381,14 +349,5 @@ export function ResultRow({
         <span className={styles.notesTag}>speaker notes hidden</span>
       )}
     </button>
-  );
-}
-
-function SearchGlyph() {
-  return (
-    <svg className={styles.searchGlyph} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <line x1="10.5" y1="10.5" x2="14" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
   );
 }

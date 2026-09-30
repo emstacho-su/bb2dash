@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
-import { CommandPalette } from '@/components/shell/CommandPalette';
 import { CourseSidebar } from '@/components/shell/CourseSidebar';
 import { ItemPopout } from '@/components/popout/ItemPopout';
 import { SidebarProvider } from '@/components/shell/SidebarProvider';
@@ -12,7 +11,8 @@ import styles from './Shell.module.css';
 
 /**
  * The authenticated app shell. Every screen inside the (app) route group gets
- * the persistent top bar, the cmd-K mount point, and the `?item=` popout host.
+ * the persistent top bar (search lives in it, `NavSearch`) and the `?item=`
+ * popout host.
  *
  * Auth is enforced twice on purpose: the middleware redirects before a render
  * happens (fast, covers every path), and this layout re-checks server-side so
@@ -43,7 +43,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <CourseSidebar />
           <main className={styles.main}>{children}</main>
         </div>
-        <CommandPalette />
         <Suspense fallback={null}>
           <ItemPopout />
         </Suspense>

@@ -18,6 +18,7 @@ const stub = vi.hoisted(() => ({
   push: vi.fn(),
   calls: [] as { q: string; mode: SearchMode; course: string | null }[],
   response: null as SearchResponse | null,
+  answers: new Map<string, SearchResponse>(),
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: stub.push }) }));
@@ -35,7 +36,13 @@ vi.mock('@/lib/queries.search', async (importOriginal) => {
     useSearch: (params: { q: string; mode: SearchMode; course: string | null }) => {
       stub.calls.push(params);
       const enabled = params.q.length >= 2;
-      const data = enabled && stub.response ? { ...stub.response, q: params.q, mode: params.mode } : undefined;
+      // Stable per query, as React Query's cache is: a fresh object every render
+      // would read as a new answer and reset the highlighted row.
+      const key = `${params.q}|${params.mode}|${params.course ?? ''}`;
+      if (enabled && stub.response && !stub.answers.has(key)) {
+        stub.answers.set(key, { ...stub.response, q: params.q, mode: params.mode });
+      }
+      const data = enabled ? stub.answers.get(key) : undefined;
       return {
         data,
         isPending: enabled && !data,
@@ -237,6 +244,7 @@ describe('NavSearch — collapsed and expanded', () => {
   beforeEach(() => {
     stub.push.mockReset();
     stub.calls = [];
+    stub.answers.clear();
     stub.response = makeResponse();
   });
 
