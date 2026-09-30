@@ -188,3 +188,42 @@ describe('UploadDropZone — two zones for the same assignment', () => {
     expect(mutate).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('UploadDropZone — the live file list of the picker (T-26, found on the preview 2026-09-30)', () => {
+  it('sends a snapshot of the chosen file, so clearing the input cannot empty it', () => {
+    renderZone();
+    const el = input();
+    const chosen = file();
+    // A browser's input.files is live: resetting the input's value empties it. Model that.
+    let cleared = false;
+    const live = {
+      get length() {
+        return cleared ? 0 : 1;
+      },
+      item: (i: number) => (!cleared && i === 0 ? chosen : null),
+      0: chosen,
+      [Symbol.iterator]: function* () {
+        if (!cleared) yield chosen;
+      },
+    };
+    Object.defineProperty(el, 'value', {
+      configurable: true,
+      get: () => (cleared ? '' : 'C:\fakepath\lab1.pdf'),
+      set: (v: string) => {
+        if (v === '') cleared = true;
+      },
+    });
+    // The real mutation reads the files later (after the handler returns); read them here after the reset.
+    let seen = -1;
+    mutate.mockImplementation((vars: { files: ArrayLike<File> }) => {
+      queueMicrotask(() => {
+        seen = Array.from(vars.files).length;
+      });
+    });
+    fireEvent.change(el, { target: { files: live } });
+    return Promise.resolve().then(() => {
+      expect(cleared).toBe(true);
+      expect(seen).toBe(1);
+    });
+  });
+});
