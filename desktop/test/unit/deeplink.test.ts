@@ -117,6 +117,92 @@ describe('navigate', () => {
     expect(log.lines.some((line) => line.includes('no window'))).toBe(true);
   });
 
+  it('opens a new window straight at the route when the window was closed (2026-09-30)', async () => {
+    const recorder = createRecorder();
+    const opened: string[] = [];
+    let finishLoad: () => void = () => undefined;
+    const deeplink = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => null,
+      openWindowAt: (target) => {
+        opened.push(target);
+        return new Promise<void>((resolve) => {
+          finishLoad = resolve;
+        });
+      },
+      recorder,
+    });
+    expect(deeplink.navigate('/course/IST.323/grades')).toBe(true);
+    expect(opened).toEqual([`${APP_URL}/course/IST.323/grades`]);
+
+    // R2-8 again: nothing is recorded as navigated until the new window has loaded.
+    await flush();
+    expect(recorder.navigations()).toEqual([]);
+
+    finishLoad();
+    await flush();
+    expect(recorder.navigations().map((n) => [n.route, n.accepted])).toEqual([
+      ['/course/IST.323/grades', true],
+    ]);
+  });
+
+  it('records a new window whose load fails as a failed navigation, and logs it', async () => {
+    const recorder = createRecorder();
+    const log = logger();
+    const deeplink = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => null,
+      openWindowAt: () => Promise.reject(new Error('ERR_NAME_NOT_RESOLVED (-105)')),
+      recorder,
+      log,
+    });
+    expect(deeplink.navigate('/inbox')).toBe(true);
+    await flush();
+    expect(recorder.navigations().map((n) => [n.route, n.accepted])).toEqual([['/inbox', false]]);
+    expect(log.lines.some((line) => line.startsWith('error navigation to /inbox failed'))).toBe(true);
+    expect(log.lines.some((line) => line.includes('navigated to'))).toBe(false);
+  });
+
+  it('counts a new window whose first load the app redirected as navigated', async () => {
+    const recorder = createRecorder();
+    const deeplink = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => null,
+      openWindowAt: () => Promise.reject(new Error('ERR_ABORTED (-3) loading')),
+      recorder,
+    });
+    deeplink.navigate('/inbox');
+    await flush();
+    expect(recorder.navigations().map((n) => n.accepted)).toEqual([true]);
+  });
+
+  it('never opens a window for a refused route', () => {
+    const opened: string[] = [];
+    const deeplink = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => null,
+      openWindowAt: async (target) => {
+        opened.push(target);
+      },
+    });
+    expect(deeplink.navigate('https://evil.example/')).toBe(false);
+    expect(opened).toEqual([]);
+  });
+
+  it('reports a window that could not be opened as a refused navigation', () => {
+    const log = logger();
+    const deeplink = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => null,
+      openWindowAt: () => {
+        throw new Error('no display');
+      },
+      log,
+    });
+    expect(deeplink.navigate('/inbox')).toBe(false);
+    expect(log.lines.some((line) => line.startsWith('error'))).toBe(true);
+  });
+
   it('returns false when the window has been destroyed', () => {
     const { window } = fakeWindow({ destroyed: true });
     expect(createDeeplink({ appUrl: APP_URL, getWindow: () => window }).navigate('/inbox')).toBe(false);

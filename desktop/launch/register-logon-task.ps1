@@ -114,7 +114,7 @@ if (-not (Test-Path $appExe)) {
 
 $installedDir = Join-Path $StateDir 'launch'
 New-Item -ItemType Directory -Force -Path $installedDir | Out-Null
-foreach ($name in @('logon-build.ps1', 'Bb2dashLaunch.psm1', 'Bb2dashLaunch.Tests.ps1', 'compose.build.yaml', 'register-logon-task.ps1', 'README.md')) {
+foreach ($name in @('logon-build.ps1', 'update-now.ps1', 'Bb2dashLaunch.psm1', 'Bb2dashLaunch.Tests.ps1', 'compose.build.yaml', 'register-logon-task.ps1', 'README.md')) {
     $from = Join-Path $sourceDir $name
     if (Test-Path $from) { Copy-Item -Force $from (Join-Path $installedDir $name) }
 }

@@ -94,7 +94,7 @@ $DOCKER_POLL_SECONDS = 10
 $APP_PROCESS_NAME = 'bb2dash'
 $BUILD_MUTEX_NAME = 'Local\Bb2dashLaunchBuild'
 $EXE_NAME = 'bb2dash.exe'
-$LAUNCH_FILES = @('logon-build.ps1', 'Bb2dashLaunch.psm1', 'Bb2dashLaunch.Tests.ps1', 'compose.build.yaml', 'register-logon-task.ps1', 'README.md')
+$LAUNCH_FILES = @('logon-build.ps1', 'update-now.ps1', 'Bb2dashLaunch.psm1', 'Bb2dashLaunch.Tests.ps1', 'compose.build.yaml', 'register-logon-task.ps1', 'README.md')
 
 if ($BuildWorktree -eq '') { $BuildWorktree = "$($RepoDir.TrimEnd('/', '\'))-build" }
 
@@ -405,7 +405,8 @@ function Invoke-Build {
         Write-State (New-LaunchState -Previous $previous -LastBuiltSha $recorded -LastResult $result -Now (Get-Date))
         if ($ok) {
             Invoke-Activate -Tree $Tree
-            Remove-OldBuilds -Keep @($Tree, (Get-ActiveTree))
+            # Never the build a pending Update now is switching to (update-now.ps1's marker).
+            Remove-OldBuilds -Keep (Get-BuildsToKeep -NewTree $Tree -ActiveTree (Get-ActiveTree) -PendingSwapTree (Read-PendingSwapTree -StateDir $StateDir))
             Update-InstalledLaunch
         }
         return $ok

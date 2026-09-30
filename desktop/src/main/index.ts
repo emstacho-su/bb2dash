@@ -8,14 +8,16 @@
  *    Windows drops every toast silently.
  * 3. Config, window, navigation guards, sync watcher, poller, tray.
  *
- * Closing the window hides it (C-12): the app keeps running and polling, and
- * *Quit* from the tray is the only exit.
+ * Closing the window destroys it (Stack, 2026-09-30, amending C-12's "close hides"): the
+ * renderer processes go away, and the main process, the poller and the tray stay. Tray
+ * *Open*, a toast click and a second launch build a new window through
+ * `window-controller.ts`. *Quit* from the tray is still the only full exit.
  *
  * The poller is started here and owns itself from then on (`poller-wiring.ts`
- * attaches the focus and power-resume triggers). This file supplies the three
- * Electron-shaped things it cannot build for itself — the userData path, the
- * window, and a session reader over the partition's cookies — and routes the
- * tray's *Check now* into `runOnce()`.
+ * attaches the focus and power-resume triggers). This file supplies the Electron-shaped
+ * things it cannot build for itself — the userData path, the window, and a session
+ * reader over the partition's cookies — and routes the tray's *Check now* into
+ * `runOnce()`.
  */
 
 import { app, BrowserWindow } from 'electron';
@@ -30,18 +32,92 @@ import { startPoller } from './poller-wiring';
 import { createMainRest, createMainSessionRest } from './rest';
 import { createUsableSessionReader } from './session';
 import { attachSyncWatcher } from './sync-terminal';
-import { installShellTestHook, recordEvent } from './test-hook';
+import { IS_TEST_MODE, installShellTestHook, recordEvent } from './test-hook';
+import { createBuilderTrigger } from '../core/update/builder-trigger';
+import type { BuilderTrigger } from '../core/update/builder-trigger';
+import { join } from 'node:path';
+import { REMINDER_FILENAME, createReminderStore } from './update-reminder-store';
+import { createUpdateFlow } from '../core/update/update-flow';
+import type { UpdateFlow } from '../core/update/update-flow';
+import {
+  buildOnDisk,
+  createStartBuilderTask,
+  launchStateDir,
+  readLastBuiltSha,
+  readRunningTree,
+  startUpdateHelper,
+} from './update-os';
+import { showUpdatePrompt } from './update-prompt';
 import { MENU_CHECK_NOW, createTray } from './tray';
 import type { TrayHandle } from './tray';
-import { createWindow, ensureLoaded, needsReload, showWindow } from './window';
+import {
+  createWindow,
+  ensureLoaded,
+  firstLoad,
+  needsReload,
+  refreshSessionWithoutWindow,
+  showWindow,
+} from './window';
+import { createWindowController } from './window-controller';
+import type { WindowController } from './window-controller';
 
 export const APP_USER_MODEL_ID = 'su.stack.bb2dash';
 
-let mainWindow: BrowserWindow | null = null;
+let windows: WindowController<BrowserWindow> | null = null;
 let trayHandle: TrayHandle | null = null;
 let config: DesktopConfig | null = null;
 let poller: PollerHandle | null = null;
 let isQuitting = false;
+let builderTrigger: BuilderTrigger | null = null;
+let updateFlow: UpdateFlow | null = null;
+
+/**
+ * 2026-09-30: when the builder has a newer build than the one running, the next window
+ * open asks Update now / Update later. See `core/update/update-flow.ts`.
+ */
+function createShellUpdateFlow(): UpdateFlow | null {
+  const stateDir = launchStateDir();
+  if (stateDir === null) {
+    log('no LOCALAPPDATA: update checks are off');
+    return null;
+  }
+  const updateLog = createNamedLogger('update');
+  return createUpdateFlow({
+    runningTree,
+    readLastBuiltSha: () => readLastBuiltSha(stateDir),
+    buildOnDisk: (tree) => buildOnDisk(stateDir, tree),
+    reminders: createReminderStore({ filePath: join(app.getPath('userData'), REMINDER_FILENAME), log: updateLog }),
+    now: () => new Date(),
+    testMode: IS_TEST_MODE,
+    showPrompt: () => showUpdatePrompt(getMainWindow()),
+    startUpdate: (tree) => startUpdateHelper({ stateDir, tree }),
+    quit,
+    record: recordEvent,
+    log: updateLog,
+  });
+}
+/** The tree hash of the running logon build, or `null` for a dev run (no updates then). */
+const runningTree = readRunningTree();
+
+/**
+ * 2026-09-30: start the logon builder now and every BUILDER_INTERVAL_HOURS, so new builds
+ * happen without a Windows logon. Only for a logon build, and never under the test env.
+ */
+function startBuilderSchedule(): void {
+  if (runningTree === null) {
+    log('not running from a logon build: the builder is not scheduled from here');
+    return;
+  }
+  if (IS_TEST_MODE) {
+    recordEvent('builder-trigger', { skipped: 'test mode' });
+    return;
+  }
+  builderTrigger = createBuilderTrigger({
+    startTask: createStartBuilderTask(),
+    log: createNamedLogger('update'),
+  });
+  builderTrigger.start();
+}
 
 /**
  * One tick, never throwing at the caller: the tray and the e2e suite both use it.
@@ -62,9 +138,9 @@ export async function runPollerTick(source: string): Promise<void> {
   }
 }
 
-/** The live window, or `null` before `ready`. The deep links need it. */
+/** The live window, or `null` before `ready` and while it is closed to the tray. */
 export function getMainWindow(): BrowserWindow | null {
-  return mainWindow;
+  return windows?.current() ?? null;
 }
 
 /** The validated config, or `null` before `ready`. */
@@ -72,28 +148,39 @@ export function getConfig(): DesktopConfig | null {
   return config;
 }
 
+/** Show the window, building a new one when it was closed. Tray, second launch. */
+function openMainWindow(initialUrl?: string): void {
+  if (windows === null) return;
+  try {
+    windows.open(initialUrl);
+  } catch (error) {
+    logError('the window could not be opened', error);
+  }
+}
+
 function onSecondInstance(): void {
   recordEvent('second-instance', {});
   // Deferred: work done synchronously inside this event can be dropped
   // (electron#35732), and showing a window is exactly that kind of work.
-  setImmediate(() => {
-    if (mainWindow !== null) showWindow(mainWindow);
-  });
-}
-
-/** C-12: the close button hides the window; only `Quit` ends the process. */
-function hideOnClose(window: BrowserWindow): void {
-  window.on('close', (event) => {
-    if (isQuitting) return;
-    event.preventDefault();
-    window.hide();
-    log('window hidden to the tray; polling continues');
-  });
+  setImmediate(() => openMainWindow());
 }
 
 function quit(): void {
   isQuitting = true;
   app.quit();
+}
+
+/** Everything a freshly built window needs: guards, the poller's focus trigger. */
+function wireWindow(window: BrowserWindow, validConfig: DesktopConfig): void {
+  attachNavigationGuards(window, allowedOrigins(validConfig), validConfig.appUrl);
+  poller?.attachWindow(window);
+  // Every window open is a chance to offer a waiting update, once the window is on screen.
+  window.once('ready-to-show', () => {
+    void updateFlow?.onWindowOpened();
+  });
+  window.on('close', () => {
+    if (!isQuitting) log('window closing to the tray: its renderer is released; polling continues');
+  });
 }
 
 /** C-7: everything the portable poller needs that only Electron can supply. */
@@ -107,7 +194,8 @@ function startShellPoller(validConfig: DesktopConfig): PollerHandle {
     },
     // R2-4: an expired session reads as `null` so the tick skips rather than 401-ing, and
     // a *hidden* window is reloaded (at most once per 10 min) so the web app's own proxy
-    // rewrites the cookie. Main still never calls the auth API itself (C-5).
+    // rewrites the cookie. With the window closed, a short-lived hidden page does the same
+    // job. Main still never calls the auth API itself (C-5).
     getSession: createUsableSessionReader({
       appUrl: validConfig.appUrl,
       supabaseUrl: validConfig.supabaseUrl,
@@ -126,9 +214,20 @@ function startShellPoller(validConfig: DesktopConfig): PollerHandle {
         const window = getMainWindow();
         if (window !== null) ensureLoaded(window);
       },
+      refreshWithoutWindow: () => {
+        refreshSessionWithoutWindow(validConfig.appUrl, (page) =>
+          attachNavigationGuards(page, allowedOrigins(validConfig), validConfig.appUrl),
+        );
+      },
     }),
     createRest: createMainSessionRest(validConfig),
     getWindow: getMainWindow,
+    openWindowAt: (target) => {
+      if (windows === null) throw new Error('the window controller is not ready');
+      const opened = windows.open(target);
+      // A window built for this route loads it first; one that appeared meanwhile is sent there.
+      return opened.created ? firstLoad(opened.window) : opened.window.loadURL(target);
+    },
     log: createNamedLogger('poller'),
   });
 }
@@ -144,31 +243,37 @@ function start(): void {
     app.exit(1);
     return;
   }
+  const validConfig = config;
+  updateFlow = createShellUpdateFlow();
 
-  mainWindow = createWindow(config.appUrl);
-  attachNavigationGuards(mainWindow, allowedOrigins(config), config.appUrl);
-  hideOnClose(mainWindow);
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  windows = createWindowController<BrowserWindow>({
+    create: (initialUrl) => createWindow(validConfig.appUrl, initialUrl),
+    onCreated: (window) => wireWindow(window, validConfig),
+    show: showWindow,
+    log,
   });
+  windows.open();
 
-  attachSyncWatcher({ config, restGet: createMainRest(config) });
+  attachSyncWatcher({ config: validConfig, restGet: createMainRest(validConfig) });
 
-  // Before the tray, so *Check now* has something to run from its first click.
-  poller = startShellPoller(config);
+  // Before the tray, so *Check now* has something to run from its first click. The first
+  // window already exists, so the poller attaches its focus trigger to it here; later
+  // windows are attached by `wireWindow`.
+  poller = startShellPoller(validConfig);
 
   trayHandle = createTray({
-    window: mainWindow,
-    showWindow,
+    onOpen: () => openMainWindow(),
     onCheckNow: () => void runPollerTick('tray'),
     onQuit: quit,
   });
 
   installShellTestHook({ clickTrayItem: (label) => trayHandle?.click(label) });
 
+  startBuilderSchedule();
+
   log(
     `bb2dash shell ready (Electron ${process.versions.electron}); ` +
-      `tray "${MENU_CHECK_NOW}" runs one tick; polling every ${config.pollIntervalMinutes}m`,
+      `tray "${MENU_CHECK_NOW}" runs one tick; polling every ${validConfig.pollIntervalMinutes}m`,
   );
 }
 
@@ -180,12 +285,15 @@ function bootstrap(): void {
     // Detach the interval and the power listener so the process can actually end.
     poller?.stop();
     poller = null;
+    builderTrigger?.stop();
+    builderTrigger = null;
   });
 
-  // C-12: the window is hidden, not destroyed, so this normally never fires.
-  // If it ever does, the tray is still the app and the process stays alive.
+  // Closing the window destroys it (2026-09-30), so this fires every time the window is
+  // closed. Registering a listener at all is what stops Electron's default quit: the tray
+  // is still the app, and only *Quit* ends the process.
   app.on('window-all-closed', () => {
-    log('every window is gone; the tray keeps the app running');
+    log('no window open; the tray keeps the app running');
   });
 
   app.whenReady().then(start).catch((error: unknown) => {
@@ -193,6 +301,14 @@ function bootstrap(): void {
     quit();
   });
 }
+
+/**
+ * Stack, 2026-09-30: GPU acceleration off. With the window closed to the tray the GPU
+ * process (~130 MB working set) was the largest part of what stayed resident, and the shell
+ * renders a plain web app that does not need it. Electron honours this only before `ready`,
+ * so it runs at import (`test/unit/gpu-off.test.ts` pins the order).
+ */
+app.disableHardwareAcceleration();
 
 if (app.requestSingleInstanceLock()) {
   bootstrap();

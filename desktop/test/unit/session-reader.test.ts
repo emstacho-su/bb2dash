@@ -161,6 +161,64 @@ describe('R2-4 — the hidden window is reloaded so the web app can refresh the 
     expect(none.reloads).toEqual([]);
   });
 
+  it('with the window closed, refreshes through a short-lived hidden page instead (2026-09-30)', async () => {
+    // Closing the window now destroys it, so there is nothing to reload. Without this the
+    // poller would go quiet an hour after close, which is the bug R2-4 fixed.
+    setCookie((T0 - HOUR) / 1000);
+    let now = T0;
+    const refreshes: number[] = [];
+    const read = createUsableSessionReader({
+      appUrl: APP_URL,
+      supabaseUrl: SUPABASE_URL,
+      getWindow: () => null,
+      reload: () => {
+        throw new Error('there is no window to reload');
+      },
+      refreshWithoutWindow: () => refreshes.push(now),
+      now: () => now,
+    });
+
+    expect(await read()).toBeNull();
+    expect(refreshes).toEqual([T0]);
+
+    now = T0 + 60_000;
+    await read();
+    expect(refreshes).toEqual([T0]);
+
+    now = T0 + HIDDEN_RELOAD_MIN_INTERVAL_MS;
+    await read();
+    expect(refreshes).toEqual([T0, T0 + HIDDEN_RELOAD_MIN_INTERVAL_MS]);
+  });
+
+  it('does not load a hidden page when nobody is signed in at all', async () => {
+    const refreshes: number[] = [];
+    const read = createUsableSessionReader({
+      appUrl: APP_URL,
+      supabaseUrl: SUPABASE_URL,
+      getWindow: () => null,
+      reload: () => undefined,
+      refreshWithoutWindow: () => refreshes.push(T0),
+      now: () => T0,
+    });
+    expect(await read()).toBeNull();
+    expect(refreshes).toEqual([]);
+  });
+
+  it('survives a window-less refresh that throws', async () => {
+    setCookie((T0 - HOUR) / 1000);
+    const read = createUsableSessionReader({
+      appUrl: APP_URL,
+      supabaseUrl: SUPABASE_URL,
+      getWindow: () => null,
+      reload: () => undefined,
+      refreshWithoutWindow: () => {
+        throw new Error('could not create the refresh page');
+      },
+      now: () => T0,
+    });
+    await expect(read()).resolves.toBeNull();
+  });
+
   it('reloads at most once per HIDDEN_RELOAD_MIN_INTERVAL_MS, however many ticks', async () => {
     setCookie((T0 - HOUR) / 1000);
     let now = T0;

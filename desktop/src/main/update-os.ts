@@ -1,0 +1,208 @@
+/**
+ * The Windows adapter behind updates (2026-09-30). Everything OS-bound the update feature
+ * needs lives here, thin, so the decisions stay in `core/update/` (CLAUDE.md: keep
+ * OS-bound code behind thin adapters; R-28):
+ *
+ *  - start the logon builder's scheduled task (`Start-ScheduledTask`),
+ *  - resolve which build is running and where the launch state lives,
+ *  - read the builder's `state.json` and check a build is on disk,
+ *  - spawn the detached *Update now* helper (`launch/update-now.ps1`).
+ *
+ * Nothing here takes a value from the renderer. The task name and every script are
+ * constants; the variable inputs to a spawn are a path this process built itself and a
+ * tree hash checked against `^[0-9a-f]{40}$`, each one argv element, never a shell string.
+ */
+
+import { execFile, spawn } from 'node:child_process';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { win32 } from 'node:path';
+
+import type { BuilderStartOutcome } from '../core/update/builder-trigger';
+import {
+  BUILDS_FOLDER,
+  EXE_NAME,
+  UNPACKED_FOLDER,
+  isTree,
+  runningTreeFromExecPath,
+} from '../core/update/build-paths';
+import { parseLastBuiltSha } from '../core/update/update-check';
+
+export const UPDATE_HELPER_SCRIPT = 'update-now.ps1';
+const LAUNCH_SCRIPTS_FOLDER = 'launch';
+const STATE_FILE = 'state.json';
+
+export const BUILDER_TASK_NAME = 'Bb2dash-LogonBuild';
+export const APP_TASK_NAME = 'Bb2dash-App';
+export const LAUNCH_STATE_FOLDER = 'bb2dash-launch';
+/** The exit code the task-start script uses for "the builder is already running". */
+export const EXIT_TASK_ALREADY_RUNNING = 3;
+const POWERSHELL_TIMEOUT_MS = 30_000;
+const STDERR_LIMIT = 300;
+
+/**
+ * Checked before started: Task Scheduler's own `MultipleInstances IgnoreNew` would drop a
+ * second start anyway, but this way the log says which one happened.
+ */
+const START_BUILDER_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
+  `$task = Get-ScheduledTask -TaskName '${BUILDER_TASK_NAME}'`,
+  `if ($task.State -eq 'Running') { exit ${EXIT_TASK_ALREADY_RUNNING} }`,
+  `Start-ScheduledTask -TaskName '${BUILDER_TASK_NAME}'`,
+  'exit 0',
+].join('; ');
+
+export interface PowerShellResult {
+  readonly code: number;
+  readonly stderr: string;
+}
+export type PowerShellRun = (script: string) => Promise<PowerShellResult>;
+
+export function powershellPath(env: NodeJS.ProcessEnv = process.env): string {
+  const root = env['SystemRoot'] ?? 'C:\\Windows';
+  return win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+}
+
+/** Run one fixed script in Windows PowerShell 5.1, hidden, and report its exit code. */
+export const runPowerShell: PowerShellRun = (script) =>
+  new Promise((resolve, reject) => {
+    execFile(
+      powershellPath(),
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      { windowsHide: true, timeout: POWERSHELL_TIMEOUT_MS },
+      (error, _stdout, stderr) => {
+        if (error === null) {
+          resolve({ code: 0, stderr: String(stderr) });
+          return;
+        }
+        const code = (error as { code?: unknown }).code;
+        if (typeof code === 'number') {
+          resolve({ code, stderr: String(stderr) });
+          return;
+        }
+        // Not an exit code: powershell.exe itself could not start, or the timeout fired.
+        reject(error);
+      },
+    );
+  });
+
+/** `Start-ScheduledTask Bb2dash-LogonBuild`, unless it is already running. */
+export function createStartBuilderTask(run: PowerShellRun = runPowerShell): () => Promise<BuilderStartOutcome> {
+  return async () => {
+    const result = await run(START_BUILDER_SCRIPT);
+    if (result.code === 0) return 'started';
+    if (result.code === EXIT_TASK_ALREADY_RUNNING) return 'already-running';
+    throw new Error(
+      `Start-ScheduledTask ${BUILDER_TASK_NAME} exited ${result.code}: ${result.stderr.trim().slice(0, STDERR_LIMIT)}`,
+    );
+  };
+}
+
+/** `%LOCALAPPDATA%\bb2dash-launch`, or `BB2DASH_LAUNCH_DIR` when set; `null` with neither. */
+export function launchStateDir(env: NodeJS.ProcessEnv = process.env): string | null {
+  const override = env['BB2DASH_LAUNCH_DIR'];
+  if (override !== undefined && override !== '') return override;
+  const local = env['LOCALAPPDATA'];
+  if (local === undefined || local === '') return null;
+  return win32.join(local, LAUNCH_STATE_FOLDER);
+}
+
+/**
+ * The tree hash of the running build, from the executable's resolved path (the app is
+ * started through the `current` junction). `null` for a dev run or a hand-packed build.
+ */
+export function readRunningTree(execPath: string = process.execPath): string | null {
+  try {
+    return runningTreeFromExecPath(realpathSync.native(execPath));
+  } catch {
+    return null;
+  }
+}
+
+/** The builder's recorded `lastBuiltSha`, or `null` when there is no readable state. */
+export function readLastBuiltSha(stateDir: string): string | null {
+  const path = win32.join(stateDir, STATE_FILE);
+  if (!existsSync(path)) return null;
+  return parseLastBuiltSha(readFileSync(path, 'utf8'));
+}
+
+/** Whether `builds/<tree>/win-unpacked/bb2dash.exe` exists. */
+export function buildOnDisk(stateDir: string, tree: string): boolean {
+  if (!isTree(tree)) return false;
+  return existsSync(win32.join(stateDir, BUILDS_FOLDER, tree, UNPACKED_FOLDER, EXE_NAME));
+}
+
+export interface UpdateHelperTarget {
+  readonly stateDir: string;
+  readonly tree: string;
+}
+
+function helperScriptPath(stateDir: string): string {
+  return win32.join(stateDir, LAUNCH_SCRIPTS_FOLDER, UPDATE_HELPER_SCRIPT);
+}
+
+/** The helper's argv: the installed `update-now.ps1`, hidden, with a validated tree. */
+export function updateHelperArgv(target: UpdateHelperTarget, env: NodeJS.ProcessEnv = process.env): readonly string[] {
+  if (!isTree(target.tree)) throw new Error('refusing to update to something that is not a tree hash');
+  return Object.freeze([
+    powershellPath(env),
+    '-NoProfile',
+    '-NonInteractive',
+    '-WindowStyle',
+    'Hidden',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    helperScriptPath(target.stateDir),
+    '-Tree',
+    target.tree,
+    '-StateDir',
+    target.stateDir,
+  ]);
+}
+
+/**
+ * Start one process that outlives this app: detached, no console, unreferenced. Resolves
+ * once it is running, rejects when it could not start (the `error`/`spawn` race, as in
+ * `sync-terminal.ts`).
+ */
+export function spawnDetached(argv: readonly string[], cwd?: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const [command, ...args] = argv;
+    if (command === undefined) {
+      reject(new Error('empty argv'));
+      return;
+    }
+    let child;
+    try {
+      child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true, ...(cwd === undefined ? {} : { cwd }) });
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+export interface UpdateHelperIo {
+  readonly exists: (path: string) => boolean;
+  readonly spawnDetached: (argv: readonly string[], cwd?: string) => Promise<void>;
+}
+
+/** Update now: spawn `update-now.ps1`, which waits for this app to exit and swaps builds. */
+export async function startUpdateHelper(
+  target: UpdateHelperTarget,
+  io: UpdateHelperIo = { exists: existsSync, spawnDetached },
+): Promise<void> {
+  const argv = updateHelperArgv(target);
+  const script = helperScriptPath(target.stateDir);
+  if (!io.exists(script)) {
+    throw new Error(`${script} is not installed; re-run register-logon-task.ps1 or wait for the next build`);
+  }
+  // Never inherit this app's working folder: the task starts the app in `current`, and a
+  // junction that is some process's cwd cannot be removed and repointed.
+  await io.spawnDetached(argv, target.stateDir);
+}
