@@ -428,6 +428,53 @@ function Invoke-SwapStep {
     return [pscustomobject]@{ Swapped = $swapped; Reason = $decision.Reason }
 }
 
+<#
+.SYNOPSIS
+  update-now.ps1's last resort, when the swap itself threw: wait (bounded) for the app to
+  exit, then start it on whatever `current` points at, so a failed update never leaves
+  Stack with no app. Logging here is best effort -- a log that throws (which may be what
+  failed in the first place) never stops the restart -- and nothing here throws.
+
+.OUTPUTS
+  [pscustomobject] Launched.
+#>
+function Invoke-UpdateFallback {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [scriptblock] $TestAppRunning,
+        [Parameter(Mandatory)] [scriptblock] $StartApp,
+        [Parameter(Mandatory)] [scriptblock] $Log,
+        [int] $TimeoutSeconds = 60,
+        [int] $PollMilliseconds = 500
+    )
+    $safeLog = {
+        param($level, $message)
+        try { & $Log $level $message } catch { [Console]::Error.WriteLine("update-now: $level $message") }
+    }
+
+    # Task Scheduler drops a start (IgnoreNew) while the old app still runs, so wait first.
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ($true) {
+        $running = $true
+        try { $running = [bool] (& $TestAppRunning) } catch { $running = $false }
+        if (-not $running) { break }
+        if ((Get-Date) -ge $deadline) {
+            & $safeLog 'WARN' "the app was still running after ${TimeoutSeconds}s; starting it anyway"
+            break
+        }
+        Start-Sleep -Milliseconds $PollMilliseconds
+    }
+
+    try {
+        & $StartApp
+        & $safeLog 'INFO' 'started the app on the build that is current'
+        return [pscustomobject]@{ Launched = $true }
+    } catch {
+        & $safeLog 'ERROR' "could not start the app either: $($_.Exception.Message)"
+        return [pscustomobject]@{ Launched = $false }
+    }
+}
+
 <# The tree a pending Update now is switching to, from its marker; '' when none or malformed. #>
 function Read-PendingSwapTree {
     [CmdletBinding()]
@@ -455,4 +502,4 @@ function Get-BuildsToKeep {
         Where-Object { $_ -match $script:ShaPattern } | Select-Object -Unique)
 }
 
-Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Read-PendingSwapTree, Get-BuildsToKeep
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep

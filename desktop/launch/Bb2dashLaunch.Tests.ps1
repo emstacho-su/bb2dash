@@ -445,3 +445,41 @@ Describe 'Read-PendingSwapTree' {
         Read-PendingSwapTree -StateDir $dir | Should Be ''
     }
 }
+
+Describe 'Invoke-UpdateFallback (update-now.ps1 catch path)' {
+
+    It 'waits for the app to exit before starting it again' {
+        $script:polls = 0
+        $script:startedAfter = -1
+        $r = Invoke-UpdateFallback -TimeoutSeconds 5 -PollMilliseconds 10 `
+            -TestAppRunning { $script:polls++; return ($script:polls -lt 4) } `
+            -StartApp { $script:startedAfter = $script:polls } `
+            -Log { param($level, $message) }
+        $r.Launched | Should Be $true
+        $script:startedAfter | Should Be 4
+    }
+
+    It 'starts the app anyway once the bound has passed' {
+        $script:started = 0
+        $r = Invoke-UpdateFallback -TimeoutSeconds 0 -PollMilliseconds 10 `
+            -TestAppRunning { $true } -StartApp { $script:started++ } -Log { param($level, $message) }
+        $script:started | Should Be 1
+        $r.Launched | Should Be $true
+    }
+
+    It 'still starts the app when logging itself throws, and never throws' {
+        $script:started = 0
+        { $script:r = Invoke-UpdateFallback -TimeoutSeconds 1 -PollMilliseconds 10 `
+            -TestAppRunning { $false } -StartApp { $script:started++ } `
+            -Log { param($level, $message) throw 'disk full' } } | Should Not Throw
+        $script:started | Should Be 1
+        $script:r.Launched | Should Be $true
+    }
+
+    It 'reports a start that fails instead of throwing' {
+        { $script:r = Invoke-UpdateFallback -TimeoutSeconds 1 -PollMilliseconds 10 `
+            -TestAppRunning { $false } -StartApp { throw 'task missing' } `
+            -Log { param($level, $message) throw 'disk full' } } | Should Not Throw
+        $script:r.Launched | Should Be $false
+    }
+}

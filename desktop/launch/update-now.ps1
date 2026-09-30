@@ -51,32 +51,40 @@ function Write-UpdateLog {
     Write-Verbose $line
 }
 
+$testAppRunning = { $null -ne (Get-Process -Name $APP_PROCESS_NAME -ErrorAction SilentlyContinue) }
+$startApp = {
+    param($exe)
+    if (Get-ScheduledTask -TaskName $AppTaskName -ErrorAction SilentlyContinue) {
+        Start-ScheduledTask -TaskName $AppTaskName
+    } else {
+        $exe = Join-Path (Join-Path $StateDir 'current') 'bb2dash.exe'
+        Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) | Out-Null
+    }
+}
+$log = { param($level, $message) Write-UpdateLog $level $message }
+
 try {
     Import-Module (Join-Path $PSScriptRoot 'Bb2dashLaunch.psm1') -Force
 
     $result = Invoke-UpdateSwap -StateDir $StateDir -Tree $Tree -TimeoutSeconds $TimeoutSeconds `
-        -TestAppRunning { $null -ne (Get-Process -Name $APP_PROCESS_NAME -ErrorAction SilentlyContinue) } `
-        -StartApp {
-            param($exe)
-            if (Get-ScheduledTask -TaskName $AppTaskName -ErrorAction SilentlyContinue) {
-                Start-ScheduledTask -TaskName $AppTaskName
-            } else {
-                Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) | Out-Null
-            }
-        } `
-        -Log { param($level, $message) Write-UpdateLog $level $message }
+        -TestAppRunning $testAppRunning -StartApp $startApp -Log $log
 
     Write-UpdateLog 'INFO' "update-now done (swapped=$($result.Swapped), launched=$($result.Launched))"
     if ($result.Launched) { exit $EXIT_OK } else { exit $EXIT_FAILED }
 } catch {
-    Write-UpdateLog 'ERROR' "update-now failed: $($_.Exception.Message)"
-    # Last resort: whatever `current` points at, start it, so a failed update never
-    # leaves Stack with no app at all.
-    try {
-        Start-ScheduledTask -TaskName $AppTaskName
-        Write-UpdateLog 'INFO' 'started the app on the build that is current'
-    } catch {
-        Write-UpdateLog 'ERROR' "could not start the app either: $($_.Exception.Message)"
+    $failure = $_.Exception.Message
+    # Last resort: wait for the app to exit (Task Scheduler drops a start while it still
+    # runs), then start whatever `current` points at, so a failed update never leaves Stack
+    # with no app. Logging here is best effort: it may be the very thing that failed.
+    try { Write-UpdateLog 'ERROR' "update-now failed: $failure" } catch { [Console]::Error.WriteLine("update-now failed: $failure") }
+    if (Get-Command Invoke-UpdateFallback -ErrorAction SilentlyContinue) {
+        $null = Invoke-UpdateFallback -TimeoutSeconds $TimeoutSeconds -TestAppRunning $testAppRunning `
+            -StartApp { & $startApp '' } -Log $log
+    } else {
+        # The module itself did not load: the same wait and start, inline.
+        $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+        while ((& $testAppRunning) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+        try { & $startApp '' } catch { [Console]::Error.WriteLine("could not start the app: $($_.Exception.Message)") }
     }
     exit $EXIT_FAILED
 }
