@@ -614,9 +614,9 @@ Remaining advisor items: ~~7 pre-existing mutable `search_path` functions (`set_
 
 ## Known issues / operational notes
 
-* **`web/package-lock.json` is out of sync with `package.json` on `main`** (found 2026-09-29 by Phase 16's
+* ~~**`web/package-lock.json` is out of sync with `package.json` on `main`** (found 2026-09-29 by Phase 16's
   W-43): `npm ci` fails on a fresh cut (missing `@emnapi/runtime` / `@emnapi/core` 1.11.3); workers ran `npm install`
-  and restored the lock. Needs its own fix PR; not Phase 16's file.
+  and restored the lock. Needs its own fix PR; not Phase 16's file.~~ Fixed on `main` by 2026-09-30 (Phase 17 merge): `npm ci` passes.
 * **PowerShell refuses repo `.ps1` scripts on `stack-laptop` by default** (execution policy `Restricted`). Stack set
   `CurrentUser` to `RemoteSigned` on 2026-09-29; `node scripts/validate-grading.mjs <COURSE>` works without it.
 * **Slide 13 of IST.323's course-intro deck (`bb_file:8`) is missing from the extracted text** (slides 12 and 14
