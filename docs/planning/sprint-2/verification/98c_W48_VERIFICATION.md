@@ -351,3 +351,37 @@ FAIL  phase18_post_embed_checks.sql  FAIL (a) no text unit: 161, 162, 163, 452; 
 ```
 
 Post-embed (d) no longer appears, so (d) PASSes; (a) and (b) wait on the gate sync and task 20.
+
+## Round 3 — code-review HIGH on 122: migration 160 (PM call)
+
+Flaw: 122 superseded a file F by its item's one remaining file G even when G had always sat
+beside F (an item held A and B, B deleted → B.superseded_by = A, no question, and the missing
+pass then skips B). 160 (`db/migrations/160_supersede_new_candidates_only.sql`) re-creates the
+function from 122's live body with one rule added: G replaces F only if no registered crawl in
+`bb_raw` ever showed F's URL and G's URL in the same content item. `bb_files.run_id` could not be
+used: 162's row carries run 6923d85d (first catalogued there), not the newest crawl f24a7ff5.
+
+Test `phase18_122_supersede_rule.sql` gains (7): two synthetic registered crawls of one IST.323
+item (A+B, then A only); B must stay current with no question.
+
+RED on the live 122 body:
+`FAIL  phase18_122_supersede_rule.sql  FAIL (7) deleted sibling B (869) superseded_by 868, 0 open questions, result {"asked": 0, "examined": 1, "older_run": false, "superseded": 1}`, exit 1.
+
+The three pairs still hold under 160: 151, 149 and 162 never appeared beside 2, 74 and 150 in
+their items in any registered crawl (the items carried V1.3.1 → V1.4, Wk3 → … → Wk4xyz, and
+wK4 → wK5 one file at a time). Dry run: `{"superseded": 3}`, `2->151, 74->149, 150->162`; A/B case
+`{"superseded": 0, "asked": 0}`, B current, 0 questions.
+
+Applied: `apply_migration` name `160_supersede_new_candidates_only`, version 20260930171117; md5
+`statements[1]` = `5e2d3088d47709048d2236ec050b5108` = the LF blob. ACL unchanged
+(`postgres, service_role, db_test_runner`).
+
+Prod read: rows whose notes carry the function's note → 0; `sync_stage_runs` files stages since
+2026-09-29 17:38Z → 0 (no fold ran under 122, so nothing was wrongly superseded).
+
+GREEN:
+
+```
+PASS  phase18_122_supersede_rule.sql
+PASS  phase18_124_stage_files_replay.sql
+```
