@@ -2,8 +2,8 @@
 // bb2dash :: scripts/validate-grading.mjs
 // Launches the V-1 grading-validation session (brief 96 §Contract "V-1 tooling"; method in
 // docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md): a Claude Code session that sees ONLY
-// the bb2dash materials MCP server and the file tools, confined to the repo root by --restricted,
-// reading docs/planning/** and writing only the 96b verdict files.
+// the bb2dash materials MCP server and the file tools, confined by --restricted to its working
+// directory <repo>/docs/planning (round 2, item 1), writing only the 96b verdict files.
 //
 //   node scripts/validate-grading.mjs [COURSE] [--export <path>] [--dry-run]
 //
@@ -21,13 +21,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 /** The repo root, from this file's own location, never the caller's cwd (105 §3 residual). */
 export const REPO_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-export const BRIEF_PATH = 'docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md';
-export const TEMPLATE_PATH = 'docs/planning/sprint-2/evidence/96c_V1_VERDICT_TEMPLATE.md';
-export const EXPORT_DIR = 'docs/planning/sprint-2/evidence';
+export const BRIEF_PATH = 'sprint-1-hub/briefs/63_GRADING_VALIDATION.md';
+export const TEMPLATE_PATH = 'sprint-2/evidence/96c_V1_VERDICT_TEMPLATE.md';
+export const EXPORT_DIR = 'sprint-2/evidence';
 export const EXPORT_PREFIX = '96a_GRADING_SCHEMA_EXPORT_';
-export const VERDICT_DIR = 'docs/planning/sprint-2/verification';
+export const VERDICT_DIR = 'sprint-2/verification';
 export const VERDICT_PREFIX = '96b_GRADING_VALIDATION_';
-const READABLE_ROOT = 'docs/planning/';
+/** The session's working directory, relative to the repo root; every path below is relative to it. */
+export const SESSION_DIR = 'docs/planning';
 const TEMP_PREFIX = 'bb2dash-validate-mcp-';
 const TMP_PLACEHOLDER = '<tmp>';
 const SERVER_NAME = 'bb2dash';
@@ -42,7 +43,7 @@ export const ALLOWED_TOOLS = Object.freeze([
   'mcp__bb2dash__search_materials',
   'mcp__bb2dash__get_material_text',
   // A Read rule also governs Glob and Grep.
-  'Read(docs/planning/**)',
+  'Read(./**)',
   // An Edit rule also governs Write; a Write(...) rule would be accepted and never consulted.
   `Edit(${VERDICT_DIR}/${VERDICT_PREFIX}*)`,
 ]);
@@ -161,9 +162,14 @@ export function buildPrompt({ course, exportPath }) {
   ].join('\n');
 }
 
-/** Newest 96a export by name (names carry the ISO date), repo-relative; null if none. */
+/** The session's working directory: <repo>/docs/planning (round 2, item 1). */
+export function sessionRootOf(repoRoot) {
+  return path.join(repoRoot, ...SESSION_DIR.split('/'));
+}
+
+/** Newest 96a export by name (names carry the ISO date), relative to docs/planning; null if none. */
 export function findNewestExport(repoRoot, fsImpl = fs) {
-  const dir = path.join(repoRoot, EXPORT_DIR);
+  const dir = path.join(sessionRootOf(repoRoot), EXPORT_DIR);
   let names;
   try {
     names = fsImpl.readdirSync(dir);
@@ -175,12 +181,15 @@ export function findNewestExport(repoRoot, fsImpl = fs) {
   return exports.length ? `${EXPORT_DIR}/${exports.at(-1)}` : null;
 }
 
-/** An --export path, made repo-relative; it must exist under docs/planning/ (the readable root). */
+/**
+ * An --export path (absolute, or relative to the repo root), made relative to docs/planning; it
+ * must exist under docs/planning/, the session's working directory and all it can read.
+ */
 export function resolveExportArg(exportArg, repoRoot, fsImpl = fs) {
   const absolute = path.resolve(repoRoot, exportArg);
-  const relative = path.relative(repoRoot, absolute).split(path.sep).join('/');
-  if (!relative.startsWith(READABLE_ROOT) || relative.includes('../')) {
-    throw new LauncherError(`--export must be a file under ${READABLE_ROOT} (the session can read nothing else): ${exportArg}`);
+  const relative = path.relative(sessionRootOf(repoRoot), absolute).split(path.sep).join('/');
+  if (!relative || relative.startsWith('../') || relative === '..' || path.isAbsolute(relative)) {
+    throw new LauncherError(`--export must be a file under ${SESSION_DIR}/ (the session can read nothing else): ${exportArg}`);
   }
   if (!fsImpl.existsSync(absolute)) throw new LauncherError(`--export file not found: ${exportArg}`);
   return relative;
@@ -244,6 +253,7 @@ export async function run(argv, deps = {}) {
   const configPath = deps.configPath ?? path.join(homeDir, '.claude.json');
   const tmpDir = deps.tmpDir ?? os.tmpdir();
   const repoRoot = deps.repoRoot ?? REPO_ROOT;
+  const sessionRoot = sessionRootOf(repoRoot);
   const spawn = deps.spawn ?? spawnClaude;
   const stdout = deps.stdout ?? process.stdout;
   const signals = deps.signals ?? process;
@@ -258,13 +268,13 @@ export async function run(argv, deps = {}) {
   if (args.dryRun) {
     const prompt = buildPrompt({ course: args.course, exportPath: exportPath ?? `${EXPORT_DIR}/${EXPORT_PREFIX}<date>.md (none found yet)` });
     stdout.write(`${formatArgv(buildClaudeArgv({ mcpConfigPath: TMP_PLACEHOLDER, prompt }))}\n`);
-    stdout.write(`cwd: ${repoRoot}\n`);
+    stdout.write(`cwd: ${sessionRoot}\n`);
     stdout.write(`export: ${exportPath ?? 'none found (a launch would refuse; generate it or pass --export)'}\n`);
     stdout.write(`server: ${SERVER_NAME} (${serverState})\n`);
     return 0;
   }
   if (!exportPath) {
-    throw new LauncherError(`no ${EXPORT_DIR}/${EXPORT_PREFIX}*.md found; generate the export (brief 96 task 15) or pass --export <path>.`);
+    throw new LauncherError(`no ${SESSION_DIR}/${EXPORT_DIR}/${EXPORT_PREFIX}*.md found; generate the export (brief 96 task 15) or pass --export <path>.`);
   }
 
   const prompt = buildPrompt({ course: args.course, exportPath });
@@ -276,7 +286,7 @@ export async function run(argv, deps = {}) {
   signals.on('SIGINT', onInterrupt);
   signals.on('exit', onExit);
   try {
-    return await spawn(CLAUDE_COMMAND, buildClaudeArgv({ mcpConfigPath: tmp, prompt }), { cwd: repoRoot });
+    return await spawn(CLAUDE_COMMAND, buildClaudeArgv({ mcpConfigPath: tmp, prompt }), { cwd: sessionRoot });
   } finally {
     removeQuietly(tmp, fsImpl);
     signals.off('SIGINT', onInterrupt);

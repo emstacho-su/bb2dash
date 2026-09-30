@@ -209,12 +209,12 @@ test('the allow list is the three bb2dash tools, the planning read and the 96b E
     'mcp__bb2dash__list_courses',
     'mcp__bb2dash__search_materials',
     'mcp__bb2dash__get_material_text',
-    'Read(docs/planning/**)',
-    'Edit(docs/planning/sprint-2/verification/96b_GRADING_VALIDATION_*)',
+    'Read(./**)',
+    'Edit(sprint-2/verification/96b_GRADING_VALIDATION_*)',
   ]);
   const argv = buildClaudeArgv({ mcpConfigPath: 't', prompt: 'p' });
   const allowed = argv[argv.indexOf('--allowedTools') + 1];
-  assert.ok(allowed.includes('Edit(docs/planning/sprint-2/verification/96b_GRADING_VALIDATION_*)'));
+  assert.ok(allowed.includes('Edit(sprint-2/verification/96b_GRADING_VALIDATION_*)'));
   assert.ok(!/Glob\(|Grep\(/.test(allowed));
 });
 
@@ -238,22 +238,22 @@ test('the deny list drops Edit/MultiEdit and adds the three Read denies', () => 
 test('the prompt names brief 63, the 96c template, the 96a export and the 96b verdict path', () => {
   const prompt = buildPrompt({
     course: 'IST.323',
-    exportPath: 'docs/planning/sprint-2/evidence/96a_GRADING_SCHEMA_EXPORT_2026-09-29.md',
+    exportPath: 'sprint-2/evidence/96a_GRADING_SCHEMA_EXPORT_2026-09-29.md',
   });
-  assert.ok(prompt.includes('docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md'));
-  assert.ok(prompt.includes('docs/planning/sprint-2/evidence/96c_V1_VERDICT_TEMPLATE.md'));
+  assert.ok(prompt.includes('sprint-1-hub/briefs/63_GRADING_VALIDATION.md'));
+  assert.ok(prompt.includes('sprint-2/evidence/96c_V1_VERDICT_TEMPLATE.md'));
   assert.ok(prompt.includes('96a_GRADING_SCHEMA_EXPORT_2026-09-29.md'));
-  assert.ok(prompt.includes('docs/planning/sprint-2/verification/96b_GRADING_VALIDATION_IST.323.md'));
+  assert.ok(prompt.includes('sprint-2/verification/96b_GRADING_VALIDATION_IST.323.md'));
 });
 
 test('GEO.103 lecture and recitation share one verdict file', () => {
-  assert.equal(verdictPathFor('GEO.103.lecture'), 'docs/planning/sprint-2/verification/96b_GRADING_VALIDATION_GEO.103.md');
+  assert.equal(verdictPathFor('GEO.103.lecture'), 'sprint-2/verification/96b_GRADING_VALIDATION_GEO.103.md');
   assert.equal(verdictPathFor('GEO.103.recitation'), verdictPathFor('GEO.103'));
-  assert.equal(verdictPathFor('IST.466'), 'docs/planning/sprint-2/verification/96b_GRADING_VALIDATION_IST.466.md');
+  assert.equal(verdictPathFor('IST.466'), 'sprint-2/verification/96b_GRADING_VALIDATION_IST.466.md');
 });
 
 test('with no course the prompt still names the 96b pattern', () => {
-  const prompt = buildPrompt({ course: '', exportPath: 'docs/planning/sprint-2/evidence/96a_GRADING_SCHEMA_EXPORT_x.md' });
+  const prompt = buildPrompt({ course: '', exportPath: 'sprint-2/evidence/96a_GRADING_SCHEMA_EXPORT_x.md' });
   assert.ok(prompt.includes('96b_GRADING_VALIDATION_'));
   assert.ok(prompt.includes('96c_V1_VERDICT_TEMPLATE.md'));
 });
@@ -273,7 +273,7 @@ test('run names the newest 96a export unless --export is given', async (t) => {
   deps.spawn = fakeSpawn(0);
   await run(['IST.323', '--export', other], deps);
   const prompt2 = deps.spawn.calls[0].args.at(-1);
-  assert.ok(prompt2.includes('docs/planning/custom-export.md'));
+  assert.ok(prompt2.includes('custom-export.md') && !prompt2.includes('docs/planning/'));
   assert.ok(!prompt2.includes('96a_GRADING_SCHEMA_EXPORT_2026-10-06.md'));
 });
 
@@ -336,7 +336,7 @@ test('REPO_ROOT is the parent of scripts/, resolved from the script itself', () 
   assert.ok(fs.existsSync(path.join(REPO_ROOT, 'scripts', 'validate-grading.mjs')));
 });
 
-test("the spawn's cwd is the repo root when called from another directory", async (t) => {
+test("the spawn's cwd is <repo>/docs/planning when called from another directory", async (t) => {
   const { deps } = baseDeps(t);
   delete deps.repoRoot; // use the real default
 
@@ -347,7 +347,7 @@ test("the spawn's cwd is the repo root when called from another directory", asyn
   await run(['IST.323', '--export', other], deps);
   const call = deps.spawn.calls[0];
   assert.equal(call.command, 'claude');
-  assert.equal(path.resolve(call.options.cwd), REPO_ROOT);
+  assert.equal(path.resolve(call.options.cwd), path.join(REPO_ROOT, 'docs', 'planning'));
   assert.notEqual(path.resolve(call.options.cwd), path.resolve(os.tmpdir()));
 });
 
@@ -373,4 +373,33 @@ test('a named error rejects run with a LauncherError that never holds the key', 
   assert.ok(code instanceof LauncherError);
   assert.ok(!code.message.includes(FAKE_KEY));
   assert.equal(err.text(), '');
+});
+
+// --- round 2, item 1: the session's working directory is docs/planning ---------------------------
+
+test('no rule and no prompt path names docs/planning (all relative to the session cwd)', () => {
+  const prompt = buildPrompt({ course: 'IST.323', exportPath: 'sprint-2/evidence/96a_GRADING_SCHEMA_EXPORT_x.md' });
+  const argv = buildClaudeArgv({ mcpConfigPath: 't', prompt });
+  assert.ok(argv.every((a) => !a.includes('docs/planning')));
+  assert.ok(prompt.includes('sprint-1-hub/briefs/63_GRADING_VALIDATION.md'));
+  assert.ok(prompt.includes('sprint-2/evidence/96c_V1_VERDICT_TEMPLATE.md'));
+  assert.ok(prompt.includes('sprint-2/verification/96b_GRADING_VALIDATION_IST.323.md'));
+});
+
+test('an --export outside docs/planning is refused', async (t) => {
+  const { deps } = baseDeps(t);
+  const outside = path.join(deps.repoRoot, 'db', 'x.md');
+  fs.mkdirSync(path.dirname(outside), { recursive: true });
+  fs.writeFileSync(outside, '# x\n');
+  await assert.rejects(run(['IST.323', '--export', outside], deps), /--export must be a file under docs\/planning\//);
+  assert.equal(deps.spawn.calls.length, 0);
+});
+
+test('the dry run names docs/planning as the cwd and the export relative to it', async (t) => {
+  const { deps, out } = baseDeps(t);
+  await run(['--dry-run', 'IST.323'], deps);
+  const text = out.text();
+  const cwdLine = text.split('\n').find((l) => l.startsWith('cwd: '));
+  assert.equal(cwdLine, `cwd: ${path.join(deps.repoRoot, 'docs', 'planning')}`);
+  assert.match(text, /^export: sprint-2\/evidence\/96a_GRADING_SCHEMA_EXPORT_2026-09-29\.md$/m);
 });

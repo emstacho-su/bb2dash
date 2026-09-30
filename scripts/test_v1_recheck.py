@@ -6,6 +6,7 @@ Run: uv run --with pyyaml --with pytest pytest scripts/test_v1_recheck.py
 from __future__ import annotations
 
 import copy
+import re
 import shutil
 import subprocess
 import sys
@@ -369,9 +370,54 @@ def emitted(tmp_path: Path, *files: Path) -> str:
     return out.read_text(encoding="utf-8")
 
 
+# Test helper (round 2, item 9: moved here from the module, which never used it).
+def split_top_level(sql: str) -> list[str]:
+    """Split on ';' outside literals, quoted identifiers, dollar quotes and comments."""
+    parts, buf, i, n = [], [], 0, len(sql)
+    tag_re = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)?\$")
+    while i < n:
+        c = sql[i]
+        if c in ("'", '"'):
+            j = i + 1
+            while j < n:
+                if sql[j] == c and j + 1 < n and sql[j + 1] == c:
+                    j += 2
+                    continue
+                if sql[j] == c:
+                    break
+                j += 1
+            buf.append(sql[i:j + 1])
+            i = j + 1
+            continue
+        if c == "$":
+            m = tag_re.match(sql, i)
+            if m:
+                close = sql.find(m.group(0), m.end())
+                end = n if close == -1 else close + len(m.group(0))
+                buf.append(sql[i:end])
+                i = end
+                continue
+        if sql.startswith("--", i):
+            j = sql.find("\n", i)
+            i = n if j == -1 else j
+            continue
+        if sql.startswith("/*", i):
+            j = sql.find("*/", i + 2)
+            i = n if j == -1 else j + 2
+            continue
+        if c == ";":
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(c)
+        i += 1
+    parts.append("".join(buf))
+    return parts
+
+
 def statements(sql: str) -> list[str]:
     body = "\n".join(line for line in sql.splitlines() if not line.startswith("--"))
-    return [s.strip() for s in vr.split_top_level(body) if s.strip()]
+    return [s.strip() for s in split_top_level(body) if s.strip()]
 
 
 def test_emit_shape_and_one_block_per_rechecked_entry(tmp_path):
@@ -550,3 +596,83 @@ def test_emit_typed_values_stay_standard_quoted(tmp_path):
     assert "got = 'a''b'" in block
     lst = _only_block(tmp_path, entry(target={**entry()["target"], "field": "letter_scale"}, stored={"x'y": 1}))
     assert "'{\"x''y\": 1}'::jsonb" in lst
+
+
+# --- round 2, item 2: relations and functions are allowlisted, literals included --------------
+
+
+def test_recheck_query_to_xml_bypass_rejected():
+    sql = "select query_to_xml('select id, source_ref from assignments', true, true, '')::text"
+    assert vr.recheck_error(sql) is not None
+    assert any("recheck" in e for e in errors_of([entry(recheck=sql)]))
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "select count(*) from courses",
+        "select count(*) from auth.users",
+        "select count(*) from assignments, attention_items",
+        "select count(*) from assignments join bb_files on true",
+        "select count(*) from public.assignments",
+        "select vault.decrypted_secrets from assignments",
+        "select current_setting('role') from assignments",
+        "select xpath('/x', query_to_xml('x', true, true, '')) from assignments",
+        "select count(*) from assignments where title = 'x' and notes like '%select * from courses%'",
+        "select count(*) from assignments where notes = 'table_to_xml(x)'",
+        "select count(*) from assignments where notes = 'pg_read_file(x)'",
+        "select count(*) from assignments where notes = 'delete me'",
+        "select \"query_to_xml\"('x', true, true, '') from assignments",
+    ],
+)
+def test_recheck_outside_the_allowlist_rejected(sql):
+    assert vr.recheck_error(sql) is not None, sql
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "select count(*) from v_gradebook_latest where course_id = 'IST.323'",
+        "select sum(weight_pct) from grade_components where course_id = 'ECN.304' and parent_id is null",
+        "select coalesce(split_part(notes, ' ', 1), '') from grading_schemes where course_id = 'IST.466'",
+        "select count(*) from v_grade_model_items where scheme_course_id = 'GEO.103.lecture'",
+        "select notes like '%B-12 re-cut (2026-09-29): the log checkpoint%' from grade_components where code = 'fp_log'",
+        "select count(*) from grade_components where code in ('a', 'b') and parent_id is not null",
+    ],
+)
+def test_recheck_inside_the_allowlist_accepted(sql):
+    assert vr.recheck_error(sql) is None, sql
+
+
+def test_all_six_verdict_files_still_pass():
+    files = sorted((SCRIPTS.parent / "docs" / "planning" / "sprint-2" / "verification").glob("96b_GRADING_VALIDATION_*.md"))
+    if not files:
+        pytest.skip("no verdict files on this branch")
+    pairs, parse_errors = vr.read_entries([str(f) for f in files])
+    assert parse_errors == []
+    result = vr.check_entries([e for _, e in pairs], [s for s, _ in pairs])
+    assert result.errors == []
+
+
+# --- round 2, item 6: stored is required on correcting entries --------------------------------
+
+
+@pytest.mark.parametrize("call", ["change_to", "mark_ungraded", "keep"])
+def test_rechecked_entry_needs_stored(call):
+    row = entry(verdict="differs", call=call, value=12)
+    del row["stored"]
+    assert any("needs stored" in e for e in errors_of([row]))
+
+
+def test_correcting_entry_without_stored_is_not_summarized_as_already_applied(tmp_path, capsys):
+    row = link_entry(verdict="differs", call="mark_ungraded", reason_code="BOOKKEEPING_COLUMN", value=None)
+    del row["stored"]
+    assert vr.main(["--summary", str(verdict_file(tmp_path, [row]))]) != 0
+    out = capsys.readouterr().out
+    assert "needs stored" in out
+    assert "| already applied |" not in out
+
+
+def test_stored_null_is_still_allowed_on_a_correction():
+    row = entry(verdict="differs", call="change_to", stored=None, value=12)
+    assert errors_of([row]) == []

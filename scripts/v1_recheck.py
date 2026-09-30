@@ -14,7 +14,8 @@ Run:  uv run --with pyyaml python scripts/v1_recheck.py --check docs/planning/sp
 Security: verdict files are written by a model session from document text, and --emit-sql turns
 their `recheck` and `value` fields into executed SQL. Every field is treated as hostile: yaml is
 read with safe_load; a recheck must be one plain SELECT (no dollar quotes, backslashes, comments or
-second statement, none of the write keywords); values are emitted as standard-quoted literals; ids
+second statement, none of the write keywords, only allowlisted relations and functions, and no
+SQL text, write keyword or snake_case call inside a string literal); values are emitted as standard-quoted literals; ids
 are pattern-checked; and the emitted unit runs `set transaction read only` before any recheck.
 """
 
@@ -64,18 +65,52 @@ MACHINE_HEADING_RE = re.compile(r"^##\s+Machine block\s*$", re.MULTILINE)
 YAML_FENCE_RE = re.compile(r"^```ya?ml[ \t]*\r?\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 
 # Whole words a recheck may not hold (the Contract's twelve), plus words that write or reach
-# outside the grading tables through a SELECT.
+# outside the grading tables through a SELECT. Checked outside AND inside string literals.
 FORBIDDEN_WORDS = (
     "insert", "update", "delete", "drop", "alter", "create", "grant", "revoke", "truncate",
     "copy", "call", "do",
-    "into", "merge", "set_config", "nextval", "setval", "dblink", "dblink_exec", "vault",
+    "into", "merge", "execute", "set_config", "nextval", "setval", "dblink", "dblink_exec", "vault",
     "lo_import", "lo_export", "lo_unlink", "lo_put", "lo_from_bytea",
 )
 FORBIDDEN_RE = re.compile(r"\b(" + "|".join(re.escape(w) for w in FORBIDDEN_WORDS) + r")\b", re.IGNORECASE)
 FORBIDDEN_PATTERNS = (
     (re.compile(r"\bpg_\w*", re.IGNORECASE), "pg_* functions and catalogs"),
+    (re.compile(r"\w*_to_xml\w*", re.IGNORECASE), "the *_to_xml functions"),
     (re.compile(r"\bnet\s*\.", re.IGNORECASE), "the net schema"),
 )
+# Inside a literal, SQL text is refused too: a literal holding a query is only useful to a function
+# that executes it, and none is allowlisted, but the literal is refused as well (round 2, item 2).
+LITERAL_SQL_RE = re.compile(r"\bselect\b[\s\S]*\bfrom\b", re.IGNORECASE)
+
+# Round 2, item 2: the only relations and functions a recheck may name. The functions are those the
+# six 2026-09-29 verdict files use (sum, count, coalesce, split_part) plus plain scalar and aggregate
+# built-ins that read values and never execute text as SQL.
+ALLOWED_RELATIONS = frozenset({
+    "grading_schemes", "grade_components", "assignments", "grade_column_links",
+    "v_gradebook_latest", "v_grade_model_items",
+})
+ALLOWED_FUNCTIONS = frozenset({
+    "coalesce", "count", "sum", "split_part", "left", "right", "length", "lower", "upper",
+    "round", "min", "max", "avg", "abs", "trim", "btrim", "nullif", "greatest", "least",
+    "bool_and", "bool_or", "string_agg", "jsonb_array_length", "cast",
+})
+# Keywords that may stand before '(' without being a function call.
+PAREN_KEYWORDS = frozenset({
+    "in", "exists", "any", "all", "some", "as", "and", "or", "not", "from", "join", "on",
+    "where", "select", "values", "filter", "over", "then", "else", "when", "is", "distinct", "by",
+    "with", "array", "case", "like", "ilike",
+})
+IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+FUNCTION_CALL_RE = re.compile(rf"({IDENT})\s*\(")
+RELATION_RE = re.compile(rf"\b(?:from|join)\s+({IDENT}(?:\s*\.\s*{IDENT})?)", re.IGNORECASE)
+FROM_LIST_RE = re.compile(
+    r"\bfrom\b(.*?)(?=\bwhere\b|\bgroup\b|\border\b|\bhaving\b|\blimit\b|\bjoin\b|\bleft\b|\binner\b"
+    r"|\bcross\b|\bright\b|\bfull\b|\bunion\b|\bexcept\b|\bintersect\b|\)|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+LIST_ITEM_RE = re.compile(rf"\s*({IDENT}(?:\s*\.\s*{IDENT})?)")
+QUALIFIED_RE = re.compile(rf"({IDENT})\s*\.\s*{IDENT}")
+CTE_RE = re.compile(rf"(?:\bwith|,)\s*({IDENT})\s+as\s*\(", re.IGNORECASE)
 
 EMIT_UNIT_NAME = "phase16_106_v1_recheck"
 NUMERIC_RE = re.compile(r"^\s*-?\d+(\.\d+)?\s*$")
@@ -205,7 +240,7 @@ def recheck_error(sql) -> str | None:
     """None when `sql` is one plain SELECT the emitted unit may run, else why not."""
     if not isinstance(sql, str) or not sql.strip():
         return "must be a non-empty SELECT"
-    for char, what in (("\x00", "a NUL"), ("$", "a dollar sign"), ("\\", "a backslash")):
+    for char, what in (("\x00", "a NUL"), ("$", "a dollar sign"), ("\\", "a backslash"), ('"', "a quoted identifier")):
         if char in sql:
             return f"must not contain {what}"
     if "--" in sql or "/*" in sql:
@@ -221,12 +256,65 @@ def recheck_error(sql) -> str | None:
     first = re.match(r"[A-Za-z]+", code)
     if not first or first.group(0).lower() not in ("select", "with"):
         return "must start with select (or with ... select)"
-    hit = FORBIDDEN_RE.search(code)
+    problem = _denied_word(code) or _relation_error(code) or _function_error(code)
+    if problem:
+        return problem
+    for literal in _literals(body):
+        problem = _denied_word(literal) or _function_error_in_literal(literal)
+        if not problem and LITERAL_SQL_RE.search(literal):
+            problem = "must not hold SQL text"
+        if problem:
+            return f"{problem} (inside a string literal)"
+    return None
+
+
+def _literals(sql: str) -> list[str]:
+    return [m.group(1).replace("''", "'") for m in re.finditer(r"'((?:[^']|'')*)'", sql)]
+
+
+def _denied_word(text: str) -> str | None:
+    hit = FORBIDDEN_RE.search(text)
     if hit:
         return f"must not contain '{hit.group(1).lower()}'"
     for pattern, what in FORBIDDEN_PATTERNS:
-        if pattern.search(code):
+        if pattern.search(text):
             return f"must not reach {what}"
+    return None
+
+
+def _relation_error(code: str) -> str | None:
+    """Every relation after from / join, or in a from comma list, is allowlisted or a CTE name."""
+    allowed = ALLOWED_RELATIONS | {m.group(1).lower() for m in CTE_RE.finditer(code)}
+    names = [m.group(1) for m in RELATION_RE.finditer(code)]
+    for m in FROM_LIST_RE.finditer(code):
+        for item in m.group(1).split(",")[1:]:
+            first = LIST_ITEM_RE.match(item)
+            if first:
+                names.append(first.group(1))
+    for name in names:
+        plain = re.sub(r"\s+", "", name).lower()
+        if plain not in allowed:
+            return f"may read only {sorted(ALLOWED_RELATIONS)}, not '{plain}'"
+    for m in QUALIFIED_RE.finditer(code):
+        if m.group(1).lower() not in allowed:
+            return f"must not name '{m.group(0)}' (qualify a column only with an allowed table)"
+    return None
+
+
+def _function_error(code: str) -> str | None:
+    for m in FUNCTION_CALL_RE.finditer(code):
+        name = m.group(1).lower()
+        if name not in PAREN_KEYWORDS and name not in ALLOWED_FUNCTIONS:
+            return f"may call only {sorted(ALLOWED_FUNCTIONS)}, not '{name}'"
+    return None
+
+
+def _function_error_in_literal(literal: str) -> str | None:
+    """Inside a literal, prose like 're-cut (2026-09-29)' is fine; a snake_case call is not."""
+    for m in FUNCTION_CALL_RE.finditer(literal):
+        name = m.group(1).lower()
+        if "_" in name and name not in ALLOWED_FUNCTIONS:
+            return f"must not name the function '{name}'"
     return None
 
 
@@ -337,8 +425,10 @@ def check_entry(e) -> list[str]:
     errs += _check_citation(e)
     if call in CORRECTING_CALLS and "value" not in e:
         errs.append(f"a {call} row needs value")
-    if call == "keep" and "stored" not in e:
-        errs.append("a keep row needs stored")
+    # A correcting entry with no `stored` would compare value with None and could be counted as
+    # already applied (round 2, item 6); keep compares its recheck with stored.
+    if call in RECHECKED_CALLS and "stored" not in e:
+        errs.append(f"a {call} row needs stored")
     if call in RECHECKED_CALLS:
         problem = recheck_error(e.get("recheck")) if "recheck" in e else "is required for keep / change_to / mark_ungraded"
         if problem:
@@ -426,50 +516,6 @@ def format_summary_table(s: Summary) -> list[str]:
 
 
 # --- --emit-sql -------------------------------------------------------------------------------
-
-
-def split_top_level(sql: str) -> list[str]:
-    """Split on ';' outside literals, quoted identifiers, dollar quotes and comments."""
-    parts, buf, i, n = [], [], 0, len(sql)
-    tag_re = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)?\$")
-    while i < n:
-        c = sql[i]
-        if c in ("'", '"'):
-            j = i + 1
-            while j < n:
-                if sql[j] == c and j + 1 < n and sql[j + 1] == c:
-                    j += 2
-                    continue
-                if sql[j] == c:
-                    break
-                j += 1
-            buf.append(sql[i:j + 1])
-            i = j + 1
-            continue
-        if c == "$":
-            m = tag_re.match(sql, i)
-            if m:
-                close = sql.find(m.group(0), m.end())
-                end = n if close == -1 else close + len(m.group(0))
-                buf.append(sql[i:end])
-                i = end
-                continue
-        if sql.startswith("--", i):
-            j = sql.find("\n", i)
-            i = n if j == -1 else j
-            continue
-        if sql.startswith("/*", i):
-            j = sql.find("*/", i + 2)
-            i = n if j == -1 else j + 2
-            continue
-        if c == ";":
-            parts.append("".join(buf))
-            buf = []
-        else:
-            buf.append(c)
-        i += 1
-    parts.append("".join(buf))
-    return parts
 
 
 def _unused_tag(body: str, base: str) -> str:
