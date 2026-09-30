@@ -43,14 +43,40 @@ export function buildRelaunch(id, repoRoot) {
       'powershell.exe',
       '-NoExit',
       '-NoLogo',
+      // As the desktop's PS_FLAGS: an npm-installed `claude` is a .ps1 shim, which Windows 11
+      // Home's default policy refuses (code review, 2026-09-30).
+      '-ExecutionPolicy',
+      'Bypass',
       '-Command',
       `claude --model ${SYNC_MODEL} '/bb-sync ${id}'`,
     ],
   };
 }
 
+/**
+ * Spawn and wait for the outcome. Node reports a missing program (ENOENT) as a later `error`
+ * event, not a throw, so "opened" is said only after the `spawn` event; the desktop's
+ * `spawnOnce` (desktop/src/main/sync-terminal.ts, R2-6) does the same.
+ */
+function spawnConfirmed(spawn, file, args) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(file, args, { detached: true, stdio: 'ignore', windowsHide: false });
+    } catch (error) {
+      resolve({ ok: false, error });
+      return;
+    }
+    child.once('spawn', () => {
+      child.unref?.();
+      resolve({ ok: true });
+    });
+    child.once('error', (error) => resolve({ ok: false, error }));
+  });
+}
+
 /** Exit codes: 0 opened, 1 could not open the terminal, 2 bad or missing request id. */
-export function main(argv, deps = {}) {
+export async function main(argv, deps = {}) {
   const repoRoot =
     deps.repoRoot ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const spawn = deps.spawn ?? nodeSpawn;
@@ -63,11 +89,9 @@ export function main(argv, deps = {}) {
   }
 
   const { file, args } = buildRelaunch(id, repoRoot);
-  try {
-    const child = spawn(file, args, { detached: true, stdio: 'ignore', windowsHide: false });
-    child.unref?.();
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+  const outcome = await spawnConfirmed(spawn, file, args);
+  if (!outcome.ok) {
+    const reason = outcome.error instanceof Error ? outcome.error.message : String(outcome.error);
     log(`could not open a terminal for bb-sync ${id}: ${reason}`);
     log(`run it by hand: claude --model ${SYNC_MODEL} "/bb-sync ${id}"`);
     return 1;
@@ -77,5 +101,7 @@ export function main(argv, deps = {}) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exitCode = main(process.argv.slice(2));
+  main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
 }

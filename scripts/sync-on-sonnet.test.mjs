@@ -7,6 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 
 import { SYNC_MODEL, buildRelaunch, isValidRequestId, main } from './sync-on-sonnet.mjs';
 
@@ -34,6 +35,8 @@ test('builds wt.exe argv: the repo dir, a titled tab, PowerShell running claude 
     'powershell.exe',
     '-NoExit',
     '-NoLogo',
+    '-ExecutionPolicy',
+    'Bypass',
     '-Command',
     "claude --model sonnet '/bb-sync 389'",
   ]);
@@ -43,14 +46,17 @@ test('refuses a bad id before building anything', () => {
   assert.throws(() => buildRelaunch("389'; calc", REPO), /request id/);
 });
 
-test('main spawns detached with no shell and exits 0', () => {
+test('main waits for the spawn event, then reports opened and exits 0', async () => {
   const calls = [];
   const out = [];
-  const code = main(['389'], {
+  const code = await main(['389'], {
     repoRoot: REPO,
     spawn: (file, args, opts) => {
       calls.push({ file, args, opts });
-      return { unref() {} };
+      const child = new EventEmitter();
+      child.unref = () => {};
+      setImmediate(() => child.emit('spawn'));
+      return child;
     },
     log: (line) => out.push(line),
   });
@@ -62,23 +68,39 @@ test('main spawns detached with no shell and exits 0', () => {
   assert.match(out.join('\n'), /bb-sync 389.*sonnet/);
 });
 
-test('main exits 2 on a missing or bad id and spawns nothing', () => {
+test('main exits 2 on a missing or bad id and spawns nothing', async () => {
   let spawned = 0;
-  const deps = { repoRoot: REPO, spawn: () => ((spawned += 1), { unref() {} }), log: () => {} };
-  assert.equal(main([], deps), 2);
-  assert.equal(main(['x'], deps), 2);
+  const deps = { repoRoot: REPO, spawn: () => ((spawned += 1), new EventEmitter()), log: () => {} };
+  assert.equal(await main([], deps), 2);
+  assert.equal(await main(['x'], deps), 2);
   assert.equal(spawned, 0);
 });
 
-test('main exits 1 when the spawn throws (wt.exe missing), and says so', () => {
+test('main exits 1 when wt.exe is missing: real spawn reports it as a later error event (code review)', async () => {
   const out = [];
-  const code = main(['389'], {
+  const code = await main(['389'], {
     repoRoot: REPO,
     spawn: () => {
-      throw new Error('spawn wt.exe ENOENT');
+      const child = new EventEmitter();
+      child.unref = () => {};
+      setImmediate(() => child.emit('error', Object.assign(new Error('spawn wt.exe ENOENT'), { code: 'ENOENT' })));
+      return child;
     },
     log: (line) => out.push(line),
   });
   assert.equal(code, 1);
+  assert.doesNotMatch(out.join('\n'), /opened a new terminal/);
   assert.match(out.join('\n'), /could not open/i);
+});
+
+test('main exits 1 when spawn throws synchronously too', async () => {
+  const out = [];
+  const code = await main(['389'], {
+    repoRoot: REPO,
+    spawn: () => {
+      throw new Error('EACCES');
+    },
+    log: (line) => out.push(line),
+  });
+  assert.equal(code, 1);
 });
