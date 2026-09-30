@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { run } from './run';
 import { manualAggregate } from '@/lib/grade-model/aggregations/manual';
+import { realScoreOf } from '@/lib/grade-model/items';
 import { component, counted, item, leaf, modelInput } from './builders';
 
 describe('manual', () => {
@@ -56,5 +57,23 @@ describe('manual', () => {
       }),
     );
     expect(result.state === 'computed' && result.standing.pct).toBeCloseTo(90, 12);
+  });
+
+  /*
+   * P-66 pins (Phase 16, B-10): the engine tells "nothing posted" from "a
+   * posted zero" by the score alone. No rule reads a posted zero as unposted;
+   * that would be a made-up number. GEO.103's two 0.000 columns are handled by
+   * "Not graded" links instead (graded-so-far.test.ts).
+   */
+  it('null score is not graded', () => {
+    expect(realScoreOf(item({ key: 'col:none', possible: 100, score: null }))).toBeNull();
+    const outcome = manualAggregate(leaf({ aggregation: 'manual' }, [counted(100, null)], 10), null);
+    expect(outcome).toMatchObject({ earned: 0, gradedCap: 0, gradedCount: 0 });
+  });
+
+  it('posted zero is graded zero', () => {
+    expect(realScoreOf(item({ key: 'col:zero', possible: 100, score: 0 }))).toBe(0);
+    const outcome = manualAggregate(leaf({ aggregation: 'manual' }, [counted(100, 0)], 10), null);
+    expect(outcome).toMatchObject({ earned: 0, gradedCap: 10, gradedCount: 1 });
   });
 });

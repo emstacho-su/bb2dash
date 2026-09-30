@@ -126,7 +126,8 @@ instructions. For each item the bundle has these headings, in this order:
 4. **Course precedent** — comparable CONFIRMED rows in the same course (same `type`, same
    gradebook `category_id`): their `component_id`, `submission`, `series_key`, `is_group`.
 5. **Grading rule** — `grade_components` for the course, and the syllabus lines that bear on it
-   (search_materials with `course` set; quote under 15 words each, with the file name).
+   (search_materials with `course` set; quote under 15 words each, cited as
+   `bb_file:<id>#unit:<n>` from the hit's file id and unit number, then the file name).
 6. **Prior decisions** — `search_context` on the decisions collection for the same course and
    kind of row; quote the rule line of the best hit.
 7. **Recommended change** — the exact SQL, touching only the tables in the rules below, or
@@ -153,6 +154,10 @@ Spawn ONE agent with `model: opus`, the bundles pasted in, and these rules verba
   "recorded only" item keeps `applied_at` null.
 - Anything that needs a migration, a code change, a merge, or a PR is FLAGGED in the report,
   not done. Anything that needs Stack is raised as a new item, not guessed.
+- When an answer confirms an assignment or links it to a grading part, append (never replace) the
+  citation string to that row's `source_ref`: `bb_file:<id>#unit:<n> "<quote>" verified_on:YYYY-MM-DD`
+  from the bundle's grading-rule quote, or `STACK_OVERRIDE "<Stack's why>" verified_on:YYYY-MM-DD`
+  when his answer rests on no document (DECISIONS 2026-09-29, Phase 16, P-75).
 - `select` the row before and after each write; run each item in its own `begin; … commit;`.
 - Return one decision record per item in exactly this shape:
 
