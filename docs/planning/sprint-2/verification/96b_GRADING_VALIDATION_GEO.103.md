@@ -16,6 +16,7 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
 * GEO.103-08 (note reworded: excluded ("Not graded") until Stack relinks the column; a posted score does not count while excluded): P-3, "Not graded" is a link row; stored/value → false/true, the recheck being a `like` test.
 * GEO.103-17 (retargeted from `assignments.component_id` → null to `grade_column_links` (GEO.103.lecture, _3602583_1) `excluded` true; stored false = no row today): DECISIONS (Phase 16, P-3), "Not graded" is an excluded link row, which migration 105 inserts.
 * GEO.103-18 (retargeted from `assignments.component_id` → null to `grade_column_links` (GEO.103.recitation, _3602445_1) `excluded` true; stored false = no row today): DECISIONS (Phase 16, P-3), "Not graded" is an excluded link row, which migration 105 inserts.
+* GEO.103-17, -18: `stored` true — migration 105 applied the two "Not graded" links on 2026-09-30 (task 20: prod moved since the sitting).
 
 ## Reconciliation table
 
@@ -367,7 +368,7 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
     table: grade_column_links
     key: {course_id: "GEO.103.lecture", column_id: "_3602583_1"}
     field: excluded
-  stored: false
+  stored: true
   materials: "Lecture attendance is scored by absences; the column reads as an absence count"
   citation: "bb_file:42#unit:3"
   quote: "You can miss three lectures, no questions asked."
@@ -385,7 +386,7 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
     table: grade_column_links
     key: {course_id: "GEO.103.recitation", column_id: "_3602445_1"}
     field: excluded
-  stored: false
+  stored: true
   materials: "The section grade is the TA's rubric grade; absences lower it"
   citation: "bb_file:22#unit:1"
   quote: "Absences will lower your grade."

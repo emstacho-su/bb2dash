@@ -9,9 +9,8 @@ writes what follows; `db/tests/phase16_106_v1_recheck.sql` re-checks every entry
 ## Counts
 
 Printed by `uv run --with pyyaml python scripts/v1_recheck.py --summary docs/planning/sprint-2/verification/96b_GRADING_VALIDATION_*.md`
-(`--compare` checks this table verbatim). Counted per distinct target row. **Taken before 105 is
-applied:** the two GEO "Not graded" links (GEO.103-17, -18) count as corrections here; once 105 is on
-prod their `stored` is brought up to date (task 20) and they move to "already applied".
+(`--compare` checks this table verbatim). Counted per distinct target row. **Taken after 105 was applied (2026-09-30):** the two GEO "Not graded" links (GEO.103-17, -18)
+are on prod, so they count under "already applied", not as corrections (task 20).
 
 | count | n |
 |---|---|
@@ -21,11 +20,13 @@ prod their `stored` is brought up to date (task 20) and they move to "already ap
 | entries matches | 137 |
 | entries materials_say_more | 15 |
 | entries not_in_materials | 43 |
-| corrections | 28 |
+| corrections | 26 |
 | citation-only | 110 |
 | left tentative | 0 |
-| already applied | 6 |
+| already applied | 8 |
 
+already applied: grade_column_links GEO.103.lecture/_3602583_1 (GEO.103-17)
+already applied: grade_column_links GEO.103.recitation/_3602445_1 (GEO.103-18)
 already applied: assignments IST.323/assignment-1 (IST.323-23)
 already applied: assignments IST.323/presentation-choice (IST.323-26)
 already applied: assignments IST.352/moving-tasks (IST.352-39)
@@ -90,7 +91,7 @@ Every other checked row (110) gains a citation string only (DECISIONS 2026-09-29
 
 ## Already applied before 106
 
-Found by re-running each correcting entry's recheck on prod (2026-09-30): IST.323 `assignment-1` and
+Found by re-running each correcting entry's recheck on prod (2026-09-30): the two GEO.103 attendance links (written by 105 that day); IST.323 `assignment-1` and
 `presentation-choice` (its excluded link already present); IST.352's four 0-point planning columns
 (`moving-tasks`, `moving-tasks-processes`, `team-and-project-selection`, `team-request`) already carry no
 component. No entry's `stored` had drifted from prod since its sitting.
