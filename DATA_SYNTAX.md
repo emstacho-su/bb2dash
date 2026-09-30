@@ -183,6 +183,52 @@ a jsonb array of 1–52 objects carrying the `planner_events` insert columns, sh
 strict jsonpath; `starts_at` / `ends_at` must carry an explicit offset. Updates are **by id**, so
 the Google mirror sees patches, never delete + insert.
 
+## Course views, gap self-close and the scheduler heartbeat (migrations 110–116)
+
+* **`v_course_stream`** (027; filters and keys 110) — the course Stream, one row per post, 8
+  columns `course_id, post_kind, posted_at, ref_kind, ref_id, title, body, meta`. Announcement
+  `meta` = `{is_read, is_unread}`; `is_unread` is the bell's predicate (`read_at is null and
+  is_read is distinct from true`, 063). File `meta` = `{bucket, file_name, mime_type,
+  storage_path, source_url}`. Left out: `my_submissions` files, files whose `notes` carry
+  `missing_since_run=`, and `bb_content` nodes with `detail.missing_since`.
+* **`v_content_tree`** (027; two columns appended by 111) — Classwork, 19 columns. `missing_since
+  uuid` is `bb_content.detail->>'missing_since'` cast: the sync run that first found the node gone
+  from Blackboard (the P-98 vanish convention), a projection, not a stored column. `notes` is the
+  joined current file's `bb_files.notes`. A node with `missing_since` set is a **ghost** when a
+  live node in the same course shares its `bb_item_id`, otherwise **stale**.
+* **Gap self-close** (114) — `stage_gaps` questions (`suggested.source = 'stage_gaps'`) close
+  themselves when the fact arrives: grading scheme recorded, assignment dated (`due_at`,
+  `due_date` or `event_start`), reading dated, file stored or superseded.
+  `close_cleared_gaps(p_sync_run_id, p_trigger)` (service_role only) archives each with
+  `archived_by = 'stage_gaps'` and `decision = {closed_itself: true, rule, sync_run_id, trigger}`;
+  `trigger` is `fold` (from `stage_gaps`, which reports `counts.gaps_closed`) or
+  `bb_files_update` (the `bb_files_close_cleared_gaps_trg` statement trigger). A key that
+  already closed itself in the last 24 h stays open with `suggested.reopened_within_24h = true`
+  and is never machine-closed after that. `attention_answered()` ignores machine-closed rows, so
+  a hole that reopens is asked again; a row Stack answered still counts.
+* **`v_inbox_feedback`** was dropped by 116 (R-57). `agent_requests.kind = 'inbox_feedback'`
+  stays: it is /inbox-apply's kind. /inbox-apply reads `v_inbox_queue` (090).
+* **`v_scheduler_heartbeat`** (113) — two rows, `transform` (cron job `bb2dash-transform-tick`)
+  and `calendar_push` (`bb2dash-calendar-push`), only for `app_owner()`'s JWT; empty for anyone
+  else. Columns: `job, cron_jobname, tick_seconds` (120 for both), `last_tick_at` (newest
+  `cron.job_run_details.start_time`), `last_ok_at` (transform: newest `succeeded` cron row;
+  calendar_push: newest `calendar_push_runs` row with status `ok`, because the cron row says
+  `succeeded` even when the push failed), `consecutive_failures` and `last_error` (failures since
+  that last success, and the newest one's message; null when there are none), and `stage`:
+
+  | stage | when (first match wins) |
+  |---|---|
+  | `off` | cron job inactive or missing; for calendar_push also `app_settings.gcal_enabled` false |
+  | `failing` | `consecutive_failures >= 3` |
+  | `missing` | never ticked, or the newest tick is more than 600 s old |
+  | `late` | the newest tick is more than 240 s old (Home says nothing) |
+  | `ok` | otherwise |
+
+  The view is `security_invoker` over `private.scheduler_heartbeat()`, a SECURITY DEFINER function
+  in schema `private` (not exposed by PostgREST; usage to `authenticated` and `service_role`
+  only) because it reads `cron.*`. The rule itself is `private.heartbeat_stage(last_tick_at,
+  now, consecutive_failures, active)`.
+
 ## Seed state (2026-09-02)
 
 7 courses, 12 staff, 11 meeting patterns, 127 sessions, 25 grade components, 57 assignments,

@@ -13,7 +13,7 @@
 
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readStoredSections, writeStoredSection } from '@/lib/grades-sections';
+import { GRADES_COLLAPSE_KEY } from '@/app/(app)/grades/grades-collapse';
 import {
   ECN304_ATTENDANCE,
   IST323_QUIZ,
@@ -132,7 +132,9 @@ describe('GradesScreen — grouping and honesty', () => {
     render(<GradesScreen />);
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(['IST 323', 'IST 352']);
+    expect(headings).toHaveLength(2);
+    expect(headings[0]).toContain('IST 323');
+    expect(headings[1]).toContain('IST 352');
   });
 
   it("gives each course only its own shells' gradebook rows", () => {
@@ -171,18 +173,12 @@ describe('GradesScreen — grouping and honesty', () => {
   });
 });
 
-describe('GradesScreen — the title is the link (G-3, P-grades-2)', () => {
-  it('makes the course title itself a link to that course', () => {
+describe('GradesScreen — the way into the course (G-3, P-grades-2; R3-7)', () => {
+  it('links each course to its own page from the header, as Materials does', () => {
     render(<GradesScreen />);
     const card = screen.getByRole('region', { name: 'IST 323' });
-    const link = within(card).getByRole('link', { name: 'IST 323' });
+    const link = within(card).getByRole('link', { name: /^Open IST 323/ });
     expect(link).toHaveAttribute('href', '/course/IST.323');
-  });
-
-  it('keeps the link inside the level-2 heading, so the card still announces itself', () => {
-    render(<GradesScreen />);
-    const heading = screen.getByRole('heading', { level: 2, name: 'IST 323' });
-    expect(within(heading).getByRole('link')).toHaveAttribute('href', '/course/IST.323');
   });
 
   it('encodes a display id that needs it', () => {
@@ -190,7 +186,7 @@ describe('GradesScreen — the title is the link (G-3, P-grades-2)', () => {
     hooks.grades = stub([makeCourseGrade({ course_id: 'GEO.103.lecture' })]);
     hooks.gradebook = stub([]);
     render(<GradesScreen />);
-    expect(screen.getByRole('link', { name: 'GEO 103' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^Open GEO 103/ })).toHaveAttribute(
       'href',
       '/course/GEO.103.lecture',
     );
@@ -204,55 +200,63 @@ describe('GradesScreen — the title is the link (G-3, P-grades-2)', () => {
 });
 
 /*
- * G-2 / P-grades-1, Stack's answer 4: each course's block collapses, and the
- * choice survives a reload. The header stays — folding a course away should
- * leave the summary, not the whole card.
+ * R3-7 (Stack's preview walk, 2026-09-29): the class header itself is the fold
+ * control, as Materials' course headers are. The explicit Hide button is gone,
+ * and the choice lives in the shared collapse store under its own key.
  */
-describe('GradesScreen — a course block collapses (G-2)', () => {
+describe('GradesScreen — the class header folds the class (R3-7)', () => {
   afterEach(() => window.localStorage.clear());
 
-  it('opens every course block by default', () => {
+  function header(name: RegExp = /IST 323/) {
+    return within(screen.getByRole('heading', { level: 2, name })).getByRole('button');
+  }
+
+  it('makes the header one button, open by default, with the course code and title in it', () => {
     render(<GradesScreen />);
-    expect(screen.getByRole('button', { name: 'Hide IST 323' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    const button = header();
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(button.textContent).toContain('IST 323');
+    expect(button.textContent).toContain('Introduction to Information Security');
     expect(screen.getByText('Quiz 2')).toBeInTheDocument();
+  });
+
+  it('draws no Hide or Show control', () => {
+    render(<GradesScreen />);
+    expect(screen.queryByRole('button', { name: /^(Hide|Show)\b/ })).toBeNull();
+    expect(screen.queryByText(/^(Hide|Show)$/)).toBeNull();
   });
 
   it('folds the gradebook away and keeps the header', () => {
     render(<GradesScreen />);
-    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+    fireEvent.click(header());
 
     expect(screen.queryByText('Quiz 2')).toBeNull();
     expect(screen.getByText(/Blackboard’s number, as of/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'IST 323' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Show IST 323' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    expect(header()).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('opens it again', () => {
     render(<GradesScreen />);
-    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Show IST 323' }));
+    fireEvent.click(header());
+    fireEvent.click(header());
     expect(screen.getByText('Quiz 2')).toBeInTheDocument();
   });
 
-  it('remembers the choice under the course\'s own key', () => {
+  it('remembers the choice under bb2dash.grades.collapsed', () => {
     render(<GradesScreen />);
-    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
-    expect(readStoredSections()['course:IST.323']).toBe('closed');
+    fireEvent.click(header());
+    expect(GRADES_COLLAPSE_KEY).toBe('bb2dash.grades.collapsed');
+    expect(JSON.parse(window.localStorage.getItem(GRADES_COLLAPSE_KEY) ?? '[]')).toEqual(['IST.323']);
   });
 
-  it('renders a course collapsed when that is what was stored', () => {
-    writeStoredSection('course:IST.323', 'closed');
+  it('renders a class folded when that is what was stored', () => {
+    window.localStorage.setItem(GRADES_COLLAPSE_KEY, JSON.stringify(['IST.323']));
     render(<GradesScreen />);
     expect(screen.queryByText('Quiz 2')).toBeNull();
+    expect(header()).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('keeps each course block on its own key', () => {
+  it('keeps each class on its own key', () => {
     hooks.courses = stub([
       course(),
       course({ display_id: 'IST.352', code: 'IST 352', shell_ids: ['IST.352'] }),
@@ -261,10 +265,10 @@ describe('GradesScreen — a course block collapses (G-2)', () => {
     hooks.gradebook = stub([IST323_QUIZ, { ...ECN304_ATTENDANCE, course_id: 'IST.352', counts_toward_grade: true }]);
     render(<GradesScreen />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hide IST 323' }));
+    fireEvent.click(header(/IST 323/));
     expect(screen.queryByText('Quiz 2')).toBeNull();
     expect(screen.getByText('Attendance')).toBeInTheDocument();
-    expect(readStoredSections()['course:IST.352']).toBeUndefined();
+    expect(header(/IST 352/)).toHaveAttribute('aria-expanded', 'true');
   });
 });
 

@@ -20,20 +20,25 @@
  * that is the mismatch the first two tests exist to catch.
  */
 
-import { act } from 'react';
-import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, waitFor } from '@testing-library/react';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeWorkItem } from './factories';
 import { makePlannerEvent } from './factories.plannerEvents';
+import {
+  hydrateOverServerHtml,
+  newQueryClient,
+  readChain,
+  warmQueryCache,
+} from './hydration-harness';
 import { reservedBoardHeightPx } from '@/lib/planner-rows';
 
 const rows = vi.hoisted(() => ({ byTable: {} as Record<string, unknown[]> }));
 
 vi.mock('@/lib/supabase/client', () => ({
-  getSupabaseBrowserClient: () => ({ from: (table: string) => readChain(table) }),
+  getSupabaseBrowserClient: () => ({
+    from: (table: string) => readChain(rows.byTable, table, { singleTables: ['terms'] }),
+  }),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -44,32 +49,7 @@ vi.mock('next/navigation', () => ({
 
 const { PlannerWeek } = await import('@/components/planner/PlannerWeek');
 
-/** A read-only query builder: every chain resolves to the table's rows. */
-function readChain(table: string) {
-  const result = () => {
-    const data = rows.byTable[table] ?? [];
-    return { data: table === 'terms' ? (data[0] ?? null) : data, error: null };
-  };
-  const chain: Record<string, unknown> = {};
-  const self = () => chain;
-  Object.assign(chain, {
-    select: self,
-    eq: self,
-    gte: self,
-    lt: self,
-    lte: self,
-    order: self,
-    limit: self,
-    maybeSingle: async () => result(),
-    single: async () => result(),
-    then: (onFulfilled: (value: unknown) => unknown) => Promise.resolve(result()).then(onFulfilled),
-  });
-  return chain;
-}
-
-function newClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
+const newClient = newQueryClient;
 
 function tree(client: QueryClient) {
   return (
@@ -143,23 +123,16 @@ describe('PlannerWeek hydration', () => {
 
   it('hydrates server HTML under a restored cache without a hydration error', async () => {
     // What the persisted cache holds when the grid's Suspense boundary hydrates.
-    const warm = newClient();
-    const first = render(tree(warm));
-    await waitFor(() => expect(first.container.textContent).toContain('Advising'));
-    first.unmount();
+    const warm = await warmQueryCache(tree, (container) =>
+      expect(container.textContent).toContain('Advising'),
+    );
 
-    const container = document.createElement('div');
-    container.innerHTML = renderToString(tree(newClient()));
-    document.body.appendChild(container);
-
-    const recoverable = vi.fn();
-    let root: Root | undefined;
-    await act(async () => {
-      root = hydrateRoot(container, tree(warm), { onRecoverableError: recoverable });
-    });
-
-    await waitFor(() => expect(container.textContent).toContain('Advising'));
-    expect(recoverable).not.toHaveBeenCalled();
-    act(() => root?.unmount());
+    const hydrated = await hydrateOverServerHtml(tree(newClient()), tree(warm));
+    try {
+      await hydrated.waitForText('Advising');
+      expect(hydrated.recoverable).not.toHaveBeenCalled();
+    } finally {
+      hydrated.unmount();
+    }
   });
 });

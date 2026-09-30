@@ -101,7 +101,8 @@ describe('every surface but the planner opens the `?item=` popout', () => {
   /** Screen → the file that builds its assignment link. */
   const SURFACES = [
     'app/(app)/Today.tsx',
-    'app/(app)/inbox/Inbox.tsx',
+    // R3-3: the Inbox card's link is built beside the card now.
+    'components/inbox/inbox-row.ts',
     'components/tracker/UpcomingTracker.tsx',
     'components/grades/GradebookTable.tsx',
   ];

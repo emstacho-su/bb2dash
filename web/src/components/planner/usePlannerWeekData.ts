@@ -26,7 +26,8 @@ import {
   type PlacedWorkItems,
   type PlannerWeekModel,
 } from '@/lib/planner-week';
-import { buildSlotHeights, contentRequiredPx, weekSlotDemandPx } from '@/lib/planner-rows';
+import { PLANNER_BLOCK_PADDING_PX, buildSlotHeights, weekSlotDemandPx } from '@/lib/planner-rows';
+import { growRowsToFit, nestedMeetingRequiredPx } from './nested-fit';
 import { toMeetingPatterns, useMeetings, useSessionsForWeek } from '@/lib/queries.planner';
 import {
   placePlannerEvents,
@@ -89,15 +90,6 @@ export interface PlannerWeekData {
 }
 
 /**
- * A class block's own lines: the course-and-time head, the room, and a topic
- * when a `sessions` row gave it one. What `MeetingContent` renders above the
- * nested chips, and therefore what the block needs room for before them.
- */
-function meetingTextLines(meeting: PlacedMeeting): number {
-  return 2 + (meeting.topic === null ? 0 : 1);
-}
-
-/**
  * Meetings and the timed items that are not inside one share each column, so
  * they share its lanes. An item due during its own class is a chip in that
  * class's block, not a block of its own.
@@ -108,6 +100,7 @@ function buildBlocks(
   nested: ReadonlyMap<string, PlacedItem<WorkItem>[]>,
   segments: readonly PlacedEventSegment[],
   dayCount: number,
+  measured: ReadonlyMap<string, number>,
 ): (GridBlock & LaneSpan)[][] {
   const byDay: GridBlock[][] = Array.from({ length: dayCount }, () => []);
   for (const meeting of meetings) {
@@ -122,8 +115,19 @@ function buildBlocks(
       // Stack's rule is that hours grow when things collide, not whenever a
       // line does not fit — a class too short for its own topic clips it on a
       // whole line and keeps it on the block's tooltip (F-2).
+      // R3-8: the larger of the estimate from its text (`nested-fit.ts`) and
+      // what the browser measured its content at, so each nested item is drawn
+      // whole even where the estimate falls short (a status select, a font).
       requiredPx:
-        chips.length === 0 ? 0 : contentRequiredPx(meetingTextLines(meeting), chips.length),
+        chips.length === 0
+          ? 0
+          : Math.max(
+              nestedMeetingRequiredPx(
+                meeting,
+                chips.map((chip) => chip.item.title),
+              ),
+              (measured.get(meeting.key) ?? 0) + PLANNER_BLOCK_PADDING_PX,
+            ),
       meeting,
       nested: chips,
     });
@@ -171,7 +175,14 @@ function renderedEventCount(placed: PlacedPlannerEvents): number {
   return new Set([...placed.timed, ...placed.allDay].map((entry) => entry.event.id)).size;
 }
 
-export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
+/** No block measured yet: the server render, and the first client one. */
+const NOTHING_MEASURED: ReadonlyMap<string, number> = new Map();
+
+export function usePlannerWeekData(
+  view: PlannerWeekModel,
+  /** R3-8: measured content heights of class blocks with nested items, by block key. */
+  measured: ReadonlyMap<string, number> = NOTHING_MEASURED,
+): PlannerWeekData {
   const meetingsQuery = useMeetings();
   const sessionsQuery = useSessionsForWeek(view.weekStart, view.weekEnd);
   const itemsQuery = useWorkItemsWindow(view.weekStart, view.weekEnd);
@@ -199,11 +210,13 @@ export function usePlannerWeekData(view: PlannerWeekModel): PlannerWeekData {
 
   const blocksByDay = useMemo(() => {
     const { nested, standalone } = nestItemsInMeetings(placedMeetings, placedItems.timed);
-    return buildBlocks(placedMeetings, standalone, nested, placedEvents.timed, view.days.length);
-  }, [placedMeetings, placedItems, placedEvents, view.days.length]);
+    return buildBlocks(placedMeetings, standalone, nested, placedEvents.timed, view.days.length, measured);
+  }, [placedMeetings, placedItems, placedEvents, view.days.length, measured]);
 
   const slotHeights = useMemo(
-    () => buildSlotHeights(weekSlotDemandPx(blocksByDay)),
+    // Capped as before, then lifted past the cap under a class whose nested
+    // items need it (R3-8): a chip is never clipped to keep a row short.
+    () => growRowsToFit(buildSlotHeights(weekSlotDemandPx(blocksByDay)), blocksByDay),
     [blocksByDay],
   );
 

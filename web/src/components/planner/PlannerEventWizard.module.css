@@ -1,0 +1,101 @@
+/* PlannerEventWizard (R3-9) — the step-by-step new event. It sits inside
+   PopoutShell's panel and borrows PlannerEventForm.module.css for the form
+   body; these are only the wizard's own pieces. Tokens only (Phase 22 owns
+   the palette). */
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+}
+
+.step {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  box-shadow: inset 0 0 0 1px var(--color-divider);
+}
+
+.stepCurrent {
+  composes: step;
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.progress {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.kind {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  box-shadow: inset 0 0 0 1px var(--color-divider);
+  cursor: pointer;
+}
+
+.kind:hover {
+  background: var(--color-hover);
+}
+
+.kindChosen {
+  composes: kind;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.reviewRow {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.reviewLabel {
+  color: var(--color-muted);
+}
+
+.back {
+  margin-right: auto;
+}
+
+.discard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}

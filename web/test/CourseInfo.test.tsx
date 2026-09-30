@@ -107,10 +107,15 @@ beforeEach(() => {
 });
 
 describe('CourseInfo — Policies', () => {
-  it('prints the recorded policies verbatim once the scheme has loaded', () => {
+  it('prints the late policy verbatim once the scheme has loaded', () => {
     render(<CourseInfo courseId="IST.323" />);
-    expect(screen.getByText(SCHEME.ai_policy)).toBeInTheDocument();
     expect(screen.getByText(SCHEME.late_policy)).toBeInTheDocument();
+  });
+
+  it('shows no AI policy line, even when the scheme row still carries one (R3-5)', () => {
+    render(<CourseInfo courseId="IST.323" />);
+    expect(screen.queryByText(SCHEME.ai_policy)).toBeNull();
+    expect(screen.getByLabelText('Policies')).not.toHaveTextContent(/AI policy/i);
   });
 
   it('never says "not recorded" for a scheme query still in flight', () => {
@@ -158,6 +163,20 @@ describe('CourseInfo — Groups and Staff', () => {
     const groups = screen.getByLabelText('Groups');
     expect(groups).toHaveTextContent('Could not load the group notes: shells fetch failed');
     expect(groups).not.toHaveTextContent('No group assignment is recorded');
+  });
+
+  it('prints the group notes verbatim, with no "Blackboard disagrees" caption (R-45)', () => {
+    // False since 2026-09-22: IST.466's group_notes were corrected to match
+    // Blackboard (Ethics Team 3, Major Case Group 2; DECISIONS).
+    const notes = 'Ethics Team 3; Major Case Group 2 (Synchrony 10/20, SU IT 11/17)';
+    state.shells = answered([
+      { id: 'IST.466', location: null, term_id: 'FALL26', kind: 'lecture', group_notes: notes, card_note: null },
+    ]);
+    render(<CourseInfo courseId="IST.466" />);
+
+    const groups = screen.getByLabelText('Groups');
+    expect(groups).toHaveTextContent(notes);
+    expect(groups).not.toHaveTextContent(/disagrees|unresolved/);
   });
 
   it('does not claim there is no staff when the staff query failed', () => {

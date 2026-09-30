@@ -14,7 +14,7 @@
  *   - terms             start_date, so week 1 = the week of start_date
  *   - sessions          lecture lane, carries week_no + session_date + topic
  *   - v_work_items      assignment lane + readings, effort/glyph precomputed
- *   - grading_schemes   the AI policy shown verbatim
+ *   - grading_schemes   the late policy and letter scale shown verbatim
  *   - bb_files          harvested files, counted per session
  */
 
@@ -26,7 +26,7 @@ import {
 } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from './supabase/client';
 import type { Tables, Views } from './queries';
-import { COURSE_WORK_ITEMS_KEY } from './progress-cache';
+import { COURSE_STREAM_KEY, COURSE_WORK_ITEMS_KEY } from './progress-cache';
 import {
   normalizeCardNote,
   shellCacheKey,
@@ -101,7 +101,7 @@ export const courseQueryKeys = {
   workItems: (shellIds: string[]) => [...COURSE_WORK_ITEMS_KEY, shellKey(shellIds)] as const,
   gradingScheme: (shellIds: string[]) => ['course-grading-scheme', shellKey(shellIds)] as const,
   sessionFiles: (shellIds: string[]) => ['course-session-files', shellKey(shellIds)] as const,
-  stream: (shellIds: string[]) => ['course-stream', shellKey(shellIds)] as const,
+  stream: (shellIds: string[]) => [...COURSE_STREAM_KEY, shellKey(shellIds)] as const,
   contentTree: (shellIds: string[]) => ['course-content-tree', shellKey(shellIds)] as const,
   staff: (shellIds: string[]) => ['course-staff', shellKey(shellIds)] as const,
 } as const;
@@ -224,11 +224,11 @@ export function courseGradingSchemeOptions(shellIds: string[]) {
       const { data, error } = await supabase
         .from('grading_schemes')
         .select('*')
-        .in('course_id', shellIds);
+        .in('course_id', shellIds)
+        .order('course_id', { ascending: true });
       if (error) throw error;
-      if (!data || data.length === 0) return null;
-      // Prefer a scheme with an ai_policy; otherwise the first row.
-      return data.find((s) => s.ai_policy) ?? data[0];
+      // The first shell's scheme by id order (the lecture shell for GEO 103).
+      return data?.[0] ?? null;
     },
     enabled: shellIds.length > 0,
     staleTime: 30 * 60 * 1000,
@@ -413,15 +413,6 @@ export function realRoomDispute(
   return rooms.some((r) => !known.has(r));
 }
 
-/**
- * A verbatim AI policy reads as "zero tolerance" when it forbids AI outright at
- * every stage. IST 352 is the one such course; surface it prominently.
- */
-export function isZeroToleranceAiPolicy(policy: string | null | undefined): boolean {
-  if (!policy) return false;
-  return /zero[\s-]?tolerance/i.test(policy);
-}
-
 /* ===========================================================================
  * Phase 8 — course dimension (stream, classwork tree, staff, card note)
  *
@@ -436,24 +427,22 @@ export type {
   ContentTreeRow,
   CourseStreamMeta,
   CourseStreamRow,
-  StreamDay,
   StreamPostKind,
   StreamRefKind,
+  VanishedSplit,
 } from './course-dimension';
 export {
   CARD_NOTE_MAX_LENGTH,
   COURSE_TIME_ZONE,
-  DUE_WINDOW_DAYS,
   NOT_RECORDED,
   buildContentTree,
   courseToday,
-  filterStreamRows,
   flattenContentTree,
   groupContentTree,
-  groupStreamByDay,
   isFolderNode,
   normalizeCardNote,
   orNotRecorded,
+  splitVanishedRows,
   streamDayKey,
   ultraStateLabel,
   validateCardNote,
@@ -469,7 +458,9 @@ const STREAM_COLUMNS = 'course_id, post_kind, posted_at, ref_kind, ref_id, title
 
 const CONTENT_TREE_COLUMNS =
   'course_id, content_id, parent_id, bb_item_id, path, depth, title, item_kind, bb_type, ' +
-  'state, url, modified_at, assignment_id, file_id, file_name, storage_path, bucket';
+  'state, url, modified_at, assignment_id, file_id, file_name, storage_path, bucket, ' +
+  // 111 (Phase 17): the vanish run id and the file's note, appended last.
+  'missing_since, notes';
 
 const COURSE_STAFF_COLUMNS = 'id, course_id, name, role, email, office, office_hours';
 
@@ -478,9 +469,9 @@ const COURSE_STAFF_COLUMNS = 'id, course_id, name, role, email, office, office_h
  * ------------------------------------------------------------------------ */
 
 /**
- * The Stream feed for a display course: every post across its shells, newest
- * first. The +/-14-day window on `assignment_due` rows is a client filter (see
- * `filterStreamRows`) so the same fetch can also feed a wider view later.
+ * `v_course_stream` for a display course: every post across its shells, newest
+ * first. The course timeline (R3-4) reads its announcement arm, which carries
+ * the bell's unread flag (110).
  */
 export function courseStreamOptions(shellIds: string[]) {
   return queryOptions({
