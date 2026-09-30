@@ -1,0 +1,27 @@
+# 101a evidence log (PM scratch, Phase 20)
+- C-H 2026-09-29: <H>=9cffe90; eval cases 67; migrations N=9; labels 1
+- C-1 on PR-A (#39, b1ad6dd): 0 / 1 / 2
+- Task 3: baseline-pre-phase20.json cases 67 = golden 67; hit_rate 0.9193548387096774 (commit 7dbec66)
+- Task 3 hm before-counts at 2026-09-29 17:24:20Z: hook_tags>5 = 0; repo/status/schema empty = 91; phase '' = 543; branch '' = 1; bb2dash sessions = 598
+- 541-544 archived = 4 (checked 2026-09-29); v_inbox_queue = 0
+- Task 4: 771c5a6 phase-aliases.test exit 1; c937b6f exit 0
+- Task 5: tags+phase-aliases+vocabulary 98/98 (99/99 at HEAD)
+- Task 6: subagent.test 30/30 (3 brief cases + 2)
+- Task 7: RED be4dcbc hook-tags exit 1 (8/11 fail); after 4fa6aef 82/82
+- Task 8: resolve-config+machine-env 25/25 (840720d)
+- Task 9: untagged 17/17; grep DEFAULT_VAULT_SEGMENTS 0 (7e92f8c)
+- Task 10: redact-extra+redaction+budget 36/36; budget 677 ms, with 20 extras 1188 ms (6e41bb1)
+- Task 11: writer-lock+sweep+hook-process 41/41; pre-change 23/1262 half reads (46e44e4)
+- Task 12: cmp redact.mjs 0; 29/30 (self-copy stale) (9ee9bcb)
+- Task 13: greps 0/0/1 (39e77e7)
+- Task 14: backfill-fields 21/21 (02fc262)
+- Task 15: C-15 0/3/1; readme-fields 4/4 (W-62 branch)
+- Task 16: merges clean; no PAYLOAD edits needed (import graph); goldens regenerated (worktree.md phase-9); install+golden 20/20; hooks 1079/1075 pass/1 fail (self-copy)/3 skip; ingest 1706 passed 3 skipped; mcp typecheck ok, 196/196. PR-B = agentic-harness #36.
+- Nightly task registered -RealmSync DryRun (Get-ScheduledTask, 2026-09-29); last dry run clean for projects/classes/harness.
+- Nightly re-registered by Stack 2026-09-29: -RealmSync Apply confirmed; first Apply night 2026-09-30 03:00 local
+- Task 20 (B-55) 2026-09-29 ~18:14Z, gitleaks 8.30.1 `gitleaks git <V>/<realm> --redact`: projects 6 commits / 5.50 MB exit 0 no leaks; classes 2 commits / 1.09 MB exit 0 no leaks; harness 4 commits / 1.55 MB exit 0 no leaks
+- C-22 night 1 (2026-09-30T07:02Z): projects committed->pulled->pushed; classes clean->pulled->up-to-date; harness committed->pulled->pushed; realms-push 0 (PR-B not yet merged, so it does not count toward the post-L20-a nights)
+- PR-A #39 merged 2026-09-30 on Stack's word (2904b20). Task 2 first step: merged blob written over ~/.claude/skills/inbox-apply/SKILL.md; C-2 cmp 0; OneDrive stub .md count 0; installed Step 0 prints 'vault=C:/Users/stack/vault ingest=C:/Users/stack/agentic-harness/ingest realm=projects ok'. First real Apply run pending.
+- PR-B agentic-harness #36 merged 2026-09-30 on Stack's word (ea0e199); main checkout pulled --ff-only to ea0e199 (105 §3 note 2)
+- Task 21 (2026-09-30, commits on docs/harness-closure-20-skills): install-checkpoint --repo from harness ea0e199; C-21 prints equal / equal / equal / 1 / 1; Step 0 via resolve-config checked in six cases (live ok; classes realm STOP; BOM+space ok; missing vault STOP; missing machine file STOP; quote in path unsafe-path STOP); three-dot diff on web/mcp-server/desktop/db/ingest empty
+- Task 25 before: `untagged-sessions.mjs --due` -> "due: no review recorded", exit 3 (2026-09-30)
