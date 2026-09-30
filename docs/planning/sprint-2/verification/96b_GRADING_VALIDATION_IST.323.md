@@ -14,6 +14,7 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
 * IST.323-08 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
 * IST.323-24 (change_to 11 → keep 13), IST.323-25 (change_to 14 → keep 18), new IST.323-57 (fp_proposal points 11 → 13) and IST.323-58 (fp_log points 3 → 1): Stack 2026-09-29 re-cut the parts instead (B-12); the Blackboard proposal column is 13 = proposal 11 + final log 2, the column stays 13 and linked to part 18, and Final Project stays 20.
 * IST.323-15 and IST.323-16 (keep 11 / keep 3 → matches, no call): they state what the syllabus says; after the re-cut their rows hold 13 and 1, which IST.323-57 and -58 recheck.
+* IST.323-05: `stored` / `value` set to null only: Phase 17 migration `119_strip_ai_policy_passages` (applied 2026-09-29) cleared `ai_policy` in every course. Citation and quote left as written; the spot-check mismatch on them is waived by Stack (DECISIONS 2026-09-29).
 
 ## Reconciliation table
 
@@ -193,13 +194,13 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
     table: grading_schemes
     key: {course_id: "IST.323"}
     field: ai_policy
-  stored: "AI allowed as a tool with disclosure; not during tests, quizzes, or the in-class Final Project defense. Final Project: AI explicitly permitted, Appendix B must document what you asked, kept, rejected."
+  stored: null
   materials: "AI as a tool with disclosure; not in tests, quizzes or the defense; Final Project more permissive"
   citation: "bb_file:8#unit:13"
   quote: "AI may not be used during tests, quizzes, or the in-class Final Project defense."
   verdict: matches
   call: keep
-  value: "AI allowed as a tool with disclosure; not during tests, quizzes, or the in-class Final Project defense. Final Project: AI explicitly permitted, Appendix B must document what you asked, kept, rejected."
+  value: null
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "The course-intro deck states the same policy."
   decided_by: session
