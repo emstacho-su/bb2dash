@@ -94,7 +94,7 @@ $DOCKER_POLL_SECONDS = 10
 $APP_PROCESS_NAME = 'bb2dash'
 $BUILD_MUTEX_NAME = 'Local\Bb2dashLaunchBuild'
 $EXE_NAME = 'bb2dash.exe'
-$LAUNCH_FILES = @('logon-build.ps1', 'Bb2dashLaunch.psm1', 'Bb2dashLaunch.Tests.ps1', 'compose.build.yaml', 'register-logon-task.ps1', 'README.md')
+$LAUNCH_FILES = @('logon-build.ps1', 'update-now.ps1', 'Bb2dashLaunch.psm1', 'Bb2dashLaunch.Tests.ps1', 'compose.build.yaml', 'register-logon-task.ps1', 'README.md')
 
 if ($BuildWorktree -eq '') { $BuildWorktree = "$($RepoDir.TrimEnd('/', '\'))-build" }
 

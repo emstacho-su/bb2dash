@@ -3,7 +3,9 @@
   The pure half of the logon launcher: decide what to do, read and write the
   small state record, name the build command. No file, process or network
   access in here -- logon-build.ps1 owns the side effects, this module owns the
-  logic, and Bb2dashLaunch.Tests.ps1 pins the logic.
+  logic, and Bb2dashLaunch.Tests.ps1 pins the logic. One exception, at the end:
+  the Update now helper (2026-09-30), whose junction swap is tested against a
+  real junction and whose process and task calls are injected scriptblocks.
 
 .DESCRIPTION
   Two decisions, in the order the script runs them:
@@ -224,4 +226,150 @@ function Get-BuildCommand {
     }
 }
 
-Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand
+# ---------------------------------------------------------------- Update now (2026-09-30)
+#
+# The app's "Update now" button spawns update-now.ps1, detached, and quits. That script
+# calls Invoke-UpdateSwap below. These are the module's only functions with side effects:
+# Set-CurrentBuild touches the `current` junction (and nothing else), and Invoke-UpdateSwap
+# reaches the process table and Task Scheduler only through the scriptblocks it is handed,
+# so Bb2dashLaunch.Tests.ps1 drives both against a junction under TestDrive.
+
+$script:UpdateExeName = 'bb2dash.exe'
+
+<#
+.SYNOPSIS
+  What Update now may do once it has waited for the app: Swap (repoint current at the
+  new build) and Launch, or Launch alone -- the old build stays current -- with the reason.
+#>
+function Get-UpdateSwapDecision {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()][string] $Tree,
+        [AllowEmptyString()][string] $ActiveTree = '',
+        [bool] $BuildExists,
+        [bool] $AppExited
+    )
+    if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
+    Assert-Sha -Name 'ActiveTree' -Value $ActiveTree
+
+    if (-not $AppExited) {
+        return [pscustomobject]@{ Actions = [string[]] @('Launch'); Reason = 'the app did not exit in time: the old build stays current' }
+    }
+    if (-not $BuildExists) {
+        return [pscustomobject]@{ Actions = [string[]] @('Launch'); Reason = "build $Tree is not on disk: the old build stays current" }
+    }
+    if ($Tree -eq $ActiveTree) {
+        return [pscustomobject]@{ Actions = [string[]] @('Launch'); Reason = "build $Tree is already current" }
+    }
+    return [pscustomobject]@{ Actions = [string[]] @('Swap', 'Launch'); Reason = "switching current to build $Tree" }
+}
+
+function Get-JunctionTarget {
+    param([string] $Path)
+    if (-not (Test-Path $Path)) { return '' }
+    $item = Get-Item $Path -Force
+    if (-not $item.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) { return '' }
+    return [string] ($item.Target | Select-Object -First 1)
+}
+
+<#
+.SYNOPSIS
+  Repoint the `current` junction at -Target, the same way logon-build.ps1's
+  Invoke-Activate does, and put the previous target back if the new junction cannot be
+  created. Never deletes a build folder: only the junction itself is removed.
+
+.OUTPUTS
+  [pscustomobject] Ok, Previous, Reason.
+#>
+function Set-CurrentBuild {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $CurrentLink,
+        [Parameter(Mandatory)] [string] $Target
+    )
+    $previous = Get-JunctionTarget $CurrentLink
+    if (-not (Test-Path (Join-Path $Target $script:UpdateExeName))) {
+        return [pscustomobject]@{ Ok = $false; Previous = $previous; Reason = "no $($script:UpdateExeName) under $Target" }
+    }
+    try {
+        if (Test-Path $CurrentLink) { [IO.Directory]::Delete($CurrentLink) }   # the junction only, never its target
+        New-Item -ItemType Junction -Path $CurrentLink -Target $Target | Out-Null
+        return [pscustomobject]@{ Ok = $true; Previous = $previous; Reason = "current -> $Target" }
+    } catch {
+        $why = $_.Exception.Message
+        if ($previous -ne '' -and -not (Test-Path $CurrentLink)) {
+            try { New-Item -ItemType Junction -Path $CurrentLink -Target $previous | Out-Null } catch { $why += "; restoring $previous also failed: $($_.Exception.Message)" }
+        }
+        return [pscustomobject]@{ Ok = $false; Previous = $previous; Reason = "could not repoint current: $why" }
+    }
+}
+
+<#
+.SYNOPSIS
+  Update now: wait for the app to exit, repoint `current` at build -Tree, start the app.
+  On any failure the old build stays current and the app is started on it; every step
+  is logged through -Log.
+
+.OUTPUTS
+  [pscustomobject] Swapped, Launched, Reason.
+#>
+function Invoke-UpdateSwap {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $StateDir,
+        [Parameter(Mandatory)] [AllowEmptyString()][string] $Tree,
+        [Parameter(Mandatory)] [scriptblock] $TestAppRunning,
+        [Parameter(Mandatory)] [scriptblock] $StartApp,
+        [Parameter(Mandatory)] [scriptblock] $Log,
+        [int] $TimeoutSeconds = 60,
+        [int] $PollMilliseconds = 500
+    )
+    if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
+
+    $currentLink = Join-Path $StateDir 'current'
+    $target = Join-Path (Join-Path (Join-Path $StateDir 'builds') $Tree) 'win-unpacked'
+    & $Log 'INFO' "update to $Tree requested; waiting up to ${TimeoutSeconds}s for the app to exit"
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $exited = $false
+    while ($true) {
+        if (-not (& $TestAppRunning)) { $exited = $true; break }
+        if ((Get-Date) -ge $deadline) { break }
+        Start-Sleep -Milliseconds $PollMilliseconds
+    }
+
+    $activeTarget = Get-JunctionTarget $currentLink
+    $activeTree = ''
+    if ($activeTarget -ne '') {
+        $leaf = Split-Path -Leaf (Split-Path -Parent $activeTarget)
+        if ($leaf -match $script:ShaPattern) { $activeTree = $leaf }
+    }
+    $decision = Get-UpdateSwapDecision -Tree $Tree -ActiveTree $activeTree `
+        -BuildExists (Test-Path (Join-Path $target $script:UpdateExeName)) -AppExited $exited
+    $level = if ($decision.Actions -contains 'Swap') { 'INFO' } else { 'WARN' }
+    & $Log $level "update decision: [$($decision.Actions -join ', ')] because $($decision.Reason)"
+
+    $swapped = $false
+    if ($decision.Actions -contains 'Swap') {
+        $set = Set-CurrentBuild -CurrentLink $currentLink -Target $target
+        if ($set.Ok) {
+            $swapped = $true
+            & $Log 'INFO' $set.Reason
+        } else {
+            & $Log 'ERROR' "$($set.Reason); the old build stays current"
+        }
+    }
+
+    $launched = $false
+    $exe = Join-Path $currentLink $script:UpdateExeName
+    try {
+        & $StartApp $exe
+        $launched = $true
+        & $Log 'INFO' "app started on $(if ($swapped) { "build $Tree" } else { 'the old build' })"
+    } catch {
+        & $Log 'ERROR' "the app could not be started: $($_.Exception.Message)"
+    }
+    return [pscustomobject]@{ Swapped = $swapped; Launched = $launched; Reason = $decision.Reason }
+}
+
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap
