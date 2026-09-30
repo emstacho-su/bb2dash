@@ -50,7 +50,14 @@ import {
 import { showUpdatePrompt } from './update-prompt';
 import { MENU_CHECK_NOW, createTray } from './tray';
 import type { TrayHandle } from './tray';
-import { createWindow, ensureLoaded, needsReload, refreshSessionWithoutWindow, showWindow } from './window';
+import {
+  createWindow,
+  ensureLoaded,
+  firstLoad,
+  needsReload,
+  refreshSessionWithoutWindow,
+  showWindow,
+} from './window';
 import { createWindowController } from './window-controller';
 import type { WindowController } from './window-controller';
 
@@ -217,7 +224,9 @@ function startShellPoller(validConfig: DesktopConfig): PollerHandle {
     getWindow: getMainWindow,
     openWindowAt: (target) => {
       if (windows === null) throw new Error('the window controller is not ready');
-      windows.open(target);
+      const opened = windows.open(target);
+      // A window built for this route loads it first; one that appeared meanwhile is sent there.
+      return opened.created ? firstLoad(opened.window) : opened.window.loadURL(target);
     },
     log: createNamedLogger('poller'),
   });

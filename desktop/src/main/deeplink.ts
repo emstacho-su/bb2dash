@@ -24,9 +24,10 @@ export interface DeeplinkOptions {
   readonly getWindow: () => BrowserWindow | null;
   /**
    * Build a new window whose first load is `target` (2026-09-30: closing the window
-   * destroys it). Without it, a click with no window is refused.
+   * destroys it). Resolves or rejects with that window's first load, like `loadURL`.
+   * Without it, a click with no window is refused.
    */
-  readonly openWindowAt?: (target: string) => void;
+  readonly openWindowAt?: (target: string) => Promise<void>;
   /** Supplied under `BB2DASH_TEST=1`; every attempt is recorded, accepted or not. */
   readonly recorder?: Recorder;
   readonly log?: Logger;
@@ -75,15 +76,17 @@ export function createDeeplink(options: DeeplinkOptions): Deeplink {
       if ((!window || window.isDestroyed()) && options.openWindowAt !== undefined) {
         // The window was closed to the tray. Build a new one straight at the route, so no
         // second `loadURL` races its first load; the window's own loader retries it.
+        let opening: Promise<void>;
         try {
-          options.openWindowAt(target);
+          opening = options.openWindowAt(target);
         } catch (error) {
           log.error(`opening a window for ${route} failed: ${describeError(error)}`);
           options.recorder?.recordNavigation(route, false);
           return false;
         }
-        options.recorder?.recordNavigation(route, true);
-        log.info(`opened a new window at ${route}`);
+        // R2-8 holds for a new window too: the outcome is recorded once its load settles.
+        log.info(`opened a new window at ${route}; waiting for it to load`);
+        settleNavigation(opening, route);
         return true;
       }
       if (!window || window.isDestroyed()) {
@@ -113,25 +116,29 @@ export function createDeeplink(options: DeeplinkOptions): Deeplink {
         return false;
       }
 
-      pending.then(
-        () => {
-          options.recorder?.recordNavigation(route, true);
-          log.info(`navigated to ${route}`);
-        },
-        (error: unknown) => {
-          if (isBenignLoadFailure(error)) {
-            // The app redirected or superseded this load: the window did navigate, just
-            // not to the URL that was asked for. Not a failure.
-            options.recorder?.recordNavigation(route, true);
-            log.info(`navigated to ${route} (superseded by the app's own redirect)`);
-            return;
-          }
-          options.recorder?.recordNavigation(route, false);
-          log.error(`navigation to ${route} failed: ${describeError(error)}`);
-        },
-      );
-
+      settleNavigation(pending, route);
       return true;
     },
   };
+
+  /** Record and log a navigation once its load is known (R2-8), for either path. */
+  function settleNavigation(pending: Promise<void>, route: string): void {
+    pending.then(
+      () => {
+        options.recorder?.recordNavigation(route, true);
+        log.info(`navigated to ${route}`);
+      },
+      (error: unknown) => {
+        if (isBenignLoadFailure(error)) {
+          // The app redirected or superseded this load: the window did navigate, just
+          // not to the URL that was asked for. Not a failure.
+          options.recorder?.recordNavigation(route, true);
+          log.info(`navigated to ${route} (superseded by the app's own redirect)`);
+          return;
+        }
+        options.recorder?.recordNavigation(route, false);
+        log.error(`navigation to ${route} failed: ${describeError(error)}`);
+      },
+    );
+  }
 }

@@ -105,6 +105,7 @@ import {
   SESSION_REFRESH_TIMEOUT_MS,
   createWindow,
   ensureLoaded,
+  firstLoad,
   needsReload,
   refreshSessionWithoutWindow,
   showWindow,
@@ -389,5 +390,18 @@ describe('2026-09-30 — the window-less session refresh', () => {
     await vi.advanceTimersByTimeAsync(SESSION_REFRESH_TIMEOUT_MS);
     fake.loadHangs = false;
     expect(refreshSessionWithoutWindow(APP_URL, noGuards)).not.toBeNull();
+  });
+});
+
+describe('R2-8 for a rebuilt window — its first load is observable', () => {
+  it('firstLoad resolves when the window’s first load does', async () => {
+    const window = createWindow(APP_URL, `${APP_URL}inbox`);
+    await expect(firstLoad(window)).resolves.toBeUndefined();
+  });
+
+  it('firstLoad rejects with the first load’s own error, even though the loader retries', async () => {
+    fake.loadFails = 1;
+    const window = createWindow(APP_URL, `${APP_URL}inbox`);
+    await expect(firstLoad(window)).rejects.toThrow(/ERR_NAME_NOT_RESOLVED/);
   });
 });

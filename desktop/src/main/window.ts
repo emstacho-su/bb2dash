@@ -155,6 +155,17 @@ export function needsReload(window: BrowserWindow): boolean {
 /** Every window's loader, so `showWindow` and the retry timer share one implementation. */
 const loaders = new WeakMap<BrowserWindow, () => void>();
 
+/** The first `loadURL` of every window, so a deep link can wait on a window it just built. */
+const firstLoads = new WeakMap<BrowserWindow, Promise<void>>();
+
+/**
+ * R2-8 for a rebuilt window: the promise of its first load, rejecting with that load's own
+ * error even when the loader goes on to retry. Resolves at once for an unknown window.
+ */
+export function firstLoad(window: BrowserWindow): Promise<void> {
+  return firstLoads.get(window) ?? Promise.resolve();
+}
+
 /**
  * R2-7 — load `appUrl`, and keep trying on the backoff if it will not load.
  *
@@ -183,7 +194,9 @@ function attachLoader(window: BrowserWindow, appUrl: string, initialUrl: string 
     loading = true;
     clear();
     const url = target;
-    window.webContents.loadURL(url).then(
+    const pending = window.webContents.loadURL(url);
+    if (!firstLoads.has(window)) firstLoads.set(window, pending);
+    pending.then(
       () => {
         loading = false;
         attempt = 0;

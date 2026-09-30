@@ -47,7 +47,7 @@ export interface PollerWiringDeps {
   /** The live window, or `null` while it is closed to the tray (2026-09-30). */
   readonly getWindow: () => BrowserWindow | null;
   /** Build a window at a toast's route when the window was closed (2026-09-30). */
-  readonly openWindowAt?: (target: string) => void;
+  readonly openWindowAt?: (target: string) => Promise<void>;
   readonly log?: Logger;
   readonly env?: NodeJS.ProcessEnv;
 }
