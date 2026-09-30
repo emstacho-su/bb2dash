@@ -117,6 +117,51 @@ describe('navigate', () => {
     expect(log.lines.some((line) => line.includes('no window'))).toBe(true);
   });
 
+  it('opens a new window straight at the route when the window was closed (2026-09-30)', () => {
+    const recorder = createRecorder();
+    const opened: string[] = [];
+    const deeplink = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => null,
+      openWindowAt: (target) => {
+        opened.push(target);
+      },
+      recorder,
+    });
+    expect(deeplink.navigate('/course/IST.323/grades')).toBe(true);
+    expect(opened).toEqual([`${APP_URL}/course/IST.323/grades`]);
+    expect(recorder.navigations().map((n) => [n.route, n.accepted])).toEqual([
+      ['/course/IST.323/grades', true],
+    ]);
+  });
+
+  it('never opens a window for a refused route', () => {
+    const opened: string[] = [];
+    const deeplink = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => null,
+      openWindowAt: (target) => {
+        opened.push(target);
+      },
+    });
+    expect(deeplink.navigate('https://evil.example/')).toBe(false);
+    expect(opened).toEqual([]);
+  });
+
+  it('reports a window that could not be opened as a refused navigation', () => {
+    const log = logger();
+    const deeplink = createDeeplink({
+      appUrl: APP_URL,
+      getWindow: () => null,
+      openWindowAt: () => {
+        throw new Error('no display');
+      },
+      log,
+    });
+    expect(deeplink.navigate('/inbox')).toBe(false);
+    expect(log.lines.some((line) => line.startsWith('error'))).toBe(true);
+  });
+
   it('returns false when the window has been destroyed', () => {
     const { window } = fakeWindow({ destroyed: true });
     expect(createDeeplink({ appUrl: APP_URL, getWindow: () => window }).navigate('/inbox')).toBe(false);

@@ -20,8 +20,13 @@ import { showWindow } from './window';
 export interface DeeplinkOptions {
   /** The single app origin the window may navigate to (C-2, C-4). */
   readonly appUrl: string;
-  /** The reused window, or `null` before it exists. C-12: it is created once. */
+  /** The live window, or `null` while the app sits in the tray with its window closed. */
   readonly getWindow: () => BrowserWindow | null;
+  /**
+   * Build a new window whose first load is `target` (2026-09-30: closing the window
+   * destroys it). Without it, a click with no window is refused.
+   */
+  readonly openWindowAt?: (target: string) => void;
   /** Supplied under `BB2DASH_TEST=1`; every attempt is recorded, accepted or not. */
   readonly recorder?: Recorder;
   readonly log?: Logger;
@@ -67,6 +72,20 @@ export function createDeeplink(options: DeeplinkOptions): Deeplink {
       }
 
       const window = options.getWindow();
+      if ((!window || window.isDestroyed()) && options.openWindowAt !== undefined) {
+        // The window was closed to the tray. Build a new one straight at the route, so no
+        // second `loadURL` races its first load; the window's own loader retries it.
+        try {
+          options.openWindowAt(target);
+        } catch (error) {
+          log.error(`opening a window for ${route} failed: ${describeError(error)}`);
+          options.recorder?.recordNavigation(route, false);
+          return false;
+        }
+        options.recorder?.recordNavigation(route, true);
+        log.info(`opened a new window at ${route}`);
+        return true;
+      }
       if (!window || window.isDestroyed()) {
         log.warn(`no window to navigate to ${route}`);
         options.recorder?.recordNavigation(route, false);

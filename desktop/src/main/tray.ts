@@ -1,5 +1,6 @@
 /**
- * C-12 (Q4) — the tray. Closing the window hides it; the app keeps running and
+ * C-12 (Q4) — the tray. Closing the window closes it for real (2026-09-30: the renderer is
+ * released); *Open* builds a new one. The app keeps running and
  * polling, and *Quit* is the only exit.
  *
  * The icon is the 16 px PNG derived from `build/icon.png` by
@@ -9,7 +10,6 @@
  */
 
 import { Menu, Tray, nativeImage } from 'electron';
-import type { BrowserWindow } from 'electron';
 
 import { log } from './log';
 import { resourcePath } from './resources';
@@ -26,8 +26,8 @@ export interface TrayItem {
 }
 
 export interface TrayOptions {
-  readonly window: BrowserWindow;
-  readonly showWindow: (window: BrowserWindow) => void;
+  /** Show the window, building it first if it was closed. */
+  readonly onOpen: () => void;
   readonly onCheckNow: () => void;
   readonly onQuit: () => void;
 }
@@ -49,7 +49,7 @@ function trayImage(): Electron.NativeImage {
 
 export function createTray(options: TrayOptions): TrayHandle {
   const items: readonly TrayItem[] = Object.freeze([
-    { label: MENU_OPEN, click: () => options.showWindow(options.window) },
+    { label: MENU_OPEN, click: options.onOpen },
     { label: MENU_CHECK_NOW, click: options.onCheckNow },
     { label: MENU_QUIT, click: options.onQuit },
   ]);
@@ -61,7 +61,7 @@ export function createTray(options: TrayOptions): TrayHandle {
       items.map((item) => ({ label: item.label, click: (): void => item.click() })),
     ),
   );
-  tray.on('click', () => options.showWindow(options.window));
+  tray.on('click', () => options.onOpen());
 
   recordEvent('tray-menu', { labels: items.map((item) => item.label) });
   log(`tray created (${items.map((item) => item.label).join(' / ')})`);

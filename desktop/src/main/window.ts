@@ -165,10 +165,13 @@ export function ensureLoaded(window: BrowserWindow): void {
   loaders.get(window)?.();
 }
 
-function attachLoader(window: BrowserWindow, appUrl: string): void {
+function attachLoader(window: BrowserWindow, appUrl: string, initialUrl: string = appUrl): void {
   let attempt = 0;
   let timer: NodeJS.Timeout | null = null;
   let loading = false;
+  // A window rebuilt for a toast click opens at that route (2026-09-30), and retries it;
+  // once anything has loaded, every later reload (crash, tray Open) is the app root again.
+  let target = initialUrl;
 
   const clear = (): void => {
     if (timer !== null) clearTimeout(timer);
@@ -179,15 +182,17 @@ function attachLoader(window: BrowserWindow, appUrl: string): void {
     if (window.isDestroyed() || loading) return;
     loading = true;
     clear();
-    window.webContents.loadURL(appUrl).then(
+    const url = target;
+    window.webContents.loadURL(url).then(
       () => {
         loading = false;
         attempt = 0;
-        log(`loaded ${new URL(appUrl).origin}`);
+        target = appUrl;
+        log(`loaded ${new URL(url).origin}`);
       },
       (error: unknown) => {
         loading = false;
-        logError(`could not load ${appUrl}`, error);
+        logError(`could not load ${url}`, error);
         const delay = LOAD_RETRY_DELAYS_MS[Math.min(attempt, LOAD_RETRY_DELAYS_MS.length - 1)];
         attempt += 1;
         if (attempt > LOAD_RETRY_DELAYS_MS.length) {
@@ -213,6 +218,7 @@ function attachLoader(window: BrowserWindow, appUrl: string): void {
     recordEvent('render-process-gone', { reason: details.reason });
     attempt = 0;
     loading = false;
+    target = appUrl;
     load();
   });
 
@@ -220,8 +226,12 @@ function attachLoader(window: BrowserWindow, appUrl: string): void {
   load();
 }
 
-/** Create the window. It is created once per run and reused (C-12). */
-export function createWindow(appUrl: string): BrowserWindow {
+/**
+ * Create the window. Closing it destroys it (2026-09-30), and `window-controller.ts`
+ * builds a new one on the next open; `initialUrl` is that window's first load when a
+ * toast click is what opened it.
+ */
+export function createWindow(appUrl: string, initialUrl?: string): BrowserWindow {
   const saved = readWindowState();
   const icon = resourcePath('build', 'icon.ico');
 
@@ -247,9 +257,65 @@ export function createWindow(appUrl: string): BrowserWindow {
   trackWindowState(window);
 
   // R2-7: owns the initial load, the retry backoff and the crash reload.
-  attachLoader(window, appUrl);
+  attachLoader(window, appUrl, initialUrl ?? appUrl);
 
   return window;
+}
+
+/**
+ * 2026-09-30 — how long the window-less refresh page lives after its load settles. Long
+ * enough for the web app's own client code to run once after the proxy has rewritten the
+ * cookie; short enough that the renderer is gone again well inside a poll interval.
+ */
+export const SESSION_REFRESH_LINGER_MS = 20_000;
+/** The page is destroyed after this whatever its load did. */
+export const SESSION_REFRESH_TIMEOUT_MS = 60_000;
+
+let refreshPage: BrowserWindow | null = null;
+
+/**
+ * Closing the window destroys it now, so R2-4's "reload the hidden window" has nothing to
+ * reload. This does the same thing with a page that exists only for the refresh: a hidden
+ * window in the same partition loads the app once — the web app's proxy rewrites the
+ * cookie on that navigation — and is destroyed again. Main still never calls the auth API
+ * (C-5). One page at a time; returns `null` when one is already running.
+ */
+export function refreshSessionWithoutWindow(
+  appUrl: string,
+  attachGuards: (window: BrowserWindow) => void,
+): BrowserWindow | null {
+  if (refreshPage !== null) return null;
+
+  const page = new BrowserWindow({
+    show: false,
+    width: 800,
+    height: 600,
+    webPreferences: { ...WEB_PREFERENCES, preload: preloadPath() },
+  });
+  refreshPage = page;
+  attachGuards(page);
+
+  let finished = false;
+  const finish = (reason: string): void => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(deadline);
+    refreshPage = null;
+    log(`session refresh page closed (${reason})`);
+    if (!page.isDestroyed()) page.destroy();
+  };
+  const deadline = setTimeout(() => finish('timed out'), SESSION_REFRESH_TIMEOUT_MS);
+  deadline.unref?.();
+
+  const linger = (): void => {
+    const timer = setTimeout(() => finish('done'), SESSION_REFRESH_LINGER_MS);
+    timer.unref?.();
+  };
+  page.webContents.loadURL(appUrl).then(linger, (error: unknown) => {
+    logError('the session refresh page could not load the app', error);
+    linger();
+  });
+  return page;
 }
 
 /**

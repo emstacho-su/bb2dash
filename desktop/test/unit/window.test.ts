@@ -14,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const fake = vi.hoisted(() => ({
   /** Resolve or reject the next `loadURL`. */
   loadFails: 0,
+  /** A `loadURL` that never settles, like a request stuck behind a captive portal. */
+  loadHangs: false,
   loads: [] as string[],
   /** `webContents.on(event)` handlers, so a test can play Chromium. */
   contentHandlers: {} as Record<string, ((...args: unknown[]) => void)[]>,
@@ -31,6 +33,7 @@ vi.mock('electron', () => {
   const webContents = {
     loadURL(url: string) {
       fake.loads.push(url);
+      if (fake.loadHangs) return new Promise<void>(() => undefined);
       if (fake.loadFails > 0) {
         fake.loadFails -= 1;
         return Promise.reject(new Error('ERR_NAME_NOT_RESOLVED (-105)'));
@@ -74,6 +77,10 @@ vi.mock('electron', () => {
       fake.visible = true;
     };
     focus = () => fake.calls.push('focus');
+    destroy = () => {
+      fake.calls.push('destroy');
+      for (const handler of fake.windowHandlers['closed'] ?? []) handler();
+    };
     getNormalBounds = () => ({ x: 0, y: 0, width: 1280, height: 800 });
   }
 
@@ -93,7 +100,17 @@ vi.mock('../../src/main/log', () => ({
 
 vi.mock('../../src/main/resources', () => ({ resourcePath: () => null }));
 
-import { createWindow, ensureLoaded, needsReload, showWindow } from '../../src/main/window';
+import {
+  SESSION_REFRESH_LINGER_MS,
+  SESSION_REFRESH_TIMEOUT_MS,
+  createWindow,
+  ensureLoaded,
+  needsReload,
+  refreshSessionWithoutWindow,
+  showWindow,
+} from '../../src/main/window';
+
+const noGuards = (): void => undefined;
 
 const APP_URL = 'http://127.0.0.1:4321/';
 
@@ -109,6 +126,7 @@ async function settle(): Promise<void> {
 
 beforeEach(() => {
   fake.loadFails = 0;
+  fake.loadHangs = false;
   fake.loads.length = 0;
   fake.contentHandlers = {};
   fake.windowHandlers = {};
@@ -312,5 +330,64 @@ describe('the window Electron is asked for', () => {
       sandbox: true,
       webSecurity: true,
     });
+  });
+});
+
+describe('2026-09-30 — a window rebuilt for a toast click opens at the route', () => {
+  const ROUTE_URL = `${APP_URL}course/IST.323/grades`;
+
+  it('makes the route its first load, not the app root', async () => {
+    createWindow(APP_URL, ROUTE_URL);
+    await settle();
+    expect(fake.loads).toEqual([ROUTE_URL]);
+  });
+
+  it('retries the route when its first load fails', async () => {
+    fake.loadFails = 1;
+    createWindow(APP_URL, ROUTE_URL);
+    await settle();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await settle();
+    expect(fake.loads).toEqual([ROUTE_URL, ROUTE_URL]);
+  });
+
+  it('goes back to the app root for a later crash reload', async () => {
+    createWindow(APP_URL, ROUTE_URL);
+    await settle();
+    fireContent('render-process-gone', {}, { reason: 'crashed' });
+    await settle();
+    expect(fake.loads).toEqual([ROUTE_URL, APP_URL]);
+  });
+});
+
+describe('2026-09-30 — the window-less session refresh', () => {
+  it('loads the app in a hidden window and destroys it once the page has had time', async () => {
+    const page = refreshSessionWithoutWindow(APP_URL, noGuards);
+    await settle();
+    expect(page).not.toBeNull();
+    expect(fake.loads).toEqual([APP_URL]);
+    expect(fake.constructed.at(-1)?.['show']).toBe(false);
+    expect(fake.calls).not.toContain('show');
+
+    await vi.advanceTimersByTimeAsync(SESSION_REFRESH_LINGER_MS - 1);
+    expect(fake.calls).not.toContain('destroy');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fake.calls).toContain('destroy');
+  });
+
+  it('destroys the page even when the load never settles', async () => {
+    fake.loadHangs = true;
+    refreshSessionWithoutWindow(APP_URL, noGuards);
+    await vi.advanceTimersByTimeAsync(SESSION_REFRESH_TIMEOUT_MS);
+    expect(fake.calls).toContain('destroy');
+  });
+
+  it('runs one refresh page at a time', async () => {
+    fake.loadHangs = true;
+    refreshSessionWithoutWindow(APP_URL, noGuards);
+    expect(refreshSessionWithoutWindow(APP_URL, noGuards)).toBeNull();
+    await vi.advanceTimersByTimeAsync(SESSION_REFRESH_TIMEOUT_MS);
+    fake.loadHangs = false;
+    expect(refreshSessionWithoutWindow(APP_URL, noGuards)).not.toBeNull();
   });
 });

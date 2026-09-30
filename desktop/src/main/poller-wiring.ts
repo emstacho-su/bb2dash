@@ -44,8 +44,10 @@ export interface PollerWiringDeps {
   readonly getSession: () => Promise<WebSession | null>;
   /** W-25's `core/rest.ts`, already bound to the anon key and the Supabase URL. */
   readonly createRest: (session: WebSession) => RestGet;
-  /** The single reused window (C-12). */
+  /** The live window, or `null` while it is closed to the tray (2026-09-30). */
   readonly getWindow: () => BrowserWindow | null;
+  /** Build a window at a toast's route when the window was closed (2026-09-30). */
+  readonly openWindowAt?: (target: string) => void;
   readonly log?: Logger;
   readonly env?: NodeJS.ProcessEnv;
 }
@@ -83,6 +85,7 @@ export function startPoller(deps: PollerWiringDeps): PollerHandle {
   const deeplink = createDeeplink({
     appUrl: deps.appUrl,
     getWindow: deps.getWindow,
+    ...(deps.openWindowAt ? { openWindowAt: deps.openWindowAt } : {}),
     ...(recorder ? { recorder } : {}),
     log,
   });
