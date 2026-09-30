@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-30** (Phase 18 merged on Stack's word "merge this phase" **before its gate sync**: migrations 120–129 live, 160 opening Phase 18's overflow block 160–169 for the review fix; tasks 16–19, 26, 28 and task 14's 48 h re-read owed to the first `/bb-sync` on `main`, which is now the gate; Phase 17 merged as PR #43). Before that, **2026-09-30** (Phase 17 built on `feat/web-polish-17`, PR open, not merged: migrations 110–119 and 150 live and md5-identical, 150 opening Phase 17's overflow block 150–159; round-3 walk 24/24 on the preview; waiting on Stack's T-24 and T-26 sittings and his look at round 3). Before that, **2026-09-29** (PRs #30 Phase 15, #31 logon build + the `estac` → `stack` path pass, and #32 sync file pull merged on Stack's word; R1 done and its gate-out green on `main`, so R3 and R4 are open; every live path reads `C:/Users/stack/...`; Task 0 started 15:25Z). Before that, **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-30** (Phase 20: PR-A #39 and harness PR-B #36 (+ #37) merged, PR-C open; V-2 walked in `101a_V2_VERIFICATION.md`, closed pending Stack's word; Session A's status in §6). Before that, **2026-09-30** (Phase 18 merged on Stack's word "merge this phase" **before its gate sync**: migrations 120–129 live, 160 opening Phase 18's overflow block 160–169 for the review fix; tasks 16–19, 26, 28 and task 14's 48 h re-read owed to the first `/bb-sync` on `main`, which is now the gate; Phase 17 merged as PR #43). Before that, **2026-09-30** (Phase 17 built on `feat/web-polish-17`, PR open, not merged: migrations 110–119 and 150 live and md5-identical, 150 opening Phase 17's overflow block 150–159; round-3 walk 24/24 on the preview; waiting on Stack's T-24 and T-26 sittings and his look at round 3). Before that, **2026-09-29** (PRs #30 Phase 15, #31 logon build + the `estac` → `stack` path pass, and #32 sync file pull merged on Stack's word; R1 done and its gate-out green on `main`, so R3 and R4 are open; every live path reads `C:/Users/stack/...`; Task 0 started 15:25Z). Before that, **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
 > rounds, record `105_BRIEF_VERIFICATION_2026-09-27.md`; §6's prompts rewritten to them). Before that, **2026-09-24** (**sprint 2 planned**:
 > requirements `91_REQUIREMENTS_v3.md`, research `92_*` + `93_SPRINT2_RESEARCH_SYNTHESIS.md`, phases
 > `94_SPRINT2_PHASES.md`, briefs `95_`–`103_`; planning PR open on `docs/sprint2-planning`; every
@@ -55,7 +55,7 @@ gitignored `.env` at registration (2026-09-29: `dist` built, 88 unit tests, `npm
 | 18 | Ingest and corpus | `briefs/98_PHASE18_ingest_corpus.md` | R-60..R-63, R-66..R-70, R-72..R-75, R-77; S2-rag-1 | 120–129 live, 160 (overflow block 160–169) | **merged 2026-09-30 before its gate sync; tasks 16–19, 26, 28 owed to the first sync on `main`** |
 | 19 | Content identity, per-crawl history, sync honesty | `briefs/99_PHASE19_content_history.md` | R-38, R-41, R-64, R-65, R-71, R-76 | 130–139 | unblocked (17 and 18 on `main`); PM recommends starting after the first sync on `main` proves 18's crawler |
 | 14 | Containers (R-28) | `briefs/100_PHASE14_containers.md` (supersedes `82_`'s Contract) | R-81..R-96; S2-containers-1 | 091–099 | planned; the spike gates its sync half, whose workers (W-55, W-56) also wait for 15, 18 and 19 on `main`; three repos, one PR per repo plus the early `syncLauncher` PR (B-51) |
-| 20 | Harness closure: V-2 on record, note quality, checkpoint redaction | `briefs/101_PHASE20_harness_closure.md` | R-97..R-104, R-106 | none here | planned; harness repo plus bb2dash, three PRs (PR-A for R-97 first, PR-B harness, PR-C bb2dash docs) |
+| 20 | Harness closure: V-2 on record, note quality, checkpoint redaction | `briefs/101_PHASE20_harness_closure.md` | R-97..R-104, R-106 | none here | **PR-A (#39, 2904b20) and PR-B (harness #36, ea0e199; + harness #37, 00539be) merged 2026-09-30; PR-C open** (`docs/harness-closure-20`); live steps done; V-2 walked in `verification/101a_V2_VERIFICATION.md`, closed pending Stack's word; task 29 after PR-C merges |
 | 21 | Workspace: chat routed by complexity, on the subscription | `briefs/102_PHASE21_workspace.md` | S2-workspace-1 | 140–149 | planned; after 14 |
 | 22 | Styling | `briefs/103_PHASE22_styling.md` | R-53, R-46; S2-styling-1 | none | planned; last |
 
@@ -217,7 +217,9 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
   items, each with the default the PM took) and approve the phase plan (`94_`); say where Phase 14 sits
   (default: it starts with Phase 15).~~ Done by delegation 2026-09-27 (DECISIONS rows of that date; Phase 14 starts
   with Phase 15). Stack may still overturn any row by saying so; the phase's PM then rewrites the B-table row.
-* **Hold the Inbox "Apply answers" button and `/bb-sync` until Phase 20's PR-A (R-97) merges:** `/inbox-apply` still
+* ~~**Hold the Inbox "Apply answers" button and `/bb-sync` until Phase 20's PR-A (R-97) merges.**~~ Lifted 2026-09-30:
+  PR-A merged (#39, 2904b20) and the installed `/inbox-apply` prints `realm=projects ok` before anything else (101a).
+  The original item: `/inbox-apply` still
   writes its decision notes to the OneDrive stub, not the realm vault (inbox-541..544.md landed there on 2026-09-27);
   the PM copies those four notes into the realm when PR-A lands (brief 101 §Seams). Found by the 2026-09-27 decision panel.
   On `stack-laptop` there is no OneDrive stub: the 2026-09-29 run (request 186) wrote inbox-752..756 straight into the
@@ -311,6 +313,12 @@ Phase 15 (done)
 > Stop at "ready when you say so".
 
 **Session A — Phase 20** (the harness repo plus two bb2dash PRs; can run first of all: R-97 is a live bug)
+
+*Status 2026-09-30:* run. PR-A (bb2dash #39) and PR-B (agentic-harness #36, plus #37) merged on Stack's word; PR-C
+(`docs/harness-closure-20`) open. Acceptance steps done: 3 (L20-a), 4 (L20-b), 5 (credential test, run by the PM
+without removing the credential), 6 (resume chain), 8 (the untagged line in `/bb2dash-pm`); step 7 struck by Stack;
+step 1's first real Apply run waits for an Inbox item; step 9 (his word on `101a`) is open. After PR-C merges: task 29.
+The prompt below is kept for the record.
 
 > You are the PM for Phase 20 of bb2dash, working in `C:/Users/stack/agentic-harness` with bb2dash beside it. Read
 > `C:/Users/stack/projects/bb2dash/docs/planning/sprint-2/briefs/101_PHASE20_harness_closure.md` in full: R-97, R-98,
