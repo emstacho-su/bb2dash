@@ -40,6 +40,9 @@ probes are separate: the same Chrome profile reopened after the browser was clos
 | probe-4 | 2026-09-29T17:40:14Z | 2:15 | 200 | idle; the tab now shows `/ultra/course` (Blackboard or Stack moved it; no click by the loop) |
 | probe-5 | 2026-09-29T18:41:21Z | 3:16 | 200 | tab in active use by Stack (a course file page), so this hour was not idle; the login is alive either way |
 | probe-6 | 2026-09-29T19:42:23Z | 4:17 | 200 | tab on the ECN.304 course outline, still in use by Stack; alive |
+| probe-7 | 2026-09-30T04:01:23Z | 12:36 | **401** | dead: the tab sits on Blackboard's landing page with `new_loc=/ultra/courses/_571529_1/outline`, the redirect a signed-out session gets. This wake fired about 7 h late (the session's usage limit paused the loop from ~20:43Z), so the death lies somewhere after probe-6 |
+
+Idle lifetime: **between 4:17 and 12:36** (t0 2026-09-29T15:25:39Z → last alive 19:42:23Z, first dead 04:01:23Z on 2026-09-30). Bracketed, not measured: the loop's hourly wake was delayed by the session's usage-limit pause, and probes 5–6 were taken while Stack was using the tab, so the series is not a pure idle measurement. The laptop stayed on. KMSI was yes.
 
 ### Reopen probes (same profile, browser closed in between)
 
