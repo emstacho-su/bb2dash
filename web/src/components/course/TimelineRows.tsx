@@ -204,24 +204,26 @@ export function AssignmentRow({
         </span>
         {isAssignment ? (
           <Link
-            className={`${styles.sessionTitle} ${styles.titleLink}`}
+            className={`${styles.sessionTitle} ${styles.asgTitle} ${styles.titleLink}`}
             href={itemQuery({ kind: 'assignment', id: itemId })}
             scroll={false}
           >
             {title}
           </Link>
         ) : (
-          <span className={styles.sessionTitle}>{title}</span>
+          <span className={`${styles.sessionTitle} ${styles.asgTitle}`}>{title}</span>
         )}
         {points && <span className={styles.sessionSub}>{points}</span>}
         <TimelineFiles files={files} />
       </span>
       {itemId != null && (
-        <StatusSelect
-          item={{ title, status: (item.status ?? 'not_started') as ProgressStatus }}
-          onChange={(_row, status) => onStatusChange(item, status)}
-          pending={pending}
-        />
+        <span className={styles.asgStatus}>
+          <StatusSelect
+            item={{ title, status: (item.status ?? 'not_started') as ProgressStatus }}
+            onChange={(_row, status) => onStatusChange(item, status)}
+            pending={pending}
+          />
+        </span>
       )}
     </div>
   );

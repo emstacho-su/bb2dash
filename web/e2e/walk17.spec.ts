@@ -250,8 +250,16 @@ test.describe('screens (T-12 … T-21)', () => {
     await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
     // The timeline opens anchored on the current week; the term's announcements sit in the weeks
     // before it, so show every week first.
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('button', { name: /^Show weeks/ }).click();
     await expect(page.getByLabel('Announcement').first()).toBeVisible();
+    // Walk finding: the assignments lane read one word per line. Every card in
+    // it must be a readable width at 1440 px, side by side with the classes lane.
+    const cards = page.locator('[data-lane="assignments"] [data-entry="assignment"]');
+    await expect(cards.first()).toBeVisible();
+    const widths = await cards.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width));
+    expect(widths.length).toBeGreaterThan(0);
+    for (const width of widths) expect(width).toBeGreaterThanOrEqual(240);
     await page.screenshot({ path: shotPath(testInfo, '24-stream-timeline-ist352.png'), fullPage: true });
   });
 
