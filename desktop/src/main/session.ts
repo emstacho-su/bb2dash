@@ -76,6 +76,12 @@ export interface UsableSessionOptions extends SessionSource {
   readonly getWindow: () => ReloadableWindow | null;
   /** Reload that window. Injected so the unit suite needs no Electron. */
   readonly reload: () => void;
+  /**
+   * 2026-09-30: closing the window destroys it, so there may be nothing to reload. This
+   * loads the app once in a short-lived hidden page instead, so the web app's proxy can
+   * still rewrite the cookie. Throttled exactly like `reload`.
+   */
+  readonly refreshWithoutWindow?: () => void;
   readonly now?: () => number;
 }
 
@@ -125,6 +131,21 @@ export function createUsableSessionReader(
     }
 
     const window = options.getWindow();
+    if ((window === null || window.isDestroyed()) && options.refreshWithoutWindow !== undefined) {
+      // No cookie at all means nobody is signed in; loading the app cannot fix that.
+      if (webSession === null) return null;
+      const at = now();
+      if (at - lastReloadAt < HIDDEN_RELOAD_MIN_INTERVAL_MS) return null;
+      lastReloadAt = at;
+      log('no window is open; loading the app in a short-lived hidden page to refresh the session');
+      recordEvent('windowless-refresh', { reason: 'expired' });
+      try {
+        options.refreshWithoutWindow();
+      } catch (error) {
+        logError('the window-less session refresh could not start', error);
+      }
+      return null;
+    }
     if (window === null || window.isDestroyed() || window.isVisible() || !window.hasLoaded()) {
       // A visible window refreshes itself; a missing one has nothing to reload; and one
       // that has never loaded is either still booting or already being retried by

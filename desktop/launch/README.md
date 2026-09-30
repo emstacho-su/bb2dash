@@ -17,7 +17,8 @@ is never run inside a container. What runs in the container is the build:
 | file | job |
 |---|---|
 | `logon-build.ps1` | the scheduled action: fetch, decide, activate, launch, build, compose |
-| `Bb2dashLaunch.psm1` | the pure half: decision, state record, build command; no side effects |
+| `update-now.ps1` | the app's **Update now**: wait for bb2dash to exit, repoint `current`, start `Bb2dash-App` |
+| `Bb2dashLaunch.psm1` | the logic: decisions, state record, build command (pure); the Update now swap (junction + injected process/task calls) |
 | `Bb2dashLaunch.Tests.ps1` | Pester tests for the module (Pester 3.4, as Windows ships it) |
 | `compose.build.yaml` | the ephemeral build service, `docker compose run --rm` |
 | `register-logon-task.ps1` | writes (or `-Unregister`s) the two Task Scheduler entries |
@@ -31,13 +32,40 @@ is never run inside a container. What runs in the container is the build:
   current                                  junction -> the active win-unpacked
   state.json                               lastBuiltSha, lastBuildAt, lastResult
   logs\logon-build.log                     one line per step; rolls at 512 KB
+  logs\update-now.log                      one line per Update now step; rolls at 512 KB
 ```
 
 `<tree>` is `git rev-parse origin/main:desktop`, the tree hash of the folder,
 so a commit that only touches `web/` never triggers a rebuild. The junction is
 only ever repointed while the app is not running: Windows locks a running
 exe's files, so a build that finishes while bb2dash is open becomes current at
-the next logon.
+the next logon, or sooner when Stack presses **Update now** (below).
+
+## Without a logon (2026-09-30)
+
+The app itself starts `Bb2dash-LogonBuild` at launch and every 6 hours
+(`BUILDER_INTERVAL_HOURS` in `src/core/update/builder-trigger.ts`), skipping it
+when the task is already running. Nothing about the run changes: the app is
+running, so the startup step does nothing, the fetch and the rebuild happen as
+usual, and a finished build waits.
+
+When a newer build is waiting (`state.json`'s `lastBuiltSha` differs from the
+tree the app is running from, and that build is on disk), the next window open
+shows **Update now / Update later** (details in `desktop/README.md`). **Update
+now** spawns `launch\update-now.ps1 -Tree <tree>` detached and quits the app.
+The helper (`Invoke-UpdateSwap` in `Bb2dashLaunch.psm1`):
+
+1. waits up to 60 s for every `bb2dash` process to exit;
+2. repoints `current` at `builds\<tree>\win-unpacked` with the same junction
+   step `Invoke-Activate` uses (the junction only, never a build folder), and
+   puts the old target back if the new junction cannot be created;
+3. starts `Bb2dash-App` (or `current\bb2dash.exe` when the task is missing).
+
+If the app did not exit, the build is gone, or the junction cannot be moved, the
+old build stays current and the app is started on it. Each step is logged to
+`logs\update-now.log`. The helper runs from the installed copy under
+`launch\`, which the builder refreshes after each successful build, so the first
+build carrying this feature installs it.
 
 The build reads from a detached `git worktree` at `<repo>-build`, never from
 the checkout the Sync terminal works in, so a rebuild cannot collide with a
@@ -105,5 +133,6 @@ Invoke-Pester -Path desktop\launch
 ```
 
 The decision matrix, the state record's parsing and immutability, and the
-build command are pinned. The side-effecting script is kept thin on purpose:
+build command are pinned. The Update now swap runs against a real junction
+under Pester's `TestDrive`, with the process check and the launch injected. The side-effecting script is kept thin on purpose:
 each function does one thing and logs it.

@@ -271,18 +271,24 @@ test.describe('the shell', () => {
     expect(page.url()).toBe(`${fixture.url}/`);
   });
 
-  test('hides to the tray on close, and the process stays alive', async () => {
+  test('close releases the window to the tray, the process stays alive, and Open rebuilds it', async () => {
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
 
+    // 2026-09-30: the window is destroyed, not hidden, so its renderer is gone.
     await expect
-      .poll(async () =>
-        app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible()),
-      )
-      .toBe(false);
-
-    // Still one window, and main still answers: the process did not quit.
-    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+      .poll(async () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+      .toBe(0);
+    // Main still answers: the process did not quit.
     expect(await app.evaluate(({ app: electronApp }) => electronApp.isReady())).toBe(true);
+
+    await app.evaluate(() => {
+      (globalThis as { __bb2dashTest?: { clickTrayItem: (label: string) => void } }).__bb2dashTest?.clickTrayItem(
+        'Open bb2dash',
+      );
+    });
+    await expect
+      .poll(async () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+      .toBe(1);
   });
 });
 

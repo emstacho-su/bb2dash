@@ -178,3 +178,308 @@ Describe 'Get-BuildCommand' {
         ($c.Arguments -join ' ') | Should Be 'compose -f C:/x/desktop/launch/compose.build.yaml run --rm --name bb2dash-build build'
     }
 }
+
+# ---------------------------------------------------------------- Update now (2026-09-30)
+#
+# The app's "Update now" spawns update-now.ps1, which calls Invoke-UpdateSwap: wait for the
+# app to exit, repoint `current` at the new build, start the app again. These run against a
+# real junction under TestDrive; the process check and the launch are injected.
+
+function New-FakeBuild {
+    param([string] $StateDir, [string] $Tree)
+    $dir = Join-Path (Join-Path (Join-Path $StateDir 'builds') $Tree) 'win-unpacked'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Set-Content -Path (Join-Path $dir 'bb2dash.exe') -Value 'fake'
+    return $dir
+}
+
+function Get-CurrentTarget {
+    param([string] $StateDir)
+    $item = Get-Item (Join-Path $StateDir 'current') -Force
+    return [string] ($item.Target | Select-Object -First 1)
+}
+
+function New-SwapFixture {
+    $stateDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+    $old = New-FakeBuild -StateDir $stateDir -Tree $SHA_A
+    $new = New-FakeBuild -StateDir $stateDir -Tree $SHA_B
+    New-Item -ItemType Junction -Path (Join-Path $stateDir 'current') -Target $old | Out-Null
+    return [pscustomobject]@{ StateDir = $stateDir; Old = $old; New = $new }
+}
+
+Describe 'Get-UpdateSwapDecision' {
+
+    It 'swaps and launches when the app has exited and the new build is on disk' {
+        $d = Get-UpdateSwapDecision -Tree $SHA_B -ActiveTree $SHA_A -BuildExists $true -AppExited $true
+        ($d.Actions -join ',') | Should Be 'Swap,Launch'
+    }
+
+    It 'only relaunches the old build when the app did not exit in time' {
+        $d = Get-UpdateSwapDecision -Tree $SHA_B -ActiveTree $SHA_A -BuildExists $true -AppExited $false
+        ($d.Actions -join ',') | Should Be 'Launch'
+        $d.Reason | Should Match 'did not exit'
+    }
+
+    It 'only relaunches when the new build is missing' {
+        $d = Get-UpdateSwapDecision -Tree $SHA_B -ActiveTree $SHA_A -BuildExists $false -AppExited $true
+        ($d.Actions -join ',') | Should Be 'Launch'
+        $d.Reason | Should Match 'not on disk'
+    }
+
+    It 'only relaunches when the requested build is already current' {
+        $d = Get-UpdateSwapDecision -Tree $SHA_A -ActiveTree $SHA_A -BuildExists $true -AppExited $true
+        ($d.Actions -join ',') | Should Be 'Launch'
+    }
+
+    It 'rejects a tree that is not 40 hex characters' {
+        { Get-UpdateSwapDecision -Tree '..\evil' -ActiveTree $SHA_A -BuildExists $true -AppExited $true } | Should Throw
+        { Get-UpdateSwapDecision -Tree '' -ActiveTree $SHA_A -BuildExists $true -AppExited $true } | Should Throw
+    }
+}
+
+Describe 'Invoke-UpdateSwap' {
+
+    It 'waits for the app to exit, repoints current at the new build, and starts the app' {
+        $f = New-SwapFixture
+        $script:polls = 0
+        $script:launched = @()
+        $r = Invoke-UpdateSwap -StateDir $f.StateDir -Tree $SHA_B -TimeoutSeconds 5 -PollMilliseconds 10 `
+            -TestAppRunning { $script:polls++; return ($script:polls -lt 3) } `
+            -StartApp { param($exe) $script:launched += $exe } `
+            -Log { param($level, $message) }
+        $r.Swapped | Should Be $true
+        $r.Launched | Should Be $true
+        $script:polls | Should Be 3
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.New
+        $script:launched.Count | Should Be 1
+        $script:launched[0] | Should Be (Join-Path (Join-Path $f.StateDir 'current') 'bb2dash.exe')
+    }
+
+    It 'keeps the old build current and relaunches it when the app never exits' {
+        $f = New-SwapFixture
+        $script:launched = 0
+        $script:lines = @()
+        $r = Invoke-UpdateSwap -StateDir $f.StateDir -Tree $SHA_B -TimeoutSeconds 0 -PollMilliseconds 10 `
+            -TestAppRunning { $true } `
+            -StartApp { param($exe) $script:launched++ } `
+            -Log { param($level, $message) $script:lines += "$level $message" }
+        $r.Swapped | Should Be $false
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
+        $script:launched | Should Be 1
+        ($script:lines -join "`n") | Should Match 'did not exit'
+    }
+
+    It 'keeps the old build current and relaunches it when the new build is missing' {
+        $f = New-SwapFixture
+        Remove-Item -Recurse -Force (Join-Path (Join-Path $f.StateDir 'builds') $SHA_B)
+        $script:launched = 0
+        $r = Invoke-UpdateSwap -StateDir $f.StateDir -Tree $SHA_B -TimeoutSeconds 1 -PollMilliseconds 10 `
+            -TestAppRunning { $false } -StartApp { param($exe) $script:launched++ } -Log { param($level, $message) }
+        $r.Swapped | Should Be $false
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
+        $script:launched | Should Be 1
+    }
+
+    It 'reports a launch that throws, after the swap has already happened' {
+        $f = New-SwapFixture
+        $script:lines = @()
+        $r = Invoke-UpdateSwap -StateDir $f.StateDir -Tree $SHA_B -TimeoutSeconds 1 -PollMilliseconds 10 `
+            -TestAppRunning { $false } -StartApp { param($exe) throw 'task missing' } `
+            -Log { param($level, $message) $script:lines += "$level $message" }
+        $r.Swapped | Should Be $true
+        $r.Launched | Should Be $false
+        ($script:lines -join "`n") | Should Match 'ERROR'
+    }
+
+    It 'refuses a malformed tree without touching current or launching anything unknown' {
+        $f = New-SwapFixture
+        $script:launched = 0
+        { Invoke-UpdateSwap -StateDir $f.StateDir -Tree 'not-a-tree' -TimeoutSeconds 1 -PollMilliseconds 10 `
+            -TestAppRunning { $false } -StartApp { param($exe) $script:launched++ } -Log { param($level, $message) } } | Should Throw
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
+    }
+}
+
+Describe 'Set-CurrentBuild' {
+
+    It 'repoints the junction and reports the previous target' {
+        $f = New-SwapFixture
+        $r = Set-CurrentBuild -CurrentLink (Join-Path $f.StateDir 'current') -Target $f.New
+        $r.Ok | Should Be $true
+        $r.Previous | Should Be $f.Old
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.New
+        Test-Path (Join-Path $f.Old 'bb2dash.exe') | Should Be $true   # the old build itself is untouched
+    }
+
+    It 'creates the junction when there was none' {
+        $stateDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $new = New-FakeBuild -StateDir $stateDir -Tree $SHA_B
+        $r = Set-CurrentBuild -CurrentLink (Join-Path $stateDir 'current') -Target $new
+        $r.Ok | Should Be $true
+        (Get-CurrentTarget $stateDir) | Should Be $new
+    }
+
+    It 'refuses a target without bb2dash.exe and leaves current alone' {
+        $f = New-SwapFixture
+        $empty = Join-Path $f.StateDir 'empty'
+        New-Item -ItemType Directory -Path $empty | Out-Null
+        $r = Set-CurrentBuild -CurrentLink (Join-Path $f.StateDir 'current') -Target $empty
+        $r.Ok | Should Be $false
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
+    }
+}
+
+# ---------------------------------------------------------------- code review round (2026-09-30)
+#
+# The swap and the builder share the builder's mutex, so a build finishing mid-swap can
+# neither repoint `current` nor prune the build being switched to; and a pending swap names
+# its build in a marker the builder's pruning keeps.
+
+function Start-MutexHolder {
+    # Holds a named mutex in a separate process (a mutex is re-entrant on its own thread,
+    # so the test thread cannot play "the builder" itself). Returns once it is held.
+    param([string] $Name, [int] $HoldSeconds)
+    $ready = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+    $job = Start-Job -ArgumentList $Name, $HoldSeconds, $ready -ScriptBlock {
+        param($n, $s, $r)
+        $m = New-Object System.Threading.Mutex($false, $n)
+        $null = $m.WaitOne()
+        Set-Content -Path $r -Value 'held'
+        Start-Sleep -Seconds $s
+        $m.ReleaseMutex()
+        $m.Dispose()
+    }
+    $deadline = (Get-Date).AddSeconds(30)
+    while (-not (Test-Path $ready)) {
+        if ((Get-Date) -ge $deadline) { throw 'the mutex holder never started' }
+        Start-Sleep -Milliseconds 100
+    }
+    return $job
+}
+
+function Invoke-TestSwap {
+    param([pscustomobject] $Fixture, [string] $MutexName, [int] $LockWaitSeconds = 5, [scriptblock] $TestAppRunning = { $false })
+    $script:launched = 0
+    $script:lines = @()
+    return Invoke-UpdateSwap -StateDir $Fixture.StateDir -Tree $SHA_B -TimeoutSeconds 1 -PollMilliseconds 10 `
+        -MutexName $MutexName -LockWaitSeconds $LockWaitSeconds `
+        -TestAppRunning $TestAppRunning `
+        -StartApp { param($exe) $script:launched++ } `
+        -Log { param($level, $message) $script:lines += "$level $message" }
+}
+
+Describe 'Invoke-UpdateSwap and the builder mutex' {
+
+    It 'swaps when the builder is idle, and leaves the mutex free afterwards' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $r = Invoke-TestSwap -Fixture $f -MutexName $name
+        $r.Swapped | Should Be $true
+        $m = New-Object System.Threading.Mutex($false, $name)
+        $m.WaitOne(0) | Should Be $true
+        $m.ReleaseMutex(); $m.Dispose()
+    }
+
+    It 'waits for a builder that finishes within the bound, then swaps' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $job = Start-MutexHolder -Name $name -HoldSeconds 2
+        try {
+            $r = Invoke-TestSwap -Fixture $f -MutexName $name -LockWaitSeconds 20
+            $r.Swapped | Should Be $true
+            (Get-CurrentTarget $f.StateDir) | Should Be $f.New
+            ($script:lines -join "`n") | Should Match 'builder'
+        } finally { $job | Wait-Job | Remove-Job -Force }
+    }
+
+    It 'keeps the old build and relaunches it when the builder holds the mutex past the bound' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $job = Start-MutexHolder -Name $name -HoldSeconds 6
+        try {
+            $r = Invoke-TestSwap -Fixture $f -MutexName $name -LockWaitSeconds 1
+            $r.Swapped | Should Be $false
+            $script:launched | Should Be 1
+            (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
+            ($script:lines -join "`n") | Should Match 'builder'
+        } finally { $job | Wait-Job | Remove-Job -Force }
+    }
+
+    It 'names its build in the pending-swap marker while it runs, and removes it after' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $marker = Join-Path $f.StateDir 'swap-pending'
+        $script:seen = ''
+        $r = Invoke-TestSwap -Fixture $f -MutexName $name -TestAppRunning {
+            if (Test-Path $marker) { $script:seen = (Get-Content -Raw $marker).Trim() }
+            return $false
+        }
+        $r.Swapped | Should Be $true
+        $script:seen | Should Be $SHA_B
+        Test-Path $marker | Should Be $false
+    }
+}
+
+Describe 'Get-BuildsToKeep (pruning never deletes a swap target)' {
+
+    It 'keeps the new build, the active build and the pending swap target' {
+        $keep = Get-BuildsToKeep -NewTree $SHA_A -ActiveTree $SHA_B -PendingSwapTree ('c' * 40)
+        ($keep | Sort-Object) -join ',' | Should Be (@($SHA_A, $SHA_B, ('c' * 40)) -join ',')
+    }
+
+    It 'drops empty and malformed entries' {
+        $keep = Get-BuildsToKeep -NewTree $SHA_A -ActiveTree '' -PendingSwapTree '..\evil'
+        ($keep -join ',') | Should Be $SHA_A
+    }
+}
+
+Describe 'Read-PendingSwapTree' {
+
+    It 'reads the marker, and is empty when it is missing or malformed' {
+        $dir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        Read-PendingSwapTree -StateDir $dir | Should Be ''
+        Set-Content -Path (Join-Path $dir 'swap-pending') -Value $SHA_B
+        Read-PendingSwapTree -StateDir $dir | Should Be $SHA_B
+        Set-Content -Path (Join-Path $dir 'swap-pending') -Value 'junk'
+        Read-PendingSwapTree -StateDir $dir | Should Be ''
+    }
+}
+
+Describe 'Invoke-UpdateFallback (update-now.ps1 catch path)' {
+
+    It 'waits for the app to exit before starting it again' {
+        $script:polls = 0
+        $script:startedAfter = -1
+        $r = Invoke-UpdateFallback -TimeoutSeconds 5 -PollMilliseconds 10 `
+            -TestAppRunning { $script:polls++; return ($script:polls -lt 4) } `
+            -StartApp { $script:startedAfter = $script:polls } `
+            -Log { param($level, $message) }
+        $r.Launched | Should Be $true
+        $script:startedAfter | Should Be 4
+    }
+
+    It 'starts the app anyway once the bound has passed' {
+        $script:started = 0
+        $r = Invoke-UpdateFallback -TimeoutSeconds 0 -PollMilliseconds 10 `
+            -TestAppRunning { $true } -StartApp { $script:started++ } -Log { param($level, $message) }
+        $script:started | Should Be 1
+        $r.Launched | Should Be $true
+    }
+
+    It 'still starts the app when logging itself throws, and never throws' {
+        $script:started = 0
+        { $script:r = Invoke-UpdateFallback -TimeoutSeconds 1 -PollMilliseconds 10 `
+            -TestAppRunning { $false } -StartApp { $script:started++ } `
+            -Log { param($level, $message) throw 'disk full' } } | Should Not Throw
+        $script:started | Should Be 1
+        $script:r.Launched | Should Be $true
+    }
+
+    It 'reports a start that fails instead of throwing' {
+        { $script:r = Invoke-UpdateFallback -TimeoutSeconds 1 -PollMilliseconds 10 `
+            -TestAppRunning { $false } -StartApp { throw 'task missing' } `
+            -Log { param($level, $message) throw 'disk full' } } | Should Not Throw
+        $script:r.Launched | Should Be $false
+    }
+}
