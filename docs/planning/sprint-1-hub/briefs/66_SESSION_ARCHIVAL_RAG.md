@@ -6,6 +6,8 @@ capture hook, the vault, the `ingest` pipeline, the `rag` MCP server); this brie
 requirement and contract, kept here because bb2dash is the project whose sessions are the first
 test case.
 
+**Amended 2026-09-30 (Phase 20, brief 101):** R-27.3's field list also carries `machine` (the machine whose transcript the note was built from; B-54), and V-2 was walked against this brief's acceptance list and DoD on live data in `../../sprint-2/verification/101a_V2_VERIFICATION.md` on 2026-09-30.
+
 Stack's ask (2026-09-14): a phase or requirement that ensures the proper context tags are
 applied, archived / concluded sessions are identified, tagged with the proper relational context
 and info, saved in the proper locations, and the RAG pipeline then runs from there.

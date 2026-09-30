@@ -13,6 +13,9 @@ You are the project manager for bb2dash; Stack is the product manager; Opus suba
 2. Run the live-state checks from §5's live-state row (`git fetch --all --prune`, `gh pr list --state
    open`, `git worktree list`, `git log --oneline origin/main -5`) and compare against
    STATUS's header date. If `origin/main` has moved past what STATUS describes, say so first.
+   Then run `node C:/Users/stack/agentic-harness/hooks/untagged-sessions.mjs --due`. On exit 3
+   the untagged-session review is due: before any other work, list the notes (`--json`), tag
+   each one or leave it on purpose, then run `--mark-reviewed` (Phase 20, R-103).
 3. Report back in under 200 words: where the product is, what is in flight and who owns it,
    which items are Stack's, and the single next PM action you propose. Then wait for Stack
    unless he already gave the instruction in the same message.
