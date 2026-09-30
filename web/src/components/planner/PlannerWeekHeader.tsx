@@ -3,7 +3,8 @@
 /**
  * The /planner header row and day heads (R-19, Phase 11; split out in 11b so
  * `PlannerWeek.tsx` stays the board). The range label, the term week, the
- * counts line and the ◂ ▸ Today pager.
+ * counts line, the ◂ ▸ Today pager and, at the top right, "+" — the new-event
+ * wizard (R3-9).
  */
 
 import Link from 'next/link';
@@ -26,6 +27,7 @@ export function WeekHeader({
   meetingCount,
   itemCount,
   eventCount,
+  onAdd,
 }: {
   view: PlannerWeekModel;
   pathname: string;
@@ -35,6 +37,8 @@ export function WeekHeader({
   itemCount: number;
   /** Planner events touching the week; named only when there are some. */
   eventCount: number;
+  /** R3-9: open the new-event wizard; the button is where focus returns. */
+  onAdd?: (opener: HTMLElement) => void;
 }) {
   const term = useTerm();
   const termWeek = termWeekNumber(term.data ?? null, view.weekStart);
@@ -56,6 +60,17 @@ export function WeekHeader({
       </span>
 
       <WeekPager view={view} pathname={pathname} />
+      {onAdd && (
+        <button
+          type="button"
+          className={styles.addEvent}
+          onClick={(event) => onAdd(event.currentTarget)}
+          aria-label="New event"
+          title="New event"
+        >
+          +
+        </button>
+      )}
     </div>
   );
 }

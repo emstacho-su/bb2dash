@@ -8,23 +8,28 @@
  *      (`@/components/tracker`), fed a 56-day window. Since H-2 the strip
  *      scrolls that whole span and opens anchored on today; H-3 put the strip
  *      and the day panel in one card.
- *   2. Undated tray (v_work_items where undated = true).
- *   3. Status quick-edit (T-06) writing assignment_progress / reading_progress.
- *   4. 2-up course cards.
- *   5. Needs-attention row, LAST on the page (H-3 / P-home-5): the queue Stack
+ *   2. 2-up course cards.
+ *   3. Undated tray (v_work_items where undated = true), folded on a first
+ *      visit and remembered, just above Needs attention (S2-home-2, B-2).
+ *   4. Needs-attention row, LAST on the page (H-3 / P-home-5): the queue Stack
  *      clears when he has time, not the thing he opens Home to see.
+ * Status quick-edit (T-06) writes assignment_progress / reading_progress from
+ * the tracker's day panel and the Undated rows.
  *
  * Every figure traces to a v_work_items / v_course_display row. Missing data
  * shows "—" or an empty state; nothing is invented.
  */
 
+import { useId } from 'react';
 import Link from 'next/link';
+import { HOME_COLLAPSE, UNDATED_SECTION, useCollapseState } from '@/lib/collapse-state';
 import tokens from '@/styles/tokens.module.css';
 import styles from './Today.module.css';
 import {
   courseCodeFromId,
   useCourseDisplay,
   useSetItemStatus,
+  trackerWindowStart,
   useTerm,
   useUndatedWorkItems,
   useWorkItemsWindow,
@@ -125,12 +130,17 @@ export function Today() {
   const weekSunday = addDays(weekMonday, 6);
   const horizonEnd = addDays(today, DEFAULT_HORIZON_DAYS - 1);
 
-  // Fetch from the Monday of this week (so the course-card week strip is whole)
-  // through the end of the tracker's 56-day paging horizon.
-  const windowQ = useWorkItemsWindow(isoDate(weekMonday), isoDate(horizonEnd));
+  // R3-1: fetch from the term's first day (or, with no term row, the Monday of
+  // this week, so the course-card week strip is whole) through the end of the
+  // tracker's 56-day paging horizon. The fetch waits for the term row, so the
+  // window is asked for once rather than once per answer.
+  const termQ = useTerm();
+  const windowStart = trackerWindowStart(termQ.data, isoDate(weekMonday));
+  const windowQ = useWorkItemsWindow(windowStart, isoDate(horizonEnd), {
+    enabled: !termQ.isPending,
+  });
   const undatedQ = useUndatedWorkItems();
   const coursesQ = useCourseDisplay();
-  const termQ = useTerm();
   const gradesQ = useCourseGrades();
   const courseFigures = useCourseFigures(coursesQ.data ?? EMPTY_COURSES);
   const setStatus = useSetItemStatus();
@@ -146,7 +156,8 @@ export function Today() {
   const todayKey = isoDate(today);
   const cardHorizonKey = isoDate(addDays(today, CARD_HORIZON_DAYS - 1));
 
-  const failed = windowQ.error ?? undatedQ.error ?? coursesQ.error;
+  // A failed term read is named too; the strip still works from this week's Monday.
+  const failed = windowQ.error ?? undatedQ.error ?? coursesQ.error ?? termQ.error;
 
   /**
    * G-2 / P-home-10 — what the course card is handed to show.
@@ -225,48 +236,16 @@ export function Today() {
       {/* ---- 1. Upcoming-work effort tracker (shared component) ---- */}
       <UpcomingTracker
         items={items}
+        startIso={windowStart === isoDate(weekMonday) ? null : windowStart}
         onStatusChange={handleStatus}
         pendingItemId={pendingId}
-        isPending={isQueryLoading(windowQ)}
+        // R3-1 review: while the fetch waits on the term row it is disabled, and
+        // a disabled query is not "loading", so the wait is counted here.
+        isPending={termQ.isPending || isQueryLoading(windowQ)}
         error={windowQ.error}
       />
 
-      {/* ---- 2. Undated tray ---- */}
-      <section className={styles.section}>
-        <div className={styles.sectionHead}>
-          <h2 className={styles.h2}>Undated</h2>
-          <span className={styles.sub}>
-            {undatedQ.isPending
-              ? 'loading…'
-              : `${undatedQ.data?.length ?? 0} item${(undatedQ.data?.length ?? 0) === 1 ? '' : 's'} with no due date yet`}
-          </span>
-        </div>
-        <div className={`${tokens.card} ${styles.undatedList}`}>
-          {(undatedQ.data ?? []).map((it) => (
-            <div key={`${it.item_kind}:${it.item_id}`} className={styles.undatedRow}>
-              <span className={GLYPH_CLASS[it.category]}>{it.glyph}</span>
-              <span className={tokens.mono}>{courseCodeFromId(it.course_id)}</span>
-              {it.item_kind === 'assignment' ? (
-                <Link
-                  className={styles.titleLink}
-                  href={itemQuery({ kind: 'assignment', id: it.item_id })}
-                  scroll={false}
-                >
-                  {it.title}
-                </Link>
-              ) : (
-                <span className={styles.titleText}>{it.title}</span>
-              )}
-              <StatusSelect item={it} onChange={handleStatus} pending={pendingId === it.item_id} />
-            </div>
-          ))}
-          {!undatedQ.isPending && (undatedQ.data?.length ?? 0) === 0 && (
-            <div className={styles.detailEmpty}>Nothing undated — every item has a date.</div>
-          )}
-        </div>
-      </section>
-
-      {/* ---- 5. Course cards (no grade line) ---- */}
+      {/* ---- 2. Course cards (no grade line) ---- */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2 className={styles.h2}>Courses</h2>
@@ -290,11 +269,103 @@ export function Today() {
         </div>
       </section>
 
+      {/* ---- 3. Undated tray (S2-home-2): folded, just above Needs attention ---- */}
+      <UndatedTray
+        items={undatedQ.data}
+        isPending={undatedQ.isPending}
+        onStatusChange={handleStatus}
+        pendingItemId={pendingId}
+      />
+
       {/* ---- 4. Needs-attention row (Phase 9; replaces the last-sync line) ----
           H-3 (P-home-5): last on the page. It is the queue Stack clears when he
           has time, not the thing he opens Home to see. */}
       <NeedsAttentionRow />
     </>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Undated tray (S2-home-2, B-2)
+ *
+ * Folded on a first visit, then remembered under `bb2dash.home.collapsed`
+ * (collapse-state.ts, P-70). The header is the toggle and carries the count,
+ * "Undated (N)", but only once the read has answered: a count over a request
+ * in flight would be invented. Folding hides rows; nothing leaves Undated.
+ * ------------------------------------------------------------------------ */
+
+function UndatedTray({
+  items,
+  isPending,
+  onStatusChange,
+  pendingItemId,
+}: {
+  items: WorkItem[] | undefined;
+  isPending: boolean;
+  onStatusChange: (item: WorkItem, status: ProgressStatus) => void;
+  pendingItemId: string | null;
+}) {
+  const listId = useId();
+  const { collapsed, toggle } = useCollapseState(HOME_COLLAPSE);
+  const folded = collapsed.has(UNDATED_SECTION);
+  const rows = items ?? [];
+  const count = isPending ? '' : ` (${rows.length})`;
+
+  return (
+    <section className={styles.section} aria-label="Undated">
+      <div className={styles.sectionHead}>
+        <h2 className={styles.h2}>
+          <button
+            type="button"
+            className={styles.undatedToggle}
+            aria-expanded={!folded}
+            aria-controls={listId}
+            onClick={() => toggle(UNDATED_SECTION)}
+          >
+            <span className={styles.undatedCaret} aria-hidden="true">
+              {folded ? '▸' : '▾'}
+            </span>
+            {`Undated${count}`}
+          </button>
+        </h2>
+        <span className={styles.sub}>
+          {isPending
+            ? 'loading…'
+            : `${rows.length} item${rows.length === 1 ? '' : 's'} with no due date yet`}
+        </span>
+      </div>
+      <div id={listId}>
+        {!folded && (
+          <div className={`${tokens.card} ${styles.undatedList}`}>
+            {rows.map((it) => (
+              <div key={`${it.item_kind}:${it.item_id}`} className={styles.undatedRow}>
+                <span className={GLYPH_CLASS[it.category]}>{it.glyph}</span>
+                <span className={tokens.mono}>{courseCodeFromId(it.course_id)}</span>
+                {it.item_kind === 'assignment' ? (
+                  <Link
+                    className={styles.titleLink}
+                    href={itemQuery({ kind: 'assignment', id: it.item_id })}
+                    scroll={false}
+                  >
+                    {it.title}
+                  </Link>
+                ) : (
+                  <span className={styles.titleText}>{it.title}</span>
+                )}
+                <StatusSelect
+                  item={it}
+                  onChange={onStatusChange}
+                  pending={pendingItemId === it.item_id}
+                />
+              </div>
+            ))}
+            {!isPending && rows.length === 0 && (
+              <div className={styles.detailEmpty}>Nothing undated — every item has a date.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

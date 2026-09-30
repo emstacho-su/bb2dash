@@ -19,6 +19,7 @@
  * figure itself renders `—`.
  */
 
+import { useId } from 'react';
 import Link from 'next/link';
 import {
   courseGradeState,
@@ -26,7 +27,6 @@ import {
   scoreText,
   type CourseGradeRow,
 } from '@/lib/queries.grades';
-import { useSectionState } from '@/lib/grades-sections';
 import tokens from '@/styles/tokens.module.css';
 import styles from './CourseGradeCard.module.css';
 
@@ -77,80 +77,87 @@ export function CourseGradeHeader({ row }: { row: CourseGradeRow | null | undefi
   );
 }
 
+/** How a card folds, when its caller lets it (R3-7). */
+export interface CourseGradeFold {
+  /** True when the class is folded to its header. */
+  readonly collapsed: boolean;
+  readonly onToggle: () => void;
+}
+
 /**
  * The header plus whatever the caller puts under it (the gradebook table).
  * `title` is the course's own code/title; this component never invents one.
  *
- * `titleHref` (Phase 12b, P-grades-2) makes that title the way into the course,
- * in place of a separate button beside it. The link sits *inside* the heading,
- * so the card keeps announcing itself as a level-2 heading with the course's
- * name. Without it the title is plain text — the course's own Grades tab passes
- * nothing, because a link from a page to itself is noise.
+ * `fold` (Phase 17 round 3, R3-7; replaces 12b's P-grades-1 "Hide" button)
+ * turns the whole class header — code and name — into one
+ * `<button aria-expanded>`, outlined on hover and focus as Materials' course
+ * headers are. Folding keeps the heading and Blackboard's header, the summary
+ * being the reason to fold the rest, and takes only `children` with it. The
+ * caller owns where the choice is remembered. Without `fold` the card does not
+ * fold at all: the course's own Grades tab has one card and nothing to hide.
  *
- * `sectionKey` (Phase 12b, P-grades-1) makes the card collapsible and gives its
- * state somewhere to live across reloads. Folding a course away leaves the
- * heading and the header — the summary is the reason to fold the rest — and
- * takes only `children`, the gradebook, with it. Without the prop the card does
- * not collapse at all: the course's own Grades tab has one card and nothing to
- * gain from hiding it.
+ * `href` (P-grades-2) is the way into the course. A link cannot sit inside the
+ * fold button, so it sits beside the header as "Open <code> →", the way
+ * Materials puts "Open in Classwork →" beside its course headers.
  */
 export function CourseGradeCard({
   title,
-  titleHref,
+  href,
   subtitle,
   row,
-  sectionKey,
+  fold,
   headerRight,
   children,
 }: {
   title: string;
-  titleHref?: string;
+  href?: string;
   subtitle?: string | null;
   row: CourseGradeRow | null | undefined;
-  /** Makes the card collapsible and names where that choice is remembered. */
-  sectionKey?: string;
+  fold?: CourseGradeFold;
   headerRight?: React.ReactNode;
   children?: React.ReactNode;
 }) {
-  const [open, toggle] = useSectionState(sectionKey, 'open');
-  const collapsible = sectionKey !== undefined;
-  const showsBody = !collapsible || open;
+  const bodyId = useId();
+  const showsBody = !fold || !fold.collapsed;
 
   return (
     <section className={`${tokens.cardLg} ${styles.card}`} aria-label={title}>
       <div className={styles.head}>
-        <div className={styles.headText}>
+        {fold ? (
           <h2 className={styles.title}>
-            {titleHref ? (
-              <Link className={styles.titleLink} href={titleHref}>
-                {title}
-              </Link>
-            ) : (
-              title
-            )}
+            <button
+              type="button"
+              className={styles.foldToggle}
+              aria-expanded={!fold.collapsed}
+              aria-controls={bodyId}
+              onClick={fold.onToggle}
+            >
+              <span className={styles.caret} aria-hidden="true">
+                {fold.collapsed ? '▸' : '▾'}
+              </span>
+              <span>{title}</span>
+              {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
+            </button>
           </h2>
-          {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
-        </div>
-        {headerRight}
-        {collapsible && (
-          <button
-            type="button"
-            className={styles.collapseToggle}
-            aria-expanded={open}
-            // Spelled out: "Hide"/"Show" alone names no course, and the
-            // accessible name is what a screen reader reads from a list of
-            // buttons with no card around them.
-            aria-label={`${open ? 'Hide' : 'Show'} ${title}`}
-            onClick={toggle}
-          >
-            {open ? 'Hide' : 'Show'}
-          </button>
+        ) : (
+          <div className={styles.headText}>
+            <h2 className={styles.title}>{title}</h2>
+            {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
+          </div>
         )}
+        {href && (
+          <Link className={styles.openLink} href={href}>
+            Open {title} →
+          </Link>
+        )}
+        {headerRight}
       </div>
 
       <CourseGradeHeader row={row} />
 
-      {showsBody && children}
+      <div id={bodyId} className={styles.body} hidden={!showsBody}>
+        {showsBody && children}
+      </div>
     </section>
   );
 }

@@ -37,7 +37,7 @@ import styles from './Bell.module.css';
 const DROPDOWN_LIMIT = 8;
 
 export function Bell() {
-  const popover = usePopover<HTMLSpanElement>();
+  const [popover, anchor] = usePopover<HTMLSpanElement>();
   const unread = useUnreadAnnouncements();
   const list = useQuery({ ...allAnnouncementsOptions(), enabled: popover.open });
 
@@ -56,7 +56,7 @@ export function Bell() {
   const rows = bellRows(list.data ?? [], unreadAtOpen, DROPDOWN_LIMIT);
 
   return (
-    <span ref={popover.ref} style={{ display: 'contents' }}>
+    <span ref={anchor} style={{ display: 'contents' }}>
       <button
         type="button"
         className={popover.open ? styles.icOpen : styles.ic}

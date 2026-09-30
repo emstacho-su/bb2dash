@@ -9,7 +9,8 @@
  * Blackboard has.
  */
 
-import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { makeTreeRow } from './factories.course';
 import type { ContentTreeRow } from '@/lib/queries.course';
@@ -19,7 +20,7 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ auth: { getSession: vi.fn() } }),
 }));
 
-const { ClassworkNode, ClassworkFileRow } = await import(
+const { ClassworkNode, ClassworkFileRow, ClassworkTree } = await import(
   '@/app/(app)/course/[id]/classwork/CourseClasswork'
 );
 const { buildContentTree } = await import('@/lib/course-dimension');
@@ -110,5 +111,101 @@ describe('ClassworkFileRow — the shared Open ladder', () => {
       'href',
       'https://blackboard.syracuse.edu/item/42',
     );
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * T-13 (R-39, R-40, B-19): the tree Blackboard lists now, once.
+ *
+ * The fixture is IST.352 on 2026-09-24: the live WK01 folder and its rename
+ * ghost (bb_content 50, same bb_item_id), the two WK04 criteria rows Blackboard
+ * re-created under new ids (1095, 1096; no live twin), and a live Knowledge
+ * Check carrying its assignment link (the drop zone).
+ * ------------------------------------------------------------------------ */
+
+const VANISH_RUN = '7f1c7a52-0000-4000-8000-000000000001';
+
+function ist352Rows(): ContentTreeRow[] {
+  return [
+    makeTreeRow({ course_id: 'IST.352', content_id: 1601, bb_item_id: '_900_1', path: 'WK01 - The Systems Development Environment', title: 'WK01 - The Systems Development Environment', item_kind: 'folder' }),
+    makeTreeRow({ course_id: 'IST.352', content_id: 1602, parent_id: 1601, bb_item_id: '_901_1', path: 'WK01 / KC1', depth: 2, title: 'Knowledge Check 1', item_kind: 'assessment', assignment_id: 'IST.352/kc-1' }),
+    makeTreeRow({ course_id: 'IST.352', content_id: 50, bb_item_id: '_900_1', path: 'WK01 - Chapter 1', title: 'WK01 - Chapter 1', item_kind: 'folder', missing_since: VANISH_RUN }),
+    makeTreeRow({ course_id: 'IST.352', content_id: 1095, bb_item_id: '_501_1', path: 'WK04 / Criteria', title: 'Project Prioritization Scoring Criteria', item_kind: 'document', missing_since: VANISH_RUN }),
+    makeTreeRow({ course_id: 'IST.352', content_id: 1096, bb_item_id: '_502_1', path: 'WK04 / Criteria (2)', title: 'Project Prioritization Scoring Criteria (2)', item_kind: 'document', missing_since: VANISH_RUN }),
+  ];
+}
+
+/** The drop zone reads the query client, so the tree renders inside one. */
+function renderTreeRows(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
+describe('ClassworkTree — ghosts and stale nodes (T-13)', () => {
+  it('never draws a rename ghost, and hides stale nodes behind a counted toggle', () => {
+    renderTreeRows(<ClassworkTree rows={ist352Rows()} />);
+
+    expect(screen.getAllByText('WK01 - The Systems Development Environment')).toHaveLength(1);
+    expect(screen.queryByText('WK01 - Chapter 1')).toBeNull();
+    expect(screen.queryByText('Project Prioritization Scoring Criteria')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Show 2 items Blackboard no longer lists' }),
+    ).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('reveals the stale nodes with a label, and still never the ghost', () => {
+    renderTreeRows(<ClassworkTree rows={ist352Rows()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 items Blackboard no longer lists' }));
+
+    expect(screen.getByText('Project Prioritization Scoring Criteria')).toBeInTheDocument();
+    expect(screen.getByText('Project Prioritization Scoring Criteria (2)')).toBeInTheDocument();
+    expect(screen.getAllByText('No longer in Blackboard')).toHaveLength(2);
+    expect(screen.queryByText('WK01 - Chapter 1')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Hide 2 items Blackboard no longer lists' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('says "1 item" for one', () => {
+    renderTreeRows(<ClassworkTree rows={[ist352Rows()[0], ist352Rows()[3]]} />);
+    expect(screen.getByRole('button', { name: 'Show 1 item Blackboard no longer lists' })).toBeInTheDocument();
+  });
+
+  it('shows no toggle for a course with nothing stale', () => {
+    renderTreeRows(<ClassworkTree rows={ist352Rows().slice(0, 3)} />);
+    expect(screen.queryByRole('button', { name: /Blackboard no longer lists/ })).toBeNull();
+  });
+
+  it('keeps the Knowledge Check on the live row, with its drop zone', () => {
+    const { container } = renderTreeRows(<ClassworkTree rows={ist352Rows()} />);
+    const kc = container.querySelector('[data-content-id="1602"]');
+    expect(kc?.textContent).toContain('Knowledge Check 1');
+    expect(kc?.textContent).toContain('Stage a file');
+  });
+});
+
+describe('ClassworkFileRow — the file note (T-13, R-40)', () => {
+  it('puts a note in the hover title and marks the row ·note, as Materials does', () => {
+    render(
+      <ClassworkFileRow
+        file={{ fileId: 3, fileName: 'criteria.pdf', storagePath: null, bucket: null, notes: 'Re-created in WK05' }}
+        nodeUrl={null}
+      />,
+    );
+    expect(screen.getByText('criteria.pdf')).toHaveAttribute('title', 'Re-created in WK05');
+    const mark = screen.getByLabelText('has a note');
+    expect(mark).toHaveTextContent('·note');
+    expect(mark).toHaveAttribute('title', 'Re-created in WK05');
+  });
+
+  it('adds no marker and no title without a note', () => {
+    render(
+      <ClassworkFileRow
+        file={{ fileId: 4, fileName: 'plain.pdf', storagePath: null, bucket: null, notes: null }}
+        nodeUrl={null}
+      />,
+    );
+    expect(screen.getByText('plain.pdf')).not.toHaveAttribute('title');
+    expect(screen.queryByLabelText('has a note')).toBeNull();
   });
 });

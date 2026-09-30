@@ -45,6 +45,7 @@ import {
 } from '@/lib/queries.today';
 import type { ProgressStatus } from '@/lib/queries';
 import { itemQuery } from '@/lib/queries.popout';
+import { useHorizontalScroll } from '@/lib/use-horizontal-scroll';
 import { StatusSelect } from './StatusSelect';
 import {
   DEFAULT_HORIZON_DAYS,
@@ -78,6 +79,11 @@ export interface UpcomingTrackerProps {
    * beyond the fetch would render empty and read as "nothing due".
    */
   horizonDays?: number;
+  /**
+   * R3-1: the first day the strip reaches back to (the term start), when the
+   * caller fetched from there. The strip still opens on today. Additive.
+   */
+  startIso?: string | null;
   /** Day columns on screen at once. The strip scrolls; this is the viewport. */
   visibleDays?: number;
   /** 'YYYY-MM-DD' first visible day. Defaults to today; clamped to the range. */
@@ -185,6 +191,7 @@ export function UpcomingTracker({
   items,
   horizonDays = DEFAULT_HORIZON_DAYS,
   visibleDays = DEFAULT_VISIBLE_DAYS,
+  startIso = null,
   anchor,
   onAnchorChange,
   selectedDay,
@@ -202,6 +209,8 @@ export function UpcomingTracker({
   const programmatic = useRef(false);
   /** The timer that releases that guard, so it can be cleared and cleaned up. */
   const releaseTimer = useRef<number | null>(null);
+  /** S2-home-1: a plain mouse wheels and drags the strip (P-69). */
+  useHorizontalScroll(scrollerRef);
 
   /**
    * Anchor and selection are self-managed as `null` = "follow today", not as a
@@ -232,12 +241,14 @@ export function UpcomingTracker({
   const range = useMemo(
     () =>
       trackerRange({
-        dueDates: items.map((item) => item.due_on),
+        // The term start rides along as one more date, so the strip begins at
+        // it (never after the first item) without changing the range rules.
+        dueDates: [...(startIso ? [startIso] : []), ...items.map((item) => item.due_on)],
         today,
         horizonDays,
         visibleDays,
       }),
-    [items, today, horizonDays, visibleDays],
+    [items, startIso, today, horizonDays, visibleDays],
   );
 
   const strip = useMemo(
@@ -280,9 +291,20 @@ export function UpcomingTracker({
     [range.firstIso, columnsInView],
   );
 
+  /**
+   * A new anchor forgets the reader's free scroll. Done while rendering, from
+   * the previous anchor, rather than in the scroll effect below (T-23: a set
+   * state inside an effect renders twice). `moveAnchor` clears it itself for
+   * the paging case where the anchor does not change.
+   */
+  const [anchorSeen, setAnchorSeen] = useState(strip.anchor);
+  if (anchorSeen !== strip.anchor) {
+    setAnchorSeen(strip.anchor);
+    setScrolledFirst(null);
+  }
+
   /** Scroll to the anchor when it moves — or when something asks again. */
   useEffect(() => {
-    setScrolledFirst(null);
     scrollToDay(strip.anchor);
   }, [strip.anchor, scrollRequest, scrollToDay]);
 

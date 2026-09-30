@@ -36,39 +36,24 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text'],
-      // Scoped to the modules this harness actually covers. The palette's
-      // ResultRow is tested (test/CommandPalette.test.tsx) but the palette
-      // shell — keyboard plumbing, debounce, router navigation — is not, and
-      // counting it would report a number that describes nothing. Widen this
-      // list as screens get covered, rather than lowering the bar.
-      //
-      // Phase 10a added the gradebook query layer and the staged-upload module;
-      // Phase 11 added the planner week grid and the announcements bell/page.
-      // Phase 11b added planner events: zone helper, validation, placement,
-      // the query layer and the form's state.
-      // Every module listed has a suite in test/ that drives it end to end.
-      include: [
-        'src/lib/queries.search.ts',
-        'src/lib/queries.sync.ts',
-        'src/lib/queries.grades.ts',
-        'src/lib/queries.submissions.ts',
-        'src/lib/planner-week.ts',
-        // Phase 12b: the variable row geometry (P-planner-2), driven by
-        // test/planner-rows.test.ts.
-        'src/lib/planner-rows.ts',
-        'src/lib/queries.planner.ts',
-        'src/lib/queries.announcements.ts',
-        'src/lib/planner-zone.ts',
-        'src/lib/planner-events.ts',
-        'src/lib/planner-events-grid.ts',
-        'src/lib/queries.plannerEvents.ts',
-        'src/components/planner/planner-event-form-state.ts',
-        'src/components/planner/PlannerWeek.tsx',
-        'src/components/shell/Bell.tsx',
-        'src/components/announcements/AnnouncementsList.tsx',
-        // Phase 10b: the grade-model engine (L1-L5 in test/grade-model/).
-        'src/lib/grade-model/**/*.ts',
+      // R-51 (T-22): every module under src/ that a suite can load is measured,
+      // so the figure describes the app rather than a hand-picked list (which
+      // was 17 modules before Phase 17). Left out are only the files no jsdom
+      // suite can drive: Next's route entries (page, layout, not-found, the
+      // proxy), the server-only Supabase client and the generated types.
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/page.tsx',
+        'src/**/layout.tsx',
+        'src/app/not-found.tsx',
+        'src/proxy.ts',
+        'src/lib/supabase/server.ts',
+        'src/lib/supabase/database.types.ts',
       ],
+      // A floor, not a target: the measured line figure on 2026-09-29 (83.11 %,
+      // 3,942 of 4,743 lines) rounded down. Raise it as screens gain suites; a run
+      // that falls below it fails.
+      thresholds: { lines: 83 },
     },
   },
 });

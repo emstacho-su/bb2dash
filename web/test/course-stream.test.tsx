@@ -1,215 +1,138 @@
 /**
- * The course Stream: what a feed row shows for each `post_kind`, and how the
- * feed is filtered and grouped before it gets there.
- *
- * The row renders on its own — no router, no query client, no network. The
- * Supabase browser client is mocked because the module graph reaches it through
- * the query layer.
+ * The course Stream since round 3 (R3-4): the Upcoming-work tracker over the
+ * course timeline. The day-grouped post feed is gone; what each lane shows is
+ * covered in `CourseTimeline.test.tsx`. This file pins the page's composition
+ * and the one helper of the old feed that the timeline still uses.
  */
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { makeStreamRow } from './factories.course';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeCourseDisplay } from './factories';
+import { newQueryClient, readChain } from './hydration-harness';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const state = vi.hoisted(() => ({ byTable: {} as Record<string, unknown[]>, hangTerms: false }));
+
 vi.mock('@/lib/supabase/client', () => ({
-  getSupabaseBrowserClient: () => ({ auth: { getSession: vi.fn() } }),
+  getSupabaseBrowserClient: () => ({
+    from: (table: string) => {
+      if (table === 'terms' && state.hangTerms) {
+        const chain: Record<string, unknown> = {};
+        for (const name of ['select', 'eq', 'order', 'limit']) chain[name] = () => chain;
+        chain.maybeSingle = () => new Promise(() => {});
+        return chain;
+      }
+      return readChain(state.byTable, table, { singleTables: ['v_course_display', 'terms'] });
+    },
+    auth: { getSession: vi.fn() },
+  }),
+}));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/course/IST.352/stream',
 }));
 
-const { StreamRow, formatPoints, formatDayHeading } = await import(
-  '@/app/(app)/course/[id]/stream/CourseStream'
-);
-const { filterStreamRows, groupStreamByDay } = await import('@/lib/course-dimension');
+/**
+ * The tracker is stubbed to record what the Stream hands it: its scrolling is
+ * UpcomingTracker's own suite (UpcomingTracker.scroll.test.tsx, R3-1).
+ */
+const trackerProps = vi.hoisted(() => ({ calls: [] as Record<string, unknown>[] }));
+vi.mock('@/components/tracker/UpcomingTracker', () => ({
+  UpcomingTracker: (props: Record<string, unknown>) => {
+    trackerProps.calls.push(props);
+    return <h2>{props.title as string}</h2>;
+  },
+}));
 
-function renderRow(overrides: Parameters<typeof makeStreamRow>[0] = {}) {
-  return render(<StreamRow row={makeStreamRow(overrides)} />);
-}
+const { CourseStream } = await import('@/app/(app)/course/[id]/stream/CourseStream');
+const { streamDayKey } = await import('@/lib/course-dimension');
 
-describe('StreamRow — announcement', () => {
-  it('names the kind and shows the announcement body', () => {
-    renderRow();
-    expect(screen.getByText('Announcement')).toBeInTheDocument();
-    expect(screen.getByText('Quiz 2 moves to Thursday')).toBeInTheDocument();
-    expect(screen.getByText('The quiz will now open Thursday at 9am.')).toBeInTheDocument();
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-29T14:00:00Z'));
+  trackerProps.calls = [];
+  state.hangTerms = false;
+  state.byTable = {
+    v_course_display: [makeCourseDisplay({ display_id: 'IST.352', code: 'IST 352', shell_ids: ['IST.352'] })],
+    courses: [{ id: 'IST.352', term_id: 'fall-2026' }],
+    terms: [{ id: 'fall-2026', name: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-11' }],
+  };
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('CourseStream — the tracker over the timeline', () => {
+  it('renders the Upcoming strip and then the week timeline, and no post feed', async () => {
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="IST.352" />
+      </QueryClientProvider>,
+    );
+
+    const timeline = await waitFor(() => screen.getByRole('region', { name: 'Course timeline' }));
+    expect(screen.getByText('Upcoming work · IST 352')).toBeInTheDocument();
+    expect(timeline.querySelector('[data-week="6"]')).not.toBeNull();
+    expect(screen.queryByRole('region', { name: 'Course stream' })).toBeNull();
   });
 
-  it('badges an unread announcement, and only an unread one', () => {
-    const { unmount } = renderRow({ meta: { is_read: false } });
-    expect(screen.getByText('unread')).toBeInTheDocument();
-    unmount();
-
-    renderRow({ meta: { is_read: true } });
-    expect(screen.queryByText('unread')).toBeNull();
+  it('says so when the course does not exist', async () => {
+    state.byTable.v_course_display = [];
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="NOPE.101" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('No course with id NOPE.101.')).toBeInTheDocument());
   });
 });
 
-describe('StreamRow — material', () => {
-  it('shows the bucket in words and the file name', () => {
-    renderRow({
-      post_kind: 'material',
-      ref_kind: 'bb_file',
-      title: 'Lecture 3 — Planning, Policy and Risk',
-      body: 'Course Content / Week 3',
-      meta: { bucket: 'lecture_slides', file_name: 'Lecture3.pptx', mime_type: null },
-    });
-    expect(screen.getByText('Material')).toBeInTheDocument();
-    expect(screen.getByText(/Lecture slides/)).toBeInTheDocument();
-    expect(screen.getByText(/Lecture3\.pptx/)).toBeInTheDocument();
+describe('CourseStream — the strip reaches back to the term start (R3-1)', () => {
+  it('hands the tracker the term’s first day, the same source Home uses, and no anchor', async () => {
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="IST.352" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(trackerProps.calls.at(-1)?.startIso).toBe('2026-08-24'));
+    // No anchor from the Stream: the strip still opens on today.
+    for (const props of trackerProps.calls) expect(props.anchor).toBeUndefined();
   });
 
-  it('never leaks the speaker notes behind a body, and says they were hidden', () => {
-    renderRow({
-      post_kind: 'material',
-      ref_kind: 'bb_file',
-      body: 'What is a system?\n[notes] Remind them about the quiz.',
-      meta: { bucket: 'lecture_slides', file_name: 'Lecture1.pptx', mime_type: null },
-    });
-    expect(screen.getByText('What is a system?')).toBeInTheDocument();
-    expect(screen.queryByText(/Remind them/)).toBeNull();
-    expect(screen.getByText('speaker notes hidden')).toBeInTheDocument();
+  it('passes no start when the term has not begun, so nothing before today is invented', async () => {
+    state.byTable.terms = [{ id: 'spring-2027', name: 'Spring 2027', start_date: '2027-01-19', end_date: '2027-05-07' }];
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="IST.352" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(trackerProps.calls.length).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(trackerProps.calls.at(-1)?.startIso ?? null).toBeNull();
   });
 });
 
-describe('StreamRow — assignments', () => {
-  it('shows what a posted assignment carries and nothing it does not', () => {
-    renderRow({
-      post_kind: 'assignment_posted',
-      ref_kind: 'assignment',
-      title: 'Case analysis 1',
-      body: null,
-      meta: { type: 'homework', due_on: '2026-09-18', points_possible: 40, status: null },
-    });
-    expect(screen.getByText('Assignment posted')).toBeInTheDocument();
-    expect(screen.getByText(/homework/)).toBeInTheDocument();
-    expect(screen.getByText(/due 2026-09-18/)).toBeInTheDocument();
-    expect(screen.getByText(/40 pts/)).toBeInTheDocument();
-  });
-
-  it('renders a due post with its status, and no points when none are recorded', () => {
-    renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      title: 'Case analysis 1',
-      body: null,
-      meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
-    });
-    expect(screen.getByText('Due')).toBeInTheDocument();
-    expect(screen.getByText(/not opened/)).toBeInTheDocument();
-    expect(screen.queryByText(/pts/)).toBeNull();
-  });
-
-  /* -----------------------------------------------------------------------
-   * F-1 (S-1 / P-grades-7) — found on the PM's browser walk.
-   *
-   * The post line built its status label by replacing underscores, so the
-   * Stream read "not started" and "missed" while Home, the tracker, the popout
-   * and the planner chip all read "not opened" and "DNF" for the same item.
-   * It is the last place in web/src that spelled a planner status for itself.
-   * -------------------------------------------------------------------- */
-
-  it.each([
-    ['not_started', 'not opened'],
-    ['in_progress', 'in progress'],
-    ['submitted', 'submitted'],
-    ['graded', 'graded'],
-    ['excused', 'excused'],
-    ['missed', 'DNF'],
-  ])('reads %s as "%s", the same as every other screen', (status, label) => {
-    renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      meta: { due_on: '2026-09-18', status, points_possible: null, type: null },
-    });
-    expect(screen.getByText(new RegExp(label))).toBeInTheDocument();
-  });
-
-  it('never prints the raw enum', () => {
-    const { container } = renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      meta: { due_on: '2026-09-18', status: 'not_started', points_possible: null, type: null },
-    });
-    expect(container.textContent).not.toContain('not started');
-    expect(container.textContent).not.toContain('not_started');
-  });
-
-  it('folds a retired value the way the rest of the app does', () => {
-    // Until migration 078 runs, rows still hold `waived` / `planned`.
-    renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      meta: { due_on: '2026-09-18', status: 'waived', points_possible: null, type: null },
-    });
-    expect(screen.getByText(/excused/)).toBeInTheDocument();
-  });
-
-  it('spells an unrecognised value rather than swallowing it', () => {
-    renderRow({
-      post_kind: 'assignment_due',
-      ref_kind: 'assignment',
-      meta: { due_on: '2026-09-18', status: 'from_the_future', points_possible: null, type: null },
-    });
-    expect(screen.getByText(/from the future/)).toBeInTheDocument();
-  });
-
-  it('marks the row with its kind so the four are distinguishable', () => {
-    const { container } = renderRow({ post_kind: 'assignment_due' });
-    expect(container.querySelector('[data-post-kind="assignment_due"]')).not.toBeNull();
+describe('CourseStream — the tracker waits for the term (code review)', () => {
+  it('reports the tracker as loading while the term row is in flight', async () => {
+    state.hangTerms = true;
+    render(
+      <QueryClientProvider client={newQueryClient()}>
+        <CourseStream courseId="IST.352" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(trackerProps.calls.length).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(trackerProps.calls.at(-1)?.isPending).toBe(true);
   });
 });
 
-describe('formatPoints — never invents a number', () => {
-  it('formats what is there, in whole points or one decimal', () => {
-    expect(formatPoints(40)).toBe('40 pts');
-    expect(formatPoints('1')).toBe('1 pt');
-    expect(formatPoints(2.55)).toBe('2.6 pts');
-  });
-
-  it('says nothing at all when the row has no points', () => {
-    expect(formatPoints(null)).toBeNull();
-    expect(formatPoints(undefined)).toBeNull();
-    expect(formatPoints('')).toBeNull();
-    expect(formatPoints('n/a')).toBeNull();
-  });
-});
-
-describe('the feed — filtering and grouping', () => {
-  it('drops an assignment_due outside the ±14-day window and keeps one inside', () => {
-    const rows = [
-      makeStreamRow({ post_kind: 'assignment_due', ref_id: 'near', meta: { due_on: '2026-09-18' } }),
-      makeStreamRow({ post_kind: 'assignment_due', ref_id: 'far', meta: { due_on: '2026-11-30' } }),
-      makeStreamRow({ post_kind: 'assignment_due', ref_id: 'past', meta: { due_on: '2026-06-01' } }),
-    ];
-    const kept = filterStreamRows(rows, '2026-09-10').map((r) => r.ref_id);
-    expect(kept).toEqual(['near']);
-  });
-
-  it('never windows anything that is not a due post', () => {
-    const rows = [
-      makeStreamRow({ post_kind: 'announcement', posted_at: '2026-01-02T14:00:00Z' }),
-      makeStreamRow({ post_kind: 'material', posted_at: '2026-01-03T14:00:00Z' }),
-      makeStreamRow({ post_kind: 'assignment_posted', posted_at: '2026-01-04T14:00:00Z' }),
-    ];
-    expect(filterStreamRows(rows, '2026-09-10')).toHaveLength(3);
-  });
-
-  it('groups by the New York day, newest day and newest post first', () => {
+describe('streamDayKey — the New York day an announcement lands on', () => {
+  it('reads a late-evening UTC time as the same New York evening', () => {
     // 23:30Z on the 8th and 02:00Z on the 9th are the same evening in New York.
-    const rows = [
-      makeStreamRow({ ref_id: 'a', posted_at: '2026-09-08T23:30:00Z' }),
-      makeStreamRow({ ref_id: 'b', posted_at: '2026-09-09T02:00:00Z' }),
-      makeStreamRow({ ref_id: 'c', posted_at: '2026-09-09T18:00:00Z' }),
-    ];
-    const days = groupStreamByDay(rows);
-    expect(days.map((d) => d.day)).toEqual(['2026-09-09', '2026-09-08']);
-    expect(days[1].rows.map((r) => r.ref_id)).toEqual(['b', 'a']);
-    expect(days[0].rows.map((r) => r.ref_id)).toEqual(['c']);
-  });
-});
-
-describe('formatDayHeading', () => {
-  it('says "Today" for today and a weekday for anything else', () => {
-    expect(formatDayHeading('2026-09-10', '2026-09-10')).toBe('Today');
-    expect(formatDayHeading('2026-09-08', '2026-09-10')).toBe('Tue · Sep 8');
+    expect(streamDayKey('2026-09-08T23:30:00Z')).toBe('2026-09-08');
+    expect(streamDayKey('2026-09-09T02:00:00Z')).toBe('2026-09-08');
+    expect(streamDayKey('2026-09-09T18:00:00Z')).toBe('2026-09-09');
   });
 });
