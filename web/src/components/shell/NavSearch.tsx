@@ -27,6 +27,10 @@ export function NavSearch() {
   const rootRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<HTMLButtonElement>(null);
   const fieldRef = useRef<HTMLInputElement>(null);
+  // True from a pointer press on the icon until its click. Safari does not
+  // focus a clicked button, so the field's blur arrives with no relatedTarget;
+  // without this the blur would fold search and the click would reopen it.
+  const iconPressedRef = useRef(false);
   const baseId = useId();
   const fieldId = `${baseId}-field`;
   const listId = `${baseId}-results`;
@@ -62,7 +66,10 @@ export function NavSearch() {
   useEffect(() => {
     if (!expanded) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') collapse(true);
+      // Only an Escape meant for search: one pressed in another menu (the
+      // account menu closes on its own) must not fold search or steal focus.
+      const root = rootRef.current;
+      if (event.key === 'Escape' && root?.contains(document.activeElement)) collapse(true);
     }
     function onPointerDown(event: MouseEvent | TouchEvent) {
       const root = rootRef.current;
@@ -88,7 +95,17 @@ export function NavSearch() {
         ref={iconRef}
         type="button"
         className={expanded ? styles.iconOpen : styles.icon}
-        onClick={expanded ? () => collapse(false) : expand}
+        onMouseDown={() => {
+          iconPressedRef.current = true;
+        }}
+        onMouseLeave={() => {
+          iconPressedRef.current = false;
+        }}
+        onClick={() => {
+          iconPressedRef.current = false;
+          if (expanded) collapse(false);
+          else expand();
+        }}
         aria-label="Search"
         aria-expanded={expanded}
         aria-controls={expanded ? fieldId : undefined}
@@ -102,6 +119,7 @@ export function NavSearch() {
         <ExpandedSearch
           fieldRef={fieldRef}
           rootRef={rootRef}
+          iconPressedRef={iconPressedRef}
           fieldId={fieldId}
           listId={listId}
           onCollapse={collapse}
@@ -114,12 +132,14 @@ export function NavSearch() {
 function ExpandedSearch({
   fieldRef,
   rootRef,
+  iconPressedRef,
   fieldId,
   listId,
   onCollapse,
 }: {
   fieldRef: RefObject<HTMLInputElement | null>;
   rootRef: RefObject<HTMLDivElement | null>;
+  iconPressedRef: RefObject<boolean>;
   fieldId: string;
   listId: string;
   onCollapse: (returnFocus: boolean) => void;
@@ -137,6 +157,8 @@ function ExpandedSearch({
     // the icon keeps the search; an empty field left for anywhere else folds.
     const next = event.relatedTarget as Node | null;
     if (next && rootRef.current?.contains(next)) return;
+    // A press on the icon: its click decides (it folds search itself).
+    if (iconPressedRef.current) return;
     if (!typing) onCollapse(false);
   }
 
