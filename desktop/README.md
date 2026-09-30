@@ -154,9 +154,14 @@ machine and brought back.
   clicking a toast builds one straight at the toast's screen. **Quit** is the
   only thing that ends the process.
   Measured on the packed build (signed-out page, so the renderer is on the small
-  side): window open 4 processes, 434-660 MB working set; closed 3 processes,
-  295-313 MB (main ~110, GPU ~130, network utility ~57). The GPU process is the
-  largest part of what stays.
+  side), two open/close cycles each:
+  * with GPU acceleration on (first cut): open 4 processes, 434-660 MB working
+    set; closed 3 processes, 295-313 MB (main ~110, GPU ~130, utility ~57).
+  * with GPU acceleration **off** (Stack, 2026-09-30; `app.disableHardwareAcceleration()`
+    in `src/main/index.ts`): open 4 processes, 355-364 MB working set / ~118 MB
+    private; closed 3 processes, 258-259 MB / ~81 MB private (main ~103, GPU
+    ~100, utility ~56). Chromium still runs a GPU process for software
+    compositing, but its private memory drops sharply.
 * **The session stays fresh with the window closed.** When the web session has
   expired and no window is open, the shell loads the app once in a hidden page
   for 20 seconds (at most every 10 minutes) so the web app's own proxy rewrites

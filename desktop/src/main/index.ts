@@ -293,6 +293,14 @@ function bootstrap(): void {
   });
 }
 
+/**
+ * Stack, 2026-09-30: GPU acceleration off. With the window closed to the tray the GPU
+ * process (~130 MB working set) was the largest part of what stayed resident, and the shell
+ * renders a plain web app that does not need it. Electron honours this only before `ready`,
+ * so it runs at import (`test/unit/gpu-off.test.ts` pins the order).
+ */
+app.disableHardwareAcceleration();
+
 if (app.requestSingleInstanceLock()) {
   bootstrap();
 } else {
