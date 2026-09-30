@@ -390,6 +390,8 @@ describe('2026-09-30 — the window-less session refresh', () => {
     await vi.advanceTimersByTimeAsync(SESSION_REFRESH_TIMEOUT_MS);
     fake.loadHangs = false;
     expect(refreshSessionWithoutWindow(APP_URL, noGuards)).not.toBeNull();
+    // Let this page finish, so the module-level slot is free for the next test.
+    await vi.advanceTimersByTimeAsync(SESSION_REFRESH_TIMEOUT_MS);
   });
 });
 
@@ -403,5 +405,20 @@ describe('R2-8 for a rebuilt window — its first load is observable', () => {
     fake.loadFails = 1;
     const window = createWindow(APP_URL, `${APP_URL}inbox`);
     await expect(firstLoad(window)).rejects.toThrow(/ERR_NAME_NOT_RESOLVED/);
+  });
+});
+
+describe('the window-less refresh survives its own setup failing (code review, LOW)', () => {
+  it('destroys the page and frees the slot when the guards throw', async () => {
+    const page = refreshSessionWithoutWindow(APP_URL, () => {
+      throw new Error('guards could not attach');
+    });
+    expect(page).toBeNull();
+    expect(fake.calls).toContain('destroy');
+
+    // Before the fix the slot stayed taken forever: every later refresh returned null.
+    fake.loadHangs = true;
+    expect(refreshSessionWithoutWindow(APP_URL, noGuards)).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(SESSION_REFRESH_TIMEOUT_MS);
   });
 });

@@ -306,28 +306,39 @@ export function refreshSessionWithoutWindow(
     webPreferences: { ...WEB_PREFERENCES, preload: preloadPath() },
   });
   refreshPage = page;
-  attachGuards(page);
 
   let finished = false;
+  let deadline: NodeJS.Timeout | null = null;
   const finish = (reason: string): void => {
     if (finished) return;
     finished = true;
-    clearTimeout(deadline);
+    if (deadline !== null) clearTimeout(deadline);
     refreshPage = null;
     log(`session refresh page closed (${reason})`);
     if (!page.isDestroyed()) page.destroy();
   };
-  const deadline = setTimeout(() => finish('timed out'), SESSION_REFRESH_TIMEOUT_MS);
-  deadline.unref?.();
 
-  const linger = (): void => {
-    const timer = setTimeout(() => finish('done'), SESSION_REFRESH_LINGER_MS);
-    timer.unref?.();
-  };
-  page.webContents.loadURL(appUrl).then(linger, (error: unknown) => {
-    logError('the session refresh page could not load the app', error);
-    linger();
-  });
+  // Code review (LOW): anything that throws while the page is being wired must still free
+  // the slot and destroy the page, or every later refresh returns null and the hidden
+  // page leaks for the life of the process.
+  try {
+    attachGuards(page);
+    deadline = setTimeout(() => finish('timed out'), SESSION_REFRESH_TIMEOUT_MS);
+    deadline.unref?.();
+
+    const linger = (): void => {
+      const timer = setTimeout(() => finish('done'), SESSION_REFRESH_LINGER_MS);
+      timer.unref?.();
+    };
+    page.webContents.loadURL(appUrl).then(linger, (error: unknown) => {
+      logError('the session refresh page could not load the app', error);
+      linger();
+    });
+  } catch (error) {
+    logError('the session refresh page could not be set up', error);
+    finish('setup failed');
+    return null;
+  }
   return page;
 }
 
