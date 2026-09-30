@@ -217,3 +217,21 @@ The eval is now 9 queries × 3 modes, so the brief's line reads `scored=27` in p
 * `node scripts/db-test.mjs --only phase18_golden_truth.sql` → `PASS  phase18_golden_truth.sql`, exit 0
 * Live eval: not run now (119 is not applied yet). The PM re-runs `node ingest/eval_search.mjs --out ingest/eval/reports/<date>.json` after the re-embed.
   Expected: `scored=27`. Round 2's committed report (`2026-09-29.json`) still holds the 10-query run.
+
+## Round 4 (PM code review, MEDIUM): `--restale` resumable
+
+Finding: an occupied restale key was always refused. So a stopped run, or a re-run before the owner SQL ran, stranded
+rows that were already uploaded. `pull_files.sql` was rewritten from the new results only, which lost their SQL. A
+no-units extraction after the upload left an orphan that every retry refused.
+
+Fix: an occupied restale key is resumed, never overwritten. Each owner transaction now opens with a `do $restale$ …`
+guard that aborts unless `storage.objects` holds the new key with this run's md5 eTag and size. The script cannot read
+Storage back (bucket `bb-files` is private, and anon is insert-only), so the owner does the check. It uses only
+hashes, a key and a size. An earlier run's non-empty `.sql` is never truncated: the run writes `<name>.<stamp>.sql`
+and prints which. Extraction with no units, or a failed extraction, after the upload reports
+`not restaled: … orphaned` with `orphanKey`, writes no SQL and stages nothing. The next run resumes that key.
+Assumption: Storage's eTag for a single upload is the quoted md5 of the body. If it is not, the guard aborts the
+transaction (safe, loud) and the row stays stale.
+
+* RED: `node --test ingest/pull_files.test.mjs` → `tests 35, pass 30, fail 5` (resumable rule, SQL guard, re-run resume, no-units orphan + retry, no-truncate)
+* GREEN: `node --test ingest/*.test.mjs` → `tests 83, pass 83, fail 0`

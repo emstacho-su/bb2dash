@@ -236,7 +236,12 @@ segment; the old object is never overwritten), and the `.sql` holds one `begin; 
 that deletes the row's old text units and points it at the new key, guarded on the old sha. That
 file carries only ids, keys and hashes, never document text: the new units wait on local disk
 and `--restale-post` posts them over PostgREST, then embeds them. A `--restale-post` line saying
-"owner SQL not run yet" means the `.sql` was skipped; run it and re-run `--restale-post`. Count the
+"owner SQL not run yet" means the `.sql` was skipped; run it and re-run `--restale-post`.
+Each transaction first checks `storage.objects` for the new key (md5 eTag and size of the fetched
+bytes) and aborts if they differ, so a re-run after a stopped run resumes a key it already filled
+instead of refusing it. A `.sql` from an earlier run is never overwritten: the script writes
+`<name>.<stamp>.sql` beside it and prints which. A row reported `not restaled … orphaned` has an
+object at its new key and no SQL; the next run resumes it, or a human removes that object. Count the
 re-pulled rows in `files_pulled` and any row with an `error` in `files_not_pulled`.
 
 `node ingest/embed_corpus.mjs --check` prints `missing_parts_before=<n>` and exits non-zero when

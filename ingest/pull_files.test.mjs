@@ -206,7 +206,7 @@ const stale72 = {
   relpath: 'IST.352/readings/Managing the Information Systems Project.pptx',
   file_name: 'Managing the Information Systems Project.pptx',
 };
-const okSql = { id: 72, oldSha: OLD_SHA, newSha: NEW_SHA, key: 'k/x.pdf', relpath: 'k/x.pdf', size: 5000, mime: 'application/pdf', pulledOn: '2026-09-29' };
+const okSql = { id: 72, oldSha: OLD_SHA, newSha: NEW_SHA, key: 'k/x.pdf', relpath: 'k/x.pdf', size: 5000, mime: 'application/pdf', pulledOn: '2026-09-29', md5: '0123456789abcdef0123456789abcdef' };
 
 test('restale: the marker is the wording stage_files writes (prod rows 72 and 144)', () => {
   assert.equal(pf.STALE_MARKER, '; stored bytes may be stale');
@@ -227,9 +227,78 @@ test('restale: the new bytes get a NEW Storage key (a restale-<sha12> segment), 
   assert.equal(pf.storageKeyFor({ relpath: pf.restaleRelpath('A/b/Lecture#4.pptx', NEW_SHA) }), `A/b/restale-${NEW_SHA.slice(0, 12)}/Lecture_4.pptx`);
 });
 
-test('restale: an occupied restale key is refused, never treated as done (no overwrite, no guess)', () => {
-  assert.equal(pf.duplicateIsAcceptable(false, { restale: true }), false);
+test('restale: an occupied restale key is resumable, because the owner SQL verifies the stored object (never an overwrite)', () => {
+  // Round 4 (code review): refusing it stranded any row a stopped or repeated run had uploaded.
+  // The object is never overwritten (no x-upsert); the owner SQL refuses to re-point the row unless
+  // storage.objects holds exactly these bytes (md5 eTag and size).
+  assert.equal(pf.duplicateIsAcceptable(false, { restale: true }), true);
   assert.equal(pf.duplicateIsAcceptable(false), true, 'the course-file rule is unchanged');
+  assert.equal(pf.duplicateIsAcceptable(true), false, 'the submission rule is unchanged');
+});
+
+test('restale SQL verifies the object at the new key is these bytes before it re-points the row', () => {
+  const sql = pf.restaleSql(okSql);
+  const lines = sql.split('\n');
+  assert.equal(lines[0], 'begin;');
+  assert.match(lines[1], /^do \$restale\$ begin if not exists \(select 1 from storage\.objects o where o\.bucket_id = 'bb-files' and o\.name = 'k\/x\.pdf' and o\.metadata->>'eTag' = '"0123456789abcdef0123456789abcdef"' and \(o\.metadata->>'size'\)::bigint = 5000\) then raise exception 'restale file 72: /);
+  assert.throws(() => pf.restaleSql({ ...okSql, md5: 'nope' }), 'the md5 is shape-checked');
+  assert.throws(() => pf.restaleSql({ ...okSql, key: 'k/$restale$x.pdf' }), 'a key cannot close the dollar quote');
+});
+
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
+
+function restaleCtx(overrides = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'restale-'));
+  return {
+    mirror: path.join(dir, 'mirror'), downloads: path.join(dir, 'dl'), pulledOn: '2026-09-30', dryRun: false,
+    storagePost: async () => ({ ok: true, status: 200, body: '{}' }),
+    extract: () => [{ unit_kind: 'slide', unit_no: 1, text: 'fresh text' }],
+    ...overrides,
+  };
+}
+const freshBytes = Buffer.concat([Buffer.from([0x50, 0x4b, 3, 4]), Buffer.alloc(3000, 7)]);
+
+async function runRestale(ctx) {
+  const local = path.join(ctx.downloads, '72_M.pptx');
+  fs.mkdirSync(ctx.downloads, { recursive: true });
+  fs.writeFileSync(local, freshBytes);
+  const sha256 = pf.sha256Hex(freshBytes);
+  return pf.restaleOne({ ...stale72, relpath: 'IST.352/readings/M.pptx' }, ctx, { localPath: local, bytes: freshBytes, mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', sha256 });
+}
+
+test('restale re-run: the key a stopped run already filled is resumed — owner SQL re-emitted, units re-staged', async () => {
+  const ctx = restaleCtx({ storagePost: async () => ({ ok: false, status: 400, body: '{"error":"Duplicate","message":"The resource already exists"}' }) });
+  const r = await runRestale(ctx);
+  assert.equal(r.error, undefined, JSON.stringify(r));
+  assert.equal(r.resumed, true);
+  assert.match(r.sql, /^begin;\ndo \$restale\$/);
+  assert.ok(r.sql.includes(`'"${pf.md5Hex(freshBytes)}"'`), 'the guard carries the md5 of these bytes');
+  assert.ok(fs.existsSync(pf.stagedUnitsPath(ctx.downloads, 72)));
+});
+
+test('restale: extraction with no units after the upload names the orphan key; no SQL, nothing staged; a retry resumes', async () => {
+  const ctx = restaleCtx({ extract: () => [] });
+  const r = await runRestale(ctx);
+  assert.equal(r.sql, undefined);
+  assert.equal(r.orphanKey, `IST.352/readings/restale-${pf.sha256Hex(freshBytes).slice(0, 12)}/M.pptx`);
+  assert.match(r.error, /not restaled/);
+  assert.ok(r.error.includes(r.orphanKey), 'the error names the object a human may remove');
+  assert.equal(fs.existsSync(pf.stagedUnitsPath(ctx.downloads, 72)), false);
+  const retry = await runRestale({ ...ctx, extract: () => [{ unit_kind: 'slide', unit_no: 1, text: 'x' }], storagePost: async () => ({ ok: false, status: 409, body: 'Duplicate' }) });
+  assert.equal(retry.resumed, true);
+  assert.ok(retry.sql);
+});
+
+test('the SQL file of an earlier run is never truncated: a new per-run file is written instead', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'out-'));
+  const out = path.join(dir, 'pull_files.sql');
+  assert.equal(pf.resolveOutPath(out, '20260930T120000'), out, 'nothing there yet: the named file');
+  fs.writeFileSync(out, '-- file 72\nbegin;\ncommit;\n');
+  assert.equal(pf.resolveOutPath(out, '20260930T120000'), path.join(dir, 'pull_files.20260930T120000.sql'));
+  fs.writeFileSync(path.join(dir, 'empty.sql'), '\n');
+  assert.equal(pf.resolveOutPath(path.join(dir, 'empty.sql'), 'x'), path.join(dir, 'empty.sql'), 'an empty file holds nothing to lose');
 });
 
 test('restale SQL: one transaction per row, old units out, row re-pointed, note cleared, guarded on the old sha', () => {
