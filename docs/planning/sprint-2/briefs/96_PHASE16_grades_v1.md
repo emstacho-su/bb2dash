@@ -420,8 +420,9 @@ Stack's acceptance script:
    ECN.304 card shows none.
 8. On `/planner`, week of 2026-11-02, the SITN presentation sits on Wed 11/4 at 3:45 PM, and the same
    event is on his Google calendar.
-9. After ECN.304 Exam 1 posts and its column is linked, Exams is counted and the rule line still says
-   the exams are averaged until all 3 are graded.
+9. ~~After ECN.304 Exam 1 posts and its column is linked, Exams is counted and the rule line still says
+   the exams are averaged until all 3 are graded.~~ Moved out of this phase (Stack, 2026-09-30): standing gate G-16,
+   `node scripts/check-ecn-exam1.mjs` → PASS before the next phase's workers are cut (ORCHESTRATOR §3).
 10. He reads the before / after invariant output in the PR and says "merge".
 
 What proves each item:
@@ -484,7 +485,7 @@ type `|` when running a command.
 | 24 | Generate `db/tests/phase16_106_v1_recheck.sql` from the six verdict files with `--emit-sql` | P-67, R-31 | W-42 | (a) runner `--only phase16_106_v1_recheck.sql` → pass | — |
 | 25 | IST.323 case names in `aggregation.sum.test.ts` match the re-cut (B-12); `web/test/grade-model/parent-links.test.ts` is left alone (its 11 / 9 tree is synthetic and its names claim no real split) | R-30 | W-43 | (d) `grep -cE "completed log \(2\) missing\|proposal 11 \+ log 3" web/test/grade-model/aggregation.sum.test.ts` → 0 (2 on `main` a5042fa), and `npx vitest run test/grade-model/aggregation.sum.test.ts` → 0 failures | — |
 | 26 | Walk, part 1, written into 96e | R-29 | PM | (c) `07-planner-sitn-2026-11-04.png`: `/planner` week of 2026-11-02, the IST 323 SITN group presentation in Wed 11/4 at 3:45 PM | "I saw my SITN date." |
-| 27 | Walk, part 2, once ECN.304 Exam 1 posts and is linked | R-36 | PM | (b) `select count(*) from v_grade_model_items where scheme_course_id = 'ECN.304' and component_id = 3 and score is not null` → 1; (c) `08-grades-ecn-exam1.png`: the ECN.304 block with the rule line, and "Exams (rank-weighted)" absent from "Not counted yet:"; (d) `ls docs/planning/sprint-2/walks/walk-16/*.png \| wc -l` → 8 | "Exam 1 counts; the rule still says averaged." |
+| 27 | ~~Walk, part 2, once ECN.304 Exam 1 posts and is linked~~ Moved to gate G-16 (2026-09-30); rehearsed in `web/test/graded-so-far.test.ts` ("ECN.304 Exam 1 posted") | R-36 | PM | (b) `select count(*) from v_grade_model_items where scheme_course_id = 'ECN.304' and component_id = 3 and score is not null` → 1; (c) `08-grades-ecn-exam1.png`: the ECN.304 block with the rule line, and "Exams (rank-weighted)" absent from "Not counted yet:"; (d) `ls docs/planning/sprint-2/walks/walk-16/*.png \| wc -l` → 8 | "Exam 1 counts; the rule still says averaged." |
 | 28 | Docs: STATUS (rows this phase fixes struck through with the migration named, per 2026-09-24), DECISIONS (Stack's B answers, if not yet recorded), ORCHESTRATOR; intake S2-carry-2; 81's C-2 row (brief 63 is task 7's) | all | PM | (d) `git diff --name-only origin/main...feat/grades-v1-16 -- project-state/ \| wc -l` → 3, and `git diff --name-only origin/main...feat/grades-v1-16 -- docs/planning/sprint-2/90_SPRINT2_INTAKE.md docs/planning/sprint-2/parked/81_PHASE13_styling.md \| wc -l` → 2 | — |
 | 29 | Gates and PR: `/code-review main high`, `/security-review`, PR with preview | all | PM | (d) `gh pr view <n> --json state -q .state` → `OPEN`; `gh pr checks <n> \| grep -cE "^Vercel[[:space:]]+pass"` → 1; `gh pr checks <n> \| grep -c fail` → 0 (the repo has no CI; Vercel's check is the one PR #22 carried) | "Ready when you say so." |
 
