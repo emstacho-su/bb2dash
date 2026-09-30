@@ -28,6 +28,7 @@ import type { ComparisonFixture } from './grade-fixtures/types';
 import { modelInputArb } from './grade-model/arbitraries';
 import { assertProperty } from './grade-model/fc-params';
 import { component, deepFreeze, item, modelInput, scheme } from './grade-model/builders';
+import { ECN304_EXAMS_PART, ecn304Input } from './grade-model/ecn304-shape';
 
 function modelOf(fixture: ComparisonFixture): ModelInput {
   return {
@@ -258,6 +259,51 @@ describe('rank rules', () => {
   it('is empty for a course with no rank-weighted part (F01)', () => {
     const figure = figureFor('F01');
     expect(figure.state === 'figure' && figure.rankRules).toEqual([]);
+  });
+});
+
+/*
+ * Task 27 (acceptance step 9): ECN.304 Exam 1 is sat 2026-10-01. Built from
+ * prod's real shape (test/grade-model/ecn304-shape.ts). By hand, weighted_pct:
+ *   Participation 10 %: 80/100                        → 10 × 0.80 = 8.00
+ *   Quizzes 15 %: 9/10, 6/8, 4/7, 8/10, drop 4/7      → 15 × (0.9+0.75+0.8)/3 = 12.25
+ *   Today (exams ungraded): (8 + 12.25) / 25          = 81.0 %
+ *   Exam 1 = 85: one graded exam, mean-until-all-graded → 75 × 0.85 = 63.75
+ *     (8 + 12.25 + 63.75) / 100                       = 84.0 %
+ *   90 / 70 / 50: (30×0.9 + 25×0.7 + 20×0.5) / 75     → 75 × 54.5/75 = 54.5
+ *     (8 + 12.25 + 54.5) / 100                        = 74.75 %
+ */
+describe('ECN.304 Exam 1 rehearsal', () => {
+  function figureOf(exams: readonly [number | null, number | null, number | null]) {
+    const figure = gradedSoFar(ecn304Input(exams));
+    if (figure.state !== 'figure') throw new Error(`expected a figure, got ${figure.state}`);
+    return figure;
+  }
+
+  it('today: 81.0 % with Exams not counted yet', () => {
+    const figure = figureOf([null, null, null]);
+    expect(figure.percent).toBeCloseTo(81, 10);
+    expect(figure.leftOutParts).toEqual([ECN304_EXAMS_PART]);
+  });
+
+  it('ECN.304 Exam 1 posted: Exams counted, rule still averaged', () => {
+    const figure = figureOf([85, null, null]);
+    expect(figure.leftOutParts).toEqual([]);
+    expect(figure.countedParts).toContain(ECN304_EXAMS_PART);
+    expect(figure.percent).toBeCloseTo(84, 10);
+    expect(figure.unlinkedColumns).toEqual([]);
+    expect(figure.rankRules).toEqual([
+      { part: ECN304_EXAMS_PART, weights: [30, 25, 20], slots: 3, allGraded: false },
+    ]);
+  });
+
+  it('ECN.304 all three exams posted: rank weighting applied', () => {
+    const figure = figureOf([90, 70, 50]);
+    expect(figure.leftOutParts).toEqual([]);
+    expect(figure.percent).toBeCloseTo(74.75, 10);
+    expect(figure.rankRules).toEqual([
+      { part: ECN304_EXAMS_PART, weights: [30, 25, 20], slots: 3, allGraded: true },
+    ]);
   });
 });
 

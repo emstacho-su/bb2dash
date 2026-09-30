@@ -24,6 +24,7 @@ import {
 } from '@/components/grades/GradedSoFarFigure';
 import { gradedSoFar, type GradedSoFarResult as Figure, type RankRule } from '@/lib/graded-so-far';
 import { component, item, modelInput } from './grade-model/builders';
+import { ecn304Input } from './grade-model/ecn304-shape';
 
 const FIGURE: Figure = {
   state: 'figure',
@@ -274,6 +275,24 @@ describe('GradedSoFarFigure — the rank-weighted rule', () => {
     render(<GradedSoFarFigure figure={figure} />);
     expect(screen.getByTestId('rank-rule').textContent).toBe(
       'Exams (rank-weighted): weighted 30 / 25 / 20 from highest score to lowest once all 3 are graded; until then the graded ones are averaged.',
+    );
+  });
+
+  // Task 27: the Exam 1 rehearsal, rendered from ECN.304's real shape.
+  it('ECN.304 Exam 1 posted: Exams counted, rule still averaged', () => {
+    render(<GradedSoFarFigure figure={gradedSoFar(ecn304Input([85, null, null]))} />);
+    expect(screen.getByText('84.0%')).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(LEFT_OUT_LABEL))).toBeNull();
+    expect(screen.getByTestId('rank-rule').textContent).toBe(
+      'Exams (rank-weighted): weighted 30 / 25 / 20 from highest score to lowest once all 3 are graded; until then the graded ones are averaged.',
+    );
+  });
+
+  it('ECN.304 all three exams posted: the every-slot-graded sentence', () => {
+    render(<GradedSoFarFigure figure={gradedSoFar(ecn304Input([90, 70, 50]))} />);
+    expect(screen.getByText('74.8%')).toBeInTheDocument();
+    expect(screen.getByTestId('rank-rule').textContent).toBe(
+      'Exams (rank-weighted): weighted 30 / 25 / 20 from highest score to lowest.',
     );
   });
 
