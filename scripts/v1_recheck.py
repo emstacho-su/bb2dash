@@ -68,7 +68,7 @@ YAML_FENCE_RE = re.compile(r"^```ya?ml[ \t]*\r?\n(.*?)^```[ \t]*$", re.MULTILINE
 # outside the grading tables through a SELECT. Checked outside AND inside string literals.
 FORBIDDEN_WORDS = (
     "insert", "update", "delete", "drop", "alter", "create", "grant", "revoke", "truncate",
-    "copy", "call", "do",
+    "copy", "call", "do", "table",
     "into", "merge", "execute", "set_config", "nextval", "setval", "dblink", "dblink_exec", "vault",
     "lo_import", "lo_export", "lo_unlink", "lo_put", "lo_from_bytea",
 )

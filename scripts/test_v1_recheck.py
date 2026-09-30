@@ -676,3 +676,14 @@ def test_correcting_entry_without_stored_is_not_summarized_as_already_applied(tm
 def test_stored_null_is_still_allowed_on_a_correction():
     row = entry(verdict="differs", call="change_to", stored=None, value=12)
     assert errors_of([row]) == []
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "select string_agg(s::text, '|') from (table agent_requests) s",
+        "select count(*) from assignments a join (table app_settings) t on true",
+    ],
+)
+def test_recheck_table_shorthand_rejected(sql):
+    assert vr.recheck_error(sql) is not None
