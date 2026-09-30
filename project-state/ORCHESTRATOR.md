@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-29** (PRs #30 Phase 15, #31 logon build + the `estac` → `stack` path pass, and #32 sync file pull merged on Stack's word; R1 done and its gate-out green on `main`, so R3 and R4 are open; every live path reads `C:/Users/stack/...`; Task 0 started 15:25Z). Before that, **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-30** (Phase 17 built on `feat/web-polish-17`, PR open, not merged: migrations 110–119 and 150 live and md5-identical, 150 opening Phase 17's overflow block 150–159; round-3 walk 24/24 on the preview; waiting on Stack's T-24 and T-26 sittings and his look at round 3). Before that, **2026-09-29** (PRs #30 Phase 15, #31 logon build + the `estac` → `stack` path pass, and #32 sync file pull merged on Stack's word; R1 done and its gate-out green on `main`, so R3 and R4 are open; every live path reads `C:/Users/stack/...`; Task 0 started 15:25Z). Before that, **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
 > rounds, record `105_BRIEF_VERIFICATION_2026-09-27.md`; §6's prompts rewritten to them). Before that, **2026-09-24** (**sprint 2 planned**:
 > requirements `91_REQUIREMENTS_v3.md`, research `92_*` + `93_SPRINT2_RESEARCH_SYNTHESIS.md`, phases
 > `94_SPRINT2_PHASES.md`, briefs `95_`–`103_`; planning PR open on `docs/sprint2-planning`; every
@@ -51,7 +51,7 @@ gitignored `.env` at registration (2026-09-29: `dist` built, 88 unit tests, `npm
 |---|---|---|---|---|---|
 | 15 | Database hygiene and the SQL test runner | `briefs/95_PHASE15_db_hygiene.md` | R-78..R-80, R-54 | 100–102 live | **merged 2026-09-29** ([PR #30](https://github.com/emstacho-su/bb2dash/pull/30), 6ef3933); runner green 21/21 on `main`, advisor's search_path list empty; R3 and R4 open |
 | 16 | Grades: V-1 sittings and the reconciliation migration | `briefs/96_PHASE16_grades_v1.md` | R-29..R-36 | 105–109 | planned; Stack's six sittings, IST.323 before 2026-12-03 |
-| 17 | Web polish: quick fixes, carried bugs, Inbox/planner leftovers, live proofs | `briefs/97_PHASE17_web_polish.md` | R-37, R-39 (interim), R-40, R-42..R-45, R-47..R-52, R-55..R-59, R-108; S2-home-1/2, S2-materials-1, S2-bugs-1 | 110–119 | planned; with 18 |
+| 17 | Web polish: quick fixes, carried bugs, Inbox/planner leftovers, live proofs | `briefs/97_PHASE17_web_polish.md` | R-37, R-39 (interim), R-40, R-42..R-45, R-47..R-52, R-55..R-59, R-108; S2-home-1/2, S2-materials-1, S2-bugs-1 | 110–119, 150 (overflow block 150–159) | built 2026-09-30; PR open, waiting on T-24/T-26 sittings |
 | 18 | Ingest and corpus | `briefs/98_PHASE18_ingest_corpus.md` | R-60..R-63, R-66..R-70, R-72..R-75, R-77; S2-rag-1 | 120–129 | planned; with 17 |
 | 19 | Content identity, per-crawl history, sync honesty | `briefs/99_PHASE19_content_history.md` | R-38, R-41, R-64, R-65, R-71, R-76 | 130–139 | planned; after 17 and 18 |
 | 14 | Containers (R-28) | `briefs/100_PHASE14_containers.md` (supersedes `82_`'s Contract) | R-81..R-96; S2-containers-1 | 091–099 | planned; the spike gates its sync half, whose workers (W-55, W-56) also wait for 15, 18 and 19 on `main`; three repos, one PR per repo plus the early `syncLauncher` PR (B-51) |
@@ -94,7 +94,7 @@ Rules that fall out of the graph:
    inherits 18's scripted fetch and embed step (P-36) and 19's register-first driver.
 5. **21 after 14**, **22 last** (Stack's "cleaning" placement; the Workspace page is in 22's inventory).
 6. **Migration ranges with slack**: 091–099 (14), 100–104 (15), 105–109 (16), 110–119 (17), 120–129 (18),
-   130–139 (19), 140–149 (21). A phase that runs out takes the next free block of ten and records it in
+   130–139 (19), 140–149 (21), 150–159 (17's overflow, taken 2026-09-29 for migration 150; DECISIONS). A phase that runs out takes the next free block of ten and records it in
    DECISIONS, never a number inside another phase's block. Every migration is additive, applied under the
    file's name, byte-identical.
 7. **What each phase hands on** is the seam table in `94_SPRINT2_PHASES.md` §3.
@@ -232,7 +232,13 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 * Say whether the Nov 30 – Dec 13 code freeze still stands. Default: it stands, as a window, not pacing (DECISIONS
   2026-09-27, no-date-paced-tasks row). If you strike it, migration 106's bound becomes 2026-12-03 and B-6's window goes.
 * Phase 12 proofs still his: see the three toasts and click one from a banner and one from the Action
-  Center; press Sync inside the shell and confirm "command copied" (batch items 57–58).
+  Center; press Sync inside the shell and confirm "command copied" (batch items 57–58). This is Phase 17's **T-24
+  desktop sitting** (brief 97 acceptance step 10); the R-108 DECISIONS row stays PENDING until it happens.
+* Phase 17 **T-26 production sitting** with the PM (brief 97 acceptance steps 8–9): the planner recurrence and
+  popover walk, the staging proof, and shots 11, 14, 15, 19–21 plus the `staged link` spec.
+* Phase 17 **round 3 on the preview**: look at the nine round-3 changes (shots 22–27 in `walk-17/`) and say whether
+  they are right before the PR merges.
+* Rotate the password you were asked to rotate during Phase 17's walk.
 * Place ECN.304 Quiz 2 and Attendance with "Counts toward…" on the course Grades tab if the figure
   should include them.
 
