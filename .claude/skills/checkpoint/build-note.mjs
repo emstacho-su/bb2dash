@@ -12,8 +12,11 @@
  * Facts come from git and the arguments; the model writes only the body. The
  * note is a schema-v2 session note with every field present, `captured_by:
  * skill` and `origin: cloud`, written to `<repo>/.harness/sessions/<id>.md`.
- * Stdout is one JSON line: { ok, path, id, session_id, collection } or
- * { ok: false, error }. Exit 0 on a note, 2 on bad input.
+ * The body and every git-derived string pass through `redact()` (a byte copy of
+ * hooks/lib/redact.mjs, installed beside this file) before anything is written,
+ * because the note is committed and a secret in git history needs rotation.
+ * Stdout is one JSON line: { ok, path, id, session_id, collection, redactions }
+ * or { ok: false, error }. Exit 0 on a note, 2 on bad input.
  */
 
 import crypto from 'node:crypto';
@@ -22,6 +25,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { findSecretValues, redact, redactLiterals } from './redact.mjs';
 
 export const GENERATOR = 'checkpoint 1.0.0';
 export const SCHEMA_VERSION = 2;
@@ -55,6 +60,7 @@ const PLAIN = 'plain';
 const LIST = 'list';
 const NUMBER_LIST = 'numlist';
 const MAP = 'map';
+const RECORDS = 'records';
 
 export const FIELD_SPEC = Object.freeze([
   ['id', QUOTED], ['title', QUOTED], ['type', PLAIN], ['schema_version', PLAIN],
@@ -67,7 +73,8 @@ export const FIELD_SPEC = Object.freeze([
   ['memory_files', LIST], ['plan_file', QUOTED], ['docs_touched', LIST], ['artifacts', LIST],
   ['files_modified', LIST], ['prompt_count', PLAIN], ['command_count', PLAIN], ['agent', PLAIN],
   ['agent_type', QUOTED], ['origin', QUOTED], ['captured_by', QUOTED], ['generator', QUOTED],
-  ['tools_used', MAP],
+  ['tools_used', MAP], ['up', QUOTED], ['related', LIST], ['machine', QUOTED],
+  ['retrievals', RECORDS], ['retrieved', LIST], ['hook_tags', LIST],
 ]);
 
 const EMITTABLE_KEY = /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/;
@@ -94,9 +101,68 @@ function emitField(key, value, kind) {
       if (entries.length === 0) return [`${key}: {}`];
       return [`${key}:`, ...entries.map(([name, count]) => `  ${name}: ${Number(count) || 0}`)];
     }
+    case RECORDS: {
+      const records = (Array.isArray(value) ? value : []).map(emitRecord).filter((lines) => lines.length > 0);
+      if (records.length === 0) return [`${key}: []`];
+      return [`${key}:`, ...records.flat()];
+    }
     default:
       return [`${key}: ${yamlStr(value)}`];
   }
+}
+
+// The SC-1 retrieval record. A checkpoint never has one, but the copy emits
+// what the hook would, so the two stay byte-identical for any input.
+const RECORD_KEY_ORDER = Object.freeze(['at', 'channel', 'tool', 'query', 'filters', 'results', 'chunks']);
+const QUOTED_RECORD_KEYS = new Set(['at', 'query', 'results', 'chunks']);
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const BARE_WORD = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+// YAML 1.1 (PyYAML, which ingest reads notes with) also turns these into booleans or null, in any case.
+const NON_STRING_WORDS = new Set(['true', 'false', 'null', 'yes', 'no', 'on', 'off']);
+
+function emitRecord(record) {
+  if (!isPlainObject(record)) return [];
+  const known = RECORD_KEY_ORDER.filter((name) => Object.hasOwn(record, name));
+  const others = Object.keys(record).filter((name) => !RECORD_KEY_ORDER.includes(name) && isEmittableKey(name));
+  return [...known, ...others].map(
+    (name, index) => `${index === 0 ? '  - ' : '    '}${name}: ${emitRecordValue(name, record[name])}`,
+  );
+}
+
+function emitRecordValue(name, value) {
+  const quoted = QUOTED_RECORD_KEYS.has(name);
+  if (Array.isArray(value)) return emitFlowList(value, quoted);
+  if (isPlainObject(value)) return emitFlowMap(value);
+  return emitFlowScalar(value, quoted);
+}
+
+function emitFlowMap(map) {
+  const entries = Object.entries(map).filter(([name]) => isEmittableKey(name));
+  const rendered = entries.map(
+    ([name, value]) => `${name}: ${Array.isArray(value) ? emitFlowList(value, false) : emitFlowScalar(value, false)}`,
+  );
+  return `{${rendered.join(', ')}}`;
+}
+
+function emitFlowList(items, quoted) {
+  return `[${items.map((item) => emitFlowScalar(item, quoted)).join(', ')}]`;
+}
+
+function emitFlowScalar(value, quoted) {
+  if (typeof value === 'boolean') return String(value);
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (value === null || value === undefined) return "''";
+  if (typeof value !== 'string') return yamlStr(JSON.stringify(value));
+  const bare = !quoted && BARE_WORD.test(value) && !NON_STRING_WORDS.has(value.toLowerCase());
+  return bare ? value : yamlStr(value);
+}
+
+function isEmittableKey(name) {
+  return EMITTABLE_KEY.test(name) && !UNSAFE_KEYS.has(name);
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 export function serializeFrontmatter(fields) {
@@ -170,6 +236,52 @@ export function gitFacts(repo, { base = '' } = {}) {
   return { repoFullName, branch: branch === 'HEAD' ? '' : branch, base: ref, commits, files };
 }
 
+// ------------------------------------------------------------- redaction
+
+/** Every marker the rules leave: `[REDACTED]`, `[REDACTED-JWT]`, `Basic [REDACTED]`, `[REDACTED:<id>]`. */
+const REDACTION_MARKER = /\[REDACTED[^\]\s]*\]/g;
+
+/** How many secrets redaction removed: the markers in `after` that were not already in `before`. */
+export function countRedactions(before, after) {
+  const count = (text) => (String(text ?? '').match(REDACTION_MARKER) ?? []).length;
+  return Math.max(0, count(after) - count(before));
+}
+
+function redactString(value) {
+  const text = String(value ?? '');
+  if (text === '') return { text, count: 0 };
+  const clean = redact(text);
+  return { text: clean, count: countRedactions(text, clean) };
+}
+
+/**
+ * The body, redacted by shape and then literally: a password seen once in a
+ * connection string and again in prose is removed from both, as the hook does.
+ */
+export function redactBody(body) {
+  const text = String(body ?? '');
+  const clean = redactLiterals(redact(text), findSecretValues(text));
+  return { text: clean, count: countRedactions(text, clean) };
+}
+
+/** Every string `gitFacts` returns, redacted. A branch or file name can carry a pasted key. */
+export function redactGitFacts(facts) {
+  let count = 0;
+  const one = (value) => {
+    const result = redactString(value);
+    count += result.count;
+    return result.text;
+  };
+  const redacted = {
+    repoFullName: one(facts.repoFullName),
+    branch: one(facts.branch),
+    base: one(facts.base),
+    commits: facts.commits.map(one),
+    files: facts.files.map(one),
+  };
+  return { facts: redacted, count };
+}
+
 // ------------------------------------------------------------ session id
 
 function claimFromJwt(token) {
@@ -228,7 +340,11 @@ export function buildNote({ repo, body, collection = '', sessionId = '', now = n
   const checked = validateBody(body);
   if (!checked.ok) return { ok: false, error: checked.error };
 
-  const facts = gitFacts(repo, { base });
+  // Redacted before anything is derived from them, so no field, no body line
+  // and no collection name can carry what the rules find.
+  const scrubbed = redactGitFacts(gitFacts(repo, { base }));
+  const facts = scrubbed.facts;
+  const bodyText = redactBody(checked.text);
   const id = resolveSessionId({ explicit: sessionId, env });
   const requested = slugify(collection);
   const fromRepo = slugify(facts.repoFullName.split('/')[1] ?? '');
@@ -271,7 +387,7 @@ export function buildNote({ repo, body, collection = '', sessionId = '', now = n
     docs_touched: facts.files.filter((file) => /^docs\/|\.md$/.test(file)),
     artifacts: [],
     files_modified: facts.files,
-    prompt_count: countRequests(checked.text),
+    prompt_count: countRequests(bodyText.text),
     command_count: 0,
     agent: 'claude-code',
     agent_type: '',
@@ -279,6 +395,15 @@ export function buildNote({ repo, body, collection = '', sessionId = '', now = n
     captured_by: CAPTURED_BY,
     generator: GENERATOR,
     tools_used: {},
+    // Empty on purpose: the collector derives both from where it files the note.
+    up: '',
+    related: [],
+    machine: '',
+    // No transcript reaches the checkpoint, so no searches are known.
+    retrievals: [],
+    retrieved: [],
+    // No classifier runs here: every tag on a checkpoint note is a hand tag.
+    hook_tags: [],
   };
 
   const text =
@@ -286,9 +411,9 @@ export function buildNote({ repo, body, collection = '', sessionId = '', now = n
     `Cloud session on \`${facts.repoFullName || 'unknown repository'}\`` +
     `${facts.branch ? ` (branch \`${facts.branch}\`)` : ''}, checkpointed by the \`/checkpoint\` skill ` +
     `on ${date}. The frontmatter is from git; the sections below are Claude's own account of the session.\n\n` +
-    `${checked.text}\n`;
+    `${bodyText.text}\n`;
 
-  return { ok: true, id: fields.id, sessionId: id, collection: finalCollection, fields, text };
+  return { ok: true, id: fields.id, sessionId: id, collection: finalCollection, fields, text, redactions: scrubbed.count + bodyText.count };
 }
 
 // ------------------------------------------------------------------- cli
@@ -349,7 +474,7 @@ export function main(argv, env = process.env) {
 
   return {
     code: 0,
-    output: { ok: true, path: notePath.replace(/\\/g, '/'), id: note.id, session_id: note.sessionId, collection: note.collection },
+    output: { ok: true, path: notePath.replace(/\\/g, '/'), id: note.id, session_id: note.sessionId, collection: note.collection, redactions: note.redactions },
   };
 }
 
