@@ -50,7 +50,7 @@ gitignored `.env` at registration (2026-09-29: `dist` built, 88 unit tests, `npm
 | Phase | Name | Brief | Requirements | Migrations | State |
 |---|---|---|---|---|---|
 | 15 | Database hygiene and the SQL test runner | `briefs/95_PHASE15_db_hygiene.md` | R-78..R-80, R-54 | 100–102 live | **merged 2026-09-29** ([PR #30](https://github.com/emstacho-su/bb2dash/pull/30), 6ef3933); runner green 21/21 on `main`, advisor's search_path list empty; R3 and R4 open |
-| 16 | Grades: V-1 sittings and the reconciliation migration | `briefs/96_PHASE16_grades_v1.md` | R-29..R-36 | 105–109 | planned; Stack's six sittings, IST.323 before 2026-12-03 |
+| 16 | Grades: V-1 sittings and the reconciliation migration | `briefs/96_PHASE16_grades_v1.md` | R-29..R-36 | 105–109 | **sittings done 2026-09-29** (six courses, 96d: 26 corrections after 105); PR open on `feat/grades-v1-16`; 105 waits for PR #40 (task 10a on `main`), then 106 |
 | 17 | Web polish: quick fixes, carried bugs, Inbox/planner leftovers, live proofs | `briefs/97_PHASE17_web_polish.md` | R-37, R-39 (interim), R-40, R-42..R-45, R-47..R-52, R-55..R-59, R-108; S2-home-1/2, S2-materials-1, S2-bugs-1 | 110–119, 150 (overflow block 150–159) | built 2026-09-30; PR open, waiting on T-24/T-26 sittings |
 | 18 | Ingest and corpus | `briefs/98_PHASE18_ingest_corpus.md` | R-60..R-63, R-66..R-70, R-72..R-75, R-77; S2-rag-1 | 120–129 | planned; with 17 |
 | 19 | Content identity, per-crawl history, sync honesty | `briefs/99_PHASE19_content_history.md` | R-38, R-41, R-64, R-65, R-71, R-76 | 130–139 | planned; after 17 and 18 |
@@ -137,6 +137,16 @@ before Nov 30. `docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md`'s header l
    create`; anything visual gets a Vercel preview for Stack. **Stop at "ready when you say so."**
 8. **After the merge** (only on Stack's word): switch the checkout to `main`, remove the phase's
    worktrees and branches, update memory.
+
+**Standing gate G-16 (ECN.304 Exam 1 counts; blocking; set 2026-09-30, Stack).** Before a phase's
+workers are cut, the PM runs `node scripts/check-ecn-exam1.mjs` from a worktree with `.env.local`
+(read-only; it reads the gradebook's crawl history, so it is right however long after the sync it runs):
+`PASS` (exit 0) → record the line in that phase's DECISIONS and STATUS, strike this gate, go on; `PENDING`
+(exit 3) → the Exam 1 sync has not run or the score is not posted; the phase does not start until Stack
+has run it (he runs it once every session with an open PR is done) and the check passes; `FAIL` (exit 1)
+→ the score counts toward nothing: tell Stack to link the column with "Counts toward… → Exams" (and answer
+the Inbox item if the column arrived as a new row), then rerun. It replaces Phase 16's acceptance step 9 and
+task 27 (brief 96).
 
 **Two PM sessions at once (learned 2026-09-15):** when another phase's PM session owns the main
 checkout (`C:/Users/stack/projects/bb2dash`), cut the phase branch as its own worktree
@@ -226,9 +236,11 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 * The Google OAuth consent screen **stays in Testing for now** (your call, 2026-09-29; you know how to publish it):
   the calendar token dies again about 2026-10-01 17:03Z, and you re-mint with `scripts/google-consent.mjs` when the
   push starts failing, or publish first and then re-mint (batch item 28; DECISIONS 2026-09-29).
-* Phase 16's six sittings as fast as you can sit them, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103,
+* ~~Phase 16's six sittings as fast as you can sit them, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103,
   IST.471; migration 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03)
-  is the one bound (brief 96 open item 4; batch item 11; no date-paced tasks, the freeze stands, DECISIONS 2026-09-27).
+  is the one bound (brief 96 open item 4; batch item 11; no date-paced tasks, the freeze stands, DECISIONS 2026-09-27).~~ Done 2026-09-29: all six sat; migration 106 is written and proven, applied once PR #40 merges.
+* ~~**Merge PR #40**~~ Merged 2026-09-30; 105 and 106 are on prod.
+* **Run the sync that carries ECN.304 Exam 1** once every session with an open PR is done. The next phase is blocked until `node scripts/check-ecn-exam1.mjs` prints `PASS` (gate G-16, §3); no Claude session needs to be open when you run the sync.
 * Say whether the Nov 30 – Dec 13 code freeze still stands. Default: it stands, as a window, not pacing (DECISIONS
   2026-09-27, no-date-paced-tasks row). If you strike it, migration 106's bound becomes 2026-12-03 and B-6's window goes.
 * Phase 12 proofs still his: see the three toasts and click one from a banner and one from the Action

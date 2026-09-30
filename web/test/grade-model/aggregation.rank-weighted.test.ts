@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { rankWeightedAggregate, rankWeightedLevel } from '@/lib/grade-model/aggregations/rank-weighted';
+import { rankWeightedAggregate, rankWeightedLevel, slotWeights, usableWeights } from '@/lib/grade-model/aggregations/rank-weighted';
 import { counted, leaf } from './builders';
 
 const EXAMS = { aggregation: 'rank_weighted' as const, countExpected: 3, rankWeights: [30, 25, 20] };
@@ -70,5 +70,45 @@ describe('rank_weighted', () => {
     const outcome = rankWeightedAggregate(leaf({ ...EXAMS, rankWeights: weights }, [counted(10, 8)], 30), 0);
     expect(outcome.earned).toBeCloseTo(8, 12);
     expect(outcome.slotCount).toBe(3);
+    expect(usableWeights(weights)).toBeNull();
+  });
+});
+
+/*
+ * R-36 (Phase 16): the screen's rule line reads weights through this, so the
+ * sentence and the arithmetic cannot disagree about which lists are usable.
+ */
+describe('usableWeights', () => {
+  it('returns the stored list, unchanged and in order, when it is usable', () => {
+    const weights = [30, 25, 20];
+    expect(usableWeights(weights)).toBe(weights);
+  });
+
+  it.each([
+    { name: 'NaN', weights: [30, Number.NaN] },
+    { name: 'infinite', weights: [Number.POSITIVE_INFINITY] },
+  ])('rejects a $name weight', ({ weights }) => {
+    expect(usableWeights(weights)).toBeNull();
+  });
+});
+
+/*
+ * Round 2 (R-36): the weights per slot the engine actually applies. Slots
+ * beyond the stored weights weigh 0, so the rule line pads with 0.
+ */
+describe('slotWeights', () => {
+  it.each([
+    { name: 'as many slots as weights', slots: 3, expected: [30, 25, 20] },
+    { name: 'one more slot than weights', slots: 4, expected: [30, 25, 20, 0] },
+    { name: 'fewer slots than weights keeps every weight', slots: 2, expected: [30, 25, 20] },
+  ])('$name', ({ slots, expected }) => {
+    expect(slotWeights([30, 25, 20], slots)).toEqual(expected);
+  });
+
+  it('agrees with the engine: a padded level equals the unpadded one', () => {
+    expect(rankWeightedLevel([0.9, 0.8, 0.7, 0.6], slotWeights([30, 25, 20], 4))).toBeCloseTo(
+      rankWeightedLevel([0.9, 0.8, 0.7, 0.6], [30, 25, 20]),
+      12,
+    );
   });
 });

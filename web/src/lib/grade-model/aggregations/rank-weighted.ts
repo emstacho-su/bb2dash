@@ -14,15 +14,25 @@ import { descending, mean, sum } from '../math';
 import { MEAN_RULES, slotAggregate } from './shared';
 import type { Aggregate } from './types';
 
-function usableWeights(weights: readonly number[] | null): readonly number[] | null {
+export function usableWeights(weights: readonly number[] | null): readonly number[] | null {
   if (weights === null || weights.length === 0) return null;
   const valid = weights.every((weight) => Number.isFinite(weight) && weight >= 0);
   return valid && sum(weights) > 0 ? weights : null;
 }
 
+/**
+ * The weight each slot carries, highest rank first: the stored weights, then 0
+ * for every slot beyond them. The rule line (R-36) states exactly this list.
+ */
+export function slotWeights(weights: readonly number[], slotCount: number): readonly number[] {
+  const padding = Math.max(0, slotCount - weights.length);
+  return [...weights, ...Array.from({ length: padding }, () => 0)];
+}
+
 export function rankWeightedLevel(values: readonly number[], weights: readonly number[]): number {
   const ranked = descending(values);
-  return sum(weights.map((weight, index) => weight * (ranked[index] ?? 0))) / sum(weights);
+  const perSlot = slotWeights(weights, ranked.length);
+  return sum(perSlot.map((weight, index) => weight * (ranked[index] ?? 0))) / sum(weights);
 }
 
 export const rankWeightedAggregate: Aggregate = (context, r) => {
