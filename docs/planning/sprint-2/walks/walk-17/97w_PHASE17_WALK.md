@@ -159,3 +159,27 @@ so `npm run walk` skips it; no write guard), titled `bb2dash test · <case>`. SQ
 Harness notes: the refuse case opens the 8:00 PM slot of Mon Nov 9, since by then 9:00 AM sits under the daily
 series and 1:00 PM under IST 352's meeting block. walk17's test 19 uses the 9:00 AM slot, so it was run after the
 daily series was deleted (its selectors match `main`, no change).
+
+## T-26 staging half (2026-09-30, branch preview on the production database)
+
+Scope per the DECISIONS row of 2026-09-30: one case, Stack's own `Role_of_Systems_Analyst.docx` (downloaded from
+Blackboard's Grades → View; sha256 `a20743b3…fc57f`, identical to the pulled-back row 140). Run by the PM with a
+one-off script (scripted login from `.env.testing`; deleted after) on
+`web-git-feat-web-polish-17-…` because production runs `main`.
+
+- **First run found a real bug:** the IST.352 Classwork row's drop zone answered "No file was dropped." and nothing
+  was written (0 staged rows, 0 objects, checked). The zone reset the file input right after handing its live
+  `input.files` to the mutation, so the upload read an empty list; staging through the picker had never worked
+  (R-47 had never run live). Fixed in d7dae5f (snapshot the list first), with a live-list regression case (RED: 0
+  files; GREEN 16/16). The same bug is on `main`/production until this PR merges.
+- **After the fix:** `POST 200 /storage/v1/object/bb-files`, `POST 201 /rest/v1/bb_files`; the row said
+  `Staged "Role_of_Systems_Analyst (2).docx"`. The popout's text contains "matches" and not "differs".
+- SQL: one `my_submissions` row with `classified_by = 'stack'` (id 810), `assignment_id = 'IST.352/role-of-systems-analyst'`,
+  `source_url` null, sha256 equal to row 140's, its Storage object present at
+  `IST.352/my_submissions/role-of-systems-analyst/Role_of_Systems_Analyst (2).docx` (no `attempt-` segment). The
+  " (2)" is the app naming the staged copy apart from the pulled-back row 140 of the same name; no Storage clash
+  (the only other object there is 140's `attempt-431219701/` key).
+- Shots: `21-materials-my-submissions.png` (Materials lists the staged file); `14-chip-matches.png` shows the A1-style
+  popout for IST.352's paper, the chip itself below the fold (its text asserted above). 15 dropped (no "differs"
+  case). The `staged link` href test is not run (IST.471 dropped from the proof).
+- The staged row stays (B-25).
