@@ -12,7 +12,9 @@
 --   D  (ratchet) an assignment with points_possible > 0 and no component sits under an excluded
 --      grade_column_links row, or its id is in D_EXCEPTIONS. The list only ever shrinks.
 --   F  (ratchet) confirmed rows that carry no citation (bb_file:<id>#unit:<n> or STACK_OVERRIDE):
---      schemes and components by notes, linked point-bearing assignments by source_ref.
+--      schemes and components by notes, linked point-bearing assignments by source_ref (an
+--      assignment whose column is "Not graded", an excluded grade_column_links row, counts toward
+--      nothing, so the link row is its decision and it needs no citation: P-3, P-75).
 --      F <= F_CEILING. The ceiling only ever goes down; 0 after 106.
 --
 -- Exact equality, no tolerance. Qualitative schemes are out of scope for A / B / C. Expected
@@ -25,12 +27,12 @@ begin;
 
 do $$
 declare
-  -- D: point-bearing assignments knowingly left with no component (B-13: leave today's links;
-  -- the two unscored IST.466 columns are named under the figure until Stack links them).
-  D_EXCEPTIONS constant text[] := array['IST.466/class-participation',
-                                        'IST.466/attendance-35625001'];
-  -- F: the baseline day's count, 2026-09-29 (6 schemes + 35 components + 46 assignments).
-  F_CEILING    constant int := 87;
+  -- D: point-bearing assignments knowingly left with no component. Empty after 106 (Stack,
+  -- 2026-09-29): IST.466/class-participation is linked to participation (component 23), and
+  -- IST.466/attendance-35625001 is "Not graded" by an excluded link, which D already allows.
+  D_EXCEPTIONS constant text[] := array[]::text[];
+  -- F: 0 after 106 (was 87 on the baseline day, 2026-09-29: 6 schemes + 35 components + 46 assignments).
+  F_CEILING constant int := 0;
   cite         constant text := 'bb_file:[0-9]+#unit:[0-9]+';
   bad          text;
   f_schemes    int;
@@ -126,9 +128,12 @@ begin
    where confidence = 'confirmed'
      and coalesce(notes, '') !~ cite and coalesce(notes, '') !~ 'STACK_OVERRIDE';
   select count(*) into f_assign
-    from assignments
+    from assignments a
    where confidence = 'confirmed' and component_id is not null and points_possible > 0
-     and coalesce(source_ref, '') !~ cite and coalesce(source_ref, '') !~ 'STACK_OVERRIDE';
+     and coalesce(source_ref, '') !~ cite and coalesce(source_ref, '') !~ 'STACK_OVERRIDE'
+     and not exists (select 1 from grade_column_links l
+                      where l.course_id = a.course_id and l.column_id = a.bb_column_id
+                        and l.excluded);
   if f_schemes + f_components + f_assign > F_CEILING then
     raise exception 'FAIL F % confirmed rows without a citation (schemes %, components %, assignments %), ceiling %',
       f_schemes + f_components + f_assign, f_schemes, f_components, f_assign, F_CEILING;
@@ -147,9 +152,12 @@ select 'grading_invariants: PASS' as result,
          where confidence = 'confirmed'
            and coalesce(notes, '') !~ 'bb_file:[0-9]+#unit:[0-9]+'
            and coalesce(notes, '') !~ 'STACK_OVERRIDE')
-     + (select count(*) from assignments
+     + (select count(*) from assignments a
          where confidence = 'confirmed' and component_id is not null and points_possible > 0
            and coalesce(source_ref, '') !~ 'bb_file:[0-9]+#unit:[0-9]+'
-           and coalesce(source_ref, '') !~ 'STACK_OVERRIDE') as f_uncited;
+           and coalesce(source_ref, '') !~ 'STACK_OVERRIDE'
+           and not exists (select 1 from grade_column_links l
+                            where l.course_id = a.course_id and l.column_id = a.bb_column_id
+                              and l.excluded)) as f_uncited;
 
 rollback;
