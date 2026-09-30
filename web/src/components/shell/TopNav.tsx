@@ -19,7 +19,7 @@ import styles from './TopNav.module.css';
  * The persistent top bar — GUI decision 1c.
  *
  *   bb2dash mark · Home · Planner · Inbox · Grades · Materials
- *   … search icon · Sync … ☰ Courses · activity · bell · user
+ *   … Sync · search icon · ☰ Courses · activity · bell · user   (right-aligned)
  *
  * ☰ no longer opens a pop-down list: it toggles the course sidebar below the
  * bar (`CourseSidebar`). The pop-down capped the content column at
@@ -33,6 +33,8 @@ import styles from './TopNav.module.css';
  *
  * 2026-09-30: the wide "Search ⌘K" button became a search icon that expands
  * in place into a field (`NavSearch.tsx`), with the results in a popover.
+ * Stack's walk the same day moved it and Sync into the right-hand group:
+ * Sync → search → ☰ → activity → bell → account.
  */
 
 const NAV_LINKS = [
@@ -91,12 +93,13 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         ))}
       </span>
 
-      {/* Search — an icon that expands into a field; ⌘K / Ctrl+K opens it too. */}
-      <NavSearch />
-
-      <SyncButton />
-
       <span className={styles.right}>
+        <SyncButton />
+
+        {/* Search — an icon whose field grows leftward (Sync slides left);
+            ⌘K / Ctrl+K opens it too. */}
+        <NavSearch />
+
         {/* ☰ — the course sidebar toggle */}
         <button
           type="button"

@@ -1,11 +1,13 @@
-/* Search in the top bar (2026-09-30): an icon that expands in place into a
-   field, with the results in a popover anchored under it. The icon is the same
-   32px button as the bar's other icons (TopNav .ic). */
+/* Search in the top bar (2026-09-30): an icon in the bar's right-hand group,
+   between Sync and ☰, that expands LEFTWARD into a field — the icon and
+   everything right of it stay put and Sync slides left as the field grows —
+   with the results in a popover anchored under it. The icon is the same 32px
+   button as the bar's other icons (TopNav .ic), composed directly: see .icon. */
 
 .root {
   --nav-search-width: 240px;
   --nav-search-min: 72px;
-  margin-left: auto;
+  margin-left: var(--space-3);
   position: relative;
   display: flex;
   align-items: center;
@@ -13,7 +15,7 @@
   border-radius: var(--radius-md);
 }
 
-/* Expanded: the icon and the field share one outlined pill. */
+/* Expanded: the field and the icon share one outlined pill. */
 .rootOpen {
   composes: root;
   background: var(--color-surface);
@@ -23,22 +25,27 @@
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
+/* One class for both states. A local class composing .icon lost the
+   cross-file `ic` in the production build (Turbopack keeps no composes chain
+   through a local class), so the open icon rendered as a bare grey browser
+   button (walk 17 shot 28). The open look hangs off aria-expanded instead. */
 .icon {
   composes: ic from './TopNav.module.css';
   flex: none;
 }
-.iconOpen {
-  composes: icon;
+.icon[aria-expanded='true'] {
   color: var(--color-accent);
 }
 
 .field {
+  /* Before the icon, so the pill grows to the left. */
+  order: -2;
   flex: 0 1 auto;
   width: var(--nav-search-width);
   min-width: var(--nav-search-min);
   height: 32px;
   box-sizing: border-box;
-  padding: 0 var(--space-3) 0 0;
+  padding: 0 0 0 var(--space-3);
   border: 0;
   background: transparent;
   color: var(--color-text);
@@ -63,11 +70,13 @@
   }
 }
 
+/* Between the field and the icon. */
 .spinner {
+  order: -1;
   flex: none;
   width: 13px;
   height: 13px;
-  margin-right: var(--space-3);
+  margin-left: var(--space-2);
   border-radius: 50%;
   border: 2px solid var(--color-divider);
   border-top-color: var(--color-accent);
@@ -88,7 +97,7 @@
   }
 }
 
-/* The results popover, right-aligned under the field. */
+/* The results popover, right-aligned under the pill (its right edge is the icon's). */
 .popover {
   position: absolute;
   z-index: 30;
@@ -104,16 +113,13 @@
   box-shadow: var(--shadow-lg), 0 0 0 1px var(--color-divider);
 }
 
-/* Narrower windows: the field sits too far left for a right-aligned 560px
-   panel, so the panel anchors to the bar itself (sticky, so it is the
-   containing block) and hugs the window's right edge. */
-@media (max-width: 960px) {
+/* Narrower windows: a 560px panel needs that much room left of the icon, which
+   the four icons right of it leave only above ~760px. Below that the panel
+   anchors to TopNav's .right group (position: relative) instead, so it lines
+   up with the window's right gutter and never runs off the left edge. */
+@media (max-width: 760px) {
   .root {
     position: static;
-  }
-  .popover {
-    top: calc(100% + var(--space-1));
-    right: var(--space-4);
   }
 }
 
