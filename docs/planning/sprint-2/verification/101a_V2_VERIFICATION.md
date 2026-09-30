@@ -148,4 +148,6 @@ to verify a proposed tag"). 341 notes were `unclassified` at the time.
 when the body lacks a trailing one (deviation 12); (2) marking a note `superseded` does not re-render the body's Status
 row (`af3dc123`, `5e968395` read "concluded" in the body while frontmatter and store say `superseded`).
 
+- **Harness #38 (2026-09-30, `429d25f`), from PR-C's `/code-review`:** the redaction read any key containing `pat` (path, Pattern, dispatch) as naming a secret and blanked its value everywhere, in the hook since 2026-09-21 (over-redaction only). Fixed to mask whole lookalike words, nested lookalike assignments capped at 8 (fails closed). Two independent adversarial differentials (650 probes; fully redacted 499 on the old code, 517 now; only formatless values after lookalike keys are redacted less, by design); accepted residue ECOMPAT, TELECOMPAT, GHPATH. hooks 1106/1106. PR-C's `/checkpoint` reinstalled from `429d25f` (C-21 `equal` x3). New session notes use it after the hook reinstall.
+
 V-2 closed: pending Stack's word
