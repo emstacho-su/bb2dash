@@ -550,3 +550,59 @@ def test_emit_typed_values_stay_standard_quoted(tmp_path):
     assert "got = 'a''b'" in block
     lst = _only_block(tmp_path, entry(target={**entry()["target"], "field": "letter_scale"}, stored={"x'y": 1}))
     assert "'{\"x''y\": 1}'::jsonb" in lst
+
+
+# --- round 2, item 2: relations and functions are allowlisted, literals included --------------
+
+
+def test_recheck_query_to_xml_bypass_rejected():
+    sql = "select query_to_xml('select id, source_ref from assignments', true, true, '')::text"
+    assert vr.recheck_error(sql) is not None
+    assert any("recheck" in e for e in errors_of([entry(recheck=sql)]))
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "select count(*) from courses",
+        "select count(*) from auth.users",
+        "select count(*) from assignments, attention_items",
+        "select count(*) from assignments join bb_files on true",
+        "select count(*) from public.assignments",
+        "select vault.decrypted_secrets from assignments",
+        "select current_setting('role') from assignments",
+        "select xpath('/x', query_to_xml('x', true, true, '')) from assignments",
+        "select count(*) from assignments where title = 'x' and notes like '%select * from courses%'",
+        "select count(*) from assignments where notes = 'table_to_xml(x)'",
+        "select count(*) from assignments where notes = 'pg_read_file(x)'",
+        "select count(*) from assignments where notes = 'delete me'",
+        "select \"query_to_xml\"('x', true, true, '') from assignments",
+    ],
+)
+def test_recheck_outside_the_allowlist_rejected(sql):
+    assert vr.recheck_error(sql) is not None, sql
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "select count(*) from v_gradebook_latest where course_id = 'IST.323'",
+        "select sum(weight_pct) from grade_components where course_id = 'ECN.304' and parent_id is null",
+        "select coalesce(split_part(notes, ' ', 1), '') from grading_schemes where course_id = 'IST.466'",
+        "select count(*) from v_grade_model_items where scheme_course_id = 'GEO.103.lecture'",
+        "select notes like '%B-12 re-cut (2026-09-29): the log checkpoint%' from grade_components where code = 'fp_log'",
+        "select count(*) from grade_components where code in ('a', 'b') and parent_id is not null",
+    ],
+)
+def test_recheck_inside_the_allowlist_accepted(sql):
+    assert vr.recheck_error(sql) is None, sql
+
+
+def test_all_six_verdict_files_still_pass():
+    files = sorted((SCRIPTS.parent / "docs" / "planning" / "sprint-2" / "verification").glob("96b_GRADING_VALIDATION_*.md"))
+    if not files:
+        pytest.skip("no verdict files on this branch")
+    pairs, parse_errors = vr.read_entries([str(f) for f in files])
+    assert parse_errors == []
+    result = vr.check_entries([e for _, e in pairs], [s for s, _ in pairs])
+    assert result.errors == []
