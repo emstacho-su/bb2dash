@@ -588,3 +588,32 @@ What the PM does with it, in this brief's terms: tasks 1–15 (the worktree is `
 `.\scripts\validate-grading.ps1 IST.323` copied to Stack's clipboard; task 16 at his first launch;
 tasks 17–20 per sitting; tasks
 21–29 after sitting 6 (27 after ECN.304 Exam 1); stop at "ready when you say so".
+
+## Round 2 (code review 2026-09-30, `/code-review high` on `feat/grades-v1-16`)
+
+Ten findings; nine taken, one moved to task 28 (STATUS is written in the PR, as always). Owner in brackets.
+
+1. **[W-41] The confined session could read the whole repo.** `--restricted` confines the file tools to the
+   working directory, which was the repo root, so `db/`, `project-state/`, `web/` and other courses'
+   verdict files were readable without a prompt. Fix: spawn with `cwd` = `<repo>/docs/planning`; rules and
+   prompt paths relative to it (`Edit(sprint-2/verification/96b_GRADING_VALIDATION_*)`); a test asserts the
+   cwd. The six 2026-09-29 sittings ran under the old cwd; their verdicts stand on Stack's calls.
+2. **[W-41] The recheck guard could be bypassed** through SQL inside a string literal (`query_to_xml('…')`).
+   Fix: a recheck may name only the tables `grading_schemes`, `grade_components`, `assignments`,
+   `grade_column_links`, `v_gradebook_latest`, `v_grade_model_items`, and call only allowlisted functions;
+   anything else is an error, literals included.
+3. **[W-43] The rule line could disagree with the engine** when a rank-weighted part has more counted items
+   than weights (extra slots weigh 0). Fix: the sentence states the engine's own slot count and weights,
+   padded with 0, so it never says "once all 3" of a 4-slot part.
+4. **[W-43] A rule was printed for parents and extra-credit parts**, which the engine does not rank-weight.
+   Fix: only leaf, non-extra-credit parts the figure counts.
+5. **[PM, then W-42] The B-12 re-cut left the final log half-moved.** New entries IST.323-59 (fp_log
+   `count_expected` 2 → 1), -60 (`fp-log-final` component 19 → 18), -61 (fp_log note); 96d now 28
+   corrections, 110 citation-only.
+6. **[W-41] `--summary` counted a correcting entry with no `stored` as already applied.** Fix: `stored` is
+   required on `change_to` / `mark_ungraded`.
+7. STATUS: task 28, in the PR.
+8. **[W-42] 106 exceeds 800 lines.** Fix: drive the note and citation appends from one table, keeping
+   guarded blocks only for value changes.
+9. **[W-41] `split_top_level` is dead code** in the module; move it to the test file or remove it.
+10. **[W-42] The 106 test's header count is stale**; make it state the asserted count.

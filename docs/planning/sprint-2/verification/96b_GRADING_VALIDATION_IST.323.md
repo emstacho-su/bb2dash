@@ -16,6 +16,7 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
 * IST.323-15 and IST.323-16 (keep 11 / keep 3 → matches, no call): they state what the syllabus says; after the re-cut their rows hold 13 and 1, which IST.323-57 and -58 recheck.
 * IST.323-05: `stored` / `value` set to null only: Phase 17 migration `119_strip_ai_policy_passages` (applied 2026-09-29) cleared `ai_policy` in every course. Citation and quote left as written; the spot-check mismatch on them is waived by Stack (DECISIONS 2026-09-29).
 * IST.323-06: recheck reads the note before the ` | ` citation separator (`split_part`), so the keep holds once 106 appends the P-75 citation (PM, 2026-09-30).
+* New IST.323-59 (fp_log count_expected 2 → 1), IST.323-60 (fp-log-final component 19 → 18), IST.323-61 (fp_log note); IST.323-35 becomes matches with no call. B-12 follow-through found by the code review (PM, 2026-09-30).
 
 ## Reconciliation table
 
@@ -730,14 +731,9 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   citation: "bb_file:151#unit:1"
   quote: "the completed log is submitted with your proposal (2 points)"
   verdict: matches
-  call: keep
-  value: "19 / 2.00"
-  reason_code: SYLLABUS_AUTHORITATIVE
-  why: "Linked to fp_log at the syllabus value."
-  decided_by: session
+  why: "Superseded by the B-12 re-cut (IST.323-60): the completed log's 2 points ride the 13-point proposal column, so the row moves to fp_proposal."
+  decided_by: Stack
   decided_on: 2026-09-29
-  confidence_after: confirmed
-  recheck: "select component_id || ' / ' || points_possible from assignments where id = 'IST.323/fp-log-final'"
 - id: IST.323-36
   target:
     table: assignments
@@ -1152,4 +1148,58 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select points from grade_components where course_id = 'IST.323' and code = 'fp_log'"
+- id: IST.323-59
+  target:
+    table: grade_components
+    key: {course_id: "IST.323", code: fp_log}
+    field: count_expected
+  stored: 2
+  materials: "After the re-cut the part holds only the 1-point log checkpoint"
+  citation: null
+  quote: null
+  verdict: differs
+  call: change_to
+  value: 1
+  reason_code: STACK_OVERRIDE
+  why: "B-12 re-cut follow-through (code review 2026-09-30): the completed log's 2 points count inside the 13-point proposal column, so fp_log keeps one slot, the checkpoint."
+  decided_by: Stack
+  decided_on: 2026-09-29
+  confidence_after: confirmed
+  recheck: "select count_expected from grade_components where course_id = 'IST.323' and code = 'fp_log'"
+- id: IST.323-60
+  target:
+    table: assignments
+    key: {id: "IST.323/fp-log-final"}
+    field: component_id
+  stored: 19
+  materials: "The completed log (2 points) is submitted with the proposal, in the one 13-point column"
+  citation: "bb_file:151#unit:1"
+  quote: "the completed log is submitted with your proposal (2 points)"
+  verdict: differs
+  call: change_to
+  value: 18
+  reason_code: STACK_OVERRIDE
+  why: "B-12 re-cut follow-through (code review 2026-09-30): the row shares column _3569973_1 with fp-proposal, which the re-cut makes worth 13 on component 18."
+  decided_by: Stack
+  decided_on: 2026-09-29
+  confidence_after: confirmed
+  recheck: "select component_id from assignments where id = 'IST.323/fp-log-final'"
+- id: IST.323-61
+  target:
+    table: grade_components
+    key: {course_id: "IST.323", code: fp_log}
+    field: notes
+  stored: false
+  materials: "Re-cut 13 / 1 (B-12)"
+  citation: null
+  quote: null
+  verdict: differs
+  call: change_to
+  value: true
+  reason_code: STACK_OVERRIDE
+  why: "Notes text for 106: B-12 re-cut (2026-09-29): this part is the 1-point log checkpoint only; the completed log's 2 points count inside the 13-point proposal column (fp_proposal)."
+  decided_by: Stack
+  decided_on: 2026-09-29
+  confidence_after: confirmed
+  recheck: "select notes like '%B-12 re-cut (2026-09-29): this part is the 1-point log checkpoint only%' from grade_components where course_id = 'IST.323' and code = 'fp_log'"
 ```
