@@ -204,7 +204,7 @@ describe('resolveAttentionItem — the request that reaches Postgres', () => {
 
 describe('syncCommand', () => {
   it('is the exact command Stack pastes into Claude Code', () => {
-    expect(syncCommand(42)).toBe('claude "/bb-sync 42"');
+    expect(syncCommand(42)).toBe('claude --model sonnet "/bb-sync 42"');
   });
 
   it('refuses to build a command around a non-id', () => {

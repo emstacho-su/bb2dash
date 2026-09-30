@@ -55,7 +55,7 @@ describe('Sync button — the clipboard command', () => {
     screen.getByRole('button', { name: /Sync/ }).click();
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(writeText).toHaveBeenCalledWith('claude "/bb-sync 42"');
+    expect(writeText).toHaveBeenCalledWith('claude --model sonnet "/bb-sync 42"');
     expect(mutateAsync).toHaveBeenCalledWith({ kind: 'sync', scope: 'all' });
   });
 
@@ -64,7 +64,7 @@ describe('Sync button — the clipboard command', () => {
     render(<SyncButton />);
     screen.getByRole('button', { name: /Sync/ }).click();
 
-    expect(await screen.findByText('claude "/bb-sync 7"')).toBeInTheDocument();
+    expect(await screen.findByText('claude --model sonnet "/bb-sync 7"')).toBeInTheDocument();
     expect(
       screen.getByText('command copied — run it in Claude Code with a logged-in Blackboard tab'),
     ).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('Sync button — the clipboard command', () => {
     render(<SyncButton />);
     screen.getByRole('button', { name: /Sync/ }).click();
 
-    expect(await screen.findByText('claude "/bb-sync 9"')).toBeInTheDocument();
+    expect(await screen.findByText('claude --model sonnet "/bb-sync 9"')).toBeInTheDocument();
     expect(
       screen.getByText('copy this and run it in Claude Code with a logged-in Blackboard tab'),
     ).toBeInTheDocument();
@@ -107,9 +107,9 @@ describe('Sync button — one open request at a time', () => {
     screen.getByRole('button', { name: /sync requested/ }).click();
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(writeText).toHaveBeenCalledWith('claude "/bb-sync 8"');
+    expect(writeText).toHaveBeenCalledWith('claude --model sonnet "/bb-sync 8"');
     expect(mutateAsync).not.toHaveBeenCalled();
-    expect(await screen.findByText('claude "/bb-sync 8"')).toBeInTheDocument();
+    expect(await screen.findByText('claude --model sonnet "/bb-sync 8"')).toBeInTheDocument();
   });
 
   it('shows a claimed request found on load as syncing, before this tab filed anything', () => {
@@ -124,6 +124,6 @@ describe('Sync button — one open request at a time', () => {
     screen.getByRole('button', { name: /Sync/ }).click();
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    expect(writeText).toHaveBeenCalledWith('claude "/bb-sync 11"');
+    expect(writeText).toHaveBeenCalledWith('claude --model sonnet "/bb-sync 11"');
   });
 });

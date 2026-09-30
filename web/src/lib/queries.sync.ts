@@ -598,10 +598,16 @@ export function totalOpen(status: SyncStatus | null): number {
   return ATTENTION_KIND_ORDER.reduce((sum, kind) => sum + (status.open_attention[kind] ?? 0), 0);
 }
 
+/**
+ * The model a sync runs on (Stack, 2026-09-30: syncs default to Sonnet), the same value the
+ * desktop shell's `SYNC_MODEL` passes; the skill checks it again as its first step.
+ */
+export const SYNC_MODEL = 'sonnet';
+
 /** The command Stack pastes into a terminal to run the crawl half of a sync. */
 export function syncCommand(requestId: number): string {
   assertRowId(requestId, 'agent request id');
-  return `claude "/bb-sync ${requestId}"`;
+  return `claude --model ${SYNC_MODEL} "/bb-sync ${requestId}"`;
 }
 
 /**

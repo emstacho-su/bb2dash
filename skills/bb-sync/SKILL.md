@@ -1,6 +1,7 @@
 ---
 name: bb-sync
-description: 'Run one Blackboard sync end to end for a queued agent_requests row. Checks the Blackboard session, claims the request, crawls every current-term course with bb.runAll, waits while the scheduled transform folds the crawl into the typed tables, closes the request, and reports what changed and what needs Stack in plain language. Use when Stack pastes claude "/bb-sync <id>" from the app Sync button, or says run a sync / sync Blackboard.'
+model: sonnet
+description: 'Run one Blackboard sync end to end for a queued agent_requests row. Checks the Blackboard session, claims the request, crawls every current-term course with bb.runAll, waits while the scheduled transform folds the crawl into the typed tables, closes the request, and reports what changed and what needs Stack in plain language. Use when Stack pastes claude --model sonnet "/bb-sync <id>" from the app Sync button (the desktop Sync button runs it), or says run a sync / sync Blackboard. Runs on Sonnet; its first step checks the model.'
 ---
 
 # bb-sync
@@ -26,6 +27,26 @@ sync with no id, create the request yourself in step 2 instead of claiming one.
 - Stack's user id for the crawler: `_21025199_1`. Term: `Fall 2026`.
 
 Post a one-line status after every step. A sync takes minutes; a silent run looks stalled.
+
+## Step −1 — Model check (before anything else)
+
+Syncs run on **Sonnet** (Stack, 2026-09-30), set three ways: the desktop Sync button and the web
+app's copied command both launch `claude --model sonnet "/bb-sync <id>"`, and this skill's
+frontmatter says `model: sonnet`, which runs the skill's turn on Sonnet whatever the session's
+model is (Claude Code skills reference: the override lasts for the rest of the turn and is not
+saved). This step verifies it took. Read your own model from your system prompt.
+
+- **A Sonnet model** → say `model: <id> — ok` and go on.
+- **Anything else** → stop here. Do not claim the request, open Blackboard or write anything; the
+  request stays `queued`, so nothing is lost. Tell Stack, in one short message, the model you are
+  on and the two ways to switch:
+  1. in this same terminal, type `/model sonnet`, then run `/bb-sync <id>` again; or
+  2. close the window and start `claude --model sonnet "/bb-sync <id>"` (the Sync button does this).
+
+  Reaching this branch means the frontmatter override did not apply (an older Claude Code, or a
+  model alias the account lacks); a skill cannot switch the model any other way, so asking is the
+  only honest move. **Exception:** if Stack says in this session to go ahead on the current model,
+  continue, and name the model in step 6's report.
 
 ## Step 0 — Apply Stack's Inbox answers first
 
@@ -140,6 +161,20 @@ Course files used to be pulled outside the sync, by hand, from the cadence runbo
 any more: a sync that catalogues a file and leaves it unopenable is a sync that has to be finished
 by a human later, and the Inbox `data_gap` raised in the meantime is a nag about the sync's own
 unfinished work. **Everything with no bytes is pulled here, before the sync reports.**
+
+**The embedding key, first.** The pull ends by embedding what it stored, which needs the legacy
+anon JWT in `SB_ANON_JWT` (`embed-corpus` has `verify_jwt` on; the `sb_publishable_` key is
+refused). A terminal the desktop app opens does not have it set, so load it from the desktop
+app's own config, which already holds it, whenever it is missing. In Git Bash, once per run,
+before the scripts below:
+
+```bash
+export SB_ANON_JWT="${SB_ANON_JWT:-$(node -e "try{process.stdout.write(require(process.env.APPDATA+'/bb2dash/config.json').supabaseAnonKey||'')}catch{}")}"
+case "$SB_ANON_JWT" in eyJ*) echo "SB_ANON_JWT: set";; *) echo "SB_ANON_JWT: missing";; esac
+```
+
+Never print the value. `missing` means the config has no key: say so in step 6 and let the
+pull run anyway (it stores and extracts, and names what it could not embed).
 
 **The manifest.** Save this array to `<scratch>/manifest.json`. `null` back → say "no files to
 pull" and go to step 5.

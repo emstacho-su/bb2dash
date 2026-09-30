@@ -64,13 +64,13 @@ describe('buildSyncCommand with Windows Terminal', () => {
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      "claude '/bb-sync 77'",
+      "claude --model sonnet '/bb-sync 77'",
     ]);
   });
 
   it('runs the command rather than typing it (Q9)', () => {
     const argv = buildSyncCommand({ repoDir: REPO, id: '5', wtPath: WT });
-    expect(argv.at(-1)).toBe("claude '/bb-sync 5'");
+    expect(argv.at(-1)).toBe("claude --model sonnet '/bb-sync 5'");
     expect(argv.join(' ')).not.toContain('PSConsoleReadLine');
     expect(argv).toContain('-NoExit');
   });
@@ -94,13 +94,13 @@ describe('buildSyncCommand without Windows Terminal', () => {
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      `Set-Location 'C:\\Users\\stack\\projects\\bb2dash'; claude '/bb-sync 9'`,
+      `Set-Location 'C:\\Users\\stack\\projects\\bb2dash'; claude --model sonnet '/bb-sync 9'`,
     ]);
   });
 
   it("doubles a single quote in the repo path, PowerShell's own escape", () => {
     const argv = buildSyncCommand({ repoDir: "C:\\Stack's repo", id: '1', wtPath: null });
-    expect(argv.at(-1)).toBe(`Set-Location 'C:\\Stack''s repo'; claude '/bb-sync 1'`);
+    expect(argv.at(-1)).toBe(`Set-Location 'C:\\Stack''s repo'; claude --model sonnet '/bb-sync 1'`);
   });
 });
 
@@ -110,7 +110,7 @@ describe('the dry run', () => {
     const dry = buildSyncCommand({ repoDir: REPO, id: '12', wtPath: WT, dryRun: true });
 
     expect(dry.slice(0, -1)).toEqual(live.slice(0, -1));
-    expect(dry.at(-1)).toBe(`Write-Output 'DRY RUN: claude "/bb-sync 12" would run here'`);
+    expect(dry.at(-1)).toBe(`Write-Output 'DRY RUN: claude --model sonnet "/bb-sync 12" would run here'`);
     expect(dry.at(-1)).not.toMatch(/^claude /);
   });
 
