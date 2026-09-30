@@ -32,7 +32,10 @@ import { startPoller } from './poller-wiring';
 import { createMainRest, createMainSessionRest } from './rest';
 import { createUsableSessionReader } from './session';
 import { attachSyncWatcher } from './sync-terminal';
-import { installShellTestHook, recordEvent } from './test-hook';
+import { IS_TEST_MODE, installShellTestHook, recordEvent } from './test-hook';
+import { createBuilderTrigger } from '../core/update/builder-trigger';
+import type { BuilderTrigger } from '../core/update/builder-trigger';
+import { createStartBuilderTask, readRunningTree } from './update-os';
 import { MENU_CHECK_NOW, createTray } from './tray';
 import type { TrayHandle } from './tray';
 import { createWindow, ensureLoaded, needsReload, refreshSessionWithoutWindow, showWindow } from './window';
@@ -46,6 +49,29 @@ let trayHandle: TrayHandle | null = null;
 let config: DesktopConfig | null = null;
 let poller: PollerHandle | null = null;
 let isQuitting = false;
+let builderTrigger: BuilderTrigger | null = null;
+/** The tree hash of the running logon build, or `null` for a dev run (no updates then). */
+const runningTree = readRunningTree();
+
+/**
+ * 2026-09-30: start the logon builder now and every BUILDER_INTERVAL_HOURS, so new builds
+ * happen without a Windows logon. Only for a logon build, and never under the test env.
+ */
+function startBuilderSchedule(): void {
+  if (runningTree === null) {
+    log('not running from a logon build: the builder is not scheduled from here');
+    return;
+  }
+  if (IS_TEST_MODE) {
+    recordEvent('builder-trigger', { skipped: 'test mode' });
+    return;
+  }
+  builderTrigger = createBuilderTrigger({
+    startTask: createStartBuilderTask(),
+    log: createNamedLogger('update'),
+  });
+  builderTrigger.start();
+}
 
 /**
  * One tick, never throwing at the caller: the tray and the e2e suite both use it.
@@ -190,6 +216,8 @@ function start(): void {
 
   installShellTestHook({ clickTrayItem: (label) => trayHandle?.click(label) });
 
+  startBuilderSchedule();
+
   log(
     `bb2dash shell ready (Electron ${process.versions.electron}); ` +
       `tray "${MENU_CHECK_NOW}" runs one tick; polling every ${validConfig.pollIntervalMinutes}m`,
@@ -204,6 +232,8 @@ function bootstrap(): void {
     // Detach the interval and the power listener so the process can actually end.
     poller?.stop();
     poller = null;
+    builderTrigger?.stop();
+    builderTrigger = null;
   });
 
   // Closing the window destroys it (2026-09-30), so this fires every time the window is
