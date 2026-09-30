@@ -266,8 +266,9 @@
   }
   .brand { margin-right: 0; }
   /* While the search field is open on a phone, the activity, bell and account
-     icons step aside for it; ☰, Home and Sync stay. */
-  .bar:has([data-search='open']) .right > :not(:first-child) {
+     icons (everything right of ☰) step aside for it; Sync, search, ☰ and
+     Home stay. */
+  .bar:has([data-search='open']) .icToggle ~ * {
     display: none;
   }
 }

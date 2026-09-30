@@ -11,7 +11,8 @@ import styles from './NavSearch.module.css';
  * 2026-09-30, Stack: "reimplement search but only as a search icon (that
  * expands when clicked to show the text field) as the feature is seldom used."
  * The wide "Search ⌘K" button and the centered dialog are gone; the results
- * open in a popover anchored under the field.
+ * open in a popover anchored under the field. The icon sits in the bar's
+ * right-hand group (Sync → search → ☰ …) and the field grows to its left.
  *
  * Expands on: the icon, ⌘K / Ctrl+K anywhere, or the `bb2dash:command-palette`
  * window event (kept as the "expand search" trigger for any other caller).
@@ -91,10 +92,24 @@ export function NavSearch() {
       className={expanded ? styles.rootOpen : styles.root}
       data-search={expanded ? 'open' : 'closed'}
     >
+      {/* Mounted per expansion, so the query, mode and highlight start clean. Rendered before
+          the icon so the page order matches what is drawn: the field grows to the icon's left,
+          and Tab moves left to right. */}
+      {expanded && (
+        <ExpandedSearch
+          fieldRef={fieldRef}
+          rootRef={rootRef}
+          iconPressedRef={iconPressedRef}
+          fieldId={fieldId}
+          listId={listId}
+          onCollapse={collapse}
+        />
+      )}
+
       <button
         ref={iconRef}
         type="button"
-        className={expanded ? styles.iconOpen : styles.icon}
+        className={styles.icon}
         onMouseDown={() => {
           iconPressedRef.current = true;
         }}
@@ -113,18 +128,6 @@ export function NavSearch() {
       >
         <SearchIcon />
       </button>
-
-      {/* Mounted per expansion, so the query, mode and highlight start clean. */}
-      {expanded && (
-        <ExpandedSearch
-          fieldRef={fieldRef}
-          rootRef={rootRef}
-          iconPressedRef={iconPressedRef}
-          fieldId={fieldId}
-          listId={listId}
-          onCollapse={collapse}
-        />
-      )}
     </div>
   );
 }
