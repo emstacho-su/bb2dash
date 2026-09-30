@@ -16,13 +16,13 @@ prod their `stored` is brought up to date (task 20) and they move to "already ap
 | count | n |
 |---|---|
 | target rows | 143 |
-| machine-block entries | 208 |
-| entries differs | 13 |
+| machine-block entries | 211 |
+| entries differs | 16 |
 | entries matches | 137 |
 | entries materials_say_more | 15 |
 | entries not_in_materials | 43 |
-| corrections | 27 |
-| citation-only | 111 |
+| corrections | 28 |
+| citation-only | 110 |
 | left tentative | 0 |
 | already applied | 6 |
 
@@ -40,6 +40,7 @@ already applied: assignments IST.352/team-request (IST.352-42)
 * Final Project parts re-cut (B-12): proposal (component 18) 11 → **13** points, final log (19) 3 → **1**;
   Final Project stays 20. The 13-point Blackboard column stays linked to the proposal and counts in full
   when it is graded on 2026-12-03.
+* The completed log's 2 points move with it: `IST.323/fp-log-final` component 19 → **18**; the final-log part keeps one slot, the 1-point checkpoint (`count_expected` 2 → **1**), and its note says so.
 * Participation note gains the attendance rule: each absence beyond two lowers participation one letter
   (note only, not computed).
 
@@ -85,7 +86,7 @@ already applied: assignments IST.352/team-request (IST.352-42)
 * Assignments (component 22): `manual` → **`sum`** over Assignments 1–5 and 7.
 * Notes: grading basis is a letter grade (scheme); which column feeds each part.
 
-Every other checked row (111) gains a citation string only (DECISIONS 2026-09-29, P-75).
+Every other checked row (110) gains a citation string only (DECISIONS 2026-09-29, P-75).
 
 ## Already applied before 106
 
