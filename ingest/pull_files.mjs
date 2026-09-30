@@ -200,9 +200,29 @@ export function isDuplicateAnswer(status, body) {
  * row, leaves `storage_path` null, and a human decides.
  */
 export function duplicateIsAcceptable(submission, { restale = false } = {}) {
-  // A restale key is new by construction (it carries the new bytes' sha). If something already
-  // occupies it, this run did not put it there, so it is refused rather than assumed.
-  return !submission && !restale;
+  // A restale key carries the new bytes' sha. If it is already occupied (a run that stopped midway,
+  // or a re-run before the owner SQL), the object is NOT overwritten and NOT trusted: the owner SQL
+  // refuses to re-point the row unless storage.objects holds exactly these bytes (md5 eTag + size).
+  // That check is what makes an occupied restale key resumable instead of a dead end.
+  void restale;
+  return !submission;
+}
+
+export const sha256Hex = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+/** Storage's eTag for a single (non-multipart) upload is the quoted md5 of the body. */
+export const md5Hex = (bytes) => crypto.createHash('md5').update(bytes).digest('hex');
+
+/**
+ * Where this run writes its owner SQL. An earlier run's non-empty file is never truncated: its rows
+ * may not have been executed yet and are not re-processed here, so a new per-run file is written
+ * next to it (`<name>.<stamp>.sql`) and the run says which.
+ */
+export function resolveOutPath(out, stamp) {
+  let existing = '';
+  try { existing = fs.readFileSync(out, 'utf8'); } catch { return out; }
+  if (existing.trim() === '') return out;
+  const ext = path.extname(out) || '.sql';
+  return path.join(path.dirname(out), `${path.basename(out, path.extname(out))}.${stamp}${ext}`);
 }
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
@@ -228,7 +248,10 @@ const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 //      on local disk (`<downloads>/restale_units/<id>.json`), and one owner transaction per row:
 //      delete the old units (their embeddings cascade), point the row at the new key and sha, and
 //      replace the marker with a dated "re-pulled" note. Both statements are guarded on the old
-//      sha, so a row that changed since the manifest was read is left alone.
+//      sha, so a row that changed since the manifest was read is left alone. The transaction
+//      opens with a guard that aborts unless storage.objects holds exactly these bytes at the new
+//      key (md5 eTag + size): that is why an occupied restale key is resumed, never refused or
+//      overwritten. A row that uploads but gets no units reports its orphaned key.
 //   2. The owner runs that SQL through execute_sql.
 //   3. `--restale-post` posts each staged file's units to /rest/v1/bb_file_text and runs the embed
 //      step. A 409 there means step 2 has not run for that row yet; the file stays staged.
@@ -247,6 +270,9 @@ const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 export const STALE_MARKER = '; stored bytes may be stale';
 const RESTALE_BY = 'ingest/pull_files.mjs --restale';
 const SHA_RE = /^[0-9a-f]{64}$/;
+const MD5_RE = /^[0-9a-f]{32}$/;
+// The storage guard is a DO block quoted with this tag, so no key may contain it.
+const GUARD_TAG = '$restale$';
 const MIME_RE = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ID_RE = /^\d+$/;
@@ -275,7 +301,7 @@ export function restaleRelpath(relpath, sha256) {
 }
 
 /** The owner transaction for a row whose bytes changed. Ids, keys and hashes only. */
-export function restaleSql({ id, oldSha, newSha, key, relpath, size, mime, pulledOn }) {
+export function restaleSql({ id, oldSha, newSha, key, relpath, size, mime, pulledOn, md5 }) {
   const fid = mustMatch(id, ID_RE, 'id');
   const was = q(mustMatch(oldSha, SHA_RE, 'old sha256'));
   const now = q(mustMatch(newSha, SHA_RE, 'new sha256'));
@@ -284,8 +310,17 @@ export function restaleSql({ id, oldSha, newSha, key, relpath, size, mime, pulle
   const day = mustMatch(pulledOn, DATE_RE, 'date');
   mustMatch(key, NO_CONTROL_RE, 'key');
   mustMatch(relpath, NO_CONTROL_RE, 'relpath');
+  const etag = q(`"${mustMatch(md5, MD5_RE, 'md5')}"`);
+  if (String(key).includes(GUARD_TAG)) throw new Error('restale: refusing a key that holds the guard quote tag');
+  // The row is re-pointed only if the object at the new key is these bytes. The script cannot read
+  // Storage back (anon is insert-only), so the owner checks storage.objects, and a mismatch aborts
+  // the whole transaction loudly instead of pointing the row at bytes nobody verified.
+  const guard = `do ${GUARD_TAG} begin if not exists (select 1 from storage.objects o where o.bucket_id = ${q(BUCKET)} ` +
+    `and o.name = ${q(key)} and o.metadata->>'eTag' = ${etag} and (o.metadata->>'size')::bigint = ${bytes}) ` +
+    `then raise exception 'restale file ${fid}: the object at the new key is not the bytes this run fetched'; end if; end ${GUARD_TAG};`;
   return [
     'begin;',
+    guard,
     `delete from bb_file_text where file_id = ${fid} and exists (select 1 from bb_files where id = ${fid} and sha256 = ${was});`,
     `update bb_files set storage_path = ${q(`${BUCKET}/${key}`)}, local_path = ${q(`course context/${relpath}`)}, ` +
       `sha256 = ${now}, bytes = ${bytes}, mime_type = ${type}, downloaded_at = now(), text_status = 'extracted', ` +
@@ -452,8 +487,8 @@ async function pullOne(row, ctx) {
  * extract, stage the units on disk, and the one owner transaction. A row whose extraction yields
  * nothing gets no SQL: its old text is better than none.
  */
-async function restaleOne(row, ctx, { localPath, bytes, mime, sha256 }) {
-  const { mirror, supabaseUrl, key, ingestDir, dryRun, pulledOn, downloads } = ctx;
+export async function restaleOne(row, ctx, { localPath, bytes, mime, sha256 }) {
+  const { mirror, dryRun, pulledOn, downloads } = ctx;
   if (sha256 === row.sha256) {
     return { id: row.id, restale: 'unchanged', sha256: sha256.slice(0, 12), ...(dryRun ? { dryRun: true } : { sql: restaleUnchangedSql({ id: row.id, sha: sha256, pulledOn }) }) };
   }
@@ -465,24 +500,29 @@ async function restaleOne(row, ctx, { localPath, bytes, mime, sha256 }) {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.copyFileSync(localPath, dest);
 
-  const up = await fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${encodeKey(storageKey)}`, {
-    method: 'POST', headers: anonHeaders(key, mime), body: bytes,
-  });
-  const upBody = await up.text();
+  const up = await ctx.storagePost(storageKey, bytes, mime);
+  let resumed = false;
   if (!up.ok) {
-    const occupied = isDuplicateAnswer(up.status, upBody) && !duplicateIsAcceptable(false, { restale: true });
-    return { id: row.id, key: storageKey, error: occupied ? `Storage key already occupied (${up.status}); a human decides` : `storage ${up.status}: ${upBody.slice(0, 200)}` };
+    // Occupied: never overwritten. Resumed only because the owner SQL verifies the object's bytes.
+    if (!isDuplicateAnswer(up.status, up.body) || !duplicateIsAcceptable(false, { restale: true })) {
+      return { id: row.id, key: storageKey, error: `storage ${up.status}: ${String(up.body).slice(0, 200)}` };
+    }
+    resumed = true;
   }
 
+  // Past this point the object exists at storageKey. A row that gets no SQL leaves it orphaned, so
+  // every such outcome names it; a retry reaches it as an occupied key and resumes.
+  const orphan = (why) => ({ id: row.id, key: storageKey, orphanKey: storageKey,
+    error: `not restaled: ${why}; the old text is kept, no SQL is written, and ${BUCKET}/${storageKey} is orphaned until a retry resumes it or a human removes it` });
   let units = [];
-  try { units = extractUnits(ingestDir, localPath); } catch (e) { return { id: row.id, key: storageKey, error: `extract failed: ${String(e).slice(0, 200)}` }; }
-  if (!units.length) return { id: row.id, key: storageKey, error: 'extract gave no units; the old text is kept and no SQL is written' };
+  try { units = ctx.extract(localPath); } catch (e) { return orphan(`extract failed (${String(e).slice(0, 160)})`); }
+  if (!units.length) return orphan('extract gave no units');
 
   const staged = stagedUnitsPath(downloads, row.id);
   fs.mkdirSync(path.dirname(staged), { recursive: true });
   fs.writeFileSync(staged, JSON.stringify(stagedUnits({ id: Number(row.id), sha256, units })));
-  const sql = restaleSql({ id: row.id, oldSha: row.sha256, newSha: sha256, key: storageKey, relpath, size: bytes.length, mime, pulledOn });
-  return { id: row.id, restale: 'changed', key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), units: units.length, staged, sql };
+  const sql = restaleSql({ id: row.id, oldSha: row.sha256, newSha: sha256, key: storageKey, relpath, size: bytes.length, mime, pulledOn, md5: md5Hex(bytes) });
+  return { id: row.id, restale: 'changed', key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), units: units.length, staged, sql, ...(resumed ? { resumed: true } : {}) };
 }
 
 /** The embed step, shared by the pull and --restale-post. Returns the note and an exit code. */
@@ -561,6 +601,13 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     key, ingestDir, dryRun: args['dry-run'] === true,
     fetchMode: args.fetch === true,
     restale: args.restale === true,
+    storagePost: async (storageKey, bytes, mime) => {
+      const up = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/storage/v1/object/${BUCKET}/${encodeKey(storageKey)}`, {
+        method: 'POST', headers: anonHeaders(key, mime), body: bytes,
+      });
+      return { ok: up.ok, status: up.status, body: await up.text() };
+    },
+    extract: (localPath) => extractUnits(ingestDir, localPath),
     fetchImpl: (url) => fetch(url),
     pulledOn: new Date().toISOString().slice(0, 10),
   };
@@ -582,7 +629,9 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   }
 
   const sql = results.filter((r) => r.sql).map((r) => `-- file ${r.id}\n${r.sql}`).join('\n');
-  const out = args.out || path.join(args.downloads, 'pull_files.sql');
+  const wanted = args.out || path.join(args.downloads, 'pull_files.sql');
+  const out = ctx.dryRun ? wanted : resolveOutPath(wanted, new Date().toISOString().replace(/[-:]/g, '').slice(0, 15));
+  if (out !== wanted) console.log(`${wanted} holds an earlier run's SQL and is kept; this run's SQL is in ${out}`);
   if (!ctx.dryRun) fs.writeFileSync(out, sql + '\n');
   for (const r of results) console.log(JSON.stringify({ ...r, sql: undefined }));
 
