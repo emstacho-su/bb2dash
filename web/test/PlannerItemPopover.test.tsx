@@ -448,3 +448,32 @@ describe('PlannerItemPopover — placement', () => {
     }
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * The Blackboard button — the item's own page when one is recorded (R-69)
+ * ------------------------------------------------------------------------ */
+
+describe('PlannerItemPopover — the Blackboard button', () => {
+  const ITEM_URL =
+    'https://blackboard.syracuse.edu/ultra/courses/_571529_1/outline/assessment/test/_12928193_1?courseId=_571529_1&gradeitemView=details';
+
+  it('opens the assignment’s own page when it has one', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, bb_url: ITEM_URL });
+    renderPopover(makeAnchor());
+    expect(screen.getByRole('link', { name: /Blackboard/ })).toHaveAttribute('href', ITEM_URL);
+  });
+
+  it('falls back to the course page for an item url on another origin', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, bb_url: 'https://evil.example.com/ultra/x' });
+    renderPopover(makeAnchor());
+    expect(screen.getByRole('link', { name: /Blackboard/ })).toHaveAttribute(
+      'href',
+      'https://blackboard.syracuse.edu/course/IST323',
+    );
+  });
+
+  it('no longer says Blackboard has no per-item url', () => {
+    renderPopover(makeAnchor());
+    expect(document.body.innerHTML).not.toContain('no stable per-item URL');
+  });
+});

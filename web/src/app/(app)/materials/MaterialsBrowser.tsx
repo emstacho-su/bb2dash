@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useId, useMemo } from 'react';
 import Link from 'next/link';
 import { courseCode, useCourses, type CourseSummary } from '@/lib/queries';
 import { FileOpenAction } from '@/components/materials/FileOpenAction';
@@ -25,12 +25,8 @@ import {
   type ReadingRoute,
   type ReadingRow,
 } from '@/lib/queries.materials';
-import {
-  readCollapsed,
-  sectionKey,
-  toggleCollapsed,
-  writeCollapsed,
-} from '@/lib/materials-collapse';
+import { sectionKey } from '@/lib/materials-collapse';
+import { MATERIALS_COLLAPSE, useCollapseState } from '@/lib/collapse-state';
 import { STAGED_LABEL, submissionOrigin } from '@/lib/queries.grades';
 import tokens from '@/styles/tokens.module.css';
 import styles from './Materials.module.css';
@@ -301,6 +297,7 @@ function CourseBlock({
   onToggle: (key: string) => void;
 }) {
   const { course } = data;
+  const bodyId = useId();
   const readingTotal = data.readings.length + data.orphanReadingFiles.length;
   const totalItems = data.fileCount + data.readings.length;
 
@@ -362,17 +359,29 @@ function CourseBlock({
     }
   }
 
+  // S2-materials-1 (B-3): the course's own key joins the same stored set.
+  const courseFolded = collapsed.has(course.id);
+
   return (
     <section className={styles.course}>
       <div className={styles.courseHead}>
-        <div className={styles.courseHeadText}>
+        <button
+          type="button"
+          className={styles.courseToggle}
+          aria-expanded={!courseFolded}
+          aria-controls={bodyId}
+          onClick={() => onToggle(course.id)}
+        >
+          <span className={styles.bucketCaret} aria-hidden="true">
+            {courseFolded ? '▸' : '▾'}
+          </span>
           <span className={styles.courseCode}>{courseCode(course)}</span>
           <span className={styles.courseTitle}>{course.title_short ?? course.title_bb ?? course.id}</span>
-        </div>
-        <div className={styles.courseHeadRight}>
           <span className={styles.courseCount}>
             {totalItems} {totalItems === 1 ? 'item' : 'items'}
           </span>
+        </button>
+        <div className={styles.courseHeadRight}>
           {/* R-06: the same materials, in the folder tree Blackboard put them in. */}
           <Link className={styles.bbLink} href={`/course/${course.id}/classwork`}>
             Open in Classwork →
@@ -385,7 +394,9 @@ function CourseBlock({
         </div>
       </div>
       <hr className={tokens.rule} />
-      <div className={styles.buckets}>{sections}</div>
+      <div id={bodyId} className={styles.buckets}>
+        {!courseFolded && sections}
+      </div>
     </section>
   );
 }
@@ -401,23 +412,12 @@ export function MaterialsBrowser() {
   const syllabiQ = useCourseSyllabi();
 
   /**
-   * M-1: which sections are folded away. Seeded empty and adopted from storage
-   * in a mount effect rather than read during render — the server has no
-   * localStorage, and reading it in render would make the first client render
-   * disagree with the HTML it is hydrating.
+   * M-1 / S2-materials-1: which courses and buckets are folded away. Read
+   * through `useSyncExternalStore` (P-70), whose server snapshot is the default
+   * (everything open), so the first client render agrees with the HTML it is
+   * hydrating and no effect has to adopt storage afterwards (T-23).
    */
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set<string>());
-  useEffect(() => {
-    setCollapsed(readCollapsed());
-  }, []);
-
-  function handleToggle(key: string) {
-    setCollapsed((current) => {
-      const next = toggleCollapsed(current, key);
-      writeCollapsed(next);
-      return next;
-    });
-  }
+  const { collapsed, toggle: handleToggle } = useCollapseState(MATERIALS_COLLAPSE);
 
   const loading = courses.isPending || files.isPending || readings.isPending;
   // The syllabus read is NOT in `loading`: it only decides whether one action

@@ -142,14 +142,14 @@ declare
   v_got  text;
   v_have text;
 begin
-  -- 100 grants USAGE on two schemas and no others. Anything else the role can reach, it reaches
-  -- through PUBLIC.
+  -- 100 grants USAGE on two schemas; 117 (Phase 17) adds `private`, for 113's heartbeat test.
+  -- No others. Anything else the role can reach, it reaches through PUBLIC.
   select coalesce(string_agg(n.nspname, ', ' order by n.nspname), '<none>') into v_got
     from pg_namespace n, aclexplode(n.nspacl) a
    where a.grantee = 'db_test_runner'::regrole
      and a.privilege_type = 'USAGE';
-  if v_got <> 'extensions, public' then
-    raise exception 'FAIL 100 grants db_test_runner USAGE on %, expected extensions, public', v_got;
+  if v_got <> 'extensions, private, public' then
+    raise exception 'FAIL 100/117 grant db_test_runner USAGE on %, expected extensions, private, public', v_got;
   end if;
 
   -- The four it must not reach at all. `net` is deliberately absent: PUBLIC holds usage on it, so

@@ -147,3 +147,27 @@ describe('courseDisplayOptions', () => {
     await expect(run(courseDisplayOptions())).rejects.toThrow('connection reset');
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * R3-1 — where the Upcoming fetch starts
+ * ------------------------------------------------------------------------ */
+
+describe('trackerWindowStart (R3-1)', () => {
+  it('starts at the term start when it is earlier than the fallback', async () => {
+    const { trackerWindowStart } = await import('@/lib/queries.today');
+    expect(
+      trackerWindowStart({ id: 'F', name: 'F', start_date: '2026-08-24', end_date: '2026-12-11' }, '2026-09-07'),
+    ).toBe('2026-08-24');
+  });
+
+  it('keeps the fallback when the term starts later, or there is none, or its date is junk', async () => {
+    const { trackerWindowStart } = await import('@/lib/queries.today');
+    expect(
+      trackerWindowStart({ id: 'S', name: 'S', start_date: '2027-01-19', end_date: '2027-05-10' }, '2026-09-07'),
+    ).toBe('2026-09-07');
+    expect(trackerWindowStart(null, '2026-09-07')).toBe('2026-09-07');
+    expect(
+      trackerWindowStart({ id: 'X', name: 'X', start_date: 'soon', end_date: '' }, '2026-09-07'),
+    ).toBe('2026-09-07');
+  });
+});

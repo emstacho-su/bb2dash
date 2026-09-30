@@ -185,9 +185,35 @@ describe('rule 2 — grade posted', () => {
       body: 'Lab 1\nLab 2\nLab 3',
       route: '/course/IST.323/grades',
     });
-    expect(toasts[1]?.title).toBe(`GEO 103${DOT}1 grades posted`);
+    // B-58 (C-7 rule 2 amended): a per-course group of one is the detail toast, never
+    // "1 grades posted".
+    expect(toasts[1]).toEqual({
+      key: 'grade:GEO.103.lecture:c4:run-b',
+      title: `GEO 103${DOT}Map quiz`,
+      body: '18 / 20',
+      route: '/course/GEO.103.lecture/grades',
+    });
     // Every member row key is recorded, so a coalesced tick still dedupes row by row.
     for (const row of four) expect(next.firedKeys).toContain(gradeKey(row));
+  });
+
+  it('never says "1 grades posted" for any group of one (B-58)', () => {
+    const singles = ['IST.323', 'GEO.103.lecture', 'IST.352', 'IST.466'].map((course, i) =>
+      gradeRow({ shell_course_id: course, column_id: `c${i}`, name: `Item ${i}` }),
+    );
+    const { toasts } = reduce(input({ grades: singles }));
+    expect(toasts).toHaveLength(4);
+    for (const toast of toasts) expect(toast.title).not.toMatch(/grades posted/);
+    expect(toasts.map((t) => t.key)).toEqual(singles.map((row) => gradeKey(row)));
+  });
+
+  it('shows the score alone when the column is worth zero points (B-58)', () => {
+    const zero = gradeRow({ name: 'Attendance 9/29', score: 1, possible: 0 });
+    expect(reduce(input({ grades: [zero] })).toasts[0]?.body).toBe('1');
+    const changed = gradeRow({ name: 'Attendance 9/29', score: 1, possible: 0, previous_score: 0 });
+    const body = reduce(input({ grades: [changed] })).toasts[0]?.body;
+    expect(body).toBe(`1${DOT}was 0`);
+    expect(body).not.toMatch(/\/ 0/);
   });
 
   it('caps a coalesced body at three names', () => {

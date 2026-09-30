@@ -93,3 +93,85 @@ describe('ResultRow — snippet safety', () => {
     expect(screen.queryByText(/private commentary/)).toBeNull();
   });
 });
+
+/*
+ * L-1 (S2-bugs-1): each mode renders the row its mode actually returns.
+ *
+ * `search` fts rows carry `rank` and a whole-unit plain headline `snippet`, and
+ * no similarity, part or score. Vector rows carry `similarity`, `part_no` and
+ * the unit's whole `text`, and no snippet. (supabase/functions/search/index.ts,
+ * migrations 021 and 024.)
+ */
+type WireRow = Record<string, unknown>;
+
+function renderModeRow(mode: 'fts' | 'vector', row: WireRow) {
+  const base: WireRow = {
+    file_id: 5,
+    text_id: 495,
+    course_id: 'IST.323',
+    bucket: 'lecture_slides',
+    file_name: 'Lecture3 - Planning, Policy and Risk.pptx',
+    unit_kind: 'slide',
+    unit_no: 28,
+  };
+  return render(
+    <ResultRow
+      result={{ ...base, ...row } as never}
+      mode={mode}
+      active={false}
+      onMouseEnter={() => {}}
+      onSelect={() => {}}
+    />,
+  );
+}
+
+describe('ResultRow — Keyword mode (fts)', () => {
+  const ftsRow = { rank: 0.0759, snippet: 'The final exam is Tuesday in Heroy auditorium' };
+
+  it('shows the headline and says it matched on wording, with no number at all', () => {
+    const { container } = renderModeRow('fts', ftsRow);
+    expect(screen.getByText('The final exam is Tuesday in Heroy auditorium')).toBeInTheDocument();
+    const badge = screen.getByText('keyword match');
+    expect(badge).toHaveAttribute('title', expect.stringMatching(/Keyword mode/));
+    expect(container.textContent).not.toMatch(/\d+%|0\.07|rank/i);
+  });
+
+  it('still hides speaker notes inside a headline', () => {
+    renderModeRow('fts', { rank: 0.1, snippet: 'Risk register\n[notes] do not read this aloud' });
+    expect(screen.getByText('Risk register')).toBeInTheDocument();
+    expect(screen.queryByText(/aloud/)).toBeNull();
+  });
+});
+
+describe('ResultRow — Semantic mode (vector)', () => {
+  const body = `Risk assessment ${'identifies assets threats and controls '.repeat(12)}`;
+
+  it('shows a passage cut from the unit text and its similarity as hybrid does', () => {
+    const { container } = renderModeRow('vector', {
+      similarity: 0.874,
+      part_no: 3,
+      text: `${body}\n[notes] remind them the quiz is Friday`,
+    });
+    expect(screen.getByText('87% match')).toBeInTheDocument();
+    expect(screen.getByText('part 3')).toBeInTheDocument();
+    const passage = screen.getByText(/^Risk assessment identifies/);
+    expect(passage.textContent?.endsWith('…')).toBe(true);
+    expect((passage.textContent ?? '').length).toBeLessThan(body.length);
+    expect(screen.queryByText(/quiz is Friday/)).toBeNull();
+    expect(screen.getByText('speaker notes hidden')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/keyword match/);
+  });
+
+  it('never calls a weak semantic hit a keyword match, and shows no percentage for it', () => {
+    const { container } = renderModeRow('vector', { similarity: 0.781, part_no: 1, text: 'Short slide' });
+    expect(screen.getByText('Short slide')).toBeInTheDocument();
+    expect(screen.getByText('weak match')).toHaveAttribute('title', 'Semantic similarity 0.781');
+    expect(container.textContent).not.toMatch(/keyword match|\d+%/);
+  });
+
+  it('shows the notes-only notice when the unit text is all speaker notes', () => {
+    renderModeRow('vector', { similarity: 0.9, part_no: 1, text: '[notes] private commentary' });
+    expect(screen.getByText(/speaker notes only/i)).toBeInTheDocument();
+    expect(screen.queryByText(/private commentary/)).toBeNull();
+  });
+});

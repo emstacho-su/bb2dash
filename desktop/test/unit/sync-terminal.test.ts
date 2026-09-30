@@ -127,7 +127,7 @@ describe('R2-6 — the PowerShell fallback', () => {
     // The fallback carries the repo through `Set-Location`, since there is no `wt -d`.
     expect(fake.spawns[1]?.args.at(-1)).toContain('Set-Location');
     expect(fake.spawns[1]?.args.at(-1)).toContain(CONFIG.repoDir);
-    expect(fake.spawns[1]?.args.at(-1)).toContain("claude '/bb-sync 77'");
+    expect(fake.spawns[1]?.args.at(-1)).toContain("claude --model sonnet '/bb-sync 77'");
     expect(fake.unrefs).toBe(1);
   });
 

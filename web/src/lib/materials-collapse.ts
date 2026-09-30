@@ -1,23 +1,20 @@
 /**
  * Which Materials sections Stack has folded away (M-1 / P-materials-1).
  *
- * Kept out of the component for the same reason `sidebar-preference.ts` is: the
- * rules about what is stored, what a bad value means and what happens when
- * storage is unavailable belong in one place with the tests, not inlined in a
- * render.
- *
- * localStorage is best-effort on purpose. A private window, blocked site data
- * or a full quota all throw, and none of those is a reason to fail the screen —
- * every section simply opens, which is a correct answer in all three. This and
- * `sidebar-preference.ts` are the only places in the app where a swallowed
- * storage error is deliberate.
- *
- * Default OPEN, not closed: the sections are collapsible, not collapsed. A
- * screen that hides its contents until you find the toggle is a worse bug than
- * the one being fixed.
+ * P-70 lifted the storage rules into `collapse-state.ts`, which serves Home as
+ * well. This file keeps its exports as thin re-exports over that store, so its
+ * importers compile unchanged and the stored value keeps its key and format: a
+ * JSON array of `<courseId>` and `<courseId>::<bucket>` keys, open by default.
  */
 
-export const MATERIALS_COLLAPSE_KEY = 'bb2dash.materials.collapsed';
+import {
+  MATERIALS_COLLAPSE,
+  readCollapseSet,
+  toggleKey,
+  writeCollapseSet,
+} from './collapse-state';
+
+export const MATERIALS_COLLAPSE_KEY = MATERIALS_COLLAPSE.storageKey;
 
 /** A section's identity: one course's one bucket. */
 export function sectionKey(courseId: string, bucket: string): string {
@@ -26,39 +23,13 @@ export function sectionKey(courseId: string, bucket: string): string {
 
 /** Read the folded set, or an empty one when there is none, it is junk, or storage throws. */
 export function readCollapsed(): ReadonlySet<string> {
-  try {
-    const raw = globalThis.localStorage?.getItem(MATERIALS_COLLAPSE_KEY);
-    if (!raw) return new Set();
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((entry): entry is string => typeof entry === 'string'));
-  } catch {
-    return new Set();
-  }
+  return readCollapseSet(MATERIALS_COLLAPSE);
 }
 
-/** Remember the folded set. Silent no-op where storage is unavailable — see header. */
+/** Remember the folded set. Silent no-op where storage is unavailable. */
 export function writeCollapsed(collapsed: ReadonlySet<string>): void {
-  try {
-    globalThis.localStorage?.setItem(
-      MATERIALS_COLLAPSE_KEY,
-      JSON.stringify([...collapsed].sort()),
-    );
-  } catch {
-    /* storage unavailable; the choice simply does not survive the reload */
-  }
+  writeCollapseSet(MATERIALS_COLLAPSE, collapsed);
 }
 
-/**
- * The set with one section flipped. Returns a NEW set — the caller holds this
- * in React state, and mutating it in place would not re-render.
- */
-export function toggleCollapsed(
-  collapsed: ReadonlySet<string>,
-  key: string,
-): ReadonlySet<string> {
-  const next = new Set(collapsed);
-  if (next.has(key)) next.delete(key);
-  else next.add(key);
-  return next;
-}
+/** The set with one section flipped, as a NEW set. */
+export const toggleCollapsed = toggleKey;

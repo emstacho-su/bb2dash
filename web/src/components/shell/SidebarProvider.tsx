@@ -8,14 +8,17 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from 'react';
+import { useHydrated } from '@/lib/use-hydrated';
 import {
-  isOverlayWidth,
+  SIDEBAR_BREAKPOINT,
   readStoredSidebar,
   resolveSidebar,
   writeStoredSidebar,
+  type SidebarState,
 } from '@/lib/sidebar-preference';
 
 /**
@@ -26,8 +29,12 @@ import {
  * desktop default. The inline boot script (see `sidebar-preference.ts`) has
  * already stamped `html[data-sidebar]` by then, and the CSS keys off that
  * attribute — so what the reader SEES is right from the first paint. React
- * adopts the same value in a mount effect and owns the attribute from there;
- * only the ARIA state is briefly optimistic, for one frame, invisibly.
+ * reads the same inputs (the stored choice, the viewport) through
+ * `useSyncExternalStore`, with the desktop default as the server snapshot, so
+ * the hydration render matches the server and the next render adopts the real
+ * value — no set-state in a mount effect (R-51). React owns the attribute from
+ * the first hydrated render; only the ARIA state is briefly optimistic, for one
+ * frame, invisibly.
  */
 
 type SidebarContextValue = {
@@ -61,48 +68,65 @@ export function useSidebar(): SidebarContextValue {
 }
 
 /** No viewport on the server; `SIDEBAR_BREAKPOINT` and up is the common case. */
-const SSR_DEFAULT_OPEN = true;
+const SSR_WIDE = true;
+
+/** The in-flow rail or the drawer follows the viewport. */
+function subscribeToResize(onChange: () => void): () => void {
+  window.addEventListener('resize', onChange);
+  return () => window.removeEventListener('resize', onChange);
+}
+
+function isWideViewport(): boolean {
+  return window.innerWidth >= SIDEBAR_BREAKPOINT;
+}
+
+function serverWide(): boolean {
+  return SSR_WIDE;
+}
+
+/** The stored choice is written only by this provider; nothing to subscribe to. */
+function subscribeToNothing(): () => void {
+  return () => {};
+}
+
+function serverStored(): SidebarState | null {
+  return null;
+}
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(SSR_DEFAULT_OPEN);
-  const [overlay, setOverlay] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const hydrated = useHydrated();
+  const wide = useSyncExternalStore(subscribeToResize, isWideViewport, serverWide);
+  const stored = useSyncExternalStore(subscribeToNothing, readStoredSidebar, serverStored);
+  /**
+   * What this visit decided, winning over the stored choice: a toggle or a
+   * close (both also written down), or a close for navigation (not written).
+   * Kept in state too, so a toggle still works where storage throws.
+   */
+  const [session, setSession] = useState<SidebarState | null>(null);
   const toggleRef = useRef<HTMLButtonElement | null>(null);
 
-  // Adopt the real preference once there is a browser to ask.
-  useEffect(() => {
-    const width = window.innerWidth;
-    setOpen(resolveSidebar(readStoredSidebar(), width) === 'open');
-    setOverlay(isOverlayWidth(width));
-    setMounted(true);
-  }, []);
-
-  // In-flow rail or drawer is a pure function of the viewport.
-  useEffect(() => {
-    function onResize() {
-      setOverlay(isOverlayWidth(window.innerWidth));
-    }
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+  const overlay = !wide;
+  // `resolveSidebar` only compares the width with the breakpoint.
+  const open = resolveSidebar(session ?? stored, wide ? SIDEBAR_BREAKPOINT : 0) === 'open';
 
   // React takes the attribute over from the boot script — but not before it has
-  // adopted the stored value, or it would overwrite the script with the SSR
-  // default and produce exactly the flash the script exists to prevent.
+  // hydrated, or it would overwrite the script with the SSR default and produce
+  // exactly the flash the script exists to prevent.
   useEffect(() => {
-    if (!mounted) return;
+    if (!hydrated) return;
     document.documentElement.setAttribute('data-sidebar', open ? 'open' : 'closed');
-  }, [mounted, open]);
+  }, [hydrated, open]);
 
   const setOpenPersisted = useCallback((next: boolean) => {
-    setOpen(next);
-    writeStoredSidebar(next ? 'open' : 'closed');
+    const state: SidebarState = next ? 'open' : 'closed';
+    setSession(state);
+    writeStoredSidebar(state);
   }, []);
 
   const toggle = useCallback(() => setOpenPersisted(!open), [open, setOpenPersisted]);
   const close = useCallback(() => setOpenPersisted(false), [setOpenPersisted]);
   /** The same close, minus the memory. See `closeForNavigation` above. */
-  const closeForNavigation = useCallback(() => setOpen(false), []);
+  const closeForNavigation = useCallback(() => setSession('closed'), []);
 
   const value = useMemo<SidebarContextValue>(
     () => ({ open, overlay, toggle, close, closeForNavigation, toggleRef }),

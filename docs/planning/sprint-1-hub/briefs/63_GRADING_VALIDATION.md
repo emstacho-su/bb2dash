@@ -15,6 +15,7 @@ were seeded on 2026-09-02/03 from syllabi and Blackboard and every one is marked
 `confidence = confirmed`, but no pass has ever checked the stored rules against the collected
 materials as a whole, and the export (`64_GRADING_SCHEMA_EXPORT_2026-09-14.md` §4) already
 surfaces ten open questions: unlinked attendance rows in four courses, a 13-vs-11 point
+  (Sprint 2, Phase 16: the current export is `docs/planning/sprint-2/evidence/96a_GRADING_SCHEMA_EXPORT_<date>.md`; its §6 carries these questions.)
 mismatch in IST.323, two competing attendance columns in IST.466, a rubric that says 120 where
 the syllabus says 100, a letter scale that stops at C-.
 
@@ -28,9 +29,11 @@ everything has reconciled correctly.
 
 * **Reads:** `docs/planning/sprint-1-hub/briefs/63_GRADING_VALIDATION.md` (this file),
   `docs/planning/sprint-1-hub/briefs/64_GRADING_SCHEMA_EXPORT_2026-09-14.md` (the claim under test), and the
+  (Sprint 2: the launcher names the newest `docs/planning/sprint-2/evidence/96a_GRADING_SCHEMA_EXPORT_<date>.md` instead.)
   materials corpus through the `bb2dash` MCP server only: `list_courses`, `search_materials`,
   `get_material_text`.
 * **Writes:** one file per course, `docs/planning/sprint-1-hub/verification/65_GRADING_VALIDATION_<course_id>.md`.
+  (Sprint 2: `docs/planning/sprint-2/verification/96b_GRADING_VALIDATION_<course_id>.md`, shaped by `docs/planning/sprint-2/evidence/96c_V1_VERDICT_TEMPLATE.md`.)
 * **Nothing else.** No Supabase MCP, no `rag` server, no shell, no edits to any other file. The
   launcher (`scripts/validate-grading.ps1`) enforces this with `--strict-mcp-config`,
   `--restricted` and an explicit tool allow-list. The session cannot change the database; the
@@ -63,6 +66,8 @@ recitation together, IST.471)
 
 ### Reconciliation table (one per course, in `65_GRADING_VALIDATION_<course_id>.md`)
 
+> Sprint 2 (Phase 16): the table lives in `96b_GRADING_VALIDATION_<course_id>.md`, in the shape of `96c_V1_VERDICT_TEMPLATE.md`, which supersedes the columns below and adds the machine block.
+
 | # | field | stored | materials say | source (bb_file/unit) | verdict | Stack's call | why |
 |---|---|---|---|---|---|---|---|
 
@@ -77,6 +82,7 @@ rank weights, parent), every assignment's component link and points, and the ari
   questions block.
 * `65_GRADING_VALIDATION_SUMMARY.md`: counts per verdict, the list of accepted corrections in
   plain statements ("IST.323/participation → component `participation`"; "IST.466 component
+  (Sprint 2: `docs/planning/sprint-2/verification/96d_GRADING_VALIDATION_SUMMARY.md` replaces it.)
   `ethics_presentations` stays 100, rubric deck is superseded — Stack confirmed with prof on
   <date>"), and the list of *ask the professor* items with their status. Rule (Stack,
   2026-09-14): **decide from the materials**; Stack may ask the professor himself and override
@@ -98,6 +104,7 @@ rank weights, parent), every assignment's component link and points, and the ari
 - [ ] Every assignment with `points_possible > 0` is linked to a component or explicitly marked
       ungraded (Stack's call recorded).
 - [ ] The ten §4 questions in the export each have an answer or an *ask the professor* status.
+      (Sprint 2: the questions are §6 of `96a_GRADING_SCHEMA_EXPORT_<date>.md`, answered in each `96b_GRADING_VALIDATION_<course_id>.md`.)
 - [ ] `confidence = confirmed` on a row now means "checked against the materials on <date>",
       and the `notes` say where.
 
@@ -118,6 +125,7 @@ Supersedes the Acceptance list above where they overlap.
       it parses; row ids are unique. This is what lets a later automated pass re-check without
       re-reading prose.
 - [ ] All ten §4 export questions answered or marked `PROF_TO_CONFIRM`.
+      (Sprint 2: §6 of `96a_GRADING_SCHEMA_EXPORT_<date>.md`; answers in the `96b_GRADING_VALIDATION_*` files.)
 - [ ] Questions block per course: each question has an answer or a recorded default, and a
       DECISIONS row where it sets policy (no-total courses, OCR files, classification).
 - [ ] SQL invariants shipped as `db/tests/grading_invariants.sql` and run **before and after**
@@ -132,6 +140,7 @@ Supersedes the Acceptance list above where they overlap.
       rows stay `tentative`.
 - [ ] `65_GRADING_VALIDATION_SUMMARY.md`: verdict counts, corrections as plain statements, open
       professor questions with status, answered logic questions → DECISIONS rows.
+      (Sprint 2: `96d_GRADING_VALIDATION_SUMMARY.md`; the verdict shape is `96c_V1_VERDICT_TEMPLATE.md`.)
 - [ ] SOP gates for the closing PR: `/code-review` on the migration; STATUS + DECISIONS +
       ORCHESTRATOR updated.
 

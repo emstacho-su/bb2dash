@@ -87,6 +87,24 @@ describe('GradesScreen — the figure under each header', () => {
     expect(within(ist466).getByText('B+')).toBeInTheDocument();
   });
 
+  it('puts the report-card strip above the classes, one card per class, from the same figures', () => {
+    render(<GradesScreen model={MODEL} />);
+    const strip = screen.getByRole('region', { name: 'Report card' });
+    const firstClass = screen.getByRole('region', { name: 'IST 323' });
+    expect(strip.compareDocumentPosition(firstClass) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    const cards = within(strip).getAllByRole('listitem');
+    expect(cards).toHaveLength(2);
+    expect(within(cards[0]).getByText('graded qualitatively')).toBeInTheDocument();
+    expect(within(cards[1]).getByText('B+')).toBeInTheDocument();
+    expect(within(cards[1]).getByText('87.4%')).toBeInTheDocument();
+  });
+
+  it('draws no strip without figures (the 10a screen)', () => {
+    render(<GradesScreen />);
+    expect(screen.queryByRole('region', { name: 'Report card' })).toBeNull();
+  });
+
   it('names the parts the figure does not cover', () => {
     render(<GradesScreen model={MODEL} />);
     const ist466 = screen.getByRole('region', { name: 'IST 466' });

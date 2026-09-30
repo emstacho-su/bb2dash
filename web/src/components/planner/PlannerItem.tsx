@@ -60,6 +60,11 @@ export interface ItemActions {
   pendingItemId: string | null;
   /** The assignment whose popover is open, if one is. */
   openItemId: string | null;
+  /**
+   * R3-8: a class block with nested items reports the height the browser laid
+   * its content out at, so the rows grow to what was drawn, not to a guess.
+   */
+  measureNested?: (blockKey: string, contentPx: number) => void;
 }
 
 /** The props that make a card open the popout. Empty for a reading: it has none. */
@@ -140,7 +145,7 @@ export function MeetingContent({
       <span className={styles.blockRoom}>{meeting.room}</span>
       {meeting.topic !== null && <span className={styles.blockTopic}>{meeting.topic}</span>}
       {nested.length > 0 && (
-        <span className={styles.nested}>
+        <span className={styles.nested} data-nested-list="true">
           {nested.map((placed) => (
             <span
               key={placed.key}

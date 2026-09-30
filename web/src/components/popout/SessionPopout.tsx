@@ -14,6 +14,9 @@
  * "No readings are recorded" and "No files are pinned" are claims about the
  * course, so neither may stand in for a query that is still running or that
  * failed — both sections, and the counts in the sub-title, guard themselves.
+ *
+ * An IST.466 session also carries the attendance marker when its schedule
+ * stars it, and the syllabus's every-class rule always (T-15).
  */
 
 import Link from 'next/link';
@@ -30,6 +33,64 @@ import {
 } from '@/components/shared/QueryState';
 import { DOW_LABELS, MONTH_LABELS, parseDateOnly } from '@/components/tracker/anchor';
 import styles from './Popout.module.css';
+
+/* -- the IST.466 attendance marker (T-15, R-49; B-27) ----------------------- */
+
+/**
+ * The one course whose schedule stars the classes where attendance and
+ * participation count ("*indicates 1 out of 15 classes where attendance and
+ * participation counts", IST466M3 Schedule Fall2026). Nothing else shows it.
+ */
+export const ATTENDANCE_MARKER_COURSE = 'IST.466';
+/** The schedule's own words, in the PM's wording (brief 97, Contract). */
+export const ATTENDANCE_MARKER_TEXT = 'Attendance and participation count';
+export const ATTENDANCE_MARKER_TITLE = 'IST 466 schedule; this course only';
+/**
+ * The syllabus gives points for every class, starred or not, so an unstarred
+ * class must never read as free. The title quotes IST466M3 Fall2026 Syllabus,
+ * "Participation, Engagement, & Professionalism", verbatim.
+ */
+export const ATTENDANCE_RULE_TEXT = 'Every class earns attendance points (syllabus)';
+export const ATTENDANCE_RULE_QUOTE =
+  'IST 466 syllabus: "Up to 150 points for attendance. A student earns up to 5 points for on-time attendance per class."';
+
+type AttendanceFields = { course_id: string; counts_attendance?: boolean | null };
+
+/** True only for a starred IST.466 session (`sessions.counts_attendance`). */
+export function showsAttendanceMarker(session: AttendanceFields): boolean {
+  return session.course_id === ATTENDANCE_MARKER_COURSE && session.counts_attendance === true;
+}
+
+export function AttendanceMarker({
+  session,
+  className = tokens.tagAccent,
+}: {
+  session: AttendanceFields;
+  className?: string;
+}) {
+  if (!showsAttendanceMarker(session)) return null;
+  return (
+    <span className={className} title={ATTENDANCE_MARKER_TITLE}>
+      {ATTENDANCE_MARKER_TEXT}
+    </span>
+  );
+}
+
+/** The syllabus line, on every IST.466 session; nothing for another course. */
+export function AttendanceRule({
+  courseId,
+  className = styles.footerNote,
+}: {
+  courseId: string;
+  className?: string;
+}) {
+  if (courseId !== ATTENDANCE_MARKER_COURSE) return null;
+  return (
+    <p className={className} title={ATTENDANCE_RULE_QUOTE}>
+      {ATTENDANCE_RULE_TEXT}
+    </p>
+  );
+}
 
 /** 'YYYY-MM-DD' → "Wed · Sep 9". */
 function formatDate(iso: string | null): string {
@@ -83,6 +144,7 @@ export function SessionPopout({ sessionId }: { sessionId: number }) {
         )}
         {session.week_no != null && <span className={tokens.mono}>Week {session.week_no}</span>}
         {tentative && <span className={tokens.tagOutline}>tentative — date/detail inferred</span>}
+        <AttendanceMarker session={session} />
       </div>
 
       <div>
@@ -94,6 +156,7 @@ export function SessionPopout({ sessionId }: { sessionId: number }) {
           <span>·</span>
           <span>{countText(readingsQ, readings.length, 'reading')}</span>
         </div>
+        <AttendanceRule courseId={session.course_id} />
       </div>
 
       {session.notes && (

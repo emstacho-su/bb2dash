@@ -235,12 +235,30 @@ export function lastSyncOptions() {
   });
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * R3-1: where Home's Upcoming fetch starts. The term's first day when the term
+ * row has one earlier than `fallbackIso` (this week's Monday), so the strip can
+ * scroll back to the term's first week; otherwise the fallback. Read from the
+ * term row already fetched for the kicker; no date is hard-coded.
+ */
+export function trackerWindowStart(term: Term | null | undefined, fallbackIso: string): string {
+  const start = term?.start_date ?? '';
+  if (!ISO_DATE.test(start)) return fallbackIso;
+  return start < fallbackIso ? start : fallbackIso;
+}
+
 /* ---------------------------------------------------------------------------
  * Hooks
  * ------------------------------------------------------------------------ */
 
-export function useWorkItemsWindow(from: string, to: string) {
-  return useQuery(workItemsWindowOptions(from, to));
+export function useWorkItemsWindow(
+  from: string,
+  to: string,
+  options: { enabled?: boolean } = {},
+) {
+  return useQuery({ ...workItemsWindowOptions(from, to), enabled: options.enabled ?? true });
 }
 
 export function useUndatedWorkItems() {

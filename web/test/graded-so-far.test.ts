@@ -27,7 +27,8 @@ import { FIXTURES } from './grade-fixtures/fixtures';
 import type { ComparisonFixture } from './grade-fixtures/types';
 import { modelInputArb } from './grade-model/arbitraries';
 import { assertProperty } from './grade-model/fc-params';
-import { deepFreeze } from './grade-model/builders';
+import { component, deepFreeze, item, modelInput, scheme } from './grade-model/builders';
+import { ECN304_EXAMS_PART, ecn304Input } from './grade-model/ecn304-shape';
 
 function modelOf(fixture: ComparisonFixture): ModelInput {
   return {
@@ -102,6 +103,207 @@ describe('both 10b gates are off', () => {
     // 87 %, not the 85.5 % muting used to give by dropping a graded 135/150.
     expect(figure.percent).toBeCloseTo(87, 10);
     expect(figure.countedParts).toContain('Major Cases');
+  });
+});
+
+/*
+ * P-66 / B-10 (Phase 16): GEO.103's two prod columns, both a posted 0.000 out
+ * of 100 (sync 67, 2026-09-27). An absence count is not a score, so migration
+ * 105 marks both "Not graded" (excluded, no component). The pin: with those two
+ * links the course says nothing is graded; linked, the same rows would print
+ * 0.0 %, which is why the links exist.
+ */
+describe('GEO.103 absence columns', () => {
+  const geoComponents = [
+    component({ id: 1, name: 'Exams', weightPct: 50, aggregation: 'average', countExpected: 2 }),
+    component({ id: 4, name: 'Lecture Attendance', weightPct: 10, aggregation: 'manual' }),
+    component({ id: 5, name: 'Discussion Section Attendance & Participation', weightPct: 10, aggregation: 'manual' }),
+    component({ id: 6, name: 'Reading Quizzes', weightPct: 30, aggregation: 'average', countExpected: 10 }),
+  ];
+  const geoRow = (key: string, name: string, componentId: number | null, excluded: boolean) =>
+    item({
+      key,
+      name,
+      componentId,
+      excluded,
+      linkSource: 'override',
+      linkConfidence: 'confirmed',
+      possible: 100,
+      score: 0,
+      kind: 'attendance',
+      seenAt: '2026-09-27T12:00:00.000Z',
+    });
+  const geoInput = (excluded: boolean): ModelInput =>
+    modelInput({
+      scheme: scheme({ courseId: 'GEO.103.lecture' }),
+      components: geoComponents,
+      items: [
+        geoRow('col:GEO.103.lecture:_3602583_1', 'Absences', excluded ? null : 4, excluded),
+        geoRow('col:GEO.103.recitation:_3602445_1', 'Attendance', excluded ? null : 5, excluded),
+      ],
+    });
+
+  it('GEO absences excluded → nothing_graded', () => {
+    expect(gradedSoFar(geoInput(true))).toEqual({ state: 'nothing_graded' });
+  });
+
+  it('the same two rows linked would read as a graded 0 %', () => {
+    const figure = gradedSoFar(geoInput(false));
+    expect(figure.state).toBe('figure');
+    if (figure.state !== 'figure') return;
+    expect(figure.percent).toBe(0);
+  });
+});
+
+/*
+ * R-36 (Phase 16): the rank-weighted rule the figure is built on, stated from
+ * the stored weights (never a literal) through the engine's own
+ * `usableWeights`, so the sentence cannot disagree with the arithmetic.
+ */
+describe('rank rules', () => {
+  const rankPart = (overrides: Partial<Parameters<typeof component>[0]> = {}) =>
+    component({
+      id: 1,
+      name: 'Exams (rank-weighted)',
+      weightPct: 75,
+      aggregation: 'rank_weighted',
+      rankWeights: [30, 25, 20],
+      countExpected: 3,
+      ...overrides,
+    });
+  const exam = (n: number, score: number | null, componentId = 1) =>
+    item({ key: `col:exam${n}`, componentId, possible: 100, score });
+
+  function rulesOf(input: ModelInput) {
+    const figure = gradedSoFar(input);
+    if (figure.state !== 'figure') throw new Error(`expected a figure, got ${figure.state}`);
+    if (figure.rankRules === undefined) throw new Error('gradedSoFar() left rankRules unset');
+    return figure.rankRules;
+  }
+
+  it('states the rule with the stored weights while exams are still ungraded', () => {
+    const input = modelInput({ components: [rankPart()], items: [exam(1, 80), exam(2, null), exam(3, null)] });
+    expect(rulesOf(input)).toEqual([{ part: 'Exams (rank-weighted)', weights: [30, 25, 20], slots: 3, allGraded: false }]);
+  });
+
+  it('marks the rule allGraded once every slot is graded (F11)', () => {
+    const figure = figureFor('F11');
+    expect(figure.state === 'figure' && figure.rankRules).toEqual([
+      { part: 'Exams', weights: [30, 25, 20], slots: 3, allGraded: true },
+    ]);
+  });
+
+  it('takes the weights from the component, not a constant (F12)', () => {
+    const figure = figureFor('F12');
+    expect(figure.state === 'figure' && figure.rankRules).toEqual([
+      { part: 'Exams', weights: [30, 20, 10], slots: 3, allGraded: false },
+    ]);
+  });
+
+  it('finds a rank-weighted part nested under a parent', () => {
+    const input = modelInput({
+      components: [
+        component({ id: 9, name: 'Assessments', weightPct: 100, aggregation: 'sum' }),
+        rankPart({ id: 1, parentId: 9, weightPct: 100 }),
+      ],
+      items: [exam(1, 90)],
+    });
+    expect(rulesOf(input).map((rule) => rule.part)).toEqual(['Exams (rank-weighted)']);
+  });
+
+  it.each([
+    { name: 'null', rankWeights: null },
+    { name: 'empty', rankWeights: [] },
+    { name: 'negative', rankWeights: [30, -5, 20] },
+    { name: 'all zero', rankWeights: [0, 0, 0] },
+  ])('states no rule for a $name weight list', ({ rankWeights }) => {
+    const input = modelInput({ components: [rankPart({ rankWeights })], items: [exam(1, 80)] });
+    expect(rulesOf(input)).toEqual([]);
+  });
+
+  // Round 2, item 3: the engine ranks over max(weights, items, 1) slots.
+  it('pads the weights with 0 to the engine’s slot count when columns outnumber weights', () => {
+    const input = modelInput({
+      components: [rankPart()],
+      items: [exam(1, 80), exam(2, 70), exam(3, null), exam(4, null)],
+    });
+    expect(rulesOf(input)).toEqual([
+      { part: 'Exams (rank-weighted)', weights: [30, 25, 20, 0], slots: 4, allGraded: false },
+    ]);
+  });
+
+  // Round 2, item 4: the engine never rank-weights a parent (it sums its
+  // children) and the figure lists no extra-credit part.
+  it('states no rule for a rank-weighted parent', () => {
+    const input = modelInput({
+      components: [
+        rankPart({ id: 9, name: 'Assessments', weightPct: 100 }),
+        component({ id: 1, name: 'Midterm', parentId: 9, weightPct: 100, aggregation: 'single' }),
+      ],
+      items: [exam(1, 90)],
+    });
+    expect(rulesOf(input)).toEqual([]);
+  });
+
+  it('states no rule for an extra-credit rank-weighted part', () => {
+    const input = modelInput({
+      components: [
+        component({ id: 2, name: 'Homework', weightPct: 100, aggregation: 'average', countExpected: 1 }),
+        rankPart({ id: 1, name: 'Bonus exams', weightPct: 10, isExtraCredit: true }),
+      ],
+      items: [item({ key: 'col:hw', componentId: 2, possible: 10, score: 9 }), exam(1, 80)],
+    });
+    expect(rulesOf(input)).toEqual([]);
+  });
+
+  it('is empty for a course with no rank-weighted part (F01)', () => {
+    const figure = figureFor('F01');
+    expect(figure.state === 'figure' && figure.rankRules).toEqual([]);
+  });
+});
+
+/*
+ * Task 27 (acceptance step 9): ECN.304 Exam 1 is sat 2026-10-01. Built from
+ * prod's real shape (test/grade-model/ecn304-shape.ts). By hand, weighted_pct:
+ *   Participation 10 %: 80/100                        → 10 × 0.80 = 8.00
+ *   Quizzes 15 %: 9/10, 6/8, 4/7, 8/10, drop 4/7      → 15 × (0.9+0.75+0.8)/3 = 12.25
+ *   Today (exams ungraded): (8 + 12.25) / 25          = 81.0 %
+ *   Exam 1 = 85: one graded exam, mean-until-all-graded → 75 × 0.85 = 63.75
+ *     (8 + 12.25 + 63.75) / 100                       = 84.0 %
+ *   90 / 70 / 50: (30×0.9 + 25×0.7 + 20×0.5) / 75     → 75 × 54.5/75 = 54.5
+ *     (8 + 12.25 + 54.5) / 100                        = 74.75 %
+ */
+describe('ECN.304 Exam 1 rehearsal', () => {
+  function figureOf(exams: readonly [number | null, number | null, number | null]) {
+    const figure = gradedSoFar(ecn304Input(exams));
+    if (figure.state !== 'figure') throw new Error(`expected a figure, got ${figure.state}`);
+    return figure;
+  }
+
+  it('today: 81.0 % with Exams not counted yet', () => {
+    const figure = figureOf([null, null, null]);
+    expect(figure.percent).toBeCloseTo(81, 10);
+    expect(figure.leftOutParts).toEqual([ECN304_EXAMS_PART]);
+  });
+
+  it('ECN.304 Exam 1 posted: Exams counted, rule still averaged', () => {
+    const figure = figureOf([85, null, null]);
+    expect(figure.leftOutParts).toEqual([]);
+    expect(figure.countedParts).toContain(ECN304_EXAMS_PART);
+    expect(figure.percent).toBeCloseTo(84, 10);
+    expect(figure.unlinkedColumns).toEqual([]);
+    expect(figure.rankRules).toEqual([
+      { part: ECN304_EXAMS_PART, weights: [30, 25, 20], slots: 3, allGraded: false },
+    ]);
+  });
+
+  it('ECN.304 all three exams posted: rank weighting applied', () => {
+    const figure = figureOf([90, 70, 50]);
+    expect(figure.leftOutParts).toEqual([]);
+    expect(figure.percent).toBeCloseTo(74.75, 10);
+    expect(figure.rankRules).toEqual([
+      { part: ECN304_EXAMS_PART, weights: [30, 25, 20], slots: 3, allGraded: true },
+    ]);
   });
 });
 

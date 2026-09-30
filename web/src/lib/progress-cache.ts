@@ -1,11 +1,12 @@
 /**
  * bb2dash — planner-state cache fan-out.
  *
- * Status and the rest of `assignment_progress` are read back through four
+ * Status and the rest of `assignment_progress` are read back through five
  * different caches, and every one of them holds the same fact:
  *
  *   ['work-items', …]                        Home's tracker + undated tray
  *   ['course-work-items', …]                 the course Stream's tracker
+ *   ['course-stream', …]                     the course Stream's feed (meta.status; T-12)
  *   ['popout', 'series', …]                  the assignment popout's series strip
  *   ['popout', 'assignment-progress', <id>]  the assignment popout's planner block
  *
@@ -13,7 +14,7 @@
  * know about, so a status changed on the course Stream snapped back (its cache
  * has a 5-minute staleTime and nothing invalidated it) and a status changed on
  * Home left the popout showing the old value for a minute. One helper now
- * patches, rolls back and invalidates all four, and both mutations use it.
+ * patches, rolls back and invalidates all of them, and both mutations use it.
  *
  * This is a leaf module on purpose: it owns the key prefixes (the key factories
  * in `queries.today.ts` / `queries.course.ts` / `queries.popout.ts` build on
@@ -33,6 +34,11 @@ export const WORK_ITEMS_KEY = ['work-items'] as const;
 export const COURSE_WORK_ITEMS_KEY = ['course-work-items'] as const;
 /** The assignment popout's series strip — `v_work_items` rows as well. */
 export const SERIES_KEY = ['popout', 'series'] as const;
+/**
+ * The course Stream's feed: `v_course_stream` rows, where an assignment post
+ * carries the status in `meta.status` and names the assignment in `ref_id`.
+ */
+export const COURSE_STREAM_KEY = ['course-stream'] as const;
 
 /** The exact key of one assignment's `assignment_progress` row. */
 export function assignmentProgressKey(assignmentId: string) {
@@ -74,9 +80,19 @@ export interface ProgressRowPatch {
   [column: string]: unknown;
 }
 
+/**
+ * The fields a Stream feed row shares with `CourseStreamRow`, declared
+ * structurally for the same reason as `WorkItemLike`.
+ */
+interface StreamPostLike {
+  ref_kind: string;
+  ref_id: string;
+  meta: { status?: string | null } | null;
+}
+
 /** What was in the caches before the optimistic patch, for a clean rollback. */
 export interface ProgressCacheSnapshot {
-  lists: [readonly unknown[], WorkItemLike[] | undefined][];
+  lists: [readonly unknown[], readonly unknown[] | undefined][];
   progress: { key: readonly unknown[]; value: unknown } | null;
 }
 
@@ -91,6 +107,7 @@ export async function cancelProgressQueries(
 ): Promise<void> {
   const cancels = WORK_ITEM_LIST_KEYS.map((queryKey) => queryClient.cancelQueries({ queryKey }));
   if (target.item_kind === 'assignment') {
+    cancels.push(queryClient.cancelQueries({ queryKey: COURSE_STREAM_KEY }));
     cancels.push(queryClient.cancelQueries({ queryKey: assignmentProgressKey(target.item_id) }));
   }
   await Promise.all(cancels);
@@ -131,6 +148,24 @@ export function patchProgressCaches(
     }
   }
 
+  if (patch.status !== undefined && target.item_kind === 'assignment') {
+    const status = patch.status;
+    for (const [key, posts] of queryClient.getQueriesData<StreamPostLike[]>({
+      queryKey: COURSE_STREAM_KEY,
+    })) {
+      lists.push([key, posts]);
+      if (!posts) continue;
+      queryClient.setQueryData<StreamPostLike[]>(
+        key,
+        posts.map((post) =>
+          post.ref_kind === 'assignment' && post.ref_id === target.item_id
+            ? { ...post, meta: { ...post.meta, status } }
+            : post,
+        ),
+      );
+    }
+  }
+
   let progress: ProgressCacheSnapshot['progress'] = null;
   if (target.item_kind === 'assignment') {
     const key = assignmentProgressKey(target.item_id);
@@ -165,6 +200,7 @@ export function invalidateProgressCaches(
     void queryClient.invalidateQueries({ queryKey });
   }
   if (target.item_kind === 'assignment') {
+    void queryClient.invalidateQueries({ queryKey: COURSE_STREAM_KEY });
     void queryClient.invalidateQueries({ queryKey: assignmentProgressKey(target.item_id) });
   }
 }

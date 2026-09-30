@@ -63,12 +63,22 @@
   display: flex;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  padding-bottom: var(--space-1);
+  /* R3-1: the scrollbar is the strip's visible slider along its bottom edge. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-600) var(--color-divider);
+  padding-bottom: var(--space-2);
   align-items: flex-end;
 }
 .tracker::-webkit-scrollbar {
-  display: none;
+  height: 8px;
+}
+.tracker::-webkit-scrollbar-track {
+  background: var(--color-divider);
+  border-radius: var(--radius-sm);
+}
+.tracker::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-600);
+  border-radius: var(--radius-sm);
 }
 .day {
   all: unset;

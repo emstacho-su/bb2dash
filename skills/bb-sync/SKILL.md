@@ -1,6 +1,7 @@
 ---
 name: bb-sync
-description: 'Run one Blackboard sync end to end for a queued agent_requests row. Checks the Blackboard session, claims the request, crawls every current-term course with bb.runAll, waits while the scheduled transform folds the crawl into the typed tables, closes the request, and reports what changed and what needs Stack in plain language. Use when Stack pastes claude "/bb-sync <id>" from the app Sync button, or says run a sync / sync Blackboard.'
+model: sonnet
+description: 'Run one Blackboard sync end to end for a queued agent_requests row. Checks the Blackboard session, claims the request, crawls every current-term course with bb.runAll, waits while the scheduled transform folds the crawl into the typed tables, closes the request, and reports what changed and what needs Stack in plain language. Use when Stack pastes claude --model sonnet "/bb-sync <id>" from the app Sync button (the desktop Sync button runs it), or says run a sync / sync Blackboard. Runs on Sonnet; its first step checks the model.'
 ---
 
 # bb-sync
@@ -26,6 +27,26 @@ sync with no id, create the request yourself in step 2 instead of claiming one.
 - Stack's user id for the crawler: `_21025199_1`. Term: `Fall 2026`.
 
 Post a one-line status after every step. A sync takes minutes; a silent run looks stalled.
+
+## Step −1 — Model check (before anything else)
+
+Syncs run on **Sonnet** (Stack, 2026-09-30), set three ways: the desktop Sync button and the web
+app's copied command both launch `claude --model sonnet "/bb-sync <id>"`, and this skill's
+frontmatter says `model: sonnet`, which runs the skill's turn on Sonnet whatever the session's
+model is (Claude Code skills reference: the override lasts for the rest of the turn and is not
+saved). This step verifies it took. Read your own model from your system prompt.
+
+- **A Sonnet model** → say `model: <id> — ok` and go on.
+- **Anything else** → stop here. Do not claim the request, open Blackboard or write anything; the
+  request stays `queued`, so nothing is lost. Tell Stack, in one short message, the model you are
+  on and the two ways to switch:
+  1. in this same terminal, type `/model sonnet`, then run `/bb-sync <id>` again; or
+  2. close the window and start `claude --model sonnet "/bb-sync <id>"` (the Sync button does this).
+
+  Reaching this branch means the frontmatter override did not apply (an older Claude Code, or a
+  model alias the account lacks); a skill cannot switch the model any other way, so asking is the
+  only honest move. **Exception:** if Stack says in this session to go ahead on the current model,
+  continue, and name the model in step 6's report.
 
 ## Step 0 — Apply Stack's Inbox answers first
 
@@ -141,6 +162,20 @@ any more: a sync that catalogues a file and leaves it unopenable is a sync that 
 by a human later, and the Inbox `data_gap` raised in the meantime is a nag about the sync's own
 unfinished work. **Everything with no bytes is pulled here, before the sync reports.**
 
+**The embedding key, first.** The pull ends by embedding what it stored, which needs the legacy
+anon JWT in `SB_ANON_JWT` (`embed-corpus` has `verify_jwt` on; the `sb_publishable_` key is
+refused). A terminal the desktop app opens does not have it set, so load it from the desktop
+app's own config, which already holds it, whenever it is missing. In Git Bash, once per run,
+before the scripts below:
+
+```bash
+export SB_ANON_JWT="${SB_ANON_JWT:-$(node -e "try{process.stdout.write(require(process.env.APPDATA+'/bb2dash/config.json').supabaseAnonKey||'')}catch{}")}"
+case "$SB_ANON_JWT" in eyJ*) echo "SB_ANON_JWT: set";; *) echo "SB_ANON_JWT: missing";; esac
+```
+
+Never print the value. `missing` means the config has no key: say so in step 6 and let the
+pull run anyway (it stores and extracts, and names what it could not embed).
+
 **The manifest.** Save this array to `<scratch>/manifest.json`. `null` back → say "no files to
 pull" and go to step 5.
 
@@ -207,6 +242,42 @@ submission's update sets `mime_type = coalesce(mime_type, <observed>)`, not the 
 since migration 085 the catalogue row already carries what Blackboard declared (`file.mimeType`)
 and a bbcswebdav download often answers `application/octet-stream`. Read the script's per-row JSON
 lines for the report; a line with `error` did not land.
+
+**Stale bytes (`--restale`).** When an instructor re-uploads a file under the same item, the
+transform keeps the row and appends `; stored bytes may be stale` to its notes. Re-pull those rows
+in the same tab, before the embed check. Their manifest is its own query:
+
+```sql
+select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
+         'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
+         'bucket', f.bucket, 'storage_path', f.storage_path, 'sha256', f.sha256,
+         'stale', true) order by f.id)
+  from bb_files f
+ where f.superseded_by is null and f.storage_path is not null
+   and f.notes like '%stored bytes may be stale%';
+```
+
+Walk the hops for these rows exactly as above, then:
+
+```
+node ingest/pull_files.mjs --manifest <scratch>/restale.json --downloads <scratch>/restale \
+     --fetch --restale --out <scratch>/4b-restale.sql
+# run <scratch>/4b-restale.sql through execute_sql
+node ingest/pull_files.mjs --restale-post --downloads <scratch>/restale
+```
+
+Unchanged bytes only clear the note. Changed bytes get a **new** Storage key (a `restale-<sha12>/`
+segment; the old object is never overwritten), and the `.sql` holds one `begin; … commit;` per row
+that deletes the row's old text units and points it at the new key, guarded on the old sha. That
+file carries only ids, keys and hashes, never document text: the new units wait on local disk
+and `--restale-post` posts them over PostgREST, then embeds them. A `--restale-post` line saying
+"owner SQL not run yet" means the `.sql` was skipped; run it and re-run `--restale-post`.
+Each transaction first checks `storage.objects` for the new key (md5 eTag and size of the fetched
+bytes) and aborts if they differ, so a re-run after a stopped run resumes a key it already filled
+instead of refusing it. A `.sql` from an earlier run is never overwritten: the script writes
+`<name>.<stamp>.sql` beside it and prints which. A row reported `not restaled … orphaned` has an
+object at its new key and no SQL; the next run resumes it, or a human removes that object. Count the
+re-pulled rows in `files_pulled` and any row with an `error` in `files_not_pulled`.
 
 `node ingest/embed_corpus.mjs --check` prints `missing_parts_before=<n>` and exits non-zero when
 anything is unembedded. Report that number.

@@ -1,7 +1,8 @@
 /**
  * L1 — `sum`: earned `cap·Σs/Σp_exp`, graded capacity `cap·Σp_graded/Σp_exp`;
  * `Σp_exp` = `points` under the points method, else Σ possible over known
- * counted items. Includes IST.323 `final_project` = proposal + log + defense.
+ * counted items. Includes a parent shaped like IST.323's `final_project` (proposal +
+ * log + defense) with a synthetic 11 / 3 / 6 split; B-12 re-cut the real one to 13 / 1 / 6.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -37,8 +38,8 @@ describe('sum under points (Σp_exp = points)', () => {
     { name: 'IST.323 exams, best case', cap: 30, count: 3, items: [counted(10, 9.8), counted(10, null), counted(10, null)], r: 1, earned: 29.8, gradedCap: 10, remainingCap: 20, remainingCount: 2 },
     { name: 'IST.466 attendance: 150 pts over 30 days, none posted, graded so far', cap: 150, count: 30, items: [], r: null, earned: 0, gradedCap: 0, remainingCap: 150, remainingCount: 30 },
     { name: 'IST.466 attendance at r = 0.5', cap: 150, count: 30, items: [], r: 0.5, earned: 75, gradedCap: 0, remainingCap: 150, remainingCount: 30 },
-    { name: 'IST.323 fp_log: checkpoint (1) known, completed log (2) missing', cap: 3, count: 2, items: [counted(1, 1)], r: null, earned: 1, gradedCap: 1, remainingCap: 2, remainingCount: 1 },
-    { name: 'IST.323 fp_log at best case', cap: 3, count: 2, items: [counted(1, 1)], r: 1, earned: 3, gradedCap: 1, remainingCap: 2, remainingCount: 1 },
+    { name: 'a 3-point log part: a 1-point checkpoint known, 2 points not yet posted', cap: 3, count: 2, items: [counted(1, 1)], r: null, earned: 1, gradedCap: 1, remainingCap: 2, remainingCount: 1 },
+    { name: 'the same 3-point log part at best case', cap: 3, count: 2, items: [counted(1, 1)], r: 1, earned: 3, gradedCap: 1, remainingCap: 2, remainingCount: 1 },
     { name: 'missing capacity with no count still leaves one slot', cap: 20, count: null, items: [counted(5, 4)], r: 0, earned: 4, gradedCap: 5, remainingCap: 15, remainingCount: 1 },
     { name: 'known possibles above points: no missing capacity, nothing clamped', cap: 11, count: 1, items: [counted(13, 13)], r: 1, earned: 13, gradedCap: 13, remainingCap: 0, remainingCount: 0 },
   ])('$name', ({ cap, count, items, r, earned, gradedCap, remainingCap, remainingCount }) => {
@@ -63,7 +64,7 @@ describe('sum under points (Σp_exp = points)', () => {
   });
 });
 
-describe('sum with children: IST.323 final_project = proposal 11 + log 3 + defense 6', () => {
+describe('sum with children: a final-project parent over three parts (synthetic 11 / 3 / 6)', () => {
   const components = [
     component({ id: 14, code: 'final_project', name: 'Final Project', points: 20, aggregation: 'sum' }),
     component({ id: 18, code: 'fp_proposal', name: 'Proposal', parentId: 14, points: 11, countExpected: 1, aggregation: 'single' }),

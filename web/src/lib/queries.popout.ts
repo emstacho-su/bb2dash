@@ -180,7 +180,7 @@ export function gradeComponentOptions(componentId: number | null | undefined) {
   });
 }
 
-/** Late policy + AI policy, shown verbatim. */
+/** The late policy, shown verbatim. */
 export function gradingSchemeOptions(courseId: string | undefined) {
   return queryOptions({
     queryKey: popoutKeys.scheme(courseId ?? 'none'),

@@ -69,30 +69,57 @@ Views: `v_upcoming` (not-yet-due, not finished), `v_overdue` (past due, still op
 `v_course_corpus` (files/stored/with-text per course+bucket), `v_course_map_latest`,
 `v_file_layout` (canonical storage/local paths + needs_move), `v_embedding_status`.
 
-## Search layer (migrations 010–013, 021)
+## Search layer (migrations 010–013, 021, 024–025, 121)
 
 Two retrieval tiers over the corpus, both scoped by course when wanted:
 
 * **Full-text** — generated `tsvector` + GIN on `bb_file_text.text`, `bb_content` (title+body),
   `announcements` (title+body). Query with `search_file_text(q, course, limit,
-  include_superseded)` → ranked hits with bucket/file context and a highlighted snippet.
+  include_superseded)` → one row per matching text unit: `rank` (`ts_rank`) and a plain-text
+  `snippet` (`ts_headline` with no markup) over the whole unit, on one side of its `[notes]`
+  marker only (121, below). It returns no `part_no`.
 * **Vector** — `bb_text_embeddings` holds `vector(384)` (gte-small, migration 011) per
-  `(text_id, model, part_no)` with an HNSW cosine index. Fully populated: 534 units →
-  1,195 rows. Corpus chunks are embedded with a `"{course} {bucket} — {file_name}: "` context
+  `(text_id, model, part_no)` with an HNSW cosine index. `embed-corpus` fills it; whether every
+  current unit has its parts is checked by `db/tests/phase18_post_embed_checks.sql` (Phase 18),
+  not quoted here as a count. Corpus chunks are embedded with a `"{course} {bucket} — {file_name}: "` context
   header; queries are embedded raw. Query with `match_file_text(query_embedding, model,
   course, limit, include_superseded)` or, preferred, `hybrid_search_file_text(q,
   query_embedding, ...)` (RRF over FTS + vector, deduped to one row per text unit).
 * **`part_range`** is a 0-based half-open range of CHARACTERS (code points, matching Postgres
   `char_length`/`substring` — not JS UTF-16 units) into `bb_file_text.text`, excluding the
   context header. It is the slice that was embedded, and the slice a snippet is cut from.
-* **Snippets (021)** — `hybrid_search_file_text` returns the MATCHED PASSAGE, plain text with
-  no markup, plus `part_no` (which part matched; null when unembedded) and `snippet_source`:
-  `fts_headline` (ts_headline over the best part's slice), `vector_part` (that slice's head),
-  `unit_head` (defensive fallback).
-* **Superseded files (018 + 021 + 022)** — `bb_files.superseded_by` points at the newer version;
-  all three functions take `p_include_superseded boolean default false` and drop those rows
-  before ranking. 4 of 64 files are superseded (IST.466 schedules 58 → 16 → 66, 40 → 66;
-  roster 35 → 37); `v_bb_files_current` is the 60 chain heads.
+* **Snippets per mode (021, 024–025, 121)** — plain text, no markup, in every mode.
+  * `match_file_text` (vector): `part_no` of the nearest part, `similarity`, and the text.
+  * `hybrid_search_file_text`: `score` (RRF), `similarity`, the MATCHED PASSAGE as `snippet`,
+    `part_no` = the part the snippet was cut from (null for the whole-unit fallback), and
+    `snippet_source`: `fts_headline` (`ts_headline` over the highest-ranking part whose slice
+    covers the tsquery; null part → the whole unit), `vector_part` (the nearest part's head),
+    `unit_head` (defensive fallback).
+  * **Speaker notes (121).** A snippet either holds no text from at or after the unit's first
+    `[notes]` marker, or starts with `[notes] ` and holds only text after it. A slice (or unit)
+    that spans the marker is headlined on the side that covers the tsquery, the pre-marker side
+    on a tie; a vector hit shows the pre-marker side; an empty side never wins.
+* **Superseded files (018 + 021 + 022, 120, 122)** — `bb_files.superseded_by` points at the newer
+  version; all three functions take `p_include_superseded boolean default false` and drop those
+  rows before ranking. `v_bb_files_current` is the chain heads. Since Phase 18 the fold writes it
+  itself: `supersede_replaced_files(run_id, sync_run_id)` (122, called by `stage_files` before
+  its missing pass, 124) supersedes a file whose Blackboard item now carries exactly one other
+  file, and asks one `stack_must_confirm` question (ref `supersede/<file id>`) when the item
+  carries several, or when only the file name matches under another item. Only the newest
+  registered crawl writes. 120 closed the two hand chains 2 → 151 (IST.323 syllabus) and
+  74 → 149 (IST.466 schedule).
+* **File weeks and sessions (123, 124)** — `file_week_no(course_id, path, file_name)` holds the
+  per-course week rules (GEO.103.lecture `Week N`, IST.323 `Lecture #N - Week N`, IST.352
+  `WKnn`; null elsewhere). `link_file_sessions(sync_run_id)` fills only null `week_no` /
+  `session_id` on current, non-`stack`, non-`my_submissions` files: through the linked reading's
+  date (`link_confidence` 1.0), else the week's only session (0.8); a week with several sessions
+  asks one question (ref `session_link/<file id>`). `link_confidence` is written only where it is
+  null. `stage_files`' `counts` carry `superseded_auto` and `session_links` (each the function's
+  jsonb). Storage keys are never rewritten.
+* **Per-item Blackboard links (126)** — `assignment_bb_url(course_id, item_id)` composes a test
+  item's Ultra page (`…/ultra/courses/<bb_id>/outline/assessment/test/<item>?courseId=<bb_id>&gradeitemView=details`)
+  when `bb_content` has that item as `resource/x-bb-asmt-test-link`, else null.
+  `stage_assignments` writes it into `assignments.bb_url` only where that is null.
 * **Edge functions** (`supabase/functions/`): `embed-corpus` (batch embedder, part-level
   resume, `max_parts`/`skip_parts` fan-out controls) and `search` v4 (the hub's retrieval API:
   `{q, course?, mode: fts|vector|hybrid, limit?, min_similarity?, include_superseded?}`).
@@ -156,6 +183,52 @@ a jsonb array of 1–52 objects carrying the `planner_events` insert columns, sh
 strict jsonpath; `starts_at` / `ends_at` must carry an explicit offset. Updates are **by id**, so
 the Google mirror sees patches, never delete + insert.
 
+## Course views, gap self-close and the scheduler heartbeat (migrations 110–116)
+
+* **`v_course_stream`** (027; filters and keys 110) — the course Stream, one row per post, 8
+  columns `course_id, post_kind, posted_at, ref_kind, ref_id, title, body, meta`. Announcement
+  `meta` = `{is_read, is_unread}`; `is_unread` is the bell's predicate (`read_at is null and
+  is_read is distinct from true`, 063). File `meta` = `{bucket, file_name, mime_type,
+  storage_path, source_url}`. Left out: `my_submissions` files, files whose `notes` carry
+  `missing_since_run=`, and `bb_content` nodes with `detail.missing_since`.
+* **`v_content_tree`** (027; two columns appended by 111) — Classwork, 19 columns. `missing_since
+  uuid` is `bb_content.detail->>'missing_since'` cast: the sync run that first found the node gone
+  from Blackboard (the P-98 vanish convention), a projection, not a stored column. `notes` is the
+  joined current file's `bb_files.notes`. A node with `missing_since` set is a **ghost** when a
+  live node in the same course shares its `bb_item_id`, otherwise **stale**.
+* **Gap self-close** (114) — `stage_gaps` questions (`suggested.source = 'stage_gaps'`) close
+  themselves when the fact arrives: grading scheme recorded, assignment dated (`due_at`,
+  `due_date` or `event_start`), reading dated, file stored or superseded.
+  `close_cleared_gaps(p_sync_run_id, p_trigger)` (service_role only) archives each with
+  `archived_by = 'stage_gaps'` and `decision = {closed_itself: true, rule, sync_run_id, trigger}`;
+  `trigger` is `fold` (from `stage_gaps`, which reports `counts.gaps_closed`) or
+  `bb_files_update` (the `bb_files_close_cleared_gaps_trg` statement trigger). A key that
+  already closed itself in the last 24 h stays open with `suggested.reopened_within_24h = true`
+  and is never machine-closed after that. `attention_answered()` ignores machine-closed rows, so
+  a hole that reopens is asked again; a row Stack answered still counts.
+* **`v_inbox_feedback`** was dropped by 116 (R-57). `agent_requests.kind = 'inbox_feedback'`
+  stays: it is /inbox-apply's kind. /inbox-apply reads `v_inbox_queue` (090).
+* **`v_scheduler_heartbeat`** (113) — two rows, `transform` (cron job `bb2dash-transform-tick`)
+  and `calendar_push` (`bb2dash-calendar-push`), only for `app_owner()`'s JWT; empty for anyone
+  else. Columns: `job, cron_jobname, tick_seconds` (120 for both), `last_tick_at` (newest
+  `cron.job_run_details.start_time`), `last_ok_at` (transform: newest `succeeded` cron row;
+  calendar_push: newest `calendar_push_runs` row with status `ok`, because the cron row says
+  `succeeded` even when the push failed), `consecutive_failures` and `last_error` (failures since
+  that last success, and the newest one's message; null when there are none), and `stage`:
+
+  | stage | when (first match wins) |
+  |---|---|
+  | `off` | cron job inactive or missing; for calendar_push also `app_settings.gcal_enabled` false |
+  | `failing` | `consecutive_failures >= 3` |
+  | `missing` | never ticked, or the newest tick is more than 600 s old |
+  | `late` | the newest tick is more than 240 s old (Home says nothing) |
+  | `ok` | otherwise |
+
+  The view is `security_invoker` over `private.scheduler_heartbeat()`, a SECURITY DEFINER function
+  in schema `private` (not exposed by PostgREST; usage to `authenticated` and `service_role`
+  only) because it reads `cron.*`. The rule itself is `private.heartbeat_stage(last_tick_at,
+  now, consecutive_failures, active)`.
+
 ## Seed state (2026-09-02)
 
 7 courses, 12 staff, 11 meeting patterns, 127 sessions, 25 grade components, 57 assignments,
@@ -193,6 +266,9 @@ Blackboard Ultra publishes an **iCal feed** of the calendar (Calendar → settin
 That is the low-cost recurring source for `assignments.due_at`; the browser session is for
 grades, content, announcements and anything the feed does not carry. Capture the feed URL during
 phase 2 and store it in `sync_runs.notes` or a `.env`, never in the repo.
+The daily `bb2dash-ical-poll` cron job was retired in migration 127 (Phase 18, R-72): it wrote an
+"ok" `sync_runs` row every day with no data. `ical_poll()`, `ical_collect()` and
+`app_settings.ical_*` are still defined.
 
 ## Access
 

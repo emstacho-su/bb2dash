@@ -43,8 +43,10 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const user = usePopover<HTMLSpanElement>();
-  const sidebar = useSidebar();
+  const [user, userAnchor] = usePopover<HTMLSpanElement>();
+  // Destructured, not read off the context object: `toggleRef` reaches a `ref`
+  // prop, and the React Compiler would otherwise treat the whole object as a ref.
+  const { open: sidebarOpen, toggle: toggleSidebar, toggleRef: sidebarToggleRef } = useSidebar();
 
   // Close the user menu on navigation.
   useEffect(() => {
@@ -102,13 +104,13 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         {/* ☰ — the course sidebar toggle */}
         <button
           type="button"
-          ref={sidebar.toggleRef}
+          ref={sidebarToggleRef}
           className={styles.icToggle}
           onClick={() => {
             user.close();
-            sidebar.toggle();
+            toggleSidebar();
           }}
-          aria-expanded={sidebar.open}
+          aria-expanded={sidebarOpen}
           aria-controls={SIDEBAR_ID}
           title="Courses sidebar"
         >
@@ -123,7 +125,7 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         <Bell />
 
         {/* User menu */}
-        <span ref={user.ref} style={{ display: 'contents' }}>
+        <span ref={userAnchor} style={{ display: 'contents' }}>
           <button
             type="button"
             className={user.open ? styles.icOpen : styles.ic}

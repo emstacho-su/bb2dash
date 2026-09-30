@@ -16,9 +16,26 @@
  *         include_superseded?}
  *   -> {mode, q, course, min_similarity, count, results: SearchResult[]}
  *
- * Phase 7 (`search` v4 + migration 021) adds `include_superseded` to the request
- * and `part_no` / `snippet_source` to each result row. Both result fields are
- * optional here so the app keeps working against the older deployed function.
+ * Phase 7 (migration 021) added `include_superseded` to the request.
+ *
+ * WHAT A ROW HOLDS DEPENDS ON THE MODE. The function passes the SQL rows through
+ * untouched, and the three SQL functions return three different shapes
+ * (migrations 021, 024, 025). Every mode carries `file_id`, `text_id`,
+ * `course_id`, `bucket`, `file_name`, `unit_kind` and `unit_no`; beyond that:
+ *   - fts    (`search_file_text`): `rank` and `snippet`, a plain-text
+ *            `ts_headline` over the WHOLE unit. No `score`, `similarity`,
+ *            `part_no` or `snippet_source`.
+ *   - vector (`match_file_text`): `part_no` (the nearest part — one row per
+ *            unit after the function keeps each unit's best part),
+ *            `similarity`, and `text`, the unit's full text. No `score`,
+ *            `snippet` or `snippet_source`.
+ *   - hybrid (`hybrid_search_file_text`, the default): `score` (an RRF sum,
+ *            ordering only), `similarity` (real cosine, null for an unembedded
+ *            unit), `snippet` (the matched passage, plain text),
+ *            `snippet_source`, and `part_no` — the part the snippet was cut
+ *            from, null for a whole-unit headline or an unembedded unit.
+ * `SearchResult` below is the hybrid shape. A field another mode does not send
+ * is simply absent at runtime, whatever the type says.
  *
  * verify_jwt is on. We authenticate with the logged-in user's Supabase session
  * access token (a real project-signed JWT), NOT the hardcoded anon key — the
@@ -32,15 +49,22 @@ import { supabaseAnonKey, supabaseUrl } from './supabase/env';
 export type SearchMode = 'fts' | 'vector' | 'hybrid';
 
 /**
- * Where a result's snippet came from (migration 021 / `search` v4):
- *   - `fts_headline` / `vector_part` — the passage that actually matched
- *   - `unit_head` — only the start of the unit, no passage evidence
- * A backend that predates 021 sends neither this nor `part_no`, so both are
- * optional here and the UI degrades to what it showed before.
+ * Where a hybrid result's snippet came from (migrations 021, 024, 025):
+ *   - `fts_headline` — a keyword hit: a headline over the highest-ranking part
+ *     whose slice satisfies the query (`part_no` set), or over the whole unit
+ *     when no part does (`part_no` null)
+ *   - `vector_part` — a vector-only hit: the head of the nearest part
+ *   - `unit_head` — a defensive fallback: only the start of the unit
+ * Only hybrid mode sends it (see the header); fts and vector rows carry no
+ * `snippet_source`, so it is optional here and the UI degrades without it.
  */
 export type SnippetSource = 'fts_headline' | 'vector_part' | 'unit_head';
 
-/** One row of the `search` function's `results` array. */
+/**
+ * One row of the `search` function's `results` array, in hybrid mode's shape.
+ * fts and vector rows differ (see the header): fts sends `rank` for `score`
+ * and no `similarity`; vector sends `text` for `snippet` and no `score`.
+ */
 export interface SearchResult {
   file_id: number;
   text_id: number;
@@ -50,7 +74,7 @@ export interface SearchResult {
   /** 'slide' | 'page' | 'doc' | 'sheet' — the extracted unit's kind. */
   unit_kind: string;
   unit_no: number | null;
-  /** RRF (hybrid) / rank (fts) / distance-derived (vector) rank score. */
+  /** Hybrid only: an RRF rank sum that sets the order and means nothing else. fts sends `rank` instead; vector sends neither. */
   score: number;
   /**
    * Cosine similarity of the query vector to the unit. Null when the unit has
@@ -58,10 +82,14 @@ export interface SearchResult {
    * See SEMANTIC_SIMILARITY_MIN.
    */
   similarity: number | null;
+  /** Plain text. Hybrid: the matched passage; fts: a whole-unit headline; vector: absent (rows carry `text`). */
   snippet: string;
-  /** The part the snippet was cut from; null for a whole-unit snippet or an unembedded unit. */
+  /**
+   * Hybrid: the part the snippet was cut from, null for a whole-unit headline
+   * or an unembedded unit. Vector: the nearest part. fts: absent.
+   */
   part_no?: number | null;
-  /** How the snippet was produced. Absent on a pre-021 backend. */
+  /** How the snippet was produced. Hybrid only; absent in fts and vector mode. */
   snippet_source?: SnippetSource | null;
 }
 
@@ -110,10 +138,11 @@ export function isKeywordMatch(result: Pick<SearchResult, 'similarity'>): boolea
 /* ---------------------------------------------------------------------------
  * Which part of a long unit matched
  *
- * A 4,000-character syllabus is embedded in parts; the snippet is now cut from
- * the part that carries the match rather than the head of the unit, and
- * `part_no` names that part — null when the snippet is the whole unit (the
- * fallback headline) or the unit has no embedding. Part 1 IS the head, and
+ * A 4,000-character syllabus is embedded in parts. In hybrid mode the snippet
+ * is cut from the part that carries the match rather than the head of the unit,
+ * and `part_no` names that part — null when the snippet is the whole unit (the
+ * fallback headline) or the unit has no embedding. In vector mode `part_no` is
+ * the nearest part; fts rows carry none. Part 1 IS the head, and
  * short units only ever have one part, so naming it would be noise: the hint
  * only means something from part 2 on.
  * ------------------------------------------------------------------------ */

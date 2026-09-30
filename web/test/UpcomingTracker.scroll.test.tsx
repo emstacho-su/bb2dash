@@ -56,7 +56,16 @@ beforeEach(() => {
 
   originals.clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
   originals.scrollLeft = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollLeft');
+  originals.scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth');
 
+  // S2-home-1: the wheel hook needs to know how far the strip can go. The
+  // fixture strip is 44 columns, whatever the container width.
+  Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+    configurable: true,
+    get() {
+      return (width / 14) * 44;
+    },
+  });
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
     configurable: true,
     get() {
@@ -263,5 +272,100 @@ describe('UpcomingTracker — the strip’s own scrolling is not read as a drag'
 
     expect(screen.getByText('Window · Sep 24 – Oct 7')).toBeInTheDocument();
     expect(strip().scrollLeft).toBe(14 * COLUMN);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * S2-home-1 — a plain mouse moves the strip (useHorizontalScroll)
+ * ------------------------------------------------------------------------ */
+
+describe('UpcomingTracker — wheel and drag with a plain mouse (S2-home-1)', () => {
+  function wheel(init: WheelEventInit): boolean {
+    const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, ...init });
+    strip().dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  function press(target: HTMLElement, fromX: number, toX: number) {
+    fireEvent.pointerDown(target, { pointerType: 'mouse', button: 0, clientX: fromX });
+    fireEvent.pointerMove(target, { pointerType: 'mouse', buttons: 1, clientX: toX });
+    fireEvent.pointerUp(target, { pointerType: 'mouse', button: 0, clientX: toX });
+    fireEvent.click(target);
+  }
+
+  it('a vertical wheel moves the strip sideways', async () => {
+    await renderTracker();
+    fireEvent.click(strip()); // R3-1: armed by a click
+    expect(wheel({ deltaY: 3 * COLUMN, deltaX: 0 })).toBe(true);
+    expect(strip().scrollLeft).toBe(3 * COLUMN);
+  });
+
+  it('leaves a native horizontal delta to the browser', async () => {
+    await renderTracker();
+    expect(wheel({ deltaY: 0, deltaX: 40 })).toBe(false);
+    expect(strip().scrollLeft).toBe(0);
+  });
+
+  it('a 3 px press on a day still opens it', async () => {
+    await renderTracker();
+    const day = screen.getAllByRole('tab')[4];
+    press(day, 200, 203);
+    expect(day).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('a 20 px drag moves the strip and does not open the day under the pointer', async () => {
+    await renderTracker();
+    const day = screen.getAllByRole('tab')[4];
+    press(day, 200, 180);
+    expect(strip().scrollLeft).toBe(20);
+    expect(day).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('◂ ▸ still page fourteen days after a wheel', async () => {
+    await renderTracker();
+    fireEvent.click(strip());
+    wheel({ deltaY: 2 * COLUMN, deltaX: 0 });
+    fireEvent.scroll(strip());
+    fireEvent.click(pagerForward());
+    await settle();
+    expect(strip().scrollLeft).toBe(16 * COLUMN);
+    fireEvent.click(pagerBack());
+    await settle();
+    expect(strip().scrollLeft).toBe(2 * COLUMN);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * R3-1 — the strip reaches back to the term's first week and opens on today
+ * ------------------------------------------------------------------------ */
+
+describe('UpcomingTracker — back to the term start (R3-1)', () => {
+  const TERM_START = '2026-08-24';
+  const PAST = makeWorkItem({ item_id: 'a-past', title: 'Syllabus quiz', due_on: '2026-08-28', effort: 1 });
+
+  it('opens with today first in view even when the strip starts in the past', async () => {
+    render(
+      <UpcomingTracker items={[PAST, ...ITEMS]} startIso={TERM_START} onStatusChange={vi.fn()} />,
+    );
+    await settle();
+    // Aug 24 → Sep 10 is 17 columns back.
+    expect(strip().scrollLeft).toBe(17 * COLUMN);
+    expect(screen.getByText('Window · Sep 10 – Sep 23')).toBeInTheDocument();
+  });
+
+  it('can scroll back to the term’s first day', async () => {
+    render(<UpcomingTracker items={ITEMS} startIso={TERM_START} onStatusChange={vi.fn()} />);
+    await settle();
+    freeScrollTo(0);
+    expect(screen.getByText('Window · Aug 24 – Sep 6')).toBeInTheDocument();
+  });
+
+  it('pages back with ◂ into the past weeks', async () => {
+    render(<UpcomingTracker items={ITEMS} startIso={TERM_START} onStatusChange={vi.fn()} />);
+    await settle();
+    expect(pagerBack()).toBeEnabled();
+    fireEvent.click(pagerBack());
+    await settle();
+    expect(strip().scrollLeft).toBe(3 * COLUMN);
   });
 });
