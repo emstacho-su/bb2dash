@@ -9,7 +9,9 @@ and nothing in here renders any of the UI — it loads `appUrl` and gets out of 
 way.
 
 Windows 11 only. Unpacked build, no installer, no code signing, no auto-update
-(Phase 12 contract, C-10).
+(Phase 12 contract, C-10). New builds come from the logon builder in
+[`launch/`](launch/README.md), and the app swaps to one only when Stack presses
+**Update now** (see *Updates* below).
 
 ## Prerequisites
 
@@ -145,12 +147,23 @@ machine and brought back.
 
 ## Living with it
 
-* **Closing the window hides it.** The app keeps running in the tray and keeps
-  polling. The tray menu is **Open bb2dash / Check now / Quit**; left-clicking
-  the tray icon shows the window. **Quit** is the only thing that ends the
-  process.
+* **Closing the window closes it for real** (2026-09-30). The web app's renderer
+  process goes away; the main process, the tray and the poller keep running, so
+  toasts still arrive. The tray menu is **Open bb2dash / Check now / Quit**;
+  left-clicking the tray icon or choosing *Open* builds a fresh window, and
+  clicking a toast builds one straight at the toast's screen. **Quit** is the
+  only thing that ends the process.
+  Measured on the packed build (signed-out page, so the renderer is on the small
+  side): window open 4 processes, 434-660 MB working set; closed 3 processes,
+  295-313 MB (main ~110, GPU ~130, network utility ~57). The GPU process is the
+  largest part of what stays.
+* **The session stays fresh with the window closed.** When the web session has
+  expired and no window is open, the shell loads the app once in a hidden page
+  for 20 seconds (at most every 10 minutes) so the web app's own proxy rewrites
+  the cookie, then destroys the page. Main still never calls the auth API.
 * **One instance.** Launching a second time shows and focuses the window that is
-  already open; there is never a second taskbar button.
+  already open, or builds one if it was closed; there is never a second taskbar
+  button.
 * **Signing in** happens on the web app's own `/login` page inside the window.
   The session cookie lives in the window's persistent partition, so it survives
   a restart. The shell reads that cookie to make its own database reads and
@@ -160,10 +173,39 @@ machine and brought back.
   key or cookie value is ever written. That is the first place to look when
   something does not happen.
 * **Other state** in `%APPDATA%\bb2dash`: `window-state.json` (size and
-  position), `notify-watermark.json` (what has already been notified about).
-  Deleting them is safe; the app rebuilds both.
+  position), `notify-watermark.json` (what has already been notified about),
+  `update-reminder.json` (the *Update later* time). Deleting them is safe; the
+  app rebuilds all three.
 * **Links to anywhere else** — a signed file URL from Materials, an outside link
   in an announcement — open in the default browser, not in the window.
+
+## Updates
+
+Only for the app as the logon builder installs it
+(`%LOCALAPPDATA%\bb2dash-launch\current\bb2dash.exe`); a dev run or a
+hand-packed build does none of this.
+
+* **Builds without a logon.** At launch and every 6 hours
+  (`BUILDER_INTERVAL_HOURS`) the app starts the `Bb2dash-LogonBuild` task, unless
+  it is already running. The builder fetches, rebuilds only when `desktop/`
+  changed, and never switches builds while the app is open.
+* **The prompt.** The running build is the tree hash in the resolved path of the
+  executable (`builds\<tree>\win-unpacked`). When the builder's `state.json`
+  records a newer `lastBuiltSha` whose build is on disk, the next time a window
+  opens a small bb2dash window appears over it: *A new version of bb2dash is
+  ready* with **Update now** and **Update later**. *Update later* asks when to
+  remind: **In 1 hour**, **In 4 hours** or **Tomorrow** (09:00 local). The
+  choice is saved in `%APPDATA%\bb2dash\update-reminder.json`, and no prompt
+  appears before then. Closing the prompt saves nothing; the next open asks
+  again. It is never a native dialog, and under `BB2DASH_TEST=1` it is only
+  recorded (`update-prompt` event).
+* **Update now** starts `launch\update-now.ps1` (detached, hidden) and quits.
+  The helper waits for every bb2dash process to exit, points `current` at the
+  new build and starts `Bb2dash-App`. If the app does not exit within 60 s, the
+  build is missing or the junction cannot be moved, the old build stays current
+  and the app starts on it. Its log is
+  `%LOCALAPPDATA%\bb2dash-launch\logs\update-now.log`; the app's side is in
+  `main.log` under `[update]`.
 
 ## Acceptance script
 
@@ -173,7 +215,8 @@ The six steps that say this phase is done, run from the unpacked build:
    taskbar button, and you are still signed in.
 2. Double-click it again: the same window is focused. No second window, no
    second process.
-3. Close the window and reopen it from the tray: still signed in.
+3. Close the window (the renderer process goes away) and reopen it from the
+   tray: a new window, still signed in.
 4. Trigger a sync: one "Sync landed with N changes" toast, with the right N.
 5. Receive a "grade posted" and a "due tomorrow" toast naming the course and the
    item; clicking each raises the window on the right screen.
