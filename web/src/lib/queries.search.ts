@@ -254,7 +254,7 @@ const DEFAULT_MODE: SearchMode = 'hybrid';
 const DEFAULT_LIMIT = 12;
 const DEFAULT_INCLUDE_SUPERSEDED = false;
 /** Below this the query is not worth an embedding round-trip. */
-const MIN_QUERY_CHARS = 2;
+export const MIN_QUERY_CHARS = 2;
 
 /**
  * One place the defaults live, so the query key and the request body can never

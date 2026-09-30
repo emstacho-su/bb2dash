@@ -6,9 +6,10 @@ import { useEffect } from 'react';
 import { clearPersistedQueryCache } from '@/lib/query-provider';
 import { SIDEBAR_ID } from '@/lib/sidebar-preference';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
-import { HamburgerIcon, SearchIcon, UserIcon } from './icons';
+import { HamburgerIcon, UserIcon } from './icons';
 import { ActivityMenu } from './ActivityMenu';
 import { Bell } from './Bell';
+import { NavSearch } from './NavSearch';
 import { useSidebar } from './SidebarProvider';
 import { SyncButton } from './SyncButton';
 import { usePopover } from './usePopover';
@@ -18,7 +19,7 @@ import styles from './TopNav.module.css';
  * The persistent top bar — GUI decision 1c.
  *
  *   bb2dash mark · Home · Planner · Inbox · Grades · Materials
- *   … cmd-K affordance · Sync … ☰ Courses · activity · bell · user
+ *   … search icon · Sync … ☰ Courses · activity · bell · user
  *
  * ☰ no longer opens a pop-down list: it toggles the course sidebar below the
  * bar (`CourseSidebar`). The pop-down capped the content column at
@@ -29,6 +30,9 @@ import styles from './TopNav.module.css';
  * Phase 9 added the Inbox link (between Planner and Grades), the Sync button
  * next to ⌘K, and the Activity pop-down. Phase 11 replaced the disabled bell
  * placeholder with the real one (`Bell.tsx`).
+ *
+ * 2026-09-30: the wide "Search ⌘K" button became a search icon that expands
+ * in place into a field (`NavSearch.tsx`), with the results in a popover.
  */
 
 const NAV_LINKS = [
@@ -67,15 +71,11 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
     router.refresh();
   }
 
-  function openCommandPalette() {
-    window.dispatchEvent(new CustomEvent('bb2dash:command-palette'));
-  }
-
   return (
     <nav className={styles.bar} aria-label="Primary">
       <Link href="/" className={styles.brand}>
         <span className={styles.mark} aria-hidden="true" />
-        bb2dash
+        <span className={styles.brandName}>bb2dash</span>
       </Link>
 
       <span className={styles.links}>
@@ -91,12 +91,8 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         ))}
       </span>
 
-      {/* cmd-K mount point — W-8 replaces the handler with the real palette. */}
-      <button type="button" className={styles.cmdk} onClick={openCommandPalette}>
-        <SearchIcon />
-        Search
-        <span className={styles.kbd}>⌘K</span>
-      </button>
+      {/* Search — an icon that expands into a field; ⌘K / Ctrl+K opens it too. */}
+      <NavSearch />
 
       <SyncButton />
 
