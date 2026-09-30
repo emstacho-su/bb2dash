@@ -22,17 +22,17 @@ or archived).
 
 ## Step 0 — Resolve the vault (every mode, `--dry-run` included)
 
-Before any claim, read or write, resolve where notes go. The shell's `HARNESS_VAULT` and
-`HARNESS_INGEST_PROJECT` win; otherwise read them from the machine file (`$HARNESS_MACHINE_ENV`,
-else `~/.harness/machine.env`). The `projects` realm must say it is the `projects` realm. In
-Git Bash:
+Before any claim, read or write, resolve where notes go. The harness resolver reads the shell
+first, then the machine file (`$HARNESS_MACHINE_ENV`, else `~/.harness/machine.env`), and exits 2
+unless the vault exists and `<vault>/projects/.realm` reads `projects`. In Git Bash:
 
 ```bash
-MF="${HARNESS_MACHINE_ENV:-$HOME/.harness/machine.env}"
-machine_val() { grep -m1 "^$1=" "$MF" 2>/dev/null | cut -d= -f2- | tr -d '\r'; }
-VAULT="${HARNESS_VAULT:-$(machine_val HARNESS_VAULT)}"
-INGEST="${HARNESS_INGEST_PROJECT:-$(machine_val HARNESS_INGEST_PROJECT)}"
-REALM="$( { sed '1s/^\xEF\xBB\xBF//' "$VAULT/projects/.realm" | tr -d '[:space:]'; } 2>/dev/null)"
+CFG="$(node C:/Users/stack/agentic-harness/hooks/resolve-config.mjs --json --require-realm projects)"
+RC=$?
+cfg() { CFG="$CFG" node -p "JSON.parse(process.env.CFG).$1 ?? ''" 2>/dev/null; }
+VAULT="$(cfg vault)"
+INGEST="$(cfg ingestProject)"
+REALM="$( [ "$RC" = 0 ] && [ "$(cfg realmCheck.ok)" = true ] && echo projects || echo "check-failed-$RC")"
 case "$VAULT$INGEST" in *[\"\'\`\$]*) REALM="unsafe-path" ;; esac
 if [ -n "$VAULT" ] && [ -n "$INGEST" ] && [ -d "$INGEST" ] && [ "$REALM" = projects ]; then
   echo "vault=$VAULT ingest=$INGEST realm=projects ok"
