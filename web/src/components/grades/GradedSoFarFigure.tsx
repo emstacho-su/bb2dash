@@ -63,7 +63,7 @@ export function rankRuleText(rule: RankRule): string {
   const head = `${rule.part}: weighted ${weights} from highest score to lowest`;
   return rule.allGraded
     ? `${head}.`
-    : `${head} once all ${rule.weights.length} are graded; until then the graded ones are averaged.`;
+    : `${head} once all ${rule.slots} are graded; until then the graded ones are averaged.`;
 }
 
 /* -- Blackboard's number, beside ours and never merged with it ------------- */

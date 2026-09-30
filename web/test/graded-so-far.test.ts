@@ -182,20 +182,20 @@ describe('rank rules', () => {
 
   it('states the rule with the stored weights while exams are still ungraded', () => {
     const input = modelInput({ components: [rankPart()], items: [exam(1, 80), exam(2, null), exam(3, null)] });
-    expect(rulesOf(input)).toEqual([{ part: 'Exams (rank-weighted)', weights: [30, 25, 20], allGraded: false }]);
+    expect(rulesOf(input)).toEqual([{ part: 'Exams (rank-weighted)', weights: [30, 25, 20], slots: 3, allGraded: false }]);
   });
 
   it('marks the rule allGraded once every slot is graded (F11)', () => {
     const figure = figureFor('F11');
     expect(figure.state === 'figure' && figure.rankRules).toEqual([
-      { part: 'Exams', weights: [30, 25, 20], allGraded: true },
+      { part: 'Exams', weights: [30, 25, 20], slots: 3, allGraded: true },
     ]);
   });
 
   it('takes the weights from the component, not a constant (F12)', () => {
     const figure = figureFor('F12');
     expect(figure.state === 'figure' && figure.rankRules).toEqual([
-      { part: 'Exams', weights: [30, 20, 10], allGraded: false },
+      { part: 'Exams', weights: [30, 20, 10], slots: 3, allGraded: false },
     ]);
   });
 
@@ -217,6 +217,41 @@ describe('rank rules', () => {
     { name: 'all zero', rankWeights: [0, 0, 0] },
   ])('states no rule for a $name weight list', ({ rankWeights }) => {
     const input = modelInput({ components: [rankPart({ rankWeights })], items: [exam(1, 80)] });
+    expect(rulesOf(input)).toEqual([]);
+  });
+
+  // Round 2, item 3: the engine ranks over max(weights, items, 1) slots.
+  it('pads the weights with 0 to the engine’s slot count when columns outnumber weights', () => {
+    const input = modelInput({
+      components: [rankPart()],
+      items: [exam(1, 80), exam(2, 70), exam(3, null), exam(4, null)],
+    });
+    expect(rulesOf(input)).toEqual([
+      { part: 'Exams (rank-weighted)', weights: [30, 25, 20, 0], slots: 4, allGraded: false },
+    ]);
+  });
+
+  // Round 2, item 4: the engine never rank-weights a parent (it sums its
+  // children) and the figure lists no extra-credit part.
+  it('states no rule for a rank-weighted parent', () => {
+    const input = modelInput({
+      components: [
+        rankPart({ id: 9, name: 'Assessments', weightPct: 100 }),
+        component({ id: 1, name: 'Midterm', parentId: 9, weightPct: 100, aggregation: 'single' }),
+      ],
+      items: [exam(1, 90)],
+    });
+    expect(rulesOf(input)).toEqual([]);
+  });
+
+  it('states no rule for an extra-credit rank-weighted part', () => {
+    const input = modelInput({
+      components: [
+        component({ id: 2, name: 'Homework', weightPct: 100, aggregation: 'average', countExpected: 1 }),
+        rankPart({ id: 1, name: 'Bonus exams', weightPct: 10, isExtraCredit: true }),
+      ],
+      items: [item({ key: 'col:hw', componentId: 2, possible: 10, score: 9 }), exam(1, 80)],
+    });
     expect(rulesOf(input)).toEqual([]);
   });
 

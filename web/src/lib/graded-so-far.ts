@@ -36,7 +36,7 @@
  */
 
 import { evaluateCourse, standingFor } from './grade-model';
-import { usableWeights } from './grade-model/aggregations/rank-weighted';
+import { slotWeights, usableWeights } from './grade-model/aggregations/rank-weighted';
 import { flattenOutcomes, type NodeOutcome } from './grade-model/evaluate';
 import { isCounted, realScoreOf, unlinkedScoredKeys } from './grade-model/items';
 import type { ItemInput, ModelInput } from './grade-model/types';
@@ -61,8 +61,10 @@ export type FigureReason =
 export interface RankRule {
   /** The component's name, as the figure's part lists print it. */
   readonly part: string;
-  /** Highest rank first, exactly as stored. */
+  /** Highest rank first: the stored weights, padded with 0 to `slots` (the engine's `slotWeights`). */
   readonly weights: readonly number[];
+  /** The engine's slot count for this part: max(stored weights, counted columns, 1). */
+  readonly slots: number;
   /** Every slot is graded, so the weights apply now; until then graded ones are averaged. */
   readonly allGraded: boolean;
 }
@@ -109,14 +111,28 @@ export function asOfFor(items: readonly ItemInput[]): string | null {
   return stamps.reduce((newest, stamp) => (Date.parse(stamp) > Date.parse(newest) ? stamp : newest));
 }
 
-/** Every rank-weighted part with usable weights, parents' children included, in syllabus order. */
+/**
+ * Every rank-weighted part the engine actually ranks, in syllabus order: a leaf
+ * (a parent sums its children, whatever its own aggregation says), not extra
+ * credit (the same filter the part lists use), with usable weights. The slot
+ * count is the engine's own (a leaf's graded + remaining slots), so a part with
+ * more columns than weights reads "once all 4" with its extra slot at 0.
+ */
 export function rankRulesFor(outcomes: readonly NodeOutcome[]): readonly RankRule[] {
   return flattenOutcomes(outcomes).flatMap((outcome) => {
-    const { component } = outcome.node;
-    if (component.aggregation !== 'rank_weighted') return [];
+    const { component, children, extraCredit } = outcome.node;
+    if (children.length > 0 || extraCredit || component.aggregation !== 'rank_weighted') return [];
     const weights = usableWeights(component.rankWeights);
     if (weights === null) return [];
-    return [{ part: component.name, weights, allGraded: outcome.state === 'graded' }];
+    const slots = outcome.gradedCount + outcome.remainingCount;
+    return [
+      {
+        part: component.name,
+        weights: slotWeights(weights, slots),
+        slots,
+        allGraded: outcome.state === 'graded',
+      },
+    ];
   });
 }
 

@@ -174,7 +174,7 @@ describe("GradedSoFarFigure — Blackboard's own total", () => {
  * built from the stored weights. The two strings are the Contract's, frozen.
  */
 describe('GradedSoFarFigure — the rank-weighted rule', () => {
-  const ECN_RULE: RankRule = { part: 'Exams (rank-weighted)', weights: [30, 25, 20], allGraded: false };
+  const ECN_RULE: RankRule = { part: 'Exams (rank-weighted)', weights: [30, 25, 20], slots: 3, allGraded: false };
 
   it('states the rule while not every slot is graded (ECN.304 today)', () => {
     expect(rankRuleText(ECN_RULE)).toBe(
@@ -189,13 +189,13 @@ describe('GradedSoFarFigure — the rank-weighted rule', () => {
   });
 
   it('prints each weight as stored, without a trailing ".0", and counts them', () => {
-    expect(rankRuleText({ part: 'Quizzes', weights: [12.5, 10, 7.5, 5], allGraded: false })).toBe(
+    expect(rankRuleText({ part: 'Quizzes', weights: [12.5, 10, 7.5, 5], slots: 4, allGraded: false })).toBe(
       'Quizzes: weighted 12.5 / 10 / 7.5 / 5 from highest score to lowest once all 4 are graded; until then the graded ones are averaged.',
     );
   });
 
   it('renders one sentence per rule, after the headline', () => {
-    const rules = [ECN_RULE, { part: 'Quizzes', weights: [2, 1], allGraded: true }];
+    const rules = [ECN_RULE, { part: 'Quizzes', weights: [2, 1], slots: 2, allGraded: true }];
     render(<GradedSoFarFigure figure={{ ...FIGURE, rankRules: rules }} />);
     const lines = screen.getAllByTestId('rank-rule');
     expect(lines.map((line) => line.textContent)).toEqual(rules.map(rankRuleText));
@@ -235,6 +235,45 @@ describe('GradedSoFarFigure — the rank-weighted rule', () => {
     render(<GradedSoFarFigure figure={figure} />);
     expect(screen.getByTestId('rank-rule').textContent).toBe(
       'Midterms: weighted 3 / 2 / 1 from highest score to lowest once all 3 are graded; until then the graded ones are averaged.',
+    );
+  });
+
+  // Round 2, item 3: more counted columns than weights. The engine ranks over
+  // max(weights, items) slots and the extra slots weigh 0; the sentence says so.
+  it('states the engine’s slot count, weights padded with 0, when columns outnumber weights', () => {
+    const figure = gradedSoFar(
+      modelInput({
+        components: [
+          component({ id: 1, name: 'Exams (rank-weighted)', weightPct: 100, aggregation: 'rank_weighted', rankWeights: [30, 25, 20], countExpected: 3 }),
+        ],
+        items: [1, 2, 3, 4].map((n) =>
+          item({ key: `col:exam${n}`, componentId: 1, possible: 100, score: n === 1 ? 80 : null }),
+        ),
+      }),
+    );
+    render(<GradedSoFarFigure figure={figure} />);
+    expect(screen.getByTestId('rank-rule').textContent).toBe(
+      'Exams (rank-weighted): weighted 30 / 25 / 20 / 0 from highest score to lowest once all 4 are graded; until then the graded ones are averaged.',
+    );
+  });
+
+  it('reads ECN.304’s real shape unchanged: three exam columns, three weights', () => {
+    const figure = gradedSoFar(
+      modelInput({
+        components: [
+          component({ id: 1, name: 'Exams (rank-weighted)', weightPct: 75, aggregation: 'rank_weighted', rankWeights: [30, 25, 20], countExpected: 3 }),
+          component({ id: 2, name: 'Participation', weightPct: 25, aggregation: 'manual' }),
+        ],
+        items: [
+          item({ key: 'col:exam1', componentId: 1, possible: 100, score: 88.889 }),
+          item({ key: 'col:exam2', componentId: 1, possible: 100, score: null }),
+          item({ key: 'col:exam3', componentId: 1, possible: 100, score: null }),
+        ],
+      }),
+    );
+    render(<GradedSoFarFigure figure={figure} />);
+    expect(screen.getByTestId('rank-rule').textContent).toBe(
+      'Exams (rank-weighted): weighted 30 / 25 / 20 from highest score to lowest once all 3 are graded; until then the graded ones are averaged.',
     );
   });
 
