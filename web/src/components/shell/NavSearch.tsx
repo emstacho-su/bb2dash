@@ -92,6 +92,20 @@ export function NavSearch() {
       className={expanded ? styles.rootOpen : styles.root}
       data-search={expanded ? 'open' : 'closed'}
     >
+      {/* Mounted per expansion, so the query, mode and highlight start clean. Rendered before
+          the icon so the page order matches what is drawn: the field grows to the icon's left,
+          and Tab moves left to right. */}
+      {expanded && (
+        <ExpandedSearch
+          fieldRef={fieldRef}
+          rootRef={rootRef}
+          iconPressedRef={iconPressedRef}
+          fieldId={fieldId}
+          listId={listId}
+          onCollapse={collapse}
+        />
+      )}
+
       <button
         ref={iconRef}
         type="button"
@@ -114,18 +128,6 @@ export function NavSearch() {
       >
         <SearchIcon />
       </button>
-
-      {/* Mounted per expansion, so the query, mode and highlight start clean. */}
-      {expanded && (
-        <ExpandedSearch
-          fieldRef={fieldRef}
-          rootRef={rootRef}
-          iconPressedRef={iconPressedRef}
-          fieldId={fieldId}
-          listId={listId}
-          onCollapse={collapse}
-        />
-      )}
     </div>
   );
 }

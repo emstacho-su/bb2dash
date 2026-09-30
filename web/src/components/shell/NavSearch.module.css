@@ -38,8 +38,8 @@
 }
 
 .field {
-  /* Before the icon, so the pill grows to the left. */
-  order: -2;
+  /* Rendered before the icon in the page (NavSearch.tsx), so the pill grows to the left and
+     Tab moves left to right; no CSS `order`. */
   flex: 0 1 auto;
   width: var(--nav-search-width);
   min-width: var(--nav-search-min);
@@ -70,9 +70,8 @@
   }
 }
 
-/* Between the field and the icon. */
+/* Between the field and the icon (its page position, after the field). */
 .spinner {
-  order: -1;
   flex: none;
   width: 13px;
   height: 13px;

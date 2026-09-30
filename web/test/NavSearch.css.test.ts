@@ -49,10 +49,10 @@ describe('NavSearch.module.css — composes', () => {
 });
 
 describe('NavSearch.module.css — the field grows leftward from the icon', () => {
-  it('orders the field before the icon inside the pill', () => {
-    const field = rules(CSS).get('field') ?? '';
-    const order = /(?:^|;|\s)order\s*:\s*(-?\d+)/.exec(field);
-    expect(order, '.field needs a negative `order`').not.toBeNull();
-    expect(Number(order?.[1])).toBeLessThan(0);
+  it('leaves the order to the page, not to CSS, so Tab moves left to right (code review, 2026-09-30)', () => {
+    for (const name of ['field', 'spinner']) {
+      const body = rules(CSS).get(name) ?? '';
+      expect(/(?:^|;|\s)order\s*:/.test(body), `.${name} must not reorder with CSS`).toBe(false);
+    }
   });
 });

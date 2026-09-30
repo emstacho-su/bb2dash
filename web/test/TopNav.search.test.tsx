@@ -75,6 +75,14 @@ describe('TopNav — search is an icon', () => {
     expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
   });
 
+  it('puts the field before the icon in the page, so Tab reads left to right', () => {
+    renderNav();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    const input = screen.getByRole('combobox', { name: 'Search materials' });
+    const icon = screen.getByRole('button', { name: 'Search' });
+    expect(input.compareDocumentPosition(icon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('expands on ⌘K and collapses on Escape', () => {
     renderNav();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
