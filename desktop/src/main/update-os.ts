@@ -4,18 +4,32 @@
  * OS-bound code behind thin adapters; R-28):
  *
  *  - start the logon builder's scheduled task (`Start-ScheduledTask`),
- *  - resolve which build is running and where the launch state lives.
+ *  - resolve which build is running and where the launch state lives,
+ *  - read the builder's `state.json` and check a build is on disk,
+ *  - spawn the detached *Update now* helper (`launch/update-now.ps1`).
  *
  * Nothing here takes a value from the renderer. The task name and every script are
- * constants; the only variable input to a spawn is a path this process built itself.
+ * constants; the variable inputs to a spawn are a path this process built itself and a
+ * tree hash checked against `^[0-9a-f]{40}$`, each one argv element, never a shell string.
  */
 
-import { execFile } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { execFile, spawn } from 'node:child_process';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { win32 } from 'node:path';
 
 import type { BuilderStartOutcome } from '../core/update/builder-trigger';
-import { runningTreeFromExecPath } from '../core/update/build-paths';
+import {
+  BUILDS_FOLDER,
+  EXE_NAME,
+  UNPACKED_FOLDER,
+  isTree,
+  runningTreeFromExecPath,
+} from '../core/update/build-paths';
+import { parseLastBuiltSha } from '../core/update/update-check';
+
+export const UPDATE_HELPER_SCRIPT = 'update-now.ps1';
+const LAUNCH_SCRIPTS_FOLDER = 'launch';
+const STATE_FILE = 'state.json';
 
 export const BUILDER_TASK_NAME = 'Bb2dash-LogonBuild';
 export const APP_TASK_NAME = 'Bb2dash-App';
@@ -102,4 +116,93 @@ export function readRunningTree(execPath: string = process.execPath): string | n
   } catch {
     return null;
   }
+}
+
+/** The builder's recorded `lastBuiltSha`, or `null` when there is no readable state. */
+export function readLastBuiltSha(stateDir: string): string | null {
+  const path = win32.join(stateDir, STATE_FILE);
+  if (!existsSync(path)) return null;
+  return parseLastBuiltSha(readFileSync(path, 'utf8'));
+}
+
+/** Whether `builds/<tree>/win-unpacked/bb2dash.exe` exists. */
+export function buildOnDisk(stateDir: string, tree: string): boolean {
+  if (!isTree(tree)) return false;
+  return existsSync(win32.join(stateDir, BUILDS_FOLDER, tree, UNPACKED_FOLDER, EXE_NAME));
+}
+
+export interface UpdateHelperTarget {
+  readonly stateDir: string;
+  readonly tree: string;
+}
+
+function helperScriptPath(stateDir: string): string {
+  return win32.join(stateDir, LAUNCH_SCRIPTS_FOLDER, UPDATE_HELPER_SCRIPT);
+}
+
+/** The helper's argv: the installed `update-now.ps1`, hidden, with a validated tree. */
+export function updateHelperArgv(target: UpdateHelperTarget, env: NodeJS.ProcessEnv = process.env): readonly string[] {
+  if (!isTree(target.tree)) throw new Error('refusing to update to something that is not a tree hash');
+  return Object.freeze([
+    powershellPath(env),
+    '-NoProfile',
+    '-NonInteractive',
+    '-WindowStyle',
+    'Hidden',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    helperScriptPath(target.stateDir),
+    '-Tree',
+    target.tree,
+    '-StateDir',
+    target.stateDir,
+  ]);
+}
+
+/**
+ * Start one process that outlives this app: detached, no console, unreferenced. Resolves
+ * once it is running, rejects when it could not start (the `error`/`spawn` race, as in
+ * `sync-terminal.ts`).
+ */
+export function spawnDetached(argv: readonly string[], cwd?: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const [command, ...args] = argv;
+    if (command === undefined) {
+      reject(new Error('empty argv'));
+      return;
+    }
+    let child;
+    try {
+      child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true, ...(cwd === undefined ? {} : { cwd }) });
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+export interface UpdateHelperIo {
+  readonly exists: (path: string) => boolean;
+  readonly spawnDetached: (argv: readonly string[], cwd?: string) => Promise<void>;
+}
+
+/** Update now: spawn `update-now.ps1`, which waits for this app to exit and swaps builds. */
+export async function startUpdateHelper(
+  target: UpdateHelperTarget,
+  io: UpdateHelperIo = { exists: existsSync, spawnDetached },
+): Promise<void> {
+  const argv = updateHelperArgv(target);
+  const script = helperScriptPath(target.stateDir);
+  if (!io.exists(script)) {
+    throw new Error(`${script} is not installed; re-run register-logon-task.ps1 or wait for the next build`);
+  }
+  // Never inherit this app's working folder: the task starts the app in `current`, and a
+  // junction that is some process's cwd cannot be removed and repointed.
+  await io.spawnDetached(argv, target.stateDir);
 }

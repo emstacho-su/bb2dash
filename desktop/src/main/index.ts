@@ -35,7 +35,19 @@ import { attachSyncWatcher } from './sync-terminal';
 import { IS_TEST_MODE, installShellTestHook, recordEvent } from './test-hook';
 import { createBuilderTrigger } from '../core/update/builder-trigger';
 import type { BuilderTrigger } from '../core/update/builder-trigger';
-import { createStartBuilderTask, readRunningTree } from './update-os';
+import { join } from 'node:path';
+import { REMINDER_FILENAME, createReminderStore } from './update-reminder-store';
+import { createUpdateFlow } from '../core/update/update-flow';
+import type { UpdateFlow } from '../core/update/update-flow';
+import {
+  buildOnDisk,
+  createStartBuilderTask,
+  launchStateDir,
+  readLastBuiltSha,
+  readRunningTree,
+  startUpdateHelper,
+} from './update-os';
+import { showUpdatePrompt } from './update-prompt';
 import { MENU_CHECK_NOW, createTray } from './tray';
 import type { TrayHandle } from './tray';
 import { createWindow, ensureLoaded, needsReload, refreshSessionWithoutWindow, showWindow } from './window';
@@ -50,6 +62,33 @@ let config: DesktopConfig | null = null;
 let poller: PollerHandle | null = null;
 let isQuitting = false;
 let builderTrigger: BuilderTrigger | null = null;
+let updateFlow: UpdateFlow | null = null;
+
+/**
+ * 2026-09-30: when the builder has a newer build than the one running, the next window
+ * open asks Update now / Update later. See `core/update/update-flow.ts`.
+ */
+function createShellUpdateFlow(): UpdateFlow | null {
+  const stateDir = launchStateDir();
+  if (stateDir === null) {
+    log('no LOCALAPPDATA: update checks are off');
+    return null;
+  }
+  const updateLog = createNamedLogger('update');
+  return createUpdateFlow({
+    runningTree,
+    readLastBuiltSha: () => readLastBuiltSha(stateDir),
+    buildOnDisk: (tree) => buildOnDisk(stateDir, tree),
+    reminders: createReminderStore({ filePath: join(app.getPath('userData'), REMINDER_FILENAME), log: updateLog }),
+    now: () => new Date(),
+    testMode: IS_TEST_MODE,
+    showPrompt: () => showUpdatePrompt(getMainWindow()),
+    startUpdate: (tree) => startUpdateHelper({ stateDir, tree }),
+    quit,
+    record: recordEvent,
+    log: updateLog,
+  });
+}
 /** The tree hash of the running logon build, or `null` for a dev run (no updates then). */
 const runningTree = readRunningTree();
 
@@ -128,6 +167,10 @@ function quit(): void {
 function wireWindow(window: BrowserWindow, validConfig: DesktopConfig): void {
   attachNavigationGuards(window, allowedOrigins(validConfig), validConfig.appUrl);
   poller?.attachWindow(window);
+  // Every window open is a chance to offer a waiting update, once the window is on screen.
+  window.once('ready-to-show', () => {
+    void updateFlow?.onWindowOpened();
+  });
   window.on('close', () => {
     if (!isQuitting) log('window closing to the tray: its renderer is released; polling continues');
   });
@@ -192,6 +235,7 @@ function start(): void {
     return;
   }
   const validConfig = config;
+  updateFlow = createShellUpdateFlow();
 
   windows = createWindowController<BrowserWindow>({
     create: (initialUrl) => createWindow(validConfig.appUrl, initialUrl),
