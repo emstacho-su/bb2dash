@@ -138,3 +138,38 @@ $ grep -cF "(v4)" supabase/functions/search/index.ts
 $ git diff <both files> | grep '^[+-]' | grep -v '^[+-]\s*(\*|/\*\*|//)'   # non-comment lines
 (none)
 ```
+
+---
+
+## Task 24, after the Phase 17 merge — the test follows the timeline to `CourseTimeline`
+
+Phase 17 (PR #43) deleted `classwork/CourseScreen.tsx`; the timeline is now
+`web/src/components/course/CourseTimeline.tsx` + `TimelineRows.tsx` (the Stream tab), and the PM
+ported task 24's rule there (72baa93). `origin/feat/ingest-corpus-18` was merged into this branch
+(no rebase), and `web/test/course-timeline-files.test.tsx` was rewritten to render `CourseTimeline`
+through the Supabase-chain mock `CourseTimeline.test.tsx` uses (IST.352, week 6, clock Tue Sep 29).
+Same three cases; the "files not landed" case now checks the pane's "Loading the timeline…" state,
+because `CourseTimeline` draws no rows until every source has answered.
+
+**RED** (after the merge, before the rewrite):
+
+```
+$ npx vitest run test/course-timeline-files.test.tsx
+ FAIL  test/course-timeline-files.test.tsx
+Error: Failed to resolve import "@/app/(app)/course/[id]/classwork/CourseScreen" from "test/course-timeline-files.test.tsx". Does the file exist?
+ Test Files  1 failed (1)
+      Tests  no tests
+```
+
+**GREEN:**
+
+```
+$ npx vitest run test/course-timeline-files.test.tsx
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+$ npx vitest run
+ Test Files  123 passed (123)
+      Tests  2128 passed (2128)
+$ npx eslint . --max-warnings 0     # exit 0
+$ npm run typecheck                 # exit 0 (after `npm ci`, which now succeeds on the merged lock)
+```
