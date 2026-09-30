@@ -479,6 +479,22 @@ def _unused_tag(body: str, base: str) -> str:
     return f"${tag}$"
 
 
+def comparison_expr(want) -> str:
+    """The boolean SQL expression comparing the recheck's text result `got` with `want`, chosen by
+    the YAML type of `want`: null -> is null; bool -> boolean; number -> numeric; list / dict -> jsonb;
+    anything else (text, dates) -> text. Every literal is standard-quoted by quote_literal."""
+    if want is None:
+        return "got is null"
+    literal = quote_literal(sql_text(want))
+    if isinstance(want, bool):
+        return f"got::boolean = {literal}::boolean"
+    if isinstance(want, (int, float, Decimal)):
+        return f"got::numeric = {literal}::numeric"
+    if isinstance(want, (list, dict)):
+        return f"got::jsonb = {literal}::jsonb"
+    return f"got = {literal}"
+
+
 def emit_block(e: dict) -> str:
     want = e.get("stored") if e["call"] == "keep" else e.get("value")
     recheck = e["recheck"].strip()
@@ -497,19 +513,13 @@ def emit_block(e: dict) -> str:
         "  exception when others then\n"
         f"    raise exception 'FAIL % (the recheck did not return exactly one value: %)', {ident}, sqlerrm;\n"
         "  end;\n"
-        "  ok := got is not distinct from want;\n"
-        "  if not ok and got ~ '^\\s*-?[0-9]+(\\.[0-9]+)?\\s*$' and want ~ '^\\s*-?[0-9]+(\\.[0-9]+)?\\s*$' then\n"
-        "    ok := got::numeric = want::numeric;\n"
-        "  end if;\n"
-        "  if not ok and got ~ '^\\s*[\\[{]' and want ~ '^\\s*[\\[{]' then\n"
-        "    begin\n"
-        "      ok := got::jsonb = want::jsonb;\n"
-        "    exception when others then\n"
-        "      ok := false;\n"
-        "    end;\n"
-        "  end if;\n"
-        "  if not ok then\n"
-        f"    raise exception 'FAIL %', {ident};\n"
+        "  begin\n"
+        f"    ok := {comparison_expr(want)};\n"
+        "  exception when others then\n"
+        "    ok := false;\n"
+        "  end;\n"
+        "  if ok is not true then\n"
+        f"    raise exception 'FAIL % (got %, want %)', {ident}, coalesce(got, 'null'), coalesce(want, 'null');\n"
         "  end if;\n"
         "end\n"
     )

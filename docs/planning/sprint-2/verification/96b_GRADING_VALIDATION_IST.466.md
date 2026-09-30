@@ -6,6 +6,10 @@ Other sources: `bb_file:21` (`IST466 Ethics Cases Spring 2026.docx`, filed under
 
 Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22 to -24 and -29; Q4 is rows IST.466-29 and -30; Q5 is rows IST.466-15 and -16; Q11 is row IST.466-36; Q12 is row IST.466-13. The Major Case Group number in component 24's notes (#3 → #2, migration 105) is team membership, not grading, and was not assessed.
 
+## Amendments (PM, 2026-09-29)
+
+* IST.466-29 (change_to 26 → keep null) and new IST.466-39 (mark_ungraded `_3562500_1`): Stack 2026-09-29, attendance and participation are separate categories, each on the syllabus's own points; attendance is the syllabus 150 on the 150-point column `_3562493_1`, and the 100-point Attendance column the syllabus does not name is "Not graded" (a `grade_column_links` excluded row, P-3), not merged.
+
 ## Reconciliation table
 
 | id | target | field | stored | materials say | citation | verdict | call | why |
@@ -38,7 +42,7 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
 | IST.466-26 | grade_components IST.466 / ethics_practice + ethics_presentations | parent_id | — (flat) | grouped as Team Ethics Presentation (150) | `bb_file:39#unit:1` | materials_say_more | keep | Stack: keep them flat for now. |
 | IST.466-27 | assignments IST.466/ai-team-assignment | component_id / points_possible | 36 / 100.00 | AI Team Assignment 100 | `bb_file:39#unit:1` | matches | keep | — |
 | IST.466-28 | assignments IST.466/attendance | component_id / points_possible | 26 / 150.00 | up to 150 for attendance | `bb_file:39#unit:1` | matches | keep | — |
-| IST.466-29 | assignments IST.466/attendance-35625001 | component_id | — (100-pt column) | one attendance item only | — | not_in_materials | change_to 26 | Stack delegated ("likely merge"): merged into attendance under the row 08 rule; unposted columns add nothing to either side. |
+| IST.466-29 | assignments IST.466/attendance-35625001 | component_id | — (100-pt column) | one attendance item only | — | not_in_materials | keep | Stack 2026-09-29: no merge; the 100-point column is not in the syllabus and is "Not graded" (row 39). |
 | IST.466-30 | assignments IST.466/class-participation | component_id | — (150-pt column) | participation is 100 | `bb_file:39#unit:1` | differs | change_to 23 | Stack: participation is likely a set value per class; normalize the gradebook column to the syllabus 100. |
 | IST.466-31 | assignments IST.466/ethics-team-2-practice | component_id / points_possible | 28 / 50.00 | practice up to 50 | `bb_file:21#unit:1` | matches | keep | — |
 | IST.466-32 | assignments IST.466/ethics-team-2-presentation | component_id / points_possible | 25 / 100.00 | presentation up to 100 | `bb_file:21#unit:1` | matches | keep | — |
@@ -48,6 +52,7 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
 | IST.466-36 | assignments IST.466/major-project-1-synchrony | component_id / points_possible | 24 / 150.00 | each case up to 150 | `bb_file:39#unit:1` | matches | keep | — |
 | IST.466-37 | assignments IST.466/major-project-2-su-it | component_id / points_possible | 24 / 150.00 | each case up to 150 | `bb_file:39#unit:1` | matches | keep | — |
 | IST.466-38 | assignments IST.466/synchrony-case-kickoff | component_id | — (no points) | Synchrony presents the case; no points | `bb_file:149#unit:1` | matches | keep | — |
+| IST.466-39 | grade_column_links IST.466 / _3562500_1 | excluded | — (no row) | attendance up to 150; the syllabus names no 100-point attendance item | `bb_file:39#unit:1` | differs | mark_ungraded | Stack 2026-09-29: attendance uses the syllabus 150 and its 150-point column; the 100-point column is not in the syllabus. |
 
 ## Questions
 
@@ -612,11 +617,11 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
   citation: null
   quote: null
   verdict: not_in_materials
-  call: change_to
-  value: 26
+  call: keep
+  value: null
   reason_code: STACK_OVERRIDE
-  why: "Stack: 'See previous answer to reason and decide on this one. Likely merge.' Merged into attendance under the IST.466-Q4 rule; a column with no posted score adds nothing to earned or possible."
-  decided_by: session
+  why: "Stack 2026-09-29: attendance and participation are separate, each on the syllabus's own points; the 100-point Attendance column is not in the syllabus, so it is not merged and is 'Not graded' (IST.466-39)."
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select component_id from assignments where id = 'IST.466/attendance-35625001'"
@@ -782,4 +787,22 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select component_id from assignments where id = 'IST.466/synchrony-case-kickoff'"
+- id: IST.466-39
+  target:
+    table: grade_column_links
+    key: {course_id: "IST.466", column_id: "_3562500_1"}
+    field: excluded
+  stored: false
+  materials: "Attendance is up to 150 points; the syllabus names no 100-point attendance item"
+  citation: "bb_file:39#unit:1"
+  quote: "Up to 150 points for attendance."
+  verdict: differs
+  call: mark_ungraded
+  value: true
+  reason_code: BOOKKEEPING_COLUMN
+  why: "Stack 2026-09-29: attendance uses the syllabus 150 and its 150-point column; the 100-point column is not in the syllabus"
+  decided_by: Stack
+  decided_on: 2026-09-29
+  confidence_after: confirmed
+  recheck: "select coalesce((select excluded from grade_column_links where course_id = 'IST.466' and column_id = '_3562500_1' and component_id is null), false)"
 ```

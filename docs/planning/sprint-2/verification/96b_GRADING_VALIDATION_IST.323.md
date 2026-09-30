@@ -8,6 +8,11 @@ Export note: §6 says §1 resolves IST.323 to `bb_file:2`, but the §1 table pri
 
 Export §6 questions for this course: Q2 (participation link) is row IST.323-27; Q3 (fp-proposal 13 vs 11) is rows IST.323-24 and IST.323-25.
 
+## Amendments (PM, 2026-09-29)
+
+* IST.323-24 (change_to 11 → keep 13), IST.323-25 (change_to 14 → keep 18), new IST.323-57 (fp_proposal points 11 → 13) and IST.323-58 (fp_log points 3 → 1): Stack 2026-09-29 re-cut the parts instead (B-12); the Blackboard proposal column is 13 = proposal 11 + final log 2, the column stays 13 and linked to part 18, and Final Project stays 20.
+* IST.323-15 and IST.323-16 (keep 11 / keep 3 → matches, no call): they state what the syllabus says; after the re-cut their rows hold 13 and 1, which IST.323-57 and -58 recheck.
+
 ## Reconciliation table
 
 | id | target | field | stored | materials say | citation | verdict | call | why |
@@ -26,8 +31,8 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
 | IST.323-12 | grade_components IST.323 / sitn_group | points | 5.00 | 5 points | `bb_file:151#unit:1` | matches | keep | — |
 | IST.323-13 | grade_components IST.323 / individual_presentation | points | 15.00 | 15 points | `bb_file:151#unit:1` | matches | keep | — |
 | IST.323-14 | grade_components IST.323 / final_project | points | 20.00 | 20 points | `bb_file:151#unit:1` | matches | keep | — |
-| IST.323-15 | grade_components IST.323 / fp_proposal | points | 11.00 | proposal 11 points | `bb_file:151#unit:1` | matches | keep | — |
-| IST.323-16 | grade_components IST.323 / fp_log | points | 3.00 (count 2: 1 + 2) | log 3 points: checkpoint 1, completed 2 | `bb_file:151#unit:1` | matches | keep | — |
+| IST.323-15 | grade_components IST.323 / fp_proposal | points | 11.00 | proposal 11 points | `bb_file:151#unit:1` | matches | — | Superseded by row 57 (B-12 re-cut). |
+| IST.323-16 | grade_components IST.323 / fp_log | points | 3.00 (count 2: 1 + 2) | log 3 points: checkpoint 1, completed 2 | `bb_file:151#unit:1` | matches | — | Superseded by row 58 (B-12 re-cut). |
 | IST.323-17 | grade_components IST.323 / fp_defense | points | 6.00 | defense 6 points | `bb_file:151#unit:1` | matches | keep | — |
 | IST.323-18 | grade_components IST.323 / exams | points | 30.00 (3 × 10) | 3 exams, 10 points each | `bb_file:151#unit:1` | matches | keep | — |
 | IST.323-19 | grade_components IST.323 / labs | points | 20.00 (4 × 5) | 4 required labs, 5 pts each | `bb_file:151#unit:1` | matches | keep | — |
@@ -35,8 +40,8 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
 | IST.323-21 | grading_schemes IST.323 | check: top-level non-EC points = graded_out_of | 100 | 5+5+5+15+20+30+20 = 100 | `bb_file:151#unit:1` | matches | keep | — |
 | IST.323-22 | grade_components IST.323 (all) | drop_lowest | 0 on every component | no drop or lowest-score rule anywhere | — | not_in_materials | keep | Accepted session recommendation: no document states a drop, so none is applied. |
 | IST.323-23 | assignments IST.323/assignment-1 | component_id | — (no points) | only "Assignment #1 given" (Week 1); session reads it as Presentation Choice, 0 points | `bb_file:151#unit:1` | not_in_materials | mark_ungraded | Stack: Assignment #1 is named in the syllabus but is named something else in practice; go with the first assignment requiring a submission. |
-| IST.323-24 | assignments IST.323/fp-proposal | points_possible | 13.00 | proposal 11; completed log (2) submitted with it | `bb_file:151#unit:1` | differs | change_to 11 | Accepted session recommendation (option b): the syllabus sets 11; the 13-pt column is proposal 11 + log 2. |
-| IST.323-25 | grade_column_links IST.323 / _3569973_1 | component_id | 18 | column holds proposal 11 + completed log 2 (two children of 14) | `bb_file:151#unit:1` | differs | change_to 14 | Accepted session recommendation (option b): a column spanning 18 and 19 links to their parent. |
+| IST.323-24 | assignments IST.323/fp-proposal | points_possible | 13.00 | proposal 11; completed log (2) submitted with it | `bb_file:151#unit:1` | differs | keep | Stack 2026-09-29: re-cut the parts 13 / 1 instead (B-12); the column stays 13. |
+| IST.323-25 | grade_column_links IST.323 / _3569973_1 | component_id | 18 | column holds proposal 11 + completed log 2 (two children of 14) | `bb_file:151#unit:1` | differs | keep | Stack 2026-09-29: re-cut the parts 13 / 1 instead (B-12); the column stays linked to part 18. |
 | IST.323-26 | assignments IST.323/presentation-choice | points_possible | 100.00, no component, column excluded | carries no points | `bb_file:151#unit:1` | differs | mark_ungraded | Accepted session recommendation: the syllabus says it carries no points; keep the column excluded. |
 | IST.323-27 | assignments IST.323/participation | component_id / points_possible | 10 / 5.00 | participation 5 points | `bb_file:151#unit:1` | matches | keep | — |
 | IST.323-28 | grading_schemes IST.323 | check: all top-level points = total_points | 104 | 100 + extra credit 4 = 104 | `bb_file:151#unit:1` | matches | keep | — |
@@ -68,6 +73,8 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
 | IST.323-54 | grade_column_links IST.323 / _3560527_1 | component_id | 13 | Individual Presentation, 15 points | `bb_file:151#unit:1` | matches | keep | — |
 | IST.323-55 | grade_column_links IST.323 / _3560541_1 | component_id | 16 | Lab #1, one of 4 required labs | `bb_file:151#unit:1` | matches | keep | — |
 | IST.323-56 | grade_column_links IST.323 / _3598132_1 | excluded | true | Presentation Choice carries no points | `bb_file:151#unit:1` | matches | keep | — |
+| IST.323-57 | grade_components IST.323 / fp_proposal | points | 11.00 | proposal 11 + final log 2 in one 13-point column | — | differs | change_to 13 | B-12 re-cut: the Blackboard proposal column is 13 = proposal 11 + final log 2; Final Project stays 20. |
+| IST.323-58 | grade_components IST.323 / fp_log | points | 3.00 | checkpoint 1 (the final log 2 moves into part 18) | — | differs | change_to 1 | B-12 re-cut: the Blackboard proposal column is 13 = proposal 11 + final log 2; Final Project stays 20. |
 
 ## Questions
 
@@ -369,14 +376,9 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   citation: "bb_file:151#unit:1"
   quote: "The proposal (11 points)."
   verdict: matches
-  call: keep
-  value: 11.00
-  reason_code: SYLLABUS_AUTHORITATIVE
-  why: "The syllabus sets the proposal at 11; kept under option (b) of Q3 in the export."
-  decided_by: session
+  why: "Superseded by the B-12 re-cut (IST.323-57 / -58): the syllabus figure stands as evidence; the row's post-106 value is rechecked there."
+  decided_by: Stack
   decided_on: 2026-09-29
-  confidence_after: confirmed
-  recheck: "select points from grade_components where course_id = 'IST.323' and code = 'fp_proposal'"
 - id: IST.323-16
   target:
     table: grade_components
@@ -387,14 +389,9 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   citation: "bb_file:151#unit:1"
   quote: "The running log (3 points)."
   verdict: matches
-  call: keep
-  value: 3.00
-  reason_code: SYLLABUS_AUTHORITATIVE
-  why: "The syllabus sets the log at 3 in two parts."
-  decided_by: session
+  why: "Superseded by the B-12 re-cut (IST.323-57 / -58): the syllabus figure stands as evidence; the row's post-106 value is rechecked there."
+  decided_by: Stack
   decided_on: 2026-09-29
-  confidence_after: confirmed
-  recheck: "select points from grade_components where course_id = 'IST.323' and code = 'fp_log'"
 - id: IST.323-17
   target:
     table: grade_components
@@ -531,10 +528,10 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   citation: "bb_file:151#unit:1"
   quote: "The proposal (11 points)."
   verdict: differs
-  call: change_to
-  value: 11.00
-  reason_code: SYLLABUS_AUTHORITATIVE
-  why: "Accepted session recommendation (option b): the syllabus sets 11; the 13-pt column is proposal 11 + log 2."
+  call: keep
+  value: 13.00
+  reason_code: STACK_OVERRIDE
+  why: "Stack 2026-09-29: re-cut the parts 13 / 1 instead (B-12); the column stays 13"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -549,10 +546,10 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   citation: "bb_file:151#unit:1"
   quote: "the completed log is submitted with your proposal (2 points)"
   verdict: differs
-  call: change_to
-  value: 14
-  reason_code: ROLLS_UP_TO_PARENT
-  why: "Accepted session recommendation (option b): a column spanning 18 and 19 links to their parent."
+  call: keep
+  value: 18
+  reason_code: STACK_OVERRIDE
+  why: "Stack 2026-09-29: re-cut the parts 13 / 1 instead (B-12); the column stays linked to part 18 (fp_proposal, 13 after IST.323-57)"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -1115,4 +1112,40 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select excluded from grade_column_links where course_id = 'IST.323' and column_id = '_3598132_1'"
+- id: IST.323-57
+  target:
+    table: grade_components
+    key: {course_id: "IST.323", code: fp_proposal}
+    field: points
+  stored: 11.00
+  materials: "Proposal 11 and the completed log 2 are submitted and graded in one 13-point column"
+  citation: null
+  quote: null
+  verdict: differs
+  call: change_to
+  value: 13.00
+  reason_code: STACK_OVERRIDE
+  why: "B-12 re-cut: the Blackboard proposal column is 13 = proposal 11 + final log 2; Final Project stays 20"
+  decided_by: Stack
+  decided_on: 2026-09-29
+  confidence_after: confirmed
+  recheck: "select points from grade_components where course_id = 'IST.323' and code = 'fp_proposal'"
+- id: IST.323-58
+  target:
+    table: grade_components
+    key: {course_id: "IST.323", code: fp_log}
+    field: points
+  stored: 3.00
+  materials: "Log checkpoint 1; the completed log 2 moves into the proposal part"
+  citation: null
+  quote: null
+  verdict: differs
+  call: change_to
+  value: 1.00
+  reason_code: STACK_OVERRIDE
+  why: "B-12 re-cut: the Blackboard proposal column is 13 = proposal 11 + final log 2; Final Project stays 20"
+  decided_by: Stack
+  decided_on: 2026-09-29
+  confidence_after: confirmed
+  recheck: "select points from grade_components where course_id = 'IST.323' and code = 'fp_log'"
 ```

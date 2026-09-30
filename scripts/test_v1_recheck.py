@@ -489,3 +489,64 @@ def test_correcting_entry_must_name_one_column(call):
 def test_keep_label_is_one_short_line(label):
     bad = entry(target={"table": "grade_components", "key": {"course_id": "TST.100", "code": "exams"}, "field": label})
     assert any("target.field" in e for e in errors_of([bad]))
+
+
+# --- type-aware comparison in the emitted block (PM, 2026-09-29) ------------------------------
+# The recheck returns text; the entry's YAML type picks the comparison, so 13.00 equals 13,
+# a YAML null means "is null" and a json value compares as jsonb.
+
+
+def _only_block(tmp_path, row) -> str:
+    stmts = statements(emitted(tmp_path, verdict_file(tmp_path, [row])))
+    blocks = [s for s in stmts if s.lower().startswith("do ")]
+    assert len(blocks) == 1
+    return blocks[0]
+
+
+def test_emit_null_compares_with_is_null(tmp_path):
+    block = _only_block(tmp_path, entry(target={**entry()["target"], "field": "notes"}, stored=None))
+    assert "got is null" in block
+    assert "is not distinct from" not in block
+
+
+def test_emit_number_compares_numerically(tmp_path):
+    block = _only_block(tmp_path, entry(stored=13))
+    assert "got::numeric = '13'::numeric" in block
+
+
+def test_emit_float_number_compares_numerically(tmp_path):
+    block = _only_block(tmp_path, entry(stored=13.0))
+    assert "got::numeric = '13.0'::numeric" in block
+
+
+def test_emit_bool_compares_as_boolean(tmp_path):
+    block = _only_block(tmp_path, link_entry(verdict="differs", call="mark_ungraded", stored=None, value=True))
+    assert "got::boolean = 'true'::boolean" in block
+
+
+def test_emit_string_compares_as_text(tmp_path):
+    block = _only_block(tmp_path, entry(target={**entry()["target"], "field": "notes"}, stored="13.00"))
+    assert "got = '13.00'" in block
+    assert "::numeric" not in block
+
+
+def test_emit_list_and_dict_compare_as_jsonb(tmp_path):
+    lst = _only_block(tmp_path, entry(target={**entry()["target"], "field": "rank_weights"}, stored=[30, 25]))
+    assert "got::jsonb = '[30, 25]'::jsonb" in lst
+    dct = _only_block(tmp_path, entry(target={**entry()["target"], "field": "letter_scale"}, stored={"A": 93}))
+    assert "got::jsonb = '{\"A\": 93}'::jsonb" in dct
+
+
+def test_emit_cast_failure_is_a_fail_not_an_error(tmp_path):
+    block = _only_block(tmp_path, entry(stored=13))
+    # a recheck returning non-numeric text must raise FAIL <id>, not a bare cast error
+    assert "exception when others then" in block
+    assert block.count("raise exception 'FAIL %") >= 2
+
+
+def test_emit_typed_values_stay_standard_quoted(tmp_path):
+    hostile = "a'b"
+    block = _only_block(tmp_path, entry(target={**entry()["target"], "field": "notes"}, stored=hostile))
+    assert "got = 'a''b'" in block
+    lst = _only_block(tmp_path, entry(target={**entry()["target"], "field": "letter_scale"}, stored={"x'y": 1}))
+    assert "'{\"x''y\": 1}'::jsonb" in lst
