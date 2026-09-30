@@ -1188,7 +1188,7 @@ declare
   ok boolean;
 begin
   begin
-    execute $rc$select notes from grading_schemes where course_id = 'IST.323'$rc$ into strict got;
+    execute $rc$select split_part(notes, ' | ', 1) from grading_schemes where course_id = 'IST.323'$rc$ into strict got;
   exception when others then
     raise exception 'FAIL % (the recheck did not return exactly one value: %)', 'IST.323-06', sqlerrm;
   end;

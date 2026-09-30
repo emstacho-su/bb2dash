@@ -15,6 +15,7 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
 * IST.323-24 (change_to 11 → keep 13), IST.323-25 (change_to 14 → keep 18), new IST.323-57 (fp_proposal points 11 → 13) and IST.323-58 (fp_log points 3 → 1): Stack 2026-09-29 re-cut the parts instead (B-12); the Blackboard proposal column is 13 = proposal 11 + final log 2, the column stays 13 and linked to part 18, and Final Project stays 20.
 * IST.323-15 and IST.323-16 (keep 11 / keep 3 → matches, no call): they state what the syllabus says; after the re-cut their rows hold 13 and 1, which IST.323-57 and -58 recheck.
 * IST.323-05: `stored` / `value` set to null only: Phase 17 migration `119_strip_ai_policy_passages` (applied 2026-09-29) cleared `ai_policy` in every course. Citation and quote left as written; the spot-check mismatch on them is waived by Stack (DECISIONS 2026-09-29).
+* IST.323-06: recheck reads the note before the ` | ` citation separator (`split_part`), so the keep holds once 106 appends the P-75 citation (PM, 2026-09-30).
 
 ## Reconciliation table
 
@@ -224,7 +225,7 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   decided_by: session
   decided_on: 2026-09-29
   confidence_after: confirmed
-  recheck: "select notes from grading_schemes where course_id = 'IST.323'"
+  recheck: "select split_part(notes, ' | ', 1) from grading_schemes where course_id = 'IST.323'"
 - id: IST.323-07
   target:
     table: grade_components
