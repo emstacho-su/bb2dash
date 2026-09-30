@@ -237,7 +237,9 @@ test.describe('screens (T-12 … T-21)', () => {
 
   test('23 R3-3 inbox', async ({ page }, testInfo) => {
     await openSignedIn(page, '/inbox');
-    await expect(page.getByRole('button', { name: /Apply answers/ }).first()).toBeVisible();
+    // The one apply control sits in the footer; its label is its state ("Apply answers", or
+    // "queued" / "running" / "done" while a request is open), so find it by where it is.
+    await expect(page.getByRole('region', { name: 'Inbox actions' }).getByRole('button')).toHaveCount(1);
     await expect(page.getByText('Apply answers now')).toHaveCount(0);
     await page.waitForLoadState('load'); await page.waitForTimeout(2000); // the app polls, so 'networkidle' never fires
     await page.screenshot({ path: shotPath(testInfo, '23-inbox.png'), fullPage: true });
