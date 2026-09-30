@@ -11,6 +11,10 @@
 --   (5) an older registered run writes 0 and says older_run
 --   (6) a name-only match (a synthetic row whose item is gone while a file of the same name sits
 --       in another item) raises exactly 1 attention row and writes 0
+--   (7) a pre-existing sibling is not a replacement (160): an item held A.pdf and B.pdf in one
+--       registered crawl; the next (newest) crawl shows only A. B is NOT superseded by A and no
+--       question is raised; B is left for the missing marker. (1) still holds under 160 because
+--       151, 149 and 162 never sat beside 2, 74 and 150 in their items in any registered crawl.
 -- Needs migration 128's execute grant for db_test_runner. Collects every failure, raises once.
 -- RUN IT: `node scripts/db-test.mjs --only phase18_122_supersede_rule.sql`.
 
@@ -101,6 +105,45 @@ begin
      or (v_r->>'asked')::int <> 1 then
     v_fail := v_fail || format('(6) name-only: %s open rows, result %s', v_open, v_r);
   end if;
+
+  -- (7) two synthetic registered crawls of IST.323, later than every real one
+  declare
+    v_run_ab uuid := gen_random_uuid();
+    v_run_a  uuid := gen_random_uuid();
+    v_bb_id  text := (select bb_id from courses where id = 'IST.323');
+    v_a      bigint;
+    v_b      bigint;
+  begin
+    insert into agent_requests (kind, state, run_id, note) values
+      ('sync', 'done', v_run_ab, 'phase18_122 synthetic'),
+      ('sync', 'done', v_run_a, 'phase18_122 synthetic');
+    insert into bb_raw (run_id, captured_at, bb_course_id, kind, payload) values
+      (v_run_ab, now() + interval '1 hour', v_bb_id, 'course', jsonb_build_object('content', jsonb_build_array(
+         jsonb_build_object('id', '_p18_ab_item', 'embeddedFiles', jsonb_build_array(
+           jsonb_build_object('name', 'p18 A.pdf', 'url', '/bbcswebdav/p18-122-A'),
+           jsonb_build_object('name', 'p18 B.pdf', 'url', '/bbcswebdav/p18-122-B')))))),
+      (v_run_a, now() + interval '2 hours', v_bb_id, 'course', jsonb_build_object('content', jsonb_build_array(
+         jsonb_build_object('id', '_p18_ab_item', 'embeddedFiles', jsonb_build_array(
+           jsonb_build_object('name', 'p18 A.pdf', 'url', '/bbcswebdav/p18-122-A'))))));
+    insert into bb_files (bb_course_id, course_id, content_id, file_name, source_url, bucket,
+                          classified_by, classification_confidence, notes)
+    values (v_bb_id, 'IST.323', '_p18_ab_item', 'p18 A.pdf',
+            'https://blackboard.syracuse.edu/bbcswebdav/p18-122-A', 'readings', 'rule', 0.6, 'phase18_122 synthetic')
+    returning id into v_a;
+    insert into bb_files (bb_course_id, course_id, content_id, file_name, source_url, bucket,
+                          classified_by, classification_confidence, notes)
+    values (v_bb_id, 'IST.323', '_p18_ab_item', 'p18 B.pdf',
+            'https://blackboard.syracuse.edu/bbcswebdav/p18-122-B', 'readings', 'rule', 0.6, 'phase18_122 synthetic')
+    returning id into v_b;
+
+    v_r := supersede_replaced_files(v_run_a, v_sync);
+    select count(*) into v_open from attention_items
+     where ref = 'supersede/' || v_b::text and state = 'open';
+    if (select superseded_by from bb_files where id = v_b) is not null or v_open <> 0 then
+      v_fail := v_fail || format('(7) deleted sibling B (%s) superseded_by %s, %s open questions, result %s',
+        v_b, coalesce((select superseded_by::text from bb_files where id = v_b), 'null'), v_open, v_r);
+    end if;
+  end;
 
   if cardinality(v_fail) > 0 then
     raise exception 'FAIL %', array_to_string(v_fail, '; ');
