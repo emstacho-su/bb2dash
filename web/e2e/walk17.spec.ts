@@ -313,6 +313,23 @@ test.describe('screens (T-12 … T-21)', () => {
     await wizard.getByRole('button', { name: 'Discard' }).click();
     await expect(wizard).toHaveCount(0);
   });
+
+  test('28 search icon expanded', async ({ page }, testInfo) => {
+    await openSignedIn(page, '/');
+    const nav = page.getByRole('navigation', { name: 'Primary' });
+    const icon = nav.getByRole('button', { name: 'Search' });
+    await expect(icon).toHaveAttribute('aria-expanded', 'false');
+    await expect(nav.getByText('⌘K')).toHaveCount(0);
+    await icon.click();
+    const field = nav.getByRole('combobox', { name: 'Search materials' });
+    await expect(field).toBeFocused();
+    await field.fill('syllabus');
+    const results = nav.getByRole('listbox', { name: 'Results' });
+    await expect(results.getByRole('option').first()).toBeVisible();
+    // A popover under the bar, not the old centered modal.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.screenshot({ path: shotPath(testInfo, '28-search-icon.png') });
+  });
 });
 
 test.describe('forced failed read (CR-7)', () => {
