@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // bb2dash :: scripts/check-ecn-exam1.mjs
-// Phase 16's blocking gate (DECISIONS 2026-09-30): does ECN.304 Exam 1 count toward "graded so far"?
+// Optional read-only check (no gate, DECISIONS 2026-09-30): does ECN.304 Exam 1 count toward "graded so far"?
 //
 //   node scripts/check-ecn-exam1.mjs [--json]
 //

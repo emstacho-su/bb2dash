@@ -144,16 +144,6 @@ before Nov 30. `docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md`'s header l
 8. **After the merge** (only on Stack's word): switch the checkout to `main`, remove the phase's
    worktrees and branches, update memory.
 
-**Standing gate G-16 (ECN.304 Exam 1 counts; blocking; set 2026-09-30, Stack).** Before a phase's
-workers are cut, the PM runs `node scripts/check-ecn-exam1.mjs` from a worktree with `.env.local`
-(read-only; it reads the gradebook's crawl history, so it is right however long after the sync it runs):
-`PASS` (exit 0) → record the line in that phase's DECISIONS and STATUS, strike this gate, go on; `PENDING`
-(exit 3) → the Exam 1 sync has not run or the score is not posted; the phase does not start until Stack
-has run it (he runs it once every session with an open PR is done) and the check passes; `FAIL` (exit 1)
-→ the score counts toward nothing: tell Stack to link the column with "Counts toward… → Exams" (and answer
-the Inbox item if the column arrived as a new row), then rerun. It replaces Phase 16's acceptance step 9 and
-task 27 (brief 96).
-
 **Two PM sessions at once (learned 2026-09-15):** when another phase's PM session owns the main
 checkout (`C:/Users/stack/projects/bb2dash`), cut the phase branch as its own worktree
 (`bb2dash-wt-<phase>`) straight from `origin/main` and never commit in the shared checkout. Each
@@ -246,7 +236,6 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
   IST.471; migration 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03)
   is the one bound (brief 96 open item 4; batch item 11; no date-paced tasks, the freeze stands, DECISIONS 2026-09-27).~~ Done 2026-09-29: all six sat; migration 106 is written and proven, applied once PR #40 merges.
 * ~~**Merge PR #40**~~ Merged 2026-09-30; 105 and 106 are on prod.
-* **Run the sync that carries ECN.304 Exam 1** once every session with an open PR is done. The next phase is blocked until `node scripts/check-ecn-exam1.mjs` prints `PASS` (gate G-16, §3); no Claude session needs to be open when you run the sync.
 * Say whether the Nov 30 – Dec 13 code freeze still stands. Default: it stands, as a window, not pacing (DECISIONS
   2026-09-27, no-date-paced-tasks row). If you strike it, migration 106's bound becomes 2026-12-03 and B-6's window goes.
 * Phase 12 proofs still his: see the three toasts and click one from a banner and one from the Action

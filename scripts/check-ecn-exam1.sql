@@ -1,5 +1,5 @@
 -- bb2dash :: scripts/check-ecn-exam1.sql
--- Phase 16's blocking gate (DECISIONS 2026-09-30): does ECN.304 Exam 1 count toward "graded so far"?
+-- Optional read-only check (no gate, DECISIONS 2026-09-30): does ECN.304 Exam 1 count toward "graded so far"?
 -- ONE read-only statement returning ONE row: state (PASS / PENDING / FAIL) and a plain-language detail.
 -- Retroactive by design: bb_gradebook keeps every crawl (append per run), so this can be run any time
 -- after the sync, with no Claude session open, and still names the crawl that first carried Exam 1.
