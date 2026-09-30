@@ -1751,27 +1751,6 @@ $v1$;
 do $v1$
 declare
   got text;
-  want text := '19 / 2.00';
-  ok boolean;
-begin
-  begin
-    execute $rc$select component_id || ' / ' || points_possible from assignments where id = 'IST.323/fp-log-final'$rc$ into strict got;
-  exception when others then
-    raise exception 'FAIL % (the recheck did not return exactly one value: %)', 'IST.323-35', sqlerrm;
-  end;
-  begin
-    ok := got = '19 / 2.00';
-  exception when others then
-    ok := false;
-  end;
-  if ok is not true then
-    raise exception 'FAIL % (got %, want %)', 'IST.323-35', coalesce(got, 'null'), coalesce(want, 'null');
-  end if;
-end
-$v1$;
-do $v1$
-declare
-  got text;
   want text := '14';
   ok boolean;
 begin
@@ -2249,6 +2228,69 @@ begin
   end;
   if ok is not true then
     raise exception 'FAIL % (got %, want %)', 'IST.323-58', coalesce(got, 'null'), coalesce(want, 'null');
+  end if;
+end
+$v1$;
+do $v1$
+declare
+  got text;
+  want text := '1';
+  ok boolean;
+begin
+  begin
+    execute $rc$select count_expected from grade_components where course_id = 'IST.323' and code = 'fp_log'$rc$ into strict got;
+  exception when others then
+    raise exception 'FAIL % (the recheck did not return exactly one value: %)', 'IST.323-59', sqlerrm;
+  end;
+  begin
+    ok := got::numeric = '1'::numeric;
+  exception when others then
+    ok := false;
+  end;
+  if ok is not true then
+    raise exception 'FAIL % (got %, want %)', 'IST.323-59', coalesce(got, 'null'), coalesce(want, 'null');
+  end if;
+end
+$v1$;
+do $v1$
+declare
+  got text;
+  want text := '18';
+  ok boolean;
+begin
+  begin
+    execute $rc$select component_id from assignments where id = 'IST.323/fp-log-final'$rc$ into strict got;
+  exception when others then
+    raise exception 'FAIL % (the recheck did not return exactly one value: %)', 'IST.323-60', sqlerrm;
+  end;
+  begin
+    ok := got::numeric = '18'::numeric;
+  exception when others then
+    ok := false;
+  end;
+  if ok is not true then
+    raise exception 'FAIL % (got %, want %)', 'IST.323-60', coalesce(got, 'null'), coalesce(want, 'null');
+  end if;
+end
+$v1$;
+do $v1$
+declare
+  got text;
+  want text := 'true';
+  ok boolean;
+begin
+  begin
+    execute $rc$select notes like '%B-12 re-cut (2026-09-29): this part is the 1-point log checkpoint only%' from grade_components where course_id = 'IST.323' and code = 'fp_log'$rc$ into strict got;
+  exception when others then
+    raise exception 'FAIL % (the recheck did not return exactly one value: %)', 'IST.323-61', sqlerrm;
+  end;
+  begin
+    ok := got::boolean = 'true'::boolean;
+  exception when others then
+    ok := false;
+  end;
+  if ok is not true then
+    raise exception 'FAIL % (got %, want %)', 'IST.323-61', coalesce(got, 'null'), coalesce(want, 'null');
   end if;
 end
 $v1$;
