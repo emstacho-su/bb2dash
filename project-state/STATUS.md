@@ -431,8 +431,8 @@ Live in prod (Supabase `bb2dash`, ref `goultdzqcavefcgnifdy`):
    (`96a`), the machine-block checker `scripts/v1_recheck.py` (`--check`, `--summary --compare`, `--emit-sql`
    → `db/tests/phase16_106_v1_recheck.sql`), `db/tests/grading_invariants.sql` (F ceiling 0 after 106). Web:
    ECN.304's rank rule stated under the figure (R-36). `/inbox-apply` cites `bb_file:<id>#unit:<n>`.
-   Task 10a's seed fix went to `main` as its own PR (#40, Stack's call). ECN.304 Exam 1 counting is gate G-16 for
-   the next phase (`node scripts/check-ecn-exam1.mjs`, PENDING until the Exam 1 sync).
+   Task 10a's seed fix went to `main` as its own PR (#40, Stack's call). ECN.304 Exam 1 counting is no
+   gate (Stack, 2026-09-30); `node scripts/check-ecn-exam1.mjs` is an optional read-only check.
 
 **Migration numbering note.** Prod's `schema_migrations` recorded the GUI migrations under their
 pre-reconciliation names (`012_planner_columns` … `017_sync_contract`) next to main's
