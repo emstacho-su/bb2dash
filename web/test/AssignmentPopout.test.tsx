@@ -14,6 +14,7 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeStagedFile } from './factories.grades';
 
 interface Stub<T> {
   data: T;
@@ -65,6 +66,7 @@ const hooks = vi.hoisted(() => ({
   series: null as unknown,
   course: null as unknown,
   save: null as unknown,
+  files: null as unknown,
 }));
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -101,7 +103,7 @@ vi.mock('@/lib/queries.grades', async (importOriginal) => {
     ...actual,
     useAssignmentGrade: () => stub(null),
     useAssignmentAttempts: () => stub([]),
-    useSubmissionFiles: () => stub([]),
+    useSubmissionFiles: () => hooks.files,
     useAssignmentHistory: () => stub([]),
   };
 });
@@ -134,6 +136,7 @@ beforeEach(() => {
   hooks.series = stub([]);
   hooks.course = stub({ bb_url: 'https://blackboard.syracuse.edu/course/IST323' });
   hooks.save = { mutate, isPending: false, isError: false, error: null };
+  hooks.files = stub([]);
 });
 
 describe('AssignmentPopout — a refetch while the owner is typing', () => {
@@ -241,5 +244,60 @@ describe('AssignmentPopout — queries that have not landed', () => {
     render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
     expect(screen.queryByText('Cite any AI use.')).toBeNull();
     expect(screen.queryByText(/AI policy/i)).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Open in Blackboard — the item's own page when one is recorded (R-69)
+ * ------------------------------------------------------------------------ */
+
+const COURSE_URL = 'https://blackboard.syracuse.edu/course/IST323';
+const ITEM_URL =
+  'https://blackboard.syracuse.edu/ultra/courses/_571529_1/outline/assessment/test/_12928193_1?courseId=_571529_1&gradeitemView=details';
+
+function footerLink(): HTMLElement {
+  return screen.getByRole('link', { name: /Open in Blackboard/ });
+}
+
+describe('AssignmentPopout — Open in Blackboard', () => {
+  it('opens the assignment’s own page, with no "(course)" suffix, when it has one', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, bb_url: ITEM_URL });
+    render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
+    expect(footerLink()).toHaveAttribute('href', ITEM_URL);
+    expect(footerLink()).toHaveTextContent('Open in Blackboard ↗');
+    expect(footerLink()).not.toHaveTextContent('(course)');
+  });
+
+  it('points a staged file at the assignment’s own page too', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, bb_url: ITEM_URL });
+    hooks.files = stub([makeStagedFile()]);
+    render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
+    const staged = screen.getByRole('link', {
+      name: 'Staged in bb2dash — attach in Blackboard ↗',
+    });
+    expect(staged).toHaveAttribute('href', ITEM_URL);
+  });
+
+  it('falls back to the course page, labelled "(course)", when the item has none', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, bb_url: null });
+    render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
+    expect(footerLink()).toHaveAttribute('href', COURSE_URL);
+    expect(footerLink()).toHaveTextContent('(course)');
+  });
+
+  it('never links an item url on another origin, or a javascript: one', () => {
+    hooks.assignment = stub({ ...ASSIGNMENT, bb_url: 'javascript:alert(1)' });
+    const { unmount } = render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
+    expect(footerLink()).toHaveAttribute('href', COURSE_URL);
+    unmount();
+
+    hooks.assignment = stub({ ...ASSIGNMENT, bb_url: 'https://evil.example.com/ultra/x' });
+    render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
+    expect(footerLink()).toHaveAttribute('href', COURSE_URL);
+  });
+
+  it('no longer says Blackboard has no per-item url', () => {
+    render(<AssignmentPopout assignmentId="IST.323/lab-1" />);
+    expect(document.body.innerHTML).not.toContain('no stable per-item URL');
   });
 });

@@ -75,7 +75,8 @@ export function SessionRow({
   onClick,
 }: {
   session: Session;
-  fileCount: number;
+  /** `null` when the course has no session-linked files: then no line at all (R-67 interim). */
+  fileCount: number | null;
   active: boolean;
   onClick: () => void;
 }) {
@@ -101,9 +102,11 @@ export function SessionRow({
           <AttendanceMarker session={session} className={styles.attendanceTag} />
         </span>
         <span className={styles.sessionTitle}>{session.topic ?? 'Untitled session'}</span>
-        <span className={styles.sessionSub}>
-          {fileCount > 0 ? `${fileCount} file${fileCount === 1 ? '' : 's'}` : 'no files'}
-        </span>
+        {fileCount !== null && (
+          <span className={styles.sessionSub}>
+            {fileCount > 0 ? `${fileCount} file${fileCount === 1 ? '' : 's'}` : 'no files'}
+          </span>
+        )}
       </span>
     </button>
   );

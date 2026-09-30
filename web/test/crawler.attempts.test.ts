@@ -77,8 +77,11 @@ const require = createRequire(import.meta.url);
 const crawler = require('../../ingest/bb_crawler.js') as {
   installCrawler: (o: Record<string, unknown>) => {
     runAll: (o?: Record<string, unknown>) => Promise<unknown>;
-    attempts: (c: string, g?: unknown[], o?: { limit?: number }) => Promise<ColumnEntry[]>;
+    attempts: (
+      c: string, g?: unknown[], o?: { limit?: number; misses?: Record<string, number> },
+    ) => Promise<ColumnEntry[]>;
   };
+  keyListMisses: (o: unknown, lists: Record<string, string[]>, prefix: string) => string[];
   assertRunId: (runId: unknown) => string | null;
   mapAttempt: (a: unknown, files?: unknown[], includeKeys?: boolean) => MappedAttempt | null;
   mapAttemptFile: (
@@ -153,8 +156,8 @@ const RAW_DETAIL = {
 };
 
 describe('the envelope version', () => {
-  it('is 4 — the attempts chain a student session can actually read', () => {
-    expect(crawler.CRAWLER_VERSION).toBe(4);
+  it('is 5 — the v4 chain plus the Phase 18 probe', () => {
+    expect(crawler.CRAWLER_VERSION).toBe(5);
   });
 
   it('bounds a column at the newest three attempts', () => {
@@ -364,6 +367,54 @@ describe('mapAttempt — the shape migration 050/055 reads', () => {
   it('returns null for something that is not an attempt at all', () => {
     expect(mapAttempt(null)).toBeNull();
     expect(mapAttempt('nope')).toBeNull();
+  });
+});
+
+describe('v5 (Phase 18, R-66) — feedback is read from `feedbackToUser` first', () => {
+  it('puts feedbackToUser ahead of instructorFeedback in the key list', () => {
+    expect(ATTEMPT_FIELD_KEYS.feedback[0]).toBe('feedbackToUser.rawText');
+    expect(ATTEMPT_FIELD_KEYS.feedback).toContain('instructorFeedback.rawText');
+  });
+
+  it('reads feedbackToUser: {rawText} into text.instructorFeedback', () => {
+    const out = mapAttempt({ id: '_8100003_1', feedbackToUser: { rawText: '<p>See the rubric.</p>' } })!;
+    expect(out.text.instructorFeedback).toBe('See the rubric.');
+  });
+
+  it('prefers feedbackToUser when both keys are present', () => {
+    const out = mapAttempt({
+      ...RAW_DETAIL,
+      feedbackToUser: { rawText: 'From feedbackToUser.' },
+    })!;
+    expect(out.text.instructorFeedback).toBe('From feedbackToUser.');
+  });
+
+  it('still falls back to instructorFeedback', () => {
+    expect(mapAttempt(RAW_DETAIL)!.text.instructorFeedback).toBe('Solid first pass.');
+  });
+
+  it('keeps the prose under text, never as a flat key', () => {
+    const out = mapAttempt({ id: '_1_1', feedbackToUser: { rawText: 'x' } })!;
+    expect(out).not.toHaveProperty('feedbackToUser');
+    expect(out).not.toHaveProperty('feedback');
+  });
+});
+
+describe('keyListMisses — v5 counts a key list that found nothing', () => {
+  it('names every list with no present candidate', () => {
+    const misses = crawler.keyListMisses({ id: '_1_1', status: 'X' }, ATTEMPT_FIELD_KEYS, 'ATTEMPT_FIELD_KEYS');
+    expect(misses).toContain('ATTEMPT_FIELD_KEYS.feedback');
+    expect(misses).toContain('ATTEMPT_FIELD_KEYS.score');
+    expect(misses).not.toContain('ATTEMPT_FIELD_KEYS.status');
+  });
+
+  it('names nothing when every list hits', () => {
+    const full = { ...RAW_DETAIL, feedbackToUser: { rawText: 'y' } };
+    expect(crawler.keyListMisses(full, ATTEMPT_FIELD_KEYS, 'ATTEMPT_FIELD_KEYS')).toEqual([]);
+  });
+
+  it('treats anything that is not an object as a miss on every list', () => {
+    expect(crawler.keyListMisses(null, { a: ['a'], b: ['b'] }, 'X')).toEqual(['X.a', 'X.b']);
   });
 });
 
@@ -613,6 +664,23 @@ describe('attempts() — the three-request chain', () => {
     expect(entry.results[0].id).toBe('_8100001_1');
     expect(entry.results[0].submitted).toBe('2026-09-10T18:00:00.000Z');
     expect(entry.results[0].files).toEqual([]);
+  });
+
+  it('v5: counts an unknown feedback shape in the caller\'s misses, once per attempt', async () => {
+    const noFeedback = { ...RAW_DETAIL, instructorFeedback: undefined };
+    stubFetch({ detail: { body: { ...noFeedback, commentsForStudent: { rawText: 'unknown key' } } } });
+    const misses: Record<string, number> = {};
+    const [entry] = await install().attempts(COURSE, [COLUMN], { misses });
+    expect(misses['ATTEMPT_FIELD_KEYS.feedback']).toBe(1);
+    expect(misses['ATTEMPT_FIELD_KEYS.status']).toBeUndefined();
+    expect(entry.results[0].text.instructorFeedback).toBeNull();
+  });
+
+  it('v5: a fully known detail adds no attempt-field miss', async () => {
+    stubFetch();
+    const misses: Record<string, number> = {};
+    await install().attempts(COURSE, [COLUMN], { misses });
+    expect(Object.keys(misses).filter((k) => k.startsWith('ATTEMPT_FIELD_KEYS.'))).toEqual([]);
   });
 
   it('never throws: a network failure is a status 0 on the entry', async () => {
