@@ -518,50 +518,6 @@ def format_summary_table(s: Summary) -> list[str]:
 # --- --emit-sql -------------------------------------------------------------------------------
 
 
-def split_top_level(sql: str) -> list[str]:
-    """Split on ';' outside literals, quoted identifiers, dollar quotes and comments."""
-    parts, buf, i, n = [], [], 0, len(sql)
-    tag_re = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)?\$")
-    while i < n:
-        c = sql[i]
-        if c in ("'", '"'):
-            j = i + 1
-            while j < n:
-                if sql[j] == c and j + 1 < n and sql[j + 1] == c:
-                    j += 2
-                    continue
-                if sql[j] == c:
-                    break
-                j += 1
-            buf.append(sql[i:j + 1])
-            i = j + 1
-            continue
-        if c == "$":
-            m = tag_re.match(sql, i)
-            if m:
-                close = sql.find(m.group(0), m.end())
-                end = n if close == -1 else close + len(m.group(0))
-                buf.append(sql[i:end])
-                i = end
-                continue
-        if sql.startswith("--", i):
-            j = sql.find("\n", i)
-            i = n if j == -1 else j
-            continue
-        if sql.startswith("/*", i):
-            j = sql.find("*/", i + 2)
-            i = n if j == -1 else j + 2
-            continue
-        if c == ";":
-            parts.append("".join(buf))
-            buf = []
-        else:
-            buf.append(c)
-        i += 1
-    parts.append("".join(buf))
-    return parts
-
-
 def _unused_tag(body: str, base: str) -> str:
     tag = base
     while f"${tag}$" in body:
