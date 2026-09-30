@@ -95,7 +95,7 @@ test.describe('the shell', () => {
     // already queued: a second press makes no POST, so no terminal opens.
     const written = await page.evaluate(async () => {
       try {
-        await navigator.clipboard.writeText('claude "/bb-sync 77"');
+        await navigator.clipboard.writeText('claude --model sonnet "/bb-sync 77"');
         return 'ok';
       } catch (error) {
         return String(error);
@@ -104,7 +104,7 @@ test.describe('the shell', () => {
     expect(written).toBe('ok');
 
     const onClipboard = await app.evaluate(({ clipboard }) => clipboard.readText());
-    expect(onClipboard).toBe('claude "/bb-sync 77"');
+    expect(onClipboard).toBe('claude --model sonnet "/bb-sync 77"');
 
     // Everything else is still denied. `geolocation` is asked for through the same
     // permission handler and must come back refused rather than prompting.
@@ -189,7 +189,7 @@ test.describe('the shell', () => {
     const spawn = (await recorded(app)).find((event) => event.kind === 'sync-terminal');
     const { argv, cwd } = spawn?.payload as { argv: string[]; cwd: string };
 
-    expect(argv.at(-1)).toBe(`claude '/bb-sync ${FIXTURE_REQUEST_ID}'`);
+    expect(argv.at(-1)).toBe(`claude --model sonnet '/bb-sync ${FIXTURE_REQUEST_ID}'`);
     expect(argv).toContain('-NoExit');
     expect(argv).toContain(cwd);
     if (argv[0]?.toLowerCase().endsWith('wt.exe')) {

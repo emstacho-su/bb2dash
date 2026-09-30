@@ -48,12 +48,19 @@ export interface SyncCommandInput {
   readonly dryRun?: boolean;
 }
 
+/**
+ * The model a sync runs on (Stack, 2026-09-30: syncs default to Sonnet). Passed on the command
+ * line so the terminal's session starts on it whatever `/model` last saved as the default; the
+ * skill checks it again as its first step.
+ */
+export const SYNC_MODEL = 'sonnet';
+
 /** What PowerShell is asked to run once the window is open. */
 export function syncInitCommand(id: string, dryRun: boolean): string {
   if (!isValidSyncId(id)) throw new InvalidSyncIdError(id);
   return dryRun
-    ? `Write-Output 'DRY RUN: claude "/bb-sync ${id}" would run here'`
-    : `claude '/bb-sync ${id}'`;
+    ? `Write-Output 'DRY RUN: claude --model ${SYNC_MODEL} "/bb-sync ${id}" would run here'`
+    : `claude --model ${SYNC_MODEL} '/bb-sync ${id}'`;
 }
 
 const POWERSHELL = 'powershell.exe';
