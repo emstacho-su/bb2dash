@@ -266,7 +266,11 @@ export function CourseTimeline({ courseId }: { courseId: string }) {
                           <div key={`s${entry.session.id}`} className={styles.sessionGroup}>
                             <SessionRow
                               session={entry.session}
-                              fileCount={(bySession.get(entry.session.id) ?? []).length}
+                              fileCount={
+                                // R-67 interim (Phase 18, task 24): a course with no session-linked
+                                // files prints no per-session line rather than "no files".
+                                bySession.size > 0 ? (bySession.get(entry.session.id) ?? []).length : null
+                              }
                               active={entry.session.id === selectedSessionId}
                               onClick={() =>
                                 setSelectedSessionId(entry.session.id === selectedSessionId ? null : entry.session.id)

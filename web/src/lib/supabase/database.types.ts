@@ -3804,6 +3804,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      assignment_bb_url: {
+        Args: { p_course_id: string; p_item_id: string }
+        Returns: string
+      }
       attention_answered: {
         Args: {
           p_course_id: string
@@ -3867,6 +3871,10 @@ export type Database = {
         Args: { p_sync_run_id: number; p_trigger: string }
         Returns: Json
       }
+      file_week_no: {
+        Args: { p_course_id: string; p_file_name: string; p_path: string }
+        Returns: number
+      }
       hybrid_search_file_text: {
         Args: {
           p_course?: string
@@ -3895,6 +3903,7 @@ export type Database = {
       }
       ical_collect: { Args: never; Returns: Json }
       ical_poll: { Args: never; Returns: Json }
+      link_file_sessions: { Args: { p_sync_run_id: number }; Returns: Json }
       link_reading_files: { Args: { p_sync_run_id: number }; Returns: Json }
       mark_announcements_seen: { Args: never; Returns: number }
       match_file_text: {
@@ -4011,6 +4020,10 @@ export type Database = {
       suggested_start: {
         Args: { p_course_id: string; p_due: string; p_effort: number }
         Returns: string
+      }
+      supersede_replaced_files: {
+        Args: { p_run_id: string; p_sync_run_id: number }
+        Returns: Json
       }
       sync_change_lines: { Args: { p_stages: Json }; Returns: Json }
       transform_tick: { Args: never; Returns: Json }

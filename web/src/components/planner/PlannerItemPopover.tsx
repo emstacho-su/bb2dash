@@ -28,6 +28,7 @@ import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import { StatusOptions } from '@/components/tracker/StatusSelect';
 import { assignmentPagePath } from '@/lib/assignment-page';
+import { BLACKBOARD_LINK_TITLE, blackboardLink } from '@/lib/blackboard-link';
 import { placePopover, type PopoverPlacementResult, type Rect } from '@/lib/popover-position';
 import { useCourse, type ProgressStatus } from '@/lib/queries';
 import { NO_VALUE, scoreText, useAssignmentGrade } from '@/lib/queries.grades';
@@ -114,6 +115,7 @@ export function PlannerItemPopover({
 
   const grade = gradeQ.data ?? null;
   const course = courseQ.data ?? null;
+  const bbLink = blackboardLink(assignment, course);
   const progress = progressQ.data ?? null;
   const status = progress?.status ?? 'not_started';
   const title = assignment?.title ?? LOADING_TITLE;
@@ -293,13 +295,13 @@ export function PlannerItemPopover({
                   See full details →
                 </Link>
               )}
-              {course?.bb_url && (
+              {bbLink && (
                 <a
                   className={tokens.btnSecondary}
-                  href={course.bb_url}
+                  href={bbLink.href}
                   target="_blank"
                   rel="noreferrer"
-                  title="Course-level link — Blackboard has no stable per-item URL here."
+                  title={BLACKBOARD_LINK_TITLE[bbLink.scope]}
                 >
                   Blackboard ↗
                 </a>

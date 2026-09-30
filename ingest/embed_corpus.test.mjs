@@ -15,6 +15,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   DEFAULT_BUDGET,
@@ -144,4 +148,28 @@ test('runEmbedLoop makes no call at all when there is nothing to embed', async (
   assert.equal(got.calls, 0);
   assert.equal(got.exitCode, 0);
   assert.equal(sent.length, 0);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Clean exit (Phase 18 round 2). On Windows, `process.exit()` called while undici is still closing
+// a fetch handle aborts node with `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` (libuv
+// src/win/async.c), losing the exit code. The three CLI scripts set `process.exitCode` instead and
+// let the event loop drain.
+// ---------------------------------------------------------------------------------------------
+
+const INGEST = path.dirname(fileURLToPath(import.meta.url));
+
+test('no CLI script calls process.exit(); each sets process.exitCode and lets the loop drain', () => {
+  for (const name of ['embed_corpus.mjs', 'eval_search.mjs', 'pull_files.mjs']) {
+    const src = fs.readFileSync(path.join(INGEST, name), 'utf8');
+    assert.equal(src.includes('process.exit('), false, `${name} calls process.exit()`);
+    assert.ok(src.includes('process.exitCode = '), `${name} sets process.exitCode`);
+  }
+});
+
+test('embed_corpus.mjs run as a CLI ends with its own exit code (2: no key), not a crash', () => {
+  const env = { ...process.env, SB_ANON_JWT: '' };
+  const r = spawnSync(process.execPath, [path.join(INGEST, 'embed_corpus.mjs'), '--check'], { env, encoding: 'utf8' });
+  assert.equal(r.status, 2, r.stderr);
+  assert.doesNotMatch(r.stderr, /Assertion failed/);
 });

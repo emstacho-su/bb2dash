@@ -1,21 +1,33 @@
-// bb2dash :: edge function `search`  (v4)
+// bb2dash :: edge function `search`
 // The hub's retrieval API over the harvested Blackboard corpus.
 //
 // POST { q: string, course?: string, mode?: 'fts'|'vector'|'hybrid', limit?: number,
 //        min_similarity?: number, include_superseded?: boolean }
-//   fts     -> rpc search_file_text(q, p_course, p_limit)            [migrations 010, 021]
+//   fts     -> rpc search_file_text(q, p_course, p_limit)            [migrations 010, 021, 024]
 //   vector  -> embed q with gte-small, rpc match_file_text(...)      [migrations 011, 021]
-//   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migrations 012/013, 021]
+//   hybrid  -> embed q, rpc hybrid_search_file_text(...)             [migrations 012/013, 021, 024, 025]
+// -> { mode, q, course, min_similarity, count, results }
 //
-// v4 (migrations 021 + 024) changes what the rows CONTAIN, not what this file computes. In
-// hybrid mode `snippet` is the matched passage rather than the head of the unit, and each row
-// carries `part_no` and `snippet_source` ('fts_headline' | 'vector_part' | 'unit_head').
-// `part_no` is THE PART THE SNIPPET WAS CUT FROM — for a keyword hit, the lowest-numbered
-// embedding part whose slice actually satisfies the tsquery; null when no part does (the
-// snippet is then a headline over the whole unit) and null for an unembedded unit. The SQL
-// function builds all of that; the rows are passed through untouched.
+// WHAT A ROW HOLDS DEPENDS ON THE MODE. This file computes none of it: the SQL functions build
+// the rows and they are passed through untouched (vector mode only filters, collapses and
+// trims them). Every mode carries file_id, text_id, course_id, bucket, file_name, unit_kind and
+// unit_no; beyond that:
+//   fts     `rank` and `snippet`, a plain-text ts_headline over the WHOLE unit. No score,
+//           similarity, part_no or snippet_source.
+//   vector  `part_no` (the nearest part; the SQL returns one row per embedding part and this
+//           file keeps each unit's best one), `similarity` (cosine) and `text`, the unit's full
+//           text. No score, snippet or snippet_source.
+//   hybrid  `score` (an RRF rank sum, ordering only), `similarity` (real cosine, null for an
+//           unembedded unit), `snippet` (the matched passage, plain text), `snippet_source`
+//           ('fts_headline' | 'vector_part' | 'unit_head') and `part_no`, THE PART THE SNIPPET
+//           WAS CUT FROM. For a keyword hit that is the highest-ts_rank part whose slice
+//           satisfies the tsquery (ties: the vector-best part if it covers, then the lower
+//           part_no; migration 025); null when no part does (the snippet is then a headline
+//           over the whole unit) and null for an unembedded unit.
+// A snippet cut after a `[notes]` speaker-note marker starts with "[notes] " so client
+// scrubbers still fire (024).
 //
-// include_superseded (boolean, default false) is the other v4 addition. bb_files.superseded_by
+// include_superseded (boolean, default false; migration 021). bb_files.superseded_by
 // marks a document that a newer version replaced — four IST.466 schedule versions, two rosters.
 // By default all three modes hide those rows, so a query gets the one current document instead
 // of a rank list of near-identical drafts. Pass true only to search history deliberately.
@@ -23,7 +35,7 @@
 // min_similarity (0..1, optional) is a cosine floor on the VECTOR evidence. Measured on this
 // corpus 2026-09-09: relevant hits 0.83-0.92, nonsense English 0.75-0.77, so 0.78 is the
 // recommended default for agent callers. It is not applied server-side by default — omit it and
-// v3 behaves exactly like v2 — because the Materials cmd-K overlay may prefer "always show
+// no floor applies at all — because the Materials cmd-K overlay may prefer "always show
 // something". In hybrid mode it is forwarded to the SQL function, which gates only the vector
 // arm and still returns literal keyword hits (with their real similarity) below the floor. In
 // vector mode there is no keyword arm, so it simply filters the ranked list. fts ignores it.
