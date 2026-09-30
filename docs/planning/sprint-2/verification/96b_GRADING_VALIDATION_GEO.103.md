@@ -6,6 +6,17 @@ GEO.103.lecture and GEO.103.recitation share this file (brief 63). The recitatio
 
 Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.103-17 and -18; Q9 (recitation has no scheme) is row GEO.103-16.
 
+## Amendments (PM, 2026-09-29)
+
+* GEO.103-02 (letter_scale stored/value: the human list → prod's exact `letter_scale::text`, what the recheck returns).
+* GEO.103-03 (ai_policy stored/value → null: prod's `grading_schemes.ai_policy` is null since migration 119_strip_ai_policy_passages, 2026-09-29).
+* GEO.103-04 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* GEO.103-25 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* GEO.103-06 (note reworded: excluded ("Not graded") until Stack relinks the column; a posted score does not count while excluded): P-3, "Not graded" is a link row; stored/value → false/true, the recheck being a `like` test.
+* GEO.103-08 (note reworded: excluded ("Not graded") until Stack relinks the column; a posted score does not count while excluded): P-3, "Not graded" is a link row; stored/value → false/true, the recheck being a `like` test.
+* GEO.103-17 (retargeted from `assignments.component_id` → null to `grade_column_links` (GEO.103.lecture, _3602583_1) `excluded` true; stored false = no row today): DECISIONS (Phase 16, P-3), "Not graded" is an excluded link row, which migration 105 inserts.
+* GEO.103-18 (retargeted from `assignments.component_id` → null to `grade_column_links` (GEO.103.recitation, _3602445_1) `excluded` true; stored false = no row today): DECISIONS (Phase 16, P-3), "Not graded" is an excluded link row, which migration 105 inserts.
+
 ## Reconciliation table
 
 | id | target | field | stored | materials say | citation | verdict | call | why |
@@ -26,8 +37,8 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
 | GEO.103-14 | grade_components GEO.103.lecture / final_exam | weight_pct | 30.00 | 30% Final Exam | `bb_file:42#unit:2` | matches | keep | — |
 | GEO.103-15 | grading_schemes GEO.103.lecture | check: top-level weights = 100 | 100 | 5+15+10+20+20+30 = 100 | `bb_file:42#unit:2` | matches | keep | — |
 | GEO.103-16 | grading_schemes GEO.103.recitation | scheme row | none | section grade is 15% of the one course grade | `bb_file:22#unit:1` | matches | keep | — |
-| GEO.103-17 | assignments GEO.103.lecture/absences | component_id | 4 (100-pt column, 0 posted) | attendance is by absences; the column reads as a count | `bb_file:42#unit:3` | not_in_materials | mark_ungraded | Stack: likely not updated frequently. Leave as ungraded. |
-| GEO.103-18 | assignments GEO.103.recitation/attendance | component_id | 5 (100-pt column, 0 posted) | section grade is the TA's rubric grade | `bb_file:22#unit:1` | not_in_materials | mark_ungraded | Stack: same as A (likely not updated frequently; leave as ungraded). |
+| GEO.103-17 | grade_column_links GEO.103.lecture / _3602583_1 | excluded | — (no row; the Absences column feeds component 4) | attendance is by absences; the column reads as a count | `bb_file:42#unit:3` | not_in_materials | mark_ungraded | Stack: likely not updated frequently. Leave as ungraded. |
+| GEO.103-18 | grade_column_links GEO.103.recitation / _3602445_1 | excluded | — (no row; the Attendance column feeds component 5) | section grade is the TA's rubric grade | `bb_file:22#unit:1` | not_in_materials | mark_ungraded | Stack: same as A (likely not updated frequently; leave as ungraded). |
 | GEO.103-19 | assignments GEO.103/exam-1 | component_id | 7 | first exam | `bb_file:42#unit:3` | matches | keep | — |
 | GEO.103-20 | assignments GEO.103/exam-2 | component_id | 8 | second exam | `bb_file:42#unit:3` | matches | keep | — |
 | GEO.103-21 | assignments GEO.103/final-exam | component_id | 9 | final exam | `bb_file:42#unit:3` | matches | keep | — |
@@ -86,16 +97,16 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
     table: grading_schemes
     key: {course_id: "GEO.103.lecture"}
     field: letter_scale
-  stored: "A 94, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D 60, F 0"
+  stored: "[{\"min\": 94, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 83, \"letter\": \"B\"}, {\"min\": 80, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 73, \"letter\": \"C\"}, {\"min\": 70, \"letter\": \"C-\"}, {\"min\": 60, \"letter\": \"D\"}, {\"min\": 0, \"letter\": \"F\"}]"
   materials: "A 94-100, A- 90-93, B+ 87-89, B 83-86, B- 80-82, C+ 77-79, C 73-76, C- 70-72, D 60-69, F 0-59"
   citation: "bb_file:42#unit:2"
   quote: "D (60-69)"
   verdict: matches
   call: keep
-  value: "A 94, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D 60, F 0"
+  value: "[{\"min\": 94, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 83, \"letter\": \"B\"}, {\"min\": 80, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 73, \"letter\": \"C\"}, {\"min\": 70, \"letter\": \"C-\"}, {\"min\": 60, \"letter\": \"D\"}, {\"min\": 0, \"letter\": \"F\"}]"
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "All ten cut-offs match the syllabus."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select letter_scale::text from grading_schemes where course_id = 'GEO.103.lecture'"
@@ -104,16 +115,16 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
     table: grading_schemes
     key: {course_id: "GEO.103.lecture"}
     field: ai_policy
-  stored: "AI allowed for study aids (e.g. NotebookLM explainers from readings). No AI or technology of any kind during in-class quizzes/exams."
+  stored: null
   materials: "Study aids from readings allowed; no AI or technology on in-class quizzes or exams"
   citation: "bb_file:42#unit:10"
   quote: "you may not use AI on the in-class quizzes or exams."
   verdict: matches
   call: keep
-  value: "AI allowed for study aids (e.g. NotebookLM explainers from readings). No AI or technology of any kind during in-class quizzes/exams."
+  value: null
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "The syllabus states the same policy."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select ai_policy from grading_schemes where course_id = 'GEO.103.lecture'"
@@ -122,15 +133,15 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
     table: grading_schemes
     key: {course_id: "GEO.103.lecture"}
     field: notes
-  stored: "Recitation rolls in; ~5 quizzes, lowest dropped; TA participation rubric; section environment"
+  stored: false
   materials: "Repeated phone use in lecture can cost significant deductions or a zero on participation"
   citation: "bb_file:42#unit:4"
   quote: "significant deductions, or even a zero, on your course participation grade"
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Lecture phone use: repeated infractions can bring significant deductions or a zero on participation (note only, not computed).'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Note only."
+  why: "Note only. Notes text for 106: Existing notes + 'Lecture phone use: repeated infractions can bring significant deductions or a zero on participation (note only, not computed).'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -158,15 +169,15 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
     table: grade_components
     key: {course_id: "GEO.103.lecture", code: lecture_attendance}
     field: notes
-  stored: "Qwickly; 3 free absences"
+  stored: false
   materials: "Three free absences; further absences deducted by an unstated amount"
   citation: "bb_file:42#unit:3"
   quote: "Any additional absences will lead to deductions from your lecture attendance grade."
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Absences column (_3602583_1) is an absence count, not a score: ungraded. Shown as not yet graded until the professor posts a score; no estimated deductions.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Likely not updated frequently. Leave as ungraded."
+  why: "Likely not updated frequently. Leave as ungraded. Notes text for 106: Existing notes + 'Absences column (_3602583_1) is an absence count, not a score: excluded (\"Not graded\") until Stack relinks the column; a posted score does not count while excluded; no estimated deductions.'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -194,15 +205,15 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
     table: grade_components
     key: {course_id: "GEO.103.lecture", code: section_participation}
     field: notes
-  stored: "Earned in section M003; TA sets criteria"
+  stored: false
   materials: "A-F rubric; absences lower the grade"
   citation: "bb_file:22#unit:1"
   quote: "Absences will lower your grade."
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Scored only from the grade the TA posts in the gradebook; not yet graded until then. The recitation Attendance column (_3602445_1) is ungraded.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Use whatever the TA posts in the gradebook."
+  why: "Use whatever the TA posts in the gradebook. Notes text for 106: Existing notes + 'Scored only from the grade the TA posts in the gradebook; not yet graded until then. The recitation Attendance column (_3602445_1) is excluded (\"Not graded\") until Stack relinks the column; a posted score does not count while excluded.'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -353,40 +364,40 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
   recheck: "select count(*) from grading_schemes where course_id = 'GEO.103.recitation'"
 - id: GEO.103-17
   target:
-    table: assignments
-    key: {id: "GEO.103.lecture/absences"}
-    field: component_id
-  stored: 4
+    table: grade_column_links
+    key: {course_id: "GEO.103.lecture", column_id: "_3602583_1"}
+    field: excluded
+  stored: false
   materials: "Lecture attendance is scored by absences; the column reads as an absence count"
   citation: "bb_file:42#unit:3"
   quote: "You can miss three lectures, no questions asked."
   verdict: not_in_materials
   call: mark_ungraded
-  value: null
+  value: true
   reason_code: STACK_OVERRIDE
   why: "Likely not updated frequently. Leave as ungraded."
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
-  recheck: "select component_id from assignments where id = 'GEO.103.lecture/absences'"
+  recheck: "select coalesce((select excluded from grade_column_links where course_id = 'GEO.103.lecture' and column_id = '_3602583_1' and component_id is null), false)"
 - id: GEO.103-18
   target:
-    table: assignments
-    key: {id: "GEO.103.recitation/attendance"}
-    field: component_id
-  stored: 5
+    table: grade_column_links
+    key: {course_id: "GEO.103.recitation", column_id: "_3602445_1"}
+    field: excluded
+  stored: false
   materials: "The section grade is the TA's rubric grade; absences lower it"
   citation: "bb_file:22#unit:1"
   quote: "Absences will lower your grade."
   verdict: not_in_materials
   call: mark_ungraded
-  value: null
+  value: true
   reason_code: STACK_OVERRIDE
   why: "Same as A: likely not updated frequently. Leave as ungraded."
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
-  recheck: "select component_id from assignments where id = 'GEO.103.recitation/attendance'"
+  recheck: "select coalesce((select excluded from grade_column_links where course_id = 'GEO.103.recitation' and column_id = '_3602445_1' and component_id is null), false)"
 - id: GEO.103-19
   target:
     table: assignments
@@ -500,15 +511,15 @@ Export §6 questions for this course: Q1 (GEO attendance columns) is rows GEO.10
     table: grade_components
     key: {course_id: "GEO.103.lecture", code: reading_quizzes}
     field: notes
-  stored: "~5 unannounced quizzes in section; lowest (or a missed zero) dropped"
+  stored: false
   materials: "Same rule; no reading quiz posted as of 2026-09-29 (week 5)"
   citation: "bb_file:42#unit:3"
   quote: "we will give five or so reading quizzes in the discussion sections"
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'As of 2026-09-29 (week 5) no reading quiz is posted; the series placeholder stays until one is, and has no points.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Note that nothing exists 5 weeks into the semester."
+  why: "Note that nothing exists 5 weeks into the semester. Notes text for 106: Existing notes + 'As of 2026-09-29 (week 5) no reading quiz is posted; the series placeholder stays until one is, and has no points.'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed

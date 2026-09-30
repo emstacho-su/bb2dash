@@ -6,6 +6,14 @@ Other sources: `bb_file:61` (`Site Supervisor Evaluation.pdf`), `bb_file:59` (`f
 
 Export §6 questions for this course: Q7 (letter scale stops at C-) is row IST.471-02 and IST.471-Q1.
 
+## Amendments (PM, 2026-09-29)
+
+* IST.471-02 (stored/value as prod's `letter_scale::text`: today's 8 steps, and after 106 the 12-step scale A 93 … D- 62, F 0 in prod's key order).
+* IST.471-03 (ai_policy stored/value → null: prod's `grading_schemes.ai_policy` is null since migration 119_strip_ai_policy_passages, 2026-09-29).
+* IST.471-04 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* IST.471-10 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* IST.471-11 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+
 ## Reconciliation table
 
 | id | target | field | stored | materials say | citation | verdict | call | why |
@@ -79,13 +87,13 @@ Export §6 questions for this course: Q7 (letter scale stops at C-) is row IST.4
     table: grading_schemes
     key: {course_id: "IST.471"}
     field: letter_scale
-  stored: "A 93, A- 90, B+ 87, B 84, B- 81, C+ 77, C 74, C- 71"
+  stored: "[{\"min\": 93, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 84, \"letter\": \"B\"}, {\"min\": 81, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 74, \"letter\": \"C\"}, {\"min\": 71, \"letter\": \"C-\"}]"
   materials: "A 93-100, A- 90-92, B+ 87-89, B 84-86, B- 81-83, C+ 77-80, C 74-76, C- 71-73; nothing below 71"
   citation: "bb_file:26#unit:5"
   quote: "71- C- 73"
   verdict: matches
   call: change_to
-  value: "A 93, A- 90, B+ 87, B 84, B- 81, C+ 77, C 74, C- 71, D+ 68, D 65, D- 62, F 0"
+  value: "[{\"min\": 93, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 84, \"letter\": \"B\"}, {\"min\": 81, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 74, \"letter\": \"C\"}, {\"min\": 71, \"letter\": \"C-\"}, {\"min\": 68, \"letter\": \"D+\"}, {\"min\": 65, \"letter\": \"D\"}, {\"min\": 62, \"letter\": \"D-\"}, {\"min\": 0, \"letter\": \"F\"}]"
   reason_code: STACK_OVERRIDE
   why: "Figure out a scale for below with the ranges you do know. However this class is the class for my for-credit internship and I don't expect to get anything below a B."
   decided_by: Stack
@@ -97,16 +105,16 @@ Export §6 questions for this course: Q7 (letter scale stops at C-) is row IST.4
     table: grading_schemes
     key: {course_id: "IST.471"}
     field: ai_policy
-  stored: "Limited and Specified AI Use template with the permitted-assignment placeholder unfilled; operative default: no AI use on any assignment unless the instructor grants documented permission."
+  stored: null
   materials: "Template placeholder left unfilled; if no instructions are given, no AI is permitted"
   citation: "bb_file:26#unit:6"
   quote: "[insert specific assignment, quiz or exam names"
   verdict: matches
   call: keep
-  value: "Limited and Specified AI Use template with the permitted-assignment placeholder unfilled; operative default: no AI use on any assignment unless the instructor grants documented permission."
+  value: null
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "The stored summary matches the syllabus."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select ai_policy from grading_schemes where course_id = 'IST.471'"
@@ -115,15 +123,15 @@ Export §6 questions for this course: Q7 (letter scale stops at C-) is row IST.4
     table: grading_schemes
     key: {course_id: "IST.471"}
     field: notes
-  stored: "70% quality of professional work (site supervisor evaluation); 30% assignments. No supervisor evaluation => no credit. Penalties up to the professor."
+  stored: false
   materials: "Same; the registrar form offers letter or pass/fail"
   citation: "bb_file:26#unit:4"
   quote: "Failure to receive the site supervisor's evaluation form will result in no credit"
   verdict: matches
   call: change_to
-  value: "Existing notes + 'Grading basis: letter grade (Stack, 2026-09-29).'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Letter grade."
+  why: "Letter grade. Notes text for 106: Existing notes + 'Grading basis: letter grade (Stack, 2026-09-29).'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -223,15 +231,15 @@ Export §6 questions for this course: Q7 (letter scale stops at C-) is row IST.4
     table: grade_components
     key: {course_id: "IST.471", code: work_quality}
     field: notes
-  stored: "Site supervisor evaluation (Assignment 6). Instrument: Site Supervisor Evaluation.pdf - 8 competencies rated 1-5, 8 IM&T outcomes, 4 narrative questions."
+  stored: false
   materials: "No credit without the supervisor's evaluation"
   citation: "bb_file:26#unit:4"
   quote: "Failure to receive the site supervisor's evaluation form will result in no credit"
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Fed by the Assignment 6 column (_3599888_1, 100 pts), earned / possible x 70; shown as not yet graded until a score is entered.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "That category would have to remain ungraded until something is entered into grades."
+  why: "That category would have to remain ungraded until something is entered into grades. Notes text for 106: Existing notes + 'Fed by the Assignment 6 column (_3599888_1, 100 pts), earned / possible x 70; shown as not yet graded until a score is entered.'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -241,15 +249,15 @@ Export §6 questions for this course: Q7 (letter scale stops at C-) is row IST.4
     table: grade_components
     key: {course_id: "IST.471", code: assignments}
     field: notes
-  stored: "Assignments 1-7. Blackboard carries columns for 1-6 only (5+5+5+5+10+100 = 130 raw points); Assignment 7 Final Reflection has no column yet."
+  stored: false
   materials: "Assignments 1-7 are the course requirements; Assignment 6 is the supervisor's evaluation"
   citation: "bb_file:26#unit:3"
   quote: "Assignment 1: Submit your Proposal to Blackboard."
   verdict: differs
   call: change_to
-  value: "Assignments 1-5 and 7. Blackboard columns for 1-5 (5+5+5+5+10 = 30 raw points); Assignment 7 has no column yet; Assignment 6 feeds work_quality. Earned / possible x 30; not yet graded until posted."
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Follows IST.471-17: the relink moves Assignment 6 out of this component."
+  why: "Follows IST.471-17: the relink moves Assignment 6 out of this component. Notes text for 106: Assignments 1-5 and 7. Blackboard columns for 1-5 (5+5+5+5+10 = 30 raw points); Assignment 7 has no column yet; Assignment 6 feeds work_quality. Earned / possible x 30; not yet graded until posted."
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed

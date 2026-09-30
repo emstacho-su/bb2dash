@@ -8,6 +8,13 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
 
 ## Amendments (PM, 2026-09-29)
 
+* IST.466-04 (letter_scale stored/value: the human list → prod's exact `letter_scale::text`, what the recheck returns).
+* IST.466-05 (ai_policy stored/value → null: prod's `grading_schemes.ai_policy` is null since migration 119_strip_ai_policy_passages, 2026-09-29).
+* IST.466-13 (stored/value → true: the recheck is a `like` test).
+* IST.466-26 (stored/value → 0: the recheck counts ethics parts with a parent).
+* IST.466-06 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* IST.466-11 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* IST.466-16 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
 * IST.466-29 (change_to 26 → keep null) and new IST.466-39 (mark_ungraded `_3562500_1`): Stack 2026-09-29, attendance and participation are separate categories, each on the syllabus's own points; attendance is the syllabus 150 on the 150-point column `_3562493_1`, and the 100-point Attendance column the syllabus does not name is "Not graded" (a `grade_column_links` excluded row, P-3), not merged.
 
 ## Reconciliation table
@@ -162,16 +169,16 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
     table: grading_schemes
     key: {course_id: "IST.466"}
     field: letter_scale
-  stored: "A 930, A- 900, B+ 870, B 830, B- 800, C+ 770, C 730, C- 700, D 600, F 0"
+  stored: "[{\"min\": 930, \"letter\": \"A\"}, {\"min\": 900, \"letter\": \"A-\"}, {\"min\": 870, \"letter\": \"B+\"}, {\"min\": 830, \"letter\": \"B\"}, {\"min\": 800, \"letter\": \"B-\"}, {\"min\": 770, \"letter\": \"C+\"}, {\"min\": 730, \"letter\": \"C\"}, {\"min\": 700, \"letter\": \"C-\"}, {\"min\": 600, \"letter\": \"D\"}, {\"min\": 0, \"letter\": \"F\"}]"
   materials: "A 1020-930, A- 929-900, B+ 899-870, B 869-830, B- 829-800, C+ 799-770, C 769-730, C- 729-700, D 699-600, F 599-0"
   citation: "bb_file:39#unit:1"
   quote: "D.. | 699-600 | F. | 599- 0"
   verdict: matches
   call: keep
-  value: "A 930, A- 900, B+ 870, B 830, B- 800, C+ 770, C 730, C- 700, D 600, F 0"
+  value: "[{\"min\": 930, \"letter\": \"A\"}, {\"min\": 900, \"letter\": \"A-\"}, {\"min\": 870, \"letter\": \"B+\"}, {\"min\": 830, \"letter\": \"B\"}, {\"min\": 800, \"letter\": \"B-\"}, {\"min\": 770, \"letter\": \"C+\"}, {\"min\": 730, \"letter\": \"C\"}, {\"min\": 700, \"letter\": \"C-\"}, {\"min\": 600, \"letter\": \"D\"}, {\"min\": 0, \"letter\": \"F\"}]"
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "All ten cut-offs match the syllabus grade table."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select letter_scale::text from grading_schemes where course_id = 'IST.466'"
@@ -180,16 +187,16 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
     table: grading_schemes
     key: {course_id: "IST.466"}
     field: ai_policy
-  stored: "No AI policy stated in the course syllabus; the syllabus lists an \"AI Team Assignment\" (100 pts). University academic-integrity appendix applies."
+  stored: null
   materials: "Syllabus has no AI statement; the appendix lists three options without choosing one"
   citation: "bb_file:33#unit:1"
   quote: "Choose One of Three Options"
   verdict: matches
   call: keep
-  value: "No AI policy stated in the course syllabus; the syllabus lists an \"AI Team Assignment\" (100 pts). University academic-integrity appendix applies."
+  value: null
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "The stored text accurately says no course AI statement was chosen."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select ai_policy from grading_schemes where course_id = 'IST.466'"
@@ -198,15 +205,15 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
     table: grading_schemes
     key: {course_id: "IST.466"}
     field: notes
-  stored: "Component summary from bb_file 39; no deduction rule"
+  stored: false
   materials: "Disrespectful students can lose up to 20 points per class"
   citation: "bb_file:39#unit:1"
   quote: "can receive a deduction of up to 20 points per class."
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Disrespect deduction: up to 20 points per class (note only, not computed).'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Note only."
+  why: "Note only. Notes text for 106: Existing notes + 'Disrespect deduction: up to 20 points per class (note only, not computed).'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -288,15 +295,15 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
     table: grade_components
     key: {course_id: "IST.466", code: participation}
     field: notes
-  stored: "Up to 10 pts per each of the 10 ethics presentations for asking good questions; presenters do not earn participation that day. Syllabus."
+  stored: false
   materials: "Presenters earn no participation on their own day, so the practical max is 90"
   citation: "bb_file:21#unit:1"
   quote: "Students that are presenting do NOT earn participation points when they present."
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Practical max 90 of 100 (own team presents once); display 100 per syllabus. Scored from gradebook column Class Participation, earned / possible x 100.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "b."
+  why: "b. Notes text for 106: Existing notes + 'Practical max 90 of 100 (own team presents once); display 100 per syllabus. Scored from gradebook column Class Participation, earned / possible x 100.'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -324,16 +331,16 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
     table: grade_components
     key: {course_id: "IST.466", code: major_cases}
     field: notes
-  stored: "Rank-scored within section: 1st 150, 2nd 140, 3rd 130, 4th 120, 5th 110, 6th 100."
+  stored: true
   materials: "150 first place down to 100 sixth place, in each section"
   citation: "bb_file:39#unit:1"
   quote: "130 points to teams that finish in third place"
   verdict: matches
   call: keep
-  value: "Rank-scored within section: 1st 150, 2nd 140, 3rd 130, 4th 120, 5th 110, 6th 100."
+  value: true
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "Export Q12: the rank scoring is now cited to the syllabus."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select notes like '%1st 150, 2nd 140, 3rd 130, 4th 120, 5th 110, 6th 100%' from grade_components where course_id = 'IST.466' and code = 'major_cases'"
@@ -378,15 +385,15 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
     table: grade_components
     key: {course_id: "IST.466", code: ethics_presentations}
     field: notes
-  stored: "40-min team ethics case presentation, up to 100 pts (<30 min capped at 65). Part of \"Team Ethics Presentation (150)\" with practice. Syllabus."
+  stored: false
   materials: "Cap of 65 matches; the 120-pt rubric deck is filed with the Ethics vs. exercise"
   citation: "bb_file:21#unit:1"
   quote: "eligible for a maximum of 65 out of 100 points"
   verdict: matches
   call: change_to
-  value: "Existing notes + 'Rubric deck (bb_file 20/38, 120 pts) does not govern this item; filed with the Ethics vs. exercise.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Pick according to my answer for Q2 (the syllabus figure governs)."
+  why: "Pick according to my answer for Q2 (the syllabus figure governs). Notes text for 106: Existing notes + 'Rubric deck (bb_file 20/38, 120 pts) does not govern this item; filed with the Ethics vs. exercise.'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -558,13 +565,13 @@ Export §6 questions for this course: Q1 (IST.466 attendance) is rows IST.466-22
     table: grade_components
     key: {course_id: "IST.466", code: ethics_practice}
     field: parent_id
-  stored: null
+  stored: 0
   materials: "Practice 50 + presentation 100 grouped as Team Ethics Presentation (150)"
   citation: "bb_file:39#unit:1"
   quote: "Team Ethics Presentation (150 points)"
   verdict: materials_say_more
   call: keep
-  value: null
+  value: 0
   reason_code: STACK_OVERRIDE
   why: "Keep them flat for now."
   decided_by: Stack

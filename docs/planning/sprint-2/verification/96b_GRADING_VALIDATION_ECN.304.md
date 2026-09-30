@@ -6,6 +6,14 @@ The corpus holds no other ECN.304 grading material. The Blackboard announcements
 
 Export §6 questions for this course: Q1 (ECN.304 attendance) is rows ECN.304-15 and -16; Q8 (quiz averaging) is row ECN.304-08 and ECN.304-Q1; Q10 (rank weights) is rows ECN.304-11 to -13.
 
+## Amendments (PM, 2026-09-29)
+
+* ECN.304-02 (letter_scale stored/value: the human list → prod's exact `letter_scale::text`, what the recheck returns).
+* ECN.304-03 (ai_policy stored/value → null: prod's `grading_schemes.ai_policy` is null since migration 119_strip_ai_policy_passages, 2026-09-29).
+* ECN.304-04 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* ECN.304-26 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* ECN.304-15 (note → "Attendance is posted regularly and counts as posted (Stack, 2026-09-29).", recheck follows it; no link): Stack's post-sitting answer; stored/value → false/true, the recheck being a `like` test.
+
 ## Reconciliation table
 
 | id | target | field | stored | materials say | citation | verdict | call | why |
@@ -24,7 +32,7 @@ Export §6 questions for this course: Q1 (ECN.304 attendance) is rows ECN.304-15
 | ECN.304-12 | grade_components ECN.304 / exams | count_expected | 3 | 3 non-cumulative exams | `bb_file:23#unit:2` | matches | keep | — |
 | ECN.304-13 | grade_components ECN.304 / exams | drop_lowest | 0 | lowest exam weighted 20%, not dropped | `bb_file:23#unit:2` | matches | keep | — |
 | ECN.304-14 | grading_schemes ECN.304 | check: top-level weights = 100 | 100 | 10 + 15 + 75 = 100 | `bb_file:23#unit:2` | matches | keep | — |
-| ECN.304-15 | grade_components ECN.304 / participation | notes | attend and participate; single Attendance column | attendance expected every class; the column-to-grade link isn't stated | `bb_file:23#unit:2` | materials_say_more | change_to (notes + not-yet-graded) | Stack: the attendance grade is assigned at the end of the semester; leave as 0 and don't count it until attendance is actually uploaded. |
+| ECN.304-15 | grade_components ECN.304 / participation | notes | attend and participate; single Attendance column | attendance expected every class; the column-to-grade link isn't stated | `bb_file:23#unit:2` | materials_say_more | change_to (notes: counts as posted) | Stack 2026-09-29: one of the few classes whose attendance is updated regularly; it counts right away, as posted. No link. |
 | ECN.304-16 | assignments ECN.304/attendance | component_id / points_possible | 1 / 100.00 | attendance is part of participation | `bb_file:23#unit:2` | not_in_materials | keep | Stack: leave as 0 but don't count towards the grade until attendance has actually been uploaded. |
 | ECN.304-17 | assignments ECN.304/exam-1 | component_id | 3 | one of 3 exams | `bb_file:23#unit:2` | matches | keep | — |
 | ECN.304-18 | assignments ECN.304/exam-2 | component_id | 3 | one of 3 exams | `bb_file:23#unit:2` | matches | keep | — |
@@ -87,16 +95,16 @@ Export §6 questions for this course: Q1 (ECN.304 attendance) is rows ECN.304-15
     table: grading_schemes
     key: {course_id: "ECN.304"}
     field: letter_scale
-  stored: "A 93, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D 60, F 0"
+  stored: "[{\"min\": 93, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 83, \"letter\": \"B\"}, {\"min\": 80, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 73, \"letter\": \"C\"}, {\"min\": 70, \"letter\": \"C-\"}, {\"min\": 60, \"letter\": \"D\"}, {\"min\": 0, \"letter\": \"F\"}]"
   materials: "A >=93, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D 60-69.9, F <60"
   citation: "bb_file:23#unit:2"
   quote: "D 60% – 69.9%"
   verdict: matches
   call: keep
-  value: "A 93, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D 60, F 0"
+  value: "[{\"min\": 93, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 83, \"letter\": \"B\"}, {\"min\": 80, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 73, \"letter\": \"C\"}, {\"min\": 70, \"letter\": \"C-\"}, {\"min\": 60, \"letter\": \"D\"}, {\"min\": 0, \"letter\": \"F\"}]"
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "All ten cut-offs match the syllabus."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select letter_scale::text from grading_schemes where course_id = 'ECN.304'"
@@ -105,16 +113,16 @@ Export §6 questions for this course: Q1 (ECN.304 attendance) is rows ECN.304-15
     table: grading_schemes
     key: {course_id: "ECN.304"}
     field: ai_policy
-  stored: "AI is permitted only for reviewing course materials. Each assignment/quiz/exam may state more; if no instructions are given for an item, no AI use is permitted."
+  stored: null
   materials: "AI permitted for reviewing course materials; none otherwise unless an item says so"
   citation: "bb_file:23#unit:3"
   quote: "artificial intelligence is permitted on the following: reviewing course materials"
   verdict: matches
   call: keep
-  value: "AI is permitted only for reviewing course materials. Each assignment/quiz/exam may state more; if no instructions are given for an item, no AI use is permitted."
+  value: null
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "The syllabus states the same policy."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select ai_policy from grading_schemes where course_id = 'ECN.304'"
@@ -123,15 +131,15 @@ Export §6 questions for this course: Q1 (ECN.304 attendance) is rows ECN.304-15
     table: grading_schemes
     key: {course_id: "ECN.304"}
     field: notes
-  stored: "Course grade formula; exams rank-weighted; lowest quiz dropped; no total points"
+  stored: false
   materials: "Exams may not be made up without an urgent, legitimate, documented reason"
   citation: "bb_file:23#unit:2"
   quote: "Exams may not be made up unless an urgent and legitimate reason"
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Exam make-up only with an urgent, legitimate, documented reason (note only, not computed).'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Note."
+  why: "Note. Notes text for 106: Existing notes + 'Exam make-up only with an urgent, legitimate, documented reason (note only, not computed).'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -321,19 +329,19 @@ Export §6 questions for this course: Q1 (ECN.304 attendance) is rows ECN.304-15
     table: grade_components
     key: {course_id: "ECN.304", code: participation}
     field: notes
-  stored: "Attend and actively participate in every class; email the instructor beforehand to be excused. Gradebook exposes a single manual Attendance column (_3598937_1, 100 pts)."
+  stored: false
   materials: "Attendance expected every class; how the column becomes the grade is not stated"
   citation: "bb_file:23#unit:2"
   quote: "I expect everyone to attend and actively participate in every class."
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Attendance grade assigned at semester end: shown as not yet graded and excluded from standing until a score is posted.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Attendance grade will be assigned at the end of the semester. Leave as 0 but don't count towards the grade until attendance has actually been uploaded."
+  why: "Stack 2026-09-29: \"This is one of the few classes that has attendance updated regularly. For this class it can count right away.\" Notes text for 106: Existing notes + 'Attendance is posted regularly and counts as posted (Stack, 2026-09-29).'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
-  recheck: "select notes like '%excluded from standing until a score is posted%' from grade_components where course_id = 'ECN.304' and code = 'participation'"
+  recheck: "select notes like '%Attendance is posted regularly and counts as posted%' from grade_components where course_id = 'ECN.304' and code = 'participation'"
 - id: ECN.304-16
   target:
     table: assignments
@@ -519,15 +527,15 @@ Export §6 questions for this course: Q1 (ECN.304 attendance) is rows ECN.304-15
     table: grade_components
     key: {course_id: "ECN.304", code: exams}
     field: notes
-  stored: "Highest exam 30%, median 25%, lowest 20%. Three non-cumulative exams (10/01, 11/05, 12/08). Verified against syllabus PDF p.2."
+  stored: false
   materials: "Rank weights need all three exam grades"
   citation: "bb_file:23#unit:2"
   quote: "The highest exam grade will be weighted 30%, the median grade 25%"
   verdict: matches
   call: change_to
-  value: "Existing notes + 'Until all three exams are graded: not yet graded before Exam 1; then the average of the exams taken fills the full 75 percent.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "a."
+  why: "a. Notes text for 106: Existing notes + 'Until all three exams are graded: not yet graded before Exam 1; then the average of the exams taken fills the full 75 percent.'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed

@@ -10,6 +10,8 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
 
 ## Amendments (PM, 2026-09-29)
 
+* IST.323-04 (letter_scale stored/value: the human list → prod's exact `letter_scale::text`, what the recheck returns).
+* IST.323-08 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
 * IST.323-24 (change_to 11 → keep 13), IST.323-25 (change_to 14 → keep 18), new IST.323-57 (fp_proposal points 11 → 13) and IST.323-58 (fp_log points 3 → 1): Stack 2026-09-29 re-cut the parts instead (B-12); the Blackboard proposal column is 13 = proposal 11 + final log 2, the column stays 13 and linked to part 18, and Final Project stays 20.
 * IST.323-15 and IST.323-16 (keep 11 / keep 3 → matches, no call): they state what the syllabus says; after the re-cut their rows hold 13 and 1, which IST.323-57 and -58 recheck.
 
@@ -173,16 +175,16 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
     table: grading_schemes
     key: {course_id: "IST.323"}
     field: letter_scale
-  stored: "A 94, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D 65, D- 60, F 0"
+  stored: "[{\"min\": 94, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 83, \"letter\": \"B\"}, {\"min\": 80, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 73, \"letter\": \"C\"}, {\"min\": 70, \"letter\": \"C-\"}, {\"min\": 65, \"letter\": \"D\"}, {\"min\": 60, \"letter\": \"D-\"}, {\"min\": 0, \"letter\": \"F\"}]"
   materials: "A 94-100, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D 65, D- 60, F <60"
   citation: "bb_file:151#unit:1"
   quote: "D | 1.000 | 65 – 69.9"
   verdict: matches
   call: keep
-  value: "A 94, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D 65, D- 60, F 0"
+  value: "[{\"min\": 94, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 83, \"letter\": \"B\"}, {\"min\": 80, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 73, \"letter\": \"C\"}, {\"min\": 70, \"letter\": \"C-\"}, {\"min\": 65, \"letter\": \"D\"}, {\"min\": 60, \"letter\": \"D-\"}, {\"min\": 0, \"letter\": \"F\"}]"
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "All eleven cut-offs match the syllabus grading table."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select letter_scale::text from grading_schemes where course_id = 'IST.323'"
@@ -245,15 +247,15 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
     table: grade_components
     key: {course_id: "IST.323", code: participation}
     field: notes
-  stored: "Discussion, questions during presentations, demos; laptop misuse => 0"
+  stored: false
   materials: "Two free absences; each absence beyond two lowers participation one letter; excused only for athletics letter, MySlice religious observance, SOS-documented illness or emergency"
   citation: "bb_file:3#unit:1"
   quote: "Each absence beyond two reduces your participation grade by one letter."
   verdict: materials_say_more
   call: change_to
-  value: "Discussion, questions during presentations, demos; laptop misuse => 0. Each absence beyond two reduces your participation grade by one letter (note only, not computed)."
+  value: true
   reason_code: SYLLABUS_AUTHORITATIVE
-  why: "Accepted session recommendation: the appendix is part of the syllabus; record the rule as a note only (Q2)."
+  why: "Accepted session recommendation: the appendix is part of the syllabus; record the rule as a note only (Q2). Notes text for 106: Discussion, questions during presentations, demos; laptop misuse => 0. Each absence beyond two reduces your participation grade by one letter (note only, not computed)."
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed

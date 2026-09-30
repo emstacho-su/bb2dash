@@ -10,6 +10,14 @@ The syllabus numbers its items #1, #2, #4, #5, #6 (there is no #3); the weights 
 
 Doubling check (Stack, row C): Moving Tasks (`_3615326_1`, 9/16) and Moving Tasks - Processes (`_3619706_1`, 9/23) are separate columns; `bb_file:155` and `bb_file:156` are class write-ups of the exercise, not gradebook items. `team-request` and `team-and-project-selection` are alternative paths on `bb_file:30#unit:4`, not one item twice. `project-1a`'s re-created column appears once (`_3607154_1`). The 16 zero-point items each have their own column and date. Nothing is doubled.
 
+## Amendments (PM, 2026-09-29)
+
+* IST.352-02 (letter_scale stored/value: the human list → prod's exact `letter_scale::text`, what the recheck returns).
+* IST.352-03 (ai_policy stored/value → null: prod's `grading_schemes.ai_policy` is null since migration 119_strip_ai_policy_passages, 2026-09-29).
+* IST.352-04 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* IST.352-13 (stored/value → false/true: the recheck is a `like` test; the notes text moved to `why`).
+* IST.352-12 (note → "Bonus items add to earned points only (note only, not computed: the figure applies no 100 percent cap)."): the figure applies no cap; stored/value → false/true, the recheck being a `like` test.
+
 ## Reconciliation table
 
 | id | target | field | stored | materials say | citation | verdict | call | why |
@@ -25,7 +33,7 @@ Doubling check (Stack, row C): Moving Tasks (`_3615326_1`, 9/16) and Moving Task
 | IST.352-09 | grade_components IST.352 / attendance | weight_pct | 15.00 | 15% | `bb_file:27#unit:1` | matches | keep | — |
 | IST.352-10 | grading_schemes IST.352 | check: top-level weights = 100 | 100 | 5+60+10+10+15 = 100 | `bb_file:27#unit:1` | matches | keep | — |
 | IST.352-11 | grade_components IST.352 (all) | drop_lowest | 0 on every component | no drop rule anywhere | — | not_in_materials | keep | Stack: keep. |
-| IST.352-12 | grade_components IST.352 / project_deliverables | notes (bonus) | bonus items listed, counting unstated | Event Model, Activity Diagram, Project Plans marked "Bonus Material" | `bb_file:27#unit:1` | materials_say_more | change_to (notes + bonus rule) | Stack Q2: bonus adds to earned only; component capped at 100%. |
+| IST.352-12 | grade_components IST.352 / project_deliverables | notes (bonus) | bonus items listed, counting unstated | Event Model, Activity Diagram, Project Plans marked "Bonus Material" | `bb_file:27#unit:1` | materials_say_more | change_to (notes + bonus rule) | Stack Q2: bonus adds to earned only; note only, not computed: the figure applies no 100 percent cap. |
 | IST.352-13 | grade_components IST.352 / attendance | notes | knowledge checks + reading confirmations feed this; one make-up | only the make-up rule is stated; no scored column exists | `bb_file:27#unit:1` | not_in_materials | change_to (notes + not-yet-graded) | Stack Q1 (a): show as not yet graded and compute over the other 85%. |
 | IST.352-14 | assignments IST.352/role-of-systems-analyst | component_id / points_possible | 29 / 5.00 | Research – Role of Systems Analyst, 5% | `bb_file:27#unit:1` | matches | keep | — |
 | IST.352-15 | assignments IST.352/project-1a | component_id / points_possible | 30 / 10.00 | a Project Assignment deliverable | `bb_file:27#unit:1` | matches | keep | — |
@@ -107,16 +115,16 @@ Doubling check (Stack, row C): Moving Tasks (`_3615326_1`, 9/16) and Moving Task
     table: grading_schemes
     key: {course_id: "IST.352"}
     field: letter_scale
-  stored: "A 93, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D+ 67, D 63, D- 60, F 0"
+  stored: "[{\"min\": 93, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 83, \"letter\": \"B\"}, {\"min\": 80, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 73, \"letter\": \"C\"}, {\"min\": 70, \"letter\": \"C-\"}, {\"min\": 67, \"letter\": \"D+\"}, {\"min\": 63, \"letter\": \"D\"}, {\"min\": 60, \"letter\": \"D-\"}, {\"min\": 0, \"letter\": \"F\"}]"
   materials: "A 93-100, A- 90-92, B+ 87-89, B 83-86, B- 80-82, C+ 77-79, C 73-76, C- 70-72, D+ 67-69, D 63-66, D- 60-62, F below 60"
   citation: "bb_file:27#unit:1"
   quote: "D - (60-62)"
   verdict: matches
   call: keep
-  value: "A 93, A- 90, B+ 87, B 83, B- 80, C+ 77, C 73, C- 70, D+ 67, D 63, D- 60, F 0"
+  value: "[{\"min\": 93, \"letter\": \"A\"}, {\"min\": 90, \"letter\": \"A-\"}, {\"min\": 87, \"letter\": \"B+\"}, {\"min\": 83, \"letter\": \"B\"}, {\"min\": 80, \"letter\": \"B-\"}, {\"min\": 77, \"letter\": \"C+\"}, {\"min\": 73, \"letter\": \"C\"}, {\"min\": 70, \"letter\": \"C-\"}, {\"min\": 67, \"letter\": \"D+\"}, {\"min\": 63, \"letter\": \"D\"}, {\"min\": 60, \"letter\": \"D-\"}, {\"min\": 0, \"letter\": \"F\"}]"
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "All twelve cut-offs match the syllabus table."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select letter_scale::text from grading_schemes where course_id = 'IST.352'"
@@ -125,16 +133,16 @@ Doubling check (Stack, row C): Moving Tasks (`_3615326_1`, 9/16) and Moving Task
     table: grading_schemes
     key: {course_id: "IST.352"}
     field: ai_policy
-  stored: "Zero tolerance: all generative-AI tools prohibited at every stage (research, brainstorming, outlining, polishing, any content)."
+  stored: null
   materials: "All generative-AI tools prohibited at all stages"
   citation: "bb_file:27#unit:1"
   quote: "Zero tolerance for artificial intelligence use."
   verdict: matches
   call: keep
-  value: "Zero tolerance: all generative-AI tools prohibited at every stage (research, brainstorming, outlining, polishing, any content)."
+  value: null
   reason_code: SYLLABUS_AUTHORITATIVE
   why: "The syllabus states the same policy."
-  decided_by: session
+  decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
   recheck: "select ai_policy from grading_schemes where course_id = 'IST.352'"
@@ -143,15 +151,15 @@ Doubling check (Stack, row C): Moving Tasks (`_3615326_1`, 9/16) and Moving Task
     table: grading_schemes
     key: {course_id: "IST.352"}
     field: notes
-  stored: "Team grades may differ; peer evaluation; one make-up reading report; electronic, no handwriting; class time"
+  stored: false
   materials: "Late work loses 20% of total points per day; re-grade requests within one week; repeated disruption affects the final grade"
   citation: "bb_file:27#unit:1"
   quote: "penalty of 20% of total points for each day being late"
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Late: minus 20 percent of total points per day late; re-grade requests within one week of return; repeated disruption affects the final grade (notes only, not computed).'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "Note only."
+  why: "Note only. Notes text for 106: Existing notes + 'Late: minus 20 percent of total points per day late; re-grade requests within one week of return; repeated disruption affects the final grade (notes only, not computed).'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
@@ -287,15 +295,15 @@ Doubling check (Stack, row C): Moving Tasks (`_3615326_1`, 9/16) and Moving Task
     table: grade_components
     key: {course_id: "IST.352", code: project_deliverables}
     field: notes
-  stored: "Team deliverables list; bonus: event model, activity diagram, project plans"
+  stored: false
   materials: "Three deliverables marked Bonus Material; how they count is not stated"
   citation: "bb_file:27#unit:1"
   quote: "Event Model (Bonus Material)"
   verdict: materials_say_more
   call: change_to
-  value: "Existing notes + 'Bonus items add to earned points only; the component is capped at 100 percent.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "A sounds correct."
+  why: "A sounds correct. Notes text for 106: Existing notes + 'Bonus items add to earned points only (note only, not computed: the figure applies no 100 percent cap).'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: tentative
@@ -305,15 +313,15 @@ Doubling check (Stack, row C): Moving Tasks (`_3615326_1`, 9/16) and Moving Task
     table: grade_components
     key: {course_id: "IST.352", code: attendance}
     field: notes
-  stored: "Knowledge checks + reading confirmations feed this; one make-up reading report allowed per semester"
+  stored: false
   materials: "Only the make-up rule is stated; no scored gradebook column exists"
   citation: "bb_file:27#unit:1"
   quote: "This option can only be used once during the semester."
   verdict: not_in_materials
   call: change_to
-  value: "Existing notes + 'No scored gradebook column: shown as not yet graded; standing computed over the other 85 percent.'"
+  value: true
   reason_code: STACK_OVERRIDE
-  why: "a."
+  why: "a. Notes text for 106: Existing notes + 'No scored gradebook column: shown as not yet graded; standing computed over the other 85 percent.'"
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
