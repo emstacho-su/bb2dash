@@ -126,3 +126,15 @@ Totals: 4 units (2 deleted, 2 trimmed), 5,249 characters, 29 embedding rows. bb_
 stored bytes are not touched. Dry run (150 plus `phase17_150_no_appendix_b.sql` in one
 begin…rollback): `phase17_150_no_appendix_b: PASS`, with 244 current IST.323 units. Slide 22 then
 reads "A: Ranked risk summary.   C: Your running log.".
+
+## Round 3 walk (automated, 2026-09-30, preview b2698bf)
+
+`npm run walk` (scripted login from `.env.testing`, Vercel share cookie): 24 passed, 0 failed. Shots 22-27 added;
+01-10, 12, 13, 16-18 retaken on the round-3 build. Findings the walk and the PM's read of the shots sent back, all
+fixed before this run: the `?view=timeline` redirect dropped `item` (W-45, d0c1597); the Stream's assignment lane
+squeezed to one word per line (W-45, 302cb81; spec 24 now asserts cards >= 240 px); the nested Quiz #5 chip
+overflowed its class block at 1040 px (W-47, d8f0034, spec 26); Inbox cards showed raw ids and JSON on the ten
+`link_file_sessions` questions (W-46, 0cd2ff8: date-labelled session choices). Code-review gate on the round-3 diff:
+two medium false-empty states (Home's tracker before the term row; the timeline before its five reads), both fixed
+(0cd2ff8, 47fa664). Security gate on c42d934..HEAD: no findings. Open request 183 (inbox_feedback, queued since
+2026-09-29 13:34Z, superseded by 186) keeps the Apply answers button reading "queued"; left for Stack's word.
