@@ -105,10 +105,10 @@ describe('createForceUpdate', () => {
     expect(calls.quits).toBe(0);
   });
 
-  it('a recorded build that is not on disk is not an update', async () => {
+  it('a recorded build that is not on disk is not an update, and not up to date either', async () => {
     const { deps, calls } = harness({ buildOnDisk: () => false });
     const result = await createForceUpdate(deps).request();
-    expect(result.status).toBe('up-to-date');
+    expect(result).toEqual({ status: 'failed', reason: FAILURE_REASONS.notOnDisk });
     expect(calls.swaps).toEqual([]);
   });
 

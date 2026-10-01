@@ -18,7 +18,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { win32 } from 'node:path';
 
 import type { BuilderStartOutcome } from '../core/update/builder-trigger';
-import type { BuilderTaskStatus } from '../core/update/force-update';
+import { type BuildCheck, type BuilderTaskStatus, parseBuildCheck } from '../core/update/force-update';
 import {
   BUILDS_FOLDER,
   EXE_NAME,
@@ -31,6 +31,7 @@ import { parseLastBuiltSha } from '../core/update/update-check';
 export const UPDATE_HELPER_SCRIPT = 'update-now.ps1';
 const LAUNCH_SCRIPTS_FOLDER = 'launch';
 const STATE_FILE = 'state.json';
+const CHECK_FILE = 'last-check.json';
 
 export const BUILDER_TASK_NAME = 'Bb2dash-LogonBuild';
 export const APP_TASK_NAME = 'Bb2dash-App';
@@ -173,6 +174,13 @@ export function readLastBuiltSha(stateDir: string): string | null {
   const path = win32.join(stateDir, STATE_FILE);
   if (!existsSync(path)) return null;
   return parseLastBuiltSha(readFileSync(path, 'utf8'));
+}
+
+/** The builder's `last-check.json`, or `null` when there is none or it is malformed. */
+export function readLastCheck(stateDir: string): BuildCheck | null {
+  const path = win32.join(stateDir, CHECK_FILE);
+  if (!existsSync(path)) return null;
+  return parseBuildCheck(readFileSync(path, 'utf8'));
 }
 
 /** Whether `builds/<tree>/win-unpacked/bb2dash.exe` exists. */

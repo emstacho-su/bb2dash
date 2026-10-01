@@ -218,9 +218,18 @@ hand-packed build does none of this.
   minutes, a no-change run a few seconds. Then:
   * a newer build is on disk: *Updating — bb2dash will restart*, and the app runs
     the same **Update now** path as the prompt (helper swap, relaunch);
-  * nothing newer: *Up to date*;
-  * the builder failed, timed out or could not be started: *Update failed:
-    &lt;reason&gt;*. The details are in `logon-build.log` and `main.log`.
+  * nothing newer, and this run fetched `origin/main` and its `desktop/` tree is
+    the running build: *Up to date*. It never says that when it could not look;
+  * anything else: *Update failed: &lt;reason&gt;*. Docker not running while a
+    build was needed (*Docker isn't running — start Docker Desktop and try
+    again*), no fetch (*could not reach GitHub …*), the build failed or took too
+    long, or the builder left no check of its own (an older installed builder;
+    that goes away once a successful build refreshes the installed scripts).
+    Details are in `logon-build.log` and `main.log`.
+
+  What the builder could check is in `%LOCALAPPDATA%\bb2dash-launch\last-check.json`
+  (`checkedAt`, `remoteTree`, `skip`: empty, `fetch-failed`, `ref-unresolved` or
+  `docker-not-ready`), written at the end of every build step.
 
   The item appears only inside the desktop app; a normal browser never shows it.
   It reaches main through the preload's `requestUpdate()`, the one IPC call
@@ -229,10 +238,6 @@ hand-packed build does none of this.
   runs waits for the same answer. A dev run answers *Update failed: this copy is
   not an installed build*; under `BB2DASH_TEST=1` the request is only recorded
   (`update-request` event).
-
-  If Docker is not running when a build is needed, the builder skips the build
-  without failing, so the item can say *Up to date* although `origin/main` has a
-  newer `desktop/`. Start Docker Desktop and click it again.
 
 ## Acceptance script
 

@@ -47,6 +47,7 @@ import {
   createStartBuilderTask,
   launchStateDir,
   readLastBuiltSha,
+  readLastCheck,
   readRunningTree,
   startUpdateHelper,
 } from './update-os';
@@ -118,6 +119,7 @@ function registerForceUpdate(validConfig: DesktopConfig): void {
     startBuilder: createStartBuilderTask(),
     readBuilderStatus: createReadBuilderStatus(),
     readLastBuiltSha: () => (stateDir === null ? null : readLastBuiltSha(stateDir)),
+    readLastCheck: () => (stateDir === null ? null : readLastCheck(stateDir)),
     buildOnDisk: (tree) => stateDir !== null && buildOnDisk(stateDir, tree),
     startUpdate: (tree) =>
       stateDir === null

@@ -36,6 +36,7 @@
     builds\<tree>\win-unpacked\bb2dash.exe   one folder per built desktop/ tree
     current                                  junction -> the active win-unpacked
     state.json                               lastBuiltSha, lastBuildAt, lastResult
+    last-check.json                          checkedAt, remoteTree, skip: what the last run could check
     logs\logon-build.log                     one line per step, rolls at 512 KB
 
   Every step logs; failures set a non-zero exit code and are never swallowed.
@@ -104,6 +105,9 @@ $InstalledLaunchDir = Join-Path $StateDir 'launch'
 $BuildsRoot = Join-Path $StateDir 'builds'
 $CurrentLink = Join-Path $StateDir 'current'
 $StateFile = Join-Path $StateDir 'state.json'
+$CheckFile = Join-Path $StateDir 'last-check.json'
+# Set by Get-DesktopTreeHash; read into last-check.json.
+$script:FetchOk = $false
 $LogDir = Join-Path $StateDir 'logs'
 $LogFile = Join-Path $LogDir 'logon-build.log'
 
@@ -227,6 +231,7 @@ function Get-DesktopTreeHash {
     # cannot be resolved. Only a line that is exactly a hash is accepted: git
     # may print warnings on the same stream.
     $fetch = Invoke-ToolWithTimeout $Git @('-C', $RepoDir, 'fetch', '--quiet', 'origin') $FetchTimeoutSeconds
+    $script:FetchOk = ($fetch.ExitCode -eq 0)
     if ($fetch.ExitCode -ne 0) {
         Write-Log 'WARN' "git fetch failed (offline?), using ${BuildRef} as last fetched: $($fetch.Output)"
     }
@@ -458,7 +463,23 @@ function Invoke-BuildStep {
             'Compose' { if (-not (Invoke-StackCompose)) { $ok = $false } }
         }
     }
+    Write-BuildCheck -Check (Get-BuildCheckRecord -RemoteSha $tree -FetchOk $script:FetchOk -Decision $decision -Now (Get-Date))
     return $ok
+}
+
+function Write-BuildCheck {
+    # last-check.json for the app's "Update desktop app"; atomic like Write-State.
+    # A failure here is logged, never fatal: the app then reports it could not check.
+    param([pscustomobject] $Check)
+    try {
+        if (-not (Test-Path $StateDir)) { New-Item -ItemType Directory -Force -Path $StateDir | Out-Null }
+        $tmp = "$CheckFile.tmp"
+        [IO.File]::WriteAllText($tmp, (ConvertTo-BuildCheckJson -Check $Check), (New-Object Text.UTF8Encoding $false))
+        Move-Item -Force $tmp $CheckFile
+        Write-Log 'INFO' "check recorded: tree '$($Check.remoteTree)', skip '$($Check.skip)'"
+    } catch {
+        Write-Log 'WARN' "could not write last-check.json: $($_.Exception.Message)"
+    }
 }
 
 function Invoke-StartupStep {
