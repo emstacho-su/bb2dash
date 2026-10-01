@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { getDesktopUpdater } from '@/lib/desktop-bridge';
 import { clearPersistedQueryCache } from '@/lib/query-provider';
 import { SIDEBAR_ID } from '@/lib/sidebar-preference';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -13,6 +14,7 @@ import { NavSearch } from './NavSearch';
 import { useSidebar } from './SidebarProvider';
 import { SyncButton } from './SyncButton';
 import { usePopover } from './usePopover';
+import { isUpdateLocked, updateLabel, useDesktopUpdate } from './useDesktopUpdate';
 import styles from './TopNav.module.css';
 
 /**
@@ -35,6 +37,11 @@ import styles from './TopNav.module.css';
  * in place into a field (`NavSearch.tsx`), with the results in a popover.
  * Stack's walk the same day moved it and Sync into the right-hand group:
  * Sync → search → ☰ → activity → bell → account.
+ *
+ * Stack, 2026-09-30: inside the desktop shell the account menu also offers
+ * "Update desktop app" (feature-detected on `window.bb2dashDesktop`; a normal
+ * browser never shows it). It reports its state in place: checking, up to
+ * date, restarting, or the failure reason.
  */
 
 const NAV_LINKS = [
@@ -50,6 +57,9 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
   const router = useRouter();
 
   const [user, userAnchor] = usePopover<HTMLSpanElement>();
+  const desktopUpdate = useDesktopUpdate();
+  // Read only while the menu is open, which is always after hydration.
+  const showDesktopUpdate = user.open && getDesktopUpdater() !== null;
   // Destructured, not read off the context object: `toggleRef` reaches a `ref`
   // prop, and the React Compiler would otherwise treat the whole object as a ref.
   const { open: sidebarOpen, toggle: toggleSidebar, toggleRef: sidebarToggleRef } = useSidebar();
@@ -145,6 +155,18 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
                 </span>
                 <span className={styles.ddEmail}>{userEmail ?? 'unknown'}</span>
               </div>
+              {showDesktopUpdate && (
+                <button
+                  type="button"
+                  className={styles.ddRow}
+                  role="menuitem"
+                  onClick={desktopUpdate.start}
+                  disabled={isUpdateLocked(desktopUpdate.state)}
+                  aria-busy={desktopUpdate.state.status === 'pending'}
+                >
+                  {updateLabel(desktopUpdate.state)}
+                </button>
+              )}
               <button type="button" className={styles.ddRow} role="menuitem" onClick={signOut}>
                 Sign out
               </button>

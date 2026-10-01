@@ -36,6 +36,7 @@
     builds\<tree>\win-unpacked\bb2dash.exe   one folder per built desktop/ tree
     current                                  junction -> the active win-unpacked
     state.json                               lastBuiltSha, lastBuildAt, lastResult
+    last-check.json                          checkedAt, remoteTree, skip: what the last run could check
     logs\logon-build.log                     one line per step, rolls at 512 KB
 
   Every step logs; failures set a non-zero exit code and are never swallowed.
@@ -53,7 +54,10 @@
   first use. Default <RepoDir>-build.
 
 .PARAMETER DockerWaitSeconds
-  How long the build step may wait for the Docker engine. Default 600.
+  How long the build step may wait for the Docker engine. Default 600. A
+  fresh force-request.json in -StateDir (written by the app's "Update desktop
+  app", which has already checked Docker) shortens it for that one run; the
+  file is consumed. See Get-DockerWaitSeconds.
 
 .PARAMETER FetchTimeoutSeconds
   How long `git fetch` may take before its process tree is killed and the ref
@@ -104,6 +108,10 @@ $InstalledLaunchDir = Join-Path $StateDir 'launch'
 $BuildsRoot = Join-Path $StateDir 'builds'
 $CurrentLink = Join-Path $StateDir 'current'
 $StateFile = Join-Path $StateDir 'state.json'
+$CheckFile = Join-Path $StateDir 'last-check.json'
+$ForceRequestFile = Join-Path $StateDir 'force-request.json'
+# Set by Get-DesktopTreeHash; read into last-check.json.
+$script:FetchOk = $false
 $LogDir = Join-Path $StateDir 'logs'
 $LogFile = Join-Path $LogDir 'logon-build.log'
 
@@ -227,6 +235,7 @@ function Get-DesktopTreeHash {
     # cannot be resolved. Only a line that is exactly a hash is accepted: git
     # may print warnings on the same stream.
     $fetch = Invoke-ToolWithTimeout $Git @('-C', $RepoDir, 'fetch', '--quiet', 'origin') $FetchTimeoutSeconds
+    $script:FetchOk = ($fetch.ExitCode -eq 0)
     if ($fetch.ExitCode -ne 0) {
         Write-Log 'WARN' "git fetch failed (offline?), using ${BuildRef} as last fetched: $($fetch.Output)"
     }
@@ -444,7 +453,8 @@ function Invoke-BuildStep {
     }
 
     $needDocker = Test-DockerNeeded -RemoteSha $tree -LastBuiltSha $lastBuilt -ComposeFileExists $composeExists
-    $wait = if ($WaitForDocker -or $needDocker) { $DockerWaitSeconds } else { 0 }
+    $dockerWait = Read-ForceRequestDockerWait
+    $wait = if ($WaitForDocker -or $needDocker) { $dockerWait } else { 0 }
     $dockerReady = if ($needDocker -or $WaitForDocker) { Test-DockerReady -TimeoutSeconds $wait } else { $false }
 
     $decision = Get-BuildDecision -RemoteSha $tree -LastBuiltSha $lastBuilt -DockerReady $dockerReady -ComposeFileExists $composeExists
@@ -458,7 +468,40 @@ function Invoke-BuildStep {
             'Compose' { if (-not (Invoke-StackCompose)) { $ok = $false } }
         }
     }
+    Write-BuildCheck -Check (Get-BuildCheckRecord -RemoteSha $tree -FetchOk $script:FetchOk -Decision $decision -Now (Get-Date))
     return $ok
+}
+
+function Read-ForceRequestDockerWait {
+    # The Docker wait for this run: -DockerWaitSeconds, or shorter when the app
+    # asked through force-request.json. The file is consumed either way, so a
+    # later logon run never inherits it.
+    if (-not (Test-Path $ForceRequestFile)) { return $DockerWaitSeconds }
+    $json = ''
+    try {
+        $json = Get-Content -Raw -Path $ForceRequestFile
+        Remove-Item -Force $ForceRequestFile
+    } catch {
+        Write-Log 'WARN' "could not read or remove force-request.json: $($_.Exception.Message)"
+    }
+    $wait = Get-DockerWaitSeconds -Default $DockerWaitSeconds -RequestJson $json -Now (Get-Date)
+    Write-Log 'INFO' "app requested this run; Docker wait ${wait}s"
+    return $wait
+}
+
+function Write-BuildCheck {
+    # last-check.json for the app's "Update desktop app"; atomic like Write-State.
+    # A failure here is logged, never fatal: the app then reports it could not check.
+    param([pscustomobject] $Check)
+    try {
+        if (-not (Test-Path $StateDir)) { New-Item -ItemType Directory -Force -Path $StateDir | Out-Null }
+        $tmp = "$CheckFile.tmp"
+        [IO.File]::WriteAllText($tmp, (ConvertTo-BuildCheckJson -Check $Check), (New-Object Text.UTF8Encoding $false))
+        Move-Item -Force $tmp $CheckFile
+        Write-Log 'INFO' "check recorded: tree '$($Check.remoteTree)', skip '$($Check.skip)'"
+    } catch {
+        Write-Log 'WARN' "could not write last-check.json: $($_.Exception.Message)"
+    }
 }
 
 function Invoke-StartupStep {

@@ -211,6 +211,40 @@ hand-packed build does none of this.
   and the app starts on it. Its log is
   `%LOCALAPPDATA%\bb2dash-launch\logs\update-now.log`; the app's side is in
   `main.log` under `[update]`.
+* **Forcing an update.** Open the account menu (the person icon, top right) and
+  click **Update desktop app**. It first checks Docker (`docker version`, 10 s
+  bound); with Docker not running it answers at once *Update failed: Docker isn't
+  running — start Docker Desktop and try again* and starts nothing. Otherwise it
+  shows *Checking for updates…*, writes `force-request.json` so this builder run
+  waits only 30 s for Docker (`APP_DOCKER_WAIT_SECONDS`; the logon run keeps its
+  600 s), starts `Bb2dash-LogonBuild` (or joins the run already going) and waits
+  for it: fetch 45 s + Docker wait 30 s + longest build 20 min + 2 min margin
+  (`FORCE_UPDATE_TIMEOUT_MS`, about 23 minutes). A container build takes a few
+  minutes, a no-change run a few seconds. If the wait runs out anyway, it says
+  *Update failed: still building — it will offer the update when it finishes*:
+  the build keeps going, and the usual prompt offers it at the next window open.
+  Then:
+  * a newer build is on disk: *Updating — bb2dash will restart*, and the app runs
+    the same **Update now** path as the prompt (helper swap, relaunch);
+  * nothing newer, and this run fetched `origin/main` and its `desktop/` tree is
+    the running build: *Up to date*. It never says that when it could not look;
+  * anything else: *Update failed: &lt;reason&gt;*. Docker not running while a
+    build was needed (*Docker isn't running — start Docker Desktop and try
+    again*), no fetch (*could not reach GitHub …*), the build failed, or the builder left no check of its own (an older installed builder;
+    that goes away once a successful build refreshes the installed scripts).
+    Details are in `logon-build.log` and `main.log`.
+
+  What the builder could check is in `%LOCALAPPDATA%\bb2dash-launch\last-check.json`
+  (`checkedAt`, `remoteTree`, `skip`: empty, `fetch-failed`, `ref-unresolved` or
+  `docker-not-ready`), written at the end of every build step.
+
+  The item appears only inside the desktop app; a normal browser never shows it.
+  It reaches main through the preload's `requestUpdate()`, the one IPC call
+  (`bb2dash:request-update`), which main answers only for the main window's top
+  frame on the app origin. One request runs at a time; clicking again while one
+  runs waits for the same answer. A dev run answers *Update failed: this copy is
+  not an installed build*; under `BB2DASH_TEST=1` the request is only recorded
+  (`update-request` event).
 
 ## Acceptance script
 
@@ -243,7 +277,7 @@ desktop/
                       move into a container later (R-28).
     main/             the Electron adapter: window, tray, cookies, notifications,
                       child_process, logging.
-    preload/          exposes one frozen object and no IPC.
+    preload/          exposes one frozen object: version, requestUpdate (one IPC call).
   test/
     unit/             vitest
     e2e/              Playwright for Electron

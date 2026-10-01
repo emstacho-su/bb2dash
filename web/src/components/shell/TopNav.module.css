@@ -204,6 +204,13 @@
   background: var(--color-hover);
   color: var(--color-text);
 }
+/* "Update desktop app" while it checks or restarts. */
+.ddRow:disabled,
+.ddRow:disabled:hover {
+  cursor: default;
+  background: none;
+  color: var(--color-neutral-500);
+}
 
 .ddIdentity {
   padding: 10px 12px;

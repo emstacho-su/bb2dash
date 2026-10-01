@@ -20,8 +20,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text'],
-      // The whole portable core (C-13) plus the four Electron adapters that are
-      // driven with `electron` mocked. The rest of `src/main/` opens windows and
+      // The whole portable core (C-13) plus the main-process modules that are
+      // driven with `electron` mocked or need no Electron at all. The rest of `src/main/` opens windows and
       // spawns processes; the Playwright suite proves that half for real.
       include: [
         'src/core/**/*.ts',
@@ -29,6 +29,7 @@ export default defineConfig({
         'src/main/deeplink.ts',
         'src/main/test-hook.ts',
         'src/main/poller-wiring.ts',
+        'src/main/update-request.ts',
       ],
       thresholds: {
         // C-7 freezes >= 90 % on the reducer; the rest of the core is held to the

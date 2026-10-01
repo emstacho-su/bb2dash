@@ -210,6 +210,82 @@ function ConvertTo-LaunchStateJson {
 
 <#
 .SYNOPSIS
+  What one build step could actually check, for last-check.json (2026-09-30).
+  The app's "Update desktop app" reads it so it never says "up to date" after
+  a run that could not look: skip is '' for a clean check, else
+  'fetch-failed' (origin not fetched; the ref is as last fetched),
+  'ref-unresolved' (no desktop/ tree hash) or 'docker-not-ready' (a needed
+  build was deferred). Separate from state.json so that file's shape is
+  unchanged.
+#>
+function Get-BuildCheckRecord {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()][string] $RemoteSha,
+        [Parameter(Mandatory)] [bool] $FetchOk,
+        [Parameter(Mandatory)] [pscustomobject] $Decision,
+        [Parameter(Mandatory)] [datetime] $Now
+    )
+    Assert-Sha -Name 'RemoteSha' -Value $RemoteSha
+    $skip = ''
+    if ($RemoteSha -eq '') { $skip = 'ref-unresolved' }
+    elseif (-not $FetchOk) { $skip = 'fetch-failed' }
+    elseif ($Decision.Reason -like 'rebuild deferred*') { $skip = 'docker-not-ready' }
+    return [pscustomobject]@{
+        checkedAt  = $Now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        remoteTree = $RemoteSha
+        skip       = $skip
+    }
+}
+
+<#
+.SYNOPSIS
+  The Docker wait for this run. The app's "Update desktop app" checks Docker
+  itself and then writes force-request.json ({requestedAt, dockerWaitSeconds})
+  before starting the task, because Start-ScheduledTask cannot pass
+  arguments. A fresh request (younger than $MaxAgeMinutes) may only shorten
+  the wait; no request, a stale one or anything malformed keeps $Default, so
+  the logon path is unchanged.
+#>
+function Get-DockerWaitSeconds {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [int] $Default,
+        [AllowEmptyString()][AllowNull()][string] $RequestJson,
+        [Parameter(Mandatory)] [datetime] $Now,
+        [int] $MaxAgeMinutes = 15
+    )
+    if ($null -eq $RequestJson -or $RequestJson.Trim() -eq '') { return $Default }
+    try { $raw = $RequestJson | ConvertFrom-Json -ErrorAction Stop } catch { return $Default }
+    if ($null -eq $raw -or $raw -isnot [pscustomobject]) { return $Default }
+    if (-not $raw.PSObject.Properties['requestedAt'] -or -not $raw.PSObject.Properties['dockerWaitSeconds']) { return $Default }
+    $wait = $raw.dockerWaitSeconds
+    if (-not ($wait -is [int] -or $wait -is [long]) -or $wait -lt 0 -or $wait -gt $Default) { return $Default }
+    $at = $raw.requestedAt
+    if ($at -isnot [datetime]) {
+        $parsed = [datetime]::MinValue
+        $ok = [datetime]::TryParse([string] $at, [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal, [ref] $parsed)
+        if (-not $ok) { return $Default }
+        $at = $parsed
+    }
+    $age = $Now.ToUniversalTime() - $at.ToUniversalTime()
+    if ($age.TotalMinutes -lt 0 -or $age.TotalMinutes -gt $MaxAgeMinutes) { return $Default }
+    return [int] $wait
+}
+
+function ConvertTo-BuildCheckJson {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [pscustomobject] $Check)
+    return ([ordered]@{
+        checkedAt  = $Check.checkedAt
+        remoteTree = $Check.remoteTree
+        skip       = $Check.skip
+    } | ConvertTo-Json -Compress)
+}
+
+<#
+.SYNOPSIS
   The ephemeral build: `docker compose run --rm --name bb2dash-build build`.
   `run --rm` creates a container for this one command and removes it on exit;
   only the named volumes survive. The fixed name lets a later run remove a
@@ -502,4 +578,4 @@ function Get-BuildsToKeep {
         Where-Object { $_ -match $script:ShaPattern } | Select-Object -Unique)
 }
 
-Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Get-BuildCheckRecord, ConvertTo-BuildCheckJson, Get-DockerWaitSeconds, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep
