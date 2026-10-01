@@ -376,6 +376,17 @@ export function restalePostOutcome(status, body) {
   return 'error';
 }
 
+/**
+ * A first pull's unit POST answer. A 409 / 23505 means this file already has units — text an agent
+ * extracted from the same file before its bytes reached Storage (file 163, 2026-10-01). Those
+ * units are kept; the bytes still land, so the row is not stuck behind its own text forever.
+ */
+export function textPostOutcome(status, body) {
+  if (status >= 200 && status < 300) return 'posted';
+  if (status === 409 || /23505/.test(String(body))) return 'already_present';
+  return 'error';
+}
+
 const USAGE = 'usage: node ingest/pull_files.mjs --manifest <json> --downloads <dir> [--mirror <dir>] [--bucket my_submissions] [--fetch] [--restale] [--only ids] [--out <sql>] [--dry-run] [--no-embed]\n' +
   '       node ingest/pull_files.mjs --restale-post --downloads <dir> [--only ids] [--no-embed]';
 
@@ -396,13 +407,14 @@ export function argError(args) {
  * `application/octet-stream` — keep what Blackboard said, fall back to the observed type only for a
  * pre-v4 row that has none. And its notes line names the step that pulled it.
  */
-export function bbFilesUpdateSql({ id, key, relpath, sha256, size, mime, textStatus, pulledOn, submission = false }) {
+export function bbFilesUpdateSql({ id, key, relpath, sha256, size, mime, textStatus, pulledOn, submission = false, textKept = false }) {
   const mimeAssign = submission ? `mime_type = coalesce(mime_type, ${q(mime)})` : `mime_type = ${q(mime)}`;
   const pulledBy = submission ? 'bb-sync step 4b' : 'ingest/pull_files.mjs';
+  const kept = textKept ? '; existing text units kept' : '';
   return (
     `update bb_files set storage_path = ${q(`${BUCKET}/${key}`)}, local_path = ${q(`course context/${relpath}`)}, ` +
     `sha256 = ${q(sha256)}, bytes = ${size}, ${mimeAssign}, downloaded_at = now(), ` +
-    `text_status = ${q(textStatus)}, notes = coalesce(notes, '') || ${q(` | bytes pulled ${pulledOn} by ${pulledBy}`)} ` +
+    `text_status = ${q(textStatus)}, notes = coalesce(notes, '') || ${q(` | bytes pulled ${pulledOn} by ${pulledBy}${kept}`)} ` +
     `where id = ${id} and storage_path is null;`
   );
 }
@@ -484,18 +496,22 @@ async function pullOne(row, ctx) {
   try { units = extractUnits(ingestDir, localPath); } catch (e) { extractError = String(e).slice(0, 200); }
 
   let unitsPosted = 0;
+  let textKept = false;
   if (units.length) {
     const tr = await fetch(`${supabaseUrl}/rest/v1/bb_file_text`, {
       method: 'POST', headers: { ...anonHeaders(key, 'application/json'), Prefer: 'return=minimal' },
       body: JSON.stringify(textRows(row.id, units)),
     });
-    if (!tr.ok) return { id: row.id, error: `bb_file_text ${tr.status}: ${(await tr.text()).slice(0, 200)}` };
-    unitsPosted = units.length;
+    const trBody = tr.ok ? '' : await tr.text();
+    const outcome = textPostOutcome(tr.status, trBody);
+    if (outcome === 'error') return { id: row.id, error: `bb_file_text ${tr.status}: ${trBody.slice(0, 200)}` };
+    textKept = outcome === 'already_present';
+    unitsPosted = textKept ? 0 : units.length;
   }
 
   const textStatus = units.length ? 'extracted' : 'failed';
-  const sql = bbFilesUpdateSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, textStatus, pulledOn, submission });
-  return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, storage: up.status, units: units.length, unitsPosted, textStatus, extractError, sql };
+  const sql = bbFilesUpdateSql({ id: row.id, key: storageKey, relpath: row.relpath, sha256, size: bytes.length, mime, textStatus, pulledOn, submission, textKept });
+  return { id: row.id, key: storageKey, size: bytes.length, sha256: sha256.slice(0, 12), ...tag, storage: up.status, units: units.length, unitsPosted, textKept, textStatus, extractError, sql };
 }
 
 /**

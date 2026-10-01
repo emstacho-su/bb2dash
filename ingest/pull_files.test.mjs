@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import {
   anonHeaders,
   bbFilesUpdateSql,
+  textPostOutcome,
   bytesLookValid,
   duplicateIsAcceptable,
   encodeKey,
@@ -356,4 +357,22 @@ test('restale: argument errors — no --bucket with --restale, and the two resta
   assert.match(pf.argError({ downloads: 'd' }), /usage/);
   assert.equal(pf.modeOf({ restale: true }), 'restale');
   assert.equal(pf.modeOf({ 'restale-post': true }), 'restale-post');
+});
+
+// File 163 (sync 443, 2026-10-01): its text had been extracted by hand from the same file, so the
+// unit POST answered 409 / 23505, the row errored after Storage already held its bytes, and no SQL
+// was emitted — a row that could never be pulled. Existing units are kept and the bytes still land.
+test('textPostOutcome: 2xx posted; 409 or 23505 means the units are already there; anything else errors', () => {
+  assert.equal(textPostOutcome(201, ''), 'posted');
+  assert.equal(textPostOutcome(409, '{"code":"23505"}'), 'already_present');
+  assert.equal(textPostOutcome(400, 'duplicate key ... 23505'), 'already_present');
+  assert.equal(textPostOutcome(401, 'no'), 'error');
+  assert.equal(textPostOutcome(500, ''), 'error');
+});
+
+test('bbFilesUpdateSql: textKept says the existing units were kept, and status stays extracted', () => {
+  const sql = bbFilesUpdateSql({ id: 163, key: 'ECN.304/readings/G.pdf', relpath: 'ECN.304/readings/G.pdf', sha256: 'abc', size: 12, mime: 'application/pdf', textStatus: 'extracted', pulledOn: '2026-10-01', textKept: true });
+  assert.match(sql, /text_status = 'extracted'/);
+  assert.match(sql, /bytes pulled 2026-10-01 by ingest\/pull_files\.mjs; existing text units kept/);
+  assert.doesNotMatch(bbFilesUpdateSql({ id: 1, key: 'k', relpath: 'r', sha256: 'a', size: 1, mime: 'application/pdf', textStatus: 'extracted', pulledOn: 'd' }), /kept/);
 });

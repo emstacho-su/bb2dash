@@ -308,7 +308,7 @@ Then run each `.sql` through `execute_sql` — the script never writes `bb_files
 submission's update sets `mime_type = coalesce(mime_type, <observed>)`, not the observed type:
 since migration 085 the catalogue row already carries what Blackboard declared (`file.mimeType`)
 and a bbcswebdav download often answers `application/octet-stream`. Read the script's per-row JSON
-lines for the report; a line with `error` did not land.
+lines for the report; a line with `error` did not land. A line with `textKept: true` landed: the file already had text units (an agent extracted them from the same file earlier, as with 163), so those were kept and only the bytes were stored.
 
 **Stale bytes (`--restale`).** When an instructor re-uploads a file under the same item, the
 transform keeps the row and appends `; stored bytes may be stale` to its notes. Re-pull those rows
