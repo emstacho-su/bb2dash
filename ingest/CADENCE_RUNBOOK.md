@@ -18,10 +18,13 @@ request — which meant a sync could catalogue a file, raise an Inbox `data_gap`
 opened, and leave both for a human. The pull is the sync's own unfinished work, so it now finishes
 it. The byte fetch no longer uses Playwright's `download` event either: that crashed the MCP browser
 on 2026-09-23 and cost a sync three files. `ingest/fetch_signed.mjs` walks the `bbcswebdav` redirect
-chain to its signed CDN URL instead, and `ingest/pull_files.mjs --fetch` downloads it.
+chain to its signed CDN URL instead, and `ingest/pull_files.mjs --fetch` downloads it. Since
+2026-10-01 the sync runs only in Stack's logged-in Chrome (Claude in Chrome), which cannot walk a
+redirect: Chrome saves each file to Downloads and `ingest/collect_download.mjs` moves it to where
+`pull_files.mjs` (no `--fetch`) looks. The hop walk stays for a Playwright caller.
 
 ## Inputs
-- Logged-in Blackboard tab (built-in browser, tab `seed`) with `installCrawler` from
+- Logged-in Blackboard tab (Stack's Chrome through Claude in Chrome, the only browser) with `installCrawler` from
   `ingest/bb_crawler.js` loaded as `window.__bb`.
 - Supabase `bb2dash` (ref goultdzqcavefcgnifdy), publishable key for REST/Storage, MCP `execute_sql`
   for reads/updates.
@@ -72,6 +75,9 @@ chain to its signed CDN URL instead, and `ingest/pull_files.mjs --fetch` downloa
    `maxRedirects: 0`) and records the hops; `ingest/pull_files.mjs --fetch` downloads the signed
    URL itself, because a signed URL carries its own authorisation and needs no session. The chain is
    bounded at three hops and must end on `.content.blackboardcdn.com`.
+   **Superseded for the sync on 2026-10-01:** Claude in Chrome has no request API, so step 4b now
+   navigates the tab to `<source_url>?xythos-download=true`, lets Chrome save the file, and
+   collects it with `ingest/collect_download.mjs` (SKILL.md step 4b, Half one).
 
    For the record: the first scripted run was 12 files on 2026-09-22 (Inbox request 38); before the
    script the procedure claimed `<uuid>.tmp` files by size and magic bytes and moved them into
