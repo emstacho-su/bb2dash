@@ -55,7 +55,9 @@
 //   select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
 //            'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
 //            'bucket', f.bucket, 'attempt_id', f.attempt_id))
-//     from bb_files f where f.storage_path is null and f.superseded_by is null;
+//     from bb_files f where f.storage_path is null and f.superseded_by is null
+//      and f.source_url is not null and not bb_file_is_outside_link(f.source_url);
+//   An outside link (migration 161: an http(s) source_url off the Blackboard host) is never pulled.
 //   With `--fetch`, the Playwright fallback adds `hops` to every row before this script reads it.
 //   `mime` may be null: it is then inferred from the extension. An optional `key` overrides the
 //   Storage key (a re-upload of an already-stored file needs its own; see file 145). `attempt_id`
@@ -278,7 +280,7 @@ const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 //            'stale', true) order by f.id)
 //     from bb_files f
 //    where f.superseded_by is null and f.storage_path is not null
-//      and f.notes like '%stored bytes may be stale%';
+//      and f.notes like '%stored bytes may be stale%' and not bb_file_is_outside_link(f.source_url);
 // ---------------------------------------------------------------------------------------------
 
 /** The exact wording stage_files appends (034, 037, 043, 053, 074); prod rows 72 and 144 carry it. */

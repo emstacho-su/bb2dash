@@ -195,11 +195,14 @@ select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
          'bucket', f.bucket, 'attempt_id', f.attempt_id) order by f.id)
   from bb_files f
  where f.storage_path is null and f.superseded_by is null
-   and f.source_url is not null;
+   and f.source_url is not null and not bb_file_is_outside_link(f.source_url);
 ```
 
 One query, both kinds. `source_url is not null` is what drops the rows Stack staged in bb2dash
-himself: they have no Blackboard URL and nothing here ever touches them. The script's own gate
+himself: they have no Blackboard URL and nothing here ever touches them. `bb_file_is_outside_link`
+(migration 161) drops **outside links** — a row whose `source_url` is an outside site (cbo.gov,
+sec.gov, …), catalogued with its text and never with bytes: they are not files to pull, and they
+never count in `files_not_pulled`. The script's own gate
 splits the rest — a run with `--bucket my_submissions` writes only submission rows, a run without
 it only course rows — so the two passes below can never write each other's rows.
 
@@ -315,7 +318,8 @@ select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
          'stale', true) order by f.id)
   from bb_files f
  where f.superseded_by is null and f.storage_path is not null
-   and f.notes like '%stored bytes may be stale%';
+   and f.notes like '%stored bytes may be stale%'
+   and not bb_file_is_outside_link(f.source_url);
 ```
 
 Run Half one for these rows exactly as above, with `--to <scratch>/restale` on the collector
