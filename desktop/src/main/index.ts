@@ -20,7 +20,7 @@
  * `runOnce()`.
  */
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 
 import { allowedOrigins } from '../core/config';
 import type { DesktopConfig } from '../core/config';
@@ -39,8 +39,11 @@ import { join } from 'node:path';
 import { REMINDER_FILENAME, createReminderStore } from './update-reminder-store';
 import { createUpdateFlow } from '../core/update/update-flow';
 import type { UpdateFlow } from '../core/update/update-flow';
+import { createForceUpdate } from '../core/update/force-update';
+import { createUpdateRequestHandler, registerUpdateRequest } from './update-request';
 import {
   buildOnDisk,
+  createReadBuilderStatus,
   createStartBuilderTask,
   launchStateDir,
   readLastBuiltSha,
@@ -98,6 +101,48 @@ function createShellUpdateFlow(): UpdateFlow | null {
 }
 /** The tree hash of the running logon build, or `null` for a dev run (no updates then). */
 const runningTree = readRunningTree();
+
+/** Long enough for the IPC reply to reach the page before the app quits for the swap. */
+const RESTART_DELAY_MS = 1_000;
+
+/**
+ * 2026-09-30: the account menu's "Update desktop app" (`core/update/force-update.ts`), over
+ * the one IPC channel. Only the main window's top frame on the app origin is answered
+ * (`update-request.ts`).
+ */
+function registerForceUpdate(validConfig: DesktopConfig): void {
+  const stateDir = launchStateDir();
+  const updateLog = createNamedLogger('update');
+  const forceUpdate = createForceUpdate({
+    runningTree: stateDir === null ? null : runningTree,
+    startBuilder: createStartBuilderTask(),
+    readBuilderStatus: createReadBuilderStatus(),
+    readLastBuiltSha: () => (stateDir === null ? null : readLastBuiltSha(stateDir)),
+    buildOnDisk: (tree) => stateDir !== null && buildOnDisk(stateDir, tree),
+    startUpdate: (tree) =>
+      stateDir === null
+        ? Promise.reject(new Error('no launch state folder'))
+        : startUpdateHelper({ stateDir, tree }),
+    quitSoon: () => void setTimeout(quit, RESTART_DELAY_MS),
+    now: () => Date.now(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    testMode: IS_TEST_MODE,
+    record: recordEvent,
+    log: updateLog,
+  });
+  registerUpdateRequest(
+    ipcMain,
+    createUpdateRequestHandler({
+      appOrigin: new URL(validConfig.appUrl).origin,
+      mainWebContentsId: () => {
+        const window = getMainWindow();
+        return window === null || window.isDestroyed() ? null : window.webContents.id;
+      },
+      run: () => forceUpdate.request(),
+      log: updateLog,
+    }),
+  );
+}
 
 /**
  * 2026-09-30: start the logon builder now and every BUILDER_INTERVAL_HOURS, so new builds
@@ -245,6 +290,7 @@ function start(): void {
   }
   const validConfig = config;
   updateFlow = createShellUpdateFlow();
+  registerForceUpdate(validConfig);
 
   windows = createWindowController<BrowserWindow>({
     create: (initialUrl) => createWindow(validConfig.appUrl, initialUrl),

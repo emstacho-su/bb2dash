@@ -18,6 +18,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { win32 } from 'node:path';
 
 import type { BuilderStartOutcome } from '../core/update/builder-trigger';
+import type { BuilderTaskStatus } from '../core/update/force-update';
 import {
   BUILDS_FOLDER,
   EXE_NAME,
@@ -54,6 +55,7 @@ const START_BUILDER_SCRIPT = [
 export interface PowerShellResult {
   readonly code: number;
   readonly stderr: string;
+  readonly stdout: string;
 }
 export type PowerShellRun = (script: string) => Promise<PowerShellResult>;
 
@@ -69,14 +71,14 @@ export const runPowerShell: PowerShellRun = (script) =>
       powershellPath(),
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
       { windowsHide: true, timeout: POWERSHELL_TIMEOUT_MS },
-      (error, _stdout, stderr) => {
+      (error, stdout, stderr) => {
         if (error === null) {
-          resolve({ code: 0, stderr: String(stderr) });
+          resolve({ code: 0, stderr: String(stderr), stdout: String(stdout) });
           return;
         }
         const code = (error as { code?: unknown }).code;
         if (typeof code === 'number') {
-          resolve({ code, stderr: String(stderr) });
+          resolve({ code, stderr: String(stderr), stdout: String(stdout) });
           return;
         }
         // Not an exit code: powershell.exe itself could not start, or the timeout fired.
@@ -94,6 +96,54 @@ export function createStartBuilderTask(run: PowerShellRun = runPowerShell): () =
     throw new Error(
       `Start-ScheduledTask ${BUILDER_TASK_NAME} exited ${result.code}: ${result.stderr.trim().slice(0, STDERR_LIMIT)}`,
     );
+  };
+}
+
+/**
+ * The builder task's state, last start time (epoch ms, 0 for never) and last exit code, as
+ * one `State|LastRunMs|LastTaskResult` line. Fixed text: the task name is a constant.
+ * Task Scheduler reports "never ran" as a 1999 date, hence the year check.
+ */
+const BUILDER_STATUS_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
+  `$task = Get-ScheduledTask -TaskName '${BUILDER_TASK_NAME}'`,
+  '$info = $task | Get-ScheduledTaskInfo',
+  '$ms = 0',
+  'if ($info.LastRunTime -and $info.LastRunTime.Year -ge 2000) { $ms = ([DateTimeOffset] $info.LastRunTime).ToUnixTimeMilliseconds() }',
+  "Write-Output ('{0}|{1}|{2}' -f $task.State, $ms, $info.LastTaskResult)",
+].join('; ');
+
+const STATUS_LINE = /^([A-Za-z]+)\|(\d+)\|(-?\d+)$/;
+const RUNNING_STATES: readonly string[] = ['Running', 'Queued'];
+
+/** One status line (the last non-empty line of the output); throws on anything else. */
+export function parseBuilderStatus(stdout: string): BuilderTaskStatus {
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  const match = STATUS_LINE.exec(lines.at(-1) ?? '');
+  if (match === null) throw new Error('unexpected builder status output');
+  const [, state = '', lastRunMs = '0', lastResult = '0'] = match;
+  const running = RUNNING_STATES.includes(state);
+  const lastRunAt = Number(lastRunMs);
+  return Object.freeze({
+    running,
+    lastRunAt: lastRunAt > 0 ? lastRunAt : null,
+    lastResult: running ? null : Number(lastResult),
+  });
+}
+
+/** Read `Bb2dash-LogonBuild`'s status from Task Scheduler. */
+export function createReadBuilderStatus(run: PowerShellRun = runPowerShell): () => Promise<BuilderTaskStatus> {
+  return async () => {
+    const result = await run(BUILDER_STATUS_SCRIPT);
+    if (result.code !== 0) {
+      throw new Error(
+        `Get-ScheduledTaskInfo ${BUILDER_TASK_NAME} exited ${result.code}: ${result.stderr.trim().slice(0, STDERR_LIMIT)}`,
+      );
+    }
+    return parseBuilderStatus(result.stdout);
   };
 }
 

@@ -145,7 +145,7 @@ test.describe('the shell', () => {
     });
   });
 
-  test('exposes the frozen preload object and no IPC', async () => {
+  test('exposes the frozen preload object: version and requestUpdate only', async () => {
     const exposed = await page.evaluate(() => {
       const api = (window as unknown as { bb2dashDesktop?: Record<string, unknown> })
         .bb2dashDesktop;
@@ -157,10 +157,21 @@ test.describe('the shell', () => {
       };
     });
 
-    expect(exposed.keys).toEqual(['version']);
+    expect(exposed.keys).toEqual(['version', 'requestUpdate']);
     expect(exposed.frozen).toBe(true);
     expect(exposed.hasRequire).toBe(false);
     expect(exposed.hasProcess).toBe(false);
+  });
+
+  test('requestUpdate from the app page reaches main, which records it and starts nothing', async () => {
+    // 2026-09-30, the account menu's "Update desktop app". Under the test env var the
+    // force update records the request instead of starting the builder or quitting.
+    const result = await page.evaluate(() =>
+      (window as unknown as { bb2dashDesktop: { requestUpdate: () => Promise<unknown> } }).bb2dashDesktop.requestUpdate(),
+    );
+    expect(result).toEqual({ status: 'up-to-date', build: null });
+    const requests = (await recorded(app)).filter((event) => event.kind === 'update-request');
+    expect(requests).toHaveLength(1);
   });
 
   test('has a tray with Open / Check now / Quit', async () => {
