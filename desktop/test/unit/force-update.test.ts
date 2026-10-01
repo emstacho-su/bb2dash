@@ -9,7 +9,10 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILDER_POLL_INTERVAL_MS,
   FAILURE_REASONS,
+  APP_DOCKER_WAIT_SECONDS,
+  BUILDER_FETCH_TIMEOUT_MS,
   FORCE_UPDATE_TIMEOUT_MS,
+  LONGEST_BUILD_MS,
   createForceUpdate,
   parseBuildCheck,
 } from '../../src/core/update/force-update';
@@ -32,7 +35,7 @@ function logger(): Logger & { lines: string[] } {
 
 interface Harness {
   readonly deps: ForceUpdateDeps;
-  readonly calls: { started: number; swaps: string[]; quits: number; records: unknown[] };
+  readonly calls: { started: number; swaps: string[]; quits: number; records: unknown[]; order: string[] };
   readonly log: ReturnType<typeof logger>;
 }
 
@@ -47,12 +50,20 @@ function harness(overrides: Partial<ForceUpdateDeps> & { statuses?: BuilderTaskS
     { running: false, lastRunAt: T0, lastResult: 0 },
   ];
   let poll = 0;
-  const calls = { started: 0, swaps: [] as string[], quits: 0, records: [] as unknown[] };
+  const calls = { started: 0, swaps: [] as string[], quits: 0, records: [] as unknown[], order: [] as string[] };
   const log = logger();
   const lastBuilt = overrides.lastBuilt === undefined ? NEWER : overrides.lastBuilt;
   const deps: ForceUpdateDeps = {
     runningTree: RUNNING,
+    dockerReady: async () => {
+      calls.order.push('docker-check');
+      return true;
+    },
+    requestShortDockerWait: (seconds) => {
+      calls.order.push(`short-wait ${seconds}`);
+    },
     startBuilder: async () => {
+      calls.order.push('start');
       calls.started += 1;
       return 'started';
     },
@@ -83,8 +94,9 @@ function harness(overrides: Partial<ForceUpdateDeps> & { statuses?: BuilderTaskS
 }
 
 describe('createForceUpdate', () => {
-  it('names its bounds as constants', () => {
-    expect(FORCE_UPDATE_TIMEOUT_MS).toBe(15 * 60 * 1000);
+  it('names its bounds as constants, and outlasts the builder: fetch + short Docker wait + longest build', () => {
+    expect(APP_DOCKER_WAIT_SECONDS).toBeLessThanOrEqual(60);
+    expect(FORCE_UPDATE_TIMEOUT_MS).toBeGreaterThan(BUILDER_FETCH_TIMEOUT_MS + APP_DOCKER_WAIT_SECONDS * 1000 + LONGEST_BUILD_MS);
     expect(BUILDER_POLL_INTERVAL_MS).toBeGreaterThan(0);
   });
 
@@ -359,5 +371,52 @@ describe('parseBuildCheck', () => {
     ]) {
       expect(parseBuildCheck(bad)).toBeNull();
     }
+  });
+});
+
+describe('createForceUpdate and Docker (PM round 3)', () => {
+  it('Docker not ready: answers at once, and never starts the builder', async () => {
+    const { deps, calls } = harness({ dockerReady: async () => false });
+    expect(await createForceUpdate(deps).request()).toEqual({ status: 'failed', reason: FAILURE_REASONS.dockerDown });
+    expect(calls.started).toBe(0);
+  });
+
+  it('a Docker check that throws counts as not ready', async () => {
+    const { deps, calls } = harness({
+      dockerReady: async () => {
+        throw new Error('spawn docker ENOENT');
+      },
+    });
+    expect(await createForceUpdate(deps).request()).toEqual({ status: 'failed', reason: FAILURE_REASONS.dockerDown });
+    expect(calls.started).toBe(0);
+  });
+
+  it('checks Docker, asks for the short wait, then starts the builder, in that order', async () => {
+    const { deps, calls } = harness();
+    await createForceUpdate(deps).request();
+    expect(calls.order).toEqual(['docker-check', `short-wait ${APP_DOCKER_WAIT_SECONDS}`, 'start']);
+  });
+
+  it('a short-wait request that cannot be written still starts the builder', async () => {
+    const { deps, calls } = harness({
+      requestShortDockerWait: () => {
+        throw new Error('EACCES');
+      },
+    });
+    expect((await createForceUpdate(deps).request()).status).toBe('restarting');
+    expect(calls.started).toBe(1);
+  });
+
+  it('a timeout says the update will still be offered when the build finishes', async () => {
+    const { deps } = harness({ statuses: [{ running: true, lastRunAt: T0, lastResult: null }] });
+    const result = await createForceUpdate(deps).request();
+    expect(result).toEqual({ status: 'failed', reason: FAILURE_REASONS.timedOut });
+    expect(FAILURE_REASONS.timedOut).toMatch(/offer the update when it finishes/);
+  });
+
+  it('test mode checks nothing, not even Docker', async () => {
+    const { deps, calls } = harness({ testMode: true });
+    await createForceUpdate(deps).request();
+    expect(calls.order).toEqual([]);
   });
 });

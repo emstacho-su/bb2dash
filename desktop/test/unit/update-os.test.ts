@@ -8,15 +8,19 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BUILDER_TASK_NAME,
+  DOCKER_CHECK_TIMEOUT_MS,
   EXIT_TASK_ALREADY_RUNNING,
+  FORCE_REQUEST_FILE,
+  createDockerReadyCheck,
   createReadBuilderStatus,
+  forceRequestJson,
   createStartBuilderTask,
   parseBuilderStatus,
   launchStateDir,
   startUpdateHelper,
   updateHelperArgv,
 } from '../../src/main/update-os';
-import type { PowerShellRun } from '../../src/main/update-os';
+import type { DockerExec, PowerShellRun } from '../../src/main/update-os';
 import { runningTreeFromExecPath } from '../../src/core/update/build-paths';
 
 const TREE = '31215cf503f565cd7113d01b14266e4b2ce1000d';
@@ -187,5 +191,53 @@ describe('parseBuilderStatus / createReadBuilderStatus', () => {
   it('rejects when the query fails', async () => {
     const read = createReadBuilderStatus(async () => ({ code: 1, stderr: 'no task', stdout: '' }));
     await expect(read()).rejects.toThrow(/no task/);
+  });
+});
+
+describe('Docker readiness and the short-wait request (PM round 3)', () => {
+  it('runs docker version with an argv list and a short timeout; ready on exit 0 with a server version', async () => {
+    const seen: Array<{ file: string; args: readonly string[]; timeoutMs: number }> = [];
+    const ready = createDockerReadyCheck({
+      exists: () => false,
+      exec: async (file, args, timeoutMs) => {
+        seen.push({ file, args, timeoutMs });
+        return { code: 0, stdout: '29.1.2\n' };
+      },
+    });
+    expect(await ready()).toBe(true);
+    expect(seen).toEqual([
+      { file: 'docker', args: ['version', '--format', '{{.Server.Version}}'], timeoutMs: DOCKER_CHECK_TIMEOUT_MS },
+    ]);
+    expect(DOCKER_CHECK_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
+  });
+
+  it('prefers Docker Desktop’s own docker.exe when it is installed', async () => {
+    const files: string[] = [];
+    await createDockerReadyCheck({
+      exists: () => true,
+      exec: async (file) => {
+        files.push(file);
+        return { code: 0, stdout: '29.1.2' };
+      },
+    })();
+    expect(files[0]).toMatch(/Docker\resources\bin\docker\.exe$/);
+  });
+
+  it('is not ready on a non-zero exit, an empty server version, or a spawn failure', async () => {
+    const check = (exec: DockerExec) => createDockerReadyCheck({ exists: () => false, exec })();
+    expect(await check(async () => ({ code: 1, stdout: '' }))).toBe(false);
+    expect(await check(async () => ({ code: 0, stdout: '  ' }))).toBe(false);
+    expect(
+      await check(async () => {
+        throw new Error('ENOENT');
+      }),
+    ).toBe(false);
+  });
+
+  it('the short-wait request is a small JSON the builder reads', () => {
+    expect(forceRequestJson(30, new Date(Date.UTC(2026, 8, 30, 5, 0, 0)))).toBe(
+      '{"requestedAt":"2026-09-30T05:00:00Z","dockerWaitSeconds":30}',
+    );
+    expect(FORCE_REQUEST_FILE).toBe('force-request.json');
   });
 });

@@ -180,6 +180,32 @@ Describe 'Get-BuildCheckRecord (last-check.json: what this run could check)' {
     }
 }
 
+Describe 'Get-DockerWaitSeconds (force-request.json from the app shortens the Docker wait)' {
+    $NOW = [datetime]'2026-09-30T05:00:00Z'
+
+    It 'keeps the default when there is no request (the logon path)' {
+        Get-DockerWaitSeconds -Default 600 -RequestJson '' -Now $NOW | Should Be 600
+    }
+
+    It 'uses the requested wait from a fresh app request' {
+        $json = '{"requestedAt":"2026-09-30T04:59:00Z","dockerWaitSeconds":30}'
+        Get-DockerWaitSeconds -Default 600 -RequestJson $json -Now $NOW | Should Be 30
+    }
+
+    It 'ignores a stale request (older than 15 minutes)' {
+        $json = '{"requestedAt":"2026-09-30T04:40:00Z","dockerWaitSeconds":30}'
+        Get-DockerWaitSeconds -Default 600 -RequestJson $json -Now $NOW | Should Be 600
+    }
+
+    It 'never lengthens the wait, and ignores anything malformed' {
+        Get-DockerWaitSeconds -Default 600 -RequestJson '{"requestedAt":"2026-09-30T04:59:00Z","dockerWaitSeconds":9000}' -Now $NOW | Should Be 600
+        Get-DockerWaitSeconds -Default 600 -RequestJson '{"requestedAt":"2026-09-30T04:59:00Z","dockerWaitSeconds":-5}' -Now $NOW | Should Be 600
+        Get-DockerWaitSeconds -Default 600 -RequestJson '{"requestedAt":"2026-09-30T04:59:00Z","dockerWaitSeconds":"30"}' -Now $NOW | Should Be 600
+        Get-DockerWaitSeconds -Default 600 -RequestJson '{not json' -Now $NOW | Should Be 600
+        Get-DockerWaitSeconds -Default 600 -RequestJson '{"dockerWaitSeconds":30}' -Now $NOW | Should Be 600
+    }
+}
+
 Describe 'Test-DockerNeeded' {
 
     It 'is false when desktop/ is unchanged and there is no compose file' {
