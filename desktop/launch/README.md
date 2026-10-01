@@ -32,6 +32,7 @@ is never run inside a container. What runs in the container is the build:
   current                                  junction -> the active win-unpacked
   state.json                               lastBuiltSha, lastBuildAt, lastResult
   last-check.json                          checkedAt, remoteTree, skip (what the last run could check)
+  force-request.json                       from the app: a short Docker wait for the next run; consumed
   logs\logon-build.log                     one line per step; rolls at 512 KB
   logs\update-now.log                      one line per Update now step; rolls at 512 KB
 ```

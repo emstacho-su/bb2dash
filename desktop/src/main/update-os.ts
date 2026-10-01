@@ -14,7 +14,7 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { win32 } from 'node:path';
 
 import type { BuilderStartOutcome } from '../core/update/builder-trigger';
@@ -174,6 +174,71 @@ export function readLastBuiltSha(stateDir: string): string | null {
   const path = win32.join(stateDir, STATE_FILE);
   if (!existsSync(path)) return null;
   return parseLastBuiltSha(readFileSync(path, 'utf8'));
+}
+
+/** How long the app's Docker check may take before Docker counts as not running. */
+export const DOCKER_CHECK_TIMEOUT_MS = 10_000;
+/** Docker Desktop's own CLI; `docker` on PATH otherwise (the builder resolves it the same way). */
+const DOCKER_DESKTOP_EXE = 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe';
+/** The same probe the builder's Test-DockerReady uses: a server version means the engine answers. */
+const DOCKER_VERSION_ARGS = Object.freeze(['version', '--format', '{{.Server.Version}}']);
+
+export type DockerExec = (
+  file: string,
+  args: readonly string[],
+  timeoutMs: number,
+) => Promise<{ readonly code: number; readonly stdout: string }>;
+
+/** execFile, argv list, no shell, hidden, bounded; a non-zero exit resolves with its code. */
+const execDocker: DockerExec = (file, args, timeoutMs) =>
+  new Promise((resolve, reject) => {
+    execFile(file, [...args], { windowsHide: true, timeout: timeoutMs }, (error, stdout) => {
+      if (error === null) {
+        resolve({ code: 0, stdout: String(stdout) });
+        return;
+      }
+      const code = (error as { code?: unknown }).code;
+      if (typeof code === 'number') resolve({ code, stdout: String(stdout) });
+      else reject(error);
+    });
+  });
+
+export interface DockerCheckIo {
+  readonly exists: (path: string) => boolean;
+  readonly exec: DockerExec;
+}
+
+/** Is the Docker engine answering? Never rejects: any failure is "not ready". */
+export function createDockerReadyCheck(io: DockerCheckIo = { exists: existsSync, exec: execDocker }): () => Promise<boolean> {
+  return async () => {
+    const file = io.exists(DOCKER_DESKTOP_EXE) ? DOCKER_DESKTOP_EXE : 'docker';
+    try {
+      const result = await io.exec(file, DOCKER_VERSION_ARGS, DOCKER_CHECK_TIMEOUT_MS);
+      return result.code === 0 && result.stdout.trim() !== '';
+    } catch {
+      return false;
+    }
+  };
+}
+
+/**
+ * The app's request to the next builder run (`force-request.json`): a shorter Docker wait,
+ * since the app has just checked Docker itself. Start-ScheduledTask cannot pass arguments,
+ * so it travels as a file the builder consumes (`Get-DockerWaitSeconds`).
+ */
+export const FORCE_REQUEST_FILE = 'force-request.json';
+
+export function forceRequestJson(dockerWaitSeconds: number, now: Date): string {
+  const requestedAt = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return JSON.stringify({ requestedAt, dockerWaitSeconds });
+}
+
+/** Write `force-request.json` atomically (temp file, then rename). */
+export function writeForceRequest(stateDir: string, dockerWaitSeconds: number, now: Date = new Date()): void {
+  const path = win32.join(stateDir, FORCE_REQUEST_FILE);
+  const temp = `${path}.tmp`;
+  writeFileSync(temp, forceRequestJson(dockerWaitSeconds, now), 'utf8');
+  renameSync(temp, path);
 }
 
 /** The builder's `last-check.json`, or `null` when there is none or it is malformed. */

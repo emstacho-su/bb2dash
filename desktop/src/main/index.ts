@@ -43,6 +43,7 @@ import { createForceUpdate } from '../core/update/force-update';
 import { createUpdateRequestHandler, registerUpdateRequest } from './update-request';
 import {
   buildOnDisk,
+  createDockerReadyCheck,
   createReadBuilderStatus,
   createStartBuilderTask,
   launchStateDir,
@@ -50,6 +51,7 @@ import {
   readLastCheck,
   readRunningTree,
   startUpdateHelper,
+  writeForceRequest,
 } from './update-os';
 import { showUpdatePrompt } from './update-prompt';
 import { MENU_CHECK_NOW, createTray } from './tray';
@@ -116,6 +118,10 @@ function registerForceUpdate(validConfig: DesktopConfig): void {
   const updateLog = createNamedLogger('update');
   const forceUpdate = createForceUpdate({
     runningTree: stateDir === null ? null : runningTree,
+    dockerReady: createDockerReadyCheck(),
+    requestShortDockerWait: (seconds) => {
+      if (stateDir !== null) writeForceRequest(stateDir, seconds);
+    },
     startBuilder: createStartBuilderTask(),
     readBuilderStatus: createReadBuilderStatus(),
     readLastBuiltSha: () => (stateDir === null ? null : readLastBuiltSha(stateDir)),

@@ -238,6 +238,42 @@ function Get-BuildCheckRecord {
     }
 }
 
+<#
+.SYNOPSIS
+  The Docker wait for this run. The app's "Update desktop app" checks Docker
+  itself and then writes force-request.json ({requestedAt, dockerWaitSeconds})
+  before starting the task, because Start-ScheduledTask cannot pass
+  arguments. A fresh request (younger than $MaxAgeMinutes) may only shorten
+  the wait; no request, a stale one or anything malformed keeps $Default, so
+  the logon path is unchanged.
+#>
+function Get-DockerWaitSeconds {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [int] $Default,
+        [AllowEmptyString()][AllowNull()][string] $RequestJson,
+        [Parameter(Mandatory)] [datetime] $Now,
+        [int] $MaxAgeMinutes = 15
+    )
+    if ($null -eq $RequestJson -or $RequestJson.Trim() -eq '') { return $Default }
+    try { $raw = $RequestJson | ConvertFrom-Json -ErrorAction Stop } catch { return $Default }
+    if ($null -eq $raw -or $raw -isnot [pscustomobject]) { return $Default }
+    if (-not $raw.PSObject.Properties['requestedAt'] -or -not $raw.PSObject.Properties['dockerWaitSeconds']) { return $Default }
+    $wait = $raw.dockerWaitSeconds
+    if (-not ($wait -is [int] -or $wait -is [long]) -or $wait -lt 0 -or $wait -gt $Default) { return $Default }
+    $at = $raw.requestedAt
+    if ($at -isnot [datetime]) {
+        $parsed = [datetime]::MinValue
+        $ok = [datetime]::TryParse([string] $at, [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal, [ref] $parsed)
+        if (-not $ok) { return $Default }
+        $at = $parsed
+    }
+    $age = $Now.ToUniversalTime() - $at.ToUniversalTime()
+    if ($age.TotalMinutes -lt 0 -or $age.TotalMinutes -gt $MaxAgeMinutes) { return $Default }
+    return [int] $wait
+}
+
 function ConvertTo-BuildCheckJson {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [pscustomobject] $Check)
@@ -542,4 +578,4 @@ function Get-BuildsToKeep {
         Where-Object { $_ -match $script:ShaPattern } | Select-Object -Unique)
 }
 
-Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Get-BuildCheckRecord, ConvertTo-BuildCheckJson, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Get-BuildCheckRecord, ConvertTo-BuildCheckJson, Get-DockerWaitSeconds, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep

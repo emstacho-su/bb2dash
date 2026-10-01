@@ -14,7 +14,7 @@
  * check, or a different tree with no build on disk all answer 'failed'.
  *
  * One request at a time: a second request while one runs gets the same promise. Under the
- * test env var nothing is started; the request is recorded and answers 'up-to-date'.
+ * test env var nothing is checked or started; the request is recorded and answers 'up-to-date'.
  * Portable: every OS step is injected (`main/update-os.ts` is the Windows adapter).
  */
 
@@ -23,7 +23,21 @@ import { isTree } from './build-paths';
 import type { BuilderStartOutcome } from './builder-trigger';
 import { decideUpdate } from './update-check';
 
-export const FORCE_UPDATE_TIMEOUT_MS = 15 * 60 * 1000;
+/**
+ * How long the app waits for the builder it started (PM review, 2026-09-30). The app checks
+ * Docker itself first, then asks the builder for a short Docker wait (force-request.json),
+ * so one run is at most: the fetch, that short wait, and a container build. The overall
+ * bound exceeds all three plus a margin, so a slow but healthy build is not cut off.
+ */
+/** logon-build.ps1 -FetchTimeoutSeconds (45). */
+export const BUILDER_FETCH_TIMEOUT_MS = 45_000;
+/** The Docker wait the app asks of a run it starts (the logon default stays 600 s). */
+export const APP_DOCKER_WAIT_SECONDS = 30;
+/** The slowest container build seen, rounded up generously. */
+export const LONGEST_BUILD_MS = 20 * 60 * 1000;
+const TIMEOUT_MARGIN_MS = 2 * 60 * 1000;
+export const FORCE_UPDATE_TIMEOUT_MS =
+  BUILDER_FETCH_TIMEOUT_MS + APP_DOCKER_WAIT_SECONDS * 1000 + LONGEST_BUILD_MS + TIMEOUT_MARGIN_MS;
 export const BUILDER_POLL_INTERVAL_MS = 5_000;
 /** Task Scheduler's LastRunTime and last-check.json have whole-second precision. */
 export const LAST_RUN_SLACK_MS = 5_000;
@@ -35,7 +49,7 @@ export const FAILURE_REASONS = Object.freeze({
   builderStart: 'the builder could not be started',
   builderStatus: 'the builder status could not be read',
   buildFailed: 'the build failed',
-  timedOut: 'the build took too long',
+  timedOut: 'still building — it will offer the update when it finishes',
   swapFailed: 'the update could not start',
   dockerDown: "Docker isn't running — start Docker Desktop and try again",
   fetchFailed: 'could not reach GitHub — check the connection and try again',
@@ -107,6 +121,10 @@ export interface BuilderTaskStatus {
 export interface ForceUpdateDeps {
   readonly runningTree: string | null;
   /** Start the builder task; rejects when it cannot be started. */
+  /** Is the Docker engine answering? Checked before the builder is started. May throw. */
+  readonly dockerReady: () => Promise<boolean>;
+  /** Ask the next builder run for a Docker wait of `seconds` (force-request.json). May throw. */
+  readonly requestShortDockerWait: (seconds: number) => void;
   readonly startBuilder: () => Promise<BuilderStartOutcome>;
   readonly readBuilderStatus: () => Promise<BuilderTaskStatus>;
   /** The builder's `lastBuiltSha`, or `null`. May throw. */
@@ -224,6 +242,24 @@ export function createForceUpdate(deps: ForceUpdateDeps): ForceUpdate {
     }
     const runningTree = deps.runningTree;
     if (runningTree === null) return failed(FAILURE_REASONS.notInstalled);
+
+    // Docker first: a builder started with Docker off would only wait and then defer.
+    let dockerReady: boolean;
+    try {
+      dockerReady = await deps.dockerReady();
+    } catch (error) {
+      deps.log.warn(`force update: the Docker check failed: ${describeError(error)}`);
+      dockerReady = false;
+    }
+    if (!dockerReady) {
+      deps.log.warn('force update: Docker is not running; the builder was not started');
+      return failed(FAILURE_REASONS.dockerDown);
+    }
+    try {
+      deps.requestShortDockerWait(APP_DOCKER_WAIT_SECONDS);
+    } catch (error) {
+      deps.log.warn(`force update: could not ask for a short Docker wait; the builder uses its default: ${describeError(error)}`);
+    }
 
     const since = deps.now();
     let outcome: BuilderStartOutcome;

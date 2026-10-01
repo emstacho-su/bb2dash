@@ -220,7 +220,7 @@ describe('Docker readiness and the short-wait request (PM round 3)', () => {
         return { code: 0, stdout: '29.1.2' };
       },
     })();
-    expect(files[0]).toMatch(/Docker\resources\bin\docker\.exe$/);
+    expect(files[0]).toBe('C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe');
   });
 
   it('is not ready on a non-zero exit, an empty server version, or a spawn failure', async () => {
