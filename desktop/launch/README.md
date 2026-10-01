@@ -31,6 +31,7 @@ is never run inside a container. What runs in the container is the build:
   builds\<tree>\win-unpacked\bb2dash.exe   one folder per built desktop/ tree hash
   current                                  junction -> the active win-unpacked
   state.json                               lastBuiltSha, lastBuildAt, lastResult
+  last-check.json                          checkedAt, remoteTree, skip (what the last run could check)
   logs\logon-build.log                     one line per step; rolls at 512 KB
   logs\update-now.log                      one line per Update now step; rolls at 512 KB
 ```
