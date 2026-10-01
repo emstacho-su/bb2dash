@@ -211,6 +211,28 @@ hand-packed build does none of this.
   and the app starts on it. Its log is
   `%LOCALAPPDATA%\bb2dash-launch\logs\update-now.log`; the app's side is in
   `main.log` under `[update]`.
+* **Forcing an update.** Open the account menu (the person icon, top right) and
+  click **Update desktop app**. It shows *Checking for updates…* while the app
+  starts `Bb2dash-LogonBuild` now (or joins the run already going) and waits for
+  it, up to 15 minutes (`FORCE_UPDATE_TIMEOUT_MS`); a container build takes a few
+  minutes, a no-change run a few seconds. Then:
+  * a newer build is on disk: *Updating — bb2dash will restart*, and the app runs
+    the same **Update now** path as the prompt (helper swap, relaunch);
+  * nothing newer: *Up to date*;
+  * the builder failed, timed out or could not be started: *Update failed:
+    &lt;reason&gt;*. The details are in `logon-build.log` and `main.log`.
+
+  The item appears only inside the desktop app; a normal browser never shows it.
+  It reaches main through the preload's `requestUpdate()`, the one IPC call
+  (`bb2dash:request-update`), which main answers only for the main window's top
+  frame on the app origin. One request runs at a time; clicking again while one
+  runs waits for the same answer. A dev run answers *Update failed: this copy is
+  not an installed build*; under `BB2DASH_TEST=1` the request is only recorded
+  (`update-request` event).
+
+  If Docker is not running when a build is needed, the builder skips the build
+  without failing, so the item can say *Up to date* although `origin/main` has a
+  newer `desktop/`. Start Docker Desktop and click it again.
 
 ## Acceptance script
 
@@ -243,7 +265,7 @@ desktop/
                       move into a container later (R-28).
     main/             the Electron adapter: window, tray, cookies, notifications,
                       child_process, logging.
-    preload/          exposes one frozen object and no IPC.
+    preload/          exposes one frozen object: version, requestUpdate (one IPC call).
   test/
     unit/             vitest
     e2e/              Playwright for Electron
