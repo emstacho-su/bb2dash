@@ -147,6 +147,39 @@ Describe 'New-LaunchState' {
     }
 }
 
+Describe 'Get-BuildCheckRecord (last-check.json: what this run could check)' {
+    $NOW = [datetime]'2026-09-30T05:00:00Z'
+
+    It 'records a clean check: fetched, resolved, nothing deferred' {
+        $c = Get-BuildCheckRecord -RemoteSha $SHA_A -FetchOk $true -Decision (Build) -Now $NOW
+        $c.remoteTree | Should Be $SHA_A
+        $c.skip | Should Be ''
+        $c.checkedAt | Should Be '2026-09-30T05:00:00Z'
+    }
+
+    It 'records docker-not-ready when a needed build was deferred' {
+        $c = Get-BuildCheckRecord -RemoteSha $SHA_B -FetchOk $true -Decision (Build (@{ RemoteSha = $SHA_B; DockerReady = $false })) -Now $NOW
+        $c.skip | Should Be 'docker-not-ready'
+    }
+
+    It 'records fetch-failed when origin could not be fetched, even if the old ref resolved' {
+        $c = Get-BuildCheckRecord -RemoteSha $SHA_A -FetchOk $false -Decision (Build) -Now $NOW
+        $c.skip | Should Be 'fetch-failed'
+    }
+
+    It 'records ref-unresolved when the desktop/ tree hash is unknown' {
+        $c = Get-BuildCheckRecord -RemoteSha '' -FetchOk $true -Decision (Build (@{ RemoteSha = '' })) -Now $NOW
+        $c.skip | Should Be 'ref-unresolved'
+        $c.remoteTree | Should Be ''
+    }
+
+    It 'serialises to the three fields the app reads' {
+        $c = Get-BuildCheckRecord -RemoteSha $SHA_A -FetchOk $true -Decision (Build) -Now $NOW
+        $json = ConvertTo-BuildCheckJson -Check $c
+        $json | Should Be ('{"checkedAt":"2026-09-30T05:00:00Z","remoteTree":"' + $SHA_A + '","skip":""}')
+    }
+}
+
 Describe 'Test-DockerNeeded' {
 
     It 'is false when desktop/ is unchanged and there is no compose file' {

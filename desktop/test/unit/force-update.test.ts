@@ -11,8 +11,9 @@ import {
   FAILURE_REASONS,
   FORCE_UPDATE_TIMEOUT_MS,
   createForceUpdate,
+  parseBuildCheck,
 } from '../../src/core/update/force-update';
-import type { BuilderTaskStatus, ForceUpdateDeps } from '../../src/core/update/force-update';
+import type { BuildCheck, BuilderTaskStatus, ForceUpdateDeps } from '../../src/core/update/force-update';
 import type { Logger } from '../../src/core/redact';
 
 const RUNNING = 'b087a07ed75b9560c73cc4ed7dd888a5a8da6800';
@@ -61,6 +62,7 @@ function harness(overrides: Partial<ForceUpdateDeps> & { statuses?: BuilderTaskS
       return status;
     },
     readLastBuiltSha: () => lastBuilt,
+    readLastCheck: () => ({ checkedAt: T0 + 1_000, remoteTree: lastBuilt ?? RUNNING, skip: '' }),
     buildOnDisk: () => true,
     startUpdate: async (tree) => {
       calls.swaps.push(tree);
@@ -248,6 +250,114 @@ describe('createForceUpdate', () => {
     for (const reason of Object.values(FAILURE_REASONS)) {
       expect(reason.length).toBeLessThanOrEqual(60);
       expect(reason).not.toMatch(/[\\/:]/);
+    }
+  });
+});
+
+describe('createForceUpdate never says up to date when it could not check (PM round 2)', () => {
+  const check = (patch: Partial<BuildCheck>): (() => BuildCheck) => () => ({
+    checkedAt: T0 + 1_000,
+    remoteTree: RUNNING,
+    skip: '',
+    ...patch,
+  });
+
+  it('Docker down: the builder deferred a needed build -> failed, start Docker', async () => {
+    const { deps } = harness({ lastBuilt: RUNNING, readLastCheck: check({ remoteTree: NEWER, skip: 'docker-not-ready' }) });
+    expect(await createForceUpdate(deps).request()).toEqual({
+      status: 'failed',
+      reason: "Docker isn't running — start Docker Desktop and try again",
+    });
+  });
+
+  it('fetch failed: origin could not be reached -> failed, not up to date', async () => {
+    const { deps } = harness({ lastBuilt: RUNNING, readLastCheck: check({ skip: 'fetch-failed' }) });
+    expect(await createForceUpdate(deps).request()).toEqual({
+      status: 'failed',
+      reason: FAILURE_REASONS.fetchFailed,
+    });
+  });
+
+  it('the build ref could not be resolved -> failed', async () => {
+    const { deps } = harness({ lastBuilt: RUNNING, readLastCheck: check({ remoteTree: null, skip: 'ref-unresolved' }) });
+    expect(await createForceUpdate(deps).request()).toEqual({ status: 'failed', reason: FAILURE_REASONS.refUnresolved });
+  });
+
+  it('no check record (an older builder) -> failed, not up to date', async () => {
+    const { deps } = harness({ lastBuilt: RUNNING, readLastCheck: () => null });
+    expect(await createForceUpdate(deps).request()).toEqual({ status: 'failed', reason: FAILURE_REASONS.noCheck });
+  });
+
+  it('a check from an earlier run than this one -> failed, not up to date', async () => {
+    const { deps } = harness({ lastBuilt: RUNNING, readLastCheck: check({ checkedAt: T0 - 3_600_000 }) });
+    expect(await createForceUpdate(deps).request()).toEqual({ status: 'failed', reason: FAILURE_REASONS.noCheck });
+  });
+
+  it('an unreadable check record -> failed', async () => {
+    const { deps } = harness({
+      lastBuilt: RUNNING,
+      readLastCheck: () => {
+        throw new Error('EBUSY');
+      },
+    });
+    expect(await createForceUpdate(deps).request()).toEqual({ status: 'failed', reason: FAILURE_REASONS.noCheck });
+  });
+
+  it('origin/main has a different desktop tree but no newer build is on disk -> failed', async () => {
+    const { deps } = harness({ lastBuilt: RUNNING, readLastCheck: check({ remoteTree: NEWER }) });
+    expect(await createForceUpdate(deps).request()).toEqual({ status: 'failed', reason: FAILURE_REASONS.notOnDisk });
+  });
+
+  it('up to date only when the run fetched and origin/main equals the running build', async () => {
+    const { deps } = harness({ lastBuilt: RUNNING, readLastCheck: check({}) });
+    expect(await createForceUpdate(deps).request()).toEqual({ status: 'up-to-date', build: RUNNING.slice(0, 7) });
+  });
+
+  it('a newer build already on disk still restarts, even when this run could not fetch', async () => {
+    const { deps, calls } = harness({ readLastCheck: check({ skip: 'fetch-failed' }) });
+    expect((await createForceUpdate(deps).request()).status).toBe('restarting');
+    expect(calls.swaps).toEqual([NEWER]);
+  });
+
+  it('joining a run that was already going accepts that run’s check', async () => {
+    const { deps } = harness({
+      lastBuilt: RUNNING,
+      startBuilder: async () => 'already-running',
+      statuses: [
+        { running: true, lastRunAt: T0 - 60_000, lastResult: null },
+        { running: false, lastRunAt: T0 - 60_000, lastResult: 0 },
+      ],
+      readLastCheck: check({ checkedAt: T0 - 30_000 }),
+    });
+    expect((await createForceUpdate(deps).request()).status).toBe('up-to-date');
+  });
+});
+
+describe('parseBuildCheck', () => {
+  it('reads the builder’s last-check.json', () => {
+    expect(parseBuildCheck(`{"checkedAt":"2026-09-30T05:00:00Z","remoteTree":"${RUNNING}","skip":""}`)).toEqual({
+      checkedAt: Date.UTC(2026, 8, 30, 5, 0, 0),
+      remoteTree: RUNNING,
+      skip: '',
+    });
+    expect(parseBuildCheck('{"checkedAt":"2026-09-30T05:00:00Z","remoteTree":"","skip":"ref-unresolved"}')).toEqual({
+      checkedAt: Date.UTC(2026, 8, 30, 5, 0, 0),
+      remoteTree: null,
+      skip: 'ref-unresolved',
+    });
+  });
+
+  it('is null for anything malformed or an unknown skip', () => {
+    for (const bad of [
+      '',
+      '{',
+      '[]',
+      '{"checkedAt":"yesterday","remoteTree":"","skip":""}',
+      `{"checkedAt":"2026-09-30T05:00:00Z","remoteTree":"xyz","skip":""}`,
+      `{"checkedAt":"2026-09-30T05:00:00Z","remoteTree":"${RUNNING}","skip":"cosmic-rays"}`,
+      `{"checkedAt":"2026-09-30T05:00:00Z","remoteTree":"${RUNNING}"}`,
+    ]) {
+      expect(parseBuildCheck(bad)).toBeNull();
     }
   });
 });
