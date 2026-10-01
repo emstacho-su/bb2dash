@@ -229,15 +229,17 @@ Once, before the first row: `mkdir -p <scratch>/downloads`, and park the tab on
 
    | Where the tab is | Meaning | Do |
    |---|---|---|
-   | still the park page | Chrome took it as a download | step 4 |
+   | still the page it was on (the park page) | Chrome took it as a download | step 4 |
    | `host` ends `.content.blackboardcdn.com` (an inline PDF) | the file is showing, not saved | run the save snippet below, then step 4 |
    | NetID, `login.microsoftonline.com`, or a Blackboard login page | **`session_expired`** | stop step 4b (below) |
    | Blackboard with `notFound`, or a `path` holding `/READ_ONLY/` (another course's copy) | **`gone`** | report the row; next row |
    | anything else | **`refused`** | report the row with the host; next row |
 
    The save snippet, run on the CDN page, verbatim except the id. It fetches the page's own URL
-   (same origin, so it works there) and hands the bytes to Chrome's Downloads as `bb2dash-<id>`;
-   it returns only a byte count:
+   (same origin, so it works there) and hands the bytes to Chrome's Downloads as `bb2dash-<id>`.
+   The tool does not wait for the promise, so it usually answers `{}` — that is not a failure;
+   step 4's collector is the check (verified live 2026-10-01: `{}` back, file saved, collected).
+   The tool's own "Tab Context" line prints the CDN URL; never repeat it anywhere.
 
    ```js
    (async () => {
