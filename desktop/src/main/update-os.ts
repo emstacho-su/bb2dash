@@ -178,8 +178,16 @@ export function readLastBuiltSha(stateDir: string): string | null {
 
 /** How long the app's Docker check may take before Docker counts as not running. */
 export const DOCKER_CHECK_TIMEOUT_MS = 10_000;
-/** Docker Desktop's own CLI; `docker` on PATH otherwise (the builder resolves it the same way). */
+/** Docker Desktop's own CLI, machine-wide install; `docker` on PATH otherwise. */
 const DOCKER_DESKTOP_EXE = 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe';
+/** The per-user install, relative to %LOCALAPPDATA% (Stack's laptop has this one, 2026-09-30). */
+const DOCKER_DESKTOP_USER_EXE = 'Programs\\DockerDesktop\\resources\\bin\\docker.exe';
+
+/** Where to look for docker.exe, in order; the last resort is `docker` on PATH. */
+function dockerCandidates(env: NodeJS.ProcessEnv): string[] {
+  const local = env['LOCALAPPDATA'];
+  return [DOCKER_DESKTOP_EXE, ...(local ? [`${local}\\${DOCKER_DESKTOP_USER_EXE}`] : [])];
+}
 /** The same probe the builder's Test-DockerReady uses: a server version means the engine answers. */
 const DOCKER_VERSION_ARGS = Object.freeze(['version', '--format', '{{.Server.Version}}']);
 
@@ -209,9 +217,12 @@ export interface DockerCheckIo {
 }
 
 /** Is the Docker engine answering? Never rejects: any failure is "not ready". */
-export function createDockerReadyCheck(io: DockerCheckIo = { exists: existsSync, exec: execDocker }): () => Promise<boolean> {
+export function createDockerReadyCheck(
+  io: DockerCheckIo = { exists: existsSync, exec: execDocker },
+  env: NodeJS.ProcessEnv = process.env,
+): () => Promise<boolean> {
   return async () => {
-    const file = io.exists(DOCKER_DESKTOP_EXE) ? DOCKER_DESKTOP_EXE : 'docker';
+    const file = dockerCandidates(env).find((path) => io.exists(path)) ?? 'docker';
     try {
       const result = await io.exec(file, DOCKER_VERSION_ARGS, DOCKER_CHECK_TIMEOUT_MS);
       return result.code === 0 && result.stdout.trim() !== '';

@@ -223,6 +223,22 @@ describe('Docker readiness and the short-wait request (PM round 3)', () => {
     expect(files[0]).toBe('C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe');
   });
 
+  it('finds a per-user Docker Desktop install under %LOCALAPPDATA% (Stack’s laptop, 2026-09-30)', async () => {
+    const files: string[] = [];
+    const perUser = 'C:\\Users\\stack\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe';
+    await createDockerReadyCheck(
+      {
+        exists: (p) => p === perUser,
+        exec: async (file) => {
+          files.push(file);
+          return { code: 0, stdout: '29.8.1' };
+        },
+      },
+      { LOCALAPPDATA: 'C:\\Users\\stack\\AppData\\Local' },
+    )();
+    expect(files[0]).toBe(perUser);
+  });
+
   it('is not ready on a non-zero exit, an empty server version, or a spawn failure', async () => {
     const check = (exec: DockerExec) => createDockerReadyCheck({ exists: () => false, exec })();
     expect(await check(async () => ({ code: 1, stdout: '' }))).toBe(false);
