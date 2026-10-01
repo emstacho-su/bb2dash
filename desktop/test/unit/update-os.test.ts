@@ -9,7 +9,9 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILDER_TASK_NAME,
   EXIT_TASK_ALREADY_RUNNING,
+  createReadBuilderStatus,
   createStartBuilderTask,
+  parseBuilderStatus,
   launchStateDir,
   startUpdateHelper,
   updateHelperArgv,
@@ -69,7 +71,7 @@ describe('createStartBuilderTask', () => {
       scripts,
       run: async (script) => {
         scripts.push(script);
-        return { code, stderr };
+        return { code, stderr, stdout: '' };
       },
     };
   }
@@ -142,5 +144,48 @@ describe('startUpdateHelper', () => {
     );
     expect(spawned).toHaveLength(1);
     expect(spawned[0]).toContain(TREE);
+  });
+});
+
+describe('parseBuilderStatus / createReadBuilderStatus', () => {
+  it('reads state|lastRunMs|lastResult', () => {
+    expect(parseBuilderStatus('Running|1790000000000|267009\r\n')).toEqual({
+      running: true,
+      lastRunAt: 1_790_000_000_000,
+      lastResult: null,
+    });
+    expect(parseBuilderStatus('Ready|1790000000000|0')).toEqual({
+      running: false,
+      lastRunAt: 1_790_000_000_000,
+      lastResult: 0,
+    });
+    expect(parseBuilderStatus('Queued|0|0').running).toBe(true);
+    expect(parseBuilderStatus('Ready|0|3')).toEqual({ running: false, lastRunAt: null, lastResult: 3 });
+  });
+
+  it('takes the last line, so a warning printed first does not matter', () => {
+    expect(parseBuilderStatus('WARNING: x\nReady|5|0').lastResult).toBe(0);
+  });
+
+  it('throws on anything else', () => {
+    for (const bad of ['', 'Ready', 'Ready|x|0', 'Ready|1|0|extra', '; rm|1|0']) {
+      expect(() => parseBuilderStatus(bad)).toThrow(/builder status/);
+    }
+  });
+
+  it('asks Task Scheduler about the named task only', async () => {
+    const scripts: string[] = [];
+    const read = createReadBuilderStatus(async (script) => {
+      scripts.push(script);
+      return { code: 0, stderr: '', stdout: 'Ready|1790000000000|0' };
+    });
+    expect(await read()).toEqual({ running: false, lastRunAt: 1_790_000_000_000, lastResult: 0 });
+    expect(scripts[0]).toContain(`Get-ScheduledTask -TaskName '${BUILDER_TASK_NAME}'`);
+    expect(scripts[0]).toContain('Get-ScheduledTaskInfo');
+  });
+
+  it('rejects when the query fails', async () => {
+    const read = createReadBuilderStatus(async () => ({ code: 1, stderr: 'no task', stdout: '' }));
+    await expect(read()).rejects.toThrow(/no task/);
   });
 });
