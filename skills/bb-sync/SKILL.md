@@ -266,8 +266,9 @@ Once, before the first row: `mkdir -p <scratch>/downloads`, and park the tab on
    `--from` defaults to `%USERPROFILE%\Downloads`; pass it if Stack's Chrome saves elsewhere. It
    waits for a finished file saved since `$since` whose name is the row's (exact, Chrome's ` (n)`
    copy, Chrome's `_` for `:?*"<>|`, or the snippet's `bb2dash-<id>`), and **moves** it to
-   `<scratch>/downloads/<id>_<name>`. Exit 0 → collected. Exit 2 (`no download`) → report the row;
-   if Chrome showed a "Save as" dialog or a "download multiple files" prompt, tell Stack, since only
+   `<scratch>/downloads/<id>_<name>`. Exit 0 → collected. Exit 2 (`no download`) → report the row
+   with the `saved_since` names it printed: a file there under a different name is this row's bytes
+   saved under Blackboard's name, left in Stack's Downloads — name it so he can delete it. If Chrome showed a "Save as" dialog or a "download multiple files" prompt, tell Stack, since only
    he can answer it. Exit 3 (more than one candidate) → nothing was moved; report the row and the
    names it printed. Exit 4 → that destination already holds a file; report it.
 5. Navigate back to the park page before the next row.

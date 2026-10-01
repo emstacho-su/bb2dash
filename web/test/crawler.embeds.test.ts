@@ -125,3 +125,11 @@ describe('parseBbfile — the whole <a …> start tag', () => {
     expect(tags[0].href).toBe(CURRENT);
   });
 });
+
+describe('durableUrl: a non-http href never beats a data-bbfile URL', () => {
+  it('ignores javascript: and relative hrefs when nothing is durable', () => {
+    const resource = `${HOST}/courses/1/file.pdf`;
+    expect(crawler.durableUrl({ resourceUrl: resource }, 'javascript:void(0)')).toBe(resource);
+    expect(crawler.durableUrl({ resourceUrl: resource }, '/ultra/courses/_1_1/outline')).toBe(resource);
+  });
+});

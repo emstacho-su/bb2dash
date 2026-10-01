@@ -41,6 +41,8 @@ export const MAX_TIMEOUT_S = 600;
 export const POLL_MS = 1000;
 /** A file system timestamp and the agent's clock may disagree by a little; never by more. */
 export const CLOCK_SLACK_MS = 1000;
+/** How many finished files saved in the window a "no download" line names. */
+export const MAX_NEAR_MISSES = 5;
 
 /** Characters Windows refuses in a file name; Chrome saves them as `_`. */
 const ILLEGAL_RE = /[\u0000-\u001f\u007f\\/:*?"<>|]/g;
@@ -129,8 +131,11 @@ export async function collect({ id, name, sinceMs, from, to, timeoutMs, pollMs =
     const entries = io.list(from);
     const candidates = matchingCandidates(entries, want);
     const stable = candidates.filter((c) => c.size > 0 && previous.get(c.name) === c.size);
-    const settled = candidates.length > 0 && stable.length === candidates.length && !downloadInFlight(entries, want);
     const timedOut = io.now() >= deadline;
+    // An in-flight download holds the decision until the timeout, then a finished, stable match
+    // is taken anyway: Chrome's anonymous `Unconfirmed N.crdownload` may be Stack's own file.
+    const allStable = candidates.length > 0 && stable.length === candidates.length;
+    const settled = allStable && (timedOut || !downloadInFlight(entries, want));
 
     if (candidates.length > 1 && (settled || timedOut)) {
       return { code: EXIT.ambiguous, line: { id, error: 'more than one candidate', candidates: candidates.map((c) => c.name) } };
@@ -144,7 +149,12 @@ export async function collect({ id, name, sinceMs, from, to, timeoutMs, pollMs =
       return { code: EXIT.ok, line: { id, collected, from: only.name, bytes: only.size } };
     }
     if (timedOut) {
-      return { code: EXIT.noDownload, line: { id, error: candidates.length ? 'download not finished' : 'no download' } };
+      if (candidates.length) return { code: EXIT.noDownload, line: { id, error: 'download not finished' } };
+      // Name the finished files saved in the window, so a name mismatch is visible and reportable.
+      const savedSince = entries
+        .filter((e) => !isPartialDownload(e.name) && e.mtimeMs >= sinceMs - CLOCK_SLACK_MS)
+        .map((e) => e.name).slice(0, MAX_NEAR_MISSES);
+      return { code: EXIT.noDownload, line: { id, error: 'no download', saved_since: savedSince } };
     }
     previous = new Map(candidates.map((c) => [c.name, c.size]));
     await io.sleep(pollMs);

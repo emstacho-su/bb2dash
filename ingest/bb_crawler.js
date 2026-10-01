@@ -144,7 +144,9 @@ const decodeEntities = (s) => String(s).replace(/&quot;/g, '"').replace(/&#0*39;
 /** The URL to catalogue for one data-bbfile object and its anchor's href (null when not an <a>). */
 const durableUrl = (o, anchorHref = null) => {
   const b = o || {};
-  const cands = [anchorHref, b.viewerUrl, b.permanentUrl, b.resourceUrl, b.href].map(withoutQuery).filter(Boolean);
+  // Only an absolute http(s) href competes: a `javascript:` or relative Ultra href is not a file.
+  const href = typeof anchorHref === 'string' && /^https?:\/\//i.test(anchorHref) ? anchorHref : null;
+  const cands = [href, b.viewerUrl, b.permanentUrl, b.resourceUrl, b.href].map(withoutQuery).filter(Boolean);
   return cands.find(u => DURABLE_FILE_RE.test(u)) || cands.find(u => !/\/sessions\//.test(u)) || cands[0] || null;
 };
 

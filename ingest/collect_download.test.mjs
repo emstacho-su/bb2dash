@@ -128,12 +128,26 @@ test('collect: one finished file is moved to <to>/<id>_<safe name>, once its siz
   assert.equal(r.line.bytes, 2000);
 });
 
-test('collect: nothing by the timeout → exit 2, {id, error: "no download"}, nothing moved', async () => {
-  const io = fakeIo([[{ name: 'Other.pdf', mtimeMs: 5, size: 2000 }]]);
+test('collect: nothing by the timeout → exit 2, names the files saved since (a near miss), nothing moved', async () => {
+  const io = fakeIo([[
+    { name: 'Other.pdf', mtimeMs: 5, size: 2000 },
+    { name: 'Older.pdf', mtimeMs: -5000, size: 2000 },
+    { name: 'x.pdf.crdownload', mtimeMs: 5, size: 10 },
+  ]]);
   const r = await collect(base, io);
   assert.equal(r.code, EXIT.noDownload);
-  assert.deepEqual(r.line, { id: 161, error: 'no download' });
+  assert.deepEqual(r.line, { id: 161, error: 'no download', saved_since: ['Other.pdf'] });
   assert.equal(io.moved.length, 0);
+});
+
+test('collect: an unrelated download still in flight does not block a finished match past the timeout', async () => {
+  const io = fakeIo([[
+    { name: 'Major Case #1 - Synchrony.pdf', mtimeMs: 5, size: 2000 },
+    { name: 'Unconfirmed 123.crdownload', mtimeMs: 5, size: 10 },
+  ]]);
+  const r = await collect(base, io);
+  assert.equal(r.code, EXIT.ok);
+  assert.equal(io.moved.length, 1);
 });
 
 test('collect: two candidates → exit 3, nothing moved, both named', async () => {
