@@ -123,6 +123,71 @@ const strip = (h) => { if (h == null) return null; if (typeof h === 'object') h 
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
       .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() || null; };
 
+// ------------------------------------------------------------------------------------------------
+// Embedded files: `<a data-bbfile="{json}" href="…">` in an Ultra document's rawText.
+//
+// WHICH URL. Prefer a durable bbcswebdav URL (pid-…-dt-…-rid-N_1/xid-N_1); session-scoped
+// /sessions/<id>/… URLs 403 once the session ends. Among durable ones, the ANCHOR'S OWN href wins,
+// then `viewerUrl`, `permanentUrl`, `resourceUrl` (and the JSON's own `href` last). A course copied
+// from an earlier term keeps the old copy's ids inside data-bbfile: IST.466 `_12939673_1` carried
+// a `resourceUrl` of the Spring 2026 copy (rid-156013084_1, which redirects into another course's
+// READ_ONLY area and answers "Not Found or no permission") while `viewerUrl` and the href named the
+// current Fall copy (rid-164409011_1). The href is what Blackboard opens when Stack clicks, so
+// trusting resourceUrl first catalogued a dead file (bb_files 161). No stored URL keeps a query
+// string: viewerUrl/href carry short-lived signed parameters.
+// ------------------------------------------------------------------------------------------------
+const DURABLE_FILE_RE = /bbcswebdav\/pid-.*-rid-\d+_\d+\/xid-\d+_\d+/;
+const withoutQuery = (u) => (typeof u === 'string' && u ? u.split('#')[0].split('?')[0] || null : null);
+const decodeEntities = (s) => String(s).replace(/&quot;/g, '"').replace(/&#0*39;/g, "'").replace(/&#x0*27;/gi, "'")
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+/** The URL to catalogue for one data-bbfile object and its anchor's href (null when not an <a>). */
+const durableUrl = (o, anchorHref = null) => {
+  const b = o || {};
+  // Only an absolute http(s) href competes: a `javascript:` or relative Ultra href is not a file.
+  const href = typeof anchorHref === 'string' && /^https?:\/\//i.test(anchorHref) ? anchorHref : null;
+  const cands = [href, b.viewerUrl, b.permanentUrl, b.resourceUrl, b.href].map(withoutQuery).filter(Boolean);
+  return cands.find(u => DURABLE_FILE_RE.test(u)) || cands.find(u => !/\/sessions\//.test(u)) || cands[0] || null;
+};
+
+// One attribute, read at a fixed position: name, then an optional "…", '…' or bare value.
+const ATTR_RE = /([^\s"'<>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/y;
+
+/**
+ * Every start tag in `html` carrying data-bbfile: its tag name, the raw attribute value, and the
+ * decoded href when the tag is an anchor. Attributes are parsed one by one, in any order and any
+ * quoting, so a `>` inside a quoted value never ends the tag early.
+ */
+const bbfileTags = (html) => {
+  const s = String(html || ''); const out = []; const tagRe = /<([a-zA-Z][a-zA-Z0-9-]*)/g; let m;
+  while ((m = tagRe.exec(s))) {
+    const tag = m[1].toLowerCase(); const attrs = Object.create(null); let i = tagRe.lastIndex;
+    for (;;) {
+      while (i < s.length && /[\s/]/.test(s[i])) i++;
+      if (i >= s.length || s[i] === '>') break;
+      ATTR_RE.lastIndex = i; const a = ATTR_RE.exec(s);
+      if (!a || ATTR_RE.lastIndex === i) break;
+      const name = a[1].toLowerCase();
+      if (!(name in attrs)) attrs[name] = a[2] ?? a[3] ?? a[4] ?? '';
+      i = ATTR_RE.lastIndex;
+    }
+    tagRe.lastIndex = i;
+    if (attrs['data-bbfile'] != null) out.push({ tag, bbfile: attrs['data-bbfile'], href: tag === 'a' && attrs.href ? decodeEntities(attrs.href) : null });
+  }
+  return out;
+};
+
+/** Append each embed in `html` to `out` (de-duplicated by URL); a malformed data-bbfile is skipped. */
+const parseBbfile = (html, out) => {
+  for (const t of bbfileTags(html)) {
+    let o; try { o = JSON.parse(decodeEntities(t.bbfile)); } catch (_) { continue; }
+    if (!o || typeof o !== 'object') continue;
+    const url = durableUrl(o, t.href);
+    if (url && !out.some(f => f.url === url)) out.push({ name: o.displayName || o.linkName || o.fileName || null, url, mime: o.mimeType || null, sessionScoped: /\/sessions\//.test(url) });
+  }
+  return out;
+};
+
 // A Blackboard user id looks like `_21025199_1`. Never show one of those as an author name.
 const isBbUserId = (v) => typeof v === 'string' && /^_\d+_\d+$/.test(v);
 
@@ -593,12 +658,7 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
   const pageAll = async (u) => { let out = [], off = 0; for (;;) { const r = await j(u + (u.includes('?') ? '&' : '?') + `offset=${off}`); if (r.__status) return { error: r.__status, results: out }; out = out.concat(r.results || []); if (!r.paging || !r.paging.nextPage || !(r.results || []).length || off > 5000) break; off += r.results.length; } return { results: out }; };
   const typeOf = (c) => c.contentHandler?.id || Object.keys(c.contentDetail || {})[0] || null;
   const isContainer = (c) => c.hasChildren || /folder|lesson|learningmodule/i.test(typeOf(c) || '');
-  // Prefer durable bbcswebdav URLs (pid-…-dt-…-rid-N_1/xid-N_1). Session-scoped /sessions/<id>/... URLs 403 once the
-  // session ends, so a catalog built from them is useless the next day.
-  const durableUrl = (o) => { const cands = [o.resourceUrl, o.viewerUrl ? o.viewerUrl.split('?')[0] : null, o.permanentUrl, o.href].filter(Boolean);
-    return cands.find(u => /bbcswebdav\/pid-.*-rid-\d+_\d+\/xid-\d+_\d+/.test(u)) || cands.find(u => !/\/sessions\//.test(u)) || cands[0] || null; };
-  const parseBbfile = (html, out) => { const re = /data-bbfile="([^"]+)"/g; let m; while ((m = re.exec(html || ''))) { try { const o = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'"));
-      const url = durableUrl(o); if (url && !out.some(f => f.url === url)) out.push({ name: o.displayName || o.linkName || o.fileName || null, url, mime: o.mimeType || null, sessionScoped: /\/sessions\//.test(url) }); } catch (_) {} } return out; };
+  // durableUrl / parseBbfile are module-level (above) so web/test can cover them.
   const embeddedFiles = (html) => parseBbfile(html, []);
   // Deep scan: attachments to assessment items (tests, assignments) live under
   // contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions, not body — so walk EVERY string
@@ -795,6 +855,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { installCrawler, strip, personName, announcementAuthor, mapAnnouncement, AUTHOR_KEYS,
     userIdOf, announcementProbe, keyListMisses, resolveAuthors, PROBE_ID_LIMIT,
     mapAttempt, mapAttemptFile, mapGradeRow, mapAttemptDetail, newestAttempts, atPath,
-    shouldProbeColumn, assessmentFields, pickKey, assertRunId,
+    shouldProbeColumn, assessmentFields, pickKey, assertRunId, durableUrl, parseBbfile, bbfileTags,
     ATTEMPT_FIELD_KEYS, ATTEMPT_FILE_KEYS, ASSESSMENT_FIELDS, CRAWLER_VERSION, ATTEMPT_LIMIT };
 }

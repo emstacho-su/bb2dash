@@ -1,10 +1,11 @@
 -- bb2dash :: db/tests/phase18_122_supersede_rule.sql
 -- Phase 18 (brief 98), task 9. Worker W-48. supersede_replaced_files (122), R-63:
---   (1) with 2 and 74 un-superseded inside this transaction, the function over the newest
---       registered crawl writes exactly these three links, by id: 2 -> 151, 74 -> 149 and
---       150 -> 162. The third is the 2026-09-29 crawl f24a7ff5, in which IST.466 item
---       _12939679_1 carries only IST466_2Schedule_wK5.docx (162), replacing wK4 (150). The
---       brief's "exactly 2" was read before that crawl (PM call, round 2).
+--   (1) with 2, 74, 150 and 162 un-superseded inside this transaction, the function over the
+--       newest registered crawl writes exactly these four links, by id: 2 -> 151, 74 -> 149,
+--       150 -> 967 and 162 -> 967. Since sync 394's crawl 1f10c823 (2026-10-01) IST.466 item
+--       _12939679_1 carries only IST466_2Schedule_wK6.docx (967), replacing wK4 (150) and wK5
+--       (162). The expectation follows the newest crawl, so a sync that changes that item again
+--       moves it (it read "150 -> 162" after crawl f24a7ff5; the brief's "exactly 2" before that).
 --   (2) a replay writes 0
 --   (3) 31, 32, 47 (the three IST.352 decks) and 155, 156 are unchanged
 --   (4) rows classified_by 'stack' are unchanged
@@ -14,7 +15,7 @@
 --   (7) a pre-existing sibling is not a replacement (160): an item held A.pdf and B.pdf in one
 --       registered crawl; the next (newest) crawl shows only A. B is NOT superseded by A and no
 --       question is raised; B is left for the missing marker. (1) still holds under 160 because
---       151, 149 and 162 never sat beside 2, 74 and 150 in their items in any registered crawl.
+--       151, 149 and 967 never sat beside 2, 74, 150 and 162 in their items in any registered crawl.
 -- Needs migration 128's execute grant for db_test_runner. Collects every failure, raises once.
 -- RUN IT: `node scripts/db-test.mjs --only phase18_122_supersede_rule.sql`.
 
@@ -48,7 +49,7 @@ begin
   select id into v_sync from sync_runs where run_id = v_newest order by id desc limit 1;
   select id into v_older_sync from sync_runs where run_id = v_older order by id desc limit 1;
 
-  update bb_files set superseded_by = null where id in (2, 74);
+  update bb_files set superseded_by = null where id in (2, 74, 150, 162);
 
   select jsonb_object_agg(id, superseded_by) into v_before from bb_files;
   select md5(string_agg(row(f.*)::text, '|' order by f.id)) into v_watch
@@ -61,7 +62,7 @@ begin
   select string_agg(format('%s->%s', f.id, f.superseded_by), ', ' order by f.id) into v_got
     from bb_files f
    where f.superseded_by is distinct from (v_before->>f.id::text)::bigint;
-  if (v_r->>'superseded')::int <> 3 or v_got is distinct from '2->151, 74->149, 150->162' then
+  if (v_r->>'superseded')::int <> 4 or v_got is distinct from '2->151, 74->149, 150->967, 162->967' then
     v_fail := v_fail || format('(1) newest run %s wrote %s: %s', v_newest, v_r->>'superseded',
                                coalesce(v_got, 'nothing'));
   end if;
@@ -83,7 +84,7 @@ begin
   end if;
 
   -- (5)
-  update bb_files set superseded_by = null where id in (2, 74);
+  update bb_files set superseded_by = null where id in (2, 74, 150, 162);
   v_r := supersede_replaced_files(v_older, v_older_sync);
   if not coalesce((v_r->>'older_run')::boolean, false) or (v_r->>'superseded')::int <> 0
      or (select superseded_by from bb_files where id = 2) is not null then

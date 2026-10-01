@@ -26,7 +26,7 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 
 const { FileOpenAction } = await import('@/components/materials/FileOpenAction');
-const { fileHonesty, fileLocation } = await import('@/lib/queries.materials');
+const { fileHonesty, fileLocation, isOutsideLink } = await import('@/lib/queries.materials');
 
 describe('fileHonesty — a route column the caller cannot see', () => {
   it('says "not stored" rather than "no route" when the other columns are unknown', () => {
@@ -63,6 +63,32 @@ describe('fileHonesty — a route column the caller cannot see', () => {
     expect(fileHonesty({ storage_path: null, local_path: 'b', source_url: null }).label).toBe(
       'Recorded on disk',
     );
+  });
+
+  it('labels a source URL off Blackboard "Outside link", and a Blackboard one "Source link"', () => {
+    expect(fileHonesty({ storage_path: null, local_path: null, source_url: 'https://www.cbo.gov/x.pdf' })).toEqual({
+      location: 'source',
+      label: 'Outside link',
+      openable: true,
+    });
+    expect(
+      fileHonesty({
+        storage_path: null,
+        local_path: null,
+        source_url: 'https://blackboard.syracuse.edu/bbcswebdav/pid-1-dt-content-rid-2_1/xid-2_1',
+      }).label,
+    ).toBe('Source link');
+  });
+
+  it('isOutsideLink follows migration 161: http(s) off the Blackboard host only', () => {
+    expect(isOutsideLink('https://www.sec.gov/files/a.pdf')).toBe(true);
+    expect(isOutsideLink('http://newyorkfed.org/x')).toBe(true);
+    expect(isOutsideLink('https://blackboard.syracuse.edu.evil.example/x')).toBe(true);
+    expect(isOutsideLink('https://blackboard.syracuse.edu/ultra/x')).toBe(false);
+    expect(isOutsideLink('https://cdn.BLACKBOARD.syracuse.edu/x')).toBe(false);
+    expect(isOutsideLink('local://course context/a.pdf')).toBe(false);
+    expect(isOutsideLink('')).toBe(false);
+    expect(isOutsideLink(null)).toBe(false);
   });
 
   it('treats an empty string as no path, not as a path', () => {

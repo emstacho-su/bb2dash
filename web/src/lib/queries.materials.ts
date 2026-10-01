@@ -279,6 +279,18 @@ export function sourceUrl(row: FileRoutes): string | null {
   return routePath(row.source_url);
 }
 
+/** Blackboard's own host, any subdomain; the same rule as SQL `bb_file_is_outside_link` (161). */
+const BLACKBOARD_URL_RE = /^https?:\/\/([a-z0-9-]+\.)*blackboard\.syracuse\.edu(:[0-9]+)?(\/|$)/i;
+
+/**
+ * An outside link: an http(s) source URL off the Blackboard host (cbo.gov, sec.gov, ...). Such a
+ * row never gets Storage bytes, so it is not a file "not pulled yet". Mirrors migration 161.
+ */
+export function isOutsideLink(url: string | null | undefined): boolean {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false;
+  return !BLACKBOARD_URL_RE.test(url);
+}
+
 export function fileLocation(row: FileRoutes): FileLocation {
   if (routePath(row.storage_path)) return 'library';
   if (routePath(row.local_path)) return 'disk';
@@ -314,7 +326,11 @@ export function fileHonesty(row: FileRoutes): {
     case 'library':
       return { location, label: 'In library', openable: true };
     case 'source':
-      return { location, label: 'Source link', openable: true };
+      return {
+        location,
+        label: isOutsideLink(sourceUrl(row)) ? 'Outside link' : 'Source link',
+        openable: true,
+      };
     case 'disk':
       return { location, label: 'Recorded on disk', openable: false };
     case 'unknown':

@@ -18,15 +18,21 @@
 // every manifest written before 2026-09-22 — is a course file.
 //
 // THE SHAPE. Two halves, because bbcswebdav URLs 302 to a cross-origin CDN with no CORS:
-//   1. Something holding the Blackboard session records the redirect chain for each file — the
-//      browser half. It follows nothing and downloads nothing; it walks hops one at a time with
-//      `page.context().request.get(u, { maxRedirects: 0 })` through `ingest/fetch_signed.mjs`'s
-//      `resolveSignedUrl`, and writes the resulting `hops` array onto the manifest row. The old
-//      route through Playwright's `download` event is gone: it crashed the MCP browser on
+//   1. The browser half gets each file's bytes onto disk as `<id>_<name>` (`downloadNameFor`).
+//      THE SYNC'S WAY (bb-sync step 4b, since 2026-10-01): the sync runs only in Stack's logged-in
+//      Chrome through Claude in Chrome, which cannot read a redirect. The tab is navigated to
+//      `<source_url>?xythos-download=true`, Chrome saves the file to its Downloads folder (an
+//      inline PDF is saved by a same-origin snippet on the CDN page), and
+//      `ingest/collect_download.mjs` moves it into --downloads. No signed URL ever passes through
+//      the agent. Then this script runs WITHOUT `--fetch`.
+//      THE FALLBACK (`--fetch`), only for a caller holding a Playwright-style request API and a
+//      logged-in context: walk hops one at a time with `request.get(u, { maxRedirects: 0 })`
+//      through `ingest/fetch_signed.mjs`'s `resolveSignedUrl` and write the `hops` array onto each
+//      manifest row. Playwright's `download` event is never used: it crashed the MCP browser on
 //      2026-09-23 and left a sync unable to store three catalogued files.
-//   2. This script does the rest, per manifest row. With `--fetch` it validates the row's `hops`
-//      and downloads the signed URL itself (a signed CDN URL carries its own authorisation, so no
-//      session is needed here); without it, it finds an already-downloaded `<id>_*` in --downloads.
+//   2. This script does the rest, per manifest row. Without `--fetch` it finds the `<id>_*` file
+//      already in --downloads; with `--fetch` it validates the row's `hops` and downloads the
+//      signed URL itself (a signed CDN URL carries its own authorisation, so no session is needed).
 //      Then: check size and magic bytes, copy to the local mirror (`course context/<relpath>`),
 //      POST to Storage `bb-files/<key>` with the publishable key (anon is insert-only, never
 //      `x-upsert`; a Duplicate answer means the object is already there), run extract_text.py
@@ -49,8 +55,10 @@
 //   select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
 //            'relpath', bb_file_relpath(f.id), 'mime', f.mime_type, 'source_url', f.source_url,
 //            'bucket', f.bucket, 'attempt_id', f.attempt_id))
-//     from bb_files f where f.storage_path is null and f.superseded_by is null;
-//   With `--fetch`, the browser half adds `hops` to every row before this script reads it.
+//     from bb_files f where f.storage_path is null and f.superseded_by is null
+//      and f.source_url is not null and not bb_file_is_outside_link(f.source_url);
+//   An outside link (migration 161: an http(s) source_url off the Blackboard host) is never pulled.
+//   With `--fetch`, the Playwright fallback adds `hops` to every row before this script reads it.
 //   `mime` may be null: it is then inferred from the extension. An optional `key` overrides the
 //   Storage key (a re-upload of an already-stored file needs its own; see file 145). `attempt_id`
 //   is carried for the operator's report only; nothing here reads it.
@@ -131,6 +139,15 @@ export function bytesLookValid(bytes, mime) {
   if (!bytes || bytes.length < MIN_BYTES) return false;
   if (mime === 'application/pdf') return bytes.subarray(0, 4).toString() === '%PDF';
   return bytes[0] === 0x50 && bytes[1] === 0x4b;
+}
+
+/**
+ * The name a manifest row's bytes go by in --downloads: `<id>_<safe name>`. `findDownload` looks
+ * for this prefix, `--fetch` writes it, and `ingest/collect_download.mjs` moves a Chrome download
+ * to it: one spelling for all three.
+ */
+export function downloadNameFor(row) {
+  return `${row.id}_${safeBasename(row.file_name || row.relpath)}`;
 }
 
 /** The downloaded file for a manifest id: `<id>_<name>` in the downloads dir. */
@@ -263,7 +280,7 @@ const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 //            'stale', true) order by f.id)
 //     from bb_files f
 //    where f.superseded_by is null and f.storage_path is not null
-//      and f.notes like '%stored bytes may be stale%';
+//      and f.notes like '%stored bytes may be stale%' and not bb_file_is_outside_link(f.source_url);
 // ---------------------------------------------------------------------------------------------
 
 /** The exact wording stage_files appends (034, 037, 043, 053, 074); prod rows 72 and 144 carry it. */
@@ -420,7 +437,7 @@ async function bytesOnDisk(row, ctx) {
   if (chain.outcome !== 'ok') {
     return { error: `hops ${chain.outcome}: ${chain.reason ?? 'no signed URL'}`, outcome: chain.outcome };
   }
-  const dest = path.join(downloads, `${row.id}_${safeBasename(row.file_name || row.relpath)}`);
+  const dest = path.join(downloads, downloadNameFor(row));
   const got = await downloadTo(fetchImpl, chain.signedUrl, dest);
   if (got.outcome !== 'ok') {
     return { error: `download ${got.outcome}: ${got.reason}`, outcome: got.outcome, fatal: got.outcome === 'session_expired' };

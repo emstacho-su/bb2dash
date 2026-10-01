@@ -5,8 +5,10 @@
 --     row's answer_phrase
 --   * a file-only truth (no text_ids) has at least one unit that contains the answer_phrase, and
 --     names every current file of that course whose text carries it
--- Q7's truth is the two current IST.466 schedules (149, and 150 posted in a second place, both
--- carrying the answer) since migration 120 superseded 74. Q10 (the IST.323 AI-use disclosure) was
+-- Q7's truth is the two current IST.466 schedules, 149 and the one posted in a second place, both
+-- carrying the answer, since migration 120 superseded 74. That second schedule is 967 (wK6) since
+-- sync 394 (2026-10-01) superseded 150 (wK4) and 162 (wK5) with it; 967 has no text until a sync
+-- pulls its bytes, which passes, because the checks need only one truth file to carry the phrase. Q10 (the IST.323 AI-use disclosure) was
 -- removed on 2026-09-29 by Stack's call to take the AI policy out of the app and the corpus (Phase 17
 -- migration 119), not for its ranking.
 -- The truth rows below are the same as ingest/eval/golden_set.json; ingest/eval_search.test.mjs
@@ -30,7 +32,7 @@ begin
       (4, array[213]::bigint[], array[23]::bigint[], 'Lowest Exam Grade'),
       (5, array[218]::bigint[], array[23]::bigint[], 'Exam 1'),
       (6, array[]::bigint[], array[21]::bigint[], 'less than 30 minutes'),
-      (7, array[]::bigint[], array[149, 150]::bigint[], 'Deloitte to Visit'),
+      (7, array[]::bigint[], array[149, 967]::bigint[], 'Deloitte to Visit'),
       (8, array[]::bigint[], array[27]::bigint[], 'penalty of 20%'),
       (9, array[348]::bigint[], array[26]::bigint[], 'evaluation form will result in no credit')
     ) as g(qid, text_ids, file_ids, answer_phrase)

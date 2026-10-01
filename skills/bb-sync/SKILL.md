@@ -21,8 +21,10 @@ sync with no id, create the request yourself in step 2 instead of claiming one.
 
 ## Inputs
 
-- A browser tab logged into Blackboard Ultra: built-in browser preferred, Claude in Chrome as
-  fallback, with `installCrawler` from `ingest/bb_crawler.js` loaded as `window.__bb`.
+- Stack's logged-in Chrome through Claude in Chrome — the only browser; never open a second
+  browser or ask for a separate login. One tab on Blackboard Ultra, with `installCrawler` from
+  `ingest/bb_crawler.js` loaded as `window.__bb`. (The built-in Playwright browser is a separate
+  profile that is not logged in; Step 1's login check still applies to the Chrome tab.)
 - Supabase `bb2dash` (ref `goultdzqcavefcgnifdy`) through the Supabase MCP for every read and write.
 - Stack's user id for the crawler: `_21025199_1`. Term: `Fall 2026`.
 
@@ -193,50 +195,107 @@ select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
          'bucket', f.bucket, 'attempt_id', f.attempt_id) order by f.id)
   from bb_files f
  where f.storage_path is null and f.superseded_by is null
-   and f.source_url is not null;
+   and f.source_url is not null and not bb_file_is_outside_link(f.source_url);
 ```
 
 One query, both kinds. `source_url is not null` is what drops the rows Stack staged in bb2dash
-himself: they have no Blackboard URL and nothing here ever touches them. The script's own gate
+himself: they have no Blackboard URL and nothing here ever touches them. `bb_file_is_outside_link`
+(migration 161) drops **outside links** — a row whose `source_url` is an outside site (cbo.gov,
+sec.gov, …), catalogued with its text and never with bytes: they are not files to pull, and they
+never count in `files_not_pulled`. The script's own gate
 splits the rest — a run with `--bucket my_submissions` writes only submission rows, a run without
 it only course rows — so the two passes below can never write each other's rows.
 
-**Half one — the browser: record the hops, download nothing.** A `bbcswebdav` URL does not serve
-bytes; it 302s to a signed CDN URL on another origin. Walk that chain in the logged-in tab, one hop
-at a time, and write the result onto each manifest row as `hops`:
+**Half one — Chrome saves each file; a script collects it.** A `bbcswebdav` URL does not serve
+bytes: it redirects to a short-lived signed URL on Blackboard's CDN. Claude in Chrome cannot read a
+redirect or fetch across origins (Ultra wraps `fetch`), so let Chrome do what it does for Stack —
+save the file to his Downloads folder — and move it from there. **Never copy, retype or paste a
+signed `*.content.blackboardcdn.com` URL** (it is a credential, ~2 KB long); nothing below needs it.
 
-```js
-const { resolveSignedUrl } = await import('./ingest/fetch_signed.mjs');
-const get = (u) => page.context().request.get(u, { maxRedirects: 0 })
-  .then((r) => ({ status: r.status(), headers: r.headers() }));
-for (const row of manifest) {
-  const walked = await resolveSignedUrl(get, row.source_url + '?xythos-download=true');
-  if (walked.outcome === 'ok') row.hops = walked.hops;
-  else row.skipped = walked.outcome;      // session_expired | gone | refused
-}
-```
+Once, before the first row: `mkdir -p <scratch>/downloads`, and park the tab on
+`https://blackboard.syracuse.edu/ultra/course` (the "park page"). Then, **one row at a time**:
 
-**`session_expired`** (401/403 on the first hop) means the session died mid-sync: stop the step,
-report it, leave the rows alone — `storage_path` is still null, so the next sync picks them up.
-**`gone`** (404) means the file is no longer on Blackboard: leave the row and report it; a human
-marks it `superseded_by` its replacement. **`refused`** means the chain did not end on Blackboard's
-CDN or ran past three hops; report it and pull nothing.
+1. `since=$(node -e "console.log(Date.now())")`.
+2. Navigate the tab to `<source_url>?xythos-download=true` (Blackboard answers that flag with an
+   attachment, so Chrome saves the file; use `&` if `source_url` already holds a `?`).
+3. Read where the tab is with this snippet, which never returns a CDN URL:
 
-Do **not** use Playwright's `download` event. It crashed the MCP browser on 2026-09-23 and cost a
-sync three files; the hop walk above is what replaced it.
+   ```js
+   (() => { const h = location.hostname, bb = h === 'blackboard.syracuse.edu';
+     const text = document.body ? document.body.innerText.slice(0, 3000) : '';
+     return JSON.stringify({ host: h, type: document.contentType, path: bb ? location.pathname : null,
+       notFound: bb && /not found|no permission|do not have permission/i.test(text) }); })()
+   ```
+
+   | Where the tab is | Meaning | Do |
+   |---|---|---|
+   | still the page it was on (the park page) | Chrome took it as a download | step 4 |
+   | `host` ends `.content.blackboardcdn.com` (an inline PDF) | the file is showing, not saved | run the save snippet below, then step 4 |
+   | NetID, `login.microsoftonline.com`, or a Blackboard login page | **`session_expired`** | stop step 4b (below) |
+   | Blackboard with `notFound`, or a `path` holding `/READ_ONLY/` (another course's copy) | **`gone`** | report the row; next row |
+   | anything else | **`refused`** | report the row with the host; next row |
+
+   The save snippet, run on the CDN page, verbatim except the id. It fetches the page's own URL
+   (same origin, so it works there) and hands the bytes to Chrome's Downloads as `bb2dash-<id>`.
+   The tool does not wait for the promise, so it usually answers `{}` — that is not a failure;
+   step 4's collector is the check (verified live 2026-10-01: `{}` back, file saved, collected).
+   The tool's own "Tab Context" line prints the CDN URL; never repeat it anywhere.
+
+   ```js
+   (async () => {
+     const ID = 161;                                  // this row's bb_files id: digits only
+     const ext = ({ 'application/pdf': '.pdf' })[document.contentType] || '';
+     const r = await fetch(location.href);
+     if (!r.ok) return 'fetch failed: ' + r.status;
+     const blob = await r.blob();
+     const a = document.createElement('a');
+     a.href = URL.createObjectURL(blob); a.download = 'bb2dash-' + ID + ext;
+     document.body.appendChild(a); a.click(); a.remove();
+     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+     return 'saved ' + blob.size + ' bytes';
+   })()
+   ```
+
+4. Collect it:
+
+   ```
+   node ingest/collect_download.mjs --id <id> --name "<file_name>" --since $since \
+        --to <scratch>/downloads [--from <Chrome's download folder>] [--timeout 60]
+   ```
+
+   `--from` defaults to `%USERPROFILE%\Downloads`; pass it if Stack's Chrome saves elsewhere. It
+   waits for a finished file saved since `$since` whose name is the row's (exact, Chrome's ` (n)`
+   copy, Chrome's `_` for `:?*"<>|`, or the snippet's `bb2dash-<id>`), and **moves** it to
+   `<scratch>/downloads/<id>_<name>`. Exit 0 → collected. Exit 2 (`no download`) → report the row
+   with the `saved_since` names it printed: a file there under a different name is this row's bytes
+   saved under Blackboard's name, left in Stack's Downloads — name it so he can delete it. If Chrome showed a "Save as" dialog or a "download multiple files" prompt, tell Stack, since only
+   he can answer it. Exit 3 (more than one candidate) → nothing was moved; report the row and the
+   names it printed. Exit 4 → that destination already holds a file; report it.
+5. Navigate back to the park page before the next row.
+
+**`session_expired`** means the session died mid-sync: stop step 4b, run what was already
+collected through Half two, report the rest, and leave them alone — `storage_path` is still null,
+so the next sync picks them up. Never log in for Stack. **`gone`** means the file is no longer
+where the catalogue says: leave the row and report it; a human marks it `superseded_by` its
+replacement. **`refused`** is reported and pulls nothing.
+
+Do **not** use Playwright's `download` event or the built-in browser. The Playwright hop walk
+(`pull_files.mjs --fetch` with `hops` from `fetch_signed.mjs`'s `resolveSignedUrl`) still works and
+stays as a fallback **only** for a caller that has a Playwright-style request API with
+`maxRedirects: 0` and a logged-in context — never this skill's Chrome tab.
 
 **Half two — the script.** `--dry-run` first to see the keys, then the two passes and the check:
 
 ```
 node ingest/pull_files.mjs --manifest <scratch>/manifest.json --downloads <scratch>/downloads \
-     --fetch --out <scratch>/4b-course.sql
+     --out <scratch>/4b-course.sql
 node ingest/pull_files.mjs --manifest <scratch>/manifest.json --downloads <scratch>/downloads \
-     --fetch --bucket my_submissions --out <scratch>/4b-subs.sql
+     --bucket my_submissions --out <scratch>/4b-subs.sql
 node ingest/embed_corpus.mjs --check
 ```
 
-`pull_files.mjs --fetch` makes the script download each row's signed URL itself (a signed URL
-carries its own authorisation, so this half needs no session). It checks size and magic bytes, mirrors to
+Without `--fetch` the script takes each row's bytes from `<scratch>/downloads/<id>_*` (a row
+with nothing there reports `no download`). It checks size and magic bytes, mirrors to
 `course context/<relpath>`, POSTs to Storage `bb-files/<key>` with the publishable key in
 `SB_ANON_KEY` (never the service key, no `x-upsert`), extracts the text into `bb_file_text`, and
 writes one `update bb_files …` per file to `--out`. Having posted new text it finishes by running
@@ -262,14 +321,16 @@ select jsonb_agg(jsonb_build_object('id', f.id, 'file_name', f.file_name,
          'stale', true) order by f.id)
   from bb_files f
  where f.superseded_by is null and f.storage_path is not null
-   and f.notes like '%stored bytes may be stale%';
+   and f.notes like '%stored bytes may be stale%'
+   and not bb_file_is_outside_link(f.source_url);
 ```
 
-Walk the hops for these rows exactly as above, then:
+Run Half one for these rows exactly as above, with `--to <scratch>/restale` on the collector
+(`mkdir -p` it first), then:
 
 ```
 node ingest/pull_files.mjs --manifest <scratch>/restale.json --downloads <scratch>/restale \
-     --fetch --restale --out <scratch>/4b-restale.sql
+     --restale --out <scratch>/4b-restale.sql
 # run <scratch>/4b-restale.sql through execute_sql
 node ingest/pull_files.mjs --restale-post --downloads <scratch>/restale
 ```
@@ -302,7 +363,8 @@ Rules that apply to this step and no other:
 - Never `insert` a `bb_files` row from this step. `stage_files` and `stage_attempts` are the only
   writers of catalog rows; this step only fills in bytes on rows they already created.
 - Report the counts in step 6, **and name every row you could not pull, with the reason** (session
-  expired, gone from Blackboard, refused chain, 409 on the Storage key). Since migration 054 the
+  expired, gone from Blackboard, refused, no download, more than one candidate, 409 on the Storage
+  key). Since migration 054 the
   transform raises no Inbox `data_gap` for a submission file whose bytes have not arrived, so this
   summary is the only place a stuck submission is reported. Do not skip it when the count is zero:
   say "all N pulled".
