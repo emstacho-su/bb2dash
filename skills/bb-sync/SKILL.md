@@ -30,23 +30,31 @@ Post a one-line status after every step. A sync takes minutes; a silent run look
 
 ## Step −1 — Model check (before anything else)
 
-Syncs run on **Sonnet** (Stack, 2026-09-30), set three ways: the desktop Sync button and the web
-app's copied command both launch `claude --model sonnet "/bb-sync <id>"`, and this skill's
-frontmatter says `model: sonnet`, which runs the skill's turn on Sonnet whatever the session's
-model is (Claude Code skills reference: the override lasts for the rest of the turn and is not
-saved). This step verifies it took. Read your own model from your system prompt.
+Syncs run on **Sonnet** (Stack, 2026-09-30). The reliable way onto it is how the session starts:
+the desktop Sync button and the web app's copied command both launch
+`claude --model sonnet "/bb-sync <id>"`. This skill's frontmatter also says `model: sonnet`, but
+Claude Code does **not** apply a skill's `model:` in auto mode (skills reference), which is how
+Stack runs it, so the frontmatter cannot be relied on (request 389, 2026-09-30, reached this step on
+Opus). Read your own model from your system prompt.
 
 - **A Sonnet model** → say `model: <id> — ok` and go on.
-- **Anything else** → stop here. Do not claim the request, open Blackboard or write anything; the
-  request stays `queued`, so nothing is lost. Tell Stack, in one short message, the model you are
-  on and the two ways to switch:
-  1. in this same terminal, type `/model sonnet`, then run `/bb-sync <id>` again; or
-  2. close the window and start `claude --model sonnet "/bb-sync <id>"` (the Sync button does this).
+- **Anything else** → relaunch on Sonnet and stop. Do not claim the request, open Blackboard or
+  write anything first; the request stays `queued`, so the new session claims it and nothing runs
+  twice. Run, from the repo root:
 
-  Reaching this branch means the frontmatter override did not apply (an older Claude Code, or a
-  model alias the account lacks); a skill cannot switch the model any other way, so asking is the
-  only honest move. **Exception:** if Stack says in this session to go ahead on the current model,
-  continue, and name the model in step 6's report.
+  ```bash
+  node scripts/sync-on-sonnet.mjs <id>
+  ```
+
+  It opens a new Windows Terminal in the repo running `claude --model sonnet '/bb-sync <id>'`
+  (exit 0). Then tell Stack in one line: "This session is on `<model>`; I reopened sync <id> on
+  Sonnet in a new terminal — use that window. This one can be closed." Do nothing else here.
+  If the script exits non-zero (no Windows Terminal, a bad id), say so and give him the two manual
+  ways instead: type `/model sonnet` here and run `/bb-sync <id>` again, or start
+  `claude --model sonnet "/bb-sync <id>"` in any terminal.
+
+  **Exception:** if Stack says in this session to go ahead on the current model, continue here
+  without relaunching, and name the model in step 6's report.
 
 ## Step 0 — Apply Stack's Inbox answers first
 
