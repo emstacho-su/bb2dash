@@ -26,6 +26,7 @@ import { useEffect } from 'react';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
+import { neverSyncedLine, normalizeStreams, runStateWord, type StreamState } from './sync-run-state';
 
 /**
  * The Phase 9 relations are absent from the generated Database type, so the
@@ -154,6 +155,10 @@ export interface SyncStatus {
   open_attention: Partial<Record<AttentionKind, number>>;
   /** `v_data_freshness` rows, one per stage. */
   freshness: FreshnessRow[];
+  /** 137: the run's notes, reaped or not, and R-41's per-stream read (null, false, [] before). */
+  notes: string | null;
+  interrupted: boolean;
+  streams: StreamState[];
 }
 
 /** One line of the in-app Activity list, flattened from `summary.changes`. */
@@ -515,6 +520,9 @@ export function normalizeSyncStatus(row: unknown): SyncStatus | null {
     summary: normalizeSummary(raw.summary),
     open_attention: normalizeOpenAttention(raw.open_attention),
     freshness: normalizeFreshness(raw.freshness ?? raw.data_freshness),
+    notes: asTextOrNull(raw.notes),
+    interrupted: raw.interrupted === true,
+    streams: normalizeStreams(raw.streams),
   };
 }
 
@@ -582,12 +590,12 @@ export function stalenessLine(freshness: FreshnessRow[], now: Date = new Date())
 /** The whole second line: "last synced 3 hrs ago · files stale 2 days". */
 export function freshnessLine(status: SyncStatus | null, now: Date = new Date()): string {
   if (!status || status.id === null) return 'no sync recorded yet';
-  const parts: string[] = [];
-  if (status.status === 'running') parts.push('sync running');
-  else parts.push(`last synced ${relativeTime(status.finished_at ?? status.started_at, now)}`);
-  if (status.status === 'partial') parts.push('last run partial');
-  if (status.status === 'failed') parts.push('last run failed');
-  const stale = stalenessLine(status.freshness, now);
+  const word = runStateWord(status);
+  const ago = relativeTime(status.finished_at ?? status.started_at, now);
+  const parts: string[] = word === 'sync running' ? [] : [`last synced ${ago}`];
+  if (word) parts.push(word);
+  // Never-synced streams are named only when no stage is stale, failed or never synced.
+  const stale = stalenessLine(status.freshness, now) ?? neverSyncedLine(status.streams);
   if (stale) parts.push(stale);
   return parts.join(' · ');
 }
