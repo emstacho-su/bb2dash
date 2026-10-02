@@ -164,3 +164,43 @@ exit 0
 |---|---|---|---|
 | `130_bb_content_ghost_collapse` | `584a268` | `3a5a3269fac57ac943eff0f7fcfc7ee2` | `3a5a3269fac57ac943eff0f7fcfc7ee2` (equal) |
 | `131_bb_content_item_key` | `c8aba6d` | `24670dbbfad382d9d244eca6cd67093b` | `24670dbbfad382d9d244eca6cd67093b` (equal) |
+
+## Tasks 7, 9 and 10 — the three tests, written first
+
+RED (2026-10-02 07:0x UTC, 130 and 131 on prod, 132 to 134 not written yet):
+
+```
+$ node scripts/db-test.mjs --only phase19_132_material_history.sql
+FAIL  phase19_132_material_history.sql  FAIL phase19_132: (S) table bb_material_history does not exist
+db-test: passed 0, failed 1, units 1
+exit 1
+
+$ node scripts/db-test.mjs --only phase19_133_course_stream_history.sql
+FAIL  phase19_133_course_stream_history.sql  FAIL phase19_133: (S) v_course_stream does not read bb_material_history; (S) this role cannot seed bb_material_history
+db-test: passed 0, failed 1, units 1
+exit 1
+
+$ node scripts/db-test.mjs --only phase19_134_sync_change_lines.sql
+FAIL  phase19_134_sync_change_lines.sql  FAIL phase19_134: (1) the brief's fixture gave ["Nothing changed"]; (2) names and the remainder gave ["Nothing changed"]; (3) the content stage still speaks: ["3 new item(s) in the course content tree", "2 content item(s) are no longer in Blackboard"]; (4) a malformed sample was not ignored; (5) every sentence at once gave [... "98 new item(s) in the course content tree", "99 content item(s) are no longer in Blackboard", ...]
+db-test: passed 0, failed 1, units 1
+exit 1
+```
+
+(The (5) line is cut here; the runner prints all 26 sentences.)
+
+### `phase17_110_course_stream.sql` (PM's call, 2026-10-02)
+
+Phase 17's test seeds one kept file, one `my_submissions` file, one file noted missing and one
+vanished node, and asserts the first is on the Stream and the other three are not. 133 posts a
+material only when `bb_material_history` holds an `appeared` or `changed` row for it, so the
+kept file would stop posting and the three exclusions would pass with nothing to exclude.
+Changed: one `insert into bb_material_history` after the seeds gives each of the four seeded
+rows an `appeared` row. No assertion is edited or removed. It needs 132's table and 133's
+insert grant, so it is red until 133 is on prod:
+
+```
+$ node scripts/db-test.mjs --only phase17_110_course_stream.sql
+FAIL  phase17_110_course_stream.sql  relation "bb_material_history" does not exist
+db-test: passed 0, failed 1, units 1
+exit 1
+```
