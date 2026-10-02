@@ -118,7 +118,8 @@ Two retrieval tiers over the corpus, both scoped by course when wanted:
   session that is not an exam, or, when the week has as many lecture numbers as such sessions, the
   session at its rank (0.8; a linked sibling that disagrees, or a lone lecture in a week of two
   sessions, still asks; an open question the rule clears is archived with
-  `decision.closed_itself`). `link_confidence` is written only where it is
+  `decision.closed_itself`). Stack's answer counts in state `resolved`, `dismissed` or `archived`
+  (163; an archived row that closed itself is not an answer). `link_confidence` is written only where it is
   null. `stage_files`' `counts` carry `superseded_auto` and `session_links` (each the function's
   jsonb). Storage keys are never rewritten.
 * **Per-item Blackboard links (126)** — `assignment_bb_url(course_id, item_id)` composes a test
