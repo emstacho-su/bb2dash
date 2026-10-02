@@ -137,3 +137,34 @@ Check: `npx vitest run test/course-classwork.samepath.test.ts test/course-classw
   `git checkout`: `npx vitest run test/course-classwork.samepath.test.ts` →
   `Test Files  1 failed (1)` · `Tests  6 failed | 3 passed (9)`.
 * GREEN (code as committed): `Test Files  3 passed (3)` · `Tests  41 passed (41)`
+
+---
+
+## Task 23 — raw-HTML guard for Blackboard rich text (P-94, R-76)
+
+New `web/test/raw-html.audit.test.ts`. It scans every `.ts/.tsx/.js/.jsx/.mjs/.cjs` file under
+`web/src` and asserts:
+
+1. `dangerouslySetInnerHTML=` appears in exactly one file, `src/app/(app)/layout.tsx`;
+2. that one use is `dangerouslySetInnerHTML={{ __html: SIDEBAR_BOOT_SCRIPT }}`, a constant from
+   `@/lib/sidebar-preference`, and nothing else;
+3. no other raw-HTML sink exists anywhere in `web/src`: the object-key form
+   `dangerouslySetInnerHTML:`, `.innerHTML =`, `.outerHTML =`, `.insertAdjacentHTML(`,
+   `document.write(`, `.createContextualFragment(`. (Beyond the brief's grep; today there are none.)
+
+It also tests its own scanner on a synthetic source map, so a pattern that stops matching fails.
+
+Nothing had to be removed. Before the test was written the only hit on this branch was the layout;
+`components/announcements/AnnouncementsList.tsx:8` names the word in a comment (no `=`), which is
+not a use.
+
+Check (a): `npx vitest run test/raw-html.audit.test.ts`
+
+* RED: **none against the real tree**, which was already clean. To show the guard bites, a file
+  `web/src/__w54_planted__.tsx` holding `<div dangerouslySetInnerHTML={{ __html: body }} />` was
+  created, the test run, and the file deleted:
+  `AssertionError: expected [ 'src/__w54_planted__.tsx', …(1) ] to deeply equal [ 'src/app/(app)/layout.tsx' ]`
+  → `Test Files  1 failed (1)` · `Tests  1 failed | 5 passed (6)`.
+* GREEN (tree as committed): `Test Files  1 passed (1)` · `Tests  6 passed (6)`
+
+Check (d): `grep -rl "dangerouslySetInnerHTML=" web/src` → `web/src/app/(app)/layout.tsx` (one path).
