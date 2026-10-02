@@ -757,3 +757,46 @@ default the PM takes:
    privilege reads (`has_function_privilege`, `has_table_privilege`, `pg_default_acl`), and the behaviour
    cases run in task 7's dry run as `postgres` inside `begin; … rollback;`, their output pasted into
    `100_W55_VERIFICATION.md`.
+
+## Round 2 — W-57 (agentic-harness `feat/containers`), from `/code-review main high` on 56cba3e, 2026-10-02
+
+Confirmed findings, each fixed test-first and pushed as `fix(14-R2-<n>): …`. Files beyond W-57's list are
+allowed only where an item names them. The spike's own findings (the PM's files) were fixed in c3d3f9c.
+
+1. **`docker compose exec` has no secrets and no git setup.** `DATABASE_URL`, `GIT_CONFIG_GLOBAL`, `safe.directory`
+   and the PAT helper exist only in the entrypoint's process tree, so the frozen `ingest-now` verb
+   (`docker compose exec harness-jobs node hooks/scheduler.mjs --run-now nightly`) runs without them. Fix so an
+   exec'd `scheduler.mjs --run-now` and `doctor.mjs` get the same environment (for example, the entrypoint
+   writes the git config at a fixed path the image sets as `GIT_CONFIG_GLOBAL`, and the scheduler or a small
+   wrapper applies the `*_FILE` shim itself). Check: in a throwaway container, an exec'd `--run-now nightly`
+   against the scratch vault and store exits 0.
+2. **The container never sweeps transcripts or host state (PM call).** With only `~/.claude/projects` mounted,
+   `routeSession` misfiles Windows sessions and git metadata is lost, and the first `up` would do that to the
+   live vault. In the container the nightly skips the transcript sweep and the `state` step and logs one line
+   saying so; the host's SessionEnd hook stays the capture path. `CLAUDE_PROJECTS_DIR` leaves `compose.yaml`.
+   `scripts/nightly-ingest.sh` may be edited for this switch only. `docs/portable.md` says it. Check: a test
+   that the container nightly's step list has no sweep and no state step, and a nightly run against a scratch
+   vault adds no note.
+3. **A stop between jobs starts the next job.** `tick()` checks `shouldStop` before each job, and the sleep
+   wakes on stop. Check: a test where SIGTERM lands during job 1 of 2 and job 2 never starts.
+4. **A stop reaches only the top-level bash.** Spawn each job in its own process group and signal the group,
+   so git, node and uv get the signal; set `stop_grace_period` to cover a realm push. Check: a test with a
+   child that spawns a grandchild, both gone after stop.
+5. **The run lock trusts a pid that repeats in a container.** Follow `lib/realm-lock.mjs` (no pid liveness;
+   age and owner), and report a failed put-back as contended. Check: a test where a stale lock names the
+   current pid and `--run-now` still runs.
+6. **`realm <name> clean` counts paths the sync never stages.** Use `realm-status.mjs`'s `parsePorcelainZ` and
+   `splitBySyncPath`: only sync-path entries make the row fail; others are listed as a note. Check: a test
+   with a `.canvas` file where `--strict` exits 0.
+7. **`pushedRow` blames a missing upstream for every git failure.** Separate no-upstream from other exit-128
+   causes. Check: a test for a detached HEAD.
+8. **The checkpoint settings reach only `collect`.** The nightly's checkpoints step reads the same
+   `HARNESS_CHECKPOINT_REPOS` and `HARNESS_CHECKPOINT_AUTHORS` (`scripts/nightly-ingest.sh`, that step only),
+   and with neither set in the container both skip with one line and exit 0 instead of failing on a
+   missing default path. Check: tests for both jobs, set and unset.
+9. **Secrets written by PowerShell carry a BOM.** `read_secret` and the PAT helper strip a UTF-8 BOM as well
+   as CR and LF. Check: a test with a BOM-prefixed file.
+10. **The Windows scripts still default to the OneDrive vault.** `scripts/nightly-ingest.ps1` and the
+   `scripts/register-*.ps1` defaults move to `~/vault` (those default lines only), so hooks and the nightly
+   agree. The `vaultAvailable()` behaviour with `~/vault` is accepted: `~/vault` is the documented default.
+   Check: grep-clean covers those lines.
