@@ -203,3 +203,37 @@ of one sync toast exactly once between them; `syncQuery()` selects `interrupted`
 **For integration.** PostgREST answers 400 for a column a view does not have. A desktop build
 carrying this `syncQuery()` must not run against prod before 137 is applied: the sync read would
 fail every tick, and C-7 turns a failed read into "this tick changes nothing".
+
+---
+
+## Final gates (branch at 21b691d)
+
+| Gate | Command | Result |
+|---|---|---|
+| web typecheck | `cd web && npm run typecheck` | exit 0 |
+| web build | `npm run build` | exit 0; route table ends `└ ○ /terms` |
+| web tests | `npx vitest run` | exit 0 · `Test Files  132 passed (132)` · `Tests  2287 passed (2287)` |
+| desktop typecheck | `cd desktop && npm run typecheck` | exit 0 |
+| desktop tests | `npx vitest run` | exit 0 · `Test Files  36 passed (36)` · `Tests  707 passed (707)` |
+
+Test counts: web 2221 → 2287 (+66), desktop 695 → 707 (+12). Nothing was removed.
+
+`git diff --numstat main -- web/src/lib/queries.sync.ts` → `14	6	web/src/lib/queries.sync.ts`.
+
+`git diff --name-only main` lists only W-54's files and the PM's brief commit (92b3af9):
+nothing under `db/`, `skills/`, `ingest/`, `project-state/`, `mcp-server/`, and not
+`web/src/lib/supabase/database.types.ts`.
+
+## Not done, and open points
+
+* The Stream block was not looked at in a browser. Placement, the cap of 8 and the word "synced"
+  need Stack's eye on the preview (task 21's deviation note).
+* `web/src/app/(app)/course/[id]/stream/page.tsx` still describes the page as "the tracker over
+  the day-grouped stream feed" in its comment. Stale since R3-4; not W-54's file.
+* The interrupted toast keeps the failed toast's body ("No error detail was recorded." when the
+  summary is null, which a reaped run's is) and its route (Home, because `attention_raised` is
+  read from the summary). 136 raises the Inbox item outside the summary, so the toast does not
+  lead to it. The brief asks for the title only; say if the body or the route should change.
+* `freshnessLine` still opens with "last synced <when>" for a failed or interrupted run, as on
+  `main` ("last synced 4 hrs ago · last sync interrupted"). `<when>` is the reap time, not a
+  sync. Unchanged because a row without the new columns must return `main`'s string.
