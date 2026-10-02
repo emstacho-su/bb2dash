@@ -33,6 +33,12 @@ export interface SyncStatusRow {
     readonly attention_raised?: number;
     readonly errors?: readonly string[];
   } | null;
+  /**
+   * Phase 19 (migration 137): `sync_runs.interrupted_at is not null`. True for a crawl that
+   * never finished and was closed by 136's terminal rule; such a row is `failed`.
+   * Optional because a row read before 137 does not carry the column.
+   */
+  readonly interrupted?: boolean;
 }
 
 /** R2: one row of `v_gradebook_history` newer than the watermark. */

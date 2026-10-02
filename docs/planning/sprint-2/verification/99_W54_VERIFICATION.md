@@ -168,3 +168,38 @@ Check (a): `npx vitest run test/raw-html.audit.test.ts`
 * GREEN (tree as committed): `Test Files  1 passed (1)` · `Tests  6 passed (6)`
 
 Check (d): `grep -rl "dangerouslySetInnerHTML=" web/src` → `web/src/app/(app)/layout.tsx` (one path).
+
+---
+
+## Task 24 — desktop toast for an interrupted run (R-41, C-7 rule 1)
+
+* `desktop/src/core/types.ts`: `SyncStatusRow.interrupted?: boolean`. Optional, so the fixtures
+  in `desktop/test/fixtures/rows.ts` (not W-54's file) still type-check, and because a row read
+  before 137 does not carry the column.
+* `desktop/src/core/poller/sources.ts`: `syncQuery()` →
+  `select=id,run_id,status,started_at,finished_at,trigger,summary,interrupted`. `validateSyncRows`
+  reads the column through a new `flag()` helper: absent or null is `false`, a non-boolean is a
+  `RowShapeError` like every other shape this module refuses.
+* `desktop/src/core/poller/reducer.ts`: a `failed` run with `interrupted === true` is titled
+  **"Sync interrupted"**; any other `failed` run keeps "Sync failed". Body, route and key are
+  unchanged. `LANDED_STATUSES` is untouched, so `running` still never toasts.
+
+Two existing assertions in `sources.test.ts` changed because the Contract changed them: the `R1`
+literal gained `,interrupted`, and the "accepts a real v_sync_status row" expectation gained
+`interrupted: false`. Everything else is an addition.
+
+Check: `npx vitest run test/unit/reducer.test.ts test/unit/sources.test.ts` (from `desktop/`)
+
+* RED (tests first, `src` as on `main`): `Test Files  2 failed (2)` ·
+  `Tests  11 failed | 83 passed (94)`, among them `titles a reaped run "Sync interrupted", not
+  "Sync failed"` and `R1 selects interrupted, the column 137 appends (Phase 19)`.
+* GREEN: `Test Files  2 passed (2)` · `Tests  94 passed (94)`
+
+Asserted: interrupted → title "Sync interrupted" (key `sync:41`, route `/`); a failed run not
+reaped, and a row with no `interrupted` key, → "Sync failed"; a `running` row toasts nothing with
+or without the flag; the flag on an `ok` run changes nothing; the running row then the reaped row
+of one sync toast exactly once between them; `syncQuery()` selects `interrupted`.
+
+**For integration.** PostgREST answers 400 for a column a view does not have. A desktop build
+carrying this `syncQuery()` must not run against prod before 137 is applied: the sync read would
+fail every tick, and C-7 turns a failed read into "this tick changes nothing".

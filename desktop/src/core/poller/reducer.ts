@@ -35,6 +35,12 @@ const LANDED_STATUSES: ReadonlySet<string> = new Set(['ok', 'partial', 'failed']
 /** " · " — the separator the Contract writes in every title. */
 const SEPARATOR = ' · ';
 
+/** C-7 rule 1: a `failed` run's title. */
+const SYNC_FAILED_TITLE = 'Sync failed';
+
+/** Brief 99 (Phase 19): a `failed` run that 136's terminal rule reaped. */
+const SYNC_INTERRUPTED_TITLE = 'Sync interrupted';
+
 // ---------------------------------------------------------------------------------------
 // Small pure helpers
 // ---------------------------------------------------------------------------------------
@@ -84,7 +90,8 @@ function syncToast(sync: SyncStatusRow | null, lastSeenAt: string): Toast | null
   if (sync.status === 'failed') {
     return {
       key: `sync:${sync.id}`,
-      title: 'Sync failed',
+      // Phase 19: a crawl that never finished was reaped (136), which is not a failed fold.
+      title: sync.interrupted === true ? SYNC_INTERRUPTED_TITLE : SYNC_FAILED_TITLE,
       body: firstError ?? 'No error detail was recorded.',
       route,
     };
