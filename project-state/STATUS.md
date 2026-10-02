@@ -623,7 +623,7 @@ Full suite after the merge (2026-10-02, `node scripts/db-test.mjs`): **passed 46
 one failure is `phase12b_082_083_planner_series.sql`, and it is the test that went stale, not the
 code: scope `all` cuts at `now()` (083/088), and the test's series holds a hard-coded row at
 2026-10-01 18:00 -04:00, which is in the past since 2026-10-02 ("these rows are not in scope for all …
-starting before the cut"). Unrelated to 162/163; **not fixed, the test needs dates that stay in the future**.
+starting before the cut"). Unrelated to 162/163. **Fixed 2026-10-02** (`fix/planner-series-test-dates`): every fixture date but the past row moved on 53 weeks (weekdays kept, the Thursdays still on their sides of the 2027-11-07 clock change), and a guard under `begin;` fails by name when they run out again on 2027-10-07.
 
 ## What's next — Sprint 2
 
