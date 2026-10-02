@@ -58,3 +58,26 @@ written and none raised. The summary row:
 So the history stage's failure path is proven here (one failed stage, the run `partial`, the other
 eight `ok`), which no committed unit can force once 132 exists. After the rollback prod read: 0
 trigger, 0 `interrupted_at` column, no `sync_request_open_run()`, 0 fixture rows.
+
+## Task 18 — runbook step 5 and the crawler's comments
+
+Done before the ordering gate opened (it needs no prod apply). Runbook: step 5 only. Crawler: the
+`runAll({ runId })` header block and the comment above `runAll`; no code line changed.
+
+```
+$ grep -c 'opened when the sync request is claimed' ingest/CADENCE_RUNBOOK.md
+1
+$ grep -c 'WHY THE SKILL STILL REGISTERS AFTER THE CRAWL' ingest/bb_crawler.js
+0
+$ grep -c 'It is NOT yet safe' ingest/bb_crawler.js
+0
+$ git diff -U0 -- ingest/bb_crawler.js | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -vE '^[+-]\s*(\*|//)' | wc -l
+0
+$ cd web && npx vitest run test/crawler.announcements.test.ts test/crawler.attempts.test.ts
+ Test Files  2 passed (2)
+      Tests  114 passed (114)
+```
+
+Not edited, outside this worker's lines, and now stale: runbook step 1 still shows
+`bb.runAll({termName: 'Fall 2026'})` with no `runId`, and the crawler header's line 4 still names
+the built-in Claude browser. Flagged to the PM.

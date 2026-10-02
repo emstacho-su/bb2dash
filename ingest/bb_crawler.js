@@ -96,19 +96,21 @@
  *  name lands in `author` with `authorSource` 'teachers' or 'users'; a failed lookup adds
  *  `userLookup` and each still-nameless post `authorUnresolved` to `misses`, and never throws.
  *
- * `runAll({ runId })` — WHY THE SKILL STILL REGISTERS AFTER THE CRAWL (round-2 review, R2-1)
- *  `runAll` accepts a caller-supplied run id, and registering it BEFORE the crawl is the order the
- *  authorisation rule wants. It is not safe yet, and the reason is in the driver, not here:
- *  `transform_tick` (migration 044) folds a REGISTERED run as soon as one of its `bb_raw` rows is
- *  more than three minutes old, with no completeness check — the calendar row is only one of two
- *  triggers, not a requirement. Register first and a slow crawl (v3 adds an attempts probe and a
- *  full-item GET per assessment, so it is slower than v2) can be folded with one course row
- *  landed; `run_transform` is idempotent, so the remaining courses are then dropped for good.
- *  So `skills/bb-sync/SKILL.md` registers the id immediately AFTER `runAll` returns, and
- *  migration 039's grace window covers that gap exactly as it did before. Register-first becomes
- *  correct the moment the tick requires the `calendar` row for a registered run — a Phase 9 driver
- *  change, not this phase's. Until then `runId` is here for that change and for tests, and it is
- *  validated as a uuid so a caller can never crawl under a fabricated id.
+ * `runAll({ runId })` — REGISTER FIRST (Phase 19, migrations 135 and 136)
+ *  `skills/bb-sync/SKILL.md` claims its request and sets `agent_requests.run_id` in one update,
+ *  BEFORE the crawl, and passes that id here. The claim opens the run's `sync_runs` row as
+ *  `running` (135), so Home says "sync running" while this is still walking courses. The order is
+ *  safe because `transform_tick` (136) folds a REGISTERED run only once its `calendar` row is in
+ *  `bb_raw`, and `runAll` posts that row last: a slow crawl is never folded part-way. Before 136
+ *  the tick also folded a registered run after three idle minutes, with no completeness check,
+ *  which is why the skill used to register after `runAll` returned (DECISIONS 2026-09-15,
+ *  superseded by this phase's row).
+ *  If the crawl dies (the tab closes, `runAll` throws) the calendar row never lands and nothing is
+ *  folded. After 30 minutes the tick's terminal rule marks the run interrupted, closes the request
+ *  as failed and raises one Inbox item. Nothing is retried: the next sync is a new run id.
+ *  `runId` is validated as a uuid so a caller can never crawl under a fabricated id. With no
+ *  `runId` the crawler names the run itself (devtools, tests); that crawl is folded only if a
+ *  claimed sync request registers the id before the tick quarantines it.
  *
  * Testability: `strip`, `announcementAuthor`, `mapAnnouncement`, `mapAttempt`, `mapAttemptFile`,
  * `shouldProbeColumn`, `assessmentFields` and `assertRunId` are module-level pure functions,
@@ -824,12 +826,11 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
   const memberships = async () => { const m = await j(`/learn/api/v1/users/${userId}/memberships?expand=course.effectiveAvailability,course.permissions,courseRole&includeCount=true&limit=10000`); return (m.results || []).map(x => ({ id: x.course.id, name: x.course.name, courseId: x.course.courseId, termId: x.course.termId, termName: x.course.term?.name, uuid: x.course.uuid, role: x.role, membershipId: x.id, lastAccess: x.lastAccessDate })); };
   const calendar = async (since, until) => ({ calendars: (await j('/learn/api/v1/calendars?limit=10000')).results || [], items: (await j(`/learn/api/v1/calendars/calendarItems?since=${since}&until=${until}`)).results || [] });
   const post = async (run_id, kind, bb_course_id, payload) => fetch(`${supabaseUrl}/rest/v1/bb_raw`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ run_id, kind, bb_course_id, payload }) });
-  // `runId` lets a caller own the run id instead of learning it afterwards. It is NOT yet safe for
-  // the bb-sync skill to register before crawling — see the header: transform_tick folds a
-  // registered run on a three-minute idle with no completeness check, so a slow crawl would be
-  // folded half-done and the rest dropped. The skill still registers immediately after this
-  // returns, under migration 039's grace window. Validated first, so a bad id fails before any
-  // request goes out rather than after seven courses have been crawled.
+  // `runId` is the id the bb-sync skill registered on its claimed request BEFORE calling this
+  // (register-first, migrations 135 and 136; see the header). The calendar row is posted LAST on
+  // purpose: it is what tells transform_tick the crawl is complete, and a registered run is folded
+  // on nothing else, so a crawl that stops part-way is never folded half-done. Validated first, so
+  // a bad id fails before any request goes out rather than after seven courses have been crawled.
   const runAll = async ({ termName = null, runId = null, since = '2026-08-01T04:00:00.000Z', until = '2027-01-15T04:00:00.000Z' } = {}) => {
     const run_id = assertRunId(runId) || crypto.randomUUID(); const mem = await memberships(); const mine = termName ? mem.filter(m => m.termName === termName) : mem;
     const log = [['memberships', (await post(run_id, 'memberships', null, { results: mem })).status]];
