@@ -47,14 +47,15 @@ this block says otherwise; the markers stay only to show which B-number a line r
 * **Machine name.** The laptop the containers run on is `stack-laptop` (`HARNESS_MACHINE` since
   2026-09-29); where this brief says `home-pc` for that machine, read `stack-laptop`. The harness's
   `docs/portable.md` keeps `home-pc` as its example name, so task 23's grep string is unchanged.
-* **Gate state on 2026-10-02.** Phases 15 and 18 are on `main`; Phase 19 has not started. W-55 and W-56
-  wait for the spike's PASS and for 19. W-57 is cut from agentic-harness `main` 429d25f; W-58 waits for
+* **Gate state on 2026-10-02.** Phases 15 and 18 are on `main`; Phase 19 started the same day in another
+  PM session (`feat/content-history-19`) and is not merged. W-55 and W-56 wait for the spike's PASS and for
+  19 on `main`. W-57 is cut from agentic-harness `main` 429d25f; W-58 waits for
   Stack to create `emstacho-su/bb2dash-stack`.
 * **Sibling-phase calls this brief rests on** (105 §3's c9 note). The file and embed steps rest on Phase
   18's B-37, answered at its default and merged (the pull runs inside the sync). The 30-minute release rests
-  on Phase 19's B-20, a PM pick that is built only on Stack's explicit yes: a different constant re-sets
-  `DEAD_LETTER_MINUTES` below it, and without the rule a stale `sync` claim is flagged by 091's sweep and
-  never released. 114's `closed_itself` shape rests on Phase 17's B-29, merged.
+  on Phase 19's B-20, a PM pick Stack said yes to at 30 minutes on 2026-10-02 (Phase 19's PR writes the
+  row): a different constant would re-set `DEAD_LETTER_MINUTES` below it, and without the rule a stale
+  `sync` claim would be flagged by 091's sweep and never released. 114's `closed_itself` shape rests on Phase 17's B-29, merged.
 
 ## Why
 

@@ -11,3 +11,6 @@ course context/
 # Playwright MCP browser session output (screenshots, snapshots, console logs)
 .playwright-mcp/
 .harness/checkpoint-body.md
+
+# Phase 14: local secret files (the umbrella repo bb2dash-stack holds the real folder)
+secrets/

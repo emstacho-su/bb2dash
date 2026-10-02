@@ -1,0 +1,40 @@
+# bb2dash — containers (Phase 14). This first cut carries only the `sync` service as the noVNC spike
+# (brief 100 task 4); W-56 completes it (task 15). The umbrella repo `bb2dash-stack` includes this file
+# and points SECRETS_DIR at its own `secrets/` folder.
+name: bb2dash
+
+services:
+  sync:
+    build:
+      context: ./docker/sync
+      dockerfile: Dockerfile
+    image: bb2dash-sync:spike
+    init: true
+    user: pwuser
+    restart: unless-stopped
+    shm_size: 1gb
+    stop_grace_period: 30s
+    security_opt:
+      - seccomp=./docker/sync/seccomp_profile.json
+    environment:
+      PROBE_MINUTES: "${PROBE_MINUTES:-30}"
+    ports:
+      # The login page. Loopback only: never reachable from another machine.
+      - "127.0.0.1:6080:6080"
+    volumes:
+      # A credential: Stack's Blackboard session. Never in the vault, RAG or an unencrypted backup.
+      - bb-profile:/home/pwuser/bb-profile
+    secrets:
+      - novnc_password
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  bb-profile:
+
+secrets:
+  novnc_password:
+    file: ${SECRETS_DIR:-./secrets}/novnc_password

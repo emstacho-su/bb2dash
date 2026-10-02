@@ -53,6 +53,32 @@ Idle lifetime: **between 4:17 and 12:36** (t0 2026-09-29T15:25:39Z → last aliv
 | reopen-3 | about +7 d (2026-10-06) | pending | | | |
 | reopen-4 | about +14 d (2026-10-13), the Duo remember-me window | pending | | | |
 
+## The spike — a Blackboard login inside a container (brief 100 task 4; R-82, P-102, P-103)
+
+Built 2026-10-02 on `feat/containers-14`: `docker/sync/Dockerfile` on
+`mcr.microsoft.com/playwright:v1.63.0-noble` with Xvfb, x11vnc and noVNC; `docker/sync/entrypoint.sh`;
+`docker/sync/seccomp_profile.json` (Playwright's own, tag v1.63.0, unchanged); `docker/sync/spike/session-age.mjs`;
+the root `compose.yaml` with the one service `sync`, the volume `bb-profile` and the secret `novnc_password`.
+
+First start, 2026-10-02T06:22:17Z, before any login:
+
+* `docker compose port sync 6080` → `127.0.0.1:6080`; `docker port bb2dash-sync-1` → `6080/tcp -> 127.0.0.1:6080`.
+* `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:6080/vnc.html` → `200`.
+* `docker compose exec sync whoami` → `pwuser`.
+* x11vnc runs with `-localhost` and reads its password with `-passwdfile /run/secrets/novnc_password`.
+* `session-age.mjs` launched Chromium with `launchPersistentContext(<bb-profile>, { headless: false, chromiumSandbox: true })`
+  and logged `host blackboard.syracuse.edu` and `users/me 401 2026-10-02T06:22:20.462Z +0m` (nobody is logged in yet).
+
+Sandbox: seccomp
+
+The `/proc` scan while `session-age.mjs` ran (12 Chromium processes): `grep -c -- "--no-sandbox"` → `0`.
+
+Each probe in the log is a request from the browser's own cookie jar, so the overnight log measures a
+login touched every 30 minutes (`PROBE_MINUTES`), not an untouched one.
+
+The `Verdict:` and `LOGIN_HOSTS:` lines are written after Stack's Duo login, the restart and the
+overnight log.
+
 Reading the numbers into the phase (brief 100 open item 1): `KEEPALIVE_MINUTES` and B-45's hour stay at
 their provisional values until the idle series has ended and the four reopen rows are filled; the
 DECISIONS row that closes Task 0 names them and writes the `Idle lifetime:` line below.
