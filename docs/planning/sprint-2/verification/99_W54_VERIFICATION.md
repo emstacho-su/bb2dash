@@ -71,3 +71,47 @@ The three fixtures the brief names, as asserted:
 
 Also asserted: a reaped run reads `last synced 4 hrs ago · last sync interrupted` and never
 `last run failed`; a running run with `history` `never` reads `sync running · history never synced`.
+
+---
+
+## Task 21 — the Stream shows "New" / "Changed" and the crawl date, keyed per run (R-38)
+
+**Deviation from the brief, for the PM and Stack.** The brief (written 2026-09-24) says
+`CourseStream.tsx` renders material posts and only needs "the label, the date and the key". On this
+branch it does not: round 3 (R3-4, DECISIONS 2026-09-29, "the Stream **becomes** the week
+timeline") removed the day-grouped post feed, and `CourseTimeline` reads only the announcement arm
+of `v_course_stream`. On `main` no material post is drawn anywhere on the Stream, so there was no
+row to add a label to.
+
+What is built, inside W-54's two files only (`CourseTimeline*` is not W-54's): a block **"New and
+changed materials"** between the Upcoming strip and the timeline.
+
+* One row per `v_course_stream` material post that carries `meta.change` (`appeared` → **New**,
+  `changed` → **Changed**) and `meta.run_id`: the label, the title as text, `synced <day>` from
+  `posted_at` (the crawl's `seen_at`, as a New York day, in a `<time>`), and on a file post the
+  shared `FileOpenAction` ladder the timeline's file rows already use.
+* React key: `material:<ref_kind>:<ref_id>:<run_id>:<change>`.
+* A material row with no `change` or no `run_id` (the view **before 133**) is not posted, so until
+  133 is on prod the Stream is exactly what `main` renders. A course with no post gets no block.
+* The newest `MATERIAL_POSTS_SHOWN` (8, one named constant) are listed; the rest fold under a
+  native `<details>` "N earlier". History is kept all term, and an unbounded list would push the
+  timeline off the screen. Nothing is dropped.
+* Two rows with the same key (one file carried by two content items in one crawl) post once.
+* Existing tokens only: `tagAccent` (New), `tagOutline` (Changed), `kicker`, `btnGhost`,
+  `--space-*`, `--text-*`, `--color-text`, `--color-neutral-500`. No new colour.
+* `CourseStreamMeta` gains `change` and `run_id`.
+
+Placement, the cap of 8 and the word "synced" are W-54's picks and are Stack's to change on the
+preview. **Not viewed in a browser**: the checks below are jsdom renders on fixtures.
+
+Check: `npx vitest run test/course-stream.history.test.tsx test/course-stream.test.tsx`
+
+* RED (test first, `CourseStream.tsx` as on `main`): `Test Files  1 failed | 1 passed (2)` ·
+  `Tests  15 failed | 8 passed (23)`, for example `TypeError: materialChangeLabel is not a function`
+  and `Unable to find role="region" and name "New and changed materials"`.
+* GREEN: `Test Files  2 passed (2)` · `Tests  24 passed (24)`
+
+Asserted: New / Changed label; the crawl date (`02:30Z` on Oct 2 reads `Thu · Oct 1`, the New York
+day); one file posted by two runs renders twice and the spied `console.error` has no "same key"
+call; a pre-133 view adds no block; a title holding `<b>` and `<img onerror>` is text, with no such
+element in the DOM; the existing "no post feed" assertion of `course-stream.test.tsx` still holds.
