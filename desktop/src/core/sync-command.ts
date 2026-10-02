@@ -11,24 +11,11 @@
  * in it can be reinterpreted as a command separator.
  */
 
+import { InvalidSyncIdError, isValidSyncId } from './sync-id';
 import type { BuildSyncCommand } from './types';
 
-/** The id comes off a PostgREST row and is checked before any argv exists. */
-export const SYNC_ID_PATTERN = /^\d{1,12}$/;
-
-export class InvalidSyncIdError extends Error {
-  readonly id: string;
-
-  constructor(id: string) {
-    super(`sync request id ${JSON.stringify(id)} does not match ${String(SYNC_ID_PATTERN)}`);
-    this.name = 'InvalidSyncIdError';
-    this.id = id;
-  }
-}
-
-export function isValidSyncId(id: string): boolean {
-  return SYNC_ID_PATTERN.test(id);
-}
+/** The id check lives in `sync-id.ts` (Phase 14), shared with the container's runner. */
+export { InvalidSyncIdError, SYNC_ID_PATTERN, isValidSyncId } from './sync-id';
 
 /** PowerShell's own escape inside a single-quoted string is a doubled quote. */
 function psSingleQuote(value: string): string {
