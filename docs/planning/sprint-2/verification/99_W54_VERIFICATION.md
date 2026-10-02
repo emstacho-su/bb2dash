@@ -115,3 +115,25 @@ Asserted: New / Changed label; the crawl date (`02:30Z` on Oct 2 reads `Thu · O
 day); one file posted by two runs renders twice and the spied `console.error` has no "same key"
 call; a pre-133 view adds no block; a title holding `<b>` and `<img onerror>` is text, with no such
 element in the DOM; the existing "no post feed" assertion of `course-stream.test.tsx` still holds.
+
+---
+
+## Task 22 — Classwork keeps two nodes that share a path (R-64)
+
+No production change, as the brief expected. `buildContentTree` folds on `content_id` and nests on
+`parent_id`; `path` is never a key. `CourseClasswork.tsx` keys its rows on `contentId` and its
+files on `fileId`, and `splitVanishedRows` pairs ghosts on `(course_id, bb_item_id)`, so two live
+nodes that share a path are both drawn.
+
+New `web/test/course-classwork.samepath.test.ts` (9 cases) on an IST.466-shaped fixture: two
+sibling lessons titled "Information" with the same path, each with a same-path "Lecture" child,
+files 17 and 19 under them.
+
+Check: `npx vitest run test/course-classwork.samepath.test.ts test/course-classwork.test.ts test/CourseClasswork.test.tsx`
+
+* RED: **none against the real code.** The test passed on its first run, because the builder
+  already keeps same-path nodes. To show the test can fail, `foldContentRows` was temporarily made
+  first-wins by `(course_id, path)` (what the old `bb_content` key did), then restored with
+  `git checkout`: `npx vitest run test/course-classwork.samepath.test.ts` →
+  `Test Files  1 failed (1)` · `Tests  6 failed | 3 passed (9)`.
+* GREEN (code as committed): `Test Files  3 passed (3)` · `Tests  41 passed (41)`
