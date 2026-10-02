@@ -172,6 +172,11 @@ describe('neverSyncedLine — the streams that have never synced, by name', () =
     expect(neverSyncedLine(normalizeStreams(undefined))).toBeNull();
   });
 
+  it('says nothing when handed no list at all (a status restored from an older cache)', () => {
+    expect(neverSyncedLine(undefined)).toBeNull();
+    expect(neverSyncedLine(null)).toBeNull();
+  });
+
   it('names a stream once even if the view repeated it', () => {
     expect(
       neverSyncedLine([

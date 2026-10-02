@@ -89,9 +89,11 @@ export function normalizeStreams(value: unknown): StreamState[] {
 /**
  * "content, history never synced": every expected stream whose state is
  * `never`, each named once, sorted. Null when there is none, so the caller
- * adds nothing to the line.
+ * adds nothing to the line. A status object restored from the persisted query
+ * cache of an older build has no `streams` at all, which reads as none.
  */
-export function neverSyncedLine(streams: readonly StreamState[]): string | null {
+export function neverSyncedLine(streams: readonly StreamState[] | null | undefined): string | null {
+  if (!Array.isArray(streams)) return null;
   const names = [
     ...new Set(streams.filter((entry) => entry.state === 'never').map((entry) => entry.stream)),
   ].sort();

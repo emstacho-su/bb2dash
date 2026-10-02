@@ -31,3 +31,43 @@ Check: `npx vitest run test/sync-run-state.test.ts`
   `Error: Failed to resolve import "@/lib/sync-run-state" from "test/sync-run-state.test.ts". Does the file exist?`
   → `Test Files  1 failed (1)` · `Tests  no tests`
 * GREEN: `Test Files  1 passed (1)` · `Tests  22 passed (22)`
+  (23 after task 20 added the "no list at all" case below)
+
+---
+
+## Task 20 — `freshnessLine` uses it; `SyncStatus` carries `notes`, `interrupted`, `streams`
+
+`queries.sync.ts`: one import, three fields on `SyncStatus`, three lines in `normalizeSyncStatus`,
+and `freshnessLine` now takes its run-state word from `runStateWord` and appends
+`neverSyncedLine(status.streams)` only when `stalenessLine` returns null. `stalenessLine`'s body is
+untouched. A row without the three columns normalises to `notes: null`, `interrupted: false`,
+`streams: []`, and the line is the string `main` returns.
+
+`neverSyncedLine` also accepts `null` / `undefined`: the query cache is persisted to localStorage
+(`query-provider.tsx`), so a `SyncStatus` object written by the previous build can be restored
+with no `streams` key at all. It reads as "none", and nothing throws.
+
+Check (d): `git diff --numstat main -- web/src/lib/queries.sync.ts` → `14	6	web/src/lib/queries.sync.ts`
+(first field 14, limit 15).
+
+Check (a): `npx vitest run test/queries.sync.test.ts test/NeedsAttention.test.tsx test/Inbox.test.tsx`
+
+* RED (tests added, `queries.sync.ts` still as on `main`), `npx vitest run test/queries.sync.test.ts`:
+  `Tests  7 failed | 28 passed (35)`. The seven are the new-behaviour cases, for example
+  `expected 'last synced 4 hrs ago' to be 'last synced 4 hrs ago · history never…'` and
+  `expected 'last synced 4 hrs ago · last run fail…' to be 'last synced 4 hrs ago · last sync int…'`.
+  The three "same string as `main`" cases (no `streams` key; each status with the new columns
+  absent; a stale stage beside a never-synced stream) **passed against `main`'s code**, which is
+  what shows the strings are `main`'s.
+* GREEN: `Test Files  3 passed (3)` · `Tests  119 passed (119)`
+
+The three fixtures the brief names, as asserted:
+
+| Fixture | Line |
+|---|---|
+| every `freshness` row fresh, `streams` holding `history` `never` | `last synced 4 hrs ago · history never synced` |
+| a `freshness` row stale 2 days, `streams` holding `history` `never` | ends `· files stale 2 days`, contains no `never synced` |
+| no `streams` key | `last synced 4 hrs ago · files stale 2 days` (the string `main` returns) |
+
+Also asserted: a reaped run reads `last synced 4 hrs ago · last sync interrupted` and never
+`last run failed`; a running run with `history` `never` reads `sync running · history never synced`.
