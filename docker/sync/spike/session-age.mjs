@@ -16,6 +16,8 @@ const START_URL = `${BLACKBOARD_ORIGIN}/ultra/`;
 const PROBE_URL = `${BLACKBOARD_ORIGIN}/learn/api/public/v1/users/me`;
 const PROFILE_DIR = process.env.BB_PROFILE_DIR ?? '/home/pwuser/bb-profile';
 const DEFAULT_PROBE_MINUTES = 30;
+/** One day. Above about 35,791 minutes `setInterval` overflows 32 bits and Node fires every millisecond. */
+const MAX_PROBE_MINUTES = 1440;
 const MS_PER_MINUTE = 60_000;
 const PROBE_TIMEOUT_MS = 30_000;
 const NAVIGATION_TIMEOUT_MS = 60_000;
@@ -24,8 +26,8 @@ function probeMinutes() {
   const raw = process.env.PROBE_MINUTES;
   if (raw === undefined || raw === '') return DEFAULT_PROBE_MINUTES;
   const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`PROBE_MINUTES must be a positive number, got ${JSON.stringify(raw)}`);
+  if (!Number.isFinite(value) || value <= 0 || value > MAX_PROBE_MINUTES) {
+    throw new Error(`PROBE_MINUTES must be a number above 0 and at most ${MAX_PROBE_MINUTES}, got ${JSON.stringify(raw)}`);
   }
   return value;
 }
@@ -96,7 +98,9 @@ async function main() {
     probe(context, startedAt).catch((error) => log(`session-age: probe crashed: ${String(error)}`));
   }, intervalMs);
 
+  let stopping = false;
   const stop = async (signal) => {
+    stopping = true;
     clearInterval(timer);
     log(`session-age: ${signal}, closing the browser so the profile is flushed`);
     try {
@@ -110,6 +114,8 @@ async function main() {
   process.on('SIGINT', () => void stop('SIGINT'));
 
   context.on('close', () => {
+    // A requested stop closes the browser too; only an unasked close is a crash.
+    if (stopping) return;
     log('session-age: the browser closed; exiting so the container restarts it');
     process.exit(1);
   });

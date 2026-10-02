@@ -10,6 +10,8 @@ services:
       dockerfile: Dockerfile
     image: bb2dash-sync:spike
     init: true
+    # Fixed, so Chromium's profile lock names the same host after the container is recreated.
+    hostname: sync
     user: pwuser
     restart: unless-stopped
     shm_size: 1gb
