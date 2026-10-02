@@ -12,9 +12,10 @@ B-45 adopts the reversal) · **One PR per repo, not per phase** (**PROVISIONAL, 
 B-51), amending the 2026-09-09 SOP row for this phase only ·
 Depends on: the noVNC spike gate (task 4) before any sync-side task; Phases 15 (runner, test role), 18
 (fetch and embed step) and 19 (register-first) on `main` before W-55 and W-56 are cut · Status:
-**PROVISIONAL until Stack answers 93 §5 (B-4, B-43, B-44, B-45, B-46, B-47, B-48, B-49, B-50, B-51)** and
-approves `94_SPRINT2_PHASES.md`. Its live SQL checks also rest on Phase 15's B-42 (**PROVISIONAL**; what
-changes otherwise is in §Tables and migrations, "If B-42 goes otherwise").
+**FROZEN 2026-10-02** (task 1; the "Frozen 2026-10-02" block below and the eleven `Phase 14 freeze:`
+DECISIONS rows of that date). Until then it read "PROVISIONAL until Stack answers 93 §5 (B-4, B-43, B-44,
+B-45, B-46, B-47, B-48, B-49, B-50, B-51) and approves `94_SPRINT2_PHASES.md`"; its live SQL checks rest on
+Phase 15's B-42, answered at its default (the `db_test_runner` role, migration 100, on prod since 2026-09-29).
 
 This brief supersedes the Contract of `../82_PHASE14_containers.md` (C-1..C-8, its task table and its
 workers). 82 stays the record of Stack's sixteen decisions (quoted below), the MVP he confirmed and the six
@@ -24,6 +25,36 @@ that closes 93 §1.7 decides (Playwright's seccomp profile by default, `--no-san
 fallback).
 
 **Answered by delegation 2026-09-27.** Stack delegated the 93 §5 answers and the plan approval to the PM; the DECISIONS rows of 2026-09-27 hold them. Of this brief's B-numbers (B-4, B-42, B-43, B-44, B-45, B-46, B-47, B-48, B-49, B-50, B-51), changed: B-45 (Reversal adopted (Requirements v2 §5 row "scheduled or in-Electron crawls (Duo)", in part), following Stack's decision #6 and the MVP he confirmed on 2026-09-16. pg_cron queues one container `sync` request each morning when none is open: daily at 07:00 New York for now, re-set from Task 0's numbers, and off (null) until the cut-over. A login_required item is a failure report, not a nag. In-Electron crawls stay declined.); the rest resolved to their defaults. The phase's PM strikes PROVISIONAL where a row says default and rewrites the B-table row where it says changed, at the session's start (ORCHESTRATOR §6).
+
+**Frozen 2026-10-02 (task 1).** The PM put open items 1–6 to Stack at the phase's start, with one conflict
+this brief predates; his answers are the eleven `Phase 14 freeze:` DECISIONS rows of 2026-10-02 and the two
+rows beside them. Every **PROVISIONAL** marker below is resolved to the default written beside it, unless
+this block says otherwise; the markers stay only to show which B-number a line rests on.
+
+* **B-4, B-43, B-44, B-46, B-47, B-48, B-49, B-50, B-51, and B-42 through Phase 15:** the default
+  (DECISIONS 2026-09-27).
+* **B-45 and open item 1:** adopted, so 092 is built (task 13) with the hour null. Stack, 2026-10-02: build
+  it and decide after the spike. Task 0's idle series put the login's life between 4:17 and 12:36 (82b), so
+  a 07:00 sync would usually find it dead. The hour is set at the cut-over only if the spike's overnight log
+  (task 4) shows the container's login alive the next morning. If it does not, the hour stays null, A5 is
+  ticked `[~]` and task 29's `[x]` count is 8.
+* **Open items 2, 3, 4 and 5:** the defaults. **Open item 6:** yes, 094 is written (eleven freeze rows).
+* **The container has its own Blackboard login.** The 2026-10-01 row "The sync runs only in Stack's
+  logged-in Chrome … never open a second browser or ask for a separate login" is scoped to the Windows
+  `/bb-sync` skill path (Stack, 2026-10-02). The runner's file step is `fetch_signed.mjs`'s hop walk in its
+  own logged-in Playwright context; the skill's Chrome download-and-collect (`ingest/collect_download.mjs`,
+  2026-10-01) is not the runner's.
+* **Machine name.** The laptop the containers run on is `stack-laptop` (`HARNESS_MACHINE` since
+  2026-09-29); where this brief says `home-pc` for that machine, read `stack-laptop`. The harness's
+  `docs/portable.md` keeps `home-pc` as its example name, so task 23's grep string is unchanged.
+* **Gate state on 2026-10-02.** Phases 15 and 18 are on `main`; Phase 19 has not started. W-55 and W-56
+  wait for the spike's PASS and for 19. W-57 is cut from agentic-harness `main` 429d25f; W-58 waits for
+  Stack to create `emstacho-su/bb2dash-stack`.
+* **Sibling-phase calls this brief rests on** (105 §3's c9 note). The file and embed steps rest on Phase
+  18's B-37, answered at its default and merged (the pull runs inside the sync). The 30-minute release rests
+  on Phase 19's B-20, a PM pick that is built only on Stack's explicit yes: a different constant re-sets
+  `DEAD_LETTER_MINUTES` below it, and without the rule a stale `sync` claim is flagged by 091's sweep and
+  never released. 114's `closed_itself` shape rests on Phase 17's B-29, merged.
 
 ## Why
 
@@ -55,18 +86,19 @@ GUI, or move Supabase or Vercel.
 
 ## Stack's calls this brief rests on
 
-Every row is **PROVISIONAL** until Stack answers; the answer is written to DECISIONS with its own date.
+Every row was **PROVISIONAL** until Stack answered. Answered 2026-09-27 by delegation and frozen
+2026-10-02 (the block above): every row stands at its default except B-45, which is adopted.
 
 | B | Question (93 §5) | Default taken | Tasks that change if he answers otherwise |
 |---|---|---|---|
 | B-4 | S2-containers-1: must or should, and where it runs | Must; the long pole beside Phases 16–19; the spike gates only the sync half; $0; the Windows path until acceptance | "Should" or "later": only task 1 runs, and Phase 21 waits too (it reuses this phase's container, token and MCP image) |
 | B-43 | Sync without an LLM (Q34) | Yes: the deterministic runner with a templated report; `skills/bb-sync` stays the Windows fallback | No: tasks 9–12 become a `claude -p "/bb-sync <id>"` wrapper, `claude_oauth_token` becomes a `sync` secret, and R-81 grows |
 | B-44 | `/inbox-apply` (bb-sync step 0) in the container sync (Q35) | Skipped; answers apply from the Inbox button | Run it: task 9 adds a `claude -p "/inbox-apply"` branch before the login check, and the sync image gains Claude Code and `claude_oauth_token` |
-| B-45 | Scheduled morning sync (Q36) | Declined until he adopts it in writing; if adopted, 07:00 New York daily, provisional until Task 0's numbers, off until cut-over | Adopted: task 13 builds 092, acceptance step A5 is walked, and task 1 writes the reversal row. Declined: 092 is never written, R-87 stays declined, and A5 is struck |
+| B-45 | Scheduled morning sync (Q36) | **Adopted** (2026-09-27 by delegation; 2026-10-02 Stack: build it, decide after the spike). 092 is built with the hour null; 07:00 New York is set at the cut-over only if the spike's overnight log shows the container's login alive the next morning. The default had been: declined until he adopts it in writing | Adopted: task 13 builds 092, acceptance step A5 is walked, and task 1 writes the reversal row. Declined: 092 is never written, R-87 stays declined, and A5 is struck |
 | B-46 | Login death: Inbox only, or a toast too (Q37) | Inbox item only; the toast stays on R-96's deferred list | Toast too: R-96's first item becomes a desktop task after task 18 (a new poller source and a click-only toast) |
 | B-47 | Task 0 probes (Q38) | Start now, read as an Entra Conditional Access / KMSI measurement | Not run: task 3 is struck; `KEEPALIVE_MINUTES` stays 0 and B-45's hour, if adopted, stays the provisional 07:00 (open item 1); the spike still gates |
-| B-48 | The dev container vs the harness's "the VM replaces it" (Q39) | Keep it, in `bb2dash-stack` only, built last | Dropped: task 26 and step A7 are struck; four secret names leave the list (11 → 7) and `claude-home` leaves the volumes (5 → 4); tasks 24, 27 and 29 each count fewer (secrets 11 → 7 and services 4 → 3 in task 24; images 4 → 3 and base manifests 5 → 4 in task 27; one fewer tick in task 29) |
-| B-49 | Container scheduler vs Task Scheduler (Q40) | The container replaces the two jobs on home-pc only; the `.ps1` scripts stay as fallback and for the work VM; the weekly curator stays a host task | "Everywhere": task 23's `portable.md` line replaces the host schedulers instead of adding one. "No": tasks 20–22 and steps A6 and A8 are struck, and R-90 is declined; `harness-jobs` goes: task 24 counts services 4 → 3 and drops `ingest-now` (verbs 8 → 7, so `just --summary` → `dev doctor down login logs sync-now up`), or, if Stack keeps the verb, re-points it to the harness's host script `scripts/nightly-ingest.ps1` (the script `AgenticHarness-NightlyIngest` runs, registered by `scripts/register-nightly-ingest.ps1`) and the eight verbs stay; task 27 counts images 4 → 3 and base manifests 5 → 3; `fastembed-cache` and `job-state` leave the volumes (5 → 3); B-50's binds are struck with task 22; `vault_realm_pat`, which only the jobs container's realm pushes use (R-89), leaves the secrets (11 → 10) with open item 4's PAT step; task 23's container-scheduler line and its `missedExecutionTolerance` note (P-106, which describes only the container scheduler) are not written, so its `On home-pc (containers):` and `missedExecutionTolerance` greps both expect 0; task 29's `Get-ScheduledTask` count expects 2, not 0 |
+| B-48 | The dev container vs the harness's "the VM replaces it" (Q39) | Keep it, in `bb2dash-stack` only, built last | Dropped: task 26 and step A7 are struck; four secret names leave the list (11 → 7) and `claude-home` leaves the volumes (5 → 4); tasks 24, 27 and 29 each count fewer (secrets 11 → 7 and services 4 → 3 in task 24; images 4 → 3 and base manifests 5 → 4 in task 27; one fewer tick in task 29); the `dev` verb goes (verbs 8 → 7, so task 24's `just --summary` → `doctor down ingest-now login logs sync-now up`, and under B-51's npm branch the `node -e` list drops `dev`); task 25's Claude token-age row goes with `claude_oauth_token` |
+| B-49 | Container scheduler vs Task Scheduler (Q40) | The container replaces the two jobs on home-pc only; the `.ps1` scripts stay as fallback and for the work VM; the weekly curator stays a host task | "Everywhere": task 23's `portable.md` line replaces the host schedulers instead of adding one. "No": tasks 20–22 and steps A6 and A8 are struck, and R-90 is declined; `harness-jobs` goes: task 24 counts services 4 → 3 and drops `ingest-now` (verbs 8 → 7, so `just --summary` → `dev doctor down login logs sync-now up`), or, if Stack keeps the verb, re-points it to the harness's host script `scripts/nightly-ingest.ps1` (the script `AgenticHarness-NightlyIngest` runs, registered by `scripts/register-nightly-ingest.ps1`) and the eight verbs stay; task 27 counts images 4 → 3 and base manifests 5 → 3; `fastembed-cache` and `job-state` leave the volumes (5 → 3); B-50's binds are struck with task 22; `vault_realm_pat`, which only the jobs container's realm pushes use (R-89), leaves the secrets (11 → 10) with open item 4's PAT step; task 23's container-scheduler line and its `missedExecutionTolerance` note (P-106, which describes only the container scheduler) are not written, so its `On home-pc (containers):` and `missedExecutionTolerance` greps both expect 0; task 29's `Get-ScheduledTask` count expects 2, not 0; the DoD's harness `hooks/tests` count expects no fewer than the base's count (+0, not +3), and R-86's DoD line keeps task 16 only |
 | B-50 | Vault access for the jobs container (Q41) | Bind-mount the Windows realm checkouts (`C:/Users/stack/vault`) as `home-pc`, after a lock and `safe.directory` test | Test fails or he prefers clones: the realms are cloned into a volume under their own machine name, and task 22's check becomes a clone-and-push check |
 | B-51 | `bb2dash-stack`, `just`, one PR per repo (Q42) | Yes to all three, each in the freeze row | npm scripts instead of `just`: the `justfile` becomes `package.json` scripts with the same eight verbs; tasks 24–26 and steps A2, A3, A6 and A7 run `npm run <verb>`, task 24's `just --summary` check becomes `node -e "console.log(Object.keys(require('./package.json').scripts).sort().join(' '))"` → `dev doctor down ingest-now login logs sync-now up`, and its `set windows-shell` grep is struck. A different repo name changes paths only. One PR per phase: task 30 expects the bb2dash PR only, and the harness and stack branches merge in the order he names |
 
@@ -691,6 +723,9 @@ starts at W-59. No id here belongs to another phase.
   (harness Phase E).
 
 ## Open items for Stack
+
+**Answered by Stack, 2026-10-02:** item 1, build 092 and decide the hour after the spike (hour null until
+its overnight log shows the login alive in the morning); items 2, 3, 4 and 5, the defaults; item 6, yes.
 
 What the B-numbers leave open (1–5), plus one PM design call the brief rests on (6). Each carries the
 default the PM takes:
