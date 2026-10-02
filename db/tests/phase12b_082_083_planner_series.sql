@@ -4,7 +4,7 @@
 --   2. cap           a 53rd occurrence is refused, one row at a time or several in one statement
 --   3. shape         a non-object, a missing key, a wrong type, an unknown key, a wall clock
 --                    without an offset - each refused
---   4. DST           an instant on either side of the 2026-11-01 transition is stored verbatim
+--   4. DST           an instant on either side of the 2027-11-07 transition is stored verbatim
 --   5. detach        "this one" survives an "all events" edit; naming it in p_rows refuses the
 --                    call; series_detached without a series is refused by the check
 --   6. following     the split makes a new series, keeps the row ids, shortens until_date
@@ -13,6 +13,11 @@
 --   8b. round 2      088's TR-3 (the split moves detached rows too), TR-4 (an emptied series
 --                    row is deleted) and TR-6 (the new until_date is the later of the two)
 --   9. boundary      another uid sees nothing and changes nothing; anon holds nothing
+--
+-- DATES: every fixture date but the past row (2026-09-10) must lie in the future, because scope
+-- 'all' cuts at now(). They were moved 53 weeks on 2026-10-02, when 2026-10-01 passed; the guard
+-- under `begin;` says so when they run out again (2027-10-07). Move them by whole weeks, and keep
+-- the Thursdays on their sides of the autumn clock change.
 --
 -- RUN IT: paste the whole file into one `execute_sql` call, or `psql "$DATABASE_URL" -f <file>`.
 -- A failing assertion raises; a pass ends with one summary row. Every write is inside the
@@ -23,6 +28,14 @@
 -- rolled back with everything else.
 
 begin;
+
+-- The fixture needs its dated rows in the future (see DATES above).
+do $$
+begin
+  if now() >= timestamptz '2027-10-07 18:00:00-04' then
+    raise exception 'FAIL the fixture dates have passed: move every date but 2026-09-10 on by whole weeks';
+  end if;
+end $$;
 
 -- =============================================================================================
 -- 0. Become the owner, and remember what the tables held before
@@ -41,13 +54,13 @@ declare
   v_53 jsonb;
 begin
   begin
-    perform planner_series_create('weekly', date '2026-11-12', '[]'::jsonb);
+    perform planner_series_create('weekly', date '2027-11-18', '[]'::jsonb);
     raise exception 'FAIL an empty p_rows was accepted';
   exception when sqlstate '22023' then null;
   end;
 
   begin
-    perform planner_series_create('weekly', date '2026-11-12', 'null'::jsonb);
+    perform planner_series_create('weekly', date '2027-11-18', 'null'::jsonb);
     raise exception 'FAIL a json null p_rows was accepted';
   exception when sqlstate '22023' then null;
   end;
@@ -55,31 +68,31 @@ begin
   select jsonb_agg(jsonb_build_object(
            'kind', 'event',
            'title', '[W-35 test] over the cap ' || i,
-           'starts_at', (date '2027-01-07' + i)::text || 'T18:00:00-05:00',
-           'ends_at',   (date '2027-01-07' + i)::text || 'T19:00:00-05:00',
+           'starts_at', (date '2028-01-13' + i)::text || 'T18:00:00-05:00',
+           'ends_at',   (date '2028-01-13' + i)::text || 'T19:00:00-05:00',
            'time_zone', 'America/New_York',
            'all_day', false))
     into v_53
     from generate_series(0, 52) i;                      -- 53 elements
 
   begin
-    perform planner_series_create('daily', date '2027-02-28', v_53);
+    perform planner_series_create('daily', date '2028-03-05', v_53);
     raise exception 'FAIL 53 occurrences were accepted';
   exception when sqlstate '22023' then null;
   end;
 
   -- An unknown p_freq and a missing p_until are refused too.
   begin
-    perform planner_series_create('fortnightly', date '2026-11-12',
-      '[{"kind":"event","title":"x","starts_at":"2026-10-01T18:00:00-04:00",
-         "ends_at":"2026-10-01T19:00:00-04:00","time_zone":"America/New_York","all_day":false}]'::jsonb);
+    perform planner_series_create('fortnightly', date '2027-11-18',
+      '[{"kind":"event","title":"x","starts_at":"2027-10-07T18:00:00-04:00",
+         "ends_at":"2027-10-07T19:00:00-04:00","time_zone":"America/New_York","all_day":false}]'::jsonb);
     raise exception 'FAIL an unknown frequency was accepted';
   exception when sqlstate '22023' then null;
   end;
   begin
     perform planner_series_create('weekly', null,
-      '[{"kind":"event","title":"x","starts_at":"2026-10-01T18:00:00-04:00",
-         "ends_at":"2026-10-01T19:00:00-04:00","time_zone":"America/New_York","all_day":false}]'::jsonb);
+      '[{"kind":"event","title":"x","starts_at":"2027-10-07T18:00:00-04:00",
+         "ends_at":"2027-10-07T19:00:00-04:00","time_zone":"America/New_York","all_day":false}]'::jsonb);
     raise exception 'FAIL a series with no end date was accepted';
   exception when sqlstate '22023' then null;
   end;
@@ -97,14 +110,14 @@ begin
   select jsonb_agg(jsonb_build_object(
            'kind', 'event',
            'title', '[W-35 test] cap day ' || i,
-           'starts_at', (date '2027-01-07' + i)::text || 'T18:00:00-05:00',
-           'ends_at',   (date '2027-01-07' + i)::text || 'T19:00:00-05:00',
+           'starts_at', (date '2028-01-13' + i)::text || 'T18:00:00-05:00',
+           'ends_at',   (date '2028-01-13' + i)::text || 'T19:00:00-05:00',
            'time_zone', 'America/New_York',
            'all_day', false))
     into v_52
     from generate_series(0, 51) i;                      -- 52 elements, all inside EST
 
-  v_cap := planner_series_create('daily', date '2027-02-27', v_52);
+  v_cap := planner_series_create('daily', date '2028-03-04', v_52);
   if (select count(*) from planner_events where series_id = v_cap) <> 52 then
     raise exception 'FAIL a 52-occurrence series did not land whole';
   end if;
@@ -112,8 +125,8 @@ begin
   -- One more row, on its own.
   begin
     insert into planner_events (kind, title, starts_at, ends_at, time_zone, all_day, series_id)
-    values ('event', '[W-35 test] the 53rd', timestamptz '2027-02-28 18:00:00-05',
-            timestamptz '2027-02-28 19:00:00-05', 'America/New_York', false, v_cap);
+    values ('event', '[W-35 test] the 53rd', timestamptz '2028-03-05 18:00:00-05',
+            timestamptz '2028-03-05 19:00:00-05', 'America/New_York', false, v_cap);
     raise exception 'FAIL a 53rd occurrence was accepted';
   exception when check_violation then null;
   end;
@@ -124,16 +137,16 @@ begin
     insert into planner_events (kind, title, starts_at, ends_at, time_zone, all_day, series_id)
     select 'event', '[W-35 test] the 53rd and 54th', d, d + interval '1 hour',
            'America/New_York', false, v_cap
-      from (values (timestamptz '2027-02-28 18:00:00-05'),
-                   (timestamptz '2027-03-01 18:00:00-05')) as t(d);
+      from (values (timestamptz '2028-03-05 18:00:00-05'),
+                   (timestamptz '2028-03-06 18:00:00-05')) as t(d);
     raise exception 'FAIL two rows in one statement walked past the cap';
   exception when check_violation then null;
   end;
 
   -- And moving an existing row into a full series is refused as well.
   insert into planner_events (kind, title, starts_at, ends_at, time_zone, all_day)
-  values ('event', '[W-35 test] a one-off', timestamptz '2027-03-04 18:00:00-05',
-          timestamptz '2027-03-04 19:00:00-05', 'America/New_York', false)
+  values ('event', '[W-35 test] a one-off', timestamptz '2028-03-09 18:00:00-05',
+          timestamptz '2028-03-09 19:00:00-05', 'America/New_York', false)
   returning id into v_first;
   begin
     update planner_events set series_id = v_cap where id = v_first;
@@ -158,8 +171,8 @@ end $$;
 do $$
 declare
   v_ok  jsonb := '{"kind":"event","title":"[W-35 test] shape",
-                   "starts_at":"2026-10-01T18:00:00-04:00",
-                   "ends_at":"2026-10-01T19:00:00-04:00",
+                   "starts_at":"2027-10-07T18:00:00-04:00",
+                   "ends_at":"2027-10-07T19:00:00-04:00",
                    "time_zone":"America/New_York","all_day":false}'::jsonb;
   v_bad jsonb;
   v_lbl text;
@@ -177,12 +190,12 @@ begin
       when 'a missing key'                then jsonb_build_array(v_ok - 'time_zone')
       when 'a wrong type'                 then jsonb_build_array(jsonb_set(v_ok, '{all_day}', '"no"'))
       when 'a wall clock with no offset'  then jsonb_build_array(
-                                                 jsonb_set(v_ok, '{starts_at}', '"2026-10-01T18:00:00"'))
+                                                 jsonb_set(v_ok, '{starts_at}', '"2027-10-07T18:00:00"'))
       when 'an unknown key'               then jsonb_build_array(v_ok || '{"colour":"blue"}'::jsonb)
       when 'a non-object element'         then jsonb_build_array(v_ok, 7)
     end;
     begin
-      perform planner_series_create('weekly', date '2026-11-12', v_bad);
+      perform planner_series_create('weekly', date '2027-11-18', v_bad);
       raise exception 'FAIL % was accepted', v_lbl;
     exception when sqlstate '22023' then null;
     end;
@@ -190,7 +203,7 @@ begin
 
   -- A nested array must be refused for a reason, not because of some other rule: the same rows
   -- without the wrapper are accepted.
-  perform planner_series_delete(planner_series_create('weekly', date '2026-11-12',
+  perform planner_series_delete(planner_series_create('weekly', date '2027-11-18',
                                                       jsonb_build_array(v_ok)), 'all', null);
 end $$;
 
@@ -201,34 +214,34 @@ do $$
 declare
   v_series uuid;
 begin
-  v_series := planner_series_create('weekly', date '2026-11-12', jsonb_build_array(
+  v_series := planner_series_create('weekly', date '2027-11-18', jsonb_build_array(
     jsonb_build_object('kind','event','title','[W-35 test] Thursday study',
       'starts_at','2026-09-10T18:00:00-04:00','ends_at','2026-09-10T19:00:00-04:00',
       'time_zone','America/New_York','all_day',false),
     jsonb_build_object('kind','event','title','[W-35 test] Thursday study',
-      'starts_at','2026-10-01T18:00:00-04:00','ends_at','2026-10-01T19:00:00-04:00',
+      'starts_at','2027-10-07T18:00:00-04:00','ends_at','2027-10-07T19:00:00-04:00',
       'time_zone','America/New_York','all_day',false),
     jsonb_build_object('kind','event','title','[W-35 test] Thursday study',
-      'starts_at','2026-10-08T18:00:00-04:00','ends_at','2026-10-08T19:00:00-04:00',
+      'starts_at','2027-10-14T18:00:00-04:00','ends_at','2027-10-14T19:00:00-04:00',
       'time_zone','America/New_York','all_day',false),
     jsonb_build_object('kind','event','title','[W-35 test] Thursday study',
-      'starts_at','2026-11-05T18:00:00-05:00','ends_at','2026-11-05T19:00:00-05:00',
+      'starts_at','2027-11-11T18:00:00-05:00','ends_at','2027-11-11T19:00:00-05:00',
       'time_zone','America/New_York','all_day',false),
     jsonb_build_object('kind','event','title','[W-35 test] Thursday study',
-      'starts_at','2026-11-12T18:00:00-05:00','ends_at','2026-11-12T19:00:00-05:00',
+      'starts_at','2027-11-18T18:00:00-05:00','ends_at','2027-11-18T19:00:00-05:00',
       'time_zone','America/New_York','all_day',false)));
 
   perform set_config('w35.series', v_series::text, true);
   perform set_config('w35.r1', (select id::text from planner_events
                                  where series_id = v_series and starts_at = '2026-09-10T18:00:00-04:00'), true);
   perform set_config('w35.r2', (select id::text from planner_events
-                                 where series_id = v_series and starts_at = '2026-10-01T18:00:00-04:00'), true);
+                                 where series_id = v_series and starts_at = '2027-10-07T18:00:00-04:00'), true);
   perform set_config('w35.r3', (select id::text from planner_events
-                                 where series_id = v_series and starts_at = '2026-10-08T18:00:00-04:00'), true);
+                                 where series_id = v_series and starts_at = '2027-10-14T18:00:00-04:00'), true);
   perform set_config('w35.r4', (select id::text from planner_events
-                                 where series_id = v_series and starts_at = '2026-11-05T18:00:00-05:00'), true);
+                                 where series_id = v_series and starts_at = '2027-11-11T18:00:00-05:00'), true);
   perform set_config('w35.r5', (select id::text from planner_events
-                                 where series_id = v_series and starts_at = '2026-11-12T18:00:00-05:00'), true);
+                                 where series_id = v_series and starts_at = '2027-11-18T18:00:00-05:00'), true);
 
   if (select count(*) from planner_events where series_id = v_series) <> 5 then
     raise exception 'FAIL the fixture series does not hold five rows';
@@ -236,7 +249,7 @@ begin
   if (select count(*) from planner_events where series_id = v_series and series_detached) <> 0 then
     raise exception 'FAIL a freshly created occurrence is already detached';
   end if;
-  if (select until_date from planner_event_series where id = v_series) <> date '2026-11-12' then
+  if (select until_date from planner_event_series where id = v_series) <> date '2027-11-18' then
     raise exception 'FAIL until_date is not what was asked for';
   end if;
   if not (select gcal_dirty from app_settings where id) then
@@ -253,11 +266,11 @@ declare
   v_bad    text;
 begin
   if (select starts_at from planner_events where id = current_setting('w35.r3')::uuid)
-     <> timestamptz '2026-10-08 18:00:00-04' then
+     <> timestamptz '2027-10-14 18:00:00-04' then
     raise exception 'FAIL the pre-transition instant was not stored verbatim';
   end if;
   if (select starts_at from planner_events where id = current_setting('w35.r4')::uuid)
-     <> timestamptz '2026-11-05 18:00:00-05' then
+     <> timestamptz '2027-11-11 18:00:00-05' then
     raise exception 'FAIL the post-transition instant was not stored verbatim';
   end if;
 
@@ -294,7 +307,7 @@ begin
   begin
     perform planner_series_update(v_series, 'all', null, jsonb_build_array(
       jsonb_build_object('id', v_r3, 'kind','event','title','[W-35 test] rewritten',
-        'starts_at','2026-10-08T18:00:00-04:00','ends_at','2026-10-08T19:00:00-04:00',
+        'starts_at','2027-10-14T18:00:00-04:00','ends_at','2027-10-14T19:00:00-04:00',
         'time_zone','America/New_York','all_day',false)));
     raise exception 'FAIL a detached row was rewritten by an "all events" edit';
   exception when sqlstate '22023' then null;
@@ -347,7 +360,7 @@ declare
   v_r2 uuid := current_setting('w35.r2')::uuid;
   v_r4 uuid := current_setting('w35.r4')::uuid;
   v_r5 uuid := current_setting('w35.r5')::uuid;
-  v_cut timestamptz := timestamptz '2026-11-05 18:00:00-05';
+  v_cut timestamptz := timestamptz '2027-11-11 18:00:00-05';
   v_new uuid;
   v_n   int;
 begin
@@ -355,7 +368,7 @@ begin
   begin
     perform planner_series_update(v_series, 'following', v_cut, jsonb_build_array(
       jsonb_build_object('id', v_r2, 'kind','event','title','[W-35 test] too early',
-        'starts_at','2026-10-01T18:00:00-04:00','ends_at','2026-10-01T19:00:00-04:00',
+        'starts_at','2027-10-07T18:00:00-04:00','ends_at','2027-10-07T19:00:00-04:00',
         'time_zone','America/New_York','all_day',false)));
     raise exception 'FAIL a row before the cut was rewritten by "this and following"';
   exception when sqlstate '22023' then null;
@@ -363,10 +376,10 @@ begin
 
   v_n := planner_series_update(v_series, 'following', v_cut, jsonb_build_array(
     jsonb_build_object('id', v_r4, 'kind','event','title','[W-35 test] Friday deep work',
-      'starts_at','2026-11-06T18:00:00-05:00','ends_at','2026-11-06T19:00:00-05:00',
+      'starts_at','2027-11-12T18:00:00-05:00','ends_at','2027-11-12T19:00:00-05:00',
       'time_zone','America/New_York','all_day',false),
     jsonb_build_object('id', v_r5, 'kind','event','title','[W-35 test] Friday deep work',
-      'starts_at','2026-11-13T18:00:00-05:00','ends_at','2026-11-13T19:00:00-05:00',
+      'starts_at','2027-11-19T18:00:00-05:00','ends_at','2027-11-19T19:00:00-05:00',
       'time_zone','America/New_York','all_day',false)));
   if v_n <> 2 then
     raise exception 'FAIL "this and following" reported % rows, expected 2', v_n;
@@ -389,16 +402,16 @@ begin
 
   -- The new series carries the old rule; the old one now ends the day before the cut.
   -- The new series keeps the old frequency; its until_date is the later of the old one
-  -- (2026-11-12) and the last moved row's own local date, which the edit moved to 2026-11-13
+  -- (2027-11-18) and the last moved row's own local date, which the edit moved to 2027-11-19
   -- (088, TR-6).
   if (select freq from planner_event_series where id = v_new) <> 'weekly'
-     or (select until_date from planner_event_series where id = v_new) <> date '2026-11-13' then
+     or (select until_date from planner_event_series where id = v_new) <> date '2027-11-19' then
     raise exception 'FAIL the new series rule or until_date is wrong: % until %',
       (select freq from planner_event_series where id = v_new),
       (select until_date from planner_event_series where id = v_new);
   end if;
-  if (select until_date from planner_event_series where id = v_series) <> date '2026-11-04' then
-    raise exception 'FAIL the old series until_date is %, expected 2026-11-04',
+  if (select until_date from planner_event_series where id = v_series) <> date '2027-11-10' then
+    raise exception 'FAIL the old series until_date is %, expected 2027-11-10',
       (select until_date from planner_event_series where id = v_series);
   end if;
 
@@ -423,7 +436,7 @@ declare
   v_n  int;
 begin
   -- "This and following" from the second of the two: one row goes, the series stays.
-  v_n := planner_series_delete(v_new, 'following', timestamptz '2026-11-13 18:00:00-05');
+  v_n := planner_series_delete(v_new, 'following', timestamptz '2027-11-19 18:00:00-05');
   if v_n <> 1 then
     raise exception 'FAIL "following" deleted % rows, expected 1', v_n;
   end if;
@@ -433,8 +446,8 @@ begin
   if not exists (select 1 from planner_events where id = v_r4) then
     raise exception 'FAIL the row before the cut was deleted';
   end if;
-  if (select until_date from planner_event_series where id = v_new) <> date '2026-11-12' then
-    raise exception 'FAIL the new series until_date is %, expected 2026-11-12',
+  if (select until_date from planner_event_series where id = v_new) <> date '2027-11-18' then
+    raise exception 'FAIL the new series until_date is %, expected 2027-11-18',
       (select until_date from planner_event_series where id = v_new);
   end if;
 
@@ -490,17 +503,17 @@ do $$
 declare
   v_s uuid; v_new uuid; v_ids uuid[]; v_n int;
 begin
-  v_s := planner_series_create('weekly', date '2026-11-12', jsonb_build_array(
-    jsonb_build_object('kind','event','title','[W-35 r2] r1','starts_at','2026-10-15T18:00:00-04:00',
-      'ends_at','2026-10-15T19:00:00-04:00','time_zone','America/New_York','all_day',false),
-    jsonb_build_object('kind','event','title','[W-35 r2] r2','starts_at','2026-10-22T18:00:00-04:00',
-      'ends_at','2026-10-22T19:00:00-04:00','time_zone','America/New_York','all_day',false),
-    jsonb_build_object('kind','event','title','[W-35 r2] r3','starts_at','2026-10-29T18:00:00-04:00',
-      'ends_at','2026-10-29T19:00:00-04:00','time_zone','America/New_York','all_day',false),
-    jsonb_build_object('kind','event','title','[W-35 r2] r4','starts_at','2026-11-05T18:00:00-05:00',
-      'ends_at','2026-11-05T19:00:00-05:00','time_zone','America/New_York','all_day',false),
-    jsonb_build_object('kind','event','title','[W-35 r2] r5','starts_at','2026-11-12T18:00:00-05:00',
-      'ends_at','2026-11-12T19:00:00-05:00','time_zone','America/New_York','all_day',false)));
+  v_s := planner_series_create('weekly', date '2027-11-18', jsonb_build_array(
+    jsonb_build_object('kind','event','title','[W-35 r2] r1','starts_at','2027-10-21T18:00:00-04:00',
+      'ends_at','2027-10-21T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] r2','starts_at','2027-10-28T18:00:00-04:00',
+      'ends_at','2027-10-28T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] r3','starts_at','2027-11-04T18:00:00-04:00',
+      'ends_at','2027-11-04T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] r4','starts_at','2027-11-11T18:00:00-05:00',
+      'ends_at','2027-11-11T19:00:00-05:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] r5','starts_at','2027-11-18T18:00:00-05:00',
+      'ends_at','2027-11-18T19:00:00-05:00','time_zone','America/New_York','all_day',false)));
 
   -- "This one" on the fourth occurrence.
   update planner_events set series_detached = true, title = '[W-35 r2] r4 detached'
@@ -509,13 +522,13 @@ begin
   select array_agg(id order by starts_at) into v_ids from planner_events where series_id = v_s;
 
   -- Split at the third; the scope is r3 and r5, but r4 must travel with them.
-  v_n := planner_series_update(v_s, 'following', timestamptz '2026-10-29 18:00:00-04',
+  v_n := planner_series_update(v_s, 'following', timestamptz '2027-11-04 18:00:00-04',
     jsonb_build_array(
       jsonb_build_object('id', v_ids[3], 'kind','event','title','[W-35 r2] r3 moved',
-        'starts_at','2026-10-30T18:00:00-04:00','ends_at','2026-10-30T19:00:00-04:00',
+        'starts_at','2027-11-05T18:00:00-04:00','ends_at','2027-11-05T19:00:00-04:00',
         'time_zone','America/New_York','all_day',false),
       jsonb_build_object('id', v_ids[5], 'kind','event','title','[W-35 r2] r5 moved',
-        'starts_at','2026-11-20T18:00:00-05:00','ends_at','2026-11-20T19:00:00-05:00',
+        'starts_at','2027-11-26T18:00:00-05:00','ends_at','2027-11-26T19:00:00-05:00',
         'time_zone','America/New_York','all_day',false)));
   if v_n <> 2 then
     raise exception 'FAIL the split reported % rows, expected 2', v_n;
@@ -530,20 +543,20 @@ begin
   if not (select series_detached from planner_events where id = v_ids[4])
      or (select title from planner_events where id = v_ids[4]) <> '[W-35 r2] r4 detached'
      or (select starts_at from planner_events where id = v_ids[4])
-        <> timestamptz '2026-11-05 18:00:00-05' then
+        <> timestamptz '2027-11-11 18:00:00-05' then
     raise exception 'FAIL TR-3 the detached row was rewritten instead of moved';
   end if;
   if (select count(*) from planner_events where series_id = v_s) <> 2 then
     raise exception 'FAIL the old series should keep exactly its two rows before the cut';
   end if;
 
-  -- TR-6: the last moved row now starts 2026-11-20, later than the old rule's 2026-11-12.
-  if (select until_date from planner_event_series where id = v_new) <> date '2026-11-20' then
-    raise exception 'FAIL TR-6 the new until_date is %, expected 2026-11-20',
+  -- TR-6: the last moved row now starts 2027-11-26, later than the old rule's 2027-11-18.
+  if (select until_date from planner_event_series where id = v_new) <> date '2027-11-26' then
+    raise exception 'FAIL TR-6 the new until_date is %, expected 2027-11-26',
       (select until_date from planner_event_series where id = v_new);
   end if;
-  if (select until_date from planner_event_series where id = v_s) <> date '2026-10-28' then
-    raise exception 'FAIL the old until_date is %, expected 2026-10-28',
+  if (select until_date from planner_event_series where id = v_s) <> date '2027-11-03' then
+    raise exception 'FAIL the old until_date is %, expected 2027-11-03',
       (select until_date from planner_event_series where id = v_s);
   end if;
 
@@ -551,7 +564,7 @@ begin
   begin
     perform planner_series_update(v_new, 'all', null, jsonb_build_array(
       jsonb_build_object('id', v_ids[4], 'kind','event','title','x',
-        'starts_at','2026-11-05T18:00:00-05:00','ends_at','2026-11-05T19:00:00-05:00',
+        'starts_at','2027-11-11T18:00:00-05:00','ends_at','2027-11-11T19:00:00-05:00',
         'time_zone','America/New_York','all_day',false)));
     raise exception 'FAIL a moved detached row was accepted in p_rows';
   exception when sqlstate '22023' then null;
@@ -567,21 +580,21 @@ end $$;
 do $$
 declare v_s uuid; v_new uuid; v_ids uuid[];
 begin
-  v_s := planner_series_create('weekly', date '2026-12-31', jsonb_build_array(
-    jsonb_build_object('kind','event','title','[W-35 r2] a','starts_at','2026-10-15T18:00:00-04:00',
-      'ends_at','2026-10-15T19:00:00-04:00','time_zone','America/New_York','all_day',false),
-    jsonb_build_object('kind','event','title','[W-35 r2] b','starts_at','2026-10-22T18:00:00-04:00',
-      'ends_at','2026-10-22T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
+  v_s := planner_series_create('weekly', date '2028-01-06', jsonb_build_array(
+    jsonb_build_object('kind','event','title','[W-35 r2] a','starts_at','2027-10-21T18:00:00-04:00',
+      'ends_at','2027-10-21T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] b','starts_at','2027-10-28T18:00:00-04:00',
+      'ends_at','2027-10-28T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
   select array_agg(id order by starts_at) into v_ids from planner_events where series_id = v_s;
 
-  perform planner_series_update(v_s, 'following', timestamptz '2026-10-22 18:00:00-04',
+  perform planner_series_update(v_s, 'following', timestamptz '2027-10-28 18:00:00-04',
     jsonb_build_array(jsonb_build_object('id', v_ids[2], 'kind','event','title','[W-35 r2] b',
-      'starts_at','2026-10-23T18:00:00-04:00','ends_at','2026-10-23T19:00:00-04:00',
+      'starts_at','2027-10-29T18:00:00-04:00','ends_at','2027-10-29T19:00:00-04:00',
       'time_zone','America/New_York','all_day',false)));
 
   select series_id into v_new from planner_events where id = v_ids[2];
-  if (select until_date from planner_event_series where id = v_new) <> date '2026-12-31' then
-    raise exception 'FAIL TR-6 the new until_date is %, expected the old 2026-12-31',
+  if (select until_date from planner_event_series where id = v_new) <> date '2028-01-06' then
+    raise exception 'FAIL TR-6 the new until_date is %, expected the old 2028-01-06',
       (select until_date from planner_event_series where id = v_new);
   end if;
 
@@ -595,20 +608,20 @@ end $$;
 do $$
 declare v_s uuid; v_new uuid; v_ids uuid[]; v_n int;
 begin
-  v_s := planner_series_create('weekly', date '2026-11-12', jsonb_build_array(
-    jsonb_build_object('kind','event','title','[W-35 r2] x1','starts_at','2026-10-15T18:00:00-04:00',
-      'ends_at','2026-10-15T19:00:00-04:00','time_zone','America/New_York','all_day',false),
-    jsonb_build_object('kind','event','title','[W-35 r2] x2','starts_at','2026-10-22T18:00:00-04:00',
-      'ends_at','2026-10-22T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
+  v_s := planner_series_create('weekly', date '2027-11-18', jsonb_build_array(
+    jsonb_build_object('kind','event','title','[W-35 r2] x1','starts_at','2027-10-21T18:00:00-04:00',
+      'ends_at','2027-10-21T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] x2','starts_at','2027-10-28T18:00:00-04:00',
+      'ends_at','2027-10-28T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
   select array_agg(id order by starts_at) into v_ids from planner_events where series_id = v_s;
 
-  v_n := planner_series_update(v_s, 'following', timestamptz '2026-10-15 18:00:00-04',
+  v_n := planner_series_update(v_s, 'following', timestamptz '2027-10-21 18:00:00-04',
     jsonb_build_array(
       jsonb_build_object('id', v_ids[1], 'kind','event','title','[W-35 r2] x1b',
-        'starts_at','2026-10-16T18:00:00-04:00','ends_at','2026-10-16T19:00:00-04:00',
+        'starts_at','2027-10-22T18:00:00-04:00','ends_at','2027-10-22T19:00:00-04:00',
         'time_zone','America/New_York','all_day',false),
       jsonb_build_object('id', v_ids[2], 'kind','event','title','[W-35 r2] x2b',
-        'starts_at','2026-10-23T18:00:00-04:00','ends_at','2026-10-23T19:00:00-04:00',
+        'starts_at','2027-10-29T18:00:00-04:00','ends_at','2027-10-29T19:00:00-04:00',
         'time_zone','America/New_York','all_day',false)));
   if v_n <> 2 then
     raise exception 'FAIL the split reported % rows, expected 2', v_n;
@@ -622,7 +635,7 @@ begin
     raise exception 'FAIL the rows lost their series in the split';
   end if;
 
-  v_n := planner_series_delete(v_new, 'following', timestamptz '2026-10-16 18:00:00-04');
+  v_n := planner_series_delete(v_new, 'following', timestamptz '2027-10-22 18:00:00-04');
   if v_n <> 2 then
     raise exception 'FAIL the delete reported % rows, expected 2', v_n;
   end if;
@@ -637,19 +650,19 @@ end $$;
 do $$
 declare v_s uuid; v_ids uuid[];
 begin
-  v_s := planner_series_create('weekly', date '2026-11-12', jsonb_build_array(
-    jsonb_build_object('kind','event','title','[W-35 r2] k1','starts_at','2026-10-15T18:00:00-04:00',
-      'ends_at','2026-10-15T19:00:00-04:00','time_zone','America/New_York','all_day',false),
-    jsonb_build_object('kind','event','title','[W-35 r2] k2','starts_at','2026-10-22T18:00:00-04:00',
-      'ends_at','2026-10-22T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
+  v_s := planner_series_create('weekly', date '2027-11-18', jsonb_build_array(
+    jsonb_build_object('kind','event','title','[W-35 r2] k1','starts_at','2027-10-21T18:00:00-04:00',
+      'ends_at','2027-10-21T19:00:00-04:00','time_zone','America/New_York','all_day',false),
+    jsonb_build_object('kind','event','title','[W-35 r2] k2','starts_at','2027-10-28T18:00:00-04:00',
+      'ends_at','2027-10-28T19:00:00-04:00','time_zone','America/New_York','all_day',false)));
   select array_agg(id order by starts_at) into v_ids from planner_events where series_id = v_s;
 
-  perform planner_series_delete(v_s, 'following', timestamptz '2026-10-22 18:00:00-04');
+  perform planner_series_delete(v_s, 'following', timestamptz '2027-10-28 18:00:00-04');
   if not exists (select 1 from planner_event_series where id = v_s) then
     raise exception 'FAIL a series that still has rows was deleted';
   end if;
-  if (select until_date from planner_event_series where id = v_s) <> date '2026-10-21' then
-    raise exception 'FAIL the until_date is %, expected 2026-10-21',
+  if (select until_date from planner_event_series where id = v_s) <> date '2027-10-27' then
+    raise exception 'FAIL the until_date is %, expected 2027-10-27',
       (select until_date from planner_event_series where id = v_s);
   end if;
 
@@ -678,9 +691,9 @@ begin
   end if;
 
   begin
-    v_series := planner_series_create('weekly', date '2026-11-12', jsonb_build_array(
+    v_series := planner_series_create('weekly', date '2027-11-18', jsonb_build_array(
       jsonb_build_object('kind','event','title','[W-35 test] stranger',
-        'starts_at','2026-10-01T18:00:00-04:00','ends_at','2026-10-01T19:00:00-04:00',
+        'starts_at','2027-10-07T18:00:00-04:00','ends_at','2027-10-07T19:00:00-04:00',
         'time_zone','America/New_York','all_day',false)));
     raise exception 'FAIL a stranger created series %', v_series;
   exception when insufficient_privilege then null;
@@ -689,7 +702,7 @@ begin
   begin
     perform planner_series_update(gen_random_uuid(), 'all', null, jsonb_build_array(
       jsonb_build_object('id', gen_random_uuid(), 'kind','event','title','x',
-        'starts_at','2026-10-01T18:00:00-04:00','ends_at','2026-10-01T19:00:00-04:00',
+        'starts_at','2027-10-07T18:00:00-04:00','ends_at','2027-10-07T19:00:00-04:00',
         'time_zone','America/New_York','all_day',false)));
     raise exception 'FAIL a stranger updated a series';
   exception when no_data_found then null;
