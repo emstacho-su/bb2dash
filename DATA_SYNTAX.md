@@ -113,7 +113,12 @@ Two retrieval tiers over the corpus, both scoped by course when wanted:
   `WKnn`; null elsewhere). `link_file_sessions(sync_run_id)` fills only null `week_no` /
   `session_id` on current, non-`stack`, non-`my_submissions` files: through the linked reading's
   date (`link_confidence` 1.0), else the week's only session (0.8); a week with several sessions
-  asks one question (ref `session_link/<file id>`). `link_confidence` is written only where it is
+  asks one question (ref `session_link/<file id>`), unless Stack already answered it or the file
+  names a lecture number (`file_lecture_no(path, file_name)`, 162): then it takes the week's only
+  session that is not an exam, or, when the week has as many lecture numbers as such sessions, the
+  session at its rank (0.8; a linked sibling that disagrees, or a lone lecture in a week of two
+  sessions, still asks; an open question the rule clears is archived with
+  `decision.closed_itself`). `link_confidence` is written only where it is
   null. `stage_files`' `counts` carry `superseded_auto` and `session_links` (each the function's
   jsonb). Storage keys are never rewritten.
 * **Per-item Blackboard links (126)** — `assignment_bb_url(course_id, item_id)` composes a test
