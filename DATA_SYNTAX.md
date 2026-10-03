@@ -208,34 +208,6 @@ the Google mirror sees patches, never delete + insert.
   live node in the same course shares its `bb_item_id`, otherwise **stale**. Since 130 and 131
   there are no ghosts: 130 merged them into their live twins and 131's key
   `(course_id, bb_item_id)` keeps a rename on the item's own row.
-
-## Content identity and history (migrations 130–134)
-
-* **Key** (131) — `bb_content` is unique on `(course_id, bb_item_id)`
-  (`bb_content_course_item_key`); the old `(course_id, path)` key is dropped and a plain index
-  `bb_content_course_path_idx (course_id, path)` serves path lookups. `parent_id` comes from the
-  payload's `parentId`. A rename updates the row and appends the old path to
-  `detail.previous_paths` (jsonb array of strings, oldest first; 130 wrote the merged ghosts'
-  paths there); `detail.previous_ids` is carried.
-* **`stage_content(p_run_id)`** (131) — only the newest registered crawl writes (043/056
-  predicate); returns `inserted, updated, unchanged, missing, missing_cleared, title_fallbacks,
-  duplicate_paths, unresolved_courses, unresolved_items, items, courses, older_run, run_id`.
-  `updated` counts rows where a stored field changed; an unchanged row keeps its `run_id`.
-* **`bb_material_history`** (132) — append-per-run, kept in full through the term. Columns `id,
-  run_id, course_id, entity ('content' | 'file'), bb_item_id, file_name ('' for content),
-  bb_file_id, change ('appeared' | 'changed' | 'vanished'), changed_fields, title, path, seen_at,
-  recorded_at`; unique `(run_id, entity, course_id, bb_item_id, file_name)`. Content is keyed
-  `(course_id, bb_item_id)` and changes on title, path, url or modified; files are keyed
-  `(course_id, bb_item_id, file_name)` from `embeddedFiles` and `detail.file` and change on url.
-  Each crawl is diffed against the newest registered crawl folded `ok`/`partial` with an older
-  row for the course; a course's first crawl is a baseline with no rows. RLS: the owner reads;
-  only `material_history_record(p_run_id)` (service_role) writes.
-* **One vanish convention** (P-98) — a vanish is always the run that first missed the item:
-  `bb_content.detail->>'missing_since'`, `bb_files.notes` `missing_since_run=<uuid>`, and
-  `bb_material_history.run_id` on a `vanished` row. 132 restamped the two older stamps that
-  disagreed.
-* **Activity** (134) — `sync_change_lines` reads the `history` stage: "N new material(s): A, B,
-  C (+k more)", "N material(s) changed: …", "N material(s) no longer in Blackboard: …".
 * **Gap self-close** (114) — `stage_gaps` questions (`suggested.source = 'stage_gaps'`) close
   themselves when the fact arrives: grading scheme recorded, assignment dated (`due_at`,
   `due_date` or `event_start`), reading dated, file stored or superseded.
@@ -268,6 +240,34 @@ the Google mirror sees patches, never delete + insert.
   in schema `private` (not exposed by PostgREST; usage to `authenticated` and `service_role`
   only) because it reads `cron.*`. The rule itself is `private.heartbeat_stage(last_tick_at,
   now, consecutive_failures, active)`.
+
+## Content identity and history (migrations 130–134)
+
+* **Key** (131) — `bb_content` is unique on `(course_id, bb_item_id)`
+  (`bb_content_course_item_key`); the old `(course_id, path)` key is dropped and a plain index
+  `bb_content_course_path_idx (course_id, path)` serves path lookups. `parent_id` comes from the
+  payload's `parentId`. A rename updates the row and appends the old path to
+  `detail.previous_paths` (jsonb array of strings, oldest first; 130 wrote the merged ghosts'
+  paths there); `detail.previous_ids` is carried.
+* **`stage_content(p_run_id)`** (131) — only the newest registered crawl writes (043/056
+  predicate); returns `inserted, updated, unchanged, missing, missing_cleared, title_fallbacks,
+  duplicate_paths, unresolved_courses, unresolved_items, items, courses, older_run, run_id`.
+  `updated` counts rows where a stored field changed; an unchanged row keeps its `run_id`.
+* **`bb_material_history`** (132) — append-per-run, kept in full through the term. Columns `id,
+  run_id, course_id, entity ('content' | 'file'), bb_item_id, file_name ('' for content),
+  bb_file_id, change ('appeared' | 'changed' | 'vanished'), changed_fields, title, path, seen_at,
+  recorded_at`; unique `(run_id, entity, course_id, bb_item_id, file_name)`. Content is keyed
+  `(course_id, bb_item_id)` and changes on title, path, url or modified; files are keyed
+  `(course_id, bb_item_id, file_name)` from `embeddedFiles` and `detail.file` and change on url.
+  Each crawl is diffed against the newest registered crawl folded `ok`/`partial` with an older
+  row for the course; a course's first crawl is a baseline with no rows. RLS: the owner reads;
+  only `material_history_record(p_run_id)` (service_role) writes.
+* **One vanish convention** (P-98) — a vanish is always the run that first missed the item:
+  `bb_content.detail->>'missing_since'`, `bb_files.notes` `missing_since_run=<uuid>`, and
+  `bb_material_history.run_id` on a `vanished` row. 132 restamped the two older stamps that
+  disagreed.
+* **Activity** (134) — `sync_change_lines` reads the `history` stage: "N new material(s): A, B,
+  C (+k more)", "N material(s) changed: …", "N material(s) no longer in Blackboard: …".
 
 ## Seed state (2026-09-02)
 
