@@ -858,9 +858,13 @@ begin
          and has_table_privilege('sync_runner', c.oid, 'select,insert,update,delete')) <> 0 then
     v_bad := v_bad || 'sync_runner holds a privilege on a public table or view'::text;
   end if;
+  -- The CASE keeps has_sequence_privilege off every relation that is not a sequence: the planner
+  -- may evaluate it before the relkind filter, and on an index it raises.
   if (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'public' and c.relkind = 'S'
-         and has_sequence_privilege('sync_runner', c.oid, 'usage,select,update')) <> 0 then
+         and case when c.relkind = 'S'
+                  then has_sequence_privilege('sync_runner', c.oid, 'usage,select,update')
+                  else false end) <> 0 then
     v_bad := v_bad || 'sync_runner holds a privilege on a public sequence'::text;
   end if;
 

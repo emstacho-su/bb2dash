@@ -80,3 +80,130 @@ FAIL  phase14_091_sync_runner.sql  FAIL phase14_091: migration 091 is not applie
 db-test: passed 0, failed 1, units 1
 exit 1
 ```
+
+## Task 7 — 091: the role, `claim_attempts`, the twelve functions and the helper
+
+Precondition, read on prod just before the dry run and again just before the apply (2026-10-03):
+
+```
+select count(*) from supabase_migrations.schema_migrations where name in ('100_db_test_runner_role',
+  '135_sync_run_open_at_claim', '136_transform_tick_register_first', '137_sync_status_run_state')
+4
+select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'
+  and p.prosecdef and has_function_privilege('public', p.oid, 'execute')
+0
+open sync requests (queued or claimed): 0
+```
+
+Dry run, two passes in `begin; … rollback;` through `execute_sql` (as `postgres`, with an in-transaction
+`grant sync_runner to postgres with inherit false, set true` standing in for 094's test-role grant, and a
+nine-row stub in place of the 284 KB loader):
+
+1. 091 + 094 + the unit's sections 0–11: sections 0–8 passed; section 9 failed on the unit's own
+   bug (section 3 had closed a request `done` today, so the login trigger correctly queued nothing).
+   The unit now clears that row before section 9 (commit 245d986).
+2. 091's section-9/10 functions + 094's grants + sections 9–11: all passed, ending at the
+   deliberate final `raise`.
+
+The `log_connections` refusal (DoD, `/security-review` item), tried once at the end of the dry run:
+
+```
+alter role sync_runner set log_connections = on;
+55P02 parameter "log_connections" cannot be set after connection start
+```
+
+So the platform refuses it, and the runner's own per-connect log line (`sync/src/db.ts`) stands.
+
+Applied as `091_sync_runner_role` from commit 245d986. Recorded statement vs the repo blob (DoD method):
+
+| Migration | prod `md5(statements[1])` | `git show HEAD:db/migrations/<file> \| md5sum` | bytes |
+|---|---|---|---|
+| `091_sync_runner_role` | `6b577e2f09310c189a0a1078c4841f80` | `6b577e2f09310c189a0a1078c4841f80` | 28559 |
+
+Post-apply checks (task 7 (b)):
+
+```
+twelve names  -> sync_claim,sync_close,sync_enqueue,sync_file_stored,sync_file_worklist,sync_login_ok,sync_login_required,sync_next,sync_register_run,sync_requeue_orphans,sync_run_outcome,sync_sweep_stale
+table privileges of sync_runner on public tables/views -> 0
+anon/authenticated execute on the twelve and the helper -> 0
+select count(*) from cron.job where jobname like '%scheduled-sync%' -> 0   (task 13 (b))
+```
+
+### Owed to Stack (task 7 (d)): the password, then `--ping`
+
+1. In the Supabase SQL editor for project `goultdzqcavefcgnifdy`, in an unsaved tab, with a password
+   he picks (never written to a file, a commit or a chat):
+
+   ```sql
+   alter role sync_runner with password '<he picks>';
+   ```
+
+2. Then, from the root of a bb2dash checkout, PowerShell (the DSN lives only in that shell; URL-encode
+   any `@`, `:`, `/`, `?`, `#` or `%` in the password):
+
+   ```powershell
+   $env:BB2DASH_TEST_DB_URL = 'postgresql://sync_runner.goultdzqcavefcgnifdy:<password>@aws-0-us-east-1.pooler.supabase.com:5432/postgres?uselibpqcompat=true&sslmode=require'
+   node scripts/db-test.mjs --ping
+   Remove-Item Env:BB2DASH_TEST_DB_URL
+   ```
+
+   Expected: `db-test: connected as sync_runner`, exit 0. The line goes here. The same DSN is the
+   value of the `sync_runner_db_url` secret file (`C:/Users/stack/.bb2dash-secrets/`, via
+   `set-secret.ps1`).
+
+`--ping` line: _owed (Stack)._
+
+## Task 7a — 094: the test role's membership
+
+RED, with the expected list amended and before 094 was applied:
+
+```
+node scripts/db-test.mjs --only phase15_100_db_test_runner_role.sql
+FAIL  phase15_100_db_test_runner_role.sql  FAIL db_test_runner memberships are anon(inherit=f,set=t), authenticated(inherit=f,set=t), expected anon(inherit=f,set=t), authenticated(inherit=f,set=t), sync_runner(inherit=f,set=t)
+db-test: passed 0, failed 1, units 1
+exit 1
+```
+
+Applied as `094_sync_runner_test_membership` from commit e978214:
+
+| Migration | prod `md5(statements[1])` | `git show HEAD:db/migrations/<file> \| md5sum` | bytes |
+|---|---|---|---|
+| `094_sync_runner_test_membership` | `90aa5bc9944bfdc1de77bb17d9432710` | `90aa5bc9944bfdc1de77bb17d9432710` | 3901 |
+
+```
+select count(*) from pg_auth_members m where m.roleid = 'sync_runner'::regrole
+  and m.member = 'db_test_runner'::regrole and not m.inherit_option          -> 1
+select rolbypassrls from pg_roles where rolname = 'sync_runner'               -> false
+ls db/migrations | grep -c "^09[1-9]_"                                        -> 2
+select count(*) from supabase_migrations.schema_migrations where name ~ '^09[1-9]_'  -> 2
+```
+
+GREEN:
+
+```
+node scripts/db-test.mjs --only phase15_100_db_test_runner_role.sql
+PASS  phase15_100_db_test_runner_role.sql
+db-test: passed 1, failed 0, units 1
+exit 0
+```
+
+## Task 6 / 11 / 13 — the 091 unit GREEN
+
+The first run after 094 failed on the unit itself: section 11's sequence check called
+`has_sequence_privilege` on an index in `auth` (`"saml_providers_pkey" is not a sequence`) because the
+planner evaluated it before the relkind filter. The check is now guarded by a `CASE`; no SQL in 091
+changed.
+
+```
+node scripts/db-test.mjs --only phase14_091_sync_runner.sql
+PASS  phase14_091_sync_runner.sql
+db-test: passed 1, failed 0, units 1
+exit 0
+
+ls db/migrations | grep -c "^092_"
+0
+
+node scripts/db-test.mjs            (whole suite)
+db-test: passed 60, failed 0, units 60
+exit 0
+```
