@@ -328,3 +328,35 @@ Check: `npx vitest run test/course-stream.history.test.tsx test/course-stream.te
 `cd web && npm run typecheck && npm run build && npx vitest run`, each exit code captured on its own
 (not through a pipe): `typecheck=0 build=0 vitest=0` · `Test Files  132 passed (132)` ·
 `Tests  2304 passed (2304)` (was 2302). Desktop untouched in round 3.
+
+---
+
+## Round 4 (2026-10-03) — content posts can be opened from the Stream
+
+`origin/feat/content-history-19` (ec0eb2f) merged into this branch first (merge, not rebase).
+Stack: "Videos don't need to be downloaded and stored... Only keep the link to it."
+
+`CourseStream.tsx`: new pure `contentPostLink(row, course)`, rendered by `MaterialPost` as one
+`<a class="btnGhost" target="_blank" rel="noopener noreferrer">`:
+
+| `meta.item_kind` | Opens | Label |
+|---|---|---|
+| `link` | its own `meta.url`, only when `new URL()` parses it as `https:` or `http:` | `Open ↗` |
+| `lti`, `document` | the course's Blackboard page: `v_course_display.bb_url` from `useCourseDisplay`, the row the course header's "Blackboard ↗" reads (`CourseSubBar.tsx`), checked through the existing `blackboardLink()` (https only). Never the LTI launch url. | `Open in Blackboard ↗` |
+| anything else, another scheme, no url | no link | — |
+
+Every href is a parsed `URL`'s `href`. Titles stay text beside the link. File posts keep the
+`FileOpenAction` ladder unchanged. Nothing here downloads.
+
+One round-1 assertion changed by Stack's call: a `document` post used to have no link; it now has
+exactly one, "Open in Blackboard ↗".
+
+Check: `npx vitest run test/course-stream.history.test.tsx test/course-stream.test.tsx test/raw-html.audit.test.ts`
+
+* RED (tests first): `npx vitest run test/course-stream.history.test.tsx` → `Test Files  1 failed (1)` ·
+  `Tests  9 failed | 21 passed (30)`. The "javascript: link draws no link" and "file post keeps its
+  ladder" cases passed before the change.
+* GREEN: `Test Files  3 passed (3)` · `Tests  42 passed (42)`
+
+Gates: `typecheck=0 build=0 vitest=0` (each exit code captured on its own) ·
+`Test Files  132 passed (132)` · `Tests  2314 passed (2314)` (was 2304).
