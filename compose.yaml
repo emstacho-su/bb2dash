@@ -1,14 +1,17 @@
-# bb2dash — containers (Phase 14). This first cut carries the `sync` service as the noVNC spike
-# (brief 100 task 4), which W-56 completes (task 15), and the `bb2dash-mcp` image (task 17). The umbrella
-# repo `bb2dash-stack` includes this file and points SECRETS_DIR at its secrets folder.
+# bb2dash — containers (Phase 14): the `sync` service, the container's sync runner with its Blackboard
+# login (brief 100 task 15), and the `bb2dash-mcp` image (task 17). The umbrella repo `bb2dash-stack`
+# includes this file and points SECRETS_DIR at the secrets folder outside every repo.
 name: bb2dash
 
 services:
+  # The runner (`sync/dist/main.js`): it takes queued sync requests through the twelve `sync_runner`
+  # functions, holds Stack's Blackboard login in `bb-profile` (Chromium headful on Xvfb, the login page
+  # at http://127.0.0.1:6080/vnc.html), pulls files into `course-files` and runs the embed step.
   sync:
     build:
-      context: ./docker/sync
-      dockerfile: Dockerfile
-    image: bb2dash-sync:spike
+      context: .
+      dockerfile: docker/sync/Dockerfile
+    image: bb2dash-sync:local
     init: true
     # Fixed, so Chromium's profile lock names the same host after the container is recreated.
     hostname: sync
@@ -20,18 +23,32 @@ services:
       - seccomp=./docker/sync/seccomp_profile.json
     environment:
       # The keep-alive (Stack, 2026-10-03): a read-only Ultra page every 20 ± 3 minutes while signed in;
-      # a probe every 60 s while the login is dead, with no navigation.
+      # 0 turns it off. The jitter and the 60 s check while the login is dead are the runner's constants.
       KEEPALIVE_MINUTES: "${KEEPALIVE_MINUTES:-20}"
-      JITTER_MINUTES: "${JITTER_MINUTES:-3}"
-      LOGIN_WATCH_SECONDS: "${LOGIN_WATCH_SECONDS:-60}"
     ports:
       # The login page. Loopback only: never reachable from another machine.
       - "127.0.0.1:6080:6080"
+    # The download lands here and reaches course-files by copy-then-unlink (P-104); X's lock and socket
+    # and the runner's heartbeat live here too, so a restart starts clean.
+    tmpfs:
+      - /tmp:size=1g,mode=1777
     volumes:
       # A credential: Stack's Blackboard session. Never in the vault, RAG or an unencrypted backup.
       - bb-profile:/home/pwuser/bb-profile
+      # Disposable: Storage is the source of truth. Mounted where `local_path` expects it.
+      - course-files:/app/course context
     secrets:
       - novnc_password
+      - sync_runner_db_url
+      - supabase_publishable_key
+      - supabase_anon_jwt
+    # The runner's heartbeat (written every 30 s): a dead login stays healthy; the doctor reports it.
+    healthcheck:
+      test: ["CMD", "node", "sync/dist/probe.js", "--heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     logging:
       driver: json-file
       options:
@@ -66,10 +83,17 @@ services:
 
 volumes:
   bb-profile:
+  course-files:
 
 secrets:
   novnc_password:
     file: ${SECRETS_DIR:-./secrets}/novnc_password
+  sync_runner_db_url:
+    file: ${SECRETS_DIR:-./secrets}/sync_runner_db_url
+  supabase_publishable_key:
+    file: ${SECRETS_DIR:-./secrets}/supabase_publishable_key
+  supabase_anon_jwt:
+    file: ${SECRETS_DIR:-./secrets}/supabase_anon_jwt
   # The bb2dash service key; this file is its only home (brief 100, Local surfaces).
   bb2dash_mcp_service_key:
     file: ${SECRETS_DIR:-./secrets}/bb2dash_mcp_service_key
