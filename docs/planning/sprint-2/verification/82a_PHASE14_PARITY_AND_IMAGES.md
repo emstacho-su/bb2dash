@@ -85,3 +85,58 @@ Item 3074 → `archived`, `archived_by = 'sync-runner'`, `decision = {"rule": "l
 
 For R-96's next web PR: the Inbox labels this item "Raised by the transform"; it was raised by the
 container's runner.
+
+## Task 27 — image proofs (2026-10-03)
+
+`gitleaks version` → `8.30.1` (host), scans run with `ghcr.io/gitleaks/gitleaks:v8.30.1`. Each image's
+filesystem was exported (`docker create` + `docker export`, unpacked into a volume by `alpine:3.20`) and
+scanned with `gitleaks dir /fs`; its build history with `docker history --no-trunc <image> | gitleaks stdin`.
+`harness-jobs:local` and `bb2dash-dev:local` were rebuilt from their branch heads first (agentic-harness
+`feat/containers` 0d998fa, bb2dash-stack `feat/containers-14-stack` 97b0426).
+
+**First run, default rules:** every history clean except `harness-jobs`; every filesystem had hits. Triage, by
+hand: all 35 filesystem hits are the `generic-api-key` rule inside base-image vendor trees, none in a path
+this project copies:
+
+| image | hits | where |
+|---|---|---|
+| `bb2dash-sync:local` | 15 | `/ms-playwright/…/reading_mode_gdocs_helper_manifest.json`, `/usr/include/node/v8-internal.h`, `/usr/lib/python3/dist-packages/{dns,cryptography,numpy/…/tests,setuptools}`, `/usr/lib/…/perl/5.38.2/CORE/cop.h` |
+| `bb2dash-mcp:local` | 1 | `/usr/local/include/node/v8-internal.h` |
+| `harness-jobs:local` | 1 | `/usr/lib/…/perl/5.36.0/CORE/cop.h` |
+| `bb2dash-dev:local` | 18 | C headers under `/usr/include`, `/usr/lib/python3/dist-packages/mercurial`, perl `cop.h`, `/usr/local/include/node`, six Vim keymaps under `/usr/share/vim`, the Playwright manifest |
+
+The `harness-jobs` history hit is `ENV GPG_KEY=<40 hex>` from the official `python:3.12-slim-bookworm` image:
+the public fingerprint of the CPython release-signing key.
+
+**The allowlist:** `docker/gitleaks-images.toml` keeps the default rules and allows only
+`/usr/{include,lib,share}/`, `/usr/local/include/`, `/ms-playwright/` and the line `ENV GPG_KEY=[0-9A-F]{40}`.
+
+**Second run, with that config:**
+
+| image (id) | `gitleaks dir` exit | history exit |
+|---|---|---|
+| `bb2dash-sync:local` (85ac77b9776e) | 0 | 0 |
+| `bb2dash-mcp:local` (bf212746abf1) | 0 | 0 |
+| `harness-jobs:local` (a2d6404ed021) | 0 | 0 |
+| `bb2dash-dev:local` (c0632969b871) | 0 | 0 |
+
+4 of 4 filesystems and 4 of 4 histories clean. The sync image is rescanned after W-55's round 2 rebuild.
+
+### Base-image manifests (2026-10-03, `docker buildx imagetools inspect`)
+
+Six bases, one more than the brief's five: the sync image also copies the `uv` binary from
+`ghcr.io/astral-sh/uv:0.12.19` (W-56, task 15).
+
+| manifest | image | index digest | platforms checked |
+|---|---|---|---|
+| manifest | `mcr.microsoft.com/playwright:v1.63.0-noble` | `sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27` | linux/amd64, linux/arm64 |
+| manifest | `ghcr.io/astral-sh/uv:0.12.19` | `sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424` | linux/amd64, linux/arm64 |
+| manifest | `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` | `sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58` | linux/amd64, linux/arm64 |
+| manifest | `python:3.12-slim-bookworm` | `sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3` | linux/amd64, linux/arm64 |
+| manifest | `node:22-slim` | `sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c` | linux/amd64, linux/arm64 |
+| manifest | `node:22-bookworm` | `sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7` | linux/amd64, linux/arm64 |
+
+## Per-image arm64 builds (post-MVP)
+
+Not built. Every base has a linux/arm64 variant, so an arm64 build of each image is a `--platform` flag away;
+the MacBook bring-up (R-96) waits on the `@anush008/tokenizers` linux-arm64 gap in the harness, not on a base.
