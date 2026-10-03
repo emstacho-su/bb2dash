@@ -82,7 +82,10 @@ screens, PM.
 | R2-2..5 | 138 materials-only counts, path rule, session urls, older-run predicate | W-52 → PM applied | 137 | done | md5 `eded5cb4…` equal; runner PASS (`phase19_138`, `phase19_132`, `phase19_133`, `phase17_110`); 10 backfilled path-only rows kept |
 | R2-6, R2-7 | Honest "last synced"; interrupted toast opens the Inbox | W-54 | — | done | d98ac0f, d2d9391; web 2302, desktop 708; numstat `16 7`; merged b949d63 |
 | R2-8 | `DATA_SYNTAX.md` heading | W-52 | — | done | 38ddc53 |
-| G1 | `/code-review main high`; CRITICAL/HIGH back to workers as round 2 | PM | 25 | doing | pass 1 (W-52 + W-54 at fab2ef6): 15 findings, 2 closed by 135–137 landing, round 2 R2-1..R2-8 in brief 99 (58a86b1) sent to W-52 (138, 139) and W-54; pass 2 over W-53 and round 2 still to run |
+| R3-1..5, 9 | 170 history fn + data step + Stream view; 171 `stage_content` re-key only onto fresh gaps | W-52 → PM applies | 139 | doing | dispatched 2026-10-03 |
+| R3-6 | Skill: interrupted run stops at step 4; step 5 guarded on `claimed` | W-53 | — | doing | dispatched 2026-10-03; PM re-installs the skill after |
+| R3-7, R3-8 | Stream block error line; one import | W-54 | — | doing | dispatched 2026-10-03 |
+| G1 | `/code-review main high`; CRITICAL/HIGH back to workers | PM | 25 | doing | pass 1 (fab2ef6): 15 findings → round 2 (done). Pass 2 (whole branch, 426c590+): 15 findings → round 3 R3-1..R3-9 in brief 99 (78d0be8), block 170–179; 4 not changed with reasons |
 | G2 | `/security-review` | PM | 25 | done | 2026-10-03 over 130–139, web, desktop, skill: no HIGH or MEDIUM; two low notes (the test role's widening grants; walk shots show course content) |
 | G3 | PR open with preview link; stop at "ready when you say so" | PM | 26, 28, 29, G1, G2 | todo | — |
 
