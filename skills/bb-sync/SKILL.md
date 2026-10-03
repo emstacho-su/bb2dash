@@ -149,13 +149,17 @@ The run already has its `sync_runs` row: step 2 opened it as `running`. The cron
 two minutes of the calendar row landing. Poll every 30 seconds, up to ten minutes:
 
 ```sql
-select id, run_id, status, started_at, finished_at, summary, open_attention
+select id, run_id, status, interrupted, started_at, finished_at, summary, open_attention
   from v_sync_status;
 ```
 
 - `status = 'running'` for this crawl's `run_id`: the fold has not happened yet; keep waiting and
   post a progress line.
-- `status in ('ok','partial','failed')` for this `run_id`: done, go to step 4b.
+- `interrupted` is true for this `run_id`: the terminal rule has already reaped the run, closed the
+  request and raised its Inbox item. Tell Stack: "the sync was marked interrupted; nothing was
+  folded; press Sync to run it again." Then stop: no step 4b, no step 5.
+- `status in ('ok','partial','failed')` for this `run_id` and `interrupted` false: done, go to
+  step 4b.
 - Ten minutes and the row is still `running`: the tick is not folding. Do not run the transform
   by hand and do not invent one — check `select * from cron.job` and `cron.job_run_details`, and
   that `bb_raw` holds this run's `calendar` row; report what you find, and leave the request
@@ -381,8 +385,11 @@ update agent_requests
        result = jsonb_build_object('run_id', $run_id, 'status', $status,
                                    'files_pulled', $files_pulled,
                                    'files_not_pulled', $files_not_pulled)
- where id = $1;
+ where id = $1 and state = 'claimed';
 ```
+
+`and state = 'claimed'` keeps this from overwriting a request the terminal rule already closed. If
+the update touches 0 rows, say so in the report: the request was no longer `claimed`.
 
 `files_pulled` and `files_not_pulled` are step 4b's two counts, written even when both are zero.
 They are what makes "the sync left nothing unopenable" a fact someone can read back later instead
