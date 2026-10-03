@@ -23,12 +23,28 @@ import type { CourseStreamRow } from '@/lib/course-dimension';
 import { makeCourseDisplay } from './factories';
 import { newQueryClient, readChain } from './hydration-harness';
 
-const state = vi.hoisted(() => ({ byTable: {} as Record<string, unknown[]> }));
+const state = vi.hoisted(() => ({
+  byTable: {} as Record<string, unknown[]>,
+  /** Tables whose read answers with a Postgres error (R3-7). */
+  failing: [] as string[],
+  /** Tables whose read never answers. */
+  hanging: [] as string[],
+}));
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
-    from: (table: string) =>
-      readChain(state.byTable, table, { singleTables: ['v_course_display', 'terms'] }),
+    from: (table: string) => {
+      const chain = readChain(state.byTable, table, { singleTables: ['v_course_display', 'terms'] });
+      if (state.failing.includes(table)) {
+        chain.then = (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+          Promise.resolve({ data: null, error: new Error('permission denied for view') }).then(
+            onFulfilled,
+            onRejected,
+          );
+      }
+      if (state.hanging.includes(table)) chain.then = () => new Promise(() => {});
+      return chain;
+    },
     auth: { getSession: vi.fn() },
   }),
 }));
@@ -122,6 +138,8 @@ beforeEach(() => {
     courses: [{ id: 'IST.466', term_id: 'fall-2026' }],
     terms: [{ id: 'fall-2026', name: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-11' }],
   };
+  state.failing = [];
+  state.hanging = [];
 });
 
 afterEach(() => {
@@ -309,5 +327,31 @@ describe('CourseStream — material posts say New or Changed, dated by crawl', (
     renderStream();
     const section = await materialSection();
     expect(section.querySelector('details')).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Round 3, R3-7: a failed read says so; a read in flight adds nothing
+ * ------------------------------------------------------------------------ */
+
+describe('CourseStream — the materials block when the stream read does not answer', () => {
+  it('shows one error line when the stream query fails, instead of vanishing', async () => {
+    state.failing = ['v_course_stream'];
+    renderStream();
+
+    const section = await materialSection();
+    const alert = within(section).getByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't load new and changed materials.");
+    expect(within(section).queryByRole('listitem')).toBeNull();
+  });
+
+  it('shows nothing new while the stream query is still loading', async () => {
+    state.hanging = ['v_course_stream'];
+    renderStream();
+
+    await waitFor(() => screen.getByText('Upcoming work · IST 466'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole('region', { name: SECTION })).toBeNull();
+    expect(screen.queryByText("Couldn't load new and changed materials.")).toBeNull();
   });
 });

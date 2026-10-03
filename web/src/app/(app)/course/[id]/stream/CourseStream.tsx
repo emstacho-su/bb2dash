@@ -10,7 +10,8 @@
  *      content item a registered crawl found new or changed, labelled "New" or
  *      "Changed" and dated by that crawl. The rows are `v_course_stream`'s
  *      material arm, which migration 133 feeds from `bb_material_history`.
- *      A course with no such post gets no block at all;
+ *      A course with no such post gets no block at all; a failed read gets a
+ *      one-line error in it (R3-7);
  *   3. the course timeline (R3-4): the week-divided two-lane view that was
  *      Classwork's `?view=timeline`. Classes on the left, with their files and
  *      the announcements posted that week; assignments on the right, with
@@ -155,8 +156,16 @@ function MaterialList({ posts }: { posts: readonly CourseStreamRow[] }) {
 
 const MATERIALS_HEADING_ID = 'course-stream-materials';
 
-function MaterialHistory({ posts }: { posts: readonly CourseStreamRow[] }) {
-  if (posts.length === 0) return null;
+/** R3-7: what the block says when the stream read failed, rather than vanishing. */
+export const MATERIALS_LOAD_ERROR = "Couldn't load new and changed materials.";
+
+/**
+ * The block. Nothing while the read is in flight or when there is no post; one
+ * error line when the read failed (with any posts a previous read left in the
+ * cache still listed under it).
+ */
+function MaterialHistory({ posts, failed }: { posts: readonly CourseStreamRow[]; failed: boolean }) {
+  if (posts.length === 0 && !failed) return null;
   const shown = posts.slice(0, MATERIAL_POSTS_SHOWN);
   const earlier = posts.slice(MATERIAL_POSTS_SHOWN);
   return (
@@ -164,7 +173,12 @@ function MaterialHistory({ posts }: { posts: readonly CourseStreamRow[] }) {
       <h2 id={MATERIALS_HEADING_ID} className={tokens.kicker}>
         New and changed materials
       </h2>
-      <MaterialList posts={shown} />
+      {failed && (
+        <p className={styles.state} role="alert">
+          {MATERIALS_LOAD_ERROR}
+        </p>
+      )}
+      {shown.length > 0 && <MaterialList posts={shown} />}
       {earlier.length > 0 && (
         <details className={styles.earlier}>
           <summary>{earlier.length} earlier</summary>
@@ -181,7 +195,7 @@ export function CourseStream({ courseId }: { courseId: string }) {
   const display = useCourseDisplay(courseId);
   const shellIds = useMemo(() => display.data?.shell_ids ?? [], [display.data]);
   const workItemsQ = useCourseWorkItems(shellIds);
-  // The same cache entry the timeline reads; it reports this query's loading and failure.
+  // The same cache entry the timeline reads; the materials block names its own failure too.
   const streamQ = useCourseStream(shellIds);
   const setStatus = useSetItemStatus();
 
@@ -236,7 +250,7 @@ export function CourseStream({ courseId }: { courseId: string }) {
         error={workItemsQ.error}
       />
 
-      <MaterialHistory posts={materialPosts} />
+      <MaterialHistory posts={materialPosts} failed={streamQ.isError} />
 
       <CourseTimeline courseId={courseId} />
     </div>
