@@ -1,0 +1,17 @@
+[project]
+name = "bb2dash-ingest"
+version = "0.1.0"
+description = "The locked Python set extract_text.py runs on (brief 100 task 14): pull_files.mjs and the sync runner both call it through `uv run --locked`."
+requires-python = ">=3.12,<3.13"
+# What extract_text.py imports beyond the standard library (docx, pptx, openpyxl), pinned; uv.lock
+# pins the rest (lxml, Pillow, XlsxWriter, et-xmlfile, typing-extensions). pdftotext is not Python:
+# Xpdf on the Windows host, poppler-utils in the sync image.
+dependencies = [
+  "python-docx==1.2.0",
+  "python-pptx==1.0.2",
+  "openpyxl==3.1.5",
+]
+
+[tool.uv]
+# A set of scripts, not a package: uv installs the dependencies and never builds this project.
+package = false

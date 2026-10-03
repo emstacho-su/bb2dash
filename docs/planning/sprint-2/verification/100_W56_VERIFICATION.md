@@ -171,7 +171,7 @@ If the `.claude.json` count is not 0 after step 3, a local-scope copy of the old
 `$env:BB2DASH_SERVICE_KEY = [IO.File]::ReadAllText('C:/Users/stack/.bb2dash-secrets/bb2dash_mcp_service_key'); node scripts/google-consent.mjs; Remove-Item Env:BB2DASH_SERVICE_KEY`
 (plus its three Google variables, as its header says).
 
-### Not verified here
+### Not verified here (task 17)
 
 * A real search through the image (needs the real key: step 2 above).
 * `claude mcp add` itself, and `claude mcp list` against the docker registration (writes
@@ -180,3 +180,99 @@ If the `.claude.json` count is not 0 after step 3, a local-scope copy of the old
 * Reading a key file from `C:/Users/stack/.bb2dash-secrets/` itself, whose access list holds only Stack's
   account: the dummy lived in the scratchpad. Docker Desktop reads bind sources as the signed-in user, so
   it should read it; step 2 proves it.
+
+## Task 14, host half — the locked Python set; `extractUnits` runs it; Xpdf vs poppler on the fixtures
+
+Not on the integrated branch of task 13a: W-55's `feat/containers-14-sync` is not merged into this
+branch yet, and the task 14 files do not touch W-55's. The check below is re-run after the 13a merge.
+
+### RED (test first; fixtures made, `extractUnits` not yet changed)
+
+```
+node --test --test-reporter=tap ingest/extract_text.test.mjs     (before ingest/pyproject.toml existed)
+  # SyntaxError: The requested module './pull_files.mjs' does not provide an export named 'extractUnits'
+  not ok 1 - ingest\extract_text.test.mjs
+  # tests 1   # pass 0   # fail 1
+```
+
+The same RED after `pyproject.toml`, `uv.lock`, the four fixtures and `expected.json` were written: the
+file still failed on the missing export, i.e. `extractUnits` still ran `uv run --python 3.12 --with …`.
+
+### GREEN
+
+```
+node --test --test-reporter=tap ingest/extract_text.test.mjs
+  ok 1 - pyproject.toml pins the three libraries exactly, and uv.lock locks the same versions
+  ok 2 - extractUnits runs the locked project, never `--with`
+  ok 3 - sample.pdf: the locked extractor's units equal expected.json
+  ok 4 - sample.docx: the locked extractor's units equal expected.json
+  ok 5 - sample.pptx: the locked extractor's units equal expected.json
+  ok 6 - sample.xlsx: the locked extractor's units equal expected.json
+  # tests 6   # pass 6   # fail 0
+
+node --test --test-reporter=tap ingest/extract_text.test.mjs ingest/pull_files.test.mjs   (the task's check, host)
+  # tests 43
+  # pass 43
+  # fail 0
+```
+
+Node 24's default reporter prints `ℹ fail 0` for the same run; `--test-reporter=tap` gives the brief's
+`# fail 0` line.
+
+* `ingest/pyproject.toml`: `requires-python = ">=3.12,<3.13"` (the `--python 3.12` the old call passed),
+  `python-docx==1.2.0`, `python-pptx==1.0.2`, `openpyxl==3.1.5` (what `extract_text.py` imports beyond
+  the standard library), `[tool.uv] package = false`.
+* `ingest/uv.lock` (uv 0.12.19, `uv lock --check` clean): 9 packages — the project, the three above, and
+  `lxml` 6.1.3, `pillow` 12.3.0, `xlsxwriter` 3.2.9, `et-xmlfile` 2.0.0, `typing-extensions` 4.16.0, with
+  manylinux wheels for the image as well as Windows ones.
+* `extractUnits` (`ingest/pull_files.mjs`, now exported, :427 on this branch; the brief's ":187" predates
+  Phase 18) runs `uv run --locked --project <ingest> python <ingest>/extract_text.py <file>`; `--locked`
+  stops on a stale lock instead of re-resolving. Its `run` argument defaults to `execFileSync` and is
+  injected only by the test. Nothing else in the file changed, so the constant `EXTRACT_DEPS` (:93) is now
+  unused; it is left for the PM to delete at integration, under the "that function only" rule.
+* `uv run` creates `ingest/.venv` on first use; uv writes a `.gitignore` of `*` inside it, so
+  `git status` stays clean.
+* The fixtures (`ingest/fixtures/extract/`) are made by `make_samples.py` there, every word written in
+  that script, no course material: `sample.pdf` (3 pages, page 2 blank, a hand-written PDF 1.4 with a
+  Helvetica font), `sample.docx` (heading, paragraphs, an empty one, a 2×2 table), `sample.pptx` (title
+  slide, a table slide with a speaker note, a blank slide, a text-box slide), `sample.xlsx` (a sheet with
+  an empty row and a blank cell, an empty sheet, a notes sheet). `expected.json` was written by hand from
+  `extract_text.py`'s rules (skipped blank units keep the numbering of what follows, ` | ` joins,
+  `[notes] `) before the GREEN run, not copied from its output.
+* `sample.pdf`'s binary-marker comment carries a NUL byte, so git classes it binary
+  (`git ls-files --eol` → `i/-text w/-text`). The first cut had none; `git add` warned "LF will be
+  replaced by CRLF", and under this laptop's `core.autocrlf=true` a later checkout would have rewritten its
+  line ends and broken the xref offsets. The fixtures were regenerated and the check re-run (same
+  `# fail 0`). The text files (`expected.json`, `pyproject.toml`, `uv.lock`) survive CRLF:
+  `uv lock --check` on a CRLF copy of the lock → resolved, exit 0.
+
+### pdftotext: the host is Xpdf **4.06**, not the brief's 4.00
+
+```
+which -a pdftotext            -> /ucrt64/bin/pdftotext   (C:\Program Files\Git\ucrt64\bin\pdftotext.exe)
+pdftotext -v                  -> pdftotext version 4.06 [www.xpdfreader.com]
+PowerShell: Get-Command pdftotext -All -> nothing (exit 1)
+```
+
+It is on Git Bash's PATH only, so `pull_files.mjs` extracts PDFs when run from Git Bash (as the bb-sync
+skill does) and would report `failed: …` for every PDF from a plain PowerShell. Xpdf writes CRLF line ends
+on Windows; Python's text mode turns them into LF before the JSON.
+
+**Preview, not the owed check:** poppler in a throwaway `node:22-slim` container (Debian 12,
+`pdftotext version 22.12.0`, apt-installed in a `--rm` run, the fixtures mounted read-only) gave the same
+bytes for `sample.pdf` as Xpdf except LF for CRLF: the same words, the blank page's `\f\f`, the final `\f`.
+The sync image's poppler (Ubuntu noble) is a different build, so the in-image run below still decides.
+
+### Owed to task 15 (the sync image is not built here)
+
+* The in-image half of the check: `docker compose run --rm sync node --test --test-reporter=tap
+  ingest/extract_text.test.mjs` → `# fail 0`, against the same `expected.json`, recorded here with the
+  image's `pdftotext -v`.
+* What that run needs from the image: `uv` and `poppler-utils` installed; `ingest/pyproject.toml` and
+  `ingest/uv.lock` copied and the set synced at build (`uv sync --locked --project /app/ingest`, owned by
+  `pwuser`), so `extractUnits`'s `uv run --locked` needs no network at run time (`UV_PYTHON_DOWNLOADS=never`
+  with noble's Python 3.12 satisfies `requires-python`); the root `.dockerignore` must exclude
+  `ingest/.venv` (a Windows venv copied into a Linux image breaks `uv run`) and `__pycache__`; and the
+  fixtures plus `extract_text.test.mjs`, `pull_files.mjs`, `fetch_signed.mjs` and `embed_corpus.mjs`
+  present at `/app/ingest` for the test to import.
+* The re-run of the host check on the integrated branch after task 13a.

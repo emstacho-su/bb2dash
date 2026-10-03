@@ -424,9 +424,14 @@ export function anonHeaders(key, contentType) {
   return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': contentType };
 }
 
-function extractUnits(ingestDir, filePath) {
-  const args = ['run', '--python', '3.12', ...EXTRACT_DEPS.flatMap((d) => ['--with', d]), 'python', path.join(ingestDir, 'extract_text.py'), filePath];
-  const out = execFileSync('uv', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: ingestDir });
+/**
+ * extract_text.py on the locked set (ingest/pyproject.toml + ingest/uv.lock, brief 100 task 14), so
+ * the host and the sync image run the same pinned libraries; `--locked` stops on a stale lock rather
+ * than re-resolving. `run` is execFileSync, injectable for extract_text.test.mjs.
+ */
+export function extractUnits(ingestDir, filePath, run = execFileSync) {
+  const args = ['run', '--locked', '--project', ingestDir, 'python', path.join(ingestDir, 'extract_text.py'), filePath];
+  const out = run('uv', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: ingestDir });
   return parseExtractOutput(out);
 }
 
