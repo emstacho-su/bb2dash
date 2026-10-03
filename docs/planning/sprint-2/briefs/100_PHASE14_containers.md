@@ -882,3 +882,56 @@ allowed only where an item names them. The spike's own findings (the PM's files)
    `scripts/register-*.ps1` defaults move to `~/vault` (those default lines only), so hooks and the nightly
    agree. The `vaultAvailable()` behaviour with `~/vault` is accepted: `~/vault` is the documented default.
    Check: grep-clean covers those lines.
+
+## Round 2 — W-58 (bb2dash-stack `feat/containers-14-stack`), from `/code-review main high` on 5d36b7a, 2026-10-03
+
+Confirmed findings, each fixed test-first and pushed as `fix(14-R2-<n>): …`. Items 1–6 are the ones that
+matter most; none may be left open. A change to the frozen volume list (item 2) is the PM's call, made here.
+
+1. **`overrideCommand: true` skips the entrypoint**, so the VS Code / devcontainer-CLI route starts with no
+   firewall, no `ANTHROPIC_API_KEY` guard and no secrets. Set it to `false`, and make the entrypoint the only
+   way the container starts. Check: a test that reads `devcontainer.json` and fails on `true`.
+2. **The dev container must not see the secret files or the host checkouts (PM call).** `DEV_ROOT` stops
+   being a host bind: the dev container works in its own clones in a sixth named volume, `dev-src`, cloned
+   on first `just dev` with `gh_token` (the brief's C-2 / R-92 "its own clones"). The umbrella bind stays
+   only if it is needed, and then with `secrets/` shadowed by an empty read-only tmpfs and `.env`,
+   `machine.env` shadowed by an empty read-only file. The README's Linux `npm ci` then runs in the clones,
+   never in a Windows checkout. Check: in a throwaway dev container (`-p bb2dash-stack-test`, empty secrets
+   template with dummy values), `ls /workspaces/bb2dash-stack/secrets` is empty, `cat` of every secret path
+   under the workspace fails, and no path under `/workspaces` is a Windows checkout.
+3. **The memory mount's parent folders are root-owned.** Pre-create `/home/node/.claude/projects/...` owned by
+   `node` in the Dockerfile. Check: in the throwaway container, user `node` can create a file in
+   `~/.claude/projects/-workspaces-bb2dash/`.
+4. **The key scan misses `sbp_` and `gho_ / ghu_ / ghs_ / ghr_` tokens.** Add them. Check: fixture cases.
+5. **The key scan fails open.** A file it cannot scan (over 1 MB, binary-looking, UTF-16, a symlink) is not
+   copied, and the seed lists each one it left out. UTF-16LE text is decoded and scanned, not skipped.
+   Check: fixture cases for each kind.
+6. **Seed order.** Filter `settings.json` (drop `env`, `apiKeyHelper`) before the key scan; only folders the
+   scan emptied are removed. Check: a fixture whose `env` holds a token yields a seeded `settings.json`
+   without `env`.
+7. **Secrets reach only PID 1.** A shell from `docker compose exec dev` or a VS Code terminal gets the same
+   variables: an `/etc/profile.d/` script and the bash rc read the `*_FILE` paths at shell start (values are
+   never written to a file). Check: `docker compose exec dev bash -lc 'test -n "$CLAUDE_CODE_OAUTH_TOKEN"'`
+   with a dummy secret.
+8. **`DATABASE_URL` means the bb2dash database in bb2dash's own docs.** In the dev container the harness URL
+   is `HARNESS_DATABASE_URL`, read only by the rag MCP launcher. Check: `env | grep -c '^DATABASE_URL='` → 0
+   in the throwaway container.
+9. **`SECRETS_DIR` only reaches compose through `just`.** `.env.example` sets it (uncommented, with the
+   placeholder path explained), and the doctor fails when it is unset or names a missing folder. Check: a
+   doctor test.
+10. **The firewall pins CDN addresses once.** Re-resolve the allowed domains on a timer inside the container
+    (every 10 minutes, adding to the ipset, never removing a live entry mid-session), and log each refresh.
+    Check: a test of the refresh function against a fake resolver.
+11. **`api.github.com/meta` is fetched unauthenticated on every start.** Use `GH_TOKEN` when present, cache the
+    last good response in the `claude-home` volume, and fall back to it on a failed fetch, logging which
+    source was used. Check: tests for fetched, cached and both-missing (the last still fails closed).
+12. **The main-module guard is not realpath-safe** in `doctor/doctor.mjs` and `scripts/lib/seed-tools.mjs`:
+    compare real paths, and a script that does not recognise itself as main exits non-zero, never a silent 0.
+    Check: a test that runs each through a symlink or junction.
+13. **`systemctl is-enabled docker` has no timeout.** Pass the doctor's timeout. Check: a test with a hanging
+    fake.
+14. **The README and `machine.env.example` disagree on the realms.** The PAT covers the three realm repos
+    (`vault-projects`, `vault-classes`, `vault-harness`); fix every "two". Check: grep.
+
+Report as before (per item, the check's line and SHA), and update the scratchpad verification file with a
+Round 2 section.
