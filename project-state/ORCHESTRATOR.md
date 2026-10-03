@@ -303,7 +303,7 @@ brief's B-table. Before cutting workers, the phase's PM reads that brief's resid
 §3 and fixes or strikes each one in the phase's own PR. The used sprint 1 prompts are history in
 `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPTS.md`.
 
-**Position on 2026-10-03 (audit 108):** Phases 15, 16, 17, 18, 19 and 20 are on `main`; D1 (Phase 14) is running in its own session (launcher PR #62 open; the runner live against prod); open next: D2 (Phase 21) after 14 merges, F (Phase 22) last, E (Stack's open items, §4) any sitting. The PM's own next PRs, outside any phase: a one-line typecheck fix for `web/e2e/walk19.spec.ts` with the name of the one failing SQL unit, the crawler PR that finishes Phase 18's task 19 (key lists, header, R-66/R-75 rows, slide 13 of `bb_file:8`), and the walk-18 screenshots on prod.
+**Position on 2026-10-03 (audit 108):** Phases 15, 16, 17, 18, 19 and 20 are on `main`; D1 (Phase 14) is running in its own session (launcher PR #62 open; the runner live against prod); open next: D2 (Phase 21) after 14 merges, F (Phase 22) last, E (Stack's open items, §4) any sitting. The PM's own next PRs, outside any phase: PR #65 (the `sync_runner` membership line ported from Phase 14's branch so `main`'s suite reads 59/59; the typecheck gap was the main checkout's stale `web/node_modules`, fixed by `npm ci`), the crawler PR that finishes Phase 18's task 19 (key lists, header, R-66/R-75 rows, slide 13 of `bb_file:8`), and the walk-18 screenshots on prod.
 
 **Position on 2026-09-29 (after PRs #30–#37):** the letters follow the chronology since 2026-09-29 (DECISIONS of that
 " . "date): A = Phase 20, B = 17 + 18 then 19, C = 16, D = 14 then 21, E = Stack's open items, F = 22; Phase 15 is done and
