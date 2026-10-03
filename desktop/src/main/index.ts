@@ -22,10 +22,12 @@
 
 import { app, BrowserWindow, ipcMain } from 'electron';
 
-import { allowedOrigins } from '../core/config';
+import { allowedOrigins, usesSyncTerminal } from '../core/config';
 import type { DesktopConfig } from '../core/config';
 import { loadConfig, reportConfigError } from './config';
 import { createNamedLogger, log, logError } from './log';
+import { createLoginPrompt, withLoginPromptCheck } from './login-prompt';
+import type { LoginPrompt } from './login-prompt';
 import { attachNavigationGuards } from './navigation';
 import type { PollerHandle } from './poller-wiring';
 import { startPoller } from './poller-wiring';
@@ -236,8 +238,41 @@ function wireWindow(window: BrowserWindow, validConfig: DesktopConfig): void {
   });
 }
 
-/** C-7: everything the portable poller needs that only Electron can supply. */
-function startShellPoller(validConfig: DesktopConfig): PollerHandle {
+/**
+ * C-7: everything the portable poller needs that only Electron can supply. Under
+ * `syncLauncher = queue-only` the login prompt rides each tick's session read (brief 100,
+ * 2026-10-03); under `terminal` `loginPrompt` is null and the reader is the plain one.
+ */
+function startShellPoller(validConfig: DesktopConfig, loginPrompt: LoginPrompt | null): PollerHandle {
+  const createRest = createMainSessionRest(validConfig);
+  // R2-4: an expired session reads as `null` so the tick skips rather than 401-ing, and
+  // a *hidden* window is reloaded (at most once per 10 min) so the web app's own proxy
+  // rewrites the cookie. With the window closed, a short-lived hidden page does the same
+  // job. Main still never calls the auth API itself (C-5).
+  const readSession = createUsableSessionReader({
+    appUrl: validConfig.appUrl,
+    supabaseUrl: validConfig.supabaseUrl,
+    getWindow: () => {
+      const window = getMainWindow();
+      if (window === null) return null;
+      return {
+        isVisible: () => window.isVisible(),
+        isDestroyed: () => window.isDestroyed(),
+        // `needsReload` is true for a window that never loaded or whose renderer died;
+        // both are `window.ts`'s to retry, not this reader's.
+        hasLoaded: () => !needsReload(window),
+      };
+    },
+    reload: () => {
+      const window = getMainWindow();
+      if (window !== null) ensureLoaded(window);
+    },
+    refreshWithoutWindow: () => {
+      refreshSessionWithoutWindow(validConfig.appUrl, (page) =>
+        attachNavigationGuards(page, allowedOrigins(validConfig), validConfig.appUrl),
+      );
+    },
+  });
   return startPoller({
     userDataDir: app.getPath('userData'),
     appUrl: validConfig.appUrl,
@@ -245,35 +280,8 @@ function startShellPoller(validConfig: DesktopConfig): PollerHandle {
       pollIntervalMinutes: validConfig.pollIntervalMinutes,
       dueReminderTime: validConfig.dueReminderTime,
     },
-    // R2-4: an expired session reads as `null` so the tick skips rather than 401-ing, and
-    // a *hidden* window is reloaded (at most once per 10 min) so the web app's own proxy
-    // rewrites the cookie. With the window closed, a short-lived hidden page does the same
-    // job. Main still never calls the auth API itself (C-5).
-    getSession: createUsableSessionReader({
-      appUrl: validConfig.appUrl,
-      supabaseUrl: validConfig.supabaseUrl,
-      getWindow: () => {
-        const window = getMainWindow();
-        if (window === null) return null;
-        return {
-          isVisible: () => window.isVisible(),
-          isDestroyed: () => window.isDestroyed(),
-          // `needsReload` is true for a window that never loaded or whose renderer died;
-          // both are `window.ts`'s to retry, not this reader's.
-          hasLoaded: () => !needsReload(window),
-        };
-      },
-      reload: () => {
-        const window = getMainWindow();
-        if (window !== null) ensureLoaded(window);
-      },
-      refreshWithoutWindow: () => {
-        refreshSessionWithoutWindow(validConfig.appUrl, (page) =>
-          attachNavigationGuards(page, allowedOrigins(validConfig), validConfig.appUrl),
-        );
-      },
-    }),
-    createRest: createMainSessionRest(validConfig),
+    getSession: withLoginPromptCheck(readSession, createRest, loginPrompt),
+    createRest,
     getWindow: getMainWindow,
     openWindowAt: (target) => {
       if (windows === null) throw new Error('the window controller is not ready');
@@ -308,12 +316,18 @@ function start(): void {
   });
   windows.open();
 
-  attachSyncWatcher({ config: validConfig, restGet: createMainRest(validConfig) });
+  // Brief 100 task 18: under `queue-only` the Sync button only queues and the container's runner
+  // takes the request, so no terminal watcher is attached; the login prompt rides the poller.
+  if (usesSyncTerminal(validConfig)) {
+    attachSyncWatcher({ config: validConfig, restGet: createMainRest(validConfig) });
+  } else {
+    log('syncLauncher is queue-only: the Sync button only queues; the container runs the sync');
+  }
 
   // Before the tray, so *Check now* has something to run from its first click. The first
   // window already exists, so the poller attaches its focus trigger to it here; later
   // windows are attached by `wireWindow`.
-  poller = startShellPoller(validConfig);
+  poller = startShellPoller(validConfig, createLoginPrompt(validConfig));
 
   trayHandle = createTray({
     onOpen: () => openMainWindow(),
