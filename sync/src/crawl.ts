@@ -126,6 +126,8 @@ export interface FoldWaitDeps {
   now: () => number;
   timeoutMs?: number;
   pollMs?: number;
+  /** A stopping runner gives up the wait at once; the row stays claimed, as on a timeout. */
+  shouldStop?: () => boolean;
 }
 
 /** Poll `sync_run_outcome` until the run is no longer running; null when FOLD_WAIT_MS runs out. */
@@ -137,7 +139,7 @@ export async function waitForFold(runId: string, deps: FoldWaitDeps): Promise<Ru
     const outcome = await deps.rpc.runOutcome(runId);
     if (outcome && outcome.status !== 'running') return outcome;
     const left = deadline - deps.now();
-    if (left <= 0) return null;
+    if (left <= 0 || deps.shouldStop?.()) return null;
     await deps.sleep(Math.min(poll, left));
   }
 }

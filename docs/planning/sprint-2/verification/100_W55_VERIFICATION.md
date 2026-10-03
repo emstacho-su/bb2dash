@@ -339,3 +339,72 @@ grep -c "migration 031" skills/bb-sync/SKILL.md
 
 `sync_login_required()` returns the open item's id by reading it back from `attention_items` after
 `raise_attention`, which returns a boolean (041:127–130); the brief's bigint return stands.
+
+## Task 12 — integration and coverage; the three entry points
+
+`sync/src/secrets.ts` (three secrets from `X`, `X_FILE` or `/run/secrets/<name>`, BOM/CR/LF stripped, a
+service key refused in every slot, the DSN refused on 6543 or without an encrypted sslmode),
+`sync/src/main.ts` (`startRunner` on injected ports; `realDeps` wires Playwright, pg and the
+filesystem), `sync/src/probe.ts`, `sync/src/enqueue.ts`.
+
+RED:
+
+```
+cd sync && npx vitest run test/secrets.test.ts
+ FAIL  test/secrets.test.ts
+ Error: Cannot find module '../src/secrets.js' imported from …/sync/test/secrets.test.ts
+
+cd sync && npx vitest run test/integration.test.ts
+ FAIL  test/integration.test.ts
+ Error: Cannot find module '../src/enqueue.js' imported from …/sync/test/integration.test.ts
+```
+
+GREEN, the DoD's sync line:
+
+```
+cd sync && npm run typecheck && npm run build && npx vitest run --coverage
+ Test Files  7 passed (7)
+      Tests  107 passed (107)
+Statements   : 87.64% ( 681/777 )
+Branches     : 81.89% ( 371/453 )
+Functions    : 75.28% ( 131/174 )
+Lines        : 89.94% ( 626/696 )
+exit 0
+```
+
+`integration.test.ts`: the scrubbed crawl replayed twice through a fake page into a fake database
+that answers the twelve functions by name (through the real `createRpc`), across two runner starts
+with a `just sync-now` (`enqueue.js`) between them. The call order is
+`claim, register, crawl, wait, files, embed, close`; a second pass on the done request calls nothing
+after `sync_next()`; each replay lands 9 `bb_raw` rows under its own run id; the run's
+`summary.changes` reads `["fold line", "Files: 1 pulled"]`. Playwright is mocked to pin the real
+launch (`headless: false`, `chromiumSandbox: true`) and the probe (`users/me`, `maxRedirects: 0`).
+
+The built entry points, run from the repo root with no credential:
+
+```
+node sync/dist/probe.js               -> users/me none 2026-10-03T21:22:45.227Z      exit 3
+node sync/dist/probe.js --heartbeat   -> heartbeat stale or missing                   exit 1
+node sync/dist/enqueue.js             -> enqueue: SYNC_RUNNER_DB_URL is not set: …    exit 2
+node sync/dist/main.js                -> sync-runner: cannot start: SYNC_RUNNER_DB_URL is not set: …  exit 2
+```
+
+### For W-56 (task 15) and the PM: what the image and compose need from the runner
+
+* Build: `cd sync && npm ci && npm run build` (esbuild bundles `src/main.ts`, `probe.ts`, `enqueue.ts`
+  to `sync/dist/`; npm packages stay external, so `sync/node_modules` must be in the image; the
+  `ingest/*.mjs` imports stay external and resolve to `/app/ingest/` at run time).
+  `desktop/src/core/sync-id.ts` is bundled in, so the image needs no `desktop/`.
+* Run: `node sync/dist/main.js` from `/app` as `pwuser` with `DISPLAY` set.
+* Secrets: `sync_runner_db_url`, `supabase_publishable_key`, `supabase_anon_jwt` mounted at
+  `/run/secrets/`; the runner reads them itself, so `docker compose exec sync node sync/dist/enqueue.js`
+  needs no shim.
+* Environment (all optional): `KEEPALIVE_MINUTES` (default 20; 0 turns the keep-alive off; the spike's
+  `JITTER_MINUTES` and `LOGIN_WATCH_SECONDS` are fixed constants in the runner, not env),
+  `BB_PROFILE_DIR` (default `/home/pwuser/bb-profile`), `COURSE_FILES_DIR` (default
+  `/app/course context`), `SYNC_STATE_DIR` (default `/tmp/bb2dash-sync`), `SYNC_TMP_DIR` (default
+  `/tmp/bb2dash-sync/downloads`; tmpfs), `SUPABASE_URL` (default the project's).
+* Healthcheck: `node sync/dist/probe.js --heartbeat` (exit 0 while the heartbeat, written every
+  30 s, is younger than 120 s).
+* The image needs `uv` and `ingest/`'s locked project for `extract_text.py` (task 14), and Node for
+  `ingest/embed_corpus.mjs`.

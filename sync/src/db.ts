@@ -8,8 +8,13 @@
  * line is the record of each login). Nothing here prints the DSN or any part of it.
  */
 
+import pg from 'pg';
+
 import { isValidSyncId } from '../../desktop/src/core/sync-id.js';
 import type { FoldStatus, Report } from './report.js';
+
+/** The application name the runner's sessions carry in pg_stat_activity. */
+export const APPLICATION_NAME = 'bb2dash-sync-runner';
 
 export type QueryResult = { rows: Record<string, unknown>[] };
 export type QueryFn = (sql: string, params?: readonly unknown[]) => Promise<QueryResult>;
@@ -186,6 +191,11 @@ export interface PgClientLike {
   query(sql: string, params?: readonly unknown[]): Promise<QueryResult>;
   end(): Promise<unknown>;
   on(event: 'error', listener: (error: Error) => void): unknown;
+}
+
+/** A real pg.Client for the session-pooler DSN; connected by createPgQuery. */
+export function newPgClient(dsn: string): PgClientLike {
+  return new pg.Client({ connectionString: dsn, application_name: APPLICATION_NAME }) as unknown as PgClientLike;
 }
 
 export interface PgQueryDeps {
