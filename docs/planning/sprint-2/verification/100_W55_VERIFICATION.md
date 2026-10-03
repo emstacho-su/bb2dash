@@ -574,3 +574,14 @@ client; the next call reconnects. A statement refusal (`22023`) keeps it.
 RED   integration.test.ts › SQLSTATE 08006 / 08003 / 57P01 / 57P03 / XX000 …   5 failed
 GREEN integration.test.ts   22 passed
 ```
+
+### Item 10 — one `readTextOrNull`, in `secrets.ts`, that tells unreadable from missing
+
+ENOENT → null (not set); any other error (EACCES, EISDIR, …) → a `ConfigError` naming the path, never
+the contents. `main.ts`, `probe.ts` and `enqueue.ts` import it; their copies are gone (`probe.js
+--heartbeat` treats an unreadable heartbeat as stale).
+
+```
+RED   secrets.test.ts   2 failed (the helper; no copies in main/probe/enqueue)
+GREEN the whole sync suite 127 passed; tsc exit 0
+```

@@ -20,7 +20,7 @@ import { createPgQuery, createRpc, newPgClient, redactDsn, type QueryFn } from '
 import { makeEmbedder, makeExtractor, makeSupabaseFiles, runFilesStep, spawnCollect, type ExtractUnit } from './files.js';
 import { BLACKBOARD_ORIGIN, LoginWatch, PROBE_URL, type LoginPort } from './login.js';
 import { runLoop } from './loop.js';
-import { loadConfig, stateFiles, type RunnerConfig } from './secrets.js';
+import { loadConfig, readTextOrNull, stateFiles, type RunnerConfig } from './secrets.js';
 
 export const HEARTBEAT_MS = 30_000;
 const NAVIGATION_TIMEOUT_MS = 60_000;
@@ -242,13 +242,6 @@ async function openPlaywright(config: RunnerConfig, log: (line: string) => void)
   };
 }
 
-function readTextOrNull(file: string): string | null {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return null;
-  }
-}
 
 let writeSeq = 0;
 const writesInFlight = new Map<string, Promise<void>>();

@@ -12,6 +12,7 @@
  * No error message carries a secret's value.
  */
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -46,6 +47,21 @@ export interface SecretSource {
   /** The file's text, or null when it cannot be read. */
   readFile(file: string): string | null;
   secretsDir?: string;
+}
+
+/**
+ * The one file reader for secrets and state (R2 item 10): the text, or null when the file does not
+ * exist. Any other failure (EACCES, EISDIR, …) is not "not set": it throws a ConfigError naming the
+ * path, never the contents.
+ */
+export function readTextOrNull(file: string): string | null {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch (error) {
+    const code = (error as { code?: unknown })?.code;
+    if (code === 'ENOENT') return null;
+    throw new ConfigError(`cannot read ${file}: ${typeof code === 'string' ? code : 'unreadable'}`);
+  }
 }
 
 export function cleanSecret(raw: string): string {

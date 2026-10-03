@@ -10,11 +10,10 @@
  * It connects to nothing and reads no secret. It imports no other entry point.
  */
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { stateDirFrom, stateFiles } from './secrets.js';
+import { readTextOrNull, stateDirFrom, stateFiles } from './secrets.js';
 
 /** Four missed heartbeats (the runner writes one every 30 s). */
 export const HEARTBEAT_STALE_MS = 120_000;
@@ -30,13 +29,6 @@ export interface ProbeDeps {
   env?: Record<string, string | undefined>;
 }
 
-function readTextOrNull(file: string): string | null {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return null;
-  }
-}
 
 export async function probeMain(argv: readonly string[], deps: ProbeDeps = {}): Promise<number> {
   const readFile = deps.readFile ?? readTextOrNull;
@@ -45,7 +37,13 @@ export async function probeMain(argv: readonly string[], deps: ProbeDeps = {}): 
   const files = stateFiles(deps.stateDir ?? stateDirFrom(deps.env ?? process.env));
 
   if (argv.includes('--heartbeat')) {
-    const beat = Date.parse((readFile(files.heartbeat) ?? '').trim());
+    let text: string | null = null;
+    try {
+      text = readFile(files.heartbeat);
+    } catch {
+      text = null; // unreadable is as unhealthy as missing
+    }
+    const beat = Date.parse((text ?? '').trim());
     const fresh = Number.isFinite(beat) && now().getTime() - beat < HEARTBEAT_STALE_MS;
     out(fresh ? `heartbeat ${new Date(beat).toISOString()}` : 'heartbeat stale or missing');
     return fresh ? 0 : 1;
