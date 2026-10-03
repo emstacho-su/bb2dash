@@ -12,5 +12,7 @@ course context/
 .playwright-mcp/
 .harness/checkpoint-body.md
 
-# Phase 14: local secret files (the umbrella repo bb2dash-stack holds the real folder)
+# Phase 14: local secret files (the real folder is SECRETS_DIR, outside every repo)
 secrets/
+# The rag MCP server's fastembed model cache when FASTEMBED_CACHE_DIR is unset: ~130 MB (P-47)
+local_cache/
