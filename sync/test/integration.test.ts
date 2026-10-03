@@ -11,7 +11,7 @@ import { readFixture } from '../../db/fixtures/phase14/scrub_crawl.mjs';
 import { CrawlError, runCrawl, type CrawlPage } from '../src/crawl.js';
 import { createPgQuery, redactDsn, type PgClientLike, type QueryFn, type QueryResult } from '../src/db.js';
 import { enqueueMain } from '../src/enqueue.js';
-import { realDeps, startRunner, type BrowserSession, type RunnerDeps } from '../src/main.js';
+import { realDeps, startRunner, writeAtomic, type BrowserSession, type RunnerDeps } from '../src/main.js';
 import { probeMain } from '../src/probe.js';
 import type { RunnerConfig } from '../src/secrets.js';
 
@@ -481,6 +481,24 @@ describe('runCrawl', () => {
     await expect(runCrawl(page({ result: { run_id: RUN, log: [['IST.323', 401], ['calendar', 201]] } }).p, opts)).rejects.toThrow(/refused 1 post/);
     await expect(runCrawl(page({ result: { run_id: 'other', log: [] } }).p, opts)).rejects.toThrow(/not the registered/);
     await expect(runCrawl(page({ result: { run_id: RUN, log: [['IST.323', 201]] } }).p, opts)).rejects.toThrow(/no calendar row/);
+  });
+});
+
+describe('writeAtomic (R2-1)', () => {
+  it('concurrent writes to the same file all succeed and leave valid JSON', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'w55-atomic-'));
+    try {
+      const file = path.join(tmp, 'state', 'login.json');
+      // Startup writes the heartbeat twice at once; many concurrent writes make the race certain.
+      const results = await Promise.allSettled(
+        Array.from({ length: 20 }, (_, n) => writeAtomic(file, JSON.stringify({ status: 200, n }))),
+      );
+      expect(results.filter((r) => r.status === 'rejected')).toEqual([]);
+      expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toMatchObject({ status: 200 });
+      expect(fs.readdirSync(path.dirname(file))).toEqual(['login.json']);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 

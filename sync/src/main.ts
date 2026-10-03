@@ -250,12 +250,36 @@ function readTextOrNull(file: string): string | null {
   }
 }
 
-/** Write through a temp file and a rename, so probe.js never reads half a file. */
-async function writeAtomic(file: string, text: string): Promise<void> {
-  await fs.promises.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  await fs.promises.writeFile(tmp, text, 'utf8');
-  await fs.promises.rename(tmp, file);
+let writeSeq = 0;
+const writesInFlight = new Map<string, Promise<void>>();
+
+/**
+ * Write through a temp file and a rename, so probe.js never reads half a file (R2-1: startup writes
+ * the heartbeat twice at once). Each write gets its own temp name, so no rename finds another's
+ * temp file gone, and writes to one file run one after another in call order, so the last call
+ * wins and no two renames race onto the same target (Windows refuses that with EPERM).
+ */
+export function writeAtomic(file: string, text: string): Promise<void> {
+  writeSeq += 1;
+  const tmp = `${file}.${process.pid}.${writeSeq}.tmp`;
+  const previous = writesInFlight.get(file) ?? Promise.resolve();
+  const write = previous
+    .catch(() => undefined)
+    .then(async () => {
+      await fs.promises.mkdir(path.dirname(file), { recursive: true });
+      await fs.promises.writeFile(tmp, text, 'utf8');
+      try {
+        await fs.promises.rename(tmp, file);
+      } catch (error) {
+        await fs.promises.rm(tmp, { force: true });
+        throw error;
+      }
+    });
+  writesInFlight.set(file, write);
+  void write.finally(() => {
+    if (writesInFlight.get(file) === write) writesInFlight.delete(file);
+  }).catch(() => undefined);
+  return write;
 }
 
 export function realDeps(env: NodeJS.ProcessEnv = process.env): RunnerDeps {
