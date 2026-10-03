@@ -41,6 +41,8 @@ export const KEEPALIVE_JITTER_MINUTES = 3;
 export const SETTLE_MS = 15_000;
 /** The check while the login is dead or unknown, so the morning login is seen within a minute. */
 export const LOGIN_WATCH_MS = 60_000;
+/** R2 item 4: with the keep-alive off (0), the live login is still probed this often, without navigating. */
+export const LOGIN_CHECK_MINUTES = 60;
 
 const MS_PER_MINUTE = 60_000;
 const MAX_KEEPALIVE_MINUTES = 1_440;
@@ -113,7 +115,7 @@ export function classifyProbe(answer: ProbeAnswer, currentUrl: string): Verdict 
   return 'error';
 }
 
-/** KEEPALIVE_MINUTES from the environment: 20 when unset, 0 turns the keep-alive off. */
+/** KEEPALIVE_MINUTES from the environment: 20 when unset; 0 turns the navigation off (the watch still probes hourly). */
 export function parseKeepaliveMinutes(raw: string | undefined): number {
   if (raw === undefined || raw.trim() === '') return DEFAULT_KEEPALIVE_MINUTES;
   const value = Number(raw);
@@ -172,10 +174,10 @@ export class LoginWatch {
     this.timer = null;
   }
 
-  /** The wait before the next tick in the current state; null while alive with the keep-alive off. */
-  nextDelayMs(): number | null {
+  /** The wait before the next tick in the current state. */
+  nextDelayMs(): number {
     if (this.state !== 'alive') return LOGIN_WATCH_MS;
-    if (this.deps.keepaliveMinutes === 0) return null;
+    if (this.deps.keepaliveMinutes === 0) return LOGIN_CHECK_MINUTES * MS_PER_MINUTE;
     return keepaliveDelayMs(this.deps.keepaliveMinutes, this.random);
   }
 
@@ -232,6 +234,9 @@ export class LoginWatch {
       if (this.state === 'alive') {
         if (this.deps.isPassRunning()) {
           this.deps.log('login: keep-alive tick skipped, a pass is running');
+        } else if (this.deps.keepaliveMinutes === 0) {
+          // The keep-alive is off: probe only, so an overnight death is still seen (R2 item 4).
+          await this.check('alive-check');
         } else {
           await this.keepalive();
         }

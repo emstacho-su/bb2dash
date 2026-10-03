@@ -554,3 +554,13 @@ sync_runner`); the check now runs as the test role.
 node scripts/db-test.mjs --only phase14_093_review_fixes.sql   -> PASS; db-test: passed 1, failed 0, units 1
 node scripts/db-test.mjs --only phase14_091_sync_runner.sql    -> PASS; db-test: passed 1, failed 0, units 1
 ```
+
+### Item 4 — `KEEPALIVE_MINUTES=0` no longer blinds the watch
+
+0 turns off the navigation only; while alive the watch probes every `LOGIN_CHECK_MINUTES = 60`
+(with the silent re-login on a dead answer), so an overnight death is seen.
+
+```
+RED   login.test.ts › KEEPALIVE_MINUTES=0 stops the navigation only …   ×
+GREEN login.test.ts   22 passed (fake clock: a probe at 60 min, no goto; then 401 -> re-login -> dead -> raised)
+```
