@@ -334,3 +334,29 @@ exit 1
 ```
 
 The prod blocks (P) and (V) of `phase19_132` still pass against the 229 backfilled rows.
+
+### 138, DRY RUN (not applied)
+
+Three rolled-back calls on 2026-10-03, each `statement_timeout = '90s'`, `lock_timeout = '10s'`:
+
+1. 138's function, then the body of `phase19_138`: passed. In the same transaction:
+   `has_function_privilege('authenticated', 'public.material_history_record(uuid)', 'execute')`
+   false; task 8's P-98 query 0; task 9's untraced material posts 0; prod history 229 rows and
+   65 Stream material posts, unchanged (138 rewrites no row).
+2. 138's function, then the body of `phase19_132` as moved to 138 (blocks P, V, 1, 2, 2b, O, 4,
+   6, 8, R2-5, X): passed. The (P) block's second formulation, now with 138's path and
+   session-url rules, still equals the newest recorded crawl's rows (`2a4d4a2e`).
+3. 138's function, then `phase9_transform_states`'s two blocks (a fixture crawl whose
+   announcement breaks one stage, folded by `run_transform`; a 31-minute `running` row reaped
+   by `transform_tick`): passed. The run reads `partial`, exactly one stage `failed`
+   (`announcements`), the `history` stage `ok` with
+   `{"appeared":0,"changed":0,"vanished":0,"baseline_courses":0,"older_run":false,"sample":[]}`,
+   and the tick reports `reaped: 1`. (A first attempt at this call pasted a cut-down function
+   by mistake; its result is not counted.)
+
+`phase10a_stage_gradebook` calls neither `run_transform` nor `material_history_record`, so it
+is run after the apply, not in the dry run.
+
+Not rewritten by 138: the 229 backfilled rows keep 132's rules. Up to 10 of them are content
+rows whose only changed field is `path`, the kind R2-3 stops writing when the path changed
+because an ancestor was renamed.
