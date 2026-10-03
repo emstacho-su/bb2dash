@@ -40,8 +40,6 @@ export interface PassDeps {
   mintRunId(): string;
   setPassRunning(running: boolean): void;
   log(line: string): void;
-  /** Claims this process made per request id, for the report; a restart starts it again. */
-  claimCounts?: Map<string, number>;
 }
 
 export type PassOutcome =
@@ -141,11 +139,12 @@ export async function runPass(d: PassDeps): Promise<PassOutcome> {
       d.log(`pass: lost the claim on request ${id}`);
       return 'claim_lost';
     }
-    const counts = d.claimCounts ?? new Map<string, number>();
-    const attempts = (counts.get(id) ?? 0) + 1;
-    counts.set(id, attempts);
+    // R2 item 7: the report carries agent_requests.claim_attempts, read back through 093's
+    // sync_own_claims (the role cannot read the table), not a count this process kept.
+    const own = (await d.rpc.ownClaims()).find((c) => c.id === id);
+    const attempts = own?.claimAttempts ?? 1;
     if (attempts >= MAX_CLAIM_ATTEMPTS) {
-      d.log(`pass: request ${id} claimed ${attempts} times by this runner; the sweep flags it at ${MAX_CLAIM_ATTEMPTS}`);
+      d.log(`pass: request ${id} has been claimed ${attempts} times; the sweep flags it at ${MAX_CLAIM_ATTEMPTS}`);
     }
 
     const runId = d.mintRunId();

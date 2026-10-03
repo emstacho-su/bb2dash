@@ -172,12 +172,14 @@ describe('one pass', () => {
     expect(rec.closes[0]!.report.error).toBe('files failed: worklist read failed');
   });
 
-  it('counts this runner\'s claims of a request in the report', async () => {
-    const counts = new Map<string, number>([['501', 1]]);
-    const { rpc, rec } = fakeRpc();
-    await runPass({ ...deps(rpc, rec), claimCounts: counts });
-    expect(rec.closes[0]!.report.claim_attempts).toBe(2);
-    expect(counts.get('501')).toBe(2);
+  it('R2 item 7: reports the claim_attempts column the database holds, not a count of its own', async () => {
+    let claimed = false;
+    const { rpc, rec } = fakeRpc({
+      claim: vi.fn(async () => { rec.calls.push('claim'); claimed = true; return true; }),
+      ownClaims: vi.fn(async () => (claimed ? [{ id: '501', runId: null, claimedAt: '2026-10-03T22:00:00Z', claimAttempts: 3 }] : [])),
+    });
+    await runPass(deps(rpc, rec));
+    expect(rec.closes[0]!.report.claim_attempts).toBe(3);
   });
 
   it('the pass flag is cleared even when a call throws', async () => {
@@ -283,6 +285,13 @@ describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
     await runPass(stateDeps(rpc, { files }));
     expect(closes.map((c) => [c.id, c.state, c.report.error])).toEqual([['601', 'failed', 'fold failed']]);
     expect(files).not.toHaveBeenCalled();
+  });
+
+  it('R2 item 7: the third claim of a request reports claim_attempts 3', async () => {
+    const { rpc, rows, closes } = statefulRpc();
+    rows.get('601')!.attempts = 2;
+    await runPass(stateDeps(rpc));
+    expect(closes.map((c) => [c.id, c.report.claim_attempts])).toEqual([['601', 3]]);
   });
 
   it('never touches a claim it did not make, and leaves its own unregistered claims to the requeue', async () => {

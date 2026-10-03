@@ -149,7 +149,6 @@ export function startRunner(d: RunnerDeps): { stop(): Promise<void>; done: Promi
         passRunning = running;
       },
       log: d.log,
-      claimCounts: new Map(),
       sleep,
       shouldStop: () => stopping,
       heartbeat,

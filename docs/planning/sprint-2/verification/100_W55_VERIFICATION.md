@@ -522,3 +522,14 @@ run is still `running` sets the run `failed`, `finished_at`, and appends `sync-r
 notes; a run that already folded keeps its status. The SQL case is `phase14_093_review_fixes.sql`
 section 2; the 091 unit's name check now expects thirteen (093's `sync_own_claims`). Checked after
 093's apply (below).
+
+### Item 7 — the report's `claim_attempts` is the column's value
+
+After the claim the runner reads its row back through `sync_own_claims()` (093); the process-local
+Map is gone.
+
+```
+RED   loop.test.ts › reports the claim_attempts column the database holds …   × (reported 1)
+GREEN loop.test.ts   26 passed (incl. "the third claim of a request reports claim_attempts 3");
+      the SQL side is phase14_093_review_fixes.sql section 1 (claim, requeue, claim, requeue, claim -> 3)
+```
