@@ -673,7 +673,7 @@ export type Database = {
       bb_content: {
         Row: {
           assignment_id: string | null
-          bb_item_id: string | null
+          bb_item_id: string
           bb_type: string | null
           body: string | null
           captured_at: string
@@ -692,7 +692,7 @@ export type Database = {
         }
         Insert: {
           assignment_id?: string | null
-          bb_item_id?: string | null
+          bb_item_id: string
           bb_type?: string | null
           body?: string | null
           captured_at?: string
@@ -711,7 +711,7 @@ export type Database = {
         }
         Update: {
           assignment_id?: string | null
-          bb_item_id?: string | null
+          bb_item_id?: string
           bb_type?: string | null
           body?: string | null
           captured_at?: string
@@ -1234,6 +1234,111 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_sync_status"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      bb_material_history: {
+        Row: {
+          bb_file_id: number | null
+          bb_item_id: string
+          change: string
+          changed_fields: string[] | null
+          course_id: string
+          entity: string
+          file_name: string
+          id: number
+          path: string | null
+          recorded_at: string
+          run_id: string
+          seen_at: string
+          title: string
+        }
+        Insert: {
+          bb_file_id?: number | null
+          bb_item_id: string
+          change: string
+          changed_fields?: string[] | null
+          course_id: string
+          entity: string
+          file_name?: string
+          id?: never
+          path?: string | null
+          recorded_at?: string
+          run_id: string
+          seen_at: string
+          title: string
+        }
+        Update: {
+          bb_file_id?: number | null
+          bb_item_id?: string
+          change?: string
+          changed_fields?: string[] | null
+          course_id?: string
+          entity?: string
+          file_name?: string
+          id?: never
+          path?: string | null
+          recorded_at?: string
+          run_id?: string
+          seen_at?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bb_material_history_bb_file_id_fkey"
+            columns: ["bb_file_id"]
+            isOneToOne: false
+            referencedRelation: "bb_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_material_history_bb_file_id_fkey"
+            columns: ["bb_file_id"]
+            isOneToOne: false
+            referencedRelation: "v_bb_files_current"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_material_history_bb_file_id_fkey"
+            columns: ["bb_file_id"]
+            isOneToOne: false
+            referencedRelation: "v_content_tree"
+            referencedColumns: ["file_id"]
+          },
+          {
+            foreignKeyName: "bb_material_history_bb_file_id_fkey"
+            columns: ["bb_file_id"]
+            isOneToOne: false
+            referencedRelation: "v_file_layout"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_material_history_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bb_material_history_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_material_history_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "bb_material_history_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
           },
         ]
       }
@@ -2276,6 +2381,7 @@ export type Database = {
         Row: {
           finished_at: string | null
           id: number
+          interrupted_at: string | null
           notes: string | null
           ran_at: string
           run_id: string | null
@@ -2289,6 +2395,7 @@ export type Database = {
         Insert: {
           finished_at?: string | null
           id?: never
+          interrupted_at?: string | null
           notes?: string | null
           ran_at?: string
           run_id?: string | null
@@ -2302,6 +2409,7 @@ export type Database = {
         Update: {
           finished_at?: string | null
           id?: never
+          interrupted_at?: string | null
           notes?: string | null
           ran_at?: string
           run_id?: string | null
@@ -3685,10 +3793,13 @@ export type Database = {
           finished_at: string | null
           freshness: Json | null
           id: number | null
+          interrupted: boolean | null
+          notes: string | null
           open_attention: Json | null
           run_id: string | null
           started_at: string | null
           status: string | null
+          streams: Json | null
           summary: Json | null
           trigger: string | null
         }
@@ -3840,7 +3951,20 @@ export type Database = {
         }
         Returns: Json
       }
+      bb_content_path_history: {
+        Args: {
+          p_new: Json
+          p_new_path: string
+          p_old: Json
+          p_old_path: string
+        }
+        Returns: Json
+      }
       bb_date_in_term: { Args: { p_ts: string }; Returns: boolean }
+      bb_file_is_outside_link: {
+        Args: { p_source_url: string }
+        Returns: boolean
+      }
       bb_file_relpath: { Args: { p_file_id: number }; Returns: string }
       bb_jarray: { Args: { p: Json }; Returns: Json }
       bb_resolve_course: { Args: { p_bb_course_id: string }; Returns: string }
@@ -3870,6 +3994,10 @@ export type Database = {
       close_cleared_gaps: {
         Args: { p_sync_run_id: number; p_trigger: string }
         Returns: Json
+      }
+      file_lecture_no: {
+        Args: { p_file_name: string; p_path: string }
+        Returns: number
       }
       file_week_no: {
         Args: { p_course_id: string; p_file_name: string; p_path: string }
@@ -3927,6 +4055,7 @@ export type Database = {
           unit_no: number
         }[]
       }
+      material_history_record: { Args: { p_run_id: string }; Returns: Json }
       planner_series_check_rows: {
         Args: { p_require_id: boolean; p_rows: Json }
         Returns: undefined

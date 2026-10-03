@@ -27,6 +27,10 @@
  * (brief 97) ahead of the regenerated types. A key a row does not carry is
  * `undefined`, which the screens read as "the view did not say", never as false
  * or "no route".
+ *
+ * Migration 133 (Phase 19, brief 99) makes both material arms read
+ * `bb_material_history` and adds `change` and `run_id` to their `meta`: one
+ * post per item per registered crawl it appeared or changed in.
  */
 export interface CourseStreamMeta {
   is_read?: boolean | null;
@@ -44,6 +48,14 @@ export interface CourseStreamMeta {
   points_possible?: number | string | null;
   type?: string | null;
   status?: string | null;
+  /**
+   * 133: `bb_material_history.change` for a material post, `appeared` or
+   * `changed` (a vanished item is never posted). Typed loosely because it is
+   * jsonb: the Stream posts only the two values it knows.
+   */
+  change?: string | null;
+  /** 133: the registered crawl the change was seen in (`bb_material_history.run_id`). */
+  run_id?: string | null;
 }
 
 export type StreamPostKind = 'announcement' | 'material' | 'assignment_posted' | 'assignment_due';

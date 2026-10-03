@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-09-30** (Phase 20: PR-A #39 and harness PR-B #36 (+ #37) merged, PR-C open; V-2 walked in `101a_V2_VERIFICATION.md`, closed closed on Stack's word 2026-09-30; Session A's status in §6). Before that, **2026-09-30** (Phase 18 merged on Stack's word "merge this phase" **before its gate sync**: migrations 120–129 live, 160 opening Phase 18's overflow block 160–169 for the review fix; tasks 16–19, 26, 28 and task 14's 48 h re-read owed to the first `/bb-sync` on `main`, which is now the gate; Phase 17 merged as PR #43). Before that, **2026-09-30** (Phase 17 built on `feat/web-polish-17`, PR open, not merged: migrations 110–119 and 150 live and md5-identical, 150 opening Phase 17's overflow block 150–159; round-3 walk 24/24 on the preview; waiting on Stack's T-24 and T-26 sittings and his look at round 3). Before that, **2026-09-29** (PRs #30 Phase 15, #31 logon build + the `estac` → `stack` path pass, and #32 sync file pull merged on Stack's word; R1 done and its gate-out green on `main`, so R3 and R4 are open; every live path reads `C:/Users/stack/...`; Task 0 started 15:25Z). Before that, **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-10-03** (Phase 19 built on `feat/content-history-19`, PR open, not merged: migrations 130–139 and 170–172 live and md5-identical (138–139 round 2; 170–171 round 3 and 172 round 4 in the overflow block 170–179, DECISIONS); the PM drove it to the end with a self-paced loop over the task ledger `verification/99_PHASE19_LEDGER.md`, on Stack's 2026-10-03 word; task 27, the first register-first sync, is his next Sync). Before that, **2026-09-30** (Phase 20: PR-A #39 and harness PR-B #36 (+ #37) merged, PR-C open; V-2 walked in `101a_V2_VERIFICATION.md`, closed closed on Stack's word 2026-09-30; Session A's status in §6). Before that, **2026-09-30** (Phase 18 merged on Stack's word "merge this phase" **before its gate sync**: migrations 120–129 live, 160 opening Phase 18's overflow block 160–169 for the review fix; tasks 16–19, 26, 28 and task 14's 48 h re-read owed to the first `/bb-sync` on `main`, which is now the gate; Phase 17 merged as PR #43). Before that, **2026-09-30** (Phase 17 built on `feat/web-polish-17`, PR open, not merged: migrations 110–119 and 150 live and md5-identical, 150 opening Phase 17's overflow block 150–159; round-3 walk 24/24 on the preview; waiting on Stack's T-24 and T-26 sittings and his look at round 3). Before that, **2026-09-29** (PRs #30 Phase 15, #31 logon build + the `estac` → `stack` path pass, and #32 sync file pull merged on Stack's word; R1 done and its gate-out green on `main`, so R3 and R4 are open; every live path reads `C:/Users/stack/...`; Task 0 started 15:25Z). Before that, **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
 > rounds, record `105_BRIEF_VERIFICATION_2026-09-27.md`; §6's prompts rewritten to them). Before that, **2026-09-24** (**sprint 2 planned**:
 > requirements `91_REQUIREMENTS_v3.md`, research `92_*` + `93_SPRINT2_RESEARCH_SYNTHESIS.md`, phases
 > `94_SPRINT2_PHASES.md`, briefs `95_`–`103_`; planning PR open on `docs/sprint2-planning`; every
@@ -53,7 +53,7 @@ gitignored `.env` at registration (2026-09-29: `dist` built, 88 unit tests, `npm
 | 16 | Grades: V-1 sittings and the reconciliation migration | `briefs/96_PHASE16_grades_v1.md` | R-29..R-36 | 105–109 | **merged 2026-09-30** (PR #44, 4c310ff): sittings done 2026-09-29; 105 and 106 on prod |
 | 17 | Web polish: quick fixes, carried bugs, Inbox/planner leftovers, live proofs | `briefs/97_PHASE17_web_polish.md` | R-37, R-39 (interim), R-40, R-42..R-45, R-47..R-52, R-55..R-59, R-108; S2-home-1/2, S2-materials-1, S2-bugs-1 | 110–119, 150 (overflow block 150–159) | **merged** (PR #43, d9d5ee9); T-24 and T-26 sittings still Stack's (§4) |
 | 18 | Ingest and corpus | `briefs/98_PHASE18_ingest_corpus.md` | R-60..R-63, R-66..R-70, R-72..R-75, R-77; S2-rag-1 | 120–129 live, 160 (overflow block 160–169) | **merged 2026-09-30 before its gate sync; tasks 16–19, 26, 28 owed to the first sync on `main`** |
-| 19 | Content identity, per-crawl history, sync honesty | `briefs/99_PHASE19_content_history.md` | R-38, R-41, R-64, R-65, R-71, R-76 | 130–139 | unblocked (17 and 18 on `main`); PM recommends starting after the first sync on `main` proves 18's crawler |
+| 19 | Content identity, per-crawl history, sync honesty | `briefs/99_PHASE19_content_history.md` | R-38, R-41, R-64, R-65, R-71, R-76 | 130–139, 170–172 live (overflow block 170–179) | **PR open, ready when Stack says so**; task 27 (first register-first sync) is Stack's next Sync; his acceptance walk on the preview |
 | 14 | Containers (R-28) | `briefs/100_PHASE14_containers.md` (supersedes `82_`'s Contract) | R-81..R-96; S2-containers-1 | 091–099 | planned; the spike gates its sync half, whose workers (W-55, W-56) also wait for 15, 18 and 19 on `main`; three repos, one PR per repo plus the early `syncLauncher` PR (B-51) |
 | 20 | Harness closure: V-2 on record, note quality, checkpoint redaction | `briefs/101_PHASE20_harness_closure.md` | R-97..R-104, R-106 | none here | **PR-A (#39, 2904b20) and PR-B (harness #36, ea0e199; + harness #37, 00539be) merged 2026-09-30; PR-C open** (`docs/harness-closure-20`); live steps done; V-2 walked in `verification/101a_V2_VERIFICATION.md`, closed closed on Stack's word 2026-09-30; task 29 after PR-C merges |
 | 21 | Workspace: chat routed by complexity, on the subscription | `briefs/102_PHASE21_workspace.md` | S2-workspace-1 | 140–149 | planned; after 14 |
@@ -94,12 +94,12 @@ Rules that fall out of the graph:
    inherits 18's scripted fetch and embed step (P-36) and 19's register-first driver.
 5. **21 after 14**, **22 last** (Stack's "cleaning" placement; the Workspace page is in 22's inventory).
 6. **Migration ranges with slack**: 091–099 (14), 100–104 (15), 105–109 (16), 110–119 (17), 120–129 (18),
-   130–139 (19), 140–149 (21), 150–159 (17's overflow, taken 2026-09-29 for migration 150; DECISIONS), 160–169 (18's
+   130–139 (19), 140–149 (21), 170–179 (19's overflow, taken 2026-10-03 for 170–172; DECISIONS), 150–159 (17's overflow, taken 2026-09-29 for migration 150; DECISIONS), 160–169 (18's
    overflow, taken 2026-09-30 for migration 160; DECISIONS). A phase that runs out takes the next free block of ten and records it in
    DECISIONS, never a number inside another phase's block. Every migration is additive, applied under the
    file's name, byte-identical.
 7. **What each phase hands on** is the seam table in `94_SPRINT2_PHASES.md` §3.
-8. **Phase 19 (B3) is unblocked since 2026-09-30** (17 and 18 on `main`), but the PM recommends it wait for Stack's
+8. ~~**Phase 19 (B3) is unblocked since 2026-09-30**~~ Built 2026-10-02/03 (PR open; STATUS row 21). Kept for the record: (17 and 18 on `main`), but the PM recommends it wait for Stack's
    first `/bb-sync` on `main`: Phase 18 merged before its gate sync, so its crawler v5, in-sync pull and author
    resolution are unproven live, and 19 re-creates `stage_content` on top of that crawl. That sync is Phase 18's gate
    (DECISIONS 2026-09-30, "Phase 18 · merge"): refresh the installed skill from `main` first, run from the main
@@ -213,6 +213,13 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 
 ## 4. Open items that are Stack's, not the PM's
 
+* **Phase 19 (PR open, 2026-10-03), in this order:** (1) ~~task 27, the first register-first sync~~ done with your sync 866
+  (2026-10-03; task 27 true, every stream `fresh`); videos now post as links (your answer; migration 172), never downloaded. (2) Walk brief 99's acceptance script on the preview
+  (`web-git-feat-content-history-19-emstacho-sus-projects.vercel.app`), step 5 included (one sync interrupted on
+  purpose; the PM already proved the rule live with request 580, and Inbox item 2636 is that proof, answer or dismiss
+  it). (3) Read the nine DECISIONS rows dated 2026-10-02/03. (4) Say whether the Stream's "New and changed
+  materials" block (above the timeline, newest 8) is where you want material posts. Then "merge this phase" or
+  changes.
 * ~~Answer the sprint 2 question batch (`docs/planning/sprint-2/93_SPRINT2_RESEARCH_SYNTHESIS.md` §5, 59
   items, each with the default the PM took) and approve the phase plan (`94_`); say where Phase 14 sits
   (default: it starts with Phase 15).~~ Done by delegation 2026-09-27 (DECISIONS rows of that date; Phase 14 starts

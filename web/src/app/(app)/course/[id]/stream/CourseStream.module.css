@@ -1,4 +1,5 @@
-/* Course Stream — tracker on top, the course timeline beneath (R3-4). */
+/* Course Stream — tracker on top, new and changed materials (Phase 19, R-38),
+   then the course timeline (R3-4). */
 
 .screen {
   display: flex;
@@ -10,4 +11,62 @@
 .state {
   font-size: var(--text-base);
   color: var(--color-neutral-500);
+}
+
+/* -- new and changed materials: existing tokens only (styling is Phase 22's) -- */
+
+.materials {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.materialList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.materialRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.changeNew {
+  composes: tagAccent from '@/styles/tokens.module.css';
+}
+
+.changeChanged {
+  composes: tagOutline from '@/styles/tokens.module.css';
+}
+
+.materialTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.materialDate {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+}
+
+.earlier > summary {
+  cursor: pointer;
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+}
+
+.earlier > .materialList {
+  margin-top: var(--space-1);
 }
