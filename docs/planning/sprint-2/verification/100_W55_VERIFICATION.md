@@ -450,3 +450,17 @@ cd sync && npx vitest run test/integration.test.ts -t writeAtomic
 cd sync && npm run typecheck && npm run build && npx vitest run --coverage
  Test Files  7 passed (7)      Tests  108 passed (108)      Lines : 89.57% ( 636/710 )      exit 0
 ```
+
+## Task 7 (d) — Stack's password and the `--ping`, 2026-10-03 (recorded by the PM)
+
+Stack set `sync_runner`'s password in the Supabase SQL editor (never in a file) and stored the session-pooler
+DSN as `sync_runner_db_url` in `C:/Users/stack/.bb2dash-secrets/` (user `sync_runner.goultdzqcavefcgnifdy`,
+port 5432, `sslmode=require`). The first `--ping`, before the `alter role` had run, failed with
+`db-test: connection failed: (EAUTHQUERY) unsupported or invalid secret format`: the pooler's answer for a
+role with no password. After it:
+
+* `node scripts/db-test.mjs --ping` with that DSN as `BB2DASH_TEST_DB_URL` → `db-test: connected as sync_runner`, exit 0
+* as `sync_runner` through the same pooler: `select count(*)` from `agent_requests`, `bb_files` and
+  `attention_items` each → SQLSTATE `42501`; `select * from sync_next()` → 0 rows (nothing queued)
+
+All eleven secret files now exist in `SECRETS_DIR`.
