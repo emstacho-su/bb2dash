@@ -32,8 +32,9 @@ redirect: Chrome saves each file to Downloads and `ingest/collect_download.mjs` 
   `C:\Users\stack\projects\bb2dash` for git.
 
 ## Steps (post a one-line status after each)
-1. **Crawl.** `await bb.runAll({termName: 'Fall 2026'})` → one `bb_raw` row per course + calendar under
-   a new `run_id`. PASS: 7 course rows + calendar row for the run.
+1. **Crawl.** `await bb.runAll({ termName: 'Fall 2026', runId })`, where `runId` is the `run_id`
+   `bb-sync` step 2 registered when it claimed the request → one `bb_raw` row per course + calendar
+   under that `run_id`, calendar last. PASS: 7 course rows + calendar row for the run.
 2. **Validate stored layers.** DB vs Storage (every `storage_path` exists, sizes match); local mirror
    (sha256 per `local_path`); `v_file_layout.needs_move = 0`; every extracted file has `bb_file_text`.
 3. ~~**Diff live vs catalog.**~~ **AUTOMATED (Phase 9) — do not do this by hand.**

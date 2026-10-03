@@ -81,3 +81,48 @@ $ cd web && npx vitest run test/crawler.announcements.test.ts test/crawler.attem
 Not edited, outside this worker's lines, and now stale: runbook step 1 still shows
 `bb.runAll({termName: 'Fall 2026'})` with no `runId`, and the crawler header's line 4 still names
 the built-in Claude browser. Flagged to the PM.
+
+## Post-gate dry run, with the real 132 (2026-10-03)
+
+Gate: `130_bb_content_ghost_collapse, 131_bb_content_item_key, 132_material_history,
+133_course_stream_history, 134_sync_change_lines_materials` on prod (applied by the PM);
+`material_history_record(uuid)` present, returns `jsonb`, ACL `postgres, service_role,
+db_test_runner`; `bb_material_history` 229 rows; open syncs 0, running rows 0, queued transform
+requests 0.
+
+Two `execute_sql` calls, each `begin; set local lock_timeout = '500ms';` + the full text of 135, 136
+and 137 (comments stripped, nothing else changed, 135's `material_history_record` guard included) +
+test bodies + `rollback;`. No migration line changed after this run: the three blobs are byte-equal
+to `ae33266`'s.
+
+**Call A: 135 + 136 + 137 + `phase19_135_136_sync_driver.sql` (as committed).** No assertion raised.
+
+| | |
+|---|---|
+| result | `phase19_135_136_sync_driver: PASS` |
+| folded run (fixture A) | `ok` |
+| its stages | `announcements=ok, assignments=ok, attempts=ok, content=ok, courses=ok, files=ok, gaps=ok, gradebook=ok, history=ok` |
+| history counts | `{"appeared":0,"changed":0,"vanished":0,"baseline_courses":0,"older_run":false,"sample":[]}` (fixture shells resolve to no course) |
+| summary.changes | `["1 Blackboard shell(s) match no course here"]` |
+| reaped notes (fixture F) | `w53 fixture: died with its tab \| interrupted (reaped)` |
+| open items for the two closed requests | 2 |
+
+**Call B: 135 + 136 + 137 + `phase9_transform_states.sql` + `phase19_137_sync_status.sql`.** No
+assertion raised. One addition between the two bodies, dry-run only: phase 9's fresh `running`
+fixture row was deleted after its unit had asserted on it, so the 137 body started from the same
+state it has when it runs alone.
+
+| | |
+|---|---|
+| phase 9: folded status | `partial` |
+| phase 9: stages | `announcements=failed, assignments=ok, attempts=ok, content=ok, courses=ok, files=ok, gaps=ok, gradebook=ok, history=ok` (exactly one failed, as it asserts) |
+| phase 9: reaped notes | `phase9 fixture: died with its session \| interrupted (reaped)` |
+| phase 9: fresh row | `running` |
+| 137: view row | `status = failed`, `interrupted = true`, notes end `interrupted (reaped)` |
+| 137: streams at the end | `announcements=stale, assignments=fresh, attempts=fresh, content=fresh, courses=fresh, files=fresh, gaps=fresh, gradebook=fresh, history=fresh` (announcements: its last `ok` on prod is 2026-10-01, more than a day old; phase 9's fixture fold failed that stage) |
+
+Checked after both rollbacks: no trigger, no `interrupted_at`, no `sync_request_open_run()`, 0
+fixture rows on prod.
+
+Runbook step 1 (outside step 5, allowed by the PM on 2026-10-03): its example now reads
+`bb.runAll({ termName: 'Fall 2026', runId })` with the run id step 2 registered.
