@@ -471,3 +471,41 @@ FAIL  phase19_171_stage_content_fresh_rekey.sql  FAIL phase19_171: (C) crawl C r
 
 `phase19_171`'s RED line is R3-5's bug as the review describes it: under 139 the new Knowledge
 Check posted at a reused path takes the weeks-old ghost's row and its link.
+
+### 170, DRY RUN (not applied)
+
+Rolled-back calls on 2026-10-03, each `statement_timeout` 90 s or less and `lock_timeout = '10s'`:
+
+1. 170's view, compared with the live 133 view inside the transaction, then 170's data step.
+   View: the same 8 columns; the announcement, `assignment_posted` and `assignment_due` arms
+   return the same row counts; material posts 65 → 69, with 0 rows lost and 4 added. The 4 are
+   R3-2's null `bb_file_id` rows, now resolved: IST.352 files 144 (`9080daeb`), 72 (`bf2f81e5`),
+   452 (`f24a7ff5`) and IST.466 file 161 (`6923d85d`), each `appeared`. So R3-9's course
+   pushdown changed no other row. Data step (R3-3): 10 path-only rows before, 10 deleted, 0
+   after; the closing recomputation finds 0; history 229 → 219; material posts stay 69 (none
+   of the 10 was posting).
+2. 170 in full (view, function, data step), then the body of `phase19_170`: passed (R3-4 on
+   both crawls, the Activity = Stream check, R3-2, R3-3).
+
+Expected `md5(prosrc)` of 170's `material_history_record`, computed locally from the committed
+file with the method that reproduces 138's live `1bd8b046c1da6191cae67a339c220550`:
+`af19c79f8e00a9608f220dd8986e4bd5`.
+
+`phase19_132` and `phase19_138` pass against live 138 with their round-3 fixtures; their run
+under 170 comes after the apply, with the full suite.
+
+### 171, DRY RUN (not applied)
+
+1. 171's function as in the file, then the body of `phase19_171`: passed. `md5(prosrc)` in the
+   transaction `1cdcd890648153eb9664c6417077866d`, equal to the local computation, so the
+   `phase18_124` pin becomes that value once the PM confirms it on prod.
+2. 171's function, a re-fold of the newest registered crawl (`inserted 0, updated 0,
+   unchanged 220, rekeyed 0, missing 0`), then `phase19_139`'s re-key cases (the linked
+   Knowledge Check and Week 2 still re-keyed, `rekeyed 2, inserted 3, missing 2`): passed.
+
+## Handed to the PM to apply (170, then 171)
+
+| migration | apply the blob at | `git show <sha>:db/migrations/<file> \| md5sum` | bytes |
+|---|---|---|---|
+| `170_material_history_round3` | `11e40bc` (unchanged at HEAD) | `ae78cfc7649bd6d52d54be083c24c403` | 31,745 |
+| `171_stage_content_rekey_fresh_only` | `6de6f62` (unchanged at HEAD) | `5eed0b5f07a118a7bfd0cd306c51c570` | 20,826 |
