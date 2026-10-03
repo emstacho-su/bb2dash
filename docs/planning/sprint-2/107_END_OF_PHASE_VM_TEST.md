@@ -1,7 +1,7 @@
 # 107 — End-of-phase test on a clean Linux VM
 
 Date 2026-10-03 · PM: the Phase 19 session · Product manager: Stack · Status: **design note, nothing
-built**; open questions at the end.
+built**; question 1 answered (2026-10-03), questions 2 and 3 open.
 
 ## What Stack asked for
 
@@ -41,26 +41,33 @@ per area, each failing on any non-zero exit:
 | desktop | `npm ci`, `typecheck`, `vitest run` in `desktop/` | nothing |
 | mcp-server | `npm ci`, `typecheck`, `build`, `test` | nothing |
 | scripts and ingest | `npm --prefix scripts ci`, `npm --prefix scripts test`; `node --test ingest/*.test.mjs`; `ingest/test_token_budget.py` through `uv` | nothing |
-| sql | `node scripts/db-test.mjs` against prod as `db_test_runner` | the test DSN as a secret (question 1) |
 | walk | `web/e2e/login.mjs` and the phase's walk spec against the phase's Vercel preview | the test login and a Vercel bypass token as secrets |
 
 The run's summary page is the evidence: the PM links it in the PR, and the ledger's integration row
 cites the run id, not lines copied out of a terminal.
 
-**What it does not do:** anything that needs Blackboard. Live syncs stay on Phase 14's stack (the
+**What it does not do:** the SQL suite (question 1, answered: it stays on Stack's own device and moves to the home box's runner when that is up), and anything that needs Blackboard. Live syncs stay on Phase 14's stack (the
 laptop now, the home machine later).
 
 ### Secrets on a public repo (the part to get right)
+
+With the SQL job out (question 1), the only secrets are the walk's test login and a Vercel bypass token.
 
 * Secrets live in a GitHub **environment** (`phase-gate`) that only `workflow_dispatch` runs on the
   owner's branches can use. No `pull_request_target`, and no secrets for pull requests from forks
   (GitHub withholds them by default).
 * Values are never echoed. The DSN is passed through `env:` to `db-test.mjs` only.
-* `db_test_runner` is a production login that bypasses row-level security, and its grants have grown
-  each phase (Phase 19's security review flagged this as low). Storing its DSN in GitHub is new
-  exposure: this is question 1.
+* `db_test_runner`'s DSN is **not** stored in GitHub (question 1): it is a production login that bypasses
+  row-level security, and its grants have grown each phase (Phase 19's security review flagged this as low).
 
 ## Part 2, later: the home machine
+
+The home box is Stack's MacBook, being factory reset for it (2026-10-03). Phase 14's containers are Linux
+containers, so on macOS they run under a Docker runtime; if it is an Apple-silicon Mac, check that Phase 14's
+images build for arm64 before moving the stack there. GitHub's self-hosted runner supports macOS.
+
+* **SQL suite:** the `sql` job runs here (`runs-on: [self-hosted, home]`), with the DSN in the box's own
+  gitignored `.env.local`, never in GitHub.
 
 * Install the Phase 14 stack (`compose.yaml`, the noVNC login, the keep-alive) and Claude Code.
 * Register it as a **self-hosted runner** for this repo with a label like `home`. The same
@@ -83,7 +90,7 @@ Phase 14's own end can use it.
 
 ## Open questions for Stack
 
-1. **The SQL job's credential:** store the `db_test_runner` DSN as a GitHub secret (default), or keep
-   the SQL suite on a machine Stack controls until the home machine is up?
+1. ~~**The SQL job's credential.**~~ **Answered 2026-10-03:** "lets keep the sql suite on my device for now." The
+   GitHub workflow has no SQL job; the suite runs on Stack's laptop, then on the home box's runner.
 2. **When it runs:** by hand at the end of a phase (default), or also on every push to a phase branch?
 3. **Where it lands:** a small phase of its own after 19 (default), or folded into Phase 14?
