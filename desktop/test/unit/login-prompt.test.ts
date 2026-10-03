@@ -1,9 +1,9 @@
 /**
  * Brief 100 (2026-10-03), the Electron login prompt. Under `syncLauncher = queue-only` the shell
- * reads the open `sync-login-required` Inbox item on each poller tick and, the first time it sees
- * an item id, opens the container's noVNC login page once in the default browser, already
- * unlocked with the password from its file. Never once per tick or per window, never under
- * `terminal`, and the password never reaches a log line.
+ * reads the container's open `sync-login-required` Inbox item on each poller tick and opens the
+ * container's noVNC login page in the default browser, already unlocked with the password from its
+ * file: once per item per New York day, remembered across restarts (round 2, item 2). Never once
+ * per tick or per window, never under `terminal`, and the password never reaches a log line.
  *
  * `electron` and the log are mocked; the file read and `openExternal` are injected, so no test
  * reads a real secret or opens a real browser tab.
@@ -34,8 +34,10 @@ import {
   loginPageUrl,
   newLoginItems,
   passwordFromFileText,
+  recordPrompted,
   validateLoginItems,
 } from '../../src/core/login-prompt';
+import type { LoginPromptStore, PromptedOn } from '../../src/core/login-prompt';
 import { LOGIN_PAGE_ORIGIN } from '../../src/core/navigation-policy';
 import type { RestGet, WebSession } from '../../src/core/types';
 import { createLoginPrompt, withLoginPromptCheck } from '../../src/main/login-prompt';
@@ -64,10 +66,34 @@ function restOverRows(rows: readonly Record<string, unknown>[]) {
   return { get, queries };
 }
 
-function harness(fileText: string | Error = PASSWORD) {
+/** 08:00 in New York on 2026-10-03 (EDT, UTC-4). */
+const DAY_ONE = new Date('2026-10-03T12:00:00Z');
+
+/** A store in memory, standing in for `userData/login-prompt.json` across "restarts". */
+function memoryStore(initial: PromptedOn = {}) {
+  let saved: PromptedOn = { ...initial };
+  const writes: PromptedOn[] = [];
+  const store: LoginPromptStore = {
+    read: () => ({ ...saved }),
+    write: (promptedOn) => {
+      saved = { ...promptedOn };
+      writes.push(saved);
+    },
+  };
+  return { store, writes, saved: () => saved };
+}
+
+interface HarnessOptions {
+  readonly store?: LoginPromptStore;
+  readonly now?: () => Date;
+}
+
+function harness(fileText: string | Error = PASSWORD, options: HarnessOptions = {}) {
   const opened: string[] = [];
   const reads: string[] = [];
   const prompt = createLoginPrompt(QUEUE_ONLY, {
+    store: options.store ?? memoryStore().store,
+    now: options.now ?? (() => DAY_ONE),
     readFile: (path) => {
       reads.push(path);
       if (fileText instanceof Error) throw fileText;
@@ -136,11 +162,23 @@ describe('core/login-prompt — the password file text', () => {
   });
 });
 
-describe('core/login-prompt — which items are new', () => {
-  it('returns the open ids not prompted yet, in order', () => {
-    expect(newLoginItems(['7', '9'], new Set(['7']))).toEqual(['9']);
-    expect(newLoginItems(['7'], new Set(['7']))).toEqual([]);
-    expect(newLoginItems([], new Set())).toEqual([]);
+describe('core/login-prompt — which items are due', () => {
+  it('returns the open ids not prompted on this New York day, in order', () => {
+    expect(newLoginItems(['7', '9'], { 7: '2026-10-03' }, '2026-10-03')).toEqual(['9']);
+    expect(newLoginItems(['7'], { 7: '2026-10-03' }, '2026-10-03')).toEqual([]);
+    expect(newLoginItems(['7'], { 7: '2026-10-02' }, '2026-10-03')).toEqual(['7']);
+    expect(newLoginItems([], {}, '2026-10-03')).toEqual([]);
+  });
+
+  it('records today against the prompted ids and keeps only ids still open; a new object', () => {
+    const before: PromptedOn = { 7: '2026-10-02', 3: '2026-09-30' };
+    const after = recordPrompted(before, ['7', '9'], ['7', '9'], '2026-10-03');
+    expect(after).toEqual({ 7: '2026-10-03', 9: '2026-10-03' });
+    expect(before).toEqual({ 7: '2026-10-02', 3: '2026-09-30' });
+    expect(recordPrompted({ 7: '2026-10-03' }, ['7', '8'], ['8'], '2026-10-03')).toEqual({
+      7: '2026-10-03',
+      8: '2026-10-03',
+    });
   });
 
   it('validates the rows to string ids', () => {
@@ -160,6 +198,71 @@ describe('core/login-prompt — which items are new', () => {
         { id: 5, ...CONTAINER_ITEM },
       ]),
     ).toEqual(['5']);
+  });
+});
+
+describe('main/login-prompt — once per New York day, across restarts (round 2, item 2)', () => {
+  it('same day: a second check opens nothing', async () => {
+    let now = DAY_ONE;
+    const { prompt, opened } = harness(PASSWORD, { now: () => now });
+    await prompt.check(restOver([41]).get);
+    now = new Date('2026-10-03T21:00:00Z'); // 17:00 New York, the same day
+    await prompt.check(restOver([41]).get);
+    expect(opened).toHaveLength(1);
+  });
+
+  it('next day: an item still open opens the page again', async () => {
+    let now = DAY_ONE;
+    const { prompt, opened } = harness(PASSWORD, { now: () => now });
+    await prompt.check(restOver([41]).get);
+    now = new Date('2026-10-04T11:30:00Z'); // 07:30 New York, the next morning
+    await prompt.check(restOver([41]).get);
+    expect(opened).toHaveLength(2);
+  });
+
+  it('restart the same day: the remembered date opens nothing new', async () => {
+    const shared = memoryStore();
+    const first = harness(PASSWORD, { store: shared.store });
+    await first.prompt.check(restOver([41]).get);
+    expect(shared.saved()).toEqual({ 41: '2026-10-03' });
+
+    const afterRestart = harness(PASSWORD, { store: shared.store, now: () => new Date('2026-10-03T19:00:00Z') });
+    await afterRestart.prompt.check(restOver([41]).get);
+    expect(first.opened).toHaveLength(1);
+    expect(afterRestart.opened).toEqual([]);
+  });
+
+  it("the day is New York's, not UTC's, across midnight UTC", async () => {
+    let now = new Date('2026-10-03T22:00:00Z'); // 18:00 New York, 2026-10-03
+    const { prompt, opened } = harness(PASSWORD, { now: () => now });
+    await prompt.check(restOver([41]).get);
+    now = new Date('2026-10-04T02:00:00Z'); // UTC is 10-04; New York is still 22:00 on 10-03
+    await prompt.check(restOver([41]).get);
+    expect(opened).toHaveLength(1);
+    now = new Date('2026-10-04T04:30:00Z'); // 00:30 New York, 2026-10-04
+    await prompt.check(restOver([41]).get);
+    expect(opened).toHaveLength(2);
+  });
+
+  it('remembers only ids still open, so the file never grows', async () => {
+    const shared = memoryStore({ 7: '2026-10-01' });
+    const { prompt } = harness(PASSWORD, { store: shared.store });
+    await prompt.check(restOver([41]).get);
+    expect(shared.saved()).toEqual({ 41: '2026-10-03' });
+  });
+
+  it('a store that will not write keeps the date in memory: no second tab today', async () => {
+    const store: LoginPromptStore = {
+      read: () => ({}),
+      write: () => {
+        throw new Error('EPERM: the userData folder is read-only');
+      },
+    };
+    const { prompt, opened } = harness(PASSWORD, { store });
+    await prompt.check(restOver([41]).get);
+    await prompt.check(restOver([41]).get);
+    expect(opened).toHaveLength(1);
+    expect(logged.some((line) => /could not be saved/.test(line))).toBe(true);
   });
 });
 
@@ -239,6 +342,8 @@ describe('main/login-prompt — opening the page', () => {
     const opened: string[] = [];
     let fail = true;
     const prompt = createLoginPrompt(QUEUE_ONLY, {
+      store: memoryStore().store,
+      now: () => DAY_ONE,
       readFile: () => PASSWORD,
       openExternal: async (url) => {
         if (fail) throw new Error(`could not open ${url}`);
@@ -278,7 +383,9 @@ describe('main/login-prompt — opening the page', () => {
   });
 
   it('terminal never opens it: no login prompt is built', () => {
-    expect(createLoginPrompt(TERMINAL, { readFile: () => PASSWORD, openExternal: async () => undefined })).toBeNull();
+    expect(
+      createLoginPrompt(TERMINAL, { store: memoryStore().store, readFile: () => PASSWORD, openExternal: async () => undefined }),
+    ).toBeNull();
   });
 });
 

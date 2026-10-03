@@ -57,12 +57,44 @@ export function passwordFromFileText(text: string): string | null {
   return password.length > 0 ? password : null;
 }
 
-/** The open ids not prompted for yet, in the order PostgREST returned them. */
+/**
+ * The New York date (`YYYY-MM-DD`) each item id last opened the page on (round 2, item 2). The
+ * desktop keeps it in `userData` (`main/login-prompt-store.ts`), so a restart the same day opens
+ * nothing new and an item still open the next morning opens the page again.
+ */
+export type PromptedOn = Readonly<Record<string, string>>;
+
+/** Where `PromptedOn` lives between runs. `read` never throws: a missing or bad file is `{}`. */
+export interface LoginPromptStore {
+  read(): PromptedOn;
+  write(promptedOn: PromptedOn): void;
+}
+
+/** The open ids not prompted on `today` (New York), in the order PostgREST returned them. */
 export function newLoginItems(
   openIds: readonly string[],
-  promptedIds: ReadonlySet<string>,
+  promptedOn: PromptedOn,
+  today: string,
 ): readonly string[] {
-  return openIds.filter((id) => !promptedIds.has(id));
+  return openIds.filter((id) => promptedOn[id] !== today);
+}
+
+/**
+ * A new record: `today` against each prompted id, earlier dates kept for ids still open, and
+ * every id no longer open dropped, so the file holds at most the items open now.
+ */
+export function recordPrompted(
+  promptedOn: PromptedOn,
+  openIds: readonly string[],
+  promptedIds: readonly string[],
+  today: string,
+): PromptedOn {
+  const next: Record<string, string> = {};
+  for (const id of openIds) {
+    const date = promptedIds.includes(id) ? today : promptedOn[id];
+    if (date !== undefined) next[id] = date;
+  }
+  return Object.freeze(next);
 }
 
 function isContainerItem(row: object): boolean {

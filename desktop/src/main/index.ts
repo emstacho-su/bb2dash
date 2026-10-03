@@ -27,6 +27,7 @@ import type { DesktopConfig } from '../core/config';
 import { loadConfig, reportConfigError } from './config';
 import { createNamedLogger, log, logError } from './log';
 import { createLoginPrompt, withLoginPromptCheck } from './login-prompt';
+import { LOGIN_PROMPT_FILENAME, createLoginPromptStore } from './login-prompt-store';
 import type { LoginPrompt } from './login-prompt';
 import { attachNavigationGuards } from './navigation';
 import type { PollerHandle } from './poller-wiring';
@@ -239,6 +240,19 @@ function wireWindow(window: BrowserWindow, validConfig: DesktopConfig): void {
 }
 
 /**
+ * Brief 100 round 2, item 2: the login prompt remembers, per item, the New York day it last
+ * opened the page, in `userData/login-prompt.json` beside the watermark. `null` under `terminal`.
+ */
+function createShellLoginPrompt(validConfig: DesktopConfig): LoginPrompt | null {
+  return createLoginPrompt(validConfig, {
+    store: createLoginPromptStore({
+      filePath: join(app.getPath('userData'), LOGIN_PROMPT_FILENAME),
+      log: createNamedLogger('login-prompt'),
+    }),
+  });
+}
+
+/**
  * C-7: everything the portable poller needs that only Electron can supply. Under
  * `syncLauncher = queue-only` the login prompt rides each tick's session read (brief 100,
  * 2026-10-03); under `terminal` `loginPrompt` is null and the reader is the plain one.
@@ -327,7 +341,7 @@ function start(): void {
   // Before the tray, so *Check now* has something to run from its first click. The first
   // window already exists, so the poller attaches its focus trigger to it here; later
   // windows are attached by `wireWindow`.
-  poller = startShellPoller(validConfig, createLoginPrompt(validConfig));
+  poller = startShellPoller(validConfig, createShellLoginPrompt(validConfig));
 
   trayHandle = createTray({
     onOpen: () => openMainWindow(),
