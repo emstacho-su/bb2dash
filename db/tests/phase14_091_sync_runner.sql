@@ -590,9 +590,14 @@ end $$;
 -- =============================================================================================
 -- 9. sync_enqueue and the login trigger
 -- =============================================================================================
--- Sections 3-8 left open sync rows; the queue starts empty again here.
+-- Sections 3-8 left open sync rows, and section 3 closed one `done` today; the queue starts empty
+-- again here, with no done sync on today's New York date.
 update agent_requests set state = 'cancelled'
  where kind = 'sync' and state in ('queued', 'claimed');
+update agent_requests set state = 'failed'
+ where kind = 'sync' and state = 'done'
+   and (finished_at at time zone 'America/New_York')::date
+       = (now() at time zone 'America/New_York')::date;
 
 do $$
 declare
