@@ -384,3 +384,34 @@ IST.352 "Assignments / Project Assignment #1A - Project Description"
 one gone on that path. It was folded by 026, whose path key updated the row in place and kept
 the old id in `previous_ids`, so no link was lost. Under 131 the same crawl would have stranded
 any link on a ghost row; under 139 it is re-keyed.
+
+### 139, DRY RUN (not applied)
+
+Two rolled-back calls on 2026-10-03, each `statement_timeout = '90s'`, `lock_timeout = '10s'`:
+
+1. 139's function as in the file, then a re-fold of the newest registered crawl, then the body
+   of `phase19_139`: passed. `md5(prosrc)` in the transaction
+   `ba31b9cb3be68f3ae7ee277258dcb271`, equal to the md5 computed locally from the committed
+   file (the same local method gives 131's live `ec78ca41daa2addb02fa113c85b7829d`), so the
+   `phase18_124` pin becomes `ba31b9cb3be68f3ae7ee277258dcb271` once the PM confirms it on prod
+   after the apply. Re-fold of `2a4d4a2e`: `inserted 0, updated 0, unchanged 220, missing 0,
+   rekeyed 0`. ACL `{postgres=X/postgres,service_role=X/postgres,db_test_runner=X/postgres}`;
+   225 rows, 21 linked, unchanged.
+2. 139's function, then `phase19_131`'s fold sequence (A, A2, B, O, C and the "nothing outside
+   the fixture moved" check, with `rekeyed 0` expected on every fold) and `phase9_transform_states`'s
+   partial block (`run_transform` on the broken-announcement crawl: `partial`, one stage
+   `failed`, `announcements`; the content stage `ok` with `rekeyed: 0`): passed.
+
+`phase17_110`, `phase17_115` and `phase10a_stage_gradebook` reach neither function, so they are
+run after the applies with the full suite.
+
+## Handed to the PM to apply (138, 139), in that order
+
+| migration | apply the blob at | `git show <sha>:db/migrations/<file> \| md5sum` | bytes |
+|---|---|---|---|
+| `138_material_history_counts` | `d7b3318` (unchanged at HEAD) | `eded5cb4cfae311bf64d9df586358e3e` | 18,242 |
+| `139_stage_content_rekey` | `aacedcf` (unchanged at HEAD) | `54ea43dc65ede8b5eb2a5368719811b3` | 20,947 |
+
+After the applies: `phase19_132`, `phase19_138`, `phase19_139`, `phase19_131` and
+`phase19_133` green; `phase18_124`'s pin moved to 139's body (expected
+`ba31b9cb3be68f3ae7ee277258dcb271`) and green; full suite.
