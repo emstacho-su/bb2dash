@@ -26,7 +26,8 @@ import { useEffect } from 'react';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
-import { neverSyncedLine, normalizeStreams, runStateWord, type StreamState } from './sync-run-state';
+import { NO_SYNC_RECORDED, lastSyncedClause, neverSyncedLine, runStateWord } from './sync-run-state';
+import { normalizeStreams, type StreamState } from './sync-run-state';
 
 /**
  * The Phase 9 relations are absent from the generated Database type, so the
@@ -589,10 +590,10 @@ export function stalenessLine(freshness: FreshnessRow[], now: Date = new Date())
 
 /** The whole second line: "last synced 3 hrs ago · files stale 2 days". */
 export function freshnessLine(status: SyncStatus | null, now: Date = new Date()): string {
-  if (!status || status.id === null) return 'no sync recorded yet';
+  if (!status || status.id === null) return NO_SYNC_RECORDED;
   const word = runStateWord(status);
-  const ago = relativeTime(status.finished_at ?? status.started_at, now);
-  const parts: string[] = word === 'sync running' ? [] : [`last synced ${ago}`];
+  const synced = lastSyncedClause(status, (iso) => relativeTime(iso, now));
+  const parts: string[] = synced === null ? [] : [synced];
   if (word) parts.push(word);
   // Never-synced streams are named only when no stage is stale, failed or never synced.
   const stale = stalenessLine(status.freshness, now) ?? neverSyncedLine(status.streams);

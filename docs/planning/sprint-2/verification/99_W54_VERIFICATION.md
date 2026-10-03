@@ -237,3 +237,38 @@ nothing under `db/`, `skills/`, `ingest/`, `project-state/`, `mcp-server/`, and 
 * `freshnessLine` still opens with "last synced <when>" for a failed or interrupted run, as on
   `main` ("last synced 4 hrs ago · last sync interrupted"). `<when>` is the reap time, not a
   sync. Unchanged because a row without the new columns must return `main`'s string.
+
+---
+
+## Round 2 (2026-10-03) — R2-6 and R2-7
+
+`origin/feat/content-history-19` (58a86b1) merged into this branch first (merge, not rebase).
+
+### R2-6 (HIGH) — a crawl that never folded is not "last synced"
+
+`sync-run-state.ts` gains `newestFoldAt(streams)` (the newest `last_seen_at`, compared as instants),
+`lastSyncedClause(run, ago)` and the constant `NO_SYNC_RECORDED`. `freshnessLine` only calls
+`lastSyncedClause`; `ago` is passed in so `sync-run-state.ts` imports nothing from `queries.sync.ts`.
+
+* ok / partial: the run's own finish, as before.
+* failed or interrupted: the newest `last_seen_at` across `streams`; `no sync recorded yet` when no
+  stream ever folded.
+* running: no clause ("sync running" says it).
+* a row with no `streams` (empty list): the run's own times, which is `main`'s string.
+
+Check: `npx vitest run test/sync-run-state.test.ts test/queries.sync.test.ts test/NeedsAttention.test.tsx test/NeedsAttention.heartbeat.test.tsx test/Inbox.test.tsx`
+
+* RED (tests first): `npx vitest run test/sync-run-state.test.ts test/queries.sync.test.ts` →
+  `Test Files  2 failed (2)` · `Tests  13 failed | 60 passed (73)`, for example
+  `expected 'last synced 5 min ago · last sync int…' to be 'last synced 3 days ago · last sync in…'`.
+  The "ok run unchanged" and "no streams key returns `main`'s string" cases passed before the fix.
+* GREEN: `Test Files  5 passed (5)` · `Tests  175 passed (175)`
+
+Asserted lines (NOW 15:00Z, run reaped at 14:55Z, streams last seen 3 days earlier):
+`last synced 3 days ago · last sync interrupted`; with a stale `files` stage,
+`… · last sync interrupted · files stale 3 days`; failed, `last synced 3 days ago · last run failed`;
+every stream `never`, `no sync recorded yet · last sync interrupted · announcements, content, files, history never synced`;
+ok, `last synced 4 hrs ago`; no `streams` key, `last synced 5 min ago · last run failed · files stale 2 days`.
+
+`git diff --numstat main -- web/src/lib/queries.sync.ts` → `16	7` (was `14	6`; this fix adds 5 and
+removes 4 lines: the import is split over two lines to stay one line longer, not seven).
