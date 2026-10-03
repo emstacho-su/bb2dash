@@ -74,7 +74,7 @@ screens, PM.
 | 24 | Desktop "Sync interrupted" toast | W-54 | — | done | 21b691d; reducer + sources 94 passed |
 | 25 | Integrate: merge branches, regenerate types, full suites | PM | 11, 17 | done | final phase branch a167397: SQL 58/58 (exit 0), web typecheck 0, build 0, vitest 2304/2304 (main 2221), desktop typecheck 0, vitest 708/708; types fbae093; `mcp-server/` untouched; 12/12 migrations md5-equal repo vs prod at HEAD |
 | 26 | Migrations recorded, md5 table, advisors | PM | 16 | done | 12/12 recorded (130–139, 170–171), each md5 equal to its blob; advisor 0 findings naming a Phase 19 object |
-| 27 | First register-first sync, live | Stack (`/bb-sync`) | 17, 25, skill installed | parked | Chrome's Blackboard tab was signed out on 2026-10-03 ~18:05Z (NetID login page; Duo is Stack's), so the PM could not run it. The register-first skill is installed: Stack's next Sync is task 27; its check and task 16's `fresh` half are read right after |
+| 27 | First register-first sync, live | Stack (`/bb-sync` 866) | 17, 25, skill installed | done | 2026-10-03: request 866 claimed 19:28:58Z opened run 800 `running` at claim; first `bb_raw` 19:29:26Z; folded 19:30:01Z `ok`, 9 stages `ok` incl. `history`; task 27's check → true; all 9 streams `fresh` (task 16's second half). Observed: a new Kaltura video (LTI item "IST-323 Lab #2 Tips") was recorded in history but not posted, because the Stream's material kinds are 027's document, link and file — put to Stack |
 | 27b | Live terminal-rule proof | PM | 16 | done | request 580 → run 592 `running` at claim, reaped at the 17:54Z tick, request `failed`, Inbox item 2636 open; Sync freed (0 open) |
 | 28 | Walk on the preview, `walk-19/01`–`06` | PM (walk helper) | 25, 27, 27b | done | 6 of 6 (01–03 afd529d; 04 ff029d5 during 27b; 05–06 10b7bb1 after the reap); cold loads, no console errors on 01–06; 04 is from the 27b run, not a crawl (task 27 can retake it) |
 | 29 | DECISIONS rows, STATUS, ORCHESTRATOR | PM | 26 | done | DECISIONS 339 → 349: the nine task-29 rows (amended for rounds 2–3) plus the block 170–179 row; STATUS row 21, header, known issues; ORCHESTRATOR header, §1, §2 rules 6 and 8, §4 |
@@ -100,9 +100,9 @@ file pull); the live desktop toast needs a desktop build from the phase branch.
 | Req | Proved by (brief §"What proves each requirement") | State |
 |---|---|---|
 | R-38 | task 9's SQL, shot 03 | met: untraced material posts 0 (task 9); shot 03 shows New/Changed posts dated by crawl. The block's placement is open for Stack's walk |
-| R-41 (run states, per-stream read) | tasks 2, 12, 14, 15, 16, 19, 20, 24; shots 04–06 | met: run states live and proven (27b), per-stream read live (`history` `never` → `fresh` after task 27), Phase 17's half on `main`; the live desktop toast needs a desktop build after merge |
+| R-41 (run states, per-stream read) | tasks 2, 12, 14, 15, 16, 19, 20, 24; shots 04–06 | met: run states live and proven (27b, sync 866); per-stream read live, `history` went `never` → `fresh` with sync 866; Phase 17's half on `main`; the live desktop toast needs a desktop build after merge |
 | R-64 | tasks 3, 4; shots 01, 02 | met: 0 duplicate pairs, path key gone, files 17/19 in the tree, shots 01 and 02 |
-| R-65 | tasks 12–14, 17, 27 | met in code and proven live for the terminal rule (27b); the first register-first sync with a real crawl (task 27) is parked for Stack's next Sync (Blackboard needs his Duo) |
+| R-65 | tasks 12–14, 17, 27 | met: open at claim, fold only when complete and the terminal rule are live; register-first proven with a real crawl (sync 866, task 27 true) and the terminal rule proven by 27b |
 | R-71 | tasks 5, 7, 8, 10 | met: real change counts, history (229 rows backfilled), one vanish convention, named Activity lines; rounds 2–3 made Activity count what the Stream shows |
 | R-76 | task 29's row; task 23 | met: closed by the DECISIONS row; the raw-HTML guard passes |
 | P-25 / P-94 / P-95 / P-98 | tasks 3 / 23 / 6 / 8 | met / met / met / met |

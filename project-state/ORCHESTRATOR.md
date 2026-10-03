@@ -213,9 +213,9 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 
 ## 4. Open items that are Stack's, not the PM's
 
-* **Phase 19 (PR open, 2026-10-03), in this order:** (1) your next Sync is task 27, the first register-first sync
-  (the installed `bb-sync` skill is the phase branch's; log in to Blackboard in Chrome when asked); the PM then reads
-  task 27's check and task 16's `history` stream turning `fresh`. (2) Walk brief 99's acceptance script on the preview
+* **Phase 19 (PR open, 2026-10-03), in this order:** (1) ~~task 27, the first register-first sync~~ done with your sync 866
+  (2026-10-03; task 27 true, every stream `fresh`); say whether new Kaltura videos (LTI items) should post on the Stream as
+  materials (default today: no, 027's rule). (2) Walk brief 99's acceptance script on the preview
   (`web-git-feat-content-history-19-emstacho-sus-projects.vercel.app`), step 5 included (one sync interrupted on
   purpose; the PM already proved the rule live with request 580, and Inbox item 2636 is that proof, answer or dismiss
   it). (3) Read the nine DECISIONS rows dated 2026-10-02/03. (4) Say whether the Stream's "New and changed
