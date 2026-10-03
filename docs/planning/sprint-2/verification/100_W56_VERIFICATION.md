@@ -276,3 +276,21 @@ The sync image's poppler (Ubuntu noble) is a different build, so the in-image ru
   fixtures plus `extract_text.test.mjs`, `pull_files.mjs`, `fetch_signed.mjs` and `embed_corpus.mjs`
   present at `/app/ingest` for the test to import.
 * The re-run of the host check on the integrated branch after task 13a.
+
+## Task 17 — Stack's key move, 2026-10-03 (recorded by the PM)
+
+Stack stored the key with `set-secret.ps1 bb2dash_mcp_service_key`, re-registered the server with the
+`docker run` recipe and deleted the key's line from `bb2dash/.env`. The PM then checked, printing no value:
+
+* `grep -c "sb_secret_" C:/Users/stack/.claude.json` → `0`
+* `grep -c "sb_secret_" C:/Users/stack/projects/bb2dash/.env` → `0`
+* the secret file: 41 bytes, `sb_secret_` shape, no newline, no BOM
+* `claude mcp list` → `bb2dash: docker run -i --rm --mount type=bind,source=<the secrets folder file>,… bb2dash-mcp:local - ✔ Connected`
+  (so Docker Desktop reads a file in the ACL-locked folder)
+* `node mcp-server/scripts/smoke.mjs --docker --key-file C:/Users/stack/.bb2dash-secrets/bb2dash_mcp_service_key`
+  → a real `search_materials` and `get_material_text` against prod, last line `smoke: all checks passed`
+
+The service key now lives only in `C:/Users/stack/.bb2dash-secrets/bb2dash_mcp_service_key`. One host
+consumer remains: `scripts/google-consent.mjs` reads `BB2DASH_SERVICE_KEY` for its one command and needs the
+**legacy service-role JWT** (its line 229: the gateway rejects an `sb_secret_` Bearer), not this file's key;
+it is fed from the Supabase dashboard when the calendar token is re-minted.
