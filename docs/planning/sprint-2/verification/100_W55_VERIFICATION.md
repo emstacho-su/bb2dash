@@ -533,3 +533,24 @@ RED   loop.test.ts › reports the claim_attempts column the database holds … 
 GREEN loop.test.ts   26 passed (incl. "the third claim of a request reports claim_attempts 3");
       the SQL side is phase14_093_review_fixes.sql section 1 (claim, requeue, claim, requeue, claim -> 3)
 ```
+
+### 093 applied (items 1, 6, 7)
+
+Dry run in `begin; … rollback;` through `execute_sql` (093, then the unit's sections 1–2 as `postgres`
+with an in-transaction `grant sync_runner to postgres with inherit false, set true`): reached its final
+`raise`. No sync request was open on prod just before. Applied as `093_sync_runner_review_fixes` from
+commit 1cdc354:
+
+| Migration | prod `md5(statements[1])` | `git show HEAD:db/migrations/<file> \| md5sum` | bytes |
+|---|---|---|---|
+| `093_sync_runner_review_fixes` | `4626aad4b27dd6fb6935eb52d466953e` | `4626aad4b27dd6fb6935eb52d466953e` | 8733 |
+
+`ls db/migrations | grep -c "^09[1-9]_"` → 3; prod `name ~ '^09[1-9]_'` → 3.
+
+The unit's first run failed on the unit itself (a read of `agent_requests` inside `set local role
+sync_runner`); the check now runs as the test role.
+
+```
+node scripts/db-test.mjs --only phase14_093_review_fixes.sql   -> PASS; db-test: passed 1, failed 0, units 1
+node scripts/db-test.mjs --only phase14_091_sync_runner.sql    -> PASS; db-test: passed 1, failed 0, units 1
+```

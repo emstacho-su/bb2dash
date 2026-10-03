@@ -27,6 +27,7 @@ declare
   v_done      bigint;
   v_got       text;
   v_attempts  smallint;
+  v_ids       bigint[];
 begin
   if to_regprocedure('public.sync_own_claims()') is null then
     raise exception 'FAIL phase14_093: migration 093 is not applied (sync_own_claims is missing)';
@@ -59,12 +60,14 @@ begin
   end if;
 
   -- Every row it returns is the runner's own open claim, whatever else prod holds.
+  -- (The ids are read as sync_runner, which cannot read the table; the check runs as the test role.)
   set local role sync_runner;
-  select count(*) into v_attempts from sync_own_claims() c
-   where not exists (select 1 from agent_requests a
-                      where a.id = c.id and a.kind = 'sync' and a.state = 'claimed'
-                        and a.claimed_by = 'sync-runner');
+  select coalesce(array_agg(c.id), '{}') into v_ids from sync_own_claims() c;
   reset role;
+  select count(*) into v_attempts from unnest(v_ids) i
+   where not exists (select 1 from agent_requests a
+                      where a.id = i and a.kind = 'sync' and a.state = 'claimed'
+                        and a.claimed_by = 'sync-runner');
   if v_attempts <> 0 then
     raise exception 'FAIL 1: sync_own_claims returned % row(s) that are not the runner''s open claims', v_attempts;
   end if;
