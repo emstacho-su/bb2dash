@@ -446,3 +446,28 @@ $ node scripts/db-test.mjs
 db-test: passed 56, failed 0, units 56
 exit 0
 ```
+
+## Round 3 (brief 99, rows R3-1 to R3-5 and R3-9), 2026-10-03
+
+`origin/feat/content-history-19` (78d0be8) merged in first. Block 170–179.
+
+### Tests, written first (RED against live 138 and 139)
+
+* `phase19_132`: crawls are now registered one at a time (R3-1 makes a newer registered crawl,
+  folded or not, an older-run trigger); still passes against live 138.
+* `phase19_138`: crawl 4 is registered but not folded, and the fixture carries the `bb_files`
+  rows `stage_files` would have written.
+* `phase19_170_activity_stream.sql` (new): R3-4 (Activity equals the Stream's posts for the
+  run), R3-2 (a null `bb_file_id` resolves at read time), R3-3 (prod: no path-only row 138 would
+  not write).
+* `phase19_171_stage_content_fresh_rekey.sql` (new): R3-5.
+
+```
+PASS  phase19_132_material_history.sql
+FAIL  phase19_138_material_history_counts.sql  FAIL phase19_138: (5) crawl 3 after a registered, unfolded crawl 4 returned {"sample": [], "changed": 0, "appeared": 0, "vanished": 0, "older_run": false, "baseline_courses": 0}
+FAIL  phase19_170_activity_stream.sql  FAIL phase19_170: (R3-3) 10 path-only row(s) left that 138 would not write; (R3-4) crawl 2 counts {"changed": 1, "appeared": 1, ...}; (R3-4) crawl 2 sample Lecture notes v2,g.pdf; (R3-4) crawl 2: Activity 1/1, Stream appeared 2 changed 0; (R3-4) crawl 3 counts {... "vanished": 2 ...}; (R3-2) the unresolved rows post (none), want 1522
+FAIL  phase19_171_stage_content_fresh_rekey.sql  FAIL phase19_171: (C) crawl C returned {... "rekeyed": 1, ... "inserted": 0 ...}; (C) the Knowledge Check rows read _w52f_kc_c:ECN.304/attendance:live; (D) the re-posted Knowledge Check reads 3153|_w52f_kc_d|["_w52f_kc_a", "_w52f_kc_c"]; (D) the ghost reads _w52f_kc_d|ECN.304/attendance|
+```
+
+`phase19_171`'s RED line is R3-5's bug as the review describes it: under 139 the new Knowledge
+Check posted at a reused path takes the weeks-old ghost's row and its link.

@@ -20,13 +20,14 @@
 --       crawl 2, so the item crawl 3 first carried is `appeared` at crawl 4
 --   (6) the same with crawl 5 `running` (the claim-opened shape): its item appears at crawl 6
 --   (8) crawl 7 carries an empty tree: nothing vanishes, and crawl 8 diffs against crawl 6
---   (R2-5) with crawls 7 and 8 folded, crawl 6 is an older run although neither wrote history
+--   (R3-1) with crawls 7 and 8 registered, crawl 6 is an older run although neither wrote history
 --   (X) every fixture row belongs to the fixture course, and prod's rows are untouched
 -- Since 138 (brief 99 round 2): the counts and sample cover materials only (R2-2), a path
 -- change counts only with the item's own parent or title change and a session-scoped url
--- compares as null (R2-3, R2-4, also in (P)'s second formulation), and older_run is the
--- registered-folded-crawl predicate (R2-5), so each crawl's sync_runs row is written only
--- once the crawls before it are recorded.
+-- compares as null (R2-3, R2-4, also in (P)'s second formulation). Since 170 (round 3):
+-- older_run is stage_content's registered-crawl predicate (R3-1), so each crawl is registered
+-- only when its turn comes, and folded once the crawls before it are recorded; the counts are
+-- what the Stream posts for the run (R3-4), which on this fixture are the same numbers.
 --   (N) a stranger (authenticated, not the owner) reads 0 rows
 --
 -- The fixture course and its eight crawls exist only inside this transaction, dated in the
@@ -326,25 +327,24 @@ begin
           BB_ORIGIN || '/bbcswebdav/w52h/x2', 'readings')
   returning id into v_file_x;
 
-  -- All eight crawls are registered and carry their bb_raw rows. A crawl's sync_runs row (its
-  -- fold) is written only once the crawls before it have been recorded, the order a real fold
-  -- keeps: 138 (R2-5) counts a newer registered crawl folded ok as making a run older, so a
-  -- crawl folded ahead of time would turn the earlier recordings into older runs.
-  for i in 1..8 loop
+  -- Each crawl is registered (its request and its bb_raw rows) when its turn comes, and its
+  -- sync_runs row (its fold) is written once the crawls before it are recorded: the order a real
+  -- sync keeps. Since 170 (R3-1) a newer REGISTERED crawl makes a run older, as it does for
+  -- stage_content, so a crawl registered ahead of time would turn earlier recordings into older
+  -- runs.
+  for k in 1..8 loop
     insert into agent_requests (kind, scope, state, run_id, note, claimed_by, claimed_at, finished_at)
-    values ('sync', 'all', 'done', v_runs[i], format('Phase 19 history fixture crawl %s (rolled back)', i),
+    values ('sync', 'all', 'done', v_runs[k], format('Phase 19 history fixture crawl %s (rolled back)', k),
             'phase19_132', now(), now());
     insert into bb_raw (run_id, kind, bb_course_id, captured_at, payload)
-    select v_runs[i], 'course', SHELL, now() + make_interval(hours => i),
+    select v_runs[k], 'course', SHELL, now() + make_interval(hours => k),
            jsonb_build_object('content', coalesce((
              select jsonb_agg(jsonb_build_object(
                       'id', f.id, 'parentId', '_w52h_root_1', 'type', f.type, 'path', f.path, 'title', f.title,
                       'detail', f.detail, 'state', 'None', 'modified', 1790000000000,
                       'embeddedFiles', coalesce(f.files, '[]'::jsonb)) order by f.ord)
-               from _fx132 f where f.crawl = i), '[]'::jsonb));
-  end loop;
+               from _fx132 f where f.crawl = k), '[]'::jsonb));
 
-  for k in 1..8 loop
     -- Fold every crawl before k, with its status (crawl 3 reaped, crawl 5 still running).
     insert into sync_runs (run_id, status, started_at, finished_at, trigger, source, scope, notes)
     select v_runs[g], STATUSES[g], now(), case when STATUSES[g] = 'running' then null else now() end,
@@ -459,13 +459,11 @@ begin
     end if;
   end loop;
 
-  -- (R2-5) crawls 7 and 8 are folded and newer; crawl 8 wrote no rows. Crawl 6 is now an older
-  -- run, whether or not a newer crawl wrote history.
-  insert into sync_runs (run_id, status, started_at, finished_at, trigger, source, scope)
-  values (v_runs[8], STATUSES[8], now(), now(), 'manual', 'blackboard', 'all');
+  -- (R2-5, R3-1) crawls 7 and 8 are registered and newer and wrote no rows (crawl 8 is not even
+  -- folded). Crawl 6 is now an older run.
   v_r := material_history_record(v_runs[6]);
   if (v_r->>'older_run')::boolean is distinct from true then
-    v_fail := v_fail || format('(R2-5) crawl 6 after folded crawls 7 and 8 returned %s', v_r);
+    v_fail := v_fail || format('(R3-1) crawl 6 after newer registered crawls 7 and 8 returned %s', v_r);
   end if;
 
   -- (X) scope
