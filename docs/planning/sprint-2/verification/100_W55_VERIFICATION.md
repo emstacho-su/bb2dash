@@ -514,3 +514,11 @@ answer is not a dead login either.
 RED   files.test.ts   5 failed | 22 passed
 GREEN files.test.ts   27 passed; the whole sync suite 119 passed; tsc exit 0
 ```
+
+### Item 6 — a failed close fails a still-running run at once (093)
+
+093 re-creates `sync_close` from its live body (091's): a `failed` close of a registered request whose
+run is still `running` sets the run `failed`, `finished_at`, and appends `sync-runner: <error>` to its
+notes; a run that already folded keeps its status. The SQL case is `phase14_093_review_fixes.sql`
+section 2; the 091 unit's name check now expects thirteen (093's `sync_own_claims`). Checked after
+093's apply (below).
