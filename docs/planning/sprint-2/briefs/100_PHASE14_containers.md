@@ -6,8 +6,8 @@ list: task 30 records it in STATUS, nothing is built); S2-containers-1 · PM-add
 P-38, P-39, P-40, P-42, P-43, P-44, P-45, P-46, P-47, P-48, P-49, P-50, P-51, P-59, P-60, P-93, P-102,
 P-103, P-104, P-105, P-106, P-107, P-108, P-109 · Branch `feat/containers-14` in bb2dash, `feat/containers`
 in agentic-harness, `feat/containers-14-stack` in the new `bb2dash-stack` · Worktree
-`bb2dash-wt-containers-14` · Migration range **091–099** (091 role and RPCs; 092 the scheduled sync, only if
-B-45 adopts the reversal) · **One PR per repo, not per phase** (**PROVISIONAL, B-51**), plus one early
+`bb2dash-wt-containers-14` · Migration range **091–099** (091 role and RPCs; 092 struck 2026-10-03, the morning
+sync follows the login) · **One PR per repo, not per phase** (**PROVISIONAL, B-51**), plus one early
 `syncLauncher` PR in bb2dash (P-43): the exception is written as a DECISIONS row at the freeze (task 1,
 B-51), amending the 2026-09-09 SOP row for this phase only ·
 Depends on: the noVNC spike gate (task 4) before any sync-side task; Phases 15 (runner, test role), 18
@@ -33,12 +33,10 @@ this block says otherwise; the markers stay only to show which B-number a line r
 
 * **B-4, B-43, B-44, B-46, B-47, B-48, B-49, B-50, B-51, and B-42 through Phase 15:** the default
   (DECISIONS 2026-09-27).
-* **B-45 and open item 1:** adopted, so 092 is built (task 13) with the hour null. Stack, 2026-10-02: build
-  it and decide after the spike. Task 0's idle series put the login's life between 4:17 and 12:36 (82b), so
-  a 07:00 sync would usually find it dead. The hour is set at the cut-over only if the spike's overnight log
-  (task 4) shows the container's login alive the next morning. If it does not, the hour stays null, A5 is
-  ticked `[~]` and task 29's `[x]` count is 8.
-* **Open items 2, 3, 4 and 5:** the defaults. **Open item 6:** yes, 094 is written (eleven freeze rows).
+* **B-45 and open item 1:** ~~adopted, so 092 is built (task 13) with the hour null~~ — **superseded on
+  2026-10-03 by the amendment below**: the morning sync follows Stack's morning login, not a clock, and 092
+  is never written.
+* **Open items 2, 3, 4 and 5:** the defaults (item 2 changed on 2026-10-03, below). **Open item 6:** yes, 094 is written (eleven freeze rows).
 * **The container has its own Blackboard login.** The 2026-10-01 row "The sync runs only in Stack's
   logged-in Chrome … never open a second browser or ask for a separate login" is scoped to the Windows
   `/bb-sync` skill path (Stack, 2026-10-02). The runner's file step is `fetch_signed.mjs`'s hop walk in its
@@ -56,6 +54,27 @@ this block says otherwise; the markers stay only to show which B-number a line r
   on Phase 19's B-20, a PM pick Stack said yes to at 30 minutes on 2026-10-02 (Phase 19's PR writes the
   row): a different constant would re-set `DEAD_LETTER_MINUTES` below it, and without the rule a stale
   `sync` claim would be flagged by 091's sweep and never released. 114's `closed_itself` shape rests on Phase 17's B-29, merged.
+
+**Amended 2026-10-03 (Stack): a manual Duo login every morning is the plan.** Stack, after the spike's
+login: "we need to plan on a manual login (at the very least 2fa) on at very least the first start up of the
+day", and his own note that "stay signed in" "tends to not work". He then chose two things, each written in
+the Contract below and as its own DECISIONS row of 2026-10-03:
+
+* **The morning sync runs right after the morning login.** The runner watches the login. The first time each
+  New York day that it sees the login alive, it queues one sync through `sync_enqueue('login')`, which
+  queues nothing when a sync already finished `done` that day or one is open. The 07:00 clock is dropped:
+  092 (the column, the two functions and the cron job) is never written, task 13 is re-cut to the login
+  trigger's tests inside 091, the trigger `'scheduled'` leaves `sync_enqueue`, and R-87 is delivered by the
+  login trigger. A5 is walked (task 29 counts 9).
+* **The desktop app opens the login page when the login is dead.** The runner checks the login when it
+  starts and on a timer, not only when a sync is queued, and raises the `sync-login-required` Inbox item
+  through a twelfth function, `sync_login_required()`. When the desktop shell (under `syncLauncher =
+  queue-only`) first sees an open item with that ref, it opens the login page once in the default browser,
+  already unlocked with the noVNC password read from its file, so Stack only does NetID and Duo. It rides
+  the early launcher PR (task 18), merged before A1.
+* **Open item 2 changes:** `KEEPALIVE_MINUTES` becomes the login check while the login is alive, default 60
+  (each check is a request from the browser's session, so it also touches it); `LOGIN_WATCH_MS = 60000` is
+  the check while it is dead, so the morning login is seen within a minute.
 
 ## Why
 
@@ -95,7 +114,7 @@ Every row was **PROVISIONAL** until Stack answered. Answered 2026-09-27 by deleg
 | B-4 | S2-containers-1: must or should, and where it runs | Must; the long pole beside Phases 16–19; the spike gates only the sync half; $0; the Windows path until acceptance | "Should" or "later": only task 1 runs, and Phase 21 waits too (it reuses this phase's container, token and MCP image) |
 | B-43 | Sync without an LLM (Q34) | Yes: the deterministic runner with a templated report; `skills/bb-sync` stays the Windows fallback | No: tasks 9–12 become a `claude -p "/bb-sync <id>"` wrapper, `claude_oauth_token` becomes a `sync` secret, and R-81 grows |
 | B-44 | `/inbox-apply` (bb-sync step 0) in the container sync (Q35) | Skipped; answers apply from the Inbox button | Run it: task 9 adds a `claude -p "/inbox-apply"` branch before the login check, and the sync image gains Claude Code and `claude_oauth_token` |
-| B-45 | Scheduled morning sync (Q36) | **Adopted** (2026-09-27 by delegation; 2026-10-02 Stack: build it, decide after the spike). 092 is built with the hour null; 07:00 New York is set at the cut-over only if the spike's overnight log shows the container's login alive the next morning. The default had been: declined until he adopts it in writing | Adopted: task 13 builds 092, acceptance step A5 is walked, and task 1 writes the reversal row. Declined: 092 is never written, R-87 stays declined, and A5 is struck |
+| B-45 | Scheduled morning sync (Q36) | **Adopted, login-triggered** (2026-09-27 by delegation; 2026-10-03 Stack: "Right after my morning login"). One sync each New York day, queued by the runner the first time it sees the login alive (`sync_enqueue('login')`); no clock, no 092. The default had been: declined until he adopts it in writing | Adopted: task 13 builds 092, acceptance step A5 is walked, and task 1 writes the reversal row. Declined: 092 is never written, R-87 stays declined, and A5 is struck |
 | B-46 | Login death: Inbox only, or a toast too (Q37) | Inbox item only; the toast stays on R-96's deferred list | Toast too: R-96's first item becomes a desktop task after task 18 (a new poller source and a click-only toast) |
 | B-47 | Task 0 probes (Q38) | Start now, read as an Entra Conditional Access / KMSI measurement | Not run: task 3 is struck; `KEEPALIVE_MINUTES` stays 0 and B-45's hour, if adopted, stays the provisional 07:00 (open item 1); the spike still gates |
 | B-48 | The dev container vs the harness's "the VM replaces it" (Q39) | Keep it, in `bb2dash-stack` only, built last | Dropped: task 26 and step A7 are struck; four secret names leave the list (11 → 7) and `claude-home` leaves the volumes (5 → 4); tasks 24, 27 and 29 each count fewer (secrets 11 → 7 and services 4 → 3 in task 24; images 4 → 3 and base manifests 5 → 4 in task 27; one fewer tick in task 29); the `dev` verb goes (verbs 8 → 7, so task 24's `just --summary` → `doctor down ingest-now login logs sync-now up`, and under B-51's npm branch the `node -e` list drops `dev`); task 25's Claude token-age row goes with `claude_oauth_token` |
@@ -145,6 +164,19 @@ reads the screens already make:
 * **Home** shows Phase 19's "sync running" from the running row its trigger opens at registration.
 * **Electron** gets the config key `syncLauncher` (`terminal`, the default, or `queue-only`) and the env
   `BB2DASH_SYNC_LAUNCHER`. `queue-only` skips `attachSyncWatcher` (`desktop/src/main/index.ts:155`).
+* **Electron login prompt** (2026-10-03). Under `queue-only` only, the shell reads the open
+  `stack_must_confirm` item with ref `sync-login-required` on each poller tick (owner session, RLS as today:
+  `GET /rest/v1/attention_items?select=id&ref=eq.sync-login-required&state=eq.open`). The first time it sees
+  an item id, it opens the login page once with `shell.openExternal` and records the id, so a login death
+  opens one browser tab, never one per tick or per window. The URL is `LOGIN_PAGE_URL` plus
+  `?autoconnect=true&resize=scale&password=<the noVNC password, URL-encoded>`; the password is read from the
+  file the config key `novncPasswordFile` (env `BB2DASH_NOVNC_PASSWORD_FILE`) names, default
+  `<home>/projects/bb2dash-stack/secrets/novnc_password`, BOM, CR and LF stripped. A missing or unreadable
+  file opens the page without the password and logs one line with the path, never a value. The pure part is
+  `desktop/src/core/login-prompt.ts` (`LOGIN_PAGE_URL = 'http://127.0.0.1:6080/vnc.html'`,
+  `loginPageUrl(password | null)`, `newLoginItems(openIds, promptedIds)`); the wiring is
+  `desktop/src/main/login-prompt.ts`. The navigation policy allows `http://127.0.0.1:6080/` for
+  `openExternal` only.
 
 Local surfaces (names frozen; C-1, C-2, C-6 and C-7 as amended):
 
@@ -193,6 +225,16 @@ Local surfaces (names frozen; C-1, C-2, C-6 and C-7 as amended):
    refuses an `sb_publishable_` value.
 10. `sync_close(id, 'done' | 'failed', report)`.
 
+**The login watch** (2026-10-03), beside the passes, in `sync/src/login.ts`. The runner keeps one login state
+(`unknown`, `alive`, `dead`) and runs the same `users/me` probe on start, then every `LOGIN_WATCH_MS` while
+the state is `dead` or `unknown` and every `KEEPALIVE_MINUTES` while it is `alive` (a pass's own probe in
+step 3 also updates the state):
+* entering `dead` calls `sync_login_required()`, once per entry;
+* entering `alive` calls `sync_login_ok()`, then `sync_enqueue('login')`, which queues the day's sync only if
+  none finished `done` on that New York day and none is open (so a container restart at noon after a morning
+  sync queues nothing);
+* the watch never claims, crawls or retries a sync itself; it only probes, raises, closes and enqueues.
+
 On start, the runner calls `sync_requeue_orphans()` once. It launches Chromium with
 `launchPersistentContext(<bb-profile>, { headless: false, chromiumSandbox: true })`, headful on Xvfb, as
 `pwuser` under Playwright's `seccomp_profile.json` (P-102). `chromiumSandbox` is set explicitly because
@@ -204,7 +246,10 @@ Named constants, each tested:
 * `FOLD_WAIT_MS = 600000`
 * `MAX_CLAIM_ATTEMPTS = 3`, the same in SQL and TS
 * `DEAD_LETTER_MINUTES = 20`, in SQL
-* `KEEPALIVE_MINUTES`, an env value; 0 means off until 82b sets it (B-47, **PROVISIONAL**)
+* `KEEPALIVE_MINUTES`, an env value, default 60 (2026-10-03): the login check while the login is alive;
+  each check is a request from the browser's session and so also touches it. 0 turns that check off
+* `LOGIN_WATCH_MS = 60000`: the login check while the login is dead or unknown, so the morning login is seen
+  within a minute
 * `LOGIN_HOSTS`: `login.microsoftonline.com` (the one host `skills/bb-sync/SKILL.md` step 1 spells out),
   plus the hosts the spike's Duo login passed through, copied from 82b's single `LOGIN_HOSTS:` line (task
   4). SKILL.md names "NetID" and "any Blackboard login page" without a host, so none is guessed here; the
@@ -228,8 +273,9 @@ the session pooler (port 5432, user `sync_runner.goultdzqcavefcgnifdy`, Phase 15
 `db_test_runner`), never the transaction pooler on 6543. Prod has the pooler's `pgbouncer.get_auth(text)`
 lookup, but nothing proves the custom role through 5432 until task 7's `--ping`. On 2026-09-24 no SECURITY
 DEFINER function in `public` is executable by PUBLIC (the seven PUBLIC-executable functions are all
-invokers; re-read on 2026-09-27: 0 DEFINER, 7 invokers), so the eleven below are the whole of what the role
-can run with the owner's rights. Task 7's precondition re-reads it after Phases 15–19.
+invokers; re-read on 2026-09-27: 0 DEFINER, 7 invokers), so the twelve below (eleven until 2026-10-03,
+when `sync_login_required` was added) are the whole of what the role can run with the owner's rights; the
+helper `sync_login_sync_due` is executable by no role but its owner. Task 7's precondition re-reads it after Phases 15–19.
 
 | Signature | Does | Refuses / notes |
 |---|---|---|
@@ -242,15 +288,13 @@ can run with the owner's rights. Task 7's precondition re-reads it after Phases 
 | `sync_file_stored(p_id bigint, p_key text, p_relpath text, p_sha256 text, p_bytes integer, p_mime text, p_text_status text) returns boolean` | writes what `bbFilesUpdateSql` writes: `storage_path = 'bb-files/' \|\| p_key`, `local_path = 'course context/' \|\| p_relpath`, `mime_type` coalesced for `my_submissions`, `downloaded_at = now()`, notes `\| bytes pulled <date> by sync-runner` | `where id = p_id and storage_path is null`; the path prefixes are the function's, not the caller's |
 | `sync_close(p_id bigint, p_state text, p_report jsonb) returns void` | own `claimed → done/failed`; `queued → failed`; sets `finished_at`, `result = p_report`, `sync_run_id`; appends `p_report->'lines'` to that run's `summary->'changes'`; `error = 'login_required'` → `raise_attention(null, 'stack_must_confirm', null, 'agent_request', 'sync-login-required', null, null, null, <question>, null)` | any other transition; a report that is not an object with an array `lines` |
 | `sync_sweep_stale() returns integer` | kinds `sync` and `inbox_feedback`, `state = 'claimed'`, `claimed_at` older than 20 minutes or `claim_attempts >= 3`, not yet flagged → `raise_attention(null, 'stack_must_confirm', null, 'agent_request', 'agent_request:<id>', null, null, null, <question>, null)`, the exact call shape Phase 19's terminal rule uses (99 §RPC signatures, `transform_tick` item 3, the terminal rule); sets `result.dead_lettered_at` | never changes `state`; never retries. The release for a `sync` row is Phase 19's 30-minute terminal rule (136), which fails the request; an `inbox_feedback` row is only flagged (no release in this phase; R-96's list, §Out of scope) |
-| `sync_enqueue(p_trigger text) returns bigint` | `p_trigger in ('just', 'scheduled')`; under `pg_advisory_xact_lock`, returns the open sync's id if one is `queued` or `claimed`, else inserts one with `params = {"trigger": p_trigger}` | never a second open sync |
+| `sync_enqueue(p_trigger text) returns bigint` | `p_trigger in ('just', 'login')` (2026-10-03: `'scheduled'` dropped with 092); under `pg_advisory_xact_lock`, returns the open sync's id if one is `queued` or `claimed`; else, for `'login'` only, returns null and inserts nothing unless `sync_login_sync_due(now())`; else inserts one with `params = {"trigger": p_trigger}` | never a second open sync; `'login'` never a second sync on a New York day that already has a `done` one |
+| `sync_login_required() returns bigint` (2026-10-03) | the login watch's raise: the same `raise_attention(null, 'stack_must_confirm', null, 'agent_request', 'sync-login-required', null, null, null, <question>, null)` call `sync_close` makes for `login_required`, one shared body; returns the open item's id | an item already open is returned, not duplicated (`attention_items_open_dedupe_idx`) |
+| helper `sync_login_sync_due(p_now timestamptz) returns boolean` (2026-10-03) | `stable`, `language plpgsql`, the house `search_path`; true when no `kind = 'sync'` row has `state = 'done'` and a `finished_at` on the New York date of `p_now` | executable by its owner only (no grant to `sync_runner`); called inside `sync_enqueue` |
 | `sync_login_ok() returns integer` | archives the open `stack_must_confirm` item with ref `sync-login-required`: `state = 'archived'`, `archived_at = now()`, `archived_by = 'sync-runner'`, `decision = {"closed_itself": true, "rule": "login check passed", "sync_run_id": null, "trigger": "sync_login_ok"}` (114's four keys); returns the rows closed (0 or 1) | touches no other ref. Phase 17's `close_cleared_gaps(bigint, text)` (114) closes only `suggested->>'source' = 'stage_gaps'` rows, so it cannot serve here; this is its own body writing 114's `closed_itself` record shape, one shape and one DECISIONS row shared with R-56 (task 1). `archive_attention_item()` refuses open rows, so it is not used. `raise_attention` consults `attention_answered` only for `missing` / `data_gap`, so the next login death raises a fresh item |
 
-092, only if B-45 adopts the reversal:
-* `sync_schedule_due(p_now timestamptz, p_hour smallint) returns boolean`: `stable`; true when the New
-  York wall-clock hour of `p_now` equals `p_hour`.
-* `sync_schedule_tick() returns bigint`: `security definer`, executable by `postgres` only. It cancels
-  `queued` rows with `params->>'trigger' = 'scheduled'` older than 6 hours, then calls
-  `sync_enqueue('scheduled')` when due.
+~~092, only if B-45 adopts the reversal: `sync_schedule_due`, `sync_schedule_tick`.~~ Struck 2026-10-03: the
+morning sync follows the login (the login watch and `sync_enqueue('login')` above), so 092 is never written.
 
 ### Tables and migrations
 
@@ -260,10 +304,10 @@ file's name, byte-identical to the repo. A file that re-creates a live object op
 
 | # | File | Creates |
 |---|---|---|
-| 091 | `db/migrations/091_sync_runner_role.sql` | role `sync_runner`; `agent_requests.claim_attempts smallint not null default 0` (no web or desktop code reads it); the eleven functions and their grants; `comment on` each |
-| 092 | `db/migrations/092_scheduled_sync.sql` | **only if B-45 adopts:** `app_settings.sync_schedule_hour smallint null check (sync_schedule_hour between 0 and 23)` (null = off, set at cut-over); the two functions; cron job `bb2dash-scheduled-sync`, `5 * * * *`, `select sync_schedule_tick()`. Prod on 2026-09-27 has neither the column nor the job |
+| 091 | `db/migrations/091_sync_runner_role.sql` | role `sync_runner`; `agent_requests.claim_attempts smallint not null default 0` (no web or desktop code reads it); the twelve functions and their grants, and the helper `sync_login_sync_due` with no grant; `comment on` each |
+| 092 | — | **struck 2026-10-03:** never written (the morning sync follows the login; no column, no cron job). The number stays unused |
 | 093 | `db/migrations/093_sync_runner_review_fixes.sql` | reserved for `/code-review` findings: `create or replace` of 091's functions only, 091 byte-frozen (088's precedent); never written if no finding needs SQL |
-| 094 | `db/migrations/094_sync_runner_test_membership.sql` | **PROVISIONAL (open item 6):** `grant sync_runner to db_test_runner with inherit false`, so a test unit can `set local role sync_runner` and inherits nothing, plus exactly the table writes the two `phase14_*` units make that Phase 15's 100 does not grant, enumerated by name, and (only with 092) `execute` on 092's two functions; a guard block raises if `db_test_runner` is absent. The same PR extends the expected membership list in Phase 15's `db/tests/phase15_100_db_test_runner_role.sql` with `sync_runner` (inherit false), as 95 §Seams requires (task 7a) |
+| 094 | `db/migrations/094_sync_runner_test_membership.sql` | **PROVISIONAL (open item 6):** `grant sync_runner to db_test_runner with inherit false`, so a test unit can `set local role sync_runner` and inherits nothing, plus exactly the table writes the two `phase14_*` units make that Phase 15's 100 does not grant, enumerated by name; a guard block raises if `db_test_runner` is absent. The same PR extends the expected membership list in Phase 15's `db/tests/phase15_100_db_test_runner_role.sql` with `sync_runner` (inherit false), as 95 §Seams requires (task 7a) |
 | 095–099 | — | unused slack (94 §2 rule 6) |
 
 **Replay order.** 091–094 are applied after Phases 15–19 (100–139) but replay before them by name (95
@@ -315,28 +359,32 @@ Under an owner-level DSN the `--only` commands stay as written and run as `postg
 * the sweep flags a 21-minute claim once and a third-claim row at once, and a second sweep flags nothing;
 * requeue skips registered rows and rows at 3 claims;
 * `sync_enqueue` twice returns one id;
+* the login trigger (2026-10-03): `sync_enqueue('login')` with no sync `done` today returns a new id whose
+  `params->>'trigger'` is `login`; with one open returns that id; with one `done` today (New York) returns
+  null and inserts nothing; `sync_enqueue('scheduled')` is refused. `sync_login_sync_due` reads the New York
+  date, not UTC: a `done` sync finished `2026-10-31 03:30Z` (23:30 the day before in New York) leaves
+  `2026-10-31 12:00Z` due, one finished `2026-10-31 13:00Z` does not, and the same across the
+  `2026-11-01` fall-back (`2026-11-02 04:30Z` is 23:30 on the 1st, `2026-11-02 05:30Z` is 00:30 on the 2nd);
+* `sync_login_required()` twice returns the same item id, and `sync_close(…, 'login_required')` after it
+  opens no second item;
 * under `set local role sync_runner` (094), reading `agent_requests`, `bb_files` or `attention_items`
-  raises 42501, and `has_table_privilege('sync_runner', …, 'select')` is false for all three;
-* `anon` and `authenticated` execute none of the eleven;
+  raises 42501, and `has_table_privilege('sync_runner', …, 'select')` is false for all three; executing
+  `sync_login_sync_due` raises 42501;
+* `anon` and `authenticated` execute none of the twelve, nor the helper;
 * no `pg_default_acl` row names `sync_runner`;
 * the unit's last row reads `phase14_091: PASS` (Phase 15's pass rule).
 
-`db/tests/phase14_092_scheduled_sync.sql` (only with 092) asserts, for hour 7:
-* `sync_schedule_due` is true at `2026-10-31 11:05Z`, `2026-11-02 12:05Z` and `2027-03-15 11:05Z`, and
-  false at `2026-11-02 11:05Z`;
-* a tick with the hour null inserts 0, and a tick with an open sync inserts 0;
-* a 7-hour-old `scheduled` row is cancelled;
-* the unit's last row reads `phase14_092: PASS`.
+~~`db/tests/phase14_092_scheduled_sync.sql`~~ struck 2026-10-03 with 092; its New York date cases moved
+into the 091 unit's login-trigger bullet above.
 
 ### Files
 
 **bb2dash, new:**
 * W-55:
-  * `db/migrations/091_sync_runner_role.sql`, `db/migrations/092_scheduled_sync.sql` (conditional),
-    `db/migrations/093_sync_runner_review_fixes.sql` (reserved),
-    `db/migrations/094_sync_runner_test_membership.sql` (PROVISIONAL)
-  * `db/tests/phase14_091_sync_runner.sql`, `db/tests/phase14_092_scheduled_sync.sql`,
-    `db/tests/phase14_load_crawl_v4.sql` (generated; never hand-edited)
+  * `db/migrations/091_sync_runner_role.sql`, `db/migrations/093_sync_runner_review_fixes.sql` (reserved),
+    `db/migrations/094_sync_runner_test_membership.sql` (092 struck 2026-10-03)
+  * `db/tests/phase14_091_sync_runner.sql`, `db/tests/phase14_load_crawl_v4.sql` (generated; never
+    hand-edited)
   * `db/fixtures/phase14/crawl_v4_scrubbed.json`, `db/fixtures/phase14/scrub_crawl.mjs` (exports
     `SCRUB_FIELDS`; writes `db/tests/phase14_load_crawl_v4.sql`, as `db/fixtures/phase12b/build_load_sql.js`
     does), `db/fixtures/phase14/README.md`
@@ -361,7 +409,9 @@ Under an owner-level DSN the `--only` commands stay as written and run as `postg
   * `scripts/install-skills.mjs` (the hash-checked copy of the harness's `hooks/install-checkpoint.mjs`;
     `--check` mode), `scripts/install-skills.test.mjs`
   * `docs/planning/sprint-2/verification/100_W56_VERIFICATION.md` (with the refreshed R5 OS-bound table, P-44)
-  * launcher branch: `desktop/test/unit/sync-launcher.test.ts`
+  * launcher branch: `desktop/test/unit/sync-launcher.test.ts`; and (2026-10-03) the login prompt:
+    `desktop/src/core/login-prompt.ts`, `desktop/src/main/login-prompt.ts`,
+    `desktop/test/unit/login-prompt.test.ts`
 * PM:
   * `desktop/src/core/sync-id.ts` (`SYNC_ID_PATTERN`, `isValidSyncId`, `InvalidSyncIdError`) and
     `desktop/test/unit/sync-id.test.ts`, committed before any worker branch is cut
@@ -494,9 +544,9 @@ widened for Supabase, Vercel, GitHub, npm, PyPI and astral.sh; `statsig.anthropi
 * 2026-09-09 — "Workflow SOP: dev on branches, push per completed task, **one PR per phase**, merge only on Stack's word" (the per-repo exception is task 1's row)
 * 2026-09-09 — "`embed-corpus` persists per-part, not per-unit"
 * 2026-09-10 — "The transform folds **only crawls registered on an owner-claimed `agent_requests` row** (`agent_requests.run_id`, migration 039); unregistered `bb_raw` runs are quarantined once, never folded; `bb_raw` unique on `(run_id, kind, bb_course_id)`" (task 1 amends "owner-claimed" to admit `sync_runner`, a second principal that can authorise a fold)
-* 2026-09-10 — "RLS hardened to owner-scoped (migration 020): 21 `using(true)` authenticated policies → `auth.uid() = public.app_owner()`" (091 adds no policy; `sync_runner` reaches rows only through its eleven DEFINER functions)
+* 2026-09-10 — "RLS hardened to owner-scoped (migration 020): 21 `using(true)` authenticated policies → `auth.uid() = public.app_owner()`" (091 adds no policy; `sync_runner` reaches rows only through its twelve DEFINER functions)
 * 2026-09-10 — "**All 15 public views are `security_invoker`** with anon revoked (migration 036, guard block refuses a future non-invoker view)"
-* 2026-09-10 — "Sync cadence: **Stack triggers**, the app does the rest; no scheduled crawl, no reminders" (stands unless B-45)
+* 2026-09-10 — "Sync cadence: **Stack triggers**, the app does the rest; no scheduled crawl, no reminders" (amended 2026-10-03: Stack's morning login triggers the day's sync, and the app opens the login page when the login is dead)
 * 2026-09-11 — "SECURITY DEFINER transform functions are not callable by `authenticated` (038); the app's only path to a transform is an `agent_requests` row"
 * 2026-09-14 — "`attention_items` dedupes only while `state = 'open'` (041); a "Keep mine" answer stands until Blackboard's value changes (042); `applied_at` is set only when a fact was written, otherwise the row stays "answered, applies on next sync" (042)"
 * 2026-09-14 — "**Definition of done for every remaining phase = SOP gates + Stack's acceptance script** walked on the Vercel preview; sign-off once per phase, at the PR"
@@ -533,8 +583,9 @@ quoted from 82 as the MVP he confirmed:
 > are gone. Nothing costs money."
 
 *PM's reading of it for today (PM wording, not Stack's; each line rests on a PROVISIONAL B-number):*
-* "a sync also runs by itself each morning" holds only if B-45 adopts the reversal. Until then the button
-  is the only trigger.
+* "a sync also runs by itself each morning while that login is alive" is read, since 2026-10-03, as: the
+  morning sync runs right after Stack's morning Duo login, which the desktop app prompts by opening the
+  login page.
 * "My vault is a private git repo" is already met by the two realm repos (2026-09-24). The jobs container
   writes to them as `home-pc` (B-50).
 * "when it dies the Inbox tells me" is the button-press path, with no toast (B-46).
@@ -566,7 +617,7 @@ SOP gates, each on its own PR:
 - [ ] bb2dash-stack: `node --test doctor/doctor.test.mjs` → `# fail 0`.
 - [ ] `/code-review main high` on each PR: CRITICAL and HIGH cleared. A SQL fix goes to 093; 091 stays
       byte-frozen.
-- [ ] `/security-review` on each PR: noVNC exposure, the `bb-profile` volume, `sync_runner` and its eleven
+- [ ] `/security-review` on each PR: noVNC exposure, the `bb-profile` volume, `sync_runner` and its twelve
       RPCs (a second principal that can authorise a fold), 094's membership (the test credential can act as
       `sync_runner` inside a rolled-back unit), the Chromium sandbox choice (seccomp profile, non-root; any
       `--no-sandbox` fallback named), secrets handling and the `*_FILE` shims, the MCP key file,
@@ -595,7 +646,9 @@ SOP gates, each on its own PR:
 3. **A3.** `just login`: log in to Blackboard with Duo in the noVNC page.
 4. **A4.** With `syncLauncher` set to `queue-only`, press Sync in the app. No terminal opens. The sync
    lands, Activity shows the runner's lines, and new files are in Storage.
-5. **A5** (only if B-45 is adopted). The next morning, a scheduled sync has run by itself.
+5. **A5** (login-triggered, 2026-10-03). The next morning the desktop app opens the login page by itself,
+   already unlocked; after NetID and Duo, a sync runs without pressing Sync, and the Inbox's login item is
+   archived.
 6. **A6** (struck if B-49 is answered "no"). `just ingest-now`, then a `rag` search finds a note written
    that day. After a night asleep, the 03:00 job ran on wake, and the jobs container pushed its notes to the
    realms.
@@ -613,27 +666,26 @@ SOP gates, each on its own PR:
    **PROVISIONAL**).
 4. Nights pass (A6), then A7.
 5. On acceptance, both jobs are unregistered (A8) and A9 is walked.
-6. DECISIONS records the cut-over. If B-45 is adopted, `sync_schedule_hour` is set only now.
+6. DECISIONS records the cut-over.
 
 One line per requirement in scope:
 * **R-81:** task 12 green, plus task 28's container run (`claimed_by = 'sync-runner'`, `done`, files pulled).
 * **R-82:** 82b "Verdict: PASS", `walk-14/01` and `/02`, and task 15's checks.
 * **R-83:** `phase14_091` PASS, `report.test.ts` green, `walk-14/03` and `/04`, and the login item archived
   after re-login.
-* **R-84:** task 7's precondition and its three post-apply SQL checks (the eleven names, 0, 0), its
+* **R-84:** task 7's precondition and its three post-apply SQL checks (the twelve names, 0, 0), its
   `--ping` line, task 7a's membership row and its `phase15_100` runner line, and the `/security-review` pass.
 * **R-85:** task 28's parity assertions, task 18 merged, and task 29's cut-over ticks.
 * **R-86:** the two grep-clean tests green (tasks 16, 22).
-* **R-87:** if adopted, `phase14_092` PASS, the cron job present and A5 ticked; otherwise no `092_` file
-  exists, and R-87 stays declined in STATUS.
+* **R-87:** login-triggered (2026-10-03): task 13's cases in `phase14_091` PASS, task 9's login-watch cases
+  green, A5 ticked, and no `092_` file exists.
 * **R-88:** tasks 24–25 and A2.
 * **R-89:** 11 secret names; gitleaks clean on 4 of 4 images, filesystem and history (task 27); `sb_secret_` absent from `~/.claude.json` and
   `bb2dash/.env` (task 17's Stack step).
 * **R-90:** tasks 20–23, A6 and A8.
 * **R-91:** task 17.
 * **R-92:** task 26 (`SMOKE PASS 7/7`) and A7.
-* **R-93 and S2-containers-1:** task 29 (8 ticks at the defaults, A5 struck while B-45 stays declined; 9 if
-  B-45 is adopted; one fewer for each step B-48 or B-49 strikes).
+* **R-93 and S2-containers-1:** task 29 (9 ticks; one fewer for each step B-48 or B-49 strikes).
 * **R-94:** 82a's five base-manifest rows and a clean `docker compose build`.
 * **R-95:** this brief and task 1's freeze row.
 * **R-96:** the deferred list in STATUS (task 30), with no build.
@@ -651,20 +703,20 @@ PASS, with Phases 15, 18 and 19 on `main`. W-57 and W-58 may be cut after task 1
 | 4 | **Spike (gate).** Build the pinned Playwright image with Xvfb, x11vnc and noVNC under `docker/sync/seccomp_profile.json`, the `bb-profile` volume, `127.0.0.1:6080` and `novnc_password`. `session-age.mjs` launches Chromium with the Contract's call, `launchPersistentContext(<bb-profile>, { headless: false, chromiumSandbox: true })`. Stack logs in with Duo; then `docker compose restart sync`; then `session-age.mjs` logs overnight. **Sandbox rule (P-102):** if Chromium starts under the profile and the `/proc` scan below counts 0 `--no-sandbox` while `session-age.mjs` runs, 82b gets the line `Sandbox: seccomp`; if the launch fails under the profile (the `launchPersistentContext` promise rejects, or the renderer crashes before Blackboard's page loads), its first error line goes into 82b, the spike relaunches with `chromiumSandbox: false`, and 82b gets `Sandbox: --no-sandbox fallback`. The verdict line, the `Sandbox:` line and the `LOGIN_HOSTS:` line are all written in `docs/planning/sprint-2/verification/82b_NOVNC_SPIKE.md`. The verdict and a DECISIONS row follow: PASS, or re-plan on the `storageState` fallback | R-82, P-38, P-102, P-103 | PM + Stack | (c) `docs/planning/sprint-2/walks/walk-14/01-novnc-duo-login.png`: the address bar reading `127.0.0.1:6080/vnc.html` and, inside the noVNC view, Blackboard Ultra's page heading "Courses" after Duo; `02-after-restart.png`: the same address and the same "Courses" heading after `docker compose restart sync`, with no sign-in form in view. (d) `docker compose port sync 6080` → `127.0.0.1:6080`; `grep -c "^Verdict: PASS$" docs/planning/sprint-2/verification/82b_NOVNC_SPIKE.md` → 1; in the same file `grep -c "^LOGIN_HOSTS: .*login\.microsoftonline\.com" …` → 1 (the one line listing the hosts the Duo login passed through) and `grep -cE "^Sandbox: (seccomp\|--no-sandbox fallback)$" …` → 1; `grep -c "chromiumSandbox: true" docker/sync/spike/session-age.mjs` → 1 when 82b reads `Sandbox: seccomp` (0 under the fallback); while `session-age.mjs` runs, `docker compose exec sync sh -c 'for f in /proc/[0-9]*/cmdline; do tr "\0" " " < "$f"; echo; done' \| grep -c -- "--no-sandbox"` → 0 before `Sandbox: seccomp` is written, the count pasted into 82b under that line (≥ 1 under the fallback) | "I logged in to Blackboard inside a container" |
 | 5 | Split the id check out of `sync-command.ts` into `desktop/src/core/sync-id.ts`, before any worker is cut | P-42, R-86 | PM | (a) `cd desktop && npx vitest run test/unit/sync-id.test.ts test/unit/sync-command.test.ts test/unit/core-portability.test.ts` → 0 failures; (d) `grep -ci "powershell" desktop/src/core/sync-id.ts` → 0 | — |
 | 6 | Write `db/tests/phase14_091_sync_runner.sql` first, with the assertion list in §Tables and migrations, and add the loader-map entry to `scripts/db-test.mjs` | R-84, R-83, P-104 | W-55 | (a) `node scripts/db-test.mjs --list \| grep -c "phase14_load_crawl_v4.sql + phase14_091_sync_runner.sql"` → 1; `node --test scripts/db-test.test.mjs` → 0 failures; after task 8 has generated the loader and before 091, `node scripts/db-test.mjs --only phase14_091_sync_runner.sql` → `db-test: passed 0, failed 1, units 1`, exit 1, the line copied into `100_W55_VERIFICATION.md`; after tasks 7 and 7a → `db-test: passed 1, failed 0, units 1`, exit 0 | — |
-| 7 | 091: role, `claim_attempts` and the eleven functions. Dry run in `begin; … rollback;`, apply with `apply_migration` as `091_sync_runner_role`, then Stack sets the password (never in a file) | R-84, P-104 | W-55 | (b) precondition, before the dry run: `select count(*) from supabase_migrations.schema_migrations where name in ('100_db_test_runner_role', '135_sync_run_open_at_claim', '136_transform_tick_register_first', '137_sync_status_run_state')` → 4 (0 on 2026-09-27; 3 if B-42's answer leaves migration 100 unwritten, **PROVISIONAL, B-42**) and `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and has_function_privilege('public', p.oid, 'execute')` → 0 (0 on 2026-09-27; the eleven-name check below relies on it). After the apply: `select string_agg(p.proname, ',' order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and has_function_privilege('sync_runner', p.oid, 'execute')` → `sync_claim,sync_close,sync_enqueue,sync_file_stored,sync_file_worklist,sync_login_ok,sync_next,sync_register_run,sync_requeue_orphans,sync_run_outcome,sync_sweep_stale`; `select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind in ('r','v','m','p') and has_table_privilege('sync_runner', c.oid, 'select,insert,update,delete')` → 0; `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = any (array['sync_next','sync_claim','sync_requeue_orphans','sync_register_run','sync_run_outcome','sync_file_worklist','sync_file_stored','sync_close','sync_sweep_stale','sync_enqueue','sync_login_ok']) and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))` → 0 (a `like 'sync\_%'` filter would also catch `sync_change_lines`, which 051 grants to `authenticated`); the md5 of the recorded statement equals the repo file's (DoD method). (d) After Stack sets the password, one command with the session-pooler DSN (user `sync_runner.goultdzqcavefcgnifdy`, port 5432) as `BB2DASH_TEST_DB_URL`: `node scripts/db-test.mjs --ping` → `db-test: connected as sync_runner`, exit 0; Stack runs it and the line goes into `100_W55_VERIFICATION.md` | — |
+| 7 | 091: role, `claim_attempts`, the twelve functions and the helper. Dry run in `begin; … rollback;`, apply with `apply_migration` as `091_sync_runner_role`, then Stack sets the password (never in a file) | R-84, P-104 | W-55 | (b) precondition, before the dry run: `select count(*) from supabase_migrations.schema_migrations where name in ('100_db_test_runner_role', '135_sync_run_open_at_claim', '136_transform_tick_register_first', '137_sync_status_run_state')` → 4 (0 on 2026-09-27; 3 if B-42's answer leaves migration 100 unwritten, **PROVISIONAL, B-42**) and `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and has_function_privilege('public', p.oid, 'execute')` → 0 (0 on 2026-09-27; the twelve-name check below relies on it). After the apply: `select string_agg(p.proname, ',' order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and has_function_privilege('sync_runner', p.oid, 'execute')` → `sync_claim,sync_close,sync_enqueue,sync_file_stored,sync_file_worklist,sync_login_ok,sync_login_required,sync_next,sync_register_run,sync_requeue_orphans,sync_run_outcome,sync_sweep_stale`; `select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind in ('r','v','m','p') and has_table_privilege('sync_runner', c.oid, 'select,insert,update,delete')` → 0; `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = any (array['sync_next','sync_claim','sync_requeue_orphans','sync_register_run','sync_run_outcome','sync_file_worklist','sync_file_stored','sync_close','sync_sweep_stale','sync_enqueue','sync_login_ok','sync_login_required','sync_login_sync_due']) and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))` → 0 (a `like 'sync\_%'` filter would also catch `sync_change_lines`, which 051 grants to `authenticated`); the md5 of the recorded statement equals the repo file's (DoD method). (d) After Stack sets the password, one command with the session-pooler DSN (user `sync_runner.goultdzqcavefcgnifdy`, port 5432) as `BB2DASH_TEST_DB_URL`: `node scripts/db-test.mjs --ping` → `db-test: connected as sync_runner`, exit 0; Stack runs it and the line goes into `100_W55_VERIFICATION.md` | — |
 | 7a | 094 (PROVISIONAL, open item 6): the test role's membership and the enumerated writes, and, in the same PR, the expected membership list in Phase 15's `db/tests/phase15_100_db_test_runner_role.sql` gains `sync_runner` (inherit false), nothing else in that file (95 §Seams). Dry run, apply as `094_sync_runner_test_membership` after Phase 15's 100 is on prod | R-84 | W-55 | (b) `select count(*) from pg_auth_members m where m.roleid = 'sync_runner'::regrole and m.member = 'db_test_runner'::regrole and not m.inherit_option` → 1; `select rolbypassrls from pg_roles where rolname = 'sync_runner'` → false. (a) With the list amended and before 094 is applied, `node scripts/db-test.mjs --only phase15_100_db_test_runner_role.sql` → `db-test: passed 0, failed 1, units 1`, exit 1; after the apply → `db-test: passed 1, failed 0, units 1`, exit 0; both lines in `100_W55_VERIFICATION.md` | — |
 | 8 | Build the scrubbed recorded-crawl fixture from a live v4 run: 9 `bb_raw` rows, with Stack's submitted text removed. Default source: run `3b5174b8` (`sync_runs` 62, the parity baseline). Prod on 2026-09-27: it holds 1 `calendar`, 7 `course` and 1 `memberships` row (run `9080daeb` has the same shape), with 6 non-null `studentSubmission` values in 2 of them; all of `bb_raw` holds 12 such values in 4 rows (P-35's "on 12 rows" counts values, not rows) | P-35 | W-55 | (a) `cd sync && npx vitest run test/fixture-scrub.test.ts` → 0 failures: 9 rows; kinds `calendar` 1, `course` 7, `memberships` 1; `SCRUB_FIELDS` includes `studentSubmission`; no field in `SCRUB_FIELDS` non-empty | — |
-| 9 | Runner core: login rule, probe, claim, register-first, crawl, fold wait, close, startup requeue, keep-alive switch | R-81, R-83 | W-55 | (a) `cd sync && npx vitest run test/login.test.ts test/loop.test.ts` → 0 failures. Named cases: each `LOGIN_HOSTS` entry; `users/me` 401 and 403 close `queued → failed`; claim lost; register refused; fold timeout leaves the row claimed; crawl throws → failed; done | "I pressed Sync and no terminal opened" |
+| 9 | Runner core: login rule, probe, claim, register-first, crawl, fold wait, close, startup requeue, and (2026-10-03) the login watch | R-81, R-83, R-87 | W-55 | (a) `cd sync && npx vitest run test/login.test.ts test/loop.test.ts` → 0 failures. Named cases: each `LOGIN_HOSTS` entry; `users/me` 401 and 403 close `queued → failed`; claim lost; register refused; fold timeout leaves the row claimed; crawl throws → failed; done. Login watch, on a fake clock: a dead start calls `sync_login_required` once and probes every `LOGIN_WATCH_MS`; dead → alive calls `sync_login_ok` then `sync_enqueue('login')` once; alive probes every `KEEPALIVE_MINUTES`; alive → dead raises again; `KEEPALIVE_MINUTES=0` stops the alive check | "I pressed Sync and no terminal opened" |
 | 10 | Files and embed on Phase 18's `ingest/fetch_signed.mjs` and `ingest/embed_corpus.mjs` (P-36 is Phase 18's; this task only calls them) | R-81, P-104 | W-55 | (a) `cd sync && npx vitest run test/files.test.ts` → 0 failures: sha256 recorded; `session_expired` (401/403) stops the step; `gone` (404), `refused` and a Storage 409 reported in `not_pulled`, never passed to `sync_file_stored`; an `EXDEV` from the move takes copy-then-unlink; `embed_corpus.mjs` is spawned once after ≥ 1 unit and never on 0; (d) `grep -c "fetch_signed.mjs" sync/src/files.ts` → 1 (its one import; `files.ts` has no copy of the fetch) | "my submission file came back" |
 | 11 | Report template, the dead-letter sweep with its attempts cap, the login item and its self-close, and `skills/bb-sync` step 1's ref | R-83, P-104 | W-55 | (a) `cd sync && npx vitest run test/report.test.ts` → 0 failures; `node scripts/db-test.mjs --only phase14_091_sync_runner.sql` → `db-test: passed 1, failed 0, units 1`; (d) `grep -c "'sync-login-required'" skills/bb-sync/SKILL.md` → 1 (the quoted ref in step 1's insert) and `grep -c "migration 031" skills/bb-sync/SKILL.md` → 0 | "the Inbox told me to log in again" |
 | 12 | Integration and coverage: the fixture replayed twice through a fake page and a fake RPC client | R-81, P-35 | W-55 | (a) `cd sync && npx vitest run --coverage` → 0 failures, exit 0 under the 80% line threshold. `integration.test.ts` asserts the call order `claim, register, crawl, wait, files, embed, close`, and that a second pass on a done request calls nothing after `sync_next()` | — |
-| 13 | **Only if B-45 adopts (PROVISIONAL):** 092 and its test; the hour stays null until cut-over | R-87 | W-55 | (a) `node scripts/db-test.mjs --only phase14_092_scheduled_sync.sql` → `db-test: passed 1, failed 0, units 1`; (b) `select count(*) from cron.job where jobname = 'bb2dash-scheduled-sync'` → 1; `select count(*) from app_settings where sync_schedule_hour is not null` → 0 before cut-over. If declined: (d) `ls db/migrations \| grep -c "^092_"` → 0 | "a sync ran by itself this morning" |
+| 13 | **The login trigger** (re-cut 2026-10-03; was 092): `sync_enqueue('login')`, `sync_login_sync_due` and `sync_login_required` inside 091, with the 091 unit's login-trigger and `sync_login_required` cases | R-87 | W-55 | (a) `node scripts/db-test.mjs --only phase14_091_sync_runner.sql` → `db-test: passed 1, failed 0, units 1` with the New York date cases in it; (d) `ls db/migrations \| grep -c "^092_"` → 0; (b) after 091's apply, `select count(*) from cron.job where jobname like '%scheduled-sync%'` → 0 | "a sync ran by itself right after my morning login" |
 | 13a | **Integrate:** merge W-55's `feat/containers-14-sync` into `feat/containers-14` after task 12 (after task 13 when B-45 adopts it); W-56 merges `feat/containers-14` into `feat/containers-14-images` before running the task 14–15 checks | R-81, R-82 | PM + W-56 | (d) run once, at integration: after `git fetch`, `git rev-parse origin/feat/containers-14-sync` gives the SHA compared, then `git merge-base --is-ancestor <that SHA> origin/feat/containers-14-images; echo $?` → 0; the SHA and the 0 are recorded in `100_W56_VERIFICATION.md`. The check is point-in-time: a later W-55 push (a 093 fix, say) does not re-open it; before a task 14–15 check is re-run after such a push, the PM and W-56 repeat both merges and record the new SHA the same way | — |
 | 14 | Lock the Python set; `extractUnits` uses it; check Xpdf vs poppler parity on the fixtures | R-81 | W-56 | (a) on the integrated branch (task 13a): `node --test ingest/extract_text.test.mjs ingest/pull_files.test.mjs` → `# fail 0` on the host (Xpdf 4.00); `docker compose run --rm sync node --test ingest/extract_text.test.mjs` → `# fail 0` in the image (poppler), both against the same `ingest/fixtures/extract/expected.json` | — |
 | 15 | The sync image and bb2dash's `compose.yaml`: non-root, seccomp, `shm_size`, heartbeat healthcheck, `course-files` at `/app/course context`, `.dockerignore` (excludes `.env`, `course context/`, `local_cache/`); `docker/sync/spike/` deleted | R-82, R-89, R-94, P-102 | W-56 | (d) on the integrated branch (task 13a): `docker compose ps --format "{{.Service}} {{.Health}}" \| grep -c "^sync healthy$"` → 1; `docker compose exec sync whoami` → `pwuser`; `grep -rl "no-sandbox" docker/sync sync/src \| wc -l` → 0 under either verdict (under the fallback the launch passes `chromiumSandbox: false` and Playwright adds the flag itself); `grep -rc "chromiumSandbox: true" sync/src \| grep -vc ":0$"` → 1 when 82b reads `Sandbox: seccomp`, 0 under the fallback (the launch then passes `chromiumSandbox: false`); `docker compose exec sync sh -c 'for f in /proc/[0-9]*/cmdline; do tr "\0" " " < "$f"; echo; done' \| grep -c -- "--no-sandbox"` → 0 when 82b reads `Sandbox: seccomp` (≥ 1 under the fallback); `ls docker/sync/spike 2>/dev/null \| wc -l` → 0; (e) `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:6080/vnc.html` → 200 | — |
 | 16 | Refresh the R5 OS-bound inventory (P-44), then grep-clean over what the bb2dash images copy | R-86, P-44 | W-56 | (d) `grep -c "^\| os-bound " docs/planning/sprint-2/verification/100_W56_VERIFICATION.md` → 7, one row per bb2dash offender 91 R-86 lists at a5042fa (`desktop/src/core/config.ts:27`, `sync-command.ts:59`, `scripts/validate-grading.ps1`, `skills/inbox-apply/SKILL.md:31`, `skills/bb-course-pull` :60-62, `skills/bb-course-map` :56, `mcp-server/scripts/smoke.mjs:33`), each with its disposition (fixed here, Phase 16, Phase 20, or not copied into an image); (a) `node --test docker/grep-clean.test.mjs` → `# fail 0`. It reads the COPY sources of `docker/sync/Dockerfile` and `mcp-server/Dockerfile`, with ≥ 1 file scanned per Dockerfile. Patterns: `C:/`, `C:\`, `.ps1`, `powershell` as a program, `Move-Item`, `OneDrive`; comments stripped | — |
 | 17 | Materials MCP image; the key read from a file; the registration recipe; the smoke `--docker` mode | R-91, R-89, P-45, P-107 | W-56 | (a) `cd mcp-server && npx vitest run test/env-file.test.ts test/config.test.ts` → 0 failures; (d) `grep -rn "console.log" mcp-server/src \| wc -l` → 0. After Stack re-registers and moves the key out of `bb2dash/.env` into `bb2dash-stack/secrets/bb2dash_mcp_service_key` (`scripts/google-consent.mjs` stays a host run, fed `BB2DASH_SERVICE_KEY` from that file for its one command): `grep -c "sb_secret_" C:/Users/stack/.claude.json` → 0, `grep -c "sb_secret_" C:/Users/stack/projects/bb2dash/.env` → 0 and `claude mcp list \| grep -c "^bb2dash: .*Connected"` → 1 | "materials search still answers, and no key sits in my Claude config" |
-| 18 | `syncLauncher` (`terminal` or `queue-only`) on its own branch and PR, merged before A1 | R-85, P-43 | W-56 | (a) `cd desktop && npx vitest run test/unit/config.test.ts test/unit/sync-launcher.test.ts test/unit/audit.test.ts` → 0 failures; (d) `gh pr list --repo emstacho-su/bb2dash --head feat/containers-14-launcher --state merged --json number --jq length` → 1 (a merged PR survives the branch's deletion; a merge-base check against `origin/feat/…` would not) | — |
+| 18 | `syncLauncher` (`terminal` or `queue-only`) and (2026-10-03) the login prompt, on their own branch and PR, merged before A1 | R-85, P-43 | W-56 | (a) `cd desktop && npx vitest run test/unit/config.test.ts test/unit/sync-launcher.test.ts test/unit/login-prompt.test.ts test/unit/audit.test.ts test/unit/navigation-policy.test.ts` → 0 failures. `login-prompt.test.ts` names: an open item id opens the page once, a second tick with the same id opens nothing, a new id opens again; `terminal` never opens it; the URL carries the URL-encoded password with a BOM, CR and LF stripped; a missing file opens the bare page and logs the path, never a value; (d) `gh pr list --repo emstacho-su/bb2dash --head feat/containers-14-launcher --state merged --json number --jq length` → 1 (a merged PR survives the branch's deletion; a merge-base check against `origin/feat/…` would not) | — |
 | 19 | Repo hygiene and one source for the four repo skills. Stack removes the stale claude.ai-synced `bb-course-*` copies, and the PM sets `FASTEMBED_CACHE_DIR` in the machine file | R-92, P-47, P-49 | W-56 + Stack + PM | (d) `git ls-files --eol \| grep -c "i/crlf"` → 0 (1 at a5042fa); `git check-ignore local_cache/probe secrets/novnc_password \| wc -l` → 2 (a path inside each folder; a bare folder name does not match a `dir/` pattern while the folder is absent); (a) `node --test scripts/install-skills.test.mjs` → `# fail 0`; (d) `find C:/Users/stack/.claude/skills/synced -maxdepth 2 -type d -name "bb-course-*" \| wc -l` → 0; `grep -c "^FASTEMBED_CACHE_DIR=" C:/Users/stack/.harness/machine.env` → 1 | — |
 | 20 | Scheduler (**PROVISIONAL, B-49**; struck if he answers "no"): per-window catch-up, atomic `last_run_at`, no overlap, DST | R-90, P-106 | W-57 | (a) `cd hooks && node --test tests/schedule.test.mjs tests/scheduler.test.mjs` → `# fail 0`, with these cases. 03:00 New York is 07:00Z on 2026-10-31, 08:00Z on 2026-11-01 and 2027-03-13, and 07:00Z on 2027-03-14. A missed window runs once at start, and two missed windows also run once. Temp-file-and-rename write; a restart mid-run never runs it twice; `nightly` and `collect` never overlap. (d) `ls hooks/tests/*.test.mjs \| wc -l` → no fewer than the base count + 3 after task 22 (`schedule`, `scheduler`, `grep-clean`), the base count being `git ls-tree --name-only <sha> hooks/tests/ \| grep -c "\.test\.mjs$"` at the harness `main` SHA recorded in DECISIONS at task 1 (the SHA W-57 is cut from); the SHA and both counts are recorded in `100_W57_VERIFICATION.md` | "the 3 AM job ran when I opened the lid" |
 | 21 | Jobs image (**PROVISIONAL, B-49**; struck if he answers "no"), compose piece, `*_FILE` shim (`DATABASE_URL` exported before psycopg starts), `HARNESS_NIGHTLY_LOG=/dev/stdout`, `HARNESS_UV` and `HARNESS_UV_BIN` set to one path | R-90, R-89, R-94 | W-57 | (d) `docker compose run --rm harness-jobs uv run --directory ingest ingest embed-check; echo $?` → last line 0; `docker compose ps --format "{{.Service}} {{.Health}}" \| grep -c "^harness-jobs healthy$"` → 1; `docker compose exec harness-jobs whoami \| grep -c "^root$"` → 0 | — |
@@ -675,7 +727,7 @@ PASS, with Phases 15, 18 and 19 on `main`. W-57 and W-58 may be cut after task 1
 | 26 | Dev container (**PROVISIONAL, B-48**; struck if dropped): reference fork on `node:22-bookworm`, widened firewall, `claude-home` seed, memory read-only until acceptance, both MCP servers by secret file | R-92, P-108, P-49 | W-58 | (d) `just dev bash scripts/dev-smoke.sh \| tail -1` → `SMOKE PASS 7/7` (`claude -p` answers; both MCP servers connected; `MEMORY.md` readable; `/bb2dash-pm` resolves to the repo copy; `git worktree add`; `npx vitest run` in `web/`; `npm run verify:embedder` in the harness `mcp-server`); `grep -c "statsig.anthropic.com" .devcontainer/init-firewall.sh` → 0; `grep -c "^FROM node:22-bookworm" .devcontainer/Dockerfile` → 1 | "I ran a PM session inside the container" |
 | 27 | Image proofs: gitleaks installed; every image's exported filesystem and `docker history --no-trunc` scanned; base-image manifests recorded apart from per-image arm64 builds | R-89, R-94, P-46, P-109 | PM | (d) `gitleaks version \| wc -l` → 1; `gitleaks dir <exported fs>; echo $?` → last line 0 for `sync`, `bb2dash-mcp`, `harness-jobs`, `dev` (4 of 4 in 82a); `docker history --no-trunc <image> \| gitleaks stdin; echo $?` → last line 0 for each of the four (4 of 4 in 82a); `grep -c "^\| manifest \| " docs/planning/sprint-2/verification/82a_PHASE14_PARITY_AND_IMAGES.md` → 5, one row per base image (`mcr.microsoft.com/playwright:v1.63.0-noble`, `node:22-slim`, `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`, `python:3.12-slim-bookworm`, `node:22-bookworm`), each naming `linux/arm64`; `grep -c "^## Per-image arm64 builds (post-MVP)$"` (same file) → 1; `docker compose --profile mcp --profile dev build; echo $?` → last line 0 | — |
 | 28 | Live proofs, both needing Stack. First, the same-day pair: the skill path with `sync` stopped, then the container path under `queue-only` (run ids `<A>`, `<B>` in 82a). Second, the login path: Stack signs out in noVNC, presses Sync, then signs in again | R-81, R-83, R-85 | Stack + PM | (b) `select count(*) \|\| ' ' \|\| count(distinct n) from (select run_id, count(*) n from bb_gradebook where run_id in ('<A>','<B>') group by run_id) s` → `2 1` (both runs present, equal counts), and the same over `bb_attempts` → `2 1` and `bb_raw` → `2 1`; `select count(*) \|\| ' ' \|\| count(distinct status) from sync_runs where run_id in ('<A>','<B>')` → `2 1`; `select count(*) from agent_requests where run_id = '<B>' and claimed_by = 'sync-runner' and state = 'done'` → 1. (c) `walk-14/03-activity-report.png`: Activity's row for `<B>` showing the runner's files line, whose exact text `report.test.ts` pins and 82a quotes beside the screenshot; `walk-14/04-inbox-login-needed.png`: the Inbox item "Blackboard login needed — open http://127.0.0.1:6080/vnc.html and sign in with Duo". (b) After re-login and one pass: `select count(*) from attention_items where ref = 'sync-login-required' and state = 'open'` → 0 | "the container's sync matched the skill's" |
-| 29 | **Stack's acceptance sitting and the cut-over**, in the order under §Definition of done | R-93, R-85, R-87, S2-containers-1 | Stack | (d) `grep -c "^- \[x\] A[1-9] " docs/planning/sprint-2/verification/82a_PHASE14_PARITY_AND_IMAGES.md` → 8 at the defaults (A5 struck while B-45 stays declined), 9 if B-45 is adopted, one fewer for each step B-48 or B-49 strikes; `grep -c "^- \[[x~]\] A[1-9] " …` (same file) → 9; PowerShell `(Get-ScheduledTask -TaskName 'AgenticHarness-NightlyIngest','AgenticHarness-CheckpointCollect' -ErrorAction SilentlyContinue \| Measure-Object).Count` → 0 | the nine steps |
+| 29 | **Stack's acceptance sitting and the cut-over**, in the order under §Definition of done | R-93, R-85, R-87, S2-containers-1 | Stack | (d) `grep -c "^- \[x\] A[1-9] " docs/planning/sprint-2/verification/82a_PHASE14_PARITY_AND_IMAGES.md` → 9 (A5 login-triggered since 2026-10-03), one fewer for each step B-48 or B-49 strikes; `grep -c "^- \[[x~]\] A[1-9] " …` (same file) → 9; PowerShell `(Get-ScheduledTask -TaskName 'AgenticHarness-NightlyIngest','AgenticHarness-CheckpointCollect' -ErrorAction SilentlyContinue \| Measure-Object).Count` → 0 | the nine steps |
 | 30 | Gates and docs on every PR: STATUS (with "Phase 14 deferred (R-96)"), DECISIONS, ORCHESTRATOR, `CLAUDE.md`; `spike/` confirmed gone (W-56 deleted it in task 15) | R-95, R-96, R-93 | PM | (d) `gh pr list --repo emstacho-su/bb2dash --head feat/containers-14 --json number --jq length` → 1, the same for `emstacho-su/agentic-harness --head feat/containers` → 1 and `emstacho-su/bb2dash-stack --head feat/containers-14-stack` → 1 (one PR per repo: **PROVISIONAL, B-51**); `grep -c "There is no Docker during development" CLAUDE.md` → 0; `grep -c "Phase 14 deferred (R-96)" project-state/STATUS.md` → 1; `ls docker/sync/spike 2>/dev/null \| wc -l` → 0 | — |
 
 ## Workers
@@ -685,11 +737,11 @@ named-hunk rule, not with another worker here). Workers commit and push per task
 `project-state/`. Each writes RED and GREEN lines and command outputs to
 `docs/planning/sprint-2/verification/100_W5N_VERIFICATION.md`; W-57 and W-58 hand theirs to the PM to
 commit. Seams frozen before any branch is cut: the 11 secret names, the 5 volume names, the 8 `just` verbs,
-the 11 RPC signatures, the three runner entry points and `desktop/src/core/sync-id.ts`.
+the 12 RPC signatures (11 until 2026-10-03), the three runner entry points and `desktop/src/core/sync-id.ts`.
 
 | Worker | Stream | Branch | Worktree | Owns | Tasks |
 |---|---|---|---|---|---|
-| W-55 | sync runner and database | `feat/containers-14-sync` (bb2dash) | `bb2dash-wt-containers-14-sync` | `db/migrations/091_sync_runner_role.sql`, `092_scheduled_sync.sql`, `093_sync_runner_review_fixes.sql`, `094_sync_runner_test_membership.sql`; `db/tests/phase14_*.sql` (the loader included); `db/fixtures/phase14/`; `sync/` (all of it); `skills/bb-sync/SKILL.md` (step 1 only); shared with Phase 15 under the named-hunk rule (this phase edits only the named hunk, and the second phase to merge rebases): `db/tests/phase15_100_db_test_runner_role.sql` (the expected membership list only, task 7a) and `scripts/db-test.mjs` (the one loader-map entry only, task 6); `verification/100_W55_VERIFICATION.md` | 6–13 (7a included) |
+| W-55 | sync runner and database | `feat/containers-14-sync` (bb2dash) | `bb2dash-wt-containers-14-sync` | `db/migrations/091_sync_runner_role.sql`, `093_sync_runner_review_fixes.sql`, `094_sync_runner_test_membership.sql`; `db/tests/phase14_*.sql` (the loader included); `db/fixtures/phase14/`; `sync/` (all of it); `skills/bb-sync/SKILL.md` (step 1 only); shared with Phase 15 under the named-hunk rule (this phase edits only the named hunk, and the second phase to merge rebases): `db/tests/phase15_100_db_test_runner_role.sql` (the expected membership list only, task 7a) and `scripts/db-test.mjs` (the one loader-map entry only, task 6); `verification/100_W55_VERIFICATION.md` | 6–13 (7a included) |
 | W-56 | images, MCP, desktop, repo hygiene | `feat/containers-14-images` and `feat/containers-14-launcher` (bb2dash) | `bb2dash-wt-containers-14-images`, `bb2dash-wt-containers-14-launcher` | `docker/` (after the PM's spike commit, including deleting `docker/sync/spike/`), `compose.yaml`, `.dockerignore`, `.gitattributes` and the one renormalized blob, `.gitignore`; `verification/100_W56_VERIFICATION.md`; `mcp-server/Dockerfile`, `.dockerignore`, `src/env-file.ts`, `src/config.ts`, `test/env-file.test.ts`, `test/config.test.ts`, `README.md`, `scripts/smoke.mjs`; `ingest/pyproject.toml`, `uv.lock`, `extract_text.test.mjs`, `fixtures/extract/`, `pull_files.mjs` (`extractUnits` only); `scripts/install-skills.mjs`, `scripts/install-skills.test.mjs`; launcher branch only: `desktop/src/core/config.ts`, `desktop/src/main/index.ts`, `desktop/test/unit/config.test.ts`, `desktop/test/unit/sync-launcher.test.ts` | 13a (merge half), 14–19 |
 | W-57 | harness jobs (**PROVISIONAL, B-49**: a "No" leaves task 23 only) | `feat/containers` (agentic-harness) | `C:/Users/stack/agentic-harness-wt-containers` | `docker/jobs/Dockerfile`, `compose.yaml`, `.dockerignore`, `scripts/jobs-entrypoint.sh`, `hooks/scheduler.mjs`, `hooks/lib/schedule.mjs`, `hooks/lib/constants.mjs` (`DEFAULT_VAULT_SEGMENTS` only), `hooks/doctor.mjs`, `hooks/tests/{schedule,scheduler,grep-clean,doctor}.test.mjs`, `docs/portable.md`, `.github/workflows/test.yml` | 20–23 |
 | W-58 | umbrella and dev container (**PROVISIONAL, B-51**; the dev container **PROVISIONAL, B-48**) | `feat/containers-14-stack` (bb2dash-stack) | `C:/Users/stack/projects/bb2dash-stack-wt-containers` | everything in `bb2dash-stack` | 24–26 |
@@ -727,6 +779,9 @@ starts at W-59. No id here belongs to another phase.
 
 **Answered by Stack, 2026-10-02:** item 1, build 092 and decide the hour after the spike (hour null until
 its overnight log shows the login alive in the morning); items 2, 3, 4 and 5, the defaults; item 6, yes.
+**Re-answered 2026-10-03:** item 1, no hour at all, the morning sync follows the morning login; item 2,
+`KEEPALIVE_MINUTES` defaults to 60 as the alive-login check, with `LOGIN_WATCH_MS` while it is dead (the
+amendment at the top).
 
 What the B-numbers leave open (1–5), plus one PM design call the brief rests on (6). Each carries the
 default the PM takes:
@@ -749,7 +804,7 @@ default the PM takes:
    are re-cut in the revised brief.
 6. **094, the test role acting as `sync_runner` (PROVISIONAL; 95 §Seams names it for the behaviour tests
    only, the privilege reads needing no membership).** Default: `grant sync_runner to db_test_runner with
-   inherit false`, so a rolled-back unit can `set local role sync_runner` and call the eleven functions,
+   inherit false`, so a rolled-back unit can `set local role sync_runner` and call the twelve functions,
    plus exactly the fixture writes Phase 15's 100 does not grant, and `sync_runner` added to the expected
    membership list in `db/tests/phase15_100_db_test_runner_role.sql`; `/security-review` covers it, and
    task 1's row (11) records its replay after 100. If he says no: 094 is never written, task 7a and row
