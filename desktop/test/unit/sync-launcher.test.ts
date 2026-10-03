@@ -2,7 +2,8 @@
  * Brief 100 task 18 (R-85, P-43): `syncLauncher`. Under `terminal` (the default) the Sync button
  * still opens Windows Terminal through the sync watcher. Under `queue-only` the button only
  * queues the request, the container's runner takes it, and the shell attaches no watcher; it
- * looks for the container's "login needed" item on each poller tick instead (2026-10-03).
+ * looks for the container's "login needed" item through the poller's per-tick hook instead
+ * (2026-10-03), and again right after the window's page finishes loading (round 2, item 5).
  *
  * `main/index.ts` bootstraps at import, so each case imports it fresh with every collaborator
  * mocked and `app.whenReady()` resolved, then reads what `start()` wired. Nothing opens a window,
@@ -21,6 +22,9 @@ const fake = vi.hoisted(() => ({
   watcherAttached: 0,
   sessionReader: async () => null,
   pollerGetSession: null as (() => Promise<unknown>) | null,
+  pollerOnTick: undefined as unknown,
+  afterSessionReloads: 0,
+  windowHandlers: {} as Record<string, (() => void)[]>,
   logs: [] as string[],
 }));
 
@@ -55,9 +59,18 @@ vi.mock('../../src/main/sync-terminal', () => ({
 }));
 vi.mock('../../src/main/session', () => ({ createUsableSessionReader: () => fake.sessionReader }));
 vi.mock('../../src/main/poller-wiring', () => ({
-  startPoller: (deps: { getSession: () => Promise<unknown> }) => {
+  startPoller: (deps: { getSession: () => Promise<unknown>; onTick?: unknown }) => {
     fake.pollerGetSession = deps.getSession;
-    return { runOnce: async () => ({}), attachWindow: () => undefined, stop: () => undefined, navigate: () => false };
+    fake.pollerOnTick = deps.onTick;
+    return {
+      runOnce: async () => ({}),
+      attachWindow: () => undefined,
+      stop: () => undefined,
+      navigate: () => false,
+      afterSessionReload: () => {
+        fake.afterSessionReloads += 1;
+      },
+    };
   },
 }));
 vi.mock('../../src/main/rest', () => ({
@@ -103,8 +116,23 @@ vi.mock('../../src/main/window', () => ({
   refreshSessionWithoutWindow: () => undefined,
   showWindow: () => undefined,
 }));
+/** A window whose `webContents.on` handlers the cases can fire, as Electron would. */
+function fakeWindow() {
+  const on = (event: string, handler: () => void) => {
+    (fake.windowHandlers[event] ??= []).push(handler);
+  };
+  return { webContents: { on, once: on }, once: () => undefined, on: () => undefined };
+}
+
 vi.mock('../../src/main/window-controller', () => ({
-  createWindowController: () => ({ open: () => ({ created: true, window: {} }), current: () => null }),
+  createWindowController: (deps: { onCreated: (window: unknown) => void }) => ({
+    open: () => {
+      const window = fakeWindow();
+      deps.onCreated(window);
+      return { created: true, window };
+    },
+    current: () => null,
+  }),
 }));
 
 /** Import `main/index.ts` fresh under `config` and let `start()` run. */
@@ -113,6 +141,9 @@ async function startShellWith(config: DesktopConfig): Promise<void> {
   fake.config = config;
   fake.watcherAttached = 0;
   fake.pollerGetSession = null;
+  fake.pollerOnTick = undefined;
+  fake.afterSessionReloads = 0;
+  fake.windowHandlers = {};
   fake.logs.length = 0;
   await import('../../src/main/index');
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -131,10 +162,11 @@ describe('usesSyncTerminal', () => {
 });
 
 describe('main/index.ts under each syncLauncher', () => {
-  it('terminal attaches the sync watcher, and the poller reads the session as before', async () => {
+  it('terminal attaches the sync watcher, and the poller has no login hook', async () => {
     await startShellWith(parseConfig({ ...ANON, syncLauncher: 'terminal' }));
     expect(fake.watcherAttached).toBe(1);
     expect(fake.pollerGetSession).toBe(fake.sessionReader);
+    expect(fake.pollerOnTick).toBeUndefined();
   });
 
   it('queue-only attaches no watcher, so pressing Sync opens no terminal', async () => {
@@ -143,10 +175,16 @@ describe('main/index.ts under each syncLauncher', () => {
     expect(fake.logs.some((line) => /queue-only/.test(line))).toBe(true);
   });
 
-  it('queue-only puts the login check on the poller tick: the session reader is wrapped', async () => {
+  it('queue-only hands the poller an explicit per-tick hook; the session reader is the plain one', async () => {
     await startShellWith(parseConfig({ ...ANON, syncLauncher: 'queue-only' }));
-    expect(fake.pollerGetSession).not.toBeNull();
-    expect(fake.pollerGetSession).not.toBe(fake.sessionReader);
-    await expect(fake.pollerGetSession?.()).resolves.toBeNull();
+    expect(typeof fake.pollerOnTick).toBe('function');
+    expect(fake.pollerGetSession).toBe(fake.sessionReader);
+  });
+
+  it("a finished page load (a session reload) runs the hook again at once", async () => {
+    await startShellWith(parseConfig({ ...ANON, syncLauncher: 'queue-only' }));
+    expect(fake.windowHandlers['did-finish-load']).toHaveLength(1);
+    fake.windowHandlers['did-finish-load']?.[0]?.();
+    expect(fake.afterSessionReloads).toBe(1);
   });
 });

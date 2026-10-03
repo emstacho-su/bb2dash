@@ -576,3 +576,74 @@ describe('R2-2 — a backlog bigger than one page', () => {
     expect(store.value?.notifyFloor).toBe(floor);
   });
 });
+
+describe('the per-tick hook (brief 100 round 2, item 5)', () => {
+  it('runs once per tick with the same get the tick reads with', async () => {
+    const seen: RestGet[] = [];
+    const { instance, rest } = poller({ onTick: (get) => void seen.push(get) });
+    await instance.runOnce();
+    await instance.runOnce();
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toBe(rest.createRest());
+  });
+
+  it('runs on a first launch too, before the watermark is initialised', async () => {
+    const seen: RestGet[] = [];
+    const { instance } = poller({ onTick: (get) => void seen.push(get), store: memoryStore(null) });
+    const result = await instance.runOnce();
+    expect(result.outcome).toBe('initialised');
+    expect(seen).toHaveLength(1);
+  });
+
+  it('does not run when the tick has no session', async () => {
+    const seen: RestGet[] = [];
+    const { instance } = poller({ onTick: (get) => void seen.push(get), getSession: async () => null });
+    await instance.runOnce();
+    expect(seen).toEqual([]);
+  });
+
+  it('a hook that throws or rejects never fails the tick', async () => {
+    const throwing = poller({
+      onTick: () => {
+        throw new Error('hook blew up');
+      },
+    });
+    expect((await throwing.instance.runOnce()).outcome).toBe('fired');
+    const rejecting = poller({ onTick: () => Promise.reject(new Error('hook rejected')) });
+    expect((await rejecting.instance.runOnce()).outcome).toBe('fired');
+  });
+
+  it('runs again right after a session reload, without a full tick', async () => {
+    const seen: RestGet[] = [];
+    const { instance, notifier, store } = poller({ onTick: (get) => void seen.push(get) });
+    await instance.afterSessionReload();
+    expect(seen).toHaveLength(1);
+    expect(notifier.shown).toEqual([]);
+    expect(store.writes).toBe(0);
+  });
+
+  it('after a reload with no session yet, or with no hook, it reads nothing', async () => {
+    const seen: RestGet[] = [];
+    let sessionReads = 0;
+    const noSession = poller({
+      onTick: (get) => void seen.push(get),
+      getSession: async () => {
+        sessionReads += 1;
+        return null;
+      },
+    });
+    await noSession.instance.afterSessionReload();
+    expect(seen).toEqual([]);
+    expect(sessionReads).toBe(1);
+
+    let unhookedReads = 0;
+    const unhooked = poller({
+      getSession: async () => {
+        unhookedReads += 1;
+        return SESSION;
+      },
+    });
+    await unhooked.instance.afterSessionReload();
+    expect(unhookedReads).toBe(0);
+  });
+});

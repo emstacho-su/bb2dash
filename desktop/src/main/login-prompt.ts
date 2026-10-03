@@ -3,7 +3,8 @@
  * `core/login-prompt.ts`; the one URL this file may hand to the browser is decided by
  * `core/navigation-policy.ts`'s `decideLoginPageOpen`.
  *
- * Under `syncLauncher = queue-only` only. On each poller tick that reads a session, the shell
+ * Under `syncLauncher = queue-only` only. As the poller's per-tick hook (`PollerDeps.onTick`), on
+ * each tick that has a session and after each page load that may have refreshed it, the shell
  * asks PostgREST for the container's open `sync-login-required` item. When an item has not opened
  * the page yet on this New York day, it reads the noVNC password from its file, opens the login
  * page once with `shell.openExternal`, and records the date against the item id in `userData`
@@ -36,7 +37,7 @@ import type { LoginPromptStore, PromptedOn } from '../core/login-prompt';
 import { decideLoginPageOpen } from '../core/navigation-policy';
 import { nyDate } from '../core/poller/ny-time';
 import { createErrorThrottle } from '../core/rest';
-import type { RestGet, WebSession } from '../core/types';
+import type { RestGet } from '../core/types';
 import { log, logError } from './log';
 import { IS_TEST_MODE, recordEvent } from './test-hook';
 
@@ -185,22 +186,4 @@ export function createLoginPrompt(config: DesktopConfig, deps: LoginPromptDeps):
   }
 
   return { check };
-}
-
-/**
- * The poller's session reader with the login check riding on it: each tick reads the session
- * once, so a tick that has one also looks for the login item (owner session, RLS as today).
- * Without a prompt (`terminal`) the reader is returned unchanged.
- */
-export function withLoginPromptCheck(
-  readSession: () => Promise<WebSession | null>,
-  createRest: (session: WebSession) => RestGet,
-  prompt: LoginPrompt | null,
-): () => Promise<WebSession | null> {
-  if (prompt === null) return readSession;
-  return async () => {
-    const session = await readSession();
-    if (session !== null) void prompt.check(createRest(session));
-    return session;
-  };
 }

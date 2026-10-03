@@ -39,8 +39,8 @@ import {
 } from '../../src/core/login-prompt';
 import type { LoginPromptStore, PromptedOn } from '../../src/core/login-prompt';
 import { LOGIN_PAGE_ORIGIN } from '../../src/core/navigation-policy';
-import type { RestGet, WebSession } from '../../src/core/types';
-import { OPEN_EXTERNAL_TIMEOUT_MS, createLoginPrompt, withLoginPromptCheck } from '../../src/main/login-prompt';
+import type { RestGet } from '../../src/core/types';
+import { OPEN_EXTERNAL_TIMEOUT_MS, createLoginPrompt } from '../../src/main/login-prompt';
 
 const ANON = { supabaseAnonKey: 'eyJhbGciOiJIUzI1NiJ9.anon.signature' };
 const QUEUE_ONLY = parseConfig({ ...ANON, syncLauncher: 'queue-only', novncPasswordFile: 'C:\\secrets\\novnc_password' });
@@ -427,42 +427,5 @@ describe('main/login-prompt — opening the page', () => {
     expect(
       createLoginPrompt(TERMINAL, { store: memoryStore().store, readFile: () => PASSWORD, openExternal: async () => undefined }),
     ).toBeNull();
-  });
-});
-
-describe('main/login-prompt — riding the poller tick', () => {
-  const SESSION: WebSession = { accessToken: 'token', expiresAt: 2_000_000_000 };
-
-  it('hands the session through unchanged and checks with a RestGet bound to it', async () => {
-    const checked: RestGet[] = [];
-    const boundTo: WebSession[] = [];
-    const rest = restOver([]).get;
-    const read = withLoginPromptCheck(
-      async () => SESSION,
-      (session) => {
-        boundTo.push(session);
-        return rest;
-      },
-      { check: async (get) => void checked.push(get) },
-    );
-    await expect(read()).resolves.toBe(SESSION);
-    expect(boundTo).toEqual([SESSION]);
-    expect(checked).toEqual([rest]);
-  });
-
-  it('checks nothing when the tick has no session', async () => {
-    const checked: RestGet[] = [];
-    const read = withLoginPromptCheck(
-      async () => null,
-      () => restOver([]).get,
-      { check: async (get) => void checked.push(get) },
-    );
-    await expect(read()).resolves.toBeNull();
-    expect(checked).toEqual([]);
-  });
-
-  it('is the plain session reader when there is no login prompt (terminal)', () => {
-    const reader = async () => SESSION;
-    expect(withLoginPromptCheck(reader, () => restOver([]).get, null)).toBe(reader);
   });
 });

@@ -24,9 +24,10 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 
 import { allowedOrigins, usesSyncTerminal } from '../core/config';
 import type { DesktopConfig } from '../core/config';
+import type { RestGet } from '../core/types';
 import { loadConfig, reportConfigError } from './config';
 import { createNamedLogger, log, logError } from './log';
-import { createLoginPrompt, withLoginPromptCheck } from './login-prompt';
+import { createLoginPrompt } from './login-prompt';
 import { LOGIN_PROMPT_FILENAME, createLoginPromptStore } from './login-prompt-store';
 import type { LoginPrompt } from './login-prompt';
 import { attachNavigationGuards } from './navigation';
@@ -230,6 +231,10 @@ function quit(): void {
 function wireWindow(window: BrowserWindow, validConfig: DesktopConfig): void {
   attachNavigationGuards(window, allowedOrigins(validConfig), validConfig.appUrl);
   poller?.attachWindow(window);
+  // Brief 100 round 2, item 5: every finished load of the app (the first one at logon, and each
+  // reload that refreshes the web session) runs the per-tick hook at once, so a cookie that was
+  // dead at logon does not hold the login prompt back to the next interval.
+  window.webContents.on('did-finish-load', () => poller?.afterSessionReload());
   // Every window open is a chance to offer a waiting update, once the window is on screen.
   window.once('ready-to-show', () => {
     void updateFlow?.onWindowOpened();
@@ -254,8 +259,8 @@ function createShellLoginPrompt(validConfig: DesktopConfig): LoginPrompt | null 
 
 /**
  * C-7: everything the portable poller needs that only Electron can supply. Under
- * `syncLauncher = queue-only` the login prompt rides each tick's session read (brief 100,
- * 2026-10-03); under `terminal` `loginPrompt` is null and the reader is the plain one.
+ * `syncLauncher = queue-only` the login prompt is the poller's per-tick hook (brief 100,
+ * 2026-10-03; round 2, item 5); under `terminal` `loginPrompt` is null and there is no hook.
  */
 function startShellPoller(validConfig: DesktopConfig, loginPrompt: LoginPrompt | null): PollerHandle {
   const createRest = createMainSessionRest(validConfig);
@@ -282,9 +287,11 @@ function startShellPoller(validConfig: DesktopConfig, loginPrompt: LoginPrompt |
       if (window !== null) ensureLoaded(window);
     },
     refreshWithoutWindow: () => {
-      refreshSessionWithoutWindow(validConfig.appUrl, (page) =>
-        attachNavigationGuards(page, allowedOrigins(validConfig), validConfig.appUrl),
-      );
+      refreshSessionWithoutWindow(validConfig.appUrl, (page) => {
+        attachNavigationGuards(page, allowedOrigins(validConfig), validConfig.appUrl);
+        // The window-less refresh is a session reload too (round 2, item 5).
+        page.webContents.once('did-finish-load', () => poller?.afterSessionReload());
+      });
     },
   });
   return startPoller({
@@ -294,8 +301,9 @@ function startShellPoller(validConfig: DesktopConfig, loginPrompt: LoginPrompt |
       pollIntervalMinutes: validConfig.pollIntervalMinutes,
       dueReminderTime: validConfig.dueReminderTime,
     },
-    getSession: withLoginPromptCheck(readSession, createRest, loginPrompt),
+    getSession: readSession,
     createRest,
+    ...(loginPrompt === null ? {} : { onTick: (get: RestGet) => loginPrompt.check(get) }),
     getWindow: getMainWindow,
     openWindowAt: (target) => {
       if (windows === null) throw new Error('the window controller is not ready');
