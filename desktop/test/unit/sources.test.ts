@@ -30,9 +30,12 @@ import {
 } from '../../src/core/poller/sources';
 import type { RestGet } from '../../src/core/types';
 
-/** The query strings exactly as `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md` C-6 freezes them. */
+/**
+ * The query strings exactly as `docs/planning/sprint-1-hub/briefs/80_PHASE12_electron.md` C-6 freezes them.
+ * R1 gains `interrupted` in Phase 19 (brief 99, task 24): migration 137 appends the column.
+ */
 const CONTRACT = {
-  R1: 'select=id,run_id,status,started_at,finished_at,trigger,summary',
+  R1: 'select=id,run_id,status,started_at,finished_at,trigger,summary,interrupted',
   R2: 'seen_at=gt.<lastSeenAt>&score=not.is.null&select=shell_course_id,column_id,name,run_id,seen_at,score,possible,previous_score&order=seen_at.asc&limit=200',
   R3: 'due_on=eq.<tomorrow>&in_workload=is.true&status=not.in.(submitted,graded,missed,excused,not_applicable,waived)&select=item_kind,item_id,course_id,title,due_at,due_on,status',
   courses: 'select=id,title_short',
@@ -61,6 +64,21 @@ function stubRest(rows: Record<string, unknown>): {
 describe('query strings (C-6, byte for byte)', () => {
   it('R1 v_sync_status', () => {
     expect(syncQuery()).toBe(CONTRACT.R1);
+  });
+
+  it('R1 selects interrupted, the column 137 appends (Phase 19)', () => {
+    const columns = syncQuery().replace(/^select=/, '').split(',');
+    expect(columns).toContain('interrupted');
+    // The seven columns C-6 froze are still read, in their order.
+    expect(columns.slice(0, 7)).toEqual([
+      'id',
+      'run_id',
+      'status',
+      'started_at',
+      'finished_at',
+      'trigger',
+      'summary',
+    ]);
   });
 
   it('R2 v_gradebook_history', () => {
@@ -144,7 +162,29 @@ describe('validateSyncRows', () => {
       finished_at: row.finished_at,
       trigger: 'app_request',
       summary: { changes: row.summary.changes, attention_raised: 1, errors: [] },
+      // Phase 19: a row that does not carry the column reads as not interrupted.
+      interrupted: false,
     });
+  });
+
+  it('reads interrupted off a reaped run (Phase 19, migration 137)', () => {
+    const reaped = { ...row, status: 'failed', summary: null, interrupted: true };
+    expect(validateSyncRows([reaped])?.interrupted).toBe(true);
+    expect(validateSyncRows([{ ...row, interrupted: false }])?.interrupted).toBe(false);
+  });
+
+  it('reads a missing or null interrupted as false rather than throwing', () => {
+    expect('interrupted' in row).toBe(false);
+    expect(validateSyncRows([row])?.interrupted).toBe(false);
+    expect(validateSyncRows([{ ...row, interrupted: null }])?.interrupted).toBe(false);
+  });
+
+  it.each([
+    ['a string', 'true'],
+    ['a number', 1],
+    ['an object', {}],
+  ])('throws RowShapeError when interrupted is %s', (_name, value) => {
+    expect(() => validateSyncRows([{ ...row, interrupted: value }])).toThrow(RowShapeError);
   });
 
   it('returns null for an empty result (no sync has ever run)', () => {

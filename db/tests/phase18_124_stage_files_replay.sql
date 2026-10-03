@@ -6,8 +6,11 @@
 --   (3) a replay of that crawl changes 0 bb_files rows. The first fold inside this transaction
 --       may still apply 122's and 123's rules to rows the live fold has not yet seen under them;
 --       every row it changes is listed in the failure message if the replay changes anything.
---   (4) stage_content's body is untouched: md5(prosrc) equals the value recorded in 98c before
---       124 (92260a274cb7bcc356de5d0fa9910084)
+--   (4) stage_content's body is untouched by stage_files' migrations: md5(prosrc) equals the body
+--       Phase 19's 171 installed (1cdcd890648153eb9664c6417077866d). Before: 92260a274cb7bcc356de5d0fa9910084
+--       (98c, before 124), ec78ca41daa2addb02fa113c85b7829d (131), ba31b9cb3be68f3ae7ee277258dcb271
+--       (139). 131, 139 and 171 re-created the function on purpose, so the pin moved with them
+--       (brief 99, W-52, 2026-10-02 and 10-03).
 -- Needs execute on stage_files for db_test_runner (migration 128). Collects failures, raises once.
 -- RUN IT: `node scripts/db-test.mjs --only phase18_124_stage_files_replay.sql`.
 
@@ -15,7 +18,7 @@ begin;
 
 do $$
 declare
-  STAGE_CONTENT_MD5 constant text := '92260a274cb7bcc356de5d0fa9910084';
+  STAGE_CONTENT_MD5 constant text := '1cdcd890648153eb9664c6417077866d';
   v_fail   text[] := array[]::text[];
   v_newest uuid;
   v_sync   bigint;
