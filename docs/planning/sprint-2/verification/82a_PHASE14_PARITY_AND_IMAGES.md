@@ -127,7 +127,7 @@ the public fingerprint of the CPython release-signing key.
 Six bases, one more than the brief's five: the sync image also copies the `uv` binary from
 `ghcr.io/astral-sh/uv:0.12.19` (W-56, task 15).
 
-| manifest | image | index digest | platforms checked |
+| row | image | index digest | platforms checked |
 |---|---|---|---|
 | manifest | `mcr.microsoft.com/playwright:v1.63.0-noble` | `sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27` | linux/amd64, linux/arm64 |
 | manifest | `ghcr.io/astral-sh/uv:0.12.19` | `sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424` | linux/amd64, linux/arm64 |
