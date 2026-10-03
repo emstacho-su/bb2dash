@@ -129,3 +129,4 @@ line ends the series and gives the login's life under the keep-alive.
 |---|---|---|
 | 2026-10-03T17:28:26Z | 0:38 | `users/me 200` after the recreate |
 | 2026-10-03T17:56:30Z | 1:06 | `users/me 200` after `wsl --shutdown` and Docker Desktop restarting (`.wslconfig` `memory=12GB`; the VM now reports 11.7 GiB). The browser was killed, not closed, and the login still came back |
+| 2026-10-03T21:30:14.305Z | 4:40 | still `users/me 200` after every keep-alive page so far (no silent re-login needed yet) |
