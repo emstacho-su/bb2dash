@@ -7,8 +7,11 @@
 --   R2-3  a folder rename marks no descendant changed: `path` is a changed field only when the
 --         item's own parentId or its own title changed.
 --   R2-4  a session-scoped (`/sessions/`) url compares as null, so its churn is not a change.
---   R2-5  older_run uses the registered-crawl predicate: a newer registered crawl folded ok or
---         partial makes this run older, even when that crawl wrote no history rows.
+--   R2-5  older_run: a newer registered crawl makes this run older, even when that crawl wrote no
+--         history rows. Since 170 (R3-1) this is exactly stage_content's predicate: registered
+--         is enough, folded or not.
+-- Since 170 (R3-4) the counts are what the Stream posts for the run, so the fixture carries the
+-- bb_files rows stage_files would have catalogued; on it the numbers are the same as 138's.
 --
 -- Crawls (one fixture course, registered one at a time, dated in the future):
 --   1  baseline: folder Week 1 (document + file node + link under it), a module, a link whose
@@ -17,7 +20,7 @@
 --      new file node, a new module
 --   3  the link under Week 1 is retitled, the file node moves to the new folder, a document with
 --      no file appears
---   4  as 3, registered and folded `ok` but never recorded
+--   4  as 3, registered but never folded or recorded
 -- RUN IT: `node scripts/db-test.mjs --only phase19_138_material_history_counts.sql`, or paste
 -- the whole file into one `execute_sql` call. The last statement is `rollback`.
 
@@ -89,13 +92,25 @@ begin
   select COURSE, (select term_id from courses order by id limit 1), 'W52.138.FIXTURE', 'W52', '138', 'M001',
          'Phase 19 round 2 fixture course (rolled back)', 'W52 round 2 fixture', SHELL;
 
+  -- The catalogue stage_files would have written for these crawls (170, R3-4: Activity counts
+  -- what the Stream posts, and the Stream posts a file through its bb_files row).
+  insert into bb_files (bb_course_id, course_id, content_id, path, file_name, source_url, bucket) values
+    (SHELL, COURSE, '_w52k_d_1',  'Week 1 / ultraDocumentBody', 'd.pdf',       'https://blackboard.syracuse.edu/bbcswebdav/w52k/d1', 'readings'),
+    (SHELL, COURSE, '_w52k_k_1',  'Week 1 / Slides',            'slides.pptx', 'https://blackboard.syracuse.edu/bbcswebdav/w52k/k1', 'readings'),
+    (SHELL, COURSE, '_w52k_n2_1', 'Week 2 / ultraDocumentBody', 'e.pdf',       'https://blackboard.syracuse.edu/bbcswebdav/w52k/e1', 'readings'),
+    (SHELL, COURSE, '_w52k_k2_1', 'Week 2 / Handout',           'handout.pdf', 'https://blackboard.syracuse.edu/bbcswebdav/w52k/k2', 'readings');
+
   for i in 1..4 loop
     v_runs := v_runs || format('00000000-1380-4000-8000-00000000000%s', i)::uuid;
     insert into agent_requests (kind, scope, state, run_id, note, claimed_by, claimed_at, finished_at)
     values ('sync', 'all', 'done', v_runs[i], format('Phase 19 round 2 fixture crawl %s (rolled back)', i),
             'phase19_138', now(), now());
-    insert into sync_runs (run_id, status, started_at, finished_at, trigger, source, scope)
-    values (v_runs[i], 'ok', now(), now(), 'manual', 'blackboard', 'all');
+    -- Crawl 4 is registered but never folded (170, R3-1: registered is enough to make crawl 3
+    -- an older run, as for stage_content).
+    if i < 4 then
+      insert into sync_runs (run_id, status, started_at, finished_at, trigger, source, scope)
+      values (v_runs[i], 'ok', now(), now(), 'manual', 'blackboard', 'all');
+    end if;
     insert into bb_raw (run_id, kind, bb_course_id, captured_at, payload)
     select v_runs[i], 'course', SHELL, now() + make_interval(hours => i),
            jsonb_build_object('content', jsonb_agg(jsonb_build_object(
@@ -104,7 +119,9 @@ begin
              'embeddedFiles', coalesce(f.files, '[]'::jsonb)) order by f.ord))
       from _fx138 f where f.crawl = i;
 
-    continue when i = 4;   -- crawl 4 is folded but never recorded
+    continue when i = 4;   -- crawl 4 is never recorded
+    -- A fold's order: the content tree first (the Stream's node arm reads it), then the history.
+    perform stage_content(v_runs[i]);
     v_r := material_history_record(v_runs[i]);
 
     if i = 1 then
@@ -155,10 +172,11 @@ begin
     end if;
   end loop;
 
-  -- R2-5: crawl 4 is newer, registered and folded, and wrote no history. Crawl 3 is now older.
+  -- R2-5 and R3-1: crawl 4 is newer and registered, not folded, and wrote no history. Crawl 3 is
+  -- now older.
   v_r := material_history_record(v_runs[3]);
   if (v_r->>'older_run')::boolean is distinct from true then
-    v_fail := v_fail || format('(5) crawl 3 after a folded, unrecorded crawl 4 returned %s', v_r);
+    v_fail := v_fail || format('(5) crawl 3 after a registered, unfolded crawl 4 returned %s', v_r);
   end if;
   if (select count(*) from bb_material_history where run_id = any (v_runs)) <> 10 then
     v_fail := v_fail || format('(X) %s fixture rows, want 10',
