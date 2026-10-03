@@ -26,8 +26,14 @@ import { useEffect } from 'react';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
-import { NO_SYNC_RECORDED, lastSyncedClause, neverSyncedLine, runStateWord } from './sync-run-state';
-import { normalizeStreams, type StreamState } from './sync-run-state';
+import {
+  NO_SYNC_RECORDED,
+  lastSyncedClause,
+  neverSyncedLine,
+  normalizeStreams,
+  runStateWord,
+  type StreamState,
+} from './sync-run-state';
 
 /**
  * The Phase 9 relations are absent from the generated Database type, so the

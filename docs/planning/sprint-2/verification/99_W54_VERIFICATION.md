@@ -317,3 +317,14 @@ Check: `npx vitest run test/course-stream.history.test.tsx test/course-stream.te
   `Tests  1 failed | 19 passed (20)`: `Unable to find role="region" and name "New and changed materials"`
   for the rejected query. The loading case passed before the fix.
 * GREEN: `Test Files  2 passed (2)` · `Tests  26 passed (26)`
+
+### R3-8 (LOW) — one import from `./sync-run-state`
+
+`queries.sync.ts` imports `./sync-run-state` in one statement (`grep -c "from './sync-run-state'"` → 1).
+`git diff --numstat main -- web/src/lib/queries.sync.ts` → `22	7` (the one statement spans eight lines).
+
+### Round 3 gates
+
+`cd web && npm run typecheck && npm run build && npx vitest run`, each exit code captured on its own
+(not through a pipe): `typecheck=0 build=0 vitest=0` · `Test Files  132 passed (132)` ·
+`Tests  2304 passed (2304)` (was 2302). Desktop untouched in round 3.
