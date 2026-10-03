@@ -46,12 +46,20 @@ const TERMINAL = parseConfig({ ...ANON, syncLauncher: 'terminal', novncPasswordF
 const PASSWORD = 'p&ss w=rd/x?#';
 const BOM = '\uFEFF';
 
-/** A RestGet over a fixed list of open item ids, recording each query it was asked. */
+/** The shape of the container's item (round 2, item 3): its ref, kind and entity. */
+const CONTAINER_ITEM = { ref: 'sync-login-required', kind: 'stack_must_confirm', entity: 'agent_request' };
+
+/** A RestGet over a fixed list of open container item ids, recording each query it was asked. */
 function restOver(ids: readonly (string | number)[]) {
+  return restOverRows(ids.map((id) => ({ id, ...CONTAINER_ITEM })));
+}
+
+/** A RestGet that answers with exactly `rows`, whatever the query asked for. */
+function restOverRows(rows: readonly Record<string, unknown>[]) {
   const queries: { relation: string; query: string }[] = [];
   const get: RestGet = async (relation, query, validate) => {
     queries.push({ relation, query });
-    return validate(ids.map((id) => ({ id })));
+    return validate(rows);
   };
   return { get, queries };
 }
@@ -103,9 +111,11 @@ describe('core/login-prompt — the page and its URL', () => {
     expect(loginPageUrl(null)).toBe(`${LOGIN_PAGE_URL}#autoconnect=true&resize=scale`);
   });
 
-  it('reads the frozen query: open items with the login ref, ids only', () => {
+  it("reads the container's open item alone: its ref, kind and entity (round 2, item 3)", () => {
     expect(LOGIN_ITEMS_RELATION).toBe('attention_items');
-    expect(LOGIN_ITEMS_QUERY).toBe('select=id&ref=eq.sync-login-required&state=eq.open');
+    expect(LOGIN_ITEMS_QUERY).toBe(
+      'select=id,ref,kind,entity&ref=eq.sync-login-required&kind=eq.stack_must_confirm&entity=eq.agent_request&state=eq.open',
+    );
   });
 });
 
@@ -134,10 +144,32 @@ describe('core/login-prompt — which items are new', () => {
   });
 
   it('validates the rows to string ids', () => {
-    expect(validateLoginItems([{ id: 12 }, { id: '13' }])).toEqual(['12', '13']);
+    expect(validateLoginItems([{ id: 12, ...CONTAINER_ITEM }, { id: '13', ...CONTAINER_ITEM }])).toEqual(['12', '13']);
     expect(() => validateLoginItems({})).toThrow(/array/);
     expect(() => validateLoginItems([null])).toThrow(/row/);
-    expect(() => validateLoginItems([{ id: true }])).toThrow(/id/);
+    expect(() => validateLoginItems([{ id: true, ...CONTAINER_ITEM }])).toThrow(/id/);
+  });
+
+  it("keeps only the container's item: another ref, kind or entity is dropped", () => {
+    expect(
+      validateLoginItems([
+        { id: 1, ...CONTAINER_ITEM, ref: 'chrome-login-required' },
+        { id: 2, ...CONTAINER_ITEM, kind: 'data_gap' },
+        { id: 3, ...CONTAINER_ITEM, entity: 'session' },
+        { id: 4 },
+        { id: 5, ...CONTAINER_ITEM },
+      ]),
+    ).toEqual(['5']);
+  });
+});
+
+describe('main/login-prompt — only the container item opens the page (round 2, item 3)', () => {
+  it("the Chrome skill's item, or any other ref, never opens the page", async () => {
+    const { prompt, opened, reads } = harness();
+    await prompt.check(restOverRows([{ id: 61, ...CONTAINER_ITEM, ref: 'chrome-login-required' }]).get);
+    await prompt.check(restOverRows([{ id: 62, ...CONTAINER_ITEM, ref: 'agent_request:62' }]).get);
+    expect(opened).toEqual([]);
+    expect(reads).toEqual([]);
   });
 });
 
@@ -236,7 +268,7 @@ describe('main/login-prompt — opening the page', () => {
     let release: () => void = () => undefined;
     const slow: RestGet = (_relation, _query, validate) =>
       new Promise((resolve) => {
-        release = () => resolve(validate([{ id: 41 }]));
+        release = () => resolve(validate([{ id: 41, ...CONTAINER_ITEM }]));
       });
     const first = prompt.check(slow);
     await prompt.check(restOver([41]).get);

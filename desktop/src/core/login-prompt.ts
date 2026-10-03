@@ -13,12 +13,22 @@
 /** The frozen login page (brief 100, Local surfaces). */
 export const LOGIN_PAGE_URL = 'http://127.0.0.1:6080/vnc.html';
 
-/** The Inbox item the runner raises through `sync_login_required()` (migration 091). */
-export const LOGIN_ITEM_REF = 'sync-login-required';
+/**
+ * The Inbox item the container's runner raises through `sync_login_required()` (migration 091):
+ * its ref, kind and entity together. The Chrome skill's own login item carries another ref
+ * (`chrome-login-required`), so it never opens the container's page (round 2, item 3).
+ */
+export const LOGIN_ITEM = Object.freeze({
+  ref: 'sync-login-required',
+  kind: 'stack_must_confirm',
+  entity: 'agent_request',
+});
 
 /** The read, owner session and RLS as every other poller read: `GET /rest/v1/attention_items?…`. */
 export const LOGIN_ITEMS_RELATION = 'attention_items';
-export const LOGIN_ITEMS_QUERY = `select=id&ref=eq.${LOGIN_ITEM_REF}&state=eq.open`;
+export const LOGIN_ITEMS_QUERY =
+  `select=id,ref,kind,entity&ref=eq.${LOGIN_ITEM.ref}&kind=eq.${LOGIN_ITEM.kind}` +
+  `&entity=eq.${LOGIN_ITEM.entity}&state=eq.open`;
 
 const UTF8_BOM = '﻿';
 
@@ -55,13 +65,24 @@ export function newLoginItems(
   return openIds.filter((id) => !promptedIds.has(id));
 }
 
-/** PostgREST rows to ids. A `bigint` id may arrive as a number or a string. */
+function isContainerItem(row: object): boolean {
+  const { ref, kind, entity } = row as { ref?: unknown; kind?: unknown; entity?: unknown };
+  return ref === LOGIN_ITEM.ref && kind === LOGIN_ITEM.kind && entity === LOGIN_ITEM.entity;
+}
+
+/**
+ * PostgREST rows to the ids of the container's login items. A row with another ref, kind or
+ * entity is dropped even if the server returned it, so the query's filter is not the only
+ * guard. A `bigint` id may arrive as a number or a string.
+ */
 export function validateLoginItems(rows: unknown): readonly string[] {
   if (!Array.isArray(rows)) throw new Error('expected an array of rows');
-  return rows.map((row: unknown) => {
+  const ids: string[] = [];
+  for (const row of rows as unknown[]) {
     if (row === null || typeof row !== 'object') throw new Error('expected a row object');
     const id = (row as { id?: unknown }).id;
     if (typeof id !== 'number' && typeof id !== 'string') throw new Error('expected an id');
-    return String(id);
-  });
+    if (isContainerItem(row)) ids.push(String(id));
+  }
+  return ids;
 }
