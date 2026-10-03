@@ -564,3 +564,41 @@ container is healthy within one interval); a per-write counter in the temp name 
 
 Not done here: the cut-over (`compose up` of the real `bb2dash` project on `bb2dash-sync:local`, keeping
 `bb2dash_bb-profile`), which is the PM's with Stack; a real `sync_runner` DSN and a live pass (task 28).
+
+## Task 16 — the R5 OS-bound inventory, refreshed (P-44), and grep-clean over what the images copy
+
+The seven bb2dash offenders 91 R-86 lists at a5042fa, as they stand on this branch:
+
+| kind | where (a5042fa → now) | what | disposition |
+|---|---|---|---|
+| os-bound | `desktop/src/core/config.ts:27` → :27-31 | `repoDir: 'C:\\Users\\estac\\projects\\bb2dash'`; now `win32.join(homedir(), 'projects', 'bb2dash')` | fixed before this phase (fc6602b); not copied into an image |
+| os-bound | `desktop/src/core/sync-command.ts:59` → :53 | `const POWERSHELL = 'powershell.exe'`, the Windows Sync terminal's argv | not copied into an image: the sync image bundles only `desktop/src/core/sync-id.ts` (split out in task 5); it retires with the terminal launch (R-96) |
+| os-bound | `scripts/validate-grading.ps1` | the PowerShell launcher for the grading validation | Phase 16 (its Node twin `scripts/validate-grading.mjs` is on `main`); not copied into an image |
+| os-bound | `skills/inbox-apply/SKILL.md:31` → :30, :60 | the vault path under OneDrive; now `node C:/Users/stack/agentic-harness/hooks/resolve-config.mjs`, with `C:/Users/stack/vault` as :60's example | Phase 20 (R-97 moved the vault path to the harness resolver; the resolver's own path stays host-side); not copied into an image |
+| os-bound | `skills/bb-course-pull/SKILL.md` :60-62 → :65-67 | PowerShell `Move-Item` from Downloads into the local mirror | not copied into an image (a Windows-browser skill); the runner's file step moves bytes in Node, copy-then-unlink (P-104) |
+| os-bound | `skills/bb-course-map/SKILL.md` :56 | "write `course context/<course_id>/course_map.json` in the OneDrive folder" | not copied into an image; the wording is stale (v3 D-7 dropped the OneDrive mirror), left for the skill's next edit |
+| os-bound | `mcp-server/scripts/smoke.mjs:33` | the `C:/Users/estac/projects/bb2dash/.env` default | fixed here (task 17, ee79822: no default; `--env-file`, or `--docker --key-file`); `scripts/` is not copied into the MCP image either |
+
+`docker/grep-clean.test.mjs` (new). It reads every non-`--from` COPY of `docker/sync/Dockerfile` (context:
+the repo root) and `mcp-server/Dockerfile` (context: `mcp-server/`), checks the contexts against
+`compose.yaml`, expands each source the way the context's `.dockerignore` exclusions leave it, skips binary
+files (a NUL in the first 8000 bytes: the four extract fixtures), strips comments (`//` and `/* */` in
+JS/TS; `#` in Python, shell, TOML, YAML and shebang files) and greps for `C:/`, `C:\`, `.ps1`,
+`powershell(.exe)` as a word, `Move-Item` and `OneDrive`. Each pattern first catches a planted line.
+
+RED: before this task the file did not exist (`node --test docker/grep-clean.test.mjs` → `Could not find
+…\docker\grep-clean.test.mjs`). The only two hits in the copied sources are comments, which the strip
+removes: `sync/src/secrets.ts:10` ("files written by PowerShell carry them") and
+`docker/sync/entrypoint.sh:27` ("a PowerShell redirect leaves behind").
+
+GREEN:
+
+```
+node --test --test-reporter=tap docker/grep-clean.test.mjs
+  # sync: 25 file(s) scanned of 29 copied          (4 binary fixtures skipped)
+  # bb2dash-mcp: 14 file(s) scanned of 14 copied
+  # tests 6
+  # pass 6
+  # fail 0
+grep -c "^| os-bound " docs/planning/sprint-2/verification/100_W56_VERIFICATION.md   -> 7
+```
