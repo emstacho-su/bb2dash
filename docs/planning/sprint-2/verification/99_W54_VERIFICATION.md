@@ -287,3 +287,12 @@ Check: `npx vitest run test/unit/reducer.test.ts test/unit/sources.test.ts` (fro
 * RED (tests first; round 1's interrupted expectation updated to the new body and route):
   `Test Files  1 failed | 1 passed (2)` · `Tests  2 failed | 93 passed (95)`.
 * GREEN: `Test Files  2 passed (2)` · `Tests  95 passed (95)`
+
+### Round 2 gates (branch at d2d9391)
+
+| Gate | Result |
+|---|---|
+| `cd web && npm run typecheck && npm run build && npx vitest run` | all exit 0 · `Test Files  132 passed (132)` · `Tests  2302 passed (2302)` (was 2287) |
+| `cd desktop && npm run typecheck && npx vitest run` | all exit 0 · `Test Files  36 passed (36)` · `Tests  708 passed (708)` (was 707) |
+
+`git diff --numstat main -- web/src/lib/queries.sync.ts` → `16	7	web/src/lib/queries.sync.ts`.
