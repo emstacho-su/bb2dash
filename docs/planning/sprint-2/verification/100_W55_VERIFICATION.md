@@ -40,3 +40,43 @@ node --test scripts/db-test.test.mjs
 ℹ pass 59
 ℹ fail 0
 ```
+
+## Task 8 — the scrubbed recorded crawl
+
+* Source: run `3b5174b8-1347-448f-96db-50a0b635dc58` (request 39, `sync_runs` 62), read on 2026-10-03
+  through the SQL test credential by `node db/fixtures/phase14/scrub_crawl.mjs --from-db`; scrubbed in
+  memory, then written. 9 rows; 272 non-empty values removed.
+* `SCRUB_FIELDS` (W-55's call, beyond the brief's `studentSubmission`): `studentSubmission`,
+  `studentComments`, `feedback`, `instructorFeedback`, `score`, `manualScore`, `effectiveScore`,
+  `displayScore`, `displayGrade`, `receipt`, `receiptId`, `email`, `body`, `description`. A first pass
+  without `body` and `description` still carried professors' email addresses and a mobile number in
+  announcement and content bodies (6 `@syr.edu` hits); after it: 0 `.edu` addresses, 0 phone-like
+  strings. Why each key is there: `db/fixtures/phase14/README.md`.
+* The sync package skeleton (`sync/package.json`, `package-lock.json`, `tsconfig.json`,
+  `vitest.config.ts`) lands with this task because its check runs under `sync/`.
+
+RED (test first, no fixture yet):
+
+```
+cd sync && npx vitest run test/fixture-scrub.test.ts
+ FAIL  test/fixture-scrub.test.ts
+ Error: ENOENT: no such file or directory, open '…/db/fixtures/phase14/crawl_v4_scrubbed.json'
+ Test Files  1 failed (1)      Tests  no tests
+```
+
+GREEN:
+
+```
+cd sync && npx vitest run test/fixture-scrub.test.ts
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+```
+
+The 091 unit's RED line, after the loader exists and before 091 (task 6's check):
+
+```
+node scripts/db-test.mjs --only phase14_091_sync_runner.sql
+FAIL  phase14_091_sync_runner.sql  FAIL phase14_091: migration 091 is not applied (no role sync_runner)
+db-test: passed 0, failed 1, units 1
+exit 1
+```

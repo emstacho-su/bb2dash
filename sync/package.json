@@ -1,0 +1,27 @@
+{
+  "name": "bb2dash-sync",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The container's sync runner (Phase 14): the queue, the Blackboard login watch, the crawl, the fold wait, the files, the embed step and the close, with no LLM in the path.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "esbuild src/main.ts src/probe.ts src/enqueue.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist --packages=external --external:../../ingest/*",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "pg": "8.23.0",
+    "playwright": "1.63.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.9.2",
+    "@types/pg": "8.23.1",
+    "@vitest/coverage-v8": "5.0.1",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  }
+}
