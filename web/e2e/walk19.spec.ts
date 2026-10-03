@@ -190,12 +190,18 @@ test.describe('standing data (acceptance steps 1–3)', () => {
   });
 });
 
+/** Home is fully drawn once none of its sections still says "loading...". */
+async function homeLoaded(page: Page): Promise<void> {
+  await expect(page.getByText(/^loading\.\.\.$/)).toHaveCount(0);
+}
+
 test.describe('live state (acceptance steps 4–5; WALK19_LIVE=1)', () => {
   test.skip(!LIVE, 'needs a running or interrupted sync on prod: set WALK19_LIVE=1 and run with -g');
 
   test('04 home sync running', async ({ page }) => {
     await openSettled(page, '/');
     await assertThenShoot(page, '04-home-sync-running.png', async () => {
+      await homeLoaded(page);
       await expect(page.getByText(/sync running/).first()).toBeVisible();
     });
   });
@@ -203,6 +209,7 @@ test.describe('live state (acceptance steps 4–5; WALK19_LIVE=1)', () => {
   test('05 home interrupted', async ({ page }) => {
     await openSettled(page, '/');
     await assertThenShoot(page, '05-home-interrupted.png', async () => {
+      await homeLoaded(page);
       await expect(page.getByText(/last sync interrupted/).first()).toBeVisible();
     });
   });

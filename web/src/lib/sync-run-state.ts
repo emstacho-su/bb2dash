@@ -37,9 +37,28 @@ export interface StreamState {
   state: StreamStateName;
 }
 
+/**
+ * What `lastSyncedClause` reads off a `v_sync_status` row: the word's inputs,
+ * the run's own times, and 137's streams (absent before 137).
+ */
+export interface LastSyncedInput extends RunStateInput {
+  finished_at: string | null;
+  started_at: string | null;
+  streams?: readonly StreamState[] | null;
+}
+
 const STREAM_STATES: readonly StreamStateName[] = ['fresh', 'stale', 'never'];
 
 const NEVER_SYNCED_SUFFIX = 'never synced';
+
+/** The line, and the clause, when no fold has ever landed. */
+export const NO_SYNC_RECORDED = 'no sync recorded yet';
+
+/** The run-state words of a newest run whose crawl was never folded in. */
+const NOT_FOLDED: ReadonlySet<RunStateWord> = new Set<RunStateWord>([
+  'last run failed',
+  'last sync interrupted',
+]);
 
 function isStreamStateName(value: unknown): value is StreamStateName {
   return typeof value === 'string' && (STREAM_STATES as readonly string[]).includes(value);
@@ -98,4 +117,49 @@ export function neverSyncedLine(streams: readonly StreamState[] | null | undefin
     ...new Set(streams.filter((entry) => entry.state === 'never').map((entry) => entry.stream)),
   ].sort();
   return names.length === 0 ? null : `${names.join(', ')} ${NEVER_SYNCED_SUFFIX}`;
+}
+
+/**
+ * The newest `last_seen_at` across the streams: when data last really folded
+ * in. Compared as instants, because the strings may carry different offsets.
+ * Null when no stream has a readable one, or there are no streams.
+ */
+export function newestFoldAt(streams: readonly StreamState[] | null | undefined): string | null {
+  if (!Array.isArray(streams)) return null;
+  let newest: string | null = null;
+  let newestMs = Number.NEGATIVE_INFINITY;
+  for (const entry of streams) {
+    const ms = entry.last_seen_at === null ? Number.NaN : Date.parse(entry.last_seen_at);
+    if (Number.isFinite(ms) && ms > newestMs) {
+      newest = entry.last_seen_at;
+      newestMs = ms;
+    }
+  }
+  return newest;
+}
+
+/**
+ * The "last synced …" clause of the freshness line, or null while a sync is
+ * running (the run-state word says so). `ago` formats an instant the way the
+ * line does; it is passed in so this module needs nothing from `queries.sync`.
+ *
+ * A run that folded (ok, partial) names its own finish. A failed or
+ * interrupted newest run never folded, so its finish (for a reaped run, the
+ * reap time) is not when data last synced: the clause names the newest real
+ * fold across the streams instead, or says no sync is recorded when no stream
+ * ever folded. A row with no streams (read before 137) keeps the run's own
+ * times, which is what the line said before.
+ */
+export function lastSyncedClause(
+  run: LastSyncedInput,
+  ago: (iso: string | null) => string,
+): string | null {
+  const word = runStateWord(run);
+  if (word === 'sync running') return null;
+  const ownFinish = run.finished_at ?? run.started_at;
+  if (word === null || !NOT_FOLDED.has(word) || !Array.isArray(run.streams) || run.streams.length === 0) {
+    return `last synced ${ago(ownFinish)}`;
+  }
+  const newest = newestFoldAt(run.streams);
+  return newest === null ? NO_SYNC_RECORDED : `last synced ${ago(newest)}`;
 }

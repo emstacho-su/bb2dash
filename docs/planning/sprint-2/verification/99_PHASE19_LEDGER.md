@@ -59,11 +59,11 @@ screens, PM.
 | 9 | 133 Stream from history | W-52 → PM applies | 7 | done | blob 10ae0a5 applied 2026-10-03; md5 `3fb82588…` equal; columns unchanged; untraced material posts 0; 65 material posts; anon 0 |
 | 10 | 134 Activity names materials | W-52 → PM applies | 9 | done | blob e14cf24 applied 2026-10-03; md5 `77268e7d…` equal; unit result in the full-suite row below |
 | 11 | `DATA_SYNTAX.md` key + table | W-52 | 7 | done | 6b0f426; greps 4 and 6; W-52 merged into the phase branch at 0a2b478 |
-| 12 | 135 open at claim; `run_transform` adopts, `history` stage | W-53 → PM applies | 10 | doing | W-53 re-dry-running with the real 132 (resumed 2026-10-03) |
-| 13 | 136 fold only on calendar row | W-53 → PM applies | 12 | todo | draft ae33266 |
+| 12 | 135 open at claim; `run_transform` adopts, `history` stage | W-53 → PM applies | 10 | doing | blob c846e1e applied by the PM 2026-10-03 (0 open syncs, 0 running rows before); md5 `adc27d3b…` equal; trigger 1; live: request 580 claimed 17:22:26Z opened `sync_runs` 592 `running` at claim; W-53 running post-apply checks |
+| 13 | 136 fold only on calendar row | W-53 → PM applies | 12 | doing | applied back to back with 135; md5 `9feca071…` equal; cron `*/2 * * * *` unchanged |
 | 14 | 136 terminal rule | W-53 | 13 | todo | — |
-| 15 | 137 `notes`, `interrupted` | W-53 → PM applies | 14 | todo | draft ae33266 |
-| 16 | 137 `streams` (R-41 per-stream read) | W-53 | 15 | todo | before-fold state `never` to record before task 27 |
+| 15 | 137 `notes`, `interrupted` | W-53 → PM applies | 14 | doing | applied; md5 `30ff4742…` equal; 12 columns as the brief lists |
+| 16 | 137 `streams` (R-41 per-stream read) | W-53 | 15 | doing | pre-fold on prod 2026-10-03: 8 streams `stale`, `history` `never`, history stage rows 0 |
 | 17 | Skill register-first (steps 2–4) | W-53 | 13 | todo | text prepared |
 | 18 | Runbook step 5, crawler comments | W-53 | — | done | 4cd9590; greps 1/0/0; crawler vitest 114 |
 | 19 | `sync-run-state.ts` | W-54 | — | done | eb14678; 23 passed |
@@ -73,12 +73,16 @@ screens, PM.
 | 23 | Raw-HTML guard | W-54 | — | done | 1cd49ba; only `layout.tsx` |
 | 24 | Desktop "Sync interrupted" toast | W-54 | — | done | 21b691d; reducer + sources 94 passed |
 | 25 | Integrate: merge branches, regenerate types, full suites | PM | 11, 17 | todo | — |
-| 26 | Migrations recorded 8/8, md5 table, advisors | PM | 16 | todo | — |
+| 26 | Migrations recorded 8/8, md5 table, advisors | PM | 16 | doing | 8/8 recorded, each md5 equal to its blob (130 `3a5a3269`, 131 `24670dbb`, 132 `9189a345`, 133 `3fb82588`, 134 `77268e7d`, 135 `adc27d3b`, 136 `9feca071`, 137 `30ff4742`); 138/139 (round 2) and advisors pending |
 | 27 | First register-first sync, live | PM via `/bb-sync` | 17, 25, skill installed | todo | needs the Chrome Blackboard tab signed in; parked for Stack if not |
-| 27b | Live terminal-rule proof (a claimed, registered run that never crawls → interrupted after 30 min + one tick, one Inbox item, Sync freed) | PM | 16 | todo | provides walk shots 05/06 |
+| 27b | Live terminal-rule proof (a claimed, registered run that never crawls → interrupted after 30 min + one tick, one Inbox item, Sync freed) | PM | 16 | doing | request 580 (`claimed_by` `phase19-pm-live-proof`, run `c2789684…`) inserted 17:22:26Z; `sync_runs` 592 opened `running` by the trigger; reap due at the first tick after 17:52:26Z; shot 04 taken during it (ff029d5) |
 | 28 | Walk on the preview, `walk-19/01`–`06` | PM (walk helper) | 25, 27, 27b | doing | 01–03 taken on the preview at fab2ef6 (afd529d, merged); cold loads, no console errors; 04–06 written, run with `WALK19_LIVE=1 -g "<name>"` when their state exists. Shot 02 reading (PM, 2026-10-03): IST.352 has two live folders named "WK01 - …" (`_12827373_1` Welcome, `_12827374_1` the renamed week folder); the check is that the renamed folder appears once, with `previous_paths` ["Weekly Modules / WK01 - Chapter 1"], and "WK01 - Chapter 1" is gone |
 | 29 | Nine DECISIONS rows, STATUS, ORCHESTRATOR | PM | 26 | todo | — |
-| G1 | `/code-review main high`; CRITICAL/HIGH back to workers as round 2 | PM | 25 | doing | early pass over W-52 + W-54 started 2026-10-03; W-53's part reviewed after it lands |
+| R2-1 | 139 re-key a re-created item (keeps its link) | W-52 → PM applies | 137 | doing | blob aacedcf, md5 `54ea43dc…`, 20,947 B; RED then green in dry run; PM reviewed the diff against 131; 1 real re-creation in 12 crawls (IST.352 "Project Assignment #1A" at `6b122650`, folded in place by 026, no link lost); apply after the 27b reap |
+| R2-2..5 | 138 materials-only counts, path rule, session urls, older-run predicate | W-52 → PM applies | 137 | doing | blob d7b3318, md5 `eded5cb4…`, 18,242 B; PM reviewed the diff against 132; 10 backfilled path-only `changed` rows stay (recorded for the PR) |
+| R2-6, R2-7 | Honest "last synced"; interrupted toast opens the Inbox | W-54 | — | done | d98ac0f, d2d9391; web 2302, desktop 708; numstat `16 7`; merged b949d63 |
+| R2-8 | `DATA_SYNTAX.md` heading | W-52 | — | done | 38ddc53 |
+| G1 | `/code-review main high`; CRITICAL/HIGH back to workers as round 2 | PM | 25 | doing | pass 1 (W-52 + W-54 at fab2ef6): 15 findings, 2 closed by 135–137 landing, round 2 R2-1..R2-8 in brief 99 (58a86b1) sent to W-52 (138, 139) and W-54; pass 2 over W-53 and round 2 still to run |
 | G2 | `/security-review` | PM | 25 | todo | — |
 | G3 | PR open with preview link; stop at "ready when you say so" | PM | 26, 28, 29, G1, G2 | todo | — |
 
