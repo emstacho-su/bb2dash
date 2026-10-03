@@ -82,6 +82,11 @@ begin
       if v_got is distinct from 'bb_content|Lab Tips video|lti|https://kaltura.example.invalid/w52v/lab-tips|appeared' then
         v_fail := v_fail || format('(1) crawl 2 posts %s', coalesce(v_got, '(none)'));
       end if;
+      -- once, across every crawl so far
+      if (select count(*) from v_course_stream
+           where course_id = COURSE and post_kind = 'material' and title = 'Lab Tips video') <> 1 then
+        v_fail := v_fail || '(1) the video does not post exactly once'::text;
+      end if;
       -- (2) Activity counts it
       if (v_r - 'sample') is distinct from
          '{"appeared":1,"changed":0,"vanished":0,"baseline_courses":0,"older_run":false}'::jsonb
@@ -97,10 +102,11 @@ begin
     end if;
   end loop;
 
-  -- (1) once, across all three crawls
-  if (select count(*) from v_course_stream
-       where course_id = COURSE and post_kind = 'material' and title = 'Lab Tips video') <> 1 then
-    v_fail := v_fail || '(1) the video does not post exactly once'::text;
+  -- (3) once it is gone, its node carries missing_since and leaves the Stream, like any vanished
+  -- node (110's rule).
+  if exists (select 1 from v_course_stream
+              where course_id = COURSE and post_kind = 'material' and title = 'Lab Tips video') then
+    v_fail := v_fail || '(3) the vanished video is still on the Stream'::text;
   end if;
   -- (4) never fetched
   if exists (select 1 from bb_files where course_id = COURSE and content_id = '_w52v_v_1')
