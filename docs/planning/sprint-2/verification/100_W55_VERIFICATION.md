@@ -408,3 +408,16 @@ node sync/dist/main.js                -> sync-runner: cannot start: SYNC_RUNNER_
   30 s, is younger than 120 s).
 * The image needs `uv` and `ingest/`'s locked project for `extract_text.py` (task 14), and Node for
   `ingest/embed_corpus.mjs`.
+
+## Open, owed and found
+
+* **Owed to Stack:** the `sync_runner` password and the `--ping` line (task 7 (d), above).
+* **Brief inconsistency:** `KEEPALIVE_MINUTES` reads 20 in the 2026-10-03 amendment, the named
+  constants and the DECISIONS keep-alive row, but 60 in "Open items for Stack" ("Re-answered
+  2026-10-03: item 2 … defaults to 60") and in the DECISIONS morning-sync row ("every 60 minutes while
+  it is alive"). The runner uses 20, the later and more specific call.
+* **The `log_connections` refusal** is `55P02 parameter "log_connections" cannot be set after
+  connection start`, not the permission error the DoD predicted; either way the platform refuses it.
+* **Not verified here:** a live run in the container (task 28); whether Ultra's
+  Content-Security-Policy lets `addScriptTag` run the crawler (the runner falls back to evaluating
+  the source, and logs it); the session pooler accepting `sync_runner` (Stack's `--ping`).
