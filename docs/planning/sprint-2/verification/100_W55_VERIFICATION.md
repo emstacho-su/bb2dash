@@ -293,3 +293,49 @@ refusing.
 The extractor runs `uv run --locked --project ingest python ingest/extract_text.py <file>`, the
 same command W-56's task 14 gives `extractUnits` on `feat/containers-14-images` (589e302), so the
 runner and the pull use one locked set once the branches integrate.
+
+## Task 11 — the report, the sweep, the login item and its self-close, and the skill's step 1
+
+RED (`report.ts` held out of the tree while its test ran first):
+
+```
+cd sync && npx vitest run test/report.test.ts
+ FAIL  test/report.test.ts
+ Error: Cannot find module '../src/report.js' imported from …/sync/test/report.test.ts
+ Test Files  1 failed (1)      Tests  no tests
+```
+
+GREEN:
+
+```
+cd sync && npx vitest run test/report.test.ts
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+
+node scripts/db-test.mjs --only phase14_091_sync_runner.sql
+PASS  phase14_091_sync_runner.sql
+db-test: passed 1, failed 0, units 1
+```
+
+The files line `report.test.ts` pins (task 28 quotes it beside `walk-14/03`): `Files: nothing new to
+pull`, `Files: <n> pulled`, or `Files: <n> pulled, <m> not pulled`, then one `Not pulled: file <id>
+(<reason>)` line per file, at most 10, then `…and <k> more not pulled`.
+
+**Brief deviation (PM, 2026-10-03, from the launcher's code review):** the Chrome skill and the
+container do not share a login item. `skills/bb-sync/SKILL.md` step 1's insert takes ref
+**`chrome-login-required`**, not the brief's `sync-login-required`, which stays the container's alone
+(raised by `sync_close` and `sync_login_required` with kind `stack_must_confirm` and entity
+`agent_request`; archived only by `sync_login_ok()`, which never touches `chrome-login-required`).
+Task 11's grep check becomes:
+
+```
+grep -c "'chrome-login-required'" skills/bb-sync/SKILL.md
+1
+grep -c "'sync-login-required'" skills/bb-sync/SKILL.md
+0
+grep -c "migration 031" skills/bb-sync/SKILL.md
+0
+```
+
+`sync_login_required()` returns the open item's id by reading it back from `attention_items` after
+`raise_attention`, which returns a boolean (041:127–130); the brief's bigint return stands.

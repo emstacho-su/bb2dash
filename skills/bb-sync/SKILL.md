@@ -78,16 +78,18 @@ update agent_requests
        result = jsonb_build_object('error', 'SESSION EXPIRED')
  where id = $1;
 
-insert into attention_items (kind, question, suggested)
-values ('stack_must_confirm',
+insert into attention_items (kind, ref, question, suggested)
+values ('stack_must_confirm', 'chrome-login-required',
         'Blackboard session expired; log in and re-run the sync',
         to_jsonb('claude "/bb-sync <new request id>"'::text))
 on conflict do nothing;
 ```
 
 Then tell Stack in one line: the session expired, log in to Blackboard and press Sync again. The
-`on conflict do nothing` is load-bearing — migration 031's unique key means a second expiry while
-the first is still open is the same row, not a second one.
+`on conflict do nothing` is load-bearing — migration 041's unique key means a second expiry while
+the first is still open is the same row, not a second one. The ref is this Chrome tab's own: the
+container's login item is `sync-login-required`, and the container's login check never closes this
+one.
 
 ## Step 2 — Claim the request and register the run
 
