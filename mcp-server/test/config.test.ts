@@ -78,7 +78,7 @@ describe('loadConfig — the key from a file (SUPABASE_SERVICE_ROLE_FILE)', () =
   }
 
   it('reads the key from the file the variable names, BOM and CRLF stripped', () => {
-    const config = loadConfig({ SUPABASE_URL: TEST_URL, SUPABASE_SERVICE_ROLE_FILE: keyFile(`﻿${FILE_KEY}\r\n`) });
+    const config = loadConfig({ SUPABASE_URL: TEST_URL, SUPABASE_SERVICE_ROLE_FILE: keyFile(`\uFEFF${FILE_KEY}\r\n`) });
     expect(config.serviceKey).toBe(FILE_KEY);
   });
 

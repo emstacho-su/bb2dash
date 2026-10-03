@@ -6,7 +6,7 @@ import { SERVICE_ROLE_FILE_VAR, cleanSecretText, readSecretFile } from '../src/e
 import { ConfigError, describeError } from '../src/errors.js';
 
 const SECRET = 'sb_secret_file_value_not_real';
-const BOM = '﻿';
+const BOM = '\uFEFF';
 
 let root: string;
 beforeEach(() => {

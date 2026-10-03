@@ -20,7 +20,7 @@ import { ConfigError } from './errors.js';
 
 export const SERVICE_ROLE_FILE_VAR = 'SUPABASE_SERVICE_ROLE_FILE';
 
-const UTF8_BOM = '﻿';
+const UTF8_BOM = '\uFEFF';
 const LINE_BREAK = /[\r\n]/;
 
 /** A leading UTF-8 byte-order mark and surrounding CR, LF and spaces removed. */
