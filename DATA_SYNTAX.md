@@ -268,6 +268,13 @@ the Google mirror sees patches, never delete + insert.
   disagreed.
 * **Activity** (134) — `sync_change_lines` reads the `history` stage: "N new material(s): A, B,
   C (+k more)", "N material(s) changed: …", "N material(s) no longer in Blackboard: …".
+* **Round 2** (138, 139) — `material_history_record` still writes every history row, but its
+  counts and `sample` cover materials only (file rows, and document or link nodes no file row of
+  the run covers); `path` is a changed field only when the item's own parent or title changed;
+  a `/sessions/` url compares as null; `older_run` is true once a newer registered crawl has
+  been folded. `stage_content` re-keys a re-created item: one new item and one stored row the
+  run does not carry, on the same path with the same `item_kind`, share the row (old id to
+  `detail.previous_ids`, link and children kept), counted as `rekeyed`.
 
 ## Seed state (2026-09-02)
 
