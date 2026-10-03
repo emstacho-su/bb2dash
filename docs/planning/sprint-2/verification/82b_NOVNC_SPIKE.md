@@ -114,3 +114,17 @@ Verdict: PASS
 Reading the numbers into the phase (brief 100 open item 1): `KEEPALIVE_MINUTES` and B-45's hour stay at
 their provisional values until the idle series has ended and the four reopen rows are filled; the
 DECISIONS row that closes Task 0 names them and writes the `Idle lifetime:` line below.
+
+## Keep-alive by navigation (Stack, 2026-10-03), measured as it runs
+
+From 2026-10-03T17:28:08Z the spike container runs the navigating keep-alive (brief 100's login watch):
+a read-only Ultra page every 20 ± 3 minutes while signed in, a silent re-login attempt (one load of
+`/ultra/`) before a dead check counts, and a probe every 60 s with no navigation while the login is dead.
+The image was rebuilt and the container recreated for it; the first probe of the new run read
+`users/me 200 2026-10-03T17:28:26Z +0m start`, so the login made at 16:50Z also survived a recreate.
+Rows below are copied from `docker compose logs sync` when the PM reads them; a `session-age: login dead`
+line ends the series and gives the login's life under the keep-alive.
+
+| at (UTC) | since login (16:50Z) | event |
+|---|---|---|
+| 2026-10-03T17:28:26Z | 0:38 | `users/me 200` after the recreate |

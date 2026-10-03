@@ -19,7 +19,11 @@ services:
     security_opt:
       - seccomp=./docker/sync/seccomp_profile.json
     environment:
-      PROBE_MINUTES: "${PROBE_MINUTES:-30}"
+      # The keep-alive (Stack, 2026-10-03): a read-only Ultra page every 20 ± 3 minutes while signed in;
+      # a probe every 60 s while the login is dead, with no navigation.
+      KEEPALIVE_MINUTES: "${KEEPALIVE_MINUTES:-20}"
+      JITTER_MINUTES: "${JITTER_MINUTES:-3}"
+      LOGIN_WATCH_SECONDS: "${LOGIN_WATCH_SECONDS:-60}"
     ports:
       # The login page. Loopback only: never reachable from another machine.
       - "127.0.0.1:6080:6080"

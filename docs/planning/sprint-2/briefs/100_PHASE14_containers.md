@@ -77,9 +77,16 @@ in order to complete this phase." The spike's verdict reads the login and the re
 A6 proves catch-up by a restart with a stale `last_run_at`, not a night asleep; the acceptance sitting and
 the cut-over run in one sitting. Since the morning login is manual, the login's overnight lifetime no longer
 decides anything.
-* **Open item 2 changes:** `KEEPALIVE_MINUTES` becomes the login check while the login is alive, default 60
-  (each check is a request from the browser's session, so it also touches it); `LOGIN_WATCH_MS = 60000` is
-  the check while it is dead, so the morning login is seen within a minute.
+* **Open item 2 changes, twice:** `KEEPALIVE_MINUTES` is the keep-alive while the login is alive, default
+  20 with `KEEPALIVE_JITTER_MINUTES = 3` (Stack, 2026-10-03: "we will need to navigate around in the logged in
+  blackboard session periodically to avoid the session going stale"); `LOGIN_WATCH_MS = 60000` is the check
+  while it is dead, so the morning login is seen within a minute.
+* **The keep-alive navigates, and a dead probe tries a silent re-login first** (Stack, 2026-10-03). Each
+  keep-alive tick loads the next read-only page of `KEEPALIVE_PAGES` in the runner's browser, never during a
+  pass, then probes. A dead probe first loads `/ultra/` once and lets a Microsoft redirect finish, so a
+  lapsed Blackboard session whose Microsoft sign-in is still valid comes back without Stack; only a second
+  dead probe raises the Inbox item. While the login is dead the runner never navigates, so the sign-in page
+  Stack types into through noVNC is left alone.
 
 ## Why
 
@@ -233,8 +240,13 @@ Local surfaces (names frozen; C-1, C-2, C-6 and C-7 as amended):
 
 **The login watch** (2026-10-03), beside the passes, in `sync/src/login.ts`. The runner keeps one login state
 (`unknown`, `alive`, `dead`) and runs the same `users/me` probe on start, then every `LOGIN_WATCH_MS` while
-the state is `dead` or `unknown` and every `KEEPALIVE_MINUTES` while it is `alive` (a pass's own probe in
-step 3 also updates the state):
+the state is `dead` or `unknown` and, while it is `alive`, runs a keep-alive tick every `KEEPALIVE_MINUTES` ±
+`KEEPALIVE_JITTER_MINUTES` (a pass's own probe in step 3 also updates the state):
+* a keep-alive tick loads the next page of `KEEPALIVE_PAGES` with `page.goto` (no click, no form), waits
+  `SETTLE_MS`, then probes; ticks are skipped while a pass runs, and the pass's own page is the same tab;
+* a dead probe from `alive` or `unknown` first loads `/ultra/` once and waits `SETTLE_MS` (the silent
+  re-login), then probes again; only that second dead probe enters `dead`;
+* while `dead`, the watch only probes; it never navigates, so the noVNC sign-in page stays put;
 * entering `dead` calls `sync_login_required()`, once per entry;
 * entering `alive` calls `sync_login_ok()`, then `sync_enqueue('login')`, which queues the day's sync only if
   none finished `done` on that New York day and none is open (so a container restart at noon after a morning
@@ -252,8 +264,13 @@ Named constants, each tested:
 * `FOLD_WAIT_MS = 600000`
 * `MAX_CLAIM_ATTEMPTS = 3`, the same in SQL and TS
 * `DEAD_LETTER_MINUTES = 20`, in SQL
-* `KEEPALIVE_MINUTES`, an env value, default 60 (2026-10-03): the login check while the login is alive;
-  each check is a request from the browser's session and so also touches it. 0 turns that check off
+* `KEEPALIVE_MINUTES`, an env value, default 20 (Stack, 2026-10-03): the keep-alive tick while the login is
+  alive. 0 turns the keep-alive off (the login is then checked only by a pass)
+* `KEEPALIVE_JITTER_MINUTES = 3`: each tick lands a random amount within ± this of `KEEPALIVE_MINUTES`
+* `KEEPALIVE_PAGES = ['/ultra/course', '/ultra/stream', '/ultra/calendar', '/ultra/institution-page']`, visited in
+  turn: read-only pages only, never a course page, a form or anything that records an action
+* `SETTLE_MS = 15000`: the wait after a keep-alive or re-login load, for Ultra's scripts and any sign-in
+  redirect
 * `LOGIN_WATCH_MS = 60000`: the login check while the login is dead or unknown, so the morning login is seen
   within a minute
 * `LOGIN_HOSTS`: `login.microsoftonline.com` (the one host `skills/bb-sync/SKILL.md` step 1 spells out),
@@ -716,7 +733,7 @@ verdict reads the login and the restart). **Sandbox rule (P-102):** if Chromium 
 | 7 | 091: role, `claim_attempts`, the twelve functions and the helper. Dry run in `begin; … rollback;`, apply with `apply_migration` as `091_sync_runner_role`, then Stack sets the password (never in a file) | R-84, P-104 | W-55 | (b) precondition, before the dry run: `select count(*) from supabase_migrations.schema_migrations where name in ('100_db_test_runner_role', '135_sync_run_open_at_claim', '136_transform_tick_register_first', '137_sync_status_run_state')` → 4 (0 on 2026-09-27; 3 if B-42's answer leaves migration 100 unwritten, **PROVISIONAL, B-42**) and `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and has_function_privilege('public', p.oid, 'execute')` → 0 (0 on 2026-09-27; the twelve-name check below relies on it). After the apply: `select string_agg(p.proname, ',' order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and has_function_privilege('sync_runner', p.oid, 'execute')` → `sync_claim,sync_close,sync_enqueue,sync_file_stored,sync_file_worklist,sync_login_ok,sync_login_required,sync_next,sync_register_run,sync_requeue_orphans,sync_run_outcome,sync_sweep_stale`; `select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind in ('r','v','m','p') and has_table_privilege('sync_runner', c.oid, 'select,insert,update,delete')` → 0; `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = any (array['sync_next','sync_claim','sync_requeue_orphans','sync_register_run','sync_run_outcome','sync_file_worklist','sync_file_stored','sync_close','sync_sweep_stale','sync_enqueue','sync_login_ok','sync_login_required','sync_login_sync_due']) and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))` → 0 (a `like 'sync\_%'` filter would also catch `sync_change_lines`, which 051 grants to `authenticated`); the md5 of the recorded statement equals the repo file's (DoD method). (d) After Stack sets the password, one command with the session-pooler DSN (user `sync_runner.goultdzqcavefcgnifdy`, port 5432) as `BB2DASH_TEST_DB_URL`: `node scripts/db-test.mjs --ping` → `db-test: connected as sync_runner`, exit 0; Stack runs it and the line goes into `100_W55_VERIFICATION.md` | — |
 | 7a | 094 (PROVISIONAL, open item 6): the test role's membership and the enumerated writes, and, in the same PR, the expected membership list in Phase 15's `db/tests/phase15_100_db_test_runner_role.sql` gains `sync_runner` (inherit false), nothing else in that file (95 §Seams). Dry run, apply as `094_sync_runner_test_membership` after Phase 15's 100 is on prod | R-84 | W-55 | (b) `select count(*) from pg_auth_members m where m.roleid = 'sync_runner'::regrole and m.member = 'db_test_runner'::regrole and not m.inherit_option` → 1; `select rolbypassrls from pg_roles where rolname = 'sync_runner'` → false. (a) With the list amended and before 094 is applied, `node scripts/db-test.mjs --only phase15_100_db_test_runner_role.sql` → `db-test: passed 0, failed 1, units 1`, exit 1; after the apply → `db-test: passed 1, failed 0, units 1`, exit 0; both lines in `100_W55_VERIFICATION.md` | — |
 | 8 | Build the scrubbed recorded-crawl fixture from a live v4 run: 9 `bb_raw` rows, with Stack's submitted text removed. Default source: run `3b5174b8` (`sync_runs` 62, the parity baseline). Prod on 2026-09-27: it holds 1 `calendar`, 7 `course` and 1 `memberships` row (run `9080daeb` has the same shape), with 6 non-null `studentSubmission` values in 2 of them; all of `bb_raw` holds 12 such values in 4 rows (P-35's "on 12 rows" counts values, not rows) | P-35 | W-55 | (a) `cd sync && npx vitest run test/fixture-scrub.test.ts` → 0 failures: 9 rows; kinds `calendar` 1, `course` 7, `memberships` 1; `SCRUB_FIELDS` includes `studentSubmission`; no field in `SCRUB_FIELDS` non-empty | — |
-| 9 | Runner core: login rule, probe, claim, register-first, crawl, fold wait, close, startup requeue, and (2026-10-03) the login watch | R-81, R-83, R-87 | W-55 | (a) `cd sync && npx vitest run test/login.test.ts test/loop.test.ts` → 0 failures. Named cases: each `LOGIN_HOSTS` entry; `users/me` 401 and 403 close `queued → failed`; claim lost; register refused; fold timeout leaves the row claimed; crawl throws → failed; done. Login watch, on a fake clock: a dead start calls `sync_login_required` once and probes every `LOGIN_WATCH_MS`; dead → alive calls `sync_login_ok` then `sync_enqueue('login')` once; alive probes every `KEEPALIVE_MINUTES`; alive → dead raises again; `KEEPALIVE_MINUTES=0` stops the alive check | "I pressed Sync and no terminal opened" |
+| 9 | Runner core: login rule, probe, claim, register-first, crawl, fold wait, close, startup requeue, and (2026-10-03) the login watch | R-81, R-83, R-87 | W-55 | (a) `cd sync && npx vitest run test/login.test.ts test/loop.test.ts` → 0 failures. Named cases: each `LOGIN_HOSTS` entry; `users/me` 401 and 403 close `queued → failed`; claim lost; register refused; fold timeout leaves the row claimed; crawl throws → failed; done. Login watch, on a fake clock: a dead start calls `sync_login_required` once and probes every `LOGIN_WATCH_MS`; dead → alive calls `sync_login_ok` then `sync_enqueue('login')` once; alive ticks every `KEEPALIVE_MINUTES` ± jitter and loads the `KEEPALIVE_PAGES` in turn; a tick during a pass is skipped; a dead probe loads `/ultra/` once before raising, and a 200 after it raises nothing; while dead nothing navigates; alive → dead raises again; `KEEPALIVE_MINUTES=0` stops the ticks | "I pressed Sync and no terminal opened" |
 | 10 | Files and embed on Phase 18's `ingest/fetch_signed.mjs` and `ingest/embed_corpus.mjs` (P-36 is Phase 18's; this task only calls them) | R-81, P-104 | W-55 | (a) `cd sync && npx vitest run test/files.test.ts` → 0 failures: sha256 recorded; `session_expired` (401/403) stops the step; `gone` (404), `refused` and a Storage 409 reported in `not_pulled`, never passed to `sync_file_stored`; an `EXDEV` from the move takes copy-then-unlink; `embed_corpus.mjs` is spawned once after ≥ 1 unit and never on 0; (d) `grep -c "fetch_signed.mjs" sync/src/files.ts` → 1 (its one import; `files.ts` has no copy of the fetch) | "my submission file came back" |
 | 11 | Report template, the dead-letter sweep with its attempts cap, the login item and its self-close, and `skills/bb-sync` step 1's ref | R-83, P-104 | W-55 | (a) `cd sync && npx vitest run test/report.test.ts` → 0 failures; `node scripts/db-test.mjs --only phase14_091_sync_runner.sql` → `db-test: passed 1, failed 0, units 1`; (d) `grep -c "'sync-login-required'" skills/bb-sync/SKILL.md` → 1 (the quoted ref in step 1's insert) and `grep -c "migration 031" skills/bb-sync/SKILL.md` → 0 | "the Inbox told me to log in again" |
 | 12 | Integration and coverage: the fixture replayed twice through a fake page and a fake RPC client | R-81, P-35 | W-55 | (a) `cd sync && npx vitest run --coverage` → 0 failures, exit 0 under the 80% line threshold. `integration.test.ts` asserts the call order `claim, register, crawl, wait, files, embed, close`, and that a second pass on a done request calls nothing after `sync_next()` | — |
