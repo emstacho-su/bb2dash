@@ -509,3 +509,28 @@ under 170 comes after the apply, with the full suite.
 |---|---|---|---|
 | `170_material_history_round3` | `11e40bc` (unchanged at HEAD) | `ae78cfc7649bd6d52d54be083c24c403` | 31,745 |
 | `171_stage_content_rekey_fresh_only` | `6de6f62` (unchanged at HEAD) | `5eed0b5f07a118a7bfd0cd306c51c570` | 20,826 |
+
+## After the PM applied 170 and 171 (2026-10-03), APPLIED
+
+`stage_content` `md5(prosrc)` re-read on prod: `1cdcd890648153eb9664c6417077866d`, as predicted.
+`phase18_124` assertion (4) re-pinned to it (`548e130`). `origin/feat/content-history-19` merged
+in before the runs (`c6c661b`).
+
+```
+$ node scripts/db-test.mjs --only <unit>      (one at a time)
+PASS  phase19_170_activity_stream.sql
+PASS  phase19_171_stage_content_fresh_rekey.sql
+PASS  phase19_138_material_history_counts.sql
+PASS  phase19_132_material_history.sql
+PASS  phase19_139_stage_content_rekey.sql
+PASS  phase19_133_course_stream_history.sql
+PASS  phase18_124_stage_files_replay.sql
+PASS  phase17_110_course_stream.sql
+PASS  phase9_transform_states.sql
+
+$ node scripts/db-test.mjs
+db-test: passed 58, failed 0, units 58
+exit 0
+```
+
+`phase19_132` and `phase19_138`, traced by hand before the apply, pass under 170 as expected.
