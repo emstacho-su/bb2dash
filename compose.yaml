@@ -1,6 +1,6 @@
-# bb2dash — containers (Phase 14). This first cut carries only the `sync` service as the noVNC spike
-# (brief 100 task 4); W-56 completes it (task 15). The umbrella repo `bb2dash-stack` includes this file
-# and points SECRETS_DIR at its own `secrets/` folder.
+# bb2dash — containers (Phase 14). This first cut carries the `sync` service as the noVNC spike
+# (brief 100 task 4), which W-56 completes (task 15), and the `bb2dash-mcp` image (task 17). The umbrella
+# repo `bb2dash-stack` includes this file and points SECRETS_DIR at its secrets folder.
 name: bb2dash
 
 services:
@@ -38,9 +38,38 @@ services:
         max-size: 10m
         max-file: "3"
 
+  # The materials MCP server as an image (brief 100 task 17, R-91). Profile `mcp`, so `up` never starts
+  # it: a host Claude Code runs the image once per session with `docker run -i --rm` (the recipe in
+  # mcp-server/README.md). This entry builds the image and offers the same stdio run through compose:
+  #   docker compose --profile mcp build bb2dash-mcp
+  #   docker compose --profile mcp run --rm -T bb2dash-mcp
+  # stdio only: no port, no restart policy and no healthcheck; it exits when its client closes stdin.
+  bb2dash-mcp:
+    profiles: [mcp]
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    image: bb2dash-mcp:local
+    user: node
+    stdin_open: true
+    environment:
+      SUPABASE_URL: https://goultdzqcavefcgnifdy.supabase.co
+      # A path, never the key: the server reads the file itself (mcp-server/src/env-file.ts).
+      SUPABASE_SERVICE_ROLE_FILE: /run/secrets/bb2dash_mcp_service_key
+    secrets:
+      - bb2dash_mcp_service_key
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 volumes:
   bb-profile:
 
 secrets:
   novnc_password:
     file: ${SECRETS_DIR:-./secrets}/novnc_password
+  # The bb2dash service key; this file is its only home (brief 100, Local surfaces).
+  bb2dash_mcp_service_key:
+    file: ${SECRETS_DIR:-./secrets}/bb2dash_mcp_service_key

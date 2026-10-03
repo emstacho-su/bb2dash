@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   BB2DASH_PROJECT_REF,
   DEFAULT_LIMIT,
@@ -7,7 +10,7 @@ import {
   MAX_LIMIT,
   loadConfig,
 } from '../src/config.js';
-import { ConfigError } from '../src/errors.js';
+import { ConfigError, describeError } from '../src/errors.js';
 import { TEST_KEY, TEST_URL } from './helpers.js';
 
 const base = { SUPABASE_URL: TEST_URL, SUPABASE_SERVICE_ROLE: TEST_KEY };
@@ -55,6 +58,68 @@ describe('loadConfig — required values', () => {
 
   it('treats blank values as missing', () => {
     expect(() => loadConfig({ ...base, SUPABASE_SERVICE_ROLE: '   ' })).toThrow(/SUPABASE_SERVICE_ROLE/);
+  });
+});
+
+describe('loadConfig — the key from a file (SUPABASE_SERVICE_ROLE_FILE)', () => {
+  const FILE_KEY = 'sb_secret_from_file_not_real';
+  let root: string;
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'mcp-config-'));
+  });
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function keyFile(content: string): string {
+    const file = path.join(root, 'bb2dash_mcp_service_key');
+    writeFileSync(file, content, 'utf8');
+    return file;
+  }
+
+  it('reads the key from the file the variable names, BOM and CRLF stripped', () => {
+    const config = loadConfig({ SUPABASE_URL: TEST_URL, SUPABASE_SERVICE_ROLE_FILE: keyFile(`﻿${FILE_KEY}\r\n`) });
+    expect(config.serviceKey).toBe(FILE_KEY);
+  });
+
+  it('the file wins over SUPABASE_SERVICE_ROLE and the legacy SUPABASE_SERVICE_KEY', () => {
+    const config = loadConfig({
+      ...base,
+      SUPABASE_SERVICE_KEY: 'legacy',
+      SUPABASE_SERVICE_ROLE_FILE: keyFile(FILE_KEY),
+    });
+    expect(config.serviceKey).toBe(FILE_KEY);
+  });
+
+  it('a named file that is missing fails, never falling back to the plain variable', () => {
+    const missing = path.join(root, 'absent');
+    let text = '';
+    try {
+      loadConfig({ ...base, SUPABASE_SERVICE_ROLE_FILE: missing });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigError);
+      text = describeError(error);
+    }
+    expect(text).toContain('SUPABASE_SERVICE_ROLE_FILE');
+    expect(text).toContain(missing);
+    expect(text).not.toContain(TEST_KEY);
+  });
+
+  it('a named file that is empty fails, never falling back to the plain variable', () => {
+    expect(() => loadConfig({ ...base, SUPABASE_SERVICE_ROLE_FILE: keyFile('\n') })).toThrow(/is empty/);
+  });
+
+  it('a blank SUPABASE_SERVICE_ROLE_FILE counts as unset, so the plain variable is read', () => {
+    expect(loadConfig({ ...base, SUPABASE_SERVICE_ROLE_FILE: '  ' }).serviceKey).toBe(TEST_KEY);
+  });
+
+  it('with neither set, the error names the file variable as the way in', () => {
+    expect(() => loadConfig({ SUPABASE_URL: TEST_URL })).toThrow(ConfigError);
+    try {
+      loadConfig({ SUPABASE_URL: TEST_URL });
+    } catch (error) {
+      expect((error as ConfigError).hint).toContain('SUPABASE_SERVICE_ROLE_FILE');
+    }
   });
 });
 
