@@ -289,3 +289,49 @@ container (README, "Once, after the first just dev"); the seed run against the r
 
 a6e7c46 feat(14-T24) · b513155 feat(14-T24) .gitattributes · 1fb2129 feat(14-T25) · 27aa84a feat(14-T26) ·
 7cc913a chore(14-T26) · 266974c fix(14-T26) · 5d36b7a fix(14-T26)
+
+## Round 2 (code review of 5d36b7a), 2026-10-03
+
+Every item test-first; unit suite at the end: `node --test --test-reporter=tap doctor/doctor.test.mjs scripts/*.test.mjs`
+→ `# pass 70 · # fail 0` (shell cases under Git Bash, with fake dig/ipset/curl/jq/git in
+`scripts/test-fixtures/fake-bin`, since this host has none of those). Container checks: one rebuild of
+`bb2dash-dev:local` (the Playwright, apt and base layers all CACHED), throwaway project
+`bb2dash-stack-test`, dummy secret values created and deleted, scratch memory folder.
+
+| # | RED | GREEN / check line | SHA |
+|---|---|---|---|
+| 1 | test: `overrideCommand` true | devcontainer.json `overrideCommand: false`; test passes | c1cff17 |
+| 2 | 5/5 tests fail (DEV_ROOT bind, no dev-src, no clone) | container: `ls /opt/bb2dash-stack/secrets` → `[] (0 entries)`; `ls /workspaces/bb2dash-stack/secrets` → No such file; `secret paths readable under the workspace: 0`; `.env bytes: 0, machine.env bytes: 0`; mounts under /workspaces: `/workspaces ext4` only (the dev-src volume); /opt/bb2dash-stack `9p ro`, its secrets `tmpfs ro` | 08eddb8, 97b0426 |
+| 3 | test: no mkdir in the image | container: `touch ok, owner node, memory: MEMORY.md` | a8a00bb |
+| 4 | HEAD's scanner: `sbp_/gho_/ghu_/ghs_/ghr_ caught by HEAD: false` (5×) | fixture cases pass | 6b27386 |
+| 5 | `does not provide an export named 'prepareStage'` | fixture: too large, binary, symlink (junction), key in UTF-8, UTF-16LE with and without BOM all left out and named; clean UTF-16 kept; source-empty folder kept | d931cc4 |
+| 6 | (same RED) | fixture: `env` holding a token → seeded settings.json `{ model }`, report says `dropped apiKeyHelper, env`, settings.json not left out | d931cc4 |
+| 7 | 2 tests fail (no profile script) | `docker compose exec dev bash -lc 'test -n "$CLAUDE_CODE_OAUTH_TOKEN"'` → exit 0; `claude` on PATH in a login shell | 1c73750 |
+| 8 | 2 tests fail | container: `env \| grep -c '^DATABASE_URL='` → 0; processes with DATABASE_URL: 0 (the root firewall loop's environ is unreadable to node, and sudo resets env) | 814365e |
+| 9 | test: unset/relative/missing pass silently | doctor test: all three → exit 1 with the reason; `.env.example` has `SECRETS_DIR=/path/to/bb2dash-stack/secrets` | 92553f3 |
+| 10 | 3/3 fail (no firewall-lib.sh) | fakes: refresh adds, never removes (`no del/flush/destroy`), logs per pass; container: `refresh every 600s`, `refresh loops running: 1`, a pass `22 domains re-resolved, 0 new` (an earlier pass: 1 new), set 130 → 130 | ac99241 |
+| 11 | 4/4 fail | fakes: fetched (token on stdin, absent from args), cached, both-missing fails closed; container: phase 1 `fetched (unauthenticated)`, cache `github-meta.json` 194038 bytes; phase 2 (dummy token, GitHub refuses) `the fetch failed; using the cached copy from …`; fresh volume + dummy token → `ERROR: … no cached copy`, container exited (fail closed) | 29a5eb5 |
+| 12 | both scripts through a junction exited 0 silently | through a junction: doctor exit 2 (`unknown argument`), seed-tools exit 2 (`usage:`); same-named file elsewhere → exit 70 | d1f7d4d |
+| 13 | hanging fake ran 30 s (no timeout passed) | `SYSTEMCTL_TIMEOUT_MS` 5 s; row `unknown: systemctl did not answer (… ETIMEDOUT)`, problem | 22cf0c0 |
+| 14 | test: "two realms" in README | grep: 0 "two realm"; PAT row names vault-projects, vault-classes, vault-harness | 5ad26c9 |
+
+Items 5 and 6 share one commit (d931cc4): both change `prepareStage` in seed-tools.mjs, and splitting them
+would leave a commit whose seed script calls a mode that does not exist.
+
+Item 2 placement: this repo's bind is at `/opt/bb2dash-stack`, not `/workspaces/bb2dash-stack`: the item's
+third check ("no path under /workspaces is a Windows checkout") rules out any host bind under
+/workspaces, and the scripts must still run from the folder `just` was run beside. `/workspaces/bb2dash-stack`
+is the dev-src clone (no secrets/ in it). Found in the throwaway run and fixed (97b0426): a refused token
+could leave `git clone` prompting on the container's TTY; the clone now runs with `GIT_TERMINAL_PROMPT=0`.
+With a dummy token, bb2dash and agentic-harness cloned anyway (public repos), bb2dash-stack failed at once,
+and the container stayed up.
+
+Clean-up after every run: `left: containers 0, volumes 0, networks 0, secrets/ 0`; one image tag,
+`bb2dash-dev:local` (abc0e2398ca3), nothing dangling. A first run of the check script left one container
+up because `docker compose down` without `--profile dev` skips the profiled service; it was removed with
+`--profile dev down -v` before the rerun. `bb2dash-sync-1`, `bb2dash_bb-profile` and `harness-postgres`
+were not touched.
+
+Unverified: the devcontainer CLI / VS Code route (no CLI here; item 1 rests on the file test); an
+authenticated clone with a real gh_token; the 10-minute timer firing on its own (a pass was run by hand
+as root in the container; the loop's sleep was not waited out).
