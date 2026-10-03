@@ -126,3 +126,55 @@ fixture rows on prod.
 
 Runbook step 1 (outside step 5, allowed by the PM on 2026-10-03): its example now reads
 `bb.runAll({ termName: 'Fall 2026', runId })` with the run id step 2 registered.
+
+## Tasks 12–16 — post-apply checks (2026-10-03)
+
+The PM applied 135, 136 and 137 from `c846e1e` (135 and 136 back to back; 0 open syncs and 0
+running rows just before). This branch then merged `origin/feat/content-history-19` (`0f08f2b`);
+the merge changed none of W-53's files.
+
+md5 on prod, `select md5(statements[1]) from supabase_migrations.schema_migrations where name = '<name>'`,
+against `git show c846e1e:db/migrations/<file> | md5sum`:
+
+| Migration | prod | blob | bytes |
+|---|---|---|---|
+| `135_sync_run_open_at_claim` | `adc27d3b3dee004ef4801519db78e260` | `adc27d3b3dee004ef4801519db78e260` | 17489 |
+| `136_transform_tick_register_first` | `9feca071a6bc2c95239d3f1f48bae386` | `9feca071a6bc2c95239d3f1f48bae386` | 16689 |
+| `137_sync_status_run_state` | `30ff47427f7b0d12ee0de259e127b16e` | `30ff47427f7b0d12ee0de259e127b16e` | 7354 |
+
+Runner:
+
+```
+$ node scripts/db-test.mjs --only phase19_135_136_sync_driver.sql
+PASS  phase19_135_136_sync_driver.sql
+db-test: passed 1, failed 0, units 1
+$ node scripts/db-test.mjs --only phase19_137_sync_status.sql
+PASS  phase19_137_sync_status.sql
+db-test: passed 1, failed 0, units 1
+$ node scripts/db-test.mjs --only phase9_transform_states.sql
+PASS  phase9_transform_states.sql
+db-test: passed 1, failed 0, units 1
+$ node scripts/db-test.mjs --only phase10a_stage_gradebook.sql
+PASS  phase10a_stage_gradebook.sql
+db-test: passed 1, failed 0, units 1
+```
+
+SQL checks:
+
+| Task | Check | Expected | Actual |
+|---|---|---|---|
+| 12 | pre-135 count of `sync` requests `queued`/`claimed` | 0 | 0 (PM, just before applying) |
+| 12 | `select count(*) from pg_trigger where tgname = 'agent_requests_open_sync_run'` | 1 | 1 |
+| 12 | `select has_function_privilege('authenticated', 'public.sync_request_open_run()', 'execute')` | false | false |
+| 13 | `select schedule from cron.job where jobname = 'bb2dash-transform-tick'` | `*/2 * * * *` | `*/2 * * * *` |
+| 15 | `v_sync_status` columns (`pg_attribute`) | `id,run_id,status,started_at,finished_at,trigger,summary,open_attention,freshness,notes,interrupted,streams` | the same |
+| 15 | `select has_table_privilege('anon', 'public.v_sync_status', 'select')` | false | false |
+| 16 | `string_agg(e->>'stream', ',' order by e->>'stream')` over `streams` | `announcements,assignments,attempts,content,courses,files,gaps,gradebook,history` | the same |
+| 16 | elements disagreeing with `v_data_freshness` | 0 | 0 |
+| 16 | owner JWT, `set local role authenticated`, `jsonb_array_length(streams)` | 9 | 9 |
+| 16 | before the first fold after 135: `select count(*) from sync_stage_runs where stage = 'history'` | 0 | 0 |
+| 16 | before the first fold after 135: `history` element's `state` | `never` | `never` |
+
+The "right after task 27" half of task 16 (`history` → `fresh`) is the PM's. When these were read,
+a real register-first sync was in flight: request 580, inserted `claimed` with `run_id`
+`c2789684-…` at 17:22:26 UTC. The two pre-fold values above were read while 0 `history` rows existed.
