@@ -441,3 +441,26 @@ Check (Git Bash): `find C:/Users/stack/.claude/skills/synced -maxdepth 2 -type d
 
 `grep -c "^FASTEMBED_CACHE_DIR=" C:/Users/stack/.harness/machine.env` → `1`, value
 `C:/Users/stack/.cache/fastembed` (set before this session; nothing to run).
+
+## Task 18, round 2 (the code-review gate on 9200aaf), `feat/containers-14-launcher`
+
+One commit per item, each test written first; the RED line is the named test failing before the fix.
+
+| item | RED → GREEN | commit |
+|---|---|---|
+| 1 password in the fragment | `login-prompt.test.ts`: 2 failed → 72 passed (with navigation-policy); the URL has no `?`, `password=` only after `#`; no password → `#autoconnect=true&resize=scale` | 538beb0 |
+| 3 container item only | 3 failed → 25 passed; query `select=id,ref,kind,entity&ref=eq.sync-login-required&kind=eq.stack_must_confirm&entity=eq.agent_request&state=eq.open`, and the validator drops any other ref, kind or entity; a `chrome-login-required` item never opens the page | 0b12388 |
+| 2 once per New York day, persisted | 7 failed → 32 passed (+ `login-prompt-store.test.ts` 6): same day, next day, restart same day, New York date across midnight UTC (22:00Z and 02:00Z one day, 04:30Z the next); `userData/login-prompt.json`, atomic, pruned to open ids | 4abb045 |
+| 4 hung `openExternal` | 1 failed → 33 passed; `OPEN_EXTERNAL_TIMEOUT_MS = 15000`, one log line, `busy` freed, nothing recorded so the next tick retries | 8062efd |
+| 6 throttled read-failure log | 1 failed → 34 passed; `createErrorThrottle` (hourly): 3 failures in 45 min → 1 line, a 4th at 61 min → 2 | 98db025 |
+| 7 `redact()` knows `password` | 3 failed → 18 passed; fragment, query string and JSON `"password": "…"` all `[redacted]` | 5fcda8c |
+| 8 small ones | `login-prompt-branches.test.ts` would not load (`core/id-rows` missing) → 60 passed with its neighbours; one origin constant, shared `core/id-rows.ts` with `sync-terminal.ts`, `'\uFEFF'` escaped, the real default reader, the `BB2DASH_TEST=1` `recordEvent('login-prompt')` branch, a policy refusal logs and records nothing | 7970e73 |
+| 5 explicit per-tick hook | 6 failed (scheduler 4, wiring 2) → 44 passed; `PollerDeps.onTick(get)` once per tick (first launch included), `afterSessionReload()` on the window's and the refresh page's `did-finish-load`; `withLoginPromptCheck` removed | cb2ea08 |
+| 9 e2e | `test/e2e/login-prompt.spec.ts`: two ticks → `login-prompt` recorded once (`unlocked: true`), no `open-external`, no `sync-terminal`; `npm run test:e2e` (one run, `BB2DASH_TEST=1`) → `23 passed (12.6s)` | e6d4be9 |
+
+After the nine: `cd desktop && npm test` → `Test Files 40 passed (40)`, `Tests 787 passed (787)`, coverage
+Statements 97.03%, Branches 94.21%, Functions 97.1%, Lines 98.18%; `npm run typecheck` → exit 0;
+`npm run build` → exit 0.
+
+The same raw-BOM slip (item 8) was in this branch's MCP server: `mcp-server/src/env-file.ts` and two of its
+tests held the character itself; now the `'\uFEFF'` escape, `npx vitest run` in `mcp-server` → 106 passed.
