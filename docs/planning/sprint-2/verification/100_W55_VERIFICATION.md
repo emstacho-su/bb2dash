@@ -258,3 +258,38 @@ Design calls (W-55):
   login death is never left un-raised.
 * The report's `claim_attempts` counts this process's claims of the request (the role cannot read
   `agent_requests.claim_attempts`); a restart starts the count again.
+
+## Task 10 — files and embed on Phase 18's signed fetch and embed loop
+
+RED:
+
+```
+cd sync && npx vitest run test/files.test.ts
+ FAIL  test/files.test.ts
+ Error: Cannot find module '../src/files.js' imported from …/sync/test/files.test.ts
+ Test Files  1 failed (1)      Tests  no tests
+```
+
+GREEN:
+
+```
+cd sync && npx vitest run test/files.test.ts
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+
+grep -c "fetch_signed.mjs" sync/src/files.ts
+1
+```
+
+Named cases: the sha256 reaches `sync_file_stored`; `session_expired` (401 and 403) stops the step
+and later rows are not tried; `gone` (404), `refused` (a redirect off the CDN) and a Storage 409 (and a
+400 "Duplicate" answer) are reported in `not_pulled` and never passed to `sync_file_stored`; an
+`EXDEV` from the move takes copy-then-unlink; `embed_corpus.mjs` is spawned once after ≥ 1 unit and
+never on 0. Also: a relpath that climbs out of course-files is refused before any request (W-55's
+addition: `bb_file_relpath` ends in Blackboard's own file name); bytes that are not the file; a
+`bb_file_text` error; an extraction failure (bytes stored, `text_status` failed); `sync_file_stored`
+refusing.
+
+The extractor runs `uv run --locked --project ingest python ingest/extract_text.py <file>`, the
+same command W-56's task 14 gives `extractUnits` on `feat/containers-14-images` (589e302), so the
+runner and the pull use one locked set once the branches integrate.
