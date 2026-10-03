@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FileStoredArgs, WorklistRow } from '../src/db.js';
 import {
+  EMBED_TIMEOUT_MS,
   makeEmbedder,
   makeExtractor,
   makeSupabaseFiles,
@@ -380,6 +381,29 @@ describe('the adapters', () => {
       runLoop: vi.fn(async () => ({ exitCode: 1, calls: 1, retries: 0, remainingParts: null, error: 'embed-corpus answered 401' })),
     });
     expect(await failing()).toEqual({ code: 1, tail: 'embed-corpus answered 401' });
+  });
+
+  it('R2 item 5: an embed that runs past EMBED_TIMEOUT_MS fails cleanly, and its later posts end the loop', async () => {
+    vi.useFakeTimers();
+    try {
+      expect(EMBED_TIMEOUT_MS).toBe(600_000);
+      let sawPost: { status: number } | null = null;
+      const runLoop = vi.fn(async (o: { post: (b: object) => Promise<{ status: number; body: unknown }> }) => {
+        await new Promise((r) => setTimeout(r, EMBED_TIMEOUT_MS + 60_000));
+        sawPost = await o.post({});
+        return { exitCode: 1, error: 'stopped' };
+      });
+      const real = vi.fn(async () => ({ status: 200, body: {} }));
+      const embed = makeEmbedder({ supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', log: () => {}, runLoop, makePost: () => real });
+      const pending = embed();
+      await vi.advanceTimersByTimeAsync(EMBED_TIMEOUT_MS + 1);
+      expect(await pending).toEqual({ code: 1, tail: 'embed timed out after 600 s' });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sawPost).toMatchObject({ status: 408 });
+      expect(real).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('R2 item 9: no source file spawns a child with the parent\'s environment', () => {

@@ -4,7 +4,7 @@
  *   users/me <status> <iso time>      exit 0 on 200, 3 otherwise (and `none` when nothing is recorded)
  *
  * `node sync/dist/probe.js --heartbeat` is the compose healthcheck: exit 0 while the runner's
- * heartbeat is younger than HEARTBEAT_STALE_MS, else 1. The healthcheck reads only the heartbeat,
+ * heartbeat (written by progress, R2 item 5) is younger than HEARTBEAT_STALE_MS, else 1. The healthcheck reads only the heartbeat,
  * so a dead login (`login_required`) stays healthy; the login is the doctor's row.
  *
  * It connects to nothing and reads no secret. It imports no other entry point.
@@ -13,10 +13,14 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { WATCHDOG_MS } from './loop.js';
 import { readTextOrNull, stateDirFrom, stateFiles } from './secrets.js';
 
-/** Four missed heartbeats (the runner writes one every 30 s). */
-export const HEARTBEAT_STALE_MS = 120_000;
+/**
+ * R2 item 5: the heartbeat is written by progress, so it can rest through a long step with its own
+ * timeout (the crawl, 15 minutes); it is stale only past the watchdog's limit, when the runner exits.
+ */
+export const HEARTBEAT_STALE_MS = WATCHDOG_MS;
 const EXIT_ALIVE = 0;
 const EXIT_NOT_ALIVE = 3;
 const HTTP_OK = 200;

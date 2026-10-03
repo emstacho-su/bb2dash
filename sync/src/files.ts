@@ -46,6 +46,9 @@ import type { NotPulled } from './report.js';
 
 const HTTP_CONFLICT = 409;
 const EXTRACT_TIMEOUT_MS = 300_000;
+/** R2 item 5: the most the embed step may take before the pass fails it cleanly. */
+export const EMBED_TIMEOUT_MS = 600_000;
+const HTTP_REQUEST_TIMEOUT = 408;
 
 export interface ExtractUnit {
   unit_kind: string;
@@ -93,6 +96,8 @@ export interface FilesPorts {
   courseFilesDir: string;
   /** The login watch's check (users/me, with its silent re-login), asked when a file answers 401/403. */
   loginCheck(): Promise<Verdict>;
+  /** Called once per file: the files step is progress for the watchdog and the heartbeat (R2 item 5). */
+  progress?(): void;
   log(line: string): void;
 }
 
@@ -221,6 +226,7 @@ export async function runFilesStep(p: FilesPorts): Promise<FilesStepResult> {
   let stopped: FilesStepResult['stopped'] = null;
 
   for (const row of rows) {
+    p.progress?.();
     let result: RowResult;
     try {
       result = await pullOne(row, p);
@@ -320,15 +326,40 @@ export interface EmbedderOptions {
   log: (line: string) => void;
   runLoop?: EmbedLoopFn;
   makePost?: typeof makePost;
+  /** Defaults to EMBED_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
-/** R2 item 9: `embed_corpus.mjs`'s own loop, in-process, until `remaining_parts = 0`. No child process. */
+/**
+ * R2 item 9: `embed_corpus.mjs`'s own loop, in-process, until `remaining_parts = 0`. No child process.
+ * R2 item 5: at most EMBED_TIMEOUT_MS; past it the step fails cleanly, and any later post answers
+ * 408 so the loop (which treats a non-retry status as final) ends without another call.
+ */
 export function makeEmbedder(o: EmbedderOptions) {
   const loop = o.runLoop ?? (runEmbedLoop as unknown as EmbedLoopFn);
-  const post = (o.makePost ?? makePost)(o.supabaseUrl, o.jwt);
+  const realPost = (o.makePost ?? makePost)(o.supabaseUrl, o.jwt);
+  const timeoutMs = o.timeoutMs ?? EMBED_TIMEOUT_MS;
   return async (): Promise<{ code: number; tail: string }> => {
-    const result = (await loop({ post, log: o.log })) as { exitCode: number; remainingParts?: number | null; error?: string };
-    const tail = result.exitCode === 0 ? `remaining_parts=${result.remainingParts ?? 0}` : String(result.error ?? 'embed failed');
-    return { code: result.exitCode, tail: tail.slice(0, 300) };
+    let timedOut = false;
+    const post = async (body: object) =>
+      timedOut ? { status: HTTP_REQUEST_TIMEOUT, body: { error: 'the embed step timed out' } } : realPost(body);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const limit = new Promise<{ exitCode: number; error: string }>((resolve) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        resolve({ exitCode: 1, error: `embed timed out after ${Math.round(timeoutMs / 1000)} s` });
+      }, timeoutMs);
+    });
+    try {
+      const result = (await Promise.race([loop({ post, log: o.log }), limit])) as {
+        exitCode: number;
+        remainingParts?: number | null;
+        error?: string;
+      };
+      const tail = result.exitCode === 0 ? `remaining_parts=${result.remainingParts ?? 0}` : String(result.error ?? 'embed failed');
+      return { code: result.exitCode, tail: tail.slice(0, 300) };
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
   };
 }

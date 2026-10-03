@@ -21,6 +21,12 @@ import type { Verdict } from './login.js';
 import { buildReport, failureReport, loginRequiredReport, type FilesSummary } from './report.js';
 
 export const POLL_INTERVAL_MS = 25_000;
+/**
+ * R2 item 5: a runner that makes no progress (a loop turn, a fold poll, a file, a crawl's start or end)
+ * for this long exits non-zero, so `restart: unless-stopped` restarts the container. It is longer than
+ * every step that has its own timeout (the crawl's 15 minutes, the embed's 10, an extraction's 5).
+ */
+export const WATCHDOG_MS = 1_200_000;
 /** The same in SQL (091's c_max_claim_attempts) and here; loop.test.ts reads 091 to keep them equal. */
 export const MAX_CLAIM_ATTEMPTS = 3;
 const QUARANTINED = '42501';

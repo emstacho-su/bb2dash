@@ -18,6 +18,8 @@ export const BB_USER_ID = '_21025199_1';
 export const TERM_NAME = 'Fall 2026';
 /** How long a pass waits for the fold before it leaves the row claimed for Phase 19's 30-minute rule. */
 export const FOLD_WAIT_MS = 600_000;
+/** R2 item 5: the most one in-page runAll may take before the pass fails it cleanly. */
+export const CRAWL_TIMEOUT_MS = 900_000;
 /** How often the fold wait reads `sync_run_outcome`; the transform tick runs every two minutes. */
 export const FOLD_POLL_MS = 15_000;
 
@@ -41,6 +43,8 @@ export interface CrawlOptions {
   crawlerPath: string;
   readSource: (path: string) => Promise<string>;
   log: (line: string) => void;
+  /** Defaults to CRAWL_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
 export interface CrawlLog {
@@ -99,13 +103,26 @@ export async function runCrawl(page: CrawlPage, opts: CrawlOptions): Promise<Cra
     if (!(await page.evaluate(crawlerInstalled, null))) throw new CrawlError('the crawler did not install in the page');
   }
 
-  const result = (await page.evaluate(crawlInPage, {
-    userId: BB_USER_ID,
-    supabaseUrl: opts.supabaseUrl,
-    anonKey: opts.anonKey,
-    termName: TERM_NAME,
-    runId: opts.runId,
-  })) as { run_id?: unknown; log?: unknown };
+  const timeoutMs = opts.timeoutMs ?? CRAWL_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new CrawlError(`the crawl timed out after ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
+  });
+  let result: { run_id?: unknown; log?: unknown };
+  try {
+    result = (await Promise.race([
+      page.evaluate(crawlInPage, {
+        userId: BB_USER_ID,
+        supabaseUrl: opts.supabaseUrl,
+        anonKey: opts.anonKey,
+        termName: TERM_NAME,
+        runId: opts.runId,
+      }),
+      timedOut,
+    ])) as { run_id?: unknown; log?: unknown };
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
 
   if (result?.run_id !== opts.runId) {
     throw new CrawlError(`runAll returned run ${JSON.stringify(result?.run_id)}, not the registered ${opts.runId}`);
@@ -128,6 +145,8 @@ export interface FoldWaitDeps {
   pollMs?: number;
   /** A stopping runner gives up the wait at once; the row stays claimed, as on a timeout. */
   shouldStop?: () => boolean;
+  /** Called on every poll: the fold wait is progress for the watchdog and the heartbeat (R2 item 5). */
+  onPoll?: () => void;
 }
 
 /** Poll `sync_run_outcome` until the run is no longer running; null when FOLD_WAIT_MS runs out. */
@@ -136,6 +155,7 @@ export async function waitForFold(runId: string, deps: FoldWaitDeps): Promise<Ru
   const poll = deps.pollMs ?? FOLD_POLL_MS;
   const deadline = deps.now() + timeout;
   for (;;) {
+    deps.onPoll?.();
     const outcome = await deps.rpc.runOutcome(runId);
     if (outcome && outcome.status !== 'running') return outcome;
     const left = deadline - deps.now();

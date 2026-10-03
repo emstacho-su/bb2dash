@@ -597,3 +597,23 @@ temp and locale, `UV_*`, `PYTHON*`); none of the runner's secrets reaches it. `s
 RED   files.test.ts   3 failed (extractUnits + uv env; in-process embed; no ...env spread or spawn)
 GREEN the whole sync suite 128 passed; tsc exit 0
 ```
+
+### Item 5 — the heartbeat proves progress; named timeouts; a watchdog
+
+* The heartbeat is written by progress only (a loop turn, every fold poll, every file, a crawl's
+  start and end); the 30-second interval writer is gone.
+* `CRAWL_TIMEOUT_MS = 900_000` on the in-page `runAll` (a `CrawlError`, so the pass closes failed);
+  `EMBED_TIMEOUT_MS = 600_000` on the in-process embed loop (its later posts answer 408, so the loop
+  ends without another call).
+* `WATCHDOG_MS = 1_200_000` (longer than every step with its own timeout): checked every
+  `WATCHDOG_CHECK_MS = 60_000`; past it the runner logs `no progress for … s` and exits 1
+  (`realDeps.onWatchdog`), so `restart: unless-stopped` restarts the container.
+* `probe.js --heartbeat` now calls the heartbeat stale at `WATCHDOG_MS` (it rests through a crawl).
+
+```
+RED   4 failed (fold-poll progress; watchdog + no interval writer; crawl timeout; embed timeout)
+GREEN the whole sync suite 132 passed; tsc exit 0
+```
+
+For W-56 / the PM: the compose healthcheck command is unchanged; it turns unhealthy only after
+20 minutes without progress, when the watchdog has already exited the runner.

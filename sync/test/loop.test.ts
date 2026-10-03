@@ -359,3 +359,14 @@ describe('the fold wait', () => {
     expect(out?.status).toBe('partial');
   });
 });
+
+describe('progress during the fold wait (R2 item 5)', () => {
+  it('waitForFold reports progress on every poll', async () => {
+    const statuses: RunOutcome['status'][] = ['running', 'running', 'ok'];
+    const rpc = { runOutcome: vi.fn(async () => ({ syncRunId: '1', status: statuses.shift()!, summary: null })) };
+    let t = 0;
+    const onPoll = vi.fn();
+    await waitForFold(RUN_ID, { rpc, now: () => t, sleep: async (ms) => { t += ms; }, onPoll });
+    expect(onPoll).toHaveBeenCalledTimes(3);
+  });
+});
