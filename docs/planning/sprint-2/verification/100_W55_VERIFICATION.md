@@ -637,3 +637,16 @@ GREEN node --test scripts/db-test.test.mjs   pass 59, fail 0
 ```
 
 Task 6/11/13's check lines that name `phase14_091_sync_runner.sql` now read as these four units.
+
+### Round 2 totals
+
+```
+cd sync && npm run typecheck && npm run build && npx vitest run --coverage
+ Test Files  7 passed (7)      Tests  132 passed (132)      Lines : 91.32% ( 705/772 )      exit 0
+node --test scripts/db-test.test.mjs   -> pass 59, fail 0
+node scripts/db-test.mjs               -> db-test: passed 64, failed 0, units 64
+```
+
+The live `bb2dash-sync-1` container, the `bb2dash` compose project and `bb2dash_bb-profile` were not
+touched. 093 changed `sync_close` under the running image; its signature and grants are unchanged, so
+the old runner keeps working until the PM redeploys.
