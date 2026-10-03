@@ -72,7 +72,7 @@ screens, PM.
 | 22 | Classwork same-path nodes | W-54 | — | done | e091f2e; no production change |
 | 23 | Raw-HTML guard | W-54 | — | done | 1cd49ba; only `layout.tsx` |
 | 24 | Desktop "Sync interrupted" toast | W-54 | — | done | 21b691d; reducer + sources 94 passed |
-| 25 | Integrate: merge branches, regenerate types, full suites | PM | 11, 17 | done | all branches merged (426c590); types fbae093 (`bb_material_history: {` 1; also picks up main's 161/162 functions); web typecheck 0, build 0, vitest 2302/2302 (main 2221); desktop typecheck 0, vitest 708/708; SQL 56/56; `mcp-server/` untouched |
+| 25 | Integrate: merge branches, regenerate types, full suites | PM | 11, 17 | done | final phase branch a167397: SQL 58/58 (exit 0), web typecheck 0, build 0, vitest 2304/2304 (main 2221), desktop typecheck 0, vitest 708/708; types fbae093; `mcp-server/` untouched; 12/12 migrations md5-equal repo vs prod at HEAD |
 | 26 | Migrations recorded, md5 table, advisors | PM | 16 | done | 12/12 recorded (130–139, 170–171), each md5 equal to its blob; advisor 0 findings naming a Phase 19 object |
 | 27 | First register-first sync, live | Stack (`/bb-sync`) | 17, 25, skill installed | parked | Chrome's Blackboard tab was signed out on 2026-10-03 ~18:05Z (NetID login page; Duo is Stack's), so the PM could not run it. The register-first skill is installed: Stack's next Sync is task 27; its check and task 16's `fresh` half are read right after |
 | 27b | Live terminal-rule proof | PM | 16 | done | request 580 → run 592 `running` at claim, reaped at the 17:54Z tick, request `failed`, Inbox item 2636 open; Sync freed (0 open) |
@@ -85,9 +85,9 @@ screens, PM.
 | R3-1..5, 9 | 170 history fn + data step + Stream view; 171 `stage_content` re-key only onto fresh gaps | W-52 → PM applied | 139 | done | 170 (11e40bc) md5 `ae78cfc7…` equal: history 229 → 219, path-only rows 0, material posts 65 → 69 (4 uncatalogued files now resolve), untraced 0; 171 (6de6f62) md5 `5eed0b5f…` equal, `stage_content` prosrc `1cdcd890…`; R3-9's predecessor scan left as is (no single-statement narrowing keeps results identical) |
 | R3-6 | Skill: interrupted run stops at step 4; step 5 guarded on `claimed` | W-53 | — | done | 543fade, merged e338bd7; greps 0/0/1/1; installed skill re-copied from the phase branch (`cmp` 0) |
 | R3-7, R3-8 | Stream block error line; one import | W-54 | — | done | 6c10b0e, 20e4ca3, merged c9d9b15; web typecheck 0, build 0, vitest 2304/2304; `queries.sync.ts` numstat `22 7` (the 15-line cap was lifted for R2-6) |
-| G1 | `/code-review main high`; CRITICAL/HIGH back to workers | PM | 25 | doing | pass 1 (fab2ef6): 15 findings → round 2 (done). Pass 2 (whole branch, 426c590+): 15 findings → round 3 R3-1..R3-9 in brief 99 (78d0be8), block 170–179; 4 not changed with reasons |
+| G1 | `/code-review main high`; CRITICAL/HIGH back to workers | PM | 25 | done | pass 1 → round 2 (R2-1..R2-8), pass 2 → round 3 (R3-1..R3-9, block 170–179); every HIGH fixed; 5 findings not changed, each with its reason in brief 99's round sections |
 | G2 | `/security-review` | PM | 25 | done | 2026-10-03 over 130–139, web, desktop, skill: no HIGH or MEDIUM; two low notes (the test role's widening grants; walk shots show course content) |
-| G3 | PR open with preview link; stop at "ready when you say so" | PM | 26, 28, 29, G1, G2 | todo | — |
+| G3 | PR open with preview link; stop at "ready when you say so" | PM | 26, 28, 29, G1, G2 | done | PR opened 2026-10-03 against `main` with the preview link; the loop stops here |
 
 Carried into the PR body as open points for Stack (not blocking): the Stream block's placement
 (W-54's pick); the interrupted toast's body and target; Home's "last synced <time> · last sync
