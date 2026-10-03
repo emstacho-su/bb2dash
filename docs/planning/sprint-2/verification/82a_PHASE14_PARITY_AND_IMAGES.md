@@ -50,3 +50,36 @@ No terminal opened. The embed step did not run, because no unit was posted (task
 
 `sync_runs` 1007's `summary->'changes'`, as Activity shows it: `2 staff name disagreement(s) need your call`,
 `Files: nothing new to pull`.
+
+## Task 28 — the login path (2026-10-03)
+
+Stack signed out of Blackboard inside the noVNC page at about 23:00Z. Then
+`docker compose exec sync node sync/dist/enqueue.js` → `request 1280`:
+
+```
+login: users/me 401 2026-10-03T23:00:22.339Z pass -> dead
+login: users/me 401 2026-10-03T23:00:37.794Z pass after-reauth -> dead
+login: alive -> dead
+pass: request 1280 failed: login_required (the Inbox asks Stack to log in)
+login: users/me 401 2026-10-03T23:01:37.936Z watch -> dead      (then one check a minute, no navigation)
+```
+
+The silent re-login was tried once and failed: Blackboard's Sign Out also ended the Microsoft sign-in.
+Request 1280: `failed`, `result->>'error'` = `login_required`, never claimed, no run. Inbox item 3074:
+`stack_must_confirm`, entity `agent_request`, ref `sync-login-required`, open, "Blackboard login needed — open
+http://127.0.0.1:6080/vnc.html and sign in with Duo" (`walk-14/04-inbox-login-needed.png`, Stack's capture).
+
+Stack signed in again through noVNC with NetID and Duo:
+
+```
+login: users/me 200 2026-10-03T23:17:38.900Z watch -> alive
+login: dead -> alive
+login: sync_enqueue('login') -> nothing queued (already synced today)
+```
+
+Item 3074 → `archived`, `archived_by = 'sync-runner'`, `decision = {"rule": "login check passed",
+"trigger": "sync_login_ok", "sync_run_id": null, "closed_itself": true}`.
+`select count(*) from attention_items where ref = 'sync-login-required' and state = 'open'` → `0`.
+
+For R-96's next web PR: the Inbox labels this item "Raised by the transform"; it was raised by the
+container's runner.
