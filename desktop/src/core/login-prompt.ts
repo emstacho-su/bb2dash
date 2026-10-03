@@ -3,15 +3,18 @@
  *
  * When the container's runner finds the Blackboard login dead it raises one open Inbox item with
  * ref `sync-login-required`. Under `syncLauncher = queue-only` the shell reads that item on each
- * poller tick and, the first time it sees an item id, opens the runner's noVNC login page in the
+ * poller tick and, once per item per New York day, opens the runner's noVNC login page in the
  * default browser, already unlocked, so Stack only does NetID and Duo. The wiring (the file read,
- * `shell.openExternal`, the remembered ids) is `src/main/login-prompt.ts`.
+ * `shell.openExternal`, the remembered dates) is `src/main/login-prompt.ts`.
  *
  * Plain Node, no `electron` and no `fs` (C-13).
  */
 
-/** The frozen login page (brief 100, Local surfaces). */
-export const LOGIN_PAGE_URL = 'http://127.0.0.1:6080/vnc.html';
+import { idOfRow } from './id-rows';
+import { LOGIN_PAGE_ORIGIN } from './navigation-policy';
+
+/** The frozen login page (brief 100, Local surfaces), on the one origin the policy allows. */
+export const LOGIN_PAGE_URL = `${LOGIN_PAGE_ORIGIN}/vnc.html`;
 
 /**
  * The Inbox item the container's runner raises through `sync_login_required()` (migration 091):
@@ -30,7 +33,7 @@ export const LOGIN_ITEMS_QUERY =
   `select=id,ref,kind,entity&ref=eq.${LOGIN_ITEM.ref}&kind=eq.${LOGIN_ITEM.kind}` +
   `&entity=eq.${LOGIN_ITEM.entity}&state=eq.open`;
 
-const UTF8_BOM = '﻿';
+const UTF8_BOM = '\uFEFF';
 
 /** noVNC's options, read from the fragment as well as the query string. */
 const PAGE_OPTIONS = 'autoconnect=true&resize=scale';
@@ -111,10 +114,8 @@ export function validateLoginItems(rows: unknown): readonly string[] {
   if (!Array.isArray(rows)) throw new Error('expected an array of rows');
   const ids: string[] = [];
   for (const row of rows as unknown[]) {
-    if (row === null || typeof row !== 'object') throw new Error('expected a row object');
-    const id = (row as { id?: unknown }).id;
-    if (typeof id !== 'number' && typeof id !== 'string') throw new Error('expected an id');
-    if (isContainerItem(row)) ids.push(String(id));
+    const id = idOfRow(row);
+    if (isContainerItem(row as object)) ids.push(id);
   }
   return ids;
 }
