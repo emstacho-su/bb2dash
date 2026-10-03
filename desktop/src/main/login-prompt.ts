@@ -35,6 +35,7 @@ import {
 import type { LoginPromptStore, PromptedOn } from '../core/login-prompt';
 import { decideLoginPageOpen } from '../core/navigation-policy';
 import { nyDate } from '../core/poller/ny-time';
+import { createErrorThrottle } from '../core/rest';
 import type { RestGet, WebSession } from '../core/types';
 import { log, logError } from './log';
 import { IS_TEST_MODE, recordEvent } from './test-hook';
@@ -104,6 +105,9 @@ export function createLoginPrompt(config: DesktopConfig, deps: LoginPromptDeps):
   const readFile = deps.readFile ?? ((path: string) => readFileSync(path, 'utf8'));
   const openExternal = deps.openExternal ?? defaultOpenExternal;
   const openTimeoutMs = deps.openTimeoutMs ?? OPEN_EXTERNAL_TIMEOUT_MS;
+  // Round 2, item 6: the shared rest helper already logs a failing relation once an hour; this
+  // file's own line follows the same throttle instead of repeating on every tick.
+  const shouldLogReadFailure = createErrorThrottle();
   /** Read from the store on the first check, then kept here; every change is written back. */
   let promptedOn: PromptedOn | null = null;
   let busy = false;
@@ -166,7 +170,9 @@ export function createLoginPrompt(config: DesktopConfig, deps: LoginPromptDeps):
       try {
         openIds = await get(LOGIN_ITEMS_RELATION, LOGIN_ITEMS_QUERY, validateLoginItems);
       } catch (error) {
-        logError('login prompt: the open login item could not be read', error);
+        if (shouldLogReadFailure(LOGIN_ITEMS_RELATION, now().getTime())) {
+          logError('login prompt: the open login item could not be read', error);
+        }
         return;
       }
       const today = nyDate(now());

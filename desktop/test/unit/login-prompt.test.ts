@@ -368,6 +368,26 @@ describe('main/login-prompt — opening the page', () => {
     expect(opened).toHaveLength(1);
   });
 
+  it('a failing read logs once an hour, like the shared rest helper, not every tick (round 2, item 6)', async () => {
+    let now = DAY_ONE;
+    const { prompt } = harness(PASSWORD, { now: () => now });
+    const failing: RestGet = async () => {
+      throw new Error('PostgREST 503');
+    };
+    const readFailures = () => logged.filter((line) => /could not be read/.test(line) && !/password/.test(line));
+
+    await prompt.check(failing);
+    now = new Date(DAY_ONE.getTime() + 15 * 60_000);
+    await prompt.check(failing);
+    now = new Date(DAY_ONE.getTime() + 45 * 60_000);
+    await prompt.check(failing);
+    expect(readFailures()).toHaveLength(1);
+
+    now = new Date(DAY_ONE.getTime() + 61 * 60_000);
+    await prompt.check(failing);
+    expect(readFailures()).toHaveLength(2);
+  });
+
   it('a check while one is still running is dropped, not queued', async () => {
     const { prompt, opened } = harness();
     let release: () => void = () => undefined;
