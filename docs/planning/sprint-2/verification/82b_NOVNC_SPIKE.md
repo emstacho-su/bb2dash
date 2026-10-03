@@ -100,7 +100,16 @@ feature "tends to not work" for him (DECISIONS 2026-09-16 decision 6 says the sa
 
 LOGIN_HOSTS: login.microsoftonline.com
 
-The `Verdict:` line is written after the overnight log.
+**Verdict, 2026-10-03.** Stack struck the overnight log the same day ("I do not want to have to wait for the
+nightly ingest to finish in order to complete this phase"), and the morning login is manual from now on
+(DECISIONS 2026-10-03), so the login's overnight lifetime no longer decides anything. What the spike had to
+show stands: a Blackboard login made through noVNC lives in the container's `bb-profile` volume, survives
+`docker compose restart sync` (`users/me 200` on the new run's first probe, no sign-in form), and Chromium
+runs as `pwuser` under Playwright's seccomp profile with its sandbox on (0 `--no-sandbox`). The fallback
+(`storageState`, open item 5) is not needed. Screenshots `walk-14/01` and `/02` are blurred where they show
+Stack's name, his courses, his To Do list and his message count (Stack, 2026-10-03: "blur the ss").
+
+Verdict: PASS
 
 Reading the numbers into the phase (brief 100 open item 1): `KEEPALIVE_MINUTES` and B-45's hour stay at
 their provisional values until the idle series has ended and the four reopen rows are filled; the
