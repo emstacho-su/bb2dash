@@ -360,3 +360,27 @@ is run after the apply, not in the dry run.
 Not rewritten by 138: the 229 backfilled rows keep 132's rules. Up to 10 of them are content
 rows whose only changed field is `path`, the kind R2-3 stops writing when the path changed
 because an ancestor was renamed.
+
+### 139 test, written first
+
+RED against live 131 (2026-10-03):
+
+```
+$ node scripts/db-test.mjs --only phase19_139_stage_content_rekey.sql
+FAIL  phase19_139_stage_content_rekey.sql  FAIL phase19_139: (B) crawl B returned {"items": 9, ..., "missing": 4, "updated": 1, "inserted": 5, ...}; (B) the Knowledge Check reads 3056|_w52r_kc_a|ECN.304/attendance|; (B) Week 2 reads 3061|_w52r_w2_a|, its child hangs under 3066; (B5) a second fold returned {... no "rekeyed" key ...} and changed 0 row(s)
+db-test: passed 0, failed 1, units 1
+exit 1
+```
+
+Under 131 the link stays on the old Knowledge Check row, which is stamped missing, and Week 2's
+child moves to a new row. (B2), (B3) and (B4) already hold under 131 and must keep holding.
+
+### Re-created items in prod's crawl history (R2-1's check)
+
+Every pair of consecutive registered crawls per course, read from `bb_raw` on 2026-10-03: an
+item id that leaves and a new id that arrives on the same path. One occurrence in 12 crawls:
+IST.352 "Assignments / Project Assignment #1A - Project Description"
+(`resource/x-bb-asmt-test-link`), `_13192249_1` → `_13195312_1` at crawl `6b122650`, one new and
+one gone on that path. It was folded by 026, whose path key updated the row in place and kept
+the old id in `previous_ids`, so no link was lost. Under 131 the same crawl would have stranded
+any link on a ghost row; under 139 it is re-keyed.
