@@ -76,9 +76,9 @@ screens, PM.
 | 26 | Migrations recorded 8/8, md5 table, advisors | PM | 16 | todo | — |
 | 27 | First register-first sync, live | PM via `/bb-sync` | 17, 25, skill installed | todo | needs the Chrome Blackboard tab signed in; parked for Stack if not |
 | 27b | Live terminal-rule proof (a claimed, registered run that never crawls → interrupted after 30 min + one tick, one Inbox item, Sync freed) | PM | 16 | todo | provides walk shots 05/06 |
-| 28 | Walk on the preview, `walk-19/01`–`06` | PM | 25, 27, 27b | todo | `web/e2e` harness, `WALK_VERCEL_SHARE` |
+| 28 | Walk on the preview, `walk-19/01`–`06` | PM (walk helper) | 25, 27, 27b | doing | 01–03 taken on the preview at fab2ef6 (afd529d, merged); cold loads, no console errors; 04–06 written, run with `WALK19_LIVE=1 -g "<name>"` when their state exists. Shot 02 reading (PM, 2026-10-03): IST.352 has two live folders named "WK01 - …" (`_12827373_1` Welcome, `_12827374_1` the renamed week folder); the check is that the renamed folder appears once, with `previous_paths` ["Weekly Modules / WK01 - Chapter 1"], and "WK01 - Chapter 1" is gone |
 | 29 | Nine DECISIONS rows, STATUS, ORCHESTRATOR | PM | 26 | todo | — |
-| G1 | `/code-review main high`; CRITICAL/HIGH back to workers as round 2 | PM | 25 | todo | — |
+| G1 | `/code-review main high`; CRITICAL/HIGH back to workers as round 2 | PM | 25 | doing | early pass over W-52 + W-54 started 2026-10-03; W-53's part reviewed after it lands |
 | G2 | `/security-review` | PM | 25 | todo | — |
 | G3 | PR open with preview link; stop at "ready when you say so" | PM | 26, 28, 29, G1, G2 | todo | — |
 
