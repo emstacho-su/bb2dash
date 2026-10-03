@@ -617,3 +617,23 @@ GREEN the whole sync suite 132 passed; tsc exit 0
 
 For W-56 / the PM: the compose healthcheck command is unchanged; it turns unhealthy only after
 20 minutes without progress, when the watchdog has already exited the runner.
+
+### Item 11 — the 091 unit split into four units of at most 400 lines
+
+`phase14_091_queue.sql` (363 lines: shape with the thirteen, setup, the second load, claim → register →
+outcome → close, quarantine, requeue), `phase14_091_close_sweep.sql` (157: the close refusals, the
+sweep), `phase14_091_login_enqueue.sql` (288: the login item, `sync_enqueue`, the New York date cases),
+`phase14_091_files.sql` (238: the file pair, the privileges). Each sits behind
+`phase14_load_crawl_v4.sql` in `LOADER_MAP` (`scripts/db-test.mjs`, the named hunk; the expected
+object in `scripts/db-test.test.mjs` likewise) and ends in its own `<name>: PASS` row.
+`phase14_091_sync_runner.sql` is deleted.
+
+```
+RED   node --test scripts/db-test.test.mjs   pass 58, fail 1 (the loader map)
+GREEN node --test scripts/db-test.test.mjs   pass 59, fail 0
+      node scripts/db-test.mjs --list   -> units 18–21 phase14_load_crawl_v4.sql + phase14_091_{close_sweep,files,login_enqueue,queue}.sql
+      each --only -> db-test: passed 1, failed 0, units 1
+      node scripts/db-test.mjs   -> db-test: passed 64, failed 0, units 64   (exit 0)
+```
+
+Task 6/11/13's check lines that name `phase14_091_sync_runner.sql` now read as these four units.
