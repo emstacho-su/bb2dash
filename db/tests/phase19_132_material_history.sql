@@ -355,6 +355,10 @@ begin
 
     continue when k in (3, 5);   -- the reaped and the running crawl are never recorded
 
+    -- A fold's order: the content tree first (the Stream's node arm reads it, 170 R3-4), then
+    -- the history.
+    perform stage_content(v_runs[k]);
+
     if k = 1 then
   -- (1) baseline
   v_r := material_history_record(v_runs[1]);

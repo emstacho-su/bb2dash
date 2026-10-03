@@ -120,6 +120,8 @@ begin
       from _fx138 f where f.crawl = i;
 
     continue when i = 4;   -- crawl 4 is never recorded
+    -- A fold's order: the content tree first (the Stream's node arm reads it), then the history.
+    perform stage_content(v_runs[i]);
     v_r := material_history_record(v_runs[i]);
 
     if i = 1 then
