@@ -149,8 +149,43 @@ describe('the files step', () => {
     expect(stored).toEqual([]);
   });
 
-  it('a Storage 409 (or a Duplicate answer) is reported in not_pulled, never done, never stored', async () => {
-    const rows = [row('41'), row('42')];
+  it('R2 item 2: a course file already in Storage (409 or Duplicate) goes on to the text and sync_file_stored', async () => {
+    const answers = [{ status: 409, body: '{"error":"Duplicate"}' }, { status: 400, body: '{"statusCode":"409","error":"Duplicate","message":"The resource already exists"}' }];
+    const { p, stored } = ports([row('43'), row('44')], { storagePost: vi.fn(async () => answers.shift()!) });
+    const r = await runFilesStep(p);
+    expect(r.files).toEqual({ pulled: 2, not_pulled: [] });
+    expect(stored.map((s) => s.id)).toEqual(['43', '44']);
+  });
+
+  it('R2 item 2: an upload whose text POST failed is recorded on the next pass, past the Duplicate', async () => {
+    let storageCalls = 0;
+    const texts = [{ status: 500, body: 'boom' }, { status: 201, body: '' }];
+    const shared = {
+      storagePost: vi.fn(async () => (storageCalls++ === 0 ? { status: 200, body: '{}' } : { status: 409, body: '{"error":"Duplicate"}' })),
+      textPost: vi.fn(async () => texts.shift()!),
+    };
+    const first = ports([row('45')], shared);
+    const r1 = await runFilesStep(first.p);
+    expect(r1.files.not_pulled).toEqual([{ id: '45', reason: 'bb_file_text 500: boom' }]);
+    expect(first.stored).toEqual([]);
+
+    const second = ports([row('45')], shared);
+    const r2 = await runFilesStep(second.p);
+    expect(r2.files).toEqual({ pulled: 1, not_pulled: [] });
+    expect(second.stored.map((s) => [s.id, s.textStatus])).toEqual([['45', 'extracted']]);
+  });
+
+  it('a text POST that answers 409/23505 keeps the units already there, and the file is recorded', async () => {
+    const { p, stored } = ports([row('46')], { textPost: vi.fn(async () => ({ status: 409, body: '{"code":"23505"}' })) });
+    const r = await runFilesStep(p);
+    expect(r.files.pulled).toBe(1);
+    expect(stored[0]!.textStatus).toBe('extracted');
+    expect(p.embed).not.toHaveBeenCalled();
+  });
+
+  it('a submission already in Storage (409 or Duplicate) is reported in not_pulled, never done, never stored', async () => {
+    const sub = (id: string) => row(id, { bucket: 'my_submissions', relpath: `IST.323/my_submissions/hw/attempt-9/${id}.pdf` });
+    const rows = [sub('41'), sub('42')];
     const answers = [{ status: 409, body: '{"error":"Duplicate"}' }, { status: 400, body: '{"statusCode":"409","error":"Duplicate","message":"The resource already exists"}' }];
     const { p, stored } = ports(rows, { storagePost: vi.fn(async () => answers.shift()!) });
     const r = await runFilesStep(p);

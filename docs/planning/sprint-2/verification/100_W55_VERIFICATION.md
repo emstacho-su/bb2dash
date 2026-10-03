@@ -491,3 +491,14 @@ RED   node scripts/db-test.mjs --only phase14_093_review_fixes.sql
       FAIL  phase14_093_review_fixes.sql  FAIL phase14_093: migration 093 is not applied (sync_own_claims is missing)
       db-test: passed 0, failed 1, units 1
 ```
+
+### Item 2 — a course file already in Storage is recorded, not stranded
+
+`duplicateIsAcceptable(isSubmissionRow(row))` from `pull_files.mjs`: a course file's 409/Duplicate goes
+on to the text POST and `sync_file_stored`; a submission's stays "never done". A text POST that answers
+409/`23505` keeps the existing units (`textPostOutcome`).
+
+```
+RED   files.test.ts   2 failed | 22 passed  (a course Duplicate; upload-then-text-fails, then a second pass)
+GREEN files.test.ts   24 passed; tsc exit 0
+```
