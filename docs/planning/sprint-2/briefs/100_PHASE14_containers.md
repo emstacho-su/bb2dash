@@ -807,16 +807,16 @@ starts at W-59. No id here belongs to another phase.
 **Answered by Stack, 2026-10-02:** item 1, build 092 and decide the hour after the spike (hour null until
 its overnight log shows the login alive in the morning); items 2, 3, 4 and 5, the defaults; item 6, yes.
 **Re-answered 2026-10-03:** item 1, no hour at all, the morning sync follows the morning login; item 2,
-`KEEPALIVE_MINUTES` defaults to 60 as the alive-login check, with `LOGIN_WATCH_MS` while it is dead (the
-amendment at the top).
+`KEEPALIVE_MINUTES` defaults to 20 (± 3) as the navigating keep-alive while the login is alive, with
+`LOGIN_WATCH_MS` while it is dead (the amendment at the top; an earlier same-day reading said 60).
 
 What the B-numbers leave open (1–5), plus one PM design call the brief rests on (6). Each carries the
 default the PM takes:
 
 1. **The scheduled-sync hour (B-45, if adopted).** Default: 07:00 New York daily, re-set once 82b holds
    Task 0's numbers. It stays null until the cut-over.
-2. **`KEEPALIVE_MINUTES` (B-47).** Default: 0 (off). The PM sets it from 82b's overnight log only if the
-   log shows a touched tab lives longer than an idle one.
+2. **`KEEPALIVE_MINUTES` (B-47).** ~~Default: 0 (off), set from 82b's overnight log.~~ Re-answered
+   2026-10-03: 20 (± 3), the navigating keep-alive (the amendment at the top).
 3. **The dead-letter threshold (R-83 note).** Default: 20 minutes, about 5× the longest past claim. The PM
    re-measures once task 28's container run includes the file step and records it in 82a.
 4. **Machine steps only he can do.** Defaults are named:
