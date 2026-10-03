@@ -432,3 +432,193 @@ compose project `agentic-harness-wt-containers`, the worktree's `.env.secrets/`,
 and `.env.w57scratch`. Kept: the image `harness-jobs:local`; `ingest/.venv` and `mcp-server/node_modules`
 in the worktree (both gitignored). The scheduled tasks `AgenticHarness-NightlyIngest` and
 `AgenticHarness-CheckpointCollect` were read once (`Ready`, `Ready`) and not touched.
+
+---
+
+# Round 2 — W-57 (ten `/code-review` findings on `56cba3e`)
+
+## Incident first: one of my test runs started the real nightly on this laptop
+
+**What happened.** At 2026-10-02 03:11 local (07:11:48Z), while writing item 1 test-first, I ran
+`node --test tests/scheduler.test.mjs` with a pass-through stub in place of `envWithSecretFiles`. Two new
+tests called `main(['--run-now', 'nightly', …])` and handed it a fake `spawn`; `main` did not yet take a
+`spawn` parameter and fell back to its default runner, which starts the real job. So the test process ran
+`bash scripts/nightly-ingest.sh` (the worktree's copy) on the host, twice:
+
+1. 07:11:48Z, with `HARNESS_VAULT=/vault` in its environment: `FATAL vault not found: /vault`, exit 2,
+   three lines in the live log. Nothing else.
+2. 07:11:50Z to 07:15:00Z, with no vault in its environment: the script read
+   `C:/Users/stack/.harness/machine.env` and ran **a full nightly reconcile against the live vault and the
+   live store, with `REALM_SYNC` at its default `apply`**, using the shared checkout's hooks and ingest
+   (`C:/Users/stack/agentic-harness`, the script's defaults).
+
+This is the thing the PM's rules forbid ("a nightly against the live vault or store", "real realm commits
+or pushes"). It was not intended and it was not a deliberate check.
+
+**What it did**, from `C:/Users/stack/.claude/hooks/nightly-ingest.log` lines 662–772 and from the realms
+afterwards (all read-only looks):
+
+| Step | Result |
+|---|---|
+| realms-pull (apply) | `projects: clean -> pulled`, `classes: clean -> pulled`, `harness: clean -> pulled`. No commit. |
+| transcripts | `transcripts=22 noted=19 active=2 candidates=1 selected=1 written=0 skipped=1`. No note written. |
+| state | `swept 0, kept 22`. |
+| checkpoints | `found=2 created=0 merged=0 unchanged=2`. Both `noop`. |
+| sweep-concluded (apply) | `scanned 1158`, `1158 left-alone`. |
+| ingest `--prune` | `Loaded 1085 documents`, `1085 unchanged`, `chunks written: 0`, orphan sweep `nothing stale` in all three realms. |
+| verify | exit 0 (read-only). |
+| eval `--history` | exit 0. |
+| realms-push (apply) | `clean -> pulled -> up-to-date` for all three. No commit, nothing pushed. |
+
+It changed nothing in the vault or the store because Stack's own scheduled nightly had finished eight
+minutes earlier (07:00:03Z to 07:03:09Z) and had already committed and pushed everything. Checked
+afterwards: no `harness-sync.lock` in any realm; `git reflog --since=2026-10-02T07:11:00Z` is empty in all
+three realms (no commit, no merge moved HEAD); each realm has 0 status entries and is 0 ahead of its
+upstream; `projects` HEAD is still `8dd45e6`, the 03:00 scheduled run's commit.
+
+**What it did write**, and I have left as it is:
+
+* about 110 lines in `C:/Users/stack/.claude/hooks/nightly-ingest.log` (lines 662–772);
+* `last_success` in `C:/Users/stack/.claude/hooks/ingest-state.json`, moved from the scheduled run's time
+  to `2026-10-02T07:13:48Z`;
+* one line appended to `C:/Users/stack/agentic-harness/ingest/eval/history.jsonl` (gitignored), `at`
+  `2026-10-02T07:14:50Z`, a duplicate of the scheduled run's 07:03:01Z scores;
+* a `git fetch` and a no-op merge-pull in each realm.
+
+I did not edit, trim or revert any of those: they are in the shared checkout and in Stack's home, outside
+my worktree, and removing lines from his log would be tidying evidence.
+
+**Why it could happen, and the fix (in `65fd6a0`, item 1).** `main()` had a default runner that spawned the
+real job, so any caller that omitted a runner got a real nightly. `main()` now starts jobs only through a
+`runner` or a `spawn` it is handed; with neither it prints
+`error: no runner and no spawn were given, so no job can be started` and exits 70, and `spawnRunner`
+throws without a `spawn`. The process entry point is the only caller that passes node's `spawn`. A test,
+`main starts a real job only when it is handed spawn`, pins it. I wrote that guard before its test, on
+purpose: the RED run of such a test is itself a real nightly. After the guard, the same test file ran with
+the live log's last line unchanged (`07:15:00Z === nightly reconcile finished`).
+
+Stack's scheduled tasks were not touched (`Ready`, `Ready`). Later, at 2026-10-03 16:46:10Z, the laptop
+woke and Task Scheduler ran both of them as catch-up runs (`LastRunTime 10/3/2026 12:46:10 PM`); the
+log's lines from 16:46Z to 16:50:55Z are theirs (the PowerShell job's `realms-pull : node sync-realms.mjs`
+format), not mine. None of my later checks touched the live vault, and that run was left alone.
+
+One more thing I ran without checking it first: `bash scripts/tests/nightly-ingest.tests.sh` (the repo's
+own shell test). I read it afterwards: it works in a `mktemp -d` scratch with
+`HARNESS_MACHINE_ENV="$SCRATCH/absent.env"`, and the live log's last line was unchanged after it.
+
+## Round 2 items
+
+Each item was written test-first. RED is the run of the new tests before the fix, GREEN the run after.
+Where the first RED was only "export not found", a stub was added and the tests were run again to get a
+RED on behaviour; both are recorded. Linux runs are in the `harness-jobs:local` image (Debian bookworm,
+Node v22.23.3, `docker run --init`), on a copy of the working tree committed into a fresh repository.
+
+| # | Commit | RED | GREEN |
+|---|---|---|---|
+| 6 | `691ac46` | `doctor.test.mjs`: tests 31, pass 26, fail 5 | tests 31, pass 31, fail 0 |
+| 7 | `000e486` | `doctor.test.mjs`: tests 33, pass 29, fail 4 | tests 33, pass 33, fail 0 |
+| 5 | `085baa9` | `scheduler.test.mjs`: `does not provide an export named 'OWNER_LOOP'`, tests 1, fail 1 | tests 21, pass 21, fail 0 |
+| 3 | `e7c6332` | module RED, then on behaviour: tests 26, pass 22, fail 4 (`the loop did not finish within 5000 ms`, `a sleep after the stop did not finish within 2000 ms`) | tests 26, pass 26, fail 0 |
+| 4 | `6451735` | Linux, on behaviour: tests 28, pass 26, fail 2, `the grandchild outlived the stop`; then the grace-period test alone: tests 29, fail 1 | Windows tests 29, pass 28, skipped 1 (process groups are POSIX); Linux tests 28, pass 28 |
+| 1 | `65fd6a0` | module RED; then with a pass-through stub: tests 35, pass 28, fail 6 (**the run that started the real nightly, above**); after the guard: tests 36, pass 33, fail 2; doctor 34, pass 33, fail 1 | scheduler + grep-clean tests 45, pass 44, skipped 1; doctor 34/34 |
+| 8 | `dcd6896` | schedule + scheduler: tests 54, pass 49, fail 4 | tests 63, pass 62, skipped 1 |
+| 2 | `c705205` | tests 2, pass 0, fail 2 | my four test files: tests 99, pass 98, skipped 1 |
+| 9 | `eca4ee5` | entrypoint and helper: tests 2, fail 2; `envWithSecretFiles`: tests 1, fail 1 | Windows 5/5 of the matching tests; Linux `scheduler.test.mjs` tests 45, pass 45 |
+| 10 | `0d998fa` | `grep-clean.test.mjs`: tests 10, pass 9, fail 1 | tests 10, pass 10, fail 0 |
+
+What each fix is:
+
+1. The image sets `GIT_CONFIG_GLOBAL=/home/harness/.gitconfig-jobs`; the entrypoint writes that file
+   (safe.directory and the helper, no token). `scheduler.mjs` reads `DATABASE_URL_FILE` itself
+   (`envWithSecretFiles`: the entrypoint's list and its three refusals, exit 78) and hands the result to the
+   jobs it starts; doctor's `DATABASE_URL` row resolves the same way. `main()` starts jobs only through a
+   `runner` or `spawn` it is handed (exit 70 otherwise).
+2. The image sets `HARNESS_JOBS_CONTAINER=1`; `nightly-ingest.sh` skips the transcript sweep and the state
+   step there with one line: `transcripts and state: skipped in the jobs container (sessions are captured
+   by the host's SessionEnd hook)`. `CLAUDE_PROJECTS_DIR` and its bind are gone from `compose.yaml` (the
+   vault is the only host bind); `docs/portable.md` step 7 says so.
+3. `tick()` asks `shouldStop` before each job; the loop leaves before its sleep after a stop; a sleep begun
+   after a stop returns at once (`createStopper`).
+4. Jobs start `detached` (their own process group) on POSIX and a stop signals the group (`signalJob`,
+   negative pid); `stop_grace_period: 150s`, tested against `SYNC_FETCH_TIMEOUT_MS` (120 s).
+5. The run lock is judged by age only (no pid liveness, as `lib/realm-lock.mjs`); `pid` and `owner`
+   (`scheduler loop` or `--run-now`) are for the message; a put-back that fails is `lock contended`.
+6. `realm <name> clean` reads `git status --porcelain=v1 -z --untracked-files=all` through
+   `parsePorcelainZ` and `splitBySyncPath(isSyncPath)`; only sync-path entries fail it; the rest are a note,
+   e.g. `yes (the sync never stages 1 entry: board.canvas)`.
+7. `realm <name> pushed` asks `symbolic-ref --quiet --short HEAD` (exit 1: `no: HEAD is detached (not on a
+   branch)`), then `config --get branch.<b>.merge` (exit 1: `no: no upstream branch (git push -u origin <b>
+   once)`), then the count; any other failure is `unknown (…)`.
+8. The nightly's checkpoints step passes `HARNESS_CHECKPOINT_REPOS`/`_AUTHORS` as `--repo`/`--author`; in
+   the container with no repository listed, it and the scheduler's `collect` both log
+   `skipped in the jobs container (HARNESS_CHECKPOINT_REPOS is not set)` and count as exit 0.
+9. `read_secret`, the git credential helper (sh, `sed '1s/^\xEF\xBB\xBF//'`) and `envWithSecretFiles` drop
+   a leading UTF-8 BOM as well as CR and LF.
+10. The `HARNESS_VAULT` default line of `nightly-ingest.ps1`, `register-checkpoint-collect.ps1`,
+   `register-nightly-ingest.ps1` and `register-weekly-curate.ps1` (that one line in each) is now
+   `"$($env:USERPROFILE -replace '\\', '/')/vault"`, which evaluates to `C:/Users/stack/vault` here (the
+   expression alone was evaluated; no script was run). `scripts/weekly-curate.ps1:101` has the same old
+   default; item 10 does not name it, so it is unchanged.
+
+### Container checks (a scratch vault and a throwaway store, never the live ones)
+
+Rebuilt image `3886a980a864`. Scratch setup as in round 1: a two-note scratch realm (`projects:local`, no
+remote) as `VAULT_DIR`, `harness_database_url` pointing at a throwaway `pgvector/pgvector:0.8.6-pg17`
+container on port 5545, `REALM_SYNC=dryrun`. `docker compose config` was read before `up` and named only
+scratch paths. All of it was removed afterwards.
+
+First start (2026-10-03 16:54Z):
+
+```
+scheduler: nightly: starting for the window 2026-10-03T07:00:00.000Z
+transcripts and state: skipped in the jobs container (sessions are captured by the host's SessionEnd hook)
+checkpoints: skipped in the jobs container (HARNESS_CHECKPOINT_REPOS is not set)
+=== nightly reconcile finished (realms-pull 0, transcripts 0, state 0, checkpoints 0, sweep 0, ingest 0, verify 0, eval 0, realms-push 0) ===
+scheduler: nightly: exit 0 after 104 s
+scheduler: collect: skipped in the jobs container (HARNESS_CHECKPOINT_REPOS is not set)
+scheduler: collect: exit 0 after 0 s
+```
+
+Item 1's check, the exec'd verb:
+
+```
+$ docker compose exec harness-jobs node hooks/scheduler.mjs --run-now nightly; echo $?
+… ingest | Loaded 2 documents. … ingest : exit 0 …
+scheduler: nightly: exit 0 after 12 s
+0
+```
+
+What that exec had: `DATABASE_URL` unset and `DATABASE_URL_FILE=/run/secrets/harness_database_url` (the
+scheduler read the file), `GIT_CONFIG_GLOBAL=/home/harness/.gitconfig-jobs`,
+`git config --global --get-all safe.directory` → `/vault/projects`,
+`git -C /vault/projects rev-parse --is-inside-work-tree` → `true`; the exec'd doctor printed
+`DATABASE_URL           set (read from DATABASE_URL_FILE)`.
+
+Item 2's check: the scratch vault held 3 files before and 3 after two nightlies; `git status --porcelain`
+printed nothing; still 1 commit. `docker compose ps` → `harness-jobs healthy`; `exec whoami` → `harness`.
+
+Items 3 and 4 in the container: with `last_run_at` set back, the loop started a nightly, and
+`docker compose stop` was sent while `uv run ingest` ran. The stop returned within a second, and the log
+read `scheduler: nightly: exit 143 after 4 s`, then `scheduler: stopped`: the whole job had the signal,
+`collect` was not started, and the restarted container (`scheduler: started …`) did not run the
+interrupted nightly again.
+
+### Re-recorded at the end (`0d998fa`)
+
+```
+$ ls hooks/tests/*.test.mjs | wc -l
+75
+$ cd hooks && npm test            (Windows, Node v24.19.0)
+ℹ tests 1187
+ℹ pass 1186
+ℹ fail 0
+ℹ skipped 1
+```
+
+The skip on Windows is the process-group test (POSIX only). The same suite on Linux: tests 1187, pass 1185,
+skipped 1, fail 1. The failure is again `a long chain of lookalike assignments is bounded: fast`
+(`hooks/tests/redact-pat.test.mjs:78`, a 300 ms bound, on `main`), at 317 ms in a full parallel run in the
+container; run alone it passed twice. It is a timing bound, and the ubuntu legs are now required. Round 1
+greps unchanged: `continue-on-error` 0, `On home-pc (containers):` 1, `missedExecutionTolerance` 1.
+
+CI: `gh run list --repo emstacho-su/agentic-harness --branch feat/containers --limit 3` → `[]` (no PR yet).
