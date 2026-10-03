@@ -327,7 +327,7 @@ begin
   returning id into v_file_a;
   insert into bb_files (run_id, bb_course_id, course_id, content_id, path, file_name, source_url, bucket)
   values (v_runs[2], SHELL, COURSE, '_w52h_x1_1', 'Syllabus', 'syllabus.docx',
-          BB_ORIGIN || '/bbcswebdav/w52h/x2', 'syllabus')
+          BB_ORIGIN || '/bbcswebdav/w52h/x2', 'readings')
   returning id into v_file_x;
 
   -- (1) baseline
