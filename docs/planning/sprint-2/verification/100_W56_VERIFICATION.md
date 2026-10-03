@@ -464,3 +464,103 @@ Statements 97.03%, Branches 94.21%, Functions 97.1%, Lines 98.18%; `npm run type
 
 The same raw-BOM slip (item 8) was in this branch's MCP server: `mcp-server/src/env-file.ts` and two of its
 tests held the character itself; now the `'\uFEFF'` escape, `npx vitest run` in `mcp-server` → 106 passed.
+
+## Task 13a — the merge half (W-55's runner into this branch)
+
+`git merge origin/feat/containers-14` (d3ead0e, which carries W-55's `feat/containers-14-sync`) →
+adef2ac, no conflict, pushed. Then, after `git fetch`:
+
+```
+git rev-parse origin/feat/containers-14-sync                                       -> b0165e54b1c6598bbd08bb237d07ee3a5e7434d4
+git merge-base --is-ancestor b0165e54b1c6598bbd08bb237d07ee3a5e7434d4 origin/feat/containers-14-images; echo $?   -> 0
+```
+
+## Task 15 — the sync image and compose (the spike made the runner's image), d58d2b8
+
+What changed:
+
+* `docker/sync/Dockerfile`: three stages on `mcr.microsoft.com/playwright:v1.63.0-noble` (and
+  `ghcr.io/astral-sh/uv:0.12.19` for the `uv` binary). The build stage runs W-55's
+  `cd sync && npm ci && npm run build` (esbuild; `desktop/src/core/sync-id.ts` bundled in) and prunes to
+  production modules. The runtime keeps the spike's display stack (xvfb, x11vnc, novnc, websockify) and its
+  entrypoint, adds `poppler-utils`, copies `sync/dist`, `sync/node_modules`, `sync/package.json` and only the
+  ingest files the runner runs plus task 14's test and fixtures, and runs `uv sync --locked --project
+  /app/ingest` **as pwuser** at build (`UV_PYTHON_DOWNLOADS=never`, `UV_NO_CACHE=1`; noble's Python 3.12),
+  so `extractUnits`'s `uv run --locked` needs no network (`UV_OFFLINE=1` at run time). `bb-profile` and
+  `/app/course context` exist in the image owned by pwuser, so fresh volumes take that owner.
+  `CMD ["node", "sync/dist/main.js"]`, working directory `/app`, `USER pwuser`.
+* `.dockerignore` (root, new): an allow-list (`docker/sync/`, `sync/`, `ingest/`,
+  `desktop/src/core/sync-id.ts`), then `sync/node_modules`, `sync/dist`, `ingest/.venv`, `**/__pycache__`,
+  `**/.env*`, `course context`, `local_cache`, `secrets` excluded.
+* `compose.yaml` `sync`: build context `.` with `docker/sync/Dockerfile`, image `bb2dash-sync:local` (the
+  live container's `bb2dash-sync:spike` is left alone for the PM's cut-over); the frozen names kept
+  (service `sync`, `hostname: sync`, volume `bb-profile`, `127.0.0.1:6080:6080`), seccomp, `user: pwuser`,
+  `init`, `shm_size: 1gb`, `restart: unless-stopped`, json-file logs. New: the three runner secrets
+  (`sync_runner_db_url`, `supabase_publishable_key`, `supabase_anon_jwt`) beside `novnc_password`,
+  `course-files:/app/course context`, `tmpfs: /tmp` (downloads, X's lock and socket, the heartbeat), and the
+  healthcheck `node sync/dist/probe.js --heartbeat` (30 s, start period 90 s). `JITTER_MINUTES` and
+  `LOGIN_WATCH_SECONDS` left the environment: they are the runner's constants (W-55).
+* The spike's review fixes ride in the unchanged `entrypoint.sh` (stale X lock and socket removed,
+  Chromium's `Singleton*` lock removed, the password copied without BOM, CR and LF); the runner passes
+  `--hide-crash-restore-bubble` and `chromiumSandbox: true` itself (`sync/src/main.ts`).
+* `docker/sync/spike/` deleted.
+
+How it was run. Nothing touched the live `bb2dash` project, its `bb2dash_bb-profile` volume or
+`harness-postgres`: everything ran as `-p bb2dash-images-test`, with a test-only override in the session
+scratchpad that adds `stubdb` (a throwaway `pgvector/pgvector:0.8.6-pg17` container, TLS on, six stub
+`sync_*` functions answering an always-empty queue), maps `blackboard.syracuse.edu` and
+`login.microsoftonline.com` to 127.0.0.1 (no Blackboard page and no login was ever loaded) and publishes
+the login page on `127.0.0.1:16080`. The four secret files were dummies in the scratchpad, deleted after.
+
+```
+docker compose -p bb2dash-images-test build sync      -> Image bb2dash-sync:local Built (3.9GB)
+  RUN uv sync --locked --project /app/ingest          -> Prepared 8 packages, Installed 8 packages
+docker run --rm bb2dash-sync:local (sh): whoami -> pwuser; pdftotext -v -> pdftotext version 24.02.0; uv 0.12.19
+
+docker compose … up -d   (stubdb healthy, then sync)
+docker compose … ps --format "{{.Service}} {{.Health}}" | grep -c "^sync healthy$"              -> 1
+docker compose … exec sync whoami                                                                 -> pwuser
+docker compose … exec sync sh -c 'for f in /proc/[0-9]*/cmdline; …' | grep -c -- "--no-sandbox"     -> 0   (12 chrome processes up)
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:16080/vnc.html                             -> 200
+docker compose … port sync 6080                                                                   -> 127.0.0.1:16080 (6080 in the real file)
+docker compose … exec sync node sync/dist/probe.js --heartbeat     -> heartbeat 2026-10-03T21:34:47.379Z, exit 0
+docker compose … exec sync node sync/dist/probe.js                 -> users/me error …, exit 3
+docker compose … exec sync node sync/dist/enqueue.js               -> sync_enqueue('just') -> request none, exit 0
+runner log: db: connected as sync_runner; requeued 0 orphaned claim(s);
+            first load of Ultra failed: net::ERR_CONNECTION_REFUSED (the blocked host, as intended)
+docker compose … restart sync -> healthy again, Chromium up (the first run's profile lock did not block it)
+container Env | grep -c dummy -> 0;  docker history --no-trunc | grep -ciE "dummy|sb_secret|sb_publishable|eyJ|postgresql://" -> 0
+docker compose … down -v -> the test project's two volumes and network removed; bb2dash_bb-profile and bb2dash-sync-1 untouched
+```
+
+Static checks on this branch:
+
+```
+grep -rl "no-sandbox" docker/sync sync/src | wc -l                         -> 0
+grep -rc "chromiumSandbox: true" sync/src | grep -vc ":0$"                 -> 1   (82b reads Sandbox: seccomp)
+ls docker/sync/spike 2>/dev/null | wc -l                                   -> 0
+umbrella: docker compose --profile mcp --profile dev config --services    -> sync, bb2dash-mcp, dev, harness-jobs
+node --test ingest/pull_files.test.mjs ingest/extract_text.test.mjs ingest/fetch_signed.test.mjs ingest/embed_corpus.test.mjs docker/grep-clean.test.mjs scripts/install-skills.test.mjs scripts/db-test.test.mjs
+                                                                           -> # tests 155, # fail 0
+```
+
+**Task 14's in-image check (owed since task 14), in this image (poppler 24.02.0):**
+
+```
+docker compose -p bb2dash-images-test run --rm -T sync node --test --test-reporter=tap ingest/extract_text.test.mjs
+  ok 1 … ok 6 (pyproject pins; extractUnits runs the locked project; sample.pdf, .docx, .pptx, .xlsx)
+  # tests 6   # pass 6   # fail 0
+docker run --rm --network none --entrypoint node bb2dash-sync:local --test --test-reporter=tap ingest/extract_text.test.mjs
+  # tests 6   # pass 6   # fail 0          (offline: the locked set needs no network)
+```
+
+The same `expected.json` as the host's `# fail 0` under Xpdf 4.06.
+
+**Found in W-55's runner (not changed here; `sync/` is W-55's):** every start logs one
+`heartbeat write failed: ENOENT … rename '/tmp/bb2dash-sync/heartbeat.7.tmp' -> '…/heartbeat'`. Two
+heartbeat writes overlap at start and share the temp name `${file}.${process.pid}.tmp` (`sync/src/main.ts`,
+`writeAtomic`), so the second rename finds its temp file gone. Harmless (the next write lands and the
+container is healthy within one interval); a per-write counter in the temp name would end it.
+
+Not done here: the cut-over (`compose up` of the real `bb2dash` project on `bb2dash-sync:local`, keeping
+`bb2dash_bb-profile`), which is the PM's with Stack; a real `sync_runner` DSN and a live pass (task 28).
