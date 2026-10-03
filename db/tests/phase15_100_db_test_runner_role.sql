@@ -73,7 +73,7 @@ end $$;
 -- =============================================================================================
 do $$
 declare
-  v_expected text := 'anon(inherit=f,set=t), authenticated(inherit=f,set=t)';
+  v_expected text := 'anon(inherit=f,set=t), authenticated(inherit=f,set=t), sync_runner(inherit=f,set=t)';
   v_got      text;
   v_bad      text;
 begin
