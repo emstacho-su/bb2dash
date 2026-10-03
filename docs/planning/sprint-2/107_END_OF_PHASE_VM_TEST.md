@@ -62,9 +62,13 @@ With the SQL job out (question 1), the only secrets are the walk's test login an
 
 ## Part 2, later: the home machine
 
-The home box is Stack's MacBook, being factory reset for it (2026-10-03). Phase 14's containers are Linux
-containers, so on macOS they run under a Docker runtime; if it is an Apple-silicon Mac, check that Phase 14's
-images build for arm64 before moving the stack there. GitHub's self-hosted runner supports macOS.
+The home box is Stack's MacBook, an **Apple M2** (arm64), being factory reset for it (2026-10-03). Phase 14's
+containers are Linux containers, so on macOS they run under a Docker runtime. Read of `origin/feat/containers-14`
+on 2026-10-03: the only image, `docker/sync/Dockerfile`, is `FROM mcr.microsoft.com/playwright:v1.63.0-noble`
+(published for amd64 and arm64), runs **Chromium** (Google Chrome has no Linux arm64 build), installs only Ubuntu
+packages (xvfb, x11vnc, novnc, websockify), and pins no platform; `compose.yaml` builds it locally. So it should
+build natively on the M2. Confirm with one `docker compose build` there before moving the stack, and keep any
+later image free of amd64-only pieces. GitHub's self-hosted runner supports macOS on Apple silicon.
 
 * **SQL suite:** the `sql` job runs here (`runs-on: [self-hosted, home]`), with the DSN in the box's own
   gitignored `.env.local`, never in GitHub.
