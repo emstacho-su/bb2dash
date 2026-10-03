@@ -173,7 +173,7 @@ begin
                     ' ; ' order by ref_kind, posted_at)
     into v_got
     from v_course_stream where course_id = COURSE and post_kind = 'material';
-  if v_got is distinct from format('bb_content %s appeared %s true ; bb_file %s appeared %s true ; bb_file %s changed %s true',
+  if v_got is distinct from format('bb_content %s appeared %s t ; bb_file %s appeared %s t ; bb_file %s changed %s t',
                                    v_doc, RUN_1, v_keep, RUN_1, v_keep, RUN_2) then
     v_fail := v_fail || format('(F) the fixture course posts: %s', coalesce(v_got, '(none)'));
   end if;
