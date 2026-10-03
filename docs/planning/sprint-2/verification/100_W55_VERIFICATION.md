@@ -421,3 +421,32 @@ node sync/dist/main.js                -> sync-runner: cannot start: SYNC_RUNNER_
 * **Not verified here:** a live run in the container (task 28); whether Ultra's
   Content-Security-Policy lets `addScriptTag` run the crawler (the runner falls back to evaluating
   the source, and logs it); the session pooler accepting `sync_runner` (Stack's `--ping`).
+
+## Round 2 — R2-1: two heartbeat writes at startup shared one temp name
+
+Found by W-56 building the image: every start logged `heartbeat write failed: ENOENT`.
+`writeAtomic` (`sync/src/main.ts`) named its temp file `${file}.${pid}.tmp`, so two writes in flight
+shared it and the second rename found it gone. Merged `origin/feat/containers-14` first (a
+fast-forward to 1cc986e).
+
+RED (20 concurrent writes to one file; two did not reproduce it reliably on Windows):
+
+```
+cd sync && npx vitest run test/integration.test.ts -t writeAtomic
+ × concurrent writes to the same file all succeed and leave valid JSON
+   "code": "ENOENT", "message": "ENOENT: no such file or directory, rename '…\state\login.json.10376.tmp' -> '…\state\login.json'"
+```
+
+A per-write counter alone then failed on Windows with `EPERM` (two renames onto one target at once),
+so writes to one file are also serialised in call order (the last call wins); the temp file is
+removed if its rename fails.
+
+GREEN:
+
+```
+cd sync && npx vitest run test/integration.test.ts -t writeAtomic
+ Test Files  1 passed (1)      Tests  1 passed | 16 skipped (17)
+
+cd sync && npm run typecheck && npm run build && npx vitest run --coverage
+ Test Files  7 passed (7)      Tests  108 passed (108)      Lines : 89.57% ( 636/710 )      exit 0
+```
