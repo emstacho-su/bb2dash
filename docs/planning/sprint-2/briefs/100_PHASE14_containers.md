@@ -935,3 +935,40 @@ matter most; none may be left open. A change to the frozen volume list (item 2) 
 
 Report as before (per item, the check's line and SHA), and update the scratchpad verification file with a
 Round 2 section.
+
+## Round 2 — W-56 task 18 (`feat/containers-14-launcher`), from `/code-review main high` on 9200aaf, 2026-10-03
+
+Fix test-first, one commit per item (`fix(14-R2-<n>): …`). Items 1–3 must land before the launcher PR opens.
+
+1. **The password leaves the browser.** Put noVNC's options in the URL fragment
+   (`/vnc.html#autoconnect=true&resize=scale&password=…`), never the query string, so websockify never sees
+   or logs it. Without a password file, keep `#autoconnect=true&resize=scale`. Check: tests that the built
+   URL has no `?` and carries the password only after `#`.
+2. **The morning prompt must come every morning (PM call).** Open the page for an open login item once per
+   New York day, not once per item id: remember the last prompt per item id with its New York date in the
+   desktop's persistent store (the watermark store or its sibling), so a process restart the same day opens
+   nothing new and an item still open the next morning opens the page again. Check: tests on a fake clock
+   for same day, next day, restart same day, and the New York date across midnight UTC.
+3. **Only the container's item opens the container's page (PM call).** The Chrome skill's item gets its own
+   ref, `chrome-login-required` (W-55's task 11 writes it, not `sync-login-required`). The desktop reads
+   `ref=eq.sync-login-required&kind=eq.stack_must_confirm&entity=eq.agent_request&state=eq.open`. Check: a
+   test that an item with another ref never opens the page.
+4. **A hung `openExternal` blocks every later check.** Race it against a timeout (a named constant), log one
+   line, free `busy`. Check: a test with a never-settling fake.
+5. **The check hides inside `getSession`.** Give `PollerDeps` an explicit per-tick hook that receives the
+   tick's `get`, call it once per tick, and also run it right after a session reload succeeds, so a dead
+   web cookie at logon does not delay the prompt to the next interval. Check: tests for both.
+6. **Duplicate failure logging.** A failed read logs once per hour, as the shared rest helper does, not every
+   tick. Check: a test.
+7. **`redact()` does not know passwords.** Add `password` to its key pattern so a URL in an error is
+   scrubbed. Check: a redact test with `#…password=…` and `?password=…`.
+8. Small ones: build the URL from `LOGIN_PAGE_ORIGIN` (one constant); drop the dead `decideLoginPageOpen`
+   branch or make its failure log and free the ids; share one id-row validator in `core/` with
+   `sync-terminal.ts`; write `UTF8_BOM` as `'\uFEFF'`; unit tests for the real default reader and the
+   test-mode `recordEvent('login-prompt')` branch.
+9. **E2E.** Add one case to the desktop e2e suite for `queue-only` with an open container login item: the
+   test-mode event `login-prompt` is recorded once and no browser opens. Run the e2e suite only under the
+   test env var (no modal, no real browser); it opens the app's window briefly on Stack's screen, which is
+   allowed for this run.
+
+The PM adds the launcher PR's own STATUS line and the DECISIONS rows its code cites (finding 5).
