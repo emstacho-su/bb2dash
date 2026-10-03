@@ -598,3 +598,28 @@ docs (tasks 25–29).
 > Cut `feat/content-history-19` and the three worker worktrees, and spawn W-52, W-53 and W-54 on
 > Opus with their disjoint file sets. Stop at "ready when you say so" with the PR and its Vercel
 > preview. Do not merge.
+
+## Round 2 (2026-10-03, from the first `/code-review main high` pass)
+
+The first pass covered W-52's and W-54's work on the phase branch at fab2ef6 (W-53's branch was not merged yet; it gets its own pass). 15 findings. Two were about the window before 135 and 137 reached prod (the desktop selecting `interrupted`, and 133/134 live with no history writer); both closed when 135–137 were applied on 2026-10-03, with no sync folded in the window. The rest, triaged by the PM:
+
+| R2 | Finding | Severity | Owner | Fix |
+|---|---|---|---|---|
+| R2-1 | 131: a re-created item (Blackboard deletes and re-posts it: new `bb_item_id`, same path) gets a new row and the old row is stamped missing, carrying its `assignment_id` with it. No fold writes `assignment_id` (only 112 and 130 ever did), so the link is lost to a ghost; 026 kept it by updating in place and appending the old id to `previous_ids`. | HIGH | W-52 | Migration **139**: `stage_content` re-created from 131's body with one added rule, applied before the missing pass: within one course in one fold, when exactly one new item and exactly one stored row that this run does not carry share a path (and the same `item_kind`), the stored row is RE-KEYED to the new id, its old id appended to `detail->'previous_ids'`, and it is updated as an existing row (so `assignment_id`, children and `previous_paths` stay). Any other shape (two new, two old, a kind change) is left to insert + missing as 131 does. Counted in a new return key `rekeyed`. Test first. Check prod history (`bb_raw`) for real occurrences and record them. |
+| R2-2 | 132: Activity counts one file node twice (content row + `detail.file` row) and counts folders and learning modules as materials. | HIGH | W-52 | Migration **138**: `material_history_record` re-created; every history row is still written (P-98's vanish convention needs content rows for every node), but the returned counts and `sample` cover materials only, the way 133's Stream does: file rows, plus content rows whose node kind is `document` or `link` and that no file row of the same run and item covers. |
+| R2-3 | 132: content compares the full breadcrumb, so renaming a folder marks every descendant `changed` {path}. | HIGH | W-52 | 138: `path` is a changed field only when the item's own parent changed (its `parentId`) or its own title changed; an ancestor's rename is not a change to the item. |
+| R2-4 | 132: the content-entity url compare does not drop session-scoped (`/sessions/`) urls as the file arm does. Prod shows 0 url churn across 12 crawls today, so defensive. | MEDIUM | W-52 | 138: a `/sessions/` url compares as null. |
+| R2-5 | 132: `older_run` counts only newer runs that already wrote history rows, unlike 043/056/131's registered-crawl predicate. | MEDIUM | W-52 | 138: the newest-registered-folded-crawl predicate (a newer registered crawl with a folded `ok`/`partial` row), not "has history rows". |
+| R2-6 | `freshnessLine` says "last synced <reap time> · last sync interrupted": the reap time of a crawl that never folded reads as fresh data. | HIGH | W-54 | When the newest run is interrupted (or failed), the "last synced" clause names the newest real fold instead (the newest `last_seen_at` in `streams`), or "no sync recorded yet" when none; logic in `sync-run-state.ts`, `queries.sync.ts` only calls it. The 15-line cap on `queries.sync.ts` is lifted for this fix only; keep the added lines minimal. |
+| R2-7 | Desktop "Sync interrupted" toast keeps the failed body ("No error detail was recorded.") and opens Home. (PM's own walk note, not the review's.) | MEDIUM | W-54 | Body: "The crawl did not finish. Nothing from it was folded in; your Inbox has the details." Click opens `/inbox`. |
+| R2-8 | `DATA_SYNTAX.md`: the new 130–134 heading sits inside the 110–116 section. | LOW | W-52 | Move it after the 110–116 bullets. |
+
+Not changed, with the reason:
+* 130's two-ghosts-with-different-links case: 130 is applied, and every one of the 21 pairs on 2026-10-02 had exactly one ghost (the D₀ query counts pairs; the pre-apply check found 21 clean pairs, 0 linked ghosts), so the case could not occur. A future collapse is not planned.
+* 131's newest-crawl guard blocking all writes, not only the missing pass: it is the Contract's rule ("an older run writes nothing"); the scenario needs a second crawl registered while the first waits to fold, which one-open-sync-at-a-time rules out.
+* A renamed attached file reads as vanished + appeared (New) rather than Changed: a rename is a real change in Blackboard; accepted, named in the Stream row of DECISIONS.
+* 132's predecessor lookup cost (25–51 ms with 12 crawls): accepted this term; 138 may resolve courses by join if W-52 can do it without changing results, not required.
+* `SyncStatus.notes` unread by any screen: the Contract names it; kept for Phase 14's runner.
+* No DECISIONS rows yet for 130/131: task 29, written before the PR.
+
+Order: 138 then 139 (138 does not touch `stage_content`; prod order equals name order). Both are dry-run in `begin; … rollback;`, handed to the PM with SHA and md5, and applied by the PM under Stack's standing approval. 138 and 139 use the last two numbers of this phase's block; a third fix takes the next free block of ten (94 §2 rule 6).

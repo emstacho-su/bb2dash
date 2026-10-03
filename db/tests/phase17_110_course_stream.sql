@@ -97,6 +97,22 @@ begin
           jsonb_build_object('missing_since', '00000000-0000-0000-0000-000000000044'))
   returning id into v_node;
 
+  -- Phase 19 (133, brief 99 task 9): the Stream posts a material only when a crawl recorded it
+  -- as appeared or changed in bb_material_history, so each seeded row gets its history row.
+  -- Without them the kept file would not post, and the three exclusion checks below would pass
+  -- with nothing to exclude. Every assertion below is as Phase 17 wrote it.
+  insert into bb_material_history
+    (run_id, course_id, entity, bb_item_id, file_name, bb_file_id, change, title, path, seen_at)
+  values
+    (coalesce(v_run, '00000000-0000-0000-0000-000000000044'), v_course, 'file', '_w44_kept_1',
+     'w44_kept.pdf', v_keep, 'appeared', 'w44_kept.pdf', 'W44 / kept', now()),
+    (coalesce(v_run, '00000000-0000-0000-0000-000000000044'), v_course, 'file', '_w44_mine_1',
+     'w44_mine.docx', v_mine, 'appeared', 'w44_mine.docx', 'W44 / mine', now()),
+    (coalesce(v_run, '00000000-0000-0000-0000-000000000044'), v_course, 'file', '_w44_gonef_1',
+     'w44_gone.pdf', v_gone, 'appeared', 'w44_gone.pdf', 'W44 / gone', now()),
+    (coalesce(v_run, '00000000-0000-0000-0000-000000000044'), v_course, 'content', '_w44_gone_1',
+     '', null, 'appeared', 'W44 gone node', 'W44 gone node', now());
+
   select meta into v_meta from v_course_stream where ref_kind = 'bb_file' and ref_id = v_keep::text;
   if v_meta is null then
     v_fail := v_fail || 'the seeded kept file is not on the Stream'::text;
