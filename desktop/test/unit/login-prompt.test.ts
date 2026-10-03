@@ -40,7 +40,7 @@ import {
 import type { LoginPromptStore, PromptedOn } from '../../src/core/login-prompt';
 import { LOGIN_PAGE_ORIGIN } from '../../src/core/navigation-policy';
 import type { RestGet, WebSession } from '../../src/core/types';
-import { createLoginPrompt, withLoginPromptCheck } from '../../src/main/login-prompt';
+import { OPEN_EXTERNAL_TIMEOUT_MS, createLoginPrompt, withLoginPromptCheck } from '../../src/main/login-prompt';
 
 const ANON = { supabaseAnonKey: 'eyJhbGciOiJIUzI1NiJ9.anon.signature' };
 const QUEUE_ONLY = parseConfig({ ...ANON, syncLauncher: 'queue-only', novncPasswordFile: 'C:\\secrets\\novnc_password' });
@@ -380,6 +380,27 @@ describe('main/login-prompt — opening the page', () => {
     release();
     await first;
     expect(opened).toHaveLength(1);
+  });
+
+  it('a browser hand-off that never settles times out, logs one line and frees the next check (round 2, item 4)', async () => {
+    expect(OPEN_EXTERNAL_TIMEOUT_MS).toBeGreaterThanOrEqual(5_000);
+    const attempts: string[] = [];
+    const prompt = createLoginPrompt(QUEUE_ONLY, {
+      store: memoryStore().store,
+      now: () => DAY_ONE,
+      readFile: () => PASSWORD,
+      openExternal: (url) => {
+        attempts.push(url);
+        return new Promise<void>(() => undefined);
+      },
+      openTimeoutMs: 20,
+    });
+    await prompt?.check(restOver([41]).get);
+    expect(logged.filter((line) => /timed out/.test(line))).toHaveLength(1);
+    // Not recorded as opened, and `busy` is free: the next tick tries again.
+    await prompt?.check(restOver([41]).get);
+    expect(attempts).toHaveLength(2);
+    for (const line of logged) expect(line).not.toContain(PASSWORD);
   });
 
   it('terminal never opens it: no login prompt is built', () => {

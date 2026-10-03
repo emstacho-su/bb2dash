@@ -39,6 +39,29 @@ import type { RestGet, WebSession } from '../core/types';
 import { log, logError } from './log';
 import { IS_TEST_MODE, recordEvent } from './test-hook';
 
+/**
+ * Round 2, item 4: how long the browser hand-off may take. `shell.openExternal` has been seen to
+ * never settle; without a limit `busy` stays set and every later check is dropped.
+ */
+export const OPEN_EXTERNAL_TIMEOUT_MS = 15_000;
+
+/** Settles `true` with `work`, or `false` when `ms` pass first; never rejects for the timeout. */
+function settlesWithin(work: Promise<void>, ms: number): Promise<boolean> {
+  return new Promise<boolean>((resolve, reject) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    work.then(
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export interface LoginPrompt {
   /** One look at the open login item. Opens the page at most once per item per day; never rejects. */
   check(get: RestGet): Promise<void>;
@@ -53,6 +76,8 @@ export interface LoginPromptDeps {
   readonly readFile?: (path: string) => string;
   /** Hands the URL to the default browser. Injected by the unit tests so none opens a tab. */
   readonly openExternal?: (url: string) => Promise<void>;
+  /** `OPEN_EXTERNAL_TIMEOUT_MS` unless a test shortens it. */
+  readonly openTimeoutMs?: number;
 }
 
 function errorCode(error: unknown): string {
@@ -78,6 +103,7 @@ export function createLoginPrompt(config: DesktopConfig, deps: LoginPromptDeps):
   const now = deps.now ?? (() => new Date());
   const readFile = deps.readFile ?? ((path: string) => readFileSync(path, 'utf8'));
   const openExternal = deps.openExternal ?? defaultOpenExternal;
+  const openTimeoutMs = deps.openTimeoutMs ?? OPEN_EXTERNAL_TIMEOUT_MS;
   /** Read from the store on the first check, then kept here; every change is written back. */
   let promptedOn: PromptedOn | null = null;
   let busy = false;
@@ -118,7 +144,10 @@ export function createLoginPrompt(config: DesktopConfig, deps: LoginPromptDeps):
       return false;
     }
     try {
-      await openExternal(decision.url);
+      if (!(await settlesWithin(openExternal(decision.url), openTimeoutMs))) {
+        log(`login prompt: handing ${LOGIN_PAGE_URL} to the default browser timed out after ${openTimeoutMs} ms; the next tick retries`);
+        return false;
+      }
       log(`login prompt: Blackboard login needed (item ${ids.join(', ')}); opened ${LOGIN_PAGE_URL}`);
       return true;
     } catch (error) {
