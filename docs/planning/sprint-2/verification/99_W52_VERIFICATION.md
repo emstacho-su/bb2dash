@@ -204,3 +204,54 @@ FAIL  phase17_110_course_stream.sql  relation "bb_material_history" does not exi
 db-test: passed 0, failed 1, units 1
 exit 1
 ```
+
+## Task 7 and 8 — migration 132, DRY RUN (not applied)
+
+Every dry run since 2026-10-03 sets `statement_timeout = '90s'` and `lock_timeout = '10s'` inside
+its transaction. (An earlier, unbounded dry-run call of 132 on 2026-10-02 never returned to the
+worker; on 2026-10-03 `pg_stat_activity` showed no open session and nothing of it persisted.
+Timed in pieces, one call of `material_history_record` takes 25 to 51 ms.)
+
+Dry run 2026-10-03, one `begin; … rollback;`: 132's statements (table, policy, function,
+grants, backfill, restamp), then the body of `phase19_132_material_history.sql`. The test body
+passed (blocks S, P, V, 1, 2, 2b, O, 4, 6, 8, X and the stranger block N).
+
+Backfill, per crawl, oldest first (`{appeared, changed, vanished}`):
+
+| crawl | appeared | changed | vanished | note |
+|---|---|---|---|---|
+| `3e12fd89` | 0 | 0 | 0 | baseline for all 7 courses |
+| `6b122650` | 34 | 10 | 4 | |
+| `bf2f81e5` | 45 | 7 | 2 | |
+| `c877b0cc` | 5 | 14 | 2 | |
+| `1b5e8da5` | 2 | 0 | 0 | |
+| `9080daeb` | 34 | 15 | 7 | |
+| `3b5174b8` | 8 | 3 | 0 | |
+| `6923d85d` | 8 | 1 | 1 | |
+| `f24a7ff5` | 8 | 0 | 0 | |
+| `1f10c823` | 6 | 8 | 1 | |
+| `8bfe8c51` | 0 | 1 | 0 | |
+| `2a4d4a2e` | 3 | 0 | 0 | |
+
+229 rows: content 82 appeared, 55 changed, 6 vanished; files 71 appeared, 4 changed, 11
+vanished. Changed fields: content `{modified}` 30, `{path}` 10, `{title,path,modified}` 6,
+`{url,modified}` 4, `{path,modified}` 3, `{title,path,url,modified}` 2; files `{url}` 4.
+82 file rows carry a `bb_file_id`; 4 `appeared` file rows do not (IST.352 `_13229019_1`,
+`_13252373_1`, `_13276647_1`; IST.466 `_12939673_1`): each of those files was re-uploaded
+later, `stage_files` moved its `bb_files.source_url` to the new url, and the old url no longer
+matches. They post as Changed at the re-upload, not as New at first sight. This only happens in
+the backfill: a live fold matches right after `stage_files`, and the id is stored.
+
+Restamp (P-98): 2 rows, GEO.103.lecture 106 (`_13177626_1`) and 99 (`_13177625_1`),
+`bf2f81e5` → `6b122650`, as the brief says. The other three stale rows already carry the
+run their `vanished` row names (`9080daeb`).
+
+Brief checks, in the dry-run transaction:
+
+| check | expected | dry run |
+|---|---|---|
+| (7) `select has_function_privilege('authenticated', 'public.material_history_record(uuid)', 'execute')` | false | false |
+| (7) `has_table_privilege('anon', 'public.bb_material_history', 'select')` | false | false |
+| (8) the P-98 query (stamped rows whose run has history but no matching `vanished` row) | 0 | 0 |
+| (8) base-table columns named `missing_since%` | 0 | 0 |
+| (7) `phase19_132` body | passes | passes |
