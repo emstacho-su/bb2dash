@@ -272,3 +272,18 @@ ok, `last synced 4 hrs ago`; no `streams` key, `last synced 5 min ago · last ru
 
 `git diff --numstat main -- web/src/lib/queries.sync.ts` → `16	7` (was `14	6`; this fix adds 5 and
 removes 4 lines: the import is split over two lines to stay one line longer, not seven).
+
+### R2-7 (MEDIUM) — the interrupted toast says what happened and opens the Inbox
+
+`desktop/src/core/poller/reducer.ts`: a `failed` run with `interrupted === true` toasts title
+"Sync interrupted", body "The crawl did not finish. Nothing from it was folded in; your Inbox has
+the details." (`SYNC_INTERRUPTED_BODY`), route `/inbox` (`INBOX_ROUTE`) whatever its summary says,
+because 136 raises the Inbox item outside the run's summary. A failed run that was not reaped keeps
+"Sync failed", its first error and the summary-driven route. `LANDED_STATUSES` is untouched, so
+`running` never toasts (its round-1 test still passes).
+
+Check: `npx vitest run test/unit/reducer.test.ts test/unit/sources.test.ts` (from `desktop/`)
+
+* RED (tests first; round 1's interrupted expectation updated to the new body and route):
+  `Test Files  1 failed | 1 passed (2)` · `Tests  2 failed | 93 passed (95)`.
+* GREEN: `Test Files  2 passed (2)` · `Tests  95 passed (95)`

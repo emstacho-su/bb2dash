@@ -137,21 +137,41 @@ describe('rule 1 — sync landed', () => {
 describe('rule 1 — an interrupted sync', () => {
   const reaped = () => syncRow({ status: 'failed', interrupted: true, summary: null });
 
-  it('titles a reaped run "Sync interrupted", not "Sync failed"', () => {
+  /** Round 2, R2-7: the body says what happened, and the click opens the Inbox item 136 raised. */
+  const INTERRUPTED_BODY =
+    'The crawl did not finish. Nothing from it was folded in; your Inbox has the details.';
+
+  it('titles a reaped run "Sync interrupted", says the crawl did not finish, and opens the Inbox', () => {
     const { toasts } = reduce(input({ sync: reaped() }));
     expect(toasts).toHaveLength(1);
     expect(toasts[0]).toEqual({
       key: 'sync:41',
       title: 'Sync interrupted',
-      body: 'No error detail was recorded.',
-      route: '/',
+      body: INTERRUPTED_BODY,
+      route: '/inbox',
     });
   });
 
-  it('keeps "Sync failed" for a failed run that was not reaped', () => {
+  it('opens the Inbox even though the reaped run raised nothing in its own summary', () => {
+    const withSummary = syncRow({
+      status: 'failed',
+      interrupted: true,
+      summary: { changes: [], attention_raised: 0, errors: ['crawl: tab closed'] },
+    });
+    const toast = reduce(input({ sync: withSummary })).toasts[0];
+    expect(toast?.route).toBe('/inbox');
+    expect(toast?.body).toBe(INTERRUPTED_BODY);
+  });
+
+  it('keeps "Sync failed", its first error and Home for a failed run that was not reaped', () => {
     const failed = { changes: [], attention_raised: 0, errors: ['files: timeout'] };
     const notReaped = syncRow({ status: 'failed', interrupted: false, summary: failed });
-    expect(reduce(input({ sync: notReaped })).toasts[0]?.title).toBe('Sync failed');
+    expect(reduce(input({ sync: notReaped })).toasts[0]).toEqual({
+      key: 'sync:41',
+      title: 'Sync failed',
+      body: 'files: timeout',
+      route: '/',
+    });
   });
 
   it('keeps "Sync failed" for a row that carries no interrupted column (before 137)', () => {
