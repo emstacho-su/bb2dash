@@ -415,3 +415,34 @@ run after the applies with the full suite.
 After the applies: `phase19_132`, `phase19_138`, `phase19_139`, `phase19_131` and
 `phase19_133` green; `phase18_124`'s pin moved to 139's body (expected
 `ba31b9cb3be68f3ae7ee277258dcb271`) and green; full suite.
+
+## After the PM applied 138 and 139 (2026-10-03, about 18:00Z), APPLIED
+
+Prod read by W-52: all ten Phase 19 migrations recorded, md5 prefixes
+130 `3a5a3269`, 131 `24670dbb`, 132 `9189a345`, 133 `3fb82588`, 134 `77268e7d`, 135 `adc27d3b`,
+136 `9feca071`, 137 `30ff4742`, 138 `eded5cb4`, 139 `54ea43dc`. `stage_content` `md5(prosrc)` =
+`ba31b9cb3be68f3ae7ee277258dcb271`, as predicted; `material_history_record`
+`1bd8b046c1da6191cae67a339c220550`.
+
+`phase18_124` assertion (4) pinned to `ba31b9cb3be68f3ae7ee277258dcb271` (`fd39dea`).
+`origin/feat/content-history-19` merged in before the full suite (`2d9289b`), so it includes
+W-53's `phase19_135_136_sync_driver` and `phase19_137_sync_status`.
+
+```
+$ node scripts/db-test.mjs --only <unit>      (one at a time, 2026-10-03)
+PASS  phase19_131_stage_content_item_key.sql
+PASS  phase19_132_material_history.sql
+PASS  phase19_133_course_stream_history.sql
+PASS  phase19_134_sync_change_lines.sql
+PASS  phase19_138_material_history_counts.sql
+PASS  phase19_139_stage_content_rekey.sql
+PASS  phase18_124_stage_files_replay.sql
+PASS  phase10a_stage_gradebook.sql
+PASS  phase17_110_course_stream.sql
+PASS  phase17_115_sync_change_lines.sql
+PASS  phase9_transform_states.sql
+
+$ node scripts/db-test.mjs
+db-test: passed 56, failed 0, units 56
+exit 0
+```
