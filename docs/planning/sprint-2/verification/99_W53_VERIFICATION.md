@@ -198,3 +198,31 @@ $ grep -c "runAll({ termName: 'Fall 2026', runId })" skills/bb-sync/SKILL.md
 $ grep -c "136's terminal rule closes it within 30 minutes and raises the one Inbox item" skills/bb-sync/SKILL.md
 1
 ```
+
+## A live interrupted run, seen while waiting (2026-10-03)
+
+Request 580 was inserted `claimed` with `run_id` `c2789684-…` at 17:22:26 UTC (register-first
+shape). The trigger opened `sync_runs` 592 as `running` 3 ms later. No `bb_raw` row ever
+landed. At 17:54:00 the tick's terminal rule closed it:
+- run 592: `failed`, `interrupted_at` set, notes `interrupted (reaped)`;
+- request 580: `failed`, `result = {"error": "interrupted", "sync_run_id": 592}`;
+- exactly one open item, 2636: `stack_must_confirm`, entity `agent_request`, ref
+  `agent_request:580`, raised_by 592, null course and field;
+- `v_sync_status` read `interrupted = true`, `status = failed`.
+
+`history` stage rows were still 0. The full suite below waited for this request to close: the
+driver unit refuses to run while a real sync is claimed.
+
+## Full suite, on the merged branch (`f2cd3f7` + task 17)
+
+```
+$ node scripts/db-test.mjs
+...
+PASS  phase19_135_136_sync_driver.sql
+PASS  phase19_137_sync_status.sql
+PASS  phase9_transform_states.sql
+db-test: passed 54, failed 0, units 54
+exit=0
+```
+
+Baseline before the phase: `passed 47, failed 0, units 47`. The 7 added units are Phase 19's.
