@@ -89,74 +89,77 @@ Then tell Stack in one line: the session expired, log in to Blackboard and press
 `on conflict do nothing` is load-bearing — migration 031's unique key means a second expiry while
 the first is still open is the same row, not a second one.
 
-## Step 2 — Claim the request
+## Step 2 — Claim the request and register the run
 
 ```sql
 update agent_requests
-   set state = 'claimed', claimed_at = now(), claimed_by = 'bb-sync session'
+   set state = 'claimed', claimed_at = now(), claimed_by = 'bb-sync session',
+       run_id = gen_random_uuid()
  where id = $1 and state = 'queued'
-returning id, kind, scope;
+returning id, kind, scope, run_id;
 ```
 
+One update does both: it claims the request and registers the crawl's `run_id`. Keep the
+`run_id` it returns; step 3 crawls under it. Registration is what authorises the fold: the
+scheduled transform folds **only** crawls whose `run_id` sits on an owner-claimed request, and an
+unregistered crawl is quarantined, never folded. The same update opens the run's `sync_runs` row
+as `running` (trigger `agent_requests_open_sync_run`, migration 135), so Home reads "sync running"
+from this moment.
+
 No row back means someone already claimed it or Stack cancelled it: say so and stop rather than
-running a second crawl. With no id at all, insert one first
-(`insert into agent_requests (kind, scope, state) values ('sync','all','claimed')`) so the run is
-still auditable.
+running a second crawl. With no id at all, insert one already claimed and registered, so the run
+is still auditable:
+
+```sql
+insert into agent_requests (kind, scope, state, claimed_at, claimed_by, run_id)
+values ('sync', 'all', 'claimed', now(), 'bb-sync session', gen_random_uuid())
+returning id, run_id;
+```
+
+Always a fresh run id: never reuse one from an earlier crawl. An id the transform has already
+quarantined is refused (SQLSTATE 42501) and the claim does not happen.
 
 ## Step 3 — Crawl
 
-In the logged-in tab:
+In the logged-in tab, with `runId` set to the `run_id` step 2 returned:
 
 ```js
-const { run_id, log } = await bb.runAll({ termName: 'Fall 2026' });
+const { run_id, log } = await bb.runAll({ termName: 'Fall 2026', runId });
 ```
 
-One `bb_raw` row per course plus a memberships row and a calendar row, all under one new `run_id`.
-PASS: 7 course rows and the calendar row, every POST status 201. The calendar row is posted last and
-is what the transform's crawl-complete detection looks for, so **never** interrupt a run part-way and
-call it done.
+One `bb_raw` row per course plus a memberships row and a calendar row, all under the registered
+run id; the `run_id` that comes back is the same id (if it is not, stop and report). PASS: 7 course
+rows and the calendar row, every POST status 201. The calendar row is posted last, and it is the
+only thing that makes the transform fold a registered run (migration 136: no idle timer), so a
+crawl that stops part-way is never folded half-done. **Never** interrupt a run part-way and call
+it done.
 
-Record the `run_id`. Report the per-course log line by line.
+Report the per-course log line by line.
 
-**Do not pass `runId` and register before the crawl.** `runAll` accepts one, and registering first
-is the order the authorisation rule would prefer — but it is not safe yet, and the reason is in the
-driver: `transform_tick` (migration 044) folds a **registered** run as soon as one of its `bb_raw`
-rows is more than three minutes old, with no completeness check. Register first, and a slow crawl
-(version 4 walks three requests per submitted column, plus a full-item GET per assessment, so it is
-slower still than version 3's single probe) can be folded with one course
-landed; `run_transform` is idempotent, so the remaining six are then dropped for good. Register-first
-becomes correct the moment the tick requires the `calendar` row for a registered run — a Phase 9
-driver change, not this phase's. Until then step 3a below is the order, and migration 039's grace
-window covers the gap exactly as it always has.
-
-## Step 3a — Register the run id, immediately (authorises the fold)
-
-The scheduled transform folds **only** crawls whose `run_id` sits on an owner-claimed request
-(`agent_requests.run_id`, migration 035). An unregistered crawl is quarantined, never folded.
-Do this the moment `bb.runAll` returns, before anything else:
-
-```sql
-update agent_requests set run_id = $run_id where id = $1 and state = 'claimed';
-```
-
-REST equivalent with the owner's JWT: `PATCH /rest/v1/agent_requests?id=eq.<id>` with body
-`{"run_id":"<uuid>"}`. If this update touches no row, stop and report: the request is no longer
-claimed and the crawl will be quarantined by the next tick (harmless, but nothing lands).
+**If the crawl fails.** If `runAll` throws or the tab closes, report it and leave the request `claimed`; 136's terminal rule closes it within 30 minutes and raises the one Inbox item.
+Then stop: do not run step 4, 4b or 5, and do not close the request yourself. The terminal rule
+closes a request, and raises its Inbox item, only while the request is still `claimed`; a request
+this skill closed would leave Stack no Inbox item. Nothing is retried under the same run id either:
+the next sync is a new request with a new one. Tell Stack in one line where the crawl stopped and
+that the Sync button frees itself within about half an hour.
 
 ## Step 4 — Wait for the transform
 
-The cron picks the run up within two minutes. Poll every 30 seconds, up to ten minutes:
+The run already has its `sync_runs` row: step 2 opened it as `running`. The cron folds it within
+two minutes of the calendar row landing. Poll every 30 seconds, up to ten minutes:
 
 ```sql
 select id, run_id, status, started_at, finished_at, summary, open_attention
   from v_sync_status;
 ```
 
-- `status = 'running'` for the crawl's `run_id`: keep waiting, post a progress line.
-- `status in ('ok','partial','failed')`: done, go to step 5.
-- Ten minutes with no `sync_runs` row for the `run_id` at all: the tick is not firing. Do not run
-  the transform by hand and do not invent one — check `select * from cron.job` and
-  `cron.job_run_details`, report what you find, and leave the request `claimed`.
+- `status = 'running'` for this crawl's `run_id`: the fold has not happened yet; keep waiting and
+  post a progress line.
+- `status in ('ok','partial','failed')` for this `run_id`: done, go to step 4b.
+- Ten minutes and the row is still `running`: the tick is not folding. Do not run the transform
+  by hand and do not invent one — check `select * from cron.job` and `cron.job_run_details`, and
+  that `bb_raw` holds this run's `calendar` row; report what you find, and leave the request
+  `claimed`.
 - `partial` means some stage failed. Read `sync_stage_runs` for that `sync_run_id` and name the
   failing stage and its `error` in the report. A partial run is still a real result.
 

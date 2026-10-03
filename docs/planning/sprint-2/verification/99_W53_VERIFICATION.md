@@ -178,3 +178,23 @@ SQL checks:
 The "right after task 27" half of task 16 (`history` → `fresh`) is the PM's. When these were read,
 a real register-first sync was in flight: request 580, inserted `claimed` with `run_id`
 `c2789684-…` at 17:22:26 UTC. The two pre-fold values above were read while 0 `history` rows existed.
+
+## Task 17 — the skill goes register-first (after 136 was applied)
+
+`skills/bb-sync/SKILL.md`, steps 2, 3, 3a and 4 only (every diff hunk sits between the `## Step 2`
+and `## Step 4b` headings). Step 2 claims and sets `run_id = gen_random_uuid()` in one update
+(and the no-id insert carries both); step 3 passes `runId` and carries the failure path verbatim,
+then stops without step 4, 4b or 5; step 3a is gone; step 4 waits on the `running` row step 2
+opened. One wording fix inside step 4: a finished run now goes to step 4b, not straight to step
+5, which skipped the file pull Phase 18 put between them. `~/.claude/skills/` was not touched.
+
+```
+$ grep -c '^## Step 3a' skills/bb-sync/SKILL.md
+0
+$ grep -c 'Do not pass' skills/bb-sync/SKILL.md
+0
+$ grep -c "runAll({ termName: 'Fall 2026', runId })" skills/bb-sync/SKILL.md
+1
+$ grep -c "136's terminal rule closes it within 30 minutes and raises the one Inbox item" skills/bb-sync/SKILL.md
+1
+```
