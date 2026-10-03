@@ -141,6 +141,7 @@ export function startRunner(d: RunnerDeps): { stop(): Promise<void>; done: Promi
           fs: fs.promises,
           tmpDir: config.tmpDir,
           courseFilesDir: config.courseFilesDir,
+          loginCheck: () => loginWatch.check('files'),
           log: d.log,
         }),
       mintRunId,

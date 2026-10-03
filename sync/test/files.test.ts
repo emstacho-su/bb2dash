@@ -89,6 +89,7 @@ function ports(rows: WorklistRow[], over: Partial<FilesPorts> = {}) {
     fs: { mkdir: fs.promises.mkdir, rename: fs.promises.rename, copyFile: fs.promises.copyFile, unlink: fs.promises.unlink, readFile: fs.promises.readFile },
     tmpDir,
     courseFilesDir: courseDir,
+    loginCheck: vi.fn(async () => 'alive' as const),
     log: () => {},
     ...over,
   };
@@ -122,15 +123,37 @@ describe('the files step', () => {
     expect(stored[0]).toMatchObject({ key: 'IST.323/assignment_spec/HW _2.pdf', relpath: 'IST.323/assignment_spec/HW #2.pdf' });
   });
 
-  it.each([401, 403])('session_expired (%i at the first hop) stops the step: later rows are not tried', async (status) => {
+  it.each([401, 403])('session_expired (%i at the first hop) with a dead re-probe stops the step: later rows are not tried', async (status) => {
     const rows = [row('21'), row('22'), row('23')];
-    const { p, stored } = ports(rows, { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-22_1': status }) });
+    const loginCheck = vi.fn(async () => 'dead' as const);
+    const { p, stored } = ports(rows, { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-22_1': status }), loginCheck });
     const r = await runFilesStep(p);
     expect(r.stopped).toBe('session_expired');
+    expect(loginCheck).toHaveBeenCalledTimes(1);
     expect(stored.map((s) => s.id)).toEqual(['21']);
     expect(r.files.pulled).toBe(1);
     expect(r.files.not_pulled).toEqual([{ id: '22', reason: `session_expired: status ${status}` }]);
     expect(p.hop).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 403])('R2 item 3: one file\'s %i with users/me still 200 is that file refused, and the step goes on', async (status) => {
+    const rows = [row('24'), row('25'), row('26')];
+    const loginCheck = vi.fn(async () => 'alive' as const);
+    const { p, stored } = ports(rows, { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-25_1': status }), loginCheck });
+    const r = await runFilesStep(p);
+    expect(r.stopped).toBeNull();
+    expect(loginCheck).toHaveBeenCalledTimes(1);
+    expect(stored.map((s) => s.id)).toEqual(['24', '26']);
+    expect(r.files.not_pulled).toEqual([{ id: '25', reason: `refused: status ${status} at the first hop, but the login check passed` }]);
+  });
+
+  it('R2 item 3: a re-probe that does not answer is not a dead login either', async () => {
+    const loginCheck = vi.fn(async () => 'error' as const);
+    const { p } = ports([row('27'), row('28')], { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-27_1': 401 }), loginCheck });
+    const r = await runFilesStep(p);
+    expect(r.stopped).toBeNull();
+    expect(r.files.pulled).toBe(1);
+    expect(r.files.not_pulled[0]!.reason).toBe('refused: status 401 at the first hop, and the login check did not answer');
   });
 
   it('gone (404) is reported in not_pulled and never reaches sync_file_stored', async () => {

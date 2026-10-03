@@ -502,3 +502,15 @@ on to the text POST and `sync_file_stored`; a submission's stays "never done". A
 RED   files.test.ts   2 failed | 22 passed  (a course Duplicate; upload-then-text-fails, then a second pass)
 GREEN files.test.ts   24 passed; tsc exit 0
 ```
+
+### Item 3 — one file's 401/403 is not a dead login
+
+On a first-hop 401/403 the files step asks the login watch's `check('files')` (users/me, with the
+silent re-login): `dead` stops the step (the watch's alive → dead path raises the login item); `alive`
+reports that file `refused: status <n> at the first hop, but the login check passed` and goes on; no
+answer is not a dead login either.
+
+```
+RED   files.test.ts   5 failed | 22 passed
+GREEN files.test.ts   27 passed; the whole sync suite 119 passed; tsc exit 0
+```

@@ -10,7 +10,8 @@
  *   * move the download from tmpfs into course-files (copy-then-unlink on EXDEV, P-104);
  *   * extract with the locked `extract_text.py` project, POST the units to `bb_file_text`;
  *   * record the row through `sync_file_stored(…)`, which writes the prefixes itself.
- * A `session_expired` outcome (401/403 at the first hop) stops the step; `gone`, `refused` and a
+ * A 401/403 at the first hop stops the step only when the login check then finds users/me dead
+ * (R2 item 3); otherwise that file is `refused`; `gone`, `refused` and a
  * submission's Storage 409 go to the report's `not_pulled`. Keys and checks are `ingest/pull_files.mjs`'s
  * exported pure helpers; its `main`, whose update SQL is the owner's, is never run.
  *
@@ -38,6 +39,7 @@ import {
   textRows,
 } from '../../ingest/pull_files.mjs';
 import type { FileStoredArgs, SyncRpc, WorklistRow } from './db.js';
+import type { Verdict } from './login.js';
 import type { FilesStepResult } from './loop.js';
 import type { NotPulled } from './report.js';
 
@@ -89,6 +91,8 @@ export interface FilesPorts {
   tmpDir: string;
   /** The course-files volume, mounted at `/app/course context`. */
   courseFilesDir: string;
+  /** The login watch's check (users/me, with its silent re-login), asked when a file answers 401/403. */
+  loginCheck(): Promise<Verdict>;
   log(line: string): void;
 }
 
@@ -131,7 +135,14 @@ async function pullOne(row: WorklistRow, p: FilesPorts): Promise<RowResult> {
   if (!dest) return { pulled: false, reason: 'unsafe relpath' };
 
   const chain = await resolveSignedUrl(p.hop, row.source_url);
-  if (chain.outcome === 'session_expired') return { pulled: false, reason: `session_expired: ${chain.reason}`, stop: true };
+  if (chain.outcome === 'session_expired') {
+    // R2 item 3: one file's 401/403 is not a dead login. Only a dead users/me (after the watch's
+    // silent re-login) stops the step; otherwise this one file was refused.
+    const verdict = await p.loginCheck();
+    if (verdict === 'dead') return { pulled: false, reason: `session_expired: ${chain.reason}`, stop: true };
+    const why = verdict === 'alive' ? 'but the login check passed' : 'and the login check did not answer';
+    return { pulled: false, reason: `refused: ${chain.reason} at the first hop, ${why}` };
+  }
   if (chain.outcome !== 'ok' || !('signedUrl' in chain) || typeof chain.signedUrl !== 'string') {
     return { pulled: false, reason: `${chain.outcome}: ${chain.reason ?? 'no signed URL'}` };
   }
