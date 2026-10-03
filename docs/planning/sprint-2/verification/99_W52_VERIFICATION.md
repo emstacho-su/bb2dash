@@ -534,3 +534,36 @@ exit 0
 ```
 
 `phase19_132` and `phase19_138`, traced by hand before the apply, pass under 170 as expected.
+
+## Round 4: migration 172, LTI items (Kaltura videos) as Stream links (2026-10-03)
+
+Stack: "Videos don't need to be downloaded and stored... Only keep the link to it." Live reads:
+`v_course_stream` viewdef md5 `8059c79fce2db2c316c3cb7de49f579b`, `material_history_record`
+`md5(prosrc)` `af19c79f8e00a9608f220dd8986e4bd5` (both 170's).
+
+Test first: `phase19_172_stream_lti.sql` (`5662f22`, fixed in `e65828a`: the single-post check
+runs while the video is live, since a vanished node leaves the Stream by 110's rule). RED against
+live 170:
+
+```
+FAIL  phase19_172_stream_lti.sql  FAIL phase19_172: (1) crawl 2 posts (none); (1) the video does not post exactly once; (2) crawl 2 returned {"sample": [], "changed": 0, "appeared": 0, ...}; (3) crawl 3 returned {... "vanished": 0 ...}
+```
+
+Block (4), nothing is fetched for a video, already holds: `stage_files` on the fixture crawl
+catalogues no `bb_files` row and the history has no `file` row for the item.
+
+172 (`edc0f08`) is 170's view and function text with `'lti'` added to the content arm's kinds
+and to the vanished rule's kinds, plus their comments; the diff against 170 is those lines only.
+
+DRY RUN (one rolled-back call; both changes applied to the live 170 bodies by text
+substitution, then the body of `phase19_172`): passed. Same 8 columns; material posts 69 → 71,
+0 lost. The two history rows that newly post: IST.323 "IST-323 Lab #2 Tips" (content 3341,
+`appeared`, run `3a7b8572`) and "Orange Instant Access (course textoobk ebooks)" (content
+102, `changed`, run `6b122650`).
+
+Expected `md5(prosrc)` of 172's `material_history_record`, computed locally:
+`bdc2844aa109a166af24a3bef93adbbc`.
+
+| migration | apply the blob at | `git show <sha>:db/migrations/172_stream_lti_materials.sql \| md5sum` | bytes |
+|---|---|---|---|
+| `172_stream_lti_materials` | `edc0f08` (unchanged at HEAD) | `cc483bff25feca48870f14b605bc7ee1` | 25863 |
