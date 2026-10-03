@@ -623,3 +623,27 @@ Not changed, with the reason:
 * No DECISIONS rows yet for 130/131: task 29, written before the PR.
 
 Order: 138 then 139 (138 does not touch `stage_content`; prod order equals name order). Both are dry-run in `begin; … rollback;`, handed to the PM with SHA and md5, and applied by the PM under Stack's standing approval. 138 and 139 use the last two numbers of this phase's block; a third fix takes the next free block of ten (94 §2 rule 6).
+
+## Round 3 (2026-10-03, from the second `/code-review main high` pass)
+
+The second pass covered the whole branch at 426c590 and after (130–139, web, desktop, skill, docs): 15 findings. Migrations 130–139 are all on prod, so this phase's block is used up; round 3 takes the next free block, **170–179** (94 §2 rule 6; 140–149 is Phase 21's, 150–159 and 160–169 are the overflow blocks of 17 and 18), recorded in its own DECISIONS row. Triage:
+
+| R3 | Finding | Severity | Owner | Fix |
+|---|---|---|---|---|
+| R3-1 | 138's `older_run` (a newer registered crawl that was *folded*) differs from the test `stage_content`, `stage_files` and `stage_gradebook` use (a newer registered crawl with `bb_raw` rows). History can be written for a run whose own stages refused, leaving `appeared` file rows with a null `bb_file_id` that never post. | MEDIUM | W-52 | `material_history_record` re-created with exactly `stage_content`'s predicate (round 2's "folded" narrowing was the PM's wording, withdrawn). |
+| R3-2 | A file history row's `bb_file_id` is looked up once, when written; if `stage_files` failed in that fold, the file never posts on the Stream. | MEDIUM | W-52 | `v_course_stream`'s file arm resolves a null `bb_file_id` at read time from `v_bb_files_current` on `(course_id, content_id = bb_item_id, file_name)`. |
+| R3-3 | Path-only `changed` rows written before 138 (the 132 backfill) still post "Changed" for items whose folder was renamed. | MEDIUM | W-52 | A data step deletes each content `changed` row whose `changed_fields` is exactly `{path}` when, recomputed from `bb_raw`, the item's own `parentId` and title are equal in the run and its predecessor (138's rule). History is derived from `bb_raw`, so the rows are recomputable; the count goes in the verification file (10 candidates on 2026-10-03). Replaces round 2's "kept". |
+| R3-4 | Activity (138: files plus document and link items no file row of the run covers) and the Stream (133: document, link and file items no `bb_files` row claims) count different things. | MEDIUM | W-52 | One test for both: Activity counts exactly what the Stream would post for that run (file rows, plus content rows of kind `document`, `link` or `file` that no `bb_files` row claims). |
+| R3-5 | 139 re-keys onto ANY stored row the crawl does not carry, including rows missing for weeks, so a different item later posted at a reused path inherits the old row's assignment link. | HIGH | W-52 | Re-key only onto a row that is not already stamped `missing_since`: the rule is for an item deleted and re-posted between two crawls. `stage_content` re-created from 139's body with that one condition; test first (a weeks-old ghost at the same path is not re-keyed). |
+| R3-6 | The skill's step 4 treats any `failed` as done, so after the terminal rule reaps a run the skill would still pull files and step 5 would overwrite the reaper's result. | MEDIUM | W-53 | Step 4: when `v_sync_status.interrupted` is true for the run, report it and stop (the terminal rule already closed the request and raised its Inbox item). Step 5's update gains `and state = 'claimed'`. Text only. |
+| R3-7 | If the Stream query fails, the "New and changed materials" block vanishes with no message. | MEDIUM | W-54 | The block shows a one-line error when `useCourseStream` fails, as other blocks do. |
+| R3-8 | `queries.sync.ts` imports `./sync-run-state` in two statements. | LOW | W-54 | One import. |
+| R3-9 | 132/138's predecessor lookup scans and detoasts every past course payload on every fold; 133's file arm sorts every course's file history before the course filter applies. | LOW | W-52 | Only if results stay identical (the tests prove it): narrow to registered, folded run ids before touching `bb_raw` payloads, and let the course filter reach the file arm. Otherwise leave it and say so. |
+
+Not changed, with the reason:
+* 130's two-ghosts-with-different-links case: same as round 2 (applied; every pair had one ghost).
+* The terminal rule counting from the claim, so a crawl that stalls past 30 minutes and then completes is not folded: the rule Stack approved ("interrupted at 30 min"); a crawl takes about a minute; the data stays in `bb_raw` and the next sync re-crawls. Named in the PR.
+* The interrupted toast promising an Inbox item when the request was no longer `claimed`, and the drain picking a reaped run whose calendar row landed late: both need the same rare stall; R3-6's step 5 guard removes the main way a request leaves `claimed` early. Named in the PR.
+* Shared SQL helpers for the item-kind map, title fallback and newest-crawl test: a refactor across 043/056/131/132; R3-1 removes the divergence that mattered. Left for a later phase.
+
+Order: W-52's migrations are 170 (`material_history_record`, the data step, `v_course_stream`) and 171 (`stage_content`), applied by the PM in that order after dry runs, with no sync in flight. W-53 and W-54 need no migration.
