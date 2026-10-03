@@ -11,7 +11,8 @@
  *      "Changed" and dated by that crawl. The rows are `v_course_stream`'s
  *      material arm, which migration 133 feeds from `bb_material_history`.
  *      A course with no such post gets no block at all; a failed read gets a
- *      one-line error in it (R3-7);
+ *      one-line error in it (R3-7). A file opens through the shared ladder; a
+ *      link item at its own url; a video (lti) or document in Blackboard (R4);
  *   3. the course timeline (R3-4): the week-divided two-lane view that was
  *      Classwork's `?view=timeline`. Classes on the left, with their files and
  *      the announcements posted that week; assignments on the right, with
@@ -31,6 +32,7 @@ import {
   useCourseWorkItems,
   type CourseStreamRow,
 } from '@/lib/queries.course';
+import { blackboardLink } from '@/lib/blackboard-link';
 import { UNKNOWN_ROUTE, type FileRoutes, type RouteValue } from '@/lib/queries.materials';
 import {
   trackerWindowStart,
@@ -124,11 +126,74 @@ function streamFileRoutes(row: CourseStreamRow): FileRoutes {
   };
 }
 
+/* -- content posts: where they open (round 4) ------------------------------ */
+
+/** Where a content post opens, and what the control says. */
+export interface ContentPostLink {
+  href: string;
+  label: string;
+}
+
+/** The schemes a link item's own url may carry. */
+const EXTERNAL_PROTOCOLS: ReadonlySet<string> = new Set(['https:', 'http:']);
+
+const OPEN_LINK_LABEL = 'Open ↗';
+const OPEN_IN_BLACKBOARD_LABEL = 'Open in Blackboard ↗';
+
+/** The item kinds that open in Blackboard rather than at a url of their own. */
+const OPENS_IN_BLACKBOARD: ReadonlySet<string> = new Set(['lti', 'document']);
+
+/** A parsed http(s) URL, or null for anything absent, blank, malformed or of another scheme. */
+function externalUrl(raw: string | null | undefined): URL | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return EXTERNAL_PROTOCOLS.has(url.protocol) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where a `bb_content` post opens (Stack, 2026-10-03: "Videos don't need to be
+ * downloaded and stored... Only keep the link to it."):
+ *
+ *   link             its own url, when that parses as http or https
+ *   lti, document    the course's Blackboard page, the same `v_course_display.bb_url`
+ *                    the course header's "Blackboard ↗" opens, checked by
+ *                    `blackboardLink` (https only). Never an LTI launch url: a
+ *                    Kaltura launch does not play outside Blackboard.
+ *   anything else    no link. A file post keeps its own Open ladder.
+ *
+ * Every href is a parsed URL's `href`; no item is ever downloaded from here.
+ */
+export function contentPostLink(
+  row: CourseStreamRow,
+  course: { bb_url?: string | null } | null | undefined,
+): ContentPostLink | null {
+  if (row.ref_kind !== 'bb_content') return null;
+  const kind = row.meta?.item_kind;
+  if (kind === 'link') {
+    const url = externalUrl(row.meta?.url);
+    return url === null ? null : { href: url.href, label: OPEN_LINK_LABEL };
+  }
+  if (typeof kind === 'string' && OPENS_IN_BLACKBOARD.has(kind)) {
+    const link = blackboardLink(null, course);
+    return link === null ? null : { href: link.href, label: OPEN_IN_BLACKBOARD_LABEL };
+  }
+  return null;
+}
+
 /* -- material history: the block ------------------------------------------- */
 
-function MaterialPost({ row }: { row: CourseStreamRow }) {
+/** The course's Blackboard page, as `v_course_display` carries it. */
+type CourseBlackboard = { bb_url?: string | null } | null;
+
+function MaterialPost({ row, course }: { row: CourseStreamRow; course: CourseBlackboard }) {
   const label = materialChangeLabel(row.meta?.change);
   if (label === null) return null;
+  const link = contentPostLink(row, course);
   return (
     <li className={styles.materialRow} data-change={row.meta?.change ?? undefined}>
       <span className={label === 'New' ? styles.changeNew : styles.changeChanged}>{label}</span>
@@ -140,15 +205,20 @@ function MaterialPost({ row }: { row: CourseStreamRow }) {
       {row.ref_kind === 'bb_file' && (
         <FileOpenAction routes={streamFileRoutes(row)} className={tokens.btnGhost} />
       )}
+      {link && (
+        <a className={tokens.btnGhost} href={link.href} target="_blank" rel="noopener noreferrer">
+          {link.label}
+        </a>
+      )}
     </li>
   );
 }
 
-function MaterialList({ posts }: { posts: readonly CourseStreamRow[] }) {
+function MaterialList({ posts, course }: { posts: readonly CourseStreamRow[]; course: CourseBlackboard }) {
   return (
     <ul className={styles.materialList}>
       {posts.map((row) => (
-        <MaterialPost key={materialPostKey(row)} row={row} />
+        <MaterialPost key={materialPostKey(row)} row={row} course={course} />
       ))}
     </ul>
   );
@@ -164,7 +234,15 @@ export const MATERIALS_LOAD_ERROR = "Couldn't load new and changed materials.";
  * error line when the read failed (with any posts a previous read left in the
  * cache still listed under it).
  */
-function MaterialHistory({ posts, failed }: { posts: readonly CourseStreamRow[]; failed: boolean }) {
+function MaterialHistory({
+  posts,
+  failed,
+  course,
+}: {
+  posts: readonly CourseStreamRow[];
+  failed: boolean;
+  course: CourseBlackboard;
+}) {
   if (posts.length === 0 && !failed) return null;
   const shown = posts.slice(0, MATERIAL_POSTS_SHOWN);
   const earlier = posts.slice(MATERIAL_POSTS_SHOWN);
@@ -178,11 +256,11 @@ function MaterialHistory({ posts, failed }: { posts: readonly CourseStreamRow[];
           {MATERIALS_LOAD_ERROR}
         </p>
       )}
-      {shown.length > 0 && <MaterialList posts={shown} />}
+      {shown.length > 0 && <MaterialList posts={shown} course={course} />}
       {earlier.length > 0 && (
         <details className={styles.earlier}>
           <summary>{earlier.length} earlier</summary>
-          <MaterialList posts={earlier} />
+          <MaterialList posts={earlier} course={course} />
         </details>
       )}
     </section>
@@ -250,7 +328,8 @@ export function CourseStream({ courseId }: { courseId: string }) {
         error={workItemsQ.error}
       />
 
-      <MaterialHistory posts={materialPosts} failed={streamQ.isError} />
+      {/* The course header's "Blackboard ↗" reads the same row (`useCourseDisplay`). */}
+      <MaterialHistory posts={materialPosts} failed={streamQ.isError} course={display.data} />
 
       <CourseTimeline courseId={courseId} />
     </div>
