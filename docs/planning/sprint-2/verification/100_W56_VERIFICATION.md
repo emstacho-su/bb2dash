@@ -294,3 +294,150 @@ The service key now lives only in `C:/Users/stack/.bb2dash-secrets/bb2dash_mcp_s
 consumer remains: `scripts/google-consent.mjs` reads `BB2DASH_SERVICE_KEY` for its one command and needs the
 **legacy service-role JWT** (its line 229: the gateway rejects an `sb_secret_` Bearer), not this file's key;
 it is fed from the Supabase dashboard when the calendar token is re-minted.
+
+## Task 18 — `syncLauncher` and the login prompt (branch `feat/containers-14-launcher`)
+
+Worktree `C:/Users/stack/projects/bb2dash-wt-containers-14-launcher`, cut from `origin/main` f86c818
+(Phase 19 merged). Commit 9200aaf, pushed; it ships as its own early PR to `main`. Recorded here because
+the launcher branch carries code only. The real desktop app was not launched and no browser tab was opened:
+`electron` is mocked, and the password file read and `openExternal` are injected in every case.
+
+Baseline on f86c818: `cd desktop && npx vitest run` → `Test Files 36 passed (36)`, `Tests 708 passed (708)`;
+`npm run typecheck` → exit 0.
+
+### RED (tests first)
+
+```
+cd desktop && npx vitest run test/unit/config.test.ts test/unit/sync-launcher.test.ts test/unit/login-prompt.test.ts test/unit/audit.test.ts test/unit/navigation-policy.test.ts
+  FAIL  test/unit/login-prompt.test.ts: Error: Cannot find module '/src/core/login-prompt'
+  FAIL  audit.test.ts > shell.openExternal has exactly two callers: expected [ 'src/main/navigation.ts' ] to deeply equal [ 'src/main/login-prompt.ts', … ]
+  FAIL  config.test.ts > CONFIG_DEFAULTS … / syncLauncher … / novncPasswordFile … (no such keys yet)
+  Test Files  5 failed (5)      Tests  23 failed | 79 passed (102)
+```
+
+### GREEN
+
+```
+the same five files             -> Test Files 5 passed (5), Tests 125 passed (125)      (0 failures)
+cd desktop && npm test          -> Test Files 38 passed (38), Tests 755 passed (755); coverage
+                                   Statements 97.12%, Branches 94.35%, Functions 97.44%, Lines 98.34% (thresholds met)
+cd desktop && npm run typecheck -> exit 0
+cd desktop && npm run build     -> exit 0
+```
+
+`login-prompt.test.ts` holds the brief's named cases: an open item id opens the page once; a second tick
+with the same id opens nothing; a new id opens again; `terminal` never opens it (no prompt is built); the URL
+carries the URL-encoded password with a BOM, CR and LF stripped; a missing file opens the bare page and
+logs the path (`ENOENT`), never a value. Also: no log line holds the password, its encoded form or
+`password=`; a browser that will not open frees the id for the next tick; a failed read changes nothing;
+a check during a check is dropped. `sync-launcher.test.ts` imports `main/index.ts` with its collaborators
+mocked: `terminal` attaches the sync watcher once, `queue-only` attaches none and wraps the poller's session
+reader.
+
+What was built:
+
+* `core/config.ts`: `syncLauncher` (`terminal` default, or `queue-only`; env `BB2DASH_SYNC_LAUNCHER`) and
+  `novncPasswordFile` (env `BB2DASH_NOVNC_PASSWORD_FILE`, default `<home>\.bb2dash-secrets\novnc_password`;
+  the brief's `bb2dash-stack/secrets` default is superseded by DECISIONS 2026-10-03), plus
+  `usesSyncTerminal(config)`.
+* `main/index.ts`: `attachSyncWatcher` only under `terminal`; under `queue-only` one log line instead.
+* `core/login-prompt.ts`: `LOGIN_PAGE_URL`, `loginPageUrl(password | null)`, `newLoginItems(openIds,
+  promptedIds)`, the frozen query `attention_items?select=id&ref=eq.sync-login-required&state=eq.open`, the
+  password-file text rule and the row validator. No `fs`, no `electron` (C-13).
+* `main/login-prompt.ts`: reads the item on each poller tick. The check rides the poller's session read
+  (`withLoginPromptCheck` wraps `getSession`), so launch, interval, focus, resume and *Check now* ticks all
+  look, and the poller's own files (`core/poller/*`, `poller-wiring.ts`) are unchanged. The prompted ids live
+  in memory, like the sync watcher's: after an app restart an item still open opens the page once more.
+  Under `BB2DASH_TEST=1` it records a `login-prompt` event (`unlocked: true|false`), never the URL.
+* `core/navigation-policy.ts`: `LOGIN_PAGE_ORIGIN = 'http://127.0.0.1:6080'` and `decideLoginPageOpen`,
+  which hands only that origin to `openExternal` (another port, https, `localhost`, a LAN address or the app
+  are dropped). The login page is never an in-window origin. `audit.test.ts` now pins `shell.openExternal`
+  to two callers: `main/navigation.ts` and `main/login-prompt.ts`.
+* `desktop/README.md`: the two keys and their environment variables (one file beyond the brief's list).
+
+Not run: the Playwright e2e suite (it launches the real app). `main/login-prompt.ts` is outside the unit
+coverage `include` list in `vitest.config.mts` (not on this task's file list); its cases run regardless.
+
+## Task 19 — repo hygiene and one source for the four repo skills
+
+Integration first: `git merge origin/feat/containers-14` (3284858, which carries `main` f86c818 with Phase
+19) into this branch → 8c86cdf, no conflict. Task 14's host check re-run on it:
+`node --test --test-reporter=tap ingest/extract_text.test.mjs ingest/pull_files.test.mjs` → `# tests 43`,
+`# fail 0`. Then `EXTRACT_DEPS` (`ingest/pull_files.mjs:93`, unused since task 14) was deleted → ec0cc4a,
+same `# fail 0`.
+
+### RED
+
+```
+git ls-files --eol | grep -c "i/crlf"                                   -> 1   ("fall2026 courses + context.txt")
+git check-ignore local_cache/probe secrets/novnc_password | wc -l       -> 1   (secrets/ only)
+node --test scripts/install-skills.test.mjs                             -> ERR_MODULE_NOT_FOUND …\scripts\install-skills.mjs
+```
+
+### GREEN (8dcbbc8, 8a1ce9a)
+
+```
+git ls-files --eol | grep -c "i/crlf"                                   -> 0
+git check-ignore local_cache/probe secrets/novnc_password | wc -l       -> 2
+node --test --test-reporter=tap scripts/install-skills.test.mjs         -> # tests 10, # pass 10, # fail 0
+```
+
+* `.gitattributes`: `* text=auto eol=lf` (with a comment). `git add --renormalize .` staged exactly one blob,
+  `fall2026 courses + context.txt`; `git diff --cached --ignore-cr-at-eol` on it is empty (line ends only).
+* `.gitignore`: `local_cache/` added (P-47); `secrets/` was already there, and its comment now names
+  `SECRETS_DIR`.
+* `scripts/install-skills.mjs` (+ test): `skills/<name>/` is the source for `bb-course-map`,
+  `bb-course-pull`, `bb-sync` and `inbox-apply`. It copies every file into `--target` (default
+  `<home>/.claude/skills`) and verifies each by SHA-256, the shape of the harness's
+  `hooks/install-checkpoint.mjs`. `--check` writes nothing and exits 1 on a missing or differing file; a
+  file the repo lacks is listed as `extra` and never deleted. One test assertion was corrected during GREEN:
+  it expected `drift` 0 after a first install, where `drift` counts the files that were missing or different
+  before the run (3), as the function documents; a following `--check` now asserts 0.
+
+The DoD's web count, before and after the renormalize:
+
+```
+main checkout (f86c818):   cd web && npx vitest run -> Test Files 132 passed (132), Tests 2314 passed (2314)
+this branch (8a1ce9a):     cd web && npx vitest run -> Test Files 132 passed (132), Tests 2314 passed (2314)
+a fresh clone of 8a1ce9a in the session scratchpad (the LF checkout the new .gitattributes gives):
+  git ls-files --eol (working tree)  -> 971 w/lf, 71 w/-text, 1 w/none, no w/crlf
+  cd web && npx vitest run           -> Test Files 132 passed (132), Tests 2314 passed (2314)
+  node --test ingest/extract_text.test.mjs ingest/pull_files.test.mjs scripts/install-skills.test.mjs -> # tests 53, # fail 0
+  sample.pdf byte-identical to the committed one (binary, untouched by eol=lf)
+```
+
+This worktree keeps its old CRLF working files until they are next checked out; the fresh clone is the LF
+view a new checkout gets.
+
+Read-only state of the real user skills folder (nothing written):
+
+```
+node scripts/install-skills.mjs --check
+  missing   bb-course-map/SKILL.md
+  missing   bb-course-pull/SKILL.md
+  same      bb-sync/SKILL.md
+  differs   inbox-apply/SKILL.md
+install-skills --check: 3 file(s) drift in C:\Users\stack\.claude\skills          (exit 1)
+find C:/Users/stack/.claude/skills/synced -maxdepth 2 -type d -name "bb-course-*" | wc -l   -> 2
+```
+
+### Owed to Stack (task 19), after the phase PR is on `main`
+
+```powershell
+# 1. Install the four skills from the main checkout, then prove it (one source for the bare names).
+cd C:/Users/stack/projects/bb2dash
+node scripts/install-skills.mjs            # -> install-skills: <n> file(s) written to C:\Users\stack\.claude\skills, each verified by SHA-256
+node scripts/install-skills.mjs --check    # -> install-skills --check: C:\Users\stack\.claude\skills in sync   (exit 0)
+
+# 2. Retire the claude.ai-synced copies. First remove the bb-course-map and bb-course-pull skills where they
+#    were uploaded on claude.ai, so the next sync does not bring them back; then, if the local folders remain:
+Get-ChildItem C:/Users/stack/.claude/skills/synced -Directory -Recurse -Depth 1 -Filter 'bb-course-*' | Remove-Item -Recurse -Force
+```
+
+Check (Git Bash): `find C:/Users/stack/.claude/skills/synced -maxdepth 2 -type d -name "bb-course-*" | wc -l`
+→ `0`. Step 1 comes first, so the bare names keep resolving to a copy while the synced ones go.
+
+### The PM's half (task 19): already in place
+
+`grep -c "^FASTEMBED_CACHE_DIR=" C:/Users/stack/.harness/machine.env` → `1`, value
+`C:/Users/stack/.cache/fastembed` (set before this session; nothing to run).
