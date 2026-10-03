@@ -972,3 +972,59 @@ Fix test-first, one commit per item (`fix(14-R2-<n>): …`). Items 1–3 must la
    allowed for this run.
 
 The PM adds the launcher PR's own STATUS line and the DECISIONS rows its code cites (finding 5).
+
+## Round 2 — W-55 (`feat/containers-14-sync`), from `/code-review main high` on the phase branch, 2026-10-03
+
+The runner is live (cut-over 2026-10-03 22:52Z). Fix test-first, one commit per item
+(`fix(14-R2-<n>): …`); SQL fixes go in **093** (`create or replace` of 091's functions, plus any new
+function a fix needs, with its grant to `sync_runner` and the name checks updated; 091 stays byte-frozen).
+Items 1–3 first.
+
+1. **A registered claim the runner never closed stays `claimed` forever.** A fold-wait timeout, a stop
+   during the wait, or any throw after `sync_register_run` leaves the row claimed; once the tick folds the
+   run (`ok`), 136's terminal rule (136:142–167) never touches it, `sync_requeue_orphans` skips it, and
+   `sync_enqueue` returns its id from then on, so no sync can be queued again. Fix: the runner resumes its
+   own registered, unclosed claims (on start and at the top of each pass): wait for the run's outcome,
+   run the files and embed steps if the run folded, and `sync_close` with the run's result; a run already
+   failed or interrupted closes `failed`. This needs a read of the runner's own claimed, registered rows
+   (a new 093 function returning `(id, run_id, claimed_at)` for `claimed_by = 'sync-runner'` only). Check:
+   SQL cases in the 091 unit or a new unit, and a `loop.test.ts` case for each way in (timeout, stop,
+   throw after register), each ending closed.
+2. **A Storage `Duplicate` strands a course file.** For a catalogue-keyed course file, a 409/Duplicate is
+   acceptable, as `pull_files.mjs`'s `duplicateIsAcceptable(false)` says: continue to the text POST and
+   `sync_file_stored`. Staged and submission keys keep "never done". A text POST that answers
+   409/`23505` keeps the existing units (`textPostOutcome`, 2026-10-01 row). Check: `files.test.ts` cases
+   for upload-then-text-fails followed by a second pass that records the file.
+3. **One file's 401/403 is not a dead login.** Before closing the sync `login_required`, re-probe
+   `users/me`: a 200 means that file is `refused` (reported in `not_pulled`, the step continues); only a
+   dead probe stops the step and goes through the login watch's alive → dead path. Check: cases for both.
+4. **`KEEPALIVE_MINUTES=0` blinds the watch.** 0 turns off the navigation only; the watch still probes
+   while alive, every `LOGIN_CHECK_MINUTES = 60`, so an overnight death is seen. Check: a fake-clock case.
+5. **The heartbeat proves the event loop, not progress.** Write the heartbeat from the pass loop's own
+   progress, put named timeouts on the crawl's `page.evaluate` (`CRAWL_TIMEOUT_MS`) and on the embed step
+   (`EMBED_TIMEOUT_MS`); on a timeout the pass fails cleanly. A loop that makes no progress for
+   `WATCHDOG_MS` exits non-zero so `restart: unless-stopped` restarts the container (compose does not
+   restart on unhealthy). Drop the separate interval writer and the per-iteration duplicate (item 14).
+   Check: fake-clock cases for each.
+6. **A crawl failure leaves its run `running` for 30 minutes.** When the runner closes a registered request
+   `failed`, its `sync_runs` row is marked failed in the same `sync_close` (093), with the error in
+   `notes`, so Home and Activity show the failure at once. Check: SQL case.
+7. **`claim_attempts` in the report is process-local.** Report the column's value (return it from
+   `sync_claim`'s successor in 093, or read it with the item-1 function), and drop the Map. Check: a case
+   where the third claim reports 3.
+8. **Connection-class errors keep a dead client.** Treat SQLSTATE classes `08`, `57P` and `XX000` as fatal:
+   drop and reconnect. Check: `db` test cases.
+9. **Reuse.** Call `embed_corpus.mjs`'s exported `runEmbedLoop`/`makePost` in-process instead of spawning
+   it, and build the extractor's argv with `pull_files.mjs`'s exported `extractUnits`; no child process
+   gets the parent's environment wholesale (an extractor child gets only what `uv` needs). Check: tests.
+10. **One `readTextOrNull`, and it tells unreadable from missing.** One shared helper in `secrets.ts`; ENOENT
+    → not set; EACCES and other errors → a clear error naming the path. Check: tests.
+11. **The 091 unit is 933 lines.** Split it by function group into units of at most 400 lines each (queue,
+    files, close and sweep, login and enqueue), each with its loader pair in the loader map and its own
+    `: PASS` row. Check: `node scripts/db-test.mjs` totals.
+12. **Dead state.** Drop `FilesStepResult.embedded`.
+
+Not for W-55: STATUS (the PM, task 30). 091's notice text ("attributes … are re-applied") cannot change in a
+frozen file; the PM records it.
+
+After this round the PM rebuilds the image and redeploys the live container.
