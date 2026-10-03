@@ -48,9 +48,12 @@ export const GRADES_RELATION = 'v_gradebook_history';
 export const DUE_RELATION = 'v_work_items';
 export const COURSES_RELATION = 'courses';
 
-/** R1. One row. */
+/**
+ * R1. One row. `interrupted` is appended by migration 137 (Phase 19, brief 99): PostgREST
+ * answers 400 for a column the view does not have, so this build needs 137 on prod.
+ */
 export function syncQuery(): string {
-  return 'select=id,run_id,status,started_at,finished_at,trigger,summary';
+  return 'select=id,run_id,status,started_at,finished_at,trigger,summary,interrupted';
 }
 
 /**
@@ -179,6 +182,14 @@ function nullableNum(relation: string, row: Row, field: string): number | null {
   return num(relation, row, field);
 }
 
+/** A boolean column that may be absent or null, which both read as `false`. */
+function flag(relation: string, row: Row, field: string): boolean {
+  const value = row[field];
+  if (value === null || value === undefined) return false;
+  if (typeof value !== 'boolean') throw new RowShapeError(relation, `${field} is not a boolean`);
+  return value;
+}
+
 /** R1's row. `summary` is `{stages, changes, attention_raised, errors}` (migration 035). */
 export function validateSyncRows(rows: unknown): SyncStatusRow | null {
   const parsed = asRows(SYNC_RELATION, rows);
@@ -222,6 +233,7 @@ export function validateSyncRows(rows: unknown): SyncStatusRow | null {
     finished_at: nullableStr(SYNC_RELATION, row, 'finished_at'),
     trigger: nullableStr(SYNC_RELATION, row, 'trigger'),
     summary,
+    interrupted: flag(SYNC_RELATION, row, 'interrupted'),
   };
 }
 

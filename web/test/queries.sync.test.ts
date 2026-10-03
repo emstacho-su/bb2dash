@@ -286,3 +286,240 @@ describe('the freshness line', () => {
     expect(relativeTime('not a date')).toBe('—');
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * Phase 19 (tasks 19 and 20, R-41): the run-state word and 137's three columns
+ * ------------------------------------------------------------------------ */
+
+/** Every stage fresh at NOW, so `stalenessLine` has nothing to say. */
+const ALL_FRESH = [
+  {
+    stage: 'assignments',
+    fresh_as_of: '2026-09-10T11:04:00.000Z',
+    last_attempt_at: '2026-09-10T11:04:00.000Z',
+    last_attempt_failed: false,
+  },
+  {
+    stage: 'files',
+    fresh_as_of: '2026-09-10T11:04:00.000Z',
+    last_attempt_at: '2026-09-10T11:04:00.000Z',
+    last_attempt_failed: false,
+  },
+];
+
+/** 137's `streams`: the named streams read `never`, the rest `fresh`. */
+function streamsWith(never: readonly string[]) {
+  return ['announcements', 'assignments', 'content', 'files', 'history'].map((stream) =>
+    never.includes(stream)
+      ? { stream, last_seen_at: null, state: 'never' }
+      : { stream, last_seen_at: '2026-09-10T11:04:00.000Z', state: 'fresh' },
+  );
+}
+
+describe('v_sync_status normalisation — the three columns 137 appends', () => {
+  it('carries notes, interrupted and streams off the row', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({
+        status: 'failed',
+        notes: 'crawl registered · interrupted (reaped)',
+        interrupted: true,
+        streams: streamsWith(['history']),
+      }),
+    );
+    expect(status?.notes).toBe('crawl registered · interrupted (reaped)');
+    expect(status?.interrupted).toBe(true);
+    expect(status?.streams).toHaveLength(5);
+    expect(status?.streams.find((entry) => entry.stream === 'history')).toEqual({
+      stream: 'history',
+      last_seen_at: null,
+      state: 'never',
+    });
+  });
+
+  it('reads a row without them (prod before 137) as no notes, not interrupted, no streams', () => {
+    const status = normalizeSyncStatus(makeSyncStatusRow());
+    expect(status?.notes).toBeNull();
+    expect(status?.interrupted).toBe(false);
+    expect(status?.streams).toEqual([]);
+  });
+
+  it('drops a malformed stream element and does not take a truthy string for interrupted', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({
+        interrupted: 'true',
+        notes: 7,
+        streams: [{ state: 'never' }, { stream: 'files', state: 'warm' }, 'history'],
+      }),
+    );
+    expect(status?.interrupted).toBe(false);
+    expect(status?.notes).toBeNull();
+    expect(status?.streams).toEqual([]);
+  });
+});
+
+describe('the freshness line — run state and never-synced streams (Phase 19)', () => {
+  it('names a stream that has never synced when every stage is fresh', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({ freshness: ALL_FRESH, streams: streamsWith(['history']) }),
+    );
+    const line = freshnessLine(status, NOW);
+    expect(line).toBe('last synced 4 hrs ago · history never synced');
+    expect(line.endsWith('· history never synced')).toBe(true);
+  });
+
+  it('names every never-synced stream, sorted', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({ freshness: ALL_FRESH, streams: streamsWith(['history', 'content']) }),
+    );
+    expect(freshnessLine(status, NOW)).toBe('last synced 4 hrs ago · content, history never synced');
+  });
+
+  it('lets a stale stage speak instead, and names no never-synced stream beside it', () => {
+    // The factory's `files` row is two days old at NOW.
+    const status = normalizeSyncStatus(makeSyncStatusRow({ streams: streamsWith(['history']) }));
+    const line = freshnessLine(status, NOW);
+    expect(line.endsWith('· files stale 2 days')).toBe(true);
+    expect(line).not.toContain('never synced');
+  });
+
+  it('returns exactly what main returns for a row with no streams key', () => {
+    const row = makeSyncStatusRow();
+    expect('streams' in row).toBe(false);
+    expect(freshnessLine(normalizeSyncStatus(row), NOW)).toBe(
+      'last synced 4 hrs ago · files stale 2 days',
+    );
+    expect(freshnessLine(normalizeSyncStatus(makeSyncStatusRow({ freshness: ALL_FRESH })), NOW)).toBe(
+      'last synced 4 hrs ago',
+    );
+  });
+
+  it('returns exactly what main returns for each status when the new columns are absent', () => {
+    const line = (overrides: Record<string, unknown>) =>
+      freshnessLine(normalizeSyncStatus(makeSyncStatusRow({ freshness: ALL_FRESH, ...overrides })), NOW);
+    expect(line({ status: 'running', finished_at: null })).toBe('sync running');
+    expect(line({ status: 'partial' })).toBe('last synced 4 hrs ago · last run partial');
+    expect(line({ status: 'failed' })).toBe('last synced 4 hrs ago · last run failed');
+    expect(line({ status: 'ok' })).toBe('last synced 4 hrs ago');
+  });
+
+  it('calls a reaped run interrupted, not failed', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({
+        status: 'failed',
+        interrupted: true,
+        notes: 'interrupted (reaped)',
+        freshness: ALL_FRESH,
+        streams: streamsWith([]),
+      }),
+    );
+    const line = freshnessLine(status, NOW);
+    expect(line).toBe('last synced 4 hrs ago · last sync interrupted');
+    expect(line).not.toContain('last run failed');
+  });
+
+  it('keeps the run-state word ahead of a never-synced stream', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({
+        status: 'running',
+        finished_at: null,
+        freshness: ALL_FRESH,
+        streams: streamsWith(['history']),
+      }),
+    );
+    expect(freshnessLine(status, NOW)).toBe('sync running · history never synced');
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Round 2, R2-6: a crawl that never folded is not "last synced"
+ * ------------------------------------------------------------------------ */
+
+describe('the freshness line — an interrupted or failed run names the newest real fold', () => {
+  /** NOW is 15:00Z on 2026-09-10: the run was reaped 5 minutes ago, after 31 minutes. */
+  const reaped = {
+    started_at: '2026-09-10T14:24:00.000Z',
+    finished_at: '2026-09-10T14:55:00.000Z',
+  };
+  /** Every stream last folded three days before NOW. */
+  const threeDaysAgo = '2026-09-07T15:00:00.000Z';
+  const streamsSeen = (at: string | null) =>
+    ['announcements', 'content', 'files', 'history'].map((stream) => ({
+      stream,
+      last_seen_at: at,
+      state: at === null ? 'never' : 'stale',
+    }));
+  const staleFreshness = [
+    { stage: 'files', fresh_as_of: threeDaysAgo, last_attempt_at: threeDaysAgo, last_attempt_failed: false },
+  ];
+
+  it('an interrupted run reaped 5 min ago, streams seen 3 days ago, reads "last synced 3 days ago"', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({
+        status: 'failed',
+        interrupted: true,
+        ...reaped,
+        freshness: [],
+        streams: streamsSeen(threeDaysAgo),
+      }),
+    );
+    expect(freshnessLine(status, NOW)).toBe('last synced 3 days ago · last sync interrupted');
+  });
+
+  it('keeps the staleness half after it when the stages are stale too', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({
+        status: 'failed',
+        interrupted: true,
+        ...reaped,
+        freshness: staleFreshness,
+        streams: streamsSeen(threeDaysAgo),
+      }),
+    );
+    expect(freshnessLine(status, NOW)).toBe(
+      'last synced 3 days ago · last sync interrupted · files stale 3 days',
+    );
+  });
+
+  it('a failed run reads the same way', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({
+        status: 'failed',
+        interrupted: false,
+        ...reaped,
+        freshness: [],
+        streams: streamsSeen(threeDaysAgo),
+      }),
+    );
+    expect(freshnessLine(status, NOW)).toBe('last synced 3 days ago · last run failed');
+  });
+
+  it('says no sync is recorded when no stream has ever folded', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({
+        status: 'failed',
+        interrupted: true,
+        ...reaped,
+        freshness: [],
+        streams: streamsSeen(null),
+      }),
+    );
+    expect(freshnessLine(status, NOW)).toBe(
+      'no sync recorded yet · last sync interrupted · announcements, content, files, history never synced',
+    );
+  });
+
+  it('an ok run is unchanged: it names its own finish', () => {
+    const status = normalizeSyncStatus(
+      makeSyncStatusRow({ status: 'ok', freshness: [], streams: streamsSeen(threeDaysAgo) }),
+    );
+    expect(freshnessLine(status, NOW)).toBe('last synced 4 hrs ago');
+  });
+
+  it('a row with no streams key returns exactly what main returns', () => {
+    const row = makeSyncStatusRow({ status: 'failed', ...reaped });
+    expect('streams' in row).toBe(false);
+    expect(freshnessLine(normalizeSyncStatus(row), NOW)).toBe(
+      'last synced 5 min ago · last run failed · files stale 2 days',
+    );
+  });
+});
