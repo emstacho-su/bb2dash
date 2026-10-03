@@ -255,3 +255,56 @@ Brief checks, in the dry-run transaction:
 | (8) the P-98 query (stamped rows whose run has history but no matching `vanished` row) | 0 | 0 |
 | (8) base-table columns named `missing_since%` | 0 | 0 |
 | (7) `phase19_132` body | passes | passes |
+
+## Task 9 — migration 133, DRY RUN (not applied)
+
+Dry run 2026-10-03, one `begin; … rollback;`: 132 (table, policy, function, grants, backfill),
+then 133, then the body of `phase19_133_course_stream_history.sql` and the seeded block of
+`phase17_110_course_stream.sql` as edited. Both passed. (First attempt failed on the test
+itself: `format('%s', boolean)` prints `t`, not `true`; fixed in `cdde75a`.)
+
+| check | expected | dry run |
+|---|---|---|
+| (9) column list of `v_course_stream` | `course_id,post_kind,posted_at,ref_kind,ref_id,title,body,meta` | same |
+| (9) material posts whose `meta->>'run_id'` has no history row | 0 | 0 |
+| (9) `phase19_133` body (`security_invoker`, no anon select, `my_submissions` and missing items excluded) | passes | passes |
+| `reloptions` | `{security_invoker=true}` | `{security_invoker=true}` |
+| `has_table_privilege('anon', 'public.v_course_stream', 'select')` | false | false |
+
+Material posts after the backfill: 65 (101 before 133): files 57 appeared and 4 changed, nodes 3
+appeared and 1 changed. By course: IST.466 20, IST.352 18, GEO.103.lecture 16, IST.323 6,
+IST.471 3, ECN.304 2. The other arms are unchanged: 27 announcement rows, 54
+`assignment_posted`, 81 `assignment_due`.
+
+## Task 10 — migration 134, DRY RUN (not applied)
+
+Dry run 2026-10-03, one `begin; … rollback;`: 134, then the body of
+`phase19_134_sync_change_lines.sql` (blocks 1 to 6), `phase17_115`'s assertions and
+`phase10a_stage_gradebook`'s one call. All passed. The brief's fixture gives exactly
+`["2 new material(s): A, B", "1 material(s) no longer in Blackboard: C"]`.
+`md5(prosrc)` live before: `bd31229e9a8d32d99e13342466bf28af`; after 134 in the dry run:
+`90da0fec8b3c8aa5f246746ff328e49d`. ACL after:
+`{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres,db_test_runner=X/postgres}`.
+
+## Task 11 — `DATA_SYNTAX.md`
+
+```
+$ grep -c 'bb_material_history' DATA_SYNTAX.md
+4
+$ grep -c 'course_id, bb_item_id' DATA_SYNTAX.md
+6
+```
+
+## Handed to the PM to apply (132, 133, 134)
+
+Each file is ASCII only, with no tabs, no trailing spaces and no CR in the blob.
+
+| migration | apply the blob at | `git show <sha>:db/migrations/<file> \| md5sum` | bytes |
+|---|---|---|---|
+| `132_material_history` | `54b8c27` (unchanged at HEAD) | `9189a345726a5615807431ae38c05909` | 23,206 |
+| `133_course_stream_history` | `10ae0a5` (unchanged at HEAD) | `3fb825885544a91b0a666158b0325cfd` | 7,381 |
+| `134_sync_change_lines_materials` | `e14cf24` (unchanged at HEAD) | `77268e7d2216bb26d7ddd4c0cc59f214` | 9,442 |
+
+After the applies: run the post-apply checks for tasks 7 to 10 as the brief writes them, the five
+`phase19_13x` tests, `phase17_110`, `phase18_124`, `phase9_transform_states`,
+`phase10a_stage_gradebook`, and the full suite. `phase17_110` is red on prod until 133 is applied.
