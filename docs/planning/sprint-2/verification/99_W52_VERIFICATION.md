@@ -308,3 +308,141 @@ Each file is ASCII only, with no tabs, no trailing spaces and no CR in the blob.
 After the applies: run the post-apply checks for tasks 7 to 10 as the brief writes them, the five
 `phase19_13x` tests, `phase17_110`, `phase18_124`, `phase9_transform_states`,
 `phase10a_stage_gradebook`, and the full suite. `phase17_110` is red on prod until 133 is applied.
+
+## Round 2 (brief 99, rows R2-1 to R2-5 and R2-8), 2026-10-03
+
+`origin/feat/content-history-19` (58a86b1) merged in. R2-8: the 130–134 section of
+`DATA_SYNTAX.md` now sits after the 110–116 bullets (`38ddc53`).
+
+### 138 tests, written first
+
+`phase19_138_material_history_counts.sql` is new. `phase19_132_material_history.sql` is moved to
+138's semantics: crawl 2 now counts `{appeared 1, changed 3, vanished 1}` (8 rows, unchanged),
+the sample holds 5, the second formulation in (P) uses the R2-3 and R2-4 rules, crawls are
+folded in order, and an (R2-5) block is added. RED against live 132 (2026-10-03):
+
+```
+$ node scripts/db-test.mjs --only phase19_132_material_history.sql
+FAIL  phase19_132_material_history.sql  FAIL phase19_132: (2) crawl 2 returned {... "changed": 4, "appeared": 2, "vanished": 2 ...}; (2) sample reads [... 7 elements ...]; (R2-5) crawl 6 after folded crawls 7 and 8 returned {"sample": [], "changed": 0, "appeared": 0, "vanished": 0, "older_run": false, "baseline_courses": 0}
+db-test: passed 0, failed 1, units 1
+exit 1
+
+$ node scripts/db-test.mjs --only phase19_138_material_history_counts.sql
+FAIL  phase19_138_material_history_counts.sql  FAIL phase19_138: (2) rows read ... changed content _w52k_d_1 {path} ; changed content _w52k_f_1 {title,path} ; changed content _w52k_k_1 {path} ; changed content _w52k_l_1 {path} ; changed content _w52k_s_1 {url}; (2) counts {"changed": 5, "appeared": 6, "vanished": 0, ...}; (2) sample titles e.pdf,Handout,handout.pdf,Reading,Session link,Slides; (3) counts {"changed": 2, "appeared": 1, ...}; (5) crawl 3 after a folded, unrecorded crawl 4 returned {... "older_run": false ...}; (X) 14 fixture rows, want 10
+db-test: passed 0, failed 1, units 1
+exit 1
+```
+
+The prod blocks (P) and (V) of `phase19_132` still pass against the 229 backfilled rows.
+
+### 138, DRY RUN (not applied)
+
+Three rolled-back calls on 2026-10-03, each `statement_timeout = '90s'`, `lock_timeout = '10s'`:
+
+1. 138's function, then the body of `phase19_138`: passed. In the same transaction:
+   `has_function_privilege('authenticated', 'public.material_history_record(uuid)', 'execute')`
+   false; task 8's P-98 query 0; task 9's untraced material posts 0; prod history 229 rows and
+   65 Stream material posts, unchanged (138 rewrites no row).
+2. 138's function, then the body of `phase19_132` as moved to 138 (blocks P, V, 1, 2, 2b, O, 4,
+   6, 8, R2-5, X): passed. The (P) block's second formulation, now with 138's path and
+   session-url rules, still equals the newest recorded crawl's rows (`2a4d4a2e`).
+3. 138's function, then `phase9_transform_states`'s two blocks (a fixture crawl whose
+   announcement breaks one stage, folded by `run_transform`; a 31-minute `running` row reaped
+   by `transform_tick`): passed. The run reads `partial`, exactly one stage `failed`
+   (`announcements`), the `history` stage `ok` with
+   `{"appeared":0,"changed":0,"vanished":0,"baseline_courses":0,"older_run":false,"sample":[]}`,
+   and the tick reports `reaped: 1`. (A first attempt at this call pasted a cut-down function
+   by mistake; its result is not counted.)
+
+`phase10a_stage_gradebook` calls neither `run_transform` nor `material_history_record`, so it
+is run after the apply, not in the dry run.
+
+Not rewritten by 138: the 229 backfilled rows keep 132's rules. Up to 10 of them are content
+rows whose only changed field is `path`, the kind R2-3 stops writing when the path changed
+because an ancestor was renamed.
+
+### 139 test, written first
+
+RED against live 131 (2026-10-03):
+
+```
+$ node scripts/db-test.mjs --only phase19_139_stage_content_rekey.sql
+FAIL  phase19_139_stage_content_rekey.sql  FAIL phase19_139: (B) crawl B returned {"items": 9, ..., "missing": 4, "updated": 1, "inserted": 5, ...}; (B) the Knowledge Check reads 3056|_w52r_kc_a|ECN.304/attendance|; (B) Week 2 reads 3061|_w52r_w2_a|, its child hangs under 3066; (B5) a second fold returned {... no "rekeyed" key ...} and changed 0 row(s)
+db-test: passed 0, failed 1, units 1
+exit 1
+```
+
+Under 131 the link stays on the old Knowledge Check row, which is stamped missing, and Week 2's
+child moves to a new row. (B2), (B3) and (B4) already hold under 131 and must keep holding.
+
+### Re-created items in prod's crawl history (R2-1's check)
+
+Every pair of consecutive registered crawls per course, read from `bb_raw` on 2026-10-03: an
+item id that leaves and a new id that arrives on the same path. One occurrence in 12 crawls:
+IST.352 "Assignments / Project Assignment #1A - Project Description"
+(`resource/x-bb-asmt-test-link`), `_13192249_1` → `_13195312_1` at crawl `6b122650`, one new and
+one gone on that path. It was folded by 026, whose path key updated the row in place and kept
+the old id in `previous_ids`, so no link was lost. Under 131 the same crawl would have stranded
+any link on a ghost row; under 139 it is re-keyed.
+
+### 139, DRY RUN (not applied)
+
+Two rolled-back calls on 2026-10-03, each `statement_timeout = '90s'`, `lock_timeout = '10s'`:
+
+1. 139's function as in the file, then a re-fold of the newest registered crawl, then the body
+   of `phase19_139`: passed. `md5(prosrc)` in the transaction
+   `ba31b9cb3be68f3ae7ee277258dcb271`, equal to the md5 computed locally from the committed
+   file (the same local method gives 131's live `ec78ca41daa2addb02fa113c85b7829d`), so the
+   `phase18_124` pin becomes `ba31b9cb3be68f3ae7ee277258dcb271` once the PM confirms it on prod
+   after the apply. Re-fold of `2a4d4a2e`: `inserted 0, updated 0, unchanged 220, missing 0,
+   rekeyed 0`. ACL `{postgres=X/postgres,service_role=X/postgres,db_test_runner=X/postgres}`;
+   225 rows, 21 linked, unchanged.
+2. 139's function, then `phase19_131`'s fold sequence (A, A2, B, O, C and the "nothing outside
+   the fixture moved" check, with `rekeyed 0` expected on every fold) and `phase9_transform_states`'s
+   partial block (`run_transform` on the broken-announcement crawl: `partial`, one stage
+   `failed`, `announcements`; the content stage `ok` with `rekeyed: 0`): passed.
+
+`phase17_110`, `phase17_115` and `phase10a_stage_gradebook` reach neither function, so they are
+run after the applies with the full suite.
+
+## Handed to the PM to apply (138, 139), in that order
+
+| migration | apply the blob at | `git show <sha>:db/migrations/<file> \| md5sum` | bytes |
+|---|---|---|---|
+| `138_material_history_counts` | `d7b3318` (unchanged at HEAD) | `eded5cb4cfae311bf64d9df586358e3e` | 18,242 |
+| `139_stage_content_rekey` | `aacedcf` (unchanged at HEAD) | `54ea43dc65ede8b5eb2a5368719811b3` | 20,947 |
+
+After the applies: `phase19_132`, `phase19_138`, `phase19_139`, `phase19_131` and
+`phase19_133` green; `phase18_124`'s pin moved to 139's body (expected
+`ba31b9cb3be68f3ae7ee277258dcb271`) and green; full suite.
+
+## After the PM applied 138 and 139 (2026-10-03, about 18:00Z), APPLIED
+
+Prod read by W-52: all ten Phase 19 migrations recorded, md5 prefixes
+130 `3a5a3269`, 131 `24670dbb`, 132 `9189a345`, 133 `3fb82588`, 134 `77268e7d`, 135 `adc27d3b`,
+136 `9feca071`, 137 `30ff4742`, 138 `eded5cb4`, 139 `54ea43dc`. `stage_content` `md5(prosrc)` =
+`ba31b9cb3be68f3ae7ee277258dcb271`, as predicted; `material_history_record`
+`1bd8b046c1da6191cae67a339c220550`.
+
+`phase18_124` assertion (4) pinned to `ba31b9cb3be68f3ae7ee277258dcb271` (`fd39dea`).
+`origin/feat/content-history-19` merged in before the full suite (`2d9289b`), so it includes
+W-53's `phase19_135_136_sync_driver` and `phase19_137_sync_status`.
+
+```
+$ node scripts/db-test.mjs --only <unit>      (one at a time, 2026-10-03)
+PASS  phase19_131_stage_content_item_key.sql
+PASS  phase19_132_material_history.sql
+PASS  phase19_133_course_stream_history.sql
+PASS  phase19_134_sync_change_lines.sql
+PASS  phase19_138_material_history_counts.sql
+PASS  phase19_139_stage_content_rekey.sql
+PASS  phase18_124_stage_files_replay.sql
+PASS  phase10a_stage_gradebook.sql
+PASS  phase17_110_course_stream.sql
+PASS  phase17_115_sync_change_lines.sql
+PASS  phase9_transform_states.sql
+
+$ node scripts/db-test.mjs
+db-test: passed 56, failed 0, units 56
+exit 0
+```
