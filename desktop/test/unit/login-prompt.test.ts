@@ -83,17 +83,24 @@ describe('core/login-prompt — the page and its URL', () => {
     expect(new URL(LOGIN_PAGE_URL).origin).toBe(LOGIN_PAGE_ORIGIN);
   });
 
-  it('carries the URL-encoded password, connecting and scaling by itself', () => {
-    const url = new URL(loginPageUrl(PASSWORD));
+  it('carries the URL-encoded password in the fragment only, connecting and scaling by itself', () => {
+    const built = loginPageUrl(PASSWORD);
+    // Round 2, item 1: noVNC reads its options from the fragment too, and a fragment never
+    // reaches websockify, so the password is never in a request line or a server log.
+    expect(built).not.toContain('?');
+    const url = new URL(built);
     expect(url.origin + url.pathname).toBe(LOGIN_PAGE_URL);
-    expect(url.searchParams.get('autoconnect')).toBe('true');
-    expect(url.searchParams.get('resize')).toBe('scale');
-    expect(url.searchParams.get('password')).toBe(PASSWORD);
-    expect(loginPageUrl(PASSWORD)).toContain(`password=${encodeURIComponent(PASSWORD)}`);
+    expect(url.search).toBe('');
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    expect(fragment.get('autoconnect')).toBe('true');
+    expect(fragment.get('resize')).toBe('scale');
+    expect(fragment.get('password')).toBe(PASSWORD);
+    expect(built.indexOf('password=')).toBeGreaterThan(built.indexOf('#'));
+    expect(built).toContain(`password=${encodeURIComponent(PASSWORD)}`);
   });
 
-  it('is the bare page when there is no password', () => {
-    expect(loginPageUrl(null)).toBe(LOGIN_PAGE_URL);
+  it('without a password keeps connecting and scaling, and asks in the page', () => {
+    expect(loginPageUrl(null)).toBe(`${LOGIN_PAGE_URL}#autoconnect=true&resize=scale`);
   });
 
   it('reads the frozen query: open items with the login ref, ids only', () => {
@@ -174,14 +181,14 @@ describe('main/login-prompt — opening the page', () => {
     const { prompt, opened } = harness(missing);
     await prompt.check(restOver([41]).get);
 
-    expect(opened).toEqual([LOGIN_PAGE_URL]);
+    expect(opened).toEqual([loginPageUrl(null)]);
     expect(logged.some((line) => line.includes('C:\\secrets\\novnc_password') && line.includes('ENOENT'))).toBe(true);
   });
 
   it('an empty file opens the bare page and says the file is empty', async () => {
     const { prompt, opened } = harness('\r\n');
     await prompt.check(restOver([41]).get);
-    expect(opened).toEqual([LOGIN_PAGE_URL]);
+    expect(opened).toEqual([loginPageUrl(null)]);
     expect(logged.some((line) => line.includes('is empty'))).toBe(true);
   });
 

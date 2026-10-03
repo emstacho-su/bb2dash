@@ -56,7 +56,7 @@ function errorCode(error: unknown): string {
 /** Under `BB2DASH_TEST=1` the e2e suite sees that the page would open, never the URL. */
 function defaultOpenExternal(url: string): Promise<void> {
   if (IS_TEST_MODE) {
-    recordEvent('login-prompt', { page: LOGIN_PAGE_URL, unlocked: url !== LOGIN_PAGE_URL });
+    recordEvent('login-prompt', { page: LOGIN_PAGE_URL, unlocked: url !== loginPageUrl(null) });
     return Promise.resolve();
   }
   return shell.openExternal(url);

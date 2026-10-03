@@ -163,7 +163,7 @@ describe('decideLoginPageOpen (the login prompt)', () => {
 
   it.each([
     'http://127.0.0.1:6080/vnc.html',
-    'http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale&password=a%26b',
+    'http://127.0.0.1:6080/vnc.html#autoconnect=true&resize=scale&password=a%26b',
   ])('hands %s to the default browser', (url) => {
     expect(decideLoginPageOpen(url)).toEqual({ kind: 'external', url: new URL(url).toString() });
   });

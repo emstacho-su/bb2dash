@@ -22,13 +22,19 @@ export const LOGIN_ITEMS_QUERY = `select=id&ref=eq.${LOGIN_ITEM_REF}&state=eq.op
 
 const UTF8_BOM = '﻿';
 
+/** noVNC's options, read from the fragment as well as the query string. */
+const PAGE_OPTIONS = 'autoconnect=true&resize=scale';
+
 /**
  * The page, connecting by itself and scaled to the browser window, unlocked with `password`
- * (URL-encoded) when there is one; the bare page when there is not, where noVNC asks for it.
+ * (URL-encoded) when there is one; without one, noVNC asks for it in the page.
+ *
+ * Every option rides in the fragment, never the query string (round 2, item 1): a browser never
+ * sends the fragment, so websockify never sees or logs the password.
  */
 export function loginPageUrl(password: string | null): string {
-  if (password === null) return LOGIN_PAGE_URL;
-  return `${LOGIN_PAGE_URL}?autoconnect=true&resize=scale&password=${encodeURIComponent(password)}`;
+  if (password === null) return `${LOGIN_PAGE_URL}#${PAGE_OPTIONS}`;
+  return `${LOGIN_PAGE_URL}#${PAGE_OPTIONS}&password=${encodeURIComponent(password)}`;
 }
 
 /**
