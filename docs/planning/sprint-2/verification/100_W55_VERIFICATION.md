@@ -207,3 +207,54 @@ node scripts/db-test.mjs            (whole suite)
 db-test: passed 60, failed 0, units 60
 exit 0
 ```
+
+## Task 9 — the runner core and the login watch
+
+`sync/src/login.ts` (the login rule, `LoginWatch`, ported from the spike's `session-age.mjs`),
+`sync/src/loop.ts` (one pass, the loop), `sync/src/crawl.ts` (run id, crawler injection, fold wait),
+`sync/src/db.ts` (the twelve RPCs over a query function; the pg adapter with its per-connect log
+line), `sync/src/report.ts` (its tests are task 11's).
+
+RED (tests first):
+
+```
+cd sync && npx vitest run test/login.test.ts
+ FAIL  test/login.test.ts
+ Error: Cannot find module '../src/login.js' imported from …/sync/test/login.test.ts
+ Test Files  1 failed (1)      Tests  no tests
+
+cd sync && npx vitest run test/loop.test.ts
+ FAIL  test/loop.test.ts
+ Error: Cannot find module '../src/loop.js' imported from …/sync/test/loop.test.ts
+ Test Files  1 failed (1)      Tests  no tests
+```
+
+GREEN (after one test fix: the loop does not sleep after the pass that saw the stop):
+
+```
+cd sync && npx vitest run test/login.test.ts test/loop.test.ts
+ Test Files  2 passed (2)
+      Tests  42 passed (42)
+```
+
+The brief's named cases, each a test: every `LOGIN_HOSTS` entry (classifyProbe, and a pass on a
+login-host tab); `users/me` 401 and 403 close `queued → failed`; claim lost; register refused (and a
+quarantined 42501); fold timeout leaves the row claimed; crawl throws → failed; done. Login watch on
+vitest's fake clock: a dead start calls `sync_login_required` once and probes every `LOGIN_WATCH_MS`;
+dead → alive calls `sync_login_ok` then `sync_enqueue('login')` once; alive ticks every
+`KEEPALIVE_MINUTES` ± jitter and loads the `KEEPALIVE_PAGES` in turn; a tick during a pass is
+skipped; a dead probe loads `/ultra/` once before raising, and a 200 after it raises nothing; while
+dead nothing navigates; alive → dead raises again; `KEEPALIVE_MINUTES=0` stops the ticks.
+`MAX_CLAIM_ATTEMPTS` is read out of 091's two `c_max_claim_attempts` constants and must equal the TS
+one.
+
+Design calls (W-55):
+
+* A pass's step-3 probe is the watch's own `check`, so it gets the same silent re-login before a
+  request is failed as `login_required`, and it is serialised with the keep-alive on the one tab.
+* A probe that answers neither 200 nor 401/403 (a 500, a network error) changes nothing: the
+  request stays queued for the next pass and the watch probes again in `LOGIN_WATCH_MS`.
+* A transition's RPC that fails (the database unreachable) is retried on the next check, so a
+  login death is never left un-raised.
+* The report's `claim_attempts` counts this process's claims of the request (the role cannot read
+  `agent_requests.claim_attempts`); a restart starts the count again.
