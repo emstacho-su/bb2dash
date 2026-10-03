@@ -20,7 +20,13 @@
 --       crawl 2, so the item crawl 3 first carried is `appeared` at crawl 4
 --   (6) the same with crawl 5 `running` (the claim-opened shape): its item appears at crawl 6
 --   (8) crawl 7 carries an empty tree: nothing vanishes, and crawl 8 diffs against crawl 6
+--   (R2-5) with crawls 7 and 8 folded, crawl 6 is an older run although neither wrote history
 --   (X) every fixture row belongs to the fixture course, and prod's rows are untouched
+-- Since 138 (brief 99 round 2): the counts and sample cover materials only (R2-2), a path
+-- change counts only with the item's own parent or title change and a session-scoped url
+-- compares as null (R2-3, R2-4, also in (P)'s second formulation), and older_run is the
+-- registered-folded-crawl predicate (R2-5), so each crawl's sync_runs row is written only
+-- once the crawls before it are recorded.
 --   (N) a stranger (authenticated, not the owner) reads 0 rows
 --
 -- The fixture course and its eight crawls exist only inside this transaction, dated in the
@@ -91,6 +97,7 @@ declare
   v_file_a  bigint;
   v_file_x  bigint;
   i         int;
+  k         int;
 begin
   -- -------------------------------------------------------------------------------------------
   -- (S) schema and privileges
@@ -201,7 +208,9 @@ begin
              it.side, it.course_id, it.j->>'id' as id,
              btrim(coalesce(it.j->>'title', '')) as title,
              it.j->>'path' as path,
-             case when u.url is null or btrim(u.url) = '' then null
+             it.j->>'parentId' as parent,
+             -- 138 (R2-4): a session-scoped url compares as null.
+             case when u.url is null or btrim(u.url) = '' or u.url ~ '/sessions/' then null
                   when left(u.url, 1) = '/' then BB_ORIGIN || u.url
                   else u.url end as url,
              case when jsonb_typeof(it.j->'modified') = 'number'
@@ -246,7 +255,9 @@ begin
       select 'content', c.course_id, c.id, '', 'changed'
         from node c join node p on p.side = 'pred' and p.course_id = c.course_id and p.id = c.id
        where c.side = 'cur'
-         and (c.title, c.path, c.url, c.modified) is distinct from (p.title, p.path, p.url, p.modified)
+         -- 138 (R2-3): a path change counts only with the item's own parent or title change.
+         and (   (c.title, c.url, c.modified) is distinct from (p.title, p.url, p.modified)
+              or (c.path is distinct from p.path and c.parent is distinct from p.parent))
       union all
       select 'file', c.course_id, c.id, c.name, 'appeared'
         from file c
@@ -304,21 +315,6 @@ begin
 
   for i in 1..8 loop
     v_runs := v_runs || format('00000000-1320-4000-8000-00000000000%s', i)::uuid;
-    insert into agent_requests (kind, scope, state, run_id, note, claimed_by, claimed_at, finished_at)
-    values ('sync', 'all', 'done', v_runs[i], format('Phase 19 history fixture crawl %s (rolled back)', i),
-            'phase19_132', now(), now());
-    insert into sync_runs (run_id, status, started_at, finished_at, trigger, source, scope, notes)
-    values (v_runs[i], STATUSES[i], now(), case when STATUSES[i] = 'running' then null else now() end,
-            'manual', 'blackboard', 'all',
-            case when STATUSES[i] = 'failed' then 'phase19 fixture: died | interrupted (reaped)' end);
-    insert into bb_raw (run_id, kind, bb_course_id, captured_at, payload)
-    select v_runs[i], 'course', SHELL, now() + make_interval(hours => i),
-           jsonb_build_object('content', coalesce((
-             select jsonb_agg(jsonb_build_object(
-                      'id', f.id, 'parentId', '_w52h_root_1', 'type', f.type, 'path', f.path, 'title', f.title,
-                      'detail', f.detail, 'state', 'None', 'modified', 1790000000000,
-                      'embeddedFiles', coalesce(f.files, '[]'::jsonb)) order by f.ord)
-               from _fx132 f where f.crawl = i), '[]'::jsonb));
   end loop;
 
   insert into bb_files (run_id, bb_course_id, course_id, content_id, path, file_name, source_url, bucket)
@@ -330,6 +326,36 @@ begin
           BB_ORIGIN || '/bbcswebdav/w52h/x2', 'readings')
   returning id into v_file_x;
 
+  -- All eight crawls are registered and carry their bb_raw rows. A crawl's sync_runs row (its
+  -- fold) is written only once the crawls before it have been recorded, the order a real fold
+  -- keeps: 138 (R2-5) counts a newer registered crawl folded ok as making a run older, so a
+  -- crawl folded ahead of time would turn the earlier recordings into older runs.
+  for i in 1..8 loop
+    insert into agent_requests (kind, scope, state, run_id, note, claimed_by, claimed_at, finished_at)
+    values ('sync', 'all', 'done', v_runs[i], format('Phase 19 history fixture crawl %s (rolled back)', i),
+            'phase19_132', now(), now());
+    insert into bb_raw (run_id, kind, bb_course_id, captured_at, payload)
+    select v_runs[i], 'course', SHELL, now() + make_interval(hours => i),
+           jsonb_build_object('content', coalesce((
+             select jsonb_agg(jsonb_build_object(
+                      'id', f.id, 'parentId', '_w52h_root_1', 'type', f.type, 'path', f.path, 'title', f.title,
+                      'detail', f.detail, 'state', 'None', 'modified', 1790000000000,
+                      'embeddedFiles', coalesce(f.files, '[]'::jsonb)) order by f.ord)
+               from _fx132 f where f.crawl = i), '[]'::jsonb));
+  end loop;
+
+  for k in 1..8 loop
+    -- Fold every crawl before k, with its status (crawl 3 reaped, crawl 5 still running).
+    insert into sync_runs (run_id, status, started_at, finished_at, trigger, source, scope, notes)
+    select v_runs[g], STATUSES[g], now(), case when STATUSES[g] = 'running' then null else now() end,
+           'manual', 'blackboard', 'all',
+           case when STATUSES[g] = 'failed' then 'phase19 fixture: died | interrupted (reaped)' end
+      from generate_series(1, k - 1) g
+     where not exists (select 1 from sync_runs s where s.run_id = v_runs[g]);
+
+    continue when k in (3, 5);   -- the reaped and the running crawl are never recorded
+
+    if k = 1 then
   -- (1) baseline
   v_r := material_history_record(v_runs[1]);
   if (v_r - 'sample') is distinct from
@@ -338,10 +364,13 @@ begin
     v_fail := v_fail || format('(1) the baseline crawl returned %s', v_r);
   end if;
 
-  -- (2) appeared, changed, vanished
+    elsif k = 2 then
+  -- (2) appeared, changed, vanished. Every row is written; since 138 (R2-2) the counts cover
+  -- materials only: b.pdf covers its document, g.pdf its document, and the file node
+  -- _w52h_x1_1 is one material (its syllabus.docx row), not two.
   v_r := material_history_record(v_runs[2]);
   if (v_r - 'sample') is distinct from
-     '{"appeared":2,"changed":4,"vanished":2,"baseline_courses":0,"older_run":false}'::jsonb then
+     '{"appeared":1,"changed":3,"vanished":1,"baseline_courses":0,"older_run":false}'::jsonb then
     v_fail := v_fail || format('(2) crawl 2 returned %s', v_r);
   end if;
   select string_agg(format('%s %s %s %s %s', change, entity, bb_item_id, file_name, coalesce(changed_fields::text, '-')),
@@ -371,7 +400,7 @@ begin
   if v_got is distinct from format('a.pdf:%s syllabus.docx:%s', v_file_a, v_file_x) then
     v_fail := v_fail || format('(2) bb_file_id read %s, want a.pdf:%s syllabus.docx:%s', v_got, v_file_a, v_file_x);
   end if;
-  if jsonb_array_length(v_r->'sample') <> 7
+  if jsonb_array_length(v_r->'sample') <> 5
      or exists (select 1 from jsonb_array_elements(v_r->'sample') e
                  where not (e ? 'change' and e ? 'entity' and e ? 'title'))
      or (select count(*) from jsonb_array_elements(v_r->'sample') e where e->>'change' = 'changed') <> 3 then
@@ -386,13 +415,16 @@ begin
     v_fail := v_fail || format('(2b) a re-run of crawl 2 returned %s', v_r);
   end if;
 
-  -- (O) an older run writes 0
+  -- (O) an older run writes 0: crawl 2 is folded now, and newer
+  insert into sync_runs (run_id, status, started_at, finished_at, trigger, source, scope)
+  values (v_runs[2], STATUSES[2], now(), now(), 'manual', 'blackboard', 'all');
   v_r := material_history_record(v_runs[1]);
   if (v_r->>'older_run')::boolean is distinct from true
      or exists (select 1 from bb_material_history where run_id = v_runs[1]) then
     v_fail := v_fail || format('(O) the older crawl returned %s', v_r);
   end if;
 
+    elsif k = 4 then
   -- (4) a reaped crawl is skipped as a predecessor
   v_r := material_history_record(v_runs[4]);
   select string_agg(format('%s %s %s', change, entity, bb_item_id), ' ; ' order by bb_item_id) into v_got
@@ -401,6 +433,7 @@ begin
     v_fail := v_fail || format('(4) after a reaped crawl 3, crawl 4 recorded %s (returned %s)', coalesce(v_got, '(none)'), v_r);
   end if;
 
+    elsif k = 6 then
   -- (6) a running crawl is skipped as a predecessor
   v_r := material_history_record(v_runs[6]);
   select string_agg(format('%s %s %s', change, entity, bb_item_id), ' ; ' order by bb_item_id) into v_got
@@ -409,16 +442,30 @@ begin
     v_fail := v_fail || format('(6) after a running crawl 5, crawl 6 recorded %s (returned %s)', coalesce(v_got, '(none)'), v_r);
   end if;
 
+    elsif k = 7 then
   -- (8) an empty tree vanishes nothing and is not a predecessor
   v_r := material_history_record(v_runs[7]);
   if (v_r - 'sample') is distinct from
      '{"appeared":0,"changed":0,"vanished":0,"baseline_courses":0,"older_run":false}'::jsonb then
     v_fail := v_fail || format('(8) the empty crawl 7 returned %s', v_r);
   end if;
+
+    else
   v_r := material_history_record(v_runs[8]);
   if (v_r - 'sample') is distinct from
      '{"appeared":0,"changed":0,"vanished":0,"baseline_courses":0,"older_run":false}'::jsonb then
     v_fail := v_fail || format('(8) crawl 8, after the empty crawl 7, returned %s', v_r);
+  end if;
+    end if;
+  end loop;
+
+  -- (R2-5) crawls 7 and 8 are folded and newer; crawl 8 wrote no rows. Crawl 6 is now an older
+  -- run, whether or not a newer crawl wrote history.
+  insert into sync_runs (run_id, status, started_at, finished_at, trigger, source, scope)
+  values (v_runs[8], STATUSES[8], now(), now(), 'manual', 'blackboard', 'all');
+  v_r := material_history_record(v_runs[6]);
+  if (v_r->>'older_run')::boolean is distinct from true then
+    v_fail := v_fail || format('(R2-5) crawl 6 after folded crawls 7 and 8 returned %s', v_r);
   end if;
 
   -- (X) scope

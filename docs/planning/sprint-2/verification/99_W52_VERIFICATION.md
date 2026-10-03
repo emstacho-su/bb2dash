@@ -308,3 +308,29 @@ Each file is ASCII only, with no tabs, no trailing spaces and no CR in the blob.
 After the applies: run the post-apply checks for tasks 7 to 10 as the brief writes them, the five
 `phase19_13x` tests, `phase17_110`, `phase18_124`, `phase9_transform_states`,
 `phase10a_stage_gradebook`, and the full suite. `phase17_110` is red on prod until 133 is applied.
+
+## Round 2 (brief 99, rows R2-1 to R2-5 and R2-8), 2026-10-03
+
+`origin/feat/content-history-19` (58a86b1) merged in. R2-8: the 130–134 section of
+`DATA_SYNTAX.md` now sits after the 110–116 bullets (`38ddc53`).
+
+### 138 tests, written first
+
+`phase19_138_material_history_counts.sql` is new. `phase19_132_material_history.sql` is moved to
+138's semantics: crawl 2 now counts `{appeared 1, changed 3, vanished 1}` (8 rows, unchanged),
+the sample holds 5, the second formulation in (P) uses the R2-3 and R2-4 rules, crawls are
+folded in order, and an (R2-5) block is added. RED against live 132 (2026-10-03):
+
+```
+$ node scripts/db-test.mjs --only phase19_132_material_history.sql
+FAIL  phase19_132_material_history.sql  FAIL phase19_132: (2) crawl 2 returned {... "changed": 4, "appeared": 2, "vanished": 2 ...}; (2) sample reads [... 7 elements ...]; (R2-5) crawl 6 after folded crawls 7 and 8 returned {"sample": [], "changed": 0, "appeared": 0, "vanished": 0, "older_run": false, "baseline_courses": 0}
+db-test: passed 0, failed 1, units 1
+exit 1
+
+$ node scripts/db-test.mjs --only phase19_138_material_history_counts.sql
+FAIL  phase19_138_material_history_counts.sql  FAIL phase19_138: (2) rows read ... changed content _w52k_d_1 {path} ; changed content _w52k_f_1 {title,path} ; changed content _w52k_k_1 {path} ; changed content _w52k_l_1 {path} ; changed content _w52k_s_1 {url}; (2) counts {"changed": 5, "appeared": 6, "vanished": 0, ...}; (2) sample titles e.pdf,Handout,handout.pdf,Reading,Session link,Slides; (3) counts {"changed": 2, "appeared": 1, ...}; (5) crawl 3 after a folded, unrecorded crawl 4 returned {... "older_run": false ...}; (X) 14 fixture rows, want 10
+db-test: passed 0, failed 1, units 1
+exit 1
+```
+
+The prod blocks (P) and (V) of `phase19_132` still pass against the 229 backfilled rows.
