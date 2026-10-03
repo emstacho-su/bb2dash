@@ -51,6 +51,8 @@ No terminal opened. The embed step did not run, because no unit was posted (task
 `sync_runs` 1007's `summary->'changes'`, as Activity shows it: `2 staff name disagreement(s) need your call`,
 `Files: nothing new to pull`.
 
+`walk-14/03-activity-report.png` (Stack's capture, 23:23Z): Activity's two newest lines, 27 minutes old, are run B's: "2 staff name disagreement(s) need your call" and the runner's own files line "Files: nothing new to pull", the text `sync/test/report.test.ts` pins; run A's line is the one below them, 35 minutes old.
+
 ## Task 28 — the login path (2026-10-03)
 
 Stack signed out of Blackboard inside the noVNC page at about 23:00Z. Then
