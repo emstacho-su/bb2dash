@@ -567,3 +567,22 @@ Expected `md5(prosrc)` of 172's `material_history_record`, computed locally:
 | migration | apply the blob at | `git show <sha>:db/migrations/172_stream_lti_materials.sql \| md5sum` | bytes |
 |---|---|---|---|
 | `172_stream_lti_materials` | `edc0f08` (unchanged at HEAD) | `cc483bff25feca48870f14b605bc7ee1` | 25863 |
+
+## After the PM applied 172 (2026-10-03), APPLIED
+
+PM's read: blob md5 `cc483bff25feca48870f14b605bc7ee1` equal on prod; `material_history_record`
+`md5(prosrc)` `bdc2844aa109a166af24a3bef93adbbc`, as predicted; material posts 69 → 71; 0
+`bb_files` rows for any `lti` item. `origin/feat/content-history-19` merged in (`4db6427`).
+
+```
+$ node scripts/db-test.mjs --only <unit>      (one at a time)
+PASS  phase19_172_stream_lti.sql
+PASS  phase19_170_activity_stream.sql
+PASS  phase19_133_course_stream_history.sql
+PASS  phase19_138_material_history_counts.sql
+PASS  phase17_110_course_stream.sql
+
+$ node scripts/db-test.mjs
+db-test: passed 59, failed 0, units 59
+exit 0
+```
