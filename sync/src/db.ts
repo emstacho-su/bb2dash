@@ -213,6 +213,16 @@ export interface PgClientLike {
   on(event: 'error', listener: (error: Error) => void): unknown;
 }
 
+/**
+ * True for a SQLSTATE that refuses one statement and leaves the session usable. Class 08
+ * (connection exception), 57P (operator intervention: admin shutdown, cannot connect now) and
+ * XX000 (internal error) are not: the client is dropped. So is anything without a SQLSTATE.
+ */
+export function isStatementError(code: unknown): boolean {
+  if (typeof code !== 'string' || !/^[0-9A-Z]{5}$/.test(code)) return false;
+  return !(code.startsWith('08') || code.startsWith('57P') || code === 'XX000');
+}
+
 /** A real pg.Client for the session-pooler DSN; connected by createPgQuery. */
 export function newPgClient(dsn: string): PgClientLike {
   return new pg.Client({ connectionString: dsn, application_name: APPLICATION_NAME }) as unknown as PgClientLike;
@@ -281,8 +291,9 @@ export function createPgQuery(deps: PgQueryDeps): QueryFn & { end(): Promise<voi
     } catch (error) {
       const message = redactDsn(error instanceof Error ? error.message : String(error), deps.dsn);
       const code = (error as { code?: unknown })?.code;
-      // A server-side refusal (a SQLSTATE) leaves the connection usable; anything else drops it.
-      if (typeof code !== 'string' || !/^[0-9A-Z]{5}$/.test(code)) await drop();
+      // A statement-level refusal leaves the connection usable; a socket error, or a SQLSTATE that
+      // means the connection itself is gone or broken (R2 item 8), drops it so the next call reconnects.
+      if (!isStatementError(code)) await drop();
       const wrapped = new Error(message) as Error & { code?: unknown };
       wrapped.code = code;
       throw wrapped;

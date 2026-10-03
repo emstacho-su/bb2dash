@@ -564,3 +564,13 @@ node scripts/db-test.mjs --only phase14_091_sync_runner.sql    -> PASS; db-test:
 RED   login.test.ts › KEEPALIVE_MINUTES=0 stops the navigation only …   ×
 GREEN login.test.ts   22 passed (fake clock: a probe at 60 min, no goto; then 401 -> re-login -> dead -> raised)
 ```
+
+### Item 8 — connection-class SQLSTATEs drop the client
+
+`isStatementError` (db.ts): class `08`, `57P` and `XX000` (and anything without a SQLSTATE) drop the
+client; the next call reconnects. A statement refusal (`22023`) keeps it.
+
+```
+RED   integration.test.ts › SQLSTATE 08006 / 08003 / 57P01 / 57P03 / XX000 …   5 failed
+GREEN integration.test.ts   22 passed
+```

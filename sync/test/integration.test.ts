@@ -416,6 +416,24 @@ describe('the pg adapter', () => {
     expect(f.made).toHaveLength(2);
   });
 
+  it.each(['08006', '08003', '57P01', '57P03', 'XX000'])('R2 item 8: SQLSTATE %s is connection-class: the client is dropped and the next call reconnects', async (code) => {
+    let first = true;
+    const f = fakeClient({
+      query: async () => {
+        if (first) {
+          first = false;
+          throw Object.assign(new Error('terminating connection'), { code });
+        }
+        return { rows: [] };
+      },
+    });
+    const q = createPgQuery({ dsn: DSN, log: () => {}, newClient: f.newClient });
+    await expect(q('select 1')).rejects.toMatchObject({ code });
+    await q('select 2');
+    expect(f.made).toHaveLength(2);
+    expect(f.ended).toContain(0);
+  });
+
   it('a failed connect is closed and reported, and the next call tries again', async () => {
     let attempts = 0;
     const f = fakeClient({
