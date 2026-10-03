@@ -296,3 +296,35 @@ Check: `npx vitest run test/unit/reducer.test.ts test/unit/sources.test.ts` (fro
 | `cd desktop && npm run typecheck && npx vitest run` | all exit 0 · `Test Files  36 passed (36)` · `Tests  708 passed (708)` (was 707) |
 
 `git diff --numstat main -- web/src/lib/queries.sync.ts` → `16	7	web/src/lib/queries.sync.ts`.
+
+---
+
+## Round 3 (2026-10-03) — R3-7 and R3-8
+
+`origin/feat/content-history-19` (78d0be8) merged into this branch first (merge, not rebase).
+
+### R3-7 (MEDIUM) — a failed stream read says so
+
+`CourseStream.tsx`: when `useCourseStream` fails, the "New and changed materials" block renders its
+heading and one line, `Couldn't load new and changed materials.` (`MATERIALS_LOAD_ERROR`), as a
+`<p className={styles.state} role="alert">`, the page's existing state style. Posts a previous read
+left in the cache are still listed under it. While the read is in flight the block renders nothing.
+
+Check: `npx vitest run test/course-stream.history.test.tsx test/course-stream.test.tsx`
+
+* RED (tests first: the mock gained failing and hanging tables):
+  `npx vitest run test/course-stream.history.test.tsx` → `Test Files  1 failed (1)` ·
+  `Tests  1 failed | 19 passed (20)`: `Unable to find role="region" and name "New and changed materials"`
+  for the rejected query. The loading case passed before the fix.
+* GREEN: `Test Files  2 passed (2)` · `Tests  26 passed (26)`
+
+### R3-8 (LOW) — one import from `./sync-run-state`
+
+`queries.sync.ts` imports `./sync-run-state` in one statement (`grep -c "from './sync-run-state'"` → 1).
+`git diff --numstat main -- web/src/lib/queries.sync.ts` → `22	7` (the one statement spans eight lines).
+
+### Round 3 gates
+
+`cd web && npm run typecheck && npm run build && npx vitest run`, each exit code captured on its own
+(not through a pipe): `typecheck=0 build=0 vitest=0` · `Test Files  132 passed (132)` ·
+`Tests  2304 passed (2304)` (was 2302). Desktop untouched in round 3.
