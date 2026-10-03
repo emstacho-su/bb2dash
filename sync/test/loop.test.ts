@@ -23,6 +23,7 @@ function fakeRpc(over: Partial<SyncRpc> = {}, request: SyncRequest | null = { id
   let open = request;
   const rpc: SyncRpc = {
     sweepStale: vi.fn(async () => { rec.calls.push('sweep'); return 0; }),
+    ownClaims: vi.fn(async () => []),
     next: vi.fn(async () => { rec.calls.push('next'); return open; }),
     claim: vi.fn(async () => { rec.calls.push('claim'); return true; }),
     requeueOrphans: vi.fn(async () => 0),
@@ -49,7 +50,7 @@ function deps(rpc: SyncRpc, rec: Recorder, over: Partial<PassDeps> = {}): PassDe
     login: { check: vi.fn(async (): Promise<Verdict> => { rec.calls.push('probe'); return 'alive'; }) },
     crawl: vi.fn(async () => { rec.calls.push('crawl'); }),
     waitFold: vi.fn(async (runId: string) => { rec.calls.push('wait'); return rpc.runOutcome(runId); }),
-    files: vi.fn(async () => { rec.calls.push('files'); return { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null, embedded: false }; }),
+    files: vi.fn(async () => { rec.calls.push('files'); return { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null }; }),
     mintRunId: () => RUN_ID,
     setPassRunning: vi.fn(),
     log: () => {},
@@ -184,6 +185,114 @@ describe('one pass', () => {
     const d = deps(rpc, rec);
     await expect(runPass(d)).rejects.toThrow('connection terminated');
     expect(d.setPassRunning).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
+  interface Row { state: string; run_id: string | null; claimed_by: string | null; attempts: number }
+
+  /** A database with one queued request, '601', and one claimed by somebody else, '602'. */
+  function statefulRpc(outcome: RunOutcome['status'] = 'ok') {
+    const rows = new Map<string, Row>([
+      ['601', { state: 'queued', run_id: null, claimed_by: null, attempts: 0 }],
+      ['602', { state: 'claimed', run_id: '00000000-1491-4000-8000-0000000000cc', claimed_by: 'bb-sync session', attempts: 0 }],
+    ]);
+    const closes: { id: string; state: string; report: Report }[] = [];
+    const rpc: SyncRpc = {
+      sweepStale: async () => 0,
+      ownClaims: async () =>
+        [...rows].filter(([, r]) => r.state === 'claimed' && r.claimed_by === 'sync-runner')
+          .map(([id, r]) => ({ id, runId: r.run_id, claimedAt: '2026-10-03T22:00:00Z', claimAttempts: r.attempts })),
+      next: async () => {
+        const q = [...rows].find(([, r]) => r.state === 'queued');
+        return q ? { id: q[0], createdAt: '2026-10-03T22:00:00Z', params: {} } : null;
+      },
+      claim: async (id) => {
+        const r = rows.get(id)!;
+        if (r.state !== 'queued') return false;
+        Object.assign(r, { state: 'claimed', claimed_by: 'sync-runner', attempts: r.attempts + 1 });
+        return true;
+      },
+      requeueOrphans: async () => 0,
+      registerRun: async (id, runId) => {
+        rows.get(id)!.run_id = runId;
+        return true;
+      },
+      runOutcome: async () => ({ syncRunId: '62', status: outcome, summary: {} }),
+      fileWorklist: async () => [],
+      fileStored: async () => true,
+      close: async (id, state, report) => {
+        const r = rows.get(id)!;
+        if (r.claimed_by !== 'sync-runner' && r.state === 'claimed') throw new Error('sync_close: another claimant');
+        r.state = state;
+        closes.push({ id, state, report });
+      },
+      enqueue: async () => null,
+      loginOk: async () => 0,
+      loginRequired: async () => '1',
+    };
+    return { rpc, rows, closes };
+  }
+
+  function stateDeps(rpc: SyncRpc, over: Partial<PassDeps> = {}): PassDeps {
+    return {
+      rpc,
+      login: { check: async () => 'alive' as Verdict },
+      crawl: async () => {},
+      waitFold: (runId) => rpc.runOutcome(runId),
+      files: async () => ({ files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null }),
+      mintRunId: () => RUN_ID,
+      setPassRunning: () => {},
+      log: () => {},
+      ...over,
+    };
+  }
+
+  it('a fold-wait timeout leaves the claim; the next pass waits again and closes it done', async () => {
+    const { rpc, rows, closes } = statefulRpc();
+    expect(await runPass(stateDeps(rpc, { waitFold: async () => null }))).toBe('fold_timeout');
+    expect(rows.get('601')!.state).toBe('claimed');
+    expect(await runPass(stateDeps(rpc))).toBe('idle');
+    expect(closes).toEqual([expect.objectContaining({ id: '601', state: 'done' })]);
+  });
+
+  it('a stop during the fold wait leaves the claim; the next runner closes it', async () => {
+    const { rpc, rows, closes } = statefulRpc();
+    let t = 0;
+    const stopping = stateDeps(rpc, {
+      waitFold: (runId) => waitForFold(runId, { rpc: { runOutcome: async () => ({ syncRunId: '62', status: 'running', summary: null }) }, now: () => t, sleep: async (ms) => { t += ms; }, shouldStop: () => true }),
+    });
+    expect(await runPass(stopping)).toBe('fold_timeout');
+    expect(rows.get('601')!.state).toBe('claimed');
+    expect(await runPass(stateDeps(rpc))).toBe('idle');
+    expect(closes.map((c) => [c.id, c.state])).toEqual([['601', 'done']]);
+  });
+
+  it('a throw after the registration leaves the claim; the next pass closes it', async () => {
+    const { rpc, rows, closes } = statefulRpc();
+    await expect(runPass(stateDeps(rpc, { waitFold: async () => { throw new Error('connection terminated'); } }))).rejects.toThrow('connection terminated');
+    expect(rows.get('601')!.state).toBe('claimed');
+    expect(await runPass(stateDeps(rpc))).toBe('idle');
+    expect(closes.map((c) => [c.id, c.state])).toEqual([['601', 'done']]);
+  });
+
+  it('a resumed run that failed closes failed, and the files step is not run', async () => {
+    const { rpc, closes } = statefulRpc('failed');
+    const files = vi.fn(async () => ({ files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null }));
+    await runPass(stateDeps(rpc, { waitFold: async () => null }));
+    await runPass(stateDeps(rpc, { files }));
+    expect(closes.map((c) => [c.id, c.state, c.report.error])).toEqual([['601', 'failed', 'fold failed']]);
+    expect(files).not.toHaveBeenCalled();
+  });
+
+  it('never touches a claim it did not make, and leaves its own unregistered claims to the requeue', async () => {
+    const { rpc, rows, closes } = statefulRpc();
+    rows.set('603', { state: 'claimed', run_id: null, claimed_by: 'sync-runner', attempts: 1 });
+    rows.get('601')!.state = 'done';
+    expect(await runPass(stateDeps(rpc))).toBe('idle');
+    expect(closes).toEqual([]);
+    expect(rows.get('602')!.state).toBe('claimed');
+    expect(rows.get('603')!.state).toBe('claimed');
   });
 });
 

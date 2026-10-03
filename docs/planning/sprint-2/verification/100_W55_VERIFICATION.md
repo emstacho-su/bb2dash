@@ -464,3 +464,30 @@ role with no password. After it:
   `attention_items` each → SQLSTATE `42501`; `select * from sync_next()` → 0 rows (nothing queued)
 
 All eleven secret files now exist in `SECRETS_DIR`.
+
+## Round 2 — W-55 (brief 100, "## Round 2 — W-55"), 2026-10-03
+
+Merged `origin/feat/containers-14` first (b0c1881). Note: `fix(14-R2-1)` was already used by the
+heartbeat temp-name fix (d5eabe5); this round's item commits use the same `fix(14-R2-<n>)` form.
+
+### Item 12 — `FilesStepResult.embedded` dropped (fec6015)
+
+```
+RED   files.test.ts › an embed that exits non-zero …   × (keys were embedError, embedded, files, stopped)
+GREEN files.test.ts                                     21 passed
+```
+
+### Item 1 — the runner resumes its own registered, unclosed claims
+
+`sync_own_claims()` (093) returns `(id, run_id, claimed_at, claim_attempts)` for `claimed_by =
+'sync-runner'` open sync claims only. At the top of every pass (so also on start) the runner waits
+for each registered one's run again: folded → files, embed, `sync_close`; failed → `sync_close`
+failed; still running → left for the next pass. `sync_close` itself refuses any other claimant.
+
+```
+RED   loop.test.ts   4 failed | 21 passed  (timeout, stop, throw after register, a failed run)
+GREEN loop.test.ts   25 passed; the whole sync suite 113 passed; tsc exit 0
+RED   node scripts/db-test.mjs --only phase14_093_review_fixes.sql
+      FAIL  phase14_093_review_fixes.sql  FAIL phase14_093: migration 093 is not applied (sync_own_claims is missing)
+      db-test: passed 0, failed 1, units 1
+```

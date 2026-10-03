@@ -103,6 +103,12 @@ class FakeDb {
       case 'sync_sweep_stale':
       case 'sync_requeue_orphans':
         return one({ n: 0 });
+      case 'sync_own_claims':
+        return {
+          rows: this.requests
+            .filter((r) => r.state === 'claimed' && r.claimed_by === 'sync-runner')
+            .map((r) => ({ id: String(r.id), run_id: r.run_id, claimed_at: r.created_at, claim_attempts: 1 })),
+        };
       case 'sync_next': {
         const q = this.requests.find((r) => r.state === 'queued');
         return { rows: q ? [{ id: String(q.id), created_at: q.created_at, params: q.params }] : [] };

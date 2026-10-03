@@ -61,9 +61,63 @@ function message(error: unknown): string {
 
 const NO_FILES: FilesStepResult = { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null };
 
+/** Steps 8–10 for a run that has folded: the files and the embed step (unless the fold failed), then the close. */
+async function finishRun(d: PassDeps, id: string, outcome: RunOutcome, attempts: number): Promise<'done' | 'failed'> {
+  let files = NO_FILES;
+  let filesError: string | null = null;
+  if (outcome.status !== 'failed') {
+    try {
+      files = await d.files();
+    } catch (error) {
+      filesError = message(error);
+    }
+  }
+  const { state, report } = buildReport({
+    foldStatus: outcome.status,
+    files: files.files,
+    claimAttempts: attempts,
+    filesStopped: files.stopped,
+    filesError,
+    embedError: files.embedError,
+  });
+  await d.rpc.close(id, state, report);
+  d.log(`pass: request ${id} closed ${state}`);
+  return state;
+}
+
+/**
+ * R2 item 1: the runner's own registered claims it never closed (a fold-wait timeout, a stop during
+ * the wait, a throw after the registration). Each run is waited for again; a folded run gets its
+ * files and its close, a failed run closes failed, and a run still running is left for the next
+ * pass (or Phase 19's 30-minute rule). Only sync_own_claims' rows, which are claimed_by =
+ * 'sync-runner', are ever closed here; an unregistered one is the requeue's, on start.
+ */
+export async function resumeOwnClaims(d: PassDeps): Promise<number> {
+  const claims = (await d.rpc.ownClaims()).filter((c) => c.runId !== null);
+  let closed = 0;
+  for (const claim of claims) {
+    d.setPassRunning(true);
+    try {
+      d.log(`pass: resuming request ${claim.id}, run ${claim.runId}`);
+      const outcome = await d.waitFold(claim.runId!);
+      if (!outcome) {
+        d.log(`pass: run ${claim.runId} has still not folded; request ${claim.id} stays claimed`);
+        continue;
+      }
+      await finishRun(d, claim.id, outcome, claim.claimAttempts);
+      closed += 1;
+    } finally {
+      d.setPassRunning(false);
+    }
+  }
+  return closed;
+}
+
 export async function runPass(d: PassDeps): Promise<PassOutcome> {
   const swept = await d.rpc.sweepStale();
   if (swept > 0) d.log(`pass: the sweep flagged ${swept} stale claim(s)`);
+
+  await resumeOwnClaims(d);
 
   const request = await d.rpc.next();
   if (!request) return 'idle';
@@ -119,31 +173,10 @@ export async function runPass(d: PassDeps): Promise<PassOutcome> {
 
     const outcome = await d.waitFold(runId);
     if (!outcome) {
-      d.log(`pass: run ${runId} did not fold in time; request ${id} stays claimed for the 30-minute rule`);
+      d.log(`pass: run ${runId} has not folded yet; request ${id} stays claimed and the next pass resumes it`);
       return 'fold_timeout';
     }
-
-    let files = NO_FILES;
-    let filesError: string | null = null;
-    if (outcome.status !== 'failed') {
-      try {
-        files = await d.files();
-      } catch (error) {
-        filesError = message(error);
-      }
-    }
-
-    const { state, report } = buildReport({
-      foldStatus: outcome.status,
-      files: files.files,
-      claimAttempts: attempts,
-      filesStopped: files.stopped,
-      filesError,
-      embedError: files.embedError,
-    });
-    await d.rpc.close(id, state, report);
-    d.log(`pass: request ${id} closed ${state}`);
-    return state;
+    return await finishRun(d, id, outcome, attempts);
   } finally {
     d.setPassRunning(false);
   }
