@@ -76,8 +76,31 @@ The `/proc` scan while `session-age.mjs` ran (12 Chromium processes): `grep -c -
 Each probe in the log is a request from the browser's own cookie jar, so the overnight log measures a
 login touched every 30 minutes (`PROBE_MINUTES`), not an untouched one.
 
-The `Verdict:` and `LOGIN_HOSTS:` lines are written after Stack's Duo login, the restart and the
-overnight log.
+After the code-review fixes (c3d3f9c) the container was recreated and restarted once with nobody logged
+in; it came back each time (`200` from the page, `users/me 401`). The laptop then slept: the log jumps from
+`users/me 401 2026-10-02T06:56:17Z +0m` to `users/me 401 2026-10-03T16:50:10Z +2034m`.
+
+**Stack's Duo login, 2026-10-03.** Stack opened `http://127.0.0.1:6080/vnc.html` in his Chrome, entered the
+VNC password and signed in with NetID and Duo, answering yes to "Stay signed in?". The top frame passed
+through one host besides Blackboard (`host login.microsoftonline.com 2026-10-03T16:50:54Z`); the Duo step
+did not navigate the top frame to a host of its own. Stack's note at the login: the stay-signed-in
+feature "tends to not work" for him (DECISIONS 2026-09-16 decision 6 says the same).
+
+* `walk-14/01-novnc-duo-login.png`: the noVNC view of `http://127.0.0.1:6080/vnc.html`, taken right after
+  the login with a headless viewer on the host (the address is in this row, not in an address bar). The
+  container's Chromium shows `blackboard.syracuse.edu/ultra/course` with the heading "Courses" and Stack's
+  courses under Fall 2026.
+* `docker compose restart sync` at 2026-10-03T16:53:16Z. First probe of the new run:
+  `users/me 200 2026-10-03T16:53:19.768Z +0m`. The `/proc` scan again counted `0` `--no-sandbox`.
+* `walk-14/02-after-restart.png`: the same address after the restart. Chromium opened its start URL
+  `/ultra/`, which lands signed in on `/ultra/institution-page` (Stack's name in the side bar, no sign-in
+  form), not on "Courses"; the check's heading reads "Institution Page" for that reason. Chromium shows
+  "Restore pages? Chromium didn't shut down correctly": the stop closed the browser but it still marked the
+  profile as crashed. Not a login problem; a note for task 15 (the runner's launch dismisses or prevents it).
+
+LOGIN_HOSTS: login.microsoftonline.com
+
+The `Verdict:` line is written after the overnight log.
 
 Reading the numbers into the phase (brief 100 open item 1): `KEEPALIVE_MINUTES` and B-45's hour stay at
 their provisional values until the idle series has ended and the four reopen rows are filled; the
