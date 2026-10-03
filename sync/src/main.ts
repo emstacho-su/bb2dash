@@ -17,7 +17,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { runCrawl, mintRunId, waitForFold, type CrawlPage } from './crawl.js';
 import { createPgQuery, createRpc, newPgClient, redactDsn, type QueryFn } from './db.js';
-import { makeEmbedder, makeExtractor, makeSupabaseFiles, runFilesStep, spawnCollect, type ExtractUnit } from './files.js';
+import { makeEmbedder, makeExtractor, makeSupabaseFiles, runFilesStep, type ExtractUnit } from './files.js';
 import { BLACKBOARD_ORIGIN, LoginWatch, PROBE_URL, type LoginPort } from './login.js';
 import { runLoop } from './loop.js';
 import { loadConfig, readTextOrNull, stateFiles, type RunnerConfig } from './secrets.js';
@@ -282,16 +282,14 @@ export function realDeps(env: NodeJS.ProcessEnv = process.env): RunnerDeps {
     process.stdout.write(`${redactDsn(line, config.dbUrl)}\n`);
   };
   const ingestDir = path.join(repoRoot, 'ingest');
-  // embed_corpus.mjs reads SB_ANON_JWT from its environment (Phase 18's contract).
-  const childEnv = { ...env, SB_ANON_JWT: config.anonJwt, SUPABASE_URL: config.supabaseUrl };
   const files = stateFiles(config.stateDir);
   return {
     config,
     query: createPgQuery({ dsn: config.dbUrl, log, newClient: newPgClient }),
     openBrowser: () => openPlaywright(config, log),
     fetchImpl: fetch,
-    extract: makeExtractor(ingestDir),
-    embed: makeEmbedder(ingestDir, spawnCollect(childEnv)),
+    extract: makeExtractor(ingestDir, { parentEnv: env }),
+    embed: makeEmbedder({ supabaseUrl: config.supabaseUrl, jwt: config.anonJwt, log }),
     readSource: (file) => fs.promises.readFile(file, 'utf8'),
     writeState: (name, text) => writeAtomic(files[name], text),
     log,

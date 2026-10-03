@@ -292,7 +292,7 @@ describe('the files step', () => {
     const { p } = ports([row('84')], { embed: vi.fn(async () => ({ code: 1, tail: 'embed-corpus 401' })) });
     const r = await runFilesStep(p);
     expect(Object.keys(r).sort()).toEqual(['embedError', 'files', 'stopped']);
-    expect(r.embedError).toBe('embed_corpus.mjs exited 1: embed-corpus 401');
+    expect(r.embedError).toBe("embed_corpus.mjs's loop ended 1: embed-corpus 401");
   });
 });
 
@@ -355,17 +355,37 @@ describe('the adapters', () => {
     expect((calls[1]!.init.headers as Record<string, string>).Prefer).toBe('return=minimal');
   });
 
-  it('the extractor runs the locked project and reads extract_text.py\'s units', async () => {
-    const exec = vi.fn(async () => ({ stdout: JSON.stringify([{ file: 'a.pdf', status: 'ok', units: [{ unit_kind: 'page', unit_no: 1, text: 'x' }] }]) }));
-    const extract = makeExtractor('/app/ingest', exec);
+  it('R2 item 9: the extractor is pull_files\' extractUnits (the locked project), and uv gets only what it needs', async () => {
+    const parent = { PATH: '/usr/bin', HOME: '/home/pwuser', UV_CACHE_DIR: '/cache/uv', LANG: 'C.UTF-8', SB_ANON_JWT: 'eyJ.secret.x', SB_ANON_KEY: 'sb_publishable_x', SYNC_RUNNER_DB_URL: 'postgresql://u:p@h/db' };
+    const exec = vi.fn(() => JSON.stringify([{ file: 'a.pdf', status: 'ok', units: [{ unit_kind: 'page', unit_no: 1, text: 'x' }] }]));
+    const extract = makeExtractor('/app/ingest', { exec, parentEnv: parent });
     expect(await extract('/app/course context/a.pdf')).toEqual([{ unit_kind: 'page', unit_no: 1, text: 'x' }]);
-    expect(exec).toHaveBeenCalledWith('uv', ['run', '--locked', '--project', '/app/ingest', 'python', path.join('/app/ingest', 'extract_text.py'), '/app/course context/a.pdf'], expect.objectContaining({ cwd: '/app/ingest' }));
+    const [cmd, args, opts] = exec.mock.calls[0] as unknown as [string, string[], { cwd: string; env: Record<string, string> }];
+    expect(cmd).toBe('uv');
+    expect(args).toEqual(['run', '--locked', '--project', '/app/ingest', 'python', path.join('/app/ingest', 'extract_text.py'), '/app/course context/a.pdf']);
+    expect(opts.cwd).toBe('/app/ingest');
+    expect(opts.env).toEqual({ PATH: '/usr/bin', HOME: '/home/pwuser', UV_CACHE_DIR: '/cache/uv', LANG: 'C.UTF-8' });
   });
 
-  it('the embedder runs node ingest/embed_corpus.mjs once and returns its exit code and last line', async () => {
-    const run = vi.fn(async () => ({ code: 0, output: 'parts 3\nremaining_parts=0\n' }));
-    const embed = makeEmbedder('/app/ingest', run);
+  it('R2 item 9: the embedder runs embed_corpus.mjs\'s loop in-process with the anon JWT, no child process', async () => {
+    const runLoop = vi.fn(async () => ({ exitCode: 0, calls: 2, retries: 0, remainingParts: 0 }));
+    const makePostImpl = vi.fn(() => async () => ({ status: 200, body: {} }));
+    const embed = makeEmbedder({ supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', runLoop, makePost: makePostImpl, log: () => {} });
     expect(await embed()).toEqual({ code: 0, tail: 'remaining_parts=0' });
-    expect(run).toHaveBeenCalledWith(process.execPath, [path.join('/app/ingest', 'embed_corpus.mjs')], '/app/ingest');
+    expect(makePostImpl).toHaveBeenCalledWith('https://p.supabase.co', 'eyJ.anon.x');
+    expect(runLoop).toHaveBeenCalledTimes(1);
+
+    const failing = makeEmbedder({
+      supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', log: () => {}, makePost: makePostImpl,
+      runLoop: vi.fn(async () => ({ exitCode: 1, calls: 1, retries: 0, remainingParts: null, error: 'embed-corpus answered 401' })),
+    });
+    expect(await failing()).toEqual({ code: 1, tail: 'embed-corpus answered 401' });
+  });
+
+  it('R2 item 9: no source file spawns a child with the parent\'s environment', () => {
+    for (const file of ['files.ts', 'main.ts']) {
+      const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', file), 'utf8');
+      expect(src, file).not.toMatch(/\.\.\.(process\.)?env\b|spawn\(/);
+    }
   });
 });

@@ -585,3 +585,15 @@ the contents. `main.ts`, `probe.ts` and `enqueue.ts` import it; their copies are
 RED   secrets.test.ts   2 failed (the helper; no copies in main/probe/enqueue)
 GREEN the whole sync suite 127 passed; tsc exit 0
 ```
+
+### Item 9 — reuse, and no child gets the parent's environment
+
+The embed step calls `embed_corpus.mjs`'s exported `runEmbedLoop` with its `makePost(supabaseUrl,
+anonJwt)` in-process (no child process at all). The extractor is `pull_files.mjs`'s exported
+`extractUnits` (the locked project), run with an environment of only what `uv` needs (`PATH`, `HOME`,
+temp and locale, `UV_*`, `PYTHON*`); none of the runner's secrets reaches it. `spawnCollect` is gone.
+
+```
+RED   files.test.ts   3 failed (extractUnits + uv env; in-process embed; no ...env spread or spawn)
+GREEN the whole sync suite 128 passed; tsc exit 0
+```

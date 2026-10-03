@@ -15,13 +15,14 @@
  * submission's Storage 409 go to the report's `not_pulled`. Keys and checks are `ingest/pull_files.mjs`'s
  * exported pure helpers; its `main`, whose update SQL is the owner's, is never run.
  *
- * Once at least one unit was posted, `node ingest/embed_corpus.mjs` runs once; never on none.
+ * Once at least one unit was posted, `ingest/embed_corpus.mjs`'s loop runs once, in-process; never on none.
  */
 
-import { execFile, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
+import { makePost, runEmbedLoop } from '../../ingest/embed_corpus.mjs';
 import { downloadTo, resolveSignedUrl } from '../../ingest/fetch_signed.mjs';
 import {
   BUCKET,
@@ -30,10 +31,10 @@ import {
   downloadNameFor,
   duplicateIsAcceptable,
   encodeKey,
+  extractUnits,
   isDuplicateAnswer,
   isSubmissionRow,
   mimeFor,
-  parseExtractOutput,
   storageKeyFor,
   textPostOutcome,
   textRows,
@@ -45,7 +46,6 @@ import type { NotPulled } from './report.js';
 
 const HTTP_CONFLICT = 409;
 const EXTRACT_TIMEOUT_MS = 300_000;
-const EXTRACT_MAX_BUFFER = 64 * 1024 * 1024;
 
 export interface ExtractUnit {
   unit_kind: string;
@@ -244,7 +244,7 @@ export async function runFilesStep(p: FilesPorts): Promise<FilesStepResult> {
   let embedError: string | null = null;
   if (unitsPosted > 0) {
     const run = await p.embed();
-    if (run.code !== 0) embedError = `embed_corpus.mjs exited ${run.code}: ${run.tail}`;
+    if (run.code !== 0) embedError = `embed_corpus.mjs's loop ended ${run.code}: ${run.tail}`;
   }
 
   return { files: { pulled, not_pulled: notPulled }, stopped, embedError };
@@ -272,46 +272,63 @@ export function makeSupabaseFiles(supabaseUrl: string, anonKey: string, fetchImp
   };
 }
 
-export type ExecFn = (
+/** The parts of the environment `uv` needs to find itself, its cache and Python; nothing else. */
+const UV_ENV_KEYS = /^(PATH|Path|HOME|USERPROFILE|SYSTEMROOT|SystemRoot|TEMP|TMP|TMPDIR|LANG|LC_ALL|XDG_CACHE_HOME|XDG_DATA_HOME|UV_[A-Z_]+|PYTHON[A-Z_]*)$/;
+
+export function uvEnv(parent: Record<string, string | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parent)) {
+    if (value !== undefined && UV_ENV_KEYS.test(key)) out[key] = value;
+  }
+  return out;
+}
+
+export type ExecSyncFn = (
   file: string,
   args: string[],
-  opts: { cwd: string; timeout: number; maxBuffer: number; encoding: 'utf8' },
-) => Promise<{ stdout: string }>;
+  opts: { cwd: string; encoding: 'utf8'; maxBuffer: number; env: Record<string, string>; timeout: number },
+) => string;
 
-const execFileAsync: ExecFn = (file, args, opts) =>
-  new Promise((resolve, reject) => {
-    execFile(file, args, opts, (error, stdout) => (error ? reject(error) : resolve({ stdout: String(stdout) })));
-  });
-
-/** `uv run --locked --project ingest python ingest/extract_text.py <file>` (task 14's locked set). */
-export function makeExtractor(ingestDir: string, exec: ExecFn = execFileAsync) {
-  return async (filePath: string): Promise<ExtractUnit[]> => {
-    const args = ['run', '--locked', '--project', ingestDir, 'python', path.join(ingestDir, 'extract_text.py'), filePath];
-    const { stdout } = await exec('uv', args, { cwd: ingestDir, timeout: EXTRACT_TIMEOUT_MS, maxBuffer: EXTRACT_MAX_BUFFER, encoding: 'utf8' });
-    return parseExtractOutput(stdout) as ExtractUnit[];
-  };
+/**
+ * R2 item 9: pull_files.mjs's `extractUnits` (the locked project: `uv run --locked --project ingest
+ * python ingest/extract_text.py <file>`, W-56's task 14), with a child environment of only what uv
+ * needs: no secret of the runner's reaches it.
+ */
+export function makeExtractor(
+  ingestDir: string,
+  opts: { exec?: ExecSyncFn; parentEnv?: Record<string, string | undefined> } = {},
+) {
+  const exec = opts.exec ?? (execFileSync as unknown as ExecSyncFn);
+  const env = uvEnv(opts.parentEnv ?? process.env);
+  // extractUnits' runner is typed from its execFileSync default; this one adds the env and a timeout.
+  const runner = (cmd: string, args: string[], o: { cwd: string; encoding: 'utf8'; maxBuffer: number }) =>
+    exec(cmd, args, { ...o, env, timeout: EXTRACT_TIMEOUT_MS });
+  return async (filePath: string): Promise<ExtractUnit[]> =>
+    extractUnits(ingestDir, filePath, runner as unknown as typeof execFileSync) as ExtractUnit[];
 }
 
-export type RunFn = (cmd: string, args: string[], cwd: string) => Promise<{ code: number; output: string }>;
+/** runEmbedLoop as this file calls it (its JS defaults type it too narrowly to call with post). */
+export type EmbedLoopFn = (o: {
+  post: (body: object) => Promise<{ status: number; body: unknown }>;
+  log: (line: string) => void;
+}) => Promise<unknown>;
 
-/** A child process with an environment, its output collected (stdout and stderr together). */
-export function spawnCollect(env: NodeJS.ProcessEnv): RunFn {
-  return (cmd, args, cwd) =>
-    new Promise((resolve) => {
-      const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-      let output = '';
-      child.stdout.on('data', (chunk) => (output += String(chunk)));
-      child.stderr.on('data', (chunk) => (output += String(chunk)));
-      child.on('error', (error) => resolve({ code: 127, output: `${output}${error.message}` }));
-      child.on('close', (code) => resolve({ code: code ?? 1, output }));
-    });
+export interface EmbedderOptions {
+  supabaseUrl: string;
+  /** The legacy anon JWT (`SB_ANON_JWT`): `embed-corpus` has verify_jwt on. */
+  jwt: string;
+  log: (line: string) => void;
+  runLoop?: EmbedLoopFn;
+  makePost?: typeof makePost;
 }
 
-/** `node ingest/embed_corpus.mjs`, which loops `embed-corpus` until `remaining_parts = 0`. */
-export function makeEmbedder(ingestDir: string, run: RunFn) {
+/** R2 item 9: `embed_corpus.mjs`'s own loop, in-process, until `remaining_parts = 0`. No child process. */
+export function makeEmbedder(o: EmbedderOptions) {
+  const loop = o.runLoop ?? (runEmbedLoop as unknown as EmbedLoopFn);
+  const post = (o.makePost ?? makePost)(o.supabaseUrl, o.jwt);
   return async (): Promise<{ code: number; tail: string }> => {
-    const { code, output } = await run(process.execPath, [path.join(ingestDir, 'embed_corpus.mjs')], ingestDir);
-    const lines = output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    return { code, tail: (lines.at(-1) ?? '').slice(0, 300) };
+    const result = (await loop({ post, log: o.log })) as { exitCode: number; remainingParts?: number | null; error?: string };
+    const tail = result.exitCode === 0 ? `remaining_parts=${result.remainingParts ?? 0}` : String(result.error ?? 'embed failed');
+    return { code: result.exitCode, tail: tail.slice(0, 300) };
   };
 }
