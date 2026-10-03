@@ -60,6 +60,7 @@ vi.mock('@/components/tracker/UpcomingTracker', () => ({
 const {
   CourseStream,
   MATERIAL_POSTS_SHOWN,
+  contentPostLink,
   materialChangeLabel,
   materialHistoryPosts,
   materialPostKey,
@@ -243,7 +244,7 @@ describe('CourseStream — material posts say New or Changed, dated by crawl', (
     expect(posts[1].querySelector('time')?.textContent).toContain('Mon · Sep 28');
   });
 
-  it('offers the shared Open ladder on a file post and nothing on a content item', async () => {
+  it('offers the shared Open ladder on a file post and no download on a content item', async () => {
     state.byTable.v_course_stream = [
       filePost(),
       filePost({ ref_id: '19', title: 'Not stored.pptx' }, { storage_path: undefined, source_url: undefined }),
@@ -255,8 +256,11 @@ describe('CourseStream — material posts say New or Changed, dated by crawl', (
     expect(within(posts[0]).getByRole('button', { name: 'Open' })).toBeEnabled();
     // The view did not carry the routes: unknown, so "Not stored", never "No route".
     expect(within(posts[1]).getByRole('button', { name: 'Not stored' })).toBeDisabled();
+    // R4: a document item opens the course in Blackboard, and that is its only control.
     expect(within(posts[2]).queryByRole('button')).toBeNull();
-    expect(within(posts[2]).queryByRole('link')).toBeNull();
+    expect(within(posts[2]).getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Open in Blackboard ↗',
+    ]);
   });
 
   it('renders one file twice when two crawls posted it, with no duplicate-key warning', async () => {
@@ -353,5 +357,126 @@ describe('CourseStream — the materials block when the stream read does not ans
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(screen.queryByRole('region', { name: SECTION })).toBeNull();
     expect(screen.queryByText("Couldn't load new and changed materials.")).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Round 4 (Stack, 2026-10-03): a content item can be reached from its post.
+ * "Videos don't need to be downloaded and stored... Only keep the link to it."
+ * ------------------------------------------------------------------------ */
+
+/** The course header's "Blackboard ↗" target: `v_course_display.bb_url` (the factory's). */
+const COURSE_BB_URL = 'https://blackboard.syracuse.edu/course/IST323';
+const KALTURA_LAUNCH = 'https://blackboard.syracuse.edu/webapps/blackboard/execute/blti/launchPlacement?id=kaltura_9';
+
+describe('contentPostLink — where a content post opens', () => {
+  const course = { bb_url: COURSE_BB_URL };
+
+  it('opens a link item at its own https or http url', () => {
+    expect(contentPostLink(nodePost({}, { item_kind: 'link', url: 'https://www.nist.gov/cyberframework' }), course)).toEqual({
+      href: 'https://www.nist.gov/cyberframework',
+      label: 'Open ↗',
+    });
+    expect(contentPostLink(nodePost({}, { item_kind: 'link', url: 'http://example.edu/reading' }), course)).toEqual({
+      href: 'http://example.edu/reading',
+      label: 'Open ↗',
+    });
+  });
+
+  it('gives a link item with any other scheme, a malformed url or none, no link', () => {
+    for (const url of [
+      'javascript:alert(1)',
+      'JAVASCRIPT:alert(1)',
+      'data:text/html,<b>x</b>',
+      'ftp://example.edu/file',
+      'file:///C:/x',
+      '//example.edu/no-scheme',
+      'not a url',
+      '   ',
+      null,
+      undefined,
+    ]) {
+      expect(contentPostLink(nodePost({}, { item_kind: 'link', url }), course), String(url)).toBeNull();
+    }
+  });
+
+  it('opens an lti item (a video) in the course’s Blackboard page, never at its launch url', () => {
+    expect(contentPostLink(nodePost({}, { item_kind: 'lti', url: KALTURA_LAUNCH }), course)).toEqual({
+      href: COURSE_BB_URL,
+      label: 'Open in Blackboard ↗',
+    });
+  });
+
+  it('opens a document item in the course’s Blackboard page', () => {
+    expect(contentPostLink(nodePost({}, { item_kind: 'document', url: null }), course)).toEqual({
+      href: COURSE_BB_URL,
+      label: 'Open in Blackboard ↗',
+    });
+  });
+
+  it('gives an lti or document item no link when the course has no safe Blackboard url', () => {
+    for (const bad of [{ bb_url: null }, { bb_url: 'javascript:alert(1)' }, { bb_url: 'http://bb.example' }, null]) {
+      expect(contentPostLink(nodePost({}, { item_kind: 'lti', url: KALTURA_LAUNCH }), bad)).toBeNull();
+      expect(contentPostLink(nodePost({}, { item_kind: 'document' }), bad)).toBeNull();
+    }
+  });
+
+  it('gives any other item kind, and a file post, no content link', () => {
+    for (const kind of ['folder', 'learning_module', 'file', null, undefined]) {
+      expect(contentPostLink(nodePost({}, { item_kind: kind, url: 'https://example.edu' }), course)).toBeNull();
+    }
+    expect(contentPostLink(filePost(), course)).toBeNull();
+  });
+});
+
+describe('CourseStream — content posts open, files keep their ladder', () => {
+  it('renders a link item’s external link with a safe target', async () => {
+    state.byTable.v_course_stream = [
+      nodePost({ title: 'NIST CSF' }, { item_kind: 'link', url: 'https://www.nist.gov/cyberframework', change: 'appeared' }),
+    ];
+    renderStream();
+
+    const [post] = within(await materialSection()).getAllByRole('listitem');
+    const link = within(post).getByRole('link', { name: 'Open ↗' });
+    expect(link).toHaveAttribute('href', 'https://www.nist.gov/cyberframework');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    // The title is text beside the link, not inside it.
+    expect(within(post).getByText('NIST CSF').closest('a')).toBeNull();
+  });
+
+  it('renders a video as "Open in Blackboard ↗" to the course page, and never its launch url', async () => {
+    state.byTable.v_course_stream = [
+      nodePost({ title: 'Week 5 lecture recording' }, { item_kind: 'lti', url: KALTURA_LAUNCH, change: 'appeared' }),
+    ];
+    renderStream();
+
+    const [post] = within(await materialSection()).getAllByRole('listitem');
+    const link = within(post).getByRole('link', { name: 'Open in Blackboard ↗' });
+    expect(link).toHaveAttribute('href', COURSE_BB_URL);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(post.innerHTML).not.toContain('launchPlacement');
+    expect(within(post).queryByRole('button')).toBeNull();
+  });
+
+  it('draws no link for a link item whose url is not http or https', async () => {
+    state.byTable.v_course_stream = [
+      nodePost({ title: 'Bad link' }, { item_kind: 'link', url: 'javascript:alert(1)', change: 'appeared' }),
+    ];
+    renderStream();
+
+    const [post] = within(await materialSection()).getAllByRole('listitem');
+    expect(within(post).queryByRole('link')).toBeNull();
+    expect(post.innerHTML).not.toContain('javascript:');
+  });
+
+  it('keeps a file post’s Open ladder and gives it no Blackboard link', async () => {
+    state.byTable.v_course_stream = [filePost()];
+    renderStream();
+
+    const [post] = within(await materialSection()).getAllByRole('listitem');
+    expect(within(post).getByRole('button', { name: 'Open' })).toBeEnabled();
+    expect(within(post).queryByRole('link', { name: 'Open in Blackboard ↗' })).toBeNull();
   });
 });
