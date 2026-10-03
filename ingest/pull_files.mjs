@@ -90,7 +90,6 @@ export const MIME_BY_EXT = {
   '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
-const EXTRACT_DEPS = ['python-docx', 'python-pptx', 'openpyxl'];
 
 /** Minimal argv parser: `--name value` pairs and `--flag` booleans. */
 export function parseArgs(argv) {
