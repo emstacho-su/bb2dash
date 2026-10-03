@@ -72,18 +72,18 @@ screens, PM.
 | 22 | Classwork same-path nodes | W-54 | — | done | e091f2e; no production change |
 | 23 | Raw-HTML guard | W-54 | — | done | 1cd49ba; only `layout.tsx` |
 | 24 | Desktop "Sync interrupted" toast | W-54 | — | done | 21b691d; reducer + sources 94 passed |
-| 25 | Integrate: merge branches, regenerate types, full suites | PM | 11, 17 | doing | all worker branches merged (426c590); types regenerated fbae093 (`bb_material_history: {` 1); SQL suite 56/56 (W-52, after merge); web + desktop suites running |
+| 25 | Integrate: merge branches, regenerate types, full suites | PM | 11, 17 | done | all branches merged (426c590); types fbae093 (`bb_material_history: {` 1; also picks up main's 161/162 functions); web typecheck 0, build 0, vitest 2302/2302 (main 2221); desktop typecheck 0, vitest 708/708; SQL 56/56; `mcp-server/` untouched |
 | 26 | Migrations recorded, md5 table, advisors | PM | 16 | done | 10/10 recorded (130–139), each md5 equal to its blob (138 `eded5cb4`, 139 `54ea43dc` added); security advisor 2026-10-03: 0 findings naming a Phase 19 object (3 pre-existing: `app_owner`, `calendar_push_now`, leaked-password protection) |
 | 27 | First register-first sync, live | Stack (`/bb-sync`) | 17, 25, skill installed | parked | Chrome's Blackboard tab was signed out on 2026-10-03 ~18:05Z (NetID login page; Duo is Stack's), so the PM could not run it. The register-first skill is installed: Stack's next Sync is task 27; its check and task 16's `fresh` half are read right after |
 | 27b | Live terminal-rule proof | PM | 16 | done | request 580 → run 592 `running` at claim, reaped at the 17:54Z tick, request `failed`, Inbox item 2636 open; Sync freed (0 open) |
 | 28 | Walk on the preview, `walk-19/01`–`06` | PM (walk helper) | 25, 27, 27b | done | 6 of 6 (01–03 afd529d; 04 ff029d5 during 27b; 05–06 10b7bb1 after the reap); cold loads, no console errors on 01–06; 04 is from the 27b run, not a crawl (task 27 can retake it) |
-| 29 | Nine DECISIONS rows, STATUS, ORCHESTRATOR | PM | 26 | todo | — |
+| 29 | Nine DECISIONS rows, STATUS, ORCHESTRATOR | PM | 26 | done | bc8942a; DECISIONS rows 339 → 348 (main + 9); STATUS row 21 + header + known issues; ORCHESTRATOR header, §1, §2 rule 8, §4 |
 | R2-1 | 139 re-key a re-created item (keeps its link) | W-52 → PM applied | 137 | done | md5 `54ea43dc…` equal; `stage_content` prosrc `ba31b9cb…`; runner PASS (`phase19_139`, `phase19_131`, `phase18_124` re-pinned fd39dea) |
 | R2-2..5 | 138 materials-only counts, path rule, session urls, older-run predicate | W-52 → PM applied | 137 | done | md5 `eded5cb4…` equal; runner PASS (`phase19_138`, `phase19_132`, `phase19_133`, `phase17_110`); 10 backfilled path-only rows kept |
 | R2-6, R2-7 | Honest "last synced"; interrupted toast opens the Inbox | W-54 | — | done | d98ac0f, d2d9391; web 2302, desktop 708; numstat `16 7`; merged b949d63 |
 | R2-8 | `DATA_SYNTAX.md` heading | W-52 | — | done | 38ddc53 |
 | G1 | `/code-review main high`; CRITICAL/HIGH back to workers as round 2 | PM | 25 | doing | pass 1 (W-52 + W-54 at fab2ef6): 15 findings, 2 closed by 135–137 landing, round 2 R2-1..R2-8 in brief 99 (58a86b1) sent to W-52 (138, 139) and W-54; pass 2 over W-53 and round 2 still to run |
-| G2 | `/security-review` | PM | 25 | todo | — |
+| G2 | `/security-review` | PM | 25 | done | 2026-10-03 over 130–139, web, desktop, skill: no HIGH or MEDIUM; two low notes (the test role's widening grants; walk shots show course content) |
 | G3 | PR open with preview link; stop at "ready when you say so" | PM | 26, 28, 29, G1, G2 | todo | — |
 
 Carried into the PR body as open points for Stack (not blocking): the Stream block's placement
