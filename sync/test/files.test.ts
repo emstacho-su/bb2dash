@@ -233,7 +233,7 @@ describe('the files step', () => {
   it('an embed that exits non-zero is the step\'s embedError', async () => {
     const { p } = ports([row('84')], { embed: vi.fn(async () => ({ code: 1, tail: 'embed-corpus 401' })) });
     const r = await runFilesStep(p);
-    expect(r.embedded).toBe(true);
+    expect(Object.keys(r).sort()).toEqual(['embedError', 'files', 'stopped']);
     expect(r.embedError).toBe('embed_corpus.mjs exited 1: embed-corpus 401');
   });
 });

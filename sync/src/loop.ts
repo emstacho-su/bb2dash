@@ -29,7 +29,6 @@ export interface FilesStepResult {
   files: FilesSummary;
   stopped: 'session_expired' | null;
   embedError: string | null;
-  embedded: boolean;
 }
 
 export interface PassDeps {
@@ -60,7 +59,7 @@ function message(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).split('\n')[0] ?? '';
 }
 
-const NO_FILES: FilesStepResult = { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null, embedded: false };
+const NO_FILES: FilesStepResult = { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null };
 
 export async function runPass(d: PassDeps): Promise<PassOutcome> {
   const swept = await d.rpc.sweepStale();

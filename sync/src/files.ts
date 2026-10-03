@@ -220,15 +220,13 @@ export async function runFilesStep(p: FilesPorts): Promise<FilesStepResult> {
   }
   p.log(`files: ${pulled} pulled, ${notPulled.length} not pulled, ${unitsPosted} units posted`);
 
-  let embedded = false;
   let embedError: string | null = null;
   if (unitsPosted > 0) {
-    embedded = true;
     const run = await p.embed();
     if (run.code !== 0) embedError = `embed_corpus.mjs exited ${run.code}: ${run.tail}`;
   }
 
-  return { files: { pulled, not_pulled: notPulled }, stopped, embedError, embedded };
+  return { files: { pulled, not_pulled: notPulled }, stopped, embedError };
 }
 
 /** Storage and `bb_file_text` POSTs with the publishable key (`SB_ANON_KEY`), as pull_files.mjs does. */
