@@ -226,3 +226,11 @@ exit=0
 ```
 
 Baseline before the phase: `passed 47, failed 0, units 47`. The 7 added units are Phase 19's.
+
+## R3-6 — the skill stops on an interrupted run, and step 5 closes only a claimed request
+
+Brief 99 round 3 (phase-branch `78d0be8`, merged here first). Text only, `skills/bb-sync/SKILL.md`:
+step 4's poll also reads `interrupted`, and when it is true for this run the skill reports "the sync
+was marked interrupted; nothing was folded; press Sync to run it again" and stops (no step 4b, no
+step 5). Step 5's update gains `and state = 'claimed'`, and a 0-row update is reported. Task 17's
+greps after the change: 0 / 0 / 1 / 1; the failure-path sentence is still verbatim (1).
