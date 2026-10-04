@@ -257,10 +257,10 @@ describe('mapAttemptFile — v4 reads the URL instead of building one', () => {
     expect(crawler.ATTEMPT_FILE_KEYS).not.toHaveProperty('size');
   });
 
-  it('reads the name from `name` alone: file.fileName and linkName are no longer candidates', () => {
-    expect(crawler.ATTEMPT_FILE_KEYS.name).toEqual(['name']);
-    const { name: _drop, ...noName } = RAW_FILE;
-    expect(mapAttemptFile(noName, CTX)!.name).toBeNull();
+  it('falls back to file.fileName when `name` is empty, so 085 never files it as untitled', () => {
+    expect(crawler.ATTEMPT_FILE_KEYS.name).toEqual(['name', 'file.fileName']);
+    const blank = { ...RAW_FILE, name: '', file: { ...RAW_FILE.file, fileName: 'essay.docx' } };
+    expect(mapAttemptFile(blank, CTX)!.name).toBe('essay.docx');
   });
 
   it('falls back to the v3 built URL only when there is no permanentUrl', () => {

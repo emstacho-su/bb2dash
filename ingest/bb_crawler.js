@@ -431,7 +431,7 @@ const ATTEMPT_FIELD_KEYS = {
  */
 const ATTEMPT_FILE_KEYS = {
   id:   ['id'],
-  name: ['name'],
+  name: ['name', 'file.fileName'],
   mime: ['file.mimeType'],
   url:  ['file.permanentUrl'],
   uuid: ['bbFileUuid'],
