@@ -3,8 +3,8 @@
  *
  * On start: `sync_requeue_orphans()` once, then Chromium on the container's display with the
  * persistent `bb-profile` (headful on Xvfb, as `pwuser`, under Playwright's seccomp profile with the
- * Chromium sandbox on: P-102), then the login watch beside the passes, and a heartbeat every
- * HEARTBEAT_MS for the healthcheck (`probe.js --heartbeat`). SIGTERM and SIGINT stop it cleanly; the
+ * Chromium sandbox on: P-102), then the login watch beside the passes. The heartbeat for the healthcheck
+ * (`probe.js --heartbeat`) is written by progress, and a runner with no progress for WATCHDOG_MS exits 1. SIGTERM and SIGINT stop it cleanly; the
  * browser closing on its own ends it with exit 1 so the container restarts it.
  *
  * `startRunner` takes every outside thing as a dependency, so integration.test.ts runs it on a fake
@@ -17,12 +17,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { runCrawl, mintRunId, waitForFold, type CrawlPage } from './crawl.js';
 import { createPgQuery, createRpc, newPgClient, redactDsn, type QueryFn } from './db.js';
-import { makeEmbedder, makeExtractor, makeSupabaseFiles, runFilesStep, spawnCollect, type ExtractUnit } from './files.js';
+import { makeEmbedder, makeExtractor, makeSupabaseFiles, runFilesStep, type ExtractUnit } from './files.js';
 import { BLACKBOARD_ORIGIN, LoginWatch, PROBE_URL, type LoginPort } from './login.js';
-import { runLoop } from './loop.js';
-import { loadConfig, stateFiles, type RunnerConfig } from './secrets.js';
+import { WATCHDOG_MS, runLoop } from './loop.js';
+import { loadConfig, readTextOrNull, stateFiles, type RunnerConfig } from './secrets.js';
 
-export const HEARTBEAT_MS = 30_000;
+/** How often the watchdog compares the last progress with WATCHDOG_MS. */
+export const WATCHDOG_CHECK_MS = 60_000;
 const NAVIGATION_TIMEOUT_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -46,6 +47,8 @@ export interface RunnerDeps {
   log(line: string): void;
   sleep?(ms: number): Promise<void>;
   random?(): number;
+  /** Called when no progress has been made for WATCHDOG_MS (realDeps: exit 1, so the container restarts). */
+  onWatchdog?(): void;
 }
 
 export type RunnerEnd = 'stopped' | 'browser_closed';
@@ -61,7 +64,8 @@ export function startRunner(d: RunnerDeps): { stop(): Promise<void>; done: Promi
   let passRunning = false;
   let watch: LoginWatch | null = null;
   let session: BrowserSession | null = null;
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  let lastProgress = Date.now();
 
   const sleep =
     d.sleep ??
@@ -82,8 +86,21 @@ export function startRunner(d: RunnerDeps): { stop(): Promise<void>; done: Promi
   const rpc = createRpc(d.query);
   const { config } = d;
   const supabase = makeSupabaseFiles(config.supabaseUrl, config.anonKey, d.fetchImpl);
-  const heartbeat = () => {
-    d.writeState('heartbeat', new Date().toISOString()).catch((error) => d.log(`sync-runner: heartbeat write failed: ${firstLine(error)}`));
+  // R2 item 5: the heartbeat is written by progress (a loop turn, a fold poll, a file, a crawl's start
+  // and end), never by a timer, so it proves the runner is getting somewhere, not only that Node runs.
+  const progress = () => {
+    lastProgress = Date.now();
+    d.writeState('heartbeat', new Date(lastProgress).toISOString()).catch((error) =>
+      d.log(`sync-runner: heartbeat write failed: ${firstLine(error)}`),
+    );
+  };
+  const checkWatchdog = () => {
+    const idle = Date.now() - lastProgress;
+    if (idle <= WATCHDOG_MS) return;
+    d.log(`sync-runner: no progress for ${Math.round(idle / 1000)} s; exiting so the container restarts it`);
+    if (watchdogTimer !== null) clearInterval(watchdogTimer);
+    watchdogTimer = null;
+    (d.onWatchdog ?? (() => {}))();
   };
 
   const done = (async (): Promise<RunnerEnd> => {
@@ -113,22 +130,28 @@ export function startRunner(d: RunnerDeps): { stop(): Promise<void>; done: Promi
     });
     watch = loginWatch;
     loginWatch.start();
-    heartbeat();
-    heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
+    progress();
+    watchdogTimer = setInterval(checkWatchdog, WATCHDOG_CHECK_MS);
 
     await runLoop({
       rpc,
       login: loginWatch,
-      crawl: (runId) =>
-        runCrawl(browser.crawlPage, {
-          runId,
-          supabaseUrl: config.supabaseUrl,
-          anonKey: config.anonKey,
-          crawlerPath: path.join(config.repoRoot, 'ingest', 'bb_crawler.js'),
-          readSource: d.readSource,
-          log: d.log,
-        }),
-      waitFold: (runId) => waitForFold(runId, { rpc, sleep, now: Date.now, shouldStop: () => stopping }),
+      crawl: async (runId) => {
+        progress();
+        try {
+          return await runCrawl(browser.crawlPage, {
+            runId,
+            supabaseUrl: config.supabaseUrl,
+            anonKey: config.anonKey,
+            crawlerPath: path.join(config.repoRoot, 'ingest', 'bb_crawler.js'),
+            readSource: d.readSource,
+            log: d.log,
+          });
+        } finally {
+          progress();
+        }
+      },
+      waitFold: (runId) => waitForFold(runId, { rpc, sleep, now: Date.now, shouldStop: () => stopping, onPoll: progress }),
       files: () =>
         runFilesStep({
           rpc,
@@ -141,6 +164,8 @@ export function startRunner(d: RunnerDeps): { stop(): Promise<void>; done: Promi
           fs: fs.promises,
           tmpDir: config.tmpDir,
           courseFilesDir: config.courseFilesDir,
+          loginCheck: () => loginWatch.check('files'),
+          progress,
           log: d.log,
         }),
       mintRunId,
@@ -148,14 +173,13 @@ export function startRunner(d: RunnerDeps): { stop(): Promise<void>; done: Promi
         passRunning = running;
       },
       log: d.log,
-      claimCounts: new Map(),
       sleep,
       shouldStop: () => stopping,
-      heartbeat,
+      heartbeat: progress,
     });
     return browserClosed ? 'browser_closed' : 'stopped';
   })().finally(async () => {
-    if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
+    if (watchdogTimer !== null) clearInterval(watchdogTimer);
     watch?.stop();
     if (session && !browserClosed) {
       try {
@@ -242,13 +266,6 @@ async function openPlaywright(config: RunnerConfig, log: (line: string) => void)
   };
 }
 
-function readTextOrNull(file: string): string | null {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return null;
-  }
-}
 
 let writeSeq = 0;
 const writesInFlight = new Map<string, Promise<void>>();
@@ -289,17 +306,19 @@ export function realDeps(env: NodeJS.ProcessEnv = process.env): RunnerDeps {
     process.stdout.write(`${redactDsn(line, config.dbUrl)}\n`);
   };
   const ingestDir = path.join(repoRoot, 'ingest');
-  // embed_corpus.mjs reads SB_ANON_JWT from its environment (Phase 18's contract).
-  const childEnv = { ...env, SB_ANON_JWT: config.anonJwt, SUPABASE_URL: config.supabaseUrl };
   const files = stateFiles(config.stateDir);
   return {
     config,
     query: createPgQuery({ dsn: config.dbUrl, log, newClient: newPgClient }),
     openBrowser: () => openPlaywright(config, log),
     fetchImpl: fetch,
-    extract: makeExtractor(ingestDir),
-    embed: makeEmbedder(ingestDir, spawnCollect(childEnv)),
+    extract: makeExtractor(ingestDir, { parentEnv: env }),
+    embed: makeEmbedder({ supabaseUrl: config.supabaseUrl, jwt: config.anonJwt, log }),
     readSource: (file) => fs.promises.readFile(file, 'utf8'),
+    onWatchdog: () => {
+      process.stdout.write('sync-runner: watchdog: exiting 1\n');
+      process.exit(1);
+    },
     writeState: (name, text) => writeAtomic(files[name], text),
     log,
   };

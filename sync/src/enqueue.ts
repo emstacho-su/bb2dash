@@ -10,12 +10,11 @@
  * other entry point.
  */
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createPgQuery, createRpc, newPgClient, redactDsn, type QueryFn } from './db.js';
-import { loadDbUrl } from './secrets.js';
+import { loadDbUrl, readTextOrNull } from './secrets.js';
 
 export interface EnqueueDeps {
   query?: QueryFn & { end(): Promise<void> };
@@ -25,13 +24,6 @@ export interface EnqueueDeps {
   out?: (line: string) => void;
 }
 
-function readTextOrNull(file: string): string | null {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return null;
-  }
-}
 
 export async function enqueueMain(_argv: readonly string[], deps: EnqueueDeps = {}): Promise<number> {
   const out = deps.out ?? ((line: string) => process.stdout.write(`${line}\n`));

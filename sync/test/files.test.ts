@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FileStoredArgs, WorklistRow } from '../src/db.js';
 import {
+  EMBED_TIMEOUT_MS,
   makeEmbedder,
   makeExtractor,
   makeSupabaseFiles,
@@ -89,6 +90,7 @@ function ports(rows: WorklistRow[], over: Partial<FilesPorts> = {}) {
     fs: { mkdir: fs.promises.mkdir, rename: fs.promises.rename, copyFile: fs.promises.copyFile, unlink: fs.promises.unlink, readFile: fs.promises.readFile },
     tmpDir,
     courseFilesDir: courseDir,
+    loginCheck: vi.fn(async () => 'alive' as const),
     log: () => {},
     ...over,
   };
@@ -122,15 +124,37 @@ describe('the files step', () => {
     expect(stored[0]).toMatchObject({ key: 'IST.323/assignment_spec/HW _2.pdf', relpath: 'IST.323/assignment_spec/HW #2.pdf' });
   });
 
-  it.each([401, 403])('session_expired (%i at the first hop) stops the step: later rows are not tried', async (status) => {
+  it.each([401, 403])('session_expired (%i at the first hop) with a dead re-probe stops the step: later rows are not tried', async (status) => {
     const rows = [row('21'), row('22'), row('23')];
-    const { p, stored } = ports(rows, { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-22_1': status }) });
+    const loginCheck = vi.fn(async () => 'dead' as const);
+    const { p, stored } = ports(rows, { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-22_1': status }), loginCheck });
     const r = await runFilesStep(p);
     expect(r.stopped).toBe('session_expired');
+    expect(loginCheck).toHaveBeenCalledTimes(1);
     expect(stored.map((s) => s.id)).toEqual(['21']);
     expect(r.files.pulled).toBe(1);
     expect(r.files.not_pulled).toEqual([{ id: '22', reason: `session_expired: status ${status}` }]);
     expect(p.hop).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 403])('R2 item 3: one file\'s %i with users/me still 200 is that file refused, and the step goes on', async (status) => {
+    const rows = [row('24'), row('25'), row('26')];
+    const loginCheck = vi.fn(async () => 'alive' as const);
+    const { p, stored } = ports(rows, { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-25_1': status }), loginCheck });
+    const r = await runFilesStep(p);
+    expect(r.stopped).toBeNull();
+    expect(loginCheck).toHaveBeenCalledTimes(1);
+    expect(stored.map((s) => s.id)).toEqual(['24', '26']);
+    expect(r.files.not_pulled).toEqual([{ id: '25', reason: `refused: status ${status} at the first hop, but the login check passed` }]);
+  });
+
+  it('R2 item 3: a re-probe that does not answer is not a dead login either', async () => {
+    const loginCheck = vi.fn(async () => 'error' as const);
+    const { p } = ports([row('27'), row('28')], { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-27_1': 401 }), loginCheck });
+    const r = await runFilesStep(p);
+    expect(r.stopped).toBeNull();
+    expect(r.files.pulled).toBe(1);
+    expect(r.files.not_pulled[0]!.reason).toBe('refused: status 401 at the first hop, and the login check did not answer');
   });
 
   it('gone (404) is reported in not_pulled and never reaches sync_file_stored', async () => {
@@ -149,8 +173,43 @@ describe('the files step', () => {
     expect(stored).toEqual([]);
   });
 
-  it('a Storage 409 (or a Duplicate answer) is reported in not_pulled, never done, never stored', async () => {
-    const rows = [row('41'), row('42')];
+  it('R2 item 2: a course file already in Storage (409 or Duplicate) goes on to the text and sync_file_stored', async () => {
+    const answers = [{ status: 409, body: '{"error":"Duplicate"}' }, { status: 400, body: '{"statusCode":"409","error":"Duplicate","message":"The resource already exists"}' }];
+    const { p, stored } = ports([row('43'), row('44')], { storagePost: vi.fn(async () => answers.shift()!) });
+    const r = await runFilesStep(p);
+    expect(r.files).toEqual({ pulled: 2, not_pulled: [] });
+    expect(stored.map((s) => s.id)).toEqual(['43', '44']);
+  });
+
+  it('R2 item 2: an upload whose text POST failed is recorded on the next pass, past the Duplicate', async () => {
+    let storageCalls = 0;
+    const texts = [{ status: 500, body: 'boom' }, { status: 201, body: '' }];
+    const shared = {
+      storagePost: vi.fn(async () => (storageCalls++ === 0 ? { status: 200, body: '{}' } : { status: 409, body: '{"error":"Duplicate"}' })),
+      textPost: vi.fn(async () => texts.shift()!),
+    };
+    const first = ports([row('45')], shared);
+    const r1 = await runFilesStep(first.p);
+    expect(r1.files.not_pulled).toEqual([{ id: '45', reason: 'bb_file_text 500: boom' }]);
+    expect(first.stored).toEqual([]);
+
+    const second = ports([row('45')], shared);
+    const r2 = await runFilesStep(second.p);
+    expect(r2.files).toEqual({ pulled: 1, not_pulled: [] });
+    expect(second.stored.map((s) => [s.id, s.textStatus])).toEqual([['45', 'extracted']]);
+  });
+
+  it('a text POST that answers 409/23505 keeps the units already there, and the file is recorded', async () => {
+    const { p, stored } = ports([row('46')], { textPost: vi.fn(async () => ({ status: 409, body: '{"code":"23505"}' })) });
+    const r = await runFilesStep(p);
+    expect(r.files.pulled).toBe(1);
+    expect(stored[0]!.textStatus).toBe('extracted');
+    expect(p.embed).not.toHaveBeenCalled();
+  });
+
+  it('a submission already in Storage (409 or Duplicate) is reported in not_pulled, never done, never stored', async () => {
+    const sub = (id: string) => row(id, { bucket: 'my_submissions', relpath: `IST.323/my_submissions/hw/attempt-9/${id}.pdf` });
+    const rows = [sub('41'), sub('42')];
     const answers = [{ status: 409, body: '{"error":"Duplicate"}' }, { status: 400, body: '{"statusCode":"409","error":"Duplicate","message":"The resource already exists"}' }];
     const { p, stored } = ports(rows, { storagePost: vi.fn(async () => answers.shift()!) });
     const r = await runFilesStep(p);
@@ -233,8 +292,8 @@ describe('the files step', () => {
   it('an embed that exits non-zero is the step\'s embedError', async () => {
     const { p } = ports([row('84')], { embed: vi.fn(async () => ({ code: 1, tail: 'embed-corpus 401' })) });
     const r = await runFilesStep(p);
-    expect(r.embedded).toBe(true);
-    expect(r.embedError).toBe('embed_corpus.mjs exited 1: embed-corpus 401');
+    expect(Object.keys(r).sort()).toEqual(['embedError', 'files', 'stopped']);
+    expect(r.embedError).toBe("embed_corpus.mjs's loop ended 1: embed-corpus 401");
   });
 });
 
@@ -297,17 +356,60 @@ describe('the adapters', () => {
     expect((calls[1]!.init.headers as Record<string, string>).Prefer).toBe('return=minimal');
   });
 
-  it('the extractor runs the locked project and reads extract_text.py\'s units', async () => {
-    const exec = vi.fn(async () => ({ stdout: JSON.stringify([{ file: 'a.pdf', status: 'ok', units: [{ unit_kind: 'page', unit_no: 1, text: 'x' }] }]) }));
-    const extract = makeExtractor('/app/ingest', exec);
+  it('R2 item 9: the extractor is pull_files\' extractUnits (the locked project), and uv gets only what it needs', async () => {
+    const parent = { PATH: '/usr/bin', HOME: '/home/pwuser', UV_CACHE_DIR: '/cache/uv', LANG: 'C.UTF-8', SB_ANON_JWT: 'eyJ.secret.x', SB_ANON_KEY: 'sb_publishable_x', SYNC_RUNNER_DB_URL: 'postgresql://u:p@h/db' };
+    const exec = vi.fn(() => JSON.stringify([{ file: 'a.pdf', status: 'ok', units: [{ unit_kind: 'page', unit_no: 1, text: 'x' }] }]));
+    const extract = makeExtractor('/app/ingest', { exec, parentEnv: parent });
     expect(await extract('/app/course context/a.pdf')).toEqual([{ unit_kind: 'page', unit_no: 1, text: 'x' }]);
-    expect(exec).toHaveBeenCalledWith('uv', ['run', '--locked', '--project', '/app/ingest', 'python', path.join('/app/ingest', 'extract_text.py'), '/app/course context/a.pdf'], expect.objectContaining({ cwd: '/app/ingest' }));
+    const [cmd, args, opts] = exec.mock.calls[0] as unknown as [string, string[], { cwd: string; env: Record<string, string> }];
+    expect(cmd).toBe('uv');
+    expect(args).toEqual(['run', '--locked', '--project', '/app/ingest', 'python', path.join('/app/ingest', 'extract_text.py'), '/app/course context/a.pdf']);
+    expect(opts.cwd).toBe('/app/ingest');
+    expect(opts.env).toEqual({ PATH: '/usr/bin', HOME: '/home/pwuser', UV_CACHE_DIR: '/cache/uv', LANG: 'C.UTF-8' });
   });
 
-  it('the embedder runs node ingest/embed_corpus.mjs once and returns its exit code and last line', async () => {
-    const run = vi.fn(async () => ({ code: 0, output: 'parts 3\nremaining_parts=0\n' }));
-    const embed = makeEmbedder('/app/ingest', run);
+  it('R2 item 9: the embedder runs embed_corpus.mjs\'s loop in-process with the anon JWT, no child process', async () => {
+    const runLoop = vi.fn(async () => ({ exitCode: 0, calls: 2, retries: 0, remainingParts: 0 }));
+    const makePostImpl = vi.fn(() => async () => ({ status: 200, body: {} }));
+    const embed = makeEmbedder({ supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', runLoop, makePost: makePostImpl, log: () => {} });
     expect(await embed()).toEqual({ code: 0, tail: 'remaining_parts=0' });
-    expect(run).toHaveBeenCalledWith(process.execPath, [path.join('/app/ingest', 'embed_corpus.mjs')], '/app/ingest');
+    expect(makePostImpl).toHaveBeenCalledWith('https://p.supabase.co', 'eyJ.anon.x');
+    expect(runLoop).toHaveBeenCalledTimes(1);
+
+    const failing = makeEmbedder({
+      supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', log: () => {}, makePost: makePostImpl,
+      runLoop: vi.fn(async () => ({ exitCode: 1, calls: 1, retries: 0, remainingParts: null, error: 'embed-corpus answered 401' })),
+    });
+    expect(await failing()).toEqual({ code: 1, tail: 'embed-corpus answered 401' });
+  });
+
+  it('R2 item 5: an embed that runs past EMBED_TIMEOUT_MS fails cleanly, and its later posts end the loop', async () => {
+    vi.useFakeTimers();
+    try {
+      expect(EMBED_TIMEOUT_MS).toBe(600_000);
+      let sawPost: { status: number } | null = null;
+      const runLoop = vi.fn(async (o: { post: (b: object) => Promise<{ status: number; body: unknown }> }) => {
+        await new Promise((r) => setTimeout(r, EMBED_TIMEOUT_MS + 60_000));
+        sawPost = await o.post({});
+        return { exitCode: 1, error: 'stopped' };
+      });
+      const real = vi.fn(async () => ({ status: 200, body: {} }));
+      const embed = makeEmbedder({ supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', log: () => {}, runLoop, makePost: () => real });
+      const pending = embed();
+      await vi.advanceTimersByTimeAsync(EMBED_TIMEOUT_MS + 1);
+      expect(await pending).toEqual({ code: 1, tail: 'embed timed out after 600 s' });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sawPost).toMatchObject({ status: 408 });
+      expect(real).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('R2 item 9: no source file spawns a child with the parent\'s environment', () => {
+    for (const file of ['files.ts', 'main.ts']) {
+      const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', file), 'utf8');
+      expect(src, file).not.toMatch(/\.\.\.(process\.)?env\b|spawn\(/);
+    }
   });
 });

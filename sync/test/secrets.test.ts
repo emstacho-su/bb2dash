@@ -13,6 +13,7 @@ import {
   assertSessionDsn,
   cleanSecret,
   loadConfig,
+  readTextOrNull,
   readSecret,
   requireSecret,
 } from '../src/secrets.js';
@@ -81,6 +82,32 @@ describe('the checks on each secret', () => {
     expect(() => assertAnonJwt('sb_publishable_abc')).toThrow(/legacy anon JWT/);
     expect(() => assertAnonJwt('sb_secret_abc')).toThrow(/service key/);
     expect(() => assertAnonJwt(jwt('service_role'))).toThrow(/service key/);
+  });
+});
+
+describe('readTextOrNull (R2 item 10)', () => {
+  it('reads a file, gives null for a missing one, and names the path for any other failure', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'w55-read-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'a'), 'text');
+      expect(readTextOrNull(path.join(dir, 'a'))).toBe('text');
+      expect(readTextOrNull(path.join(dir, 'missing'))).toBeNull();
+      // A directory cannot be read as text (EISDIR): not "not set", but a clear error naming the path.
+      expect(() => readTextOrNull(dir)).toThrow(ConfigError);
+      expect(() => readTextOrNull(dir)).toThrow(dir);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('is the one helper: main, probe and enqueue define no copy of their own', async () => {
+    const fs = await import('node:fs');
+    for (const file of ['main.ts', 'probe.ts', 'enqueue.ts']) {
+      const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', file), 'utf8');
+      expect(src, file).not.toMatch(/function readTextOrNull/);
+    }
   });
 });
 

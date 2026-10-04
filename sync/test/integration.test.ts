@@ -8,10 +8,11 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { readFixture } from '../../db/fixtures/phase14/scrub_crawl.mjs';
-import { CrawlError, runCrawl, type CrawlPage } from '../src/crawl.js';
+import { CRAWL_TIMEOUT_MS, CrawlError, runCrawl, type CrawlPage } from '../src/crawl.js';
 import { createPgQuery, redactDsn, type PgClientLike, type QueryFn, type QueryResult } from '../src/db.js';
 import { enqueueMain } from '../src/enqueue.js';
 import { realDeps, startRunner, writeAtomic, type BrowserSession, type RunnerDeps } from '../src/main.js';
+import { WATCHDOG_MS } from '../src/loop.js';
 import { probeMain } from '../src/probe.js';
 import type { RunnerConfig } from '../src/secrets.js';
 
@@ -103,6 +104,12 @@ class FakeDb {
       case 'sync_sweep_stale':
       case 'sync_requeue_orphans':
         return one({ n: 0 });
+      case 'sync_own_claims':
+        return {
+          rows: this.requests
+            .filter((r) => r.state === 'claimed' && r.claimed_by === 'sync-runner')
+            .map((r) => ({ id: String(r.id), run_id: r.run_id, claimed_at: r.created_at, claim_attempts: 1 })),
+        };
       case 'sync_next': {
         const q = this.requests.find((r) => r.state === 'queued');
         return { rows: q ? [{ id: String(q.id), created_at: q.created_at, params: q.params }] : [] };
@@ -286,6 +293,48 @@ describe('the runner end to end, on fakes', () => {
     }
   });
 
+  it('R2 item 5: the heartbeat comes from progress only, and a pass stuck past WATCHDOG_MS ends the runner non-zero', async () => {
+    vi.useFakeTimers();
+    try {
+      expect(WATCHDOG_MS).toBe(1_200_000);
+      const db = new FakeDb();
+      db.insertRequest({});
+      // The database stops answering the fold wait: no timeout of the runner's own covers it.
+      const query = Object.assign(
+        (async (sql: string, params?: readonly unknown[]) =>
+          sql.includes('sync_run_outcome') ? new Promise<QueryResult>(() => {}) : db.query(sql, params)) as QueryFn,
+        { end: async () => {} },
+      );
+      const beats: number[] = [];
+      const lines: string[] = [];
+      const onWatchdog = vi.fn();
+      const d: RunnerDeps = {
+        ...deps(db, new Map(), os.tmpdir()),
+        query,
+        sleep: undefined,
+        writeState: async (name) => {
+          if (name === 'heartbeat') beats.push(Date.now());
+        },
+        log: (l) => lines.push(l),
+        onWatchdog,
+      };
+      startRunner(d);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(db.events).toContain('crawl');
+      const stuckAt = beats.length;
+      expect(stuckAt).toBeGreaterThan(0);
+
+      await vi.advanceTimersByTimeAsync(WATCHDOG_MS - 120_000);
+      expect(onWatchdog).not.toHaveBeenCalled();
+      expect(beats.length).toBe(stuckAt); // no interval writer keeps the heartbeat fresh
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(onWatchdog).toHaveBeenCalledTimes(1);
+      expect(lines.some((l) => l.includes('no progress'))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a runner whose browser will not open ends, and says why', async () => {
     const db = new FakeDb();
     const lines: string[] = [];
@@ -309,11 +358,11 @@ describe('probe.js', () => {
     expect(out).toEqual([`users/me 200 ${at}`, `users/me 401 ${at}`, `users/me none ${at}`, `users/me none ${at}`]);
   });
 
-  it('--heartbeat: 0 while the heartbeat is fresh, 1 when stale or missing (the compose healthcheck)', async () => {
+  it('--heartbeat: 0 while the heartbeat is younger than WATCHDOG_MS, 1 when older or missing (the compose healthcheck)', async () => {
     const now = () => new Date('2026-10-03T21:05:00.000Z');
     const out: string[] = [];
     expect(await probeMain(['--heartbeat'], { stateDir: '/s', readFile: read({ '/s/heartbeat': '2026-10-03T21:04:30.000Z' }), out: (l) => out.push(l), now })).toBe(0);
-    expect(await probeMain(['--heartbeat'], { stateDir: '/s', readFile: read({ '/s/heartbeat': '2026-10-03T20:55:00.000Z' }), out: (l) => out.push(l), now })).toBe(1);
+    expect(await probeMain(['--heartbeat'], { stateDir: '/s', readFile: read({ '/s/heartbeat': '2026-10-03T20:40:00.000Z' }), out: (l) => out.push(l), now })).toBe(1);
     expect(await probeMain(['--heartbeat'], { stateDir: '/s', readFile: read({}), out: (l) => out.push(l), now })).toBe(1);
   });
 });
@@ -410,6 +459,24 @@ describe('the pg adapter', () => {
     expect(f.made).toHaveLength(2);
   });
 
+  it.each(['08006', '08003', '57P01', '57P03', 'XX000'])('R2 item 8: SQLSTATE %s is connection-class: the client is dropped and the next call reconnects', async (code) => {
+    let first = true;
+    const f = fakeClient({
+      query: async () => {
+        if (first) {
+          first = false;
+          throw Object.assign(new Error('terminating connection'), { code });
+        }
+        return { rows: [] };
+      },
+    });
+    const q = createPgQuery({ dsn: DSN, log: () => {}, newClient: f.newClient });
+    await expect(q('select 1')).rejects.toMatchObject({ code });
+    await q('select 2');
+    expect(f.made).toHaveLength(2);
+    expect(f.ended).toContain(0);
+  });
+
   it('a failed connect is closed and reported, and the next call tries again', async () => {
     let attempts = 0;
     const f = fakeClient({
@@ -474,6 +541,23 @@ describe('runCrawl', () => {
     const { p, calls } = page({ url: 'about:blank', installed: [false, true] });
     await runCrawl(p, opts);
     expect(calls).toEqual(['goto https://blackboard.syracuse.edu/ultra/', 'tag /app/ingest/bb_crawler.js', 'script', 'runAll']);
+  });
+
+  it('R2 item 5: a crawl that runs past CRAWL_TIMEOUT_MS fails cleanly with a CrawlError', async () => {
+    vi.useFakeTimers();
+    try {
+      expect(CRAWL_TIMEOUT_MS).toBe(900_000);
+      const { p } = page();
+      const hung: CrawlPage = { ...p, evaluate: (async (fn: { name: string }) => (fn.name === 'crawlerInstalled' ? true : new Promise(() => {}))) as CrawlPage['evaluate'] };
+      const pending = runCrawl(hung, opts);
+      const caught = pending.catch((e: Error) => e);
+      await vi.advanceTimersByTimeAsync(CRAWL_TIMEOUT_MS + 1);
+      const error = await caught;
+      expect(error).toBeInstanceOf(CrawlError);
+      expect(String(error)).toMatch(/timed out after 900 s/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throws a CrawlError when the crawler will not install, a post failed, the run id differs, or no calendar row landed', async () => {

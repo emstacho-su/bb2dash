@@ -464,3 +464,189 @@ role with no password. After it:
   `attention_items` each → SQLSTATE `42501`; `select * from sync_next()` → 0 rows (nothing queued)
 
 All eleven secret files now exist in `SECRETS_DIR`.
+
+## Round 2 — W-55 (brief 100, "## Round 2 — W-55"), 2026-10-03
+
+Merged `origin/feat/containers-14` first (b0c1881). Note: `fix(14-R2-1)` was already used by the
+heartbeat temp-name fix (d5eabe5); this round's item commits use the same `fix(14-R2-<n>)` form.
+
+### Item 12 — `FilesStepResult.embedded` dropped (fec6015)
+
+```
+RED   files.test.ts › an embed that exits non-zero …   × (keys were embedError, embedded, files, stopped)
+GREEN files.test.ts                                     21 passed
+```
+
+### Item 1 — the runner resumes its own registered, unclosed claims
+
+`sync_own_claims()` (093) returns `(id, run_id, claimed_at, claim_attempts)` for `claimed_by =
+'sync-runner'` open sync claims only. At the top of every pass (so also on start) the runner waits
+for each registered one's run again: folded → files, embed, `sync_close`; failed → `sync_close`
+failed; still running → left for the next pass. `sync_close` itself refuses any other claimant.
+
+```
+RED   loop.test.ts   4 failed | 21 passed  (timeout, stop, throw after register, a failed run)
+GREEN loop.test.ts   25 passed; the whole sync suite 113 passed; tsc exit 0
+RED   node scripts/db-test.mjs --only phase14_093_review_fixes.sql
+      FAIL  phase14_093_review_fixes.sql  FAIL phase14_093: migration 093 is not applied (sync_own_claims is missing)
+      db-test: passed 0, failed 1, units 1
+```
+
+### Item 2 — a course file already in Storage is recorded, not stranded
+
+`duplicateIsAcceptable(isSubmissionRow(row))` from `pull_files.mjs`: a course file's 409/Duplicate goes
+on to the text POST and `sync_file_stored`; a submission's stays "never done". A text POST that answers
+409/`23505` keeps the existing units (`textPostOutcome`).
+
+```
+RED   files.test.ts   2 failed | 22 passed  (a course Duplicate; upload-then-text-fails, then a second pass)
+GREEN files.test.ts   24 passed; tsc exit 0
+```
+
+### Item 3 — one file's 401/403 is not a dead login
+
+On a first-hop 401/403 the files step asks the login watch's `check('files')` (users/me, with the
+silent re-login): `dead` stops the step (the watch's alive → dead path raises the login item); `alive`
+reports that file `refused: status <n> at the first hop, but the login check passed` and goes on; no
+answer is not a dead login either.
+
+```
+RED   files.test.ts   5 failed | 22 passed
+GREEN files.test.ts   27 passed; the whole sync suite 119 passed; tsc exit 0
+```
+
+### Item 6 — a failed close fails a still-running run at once (093)
+
+093 re-creates `sync_close` from its live body (091's): a `failed` close of a registered request whose
+run is still `running` sets the run `failed`, `finished_at`, and appends `sync-runner: <error>` to its
+notes; a run that already folded keeps its status. The SQL case is `phase14_093_review_fixes.sql`
+section 2; the 091 unit's name check now expects thirteen (093's `sync_own_claims`). Checked after
+093's apply (below).
+
+### Item 7 — the report's `claim_attempts` is the column's value
+
+After the claim the runner reads its row back through `sync_own_claims()` (093); the process-local
+Map is gone.
+
+```
+RED   loop.test.ts › reports the claim_attempts column the database holds …   × (reported 1)
+GREEN loop.test.ts   26 passed (incl. "the third claim of a request reports claim_attempts 3");
+      the SQL side is phase14_093_review_fixes.sql section 1 (claim, requeue, claim, requeue, claim -> 3)
+```
+
+### 093 applied (items 1, 6, 7)
+
+Dry run in `begin; … rollback;` through `execute_sql` (093, then the unit's sections 1–2 as `postgres`
+with an in-transaction `grant sync_runner to postgres with inherit false, set true`): reached its final
+`raise`. No sync request was open on prod just before. Applied as `093_sync_runner_review_fixes` from
+commit 1cdc354:
+
+| Migration | prod `md5(statements[1])` | `git show HEAD:db/migrations/<file> \| md5sum` | bytes |
+|---|---|---|---|
+| `093_sync_runner_review_fixes` | `4626aad4b27dd6fb6935eb52d466953e` | `4626aad4b27dd6fb6935eb52d466953e` | 8733 |
+
+`ls db/migrations | grep -c "^09[1-9]_"` → 3; prod `name ~ '^09[1-9]_'` → 3.
+
+The unit's first run failed on the unit itself (a read of `agent_requests` inside `set local role
+sync_runner`); the check now runs as the test role.
+
+```
+node scripts/db-test.mjs --only phase14_093_review_fixes.sql   -> PASS; db-test: passed 1, failed 0, units 1
+node scripts/db-test.mjs --only phase14_091_sync_runner.sql    -> PASS; db-test: passed 1, failed 0, units 1
+```
+
+### Item 4 — `KEEPALIVE_MINUTES=0` no longer blinds the watch
+
+0 turns off the navigation only; while alive the watch probes every `LOGIN_CHECK_MINUTES = 60`
+(with the silent re-login on a dead answer), so an overnight death is seen.
+
+```
+RED   login.test.ts › KEEPALIVE_MINUTES=0 stops the navigation only …   ×
+GREEN login.test.ts   22 passed (fake clock: a probe at 60 min, no goto; then 401 -> re-login -> dead -> raised)
+```
+
+### Item 8 — connection-class SQLSTATEs drop the client
+
+`isStatementError` (db.ts): class `08`, `57P` and `XX000` (and anything without a SQLSTATE) drop the
+client; the next call reconnects. A statement refusal (`22023`) keeps it.
+
+```
+RED   integration.test.ts › SQLSTATE 08006 / 08003 / 57P01 / 57P03 / XX000 …   5 failed
+GREEN integration.test.ts   22 passed
+```
+
+### Item 10 — one `readTextOrNull`, in `secrets.ts`, that tells unreadable from missing
+
+ENOENT → null (not set); any other error (EACCES, EISDIR, …) → a `ConfigError` naming the path, never
+the contents. `main.ts`, `probe.ts` and `enqueue.ts` import it; their copies are gone (`probe.js
+--heartbeat` treats an unreadable heartbeat as stale).
+
+```
+RED   secrets.test.ts   2 failed (the helper; no copies in main/probe/enqueue)
+GREEN the whole sync suite 127 passed; tsc exit 0
+```
+
+### Item 9 — reuse, and no child gets the parent's environment
+
+The embed step calls `embed_corpus.mjs`'s exported `runEmbedLoop` with its `makePost(supabaseUrl,
+anonJwt)` in-process (no child process at all). The extractor is `pull_files.mjs`'s exported
+`extractUnits` (the locked project), run with an environment of only what `uv` needs (`PATH`, `HOME`,
+temp and locale, `UV_*`, `PYTHON*`); none of the runner's secrets reaches it. `spawnCollect` is gone.
+
+```
+RED   files.test.ts   3 failed (extractUnits + uv env; in-process embed; no ...env spread or spawn)
+GREEN the whole sync suite 128 passed; tsc exit 0
+```
+
+### Item 5 — the heartbeat proves progress; named timeouts; a watchdog
+
+* The heartbeat is written by progress only (a loop turn, every fold poll, every file, a crawl's
+  start and end); the 30-second interval writer is gone.
+* `CRAWL_TIMEOUT_MS = 900_000` on the in-page `runAll` (a `CrawlError`, so the pass closes failed);
+  `EMBED_TIMEOUT_MS = 600_000` on the in-process embed loop (its later posts answer 408, so the loop
+  ends without another call).
+* `WATCHDOG_MS = 1_200_000` (longer than every step with its own timeout): checked every
+  `WATCHDOG_CHECK_MS = 60_000`; past it the runner logs `no progress for … s` and exits 1
+  (`realDeps.onWatchdog`), so `restart: unless-stopped` restarts the container.
+* `probe.js --heartbeat` now calls the heartbeat stale at `WATCHDOG_MS` (it rests through a crawl).
+
+```
+RED   4 failed (fold-poll progress; watchdog + no interval writer; crawl timeout; embed timeout)
+GREEN the whole sync suite 132 passed; tsc exit 0
+```
+
+For W-56 / the PM: the compose healthcheck command is unchanged; it turns unhealthy only after
+20 minutes without progress, when the watchdog has already exited the runner.
+
+### Item 11 — the 091 unit split into four units of at most 400 lines
+
+`phase14_091_queue.sql` (363 lines: shape with the thirteen, setup, the second load, claim → register →
+outcome → close, quarantine, requeue), `phase14_091_close_sweep.sql` (157: the close refusals, the
+sweep), `phase14_091_login_enqueue.sql` (288: the login item, `sync_enqueue`, the New York date cases),
+`phase14_091_files.sql` (238: the file pair, the privileges). Each sits behind
+`phase14_load_crawl_v4.sql` in `LOADER_MAP` (`scripts/db-test.mjs`, the named hunk; the expected
+object in `scripts/db-test.test.mjs` likewise) and ends in its own `<name>: PASS` row.
+`phase14_091_sync_runner.sql` is deleted.
+
+```
+RED   node --test scripts/db-test.test.mjs   pass 58, fail 1 (the loader map)
+GREEN node --test scripts/db-test.test.mjs   pass 59, fail 0
+      node scripts/db-test.mjs --list   -> units 18–21 phase14_load_crawl_v4.sql + phase14_091_{close_sweep,files,login_enqueue,queue}.sql
+      each --only -> db-test: passed 1, failed 0, units 1
+      node scripts/db-test.mjs   -> db-test: passed 64, failed 0, units 64   (exit 0)
+```
+
+Task 6/11/13's check lines that name `phase14_091_sync_runner.sql` now read as these four units.
+
+### Round 2 totals
+
+```
+cd sync && npm run typecheck && npm run build && npx vitest run --coverage
+ Test Files  7 passed (7)      Tests  132 passed (132)      Lines : 91.32% ( 705/772 )      exit 0
+node --test scripts/db-test.test.mjs   -> pass 59, fail 0
+node scripts/db-test.mjs               -> db-test: passed 64, failed 0, units 64
+```
+
+The live `bb2dash-sync-1` container, the `bb2dash` compose project and `bb2dash_bb-profile` were not
+touched. 093 changed `sync_close` under the running image; its signature and grants are unchanged, so
+the old runner keeps working until the PM redeploys.

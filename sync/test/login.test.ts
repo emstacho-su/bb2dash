@@ -7,6 +7,7 @@ import {
   DEFAULT_KEEPALIVE_MINUTES,
   KEEPALIVE_JITTER_MINUTES,
   KEEPALIVE_PAGES,
+  LOGIN_CHECK_MINUTES,
   LOGIN_HOSTS,
   LOGIN_WATCH_MS,
   LoginWatch,
@@ -305,15 +306,26 @@ describe('the login watch, on a fake clock', () => {
     watch.stop();
   });
 
-  it('KEEPALIVE_MINUTES=0 stops the ticks while alive', async () => {
+  it('R2 item 4: KEEPALIVE_MINUTES=0 stops the navigation only; the watch still probes every LOGIN_CHECK_MINUTES', async () => {
+    expect(LOGIN_CHECK_MINUTES).toBe(60);
     const page = fakePage([200]);
     const rpc = fakeRpc();
     const watch = makeWatch(page, rpc, { keepaliveMinutes: 0 });
     watch.start();
     await vi.advanceTimersByTimeAsync(1);
     page.calls.length = 0;
-    await vi.advanceTimersByTimeAsync(6 * 60 * MINUTE);
+
+    await vi.advanceTimersByTimeAsync(60 * MINUTE - 2);
     expect(page.calls).toEqual([]);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(page.calls).toEqual(['probe 200']);
+
+    // An overnight death is seen at the next hourly check: silent re-login, then the raise.
+    page.setAnswers([401]);
+    await vi.advanceTimersByTimeAsync(60 * MINUTE + SETTLE_MS + 1);
+    expect(watch.state).toBe('dead');
+    expect(rpc.calls).toEqual(['sync_login_ok', 'sync_enqueue(login)', 'sync_login_required']);
+    expect(page.calls.filter((c) => c.startsWith('goto'))).toEqual([`goto ${BLACKBOARD_ORIGIN}${REAUTH_PATH}`]);
     watch.stop();
   });
 
