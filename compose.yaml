@@ -20,7 +20,10 @@ services:
     shm_size: 1gb
     stop_grace_period: 30s
     security_opt:
-      - seccomp=./docker/sync/seccomp_profile.json
+      # Docker reads this path as given, not relative to this file: run through bb2dash-stack's include it
+      # would land in the umbrella's folder. BB2DASH_DIR (the umbrella's .env) names this repo; unset, `.`
+      # is this repo's own folder (the project directory when this file is used alone).
+      - seccomp=${BB2DASH_DIR:-.}/docker/sync/seccomp_profile.json
     environment:
       # The keep-alive (Stack, 2026-10-03): a read-only Ultra page every 20 ± 3 minutes while signed in;
       # 0 turns it off. The jitter and the 60 s check while the login is dead are the runner's constants.
