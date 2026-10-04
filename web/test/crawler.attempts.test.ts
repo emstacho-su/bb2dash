@@ -83,6 +83,7 @@ const crawler = require('../../ingest/bb_crawler.js') as {
     ) => Promise<ColumnEntry[]>;
   };
   keyListMisses: (o: unknown, lists: Record<string, string[]>, prefix: string) => string[];
+  strip: (h: unknown) => string | null;
   assertRunId: (runId: unknown) => string | null;
   mapAttempt: (a: unknown, files?: unknown[], includeKeys?: boolean) => MappedAttempt | null;
   mapAttemptFile: (
@@ -232,6 +233,21 @@ describe('pickKey / atPath — a candidate may be a path', () => {
   });
 });
 
+describe('strip — only a string is ever flattened into text', () => {
+  it('reads displayText or rawText only when it is a string', () => {
+    expect(crawler.strip({ rawText: { displayText: 'x' } })).toBeNull();
+    expect(crawler.strip({ displayText: { nested: true }, rawText: '<p>Raw half.</p>' })).toBe('Raw half.');
+    expect(crawler.strip({ displayText: 'Shown half.', rawText: '<p>Raw half.</p>' })).toBe('Shown half.');
+    expect(crawler.strip('<p>A bare string.</p>')).toBe('A bare string.');
+  });
+
+  it('never lets an object at studentSubmission.rawText become the submission text', () => {
+    const out = mapAttempt({ ...RAW_DETAIL, studentSubmission: { rawText: { displayText: 'x' } } })!;
+    expect(out.text.studentSubmission).toBeNull();
+    expect(JSON.stringify(out.text)).not.toContain('[object Object]');
+  });
+});
+
 describe('mapAttemptFile — v4 reads the URL instead of building one', () => {
   it('takes Blackboard\'s own durable permanentUrl', () => {
     const f = mapAttemptFile(RAW_FILE, CTX)!;
@@ -257,10 +273,10 @@ describe('mapAttemptFile — v4 reads the URL instead of building one', () => {
     expect(crawler.ATTEMPT_FILE_KEYS).not.toHaveProperty('size');
   });
 
-  it('reads the name from `name` alone: file.fileName and linkName are no longer candidates', () => {
-    expect(crawler.ATTEMPT_FILE_KEYS.name).toEqual(['name']);
-    const { name: _drop, ...noName } = RAW_FILE;
-    expect(mapAttemptFile(noName, CTX)!.name).toBeNull();
+  it('falls back to file.fileName when `name` is empty, so 085 never files it as untitled', () => {
+    expect(crawler.ATTEMPT_FILE_KEYS.name).toEqual(['name', 'file.fileName']);
+    const blank = { ...RAW_FILE, name: '', file: { ...RAW_FILE.file, fileName: 'essay.docx' } };
+    expect(mapAttemptFile(blank, CTX)!.name).toBe('essay.docx');
   });
 
   it('falls back to the v3 built URL only when there is no permanentUrl', () => {
@@ -275,9 +291,12 @@ describe('mapAttemptFile — v4 reads the URL instead of building one', () => {
     expect(f.downloadUrl!.startsWith('https://bb.example.edu/learn/api/v1/')).toBe(true);
   });
 
-  it('reads the id from `id` alone, so an entry with only a bbFileUuid drops out', () => {
-    expect(crawler.ATTEMPT_FILE_KEYS.id).toEqual(['id']);
-    expect(mapAttemptFile({ bbFileUuid: 'abc', file: { permanentUrl: 'https://x/y' } }, CTX)).toBeNull();
+  it('uses bbFileUuid as the id when there is no id, and keeps the durable URL', () => {
+    expect(crawler.ATTEMPT_FILE_KEYS.id).toEqual(['id', 'bbFileUuid']);
+    const { id: _drop, ...noId } = RAW_FILE;
+    const f = mapAttemptFile(noId, CTX)!;
+    expect(f.id).toBe('11111111-2222-3333-4444-555555555555');
+    expect(f.downloadUrl).toBe('https://blackboard.syracuse.edu/bbcswebdav/xid-9000001_1');
   });
 
   it('leaves an unknown field null rather than guessing', () => {
