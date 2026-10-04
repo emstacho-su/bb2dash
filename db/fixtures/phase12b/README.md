@@ -22,6 +22,13 @@ sitting.
 | `_3598132_1` | step 3 answers `500`: the submission is still recorded from the step-2 list row, without files, and `entry.status` keeps the failure. |
 | `_3560541_1` | step 1 answers `403`: the chain stops, `results` is empty, and the crawl carries on. |
 
+The raw responses follow the live crawls (Phase 18 task 19, 2026-10-04): the newest quiz attempt
+(`_8100002_1`) carries its professor's feedback as `feedbackToUser: { rawText, displayText }`, the
+name every live attempt with feedback used, and no file entry has a `size`, which Ultra never
+sends. `_8100002_1` keeps a `studentComments` string although no live attempt has carried one: the
+crawler keeps that one name, and `phase12b_085_stage_attempts_v4.sql` proves the prose reaches
+`bb_attempts.raw`.
+
 It also carries the two keys the drift guard uses and the database never sees:
 
 * `_rawResponses` — the invented Blackboard responses the payload was generated from.

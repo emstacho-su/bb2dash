@@ -83,8 +83,11 @@ begin
     raise exception 'FAIL prose reached a column: feedback=%, comments=%, submission=%',
       a.feedback, a.student_comments, a.student_submission;
   end if;
+  -- The feedback is the attempt's `feedbackToUser` (Phase 18 task 19), flattened to plain text.
   if a.raw->'text'->>'studentSubmission' is distinct from 'Second pass, appendix attached.'
-     or a.raw->'text'->>'studentComments' is distinct from 'Resubmitting with the appendix I left out.' then
+     or a.raw->'text'->>'studentComments' is distinct from 'Resubmitting with the appendix I left out.'
+     or a.raw->'text'->>'instructorFeedback' is distinct from
+        'Clear reasoning on question three; cite the reading next time.' then
     raise exception 'FAIL the prose is not in raw either: %', a.raw->'text';
   end if;
 

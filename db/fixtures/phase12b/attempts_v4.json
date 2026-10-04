@@ -1,5 +1,5 @@
 {
-  "_note": "SYNTHETIC. Crawler v4 shape (docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md) with INVENTED ids, names, text and URLs. No real submission, file name or feedback appears here.",
+  "_note": "SYNTHETIC. Crawler v4 shape (docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md), raw responses brought to the live shape on 2026-10-04 (attempt feedback as feedbackToUser, file entries without size), with INVENTED ids, names, text and URLs. No real submission, file name or feedback appears here.",
   "run_id": "00000000-12b0-4000-8000-000000000001",
   "kind": "course",
   "bb_course_id": "_571529_1",
@@ -85,6 +85,7 @@
             "overrideStatus",
             "readyToPost",
             "displayGrade",
+            "feedbackToUser",
             "attemptReceipt",
             "studentSubmission",
             "studentComments",
@@ -191,7 +192,7 @@
             "text": {
               "studentSubmission": "Second pass, appendix attached.",
               "studentComments": "Resubmitting with the appendix I left out.",
-              "instructorFeedback": null
+              "instructorFeedback": "Clear reasoning on question three; cite the reading next time."
             },
             "keys": [
               "id",
@@ -209,6 +210,7 @@
               "overrideStatus",
               "readyToPost",
               "displayGrade",
+              "feedbackToUser",
               "attemptReceipt",
               "studentSubmission",
               "studentComments",
@@ -584,6 +586,10 @@
             "readyToPost": false,
             "displayGrade": {
               "score": 9.5
+            },
+            "feedbackToUser": {
+              "rawText": "<p>Clear reasoning on question three; cite the reading next time.</p>",
+              "displayText": "Clear reasoning on question three; cite the reading next time."
             },
             "attemptReceipt": {
               "receiptId": "RCPT-000000A2",
