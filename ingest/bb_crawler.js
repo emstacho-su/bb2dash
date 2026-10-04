@@ -27,11 +27,13 @@
  *  - Announcements (/learn/api/v1/courses/{C}/announcements): the INTERNAL endpoint uses
  *    `createdDate` / `modifiedDate`; the PUBLIC one uses `created` / `modified`. Do not mix them.
  *    `modifiedDate` is proven against live payloads and feeds announcements.modified_at
- *    (migration 033). The creator DISPLAY NAME key is NOT verified — see the TODO on
+ *    (migration 033). The creator key is `creatorUserId`, proven live (R-70, DECISIONS 2026-10-03:
+ *    27 of 27 announcements carry an author after the v5 crawls, 26 from the course's teachers and
+ *    1 through `/users/{id}`); see
  *    mapAnnouncement() below; the mapper tries every candidate and records the winner in
  *    `authorSource`, and v5's probe (below) records what the payload actually carries.
  *
- * PHASE 10a (crawler version 3) — what changed and what is still unverified
+ * PHASE 10a (crawler version 3) — the first versioned envelope
  *  - Every `kind = 'course'` payload now carries `crawler: { version: 3 }`. It is the first
  *    versioned envelope; the stages read a missing key as version 2 (migration 050).
  *  - `attempts(C, gradebook)` probes the columns that look like they have a submission and posts
@@ -68,17 +70,28 @@
  *  PROSE MOVED. Stack's typed-in submission, his comments and the instructor's feedback are now
  *  nested under `results[].text`, which the stage does not read into a column — so they live in
  *  `bb_attempts.raw` (owner-only, RLS) and nowhere else.
- *  STILL UNVERIFIED AGAINST A LIVE RUN: the key names come from one read of Blackboard's own
- *  requests, not from a crawl of our own. `keys` travels with every column so Stack's next sync
- *  settles them for good. Unknown keys yield null, never a guess.
- *  - Assessment fields (`dueDate`, `points`, `gradebookColumnId`, `attemptsAllowed`): ALSO NOT
- *    VERIFIED. `slim()` runs on the Summary view, whose `contentDetail` only ever holds `file`
- *    and `url` (migration 034's header). walk() already fetches the full item for every
- *    assessment, so `assessmentFields()` now scans that full item for the four names at any depth
- *    and records **where each was found** in `detailSource`. After the first live crawl one query
- *    over bb_raw names Ultra's real path, and the scan can be replaced by reading it directly.
- *    Until then a field Ultra does not expose stays absent rather than being invented; the
- *    gradebook column remains the source of truth for due dates and points (migration 034).
+ *  WHAT THE LIVE CRAWLS PROVED. Crawler v4 has run since sync 34 (2026-09-22) and v5 since
+ *  sync 394 (2026-10-01); their `keys` and `probe` cover 274 probed first attempts. The attempt
+ *  detail carried `status`, `creationDate`, `modifiedDate`, `attemptDate`, `exempt` and
+ *  `displayGrade` on 274 of 274, `attemptReceipt` on 234, `studentSubmission` on 100,
+ *  `studentSubmissionFiles` on 28 and `feedbackToUser` on 10. Each of the 28 file entries
+ *  carried `id`, `bbFileUuid`, `name`, `linkName`, `fileType`, `hasErrors` and `file`, and every
+ *  catalogued file took its mime type and durable URL from `file.mimeType` / `file.permanentUrl`.
+ *  Never seen in any crawl: `instructorFeedback` (v4's name for what the attempt sends as
+ *  `feedbackToUser`), `studentComments`, and any file size — a file's bytes come from the pull
+ *  (`bb_files.bytes`). Both `submitted` names stay: a step-2 list row has no receipt, only
+ *  `attemptDate`. The prose is still only under `results[].text`, so only in `bb_attempts.raw`.
+ *  Key lists cut 2026-10-04 (Phase 18 task 19). A name no list keeps yields null, never a guess.
+ *  - Assessment fields (`dueDate`, `points`, `gradebookColumnId`, `attemptsAllowed`): CLOSED
+ *    (R-75, option (b), DECISIONS 2026-10-04). `slim()` runs on the Summary view, whose
+ *    `contentDetail` only ever holds `file` and `url` (migration 034's header), so walk() fetches
+ *    the full item for every assessment and `assessmentFields()` scans it. Live crawls found
+ *    points and due date at `contentDetail[…].test.gradingColumn.{possible, dueDate}` (38 and 37
+ *    items in the 2026-09-24 crawl) and `gradebookColumnId` / `attemptsAllowed` on no Ultra
+ *    content item. The gradebook column stays the source of due dates and points (migration
+ *    034), the column-to-item link is `column.contentId` (084), and attempts allowed come from
+ *    055. The depth scan stays as a probe that records where each value was found in
+ *    `detailSource`; nothing reads the copy `stage_content` folds into `bb_content.detail`.
  *
  * PHASE 18 (crawler version 5) — the probe (R-66, R-70, P-97)
  *  Every `kind = 'course'` payload carries
@@ -89,7 +102,7 @@
  *  found nothing: `AUTHOR_KEYS` per announcement with neither a name nor a user id, and
  *  `ATTEMPT_FIELD_KEYS.<field>` / `ATTEMPT_FILE_KEYS.<field>` per attempt detail / file. A mapped
  *  announcement keeps a bare creator id as `authorUserId` beside `author` / `authorSource`; the
- *  id is never shown. Attempt feedback is read from `feedbackToUser` first. The stages ignore
+ *  id is never shown. Attempt feedback is read from `feedbackToUser` alone. The stages ignore
  *  `crawler.probe` and `authorUserId`; one query over bb_raw after the next sync reads them.
  *  Task 18 resolves `authorUserId` to a name: the course's teacher rows first, then one
  *  `GET /learn/api/v1/users/{id}` per distinct unresolved id per run (resolveAuthors). A resolved
@@ -213,12 +226,13 @@ const personName = (v) => {
   return null;
 };
 
-// TODO(verify on a live payload): the exact creator key of the INTERNAL announcements endpoint is
-// unconfirmed. No Blackboard session was available when this was written, and the endpoint is not in
+// Verified on live payloads (R-70, DECISIONS 2026-10-03): the INTERNAL announcements endpoint sends the
+// creator as a bare id, `creatorUserId`, which task 18 resolves to a name (the course's teachers first,
+// then one /users/{id} per unknown id; 27 of 27 live on 2026-10-03). The endpoint is not in
 // Anthology's published REST schema (the PUBLIC schema exposes `creator` as a bare user id, not a
 // name). Candidates, in the order tried below. mapAnnouncement records the winning key in
 // `authorSource`, so after the first live crawl `select payload->'announcements' from bb_raw` names
-// the true key and this list can be cut to it. Until then an unknown shape yields author: null —
+// the true key (it did: `creatorUserId`; the name keys stay for a tenant that sends one). An unknown shape yields author: null —
 // never a guess, and never a raw user id.
 //
 // v5 (Phase 18, R-70): `creatorUserId` leads the list. Research 92 §9 found it documented on the
@@ -381,10 +395,17 @@ const assertRunId = (runId) => {
 
 /**
  * v4 (P-grades-4): the key names Blackboard's own gradebook page uses, read off its requests and
- * written down in docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md. v3's candidate lists were guesses and
- * are cut to these. Two entries per field at most, and only where BOTH are real: the attempt
- * DETAIL (step 3) carries `attemptReceipt.submissionDate`, the attempt LIST (step 2) carries only
- * `attemptDate`, and a column whose detail request failed falls back to the list row.
+ * written down in docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md. Cut on 2026-10-04
+ * (Phase 18 task 19) to the names the live v4 and v5 crawls proved (see the header). More than
+ * one entry only where every one is real:
+ *  - `submitted`: the attempt DETAIL (step 3) carries `attemptReceipt.submissionDate`; the
+ *    attempt LIST (step 2) carries only `attemptDate`, and a column whose detail request failed
+ *    falls back to the list row (3 of 26 attempts used it, R-66).
+ *  - `feedback`: `feedbackToUser` is `{rawText, displayText}` or a plain string (R-66). The two
+ *    object forms come first; the bare key is read string-only (STRING_ONLY_KEY_LISTS).
+ *  - `studentSubmission`: the two halves of Ultra's `{rawText, displayText}` envelope.
+ * `studentComments` was never seen on a live attempt; the name stays so the envelope keeps
+ * `text.studentComments` (null) and migration 085's contract is unchanged.
  *
  * A dotted candidate is a path, read one level at a time — Ultra nests the score under
  * `displayGrade` and the submission date under `attemptReceipt`.
@@ -395,10 +416,7 @@ const ATTEMPT_FIELD_KEYS = {
   submitted:         ['attemptReceipt.submissionDate', 'attemptDate'],
   modified:          ['modifiedDate'],
   score:             ['displayGrade.score'],
-  // v5 (R-66): Blackboard's attempt resource names the feedback `feedbackToUser`; v4's
-  // `instructorFeedback` stays as the fallback until the probe sitting (98a §4) settles it.
-  feedback:          ['feedbackToUser.rawText', 'feedbackToUser.displayText',
-                      'instructorFeedback.rawText', 'instructorFeedback.displayText'],
+  feedback:          ['feedbackToUser.rawText', 'feedbackToUser.displayText', 'feedbackToUser'],
   studentComments:   ['studentComments'],
   studentSubmission: ['studentSubmission.rawText', 'studentSubmission.displayText'],
   exempt:            ['exempt'],
@@ -408,11 +426,12 @@ const ATTEMPT_FIELD_KEYS = {
 /**
  * Key names for one `studentSubmissionFiles[]` entry. `file.permanentUrl` is the whole point of
  * the v4 chain: a durable `bbcswebdav/xid-<n>_1` URL that downloads with the session cookie.
+ * There is no `size` list: Ultra sends no size on a file entry (0 of 28 live), so
+ * mapAttemptFile() emits `size: null` and the probe stops counting a key known to be absent.
  */
 const ATTEMPT_FILE_KEYS = {
-  id:   ['id', 'bbFileUuid'],
-  name: ['name', 'file.fileName', 'linkName'],
-  size: ['size'],
+  id:   ['id'],
+  name: ['name'],
   mime: ['file.mimeType'],
   url:  ['file.permanentUrl'],
   uuid: ['bbFileUuid'],
@@ -442,12 +461,35 @@ const pickKey = (o, keys) => {
 };
 
 /**
+ * pickKey for prose: only a non-empty STRING counts as present. `feedback` ends in the bare
+ * `feedbackToUser`, which is right when Blackboard sends a plain string; when it sends the
+ * `{rawText, displayText}` object instead (both read by the dotted candidates before it), that
+ * object must never reach strip(), which would turn it into text.
+ */
+const pickString = (o, keys) => {
+  if (o == null || typeof o !== 'object') return null;
+  for (const k of keys) {
+    const v = k.includes('.') ? atPath(o, k) : o[k];
+    if (typeof v === 'string' && v !== '') return v;
+  }
+  return null;
+};
+
+/** Key lists read with pickString. The probe counts their misses by the same rule. */
+const STRING_ONLY_KEY_LISTS = new Set([ATTEMPT_FIELD_KEYS.feedback]);
+
+/**
  * v5 probe: the names of the key lists that found nothing in `o` — `<prefix>.<field>` for each
  * field of `lists` whose candidates are all absent. A silent null cannot tell "renamed" from
  * "never sent"; a per-list miss count in `crawler.probe.misses` can.
  */
 const keyListMisses = (o, lists, prefix) =>
-  Object.keys(lists).filter((field) => pickKey(o, lists[field]) === null).map((field) => `${prefix}.${field}`);
+  Object.keys(lists)
+    .filter((field) => {
+      const pick = STRING_ONLY_KEY_LISTS.has(lists[field]) ? pickString : pickKey;
+      return pick(o, lists[field]) === null;
+    })
+    .map((field) => `${prefix}.${field}`);
 
 /** Add one to each named miss. `misses` is a counter the caller owns for one course payload. */
 const countMisses = (misses, names) => {
@@ -492,7 +534,7 @@ const mapAttemptFile = (f, { base = 'https://blackboard.syracuse.edu', courseId 
   return {
     id,
     name: asString(pickKey(f, ATTEMPT_FILE_KEYS.name)),
-    size: asNumber(pickKey(f, ATTEMPT_FILE_KEYS.size)),
+    size: null, // Ultra sends no file size (0 of 28 live); bytes come from the pull, bb_files.bytes
     mime: asString(pickKey(f, ATTEMPT_FILE_KEYS.mime)),
     uuid: asString(pickKey(f, ATTEMPT_FILE_KEYS.uuid)),
     downloadUrl: url
@@ -532,7 +574,7 @@ const mapAttempt = (a, files = [], includeKeys = false) => {
     text: {
       studentSubmission:  strip(pickKey(a, ATTEMPT_FIELD_KEYS.studentSubmission))?.slice(0, 4000) || null,
       studentComments:    strip(pickKey(a, ATTEMPT_FIELD_KEYS.studentComments))?.slice(0, 2000) || null,
-      instructorFeedback: strip(pickKey(a, ATTEMPT_FIELD_KEYS.feedback))?.slice(0, 1000) || null,
+      instructorFeedback: strip(pickString(a, ATTEMPT_FIELD_KEYS.feedback))?.slice(0, 1000) || null,
     },
   };
   if (includeKeys) out.keys = Object.keys(a);
@@ -605,13 +647,13 @@ const newestAttempts = (rows, limit = ATTEMPT_LIMIT) => {
 /**
  * The assessment fields the planner wants, found wherever Ultra actually keeps them.
  *
- * Every candidate below is a guess about Ultra's shape, so the function records the dotted PATH
- * each value came from alongside the value. After the first live crawl,
+ * A probe, kept as one (R-75, option (b)): it records the dotted PATH each value came from
+ * alongside the value, as `detailSource` in bb_raw. Live crawls found `points` and `dueDate` at
+ * `contentDetail[…].test.gradingColumn.{possible, dueDate}` and the other two names nowhere,
  *   select distinct jsonb_object_keys(ci->'detailSource') , ci->'detailSource'
  *     from bb_raw, lateral jsonb_array_elements(payload->'content') ci where ci ? 'detailSource';
- * names the real path and this scan can be replaced by reading it directly. A field Ultra does
- * not expose simply stays absent: the gradebook column is still the source of truth for due dates
- * and points (migration 034), and inventing one here would put a made-up date on the tracker.
+ * and nothing reads the values: the gradebook column is the source of truth for due dates and
+ * points (migration 034), and a field Ultra does not expose stays absent rather than invented.
  *
  * Shallow matches win (the walk checks a node's own keys before descending), and objects are
  * never taken as values, so `{dueDate: {...}}` is skipped rather than stored as a blob.
@@ -688,8 +730,8 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
         // instruction body (assessments/assignments). Cheap: one GET per item.
         if (s.type === null || /asmt|assignment|test|survey/i.test(s.type || '')) { const full = await j(`/learn/api/v1/courses/${C}/contents/${c.id}`); if (!full.__status) { if (s.type === null) s.body = strip(full.body)?.slice(0, 12000) || null; s.embeddedFiles = embedsDeep(full);
           // The Summary view's contentDetail only ever holds file/url, so the assessment fields
-          // are looked for in the FULL item — with the path each came from, because where Ultra
-          // keeps them is unverified until a live crawl. See assessmentFields() above.
+          // are looked for in the FULL item, with the path each came from. A probe only: the
+          // gradebook column is the source of due dates and points. See assessmentFields() above.
           const af = assessmentFields(full);
           if (af) { s.detail = Object.assign({}, s.detail, af.values); s.detailSource = af.paths; } } }
         items.push(s); if (isContainer(c)) stack.push({ id: c.id, path: p }); } }
@@ -856,6 +898,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { installCrawler, strip, personName, announcementAuthor, mapAnnouncement, AUTHOR_KEYS,
     userIdOf, announcementProbe, keyListMisses, resolveAuthors, PROBE_ID_LIMIT,
     mapAttempt, mapAttemptFile, mapGradeRow, mapAttemptDetail, newestAttempts, atPath,
-    shouldProbeColumn, assessmentFields, pickKey, assertRunId, durableUrl, parseBbfile, bbfileTags,
+    shouldProbeColumn, assessmentFields, pickKey, pickString, assertRunId, durableUrl, parseBbfile, bbfileTags,
     ATTEMPT_FIELD_KEYS, ATTEMPT_FILE_KEYS, ASSESSMENT_FIELDS, CRAWLER_VERSION, ATTEMPT_LIMIT };
 }
