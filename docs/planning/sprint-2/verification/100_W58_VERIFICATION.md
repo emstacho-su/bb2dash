@@ -335,3 +335,30 @@ were not touched.
 Unverified: the devcontainer CLI / VS Code route (no CLI here; item 1 rests on the file test); an
 authenticated clone with a real gh_token; the 10-minute timer firing on its own (a pass was run by hand
 as root in the container; the loop's sleep was not waited out).
+
+## Round 3 (security review of 97b0426, HIGH), 2026-10-04
+
+Unit suite after all four: `node --test --test-reporter=tap doctor/doctor.test.mjs scripts/*.test.mjs`
+→ `# tests 89 · # pass 89 · # fail 0`. New fakes: stat (an override map, so a test declares owner, mode
+and symlink-ness), iptables/ip6tables (logged), iptables-save, ip, aggregate, setsid; curl gained
+FAKE_CURL_BLOCK, dig FAKE_DNS_DEFAULT, jq `-r`. Shared helper: `scripts/test-fixtures/firewall-world.mjs`.
+A whole `init-firewall.sh` run against the fakes takes ~35 s under Git Bash (process spawning).
+
+| # | RED | GREEN / check line | SHA |
+|---|---|---|---|
+| 1 | 12 fail (cache in claude-home, no trust check) | node-owned cache, symlinked cache, the rename attack (folder owned by uid 1000), symlinked folder, mode 664 file, mode 777 folder: each `ERROR: … the cache is refused: <why>`, stdout empty; a root-owned chain is used; a fetch leaves only `github-ranges.txt` (mktemp + rename). Container: `root:root 755 /var/lib/bb2dash-firewall`, `root:root 644 …/github-ranges.txt`; as node `mv` → Permission denied, append → Permission denied; claude-home entries naming firewall: 0 | 24aaa66 |
+| 4 | 4 fail | planted 203.0.113.0/24 → `… is not inside GitHub's published ranges`; 140.82.0.0/16 and 0.0.0.0/0 refused; 140.82.300.0/24 → `not an IPv4 range`; missing list → refused; 140.82.114.0/24 and 192.30.253.17/32 accepted; a fresh fetch with an unlisted range is used | bd35170 |
+| 2 | 3 fail | design: refuse a re-run (mkdir claim of `/dev/shm/bb2dash-firewall.up` before any rule changes). Fakes: first run 0 and claims; second run exit 75, iptables calls unchanged; a planted file in the marker's place → 75, no calls. Container: `sudo init-firewall.sh as node -> exit 75`, `iptables -S unchanged by the refused run`; after `docker compose restart dev` the firewall raised again | 961f9c5 |
+| 3 | 2 fail | fakes with example.com reachable: `ERROR: Firewall verification failed …`, `Firewall left at deny-all except loopback`, last state exactly `-F -X, -P INPUT/FORWARD/OUTPUT DROP, lo ACCEPT in/out`, IPv6 policies DROP, exit ≠ 0; same for a name that does not resolve | 46237a4 |
+
+Item 2 claims the marker at the start of the run, not "once the firewall is up" as the item words it:
+a claim before the flush also stops two concurrent runs, and a failed first run stops the container
+anyway (the entrypoint dies). A planted marker can only stop the firewall from rising, which stops the
+container: a denial, never a bypass.
+
+Container run (`-p bb2dash-stack-test`, dummy secrets, image rebuilt, late layers only, ce722216c359):
+start with gh_token empty → `GitHub ranges: fetched (unauthenticated)`, 120 lines cached (web+api+git,
+not de-duplicated); round 2 item 2 still holds (`/opt/bb2dash-stack/secrets` 0 entries, secret paths
+readable 0, `/workspaces ext4` only); restart with a dummy gh_token (GitHub refuses it) →
+`GitHub ranges: the fetch failed; using the cached copy from 2026-10-04T01:22:22Z`. Clean-up:
+`left: containers 0, volumes 0, networks 0, secrets/ 0`; one image tag, nothing dangling.
