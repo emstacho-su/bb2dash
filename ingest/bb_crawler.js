@@ -27,7 +27,9 @@
  *  - Announcements (/learn/api/v1/courses/{C}/announcements): the INTERNAL endpoint uses
  *    `createdDate` / `modifiedDate`; the PUBLIC one uses `created` / `modified`. Do not mix them.
  *    `modifiedDate` is proven against live payloads and feeds announcements.modified_at
- *    (migration 033). The creator DISPLAY NAME key is NOT verified — see the TODO on
+ *    (migration 033). The creator key is `creatorUserId`, proven live (R-70, DECISIONS 2026-10-03:
+ *    27 of 27 announcements carry an author after the v5 crawls, 26 from the course's teachers and
+ *    1 through `/users/{id}`); see
  *    mapAnnouncement() below; the mapper tries every candidate and records the winner in
  *    `authorSource`, and v5's probe (below) records what the payload actually carries.
  *
@@ -224,12 +226,13 @@ const personName = (v) => {
   return null;
 };
 
-// TODO(verify on a live payload): the exact creator key of the INTERNAL announcements endpoint is
-// unconfirmed. No Blackboard session was available when this was written, and the endpoint is not in
+// Verified on live payloads (R-70, DECISIONS 2026-10-03): the INTERNAL announcements endpoint sends the
+// creator as a bare id, `creatorUserId`, which task 18 resolves to a name (the course's teachers first,
+// then one /users/{id} per unknown id; 27 of 27 live on 2026-10-03). The endpoint is not in
 // Anthology's published REST schema (the PUBLIC schema exposes `creator` as a bare user id, not a
 // name). Candidates, in the order tried below. mapAnnouncement records the winning key in
 // `authorSource`, so after the first live crawl `select payload->'announcements' from bb_raw` names
-// the true key and this list can be cut to it. Until then an unknown shape yields author: null —
+// the true key (it did: `creatorUserId`; the name keys stay for a tenant that sends one). An unknown shape yields author: null —
 // never a guess, and never a raw user id.
 //
 // v5 (Phase 18, R-70): `creatorUserId` leads the list. Research 92 §9 found it documented on the
