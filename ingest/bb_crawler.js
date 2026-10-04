@@ -430,7 +430,7 @@ const ATTEMPT_FIELD_KEYS = {
  * mapAttemptFile() emits `size: null` and the probe stops counting a key known to be absent.
  */
 const ATTEMPT_FILE_KEYS = {
-  id:   ['id'],
+  id:   ['id', 'bbFileUuid'],
   name: ['name', 'file.fileName'],
   mime: ['file.mimeType'],
   url:  ['file.permanentUrl'],

@@ -275,9 +275,12 @@ describe('mapAttemptFile — v4 reads the URL instead of building one', () => {
     expect(f.downloadUrl!.startsWith('https://bb.example.edu/learn/api/v1/')).toBe(true);
   });
 
-  it('reads the id from `id` alone, so an entry with only a bbFileUuid drops out', () => {
-    expect(crawler.ATTEMPT_FILE_KEYS.id).toEqual(['id']);
-    expect(mapAttemptFile({ bbFileUuid: 'abc', file: { permanentUrl: 'https://x/y' } }, CTX)).toBeNull();
+  it('uses bbFileUuid as the id when there is no id, and keeps the durable URL', () => {
+    expect(crawler.ATTEMPT_FILE_KEYS.id).toEqual(['id', 'bbFileUuid']);
+    const { id: _drop, ...noId } = RAW_FILE;
+    const f = mapAttemptFile(noId, CTX)!;
+    expect(f.id).toBe('11111111-2222-3333-4444-555555555555');
+    expect(f.downloadUrl).toBe('https://blackboard.syracuse.edu/bbcswebdav/xid-9000001_1');
   });
 
   it('leaves an unknown field null rather than guessing', () => {
