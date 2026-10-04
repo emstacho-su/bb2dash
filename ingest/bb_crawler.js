@@ -29,9 +29,8 @@
  *    `modifiedDate` is proven against live payloads and feeds announcements.modified_at
  *    (migration 033). The creator key is `creatorUserId`, proven live (R-70, DECISIONS 2026-10-03:
  *    27 of 27 announcements carry an author after the v5 crawls, 26 from the course's teachers and
- *    1 through `/users/{id}`); see
- *    mapAnnouncement() below; the mapper tries every candidate and records the winner in
- *    `authorSource`, and v5's probe (below) records what the payload actually carries.
+ *    1 through `/users/{id}`); see mapAnnouncement() below; the mapper tries every candidate and
+ *    records the winner in `authorSource`, and v5's probe (below) records what the payload carries.
  *
  * PHASE 10a (crawler version 3) — the first versioned envelope
  *  - Every `kind = 'course'` payload now carries `crawler: { version: 3 }`. It is the first
@@ -70,28 +69,17 @@
  *  PROSE MOVED. Stack's typed-in submission, his comments and the instructor's feedback are now
  *  nested under `results[].text`, which the stage does not read into a column — so they live in
  *  `bb_attempts.raw` (owner-only, RLS) and nowhere else.
- *  WHAT THE LIVE CRAWLS PROVED. Crawler v4 has run since sync 34 (2026-09-22) and v5 since
- *  sync 394 (2026-10-01); their `keys` and `probe` cover 274 probed first attempts. The attempt
- *  detail carried `status`, `creationDate`, `modifiedDate`, `attemptDate`, `exempt` and
- *  `displayGrade` on 274 of 274, `attemptReceipt` on 234, `studentSubmission` on 100,
- *  `studentSubmissionFiles` on 28 and `feedbackToUser` on 10. Each of the 28 file entries
- *  carried `id`, `bbFileUuid`, `name`, `linkName`, `fileType`, `hasErrors` and `file`, and every
- *  catalogued file took its mime type and durable URL from `file.mimeType` / `file.permanentUrl`.
- *  Never seen in any crawl: `instructorFeedback` (v4's name for what the attempt sends as
- *  `feedbackToUser`), `studentComments`, and any file size — a file's bytes come from the pull
- *  (`bb_files.bytes`). Both `submitted` names stay: a step-2 list row has no receipt, only
- *  `attemptDate`. The prose is still only under `results[].text`, so only in `bb_attempts.raw`.
- *  Key lists cut 2026-10-04 (Phase 18 task 19). A name no list keeps yields null, never a guess.
+ *  WHAT THE LIVE CRAWLS PROVED (the counts: DECISIONS 2026-10-04, R-66 and R-75). The key lists
+ *  keep names live v4 and v5 attempts carried. Never seen: `instructorFeedback` (the attempt sends
+ *  `feedbackToUser`), `studentComments` (its one name kept for 085's contract), and any file size
+ *  (bytes come from the pull, `bb_files.bytes`). A plain-string `feedbackToUser` is accepted by
+ *  R-66, not yet seen live. Both `submitted` names stay: a step-2 list row has no receipt, only
+ *  `attemptDate`. The prose is only under `results[].text`, so only in `bb_attempts.raw`. Key
+ *  lists cut 2026-10-04 (Phase 18 task 19); a name no list keeps yields null, never a guess.
  *  - Assessment fields (`dueDate`, `points`, `gradebookColumnId`, `attemptsAllowed`): CLOSED
- *    (R-75, option (b), DECISIONS 2026-10-04). `slim()` runs on the Summary view, whose
- *    `contentDetail` only ever holds `file` and `url` (migration 034's header), so walk() fetches
- *    the full item for every assessment and `assessmentFields()` scans it. Live crawls found
- *    points and due date at `contentDetail[…].test.gradingColumn.{possible, dueDate}` (38 and 37
- *    items in the 2026-09-24 crawl) and `gradebookColumnId` / `attemptsAllowed` on no Ultra
- *    content item. The gradebook column stays the source of due dates and points (migration
- *    034), the column-to-item link is `column.contentId` (084), and attempts allowed come from
- *    055. The depth scan stays as a probe that records where each value was found in
- *    `detailSource`; nothing reads the copy `stage_content` folds into `bb_content.detail`.
+ *    (R-75, option (b)). The gradebook column is the source of due dates and points (migration
+ *    034), the item link is `column.contentId` (084), and attempts allowed come from 055.
+ *    `assessmentFields()` stays a probe that records `detailSource`; nothing reads its values.
  *
  * PHASE 18 (crawler version 5) — the probe (R-66, R-70, P-97)
  *  Every `kind = 'course'` payload carries
@@ -395,21 +383,14 @@ const assertRunId = (runId) => {
 };
 
 /**
- * v4 (P-grades-4): the key names Blackboard's own gradebook page uses, read off its requests and
- * written down in docs/planning/sprint-1-hub/evidence/80f_ATTEMPTS_ENDPOINT.md. Cut on 2026-10-04
- * (Phase 18 task 19) to the names the live v4 and v5 crawls proved (see the header). More than
- * one entry only where every one is real:
- *  - `submitted`: the attempt DETAIL (step 3) carries `attemptReceipt.submissionDate`; the
- *    attempt LIST (step 2) carries only `attemptDate`, and a column whose detail request failed
- *    falls back to the list row (3 of 26 attempts used it, R-66).
- *  - `feedback`: `feedbackToUser` is `{rawText, displayText}` or a plain string (R-66). The two
- *    object forms come first; the bare key is read string-only (STRING_ONLY_KEY_LISTS).
- *  - `studentSubmission`: the two halves of Ultra's `{rawText, displayText}` envelope.
- * `studentComments` was never seen on a live attempt; the name stays so the envelope keeps
- * `text.studentComments` (null) and migration 085's contract is unchanged.
- *
- * A dotted candidate is a path, read one level at a time — Ultra nests the score under
- * `displayGrade` and the submission date under `attemptReceipt`.
+ * v4 (P-grades-4): the names Blackboard's own gradebook page uses (80f_ATTEMPTS_ENDPOINT.md), cut
+ * on 2026-10-04 (Phase 18 task 19) to those the live crawls proved. More than one only where every
+ * one is real: `submitted` (the DETAIL's `attemptReceipt.submissionDate`; a LIST row, used when
+ * the detail request failed, has only `attemptDate`) and the `{rawText, displayText}` halves of
+ * `feedback` and `studentSubmission`, both read string-only (STRING_ONLY_KEY_LISTS). `feedback`
+ * ends in the bare `feedbackToUser`, a plain-string form R-66 accepts, not yet seen live.
+ * `studentComments` was never seen; its one name keeps `text.studentComments` (null) in 085's
+ * contract. A dotted candidate is a path, read one level at a time.
  */
 const ATTEMPT_FIELD_KEYS = {
   status:            ['status'],
@@ -417,6 +398,7 @@ const ATTEMPT_FIELD_KEYS = {
   submitted:         ['attemptReceipt.submissionDate', 'attemptDate'],
   modified:          ['modifiedDate'],
   score:             ['displayGrade.score'],
+  // The bare key is the plain-string form: accepted by R-66, not yet seen live.
   feedback:          ['feedbackToUser.rawText', 'feedbackToUser.displayText', 'feedbackToUser'],
   studentComments:   ['studentComments'],
   studentSubmission: ['studentSubmission.rawText', 'studentSubmission.displayText'],
@@ -425,10 +407,9 @@ const ATTEMPT_FIELD_KEYS = {
 };
 
 /**
- * Key names for one `studentSubmissionFiles[]` entry. `file.permanentUrl` is the whole point of
- * the v4 chain: a durable `bbcswebdav/xid-<n>_1` URL that downloads with the session cookie.
- * There is no `size` list: Ultra sends no size on a file entry (0 of 28 live), so
- * mapAttemptFile() emits `size: null` and the probe stops counting a key known to be absent.
+ * Key names for one `studentSubmissionFiles[]` entry, each on every live entry. `file.permanentUrl`
+ * is the durable `bbcswebdav/xid-<n>_1` URL the v4 chain exists for. No `size` list: Ultra sends
+ * none, so mapAttemptFile() emits `size: null` and the probe does not count a known absence.
  */
 const ATTEMPT_FILE_KEYS = {
   id:   ['id', 'bbFileUuid'],
@@ -461,12 +442,8 @@ const pickKey = (o, keys) => {
   return null;
 };
 
-/**
- * pickKey for prose: only a non-empty STRING counts as present. `feedback` ends in the bare
- * `feedbackToUser`, which is right when Blackboard sends a plain string; when it sends the
- * `{rawText, displayText}` object instead (both read by the dotted candidates before it), that
- * object must never reach strip(), which would turn it into text.
- */
+// pickKey for prose: only a non-empty STRING counts as present, so an object (the whole envelope
+// under a bare `feedbackToUser`, or one nested where the text should be) never reaches strip().
 const pickString = (o, keys) => {
   if (o == null || typeof o !== 'object') return null;
   for (const k of keys) {
@@ -484,13 +461,9 @@ const STRING_ONLY_KEY_LISTS = new Set([ATTEMPT_FIELD_KEYS.feedback, ATTEMPT_FIEL
  * field of `lists` whose candidates are all absent. A silent null cannot tell "renamed" from
  * "never sent"; a per-list miss count in `crawler.probe.misses` can.
  */
-const keyListMisses = (o, lists, prefix) =>
-  Object.keys(lists)
-    .filter((field) => {
-      const pick = STRING_ONLY_KEY_LISTS.has(lists[field]) ? pickString : pickKey;
-      return pick(o, lists[field]) === null;
-    })
-    .map((field) => `${prefix}.${field}`);
+const keyListMisses = (o, lists, prefix) => Object.keys(lists)
+  .filter((f) => (STRING_ONLY_KEY_LISTS.has(lists[f]) ? pickString : pickKey)(o, lists[f]) === null)
+  .map((f) => `${prefix}.${f}`);
 
 /** Add one to each named miss. `misses` is a counter the caller owns for one course payload. */
 const countMisses = (misses, names) => {
@@ -521,11 +494,8 @@ const shouldProbeColumn = (g) => {
  *
  * v4 READS the download URL instead of building one. `file.permanentUrl` is Blackboard's own
  * durable link; v3 built `/gradebook/attempts/<aid>/files/<id>/download`, which is not a route a
- * student session can use, and that is the second reason v3 catalogued nothing. The built form
- * survives only as a fallback so an old payload still produces a row.
- *
- * Returns null for anything with no usable id, so a malformed entry drops out rather than
- * producing a catalog row nothing can download.
+ * student session can use. The built form survives only as a fallback so an old payload still
+ * produces a row. Returns null when neither `id` nor `bbFileUuid` is present.
  */
 const mapAttemptFile = (f, { base = 'https://blackboard.syracuse.edu', courseId = null, attemptId = null } = {}) => {
   if (f == null || typeof f !== 'object') return null;
@@ -535,7 +505,7 @@ const mapAttemptFile = (f, { base = 'https://blackboard.syracuse.edu', courseId 
   return {
     id,
     name: asString(pickKey(f, ATTEMPT_FILE_KEYS.name)),
-    size: null, // Ultra sends no file size (0 of 28 live); bytes come from the pull, bb_files.bytes
+    size: null, // Ultra sends no file size; the bytes come from the pull (bb_files.bytes)
     mime: asString(pickKey(f, ATTEMPT_FILE_KEYS.mime)),
     uuid: asString(pickKey(f, ATTEMPT_FILE_KEYS.uuid)),
     downloadUrl: url
@@ -548,17 +518,11 @@ const mapAttemptFile = (f, { base = 'https://blackboard.syracuse.edu', courseId 
 /**
  * One raw attempt (step 3's detail, or step 2's list row when the detail request failed) -> the
  * shape migration 050/055 reads. Pure: no fetch, no session, no globals.
- *
- * WHERE THE PROSE WENT (v4). `studentSubmission.rawText` is what Stack typed into Blackboard and
- * `instructorFeedback` is what a professor wrote back. The stage lifts the TOP-LEVEL keys of this
- * object into columns; nesting the three prose fields under `text` keeps them out of those columns
- * and leaves them in `bb_attempts.raw` alone, which is owner-only under RLS. They are still capped
- * the way the rest of the crawler caps prose: feedback 1000, student comments 2000, submitted text
- * 4000, all flattened to plain text first.
- *
- * `includeKeys` is set for the FIRST attempt of each column only — the probe that names what this
- * row was actually built from — and repeating it on every attempt would just make the payload
- * bigger.
+ * WHERE THE PROSE WENT (v4). The stage lifts the TOP-LEVEL keys of this object into columns, so
+ * Stack's submitted text, his comments and the professor's feedback nest under `text` and live in
+ * `bb_attempts.raw` alone (owner-only, RLS), flattened to plain text and capped: feedback 1000,
+ * comments 2000, submitted text 4000. `includeKeys` is set for each column's FIRST attempt only:
+ * the probe of what the row was built from, which every attempt repeating would only bloat.
  */
 const mapAttempt = (a, files = [], includeKeys = false) => {
   if (a == null || typeof a !== 'object') return null;
@@ -646,18 +610,12 @@ const newestAttempts = (rows, limit = ATTEMPT_LIMIT) => {
 };
 
 /**
- * The assessment fields the planner wants, found wherever Ultra actually keeps them.
- *
- * A probe, kept as one (R-75, option (b)): it records the dotted PATH each value came from
- * alongside the value, as `detailSource` in bb_raw. Live crawls found `points` and `dueDate` at
- * `contentDetail[…].test.gradingColumn.{possible, dueDate}` and the other two names nowhere,
- *   select distinct jsonb_object_keys(ci->'detailSource') , ci->'detailSource'
- *     from bb_raw, lateral jsonb_array_elements(payload->'content') ci where ci ? 'detailSource';
- * and nothing reads the values: the gradebook column is the source of truth for due dates and
+ * The assessment fields, wherever Ultra keeps them: a probe, kept as one (R-75, option (b)). Each
+ * value travels with the dotted PATH it came from, as `detailSource` in bb_raw; live crawls found
+ * `points` and `dueDate` at `contentDetail[…].test.gradingColumn.{possible, dueDate}` and the other
+ * two nowhere. Nothing reads the values: the gradebook column is the source of due dates and
  * points (migration 034), and a field Ultra does not expose stays absent rather than invented.
- *
- * Shallow matches win (the walk checks a node's own keys before descending), and objects are
- * never taken as values, so `{dueDate: {...}}` is skipped rather than stored as a blob.
+ * Shallow matches win (a node's own keys before its children); an object is never taken as a value.
  */
 const ASSESSMENT_FIELDS = {
   dueDate:           ['dueDate', 'due'],
@@ -730,9 +688,8 @@ function installCrawler({ userId, supabaseUrl, anonKey, base = 'https://blackboa
         // Fetch the full item for documents (type null) AND for anything that could carry attachments in a nested
         // instruction body (assessments/assignments). Cheap: one GET per item.
         if (s.type === null || /asmt|assignment|test|survey/i.test(s.type || '')) { const full = await j(`/learn/api/v1/courses/${C}/contents/${c.id}`); if (!full.__status) { if (s.type === null) s.body = strip(full.body)?.slice(0, 12000) || null; s.embeddedFiles = embedsDeep(full);
-          // The Summary view's contentDetail only ever holds file/url, so the assessment fields
-          // are looked for in the FULL item, with the path each came from. A probe only: the
-          // gradebook column is the source of due dates and points. See assessmentFields() above.
+          // The Summary view's contentDetail only holds file/url, so the assessment-field probe
+          // scans the FULL item (assessmentFields() above); the gradebook column stays the source.
           const af = assessmentFields(full);
           if (af) { s.detail = Object.assign({}, s.detail, af.values); s.detailSource = af.paths; } } }
         items.push(s); if (isContainer(c)) stack.push({ id: c.id, path: p }); } }
