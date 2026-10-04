@@ -132,8 +132,9 @@
  */
 
 // Blackboard hands back HTML in a {displayText, rawText} envelope (or a bare string). Flatten it to
-// readable plain text, or null when nothing is left. Module-level so the mappers below stay pure.
-const strip = (h) => { if (h == null) return null; if (typeof h === 'object') h = h.displayText || h.rawText || ''; h = String(h);
+// readable plain text, or null when nothing is left; only a STRING half is read, so an object never
+// becomes '[object Object]'. Module-level so the mappers below stay pure.
+const strip = (h) => { if (h == null) return null; if (typeof h === 'object') h = [h.displayText, h.rawText].find((t) => typeof t === 'string' && t) || ''; h = String(h);
     return h.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d|tr)>/gi, '\n').replace(/<[^>]+>/g, '')
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
       .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() || null; };
@@ -476,7 +477,7 @@ const pickString = (o, keys) => {
 };
 
 /** Key lists read with pickString. The probe counts their misses by the same rule. */
-const STRING_ONLY_KEY_LISTS = new Set([ATTEMPT_FIELD_KEYS.feedback]);
+const STRING_ONLY_KEY_LISTS = new Set([ATTEMPT_FIELD_KEYS.feedback, ATTEMPT_FIELD_KEYS.studentSubmission]);
 
 /**
  * v5 probe: the names of the key lists that found nothing in `o` — `<prefix>.<field>` for each
@@ -572,7 +573,7 @@ const mapAttempt = (a, files = [], includeKeys = false) => {
     receipt:   asString(pickKey(a, ATTEMPT_FIELD_KEYS.receipt)),
     files:     Array.isArray(files) ? files.filter(Boolean) : [],
     text: {
-      studentSubmission:  strip(pickKey(a, ATTEMPT_FIELD_KEYS.studentSubmission))?.slice(0, 4000) || null,
+      studentSubmission:  strip(pickString(a, ATTEMPT_FIELD_KEYS.studentSubmission))?.slice(0, 4000) || null,
       studentComments:    strip(pickKey(a, ATTEMPT_FIELD_KEYS.studentComments))?.slice(0, 2000) || null,
       instructorFeedback: strip(pickString(a, ATTEMPT_FIELD_KEYS.feedback))?.slice(0, 1000) || null,
     },
@@ -625,7 +626,7 @@ const mapAttemptDetail = (d) => {
     submissionTotalSize: asNumber(r.submissionTotalSize),
     displayScore:        asNumber(pickKey(d, ['displayGrade.score'])),
     fileCount:           Array.isArray(d.studentSubmissionFiles) ? d.studentSubmissionFiles.length : 0,
-    hasRawText:          !!strip(pickKey(d, ['studentSubmission.rawText'])),
+    hasRawText:          !!strip(pickString(d, ['studentSubmission.rawText'])),
   };
 };
 

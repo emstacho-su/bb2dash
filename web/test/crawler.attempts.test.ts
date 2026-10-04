@@ -83,6 +83,7 @@ const crawler = require('../../ingest/bb_crawler.js') as {
     ) => Promise<ColumnEntry[]>;
   };
   keyListMisses: (o: unknown, lists: Record<string, string[]>, prefix: string) => string[];
+  strip: (h: unknown) => string | null;
   assertRunId: (runId: unknown) => string | null;
   mapAttempt: (a: unknown, files?: unknown[], includeKeys?: boolean) => MappedAttempt | null;
   mapAttemptFile: (
@@ -229,6 +230,21 @@ describe('pickKey / atPath — a candidate may be a path', () => {
     expect(pickKey({ attemptDate: 'b' }, ['attemptReceipt.submissionDate', 'attemptDate'])).toBe('b');
     expect(pickKey({ attemptReceipt: { submissionDate: 'a' }, attemptDate: 'b' },
       ['attemptReceipt.submissionDate', 'attemptDate'])).toBe('a');
+  });
+});
+
+describe('strip — only a string is ever flattened into text', () => {
+  it('reads displayText or rawText only when it is a string', () => {
+    expect(crawler.strip({ rawText: { displayText: 'x' } })).toBeNull();
+    expect(crawler.strip({ displayText: { nested: true }, rawText: '<p>Raw half.</p>' })).toBe('Raw half.');
+    expect(crawler.strip({ displayText: 'Shown half.', rawText: '<p>Raw half.</p>' })).toBe('Shown half.');
+    expect(crawler.strip('<p>A bare string.</p>')).toBe('A bare string.');
+  });
+
+  it('never lets an object at studentSubmission.rawText become the submission text', () => {
+    const out = mapAttempt({ ...RAW_DETAIL, studentSubmission: { rawText: { displayText: 'x' } } })!;
+    expect(out.text.studentSubmission).toBeNull();
+    expect(JSON.stringify(out.text)).not.toContain('[object Object]');
   });
 });
 
