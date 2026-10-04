@@ -1,0 +1,4 @@
+# Brief 100 task 19 (R-92): every text file is stored with LF and checked out with LF on every
+# machine, Windows included, so a Linux image and a Windows checkout see the same bytes (a shell
+# script with CRLF does not run). Binary files are detected as before and left alone.
+* text=auto eol=lf

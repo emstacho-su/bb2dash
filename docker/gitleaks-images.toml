@@ -1,0 +1,27 @@
+# Phase 14 task 27: gitleaks settings for scanning the four images' exported filesystems and their
+# `docker history`. The default rules stay on; two narrow allowlists cover what the base images ship.
+# Every entry was triaged by hand on 2026-10-03 (82a_PHASE14_PARITY_AND_IMAGES.md, "Task 27").
+
+[extend]
+useDefault = true
+
+# Vendor and distro files from the base images: C headers, Perl and Python packages, Vim keymaps and the
+# Playwright Chromium bundle. Every hit in these trees on 2026-10-03 was the `generic-api-key` rule matching
+# a constant, a test vector or a keymap table. Nothing this repo or the harness copies lives under them:
+# the bb2dash images copy into /app, the dev image into /home/node and /usr/local/bin.
+[[allowlists]]
+description = "base-image vendor trees"
+paths = [
+  '''^/fs/usr/(include|lib|share)/''',
+  '''^/fs/usr/local/include/''',
+  '''^/fs/ms-playwright/''',
+]
+
+# The official python image's `ENV GPG_KEY=<40 hex>`: the public fingerprint of the key that signs
+# CPython releases, used to verify the source tarball. Public by design.
+[[allowlists]]
+description = "python base image release-signing key fingerprint"
+regexTarget = "line"
+regexes = [
+  '''ENV GPG_KEY=[0-9A-F]{40}\b''',
+]

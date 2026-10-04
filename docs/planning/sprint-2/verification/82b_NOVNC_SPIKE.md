@@ -53,6 +53,80 @@ Idle lifetime: **between 4:17 and 12:36** (t0 2026-09-29T15:25:39Z → last aliv
 | reopen-3 | about +7 d (2026-10-06) | pending | | | |
 | reopen-4 | about +14 d (2026-10-13), the Duo remember-me window | pending | | | |
 
+## The spike — a Blackboard login inside a container (brief 100 task 4; R-82, P-102, P-103)
+
+Built 2026-10-02 on `feat/containers-14`: `docker/sync/Dockerfile` on
+`mcr.microsoft.com/playwright:v1.63.0-noble` with Xvfb, x11vnc and noVNC; `docker/sync/entrypoint.sh`;
+`docker/sync/seccomp_profile.json` (Playwright's own, tag v1.63.0, unchanged); `docker/sync/spike/session-age.mjs`;
+the root `compose.yaml` with the one service `sync`, the volume `bb-profile` and the secret `novnc_password`.
+
+First start, 2026-10-02T06:22:17Z, before any login:
+
+* `docker compose port sync 6080` → `127.0.0.1:6080`; `docker port bb2dash-sync-1` → `6080/tcp -> 127.0.0.1:6080`.
+* `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:6080/vnc.html` → `200`.
+* `docker compose exec sync whoami` → `pwuser`.
+* x11vnc runs with `-localhost` and reads its password with `-passwdfile /run/secrets/novnc_password`.
+* `session-age.mjs` launched Chromium with `launchPersistentContext(<bb-profile>, { headless: false, chromiumSandbox: true })`
+  and logged `host blackboard.syracuse.edu` and `users/me 401 2026-10-02T06:22:20.462Z +0m` (nobody is logged in yet).
+
+Sandbox: seccomp
+
+The `/proc` scan while `session-age.mjs` ran (12 Chromium processes): `grep -c -- "--no-sandbox"` → `0`.
+
+Each probe in the log is a request from the browser's own cookie jar, so the overnight log measures a
+login touched every 30 minutes (`PROBE_MINUTES`), not an untouched one.
+
+After the code-review fixes (c3d3f9c) the container was recreated and restarted once with nobody logged
+in; it came back each time (`200` from the page, `users/me 401`). The laptop then slept: the log jumps from
+`users/me 401 2026-10-02T06:56:17Z +0m` to `users/me 401 2026-10-03T16:50:10Z +2034m`.
+
+**Stack's Duo login, 2026-10-03.** Stack opened `http://127.0.0.1:6080/vnc.html` in his Chrome, entered the
+VNC password and signed in with NetID and Duo, answering yes to "Stay signed in?". The top frame passed
+through one host besides Blackboard (`host login.microsoftonline.com 2026-10-03T16:50:54Z`); the Duo step
+did not navigate the top frame to a host of its own. Stack's note at the login: the stay-signed-in
+feature "tends to not work" for him (DECISIONS 2026-09-16 decision 6 says the same).
+
+* `walk-14/01-novnc-duo-login.png`: the noVNC view of `http://127.0.0.1:6080/vnc.html`, taken right after
+  the login with a headless viewer on the host (the address is in this row, not in an address bar). The
+  container's Chromium shows `blackboard.syracuse.edu/ultra/course` with the heading "Courses" and Stack's
+  courses under Fall 2026.
+* `docker compose restart sync` at 2026-10-03T16:53:16Z. First probe of the new run:
+  `users/me 200 2026-10-03T16:53:19.768Z +0m`. The `/proc` scan again counted `0` `--no-sandbox`.
+* `walk-14/02-after-restart.png`: the same address after the restart. Chromium opened its start URL
+  `/ultra/`, which lands signed in on `/ultra/institution-page` (Stack's name in the side bar, no sign-in
+  form), not on "Courses"; the check's heading reads "Institution Page" for that reason. Chromium shows
+  "Restore pages? Chromium didn't shut down correctly": the stop closed the browser but it still marked the
+  profile as crashed. Not a login problem; a note for task 15 (the runner's launch dismisses or prevents it).
+
+LOGIN_HOSTS: login.microsoftonline.com
+
+**Verdict, 2026-10-03.** Stack struck the overnight log the same day ("I do not want to have to wait for the
+nightly ingest to finish in order to complete this phase"), and the morning login is manual from now on
+(DECISIONS 2026-10-03), so the login's overnight lifetime no longer decides anything. What the spike had to
+show stands: a Blackboard login made through noVNC lives in the container's `bb-profile` volume, survives
+`docker compose restart sync` (`users/me 200` on the new run's first probe, no sign-in form), and Chromium
+runs as `pwuser` under Playwright's seccomp profile with its sandbox on (0 `--no-sandbox`). The fallback
+(`storageState`, open item 5) is not needed. Screenshots `walk-14/01` and `/02` are blurred where they show
+Stack's name, his courses, his To Do list and his message count (Stack, 2026-10-03: "blur the ss").
+
+Verdict: PASS
+
 Reading the numbers into the phase (brief 100 open item 1): `KEEPALIVE_MINUTES` and B-45's hour stay at
 their provisional values until the idle series has ended and the four reopen rows are filled; the
 DECISIONS row that closes Task 0 names them and writes the `Idle lifetime:` line below.
+
+## Keep-alive by navigation (Stack, 2026-10-03), measured as it runs
+
+From 2026-10-03T17:28:08Z the spike container runs the navigating keep-alive (brief 100's login watch):
+a read-only Ultra page every 20 ± 3 minutes while signed in, a silent re-login attempt (one load of
+`/ultra/`) before a dead check counts, and a probe every 60 s with no navigation while the login is dead.
+The image was rebuilt and the container recreated for it; the first probe of the new run read
+`users/me 200 2026-10-03T17:28:26Z +0m start`, so the login made at 16:50Z also survived a recreate.
+Rows below are copied from `docker compose logs sync` when the PM reads them; a `session-age: login dead`
+line ends the series and gives the login's life under the keep-alive.
+
+| at (UTC) | since login (16:50Z) | event |
+|---|---|---|
+| 2026-10-03T17:28:26Z | 0:38 | `users/me 200` after the recreate |
+| 2026-10-03T17:56:30Z | 1:06 | `users/me 200` after `wsl --shutdown` and Docker Desktop restarting (`.wslconfig` `memory=12GB`; the VM now reports 11.7 GiB). The browser was killed, not closed, and the login still came back |
+| 2026-10-03T21:30:14.305Z | 4:40 | still `users/me 200` after every keep-alive page so far (no silent re-login needed yet) |

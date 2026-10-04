@@ -1,0 +1,99 @@
+# bb2dash — containers (Phase 14): the `sync` service, the container's sync runner with its Blackboard
+# login (brief 100 task 15), and the `bb2dash-mcp` image (task 17). The umbrella repo `bb2dash-stack`
+# includes this file and points SECRETS_DIR at the secrets folder outside every repo.
+name: bb2dash
+
+services:
+  # The runner (`sync/dist/main.js`): it takes queued sync requests through the twelve `sync_runner`
+  # functions, holds Stack's Blackboard login in `bb-profile` (Chromium headful on Xvfb, the login page
+  # at http://127.0.0.1:6080/vnc.html), pulls files into `course-files` and runs the embed step.
+  sync:
+    build:
+      context: .
+      dockerfile: docker/sync/Dockerfile
+    image: bb2dash-sync:local
+    init: true
+    # Fixed, so Chromium's profile lock names the same host after the container is recreated.
+    hostname: sync
+    user: pwuser
+    restart: unless-stopped
+    shm_size: 1gb
+    stop_grace_period: 30s
+    security_opt:
+      - seccomp=./docker/sync/seccomp_profile.json
+    environment:
+      # The keep-alive (Stack, 2026-10-03): a read-only Ultra page every 20 ± 3 minutes while signed in;
+      # 0 turns it off. The jitter and the 60 s check while the login is dead are the runner's constants.
+      KEEPALIVE_MINUTES: "${KEEPALIVE_MINUTES:-20}"
+    ports:
+      # The login page. Loopback only: never reachable from another machine.
+      - "127.0.0.1:6080:6080"
+    # The download lands here and reaches course-files by copy-then-unlink (P-104); X's lock and socket
+    # and the runner's heartbeat live here too, so a restart starts clean.
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    volumes:
+      # A credential: Stack's Blackboard session. Never in the vault, RAG or an unencrypted backup.
+      - bb-profile:/home/pwuser/bb-profile
+      # Disposable: Storage is the source of truth. Mounted where `local_path` expects it.
+      - course-files:/app/course context
+    secrets:
+      - novnc_password
+      - sync_runner_db_url
+      - supabase_publishable_key
+      - supabase_anon_jwt
+    # The runner's heartbeat (written every 30 s): a dead login stays healthy; the doctor reports it.
+    healthcheck:
+      test: ["CMD", "node", "sync/dist/probe.js", "--heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # The materials MCP server as an image (brief 100 task 17, R-91). Profile `mcp`, so `up` never starts
+  # it: a host Claude Code runs the image once per session with `docker run -i --rm` (the recipe in
+  # mcp-server/README.md). This entry builds the image and offers the same stdio run through compose:
+  #   docker compose --profile mcp build bb2dash-mcp
+  #   docker compose --profile mcp run --rm -T bb2dash-mcp
+  # stdio only: no port, no restart policy and no healthcheck; it exits when its client closes stdin.
+  bb2dash-mcp:
+    profiles: [mcp]
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    image: bb2dash-mcp:local
+    user: node
+    stdin_open: true
+    environment:
+      SUPABASE_URL: https://goultdzqcavefcgnifdy.supabase.co
+      # A path, never the key: the server reads the file itself (mcp-server/src/env-file.ts).
+      SUPABASE_SERVICE_ROLE_FILE: /run/secrets/bb2dash_mcp_service_key
+    secrets:
+      - bb2dash_mcp_service_key
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  bb-profile:
+  course-files:
+
+secrets:
+  novnc_password:
+    file: ${SECRETS_DIR:-./secrets}/novnc_password
+  sync_runner_db_url:
+    file: ${SECRETS_DIR:-./secrets}/sync_runner_db_url
+  supabase_publishable_key:
+    file: ${SECRETS_DIR:-./secrets}/supabase_publishable_key
+  supabase_anon_jwt:
+    file: ${SECRETS_DIR:-./secrets}/supabase_anon_jwt
+  # The bb2dash service key; this file is its only home (brief 100, Local surfaces).
+  bb2dash_mcp_service_key:
+    file: ${SECRETS_DIR:-./secrets}/bb2dash_mcp_service_key

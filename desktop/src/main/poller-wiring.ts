@@ -48,6 +48,8 @@ export interface PollerWiringDeps {
   readonly getWindow: () => BrowserWindow | null;
   /** Build a window at a toast's route when the window was closed (2026-09-30). */
   readonly openWindowAt?: (target: string) => Promise<void>;
+  /** Brief 100 round 2, item 5: the scheduler's per-tick hook (the login prompt's check). */
+  readonly onTick?: (get: RestGet) => Promise<void> | void;
   readonly log?: Logger;
   readonly env?: NodeJS.ProcessEnv;
 }
@@ -61,6 +63,8 @@ export interface PollerHandle {
   stop(): void;
   /** Exposed so `index.ts` can route a toast click that arrived before the window existed. */
   navigate(route: string): boolean;
+  /** A page finished loading: run the per-tick hook now, with the possibly fresh session. */
+  afterSessionReload(): void;
 }
 
 /** A last-resort logger if a caller supplies none. Redacted either way. */
@@ -105,6 +109,7 @@ export function startPoller(deps: PollerWiringDeps): PollerHandle {
     notifier,
     getSession: deps.getSession,
     createRest: deps.createRest,
+    ...(deps.onTick ? { onTick: deps.onTick } : {}),
     log,
   });
 
@@ -151,5 +156,8 @@ export function startPoller(deps: PollerWiringDeps): PollerHandle {
       poller.stop();
     },
     navigate: (route: string) => deeplink.navigate(route),
+    afterSessionReload: () => {
+      void poller.afterSessionReload();
+    },
   };
 }

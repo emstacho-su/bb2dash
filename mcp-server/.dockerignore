@@ -1,0 +1,8 @@
+# An allow-list: the build reads only these. Everything else (.env files, keys, node_modules,
+# dist, tests, scripts, docs) never reaches the build context.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!src
+!src/**

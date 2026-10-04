@@ -19,6 +19,15 @@ import { z } from 'zod';
 
 import { HH_MM } from './patterns';
 
+/**
+ * Brief 100 task 18 (R-85): how the Sync button reaches a sync. `terminal` (Phase 12) watches the
+ * button's POST and opens Windows Terminal on `claude "/bb-sync <id>"`; `queue-only` leaves the
+ * queued request to the container's runner, and the shell opens the runner's login page instead
+ * when the Blackboard login is dead (`main/login-prompt.ts`).
+ */
+export const SYNC_LAUNCHERS = Object.freeze(['terminal', 'queue-only'] as const);
+export type SyncLauncher = (typeof SYNC_LAUNCHERS)[number];
+
 /** Defaults for every key the user may leave out of `config.json` (C-2). */
 export const CONFIG_DEFAULTS = Object.freeze({
   appUrl: 'https://web-xi-ten-uy9xk6c6p0.vercel.app',
@@ -36,6 +45,13 @@ export const CONFIG_DEFAULTS = Object.freeze({
   dueReminderTime: '18:00',
   /** When true the Sync terminal echoes the command instead of running it. */
   syncDryRun: false,
+  /** The terminal launch stays the default until the container cut-over (brief 100, R-93). */
+  syncLauncher: 'terminal' as SyncLauncher,
+  /**
+   * The noVNC password the login prompt unlocks the page with: the `novnc_password` secret in the
+   * folder outside every repo (DECISIONS 2026-10-03), derived from the home folder like `repoDir`.
+   */
+  novncPasswordFile: win32.join(homedir(), '.bb2dash-secrets', 'novnc_password'),
 });
 
 const HTTP_URL = 'must be an http(s) URL';
@@ -60,6 +76,8 @@ export const configSchema = z.object({
     .regex(HH_MM, 'must be a 24-hour HH:MM time, e.g. 18:00')
     .default(CONFIG_DEFAULTS.dueReminderTime),
   syncDryRun: z.boolean().default(CONFIG_DEFAULTS.syncDryRun),
+  syncLauncher: z.enum(SYNC_LAUNCHERS).default(CONFIG_DEFAULTS.syncLauncher),
+  novncPasswordFile: z.string().min(1).default(CONFIG_DEFAULTS.novncPasswordFile),
 });
 
 export type DesktopConfig = Readonly<z.infer<typeof configSchema>>;
@@ -88,6 +106,8 @@ const ENV_KEYS = Object.freeze({
   BB2DASH_POLL_INTERVAL_MINUTES: 'pollIntervalMinutes',
   BB2DASH_DUE_REMINDER_TIME: 'dueReminderTime',
   BB2DASH_SYNC_DRY_RUN: 'syncDryRun',
+  BB2DASH_SYNC_LAUNCHER: 'syncLauncher',
+  BB2DASH_NOVNC_PASSWORD_FILE: 'novncPasswordFile',
 } as const);
 
 type EnvKey = keyof typeof ENV_KEYS;
@@ -137,6 +157,11 @@ export function loadConfigFrom(
   env: Record<string, string | undefined>,
 ): DesktopConfig {
   return parseConfig(applyEnvOverrides(fileValue, env));
+}
+
+/** True when the Sync button opens the terminal; false under `queue-only` (the container's runner). */
+export function usesSyncTerminal(config: Pick<DesktopConfig, 'syncLauncher'>): boolean {
+  return config.syncLauncher === 'terminal';
 }
 
 /** The two origins the window may navigate to (C-4). */

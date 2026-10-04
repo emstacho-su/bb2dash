@@ -15,9 +15,14 @@ const JWT = /\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\b/g;
 /** `sb-<ref>-auth-token[.<n>]=<value>` — the web session cookie, chunked or not. */
 const AUTH_COOKIE = /\b(sb-[a-z0-9]+-auth-token(?:\.\d+)?)=[^;\s]+/gi;
 
-/** `Authorization: Bearer <anything>` / `apikey: <anything>`, header- or object-shaped. */
+/**
+ * `Authorization: Bearer <anything>` / `apikey: <anything>`, header-, object- or JSON-shaped.
+ * `password` since brief 100 round 2, item 7: the noVNC login URL carries one in its fragment,
+ * and an error that quotes the URL must not put it in the log.
+ */
 const BEARER = /\b(bearer)\s+[^\s"',;}]+/gi;
-const APIKEY = /\b(apikey|authorization|access_token|refresh_token|accessToken|refreshToken)(\s*[:=]\s*"?)[^\s"',;}]+/gi;
+const APIKEY =
+  /\b(apikey|authorization|access_token|refresh_token|accessToken|refreshToken|password)(\s*"?\s*[:=]\s*"?)[^\s"',;}]+/gi;
 
 /** Any remaining base64-ish run long enough to be a credential. */
 const LONG_OPAQUE = /\b[A-Za-z0-9_-]{60,}\b/g;

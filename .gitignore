@@ -11,3 +11,8 @@ course context/
 # Playwright MCP browser session output (screenshots, snapshots, console logs)
 .playwright-mcp/
 .harness/checkpoint-body.md
+
+# Phase 14: local secret files (the real folder is SECRETS_DIR, outside every repo)
+secrets/
+# The rag MCP server's fastembed model cache when FASTEMBED_CACHE_DIR is unset: ~130 MB (P-47)
+local_cache/
