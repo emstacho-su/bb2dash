@@ -1028,3 +1028,35 @@ Not for W-55: STATUS (the PM, task 30). 091's notice text ("attributes … are r
 frozen file; the PM records it.
 
 After this round the PM rebuilds the image and redeploys the live container.
+
+## Round 3 — W-58 (bb2dash-stack), from `/security-review` on 97b0426, 2026-10-04 — HIGH
+
+**The dev container's user can make the root firewall allow any address.** `init-firewall.sh` runs as root
+through the sudoers rule (`.devcontainer/Dockerfile:110`). On a failed GitHub `/meta` fetch it trusts a cache
+at `/home/node/.claude/.firewall/github-meta.json` (`firewall-lib.sh:54`, `:95-99`), inside the node-owned
+`claude-home` volume. Its CIDRs are checked only for shape (`init-firewall.sh:78-84`). A re-run always reaches
+that fallback, because `iptables -F` (`:37`) keeps the first run's `OUTPUT DROP` policy and the fetch times
+out. `node` can rename a root-owned `.firewall/` aside in its own parent. The checks at `:132-143` pass with
+GitHub's real ranges plus an attacker range, and run after the rules are live with no rollback. Verified link
+by link (true positive, 8/10).
+
+Fix test-first, as `fix(14-R3-<n>): …`:
+
+1. **The cache leaves node's reach.** Root-owned folder created in the image (`/var/lib/bb2dash-firewall/`,
+   0755 root:root), written with `mktemp` in that folder and renamed into place. Before reading it, refuse
+   it unless the file and every parent folder are root-owned and not symlinks, and the file is not
+   group- or world-writable. The cache does not survive a container rebuild; the first start of a new
+   container fetches or fails closed. That is accepted.
+2. **A re-run cannot reach the fallback by flushing first.** Either refuse a second run (a root-owned marker
+   written once the firewall is up; a deliberate re-raise needs a container restart), or fetch GitHub's
+   ranges before the flush. Pick one, say which, test it.
+3. **A failed check leaves deny-all, not the half-built rules.** Any verification failure resets OUTPUT and
+   INPUT to deny-all except loopback before exiting non-zero.
+4. **No cache entry outside GitHub's own ranges.** Every cached CIDR must sit inside a supernet in a fixed,
+   committed list of GitHub's published ranges, or the whole cache is refused. A fresh fetch is trusted as
+   GitHub's answer over TLS.
+
+Checks: shell tests with the fake binaries for each item, including the rename attack, a symlinked cache, a
+node-owned cache, a planted range outside the supernets, a second run, and a failed check leaving deny-all.
+Then rebuild `bb2dash-dev:local` and run the item-2 isolation test in a throwaway container
+(`-p bb2dash-stack-test`, dummy secrets).
