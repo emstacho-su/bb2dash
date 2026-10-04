@@ -711,6 +711,8 @@ first. The two `AgenticHarness-*` Task Scheduler jobs still run; the harness job
 82a ticks); the cut-over (queue-only, the harness jobs container on with `REALM_SYNC=apply`, the two scheduled tasks
 removed) happens in that sitting. After it: `node scripts/install-skills.mjs` from the main checkout, Stack removes the stale claude.ai `bb-course-*` skills, the PM moves the live `sync` container's compose project off the phase worktree and removes the Phase 14 worktrees.
 
+**Acceptance, 2026-10-04:** A2's first `just up` found two path bugs (the seccomp profile through the umbrella; the justfile overriding `SECRETS_DIR`); both fixed by this follow-up PR and bb2dash-stack's, before the sitting goes on.
+
 ### Phase 14 deferred (R-96)
 
 Nothing below is built in this phase:
