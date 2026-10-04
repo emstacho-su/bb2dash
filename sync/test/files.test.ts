@@ -1,0 +1,415 @@
+// Task 10 (R-81, P-104): the files step and the embed step, on Phase 18's signed fetch and
+// pull_files.mjs's pure helpers, with fakes for the network, Storage, extraction and the embed.
+
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { FileStoredArgs, WorklistRow } from '../src/db.js';
+import {
+  EMBED_TIMEOUT_MS,
+  makeEmbedder,
+  makeExtractor,
+  makeSupabaseFiles,
+  moveIntoPlace,
+  runFilesStep,
+  safeJoin,
+  type FilesPorts,
+} from '../src/files.js';
+
+const CDN = 'https://abc.content.blackboardcdn.com/signed/file?sig=1';
+const PDF = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(2000, 0x20)]);
+const SHA = createHash('sha256').update(PDF).digest('hex');
+
+let dir: string;
+let tmpDir: string;
+let courseDir: string;
+
+beforeEach(() => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'w55-files-'));
+  tmpDir = path.join(dir, 'tmp');
+  courseDir = path.join(dir, 'course context');
+  fs.mkdirSync(tmpDir, { recursive: true });
+});
+
+afterEach(() => {
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function row(id: string, over: Partial<WorklistRow> = {}): WorklistRow {
+  return {
+    id,
+    file_name: `Lecture ${id}.pdf`,
+    relpath: `IST.323/lecture_slides/week-01/Lecture ${id}.pdf`,
+    mime: 'application/pdf',
+    source_url: `https://blackboard.syracuse.edu/bbcswebdav/xid-${id}_1`,
+    bucket: 'lecture_slides',
+    attempt_id: null,
+    ...over,
+  };
+}
+
+/** Hops: the durable URL 302s to the CDN, unless a status is scripted for that row's URL. */
+function hopFor(statusByUrl: Record<string, number> = {}) {
+  return vi.fn(async (url: string): Promise<{ status: number; headers: Record<string, string> }> => {
+    const scripted = statusByUrl[url];
+    if (scripted !== undefined) return { status: scripted, headers: {} };
+    return { status: 302, headers: { location: CDN } };
+  });
+}
+
+function ports(rows: WorklistRow[], over: Partial<FilesPorts> = {}) {
+  const stored: FileStoredArgs[] = [];
+  const order: string[] = [];
+  const p: FilesPorts = {
+    rpc: {
+      fileWorklist: vi.fn(async () => rows),
+      fileStored: vi.fn(async (a: FileStoredArgs) => {
+        stored.push(a);
+        order.push(`stored ${a.id}`);
+        return true;
+      }),
+    },
+    hop: hopFor(),
+    fetchSigned: vi.fn(async () => new Response(PDF, { status: 200 })),
+    storagePost: vi.fn(async () => {
+      order.push('storage');
+      return { status: 200, body: '{}' };
+    }),
+    textPost: vi.fn(async () => {
+      order.push('text');
+      return { status: 201, body: '' };
+    }),
+    extract: vi.fn(async () => [{ unit_kind: 'page', unit_no: 1, text: 'hello' }]),
+    embed: vi.fn(async () => {
+      order.push('embed');
+      return { code: 0, tail: 'remaining_parts=0' };
+    }),
+    fs: { mkdir: fs.promises.mkdir, rename: fs.promises.rename, copyFile: fs.promises.copyFile, unlink: fs.promises.unlink, readFile: fs.promises.readFile },
+    tmpDir,
+    courseFilesDir: courseDir,
+    loginCheck: vi.fn(async () => 'alive' as const),
+    log: () => {},
+    ...over,
+  };
+  return { p, stored, order };
+}
+
+describe('the files step', () => {
+  it('pulls a file: Storage, course-files, extract, text, then sync_file_stored with its sha256', async () => {
+    const { p, stored, order } = ports([row('11')]);
+    const r = await runFilesStep(p);
+    expect(r.files).toEqual({ pulled: 1, not_pulled: [] });
+    expect(r.stopped).toBeNull();
+    expect(stored).toEqual([{
+      id: '11',
+      key: 'IST.323/lecture_slides/week-01/Lecture 11.pdf',
+      relpath: 'IST.323/lecture_slides/week-01/Lecture 11.pdf',
+      sha256: SHA,
+      bytes: PDF.length,
+      mime: 'application/pdf',
+      textStatus: 'extracted',
+    }]);
+    expect(order).toEqual(['storage', 'text', 'stored 11', 'embed']);
+    expect(fs.readFileSync(path.join(courseDir, 'IST.323/lecture_slides/week-01/Lecture 11.pdf'))).toEqual(PDF);
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+    expect(p.hop).toHaveBeenCalledWith('https://blackboard.syracuse.edu/bbcswebdav/xid-11_1');
+  });
+
+  it('a key drops "#" the way storageKeyFor does; the relpath keeps it', async () => {
+    const { p, stored } = ports([row('12', { file_name: 'HW #2.pdf', relpath: 'IST.323/assignment_spec/HW #2.pdf' })]);
+    await runFilesStep(p);
+    expect(stored[0]).toMatchObject({ key: 'IST.323/assignment_spec/HW _2.pdf', relpath: 'IST.323/assignment_spec/HW #2.pdf' });
+  });
+
+  it.each([401, 403])('session_expired (%i at the first hop) with a dead re-probe stops the step: later rows are not tried', async (status) => {
+    const rows = [row('21'), row('22'), row('23')];
+    const loginCheck = vi.fn(async () => 'dead' as const);
+    const { p, stored } = ports(rows, { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-22_1': status }), loginCheck });
+    const r = await runFilesStep(p);
+    expect(r.stopped).toBe('session_expired');
+    expect(loginCheck).toHaveBeenCalledTimes(1);
+    expect(stored.map((s) => s.id)).toEqual(['21']);
+    expect(r.files.pulled).toBe(1);
+    expect(r.files.not_pulled).toEqual([{ id: '22', reason: `session_expired: status ${status}` }]);
+    expect(p.hop).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 403])('R2 item 3: one file\'s %i with users/me still 200 is that file refused, and the step goes on', async (status) => {
+    const rows = [row('24'), row('25'), row('26')];
+    const loginCheck = vi.fn(async () => 'alive' as const);
+    const { p, stored } = ports(rows, { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-25_1': status }), loginCheck });
+    const r = await runFilesStep(p);
+    expect(r.stopped).toBeNull();
+    expect(loginCheck).toHaveBeenCalledTimes(1);
+    expect(stored.map((s) => s.id)).toEqual(['24', '26']);
+    expect(r.files.not_pulled).toEqual([{ id: '25', reason: `refused: status ${status} at the first hop, but the login check passed` }]);
+  });
+
+  it('R2 item 3: a re-probe that does not answer is not a dead login either', async () => {
+    const loginCheck = vi.fn(async () => 'error' as const);
+    const { p } = ports([row('27'), row('28')], { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-27_1': 401 }), loginCheck });
+    const r = await runFilesStep(p);
+    expect(r.stopped).toBeNull();
+    expect(r.files.pulled).toBe(1);
+    expect(r.files.not_pulled[0]!.reason).toBe('refused: status 401 at the first hop, and the login check did not answer');
+  });
+
+  it('gone (404) is reported in not_pulled and never reaches sync_file_stored', async () => {
+    const { p, stored } = ports([row('31')], { hop: hopFor({ 'https://blackboard.syracuse.edu/bbcswebdav/xid-31_1': 404 }) });
+    const r = await runFilesStep(p);
+    expect(r.files.not_pulled).toEqual([{ id: '31', reason: 'gone: status 404' }]);
+    expect(stored).toEqual([]);
+    expect(p.storagePost).not.toHaveBeenCalled();
+  });
+
+  it('refused (a redirect off the CDN) is reported in not_pulled and never stored', async () => {
+    const hop = vi.fn(async () => ({ status: 302, headers: { location: 'https://evil.example.com/x' } }));
+    const { p, stored } = ports([row('32')], { hop });
+    const r = await runFilesStep(p);
+    expect(r.files.not_pulled[0]).toMatchObject({ id: '32', reason: expect.stringMatching(/^refused: /) });
+    expect(stored).toEqual([]);
+  });
+
+  it('R2 item 2: a course file already in Storage (409 or Duplicate) goes on to the text and sync_file_stored', async () => {
+    const answers = [{ status: 409, body: '{"error":"Duplicate"}' }, { status: 400, body: '{"statusCode":"409","error":"Duplicate","message":"The resource already exists"}' }];
+    const { p, stored } = ports([row('43'), row('44')], { storagePost: vi.fn(async () => answers.shift()!) });
+    const r = await runFilesStep(p);
+    expect(r.files).toEqual({ pulled: 2, not_pulled: [] });
+    expect(stored.map((s) => s.id)).toEqual(['43', '44']);
+  });
+
+  it('R2 item 2: an upload whose text POST failed is recorded on the next pass, past the Duplicate', async () => {
+    let storageCalls = 0;
+    const texts = [{ status: 500, body: 'boom' }, { status: 201, body: '' }];
+    const shared = {
+      storagePost: vi.fn(async () => (storageCalls++ === 0 ? { status: 200, body: '{}' } : { status: 409, body: '{"error":"Duplicate"}' })),
+      textPost: vi.fn(async () => texts.shift()!),
+    };
+    const first = ports([row('45')], shared);
+    const r1 = await runFilesStep(first.p);
+    expect(r1.files.not_pulled).toEqual([{ id: '45', reason: 'bb_file_text 500: boom' }]);
+    expect(first.stored).toEqual([]);
+
+    const second = ports([row('45')], shared);
+    const r2 = await runFilesStep(second.p);
+    expect(r2.files).toEqual({ pulled: 1, not_pulled: [] });
+    expect(second.stored.map((s) => [s.id, s.textStatus])).toEqual([['45', 'extracted']]);
+  });
+
+  it('a text POST that answers 409/23505 keeps the units already there, and the file is recorded', async () => {
+    const { p, stored } = ports([row('46')], { textPost: vi.fn(async () => ({ status: 409, body: '{"code":"23505"}' })) });
+    const r = await runFilesStep(p);
+    expect(r.files.pulled).toBe(1);
+    expect(stored[0]!.textStatus).toBe('extracted');
+    expect(p.embed).not.toHaveBeenCalled();
+  });
+
+  it('a submission already in Storage (409 or Duplicate) is reported in not_pulled, never done, never stored', async () => {
+    const sub = (id: string) => row(id, { bucket: 'my_submissions', relpath: `IST.323/my_submissions/hw/attempt-9/${id}.pdf` });
+    const rows = [sub('41'), sub('42')];
+    const answers = [{ status: 409, body: '{"error":"Duplicate"}' }, { status: 400, body: '{"statusCode":"409","error":"Duplicate","message":"The resource already exists"}' }];
+    const { p, stored } = ports(rows, { storagePost: vi.fn(async () => answers.shift()!) });
+    const r = await runFilesStep(p);
+    expect(r.files.pulled).toBe(0);
+    expect(r.files.not_pulled.map((n) => n.id)).toEqual(['41', '42']);
+    expect(r.files.not_pulled[0]!.reason).toMatch(/^storage 409/);
+    expect(stored).toEqual([]);
+    expect(p.extract).not.toHaveBeenCalled();
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+  });
+
+  it('bytes that do not look like the file are reported, not stored', async () => {
+    const { p, stored } = ports([row('51')], { fetchSigned: vi.fn(async () => new Response('<html>login</html>', { status: 200 })) });
+    const r = await runFilesStep(p);
+    expect(r.files.not_pulled[0]).toMatchObject({ id: '51', reason: expect.stringMatching(/^bad bytes/) });
+    expect(stored).toEqual([]);
+  });
+
+  it('a relpath that climbs out of course-files is refused before any request', async () => {
+    const { p, stored } = ports([row('52', { relpath: '../../etc/passwd' })]);
+    const r = await runFilesStep(p);
+    expect(r.files.not_pulled).toEqual([{ id: '52', reason: 'unsafe relpath' }]);
+    expect(p.hop).not.toHaveBeenCalled();
+    expect(stored).toEqual([]);
+  });
+
+  it('a text POST error leaves the row unstored and reported; an already-present answer keeps the text', async () => {
+    const rows = [row('61'), row('62')];
+    const answers = [{ status: 500, body: 'boom' }, { status: 409, body: '23505' }];
+    const { p, stored } = ports(rows, { textPost: vi.fn(async () => answers.shift()!) });
+    const r = await runFilesStep(p);
+    expect(r.files.not_pulled).toEqual([{ id: '61', reason: 'bb_file_text 500: boom' }]);
+    expect(stored.map((s) => s.id)).toEqual(['62']);
+    expect(p.embed).not.toHaveBeenCalled();
+  });
+
+  it('an extraction that fails still stores the bytes, with text_status failed', async () => {
+    const { p, stored } = ports([row('63')], { extract: vi.fn(async () => { throw new Error('uv: not found'); }) });
+    const r = await runFilesStep(p);
+    expect(r.files.pulled).toBe(1);
+    expect(stored[0]!.textStatus).toBe('failed');
+    expect(p.textPost).not.toHaveBeenCalled();
+  });
+
+  it('sync_file_stored refusing (false or an error) is reported, not counted', async () => {
+    const answers: (boolean | Error)[] = [false, new Error('relpath is not bb_file_relpath(72)')];
+    const { p } = ports([row('71'), row('72')], {
+      rpc: {
+        fileWorklist: vi.fn(async () => [row('71'), row('72')]),
+        fileStored: vi.fn(async () => {
+          const a = answers.shift()!;
+          if (a instanceof Error) throw a;
+          return a;
+        }),
+      },
+    });
+    const r = await runFilesStep(p);
+    expect(r.files.pulled).toBe(0);
+    expect(r.files.not_pulled).toEqual([
+      { id: '71', reason: 'already stored by another writer' },
+      { id: '72', reason: 'sync_file_stored refused: relpath is not bb_file_relpath(72)' },
+    ]);
+  });
+
+  it('spawns embed_corpus.mjs once after at least one unit, and never on none', async () => {
+    const two = ports([row('81'), row('82')]);
+    await runFilesStep(two.p);
+    expect(two.p.embed).toHaveBeenCalledTimes(1);
+
+    const none = ports([row('83')], { extract: vi.fn(async () => []) });
+    await runFilesStep(none.p);
+    expect(none.p.embed).not.toHaveBeenCalled();
+
+    const empty = ports([]);
+    const r = await runFilesStep(empty.p);
+    expect(empty.p.embed).not.toHaveBeenCalled();
+    expect(r.files).toEqual({ pulled: 0, not_pulled: [] });
+  });
+
+  it('an embed that exits non-zero is the step\'s embedError', async () => {
+    const { p } = ports([row('84')], { embed: vi.fn(async () => ({ code: 1, tail: 'embed-corpus 401' })) });
+    const r = await runFilesStep(p);
+    expect(Object.keys(r).sort()).toEqual(['embedError', 'files', 'stopped']);
+    expect(r.embedError).toBe("embed_corpus.mjs's loop ended 1: embed-corpus 401");
+  });
+});
+
+describe('the move into course-files', () => {
+  it('renames when it can', async () => {
+    const ops = { mkdir: vi.fn(async () => undefined), rename: vi.fn(async () => undefined), copyFile: vi.fn(), unlink: vi.fn() };
+    await moveIntoPlace('/tmp/a', '/app/course context/x/a', ops);
+    expect(ops.rename).toHaveBeenCalledWith('/tmp/a', '/app/course context/x/a');
+    expect(ops.copyFile).not.toHaveBeenCalled();
+  });
+
+  it('an EXDEV from the move takes copy-then-unlink (tmpfs to the course-files volume)', async () => {
+    const exdev = Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
+    const ops = {
+      mkdir: vi.fn(async () => undefined),
+      rename: vi.fn(async () => { throw exdev; }),
+      copyFile: vi.fn(async () => undefined),
+      unlink: vi.fn(async () => undefined),
+    };
+    await moveIntoPlace('/tmp/a', '/app/course context/x/a', ops);
+    expect(ops.copyFile).toHaveBeenCalledWith('/tmp/a', '/app/course context/x/a');
+    expect(ops.unlink).toHaveBeenCalledWith('/tmp/a');
+  });
+
+  it('any other rename error is thrown', async () => {
+    const ops = {
+      mkdir: vi.fn(async () => undefined),
+      rename: vi.fn(async () => { throw Object.assign(new Error('EACCES'), { code: 'EACCES' }); }),
+      copyFile: vi.fn(),
+      unlink: vi.fn(),
+    };
+    await expect(moveIntoPlace('/tmp/a', '/b', ops)).rejects.toThrow('EACCES');
+    expect(ops.copyFile).not.toHaveBeenCalled();
+  });
+
+  it('safeJoin keeps a relpath inside its base', () => {
+    expect(safeJoin('/app/course context', 'IST.323/a.pdf')).toBe(path.resolve('/app/course context', 'IST.323/a.pdf'));
+    expect(safeJoin('/app/course context', '../x')).toBeNull();
+    expect(safeJoin('/app/course context', '/etc/passwd')).toBeNull();
+    expect(safeJoin('/app/course context', '')).toBeNull();
+  });
+});
+
+describe('the adapters', () => {
+  it('Storage: POST bb-files/<encoded key> with the publishable key and no x-upsert; text: bb_file_text', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response('{}', { status: 200 });
+    });
+    const sb = makeSupabaseFiles('https://x.supabase.co', 'sb_publishable_abc', fetchImpl as unknown as typeof fetch);
+    await sb.storagePost('IST.323/a b.pdf', Buffer.from('x'), 'application/pdf');
+    await sb.textPost([{ file_id: 1, unit_kind: 'page', unit_no: 1, text: 't' }]);
+    expect(calls[0]!.url).toBe('https://x.supabase.co/storage/v1/object/bb-files/IST.323/a%20b.pdf');
+    const h0 = calls[0]!.init.headers as Record<string, string>;
+    expect(h0.apikey).toBe('sb_publishable_abc');
+    expect(h0['Content-Type']).toBe('application/pdf');
+    expect(Object.keys(h0).map((k) => k.toLowerCase())).not.toContain('x-upsert');
+    expect(calls[1]!.url).toBe('https://x.supabase.co/rest/v1/bb_file_text');
+    expect((calls[1]!.init.headers as Record<string, string>).Prefer).toBe('return=minimal');
+  });
+
+  it('R2 item 9: the extractor is pull_files\' extractUnits (the locked project), and uv gets only what it needs', async () => {
+    const parent = { PATH: '/usr/bin', HOME: '/home/pwuser', UV_CACHE_DIR: '/cache/uv', LANG: 'C.UTF-8', SB_ANON_JWT: 'eyJ.secret.x', SB_ANON_KEY: 'sb_publishable_x', SYNC_RUNNER_DB_URL: 'postgresql://u:p@h/db' };
+    const exec = vi.fn(() => JSON.stringify([{ file: 'a.pdf', status: 'ok', units: [{ unit_kind: 'page', unit_no: 1, text: 'x' }] }]));
+    const extract = makeExtractor('/app/ingest', { exec, parentEnv: parent });
+    expect(await extract('/app/course context/a.pdf')).toEqual([{ unit_kind: 'page', unit_no: 1, text: 'x' }]);
+    const [cmd, args, opts] = exec.mock.calls[0] as unknown as [string, string[], { cwd: string; env: Record<string, string> }];
+    expect(cmd).toBe('uv');
+    expect(args).toEqual(['run', '--locked', '--project', '/app/ingest', 'python', path.join('/app/ingest', 'extract_text.py'), '/app/course context/a.pdf']);
+    expect(opts.cwd).toBe('/app/ingest');
+    expect(opts.env).toEqual({ PATH: '/usr/bin', HOME: '/home/pwuser', UV_CACHE_DIR: '/cache/uv', LANG: 'C.UTF-8' });
+  });
+
+  it('R2 item 9: the embedder runs embed_corpus.mjs\'s loop in-process with the anon JWT, no child process', async () => {
+    const runLoop = vi.fn(async () => ({ exitCode: 0, calls: 2, retries: 0, remainingParts: 0 }));
+    const makePostImpl = vi.fn(() => async () => ({ status: 200, body: {} }));
+    const embed = makeEmbedder({ supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', runLoop, makePost: makePostImpl, log: () => {} });
+    expect(await embed()).toEqual({ code: 0, tail: 'remaining_parts=0' });
+    expect(makePostImpl).toHaveBeenCalledWith('https://p.supabase.co', 'eyJ.anon.x');
+    expect(runLoop).toHaveBeenCalledTimes(1);
+
+    const failing = makeEmbedder({
+      supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', log: () => {}, makePost: makePostImpl,
+      runLoop: vi.fn(async () => ({ exitCode: 1, calls: 1, retries: 0, remainingParts: null, error: 'embed-corpus answered 401' })),
+    });
+    expect(await failing()).toEqual({ code: 1, tail: 'embed-corpus answered 401' });
+  });
+
+  it('R2 item 5: an embed that runs past EMBED_TIMEOUT_MS fails cleanly, and its later posts end the loop', async () => {
+    vi.useFakeTimers();
+    try {
+      expect(EMBED_TIMEOUT_MS).toBe(600_000);
+      let sawPost: { status: number } | null = null;
+      const runLoop = vi.fn(async (o: { post: (b: object) => Promise<{ status: number; body: unknown }> }) => {
+        await new Promise((r) => setTimeout(r, EMBED_TIMEOUT_MS + 60_000));
+        sawPost = await o.post({});
+        return { exitCode: 1, error: 'stopped' };
+      });
+      const real = vi.fn(async () => ({ status: 200, body: {} }));
+      const embed = makeEmbedder({ supabaseUrl: 'https://p.supabase.co', jwt: 'eyJ.anon.x', log: () => {}, runLoop, makePost: () => real });
+      const pending = embed();
+      await vi.advanceTimersByTimeAsync(EMBED_TIMEOUT_MS + 1);
+      expect(await pending).toEqual({ code: 1, tail: 'embed timed out after 600 s' });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sawPost).toMatchObject({ status: 408 });
+      expect(real).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('R2 item 9: no source file spawns a child with the parent\'s environment', () => {
+    for (const file of ['files.ts', 'main.ts']) {
+      const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', file), 'utf8');
+      expect(src, file).not.toMatch(/\.\.\.(process\.)?env\b|spawn\(/);
+    }
+  });
+});

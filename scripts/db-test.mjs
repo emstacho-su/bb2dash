@@ -32,6 +32,10 @@ export const LOADER_MAP = Object.freeze({
   'phase10a_stage_gradebook.sql': 'phase10a_load_fixtures.sql',
   'phase10a_stage_attempts.sql': 'phase10a_load_fixtures.sql',
   'phase12b_085_stage_attempts_v4.sql': 'phase12b_load_fixture.sql',
+  'phase14_091_close_sweep.sql': 'phase14_load_crawl_v4.sql',
+  'phase14_091_files.sql': 'phase14_load_crawl_v4.sql',
+  'phase14_091_login_enqueue.sql': 'phase14_load_crawl_v4.sql',
+  'phase14_091_queue.sql': 'phase14_load_crawl_v4.sql',
 });
 
 /** The loader files themselves, derived from the map so the two can never drift. */

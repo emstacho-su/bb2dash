@@ -1,0 +1,19 @@
+{
+  "_about": "Units extract_text.py must return for the four synthetic fixtures make_samples.py wrote (no course material). extract_text.test.mjs compares text with runs of whitespace collapsed, so Xpdf on the host and poppler in the sync image both match this one file.",
+  "sample.pdf": [
+    { "unit_kind": "page", "unit_no": 1, "text": "bb2dash extraction fixture\nPage one: synthetic text, no course material." },
+    { "unit_kind": "page", "unit_no": 3, "text": "Page three follows a blank page." }
+  ],
+  "sample.docx": [
+    { "unit_kind": "doc", "unit_no": 1, "text": "bb2dash extraction fixture\nA synthetic document, no course material.\nSecond paragraph after an empty one.\nWeek | Topic\n1 | Fixtures" }
+  ],
+  "sample.pptx": [
+    { "unit_kind": "slide", "unit_no": 1, "text": "bb2dash extraction fixture\nSynthetic slides, no course material." },
+    { "unit_kind": "slide", "unit_no": 2, "text": "A table slide\nTerm | Meaning\nUnit | One slide\n[notes] Speaker note for slide two." },
+    { "unit_kind": "slide", "unit_no": 4, "text": "Slide four follows a blank slide." }
+  ],
+  "sample.xlsx": [
+    { "unit_kind": "sheet", "unit_no": 1, "text": "# Schedule\nWeek | Topic | Hours\n1 | Fixtures | 3.5\n2 | Parity | " },
+    { "unit_kind": "sheet", "unit_no": 3, "text": "# Notes\nSynthetic workbook, no course material." }
+  ]
+}

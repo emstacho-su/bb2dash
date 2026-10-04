@@ -1,5 +1,7 @@
 # Phase 14 — Containers: every local process moves into Docker
 
+> **Superseded 2026-10-02:** this file's Contract (C-1..C-8), task table and workers are replaced by `briefs/100_PHASE14_containers.md`, frozen that day. Stack's sixteen decisions, the MVP and the research below stand as the record.
+
 Date: 2026-09-16 (brief + research synthesis). Product manager: Stack. Requirement: **R-28**
 (`60_REQUIREMENTS_v2.md` §3.5). **After Phase 13.** Three repos are touched, so this phase is the
 one exception to "one PR per phase": **one PR per repo**, opened together, merged on Stack's word.

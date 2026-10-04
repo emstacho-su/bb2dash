@@ -1,23 +1,44 @@
 #!/usr/bin/env node
 /**
- * End-to-end smoke test against the LIVE project.
+ * End-to-end smoke test over stdio, the transport Claude Code uses.
  *
- * Spawns dist/index.js over stdio with the MCP SDK client — the same transport
- * Claude Code uses — and exercises all three tools. Reads SUPABASE_URL and
- * SUPABASE_SERVICE_ROLE from the environment, or from an env file given as
- * --env-file (default: the bb2dash repo .env). Never prints a key.
+ * Host mode (the default) spawns dist/index.js with this Node. `--docker` spawns
+ * the image exactly as the README's registration recipe does: `docker run -i --rm`
+ * with the key file bind-mounted read-only at /run/secrets/bb2dash_mcp_service_key
+ * and SUPABASE_SERVICE_ROLE_FILE naming it, so the key never reaches a command
+ * line or the container's environment. Never prints a key.
  *
- *   npm run build && node scripts/smoke.mjs [--env-file C:/path/.env]
+ *   npm run build && node scripts/smoke.mjs --env-file <bb2dash .env>
+ *   node scripts/smoke.mjs --docker --key-file <host path of bb2dash_mcp_service_key>
+ *   node scripts/smoke.mjs --docker --key-file <any non-empty file> --tools-only
+ *
+ * Host mode reads SUPABASE_SERVICE_ROLE_FILE or SUPABASE_SERVICE_ROLE from the
+ * environment, or from the env file given as --env-file. Docker mode takes
+ * --key-file, else $SECRETS_DIR/bb2dash_mcp_service_key, and --image (default
+ * bb2dash-mcp:local). SUPABASE_URL defaults to the bb2dash project in both.
+ * --tools-only stops after startup and the tool listing, which needs no network
+ * and no real key; the full run searches the live corpus.
  */
 
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const entry = resolve(here, '..', 'dist', 'index.js');
+
+const DEFAULT_SUPABASE_URL = 'https://goultdzqcavefcgnifdy.supabase.co';
+const DEFAULT_IMAGE = 'bb2dash-mcp:local';
+const SECRET_NAME = 'bb2dash_mcp_service_key';
+const CONTAINER_KEY_PATH = `/run/secrets/${SECRET_NAME}`;
+const EXPECTED_TOOLS = ['get_material_text', 'list_courses', 'search_materials'];
+
+function fail(message) {
+  console.error(`smoke: ${message}`);
+  process.exit(2);
+}
 
 function readEnvFile(path) {
   const out = {};
@@ -29,31 +50,69 @@ function readEnvFile(path) {
 }
 
 const args = process.argv.slice(2);
-const envFileIndex = args.indexOf('--env-file');
-const envFile = envFileIndex >= 0 ? args[envFileIndex + 1] : 'C:/Users/stack/projects/bb2dash/.env';
-const fileEnv = process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY)
-  ? {}
-  : readEnvFile(envFile);
-const env = { ...fileEnv, ...process.env };
-
-if (!env.SUPABASE_URL || !(env.SUPABASE_SERVICE_ROLE || env.SUPABASE_SERVICE_KEY)) {
-  console.error('smoke: SUPABASE_URL and SUPABASE_SERVICE_ROLE are required (env or --env-file).');
-  process.exit(2);
+function option(name) {
+  const at = args.indexOf(name);
+  if (at < 0) return undefined;
+  const value = args[at + 1];
+  if (!value || value.startsWith('--')) fail(`${name} needs a value.`);
+  return value;
 }
+const docker = args.includes('--docker');
+const toolsOnly = args.includes('--tools-only');
+
+/** Host mode: dist/index.js under this Node, the key by file path or by value. */
+function hostServer() {
+  const envFile = option('--env-file');
+  const env = { ...(envFile ? readEnvFile(envFile) : {}), ...process.env };
+  const keyFile = env.SUPABASE_SERVICE_ROLE_FILE;
+  const key = env.SUPABASE_SERVICE_ROLE ?? env.SUPABASE_SERVICE_KEY;
+  if (!keyFile && !key) {
+    fail('set SUPABASE_SERVICE_ROLE_FILE or SUPABASE_SERVICE_ROLE, or pass --env-file <bb2dash .env>.');
+  }
+  return {
+    label: `host ${entry}`,
+    params: {
+      command: process.execPath,
+      args: [entry],
+      env: {
+        SUPABASE_URL: env.SUPABASE_URL ?? DEFAULT_SUPABASE_URL,
+        ...(keyFile ? { SUPABASE_SERVICE_ROLE_FILE: keyFile } : { SUPABASE_SERVICE_ROLE: key }),
+      },
+      stderr: 'pipe',
+    },
+  };
+}
+
+/** Docker mode: the registration recipe's `docker run`, the key file mounted read-only. */
+function dockerServer() {
+  const image = option('--image') ?? DEFAULT_IMAGE;
+  const keyFile = option('--key-file') ?? (process.env.SECRETS_DIR ? join(process.env.SECRETS_DIR, SECRET_NAME) : undefined);
+  if (!keyFile) fail('--docker needs --key-file <path>, or SECRETS_DIR set.');
+  if (!existsSync(keyFile)) fail(`the key file ${keyFile} does not exist.`);
+  const url = process.env.SUPABASE_URL ?? DEFAULT_SUPABASE_URL;
+  return {
+    label: `docker ${image}`,
+    params: {
+      command: 'docker',
+      args: [
+        'run', '-i', '--rm',
+        '--mount', `type=bind,source=${resolve(keyFile)},target=${CONTAINER_KEY_PATH},readonly`,
+        '-e', `SUPABASE_URL=${url}`,
+        '-e', `SUPABASE_SERVICE_ROLE_FILE=${CONTAINER_KEY_PATH}`,
+        image,
+      ],
+      stderr: 'pipe',
+    },
+  };
+}
+
+const server = docker ? dockerServer() : hostServer();
+console.log(`smoke: ${server.label}${toolsOnly ? ' (tools only)' : ''}`);
 
 const textOf = (result) => result.content.map((part) => part.text ?? '').join('\n');
 const head = (text, lines = 14) => text.split('\n').slice(0, lines).join('\n');
 
-const transport = new StdioClientTransport({
-  command: process.execPath,
-  args: [entry],
-  env: {
-    SUPABASE_URL: env.SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE: env.SUPABASE_SERVICE_ROLE ?? env.SUPABASE_SERVICE_KEY,
-    PATH: process.env.PATH ?? '',
-  },
-  stderr: 'pipe',
-});
+const transport = new StdioClientTransport(server.params);
 const client = new Client({ name: 'bb2dash-smoke', version: '0.0.0' });
 
 transport.stderr?.on('data', (chunk) => process.stderr.write(`  [server] ${chunk}`));
@@ -64,11 +123,7 @@ function check(label, ok, detail = '') {
   if (!ok) failures += 1;
 }
 
-try {
-  await client.connect(transport);
-  const { tools } = await client.listTools();
-  check('three tools advertised', tools.length === 3, tools.map((t) => t.name).join(', '));
-
+async function liveChecks() {
   const courses = await client.callTool({ name: 'list_courses', arguments: {} });
   const coursesText = textOf(courses);
   check('list_courses', !courses.isError && /IST\.323/.test(coursesText));
@@ -108,6 +163,14 @@ try {
 
   const missing = await client.callTool({ name: 'get_material_text', arguments: { text_id: 999999999 } });
   check('get_material_text: missing id is not an error', !missing.isError && /not an error/.test(textOf(missing)));
+}
+
+try {
+  await client.connect(transport);
+  const { tools } = await client.listTools();
+  const names = tools.map((t) => t.name).sort();
+  check('three tools advertised', names.join(',') === EXPECTED_TOOLS.join(','), names.join(', '));
+  if (!toolsOnly) await liveChecks();
 } catch (error) {
   check('smoke run', false, error instanceof Error ? error.message : String(error));
 } finally {

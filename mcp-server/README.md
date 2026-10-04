@@ -57,7 +57,7 @@ cd C:/Users/stack/projects/bb2dash/mcp-server
 npm install
 npm run build
 npm test
-npm run smoke      # live end-to-end over stdio; reads ../.env, never prints the key
+node scripts/smoke.mjs --env-file ../.env   # live end-to-end over stdio; never prints the key
 ```
 
 Requires Node ≥ 20.11 (developed on 24.13.0). Pass `C:/...` paths to Node, never MSYS `/c/...`.
@@ -67,7 +67,8 @@ Requires Node ≥ 20.11 (developed on 24.13.0). Pass `C:/...` paths to Node, nev
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `SUPABASE_URL` | **yes** | — | `https://goultdzqcavefcgnifdy.supabase.co`. Refused if it names harness-memory. |
-| `SUPABASE_SERVICE_ROLE` | **yes** | — | The `sb_secret_…` key. `SUPABASE_SERVICE_KEY` accepted as a legacy alias. |
+| `SUPABASE_SERVICE_ROLE_FILE` | one of these two | — | Path to a file holding the `sb_secret_…` key alone (a BOM, CR and LF are stripped). When set, it is the only source: it wins over `SUPABASE_SERVICE_ROLE`, and a missing, unreadable, empty or multi-line file stops the server with a message that names the path, never the value. The image reads `/run/secrets/bb2dash_mcp_service_key`. |
+| `SUPABASE_SERVICE_ROLE` | one of these two | — | The `sb_secret_…` key itself. `SUPABASE_SERVICE_KEY` accepted as a legacy alias. Read only when `SUPABASE_SERVICE_ROLE_FILE` is unset. |
 | `BB2DASH_MIN_SIMILARITY` | no | `0.78` | Cosine floor on vector evidence. `none` disables. |
 | `BB2DASH_DEFAULT_LIMIT` | no | `10` | `limit` when the caller omits it. |
 | `BB2DASH_MAX_LIMIT` | no | `50` | Hard ceiling on `limit`. |
@@ -76,25 +77,62 @@ Requires Node ≥ 20.11 (developed on 24.13.0). Pass `C:/...` paths to Node, nev
 **Why the service key.** `bb_file_text` and `bb_text_embeddings` are readable only by
 `authenticated`/service (anon is insert-only, by design — NOTES.md caveat 9), and `search` runs
 behind `verify_jwt`. This is a local stdio process driven by Claude Code, never a browser, so the
-key stays server-side; it lives in the server's env block in `~/.claude.json` and nowhere in the
-repo.
+key stays server-side. It lives in one file, the `bb2dash_mcp_service_key` secret in the secrets
+folder (`SECRETS_DIR`, on this laptop `C:/Users/stack/.bb2dash-secrets/`), and nowhere in the
+repo, an image or `~/.claude.json`.
 
-### Register with Claude Code
+### Register with Claude Code (Docker)
 
 MCP servers are **not** read from `~/.claude/settings.json`; user-scope servers live in
-`~/.claude.json` and are written with the `claude mcp` CLI. Build the JSON from `.env` so the key
-never appears on a command line:
+`~/.claude.json` and are written with the `claude mcp` CLI. The registration runs the
+`bb2dash-mcp:local` image once per session and names the key file by path, so neither the
+command line nor `~/.claude.json` nor `docker inspect` holds the key.
 
-```bash
-JSON=$(node -e '
-const env=Object.fromEntries(require("fs").readFileSync("C:/Users/stack/projects/bb2dash/.env","utf8").split(/\r?\n/)
-  .filter(l=>/^[A-Z_]+=/.test(l)).map(l=>{const i=l.indexOf("=");return[l.slice(0,i),l.slice(i+1).trim()]}));
-process.stdout.write(JSON.stringify({type:"stdio",command:"C:/Program Files/nodejs/node.exe",
-  args:["C:/Users/stack/projects/bb2dash/mcp-server/dist/index.js"],
-  env:{SUPABASE_URL:env.SUPABASE_URL,SUPABASE_SERVICE_ROLE:env.SUPABASE_SERVICE_ROLE}}))')
-claude mcp add-json bb2dash "$JSON" -s user
-claude mcp list        # bb2dash: ✔ Connected
+1. Build the image (once, and after each change under `mcp-server/`), from the repo root:
+
+   ```powershell
+   docker compose --profile mcp build bb2dash-mcp     # or: docker build -t bb2dash-mcp:local mcp-server
+   ```
+
+2. Write the key file **before** the first run. Docker Desktop on Windows turns a missing bind
+   source into an empty folder, even with `--mount`; if that happened, delete the folder first.
+
+   ```powershell
+   & C:/Users/stack/.bb2dash-secrets/set-secret.ps1 bb2dash_mcp_service_key   # hidden prompt
+   ```
+
+3. Register it (PowerShell; the `--mount` value is quoted because it holds commas):
+
+   ```powershell
+   claude mcp remove bb2dash -s user      # only if an older registration exists
+   claude mcp add --scope user bb2dash -- docker run -i --rm `
+     --mount "type=bind,source=C:/Users/stack/.bb2dash-secrets/bb2dash_mcp_service_key,target=/run/secrets/bb2dash_mcp_service_key,readonly" `
+     -e SUPABASE_URL=https://goultdzqcavefcgnifdy.supabase.co `
+     -e SUPABASE_SERVICE_ROLE_FILE=/run/secrets/bb2dash_mcp_service_key `
+     bb2dash-mcp:local
+   claude mcp list        # bb2dash: docker run -i --rm ... - ✓ Connected
+   ```
+
+   From Git Bash, prefix the `claude mcp add` line with `MSYS_NO_PATHCONV=1`, or MSYS rewrites
+   `/run/secrets/...` into a Windows path.
+
+The same run through compose, with the secret and the URL from `compose.yaml`:
+`docker compose --profile mcp run --rm -T bb2dash-mcp` (from the repo root, with `SECRETS_DIR`
+set). Without Docker, the host build reads the same file:
+`claude mcp add --scope user bb2dash -e SUPABASE_URL=https://goultdzqcavefcgnifdy.supabase.co -e SUPABASE_SERVICE_ROLE_FILE=C:/Users/stack/.bb2dash-secrets/bb2dash_mcp_service_key -- "C:/Program Files/nodejs/node.exe" C:/Users/stack/projects/bb2dash/mcp-server/dist/index.js`.
+
+### Smoke test
+
+```powershell
+node scripts/smoke.mjs --env-file ../.env                                   # host build, live
+node scripts/smoke.mjs --docker --key-file C:/Users/stack/.bb2dash-secrets/bb2dash_mcp_service_key   # the image, live
+node scripts/smoke.mjs --docker --key-file <any non-empty file> --tools-only # startup and tool listing only
 ```
+
+`--docker` runs the image exactly as the registration does (`--image` overrides
+`bb2dash-mcp:local`; `--key-file` defaults to `$SECRETS_DIR/bb2dash_mcp_service_key`). The live run
+calls all three tools against the corpus; `--tools-only` needs no network and no real key. The
+script never prints a key and exits 0 only when every check passes.
 
 After restarting Claude Code the tools appear as `mcp__bb2dash__search_materials`,
 `mcp__bb2dash__get_material_text` and `mcp__bb2dash__list_courses`. Diagnostics go to stderr;
@@ -253,6 +291,7 @@ mcp-server/
     index.ts                 stdio bootstrap, stderr logging
     server.ts                registers the three tools
     config.ts                env parsing, the two-stores guard, defaults
+    env-file.ts              reads the key from the file SUPABASE_SERVICE_ROLE_FILE names
     client.ts                fetch wrapper: search Edge Function + PostgREST; row validation
     format.ts                LLM-readable rendering; similarity vs score labelling
     errors.ts                typed errors with actionable hints
@@ -262,14 +301,16 @@ mcp-server/
       get-material-text.ts
       list-courses.ts
   test/                      vitest, fetch mocked — no network, no key
-  scripts/smoke.mjs          live end-to-end over stdio
+  scripts/smoke.mjs          end-to-end over stdio: the host build, or the image (--docker)
+  Dockerfile                 node:22-slim, multi-stage, non-root, stdio only
+  .dockerignore              an allow-list: package files, tsconfig.json, src/
 ```
 
 ## Tests
 
 ```powershell
-npm test                 # 74 tests
-npm run test:coverage    # 95% statements, 82% branches, 100% functions
+npm test                 # 106 tests
+npm run test:coverage    # 95% statements, 85% branches, 100% functions
 npm run typecheck
 ```
 

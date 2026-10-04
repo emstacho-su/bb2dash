@@ -1,0 +1,19 @@
+# The sync image's build context is the repo root (docker/sync/Dockerfile, brief 100 task 15). An
+# allow-list: only what that Dockerfile copies is sent. `.env`, `course context/`, `local_cache/`,
+# any secrets folder, and every node_modules, dist, .venv and __pycache__ stay out, so nothing
+# secret or host-built (a Windows venv breaks `uv run` on Linux) reaches a layer.
+*
+!docker/sync/
+!sync/
+!ingest/
+!desktop/src/core/sync-id.ts
+sync/node_modules
+sync/dist
+sync/coverage
+ingest/.venv
+**/__pycache__
+**/.env
+**/.env.*
+course context
+local_cache
+secrets
