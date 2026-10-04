@@ -89,6 +89,13 @@ export interface PollerDeps {
   readonly clock?: () => Date;
   readonly timers?: Timers;
   readonly log?: Logger;
+  /**
+   * Brief 100 round 2, item 5: work that rides every tick with a session — the login prompt's
+   * look for the container's "login needed" item. Called once per tick with the tick's own `get`
+   * (before the watermark, so a first launch runs it too), and again by `afterSessionReload`.
+   * Not awaited: it must never slow or fail the tick. A throw or rejection is logged.
+   */
+  readonly onTick?: (get: RestGet) => Promise<void> | void;
 }
 
 export interface Poller {
@@ -103,6 +110,12 @@ export interface Poller {
   onResume(): Promise<TickResult>;
   /** One tick from rows supplied directly — the e2e test hook's `tick(fixture)` (C-10). */
   runWithRows(rows: TickRows, reason?: TickReason): Promise<TickResult>;
+  /**
+   * Round 2, item 5: the page just finished loading, so the web session may be fresh. Runs the
+   * per-tick hook now, without a tick (no toast, no watermark), so a dead cookie at logon does
+   * not hold the hook back until the next interval. Nothing is read when there is no hook.
+   */
+  afterSessionReload(): Promise<void>;
 }
 
 /** C-7: "on window focus (at most once per 60 s)". */
@@ -192,6 +205,19 @@ export function createPoller(deps: PollerDeps): Poller {
     };
   }
 
+  /** The per-tick hook, never awaited and never allowed to throw at the caller. */
+  function runHook(get: RestGet, reason: string): void {
+    const hook = deps.onTick;
+    if (!hook) return;
+    try {
+      void Promise.resolve(hook(get)).catch((error: unknown) => {
+        log.warn(`per-tick hook (${reason}) failed: ${describeError(error)}`);
+      });
+    } catch (error) {
+      log.warn(`per-tick hook (${reason}) failed: ${describeError(error)}`);
+    }
+  }
+
   async function tick(reason: TickReason): Promise<TickResult> {
     const now = clock();
 
@@ -200,6 +226,9 @@ export function createPoller(deps: PollerDeps): Poller {
       log.info(`tick (${reason}) skipped: no readable session`);
       return skipped(reason, 'skipped-no-session');
     }
+
+    const get = deps.createRest(session);
+    runHook(get, reason);
 
     const stored = await deps.store.read();
     if (!stored) {
@@ -210,7 +239,6 @@ export function createPoller(deps: PollerDeps): Poller {
       return skipped(reason, 'initialised');
     }
 
-    const get = deps.createRest(session);
     let rows: TickRows;
     let advanceTo = now;
     try {
@@ -281,6 +309,16 @@ export function createPoller(deps: PollerDeps): Poller {
 
     onResume(): Promise<TickResult> {
       return exclusive('resume', () => tick('resume'));
+    },
+
+    async afterSessionReload(): Promise<void> {
+      if (!deps.onTick) return;
+      try {
+        const session = await deps.getSession();
+        if (session) runHook(deps.createRest(session), 'session reload');
+      } catch (error) {
+        log.warn(`per-tick hook after a session reload skipped: ${describeError(error)}`);
+      }
     },
 
     runWithRows(rows: TickRows, reason: TickReason = 'test'): Promise<TickResult> {

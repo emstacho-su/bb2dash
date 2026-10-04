@@ -53,6 +53,23 @@ export function decideWindowOpen(rawUrl: string): NavigationDecision {
 }
 
 /**
+ * Brief 100 (2026-10-03): the container's noVNC login page, published on loopback only. It is
+ * never an allowed in-window origin; the login prompt (`main/login-prompt.ts`) is the one place
+ * the shell opens it, in the default browser, and nothing else goes out that way.
+ */
+export const LOGIN_PAGE_ORIGIN = 'http://127.0.0.1:6080';
+
+/** The login prompt's `openExternal`: the noVNC origin only, everything else dropped. */
+export function decideLoginPageOpen(rawUrl: string): NavigationDecision {
+  const url = parse(rawUrl);
+  if (url === null) return { kind: 'drop', reason: 'unparseable URL' };
+  if (url.origin !== LOGIN_PAGE_ORIGIN) {
+    return { kind: 'drop', reason: `${url.origin} is not the login page origin` };
+  }
+  return { kind: 'external', url: url.toString() };
+}
+
+/**
  * R2-5 — the one OS permission the renderer is allowed, and only from the app itself.
  *
  * C-3 said "deny every request", on the reasoning that the toasts are main's and the Sync

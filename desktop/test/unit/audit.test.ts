@@ -16,7 +16,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Vitest runs from `desktop/`, which is where `vitest.config.mts` lives.
@@ -120,5 +120,27 @@ describe('the APIs Phase 12 excluded are absent by inspection', () => {
       return pattern.test(read(file));
     });
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * Brief 100 (2026-10-03): the shell hands a URL to the default browser from two places only,
+ * the navigation guards (a link Stack followed) and the login prompt (the container's noVNC
+ * login page, the one target the shell opens on its own). A third caller would be a new way
+ * out of the shell that no policy decides.
+ */
+describe('shell.openExternal has exactly two callers', () => {
+  const OPEN_EXTERNAL = /\bshell\.openExternal\s*\(/;
+
+  it('catches a planted call', () => {
+    expect(OPEN_EXTERNAL.test("void shell.openExternal('https://example.com')")).toBe(true);
+  });
+
+  it('is called only from main/navigation.ts and main/login-prompt.ts', () => {
+    const SRC = join(process.cwd(), 'src');
+    const callers = FILES.filter((file) => file.startsWith(SRC) && OPEN_EXTERNAL.test(read(file)))
+      .map((file) => relative(process.cwd(), file).split(sep).join('/'))
+      .sort();
+    expect(callers).toEqual(['src/main/login-prompt.ts', 'src/main/navigation.ts']);
   });
 });

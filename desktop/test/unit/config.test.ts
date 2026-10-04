@@ -31,7 +31,16 @@ describe('CONFIG_DEFAULTS', () => {
       pollIntervalMinutes: 15,
       dueReminderTime: '18:00',
       syncDryRun: false,
+      syncLauncher: 'terminal',
+      novncPasswordFile: win32.join(homedir(), '.bb2dash-secrets', 'novnc_password'),
     });
+  });
+
+  it('puts the noVNC password file in the secrets folder outside every repo (DECISIONS 2026-10-03)', () => {
+    expect(win32.relative(homedir(), CONFIG_DEFAULTS.novncPasswordFile)).toBe(
+      win32.join('.bb2dash-secrets', 'novnc_password'),
+    );
+    expect(CONFIG_DEFAULTS.novncPasswordFile).not.toMatch(/bb2dash-stack/);
   });
 
   it('derives repoDir from the home folder, printable characters only', () => {
@@ -53,6 +62,14 @@ describe('parseConfig', () => {
     expect(config.pollIntervalMinutes).toBe(15);
     expect(config.dueReminderTime).toBe('18:00');
     expect(config.syncDryRun).toBe(false);
+    expect(config.syncLauncher).toBe('terminal');
+    expect(config.novncPasswordFile).toBe(CONFIG_DEFAULTS.novncPasswordFile);
+  });
+
+  it('accepts both syncLauncher values and a password file path', () => {
+    expect(parseConfig({ ...MINIMAL, syncLauncher: 'queue-only' }).syncLauncher).toBe('queue-only');
+    expect(parseConfig({ ...MINIMAL, syncLauncher: 'terminal' }).syncLauncher).toBe('terminal');
+    expect(parseConfig({ ...MINIMAL, novncPasswordFile: 'D:\\keys\\novnc' }).novncPasswordFile).toBe('D:\\keys\\novnc');
   });
 
   it('rejects a missing anon key and names the field', () => {
@@ -70,6 +87,9 @@ describe('parseConfig', () => {
     ['pollIntervalMinutes', { ...MINIMAL, pollIntervalMinutes: 0 }],
     ['dueReminderTime', { ...MINIMAL, dueReminderTime: '6pm' }],
     ['syncDryRun', { ...MINIMAL, syncDryRun: 'yes' }],
+    ['syncLauncher', { ...MINIMAL, syncLauncher: 'auto' }],
+    ['syncLauncher', { ...MINIMAL, syncLauncher: 'Queue-Only' }],
+    ['novncPasswordFile', { ...MINIMAL, novncPasswordFile: '' }],
   ])('rejects a bad %s and names it', (field, raw) => {
     try {
       parseConfig(raw);
@@ -117,6 +137,26 @@ describe('applyEnvOverrides', () => {
     });
     expect(merged.pollIntervalMinutes).toBe(3);
     expect(merged.syncDryRun).toBe(true);
+  });
+
+  it('reads BB2DASH_SYNC_LAUNCHER and BB2DASH_NOVNC_PASSWORD_FILE', () => {
+    const merged = loadConfigFrom(MINIMAL, {
+      BB2DASH_SYNC_LAUNCHER: 'queue-only',
+      BB2DASH_NOVNC_PASSWORD_FILE: 'D:\\keys\\novnc',
+    });
+    expect(merged.syncLauncher).toBe('queue-only');
+    expect(merged.novncPasswordFile).toBe('D:\\keys\\novnc');
+  });
+
+  it('lets the environment win over the file for syncLauncher, and rejects a bad value by name', () => {
+    const file = { ...MINIMAL, syncLauncher: 'terminal' };
+    expect(loadConfigFrom(file, { BB2DASH_SYNC_LAUNCHER: 'queue-only' }).syncLauncher).toBe('queue-only');
+    try {
+      loadConfigFrom(file, { BB2DASH_SYNC_LAUNCHER: 'container' });
+      throw new Error('expected loadConfigFrom to throw');
+    } catch (error) {
+      expect((error as ConfigError).field).toBe('syncLauncher');
+    }
   });
 
   it('keeps a non-numeric interval as a string so the schema rejects it by name', () => {

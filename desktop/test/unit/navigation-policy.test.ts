@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ALLOWED_PERMISSION,
+  LOGIN_PAGE_ORIGIN,
+  decideLoginPageOpen,
   decideNavigation,
   decidePermission,
   decideWindowOpen,
@@ -147,5 +149,38 @@ describe('decidePermission (R2-5)', () => {
 
   it('names exactly the permission Chromium raises for navigator.clipboard.writeText', () => {
     expect(ALLOWED_PERMISSION).toBe('clipboard-sanitized-write');
+  });
+});
+
+/**
+ * Brief 100 (2026-10-03): the container's noVNC login page is the one loopback target the
+ * shell hands to `shell.openExternal` on its own initiative, and nothing else gets that way.
+ */
+describe('decideLoginPageOpen (the login prompt)', () => {
+  it('is the loopback noVNC origin, port 6080, plain http', () => {
+    expect(LOGIN_PAGE_ORIGIN).toBe('http://127.0.0.1:6080');
+  });
+
+  it.each([
+    'http://127.0.0.1:6080/vnc.html',
+    'http://127.0.0.1:6080/vnc.html#autoconnect=true&resize=scale&password=a%26b',
+  ])('hands %s to the default browser', (url) => {
+    expect(decideLoginPageOpen(url)).toEqual({ kind: 'external', url: new URL(url).toString() });
+  });
+
+  it.each([
+    ['another port', 'http://127.0.0.1:6081/vnc.html'],
+    ['https on the same port', 'https://127.0.0.1:6080/vnc.html'],
+    ['localhost by name', 'http://localhost:6080/vnc.html'],
+    ['a LAN address', 'http://192.168.1.20:6080/vnc.html'],
+    ['the app itself', 'https://web-xi-ten-uy9xk6c6p0.vercel.app/'],
+    ['a javascript URL', 'javascript:alert(1)'],
+    ['an unparseable target', 'not a url at all'],
+  ])('drops %s', (_label, url) => {
+    expect(decideLoginPageOpen(url)).toMatchObject({ kind: 'drop' });
+  });
+
+  it('never lets the login page load inside the window', () => {
+    expect(decideNavigation('http://127.0.0.1:6080/vnc.html', ALLOWED)).toMatchObject({ kind: 'external' });
   });
 });
