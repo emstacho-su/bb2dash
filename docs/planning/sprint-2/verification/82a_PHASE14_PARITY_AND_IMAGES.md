@@ -120,7 +120,7 @@ the public fingerprint of the CPython release-signing key.
 | `harness-jobs:local` (a2d6404ed021) | 0 | 0 |
 | `bb2dash-dev:local` (c0632969b871) | 0 | 0 |
 
-4 of 4 filesystems and 4 of 4 histories clean. After W-55's round 2 the sync image was rebuilt from `feat/containers-14` ff369a4 (`bb2dash-sync:local` 385c75962dea) and rescanned the same way: `gitleaks dir` exit 0, history exit 0 (2026-10-04 00:04Z). That image is the one the live container runs since 00:01Z.
+4 of 4 filesystems and 4 of 4 histories clean. After W-55's round 2 the sync image was rebuilt from `feat/containers-14` ff369a4 (`bb2dash-sync:local` 385c75962dea) and rescanned the same way: `gitleaks dir` exit 0, history exit 0 (2026-10-04 00:04Z). That image is the one the live container runs since 00:01Z. After W-58's round 3 the dev image was rebuilt from bb2dash-stack 46237a4 (`bb2dash-dev:local` ce722216c359) and rescanned: `gitleaks dir` exit 0, history exit 0 (2026-10-04 01:27Z).
 
 ### Base-image manifests (2026-10-03, `docker buildx imagetools inspect`)
 
