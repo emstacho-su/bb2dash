@@ -14,7 +14,8 @@
  *
  * WHAT THIS PROVES, AND WHAT IT CANNOT. That the mappers produce the shape migration 050/055
  * reads, keep Stack's prose out of the flat columns, bound the chain, and record what Blackboard
- * really sent. It cannot prove the live responses — Stack's next sync does that.
+ * really sent. It cannot prove the live responses; the v4 and v5 crawls did (the crawler header),
+ * and the raw shapes below follow them since the key lists were cut (Phase 18 task 19).
  */
 
 import { createRequire } from 'node:module';
@@ -109,7 +110,7 @@ const {
 
 const CTX = { courseId: '_571529_1', attemptId: '_8100001_1' };
 
-/** One `studentSubmissionFiles[]` entry, real shape, invented values. */
+/** One `studentSubmissionFiles[]` entry, live shape (no `size`, 0 of 28 live), invented values. */
 const RAW_FILE = {
   id: '_4400001_1',
   name: 'widget-analysis.docx',
@@ -127,7 +128,11 @@ const RAW_FILE = {
   },
 };
 
-/** One attempt detail (step 3), real shape, invented values. */
+/**
+ * One attempt detail (step 3), live shape, invented values. The feedback is `feedbackToUser`, the
+ * name the live crawls saw. `studentComments` has not been seen live; it stays here because the
+ * crawler keeps its one name, and this is what covers it.
+ */
 const RAW_DETAIL = {
   id: '_8100001_1',
   gradeId: '_7700001_1',
@@ -149,7 +154,7 @@ const RAW_DETAIL = {
     submissionType: 'MANUALLY_SUBMITTED',
   },
   studentSubmission: { rawText: '<p>Draft attached.</p>', displayText: 'Draft attached.' },
-  instructorFeedback: { rawText: '<p>Solid first pass.</p>', displayText: 'Solid first pass.' },
+  feedbackToUser: { rawText: '<p>Solid first pass.</p>', displayText: 'Solid first pass.' },
   studentComments: 'Resubmitting after the lab.',
   studentSubmissionFiles: [RAW_FILE],
   submissionHasFilePartsWithErrors: false,
@@ -242,9 +247,20 @@ describe('mapAttemptFile — v4 reads the URL instead of building one', () => {
       .toEqual(['downloadUrl', 'id', 'mime', 'name', 'size', 'uuid']);
   });
 
-  it('falls back to file.fileName when the entry has no display name', () => {
-    const { name: _drop, linkName: _drop2, ...noName } = RAW_FILE;
-    expect(mapAttemptFile(noName, CTX)!.name).toBe('widget-analysis.docx');
+  it('a live entry has no size: size is null and the name comes from `name`', () => {
+    expect(RAW_FILE).not.toHaveProperty('size');
+    const f = mapAttemptFile({ ...RAW_FILE, name: 'from-name.docx' }, CTX)!;
+    expect(f.size).toBeNull();
+    expect(f.name).toBe('from-name.docx');
+    // Bytes come from the pull (bb_files.bytes), so even a stray size key is not read.
+    expect(mapAttemptFile({ ...RAW_FILE, size: 1234 }, CTX)!.size).toBeNull();
+    expect(crawler.ATTEMPT_FILE_KEYS).not.toHaveProperty('size');
+  });
+
+  it('reads the name from `name` alone: file.fileName and linkName are no longer candidates', () => {
+    expect(crawler.ATTEMPT_FILE_KEYS.name).toEqual(['name']);
+    const { name: _drop, ...noName } = RAW_FILE;
+    expect(mapAttemptFile(noName, CTX)!.name).toBeNull();
   });
 
   it('falls back to the v3 built URL only when there is no permanentUrl', () => {
@@ -259,8 +275,9 @@ describe('mapAttemptFile — v4 reads the URL instead of building one', () => {
     expect(f.downloadUrl!.startsWith('https://bb.example.edu/learn/api/v1/')).toBe(true);
   });
 
-  it('uses bbFileUuid as the id when there is no id', () => {
-    expect(mapAttemptFile({ bbFileUuid: 'abc', file: { permanentUrl: 'https://x/y' } }, CTX)!.id).toBe('abc');
+  it('reads the id from `id` alone, so an entry with only a bbFileUuid drops out', () => {
+    expect(crawler.ATTEMPT_FILE_KEYS.id).toEqual(['id']);
+    expect(mapAttemptFile({ bbFileUuid: 'abc', file: { permanentUrl: 'https://x/y' } }, CTX)).toBeNull();
   });
 
   it('leaves an unknown field null rather than guessing', () => {
@@ -326,7 +343,7 @@ describe('mapAttempt — the shape migration 050/055 reads', () => {
   it('flattens prose to plain text and caps each field', () => {
     const long = mapAttempt({
       ...RAW_DETAIL,
-      instructorFeedback: { rawText: 'f'.repeat(4000) },
+      feedbackToUser: { rawText: 'f'.repeat(4000) },
       studentComments: 'c'.repeat(4000),
       studentSubmission: { rawText: 's'.repeat(9000) },
     })!;
@@ -370,10 +387,10 @@ describe('mapAttempt — the shape migration 050/055 reads', () => {
   });
 });
 
-describe('v5 (Phase 18, R-66) — feedback is read from `feedbackToUser` first', () => {
-  it('puts feedbackToUser ahead of instructorFeedback in the key list', () => {
-    expect(ATTEMPT_FIELD_KEYS.feedback[0]).toBe('feedbackToUser.rawText');
-    expect(ATTEMPT_FIELD_KEYS.feedback).toContain('instructorFeedback.rawText');
+describe('v5 (Phase 18, R-66) — feedback is read from `feedbackToUser` alone', () => {
+  it('lists the two object forms, then the bare key, and no instructorFeedback', () => {
+    expect(ATTEMPT_FIELD_KEYS.feedback)
+      .toEqual(['feedbackToUser.rawText', 'feedbackToUser.displayText', 'feedbackToUser']);
   });
 
   it('reads feedbackToUser: {rawText} into text.instructorFeedback', () => {
@@ -381,16 +398,32 @@ describe('v5 (Phase 18, R-66) — feedback is read from `feedbackToUser` first',
     expect(out.text.instructorFeedback).toBe('See the rubric.');
   });
 
-  it('prefers feedbackToUser when both keys are present', () => {
-    const out = mapAttempt({
-      ...RAW_DETAIL,
-      feedbackToUser: { rawText: 'From feedbackToUser.' },
-    })!;
-    expect(out.text.instructorFeedback).toBe('From feedbackToUser.');
+  it('reads displayText when rawText is empty', () => {
+    const out = mapAttempt({ id: '_1_1', feedbackToUser: { rawText: '', displayText: 'Shown text.' } })!;
+    expect(out.text.instructorFeedback).toBe('Shown text.');
   });
 
-  it('still falls back to instructorFeedback', () => {
-    expect(mapAttempt(RAW_DETAIL)!.text.instructorFeedback).toBe('Solid first pass.');
+  it('reads feedbackToUser sent as a plain string', () => {
+    const out = mapAttempt({ id: '_1_1', feedbackToUser: '<p>Plain string feedback.</p>' })!;
+    expect(out.text.instructorFeedback).toBe('Plain string feedback.');
+  });
+
+  it('reads nothing from instructorFeedback alone: the v4 fallback is gone', () => {
+    const { feedbackToUser: _drop, ...v4Shape } = RAW_DETAIL;
+    const out = mapAttempt({
+      ...v4Shape, instructorFeedback: { rawText: '<p>Old name.</p>', displayText: 'Old name.' },
+    })!;
+    expect(out.text.instructorFeedback).toBeNull();
+  });
+
+  it('never turns an object into text, and the probe counts it as a miss', () => {
+    const empty = { id: '_1_1', feedbackToUser: { rawText: null, displayText: '' } };
+    expect(mapAttempt(empty)!.text.instructorFeedback).toBeNull();
+    expect(crawler.keyListMisses(empty, ATTEMPT_FIELD_KEYS, 'ATTEMPT_FIELD_KEYS'))
+      .toContain('ATTEMPT_FIELD_KEYS.feedback');
+    // A non-string where the text should be is skipped, not flattened by strip().
+    const nested = { id: '_1_1', feedbackToUser: { rawText: { displayText: 'not feedback' } } };
+    expect(mapAttempt(nested)!.text.instructorFeedback).toBeNull();
   });
 
   it('keeps the prose under text, never as a flat key', () => {
@@ -409,8 +442,11 @@ describe('keyListMisses — v5 counts a key list that found nothing', () => {
   });
 
   it('names nothing when every list hits', () => {
-    const full = { ...RAW_DETAIL, feedbackToUser: { rawText: 'y' } };
-    expect(crawler.keyListMisses(full, ATTEMPT_FIELD_KEYS, 'ATTEMPT_FIELD_KEYS')).toEqual([]);
+    expect(crawler.keyListMisses(RAW_DETAIL, ATTEMPT_FIELD_KEYS, 'ATTEMPT_FIELD_KEYS')).toEqual([]);
+  });
+
+  it('counts no file miss on a live entry, which has no size', () => {
+    expect(crawler.keyListMisses(RAW_FILE, crawler.ATTEMPT_FILE_KEYS, 'ATTEMPT_FILE_KEYS')).toEqual([]);
   });
 
   it('treats anything that is not an object as a miss on every list', () => {
@@ -667,8 +703,12 @@ describe('attempts() — the three-request chain', () => {
   });
 
   it('v5: counts an unknown feedback shape in the caller\'s misses, once per attempt', async () => {
-    const noFeedback = { ...RAW_DETAIL, instructorFeedback: undefined };
-    stubFetch({ detail: { body: { ...noFeedback, commentsForStudent: { rawText: 'unknown key' } } } });
+    const { feedbackToUser: _drop, ...noFeedback } = RAW_DETAIL;
+    stubFetch({ detail: { body: {
+      ...noFeedback,
+      instructorFeedback: { rawText: 'v4 name, never sent live' },
+      commentsForStudent: { rawText: 'unknown key' },
+    } } });
     const misses: Record<string, number> = {};
     const [entry] = await install().attempts(COURSE, [COLUMN], { misses });
     expect(misses['ATTEMPT_FIELD_KEYS.feedback']).toBe(1);
@@ -676,11 +716,11 @@ describe('attempts() — the three-request chain', () => {
     expect(entry.results[0].text.instructorFeedback).toBeNull();
   });
 
-  it('v5: a fully known detail adds no attempt-field miss', async () => {
+  it('v5: a fully known detail and file add no miss at all, and no size miss', async () => {
     stubFetch();
     const misses: Record<string, number> = {};
     await install().attempts(COURSE, [COLUMN], { misses });
-    expect(Object.keys(misses).filter((k) => k.startsWith('ATTEMPT_FIELD_KEYS.'))).toEqual([]);
+    expect(misses).toEqual({});
   });
 
   it('never throws: a network failure is a status 0 on the entry', async () => {
@@ -759,6 +799,22 @@ describe('assessmentFields — the probe for where Ultra keeps the assessment fi
     });
     expect(out.paths.gradebookColumnId).toBe('gradebookColumnId');
     expect(out.paths.dueDate).toBe('contentDetail.resource/x-bb-asmt-test-link.test.assessment.dueDate');
+  });
+
+  it('records the live path: points and due date under test.gradingColumn, the other two nowhere (R-75)', () => {
+    const LINK = 'resource/x-bb-asmt-test-link';
+    const full = {
+      id: '_12928186_1',
+      contentDetail: {
+        [LINK]: { test: { gradingColumn: { possible: 20, dueDate: '2026-10-01T03:59:00.000Z' } } },
+      },
+    };
+    const out = assessmentFields(full)!;
+    expect(out.values).toEqual({ points: 20, dueDate: '2026-10-01T03:59:00.000Z' });
+    expect(out.paths).toEqual({
+      points: `contentDetail.${LINK}.test.gradingColumn.possible`,
+      dueDate: `contentDetail.${LINK}.test.gradingColumn.dueDate`,
+    });
   });
 
   it('prefers the shallower occurrence when a field appears twice', () => {
