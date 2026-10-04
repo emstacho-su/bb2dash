@@ -62,6 +62,8 @@ the terminal somewhere unintended.
 | `pollIntervalMinutes` | `15` | how often the notification poller ticks while the app runs |
 | `dueReminderTime` | `18:00` | New York wall-clock time the once-a-day "due tomorrow" check runs |
 | `syncDryRun` | `false` | when true the Sync terminal prints the command instead of running it |
+| `syncLauncher` | `terminal` | `terminal`: the Sync button opens Windows Terminal on `/bb-sync`. `queue-only`: the button only queues and the container's runner takes the request; no terminal opens, and when the runner raises "Blackboard login needed" the app opens `http://127.0.0.1:6080/vnc.html` once in the default browser, already unlocked (brief 100, task 18) |
+| `novncPasswordFile` | `<profile>\.bb2dash-secrets\novnc_password` | the file the login page's noVNC password is read from under `queue-only`; a BOM, CR and LF are stripped, and the password goes only into the URL handed to the browser, never into the log. A missing or unreadable file opens the page without it |
 
 **Secrets.** The anon key is the only credential in this package, and it is not a
 secret: it is public in the web bundle already, and row-level security is the
@@ -72,7 +74,8 @@ key belongs in `config.json` on the machine, never in the repository.
 **Environment overrides.** Every key can be overridden by an environment
 variable (`BB2DASH_APP_URL`, `BB2DASH_SUPABASE_ANON_KEY`, `BB2DASH_REPO_DIR`,
 `BB2DASH_POLL_INTERVAL_MINUTES`, `BB2DASH_DUE_REMINDER_TIME`,
-`BB2DASH_SYNC_DRY_RUN`, `BB2DASH_SUPABASE_URL`). The e2e suite uses them to point
+`BB2DASH_SYNC_DRY_RUN`, `BB2DASH_SUPABASE_URL`, `BB2DASH_SYNC_LAUNCHER`,
+`BB2DASH_NOVNC_PASSWORD_FILE`). The e2e suite uses them to point
 the shell at a local fixture page so no test ever reaches `*.supabase.co`.
 
 ## Build, test, pack

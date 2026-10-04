@@ -16,6 +16,7 @@ import { existsSync } from 'node:fs';
 import { session as electronSession } from 'electron';
 
 import type { DesktopConfig } from '../core/config';
+import { validateIdRows } from '../core/id-rows';
 import { InvalidSyncIdError, buildSyncCommand } from '../core/sync-command';
 import type { RestGet } from '../core/types';
 import { log, logError } from './log';
@@ -30,15 +31,12 @@ interface QueuedRequest {
   readonly id: string;
 }
 
-/** PostgREST returns `bigint` ids as numbers or strings depending on the column. */
+/**
+ * PostgREST returns `bigint` ids as numbers or strings depending on the column; the shared
+ * check in `core/id-rows.ts` (the login prompt's too) turns either into a string.
+ */
 function validateQueuedRequests(rows: unknown): readonly QueuedRequest[] {
-  if (!Array.isArray(rows)) throw new Error('expected an array of rows');
-  return rows.map((row) => {
-    if (row === null || typeof row !== 'object') throw new Error('expected a row object');
-    const id = (row as { id?: unknown }).id;
-    if (typeof id !== 'number' && typeof id !== 'string') throw new Error('expected an id');
-    return Object.freeze({ id: String(id) });
-  });
+  return validateIdRows(rows).map((id) => Object.freeze({ id }));
 }
 
 /**

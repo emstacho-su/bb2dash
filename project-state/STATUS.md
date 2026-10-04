@@ -653,6 +653,16 @@ code: scope `all` cuts at `now()` (083/088), and the test's series holds a hard-
 2026-10-01 18:00 -04:00, which is in the past since 2026-10-02 ("these rows are not in scope for all …
 starting before the cut"). Unrelated to 162/163. **Fixed 2026-10-02** (`fix/planner-series-test-dates`): every fixture date but the past row moved on 53 weeks (weekdays kept, the Thursdays still on their sides of the 2027-11-07 clock change), and a guard under `begin;` fails by name when they run out again on 2027-10-07.
 
+## Phase 14 early PR — the desktop launcher (2026-10-03)
+
+The first of Phase 14's PRs (brief 100 task 18, merged before acceptance step A1; the exception to one PR per phase is DECISIONS 2026-10-02 "Phase 14 freeze: one PR per repo" on the phase branch). It adds two desktop config keys and changes nothing by default:
+
+* `syncLauncher` (`terminal`, the default, or `queue-only`; env `BB2DASH_SYNC_LAUNCHER`). Under `queue-only` the Sync button only queues the request for the container's runner; no terminal opens.
+* `novncPasswordFile` (env `BB2DASH_NOVNC_PASSWORD_FILE`, default `<home>.bb2dash-secrets
+ovnc_password`). Under `queue-only`, when an open Inbox item with ref `sync-login-required` (kind `stack_must_confirm`, entity `agent_request`) exists, the app opens `http://127.0.0.1:6080/vnc.html` once per New York day, unlocked through the URL fragment, so Stack only does NetID and Duo.
+
+Nothing raises `sync-login-required` until the phase PR (migration 091 and the runner) and the cut-over land, so with the default `terminal` this PR changes no behaviour. Desktop: 40 files, 787 unit tests, typecheck and build clean, e2e 23 passed (one new case); `/code-review` round 2 applied; `/security-review`: no findings.
+
 ## What's next — Sprint 2
 
 Planned 2026-09-24 on `docs/sprint2-planning` ([PR #28](https://github.com/emstacho-su/bb2dash/pull/28), merged as 67269b5 on 2026-09-27): requirements `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`

@@ -14,6 +14,22 @@ import type { AddressInfo } from 'node:net';
 /** The id the fake `agent_requests` row carries; the argv must quote exactly this. */
 export const FIXTURE_REQUEST_ID = '4242';
 
+/**
+ * Brief 100 round 2, item 9: the open Inbox items `GET /rest/v1/attention_items` filters over —
+ * the container's login item, and the Chrome skill's item, which must never open the page.
+ */
+export const FIXTURE_CONTAINER_LOGIN_ITEM_ID = 7701;
+const ATTENTION_ITEMS: readonly Record<string, string | number>[] = [
+  { id: FIXTURE_CONTAINER_LOGIN_ITEM_ID, ref: 'sync-login-required', kind: 'stack_must_confirm', entity: 'agent_request', state: 'open' },
+  { id: 7702, ref: 'chrome-login-required', kind: 'stack_must_confirm', entity: 'agent_request', state: 'open' },
+];
+
+/** PostgREST's `column=eq.value` filters, the only operator the shell sends here. */
+function filterRows(rows: readonly Record<string, string | number>[], query: string) {
+  const filters = [...new URLSearchParams(query)].filter(([, value]) => value.startsWith('eq.'));
+  return rows.filter((row) => filters.every(([column, value]) => String(row[column]) === value.slice(3)));
+}
+
 const PAGE = `<!doctype html>
 <html lang="en">
   <head><meta charset="utf-8" /><title>bb2dash fixture</title></head>
@@ -84,6 +100,12 @@ export async function startFixtureServer(): Promise<FixtureServer> {
       response.end(
         JSON.stringify([{ id: FIXTURE_REQUEST_ID, created_at: '2026-09-16T12:00:00Z' }]),
       );
+      return;
+    }
+    if (path === '/rest/v1/attention_items' && request.method === 'GET') {
+      const query = (request.url ?? '').split('?')[1] ?? '';
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(filterRows(ATTENTION_ITEMS, query)));
       return;
     }
     if (path.startsWith('/rest/v1/')) {

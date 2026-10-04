@@ -61,6 +61,20 @@ describe('redact', () => {
     expect(line).not.toContain(FAKE_JWT.slice(0, 20));
   });
 
+  // Brief 100 round 2, item 7: the noVNC login URL carries a password; an error that quotes it
+  // must not put the password in the log, whether it rides in the fragment or a query string.
+  it.each([
+    ['in a fragment', 'could not open http://127.0.0.1:6080/vnc.html#autoconnect=true&resize=scale&password=p%26ss-w0rd'],
+    ['in a query string', 'GET http://127.0.0.1:6080/vnc.html?password=p%26ss-w0rd&autoconnect=true'],
+    ['as a JSON field', '{"password": "p%26ss-w0rd"}'],
+  ])('removes a password %s', (_where, line) => {
+    const out = redact(line);
+    expect(out).not.toContain('p%26ss-w0rd');
+    expect(out).not.toContain('w0rd');
+    expect(out).toContain('password');
+    expect(out).toContain('[redacted]');
+  });
+
   it('leaves ordinary log lines alone', () => {
     const line = 'tick (interval) fired 2 toast(s)';
     expect(redact(line)).toBe(line);

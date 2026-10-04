@@ -27,6 +27,10 @@ export interface LaunchOptions {
   readonly userDataDir: string;
   /** `BB2DASH_SYNC_DRY_RUN`; the recorder is on anyway, so this only shapes argv. */
   readonly dryRun?: boolean;
+  /** `BB2DASH_SYNC_LAUNCHER` (brief 100 task 18); unset means the default, `terminal`. */
+  readonly syncLauncher?: 'terminal' | 'queue-only';
+  /** `BB2DASH_NOVNC_PASSWORD_FILE`: a fixture file, so no run reads the real secret. */
+  readonly novncPasswordFile?: string;
 }
 
 export async function launchShell(options: LaunchOptions): Promise<ElectronApplication> {
@@ -39,6 +43,8 @@ export async function launchShell(options: LaunchOptions): Promise<ElectronAppli
       BB2DASH_SUPABASE_URL: options.fixtureUrl,
       BB2DASH_SUPABASE_ANON_KEY: FIXTURE_ANON_KEY,
       BB2DASH_SYNC_DRY_RUN: options.dryRun === true ? '1' : '0',
+      ...(options.syncLauncher === undefined ? {} : { BB2DASH_SYNC_LAUNCHER: options.syncLauncher }),
+      ...(options.novncPasswordFile === undefined ? {} : { BB2DASH_NOVNC_PASSWORD_FILE: options.novncPasswordFile }),
     },
   });
 }
