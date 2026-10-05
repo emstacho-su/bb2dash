@@ -4,15 +4,15 @@
  * Per row of `sync_file_worklist()`:
  *   * walk the redirect hops in the runner's logged-in context and download the signed URL, both
  *     with Phase 18's signed-fetch module (this file has no copy of that fetch); take the sha256;
- *   * POST the bytes to Storage `bb-files/<key>` with the publishable key, never `x-upsert`; a 409
- *     or a Duplicate answer goes on for a course file (its key is the catalogue's) and is never done
- *     for a submission (R2 item 2);
+ *   * POST the bytes to Storage `bb-files/<key>` (only characters Storage accepts; W-73) with the
+ *     publishable key, never `x-upsert`; a 409 or a Duplicate answer goes on for a course file whose
+ *     key is the catalogue's own spelling and is never done for a submission or a sanitised key (R2 item 2);
  *   * move the download from tmpfs into course-files (copy-then-unlink on EXDEV, P-104);
  *   * extract with the locked `extract_text.py` project, POST the units to `bb_file_text`;
  *   * record the row through `sync_file_stored(…)`, which writes the prefixes itself.
  * A 401/403 at the first hop stops the step only when the login check then finds users/me dead
- * (R2 item 3); otherwise that file is `refused`; `gone`, `refused` and a
- * submission's Storage 409 go to the report's `not_pulled`. Keys and checks are `ingest/pull_files.mjs`'s
+ * (R2 item 3); otherwise that file is `refused`; `gone`, `refused` and a refused
+ * Storage 409 go to the report's `not_pulled`. Keys and checks are `ingest/pull_files.mjs`'s
  * exported pure helpers; its `main`, whose update SQL is the owner's, is never run.
  *
  * Once at least one unit was posted, `ingest/embed_corpus.mjs`'s loop runs once, in-process; never on none.
@@ -29,12 +29,11 @@ import {
   anonHeaders,
   bytesLookValid,
   downloadNameFor,
-  duplicateIsAcceptable,
   encodeKey,
   extractUnits,
   isDuplicateAnswer,
-  isSubmissionRow,
   mimeFor,
+  occupiedKeyRefusal,
   storageKeyFor,
   textPostOutcome,
   textRows,
@@ -169,10 +168,9 @@ async function pullOne(row: WorklistRow, p: FilesPorts): Promise<RowResult> {
     if (up.status === HTTP_CONFLICT || isDuplicateAnswer(up.status, up.body)) {
       // R2 item 2: a course file's key comes from the catalogue, so the object there is this file
       // (an earlier pass uploaded it and then failed later); go on. A submission's key must never
-      // be shared (052), so an occupied one is a human's call, never done.
-      if (!duplicateIsAcceptable(isSubmissionRow(row))) {
-        return { pulled: false, reason: `storage 409: key already occupied; a human decides whether those bytes are this file` };
-      }
+      // be shared (052), and a sanitised one may be another name's (W-73), so either is a human's call.
+      const refusal = occupiedKeyRefusal(row);
+      if (refusal) return { pulled: false, reason: `storage 409: ${refusal}` };
       p.log(`files: ${row.id} is already in Storage under its catalogue key; recording it`);
     } else if (up.status < 200 || up.status > 299) {
       return { pulled: false, reason: `storage ${up.status}: ${up.body.slice(0, 200)}` };
