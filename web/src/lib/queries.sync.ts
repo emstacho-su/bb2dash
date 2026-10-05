@@ -26,6 +26,7 @@ import { useEffect } from 'react';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
+import { asRecord } from './json-record';
 import {
   NO_SYNC_RECORDED,
   lastSyncedClause,
@@ -443,12 +444,6 @@ export function buildResolutionPatch(input: ResolveInput, now: Date = new Date()
  * Normalisers (pure — the view and the summary envelope are jsonb, so trust
  * nothing about their inner shape)
  * ------------------------------------------------------------------------ */
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
 
 function asTextOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;

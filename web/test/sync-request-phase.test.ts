@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PHASE_LABEL,
   QUEUE_GRACE_MS,
+  REQUEUE_GRACE_MS,
   RUNNER_CLAIMANT,
   closeAnnouncement,
   closePrompt,
@@ -40,6 +41,10 @@ function request(overrides: Partial<PhaseRequest> = {}): PhaseRequest {
     result: null,
     ...overrides,
   };
+}
+
+function minutesAgo(minutes: number): string {
+  return new Date(NOW - minutes * 60_000).toISOString();
 }
 
 const ALL_PHASES: readonly SyncPhase[] = [
@@ -80,10 +85,15 @@ describe('syncPhase — the request row and the run it opened', () => {
     expect(syncPhase(request({ created_at: 'not a date' }), null, NOW)).toBe('queued');
   });
 
-  it('a queued request the runner claimed before is requeued, however old', () => {
-    const old = new Date(NOW - 10 * QUEUE_GRACE_MS).toISOString();
-    expect(syncPhase(request({ claim_attempts: 1, created_at: old }), null, NOW)).toBe('requeued');
-    expect(syncPhase(request({ claim_attempts: 2 }), null, NOW)).toBe('requeued');
+  it('a queued request the runner claimed before is requeued, past the short grace', () => {
+    expect(syncPhase(request({ claim_attempts: 1, created_at: minutesAgo(3) }), null, NOW)).toBe('requeued');
+    expect(syncPhase(request({ claim_attempts: 2, created_at: minutesAgo(9) }), null, NOW)).toBe('requeued');
+  });
+
+  it('a requeued request reads unclaimed once it has waited the long grace', () => {
+    const edge = new Date(NOW - REQUEUE_GRACE_MS).toISOString();
+    expect(syncPhase(request({ claim_attempts: 1, created_at: edge }), null, NOW)).toBe('requeued');
+    expect(syncPhase(request({ claim_attempts: 1, created_at: minutesAgo(11) }), null, NOW)).toBe('unclaimed');
   });
 
   it("the runner's claim with no run row yet is starting", () => {
@@ -149,64 +159,56 @@ describe('PHASE_LABEL — what the button says', () => {
 });
 
 describe('phaseTitle — the tooltip sentence', () => {
-  it('says how long an unclaimed request has waited, in seconds then minutes', () => {
-    const at90s = request({ created_at: new Date(NOW - 90_000).toISOString() });
-    expect(phaseTitle('unclaimed', at90s, NOW, ago)).toBe(
-      'Nothing has claimed this sync in 90 s. The sync container may be busy or down; press again for the fallback command.',
-    );
-    const at3m = request({ created_at: new Date(NOW - 3 * 60_000 - 5_000).toISOString() });
-    expect(phaseTitle('unclaimed', at3m, NOW, ago)).toBe(
-      'Nothing has claimed this sync in 3 min. The sync container may be busy or down; press again for the fallback command.',
+  it("dates an unclaimed request's filing through the caller's ago", () => {
+    const stale = request({ created_at: minutesAgo(2) });
+    expect(phaseTitle('unclaimed', stale, ago)).toBe(
+      `Nothing has claimed this sync, requested ${stale.created_at} ago. The sync container may be busy or down; press again for the fallback command.`,
     );
   });
 
   it('explains a requeued request and keeps the fallback reachable', () => {
-    expect(phaseTitle('requeued', request({ claim_attempts: 1 }), NOW, ago)).toBe(
+    expect(phaseTitle('requeued', request({ claim_attempts: 1 }), ago)).toBe(
       'The sync container claimed this request once and let it go (a restart); its next pass takes it again. Press again for the fallback command.',
     );
   });
 
   it('names the session that claimed the row', () => {
     const claimed = request({ state: 'claimed', claimed_by: 'bb-sync session' });
-    expect(phaseTitle('session', claimed, NOW, ago)).toBe(
-      'A Claude Code session (bb-sync session) is running this sync',
-    );
+    expect(phaseTitle('session', claimed, ago)).toBe('A Claude Code session (bb-sync session) is running this sync');
   });
 
   it('falls back to a generic sentence for a session with no name', () => {
     const claimed = request({ state: 'claimed', claimed_by: null });
-    expect(phaseTitle('session', claimed, NOW, ago)).toBe('A Claude Code session is running this sync');
+    expect(phaseTitle('session', claimed, ago)).toBe('A Claude Code session is running this sync');
   });
 
   it('describes the container phases and the idle button', () => {
-    expect(phaseTitle('idle', null, NOW, ago)).toBe('Ask the sync container to crawl Blackboard');
-    expect(phaseTitle('queued', request(), NOW, ago)).toBe(
+    expect(phaseTitle('idle', null, ago)).toBe('Ask the sync container to crawl Blackboard');
+    expect(phaseTitle('queued', request(), ago)).toBe(
       'Requested; the sync container takes queued requests within about a minute',
     );
-    expect(phaseTitle('starting', request(), NOW, ago)).toBe(
+    expect(phaseTitle('starting', request(), ago)).toBe(
       'The sync container claimed the request and is opening the run',
     );
-    expect(phaseTitle('crawling', request(), NOW, ago)).toBe(
+    expect(phaseTitle('crawling', request(), ago)).toBe(
       'The sync container is crawling Blackboard and folding the result in',
     );
-    expect(phaseTitle('pulling_files', request(), NOW, ago)).toBe(
+    expect(phaseTitle('pulling_files', request(), ago)).toBe(
       'The crawl folded in; the sync container is pulling new files',
     );
-    expect(phaseTitle('finishing', request(), NOW, ago)).toBe(
+    expect(phaseTitle('finishing', request(), ago)).toBe(
       'The run failed; the sync container is closing the request',
     );
   });
 
   it("dates a finished request from finished_at through the caller's ago", () => {
     const done = request({ state: 'done', finished_at: '2026-10-05T18:06:00.000Z' });
-    expect(phaseTitle('done', done, NOW, ago)).toBe('Sync done 2026-10-05T18:06:00.000Z ago');
-    expect(phaseTitle('failed', request({ state: 'failed', finished_at: null }), NOW, ago)).toBe(
-      'Sync failed',
-    );
+    expect(phaseTitle('done', done, ago)).toBe('Sync done 2026-10-05T18:06:00.000Z ago');
+    expect(phaseTitle('failed', request({ state: 'failed', finished_at: null }), ago)).toBe('Sync failed');
   });
 
   it('has a sentence for every phase', () => {
-    for (const phase of ALL_PHASES) expect(phaseTitle(phase, request(), NOW, ago)).toBeTruthy();
+    for (const phase of ALL_PHASES) expect(phaseTitle(phase, request(), ago)).toBeTruthy();
   });
 });
 
@@ -292,7 +294,7 @@ describe("resultHeadline — the one line of a closed request's report", () => {
   });
 });
 
-describe('filesNeedingStack — the unpulled files the next sync will not retry', () => {
+describe('filesNeedingStack — the unpulled files that ask for a hand', () => {
   it("counts the runner's not_pulled entries", () => {
     const report = {
       files: {
@@ -312,11 +314,18 @@ describe('filesNeedingStack — the unpulled files the next sync will not retry'
         pulled: 1,
         not_pulled: [
           { id: '1', reason: 'session_expired: login page' },
-          { id: '2', reason: 'storage 409: key already occupied' },
+          { id: '2', reason: 'storage 409: key already occupied; a human decides whether those bytes are this file' },
         ],
       },
     };
     expect(filesNeedingStack(report)).toBe(1);
+  });
+
+  it('leaves out a file another writer stored first: it has bytes, and no Inbox item', () => {
+    const report = {
+      files: { pulled: 1, not_pulled: [{ id: '1', reason: 'already stored by another writer' }] },
+    };
+    expect(filesNeedingStack(report)).toBe(0);
   });
 
   it("takes the skill's count when there are no reasons", () => {
@@ -333,9 +342,10 @@ describe('filesNeedingStack — the unpulled files the next sync will not retry'
 });
 
 describe('closePrompt — the line that asks for a hand', () => {
-  it('is null when every file landed or will be retried', () => {
+  it('is null when every file landed, will be retried, or was stored by another writer', () => {
     expect(closePrompt({ files: { pulled: 3, not_pulled: [] } })).toBeNull();
     expect(closePrompt({ files: { not_pulled: [{ id: '1', reason: 'session_expired: dead' }] } })).toBeNull();
+    expect(closePrompt({ files: { not_pulled: [{ id: '1', reason: 'already stored by another writer' }] } })).toBeNull();
     expect(closePrompt(null)).toBeNull();
   });
 

@@ -12,18 +12,20 @@
  *
  *   queued, never claimed, young  → waiting for the runner
  *   queued, never claimed, old    → unclaimed: nothing took it, the paste command is the fallback
- *   queued, claimed before        → requeued: the runner let it go (a restart); its next pass takes it
+ *   queued, claimed before        → requeued: the runner let it go (a restart); its next pass takes
+ *                                   it — unclaimed too once it has waited ten minutes
  *   claimed by sync-runner        → starting (no run row) / crawling (running) / pulling files
  *                                   (folded) / finishing (the run failed; the close is next)
  *   claimed by anyone else        → a Claude Code session (the Windows /bb-sync skill)
  *   done / failed / cancelled
  *
  * Pure: nothing here imports React, TanStack Query or Supabase, and nothing throws.
- * The "ago" wording comes in from the caller (`relativeTime`), as `sync-run-state.ts`
- * does, so one rule formats every "N min ago" in the app. `queries.sync.ts` is past
- * the project's size rule, which is why this is its own file.
+ * Every "ago" comes in from the caller (`relativeTime`), as `sync-run-state.ts`
+ * does, so one rule formats every relative time in the app. `queries.sync.ts` is
+ * past the project's size rule, which is why this is its own file.
  */
 
+import { asRecord } from './json-record';
 import type { AgentRequestState } from './queries.sync';
 
 /** What `sync_claim()` writes in `claimed_by` (migration 091). */
@@ -34,6 +36,14 @@ export const RUNNER_CLAIMANT = 'sync-runner';
  * took it: three of the runner's 25-second polls. Live claims land in 11–25 s.
  */
 export const QUEUE_GRACE_MS = 75_000;
+
+/**
+ * How long a requeued request (the runner claimed it once and let it go, a
+ * restart before the run registered) may wait before it reads as unclaimed too.
+ * The requeue keeps `created_at`, so the wait is read from there: a restart takes
+ * well under this, and past it the runner is not coming back on its own.
+ */
+export const REQUEUE_GRACE_MS = 10 * 60_000;
 
 export type SyncPhase =
   | 'idle'
@@ -127,14 +137,13 @@ const MOVING: ReadonlySet<SyncPhase> = new Set<SyncPhase>([
 const FALLBACK: ReadonlySet<SyncPhase> = new Set<SyncPhase>(['unclaimed', 'requeued']);
 
 /**
- * A reason the next sync retries on its own (`sync/src/files.ts`: the files step
- * stops when the Blackboard session dies, "the rest are tried on the next sync").
- * Nothing to prompt for.
+ * The `not_pulled` reasons (`sync/src/files.ts`) that ask nothing of Stack: the
+ * files step stopped because the Blackboard session died ("the rest are tried on
+ * the next sync"), or another writer stored the file first (it has bytes, and its
+ * gap item closes itself). Everything else — a refused fetch, bad bytes, a Storage
+ * refusal, an occupied key — leaves the file without bytes and its Inbox item open.
  */
-const TRANSIENT_REASON = /^session_expired\b/;
-
-const MS_SECOND = 1000;
-const MS_MINUTE = 60 * MS_SECOND;
+const NO_PROMPT_REASON = /^(session_expired\b|already stored by another writer)/;
 
 /** True for a request nobody has finished: the two states the open lookup returns. */
 export function isOpenState(state: AgentRequestState): boolean {
@@ -146,12 +155,6 @@ function sinceMs(iso: string | null, now: number): number {
   if (!iso) return 0;
   const then = Date.parse(iso);
   return Number.isFinite(then) ? Math.max(0, now - then) : 0;
-}
-
-/** "45 s" under two minutes, "3 min" from there: how long a queued request has waited. */
-function elapsedText(ms: number): string {
-  if (ms < 2 * MS_MINUTE) return `${Math.round(ms / MS_SECOND)} s`;
-  return `${Math.floor(ms / MS_MINUTE)} min`;
 }
 
 /** The runner's phase from the run row its claim opened. No row yet, or an unknown status, is starting. */
@@ -171,13 +174,14 @@ function runnerPhase(run: PhaseRun | null | undefined): SyncPhase {
 
 /**
  * A queued row's phase. One the runner claimed before and `sync_requeue_orphans()`
- * put back (a restart before the run registered) is requeued, not unclaimed: the
- * grace is read from `created_at`, which the requeue keeps, so it would read as
- * abandoned at once while the next pass is about to take it.
+ * put back is requeued, not unclaimed, for its longer grace: the wait is read from
+ * `created_at`, which the requeue keeps, so the short grace would call it abandoned
+ * at once while the restarted runner's next pass is about to take it.
  */
 function queuedPhase(request: PhaseRequest, now: number): SyncPhase {
-  if (request.claim_attempts > 0) return 'requeued';
-  return sinceMs(request.created_at, now) > QUEUE_GRACE_MS ? 'unclaimed' : 'queued';
+  const waited = sinceMs(request.created_at, now);
+  if (request.claim_attempts > 0) return waited > REQUEUE_GRACE_MS ? 'unclaimed' : 'requeued';
+  return waited > QUEUE_GRACE_MS ? 'unclaimed' : 'queued';
 }
 
 /** The phase of the open request, or idle with none. */
@@ -208,7 +212,6 @@ export function isMovingPhase(phase: SyncPhase): boolean {
 export function phaseTitle(
   phase: SyncPhase,
   request: PhaseRequest | null | undefined,
-  now: number,
   ago: AgoFormatter,
 ): string {
   switch (phase) {
@@ -218,7 +221,7 @@ export function phaseTitle(
       return 'Requested; the sync container takes queued requests within about a minute';
     case 'unclaimed':
       return (
-        `Nothing has claimed this sync in ${elapsedText(sinceMs(request?.created_at ?? null, now))}. ` +
+        `Nothing has claimed this sync, requested ${ago(request?.created_at ?? null)}. ` +
         'The sync container may be busy or down; press again for the fallback command.'
       );
     case 'requeued':
@@ -253,12 +256,6 @@ export function pressAction(phase: SyncPhase): PressAction {
   return isMovingPhase(phase) ? 'status' : 'file';
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
 /**
  * The one line of a closed request's report: the runner's first `lines` entry,
  * the skill's figures rebuilt into the same sentence, or the error word. Null
@@ -286,7 +283,7 @@ export function closeAnnouncement(request: Pick<PhaseRequest, 'state' | 'result'
 
 /**
  * How many files of a closed request's report need Stack: the runner's
- * `files.not_pulled` entries whose reason is not transient, or the skill's
+ * `files.not_pulled` entries whose reason asks for a hand, or the skill's
  * `files_not_pulled` count (it carries no reasons). 0 for a report without either.
  */
 export function filesNeedingStack(result: unknown): number {
@@ -296,7 +293,7 @@ export function filesNeedingStack(result: unknown): number {
   if (files && Array.isArray(files.not_pulled)) {
     return files.not_pulled.filter((entry) => {
       const row = asRecord(entry);
-      return row !== null && !(typeof row.reason === 'string' && TRANSIENT_REASON.test(row.reason));
+      return row !== null && !(typeof row.reason === 'string' && NO_PROMPT_REASON.test(row.reason));
     }).length;
   }
   return typeof report.files_not_pulled === 'number' && report.files_not_pulled > 0

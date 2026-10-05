@@ -745,8 +745,10 @@ copied `claude --model sonnet "/bb-sync <id>"` and said to run it in Claude Code
   is occuring", the label reads `crawling…` and not `container: crawling`.
 * A queued row nothing has claimed after 75 s (three runner polls of 25 s) reads `waiting on the container…`; only then does a
   second press copy the paste command and show it. The Windows skill stays the fallback (CLAUDE.md), so the command stays reachable.
-  A queued row the runner claimed before (`claim_attempts > 0`: `sync_requeue_orphans()` after a restart) reads `sync requeued…`,
-  never as abandoned, and a press offers the command too. The web now reads `claim_attempts`; 091's column comment ("No web or
+  A queued row the runner claimed before (`claim_attempts > 0`: `sync_requeue_orphans()` after a restart) reads `sync requeued…`
+  for ten minutes from its filing (a restart takes well under that), then `waiting on the container…` like any other; a press
+  offers the command in both. The unclaimed tooltip dates the request ("requested 2 min ago", `relativeTime`) rather than
+  counting seconds. The web now reads `claim_attempts`; 091's column comment ("No web or
   desktop code reads it") is stale from here and the next migration touching the column refreshes it.
 * The tab follows any request it sees open by id, so a close is read (and announced once) after the open lookup stops returning
   it, and a closed request of this tab's never hides a newer open one. A failed read of any of the three queries renders an alert
@@ -763,12 +765,20 @@ copied `claude --model sonnet "/bb-sync <id>"` and said to run it in Claude Code
 * Code: `web/src/lib/sync-request-phase.ts` (pure: phase, labels, titles, press action, headline), `web/src/lib/queries.sync-run.ts`
   (the run row by `run_id`, polled every 10 s while the request is claimed; the id is checked as a uuid before it reaches a filter),
   `web/src/lib/use-now.ts` (the clock as state, so render stays pure under the React compiler lint); `agent_requests` reads carry
-  `run_id` and `claim_attempts`. Gates: web vitest 135 files / 2394 tests, `tsc` 0, `eslint` clean; `/code-review main high`:
+  `run_id` and `claim_attempts`. Gates: web vitest 135 files / 2402 tests, `tsc` 0, `eslint` clean; `/code-review main high`, round 1:
   12 findings, 11 applied in round 2 (two correctness: a closed request of this tab's could hide a newer open one and let a press
   file beside it; the close of a sync watched without a press was never announced), one already met (STATUS and DECISIONS landed
   in the PR's later commits). Accepted, not changed: a second queued row behind a claim the runner is resuming after a restart
   would read `waiting on the container…` after the grace; the tooltip asks whether the container is busy or down rather than
   asserting it is dead, and a fallback session's own claim is first-wins against the runner's, so no second crawl starts.
+  Round 3 (on the arrows, labels and prompt commit): 13 findings, 12 applied — the e2e walk finds the button by `data-testid`
+  (its title follows the request now); the clock is an external store (`use-now.ts`, `useSyncExternalStore`) re-read on
+  subscribe, ticking 5 s while the request is queued and 60 s once it has closed, so the done tooltip keeps counting and a
+  row found on focus is dated right; the alert and the toast stack instead of overlapping; a disabled run query's cached
+  error is not shown; a requeued row escalates to unclaimed after ten minutes; `already stored by another writer` asks
+  nothing; a failed press no longer wipes the prompt; reduced motion stops the arrows; one `asRecord` (`json-record.ts`)
+  serves three modules; the unclaimed tooltip dates the request through `relativeTime`. Declined: splitting
+  `queries.sync.ts` (1,400 lines) is its own refactor PR; this PR adds six lines to it.
   `/security-review` not run: no auth, secret or endpoint touched (one owner-scoped `sync_runs` read, the id checked as a uuid).
 
 **Found the same day, not fixed here:** sync 1297 (request 1856, 2026-10-05 18:07Z) pulled 3 files and left file 2489 unpulled

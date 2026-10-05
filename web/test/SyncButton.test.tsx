@@ -8,10 +8,10 @@
  * the Inbox.
  *
  * The query hooks are stubbed (the real `syncCommand`, `copyToClipboard`,
- * `relativeTime` and the phase helpers are kept), so no query client and no
- * network are involved. The stubbed `useAgentRequest` honours the id it is asked
- * for, the way the real hook does, so the tests that follow a request by id mean
- * what they say.
+ * `relativeTime`, `useNow` and the phase helpers are kept), so no query client
+ * and no network are involved. The stubbed `useAgentRequest` honours the id it is
+ * asked for, the way the real hook does, so the tests that follow a request by
+ * id mean what they say.
  */
 
 import { act, render, screen, waitFor } from '@testing-library/react';
@@ -104,6 +104,12 @@ function closeAfterWatching(result: Record<string, unknown>, state = 'done') {
   return view;
 }
 
+const STORAGE_REFUSED = {
+  error: null,
+  lines: ['Files: 3 pulled, 1 not pulled', 'Not pulled: file 2489 (storage 400: InvalidKey)'],
+  files: { pulled: 3, not_pulled: [{ id: '2489', reason: 'storage 400: InvalidKey' }] },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
@@ -145,12 +151,11 @@ describe('Sync button — a press queues for the container', () => {
     expect(screen.queryByText(/bb-sync/)).not.toBeInTheDocument();
   });
 
-  it('names the container in the idle tooltip, not a Claude session', () => {
+  it('names the container in the idle tooltip and carries a stable test id', () => {
     render(<SyncButton />);
-    expect(screen.getByRole('button', { name: 'Sync' })).toHaveAttribute(
-      'title',
-      'Ask the sync container to crawl Blackboard',
-    );
+    const button = screen.getByRole('button', { name: 'Sync' });
+    expect(button).toHaveAttribute('title', 'Ask the sync container to crawl Blackboard');
+    expect(button).toHaveAttribute('data-testid', 'sync-button');
   });
 
   it('surfaces a failed insert rather than pretending a sync was requested', () => {
@@ -166,6 +171,32 @@ describe('Sync button — a press queues for the container', () => {
     expect(screen.getByRole('alert').textContent).toBe(
       "Could not read the sync's state: permission denied for table agent_requests",
     );
+  });
+
+  it('shows the alert and the toast together, the alert first', async () => {
+    openState.data = row();
+    openState.error = new Error('timeout');
+    render(<SyncButton />);
+
+    screen.getByRole('button', { name: 'sync requested' }).click();
+
+    const status = await screen.findByRole('status');
+    const alert = screen.getByRole('alert');
+    expect(alert.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not show a run read error for a claim that is not the runner's", () => {
+    runState.error = new Error('stale run read');
+    openState.data = row({ state: 'claimed', claimed_by: 'bb-sync session', run_id: RUN_ID });
+    render(<SyncButton />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it("shows a run read error for the runner's claim", () => {
+    runState.error = new Error('run read failed');
+    openState.data = runnerClaim();
+    render(<SyncButton />);
+    expect(screen.getByRole('alert').textContent).toBe("Could not read the sync's state: run read failed");
   });
 });
 
@@ -218,6 +249,18 @@ describe('Sync button — the label follows the runner', () => {
     openState.data = row({ claim_attempts: 1 });
     render(<SyncButton />);
     expect(screen.getByRole('button', { name: 'sync requeued…' })).toBeInTheDocument();
+  });
+
+  it('a queued request turns to waiting at the grace without a refetch', () => {
+    openState.data = row({ created_at: new Date(NOW.getTime() - 72_000).toISOString() });
+    render(<SyncButton />);
+    expect(screen.getByRole('button', { name: 'sync requested' })).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(screen.getByRole('button', { name: 'waiting on the container…' })).toBeInTheDocument();
   });
 });
 
@@ -307,13 +350,13 @@ describe('Sync button — following a request by id', () => {
 describe('Sync button — the fallback when nothing claims the request', () => {
   const stale = () => row({ created_at: new Date(NOW.getTime() - 90_000).toISOString() });
 
-  it('says it is waiting on the container after the grace', () => {
+  it('says it is waiting on the container after the grace, dating the request', () => {
     openState.data = stale();
     render(<SyncButton />);
     const button = screen.getByRole('button', { name: 'waiting on the container…' });
     expect(button).toHaveAttribute(
       'title',
-      'Nothing has claimed this sync in 90 s. The sync container may be busy or down; press again for the fallback command.',
+      'Nothing has claimed this sync, requested 2 min ago. The sync container may be busy or down; press again for the fallback command.',
     );
   });
 
@@ -410,17 +453,13 @@ describe('Sync button — the close', () => {
     expect(await screen.findByText('Sync cancelled')).toBeInTheDocument();
   });
 
-  it('dates the closed request in the tooltip', () => {
-    openState.data = row({ id: 7 });
-    const view = render(<SyncButton />);
+  it('keeps dating the closed request in the tooltip as time passes', () => {
+    closeAfterWatching({ lines: ['Files: 1 pulled'] });
+    expect(screen.getByRole('button', { name: 'sync done' })).toHaveAttribute('title', 'Sync done just now');
 
-    openState.data = null;
-    requestState.data = row({
-      id: 7,
-      state: 'done',
-      finished_at: new Date(NOW.getTime() - 2 * 60_000).toISOString(),
+    act(() => {
+      vi.advanceTimersByTime(2 * 60_000);
     });
-    view.rerender(<SyncButton />);
 
     expect(screen.getByRole('button', { name: 'sync done' })).toHaveAttribute('title', 'Sync done 2 min ago');
   });
@@ -434,12 +473,6 @@ describe('Sync button — the close', () => {
 });
 
 describe('Sync button — a file that needs Stack after the close', () => {
-  const STORAGE_REFUSED = {
-    error: null,
-    lines: ['Files: 3 pulled, 1 not pulled', 'Not pulled: file 2489 (storage 400: InvalidKey)'],
-    files: { pulled: 3, not_pulled: [{ id: '2489', reason: 'storage 400: InvalidKey' }] },
-  };
-
   it('prompts with the way to the Inbox and stays up past the usual toast time', async () => {
     closeAfterWatching(STORAGE_REFUSED);
 
@@ -466,6 +499,21 @@ describe('Sync button — a file that needs Stack after the close', () => {
 
     await waitFor(() => expect(screen.queryByText(/One file could not be pulled/)).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'sync done' })).toBeInTheDocument();
+  });
+
+  it('survives a press whose insert fails: the error shows above it', async () => {
+    const view = closeAfterWatching(STORAGE_REFUSED);
+    expect(await screen.findByText(/One file could not be pulled/)).toBeInTheDocument();
+    mutateAsync.mockRejectedValue(new Error('network down'));
+
+    screen.getByRole('button', { name: 'sync done' }).click();
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    createState.isError = true;
+    createState.error = new Error('network down');
+    view.rerender(<SyncButton />);
+
+    expect(screen.getByRole('alert').textContent).toBe('Could not file the request: network down');
+    expect(screen.getByText(/One file could not be pulled/)).toBeInTheDocument();
   });
 
   it('does not prompt for a file the next sync retries on its own', async () => {

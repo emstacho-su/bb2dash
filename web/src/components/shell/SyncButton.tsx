@@ -60,11 +60,11 @@ import styles from './SyncButton.module.css';
 /** How long a toast with nothing to act on stays up. */
 const TOAST_MS = 15000;
 
-/**
- * How often the clock is re-read while a request is open, so a queued row
- * nothing claims turns to "waiting on the container…" within this of the grace.
- */
-const CLOCK_TICK_MS = 5000;
+/** The clock while the request is queued: the one time-driven edge is queued → unclaimed at the grace. */
+const QUEUE_TICK_MS = 5000;
+
+/** The clock once the request has closed: the tooltip's "Sync done N min ago" keeps up. */
+const CLOSED_TICK_MS = 60_000;
 
 type Toast =
   | { kind: 'note'; text: string }
@@ -74,6 +74,17 @@ type Toast =
 /** A close with a prompt waits for Stack; every other toast goes on its own. */
 function staysUp(toast: Toast): boolean {
   return toast.kind === 'close' && toast.prompt !== null;
+}
+
+/**
+ * How often the clock is re-read for the request shown: while it is queued, once
+ * it has closed, and never while the runner or a session holds it (no phase then
+ * depends on the time) or nothing is open.
+ */
+function clockTick(request: AgentRequest | null): number | null {
+  if (!request) return null;
+  if (request.state === 'queued') return QUEUE_TICK_MS;
+  return isOpenState(request.state) ? null : CLOSED_TICK_MS;
 }
 
 /**
@@ -89,7 +100,7 @@ function watchedRequest(
   return followed ?? open ?? null;
 }
 
-/** The first read error among the three queries, for the alert line. */
+/** The first read error among the queries still asked, for the alert line. */
 function firstError(...errors: readonly (Error | null | undefined)[]): Error | null {
   return errors.find((error): error is Error => error instanceof Error) ?? null;
 }
@@ -108,17 +119,15 @@ export function SyncButton() {
   if (openId !== null && openId !== followedId) setFollowedId(openId);
   const followed = useAgentRequest(followedId);
   const request = watchedRequest(followed.data, open.data);
-  // The run row says where the container is; a session's claim never reads it.
-  const run = useSyncRun(
-    request?.run_id ?? null,
-    request?.state === 'claimed' && request.claimed_by === RUNNER_CLAIMANT,
-  );
-  // The clock ticks only while the request is open; a closed one keeps its last reading.
-  const now = useNow(request && isOpenState(request.state) ? CLOCK_TICK_MS : null);
+  // The run row says where the container is; a session's claim never reads it,
+  // and a disabled query's cached error is not this request's news.
+  const runAsked = request?.state === 'claimed' && request.claimed_by === RUNNER_CLAIMANT;
+  const run = useSyncRun(request?.run_id ?? null, runAsked);
+  const now = useNow(clockTick(request));
   const phase: SyncPhase = syncPhase(request, run.data, now);
   const ago = (iso: string | null) => relativeTime(iso, new Date(now));
-  const title = phaseTitle(phase, request, now, ago);
-  const readError = firstError(followed.error, open.error, run.error);
+  const title = phaseTitle(phase, request, ago);
+  const readError = firstError(followed.error, open.error, runAsked ? run.error : null);
 
   // A toast with nothing to act on is transient; the request state in the label is not.
   useEffect(() => {
@@ -148,8 +157,8 @@ export function SyncButton() {
       setFollowedId(row.id);
       setToast({ kind: 'note', text: SYNC_COPY.requested });
     } catch {
-      // The mutation's own error is rendered below; nothing to swallow here.
-      setToast(null);
+      // The mutation's own error is rendered below the button; a prompt already
+      // up (a file that needs Stack) stays, since nothing here replaces it.
     }
   }
 
@@ -174,6 +183,11 @@ export function SyncButton() {
 
   const busy = create.isPending;
   const label = busy ? 'requesting…' : PHASE_LABEL[phase];
+  const alert = create.isError
+    ? `Could not file the request: ${create.error.message}`
+    : readError
+      ? `Could not read the sync's state: ${readError.message}`
+      : null;
 
   return (
     <span className={styles.wrap}>
@@ -183,48 +197,47 @@ export function SyncButton() {
         onClick={() => void press()}
         disabled={busy}
         title={title}
+        data-testid="sync-button"
         data-live={isLivePhase(phase) ? '' : undefined}
       >
         <SyncIcon />
         {label}
       </button>
 
-      {create.isError && (
-        <span className={styles.toastError} role="alert">
-          Could not file the request: {create.error.message}
-        </span>
-      )}
-
-      {!create.isError && readError && (
-        <span className={styles.toastError} role="alert">
-          Could not read the sync&apos;s state: {readError.message}
-        </span>
-      )}
-
-      {toast && (
-        <span className={styles.toast} role="status">
-          {toast.kind === 'fallback' ? (
-            <>
-              <span className={styles.toastLine}>
-                {toast.copied ? SYNC_COPY.fallbackCopied : SYNC_COPY.fallbackCopy}
-              </span>
-              <code className={styles.command}>{toast.command}</code>
-            </>
-          ) : (
-            <span className={styles.toastLine}>{toast.text}</span>
+      {(alert !== null || toast !== null) && (
+        <span className={styles.stack}>
+          {alert !== null && (
+            <span className={styles.toastError} role="alert">
+              {alert}
+            </span>
           )}
-          {toast.kind === 'close' && toast.prompt !== null && (
-            <>
-              <span className={styles.prompt}>{toast.prompt}</span>
-              <span className={styles.toastActions}>
-                <Link className={styles.toastLink} href="/inbox">
-                  {SYNC_COPY.openInbox}
-                </Link>
-                <button type="button" className={styles.toastDismiss} onClick={() => setToast(null)}>
-                  {SYNC_COPY.dismiss}
-                </button>
-              </span>
-            </>
+
+          {toast && (
+            <span className={styles.toast} role="status">
+              {toast.kind === 'fallback' ? (
+                <>
+                  <span className={styles.toastLine}>
+                    {toast.copied ? SYNC_COPY.fallbackCopied : SYNC_COPY.fallbackCopy}
+                  </span>
+                  <code className={styles.command}>{toast.command}</code>
+                </>
+              ) : (
+                <span className={styles.toastLine}>{toast.text}</span>
+              )}
+              {toast.kind === 'close' && toast.prompt !== null && (
+                <>
+                  <span className={styles.prompt}>{toast.prompt}</span>
+                  <span className={styles.toastActions}>
+                    <Link className={styles.toastLink} href="/inbox">
+                      {SYNC_COPY.openInbox}
+                    </Link>
+                    <button type="button" className={styles.toastDismiss} onClick={() => setToast(null)}>
+                      {SYNC_COPY.dismiss}
+                    </button>
+                  </span>
+                </>
+              )}
+            </span>
           )}
         </span>
       )}
