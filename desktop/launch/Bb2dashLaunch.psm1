@@ -5,7 +5,8 @@
   access in here -- logon-build.ps1 owns the side effects, this module owns the
   logic, and Bb2dashLaunch.Tests.ps1 pins the logic. One exception, at the end:
   the Update now helper (2026-09-30), whose junction swap is tested against a
-  real junction and whose process and task calls are injected scriptblocks.
+  real junction and whose process and task calls are injected scriptblocks, and
+  its -Detach hand-off (2026-10-04), whose Start-Process is injected the same way.
 
 .DESCRIPTION
   Two decisions, in the order the script runs them:
@@ -578,4 +579,89 @@ function Get-BuildsToKeep {
         Where-Object { $_ -match $script:ShaPattern } | Select-Object -Unique)
 }
 
-Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Get-BuildCheckRecord, ConvertTo-BuildCheckJson, Get-DockerWaitSeconds, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep
+# ---------------------------------------------------------------- the hand-off (2026-10-04)
+#
+# Windows PowerShell 5.1 started detached (DETACHED_PROCESS, no console) exits 0 without
+# running its script, and a plain child of the app dies with it (libuv's kill-on-close job).
+# So the app runs `update-now.ps1 -Detach` as a plain hidden child, and that stage starts the
+# real helper with Start-Process: libuv's job allows silent breakaway, so the helper started
+# from inside it is outside the job and outlives the app.
+
+<#
+  One element for Start-Process -ArgumentList. PowerShell 5.1 joins the list with spaces and
+  never quotes, so an element with whitespace is quoted here, with the backslashes before the
+  closing quote doubled so they stay literal. A double quote inside an element is refused.
+#>
+function ConvertTo-ProcessArgument {
+    param([AllowEmptyString()][string] $Value)
+    if ($Value.Contains('"')) { throw "an argument may not contain a double quote: $Value" }
+    if ($Value -ne '' -and $Value -notmatch '\s') { return $Value }
+    return '"' + ($Value -replace '(\\+)$', '$1$1') + '"'
+}
+
+<#
+.SYNOPSIS
+  The argument list for update-now.ps1's second stage: the same script, hidden, without
+  -Detach, with the same -Tree, -StateDir, -AppTaskName and -TimeoutSeconds.
+
+.OUTPUTS
+  [string[]], each element ready for Start-Process (see ConvertTo-ProcessArgument).
+#>
+function New-HelperHandoffArgumentList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $ScriptPath,
+        [Parameter(Mandatory)] [AllowEmptyString()][string] $Tree,
+        [Parameter(Mandatory)] [string] $StateDir,
+        [Parameter(Mandatory)] [string] $AppTaskName,
+        [Parameter(Mandatory)] [int] $TimeoutSeconds
+    )
+    if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
+    # PowerShell's own options first: everything after -File is a parameter of the script.
+    $arguments = @(
+        '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass',
+        '-File', $ScriptPath,
+        '-Tree', $Tree, '-StateDir', $StateDir, '-AppTaskName', $AppTaskName,
+        '-TimeoutSeconds', [string] $TimeoutSeconds
+    )
+    return [string[]] @($arguments | ForEach-Object { ConvertTo-ProcessArgument $_ })
+}
+
+<#
+.SYNOPSIS
+  update-now.ps1 -Detach: start the real helper through -StartProcess (called as
+  & $StartProcess <powershell.exe> <argument list> <working folder>, returning the process)
+  and log its pid. A start that throws or returns no process is logged at ERROR and
+  reported in the result, never swallowed.
+
+.OUTPUTS
+  [pscustomobject] Ok, ProcessId, Reason.
+#>
+function Invoke-HelperHandoff {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $PowerShellPath,
+        [Parameter(Mandatory)] [string] $ScriptPath,
+        [Parameter(Mandatory)] [AllowEmptyString()][string] $Tree,
+        [Parameter(Mandatory)] [string] $StateDir,
+        [Parameter(Mandatory)] [string] $AppTaskName,
+        [Parameter(Mandatory)] [int] $TimeoutSeconds,
+        [Parameter(Mandatory)] [scriptblock] $StartProcess,
+        [Parameter(Mandatory)] [scriptblock] $Log
+    )
+    try {
+        $arguments = New-HelperHandoffArgumentList -ScriptPath $ScriptPath -Tree $Tree -StateDir $StateDir `
+            -AppTaskName $AppTaskName -TimeoutSeconds $TimeoutSeconds
+        $process = & $StartProcess $PowerShellPath $arguments $StateDir
+        if ($null -eq $process) { throw 'Start-Process returned no process' }
+        $reason = "update to $Tree handed off to the helper (pid $($process.Id)); this stage exits"
+        & $Log 'INFO' $reason
+        return [pscustomobject]@{ Ok = $true; ProcessId = [int] $process.Id; Reason = $reason }
+    } catch {
+        $reason = "could not hand off to the helper: $($_.Exception.Message)"
+        & $Log 'ERROR' $reason
+        return [pscustomobject]@{ Ok = $false; ProcessId = 0; Reason = $reason }
+    }
+}
+
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Get-BuildCheckRecord, ConvertTo-BuildCheckJson, Get-DockerWaitSeconds, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep, New-HelperHandoffArgumentList, Invoke-HelperHandoff

@@ -4,8 +4,17 @@
   and start the app again.
 
 .DESCRIPTION
-  The app spawns this, detached and hidden, when Stack presses "Update now", and then
-  quits. It runs from the installed copy under %LOCALAPPDATA%\bb2dash-launch\launch.
+  The app runs this when Stack presses "Update now", in two stages (2026-10-04):
+
+    Stage 1, -Detach: the app runs it as a plain hidden child and waits for it to exit.
+       It does not swap. It starts a second run of itself, without -Detach, through
+       Start-Process (Invoke-HelperHandoff), logs that run's pid and exits 0, or 6 when
+       the start failed. The app cannot start the helper detached itself: Windows
+       PowerShell 5.1 with no console exits 0 without running its script. And a plain
+       child of the app dies with the app, while a process Start-Process launches from
+       that child does not.
+    Stage 2, the helper itself: it writes the swap-pending marker, which the app waits
+       for before it quits, and then:
 
     1. Wait up to -TimeoutSeconds for every bb2dash process to exit (Windows locks a
        running exe's files, which is why the builder never swaps while the app runs).
@@ -14,19 +23,21 @@
     3. Start the Bb2dash-App task (Start-Process on current\bb2dash.exe when the task is
        not registered).
 
-  If anything fails, the old build stays current and the app is started on it. Every
-  step is logged to logs\update-now.log. The logic is Invoke-UpdateSwap in
-  Bb2dashLaunch.psm1, pinned by Bb2dashLaunch.Tests.ps1.
+  It runs from the installed copy under %LOCALAPPDATA%\bb2dash-launch\launch. If anything
+  fails, the old build stays current and the app is started on it. Every step of both
+  stages is logged to logs\update-now.log. The logic is Invoke-UpdateSwap and
+  Invoke-HelperHandoff in Bb2dashLaunch.psm1, pinned by Bb2dashLaunch.Tests.ps1.
 
 .EXAMPLE
-  powershell -NoProfile -File update-now.ps1 -Tree 31215cf503f565cd7113d01b14266e4b2ce1000d
+  powershell -NoProfile -File update-now.ps1 -Tree 31215cf503f565cd7113d01b14266e4b2ce1000d -Detach
 #>
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Mandatory)] [string] $Tree,
     [string] $StateDir = (Join-Path $env:LOCALAPPDATA 'bb2dash-launch'),
     [string] $AppTaskName = 'Bb2dash-App',
-    [int] $TimeoutSeconds = 60
+    [int] $TimeoutSeconds = 60,
+    [switch] $Detach
 )
 
 Set-StrictMode -Version Latest
@@ -36,6 +47,7 @@ $APP_PROCESS_NAME = 'bb2dash'
 $LOG_ROLL_BYTES = 512KB
 $EXIT_OK = 0
 $EXIT_FAILED = 5
+$EXIT_HANDOFF_FAILED = 6
 
 $LogDir = Join-Path $StateDir 'logs'
 $LogFile = Join-Path $LogDir 'update-now.log'
@@ -51,6 +63,30 @@ function Write-UpdateLog {
     Write-Verbose $line
 }
 
+$log = { param($level, $message) Write-UpdateLog $level $message }
+
+if ($Detach) {
+    # Stage 1: hand off and exit. No fallback here: the app is still running, and when this
+    # exits non-zero it stays on its build and says the helper could not start.
+    try {
+        Import-Module (Join-Path $PSScriptRoot 'Bb2dashLaunch.psm1') -Force
+        # PS 5.1 joins -ArgumentList with spaces and never quotes; the list arrives quoted.
+        $startProcess = {
+            param($filePath, $argumentList, $workingDirectory)
+            Start-Process -FilePath $filePath -ArgumentList ($argumentList -join ' ') -WindowStyle Hidden `
+                -WorkingDirectory $workingDirectory -PassThru
+        }
+        $handoff = Invoke-HelperHandoff -PowerShellPath (Get-Process -Id $PID).Path -ScriptPath $PSCommandPath `
+            -Tree $Tree -StateDir $StateDir -AppTaskName $AppTaskName -TimeoutSeconds $TimeoutSeconds `
+            -StartProcess $startProcess -Log $log
+        if ($handoff.Ok) { exit $EXIT_OK } else { exit $EXIT_HANDOFF_FAILED }
+    } catch {
+        $failure = $_.Exception.Message
+        try { Write-UpdateLog 'ERROR' "update-now hand-off failed: $failure" } catch { [Console]::Error.WriteLine("update-now hand-off failed: $failure") }
+        exit $EXIT_HANDOFF_FAILED
+    }
+}
+
 $testAppRunning = { $null -ne (Get-Process -Name $APP_PROCESS_NAME -ErrorAction SilentlyContinue) }
 $startApp = {
     param($exe)
@@ -61,7 +97,6 @@ $startApp = {
         Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) | Out-Null
     }
 }
-$log = { param($level, $message) Write-UpdateLog $level $message }
 
 try {
     Import-Module (Join-Path $PSScriptRoot 'Bb2dashLaunch.psm1') -Force

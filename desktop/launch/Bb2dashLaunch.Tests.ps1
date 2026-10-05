@@ -542,3 +542,112 @@ Describe 'Invoke-UpdateFallback (update-now.ps1 catch path)' {
         $script:r.Launched | Should Be $false
     }
 }
+
+# ---------------------------------------------------------------- the hand-off (2026-10-04)
+#
+# Windows PowerShell 5.1 started detached (no console) exits 0 without running its script,
+# so the app runs `update-now.ps1 -Detach` as a plain hidden child and that stage starts the
+# real helper with Start-Process (W-71). The argv is pure; the start is an injected scriptblock.
+
+$HANDOFF_SCRIPT = 'C:\Users\s\AppData\Local\bb2dash-launch\launch\update-now.ps1'
+$HANDOFF_STATE = 'C:\Users\s\AppData\Local\bb2dash-launch'
+$HANDOFF_POWERSHELL = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+
+function New-TestHandoffArguments {
+    param([hashtable] $Overrides = @{})
+    $inputs = @{ ScriptPath = $HANDOFF_SCRIPT; Tree = $SHA_B; StateDir = $HANDOFF_STATE; AppTaskName = 'Bb2dash-App'; TimeoutSeconds = 60 }
+    foreach ($k in $Overrides.Keys) { $inputs[$k] = $Overrides[$k] }
+    return New-HelperHandoffArgumentList @inputs
+}
+
+function Get-ArgumentAfter {
+    param([string[]] $Arguments, [string] $Name)
+    $i = [array]::IndexOf($Arguments, $Name)
+    if ($i -lt 0 -or $i -ge ($Arguments.Count - 1)) { return $null }
+    return $Arguments[$i + 1]
+}
+
+function Invoke-TestHandoff {
+    param([scriptblock] $StartProcess)
+    $script:lines = @()
+    return Invoke-HelperHandoff -PowerShellPath $HANDOFF_POWERSHELL -ScriptPath $HANDOFF_SCRIPT -Tree $SHA_B `
+        -StateDir $HANDOFF_STATE -AppTaskName 'Bb2dash-App' -TimeoutSeconds 60 -StartProcess $StartProcess `
+        -Log { param($level, $message) $script:lines += "$level $message" }
+}
+
+Describe 'New-HelperHandoffArgumentList (update-now.ps1 -Detach)' {
+
+    It 'runs the same script, hidden, and never with -Detach again' {
+        $a = New-TestHandoffArguments
+        ($a -contains '-Detach') | Should Be $false
+        (Get-ArgumentAfter $a '-WindowStyle') | Should Be 'Hidden'
+        (Get-ArgumentAfter $a '-File') | Should Be $HANDOFF_SCRIPT
+        ($a -contains '-NoProfile') | Should Be $true
+        ($a -contains '-NonInteractive') | Should Be $true
+    }
+
+    It 'puts every PowerShell option before -File (what follows -File goes to the script)' {
+        $a = New-TestHandoffArguments
+        $file = [array]::IndexOf($a, '-File')
+        foreach ($option in @('-NoProfile', '-NonInteractive', '-WindowStyle', '-ExecutionPolicy')) {
+            [array]::IndexOf($a, $option) | Should BeLessThan $file
+        }
+    }
+
+    It 'carries the tree, the state folder, the app task and the timeout' {
+        $a = New-TestHandoffArguments (@{ AppTaskName = 'Bb2dash-NoSuchTask'; TimeoutSeconds = 7 })
+        (Get-ArgumentAfter $a '-Tree') | Should Be $SHA_B
+        (Get-ArgumentAfter $a '-StateDir') | Should Be $HANDOFF_STATE
+        (Get-ArgumentAfter $a '-AppTaskName') | Should Be 'Bb2dash-NoSuchTask'
+        (Get-ArgumentAfter $a '-TimeoutSeconds') | Should Be '7'
+    }
+
+    It 'quotes an element with a space, because Start-Process joins the list unquoted' {
+        $a = New-TestHandoffArguments (@{ StateDir = 'C:\Users\s\OneDrive - Syracuse University\launch' })
+        (Get-ArgumentAfter $a '-StateDir') | Should Be '"C:\Users\s\OneDrive - Syracuse University\launch"'
+        $s = New-TestHandoffArguments (@{ ScriptPath = 'C:\a b\update-now.ps1' })
+        (Get-ArgumentAfter $s '-File') | Should Be '"C:\a b\update-now.ps1"'
+    }
+
+    It 'keeps a trailing backslash literal inside the quotes' {
+        $a = New-TestHandoffArguments (@{ StateDir = 'C:\a b\' })
+        (Get-ArgumentAfter $a '-StateDir') | Should Be '"C:\a b\\"'
+    }
+
+    It 'refuses a malformed tree and an element with a double quote' {
+        { New-TestHandoffArguments (@{ Tree = '..\evil' }) } | Should Throw
+        { New-TestHandoffArguments (@{ StateDir = 'C:\a" -Evil "b' }) } | Should Throw
+    }
+}
+
+Describe 'Invoke-HelperHandoff' {
+
+    It 'starts PowerShell once with the hand-off list, in the state folder, and logs the pid' {
+        $script:calls = @()
+        $r = Invoke-TestHandoff -StartProcess {
+            param($filePath, $argumentList, $workingDirectory)
+            $script:calls += , @($filePath, $argumentList, $workingDirectory)
+            return [pscustomobject]@{ Id = 4242 }
+        }
+        $r.Ok | Should Be $true
+        $r.ProcessId | Should Be 4242
+        $script:calls.Count | Should Be 1
+        $script:calls[0][0] | Should Be $HANDOFF_POWERSHELL
+        ($script:calls[0][1] -join ' ') | Should Be ((New-TestHandoffArguments) -join ' ')
+        $script:calls[0][2] | Should Be $HANDOFF_STATE
+        ($script:lines -join "`n") | Should Match 'INFO .*pid 4242'
+    }
+
+    It 'reports a start that throws, at ERROR, instead of swallowing it' {
+        $r = Invoke-TestHandoff -StartProcess { param($f, $a, $w) throw 'access denied' }
+        $r.Ok | Should Be $false
+        $r.Reason | Should Match 'access denied'
+        ($script:lines -join "`n") | Should Match 'ERROR .*access denied'
+    }
+
+    It 'counts a start that returns no process as a failure' {
+        $r = Invoke-TestHandoff -StartProcess { param($f, $a, $w) $null }
+        $r.Ok | Should Be $false
+        ($script:lines -join "`n") | Should Match 'ERROR'
+    }
+}
