@@ -415,6 +415,8 @@ async function waitForSwapMarker(
   for (;;) {
     const verdict = judgeSwapMarker(io.readMarker(markerPath), before, tree);
     if (verdict.kind === 'started') return;
+    // Second line of defence: the helper itself refuses first, while a fresh marker names
+    // another build (Invoke-UpdateSwap); this catches one written after the press.
     if (verdict.kind === 'other-tree') {
       throw new Error(`another update is running: ${PENDING_SWAP_FILE} names build ${verdict.tree}, not ${tree}`);
     }

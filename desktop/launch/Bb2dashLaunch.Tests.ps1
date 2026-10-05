@@ -479,6 +479,52 @@ Describe 'Invoke-UpdateSwap and the builder mutex' {
     }
 }
 
+Describe 'Invoke-UpdateSwap and a pending swap for another build (R2-1)' {
+
+    function Set-Marker {
+        param([pscustomobject] $Fixture, [string] $Tree, [int] $AgeSeconds = 0)
+        $path = Join-Path $Fixture.StateDir 'swap-pending'
+        [IO.File]::WriteAllText($path, $Tree)
+        if ($AgeSeconds -gt 0) { (Get-Item $path).LastWriteTime = (Get-Date).AddSeconds(-$AgeSeconds) }
+        return $path
+    }
+
+    It 'refuses while a fresh marker names another build: nothing written, no mutex, nothing started' {
+        $f = New-SwapFixture
+        $other = 'c' * 40
+        $marker = Set-Marker -Fixture $f -Tree $other
+        $before = (Get-Item $marker).LastWriteTimeUtc
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $r = Invoke-TestSwap -Fixture $f -MutexName $name
+        $r.Swapped | Should Be $false
+        $r.Launched | Should Be $false
+        $r.Reason | Should Match "another update is in progress for build $other"
+        $script:launched | Should Be 0
+        ($script:lines -join "`n") | Should Match "another update is in progress for build $other"
+        [IO.File]::ReadAllText($marker) | Should Be $other
+        (Get-Item $marker).LastWriteTimeUtc | Should Be $before
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
+        $m = $null
+        [System.Threading.Mutex]::TryOpenExisting($name, [ref] $m) | Should Be $false
+    }
+
+    It 'overwrites a marker for another build older than the wait bounds (a leftover) and swaps' {
+        $f = New-SwapFixture
+        # Invoke-TestSwap waits 1 s for the app and 5 s for the mutex: older than 6 s is a leftover.
+        $null = Set-Marker -Fixture $f -Tree ('c' * 40) -AgeSeconds 3600
+        $r = Invoke-TestSwap -Fixture $f -MutexName ('Local\Bb2dashTest' + [guid]::NewGuid().ToString('N'))
+        $r.Swapped | Should Be $true
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.New
+    }
+
+    It 'proceeds over a fresh marker naming its own build' {
+        $f = New-SwapFixture
+        $null = Set-Marker -Fixture $f -Tree $SHA_B
+        $r = Invoke-TestSwap -Fixture $f -MutexName ('Local\Bb2dashTest' + [guid]::NewGuid().ToString('N'))
+        $r.Swapped | Should Be $true
+    }
+}
+
 Describe 'Get-BuildsToKeep (pruning never deletes a swap target)' {
 
     It 'keeps the new build, the active build and the pending swap target' {

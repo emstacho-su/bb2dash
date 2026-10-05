@@ -10,6 +10,11 @@
  * A marker counts only when it was written after the press: one whose write time is
  * unchanged since before the helper was started is left over from an earlier run that was
  * killed before its cleanup, and says nothing about this one.
+ *
+ * `other-tree` is the second line of defence. The helper refuses first: `Invoke-UpdateSwap`
+ * will not touch a marker naming another build that is younger than its own two waits, so it
+ * writes nothing and exits, and the app then times out waiting. The app only sees `other-tree`
+ * when another helper writes the marker after this press.
  */
 
 import { isTree } from './build-paths';

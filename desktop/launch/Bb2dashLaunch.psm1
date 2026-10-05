@@ -389,7 +389,9 @@ function Set-CurrentBuild {
 .SYNOPSIS
   Update now: wait for the app to exit, repoint `current` at build -Tree, start the app.
   On any failure the old build stays current and the app is started on it; every step
-  is logged through -Log.
+  is logged through -Log. While a live helper for another build holds the marker (younger
+  than -TimeoutSeconds + -LockWaitSeconds), this one refuses first: it writes nothing,
+  takes no mutex and starts nothing.
 
 .OUTPUTS
   [pscustomobject] Swapped, Launched, Reason.
@@ -410,6 +412,15 @@ function Invoke-UpdateSwap {
         [int] $LockWaitSeconds = 120
     )
     if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
+
+    # A live helper for another build owns the marker: refuse before touching it or the mutex.
+    # A live helper's marker is never older than its two waits; anything older is a leftover.
+    $foreign = Get-ForeignPendingSwap -StateDir $StateDir -Tree $Tree -FreshSeconds ($TimeoutSeconds + $LockWaitSeconds)
+    if ($foreign -ne '') {
+        $refusal = "another update is in progress for build ${foreign}: nothing swapped, nothing started"
+        & $Log 'ERROR' $refusal
+        return [pscustomobject]@{ Swapped = $false; Launched = $false; Reason = $refusal }
+    }
 
     # Named before anything waits, so a build that finishes meanwhile keeps this build
     # (Get-BuildsToKeep). Removed when the swap is over, whatever happened.
@@ -444,6 +455,21 @@ function Invoke-UpdateSwap {
         & $Log 'ERROR' "the app could not be started: $($_.Exception.Message)"
     }
     return [pscustomobject]@{ Swapped = $swap.Swapped; Launched = $launched; Reason = $swap.Reason }
+}
+
+<#
+  The build a live Update now for another build is switching to: the marker's tree when it
+  names a different build and was written less than -FreshSeconds ago; '' otherwise (no
+  marker, a malformed one, this build's own, or a leftover older than a live helper's waits).
+#>
+function Get-ForeignPendingSwap {
+    param([string] $StateDir, [string] $Tree, [int] $FreshSeconds)
+    $pending = Read-PendingSwapTree -StateDir $StateDir
+    if ($pending -eq '' -or $pending -eq $Tree) { return '' }
+    $written = (Get-Item -LiteralPath (Join-Path $StateDir $script:PendingSwapFile)).LastWriteTimeUtc
+    $ageSeconds = ([DateTime]::UtcNow - $written).TotalSeconds
+    if ($ageSeconds -lt $FreshSeconds) { return $pending }
+    return ''
 }
 
 <# Take the builder's mutex, waiting up to -Seconds for a running build. True when held. #>
