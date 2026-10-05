@@ -47,6 +47,7 @@ import {
   suggestedDetails,
 } from './inbox-row';
 import { parseSessionChoice, type ChoiceInput } from '@/lib/queries.inboxChoice';
+import { UNDO_OUTCOME, canReopen } from '@/lib/queries.inboxReopen';
 import styles from './InboxCard.module.css';
 
 /** I-2: the sentence under a control — what pressing it actually changes. */
@@ -83,6 +84,10 @@ export interface InboxCardProps {
   onResolve: (input: ResolveInput) => void;
   /** A candidate question's choice (`queries.inboxChoice.ts`). */
   onChoose?: (input: ChoiceInput) => void;
+  /** Undo: an answered, unapplied row back to open (`queries.inboxReopen.ts`). */
+  onReopen?: (id: number) => void;
+  /** While the Apply worker holds the queue: the sentence Undo shows instead, disabled. */
+  undoBlocked?: string | null;
   /** Session id → "Mon, Sep 21 · Requirements"; undefined while it loads. */
   sessionLabels?: ReadonlyMap<number, string>;
 }
@@ -121,6 +126,8 @@ export function InboxCard({
   failure = null,
   onResolve,
   onChoose,
+  onReopen,
+  undoBlocked = null,
   sessionLabels,
 }: InboxCardProps) {
   const titleId = useId();
@@ -241,6 +248,19 @@ export function InboxCard({
             <p className={styles.outcome}>{GAP_ANSWER_OUTCOME}</p>
           )}
           {decision && <p className={styles.decision}>{decision}</p>}
+          {onReopen && canReopen(item) && (
+            <div className={styles.undo}>
+              <button
+                type="button"
+                className={tokens.btnGhost}
+                disabled={pending || undoBlocked !== null}
+                onClick={() => onReopen(item.id)}
+              >
+                Undo
+              </button>
+              <p className={styles.outcome}>{undoBlocked ?? UNDO_OUTCOME}</p>
+            </div>
+          )}
         </>
       ) : (
         <div className={styles.controls}>
@@ -390,7 +410,7 @@ export function InboxCard({
 
       {failure && (
         <p className={styles.problem} role="alert">
-          That answer was not saved: {failureText(failure)}. The controls are still live — try
+          That change was not saved: {failureText(failure)}. The controls are still live — try
           again.
         </p>
       )}
