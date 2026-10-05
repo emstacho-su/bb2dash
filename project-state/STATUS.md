@@ -870,14 +870,9 @@ Remaining advisor items: ~~7 pre-existing mutable `search_path` functions (`set_
   Migration 095 is live; the container pulls the file once its image is rebuilt (`just up` from `bb2dash-stack`,
   never while a sync is open), and the gap item should close itself. Until then every sync reports it under
   `not_pulled`. The web drop zone still uses the raw file name as its Storage key (deferred list).
-* **A file whose name carries a non-ASCII character is never pulled** (found 2026-10-05 on sync 1297 / request 1856: file 2489,
-  GEO.103's week-7 reading "Musk’s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf", Storage
-  `400 InvalidKey` for key `GEO.103.lecture/readings/week-07/Musk’s AI ….pdf`). `storageKeyFor` in `ingest/pull_files.mjs`, shared
-  by the skill and the container runner (`sync/src/files.ts` imports it), is the catalogue's `relpath` with only `#` replaced
-  (`safeBasename` cleans the scratch download name, not the key), and Supabase Storage validates the decoded key against an
-  ASCII word-and-punctuation set, so the curly apostrophe (U+2019) is refused on every sync and the report says "1 not pulled"
-  each time. Fix owed: map the key onto Storage's allowed set in `storageKeyFor` (one PR in `ingest/`,
-  exercised by `sync/`'s tests), then the next sync pulls it.
+* ~~**A file whose name carries a non-ASCII character is never pulled** (found 2026-10-05 on sync 1297 / request 1856: file 2489;
+  `storageKeyFor` replaced only `#`, and Supabase Storage validates the decoded key against an ASCII word-and-punctuation set).~~
+  Fixed by [PR #75](https://github.com/emstacho-su/bb2dash/pull/75) and migration 095; the bullet above carries the rollout.
 * **Phase 19 (2026-10-03): a sync whose data folded but whose session died before closing its request stays
   `claimed`**, so the Sync button keeps reading "syncing…". The 30-minute terminal rule covers only crawls that never
   completed; a cut-off for this case would close a legitimate long file pull. Left for Phase 14's runner and
