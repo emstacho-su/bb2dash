@@ -21,6 +21,7 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
+import { asRecord } from './json-record';
 import {
   assertRowId,
   fieldValueText,
@@ -41,12 +42,6 @@ export interface SessionChoice {
   pickKey: string;
   /** The resolution for "none of these", when the template offers one. */
   none: Record<string, unknown> | null;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 /** `{"session_id": <one of candidates>}` → `session_id`. */

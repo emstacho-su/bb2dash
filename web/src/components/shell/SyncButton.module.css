@@ -40,13 +40,35 @@
   display: block;
 }
 
-/* The toast hangs under the bar, anchored to the button. */
-.toast {
+/* The arrows circle while the sync container works the request (`data-live`). */
+.button[data-live] svg {
+  animation: sync-spin 1.1s linear infinite;
+}
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Reduced motion: the label already names the phase, so the arrows stand still. */
+@media (prefers-reduced-motion: reduce) {
+  .button[data-live] svg {
+    animation: none;
+  }
+}
+
+/* Under the bar, anchored to the button: the alert (if any) above the toast (if any). */
+.stack {
   position: absolute;
   z-index: 30;
   top: 38px;
   right: 0;
   width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.toast {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -60,6 +82,41 @@
   font-size: var(--text-sm);
   color: var(--color-neutral-300);
   line-height: 1.4;
+}
+
+/* The line that asks for Stack's hand: the one thing in the toast that is not a report. */
+.prompt {
+  composes: toastLine;
+  color: var(--color-text);
+}
+
+.toastActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.toastLink {
+  font-size: var(--text-sm);
+  color: var(--color-accent-200);
+  text-decoration: none;
+}
+.toastLink:hover {
+  text-decoration: underline;
+}
+
+.toastDismiss {
+  all: unset;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-500);
+}
+.toastDismiss:hover {
+  color: var(--color-text);
+}
+.toastDismiss:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .command {
@@ -80,8 +137,7 @@
 }
 
 @media (max-width: 720px) {
-  .toast,
-  .toastError {
+  .stack {
     width: min(320px, calc(100vw - 28px));
   }
 }

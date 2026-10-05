@@ -26,6 +26,7 @@ import { useEffect } from 'react';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
+import { asRecord } from './json-record';
 import {
   NO_SYNC_RECORDED,
   lastSyncedClause,
@@ -41,9 +42,16 @@ import {
  * an un-narrowed client until the types are regenerated; every row that comes
  * back is pinned to an interface below. Same pattern as queries.today.ts.
  */
-function untypedClient(): SupabaseClient {
+export function untypedClient(): SupabaseClient {
   return getSupabaseBrowserClient() as unknown as SupabaseClient;
 }
+
+/**
+ * The PostgREST filter that drops a quarantined crawl (`sync_runs.scope =
+ * 'unregistered'`, Phase 19): Activity and the Sync button's run read share it,
+ * so a row one hides the other never adopts.
+ */
+export const NOT_QUARANTINED_FILTER = 'scope.is.null,scope.neq.unregistered';
 
 /* ---------------------------------------------------------------------------
  * Row types (hand-declared from the frozen contract — see header)
@@ -130,6 +138,10 @@ export interface AgentRequest {
   claimed_by: string | null;
   finished_at: string | null;
   sync_run_id: number | null;
+  /** The crawl's uuid, set when the claim registers its run (Phase 19; 091's `sync_register_run`). */
+  run_id: string | null;
+  /** How many times `sync_claim()` took the row (091). Above 0 on a queued row: the runner requeued it. */
+  claim_attempts: number;
   result: Record<string, unknown> | null;
 }
 
@@ -243,6 +255,8 @@ export const syncKeys = {
    * key would each show the other's request as its own.
    */
   openRequest: (kind: AgentRequestKind) => ['agent-request', 'open', kind] as const,
+  /** The run a claimed sync request opened, by its uuid (`queries.sync-run.ts`). */
+  syncRun: (runId: string) => ['sync-run', runId] as const,
   inboxQueueCount: () => ['inbox-queue-count'] as const,
   activity: (limit: number) => ['activity', limit] as const,
 } as const;
@@ -430,12 +444,6 @@ export function buildResolutionPatch(input: ResolveInput, now: Date = new Date()
  * Normalisers (pure — the view and the summary envelope are jsonb, so trust
  * nothing about their inner shape)
  * ------------------------------------------------------------------------ */
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
 
 function asTextOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -1076,7 +1084,7 @@ export function attentionItemsOptions(state?: AttentionState) {
 
 const AGENT_REQUEST_COLUMNS =
   'id, created_at, kind, scope, params, note, state, claimed_at, claimed_by, ' +
-  'finished_at, sync_run_id, result';
+  'finished_at, sync_run_id, run_id, claim_attempts, result';
 
 /** One `agent_requests` row, polled while the Sync button is waiting on it. */
 export function agentRequestOptions(id: number | null) {
@@ -1196,7 +1204,7 @@ export function activityOptions(limit = 8) {
         .from('sync_runs')
         .select('id, ran_at, started_at, finished_at, status, summary, source, scope')
         .neq('source', 'ical')
-        .or('scope.is.null,scope.neq.unregistered')
+        .or(NOT_QUARANTINED_FILTER)
         .order('id', { ascending: false })
         .limit(limit);
       if (error) throw error;
