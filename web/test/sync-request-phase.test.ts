@@ -11,6 +11,8 @@ import {
   QUEUE_GRACE_MS,
   RUNNER_CLAIMANT,
   closeAnnouncement,
+  closePrompt,
+  filesNeedingStack,
   isLivePhase,
   isMovingPhase,
   isOpenState,
@@ -126,15 +128,15 @@ describe('syncPhase — the request row and the run it opened', () => {
 });
 
 describe('PHASE_LABEL — what the button says', () => {
-  it('names the container while the runner works, and Claude Code for a session', () => {
+  it('reads the container phases plainly, and names Claude Code for a session', () => {
     expect(PHASE_LABEL.idle).toBe('Sync');
     expect(PHASE_LABEL.queued).toBe('sync requested');
     expect(PHASE_LABEL.unclaimed).toBe('waiting on the container…');
     expect(PHASE_LABEL.requeued).toBe('sync requeued…');
-    expect(PHASE_LABEL.starting).toBe('container: starting…');
-    expect(PHASE_LABEL.crawling).toBe('container: crawling…');
-    expect(PHASE_LABEL.pulling_files).toBe('container: pulling files…');
-    expect(PHASE_LABEL.finishing).toBe('container: finishing…');
+    expect(PHASE_LABEL.starting).toBe('starting…');
+    expect(PHASE_LABEL.crawling).toBe('crawling…');
+    expect(PHASE_LABEL.pulling_files).toBe('pulling files…');
+    expect(PHASE_LABEL.finishing).toBe('finishing…');
     expect(PHASE_LABEL.session).toBe('Claude Code: syncing…');
     expect(PHASE_LABEL.done).toBe('sync done');
     expect(PHASE_LABEL.failed).toBe('sync failed');
@@ -287,5 +289,62 @@ describe("resultHeadline — the one line of a closed request's report", () => {
     expect(resultHeadline('text')).toBeNull();
     expect(resultHeadline({ lines: [42] })).toBeNull();
     expect(resultHeadline({})).toBeNull();
+  });
+});
+
+describe('filesNeedingStack — the unpulled files the next sync will not retry', () => {
+  it("counts the runner's not_pulled entries", () => {
+    const report = {
+      files: {
+        pulled: 3,
+        not_pulled: [
+          { id: '2489', reason: 'storage 400: InvalidKey' },
+          { id: '2490', reason: 'refused: 403 at the first hop' },
+        ],
+      },
+    };
+    expect(filesNeedingStack(report)).toBe(2);
+  });
+
+  it('leaves out a file the session expiry stopped: the next sync tries it', () => {
+    const report = {
+      files: {
+        pulled: 1,
+        not_pulled: [
+          { id: '1', reason: 'session_expired: login page' },
+          { id: '2', reason: 'storage 409: key already occupied' },
+        ],
+      },
+    };
+    expect(filesNeedingStack(report)).toBe(1);
+  });
+
+  it("takes the skill's count when there are no reasons", () => {
+    expect(filesNeedingStack({ status: 'ok', files_pulled: 1, files_not_pulled: 2 })).toBe(2);
+    expect(filesNeedingStack({ status: 'ok', files_pulled: 1, files_not_pulled: 0 })).toBe(0);
+  });
+
+  it('is 0 for a report it cannot read, and ignores a malformed entry', () => {
+    expect(filesNeedingStack(null)).toBe(0);
+    expect(filesNeedingStack({})).toBe(0);
+    expect(filesNeedingStack({ files: { not_pulled: 'nope' } })).toBe(0);
+    expect(filesNeedingStack({ files: { not_pulled: [42, null] } })).toBe(0);
+  });
+});
+
+describe('closePrompt — the line that asks for a hand', () => {
+  it('is null when every file landed or will be retried', () => {
+    expect(closePrompt({ files: { pulled: 3, not_pulled: [] } })).toBeNull();
+    expect(closePrompt({ files: { not_pulled: [{ id: '1', reason: 'session_expired: dead' }] } })).toBeNull();
+    expect(closePrompt(null)).toBeNull();
+  });
+
+  it('speaks of one file, or of several', () => {
+    expect(closePrompt({ files: { not_pulled: [{ id: '2489', reason: 'storage 400' }] } })).toBe(
+      'One file could not be pulled. Its Inbox item has the Blackboard link; open it and say what should happen.',
+    );
+    expect(closePrompt({ files_pulled: 0, files_not_pulled: 3 })).toBe(
+      '3 files could not be pulled. Their Inbox items have the Blackboard links; open them and say what should happen.',
+    );
   });
 });

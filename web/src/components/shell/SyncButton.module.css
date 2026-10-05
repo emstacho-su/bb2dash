@@ -40,23 +40,18 @@
   display: block;
 }
 
-/* The live mark: the sync container is working on the request right now. */
-.live {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  animation: sync-live 1.2s ease-in-out infinite;
+/* The arrows circle while the sync container works the request (`data-live`). */
+.button[data-live] svg {
+  animation: sync-spin 1.1s linear infinite;
 }
-@keyframes sync-live {
-  50% {
-    opacity: 0.25;
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .live {
-    animation: none;
+  .button[data-live] svg {
+    animation-duration: 3s;
   }
 }
 
@@ -80,6 +75,41 @@
   font-size: var(--text-sm);
   color: var(--color-neutral-300);
   line-height: 1.4;
+}
+
+/* The line that asks for Stack's hand: the one thing in the toast that is not a report. */
+.prompt {
+  composes: toastLine;
+  color: var(--color-text);
+}
+
+.toastActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.toastLink {
+  font-size: var(--text-sm);
+  color: var(--color-accent-200);
+  text-decoration: none;
+}
+.toastLink:hover {
+  text-decoration: underline;
+}
+
+.toastDismiss {
+  all: unset;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-500);
+}
+.toastDismiss:hover {
+  color: var(--color-text);
+}
+.toastDismiss:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .command {

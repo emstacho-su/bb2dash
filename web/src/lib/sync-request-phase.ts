@@ -72,16 +72,19 @@ export type PressAction = 'file' | 'fallback' | 'status';
 /** Formats an ISO instant as "2 min ago"; the caller passes `relativeTime`. */
 export type AgoFormatter = (iso: string | null) => string;
 
-/** What the button says in each phase. */
+/**
+ * What the button says in each phase. The container phases carry no prefix: the
+ * circling arrows say who is working, and the tooltip names the container.
+ */
 export const PHASE_LABEL: Record<SyncPhase, string> = {
   idle: 'Sync',
   queued: 'sync requested',
   unclaimed: 'waiting on the container…',
   requeued: 'sync requeued…',
-  starting: 'container: starting…',
-  crawling: 'container: crawling…',
-  pulling_files: 'container: pulling files…',
-  finishing: 'container: finishing…',
+  starting: 'starting…',
+  crawling: 'crawling…',
+  pulling_files: 'pulling files…',
+  finishing: 'finishing…',
   session: 'Claude Code: syncing…',
   done: 'sync done',
   failed: 'sync failed',
@@ -99,6 +102,8 @@ export const SYNC_COPY = Object.freeze({
     'Nothing has claimed this sync. If the sync container is down, the command is copied — run it in Claude Code with a logged-in Blackboard tab.',
   fallbackCopy:
     'Nothing has claimed this sync. If the sync container is down, copy this and run it in Claude Code with a logged-in Blackboard tab.',
+  openInbox: 'Open the Inbox →',
+  dismiss: 'Dismiss',
 });
 
 /** The phases in which the container is working on the request right now. */
@@ -120,6 +125,13 @@ const MOVING: ReadonlySet<SyncPhase> = new Set<SyncPhase>([
 
 /** The phases in which a press offers the paste command instead of filing or re-showing. */
 const FALLBACK: ReadonlySet<SyncPhase> = new Set<SyncPhase>(['unclaimed', 'requeued']);
+
+/**
+ * A reason the next sync retries on its own (`sync/src/files.ts`: the files step
+ * stops when the Blackboard session dies, "the rest are tried on the next sync").
+ * Nothing to prompt for.
+ */
+const TRANSIENT_REASON = /^session_expired\b/;
 
 const MS_SECOND = 1000;
 const MS_MINUTE = 60 * MS_SECOND;
@@ -182,7 +194,7 @@ export function syncPhase(
   return request.state;
 }
 
-/** True while the container is working on the request: the button shows its live mark. */
+/** True while the container is working on the request: the button's arrows circle. */
 export function isLivePhase(phase: SyncPhase): boolean {
   return LIVE.has(phase);
 }
@@ -270,4 +282,39 @@ export function closeAnnouncement(request: Pick<PhaseRequest, 'state' | 'result'
   const head = `Sync ${request.state}`;
   const line = resultHeadline(request.result);
   return line ? `${head} · ${line}` : head;
+}
+
+/**
+ * How many files of a closed request's report need Stack: the runner's
+ * `files.not_pulled` entries whose reason is not transient, or the skill's
+ * `files_not_pulled` count (it carries no reasons). 0 for a report without either.
+ */
+export function filesNeedingStack(result: unknown): number {
+  const report = asRecord(result);
+  if (!report) return 0;
+  const files = asRecord(report.files);
+  if (files && Array.isArray(files.not_pulled)) {
+    return files.not_pulled.filter((entry) => {
+      const row = asRecord(entry);
+      return row !== null && !(typeof row.reason === 'string' && TRANSIENT_REASON.test(row.reason));
+    }).length;
+  }
+  return typeof report.files_not_pulled === 'number' && report.files_not_pulled > 0
+    ? report.files_not_pulled
+    : 0;
+}
+
+/**
+ * The prompt under a close that left files unpulled, or null when none needs
+ * Stack. The fold has already raised a `data_gap` Inbox item for each file
+ * without bytes (`stage_gaps`, `files_without_bytes`), carrying its Blackboard
+ * link, so the manual steps live there: open the link, get the file, and say in
+ * the item what should happen.
+ */
+export function closePrompt(result: unknown): string | null {
+  const count = filesNeedingStack(result);
+  if (count === 0) return null;
+  return count === 1
+    ? 'One file could not be pulled. Its Inbox item has the Blackboard link; open it and say what should happen.'
+    : `${count} files could not be pulled. Their Inbox items have the Blackboard links; open them and say what should happen.`;
 }

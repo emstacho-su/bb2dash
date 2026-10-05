@@ -2,8 +2,10 @@
  * The Sync button after the Phase 14 cut-over: a press files an `agent_requests`
  * row and the `sync` container's runner takes it, so nothing is copied and no
  * terminal is named. The button's label follows what the runner writes (its
- * claim, the run it opens, the close), and the paste command comes back only as
- * the fallback for a request nothing claimed.
+ * claim, the run it opens, the close), the arrows circle while the container
+ * works, and the paste command comes back only as the fallback for a request
+ * nothing claimed. A close that left a file unpulled stays up with the way to
+ * the Inbox.
  *
  * The query hooks are stubbed (the real `syncCommand`, `copyToClipboard`,
  * `relativeTime` and the phase helpers are kept), so no query client and no
@@ -12,7 +14,8 @@
  * what they say.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = Record<string, unknown> & { id: number };
@@ -26,6 +29,14 @@ const runCalls: Array<[string | null, boolean]> = [];
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn() }),
+}));
+
+vi.mock('next/link', () => ({
+  default: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock('@/lib/queries.sync', async (importOriginal) => {
@@ -74,6 +85,23 @@ function row(overrides: Record<string, unknown> = {}): Row {
 
 function runnerClaim(overrides: Record<string, unknown> = {}): Row {
   return row({ state: 'claimed', claimed_by: 'sync-runner', claim_attempts: 1, run_id: RUN_ID, ...overrides });
+}
+
+/** A watched runner claim, then its close with the given report. */
+function closeAfterWatching(result: Record<string, unknown>, state = 'done') {
+  openState.data = runnerClaim();
+  runState.data = { status: 'ok' };
+  const view = render(<SyncButton />);
+  openState.data = null;
+  requestState.data = row({
+    state,
+    claimed_by: 'sync-runner',
+    claim_attempts: 1,
+    finished_at: NOW.toISOString(),
+    result,
+  });
+  view.rerender(<SyncButton />);
+  return view;
 }
 
 beforeEach(() => {
@@ -151,16 +179,14 @@ describe('Sync button — the label follows the runner', () => {
   it("the runner's claim with no run yet is starting", () => {
     openState.data = runnerClaim({ run_id: null });
     render(<SyncButton />);
-    expect(screen.getByRole('button', { name: 'container: starting…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'starting…' })).toBeInTheDocument();
   });
 
-  it("the runner's claim with a running run is crawling, with the live mark", () => {
+  it("the runner's claim with a running run reads crawling, with the container in the tooltip", () => {
     openState.data = runnerClaim();
     runState.data = { status: 'running' };
     render(<SyncButton />);
-    const button = screen.getByRole('button', { name: 'container: crawling…' });
-    expect(button).toBeInTheDocument();
-    expect(button.querySelector('[data-live]')).not.toBeNull();
+    const button = screen.getByRole('button', { name: 'crawling…' });
     expect(button).toHaveAttribute(
       'title',
       'The sync container is crawling Blackboard and folding the result in',
@@ -171,7 +197,7 @@ describe('Sync button — the label follows the runner', () => {
     openState.data = runnerClaim();
     runState.data = { status: 'ok' };
     render(<SyncButton />);
-    expect(screen.getByRole('button', { name: 'container: pulling files…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'pulling files…' })).toBeInTheDocument();
   });
 
   it("reads the run row only for the runner's claim", () => {
@@ -193,10 +219,34 @@ describe('Sync button — the label follows the runner', () => {
     render(<SyncButton />);
     expect(screen.getByRole('button', { name: 'sync requeued…' })).toBeInTheDocument();
   });
+});
 
-  it('the idle button carries no live mark', () => {
-    render(<SyncButton />);
-    expect(screen.getByRole('button', { name: 'Sync' }).querySelector('[data-live]')).toBeNull();
+describe('Sync button — the arrows circle while the container works', () => {
+  it('turn through starting, crawling, pulling files and finishing', () => {
+    for (const status of [null, 'running', 'ok', 'failed']) {
+      openState.data = runnerClaim();
+      runState.data = status === null ? null : { status };
+      const view = render(<SyncButton />);
+      expect(screen.getByRole('button')).toHaveAttribute('data-live');
+      view.unmount();
+    }
+  });
+
+  it('stand still when idle, queued, waiting, in a Claude Code session, or done', () => {
+    const rows: Array<Row | null> = [
+      null,
+      row(),
+      row({ created_at: new Date(NOW.getTime() - 90_000).toISOString() }),
+      row({ state: 'claimed', claimed_by: 'bb-sync session', run_id: RUN_ID }),
+    ];
+    for (const open of rows) {
+      openState.data = open;
+      const view = render(<SyncButton />);
+      expect(screen.getByRole('button')).not.toHaveAttribute('data-live');
+      view.unmount();
+    }
+    closeAfterWatching({ lines: ['Files: 1 pulled'] });
+    expect(screen.getByRole('button', { name: 'sync done' })).not.toHaveAttribute('data-live');
   });
 });
 
@@ -205,7 +255,7 @@ describe('Sync button — following a request by id', () => {
     openState.data = row();
     requestState.data = runnerClaim({ run_id: null });
     render(<SyncButton />);
-    expect(screen.getByRole('button', { name: 'container: starting…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'starting…' })).toBeInTheDocument();
   });
 
   it("a closed request of this tab's never hides a newer open one, and a press files nothing", async () => {
@@ -230,7 +280,7 @@ describe('Sync button — following a request by id', () => {
     runState.data = { status: 'running' };
     render(<SyncButton />);
 
-    screen.getByRole('button', { name: 'container: crawling…' }).click();
+    screen.getByRole('button', { name: 'crawling…' }).click();
 
     expect(
       await screen.findByText('The sync container is crawling Blackboard and folding the result in'),
@@ -312,23 +362,23 @@ describe('Sync button — the fallback when nothing claims the request', () => {
 
 describe('Sync button — the close', () => {
   it("announces the report's first line when a request it watched, but never pressed, finishes", async () => {
-    openState.data = runnerClaim();
-    runState.data = { status: 'ok' };
-    const view = render(<SyncButton />);
-    expect(screen.getByRole('button', { name: 'container: pulling files…' })).toBeInTheDocument();
-
-    openState.data = null;
-    requestState.data = row({
-      state: 'done',
-      claimed_by: 'sync-runner',
-      claim_attempts: 1,
-      finished_at: NOW.toISOString(),
-      result: { error: null, lines: ['Files: 3 pulled, 1 not pulled'] },
-    });
-    view.rerender(<SyncButton />);
+    closeAfterWatching({ error: null, lines: ['Files: 3 pulled'], files: { pulled: 3, not_pulled: [] } });
 
     expect(screen.getByRole('button', { name: 'sync done' })).toBeInTheDocument();
-    expect(await screen.findByText('Sync done · Files: 3 pulled, 1 not pulled')).toBeInTheDocument();
+    expect(await screen.findByText('Sync done · Files: 3 pulled')).toBeInTheDocument();
+    expect(screen.queryByText(/could not be pulled/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('a close with nothing to act on goes away on its own', async () => {
+    closeAfterWatching({ lines: ['Files: 3 pulled'] });
+    expect(await screen.findByText('Sync done · Files: 3 pulled')).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(16_000);
+    });
+
+    expect(screen.queryByText('Sync done · Files: 3 pulled')).not.toBeInTheDocument();
   });
 
   it('announces a failure with its line', async () => {
@@ -380,5 +430,64 @@ describe('Sync button — the close', () => {
     render(<SyncButton />);
     expect(screen.queryByText(/Sync done/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
+  });
+});
+
+describe('Sync button — a file that needs Stack after the close', () => {
+  const STORAGE_REFUSED = {
+    error: null,
+    lines: ['Files: 3 pulled, 1 not pulled', 'Not pulled: file 2489 (storage 400: InvalidKey)'],
+    files: { pulled: 3, not_pulled: [{ id: '2489', reason: 'storage 400: InvalidKey' }] },
+  };
+
+  it('prompts with the way to the Inbox and stays up past the usual toast time', async () => {
+    closeAfterWatching(STORAGE_REFUSED);
+
+    expect(await screen.findByText('Sync done · Files: 3 pulled, 1 not pulled')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'One file could not be pulled. Its Inbox item has the Blackboard link; open it and say what should happen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the Inbox →' })).toHaveAttribute('href', '/inbox');
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(screen.getByText(/One file could not be pulled/)).toBeInTheDocument();
+  });
+
+  it('goes away when dismissed', async () => {
+    closeAfterWatching(STORAGE_REFUSED);
+    expect(await screen.findByText(/One file could not be pulled/)).toBeInTheDocument();
+
+    screen.getByRole('button', { name: 'Dismiss' }).click();
+
+    await waitFor(() => expect(screen.queryByText(/One file could not be pulled/)).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'sync done' })).toBeInTheDocument();
+  });
+
+  it('does not prompt for a file the next sync retries on its own', async () => {
+    closeAfterWatching({
+      error: null,
+      lines: ['Files: 2 pulled, 1 not pulled', 'Files stopped: the Blackboard session expired; the rest are tried on the next sync'],
+      files: { pulled: 2, not_pulled: [{ id: '2489', reason: 'session_expired: login page' }] },
+    });
+
+    expect(await screen.findByText('Sync done · Files: 2 pulled, 1 not pulled')).toBeInTheDocument();
+    expect(screen.queryByText(/could not be pulled/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it("counts the skill's figure, which carries no reasons", async () => {
+    closeAfterWatching({ run_id: RUN_ID, status: 'ok', files_pulled: 1, files_not_pulled: 2 });
+
+    expect(await screen.findByText('Sync done · Files: 1 pulled, 2 not pulled')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '2 files could not be pulled. Their Inbox items have the Blackboard links; open them and say what should happen.',
+      ),
+    ).toBeInTheDocument();
   });
 });

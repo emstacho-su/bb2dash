@@ -11,21 +11,24 @@
  * Nothing is copied and no terminal is named on a press.
  *
  * The label then follows what the runner writes — its claim, the run it opens,
- * the fold, the close — through `syncPhase`. The paste command of the Windows
- * `/bb-sync` skill comes back only as the fallback: a request nothing has claimed
- * after the grace (or one the runner let go) says so, and a second press copies
- * the command and shows it. The clipboard is best-effort by design: it is denied
- * outside a secure context and in some embedded views, so the command is always
- * shown in the toast too.
+ * the fold, the close — through `syncPhase`, and the arrows circle while the
+ * container works. The paste command of the Windows `/bb-sync` skill comes back
+ * only as the fallback: a request nothing has claimed after the grace (or one the
+ * runner let go) says so, and a second press copies the command and shows it. The
+ * clipboard is best-effort by design: it is denied outside a secure context and
+ * in some embedded views, so the command is always shown in the toast too.
  *
  * One open request at a time. The tick never touches `kind = 'sync'` rows, so a
  * second press while one is queued or claimed would leave an orphan that nothing
  * ever closes. While a sync request is open (this tab's or any other's), pressing
  * the button re-shows that request's status instead of filing a new row. The tab
  * follows any request it sees open by id, so the row's close is still read (and
- * announced once) after the open lookup stops returning it.
+ * announced once) after the open lookup stops returning it. A close that left a
+ * file unpulled for a reason the next sync will not retry stays up, with the way
+ * to the Inbox item that holds the file's Blackboard link, until dismissed.
  */
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
   copyToClipboard,
@@ -43,6 +46,7 @@ import {
   RUNNER_CLAIMANT,
   SYNC_COPY,
   closeAnnouncement,
+  closePrompt,
   isLivePhase,
   isMovingPhase,
   isOpenState,
@@ -53,7 +57,7 @@ import {
 } from '@/lib/sync-request-phase';
 import styles from './SyncButton.module.css';
 
-/** How long a toast stays up. */
+/** How long a toast with nothing to act on stays up. */
 const TOAST_MS = 15000;
 
 /**
@@ -64,7 +68,13 @@ const CLOCK_TICK_MS = 5000;
 
 type Toast =
   | { kind: 'note'; text: string }
-  | { kind: 'fallback'; command: string; copied: boolean };
+  | { kind: 'fallback'; command: string; copied: boolean }
+  | { kind: 'close'; text: string; prompt: string | null };
+
+/** A close with a prompt waits for Stack; every other toast goes on its own. */
+function staysUp(toast: Toast): boolean {
+  return toast.kind === 'close' && toast.prompt !== null;
+}
 
 /**
  * The request this tab shows: the one it follows by id, unless that one has
@@ -110,9 +120,9 @@ export function SyncButton() {
   const title = phaseTitle(phase, request, now, ago);
   const readError = firstError(followed.error, open.error, run.error);
 
-  // The toast is transient; the request state in the label is not.
+  // A toast with nothing to act on is transient; the request state in the label is not.
   useEffect(() => {
-    if (!toast) return;
+    if (!toast || staysUp(toast)) return;
     const timer = window.setTimeout(() => setToast(null), TOAST_MS);
     return () => window.clearTimeout(timer);
   }, [toast]);
@@ -128,7 +138,7 @@ export function SyncButton() {
     }
     if (phase !== 'idle' && movingId.current === request.id) {
       movingId.current = null;
-      setToast({ kind: 'note', text: closeAnnouncement(request) });
+      setToast({ kind: 'close', text: closeAnnouncement(request), prompt: closePrompt(request.result) });
     }
   }, [phase, request]);
 
@@ -173,10 +183,10 @@ export function SyncButton() {
         onClick={() => void press()}
         disabled={busy}
         title={title}
+        data-live={isLivePhase(phase) ? '' : undefined}
       >
         <SyncIcon />
         {label}
-        {isLivePhase(phase) && <span className={styles.live} data-live="" aria-hidden="true" />}
       </button>
 
       {create.isError && (
@@ -193,14 +203,27 @@ export function SyncButton() {
 
       {toast && (
         <span className={styles.toast} role="status">
-          {toast.kind === 'note' ? (
-            <span className={styles.toastLine}>{toast.text}</span>
-          ) : (
+          {toast.kind === 'fallback' ? (
             <>
               <span className={styles.toastLine}>
                 {toast.copied ? SYNC_COPY.fallbackCopied : SYNC_COPY.fallbackCopy}
               </span>
               <code className={styles.command}>{toast.command}</code>
+            </>
+          ) : (
+            <span className={styles.toastLine}>{toast.text}</span>
+          )}
+          {toast.kind === 'close' && toast.prompt !== null && (
+            <>
+              <span className={styles.prompt}>{toast.prompt}</span>
+              <span className={styles.toastActions}>
+                <Link className={styles.toastLink} href="/inbox">
+                  {SYNC_COPY.openInbox}
+                </Link>
+                <button type="button" className={styles.toastDismiss} onClick={() => setToast(null)}>
+                  {SYNC_COPY.dismiss}
+                </button>
+              </span>
             </>
           )}
         </span>

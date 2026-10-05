@@ -738,10 +738,11 @@ copied `claude --model sonnet "/bb-sync <id>"` and said to run it in Claude Code
 
 * A press files the `agent_requests` row and copies nothing; the toast says the sync container picks it up within about a minute.
 * The label follows what the runner writes, read off `claimed_by` and the `sync_runs` row the claim opened (135's trigger):
-  `sync requested` → `container: starting…` → `container: crawling…` (run `running`) → `container: pulling files…` (run `ok` /
-  `partial`) → `sync done`; `container: finishing…` for a failed run under an open claim; `Claude Code: syncing…` for any other
-  claimant (the Windows `/bb-sync` skill), with the claimant in the tooltip. A pulsing accent dot marks the container phases
-  (`prefers-reduced-motion` honoured).
+  `sync requested` → `starting…` → `crawling…` (run `running`) → `pulling files…` (run `ok` / `partial`) → `sync done`;
+  `finishing…` for a failed run under an open claim; `Claude Code: syncing…` for any other claimant (the Windows `/bb-sync` skill),
+  with the claimant in the tooltip. The button's arrows circle through the four container phases (`prefers-reduced-motion` slows
+  them); the tooltip names the container. Stack, 2026-10-05, second round: "animate the arrows so that they circle while the crawl
+  is occuring", the label reads `crawling…` and not `container: crawling`.
 * A queued row nothing has claimed after 75 s (three runner polls of 25 s) reads `waiting on the container…`; only then does a
   second press copy the paste command and show it. The Windows skill stays the fallback (CLAUDE.md), so the command stays reachable.
   A queued row the runner claimed before (`claim_attempts > 0`: `sync_requeue_orphans()` after a restart) reads `sync requeued…`,
@@ -751,11 +752,18 @@ copied `claude --model sonnet "/bb-sync <id>"` and said to run it in Claude Code
   it, and a closed request of this tab's never hides a newer open one. A failed read of any of the three queries renders an alert
   line instead of a stale label.
 * The close of a request the tab saw moving is announced once with the report's first line ("Sync done · Files: 3 pulled, 1 not
-  pulled"); a request already closed when the page loaded says nothing, that is Activity's.
+  pulled"); a request already closed when the page loaded says nothing, that is Activity's. A close that left a file unpulled for
+  a reason the next sync will not retry (the runner's `files.not_pulled[].reason`, anything but `session_expired`; the skill's
+  `files_not_pulled` count, which carries no reasons) stays up until dismissed, with "One file could not be pulled. Its Inbox item
+  has the Blackboard link; open it and say what should happen.", an "Open the Inbox →" link and Dismiss. The manual steps live in
+  the Inbox because the fold already raises a `data_gap` item per file without bytes (`stage_gaps`, `files_without_bytes`; item 3441
+  for file 2489 today) carrying the file's Blackboard `source_url`, and the card records what should happen for `/inbox-apply`.
+  Stack, 2026-10-05, second round: "if the popup indicates that there was a file that needs to be pulled we should be prompted to
+  do the manual steps … (if required)".
 * Code: `web/src/lib/sync-request-phase.ts` (pure: phase, labels, titles, press action, headline), `web/src/lib/queries.sync-run.ts`
   (the run row by `run_id`, polled every 10 s while the request is claimed; the id is checked as a uuid before it reaches a filter),
   `web/src/lib/use-now.ts` (the clock as state, so render stays pure under the React compiler lint); `agent_requests` reads carry
-  `run_id` and `claim_attempts`. Gates: web vitest 135 files / 2382 tests, `tsc` 0, `eslint` clean; `/code-review main high`:
+  `run_id` and `claim_attempts`. Gates: web vitest 135 files / 2394 tests, `tsc` 0, `eslint` clean; `/code-review main high`:
   12 findings, 11 applied in round 2 (two correctness: a closed request of this tab's could hide a newer open one and let a press
   file beside it; the close of a sync watched without a press was never announced), one already met (STATUS and DECISIONS landed
   in the PR's later commits). Accepted, not changed: a second queued row behind a claim the runner is resuming after a restart
