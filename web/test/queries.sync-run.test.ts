@@ -58,11 +58,12 @@ describe('syncRunOptions — the run row behind a claimed request', () => {
     expect(row).toEqual({ id: 1297, status: 'running' });
   });
 
-  it('is keyed by the run id and on only while the request is claimed', () => {
+  it('is keyed by the run id and on only while the request is claimed and the id is a uuid', () => {
     expect(syncRunOptions(RUN_ID, true).queryKey).toEqual(['sync-run', RUN_ID]);
     expect(syncRunOptions(RUN_ID, true).enabled).toBe(true);
     expect(syncRunOptions(RUN_ID, false).enabled).toBe(false);
     expect(syncRunOptions(null, true).enabled).toBe(false);
+    expect(syncRunOptions('1297', true).enabled).toBe(false);
   });
 
   it('polls every ten seconds while on, like the request itself', () => {

@@ -16,8 +16,8 @@ import {
   shotPath,
 } from './walk';
 
-/** The Sync button's title (`src/components/shell/SyncButton.tsx`). */
-const SYNC_TITLE = 'Ask a Claude session to crawl Blackboard';
+/** The Sync button's idle title (`src/lib/sync-request-phase.ts`, `phaseTitle('idle', …)`). */
+const SYNC_TITLE = 'Ask the sync container to crawl Blackboard';
 
 test('signed in', async ({ page, context }, testInfo) => {
   const writes = await guardWrites(context);

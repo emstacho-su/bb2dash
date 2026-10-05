@@ -41,9 +41,16 @@ import {
  * an un-narrowed client until the types are regenerated; every row that comes
  * back is pinned to an interface below. Same pattern as queries.today.ts.
  */
-function untypedClient(): SupabaseClient {
+export function untypedClient(): SupabaseClient {
   return getSupabaseBrowserClient() as unknown as SupabaseClient;
 }
+
+/**
+ * The PostgREST filter that drops a quarantined crawl (`sync_runs.scope =
+ * 'unregistered'`, Phase 19): Activity and the Sync button's run read share it,
+ * so a row one hides the other never adopts.
+ */
+export const NOT_QUARANTINED_FILTER = 'scope.is.null,scope.neq.unregistered';
 
 /* ---------------------------------------------------------------------------
  * Row types (hand-declared from the frozen contract — see header)
@@ -132,6 +139,8 @@ export interface AgentRequest {
   sync_run_id: number | null;
   /** The crawl's uuid, set when the claim registers its run (Phase 19; 091's `sync_register_run`). */
   run_id: string | null;
+  /** How many times `sync_claim()` took the row (091). Above 0 on a queued row: the runner requeued it. */
+  claim_attempts: number;
   result: Record<string, unknown> | null;
 }
 
@@ -1080,7 +1089,7 @@ export function attentionItemsOptions(state?: AttentionState) {
 
 const AGENT_REQUEST_COLUMNS =
   'id, created_at, kind, scope, params, note, state, claimed_at, claimed_by, ' +
-  'finished_at, sync_run_id, run_id, result';
+  'finished_at, sync_run_id, run_id, claim_attempts, result';
 
 /** One `agent_requests` row, polled while the Sync button is waiting on it. */
 export function agentRequestOptions(id: number | null) {
@@ -1200,7 +1209,7 @@ export function activityOptions(limit = 8) {
         .from('sync_runs')
         .select('id, ran_at, started_at, finished_at, status, summary, source, scope')
         .neq('source', 'ical')
-        .or('scope.is.null,scope.neq.unregistered')
+        .or(NOT_QUARANTINED_FILTER)
         .order('id', { ascending: false })
         .limit(limit);
       if (error) throw error;

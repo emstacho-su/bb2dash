@@ -13,19 +13,23 @@
  * The label then follows what the runner writes — its claim, the run it opens,
  * the fold, the close — through `syncPhase`. The paste command of the Windows
  * `/bb-sync` skill comes back only as the fallback: a request nothing has claimed
- * after the grace says so, and a second press copies the command and shows it.
- * The clipboard is best-effort by design: it is denied outside a secure context
- * and in some embedded views, so the command is always shown in the toast too.
+ * after the grace (or one the runner let go) says so, and a second press copies
+ * the command and shows it. The clipboard is best-effort by design: it is denied
+ * outside a secure context and in some embedded views, so the command is always
+ * shown in the toast too.
  *
  * One open request at a time. The tick never touches `kind = 'sync'` rows, so a
  * second press while one is queued or claimed would leave an orphan that nothing
  * ever closes. While a sync request is open (this tab's or any other's), pressing
- * the button re-shows that request's status instead of filing a new row.
+ * the button re-shows that request's status instead of filing a new row. The tab
+ * follows any request it sees open by id, so the row's close is still read (and
+ * announced once) after the open lookup stops returning it.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import {
   copyToClipboard,
+  relativeTime,
   syncCommand,
   useAgentRequest,
   useCreateAgentRequest,
@@ -36,10 +40,12 @@ import { useSyncRun } from '@/lib/queries.sync-run';
 import { useNow } from '@/lib/use-now';
 import {
   PHASE_LABEL,
+  RUNNER_CLAIMANT,
   SYNC_COPY,
   closeAnnouncement,
   isLivePhase,
   isMovingPhase,
+  isOpenState,
   phaseTitle,
   pressAction,
   syncPhase,
@@ -60,25 +66,49 @@ type Toast =
   | { kind: 'note'; text: string }
   | { kind: 'fallback'; command: string; copied: boolean };
 
-/** The request this tab is watching: the one it filed, else the open one anybody filed. */
+/**
+ * The request this tab shows: the one it follows by id, unless that one has
+ * closed and a different row is open now — then the open row, so a finished
+ * request of this tab's never hides a newer one and a press never files beside it.
+ */
 function watchedRequest(
-  filed: AgentRequest | null | undefined,
+  followed: AgentRequest | null | undefined,
   open: AgentRequest | null | undefined,
 ): AgentRequest | null {
-  return filed ?? open ?? null;
+  if (followed && open && followed.id !== open.id && !isOpenState(followed.state)) return open;
+  return followed ?? open ?? null;
+}
+
+/** The first read error among the three queries, for the alert line. */
+function firstError(...errors: readonly (Error | null | undefined)[]): Error | null {
+  return errors.find((error): error is Error => error instanceof Error) ?? null;
 }
 
 export function SyncButton() {
   const create = useCreateAgentRequest();
-  const [requestId, setRequestId] = useState<number | null>(null);
+  // The request this tab follows by id: the one it filed, or one it saw open.
+  const [followedId, setFollowedId] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
-  const filed = useAgentRequest(requestId);
   const open = useOpenSyncRequest();
-  const request = watchedRequest(filed.data, open.data);
-  const run = useSyncRun(request?.run_id ?? null, request?.state === 'claimed');
-  const now = useNow(request ? CLOCK_TICK_MS : null);
+  // The tab follows any request it sees open, so the row's close is still read
+  // after the open lookup stops returning it. Derived during render, the way the
+  // lint config asks for state that follows a query, not copied in an effect.
+  const openId = open.data?.id ?? null;
+  if (openId !== null && openId !== followedId) setFollowedId(openId);
+  const followed = useAgentRequest(followedId);
+  const request = watchedRequest(followed.data, open.data);
+  // The run row says where the container is; a session's claim never reads it.
+  const run = useSyncRun(
+    request?.run_id ?? null,
+    request?.state === 'claimed' && request.claimed_by === RUNNER_CLAIMANT,
+  );
+  // The clock ticks only while the request is open; a closed one keeps its last reading.
+  const now = useNow(request && isOpenState(request.state) ? CLOCK_TICK_MS : null);
   const phase: SyncPhase = syncPhase(request, run.data, now);
+  const ago = (iso: string | null) => relativeTime(iso, new Date(now));
+  const title = phaseTitle(phase, request, now, ago);
+  const readError = firstError(followed.error, open.error, run.error);
 
   // The toast is transient; the request state in the label is not.
   useEffect(() => {
@@ -96,7 +126,7 @@ export function SyncButton() {
       movingId.current = request.id;
       return;
     }
-    if ((phase === 'done' || phase === 'failed') && movingId.current === request.id) {
+    if (phase !== 'idle' && movingId.current === request.id) {
       movingId.current = null;
       setToast({ kind: 'note', text: closeAnnouncement(request) });
     }
@@ -105,7 +135,7 @@ export function SyncButton() {
   async function fileRequest() {
     try {
       const row = await create.mutateAsync({ kind: 'sync', scope: 'all' });
-      setRequestId(row.id);
+      setFollowedId(row.id);
       setToast({ kind: 'note', text: SYNC_COPY.requested });
     } catch {
       // The mutation's own error is rendered below; nothing to swallow here.
@@ -116,7 +146,6 @@ export function SyncButton() {
   async function offerFallback(id: number) {
     const command = syncCommand(id);
     const copied = await copyToClipboard(command);
-    setRequestId(id);
     setToast({ kind: 'fallback', command, copied });
   }
 
@@ -130,8 +159,7 @@ export function SyncButton() {
       await offerFallback(request.id);
       return;
     }
-    setRequestId(request.id);
-    setToast({ kind: 'note', text: phaseTitle(phase, request, now) });
+    setToast({ kind: 'note', text: title });
   }
 
   const busy = create.isPending;
@@ -144,7 +172,7 @@ export function SyncButton() {
         className={styles.button}
         onClick={() => void press()}
         disabled={busy}
-        title={phaseTitle(phase, request, now)}
+        title={title}
       >
         <SyncIcon />
         {label}
@@ -154,6 +182,12 @@ export function SyncButton() {
       {create.isError && (
         <span className={styles.toastError} role="alert">
           Could not file the request: {create.error.message}
+        </span>
+      )}
+
+      {!create.isError && readError && (
+        <span className={styles.toastError} role="alert">
+          Could not read the sync&apos;s state: {readError.message}
         </span>
       )}
 

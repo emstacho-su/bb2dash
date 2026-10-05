@@ -10,15 +10,18 @@
  * trigger), which the runner's fold moves from `running` to `ok`, `partial` or
  * `failed` before the files step and the close.
  *
- *   queued, young            → waiting for the runner
- *   queued, past the grace   → unclaimed: nothing took it, the paste command is the fallback
- *   claimed by sync-runner   → starting (no run row) / crawling (running) / pulling files
- *                              (folded) / finishing (the run failed; the close is next)
- *   claimed by anyone else   → a Claude Code session (the Windows /bb-sync skill)
+ *   queued, never claimed, young  → waiting for the runner
+ *   queued, never claimed, old    → unclaimed: nothing took it, the paste command is the fallback
+ *   queued, claimed before        → requeued: the runner let it go (a restart); its next pass takes it
+ *   claimed by sync-runner        → starting (no run row) / crawling (running) / pulling files
+ *                                   (folded) / finishing (the run failed; the close is next)
+ *   claimed by anyone else        → a Claude Code session (the Windows /bb-sync skill)
  *   done / failed / cancelled
  *
  * Pure: nothing here imports React, TanStack Query or Supabase, and nothing throws.
- * `queries.sync.ts` is past the project's size rule, which is why this is its own file.
+ * The "ago" wording comes in from the caller (`relativeTime`), as `sync-run-state.ts`
+ * does, so one rule formats every "N min ago" in the app. `queries.sync.ts` is past
+ * the project's size rule, which is why this is its own file.
  */
 
 import type { AgentRequestState } from './queries.sync';
@@ -27,8 +30,8 @@ import type { AgentRequestState } from './queries.sync';
 export const RUNNER_CLAIMANT = 'sync-runner';
 
 /**
- * How long a queued request may wait before the button says nothing took it:
- * three of the runner's 25-second polls. Live claims land in 11–25 s.
+ * How long a never-claimed queued request may wait before the button says nothing
+ * took it: three of the runner's 25-second polls. Live claims land in 11–25 s.
  */
 export const QUEUE_GRACE_MS = 75_000;
 
@@ -36,6 +39,7 @@ export type SyncPhase =
   | 'idle'
   | 'queued'
   | 'unclaimed'
+  | 'requeued'
   | 'starting'
   | 'crawling'
   | 'pulling_files'
@@ -51,6 +55,8 @@ export interface PhaseRequest {
   state: AgentRequestState;
   created_at: string;
   claimed_by: string | null;
+  /** 091: how many times `sync_claim()` took the row. Above 0 on a queued row means a requeue. */
+  claim_attempts: number;
   finished_at: string | null;
   result: Record<string, unknown> | null;
 }
@@ -63,11 +69,15 @@ export interface PhaseRun {
 /** What a press does: file a new request, offer the paste command, or re-show the status. */
 export type PressAction = 'file' | 'fallback' | 'status';
 
+/** Formats an ISO instant as "2 min ago"; the caller passes `relativeTime`. */
+export type AgoFormatter = (iso: string | null) => string;
+
 /** What the button says in each phase. */
 export const PHASE_LABEL: Record<SyncPhase, string> = {
   idle: 'Sync',
   queued: 'sync requested',
   unclaimed: 'waiting on the container…',
+  requeued: 'sync requeued…',
   starting: 'container: starting…',
   crawling: 'container: crawling…',
   pulling_files: 'container: pulling files…',
@@ -78,9 +88,13 @@ export const PHASE_LABEL: Record<SyncPhase, string> = {
   cancelled: 'sync cancelled',
 };
 
-/** The toast lines the button shows. */
+/**
+ * The toast lines the button shows. The web cannot see the desktop's
+ * `syncLauncher`, so the requested line names the container's cadence and
+ * nothing about a terminal.
+ */
 export const SYNC_COPY = Object.freeze({
-  requested: 'Sync requested — the sync container picks it up within about a minute. No terminal needed.',
+  requested: 'Sync requested — the sync container takes queued requests within about a minute.',
   fallbackCopied:
     'Nothing has claimed this sync. If the sync container is down, the command is copied — run it in Claude Code with a logged-in Blackboard tab.',
   fallbackCopy:
@@ -99,14 +113,21 @@ const LIVE: ReadonlySet<SyncPhase> = new Set<SyncPhase>([
 const MOVING: ReadonlySet<SyncPhase> = new Set<SyncPhase>([
   'queued',
   'unclaimed',
+  'requeued',
   ...LIVE,
   'session',
 ]);
 
+/** The phases in which a press offers the paste command instead of filing or re-showing. */
+const FALLBACK: ReadonlySet<SyncPhase> = new Set<SyncPhase>(['unclaimed', 'requeued']);
+
 const MS_SECOND = 1000;
 const MS_MINUTE = 60 * MS_SECOND;
-const MS_HOUR = 60 * MS_MINUTE;
-const MS_DAY = 24 * MS_HOUR;
+
+/** True for a request nobody has finished: the two states the open lookup returns. */
+export function isOpenState(state: AgentRequestState): boolean {
+  return state === 'queued' || state === 'claimed';
+}
 
 /** Milliseconds since an ISO instant, or 0 when the instant is unreadable. */
 function sinceMs(iso: string | null, now: number): number {
@@ -119,18 +140,6 @@ function sinceMs(iso: string | null, now: number): number {
 function elapsedText(ms: number): string {
   if (ms < 2 * MS_MINUTE) return `${Math.round(ms / MS_SECOND)} s`;
   return `${Math.floor(ms / MS_MINUTE)} min`;
-}
-
-/** "just now" / "2 min ago" / "3 hrs ago" / "4 days ago": when a request closed. */
-function agoText(ms: number): string {
-  if (ms < MS_MINUTE) return 'just now';
-  if (ms < MS_HOUR) return `${Math.round(ms / MS_MINUTE)} min ago`;
-  if (ms < MS_DAY) {
-    const hours = Math.round(ms / MS_HOUR);
-    return `${hours} hr${hours === 1 ? '' : 's'} ago`;
-  }
-  const days = Math.round(ms / MS_DAY);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
 /** The runner's phase from the run row its claim opened. No row yet, or an unknown status, is starting. */
@@ -148,6 +157,17 @@ function runnerPhase(run: PhaseRun | null | undefined): SyncPhase {
   }
 }
 
+/**
+ * A queued row's phase. One the runner claimed before and `sync_requeue_orphans()`
+ * put back (a restart before the run registered) is requeued, not unclaimed: the
+ * grace is read from `created_at`, which the requeue keeps, so it would read as
+ * abandoned at once while the next pass is about to take it.
+ */
+function queuedPhase(request: PhaseRequest, now: number): SyncPhase {
+  if (request.claim_attempts > 0) return 'requeued';
+  return sinceMs(request.created_at, now) > QUEUE_GRACE_MS ? 'unclaimed' : 'queued';
+}
+
 /** The phase of the open request, or idle with none. */
 export function syncPhase(
   request: PhaseRequest | null | undefined,
@@ -155,9 +175,7 @@ export function syncPhase(
   now: number,
 ): SyncPhase {
   if (!request) return 'idle';
-  if (request.state === 'queued') {
-    return sinceMs(request.created_at, now) > QUEUE_GRACE_MS ? 'unclaimed' : 'queued';
-  }
+  if (request.state === 'queued') return queuedPhase(request, now);
   if (request.state === 'claimed') {
     return request.claimed_by === RUNNER_CLAIMANT ? runnerPhase(run) : 'session';
   }
@@ -179,6 +197,7 @@ export function phaseTitle(
   phase: SyncPhase,
   request: PhaseRequest | null | undefined,
   now: number,
+  ago: AgoFormatter,
 ): string {
   switch (phase) {
     case 'idle':
@@ -188,7 +207,12 @@ export function phaseTitle(
     case 'unclaimed':
       return (
         `Nothing has claimed this sync in ${elapsedText(sinceMs(request?.created_at ?? null, now))}. ` +
-        'Is the sync container up? Press again for the fallback command.'
+        'The sync container may be busy or down; press again for the fallback command.'
+      );
+    case 'requeued':
+      return (
+        'The sync container claimed this request once and let it go (a restart); its next pass takes ' +
+        'it again. Press again for the fallback command.'
       );
     case 'starting':
       return 'The sync container claimed the request and is opening the run';
@@ -206,14 +230,14 @@ export function phaseTitle(
     case 'failed':
     case 'cancelled': {
       const finished = request?.finished_at ?? null;
-      return finished ? `Sync ${phase} ${agoText(sinceMs(finished, now))}` : `Sync ${phase}`;
+      return finished ? `Sync ${phase} ${ago(finished)}` : `Sync ${phase}`;
     }
   }
 }
 
 /** What a press does in the phase. */
 export function pressAction(phase: SyncPhase): PressAction {
-  if (phase === 'unclaimed') return 'fallback';
+  if (FALLBACK.has(phase)) return 'fallback';
   return isMovingPhase(phase) ? 'status' : 'file';
 }
 

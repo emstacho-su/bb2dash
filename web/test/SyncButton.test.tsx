@@ -5,18 +5,24 @@
  * claim, the run it opens, the close), and the paste command comes back only as
  * the fallback for a request nothing claimed.
  *
- * The query hooks are stubbed (the real `syncCommand`, `copyToClipboard` and the
- * phase helpers are kept), so no query client and no network are involved.
+ * The query hooks are stubbed (the real `syncCommand`, `copyToClipboard`,
+ * `relativeTime` and the phase helpers are kept), so no query client and no
+ * network are involved. The stubbed `useAgentRequest` honours the id it is asked
+ * for, the way the real hook does, so the tests that follow a request by id mean
+ * what they say.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+type Row = Record<string, unknown> & { id: number };
+
 const mutateAsync = vi.fn();
 const createState = { isPending: false, isError: false, error: null as Error | null };
-const requestState = { data: null as Record<string, unknown> | null };
-const openState = { data: null as Record<string, unknown> | null };
-const runState = { data: null as { status: string } | null };
+const requestState = { data: null as Row | null, error: null as Error | null };
+const openState = { data: null as Row | null, error: null as Error | null };
+const runState = { data: null as { status: string } | null, error: null as Error | null };
+const runCalls: Array<[string | null, boolean]> = [];
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn() }),
@@ -27,14 +33,23 @@ vi.mock('@/lib/queries.sync', async (importOriginal) => {
   return {
     ...actual,
     useCreateAgentRequest: () => ({ mutateAsync, ...createState }),
-    useAgentRequest: () => requestState,
+    useAgentRequest: (id: number | null) => ({
+      data: id !== null && requestState.data?.id === id ? requestState.data : null,
+      error: requestState.error,
+    }),
     useOpenSyncRequest: () => openState,
   };
 });
 
 vi.mock('@/lib/queries.sync-run', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/queries.sync-run')>();
-  return { ...actual, useSyncRun: () => runState };
+  return {
+    ...actual,
+    useSyncRun: (runId: string | null, claimed: boolean) => {
+      runCalls.push([runId, claimed]);
+      return runState;
+    },
+  };
 });
 
 const { SyncButton } = await import('@/components/shell/SyncButton');
@@ -43,12 +58,13 @@ const NOW = new Date('2026-10-05T18:08:00.000Z');
 const RUN_ID = '0b0fe08b-1d79-41a7-9674-2a3de0b4986e';
 const writeText = vi.fn();
 
-function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function row(overrides: Record<string, unknown> = {}): Row {
   return {
     id: 8,
     state: 'queued',
     created_at: new Date(NOW.getTime() - 10_000).toISOString(),
     claimed_by: null,
+    claim_attempts: 0,
     run_id: null,
     finished_at: null,
     result: null,
@@ -56,8 +72,8 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-function runnerClaim(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return row({ state: 'claimed', claimed_by: 'sync-runner', run_id: RUN_ID, ...overrides });
+function runnerClaim(overrides: Record<string, unknown> = {}): Row {
+  return row({ state: 'claimed', claimed_by: 'sync-runner', claim_attempts: 1, run_id: RUN_ID, ...overrides });
 }
 
 beforeEach(() => {
@@ -67,8 +83,12 @@ beforeEach(() => {
   createState.isError = false;
   createState.error = null;
   requestState.data = null;
+  requestState.error = null;
   openState.data = null;
+  openState.error = null;
   runState.data = null;
+  runState.error = null;
+  runCalls.length = 0;
   writeText.mockResolvedValue(undefined);
   Object.defineProperty(globalThis.navigator, 'clipboard', {
     value: { writeText },
@@ -90,7 +110,7 @@ describe('Sync button — a press queues for the container', () => {
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ kind: 'sync', scope: 'all' }));
     expect(
       await screen.findByText(
-        'Sync requested — the sync container picks it up within about a minute. No terminal needed.',
+        'Sync requested — the sync container takes queued requests within about a minute.',
       ),
     ).toBeInTheDocument();
     expect(writeText).not.toHaveBeenCalled();
@@ -110,6 +130,14 @@ describe('Sync button — a press queues for the container', () => {
     createState.error = new Error('row-level security');
     render(<SyncButton />);
     expect(screen.getByRole('alert').textContent).toContain('row-level security');
+  });
+
+  it("surfaces a failed read of the sync's state instead of sitting on a stale label", () => {
+    openState.error = new Error('permission denied for table agent_requests');
+    render(<SyncButton />);
+    expect(screen.getByRole('alert').textContent).toBe(
+      "Could not read the sync's state: permission denied for table agent_requests",
+    );
   });
 });
 
@@ -146,18 +174,24 @@ describe('Sync button — the label follows the runner', () => {
     expect(screen.getByRole('button', { name: 'container: pulling files…' })).toBeInTheDocument();
   });
 
-  it('a claim by a Claude Code session says so', () => {
-    openState.data = row({ state: 'claimed', claimed_by: 'bb-sync session' });
+  it("reads the run row only for the runner's claim", () => {
+    openState.data = runnerClaim();
+    render(<SyncButton />);
+    expect(runCalls.at(-1)).toEqual([RUN_ID, true]);
+  });
+
+  it('a claim by a Claude Code session says so and never reads the run row', () => {
+    openState.data = row({ state: 'claimed', claimed_by: 'bb-sync session', run_id: RUN_ID });
     render(<SyncButton />);
     const button = screen.getByRole('button', { name: 'Claude Code: syncing…' });
     expect(button).toHaveAttribute('title', 'A Claude Code session (bb-sync session) is running this sync');
+    expect(runCalls.every(([, claimed]) => claimed === false)).toBe(true);
   });
 
-  it("this tab's filed request wins over the open lookup once it is known", () => {
-    openState.data = row();
-    requestState.data = runnerClaim({ run_id: null });
+  it('a requeued request says so', () => {
+    openState.data = row({ claim_attempts: 1 });
     render(<SyncButton />);
-    expect(screen.getByRole('button', { name: 'container: starting…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'sync requeued…' })).toBeInTheDocument();
   });
 
   it('the idle button carries no live mark', () => {
@@ -166,7 +200,31 @@ describe('Sync button — the label follows the runner', () => {
   });
 });
 
-describe('Sync button — one open request at a time', () => {
+describe('Sync button — following a request by id', () => {
+  it('follows the open request it sees, so its own fresher read wins once it is known', () => {
+    openState.data = row();
+    requestState.data = runnerClaim({ run_id: null });
+    render(<SyncButton />);
+    expect(screen.getByRole('button', { name: 'container: starting…' })).toBeInTheDocument();
+  });
+
+  it("a closed request of this tab's never hides a newer open one, and a press files nothing", async () => {
+    openState.data = row({ id: 10 });
+    const view = render(<SyncButton />);
+    expect(screen.getByRole('button', { name: 'sync requested' })).toBeInTheDocument();
+
+    openState.data = row({ id: 11 });
+    requestState.data = row({ id: 10, state: 'done', finished_at: NOW.toISOString() });
+    view.rerender(<SyncButton />);
+
+    const button = screen.getByRole('button', { name: 'sync requested' });
+    button.click();
+    expect(
+      await screen.findByText('Requested; the sync container takes queued requests within about a minute'),
+    ).toBeInTheDocument();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
   it('re-shows the status instead of filing while a request is moving', async () => {
     openState.data = runnerClaim();
     runState.data = { status: 'running' };
@@ -181,10 +239,14 @@ describe('Sync button — one open request at a time', () => {
     expect(writeText).not.toHaveBeenCalled();
   });
 
-  it('files a new request once the last one is done', async () => {
-    requestState.data = row({ id: 7, state: 'done' });
+  it('files a new request once the one it followed is done', async () => {
+    openState.data = row({ id: 7 });
+    const view = render(<SyncButton />);
+
+    openState.data = null;
+    requestState.data = row({ id: 7, state: 'done', finished_at: NOW.toISOString() });
+    view.rerender(<SyncButton />);
     mutateAsync.mockResolvedValue(row({ id: 11 }));
-    render(<SyncButton />);
 
     screen.getByRole('button', { name: 'sync done' }).click();
 
@@ -201,7 +263,7 @@ describe('Sync button — the fallback when nothing claims the request', () => {
     const button = screen.getByRole('button', { name: 'waiting on the container…' });
     expect(button).toHaveAttribute(
       'title',
-      'Nothing has claimed this sync in 90 s. Is the sync container up? Press again for the fallback command.',
+      'Nothing has claimed this sync in 90 s. The sync container may be busy or down; press again for the fallback command.',
     );
   });
 
@@ -222,6 +284,16 @@ describe('Sync button — the fallback when nothing claims the request', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
+  it('a requeued request offers the command on a press too', async () => {
+    openState.data = row({ claim_attempts: 1 });
+    render(<SyncButton />);
+
+    screen.getByRole('button', { name: 'sync requeued…' }).click();
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('claude --model sonnet "/bb-sync 8"'));
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
   it('still shows the command when the clipboard is denied, and says it was not copied', async () => {
     openState.data = stale();
     writeText.mockRejectedValue(new Error('clipboard blocked'));
@@ -239,7 +311,7 @@ describe('Sync button — the fallback when nothing claims the request', () => {
 });
 
 describe('Sync button — the close', () => {
-  it("announces the report's first line when the watched request finishes", async () => {
+  it("announces the report's first line when a request it watched, but never pressed, finishes", async () => {
     openState.data = runnerClaim();
     runState.data = { status: 'ok' };
     const view = render(<SyncButton />);
@@ -249,6 +321,7 @@ describe('Sync button — the close', () => {
     requestState.data = row({
       state: 'done',
       claimed_by: 'sync-runner',
+      claim_attempts: 1,
       finished_at: NOW.toISOString(),
       result: { error: null, lines: ['Files: 3 pulled, 1 not pulled'] },
     });
@@ -275,9 +348,37 @@ describe('Sync button — the close', () => {
     ).toBeInTheDocument();
   });
 
+  it('announces a cancellation', async () => {
+    openState.data = row();
+    const view = render(<SyncButton />);
+
+    openState.data = null;
+    requestState.data = row({ state: 'cancelled', finished_at: NOW.toISOString() });
+    view.rerender(<SyncButton />);
+
+    expect(screen.getByRole('button', { name: 'sync cancelled' })).toBeInTheDocument();
+    expect(await screen.findByText('Sync cancelled')).toBeInTheDocument();
+  });
+
+  it('dates the closed request in the tooltip', () => {
+    openState.data = row({ id: 7 });
+    const view = render(<SyncButton />);
+
+    openState.data = null;
+    requestState.data = row({
+      id: 7,
+      state: 'done',
+      finished_at: new Date(NOW.getTime() - 2 * 60_000).toISOString(),
+    });
+    view.rerender(<SyncButton />);
+
+    expect(screen.getByRole('button', { name: 'sync done' })).toHaveAttribute('title', 'Sync done 2 min ago');
+  });
+
   it('does not announce a request that was already closed when the page loaded', () => {
     requestState.data = row({ state: 'done', result: { lines: ['Files: 1 pulled'] } });
     render(<SyncButton />);
-    expect(screen.queryByText(/Sync done ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sync done/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
   });
 });
