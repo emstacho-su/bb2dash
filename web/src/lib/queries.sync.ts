@@ -23,7 +23,13 @@
  */
 
 import { useEffect } from 'react';
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from './supabase/client';
 import { asRecord } from './json-record';
@@ -1348,17 +1354,23 @@ export function useActivity(limit = 8) {
 }
 
 /** Resolve an item, then refresh the Inbox and the Home counts together. */
+/**
+ * The three caches every Inbox write moves: the rows themselves, Home's status
+ * row (its open counts), and the Apply button's queue count — answering, taking
+ * an answer back or the worker finishing all change what the queue holds, so the
+ * count moves here and not when a request is filed. One body for every caller.
+ */
+export function invalidateInboxCaches(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: syncKeys.attentionAll() });
+  void queryClient.invalidateQueries({ queryKey: syncKeys.status() });
+  void queryClient.invalidateQueries({ queryKey: syncKeys.inboxQueueCount() });
+}
+
 export function useResolveAttentionItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: resolveAttentionItem,
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: syncKeys.attentionAll() });
-      void queryClient.invalidateQueries({ queryKey: syncKeys.status() });
-      // Answering a row is what changes the worker's queue, so the Apply button's
-      // count moves here — not when a request is filed.
-      void queryClient.invalidateQueries({ queryKey: syncKeys.inboxQueueCount() });
-    },
+    onSettled: () => invalidateInboxCaches(queryClient),
   });
 }
 
@@ -1395,8 +1407,6 @@ export function useRefreshInboxOnSettled(state: AgentRequestState | null) {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (state !== 'done' && state !== 'failed') return;
-    void queryClient.invalidateQueries({ queryKey: syncKeys.attentionAll() });
-    void queryClient.invalidateQueries({ queryKey: syncKeys.status() });
-    void queryClient.invalidateQueries({ queryKey: syncKeys.inboxQueueCount() });
+    invalidateInboxCaches(queryClient);
   }, [queryClient, state]);
 }
