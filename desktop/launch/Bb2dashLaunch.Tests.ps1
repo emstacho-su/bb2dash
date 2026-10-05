@@ -655,4 +655,24 @@ Describe 'Invoke-HelperHandoff' {
         $r.Ok | Should Be $false
         ($script:lines -join "`n") | Should Match 'ERROR'
     }
+
+    It 'still reports a successful start when logging it throws (R2-3)' {
+        $script:starts = 0
+        $r = Invoke-HelperHandoff -PowerShellPath $HANDOFF_POWERSHELL -ScriptPath $HANDOFF_SCRIPT -Tree $SHA_B `
+            -StateDir $HANDOFF_STATE -AppTaskName 'Bb2dash-App' -TimeoutSeconds 60 `
+            -StartProcess { param($f, $a, $w) $script:starts++; [pscustomobject]@{ Id = 4242 } } `
+            -Log { param($level, $message) throw 'disk full' }
+        $r.Ok | Should Be $true
+        $r.ProcessId | Should Be 4242
+        $script:starts | Should Be 1
+    }
+
+    It 'still reports a failed start when logging the failure throws' {
+        $r = Invoke-HelperHandoff -PowerShellPath $HANDOFF_POWERSHELL -ScriptPath $HANDOFF_SCRIPT -Tree $SHA_B `
+            -StateDir $HANDOFF_STATE -AppTaskName 'Bb2dash-App' -TimeoutSeconds 60 `
+            -StartProcess { param($f, $a, $w) throw 'access denied' } `
+            -Log { param($level, $message) throw 'disk full' }
+        $r.Ok | Should Be $false
+        $r.Reason | Should Match 'access denied'
+    }
 }

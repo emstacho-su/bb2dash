@@ -633,7 +633,8 @@ function New-HelperHandoffArgumentList {
   update-now.ps1 -Detach: start the real helper through -StartProcess (called as
   & $StartProcess <powershell.exe> <argument list> <working folder>, returning the process)
   and log its pid. A start that throws or returns no process is logged at ERROR and
-  reported in the result, never swallowed.
+  reported in the result, never swallowed. Logging is best effort and never changes Ok:
+  a log that throws after a successful start must not report a running helper as failed.
 
 .OUTPUTS
   [pscustomobject] Ok, ProcessId, Reason.
@@ -650,19 +651,32 @@ function Invoke-HelperHandoff {
         [Parameter(Mandatory)] [scriptblock] $StartProcess,
         [Parameter(Mandatory)] [scriptblock] $Log
     )
+    $process = $null
+    $failure = ''
     try {
         $arguments = New-HelperHandoffArgumentList -ScriptPath $ScriptPath -Tree $Tree -StateDir $StateDir `
             -AppTaskName $AppTaskName -TimeoutSeconds $TimeoutSeconds
         $process = & $StartProcess $PowerShellPath $arguments $StateDir
         if ($null -eq $process) { throw 'Start-Process returned no process' }
-        $reason = "update to $Tree handed off to the helper (pid $($process.Id)); this stage exits"
-        & $Log 'INFO' $reason
-        return [pscustomobject]@{ Ok = $true; ProcessId = [int] $process.Id; Reason = $reason }
     } catch {
-        $reason = "could not hand off to the helper: $($_.Exception.Message)"
-        & $Log 'ERROR' $reason
+        $process = $null
+        $failure = $_.Exception.Message
+    }
+
+    if ($null -eq $process) {
+        $reason = "could not hand off to the helper: $failure"
+        Write-BestEffortLog -Log $Log -Level 'ERROR' -Message $reason
         return [pscustomobject]@{ Ok = $false; ProcessId = 0; Reason = $reason }
     }
+    $reason = "update to $Tree handed off to the helper (pid $($process.Id)); this stage exits"
+    Write-BestEffortLog -Log $Log -Level 'INFO' -Message $reason
+    return [pscustomobject]@{ Ok = $true; ProcessId = [int] $process.Id; Reason = $reason }
+}
+
+<# Log through -Log; a log that throws goes to stderr instead and never stops the caller. #>
+function Write-BestEffortLog {
+    param([scriptblock] $Log, [string] $Level, [string] $Message)
+    try { & $Log $Level $Message } catch { [Console]::Error.WriteLine("update-now: $Level $Message (log failed: $($_.Exception.Message))") }
 }
 
 Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Get-BuildCheckRecord, ConvertTo-BuildCheckJson, Get-DockerWaitSeconds, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep, New-HelperHandoffArgumentList, Invoke-HelperHandoff
