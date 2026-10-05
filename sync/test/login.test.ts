@@ -395,6 +395,7 @@ describe('the login watch, on a fake clock', () => {
 describe('a pass\'s own check', () => {
   it('runs the same probe and silent re-login, and moves the state', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date(MIDDAY_UTC));
     try {
       const page = fakePage([401, 401]);
       const rpc = fakeRpc();
