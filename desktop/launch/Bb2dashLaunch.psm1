@@ -305,8 +305,10 @@ function Get-BuildCommand {
 
 # ---------------------------------------------------------------- Update now (2026-09-30)
 #
-# The app's "Update now" button spawns update-now.ps1, detached, and quits. That script
-# calls Invoke-UpdateSwap below. These are the module's only functions with side effects:
+# The app's "Update now" button runs update-now.ps1 -Detach, which hands off to a second run
+# of the script (the hand-off, at the end of this module); the app quits once that run has
+# written its marker. That run calls Invoke-UpdateSwap below. These are the module's only
+# functions with side effects:
 # Set-CurrentBuild touches the `current` junction (and nothing else), and Invoke-UpdateSwap
 # reaches the process table and Task Scheduler only through the scriptblocks it is handed,
 # so Bb2dashLaunch.Tests.ps1 drives both against a junction under TestDrive.
