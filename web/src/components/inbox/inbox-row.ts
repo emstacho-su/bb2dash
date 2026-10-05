@@ -37,6 +37,29 @@ function suggestedRecord(item: Pick<AttentionItem, 'suggested'>): Record<string,
     : null;
 }
 
+/** One Inbox write's bookkeeping: when it was sent, and the row it was about. */
+export interface InboxWrite<T> {
+  at: number;
+  id: number | null;
+  detail: T;
+}
+
+/**
+ * The Inbox runs three mutations over the same four columns (an answer, a
+ * session choice, an undo), and a mutation's error or pending state persists
+ * until that same hook runs again. The card that owns the state in flight, or
+ * the failure to show, is whichever write was sent last — not a fixed order
+ * among the three, which let a stale undo failure hide a fresh answer failure
+ * on another card. `null` entries are writes with nothing to report.
+ */
+export function latestWrite<T>(writes: readonly (InboxWrite<T> | null)[]): InboxWrite<T> | null {
+  let latest: InboxWrite<T> | null = null;
+  for (const write of writes) {
+    if (write !== null && (latest === null || write.at > latest.at)) latest = write;
+  }
+  return latest;
+}
+
 /** True when 114 flagged the row: `suggested->>'reopened_within_24h'` is `true`. */
 export function reopenedWithin24h(item: Pick<AttentionItem, 'suggested'>): boolean {
   const flag = suggestedRecord(item)?.[REOPENED_KEY];

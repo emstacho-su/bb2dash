@@ -25,6 +25,7 @@ import { asRecord } from './json-record';
 import {
   assertRowId,
   fieldValueText,
+  invalidateInboxCaches,
   normalizeNote,
   syncKeys,
   type AttentionItem,
@@ -160,10 +161,6 @@ export function useResolveChoice() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: resolveChoice,
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: syncKeys.attentionAll() });
-      void queryClient.invalidateQueries({ queryKey: syncKeys.status() });
-      void queryClient.invalidateQueries({ queryKey: syncKeys.inboxQueueCount() });
-    },
+    onSettled: () => invalidateInboxCaches(queryClient),
   });
 }
