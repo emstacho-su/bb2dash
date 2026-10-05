@@ -744,12 +744,24 @@ copied `claude --model sonnet "/bb-sync <id>"` and said to run it in Claude Code
   (`prefers-reduced-motion` honoured).
 * A queued row nothing has claimed after 75 s (three runner polls of 25 s) reads `waiting on the container…`; only then does a
   second press copy the paste command and show it. The Windows skill stays the fallback (CLAUDE.md), so the command stays reachable.
+  A queued row the runner claimed before (`claim_attempts > 0`: `sync_requeue_orphans()` after a restart) reads `sync requeued…`,
+  never as abandoned, and a press offers the command too. The web now reads `claim_attempts`; 091's column comment ("No web or
+  desktop code reads it") is stale from here and the next migration touching the column refreshes it.
+* The tab follows any request it sees open by id, so a close is read (and announced once) after the open lookup stops returning
+  it, and a closed request of this tab's never hides a newer open one. A failed read of any of the three queries renders an alert
+  line instead of a stale label.
 * The close of a request the tab saw moving is announced once with the report's first line ("Sync done · Files: 3 pulled, 1 not
   pulled"); a request already closed when the page loaded says nothing, that is Activity's.
 * Code: `web/src/lib/sync-request-phase.ts` (pure: phase, labels, titles, press action, headline), `web/src/lib/queries.sync-run.ts`
   (the run row by `run_id`, polled every 10 s while the request is claimed; the id is checked as a uuid before it reaches a filter),
   `web/src/lib/use-now.ts` (the clock as state, so render stays pure under the React compiler lint); `agent_requests` reads carry
-  `run_id`. Gates: web vitest 135 files / 2370 tests, `tsc` 0, `eslint` clean; `/code-review main high` recorded in the PR.
+  `run_id` and `claim_attempts`. Gates: web vitest 135 files / 2382 tests, `tsc` 0, `eslint` clean; `/code-review main high`:
+  12 findings, 11 applied in round 2 (two correctness: a closed request of this tab's could hide a newer open one and let a press
+  file beside it; the close of a sync watched without a press was never announced), one already met (STATUS and DECISIONS landed
+  in the PR's later commits). Accepted, not changed: a second queued row behind a claim the runner is resuming after a restart
+  would read `waiting on the container…` after the grace; the tooltip asks whether the container is busy or down rather than
+  asserting it is dead, and a fallback session's own claim is first-wins against the runner's, so no second crawl starts.
+  `/security-review` not run: no auth, secret or endpoint touched (one owner-scoped `sync_runs` read, the id checked as a uuid).
 
 **Found the same day, not fixed here:** sync 1297 (request 1856, 2026-10-05 18:07Z) pulled 3 files and left file 2489 unpulled
 with Storage `400 InvalidKey`; see Known issues.
