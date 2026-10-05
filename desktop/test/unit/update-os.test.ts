@@ -1,27 +1,39 @@
 /**
  * The Windows adapter behind the update feature (2026-09-30): starting the builder task,
- * and where the running build lives. Every OS call is injected, so nothing here touches
- * Task Scheduler or this machine's %LOCALAPPDATA%.
+ * where the running build lives, and starting the Update now helper. Every OS call is
+ * injected, so nothing here touches Task Scheduler or this machine's %LOCALAPPDATA%. Two
+ * small exceptions run for real: `runHidden` against `node` itself and `readSwapMarker`
+ * against a temp folder.
  */
 
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   BUILDER_TASK_NAME,
   DOCKER_CHECK_TIMEOUT_MS,
   EXIT_TASK_ALREADY_RUNNING,
   FORCE_REQUEST_FILE,
+  HELPER_HANDOFF_TIMEOUT_MS,
+  HELPER_START_TIMEOUT_MS,
+  MARKER_POLL_MS,
   createDockerReadyCheck,
   createReadBuilderStatus,
   forceRequestJson,
   createStartBuilderTask,
   parseBuilderStatus,
   launchStateDir,
+  readSwapMarker,
+  runHidden,
   startUpdateHelper,
   updateHelperArgv,
 } from '../../src/main/update-os';
-import type { DockerExec, PowerShellRun } from '../../src/main/update-os';
+import type { DockerExec, HelperRun, PowerShellRun, UpdateHelperIo } from '../../src/main/update-os';
 import { runningTreeFromExecPath } from '../../src/core/update/build-paths';
+import type { SwapMarkerSnapshot } from '../../src/core/update/swap-marker';
 
 const TREE = '31215cf503f565cd7113d01b14266e4b2ce1000d';
 
@@ -103,7 +115,7 @@ describe('createStartBuilderTask', () => {
 describe('updateHelperArgv (Update now)', () => {
   const STATE = 'C:\\Users\\s\\AppData\\Local\\bb2dash-launch';
 
-  it('runs the installed update-now.ps1, hidden, with the tree and the state folder', () => {
+  it('runs the installed update-now.ps1, hidden, with the tree, the state folder and -Detach', () => {
     const argv = updateHelperArgv({ stateDir: STATE, tree: TREE }, { SystemRoot: 'C:\\Windows' });
     expect(argv).toEqual([
       'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
@@ -119,6 +131,7 @@ describe('updateHelperArgv (Update now)', () => {
       TREE,
       '-StateDir',
       STATE,
+      '-Detach',
     ]);
   });
 
@@ -128,26 +141,163 @@ describe('updateHelperArgv (Update now)', () => {
   });
 });
 
-describe('startUpdateHelper', () => {
-  it('fails before spawning when the helper script is not installed', async () => {
-    const spawned: string[][] = [];
-    await expect(
-      startUpdateHelper(
-        { stateDir: 'C:\\nowhere', tree: TREE },
-        { exists: () => false, spawnDetached: async (argv) => void spawned.push([...argv]) },
-      ),
-    ).rejects.toThrow(/update-now\.ps1/);
-    expect(spawned).toEqual([]);
+describe('startUpdateHelper (stage 1 hands off, then the helper’s marker; W-71)', () => {
+  const STATE_DIR = 'C:\\s';
+  const MARKER_PATH = `${STATE_DIR}\\swap-pending`;
+  const OTHER = 'a'.repeat(40);
+  const FRESH: SwapMarkerSnapshot = Object.freeze({ text: TREE, modifiedMs: 2_000 });
+
+  interface HarnessOptions {
+    readonly installed?: boolean;
+    /** The marker as it was before stage 1 ran. */
+    readonly before?: SwapMarkerSnapshot | null;
+    /** What each read after stage 1 returns, in order; the last one repeats. */
+    readonly after?: ReadonlyArray<SwapMarkerSnapshot | null>;
+    readonly run?: HelperRun;
+  }
+
+  /** Fake OS: a clock that only `sleep` moves, a scripted marker, a recorded stage-1 run. */
+  function harness(options: HarnessOptions = {}) {
+    const after = options.after ?? [FRESH];
+    let clock = 0;
+    let ran = false;
+    let readsAfterRun = 0;
+    const runs: Array<{ argv: readonly string[]; cwd: string; timeoutMs: number }> = [];
+    const markerPaths: string[] = [];
+    const io: UpdateHelperIo = {
+      exists: () => options.installed ?? true,
+      readMarker: (path) => {
+        markerPaths.push(path);
+        if (!ran) return options.before ?? null;
+        const next = after[Math.min(readsAfterRun, after.length - 1)] ?? null;
+        readsAfterRun += 1;
+        return next;
+      },
+      run: async (argv, cwd, timeoutMs) => {
+        runs.push({ argv: [...argv], cwd, timeoutMs });
+        ran = true;
+        return (options.run ?? (async () => 0))(argv, cwd, timeoutMs);
+      },
+      sleep: async (ms) => {
+        clock += ms;
+      },
+      now: () => clock,
+    };
+    return { io, runs, markerPaths, elapsed: () => clock, readsAfterRun: () => readsAfterRun };
+  }
+
+  const start = (io: UpdateHelperIo) => startUpdateHelper({ stateDir: STATE_DIR, tree: TREE }, io);
+
+  it('fails before running anything when the helper script is not installed', async () => {
+    const h = harness({ installed: false });
+    await expect(start(h.io)).rejects.toThrow(/update-now\.ps1/);
+    expect(h.runs).toEqual([]);
   });
 
-  it('spawns the argv once the script is there', async () => {
-    const spawned: string[][] = [];
-    await startUpdateHelper(
-      { stateDir: 'C:\\s', tree: TREE },
-      { exists: () => true, spawnDetached: async (argv) => void spawned.push([...argv]) },
+  it('runs stage 1 with -Detach in the state folder, bounded, and resolves once the marker names the tree', async () => {
+    const h = harness({ after: [null, null, FRESH] });
+    await expect(start(h.io)).resolves.toBeUndefined();
+    expect(h.runs).toHaveLength(1);
+    expect(h.runs[0]?.argv).toEqual(updateHelperArgv({ stateDir: STATE_DIR, tree: TREE }));
+    expect(h.runs[0]?.argv.at(-1)).toBe('-Detach');
+    expect(h.runs[0]?.cwd).toBe(STATE_DIR);
+    expect(h.runs[0]?.timeoutMs).toBe(HELPER_HANDOFF_TIMEOUT_MS);
+    expect(h.elapsed()).toBe(2 * MARKER_POLL_MS);
+    expect(new Set(h.markerPaths)).toEqual(new Set([MARKER_PATH]));
+  });
+
+  it('rejects when stage 1 exits non-zero, without waiting for a marker', async () => {
+    const h = harness({ run: async () => 6 });
+    await expect(start(h.io)).rejects.toThrow(/-Detach exited 6/);
+    expect(h.readsAfterRun()).toBe(0);
+  });
+
+  it('rejects when stage 1 ends without an exit code', async () => {
+    const h = harness({ run: async () => null });
+    await expect(start(h.io)).rejects.toThrow(/without an exit code/);
+  });
+
+  it('rejects when stage 1 cannot be spawned or does not exit in time', async () => {
+    const spawnError = harness({ run: async () => Promise.reject(new Error('spawn powershell.exe ENOENT')) });
+    await expect(start(spawnError.io)).rejects.toThrow(/ENOENT/);
+    const timedOut = harness({ run: async () => Promise.reject(new Error('did not exit within 30000 ms')) });
+    await expect(start(timedOut.io)).rejects.toThrow(/30000 ms/);
+  });
+
+  it('rejects when the marker never appears before the bound', async () => {
+    const h = harness({ after: [null] });
+    await expect(start(h.io)).rejects.toThrow(/did not start within/);
+    expect(h.elapsed()).toBeGreaterThanOrEqual(HELPER_START_TIMEOUT_MS);
+    expect(h.elapsed()).toBeLessThan(HELPER_START_TIMEOUT_MS + MARKER_POLL_MS);
+  });
+
+  it('rejects at once when a new marker names another build', async () => {
+    const h = harness({ after: [{ text: OTHER, modifiedMs: 2_000 }] });
+    await expect(start(h.io)).rejects.toThrow(new RegExp(`names build ${OTHER}`));
+    expect(h.elapsed()).toBe(0);
+  });
+
+  it('does not take a marker left over from before the press for the helper', async () => {
+    const stale: SwapMarkerSnapshot = { text: TREE, modifiedMs: 1_000 };
+    const never = harness({ before: stale, after: [stale] });
+    await expect(start(never.io)).rejects.toThrow(/did not start within/);
+    const rewritten = harness({ before: stale, after: [stale, stale, FRESH] });
+    await expect(start(rewritten.io)).resolves.toBeUndefined();
+  });
+
+  it('rejects when the marker cannot be read', async () => {
+    const h = harness();
+    const io: UpdateHelperIo = {
+      ...h.io,
+      readMarker: () => {
+        throw new Error('EACCES: permission denied');
+      },
+    };
+    await expect(start(io)).rejects.toThrow(/EACCES/);
+  });
+});
+
+describe('runHidden (the real stage-1 runner)', () => {
+  const node = process.execPath;
+
+  it('resolves the exit code of a process it waited for', async () => {
+    expect(await runHidden([node, '-e', 'process.exit(0)'], tmpdir(), 10_000)).toBe(0);
+    expect(await runHidden([node, '-e', 'process.exit(3)'], tmpdir(), 10_000)).toBe(3);
+  });
+
+  it('stops a process that runs past the bound and rejects', async () => {
+    await expect(runHidden([node, '-e', 'setTimeout(() => {}, 20000)'], tmpdir(), 300)).rejects.toThrow(
+      /did not exit within 300 ms/,
     );
-    expect(spawned).toHaveLength(1);
-    expect(spawned[0]).toContain(TREE);
+  });
+
+  it('rejects when the program cannot be started', async () => {
+    await expect(runHidden([join(tmpdir(), 'no-such-program-w71.exe')], tmpdir(), 10_000)).rejects.toThrow(/ENOENT/);
+    await expect(runHidden([], tmpdir(), 10_000)).rejects.toThrow(/empty argv/);
+  });
+});
+
+describe('readSwapMarker', () => {
+  let dir: string | null = null;
+  afterEach(() => {
+    if (dir !== null) rmSync(dir, { recursive: true, force: true });
+    dir = null;
+  });
+
+  it('is null when there is no marker, and the text and write time when there is one', () => {
+    dir = mkdtempSync(join(tmpdir(), 'bb2dash-swap-marker-'));
+    const path = join(dir, 'swap-pending');
+    expect(readSwapMarker(path)).toBeNull();
+    writeFileSync(path, TREE, 'utf8');
+    const seen = readSwapMarker(path);
+    expect(seen?.text).toBe(TREE);
+    expect(seen?.modifiedMs).toBeGreaterThan(0);
+  });
+
+  it('throws on anything but a missing file', () => {
+    dir = mkdtempSync(join(tmpdir(), 'bb2dash-swap-marker-'));
+    // A folder where the file should be: reading it fails with EISDIR, not ENOENT.
+    expect(() => readSwapMarker(dir as string)).toThrow();
   });
 });
 
