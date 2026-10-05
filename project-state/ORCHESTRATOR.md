@@ -269,15 +269,16 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
 * **Phase 18 defaults to confirm or overturn:** file 62 stays current with its missing note; reading 46 stays tagged; file 69 is not re-OCR'd and `.doc`/OCR automation stays out.
 * The 0-byte session note `b46dd7f8` (delete or keep) and inbox-541..544, which exist in the RAG store from the old machine but not in the realm on disk (rebuild from the store, or leave).
 
-* **Phase 14 acceptance sitting (A1–A9), in one sitting, no overnight wait** (brief 100 §Definition of done; ticks in
-  `docs/planning/sprint-2/verification/82a_PHASE14_PARITY_AND_IMAGES.md`). Everything is on `main` since 2026-10-04. Then
-  in a fresh clone set (`SECRETS_DIR=C:/Users/stack/.bb2dash-secrets`): `just up`, `just doctor`, `just login`, a Sync under
-  `queue-only` with no terminal, the morning-login trigger (A5: the app opens the login page, the day's sync runs),
-  `just ingest-now` plus the catch-up restart (A6, `REALM_SYNC=apply`), the dev container with `/bb2dash-pm` (A7), the
-  two `AgenticHarness-*` scheduled tasks removed (A8), and the Windows `/bb-sync` fallback with Docker stopped (A9).
-  Stack's own steps already done: the Duo login in the container, the secrets folder (11/11), the MCP key move,
-  `.wslconfig`, Docker autostart. Still his: removing the stale `bb-course-*` claude.ai skills (task 19), and running
-  `node scripts/install-skills.mjs` after the merge.
+* **Phase 14 acceptance sitting (A1–A9)** (brief 100 §Definition of done; ticks in
+  `docs/planning/sprint-2/verification/82a_PHASE14_PARITY_AND_IMAGES.md`, section "Acceptance A1–A9"). Walked
+  2026-10-04/05 on `main` with the existing checkouts: **A1–A4 and A6 ticked, A2 passed on Stack's word with the doctor's
+  two reporting artefacts named (W-74), A8 partial** (the nightly task gone, the checkpoint task kept until the container
+  collects). Still open: **A5** (the first morning after 06:00 New York proves the sync without a press, PR #73; the
+  next dead login proves the page opening), **A7** `just dev`, **A9** the Windows `/bb-sync` with Docker stopped.
+  Stack's remaining steps: a tray Quit so the logon-build task activates desktop build `f37723a` (PR #71), then one
+  press of **Update desktop app** on a later desktop change as the end-to-end proof; removing the stale `bb-course-*`
+  claude.ai skills (task 19). Done: the Duo login, secrets 11/11, the MCP key move, `.wslconfig`, Docker autostart,
+  `node scripts/install-skills.mjs` (2026-10-05 22:0xZ), the sync image rebuilt from `main` 2e39199 (22:06Z).
 
 ## 5. Context the orchestrator reviews at session start
 

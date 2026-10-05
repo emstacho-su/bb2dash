@@ -759,12 +759,21 @@ login-triggered sync also ran that evening (the runner saw the login at 01:02:56
 `AgenticHarness-*` Task Scheduler jobs still exist (NightlyIngest disabled, CheckpointCollect ready); the harness jobs
 container is up in dry-run.
 
-**Next:** A5–A9 (brief 100 §Definition of done; 82a ticks). A5's app-opens-the-login-page half needs a dead login
-under queue-only, so the next morning's first login is its natural proof (its archive-and-enqueue half was seen at
-01:02Z); A6 sets `REALM_SYNC=apply`, brings the jobs container up with it, runs `just ingest-now`, checks a `rag`
-search and the realm push, then the catch-up restart; A7 `just dev`; A8 Stack unregisters the two tasks himself; A9 the
-Windows `/bb-sync` with Docker stopped. After it: Stack removes the stale claude.ai `bb-course-*` skills
-(`install-skills.mjs --check` already read "in sync" on 2026-10-04); the Phase 14 worktrees are gone.
+**Acceptance on 2026-10-05 (ticks in 82a, section "Acceptance A1–A9"):** **A2 passed on Stack's word** after the doctor
+read of 20:19Z: every row the containers own green; its exit 1 came from two reporting artefacts of the cut-over (the
+harness doctor's `nightly ingest` row reads the host's retired state file, follow-up W-74; the strict `vault … clean`
+rows count notes written since the last nightly). **A6** done both halves: `just ingest-now` exit 0 (91 chunks, realms
+pushed, a `rag` search finds the day's notes) and the catch-up proven at 18:06:39Z (the restarted scheduler ran the
+missed window 13 ms after starting; a first attempt killed mid-run by the restart showed "never twice" and a clean lock
+takeover). **A8 partial** by agreement: the nightly task is unregistered; the checkpoint task stays until the jobs
+container collects checkpoints (deferred list). The sync image was rebuilt from `main` 2e39199 at 22:06Z (PRs #71, #73,
+#75) and `bb2dash-sync-1` recreated with the login intact; the installed skills were refreshed from `main` the same hour.
+
+**Next:** A5's "sync without a press" half on the first morning after 06:00 New York (PR #73's rule), its page-opening
+half on the next dead login; A7 `just dev`; A9 the Windows `/bb-sync` with Docker stopped; the tray Quit that lets the
+logon-build task activate desktop build `f37723a` (PR #71), after which the first update press is the end-to-end proof;
+Stack removes the stale claude.ai `bb-course-*` skills. Follow-ups on the deferred list: W-74 (the umbrella doctor
+reads the container's ingest state), container-side checkpoint collection, the Activity label for login-triggered runs.
 
 **Acceptance, 2026-10-04:** A2's first `just up` found two path bugs (the seccomp profile through the umbrella; the justfile overriding `SECRETS_DIR`); both fixed by this follow-up PR and bb2dash-stack's, before the sitting goes on.
 
