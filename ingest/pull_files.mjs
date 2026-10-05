@@ -270,14 +270,18 @@ export function duplicateIsAcceptable(submission, { restale = false, sanitised =
 /**
  * Why an occupied Storage key must not be recorded as this row's file, or null when it may (the
  * course resume). Both runners put it after `storage <status>: `, so the report's `not_pulled` and
- * the Inbox item say why without a lookup. A name already holding `_` where another has a refused
- * character is not sanitised, so if it arrives second it still resumes: the size + md5 check closes that.
+ * the Inbox item say why without a lookup. The verdict comes first and the sanitised file name
+ * last, so the report's 200-character clip can only shorten the name (the line already names the
+ * file by id). A name already holding `_` where another has a refused character is not sanitised,
+ * so if it arrives second it still resumes: the size + md5 check on Phase 14's deferred list closes that.
  */
 export function occupiedKeyRefusal(row) {
-  const sanitised = keyWasSanitised(row);
+  const raw = unsanitisedKeyFor(row);
+  const key = sanitizeStorageKey(raw);
+  const sanitised = key !== raw;
   if (duplicateIsAcceptable(isSubmissionRow(row), { sanitised })) return null;
   if (sanitised) {
-    return `key already occupied and this key was sanitised (${unsanitisedKeyFor(row)} -> ${storageKeyFor(row)}); the object there may be another file; a human decides`;
+    return `key already occupied; this key was sanitised, so the object there may be another file; a human decides (${path.posix.basename(key)})`;
   }
   return 'key already occupied; a human decides whether those bytes are this file';
 }

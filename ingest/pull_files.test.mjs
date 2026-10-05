@@ -144,15 +144,44 @@ test('W-73: an occupied key resumes a course file whose key sanitising left alon
 test('W-73: an occupied key is refused for a course file whose key sanitising changed — it may hold another file', () => {
   const row = { relpath: `GEO.103/readings/${MUSK}`, bucket: 'readings' };
   assert.equal(pf.occupiedKeyRefusal(row),
-    `key already occupied and this key was sanitised (GEO.103/readings/${MUSK} -> GEO.103/readings/Musk_s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf); the object there may be another file; a human decides`);
+    'key already occupied; this key was sanitised, so the object there may be another file; a human decides (Musk_s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf)');
   assert.equal(duplicateIsAcceptable(false, { sanitised: true }), false);
+});
+
+test('W-73 R2-4: the reason fits the report\'s 200-character clip for 2489, verdict first, the name last', () => {
+  const REPORT_REASON_MAX = 200; // sync/src/report.ts REASON_MAX
+  const reason = `storage 409: ${pf.occupiedKeyRefusal({ relpath: `GEO.103/readings/${MUSK}`, bucket: 'readings' })}`;
+  assert.ok(reason.length < REPORT_REASON_MAX, `${reason.length} characters`);
+  // A longer name is clipped from the end, so only the name can be cut, never the verdict.
+  const long = pf.occupiedKeyRefusal({ relpath: `X/readings/${'é'.repeat(300)}.pdf`, bucket: 'readings' });
+  assert.ok(long.indexOf('a human decides (') + 'a human decides ('.length < REPORT_REASON_MAX);
+});
+
+const STORAGE_KEYS_FIXTURE = new URL('../db/fixtures/phase14/storage_keys.json', import.meta.url);
+const STORAGE_KEY_SQL_UNIT = new URL('../db/tests/phase14_095_storage_key.sql', import.meta.url);
+
+test('W-73 R2-3: storageKeyFor meets the shared relpath -> key contract (db/fixtures/phase14/storage_keys.json)', () => {
+  const { cases } = JSON.parse(fs.readFileSync(STORAGE_KEYS_FIXTURE, 'utf8'));
+  assert.ok(cases.length >= 10 && cases.length <= 12, `${cases.length} cases`);
+  for (const c of cases) {
+    assert.equal(storageKeyFor({ relpath: c.relpath }), c.key, c.case);
+    assert.equal(pf.STORAGE_KEY_VALID.test(c.key), true, `${c.case}: Storage accepts the key`);
+  }
+});
+
+test('W-73 R2-3: the SQL unit for 095 carries the same cases, so bb_file_storage_key meets the same contract', () => {
+  const { cases } = JSON.parse(fs.readFileSync(STORAGE_KEYS_FIXTURE, 'utf8'));
+  const sql = fs.readFileSync(STORAGE_KEY_SQL_UNIT, 'utf8');
+  const inline = /:= \$storage_keys\$\s*(\[[\s\S]*?\])\s*\$storage_keys\$::jsonb/.exec(sql);
+  assert.ok(inline, 'the unit holds the cases between $storage_keys$ tags');
+  assert.deepEqual(JSON.parse(inline[1]), cases);
 });
 
 test('W-73: two names that differ only in a refused character share a key, and the second one to arrive is refused', () => {
   const first = { relpath: 'GEO.103/readings/a’b.pdf', bucket: 'readings' };
   const second = { relpath: 'GEO.103/readings/a“b.pdf', bucket: 'readings' };
   assert.equal(storageKeyFor(first), storageKeyFor(second));
-  assert.match(pf.occupiedKeyRefusal(second), /^key already occupied and this key was sanitised .*; a human decides$/);
+  assert.equal(pf.occupiedKeyRefusal(second), 'key already occupied; this key was sanitised, so the object there may be another file; a human decides (a_b.pdf)');
   // Known limit until Storage's size + md5 eTag is checked against the fetched bytes (Phase 14's
   // deferred list): a name that already holds `_` there is not sanitised, so if it arrives SECOND
   // its occupied key still resumes. Flip this when that check lands.

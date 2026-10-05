@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { storageKeyFor } from '../../ingest/pull_files.mjs';
 import type { FileStoredArgs, WorklistRow } from '../src/db.js';
 import {
   EMBED_TIMEOUT_MS,
@@ -70,6 +71,12 @@ function ports(rows: WorklistRow[], over: Partial<FilesPorts> = {}) {
     rpc: {
       fileWorklist: vi.fn(async () => rows),
       fileStored: vi.fn(async (a: FileStoredArgs) => {
+        // sync_file_stored's gate since 095: the key must be bb_file_storage_key(relpath), which is
+        // storageKeyFor's rule (db/fixtures/phase14/storage_keys.json pins the two together).
+        // With 091's gate, replace(relpath, '#', '_'), file 2489 was refused here (W-73 R2-1).
+        if (a.key !== storageKeyFor({ relpath: a.relpath })) {
+          throw Object.assign(new Error("sync_file_stored: key is not the relpath's storage key"), { code: '22023' });
+        }
         stored.push(a);
         order.push(`stored ${a.id}`);
         return true;
@@ -250,7 +257,7 @@ describe('the files step', () => {
     expect(r.files.pulled).toBe(0);
     expect(r.files.not_pulled).toEqual([{
       id: '2489',
-      reason: `storage 409: key already occupied and this key was sanitised (GEO.103/readings/${MUSK} -> GEO.103/readings/${MUSK_KEY}); the object there may be another file; a human decides`,
+      reason: `storage 409: key already occupied; this key was sanitised, so the object there may be another file; a human decides (${MUSK_KEY})`,
     }]);
     expect(stored).toEqual([]);
     expect(p.extract).not.toHaveBeenCalled();
@@ -270,7 +277,7 @@ describe('the files step', () => {
     expect(p.storagePost).toHaveBeenNthCalledWith(1, 'GEO.103/readings/a_b.pdf', expect.any(Buffer), 'application/pdf');
     expect(p.storagePost).toHaveBeenNthCalledWith(2, 'GEO.103/readings/a_b.pdf', expect.any(Buffer), 'application/pdf');
     expect(stored.map((s) => s.id)).toEqual(['61']);
-    expect(r.files.not_pulled).toEqual([{ id: '62', reason: expect.stringMatching(/^storage 409: key already occupied and this key was sanitised .*; a human decides$/) }]);
+    expect(r.files.not_pulled).toEqual([{ id: '62', reason: 'storage 409: key already occupied; this key was sanitised, so the object there may be another file; a human decides (a_b.pdf)' }]);
   });
 
   it('bytes that do not look like the file are reported, not stored', async () => {
