@@ -151,8 +151,8 @@ describe('startUpdateHelper (stage 1 hands off, then the helper’s marker; W-71
     readonly installed?: boolean;
     /** The marker as it was before stage 1 ran. */
     readonly before?: SwapMarkerSnapshot | null;
-    /** What each read after stage 1 returns, in order; the last one repeats. */
-    readonly after?: ReadonlyArray<SwapMarkerSnapshot | null>;
+    /** What each read after stage 1 returns, in order (an Error is thrown); the last one repeats. */
+    readonly after?: ReadonlyArray<SwapMarkerSnapshot | null | Error>;
     readonly run?: HelperRun;
   }
 
@@ -171,6 +171,7 @@ describe('startUpdateHelper (stage 1 hands off, then the helper’s marker; W-71
         if (!ran) return options.before ?? null;
         const next = after[Math.min(readsAfterRun, after.length - 1)] ?? null;
         readsAfterRun += 1;
+        if (next instanceof Error) throw next;
         return next;
       },
       run: async (argv, cwd, timeoutMs) => {
@@ -255,7 +256,7 @@ describe('startUpdateHelper (stage 1 hands off, then the helper’s marker; W-71
     await expect(start(rewritten.io)).resolves.toBeUndefined();
   });
 
-  it('rejects when the marker cannot be read', async () => {
+  it('rejects before stage 1 when the marker cannot be read beforehand (no helper yet)', async () => {
     const h = harness();
     const io: UpdateHelperIo = {
       ...h.io,
@@ -264,6 +265,28 @@ describe('startUpdateHelper (stage 1 hands off, then the helper’s marker; W-71
       },
     };
     await expect(start(io)).rejects.toThrow(/EACCES/);
+    expect(h.runs).toEqual([]);
+  });
+
+  const eperm = () => Object.assign(new Error('EPERM: operation not permitted, stat'), { code: 'EPERM' });
+
+  it('waits through a read error while polling and resolves once the marker is readable (R2-4)', async () => {
+    const h = harness({ after: [null, eperm(), FRESH] });
+    await expect(start(h.io)).resolves.toBeUndefined();
+    expect(h.elapsed()).toBe(2 * MARKER_POLL_MS);
+  });
+
+  it('rejects at the bound naming the last read error when every poll fails (R2-4)', async () => {
+    const h = harness({ after: [eperm()] });
+    await expect(start(h.io)).rejects.toThrow(
+      /did not start within 20000 ms: no swap-pending for build [0-9a-f]{40}; last read error: EPERM; a helper may still be running/,
+    );
+    expect(h.elapsed()).toBeGreaterThanOrEqual(HELPER_START_TIMEOUT_MS);
+  });
+
+  it('names a read error without an errno code by its message', async () => {
+    const h = harness({ after: [new Error('disk gone')] });
+    await expect(start(h.io)).rejects.toThrow(/last read error: disk gone;/);
   });
 });
 

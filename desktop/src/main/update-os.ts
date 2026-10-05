@@ -351,7 +351,10 @@ export const runHidden: HelperRun = (argv, cwd, timeoutMs) =>
     });
   });
 
-/** The helper's pending-swap marker, or `null` when there is none; any other failure throws. */
+/**
+ * The helper's pending-swap marker, or `null` when there is none; any other failure throws.
+ * The poll in `startUpdateHelper` treats a throw as "not yet" and names it at the bound.
+ */
 export function readSwapMarker(path: string): SwapMarkerSnapshot | null {
   try {
     const modifiedMs = statSync(path).mtimeMs;
@@ -410,6 +413,28 @@ export async function startUpdateHelper(
  */
 const HELPER_MAY_STILL_RUN = '; a helper may still be running: see logs\\update-now.log';
 
+/** An fs error's errno code (`EPERM`), else its message. */
+function describeReadError(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === 'string' && code !== '') return code;
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * One poll of the marker. A read error (a transient EBUSY/EPERM while the helper writes or
+ * removes the file) counts as "not there yet"; the caller keeps the last one for its message.
+ */
+function pollSwapMarker(
+  markerPath: string,
+  io: UpdateHelperIo,
+): { readonly seen: SwapMarkerSnapshot | null; readonly readError: string | null } {
+  try {
+    return { seen: io.readMarker(markerPath), readError: null };
+  } catch (error) {
+    return { seen: null, readError: describeReadError(error) };
+  }
+}
+
 /** Poll the marker until it names `tree`, bounded by HELPER_START_TIMEOUT_MS. */
 async function waitForSwapMarker(
   markerPath: string,
@@ -418,8 +443,11 @@ async function waitForSwapMarker(
   io: UpdateHelperIo,
 ): Promise<void> {
   const deadline = io.now() + HELPER_START_TIMEOUT_MS;
+  let lastReadError: string | null = null;
   for (;;) {
-    const verdict = judgeSwapMarker(io.readMarker(markerPath), before, tree);
+    const poll = pollSwapMarker(markerPath, io);
+    lastReadError = poll.readError ?? lastReadError;
+    const verdict = judgeSwapMarker(poll.seen, before, tree);
     if (verdict.kind === 'started') return;
     // Second line of defence: the helper itself refuses first, while a fresh marker names
     // another build (Invoke-UpdateSwap); this catches one written after the press.
@@ -429,8 +457,9 @@ async function waitForSwapMarker(
       );
     }
     if (io.now() >= deadline) {
+      const readNote = lastReadError === null ? '' : `; last read error: ${lastReadError}`;
       throw new Error(
-        `the update helper did not start within ${HELPER_START_TIMEOUT_MS} ms: no ${PENDING_SWAP_FILE} for build ${tree}${HELPER_MAY_STILL_RUN}`,
+        `the update helper did not start within ${HELPER_START_TIMEOUT_MS} ms: no ${PENDING_SWAP_FILE} for build ${tree}${readNote}${HELPER_MAY_STILL_RUN}`,
       );
     }
     await io.sleep(MARKER_POLL_MS);
