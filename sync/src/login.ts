@@ -55,7 +55,7 @@ export const SYNC_DAY_TIME_ZONE = 'America/New_York';
  */
 export const DAILY_SYNC_NOT_BEFORE_HOUR = 6;
 /**
- * After a null answer the daily rule asks again no sooner than this (R2-2's sibling, R2-1). Null is
+ * After a null answer the daily rule asks again no sooner than this (R2-1). Null is
  * decided on the database's clock, which can disagree with this container's about the New York day,
  * so a null never settles the day; only an id does.
  */

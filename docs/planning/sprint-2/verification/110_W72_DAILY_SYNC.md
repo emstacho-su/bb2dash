@@ -64,6 +64,11 @@ death has no transition, and the next day's sync is never asked for.
    day. If that pass then fails, nothing more is asked that day unless the login re-enters `alive`.
    This is rare and the brief names every `-> alive` path, so the behaviour was not special-cased.
 
+**A limit set by the PM as a product call (round 2), not by the worker.** Once the day's call has
+been answered with an id, the watch does not ask again that day, even if that sync then fails. An
+automatic re-ask after a failed sync could loop. Stack sees the failure in Activity and presses Sync.
+Only a new entry into `alive` (Stack logging in again) calls again that day, as before.
+
 ## Tests (`sync/test/login.test.ts`)
 
 RED, at c752b16, before the change (`npx vitest run test/login.test.ts`):
@@ -152,3 +157,101 @@ Baseline before the change: 132 tests passed. `db/tests` are untouched (no SQL c
 * `docs/planning/sprint-2/verification/110_W72_DAILY_SYNC.md`: this record.
 
 `project-state/` and `db/migrations/` are not touched; the PM writes STATUS and DECISIONS.
+
+## Round 2 (`/code-review fix/sync-daily-enqueue high`, static; 2026-10-05)
+
+Round 2 supersedes two parts of the record above. The daily call now waits for 06:00 New York, not
+midnight, and only an answer with an id records the day. The PM declined three findings: re-asking
+after a failed first sync (the product call recorded under Calls above), a timeout around the
+enqueue RPC (no RPC in `db.ts` has one, and the container watchdog covers a hang), and STATUS and
+DECISIONS (those are the PM's).
+
+Each item was one commit, pushed. The two behaviour changes (R2-2, R2-1) were written test first.
+
+* **R2-5, 6c7de68.** The "a pass's own check" describe now starts at `MIDDAY_UTC` like the others.
+* **R2-3, 57f77ff.** `syncDayOf` builds `YYYY-MM-DD` from `formatToParts` (year, month, day) on an
+  `en-US` formatter, so no locale's date pattern is involved. A missing part throws, naming the
+  instant. The existing `syncDayOf` cases stayed green.
+* **R2-4, 5a0fea9.** The dead `this.state !== 'alive'` test is gone from `enqueueIfNewDay`. A comment
+  says where the invariant lives: the one caller, `checkNow`, runs it only on an alive verdict, and
+  `probeAndSettle` has entered `alive` before returning one.
+* **R2-2, 0b77fc4.** `DAILY_SYNC_NOT_BEFORE_HOUR = 6` is exported; it is a New York local hour, read
+  with the day from the same `formatToParts` call (`hourCycle: 'h23'`). Before that hour, passing
+  checks make no call and record nothing. An entry into `alive` (a real login) still calls at any
+  hour. If Stack moves the hour, only the constant changes. RED: `Tests  6 failed | 30 passed (36)`.
+* **R2-1, e434a9e.** Both paths, the daily rule and an entry into `alive`, now record the day only
+  when the answer is an id. A null sets a backoff, so the daily rule asks again no sooner than
+  `DAILY_NULL_RETRY_MINUTES = 60` later. The entry's null sets it too, so a login answered null is
+  not re-asked at the next check. The daily rule logs a null once per New York day and an id every
+  time; the entry's log line is unchanged. The memory is one readonly `DailyMemory` object, replaced
+  whole after each answer. RED: `Tests  3 failed | 35 passed (38)`. With the backoff ignored, the
+  two backoff cases fail (`Tests  2 failed | 36 passed (38)`).
+
+How the PM's R2-1 example meets R2-2: "a null at 00:00:40 New York followed by an id an hour later"
+cannot happen as written, because R2-2 stops the daily rule before 06:00. The null case is pinned
+twice instead:
+
+* a daily null at 06:05, then an id at the first passing check an hour or more later (07:06), which
+  records the day;
+* an entry at 00:00:40 answered null, which leaves the day open; the 06:00 call's id then records it.
+
+Each of these is two calls.
+
+The daily rule's cases now (16; the file runs 38):
+
+1. pins the daily rule's constants (`SYNC_DAY_TIME_ZONE`, `DAILY_SYNC_NOT_BEFORE_HOUR` 6)
+2. `syncDayOf` across the 2026-11-01 fall-back (unchanged)
+3. alive across New York midnight in October: no call at 00:01 or 05:59:59, one on the first passing
+   check at or after 06:00; on the keep-alive path
+4. the same, on the hourly probe path (`KEEPALIVE_MINUTES=0`)
+5. a dead -> alive entry at 03:00 New York still calls, records the day, and the daily rule adds none
+   after 06:00
+6. a same-day re-entry after the daily call keeps the entry's own call, then none
+7. a failed daily call is retried on the next passing check, then not again that day
+8. an entry whose own call failed is retried by the entry path alone, never doubled
+9. a daily null does not record the day: asked again no sooner than an hour later, and an id records
+   it (also pins `DAILY_NULL_RETRY_MINUTES` 60)
+10. an entry at 00:00:40 New York answered null does not record the day; the 06:00 call's id does
+11. a null answered all day: at most one call an hour, one "nothing queued" line a day (and one more
+    the next day)
+12. the 2026-11-01 fall-back: 06:00 New York is 11:00Z on the 1st and the 2nd, not 10:00Z
+13. a watch that is dead (401) across midnight and 06:00 never enqueues
+14. a watch that is unknown (500) across midnight and 06:00 never enqueues
+15. an unknown watch whose probe throws across midnight and 06:00 never enqueues
+16. an alive watch whose checks fail (500) around 06:00 waits for the next passing check
+
+### Round 2 gates
+
+Run from `sync/` on e434a9e plus the uncommitted edits in this commit: this note and a comment
+phrase in `login.ts` (the `DAILY_NULL_RETRY_MINUTES` doc comment).
+Each block is the command, then its last line verbatim.
+
+```
+npm run typecheck
+> tsc -p tsconfig.json --noEmit
+```
+
+(Exit 0, no diagnostics.)
+
+```
+npm run build
+⚡ Done in 15ms
+```
+
+```
+npx vitest run --coverage
+================================================================================
+```
+
+The lines above it:
+
+```
+ Test Files  7 passed (7)
+      Tests  148 passed (148)
+Statements   : 90.51% ( 821/907 )
+Branches     : 82.64% ( 438/530 )
+Functions    : 80.72% ( 155/192 )
+Lines        : 91.88% ( 747/813 )
+```
+
+The threshold is lines 80%. `login.ts` is at 98.21% of lines and is now 436 lines long.
