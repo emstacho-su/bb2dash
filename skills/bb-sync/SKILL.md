@@ -364,9 +364,11 @@ Rules that apply to this step and no other:
 
 - **A 409 is not "done" for a submission.** Something already occupies that key and this step does
   not know what, so it must not point a Blackboard row at bytes it did not write. The script fails
-  such a row (`Storage key already occupied`) and emits no SQL for it. Name it in the report; the
+  such a row (`key already occupied`) and emits no SQL for it. Name it in the report; the
   next sync retries it and a human decides whether the object there is the same file. A course
-  key is derived from the catalogue, so a duplicate there is this same file and is accepted.
+  key is derived from the catalogue, so a duplicate there is this same file and is accepted —
+  unless the key was sanitised (a character Storage refuses, such as `#`, `’` or `é`, became `_`):
+  another name may map to that key, so the row fails the same way and the reason names both spellings.
 - Rows with `classified_by = 'stack'` are files **Stack** staged in bb2dash. They have no
   `source_url`, the manifest query excludes them, and they are never touched here.
 - Never `insert` a `bb_files` row from this step. `stage_files` and `stage_attempts` are the only
