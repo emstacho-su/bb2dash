@@ -142,7 +142,11 @@ nothing written. A new app paired with an old installed script therefore stays o
   off limits, so the first real press is the end-to-end proof. An app built before this fix cannot
   deliver it through its own Update now (its detached start never runs the script). The build
   carrying it becomes current at the next logon.
-* **Open risk, not tested: the relaunch through `Bb2dash-App`.** The proof's parent was a plain
+* **Open risk (closed by the PM's probe, 2026-10-04 21:24): the relaunch through `Bb2dash-App`.**
+  The PM ran a throwaway probe task whose action Start-Processes a sleeping grandchild. The task
+  went back to `Ready` while the grandchild was still alive. So a handed-off process is outside the
+  task's job, and the helper's `Start-ScheduledTask Bb2dash-App` is accepted. The original text
+  follows for the record. The proof's parent was a plain
   Node process. The real app is the `Bb2dash-App` task's action, and Task Scheduler tracks a task's
   processes in its own job object. `Bb2dash-App` is registered with `MultipleInstances IgnoreNew`.
   If the handed-off helper stays in that job, the task instance may still count as running while the
@@ -155,3 +159,90 @@ nothing written. A new app paired with an old installed script therefore stays o
   to test it, because that would be a system change outside this brief.
 * **Commit trailer.** I used `Co-Authored-By: Claude Opus 5.5`, the model that did the work, as
   the session's attribution rule says, rather than the brief's "Claude Fable 5.1".
+
+---
+
+## Round 2 (from `/code-review fix/desktop-update-helper high`; `/security-review` had no finding)
+
+Each item went test first: the new or changed cases failed, then passed. One commit per item.
+
+| Item | Commit | What changed |
+|---|---|---|
+| R2-7 | 4ae23ac | `New-HelperHandoffArgumentList` no longer puts `-WindowStyle Hidden` in the child argv. `Start-Process -WindowStyle Hidden` in `update-now.ps1` hides the window, and a comment there says so. Pester pins that the argv carries neither `-WindowStyle` nor `Hidden`. |
+| R2-3 | 66d2d4d | `Invoke-HelperHandoff` captures the process inside the `try` and logs outside it through `Write-BestEffortLog`, which falls back to stderr. A log that throws never changes `Ok`. Pester: a throwing `-Log` after a successful start gives `Ok=$true`, pid 4242; after a failed start it still reports the failure. |
+| R2-1 | c7eab90 | Before writing its own marker, `Invoke-UpdateSwap` calls `Get-ForeignPendingSwap`. If an existing `swap-pending` names a different build and is younger than `TimeoutSeconds + LockWaitSeconds`, the helper logs ERROR `another update is in progress for build <other>: nothing swapped, nothing started`. It then returns `Launched=$false` (stage 2 exits 5) without writing anything, taking the mutex or starting anything. An older marker is a leftover and is overwritten. Pester: a fresh foreign marker is refused, with marker content and write time unchanged and `Mutex.TryOpenExisting` False; a stale foreign marker and a same-tree marker both proceed. The app-side `other-tree` verdict stays, and comments in `swap-marker.ts` and `update-os.ts` now say the helper refuses first. |
+| R2-2 | e219c8e | When the app is still running after the wait, `Get-UpdateSwapDecision` returns no actions, with the reason `the app is still running after <n>s; nothing swapped, nothing started`. `Invoke-UpdateSwap` launches only when the swap step's decision says Launch. Past the builder-mutex bound it launches only if the app is gone (`Get-BuilderBusyOutcome`). Exit is 5 in both "nothing" cases. My own addition: the catch-path fallback (`Invoke-UpdateFallback` and the inline no-module fallback in `update-now.ps1`) follows the same rule and no longer "starts it anyway". On the app side, the marker-timeout and other-tree failures end with `; a helper may still be running: see logs\update-now.log`, and a failed stage 1 does not. Both READMEs now say "…stays current; if the app never exited, nothing is started" and describe R2-1's refusal. Pester: the decision, the swap, the mutex-bound-with-app-running case and the fallback. Vitest: both suffixes, plus no suffix after a failed stage 1. |
+| R2-4 | 15e54a6 | While polling, a read or stat error counts as "not there yet". The last one is named at the bound: `…: no swap-pending for build <tree>; last read error: <code>; a helper may still be running: see logs\update-now.log` (the message text when there is no errno code). The read before stage 1 still rejects, because no helper exists yet. Tests: EPERM on poll 2 then the marker on poll 3 resolves; EPERM on every poll rejects naming `EPERM`; a codeless error is named by its message. |
+| R2-5 | adc239e | The timeout reads `…did not exit within <ms> ms; stopped it (pid N)` only when `child.kill()` returned true, otherwise `…; could not stop it (pid N)`. The runner is now `createRunHidden(spawnFn)`, with `runHidden` as the default over Node's `spawn`. Tests: a real `node` past a 300 ms bound gives `stopped it (pid <n>)`; a fake child whose `kill()` returns false gives `could not stop it (pid 4242)`. |
+| R2-6 | bf9992f, 0775bf6 | The `startUpdate` contract in `update-flow.ts` and `force-update.ts` now reads: "Hand the swap helper off through update-now.ps1 -Detach; resolves only once the helper's swap-pending marker names the build (seconds, up to about 50 s); rejects when nothing is running." I also fixed the module's own Update now section comment, which still said "spawns update-now.ps1, detached". |
+
+Declined by the PM and left untouched: a per-press token in the marker; sharing
+`ConvertTo-ProcessArgument` with `logon-build.ps1`; STATUS/DECISIONS; the commit trailers. The
+relaunch risk is closed (see the open-risk paragraph above).
+
+### Round 2 gates (final tree, last lines verbatim)
+
+| Command (from `desktop/`) | Last line |
+|---|---|
+| `npm run typecheck` | `> tsc -p tsconfig.test.json --noEmit` (no errors; exit 0) |
+| `npm test` | `Tests  824 passed (824)`; coverage `Statements 97.32% · Branches 94.3% · Functions 97.53% · Lines 98.4%` |
+| `npm run test:e2e` (with `BB2DASH_LAUNCH_DIR` pointed at scratch) | `23 passed (9.1s)` |
+| `powershell -NoProfile -NonInteractive -Command "Invoke-Pester -Path 'C:/Users/stack/projects/bb2dash-wt-update-helper/desktop/launch'"` | `Passed: 75 Failed: 0 Skipped: 0 Pending: 0 Inconclusive: 0` |
+
+`npm ci` was not repeated: `package-lock.json` did not change in Round 2.
+
+### Round 2 live proof (scratch only)
+
+The same script and arguments as in round 1, run three times, each in a fresh scratch folder.
+`Local\Bb2dashLaunchBuild` was not held beforehand.
+
+**1. `live-r2`, `-TimeoutSeconds 1`, no `bb2dash` process running.** Stack's app was closed at
+that moment. The helper took the "app gone" path and finished before the parent exited, so this
+run shows the hand-off but not survival:
+
+```
+2026-10-04 21:49:07 [INFO] update to 0000000000000000000000000000000000000000 handed off to the helper (pid 12192); this stage exits
+2026-10-04 21:49:07 [INFO] update to 0000000000000000000000000000000000000000 requested; waiting up to 1s for the app to exit
+2026-10-04 21:49:08 [WARN] update decision: [Launch] because build 0000000000000000000000000000000000000000 is not on disk: the old build stays current
+2026-10-04 21:49:08 [ERROR] the app could not be started: This command cannot be run because either the parameter "WorkingDirectory" has a value that is not valid or cannot be used with this command. Give a valid input and Run your command again.
+2026-10-04 21:49:08 [INFO] update-now done (swapped=False, launched=False)
+```
+
+**2. `live-r2b`, `-TimeoutSeconds 1`, app running.** To get "the app is still running" without
+touching Stack's app, a copy of `PING.EXE` named `bb2dash.exe` ran from scratch and exited on its
+own after about 7 s. The R2-2 path shows, with no start attempted:
+
+```
+2026-10-04 21:49:33 [INFO] update to 0000000000000000000000000000000000000000 handed off to the helper (pid 20356); this stage exits
+2026-10-04 21:49:33 [INFO] update to 0000000000000000000000000000000000000000 requested; waiting up to 1s for the app to exit
+2026-10-04 21:49:34 [WARN] update decision: [] because the app is still running after 1s; nothing swapped, nothing started
+2026-10-04 21:49:34 [INFO] update-now done (swapped=False, launched=False)
+```
+
+**3. `live-r2c`, `-TimeoutSeconds 4`, app running.** The longer wait makes the helper outlive
+the parent, so this run shows survival. Parent's record:
+
+```
++0ms parent pid 20648; marker before stage 1: false
++11ms stage 1 spawned, pid 8444
++377ms stage 1 exited 0
++612ms marker present, content '0000000000000000000000000000000000000000'
++1906ms parent exiting; marker present now: true
+```
+
+At the moment the parent exited, the log held only the first two lines. After the helper
+finished:
+
+```
+2026-10-04 21:49:51 [INFO] update to 0000000000000000000000000000000000000000 handed off to the helper (pid 41844); this stage exits
+2026-10-04 21:49:51 [INFO] update to 0000000000000000000000000000000000000000 requested; waiting up to 4s for the app to exit
+2026-10-04 21:49:55 [WARN] update decision: [] because the app is still running after 4s; nothing swapped, nothing started
+2026-10-04 21:49:55 [INFO] update-now done (swapped=False, launched=False)
+```
+
+Afterwards `swap-pending` was gone and pid 41844 no longer existed.
+
+Stack's own `bb2dash.exe` appeared at 21:49:32, from `%LOCALAPPDATA%\bb2dash-launch\current`,
+with parent `explorer.exe`: a launch from the shell, not by any helper. No helper in these runs
+started anything; a helper start would have a PowerShell parent. I only read the process table;
+nothing was stopped or started. The stand-in copy was deleted afterwards.
