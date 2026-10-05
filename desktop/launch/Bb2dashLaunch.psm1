@@ -601,8 +601,9 @@ function ConvertTo-ProcessArgument {
 
 <#
 .SYNOPSIS
-  The argument list for update-now.ps1's second stage: the same script, hidden, without
-  -Detach, with the same -Tree, -StateDir, -AppTaskName and -TimeoutSeconds.
+  The argument list for update-now.ps1's second stage: the same script without -Detach,
+  with the same -Tree, -StateDir, -AppTaskName and -TimeoutSeconds. No -WindowStyle here:
+  the caller's Start-Process -WindowStyle Hidden is what hides the window.
 
 .OUTPUTS
   [string[]], each element ready for Start-Process (see ConvertTo-ProcessArgument).
@@ -619,7 +620,7 @@ function New-HelperHandoffArgumentList {
     if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
     # PowerShell's own options first: everything after -File is a parameter of the script.
     $arguments = @(
-        '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass',
+        '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
         '-File', $ScriptPath,
         '-Tree', $Tree, '-StateDir', $StateDir, '-AppTaskName', $AppTaskName,
         '-TimeoutSeconds', [string] $TimeoutSeconds

@@ -577,19 +577,24 @@ function Invoke-TestHandoff {
 
 Describe 'New-HelperHandoffArgumentList (update-now.ps1 -Detach)' {
 
-    It 'runs the same script, hidden, and never with -Detach again' {
+    It 'runs the same script, and never with -Detach again' {
         $a = New-TestHandoffArguments
         ($a -contains '-Detach') | Should Be $false
-        (Get-ArgumentAfter $a '-WindowStyle') | Should Be 'Hidden'
         (Get-ArgumentAfter $a '-File') | Should Be $HANDOFF_SCRIPT
         ($a -contains '-NoProfile') | Should Be $true
         ($a -contains '-NonInteractive') | Should Be $true
     }
 
+    It 'leaves hiding the window to Start-Process -WindowStyle Hidden, not to the child argv (R2-7)' {
+        $a = New-TestHandoffArguments
+        ($a -contains '-WindowStyle') | Should Be $false
+        ($a -contains 'Hidden') | Should Be $false
+    }
+
     It 'puts every PowerShell option before -File (what follows -File goes to the script)' {
         $a = New-TestHandoffArguments
         $file = [array]::IndexOf($a, '-File')
-        foreach ($option in @('-NoProfile', '-NonInteractive', '-WindowStyle', '-ExecutionPolicy')) {
+        foreach ($option in @('-NoProfile', '-NonInteractive', '-ExecutionPolicy')) {
             [array]::IndexOf($a, $option) | Should BeLessThan $file
         }
     }

@@ -71,6 +71,7 @@ if ($Detach) {
     try {
         Import-Module (Join-Path $PSScriptRoot 'Bb2dashLaunch.psm1') -Force
         # PS 5.1 joins -ArgumentList with spaces and never quotes; the list arrives quoted.
+        # -WindowStyle Hidden here is what hides the helper's window (the list carries none).
         $startProcess = {
             param($filePath, $argumentList, $workingDirectory)
             Start-Process -FilePath $filePath -ArgumentList ($argumentList -join ' ') -WindowStyle Hidden `
