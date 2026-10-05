@@ -55,8 +55,8 @@ const ENQUEUE_LOGIN_CALL = "sync_enqueue('login')";
 const NOTHING_QUEUED = 'nothing queued (already synced today)';
 /** The prefix of the daily rule's log line. */
 const NEW_DAY_LOG_PREFIX = 'login: new New York day:';
-/** en-CA renders the date ISO-ordered, YYYY-MM-DD. */
-const SYNC_DAY_FORMAT = new Intl.DateTimeFormat('en-CA', {
+/** The New York wall clock, read part by part (`formatToParts`), so no locale's date pattern matters. */
+const SYNC_DAY_FORMAT = new Intl.DateTimeFormat('en-US', {
   timeZone: SYNC_DAY_TIME_ZONE,
   year: 'numeric',
   month: '2-digit',
@@ -149,7 +149,13 @@ export function parseKeepaliveMinutes(raw: string | undefined): number {
 
 /** The New York calendar day an instant falls on, as 'YYYY-MM-DD'. */
 export function syncDayOf(at: Date): string {
-  return SYNC_DAY_FORMAT.format(at);
+  const parts = SYNC_DAY_FORMAT.formatToParts(at);
+  const part = (type: Intl.DateTimeFormatPartTypes): string => {
+    const value = parts.find((p) => p.type === type)?.value;
+    if (value === undefined) throw new Error(`syncDayOf: no ${type} for ${at.toISOString()}`);
+    return value;
+  };
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 /** The delay to the next keep-alive tick: KEEPALIVE_MINUTES give or take the jitter. */
