@@ -14,9 +14,10 @@
  *   * entering `dead` calls `sync_login_required()` once per entry;
  *   * entering `alive` calls `sync_login_ok()`, then `sync_enqueue('login')` (the database queues the
  *     day's sync only if none finished done that New York day and none is open);
- *   * the first passing check of a New York day on which no `sync_enqueue('login')` has answered yet
- *     makes that call alone (no `sync_login_ok()`), so a login the keep-alive held overnight still
- *     queues the day's sync; a failed call is retried on the next passing check (W-72, 2026-10-05);
+ *   * the first passing check at or after 06:00 New York (DAILY_SYNC_NOT_BEFORE_HOUR) on a day with no
+ *     `sync_enqueue('login')` answered yet makes that call alone (no `sync_login_ok()`), so a login the
+ *     keep-alive held overnight still queues the day's sync in the morning; a failed call is retried
+ *     on the next passing check (W-72, 2026-10-05);
  *   * it never claims, crawls or retries a sync.
  *
  * Ported from the spike's `docker/sync/spike/session-age.mjs`, onto injected ports so it runs on a
@@ -48,6 +49,11 @@ export const LOGIN_WATCH_MS = 60_000;
 export const LOGIN_CHECK_MINUTES = 60;
 /** The zone whose calendar day the daily sync is counted in, as `sync_login_sync_due` (091) counts it. */
 export const SYNC_DAY_TIME_ZONE = 'America/New_York';
+/**
+ * The New York local hour before which the daily rule makes no call (R2-2): the keep-alive would
+ * otherwise queue the "morning" sync at midnight. Stack's own login (an entry) calls at any hour.
+ */
+export const DAILY_SYNC_NOT_BEFORE_HOUR = 6;
 
 /** The RPC both enqueue paths make, as their log lines name it. */
 const ENQUEUE_LOGIN_CALL = "sync_enqueue('login')";
@@ -61,6 +67,8 @@ const SYNC_DAY_FORMAT = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
+  hour: '2-digit',
+  hourCycle: 'h23',
 });
 
 const MS_PER_MINUTE = 60_000;
@@ -147,15 +155,25 @@ export function parseKeepaliveMinutes(raw: string | undefined): number {
   return value;
 }
 
-/** The New York calendar day an instant falls on, as 'YYYY-MM-DD'. */
-export function syncDayOf(at: Date): string {
+/** An instant on the New York wall clock: its calendar day ('YYYY-MM-DD') and its hour (0-23). */
+interface NewYorkClock {
+  readonly day: string;
+  readonly hour: number;
+}
+
+function newYorkClock(at: Date): NewYorkClock {
   const parts = SYNC_DAY_FORMAT.formatToParts(at);
   const part = (type: Intl.DateTimeFormatPartTypes): string => {
     const value = parts.find((p) => p.type === type)?.value;
-    if (value === undefined) throw new Error(`syncDayOf: no ${type} for ${at.toISOString()}`);
+    if (value === undefined) throw new Error(`newYorkClock: no ${type} for ${at.toISOString()}`);
     return value;
   };
-  return `${part('year')}-${part('month')}-${part('day')}`;
+  return { day: `${part('year')}-${part('month')}-${part('day')}`, hour: Number(part('hour')) };
+}
+
+/** The New York calendar day an instant falls on, as 'YYYY-MM-DD'. */
+export function syncDayOf(at: Date): string {
+  return newYorkClock(at).day;
 }
 
 /** The delay to the next keep-alive tick: KEEPALIVE_MINUTES give or take the jitter. */
@@ -357,11 +375,11 @@ export class LoginWatch {
     // The state is `alive` here: the one caller, `checkNow`, runs this only on an alive verdict,
     // and `probeAndSettle` has called `enter('alive')` before returning one.
     if (this.owed !== 'none') return;
-    const today = syncDayOf(this.now());
-    if (today === this.enqueuedDay) return;
+    const clock = newYorkClock(this.now());
+    if (clock.day === this.enqueuedDay || clock.hour < DAILY_SYNC_NOT_BEFORE_HOUR) return;
     try {
       const queued = await this.deps.rpc.enqueue('login');
-      this.enqueuedDay = today;
+      this.enqueuedDay = clock.day;
       this.deps.log(`${NEW_DAY_LOG_PREFIX} ${ENQUEUE_LOGIN_CALL} -> ${queued ?? NOTHING_QUEUED}`);
     } catch (error) {
       this.deps.log(`login: ${ENQUEUE_LOGIN_CALL} failed: ${firstLine(error)}`);

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BLACKBOARD_ORIGIN,
+  DAILY_SYNC_NOT_BEFORE_HOUR,
   DEFAULT_KEEPALIVE_MINUTES,
   KEEPALIVE_JITTER_MINUTES,
   KEEPALIVE_PAGES,
@@ -417,8 +418,9 @@ describe('a pass\'s own check', () => {
   });
 });
 
-// W-72 (2026-10-05): the first passing check of each New York day asks sync_enqueue('login') once,
-// so a login the keep-alive held all night still queues the day's sync (DECISIONS 2026-10-03).
+// W-72 (2026-10-05): the first passing check at or after 06:00 each New York day asks
+// sync_enqueue('login') once, so a login the keep-alive held all night still queues the day's sync
+// (DECISIONS 2026-10-03), in the morning rather than at midnight (round 2, R2-2).
 describe('the daily rule: one sync_enqueue(login) per New York day', () => {
   const ENQUEUE = 'sync_enqueue(login)';
   const NEW_DAY_LINE = "login: new New York day: sync_enqueue('login') -> ";
@@ -434,8 +436,12 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     return rpc.calls.filter((c) => c === ENQUEUE).length;
   }
 
-  it('the day is the America/New_York calendar day, across the 2026-11-01 fall-back', () => {
+  it('pins the daily rule\'s constants', () => {
     expect(SYNC_DAY_TIME_ZONE).toBe('America/New_York');
+    expect(DAILY_SYNC_NOT_BEFORE_HOUR).toBe(6);
+  });
+
+  it('the day is the America/New_York calendar day, across the 2026-11-01 fall-back', () => {
     expect(syncDayOf(new Date('2026-10-05T03:59:59Z'))).toBe('2026-10-04');
     expect(syncDayOf(new Date('2026-10-05T04:00:00Z'))).toBe('2026-10-05');
     // 2026-11-01 begins on EDT (04:00Z); the clocks fall back at 06:00Z, so 04:30Z is already the 1st.
@@ -450,7 +456,7 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
   it.each([
     ['the keep-alive visit', DEFAULT_KEEPALIVE_MINUTES],
     ['the hourly probe (KEEPALIVE_MINUTES=0)', 0],
-  ])('alive across New York midnight in October: one enqueue on the first passing check after 04:00Z (%s)', async (_path, minutes) => {
+  ])('alive across New York midnight in October: no call at 00:01 or 05:59, one on the first passing check at or after 06:00 (%s)', async (_path, minutes) => {
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage([200]);
     const rpc = fakeRpc();
@@ -458,21 +464,25 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     const watch = makeWatch(page, rpc, { keepaliveMinutes: minutes, log: (l) => lines.push(l) });
     watch.start();
 
-    await advanceTo('2026-10-05T03:59:59Z');
+    // 00:01 and 05:59:59 New York (EDT, UTC-4): passing checks, no call.
+    await advanceTo('2026-10-05T04:01:00Z');
     expect(watch.state).toBe('alive');
     expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE]);
+    await advanceTo('2026-10-05T09:59:59Z');
+    expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE]);
 
-    await advanceTo('2026-10-05T04:01:00Z');
+    // The first passing check at or after 06:00 New York (10:00Z; 10:05:15Z on the keep-alive's cadence).
+    await advanceTo('2026-10-05T10:21:00Z');
     // No sync_login_ok: there is no login item to archive, only the day's sync to ask for.
     expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE, ENQUEUE]);
     expect(lines.filter((l) => l.startsWith(NEW_DAY_LINE))).toEqual([`${NEW_DAY_LINE}42`]);
 
-    await advanceTo('2026-10-05T23:00:00Z');
+    await advanceTo('2026-10-06T03:59:00Z');
     expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE, ENQUEUE]);
     watch.stop();
   });
 
-  it('a dead -> alive entry records the day: the morning login is the one call, and later checks that day add none', async () => {
+  it('a dead -> alive entry at 03:00 New York still calls, records the day, and the daily rule adds none after 06:00', async () => {
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage([200]);
     const rpc = fakeRpc();
@@ -483,12 +493,14 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
 
     // The login dies before midnight and stays dead across it.
     page.setAnswers([401]);
-    await advanceTo('2026-10-05T12:00:00Z');
+    await advanceTo('2026-10-05T07:00:00Z');
     expect(watch.state).toBe('dead');
     expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE, 'sync_login_required']);
 
-    // Stack's morning login: the entry's own call is the day's one call.
+    // Stack logs in at 03:00 New York (07:00Z): a real login calls at any hour; it is the day's one call.
     page.setAnswers([200]);
+    await advanceTo('2026-10-05T07:02:00Z');
+    expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE, 'sync_login_required', 'sync_login_ok', ENQUEUE]);
     await advanceTo('2026-10-05T23:00:00Z');
     expect(watch.state).toBe('alive');
     expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE, 'sync_login_required', 'sync_login_ok', ENQUEUE]);
@@ -496,17 +508,17 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     watch.stop();
   });
 
-  it('a same-day re-entry after the boundary call keeps the entry\'s own call (the database answers it), then none', async () => {
+  it('a same-day re-entry after the daily call keeps the entry\'s own call (the database answers it), then none', async () => {
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage([200]);
     const rpc = fakeRpc();
     const watch = makeWatch(page, rpc);
     watch.start();
-    await advanceTo('2026-10-05T04:01:00Z');
+    await advanceTo('2026-10-05T10:21:00Z');
     expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE, ENQUEUE]);
 
     page.setAnswers([401]);
-    await advanceTo('2026-10-05T06:00:00Z');
+    await advanceTo('2026-10-05T12:00:00Z');
     expect(watch.state).toBe('dead');
 
     page.setAnswers([200]);
@@ -515,7 +527,7 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     watch.stop();
   });
 
-  it('a failed enqueue at the boundary is retried on the next passing check, then not again that day', async () => {
+  it('a failed daily call is retried on the next passing check, then not again that day', async () => {
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage([200]);
     const rpc = fakeRpc();
@@ -534,14 +546,14 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
       return '43';
     });
 
-    // The first check after 04:00Z (04:00:45Z) fails: logged, the day not recorded.
-    await advanceTo('2026-10-05T04:01:00Z');
+    // The first check at or after 06:00 New York (10:05:15Z) fails: logged, the day not recorded.
+    await advanceTo('2026-10-05T10:06:00Z');
     expect(enqueues(rpc)).toBe(2);
     expect(lines).toContain("login: sync_enqueue('login') failed: connection terminated");
     expect(lines.some((l) => l.startsWith(NEW_DAY_LINE))).toBe(false);
 
-    // The next passing check (04:21:00Z) asks again and succeeds.
-    await advanceTo('2026-10-05T04:22:00Z');
+    // The next passing check (10:25:30Z) asks again and succeeds.
+    await advanceTo('2026-10-05T10:26:00Z');
     expect(enqueues(rpc)).toBe(3);
     expect(lines.filter((l) => l.startsWith(NEW_DAY_LINE))).toEqual([`${NEW_DAY_LINE}43`]);
 
@@ -589,7 +601,7 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
       return null;
     });
 
-    await advanceTo('2026-10-05T12:00:00Z');
+    await advanceTo('2026-10-05T23:00:00Z');
     expect(enqueues(rpc)).toBe(2);
     expect(lines.filter((l) => l.startsWith(NEW_DAY_LINE))).toEqual([
       `${NEW_DAY_LINE}nothing queued (already synced today)`,
@@ -597,22 +609,23 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     watch.stop();
   });
 
-  it('the 2026-11-01 fall-back: the 1st begins at 04:00Z, the repeated hour adds nothing, the 2nd begins at 05:00Z', async () => {
+  it('the 2026-11-01 fall-back: 06:00 New York is 11:00Z on the 1st and the 2nd, not 10:00Z', async () => {
     vi.setSystemTime(new Date('2026-11-01T03:00:00Z'));
     const page = fakePage([200]);
     const rpc = fakeRpc();
     const watch = makeWatch(page, rpc);
     watch.start();
 
-    await advanceTo('2026-11-01T03:59:59Z');
+    // The 1st begins at 04:00Z (EDT); the clocks fall back at 06:00Z, so 10:59:59Z is 05:59:59 EST.
+    await advanceTo('2026-11-01T10:59:59Z');
     expect(enqueues(rpc)).toBe(1);
-    await advanceTo('2026-11-01T04:01:00Z');
+    await advanceTo('2026-11-01T11:21:00Z');
     expect(enqueues(rpc)).toBe(2);
 
-    // Through 01:00-01:59 twice (EDT, then EST from 06:00Z) and on to 23:59:59 EST on the 1st.
-    await advanceTo('2026-11-02T04:59:59Z');
+    // The 2nd begins at 05:00Z (EST); 06:00 is 11:00Z again.
+    await advanceTo('2026-11-02T10:59:59Z');
     expect(enqueues(rpc)).toBe(2);
-    await advanceTo('2026-11-02T05:30:00Z');
+    await advanceTo('2026-11-02T11:21:00Z');
     expect(enqueues(rpc)).toBe(3);
     expect(rpc.calls.filter((c) => c === 'sync_login_ok')).toHaveLength(1);
     watch.stop();
@@ -621,19 +634,19 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
   it.each([
     ['dead (users/me 401)', [401], 'dead', ['sync_login_required']],
     ['unknown (users/me 500)', [500], 'unknown', []],
-  ])('a watch that is %s across New York midnight never enqueues', async (_name, answers, state, calls) => {
+  ])('a watch that is %s across New York midnight and 06:00 never enqueues', async (_name, answers, state, calls) => {
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage(answers);
     const rpc = fakeRpc();
     const watch = makeWatch(page, rpc);
     watch.start();
-    await advanceTo('2026-10-05T06:00:00Z');
+    await advanceTo('2026-10-05T12:00:00Z');
     expect(watch.state).toBe(state);
     expect(rpc.calls).toEqual(calls);
     watch.stop();
   });
 
-  it('an unknown watch whose probe throws across midnight never enqueues', async () => {
+  it('an unknown watch whose probe throws across midnight and 06:00 never enqueues', async () => {
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage([200]);
     page.port.probe = vi.fn(async () => {
@@ -642,27 +655,27 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     const rpc = fakeRpc();
     const watch = makeWatch(page, rpc);
     watch.start();
-    await advanceTo('2026-10-05T06:00:00Z');
+    await advanceTo('2026-10-05T12:00:00Z');
     expect(watch.state).toBe('unknown');
     expect(rpc.calls).toEqual([]);
     watch.stop();
   });
 
-  it('an alive watch whose checks fail at the boundary waits for the next passing check', async () => {
+  it('an alive watch whose checks fail around 06:00 waits for the next passing check', async () => {
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage([200]);
     const rpc = fakeRpc();
     const watch = makeWatch(page, rpc);
     watch.start();
-    await advanceTo('2026-10-05T03:50:00Z');
+    await advanceTo('2026-10-05T09:50:00Z');
 
     page.setAnswers([500]);
-    await advanceTo('2026-10-05T05:00:00Z');
+    await advanceTo('2026-10-05T11:00:00Z');
     expect(watch.state).toBe('alive');
     expect(enqueues(rpc)).toBe(1);
 
     page.setAnswers([200]);
-    await advanceTo('2026-10-05T05:30:00Z');
+    await advanceTo('2026-10-05T11:30:00Z');
     expect(enqueues(rpc)).toBe(2);
     watch.stop();
   });
