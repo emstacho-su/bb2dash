@@ -354,7 +354,9 @@ export class LoginWatch {
    * A failure leaves the day unrecorded, so the next passing check asks again.
    */
   private async enqueueIfNewDay(): Promise<void> {
-    if (this.state !== 'alive' || this.owed !== 'none') return;
+    // The state is `alive` here: the one caller, `checkNow`, runs this only on an alive verdict,
+    // and `probeAndSettle` has called `enter('alive')` before returning one.
+    if (this.owed !== 'none') return;
     const today = syncDayOf(this.now());
     if (today === this.enqueuedDay) return;
     try {
