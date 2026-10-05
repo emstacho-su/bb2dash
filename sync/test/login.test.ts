@@ -549,6 +549,32 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     watch.stop();
   });
 
+  it('an entry whose own call failed is retried by the entry path alone, never doubled by the daily rule', async () => {
+    vi.setSystemTime(new Date(MIDDAY_UTC));
+    const page = fakePage([200]);
+    const rpc = fakeRpc();
+    let failNext = true;
+    rpc.rpc.enqueue = vi.fn(async (trigger: 'just' | 'login') => {
+      rpc.calls.push(`sync_enqueue(${trigger})`);
+      if (failNext) {
+        failNext = false;
+        throw new Error('connection terminated');
+      }
+      return '44';
+    });
+    const watch = makeWatch(page, rpc);
+    watch.start();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE]);
+
+    // The next check pays the entry's debt (sync_login_ok, then the call), which records the day.
+    await vi.advanceTimersByTimeAsync(20 * MINUTE + SETTLE_MS);
+    expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE, 'sync_login_ok', ENQUEUE]);
+    await vi.advanceTimersByTimeAsync(3 * 60 * MINUTE);
+    expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE, 'sync_login_ok', ENQUEUE]);
+    watch.stop();
+  });
+
   it('logs "nothing queued" when the database answers null (a sync already finished done today)', async () => {
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage([200]);

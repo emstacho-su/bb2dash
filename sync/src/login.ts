@@ -14,6 +14,9 @@
  *   * entering `dead` calls `sync_login_required()` once per entry;
  *   * entering `alive` calls `sync_login_ok()`, then `sync_enqueue('login')` (the database queues the
  *     day's sync only if none finished done that New York day and none is open);
+ *   * the first passing check of a New York day on which no `sync_enqueue('login')` has answered yet
+ *     makes that call alone (no `sync_login_ok()`), so a login the keep-alive held overnight still
+ *     queues the day's sync; a failed call is retried on the next passing check (W-72, 2026-10-05);
  *   * it never claims, crawls or retries a sync.
  *
  * Ported from the spike's `docker/sync/spike/session-age.mjs`, onto injected ports so it runs on a
@@ -43,6 +46,22 @@ export const SETTLE_MS = 15_000;
 export const LOGIN_WATCH_MS = 60_000;
 /** R2 item 4: with the keep-alive off (0), the live login is still probed this often, without navigating. */
 export const LOGIN_CHECK_MINUTES = 60;
+/** The zone whose calendar day the daily sync is counted in, as `sync_login_sync_due` (091) counts it. */
+export const SYNC_DAY_TIME_ZONE = 'America/New_York';
+
+/** The RPC both enqueue paths make, as their log lines name it. */
+const ENQUEUE_LOGIN_CALL = "sync_enqueue('login')";
+/** The log's reading of a null answer: a sync already finished done this New York day. */
+const NOTHING_QUEUED = 'nothing queued (already synced today)';
+/** The prefix of the daily rule's log line. */
+const NEW_DAY_LOG_PREFIX = 'login: new New York day:';
+/** en-CA renders the date ISO-ordered, YYYY-MM-DD. */
+const SYNC_DAY_FORMAT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: SYNC_DAY_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 
 const MS_PER_MINUTE = 60_000;
 const MAX_KEEPALIVE_MINUTES = 1_440;
@@ -128,6 +147,11 @@ export function parseKeepaliveMinutes(raw: string | undefined): number {
   return value;
 }
 
+/** The New York calendar day an instant falls on, as 'YYYY-MM-DD'. */
+export function syncDayOf(at: Date): string {
+  return SYNC_DAY_FORMAT.format(at);
+}
+
 /** The delay to the next keep-alive tick: KEEPALIVE_MINUTES give or take the jitter. */
 export function keepaliveDelayMs(minutes: number, random: () => number): number {
   const jitter = (random() * 2 - 1) * KEEPALIVE_JITTER_MINUTES;
@@ -155,6 +179,8 @@ export class LoginWatch {
   private ticking = false;
   /** An RPC the last transition owed and could not make; retried on the next tick. */
   private owed: 'none' | 'raise' | 'alive' = 'none';
+  /** The New York day of the last `sync_enqueue('login')` that answered; null before the first. */
+  private enqueuedDay: string | null = null;
 
   constructor(deps: LoginWatchDeps) {
     this.deps = deps;
@@ -193,6 +219,13 @@ export class LoginWatch {
 
   private async checkNow(label: string): Promise<Verdict> {
     await this.payOwed();
+    const verdict = await this.probeAndSettle(label);
+    if (verdict === 'alive') await this.enqueueIfNewDay();
+    return verdict;
+  }
+
+  /** The probe, and on a dead answer from `alive` or `unknown` the silent re-login and a second probe. */
+  private async probeAndSettle(label: string): Promise<Verdict> {
     const first = await this.probeOnce(label);
     if (first !== 'dead') {
       if (first === 'alive') await this.enter('alive');
@@ -298,12 +331,32 @@ export class LoginWatch {
     if (this.owed === 'alive' && this.state === 'alive') {
       try {
         await this.deps.rpc.loginOk();
+        const day = syncDayOf(this.now());
         const queued = await this.deps.rpc.enqueue('login');
-        this.deps.log(`login: sync_enqueue('login') -> ${queued ?? 'nothing queued (already synced today)'}`);
+        this.enqueuedDay = day;
+        this.deps.log(`login: ${ENQUEUE_LOGIN_CALL} -> ${queued ?? NOTHING_QUEUED}`);
         this.owed = 'none';
       } catch (error) {
         this.deps.log(`login: sync_login_ok / sync_enqueue failed: ${firstLine(error)}`);
       }
+    }
+  }
+
+  /**
+   * The daily rule: on a passing check, ask for the day's sync once per New York day. An entry into
+   * `alive` already asked (and recorded the day); while its call is still owed, `payOwed` retries it.
+   * A failure leaves the day unrecorded, so the next passing check asks again.
+   */
+  private async enqueueIfNewDay(): Promise<void> {
+    if (this.state !== 'alive' || this.owed !== 'none') return;
+    const today = syncDayOf(this.now());
+    if (today === this.enqueuedDay) return;
+    try {
+      const queued = await this.deps.rpc.enqueue('login');
+      this.enqueuedDay = today;
+      this.deps.log(`${NEW_DAY_LOG_PREFIX} ${ENQUEUE_LOGIN_CALL} -> ${queued ?? NOTHING_QUEUED}`);
+    } catch (error) {
+      this.deps.log(`login: ${ENQUEUE_LOGIN_CALL} failed: ${firstLine(error)}`);
     }
   }
 }
