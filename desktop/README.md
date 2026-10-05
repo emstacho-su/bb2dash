@@ -207,13 +207,20 @@ hand-packed build does none of this.
   appears before then. Closing the prompt saves nothing; the next open asks
   again. It is never a native dialog, and under `BB2DASH_TEST=1` it is only
   recorded (`update-prompt` event).
-* **Update now** starts `launch\update-now.ps1` (detached, hidden) and quits.
-  The helper waits for every bb2dash process to exit, points `current` at the
-  new build and starts `Bb2dash-App`. If the app does not exit within 60 s, the
-  build is missing or the junction cannot be moved, the old build stays current
-  and the app starts on it. Its log is
-  `%LOCALAPPDATA%\bb2dash-launch\logs\update-now.log`; the app's side is in
-  `main.log` under `[update]`.
+* **Update now** runs `launch\update-now.ps1 -Detach` as a hidden child and
+  waits up to 30 s for it to exit. That stage hands the helper off to a
+  separate hidden PowerShell (`Start-Process`, so the helper outlives the app)
+  and exits. The app quits only after the helper's `swap-pending` marker names
+  the new build (20 s bound). If the hand-off fails or no marker appears, the
+  app stays on its build and `main.log` says *Update now could not start the
+  helper; staying on this build:* with the reason, for example
+  *update-now.ps1 -Detach exited 6: no helper was started* or *the update
+  helper did not start within 20000 ms*. The helper waits for every bb2dash
+  process to exit, points `current` at the new build and starts `Bb2dash-App`.
+  If the app does not exit within 60 s, the build is missing or the junction
+  cannot be moved, the old build stays current and the app starts on it. Its
+  log is `%LOCALAPPDATA%\bb2dash-launch\logs\update-now.log` (both stages); the
+  app's side is in `main.log` under `[update]`.
 * **Forcing an update.** Open the account menu (the person icon, top right) and
   click **Update desktop app**. It first checks Docker (`docker version`, 10 s
   bound); with Docker not running it answers at once *Update failed: Docker isn't
@@ -227,8 +234,11 @@ hand-packed build does none of this.
   *Update failed: still building — it will offer the update when it finishes*:
   the build keeps going, and the usual prompt offers it at the next window open.
   Then:
-  * a newer build is on disk: *Updating — bb2dash will restart*, and the app runs
-    the same **Update now** path as the prompt (helper swap, relaunch);
+  * a newer build is on disk: the app runs the same **Update now** path as the
+    prompt (hand-off, helper swap, relaunch) and says *Updating — bb2dash will
+    restart* only once the helper's marker has appeared. A failed hand-off or no
+    marker answers *Update failed: the update could not start* and the app stays
+    on its build;
   * nothing newer, and this run fetched `origin/main` and its `desktop/` tree is
     the running build: *Up to date*. It never says that when it could not look;
   * anything else: *Update failed: &lt;reason&gt;*. Docker not running while a
