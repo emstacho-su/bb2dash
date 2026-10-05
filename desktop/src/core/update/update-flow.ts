@@ -32,7 +32,11 @@ export interface UpdateFlowDeps {
   readonly testMode: boolean;
   /** Show the app-owned prompt and resolve with Stack's answer. Never a native dialog. */
   readonly showPrompt: (tree: string) => Promise<PromptAnswer>;
-  /** Spawn the detached swap helper; resolves once it is running. */
+  /**
+   * Hand the swap helper off through update-now.ps1 -Detach; resolves only once the helper's
+   * swap-pending marker names the build (seconds, up to about 50 s); rejects when nothing is
+   * running.
+   */
   readonly startUpdate: (tree: string) => Promise<void>;
   readonly quit: () => void;
   readonly record: (kind: string, payload: unknown) => void;

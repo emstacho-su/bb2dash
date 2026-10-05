@@ -17,8 +17,8 @@ is never run inside a container. What runs in the container is the build:
 | file | job |
 |---|---|
 | `logon-build.ps1` | the scheduled action: fetch, decide, activate, launch, build, compose |
-| `update-now.ps1` | the app's **Update now**: wait for bb2dash to exit, repoint `current`, start `Bb2dash-App` |
-| `Bb2dashLaunch.psm1` | the logic: decisions, state record, build command (pure); the Update now swap (junction + injected process/task calls) |
+| `update-now.ps1` | the app's **Update now**: with `-Detach`, hand off to a second run of itself; that run waits for bb2dash to exit, repoints `current`, starts `Bb2dash-App` |
+| `Bb2dashLaunch.psm1` | the logic: decisions, state record, build command (pure); the Update now swap (junction + injected process/task calls) and its hand-off (injected `Start-Process`) |
 | `Bb2dashLaunch.Tests.ps1` | Pester tests for the module (Pester 3.4, as Windows ships it) |
 | `compose.build.yaml` | the ephemeral build service, `docker compose run --rm` |
 | `register-logon-task.ps1` | writes (or `-Unregister`s) the two Task Scheduler entries |
@@ -33,6 +33,7 @@ is never run inside a container. What runs in the container is the build:
   state.json                               lastBuiltSha, lastBuildAt, lastResult
   last-check.json                          checkedAt, remoteTree, skip (what the last run could check)
   force-request.json                       from the app: a short Docker wait for the next run; consumed
+  swap-pending                             the tree a running Update now helper is switching to; removed when it ends
   logs\logon-build.log                     one line per step; rolls at 512 KB
   logs\update-now.log                      one line per Update now step; rolls at 512 KB
 ```
@@ -54,8 +55,21 @@ usual, and a finished build waits.
 When a newer build is waiting (`state.json`'s `lastBuiltSha` differs from the
 tree the app is running from, and that build is on disk), the next window open
 shows **Update now / Update later** (details in `desktop/README.md`). **Update
-now** spawns `launch\update-now.ps1 -Tree <tree>` detached and quits the app.
-The helper (`Invoke-UpdateSwap` in `Bb2dashLaunch.psm1`):
+now** runs `launch\update-now.ps1 -Tree <tree> -StateDir <dir> -Detach` as a
+hidden child of the app and waits for it to exit 0 (30 s bound). With `-Detach`
+the script does not swap: `Invoke-HelperHandoff` starts a second run of the same
+script without `-Detach` through `Start-Process -WindowStyle Hidden`, logs that
+run's pid and exits (6 when the start failed). The app quits only once that run
+has written `swap-pending` naming the tree (20 s bound); otherwise it stays on
+its build. The two stages exist because Windows PowerShell 5.1 started detached
+(no console) exits 0 without running its script, and a plain child of the app
+dies with the app, while a process that child starts does not (2026-10-04).
+
+The helper (`Invoke-UpdateSwap` in `Bb2dashLaunch.psm1`) first refuses, touching
+nothing (no marker, no mutex, no start; exit 5), while an existing `swap-pending`
+names another build and is younger than its two waits (60 s app + 120 s builder);
+an older one is a leftover and is overwritten. Otherwise it writes `swap-pending`,
+then:
 
 1. waits up to 60 s for every `bb2dash` process to exit;
 2. repoints `current` at `builds\<tree>\win-unpacked` with the same junction
@@ -63,11 +77,16 @@ The helper (`Invoke-UpdateSwap` in `Bb2dashLaunch.psm1`):
    puts the old target back if the new junction cannot be created;
 3. starts `Bb2dash-App` (or `current\bb2dash.exe` when the task is missing).
 
-If the app did not exit, the build is gone, or the junction cannot be moved, the
-old build stays current and the app is started on it. Each step is logged to
+If the build is gone or the junction cannot be moved, the old build stays
+current and the app is started on it; if the app never exited, nothing is
+started (the app gave up on the helper and is still running). Each step is logged to
 `logs\update-now.log`. The helper runs from the installed copy under
 `launch\`, which the builder refreshes after each successful build, so the first
-build carrying this feature installs it.
+build carrying this feature installs it. An app built before the hand-off cannot
+deliver it through its own **Update now** (its detached start never runs the
+script); the build carrying it becomes current at the next logon, when the app
+is not running. A new app against an older installed script fails safe: the old
+script rejects `-Detach`, exits non-zero, and the app stays on its build.
 
 The build reads from a detached `git worktree` at `<repo>-build`, never from
 the checkout the Sync terminal works in, so a rebuild cannot collide with a
