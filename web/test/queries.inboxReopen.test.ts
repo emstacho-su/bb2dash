@@ -13,6 +13,7 @@ const chain = {
   eq: vi.fn(),
   in: vi.fn(),
   is: vi.fn(),
+  not: vi.fn(),
   select: vi.fn(),
 };
 
@@ -20,9 +21,18 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from }),
 }));
 
-const { REOPEN_PATCH, REOPEN_REFUSED, REOPEN_TWIN, canReopen, reopenAttentionItem } = await import(
-  '@/lib/queries.inboxReopen'
-);
+const { REOPEN_PATCH, REOPEN_REFUSED, REOPEN_TWIN, canReopen, isSessionLinkRef, reopenAttentionItem } =
+  await import('@/lib/queries.inboxReopen');
+
+/** Stack's own answer: resolved, with the shape his Accept Blackboard writes. */
+function answered(overrides: Parameters<typeof makeAttentionItem>[0] = {}) {
+  return makeAttentionItem({
+    state: 'resolved',
+    resolved_at: '2026-10-05T20:06:20Z',
+    resolution: { accept: 'blackboard' },
+    ...overrides,
+  });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,13 +41,14 @@ beforeEach(() => {
   chain.eq.mockReturnValue(chain);
   chain.in.mockReturnValue(chain);
   chain.is.mockReturnValue(chain);
+  chain.not.mockReturnValue(chain);
   chain.select.mockResolvedValue({ data: [{ id: 7 }], error: null });
 });
 
-describe('canReopen — only an answer nothing has acted on', () => {
+describe('canReopen — only an answer of Stack\'s that nothing has acted on', () => {
   it('is true for a resolved or dismissed row the transform has not applied and the worker has not archived', () => {
-    expect(canReopen(makeAttentionItem({ state: 'resolved', resolved_at: '2026-10-05T20:06:20Z' }))).toBe(true);
-    expect(canReopen(makeAttentionItem({ state: 'dismissed', resolved_at: '2026-10-05T20:06:20Z' }))).toBe(true);
+    expect(canReopen(answered())).toBe(true);
+    expect(canReopen(answered({ state: 'dismissed', resolution: { dismissed: true } }))).toBe(true);
   });
 
   it('is false for an open row: there is nothing to take back', () => {
@@ -45,16 +56,34 @@ describe('canReopen — only an answer nothing has acted on', () => {
   });
 
   it('is false once the transform applied the answer: the fact changed', () => {
-    expect(
-      canReopen(makeAttentionItem({ state: 'resolved', applied_at: '2026-10-05T21:00:00Z' })),
-    ).toBe(false);
+    expect(canReopen(answered({ applied_at: '2026-10-05T21:00:00Z' }))).toBe(false);
   });
 
   it('is false once the worker archived the row', () => {
-    expect(canReopen(makeAttentionItem({ state: 'archived', archived_at: '2026-10-05T21:00:00Z' }))).toBe(false);
+    expect(canReopen(answered({ state: 'archived', archived_at: '2026-10-05T21:00:00Z' }))).toBe(false);
+    expect(canReopen(answered({ archived_at: '2026-10-05T21:00:00Z' }))).toBe(false);
+  });
+
+  it('is false for a session-link question: the fold applies the pick without a stamp', () => {
     expect(
-      canReopen(makeAttentionItem({ state: 'resolved', archived_at: '2026-10-05T21:00:00Z' })),
+      canReopen(
+        answered({
+          kind: 'stack_must_confirm',
+          entity: 'bb_file',
+          ref: 'session_link/2489',
+          field: 'session_id',
+          resolution: { session_id: 44 },
+        }),
+      ),
     ).toBe(false);
+    expect(isSessionLinkRef('session_link/2489')).toBe(true);
+    expect(isSessionLinkRef('GEO.103.lecture/exam-1')).toBe(false);
+    expect(isSessionLinkRef(null)).toBe(false);
+  });
+
+  it('is false for a row the database closed itself: no resolution of Stack\'s to take back', () => {
+    expect(canReopen(answered({ state: 'dismissed', resolution: null }))).toBe(false);
+    expect(canReopen(answered({ resolution: null }))).toBe(false);
   });
 });
 
@@ -69,6 +98,8 @@ describe('reopenAttentionItem — the write', () => {
     expect(chain.in).toHaveBeenCalledWith('state', ['resolved', 'dismissed']);
     expect(chain.is).toHaveBeenCalledWith('applied_at', null);
     expect(chain.is).toHaveBeenCalledWith('archived_at', null);
+    expect(chain.not).toHaveBeenCalledWith('resolution', 'is', null);
+    expect(chain.not).toHaveBeenCalledWith('ref', 'like', 'session_link/%');
     expect(chain.select).toHaveBeenCalledWith('id');
   });
 
@@ -78,9 +109,11 @@ describe('reopenAttentionItem — the write', () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it('says so when no row was reopened: the fold or the worker got there first', async () => {
+  it('says so when no row was reopened, naming every way that happens', async () => {
     chain.select.mockResolvedValue({ data: [], error: null });
     await expect(reopenAttentionItem(7)).rejects.toThrow(REOPEN_REFUSED);
+    expect(REOPEN_REFUSED).toMatch(/applied or archived/);
+    expect(REOPEN_REFUSED).toMatch(/signed out/);
   });
 
   it('names the newer open twin when the unique open index refuses the row', async () => {

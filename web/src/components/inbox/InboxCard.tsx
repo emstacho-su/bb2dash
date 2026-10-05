@@ -86,6 +86,8 @@ export interface InboxCardProps {
   onChoose?: (input: ChoiceInput) => void;
   /** Undo: an answered, unapplied row back to open (`queries.inboxReopen.ts`). */
   onReopen?: (id: number) => void;
+  /** While the Apply worker holds the queue: the sentence Undo shows instead, disabled. */
+  undoBlocked?: string | null;
   /** Session id → "Mon, Sep 21 · Requirements"; undefined while it loads. */
   sessionLabels?: ReadonlyMap<number, string>;
 }
@@ -125,6 +127,7 @@ export function InboxCard({
   onResolve,
   onChoose,
   onReopen,
+  undoBlocked = null,
   sessionLabels,
 }: InboxCardProps) {
   const titleId = useId();
@@ -246,18 +249,16 @@ export function InboxCard({
           )}
           {decision && <p className={styles.decision}>{decision}</p>}
           {onReopen && canReopen(item) && (
-            <div className={styles.controls}>
-              <div className={styles.choice}>
-                <button
-                  type="button"
-                  className={tokens.btnGhost}
-                  disabled={pending}
-                  onClick={() => onReopen(item.id)}
-                >
-                  Undo
-                </button>
-                <p className={styles.outcome}>{UNDO_OUTCOME}</p>
-              </div>
+            <div className={styles.undo}>
+              <button
+                type="button"
+                className={tokens.btnGhost}
+                disabled={pending || undoBlocked !== null}
+                onClick={() => onReopen(item.id)}
+              >
+                Undo
+              </button>
+              <p className={styles.outcome}>{undoBlocked ?? UNDO_OUTCOME}</p>
             </div>
           )}
         </>
