@@ -22,7 +22,7 @@
  * tree hash checked against `^[0-9a-f]{40}$`, each one argv element, never a shell string.
  */
 
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
+import { type ChildProcess, type SpawnOptions, execFile, spawn } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { win32 } from 'node:path';
 
@@ -317,13 +317,21 @@ export const MARKER_POLL_MS = 250;
 /** Run one process and wait for it: resolves its exit code (`null` when it ended without one). */
 export type HelperRun = (argv: readonly string[], cwd: string, timeoutMs: number) => Promise<number | null>;
 
+export type SpawnHidden = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
+
+/** `kill()` reports whether the signal was delivered; the timeout message says which. */
+function timeoutMessage(command: string, timeoutMs: number, child: ChildProcess, stopped: boolean): string {
+  const outcome = stopped ? 'stopped it' : 'could not stop it';
+  return `${win32.basename(command)} did not exit within ${timeoutMs} ms; ${outcome} (pid ${child.pid ?? 'unknown'})`;
+}
+
 /**
  * Run one process hidden (a console, never shown) and wait for it, bounded. Not detached on
  * purpose: Windows PowerShell 5.1 started detached has no console and exits 0 without running
  * its script. A child that runs past `timeoutMs` is stopped and the promise rejects; so does
- * one that could not be started.
+ * one that could not be started. `spawnFn` is injectable for tests only.
  */
-export const runHidden: HelperRun = (argv, cwd, timeoutMs) =>
+export const createRunHidden = (spawnFn: SpawnHidden = spawn): HelperRun => (argv, cwd, timeoutMs) =>
   new Promise((resolve, reject) => {
     const [command, ...args] = argv;
     if (command === undefined) {
@@ -332,14 +340,13 @@ export const runHidden: HelperRun = (argv, cwd, timeoutMs) =>
     }
     let child: ChildProcess;
     try {
-      child = spawn(command, args, { cwd, stdio: 'ignore', windowsHide: true });
+      child = spawnFn(command, args, { cwd, stdio: 'ignore', windowsHide: true });
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)));
       return;
     }
     const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error(`${win32.basename(command)} did not exit within ${timeoutMs} ms; stopped it`));
+      reject(new Error(timeoutMessage(command, timeoutMs, child, child.kill())));
     }, timeoutMs);
     child.once('error', (error) => {
       clearTimeout(timer);
@@ -350,6 +357,9 @@ export const runHidden: HelperRun = (argv, cwd, timeoutMs) =>
       resolve(code);
     });
   });
+
+/** The real stage-1 runner: `createRunHidden` over Node's `spawn`. */
+export const runHidden: HelperRun = createRunHidden();
 
 /**
  * The helper's pending-swap marker, or `null` when there is none; any other failure throws.

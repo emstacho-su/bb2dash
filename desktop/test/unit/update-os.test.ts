@@ -6,6 +6,8 @@
  * against a temp folder.
  */
 
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,6 +24,7 @@ import {
   MARKER_POLL_MS,
   createDockerReadyCheck,
   createReadBuilderStatus,
+  createRunHidden,
   forceRequestJson,
   createStartBuilderTask,
   parseBuilderStatus,
@@ -298,9 +301,17 @@ describe('runHidden (the real stage-1 runner)', () => {
     expect(await runHidden([node, '-e', 'process.exit(3)'], tmpdir(), 10_000)).toBe(3);
   });
 
-  it('stops a process that runs past the bound and rejects', async () => {
+  it('stops a process that runs past the bound and rejects, naming its pid (R2-5)', async () => {
     await expect(runHidden([node, '-e', 'setTimeout(() => {}, 20000)'], tmpdir(), 300)).rejects.toThrow(
-      /did not exit within 300 ms/,
+      /did not exit within 300 ms; stopped it \(pid \d+\)$/,
+    );
+  });
+
+  it('says so when a process past the bound could not be stopped (R2-5)', async () => {
+    const stubborn = Object.assign(new EventEmitter(), { pid: 4242, kill: () => false });
+    const run = createRunHidden(() => stubborn as unknown as ChildProcess);
+    await expect(run(['C:\\x\\powershell.exe'], tmpdir(), 10)).rejects.toThrow(
+      'powershell.exe did not exit within 10 ms; could not stop it (pid 4242)',
     );
   });
 
