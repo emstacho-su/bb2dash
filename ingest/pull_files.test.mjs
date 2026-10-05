@@ -3,8 +3,8 @@
 //   node --test ingest/pull_files.test.mjs
 //
 // Covers the pure parts of the file pull — the decisions that, wrong, would land bytes under the
-// wrong key or a row in the wrong state: the Storage key (no `#`, override wins, the attempt
-// segment survives), the magic-byte check, the download lookup, the manifest filter and its bucket
+// wrong key or a row in the wrong state: the Storage key (only characters Storage accepts, a valid
+// override wins, the attempt segment survives), the magic-byte check, the download lookup, the manifest filter and its bucket
 // gate, the extractor's output shape, the text rows (never `char_count`), the duplicate-answer rule
 // and the two forms of the SQL statement the owner runs (course file vs bb-sync step 4b).
 // Importing the module must run nothing: the suite finishing asserts that.
@@ -49,6 +49,156 @@ test('storageKeyFor keeps the attempt-<digits> segment a submission relpath carr
 
 test('encodeKey keeps the slashes and encodes each segment', () => {
   assert.equal(encodeKey('IST.352/readings/Identifying & Selecting.pptx'), 'IST.352/readings/Identifying%20%26%20Selecting.pptx');
+});
+
+// W-73: Supabase Storage refuses any object key with a character outside storage-api's
+// VALID_OBJECT_KEY (src/storage/limits.ts). File 2489's curly apostrophe drew `400 InvalidKey` on
+// every sync on 2026-10-05. Every refused character becomes `_`, one per character, in every
+// segment; the `/` separators, the mirror path and the file name are never touched.
+
+const MUSK = 'Musk’s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf';
+
+test('W-73: the Storage key check is storage-api\'s VALID_OBJECT_KEY, verbatim', () => {
+  assert.equal(pf.STORAGE_KEY_VALID.source, "^[A-Za-z0-9_/!.*'() &$=@;:+,?-]*$", 'supabase/storage src/storage/limits.ts @ 69bb550');
+  assert.equal(pf.STORAGE_KEY_REPLACEMENT, '_');
+});
+
+test('W-73: file 2489, the curly apostrophe becomes one _ and the folder is untouched', () => {
+  assert.equal(storageKeyFor({ relpath: `GEO.103/readings/${MUSK}` }),
+    'GEO.103/readings/Musk_s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf');
+});
+
+test('W-73: each refused character becomes one _ (accents, smart quotes, %, [, ], ~, #)', () => {
+  const cases = [
+    ['Café.pdf', 'Caf_.pdf'],
+    ['“smart quotes”.pdf', '_smart quotes_.pdf'],
+    ['100% done.pdf', '100_ done.pdf'],
+    ['[draft].pdf', '_draft_.pdf'],
+    ['~notes.pdf', '_notes.pdf'],
+    ['HW #2.pdf', 'HW _2.pdf'],
+    ['a–b — c.pdf', 'a_b _ c.pdf'],
+    ['tab\there.pdf', 'tab_here.pdf'],
+    ['quote".pdf', 'quote_.pdf'],
+    ['back\\slash.pdf', 'back_slash.pdf'],
+  ];
+  for (const [name, want] of cases) assert.equal(storageKeyFor({ relpath: `X/readings/${name}` }), `X/readings/${want}`, name);
+});
+
+test('W-73: a whole code point is one character — an emoji is one _, a decomposed accent keeps its base letter', () => {
+  assert.equal(pf.safeStorageSegment('Notes \u{1F4DA}.pdf'), 'Notes _.pdf');
+  assert.equal(pf.safeStorageSegment('Café.pdf'), 'Cafe_.pdf', 'NFD é is e + a combining accent');
+});
+
+test('W-73: every character Storage accepts is kept as it is', () => {
+  const allowed = "Az09_ '()&+,=@:;?$*!-.";
+  assert.equal(pf.safeStorageSegment(allowed), allowed);
+  assert.equal(storageKeyFor({ relpath: `X/readings/${allowed}.pdf` }), `X/readings/${allowed}.pdf`);
+});
+
+test('W-73: the sanitiser and the key check agree on every character (ASCII, Latin-1, punctuation)', () => {
+  const sample = [];
+  for (let c = 0; c <= 0x2ff; c++) sample.push(String.fromCodePoint(c));
+  sample.push('‘', '’', '“', '”', '–', '—', '…', ' ', '\u{1F4DA}');
+  for (const ch of sample.filter((s) => s !== '/')) {
+    const kept = pf.safeStorageSegment(ch) === ch;
+    assert.equal(kept, pf.STORAGE_KEY_VALID.test(ch), `U+${ch.codePointAt(0).toString(16)}`);
+    assert.equal(pf.STORAGE_KEY_VALID.test(pf.safeStorageSegment(ch)), true);
+  }
+});
+
+test('W-73: sanitising works per segment and never touches a / separator', () => {
+  assert.equal(pf.sanitizeStorageKey('Aé/b%c/d’e.pdf'), 'A_/b_c/d_e.pdf');
+  assert.equal(pf.sanitizeStorageKey('a/b.pdf'), 'a/b.pdf');
+  assert.equal(pf.sanitizeStorageKey(pf.sanitizeStorageKey(`X/${MUSK}`)), pf.sanitizeStorageKey(`X/${MUSK}`), 'idempotent');
+  assert.equal(pf.STORAGE_KEY_VALID.test(storageKeyFor({ relpath: `GEO.103/readings/${MUSK}` })), true);
+});
+
+test('W-73: an explicit key Storage accepts is honoured byte for byte; one it would refuse is sanitised', () => {
+  assert.equal(storageKeyFor({ relpath: 'a/b.xlsx', key: 'a/b (re-upload).xlsx' }), 'a/b (re-upload).xlsx');
+  assert.equal(storageKeyFor({ relpath: 'a/b.xlsx', key: 'a/b (ré-upload).xlsx' }), 'a/b (r_-upload).xlsx');
+});
+
+test('W-73: a submission keeps its relpath layout and attempt segment; only the refused characters change', () => {
+  const relpath = 'IST.352/my_submissions/role-of-systems-analyst/attempt-431219701/Résumé #2.docx';
+  assert.equal(storageKeyFor({ relpath, bucket: SUBMISSION_BUCKET }), 'IST.352/my_submissions/role-of-systems-analyst/attempt-431219701/R_sum_ _2.docx');
+});
+
+test('W-73: encodeKey still runs on the sanitised key, one segment at a time', () => {
+  const key = storageKeyFor({ relpath: `GEO.103/readings/${MUSK}` });
+  assert.equal(encodeKey(key), 'GEO.103/readings/Musk_s%20AI%20Fuels%20Pollution%20in%20Black%20Memphis%20Neighborhood%20-%20Capital%20B%20News.pdf');
+  assert.equal(encodeKey(storageKeyFor({ relpath: "X/O'Brien (1) & co.pdf" })), "X/O'Brien%20(1)%20%26%20co.pdf");
+});
+
+test('W-73: keyWasSanitised says whether the key differs from the name it was built from', () => {
+  assert.equal(pf.keyWasSanitised({ relpath: 'a/b.pdf' }), false);
+  assert.equal(pf.keyWasSanitised({ relpath: `GEO.103/readings/${MUSK}` }), true);
+  assert.equal(pf.keyWasSanitised({ relpath: 'a/HW #2.pdf' }), true);
+  assert.equal(pf.keyWasSanitised({ relpath: 'a/b.xlsx', key: 'a/b (re-upload).xlsx' }), false);
+});
+
+test('W-73: an occupied key resumes a course file whose key sanitising left alone, as before', () => {
+  assert.equal(pf.occupiedKeyRefusal({ relpath: 'IST.323/lecture_slides/week-01/Lecture 4.pdf', bucket: 'lecture_slides' }), null);
+  assert.equal(duplicateIsAcceptable(false, { sanitised: false }), true);
+});
+
+test('W-73: an occupied key is refused for a course file whose key sanitising changed — it may hold another file', () => {
+  const row = { relpath: `GEO.103/readings/${MUSK}`, bucket: 'readings' };
+  assert.equal(pf.occupiedKeyRefusal(row),
+    'key already occupied; this key was sanitised, so the object there may be another file; a human decides (Musk_s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf)');
+  assert.equal(duplicateIsAcceptable(false, { sanitised: true }), false);
+});
+
+test('W-73 R2-4: the reason fits the report\'s 200-character clip for 2489, verdict first, the name last', () => {
+  const REPORT_REASON_MAX = 200; // sync/src/report.ts REASON_MAX
+  const reason = `storage 409: ${pf.occupiedKeyRefusal({ relpath: `GEO.103/readings/${MUSK}`, bucket: 'readings' })}`;
+  assert.ok(reason.length < REPORT_REASON_MAX, `${reason.length} characters`);
+  // A longer name is clipped from the end, so only the name can be cut, never the verdict.
+  const long = pf.occupiedKeyRefusal({ relpath: `X/readings/${'é'.repeat(300)}.pdf`, bucket: 'readings' });
+  assert.ok(long.indexOf('a human decides (') + 'a human decides ('.length < REPORT_REASON_MAX);
+});
+
+const STORAGE_KEYS_FIXTURE = new URL('../db/fixtures/phase14/storage_keys.json', import.meta.url);
+const STORAGE_KEY_SQL_UNIT = new URL('../db/tests/phase14_095_storage_key.sql', import.meta.url);
+
+test('W-73 R2-3: storageKeyFor meets the shared relpath -> key contract (db/fixtures/phase14/storage_keys.json)', () => {
+  const { cases } = JSON.parse(fs.readFileSync(STORAGE_KEYS_FIXTURE, 'utf8'));
+  assert.ok(cases.length >= 10 && cases.length <= 12, `${cases.length} cases`);
+  for (const c of cases) {
+    assert.equal(storageKeyFor({ relpath: c.relpath }), c.key, c.case);
+    assert.equal(pf.STORAGE_KEY_VALID.test(c.key), true, `${c.case}: Storage accepts the key`);
+  }
+});
+
+test('W-73 R2-3: the SQL unit for 095 carries the same cases, so bb_file_storage_key meets the same contract', () => {
+  const { cases } = JSON.parse(fs.readFileSync(STORAGE_KEYS_FIXTURE, 'utf8'));
+  const sql = fs.readFileSync(STORAGE_KEY_SQL_UNIT, 'utf8');
+  const inline = /:= \$storage_keys\$\s*(\[[\s\S]*?\])\s*\$storage_keys\$::jsonb/.exec(sql);
+  assert.ok(inline, 'the unit holds the cases between $storage_keys$ tags');
+  assert.deepEqual(JSON.parse(inline[1]), cases);
+});
+
+test('W-73: two names that differ only in a refused character share a key, and the second one to arrive is refused', () => {
+  const first = { relpath: 'GEO.103/readings/a’b.pdf', bucket: 'readings' };
+  const second = { relpath: 'GEO.103/readings/a“b.pdf', bucket: 'readings' };
+  assert.equal(storageKeyFor(first), storageKeyFor(second));
+  assert.equal(pf.occupiedKeyRefusal(second), 'key already occupied; this key was sanitised, so the object there may be another file; a human decides (a_b.pdf)');
+  // Known limit until Storage's size + md5 eTag is checked against the fetched bytes (Phase 14's
+  // deferred list): a name that already holds `_` there is not sanitised, so if it arrives SECOND
+  // its occupied key still resumes. Flip this when that check lands.
+  assert.equal(storageKeyFor({ relpath: 'GEO.103/readings/a_b.pdf' }), storageKeyFor(first));
+  assert.equal(pf.occupiedKeyRefusal({ relpath: 'GEO.103/readings/a_b.pdf', bucket: 'readings' }), null);
+});
+
+test('W-73: a submission\'s occupied key is still refused with its own wording', () => {
+  assert.equal(pf.occupiedKeyRefusal({ relpath: 'IST.352/my_submissions/a/attempt-1/x.docx', bucket: SUBMISSION_BUCKET }),
+    'key already occupied; a human decides whether those bytes are this file');
+});
+
+test('W-73: a restale key is sanitised too, and its occupied key still resumes (the owner SQL checks the bytes)', () => {
+  const sha = 'b'.repeat(64);
+  assert.equal(storageKeyFor({ relpath: pf.restaleRelpath(`GEO.103/readings/${MUSK}`, sha) }),
+    'GEO.103/readings/restale-bbbbbbbbbbbb/Musk_s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf');
+  assert.equal(duplicateIsAcceptable(false, { restale: true, sanitised: true }), true);
 });
 
 test('bytesLookValid: PDF magic for pdf, zip magic for the Office types, and a floor on size', () => {

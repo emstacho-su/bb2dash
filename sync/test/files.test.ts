@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { storageKeyFor } from '../../ingest/pull_files.mjs';
 import type { FileStoredArgs, WorklistRow } from '../src/db.js';
 import {
   EMBED_TIMEOUT_MS,
@@ -22,6 +23,9 @@ import {
 const CDN = 'https://abc.content.blackboardcdn.com/signed/file?sig=1';
 const PDF = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(2000, 0x20)]);
 const SHA = createHash('sha256').update(PDF).digest('hex');
+/** File 2489 (W-73): a curly apostrophe Storage refuses with 400 InvalidKey. */
+const MUSK = 'Musk’s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf';
+const MUSK_KEY = 'Musk_s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf';
 
 let dir: string;
 let tmpDir: string;
@@ -67,6 +71,12 @@ function ports(rows: WorklistRow[], over: Partial<FilesPorts> = {}) {
     rpc: {
       fileWorklist: vi.fn(async () => rows),
       fileStored: vi.fn(async (a: FileStoredArgs) => {
+        // sync_file_stored's gate since 095: the key must be bb_file_storage_key(relpath), which is
+        // storageKeyFor's rule (db/fixtures/phase14/storage_keys.json pins the two together).
+        // With 091's gate, replace(relpath, '#', '_'), file 2489 was refused here (W-73 R2-1).
+        if (a.key !== storageKeyFor({ relpath: a.relpath })) {
+          throw Object.assign(new Error("sync_file_stored: key is not the relpath's storage key"), { code: '22023' });
+        }
         stored.push(a);
         order.push(`stored ${a.id}`);
         return true;
@@ -122,6 +132,15 @@ describe('the files step', () => {
     const { p, stored } = ports([row('12', { file_name: 'HW #2.pdf', relpath: 'IST.323/assignment_spec/HW #2.pdf' })]);
     await runFilesStep(p);
     expect(stored[0]).toMatchObject({ key: 'IST.323/assignment_spec/HW _2.pdf', relpath: 'IST.323/assignment_spec/HW #2.pdf' });
+  });
+
+  it('W-73: file 2489\'s curly apostrophe is a _ in the Storage key; the relpath, and so the mirror, keeps it', async () => {
+    const { p, stored } = ports([row('2489', { file_name: MUSK, relpath: `GEO.103/readings/${MUSK}`, bucket: 'readings' })]);
+    const r = await runFilesStep(p);
+    expect(r.files).toEqual({ pulled: 1, not_pulled: [] });
+    expect(p.storagePost).toHaveBeenCalledWith(`GEO.103/readings/${MUSK_KEY}`, expect.any(Buffer), 'application/pdf');
+    expect(stored[0]).toMatchObject({ key: `GEO.103/readings/${MUSK_KEY}`, relpath: `GEO.103/readings/${MUSK}` });
+    expect(fs.existsSync(path.join(courseDir, 'GEO.103', 'readings', MUSK))).toBe(true);
   });
 
   it.each([401, 403])('session_expired (%i at the first hop) with a dead re-probe stops the step: later rows are not tried', async (status) => {
@@ -219,6 +238,46 @@ describe('the files step', () => {
     expect(stored).toEqual([]);
     expect(p.extract).not.toHaveBeenCalled();
     expect(fs.readdirSync(tmpDir)).toEqual([]);
+  });
+
+  it('W-73: a course file whose key sanitising left alone still resumes past a 409', async () => {
+    const { p, stored } = ports([row('47', { relpath: "IST.323/readings/O'Brien (1) & co.pdf", bucket: 'readings' })], {
+      storagePost: vi.fn(async () => ({ status: 409, body: '{"error":"Duplicate"}' })),
+    });
+    const r = await runFilesStep(p);
+    expect(r.files).toEqual({ pulled: 1, not_pulled: [] });
+    expect(stored.map((s) => s.key)).toEqual(["IST.323/readings/O'Brien (1) & co.pdf"]);
+  });
+
+  it('W-73: a course file whose key sanitising changed refuses a 409: another name may own that key', async () => {
+    const { p, stored } = ports([row('2489', { file_name: MUSK, relpath: `GEO.103/readings/${MUSK}`, bucket: 'readings' })], {
+      storagePost: vi.fn(async () => ({ status: 409, body: '{"error":"Duplicate"}' })),
+    });
+    const r = await runFilesStep(p);
+    expect(r.files.pulled).toBe(0);
+    expect(r.files.not_pulled).toEqual([{
+      id: '2489',
+      reason: `storage 409: key already occupied; this key was sanitised, so the object there may be another file; a human decides (${MUSK_KEY})`,
+    }]);
+    expect(stored).toEqual([]);
+    expect(p.extract).not.toHaveBeenCalled();
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+  });
+
+  it('W-73: two names that differ only in a refused character: the second to arrive is refused, not recorded on the first\'s bytes', async () => {
+    let calls = 0;
+    const rows = [
+      row('61', { file_name: 'a’b.pdf', relpath: 'GEO.103/readings/a’b.pdf', bucket: 'readings' }),
+      row('62', { file_name: 'a“b.pdf', relpath: 'GEO.103/readings/a“b.pdf', bucket: 'readings' }),
+    ];
+    const { p, stored } = ports(rows, {
+      storagePost: vi.fn(async () => (calls++ === 0 ? { status: 200, body: '{}' } : { status: 409, body: '{"error":"Duplicate"}' })),
+    });
+    const r = await runFilesStep(p);
+    expect(p.storagePost).toHaveBeenNthCalledWith(1, 'GEO.103/readings/a_b.pdf', expect.any(Buffer), 'application/pdf');
+    expect(p.storagePost).toHaveBeenNthCalledWith(2, 'GEO.103/readings/a_b.pdf', expect.any(Buffer), 'application/pdf');
+    expect(stored.map((s) => s.id)).toEqual(['61']);
+    expect(r.files.not_pulled).toEqual([{ id: '62', reason: 'storage 409: key already occupied; this key was sanitised, so the object there may be another file; a human decides (a_b.pdf)' }]);
   });
 
   it('bytes that do not look like the file are reported, not stored', async () => {

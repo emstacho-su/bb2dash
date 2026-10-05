@@ -63,10 +63,13 @@
 //   Storage key (a re-upload of an already-stored file needs its own; see file 145). `attempt_id`
 //   is carried for the operator's report only; nothing here reads it.
 //
-// STORAGE KEYS. Supabase Storage rejects `#` in a key; the key drops it, the mirror keeps the real
-// name, and `storage_path` records the key. Nothing else is renamed — in particular the
-// `attempt-<digits>/` segment migration 052 gives a submission relpath survives into the key, which
-// is what keeps a pulled-back submission off the key of a file Stack staged under the same name.
+// STORAGE KEYS. Supabase Storage refuses any key character outside `STORAGE_KEY_VALID` (`#`, `%`,
+// `~`, `[`, `]`, `"`, curly quotes, every non-ASCII letter): each one becomes `_` in every segment,
+// never the `/` separators, while the mirror and `file_name` keep the real name and `storage_path`
+// records the key. An occupied sanitised key is refused, not resumed (`occupiedKeyRefusal`).
+// Nothing else is renamed — in particular the `attempt-<digits>/` segment migration 052 gives a
+// submission relpath survives into the key, which is what keeps a pulled-back submission off the
+// key of a file Stack staged under the same name.
 //
 // Importing this module runs nothing: every helper is pure and exported for pull_files.test.mjs.
 
@@ -112,10 +115,45 @@ export function mimeFor(row) {
   return MIME_BY_EXT[ext] ?? 'application/octet-stream';
 }
 
-/** The Storage object key: an explicit override wins; otherwise the relpath without `#`. */
+/**
+ * The characters Supabase Storage accepts in an object key: storage-api's `VALID_OBJECT_KEY`,
+ * verbatim (supabase/storage `src/storage/limits.ts`, read at 69bb550, 2026-09-21). A key with
+ * anything else is answered `400 InvalidKey` (file 2489, 2026-10-05: a curly apostrophe).
+ */
+export const STORAGE_KEY_VALID = /^[A-Za-z0-9_/!.*'() &$=@;:+,?-]*$/;
+/** What a refused character becomes in the key, one per character. */
+export const STORAGE_KEY_REPLACEMENT = '_';
+// The same set without `/`, negated: one segment's refused characters, a whole code point at a time
+// (`u`), so an emoji is one `_`, not two. The sanitiser/check agreement test keeps the two in step.
+const REFUSED_IN_SEGMENT = /[^A-Za-z0-9_!.*'() &$=@;:+,?-]/gu;
+
+/** One key segment with every character Storage refuses replaced by `_`. */
+export function safeStorageSegment(segment) {
+  return String(segment).replace(REFUSED_IN_SEGMENT, STORAGE_KEY_REPLACEMENT);
+}
+
+/** A key Storage accepts: each `/`-separated segment made safe; the separators never change. */
+export function sanitizeStorageKey(key) {
+  return String(key).split('/').map(safeStorageSegment).join('/');
+}
+
+/** The key before sanitising: an explicit override wins; otherwise the relpath. */
+function unsanitisedKeyFor(row) {
+  return row.key ? String(row.key) : String(row.relpath);
+}
+
+/**
+ * The Storage object key: the explicit override or the relpath, sanitised. The sanitiser changes
+ * nothing Storage accepts, so a deliberate override is honoured byte for byte; one Storage would
+ * refuse can never be stored as given, and `storage_path` records the key actually used.
+ */
 export function storageKeyFor(row) {
-  if (row.key) return row.key;
-  return String(row.relpath).replace(/#/g, '_');
+  return sanitizeStorageKey(unsanitisedKeyFor(row));
+}
+
+/** Did sanitising change this row's key? Then another file's name may map to the same key. */
+export function keyWasSanitised(row) {
+  return storageKeyFor(row) !== unsanitisedKeyFor(row);
 }
 
 /**
@@ -209,19 +247,43 @@ export function isDuplicateAnswer(status, body) {
 }
 
 /**
- * Is that duplicate answer good enough to go on? For a course file yes: the key is derived from the
- * catalogue, so the object under it is this file. For a submission NO — migration 052's
+ * Is that duplicate answer good enough to go on? For a course file whose key is the catalogue's own
+ * spelling, yes: the object under it is this file. For a submission NO — migration 052's
  * `attempt-<digits>` segment means nothing should ever share the key, so an occupied one holds
  * bytes this step did not write and must not point a Blackboard row at. bb-sync step 4b reports the
- * row, leaves `storage_path` null, and a human decides.
+ * row, leaves `storage_path` null, and a human decides. A SANITISED course key (W-73) is refused the
+ * same way: two names that differ only in a refused character (`a’b.pdf`, `a“b.pdf`) share a key,
+ * so the object there may be the other file's. The cost: a sanitised file whose earlier pass
+ * uploaded and then failed later is a loud item instead of a resume, until Storage's size and md5
+ * eTag are checked against the fetched bytes (Phase 14's deferred list).
  */
-export function duplicateIsAcceptable(submission, { restale = false } = {}) {
+export function duplicateIsAcceptable(submission, { restale = false, sanitised = false } = {}) {
+  if (submission) return false;
   // A restale key carries the new bytes' sha. If it is already occupied (a run that stopped midway,
   // or a re-run before the owner SQL), the object is NOT overwritten and NOT trusted: the owner SQL
   // refuses to re-point the row unless storage.objects holds exactly these bytes (md5 eTag + size).
-  // That check is what makes an occupied restale key resumable instead of a dead end.
-  void restale;
-  return !submission;
+  // That check is what makes an occupied restale key resumable instead of a dead end, sanitised or not.
+  if (restale) return true;
+  return !sanitised;
+}
+
+/**
+ * Why an occupied Storage key must not be recorded as this row's file, or null when it may (the
+ * course resume). Both runners put it after `storage <status>: `, so the report's `not_pulled` and
+ * the Inbox item say why without a lookup. The verdict comes first and the sanitised file name
+ * last, so the report's 200-character clip can only shorten the name (the line already names the
+ * file by id). A name already holding `_` where another has a refused character is not sanitised,
+ * so if it arrives second it still resumes: the size + md5 check on Phase 14's deferred list closes that.
+ */
+export function occupiedKeyRefusal(row) {
+  const raw = unsanitisedKeyFor(row);
+  const key = sanitizeStorageKey(raw);
+  const sanitised = key !== raw;
+  if (duplicateIsAcceptable(isSubmissionRow(row), { sanitised })) return null;
+  if (sanitised) {
+    return `key already occupied; this key was sanitised, so the object there may be another file; a human decides (${path.posix.basename(key)})`;
+  }
+  return 'key already occupied; a human decides whether those bytes are this file';
 }
 
 export const sha256Hex = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -488,11 +550,10 @@ async function pullOne(row, ctx) {
   const upBody = await up.text();
   if (!up.ok) {
     if (!isDuplicateAnswer(up.status, upBody)) return { id: row.id, error: `storage ${up.status}: ${upBody.slice(0, 200)}` };
-    // A course key is derived from the catalogue, so an occupied one holds this same file. Only a
-    // submission key must never be assumed (migration 052: nothing should ever share it).
-    if (!duplicateIsAcceptable(submission)) {
-      return { id: row.id, key: storageKey, ...tag, error: `Storage key already occupied (${up.status}); a human decides whether those bytes are this file` };
-    }
+    // A course key in the catalogue's own spelling holds this same file. A submission key (migration
+    // 052: nothing should ever share it) or a sanitised key (W-73: another name may map to it) is never assumed.
+    const refusal = occupiedKeyRefusal(row);
+    if (refusal) return { id: row.id, key: storageKey, ...tag, error: `storage ${up.status}: ${refusal}` };
   }
 
   let units = [];

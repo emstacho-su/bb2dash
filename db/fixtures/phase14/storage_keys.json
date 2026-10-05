@@ -1,0 +1,17 @@
+{
+  "about": "W-73 contract: relpath -> Supabase Storage object key. Every character outside storage-api's VALID_OBJECT_KEY (supabase/storage src/storage/limits.ts @ 69bb550) becomes one _, per code point; / and the allowed characters are kept; no Unicode folding. Read by ingest/pull_files.test.mjs (storageKeyFor); db/tests/phase14_095_storage_key.sql carries the same cases array inline between $storage_keys$ tags (bb_file_storage_key), and pull_files.test.mjs checks that copy equals this one. Non-ASCII is written as \\u escapes so NFC and NFD stay distinct.",
+  "cases": [
+    { "case": "file 2489's name: a curly apostrophe", "relpath": "GEO.103/readings/Musk’s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf", "key": "GEO.103/readings/Musk_s AI Fuels Pollution in Black Memphis Neighborhood - Capital B News.pdf" },
+    { "case": "# (the pre-W-73 rule)", "relpath": "IST.323/lecture_slides/week-04/Lecture#4-Chap 3a.pptx", "key": "IST.323/lecture_slides/week-04/Lecture_4-Chap 3a.pptx" },
+    { "case": "every allowed character is kept", "relpath": "IST.352/readings/O'Brien (1) & co, + A=B @x: y; z? $5 *! -_.pdf", "key": "IST.352/readings/O'Brien (1) & co, + A=B @x: y; z? $5 *! -_.pdf" },
+    { "case": "precomposed e-acute (NFC)", "relpath": "ECN.304/readings/Café notes.pdf", "key": "ECN.304/readings/Caf_ notes.pdf" },
+    { "case": "e + combining acute (NFD): the base letter stays", "relpath": "ECN.304/readings/Café notes.pdf", "key": "ECN.304/readings/Cafe_ notes.pdf" },
+    { "case": "smart double quotes", "relpath": "IST.352/readings/“Smart” quotes.docx", "key": "IST.352/readings/_Smart_ quotes.docx" },
+    { "case": "%, [, ] and ~", "relpath": "IST.471/assignment_spec/100% [draft] ~v2.pdf", "key": "IST.471/assignment_spec/100_ _draft_ _v2.pdf" },
+    { "case": "en and em dashes", "relpath": "IST.466/readings/Week 3 – Notes — final.pdf", "key": "IST.466/readings/Week 3 _ Notes _ final.pdf" },
+    { "case": "an astral character (emoji) is one code point, one _", "relpath": "GEO.103/readings/Notes 📚.pdf", "key": "GEO.103/readings/Notes _.pdf" },
+    { "case": "a submission keeps its attempt segment", "relpath": "IST.352/my_submissions/role-of-systems-analyst/attempt-431219701/Résumé #2.docx", "key": "IST.352/my_submissions/role-of-systems-analyst/attempt-431219701/R_sum_ _2.docx" },
+    { "case": "double quote, no-break space and backslash", "relpath": "IST.323/readings/a\"b c\\d.pdf", "key": "IST.323/readings/a_b_c_d.pdf" },
+    { "case": "a plain name is unchanged", "relpath": "IST.323/lecture_slides/week-01/Lecture 1.pdf", "key": "IST.323/lecture_slides/week-01/Lecture 1.pdf" }
+  ]
+}
