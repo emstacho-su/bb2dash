@@ -5,7 +5,8 @@
   access in here -- logon-build.ps1 owns the side effects, this module owns the
   logic, and Bb2dashLaunch.Tests.ps1 pins the logic. One exception, at the end:
   the Update now helper (2026-09-30), whose junction swap is tested against a
-  real junction and whose process and task calls are injected scriptblocks.
+  real junction and whose process and task calls are injected scriptblocks, and
+  its -Detach hand-off (2026-10-04), whose Start-Process is injected the same way.
 
 .DESCRIPTION
   Two decisions, in the order the script runs them:
@@ -304,8 +305,10 @@ function Get-BuildCommand {
 
 # ---------------------------------------------------------------- Update now (2026-09-30)
 #
-# The app's "Update now" button spawns update-now.ps1, detached, and quits. That script
-# calls Invoke-UpdateSwap below. These are the module's only functions with side effects:
+# The app's "Update now" button runs update-now.ps1 -Detach, which hands off to a second run
+# of the script (the hand-off, at the end of this module); the app quits once that run has
+# written its marker. That run calls Invoke-UpdateSwap below. These are the module's only
+# functions with side effects:
 # Set-CurrentBuild touches the `current` junction (and nothing else), and Invoke-UpdateSwap
 # reaches the process table and Task Scheduler only through the scriptblocks it is handed,
 # so Bb2dashLaunch.Tests.ps1 drives both against a junction under TestDrive.
@@ -320,6 +323,8 @@ $script:PendingSwapFile = 'swap-pending'
 .SYNOPSIS
   What Update now may do once it has waited for the app: Swap (repoint current at the
   new build) and Launch, or Launch alone -- the old build stays current -- with the reason.
+  Nothing at all while the app is still running after the wait (-WaitedSeconds): the app
+  gave up on this helper and stays on its build, so starting it again would be wrong.
 #>
 function Get-UpdateSwapDecision {
     [CmdletBinding()]
@@ -327,13 +332,14 @@ function Get-UpdateSwapDecision {
         [Parameter(Mandatory)] [AllowEmptyString()][string] $Tree,
         [AllowEmptyString()][string] $ActiveTree = '',
         [bool] $BuildExists,
-        [bool] $AppExited
+        [bool] $AppExited,
+        [int] $WaitedSeconds = 60
     )
     if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
     Assert-Sha -Name 'ActiveTree' -Value $ActiveTree
 
     if (-not $AppExited) {
-        return [pscustomobject]@{ Actions = [string[]] @('Launch'); Reason = 'the app did not exit in time: the old build stays current' }
+        return [pscustomobject]@{ Actions = [string[]] @(); Reason = "the app is still running after ${WaitedSeconds}s; nothing swapped, nothing started" }
     }
     if (-not $BuildExists) {
         return [pscustomobject]@{ Actions = [string[]] @('Launch'); Reason = "build $Tree is not on disk: the old build stays current" }
@@ -387,8 +393,11 @@ function Set-CurrentBuild {
 <#
 .SYNOPSIS
   Update now: wait for the app to exit, repoint `current` at build -Tree, start the app.
-  On any failure the old build stays current and the app is started on it; every step
-  is logged through -Log.
+  On any failure the old build stays current and the app is started on it, but only once
+  the app is gone: if it is still running after the wait, nothing is swapped or started.
+  Every step is logged through -Log. While a live helper for another build holds the
+  marker (younger than -TimeoutSeconds + -LockWaitSeconds), this one refuses first: it
+  writes nothing, takes no mutex and starts nothing.
 
 .OUTPUTS
   [pscustomobject] Swapped, Launched, Reason.
@@ -410,10 +419,19 @@ function Invoke-UpdateSwap {
     )
     if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
 
+    # A live helper for another build owns the marker: refuse before touching it or the mutex.
+    # A live helper's marker is never older than its two waits; anything older is a leftover.
+    $foreign = Get-ForeignPendingSwap -StateDir $StateDir -Tree $Tree -FreshSeconds ($TimeoutSeconds + $LockWaitSeconds)
+    if ($foreign -ne '') {
+        $refusal = "another update is in progress for build ${foreign}: nothing swapped, nothing started"
+        & $Log 'ERROR' $refusal
+        return [pscustomobject]@{ Swapped = $false; Launched = $false; Reason = $refusal }
+    }
+
     # Named before anything waits, so a build that finishes meanwhile keeps this build
     # (Get-BuildsToKeep). Removed when the swap is over, whatever happened.
     $marker = Join-Path $StateDir $script:PendingSwapFile
-    $swap = [pscustomobject]@{ Swapped = $false; Reason = '' }
+    $swap = [pscustomobject]@{ Swapped = $false; Launch = $false; Reason = '' }
     $mutex = $null
     $locked = $false
     try {
@@ -424,7 +442,7 @@ function Invoke-UpdateSwap {
             $swap = Invoke-SwapStep -StateDir $StateDir -Tree $Tree -TestAppRunning $TestAppRunning `
                 -Log $Log -TimeoutSeconds $TimeoutSeconds -PollMilliseconds $PollMilliseconds
         } else {
-            $swap.Reason = "the builder was still running after ${LockWaitSeconds}s: the old build stays current"
+            $swap = Get-BuilderBusyOutcome -LockWaitSeconds $LockWaitSeconds -TestAppRunning $TestAppRunning
             & $Log 'WARN' $swap.Reason
         }
     } finally {
@@ -433,6 +451,9 @@ function Invoke-UpdateSwap {
         Remove-Item -Force $marker -ErrorAction SilentlyContinue
     }
 
+    if (-not $swap.Launch) {
+        return [pscustomobject]@{ Swapped = $swap.Swapped; Launched = $false; Reason = $swap.Reason }
+    }
     $launched = $false
     $exe = Join-Path (Join-Path $StateDir 'current') $script:UpdateExeName
     try {
@@ -443,6 +464,35 @@ function Invoke-UpdateSwap {
         & $Log 'ERROR' "the app could not be started: $($_.Exception.Message)"
     }
     return [pscustomobject]@{ Swapped = $swap.Swapped; Launched = $launched; Reason = $swap.Reason }
+}
+
+<#
+  The builder held its mutex past the bound, so nothing is swapped. The old build is
+  started only when the app is gone; while it still runs, nothing is started.
+#>
+function Get-BuilderBusyOutcome {
+    param([int] $LockWaitSeconds, [scriptblock] $TestAppRunning)
+    if (& $TestAppRunning) {
+        $reason = "the builder was still running after ${LockWaitSeconds}s and so is the app; nothing swapped, nothing started"
+        return [pscustomobject]@{ Swapped = $false; Launch = $false; Reason = $reason }
+    }
+    $reason = "the builder was still running after ${LockWaitSeconds}s: the old build stays current"
+    return [pscustomobject]@{ Swapped = $false; Launch = $true; Reason = $reason }
+}
+
+<#
+  The build a live Update now for another build is switching to: the marker's tree when it
+  names a different build and was written less than -FreshSeconds ago; '' otherwise (no
+  marker, a malformed one, this build's own, or a leftover older than a live helper's waits).
+#>
+function Get-ForeignPendingSwap {
+    param([string] $StateDir, [string] $Tree, [int] $FreshSeconds)
+    $pending = Read-PendingSwapTree -StateDir $StateDir
+    if ($pending -eq '' -or $pending -eq $Tree) { return '' }
+    $written = (Get-Item -LiteralPath (Join-Path $StateDir $script:PendingSwapFile)).LastWriteTimeUtc
+    $ageSeconds = ([DateTime]::UtcNow - $written).TotalSeconds
+    if ($ageSeconds -lt $FreshSeconds) { return $pending }
+    return ''
 }
 
 <# Take the builder's mutex, waiting up to -Seconds for a running build. True when held. #>
@@ -487,7 +537,8 @@ function Invoke-SwapStep {
         if ($leaf -match $script:ShaPattern) { $activeTree = $leaf }
     }
     $decision = Get-UpdateSwapDecision -Tree $Tree -ActiveTree $activeTree `
-        -BuildExists (Test-Path (Join-Path $target $script:UpdateExeName)) -AppExited $exited
+        -BuildExists (Test-Path (Join-Path $target $script:UpdateExeName)) -AppExited $exited `
+        -WaitedSeconds $TimeoutSeconds
     $level = if ($decision.Actions -contains 'Swap') { 'INFO' } else { 'WARN' }
     & $Log $level "update decision: [$($decision.Actions -join ', ')] because $($decision.Reason)"
 
@@ -501,15 +552,16 @@ function Invoke-SwapStep {
             & $Log 'ERROR' "$($set.Reason); the old build stays current"
         }
     }
-    return [pscustomobject]@{ Swapped = $swapped; Reason = $decision.Reason }
+    return [pscustomobject]@{ Swapped = $swapped; Launch = ($decision.Actions -contains 'Launch'); Reason = $decision.Reason }
 }
 
 <#
 .SYNOPSIS
   update-now.ps1's last resort, when the swap itself threw: wait (bounded) for the app to
   exit, then start it on whatever `current` points at, so a failed update never leaves
-  Stack with no app. Logging here is best effort -- a log that throws (which may be what
-  failed in the first place) never stops the restart -- and nothing here throws.
+  Stack with no app. If the app is still running after the wait, nothing is started: it
+  never quit, so Stack has an app. Logging here is best effort -- a log that throws (which
+  may be what failed in the first place) never stops the restart -- and nothing here throws.
 
 .OUTPUTS
   [pscustomobject] Launched.
@@ -535,8 +587,8 @@ function Invoke-UpdateFallback {
         try { $running = [bool] (& $TestAppRunning) } catch { $running = $false }
         if (-not $running) { break }
         if ((Get-Date) -ge $deadline) {
-            & $safeLog 'WARN' "the app was still running after ${TimeoutSeconds}s; starting it anyway"
-            break
+            & $safeLog 'WARN' "the app is still running after ${TimeoutSeconds}s; nothing started"
+            return [pscustomobject]@{ Launched = $false }
         }
         Start-Sleep -Milliseconds $PollMilliseconds
     }
@@ -578,4 +630,104 @@ function Get-BuildsToKeep {
         Where-Object { $_ -match $script:ShaPattern } | Select-Object -Unique)
 }
 
-Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Get-BuildCheckRecord, ConvertTo-BuildCheckJson, Get-DockerWaitSeconds, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep
+# ---------------------------------------------------------------- the hand-off (2026-10-04)
+#
+# Windows PowerShell 5.1 started detached (DETACHED_PROCESS, no console) exits 0 without
+# running its script, and a plain child of the app dies with it (libuv's kill-on-close job).
+# So the app runs `update-now.ps1 -Detach` as a plain hidden child, and that stage starts the
+# real helper with Start-Process: libuv's job allows silent breakaway, so the helper started
+# from inside it is outside the job and outlives the app.
+
+<#
+  One element for Start-Process -ArgumentList. PowerShell 5.1 joins the list with spaces and
+  never quotes, so an element with whitespace is quoted here, with the backslashes before the
+  closing quote doubled so they stay literal. A double quote inside an element is refused.
+#>
+function ConvertTo-ProcessArgument {
+    param([AllowEmptyString()][string] $Value)
+    if ($Value.Contains('"')) { throw "an argument may not contain a double quote: $Value" }
+    if ($Value -ne '' -and $Value -notmatch '\s') { return $Value }
+    return '"' + ($Value -replace '(\\+)$', '$1$1') + '"'
+}
+
+<#
+.SYNOPSIS
+  The argument list for update-now.ps1's second stage: the same script without -Detach,
+  with the same -Tree, -StateDir, -AppTaskName and -TimeoutSeconds. No -WindowStyle here:
+  the caller's Start-Process -WindowStyle Hidden is what hides the window.
+
+.OUTPUTS
+  [string[]], each element ready for Start-Process (see ConvertTo-ProcessArgument).
+#>
+function New-HelperHandoffArgumentList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $ScriptPath,
+        [Parameter(Mandatory)] [AllowEmptyString()][string] $Tree,
+        [Parameter(Mandatory)] [string] $StateDir,
+        [Parameter(Mandatory)] [string] $AppTaskName,
+        [Parameter(Mandatory)] [int] $TimeoutSeconds
+    )
+    if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
+    # PowerShell's own options first: everything after -File is a parameter of the script.
+    $arguments = @(
+        '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', $ScriptPath,
+        '-Tree', $Tree, '-StateDir', $StateDir, '-AppTaskName', $AppTaskName,
+        '-TimeoutSeconds', [string] $TimeoutSeconds
+    )
+    return [string[]] @($arguments | ForEach-Object { ConvertTo-ProcessArgument $_ })
+}
+
+<#
+.SYNOPSIS
+  update-now.ps1 -Detach: start the real helper through -StartProcess (called as
+  & $StartProcess <powershell.exe> <argument list> <working folder>, returning the process)
+  and log its pid. A start that throws or returns no process is logged at ERROR and
+  reported in the result, never swallowed. Logging is best effort and never changes Ok:
+  a log that throws after a successful start must not report a running helper as failed.
+
+.OUTPUTS
+  [pscustomobject] Ok, ProcessId, Reason.
+#>
+function Invoke-HelperHandoff {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $PowerShellPath,
+        [Parameter(Mandatory)] [string] $ScriptPath,
+        [Parameter(Mandatory)] [AllowEmptyString()][string] $Tree,
+        [Parameter(Mandatory)] [string] $StateDir,
+        [Parameter(Mandatory)] [string] $AppTaskName,
+        [Parameter(Mandatory)] [int] $TimeoutSeconds,
+        [Parameter(Mandatory)] [scriptblock] $StartProcess,
+        [Parameter(Mandatory)] [scriptblock] $Log
+    )
+    $process = $null
+    $failure = ''
+    try {
+        $arguments = New-HelperHandoffArgumentList -ScriptPath $ScriptPath -Tree $Tree -StateDir $StateDir `
+            -AppTaskName $AppTaskName -TimeoutSeconds $TimeoutSeconds
+        $process = & $StartProcess $PowerShellPath $arguments $StateDir
+        if ($null -eq $process) { throw 'Start-Process returned no process' }
+    } catch {
+        $process = $null
+        $failure = $_.Exception.Message
+    }
+
+    if ($null -eq $process) {
+        $reason = "could not hand off to the helper: $failure"
+        Write-BestEffortLog -Log $Log -Level 'ERROR' -Message $reason
+        return [pscustomobject]@{ Ok = $false; ProcessId = 0; Reason = $reason }
+    }
+    $reason = "update to $Tree handed off to the helper (pid $($process.Id)); this stage exits"
+    Write-BestEffortLog -Log $Log -Level 'INFO' -Message $reason
+    return [pscustomobject]@{ Ok = $true; ProcessId = [int] $process.Id; Reason = $reason }
+}
+
+<# Log through -Log; a log that throws goes to stderr instead and never stops the caller. #>
+function Write-BestEffortLog {
+    param([scriptblock] $Log, [string] $Level, [string] $Message)
+    try { & $Log $Level $Message } catch { [Console]::Error.WriteLine("update-now: $Level $Message (log failed: $($_.Exception.Message))") }
+}
+
+Export-ModuleMember -Function Get-StartupDecision, Get-BuildDecision, Get-BuildCheckRecord, ConvertTo-BuildCheckJson, Get-DockerWaitSeconds, Test-DockerNeeded, ConvertTo-LaunchState, New-LaunchState, ConvertTo-LaunchStateJson, Get-BuildCommand, Get-UpdateSwapDecision, Set-CurrentBuild, Invoke-UpdateSwap, Invoke-UpdateFallback, Read-PendingSwapTree, Get-BuildsToKeep, New-HelperHandoffArgumentList, Invoke-HelperHandoff

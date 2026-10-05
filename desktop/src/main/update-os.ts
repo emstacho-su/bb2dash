@@ -6,15 +6,24 @@
  *  - start the logon builder's scheduled task (`Start-ScheduledTask`),
  *  - resolve which build is running and where the launch state lives,
  *  - read the builder's `state.json` and check a build is on disk,
- *  - spawn the detached *Update now* helper (`launch/update-now.ps1`).
+ *  - start the *Update now* helper (`launch/update-now.ps1`) and wait until it is running.
+ *
+ * The helper start has two stages (2026-10-04, W-71). The app runs `update-now.ps1 -Detach`
+ * as a plain hidden child and waits for it to exit 0; that stage starts the real helper with
+ * Start-Process and exits. Then the app waits for the helper's `swap-pending` marker to name
+ * the build, and only then do its callers quit. A detached spawn is not used: Windows
+ * PowerShell 5.1 started detached has no console and exits 0 without running its script,
+ * which is how six presses on 2026-10-04 quit the app and swapped nothing. A plain child
+ * alone would not do either, since it dies with the app (libuv's kill-on-close job), but the
+ * process it starts with Start-Process is outside that job and outlives the app.
  *
  * Nothing here takes a value from the renderer. The task name and every script are
  * constants; the variable inputs to a spawn are a path this process built itself and a
  * tree hash checked against `^[0-9a-f]{40}$`, each one argv element, never a shell string.
  */
 
-import { execFile, spawn } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { type ChildProcess, type SpawnOptions, execFile, spawn } from 'node:child_process';
+import { existsSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { win32 } from 'node:path';
 
 import type { BuilderStartOutcome } from '../core/update/builder-trigger';
@@ -26,6 +35,7 @@ import {
   isTree,
   runningTreeFromExecPath,
 } from '../core/update/build-paths';
+import { PENDING_SWAP_FILE, type SwapMarkerSnapshot, judgeSwapMarker } from '../core/update/swap-marker';
 import { parseLastBuiltSha } from '../core/update/update-check';
 
 export const UPDATE_HELPER_SCRIPT = 'update-now.ps1';
@@ -274,7 +284,10 @@ function helperScriptPath(stateDir: string): string {
   return win32.join(stateDir, LAUNCH_SCRIPTS_FOLDER, UPDATE_HELPER_SCRIPT);
 }
 
-/** The helper's argv: the installed `update-now.ps1`, hidden, with a validated tree. */
+/**
+ * Stage 1's argv: the installed `update-now.ps1`, hidden, with a validated tree and
+ * `-Detach`, so it only hands off to a second run of itself and exits.
+ */
 export function updateHelperArgv(target: UpdateHelperTarget, env: NodeJS.ProcessEnv = process.env): readonly string[] {
   if (!isTree(target.tree)) throw new Error('refusing to update to something that is not a tree hash');
   return Object.freeze([
@@ -291,52 +304,174 @@ export function updateHelperArgv(target: UpdateHelperTarget, env: NodeJS.Process
     target.tree,
     '-StateDir',
     target.stateDir,
+    '-Detach',
   ]);
 }
 
+/** Stage 1 (`update-now.ps1 -Detach`) only starts the real helper; it must exit within this. */
+export const HELPER_HANDOFF_TIMEOUT_MS = 30_000;
+/** How long the handed-off helper has to write its pending-swap marker. */
+export const HELPER_START_TIMEOUT_MS = 20_000;
+export const MARKER_POLL_MS = 250;
+
+/** Run one process and wait for it: resolves its exit code (`null` when it ended without one). */
+export type HelperRun = (argv: readonly string[], cwd: string, timeoutMs: number) => Promise<number | null>;
+
+export type SpawnHidden = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
+
+/** `kill()` reports whether the signal was delivered; the timeout message says which. */
+function timeoutMessage(command: string, timeoutMs: number, child: ChildProcess, stopped: boolean): string {
+  const outcome = stopped ? 'stopped it' : 'could not stop it';
+  return `${win32.basename(command)} did not exit within ${timeoutMs} ms; ${outcome} (pid ${child.pid ?? 'unknown'})`;
+}
+
 /**
- * Start one process that outlives this app: detached, no console, unreferenced. Resolves
- * once it is running, rejects when it could not start (the `error`/`spawn` race, as in
- * `sync-terminal.ts`).
+ * Run one process hidden (a console, never shown) and wait for it, bounded. Not detached on
+ * purpose: Windows PowerShell 5.1 started detached has no console and exits 0 without running
+ * its script. A child that runs past `timeoutMs` is stopped and the promise rejects; so does
+ * one that could not be started. `spawnFn` is injectable for tests only.
  */
-export function spawnDetached(argv: readonly string[], cwd?: string): Promise<void> {
-  return new Promise((resolve, reject) => {
+export const createRunHidden = (spawnFn: SpawnHidden = spawn): HelperRun => (argv, cwd, timeoutMs) =>
+  new Promise((resolve, reject) => {
     const [command, ...args] = argv;
     if (command === undefined) {
       reject(new Error('empty argv'));
       return;
     }
-    let child;
+    let child: ChildProcess;
     try {
-      child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true, ...(cwd === undefined ? {} : { cwd }) });
+      child = spawnFn(command, args, { cwd, stdio: 'ignore', windowsHide: true });
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)));
       return;
     }
-    child.once('error', reject);
-    child.once('spawn', () => {
-      child.unref();
-      resolve();
+    const timer = setTimeout(() => {
+      reject(new Error(timeoutMessage(command, timeoutMs, child, child.kill())));
+    }, timeoutMs);
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('exit', (code) => {
+      clearTimeout(timer);
+      resolve(code);
     });
   });
+
+/** The real stage-1 runner: `createRunHidden` over Node's `spawn`. */
+export const runHidden: HelperRun = createRunHidden();
+
+/**
+ * The helper's pending-swap marker, or `null` when there is none; any other failure throws.
+ * The poll in `startUpdateHelper` treats a throw as "not yet" and names it at the bound.
+ */
+export function readSwapMarker(path: string): SwapMarkerSnapshot | null {
+  try {
+    const modifiedMs = statSync(path).mtimeMs;
+    return Object.freeze({ text: readFileSync(path, 'utf8'), modifiedMs });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
 }
 
 export interface UpdateHelperIo {
   readonly exists: (path: string) => boolean;
-  readonly spawnDetached: (argv: readonly string[], cwd?: string) => Promise<void>;
+  readonly readMarker: (path: string) => SwapMarkerSnapshot | null;
+  readonly run: HelperRun;
+  readonly sleep: (ms: number) => Promise<void>;
+  readonly now: () => number;
 }
 
-/** Update now: spawn `update-now.ps1`, which waits for this app to exit and swaps builds. */
+const DEFAULT_HELPER_IO: UpdateHelperIo = Object.freeze({
+  exists: existsSync,
+  readMarker: readSwapMarker,
+  run: runHidden,
+  sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  now: () => Date.now(),
+});
+
+/**
+ * Update now: run `update-now.ps1 -Detach`, which starts the real helper and exits, then wait
+ * for that helper's pending-swap marker to name `target.tree`. Resolves only then, so the
+ * caller quits only once a helper is really waiting to swap; rejects on anything else.
+ */
 export async function startUpdateHelper(
   target: UpdateHelperTarget,
-  io: UpdateHelperIo = { exists: existsSync, spawnDetached },
+  io: UpdateHelperIo = DEFAULT_HELPER_IO,
 ): Promise<void> {
   const argv = updateHelperArgv(target);
   const script = helperScriptPath(target.stateDir);
   if (!io.exists(script)) {
     throw new Error(`${script} is not installed; re-run register-logon-task.ps1 or wait for the next build`);
   }
+  const markerPath = win32.join(target.stateDir, PENDING_SWAP_FILE);
+  const before = io.readMarker(markerPath);
   // Never inherit this app's working folder: the task starts the app in `current`, and a
   // junction that is some process's cwd cannot be removed and repointed.
-  await io.spawnDetached(argv, target.stateDir);
+  const code = await io.run(argv, target.stateDir, HELPER_HANDOFF_TIMEOUT_MS);
+  if (code !== 0) {
+    const how = code === null ? 'without an exit code' : `exited ${code}`;
+    throw new Error(`${UPDATE_HELPER_SCRIPT} -Detach ${how}: no helper was started (logs\\update-now.log)`);
+  }
+  await waitForSwapMarker(markerPath, target.tree, before, io);
+}
+
+/**
+ * Stage 1 exited 0, so a helper process may exist even when the wait fails. It never starts
+ * the app while the app runs (`Get-UpdateSwapDecision`), but the reason says where to look.
+ */
+const HELPER_MAY_STILL_RUN = '; a helper may still be running: see logs\\update-now.log';
+
+/** An fs error's errno code (`EPERM`), else its message. */
+function describeReadError(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === 'string' && code !== '') return code;
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * One poll of the marker. A read error (a transient EBUSY/EPERM while the helper writes or
+ * removes the file) counts as "not there yet"; the caller keeps the last one for its message.
+ */
+function pollSwapMarker(
+  markerPath: string,
+  io: UpdateHelperIo,
+): { readonly seen: SwapMarkerSnapshot | null; readonly readError: string | null } {
+  try {
+    return { seen: io.readMarker(markerPath), readError: null };
+  } catch (error) {
+    return { seen: null, readError: describeReadError(error) };
+  }
+}
+
+/** Poll the marker until it names `tree`, bounded by HELPER_START_TIMEOUT_MS. */
+async function waitForSwapMarker(
+  markerPath: string,
+  tree: string,
+  before: SwapMarkerSnapshot | null,
+  io: UpdateHelperIo,
+): Promise<void> {
+  const deadline = io.now() + HELPER_START_TIMEOUT_MS;
+  let lastReadError: string | null = null;
+  for (;;) {
+    const poll = pollSwapMarker(markerPath, io);
+    lastReadError = poll.readError ?? lastReadError;
+    const verdict = judgeSwapMarker(poll.seen, before, tree);
+    if (verdict.kind === 'started') return;
+    // Second line of defence: the helper itself refuses first, while a fresh marker names
+    // another build (Invoke-UpdateSwap); this catches one written after the press.
+    if (verdict.kind === 'other-tree') {
+      throw new Error(
+        `another update is running: ${PENDING_SWAP_FILE} names build ${verdict.tree}, not ${tree}${HELPER_MAY_STILL_RUN}`,
+      );
+    }
+    if (io.now() >= deadline) {
+      const readNote = lastReadError === null ? '' : `; last read error: ${lastReadError}`;
+      throw new Error(
+        `the update helper did not start within ${HELPER_START_TIMEOUT_MS} ms: no ${PENDING_SWAP_FILE} for build ${tree}${readNote}${HELPER_MAY_STILL_RUN}`,
+      );
+    }
+    await io.sleep(MARKER_POLL_MS);
+  }
 }

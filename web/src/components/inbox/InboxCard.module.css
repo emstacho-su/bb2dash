@@ -162,6 +162,11 @@
   line-height: 1.45;
   color: var(--color-neutral-400);
 }
+/* Undo under an answered row: one control and its sentence, a step below the answer. */
+.undo {
+  composes: choice;
+  margin-top: var(--space-1);
+}
 
 .answered {
   margin: 0;

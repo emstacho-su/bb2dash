@@ -39,12 +39,15 @@ import {
   useSessionLabels,
   type ChoiceInput,
 } from '@/lib/queries.inboxChoice';
+import { latestWrite } from '@/components/inbox/inbox-row';
+import { UNDO_BLOCKED, useReopenAttentionItem } from '@/lib/queries.inboxReopen';
 import tokens from '@/styles/tokens.module.css';
 import shell from '../Shell.module.css';
 import styles from './Inbox.module.css';
 import {
   freshnessLine,
   useAttentionItems,
+  useOpenInboxApplyRequest,
   useResolveAttentionItem,
   useSyncStatus,
   type AttentionItem,
@@ -73,22 +76,30 @@ export default function Inbox() {
   const statusQuery = useSyncStatus();
   const resolve = useResolveAttentionItem();
   const choose = useResolveChoice();
+  const reopen = useReopenAttentionItem();
+  const applying = useOpenInboxApplyRequest();
   const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
   const labelIds = useMemo(() => candidateIds(items), [items]);
   const labelsQuery = useSessionLabels(labelIds);
 
-  // A resolve and a choice are two mutations over the same four columns; the
-  // card that sent the one in flight (or the one that failed) is whichever ran last.
-  const pendingId = resolve.isPending
-    ? (resolve.variables?.id ?? null)
-    : choose.isPending
-      ? (choose.variables?.id ?? null)
-      : null;
-  const failed = choose.error
-    ? { error: choose.error, id: choose.variables?.id ?? null }
-    : resolve.error
-      ? { error: resolve.error, id: resolve.variables?.id ?? null }
-      : null;
+  // A resolve, a choice and an undo are three mutations over the same four
+  // columns, and each hook's pending or failed state persists until it runs
+  // again. The card that owns the write in flight, or the failure to show, is
+  // the one whose write was sent last (`latestWrite`), never a fixed order.
+  const pendingId =
+    latestWrite<null>([
+      resolve.isPending ? { at: resolve.submittedAt, id: resolve.variables?.id ?? null, detail: null } : null,
+      choose.isPending ? { at: choose.submittedAt, id: choose.variables?.id ?? null, detail: null } : null,
+      reopen.isPending ? { at: reopen.submittedAt, id: reopen.variables ?? null, detail: null } : null,
+    ])?.id ?? null;
+  const failed = latestWrite<Error>([
+    resolve.error ? { at: resolve.submittedAt, id: resolve.variables?.id ?? null, detail: resolve.error } : null,
+    choose.error ? { at: choose.submittedAt, id: choose.variables?.id ?? null, detail: choose.error } : null,
+    reopen.error ? { at: reopen.submittedAt, id: reopen.variables ?? null, detail: reopen.error } : null,
+  ]);
+  // While `/inbox-apply` holds the queue (an `inbox_feedback` request is queued or
+  // claimed) an undo could land between its read and its write, so Undo waits.
+  const undoBlocked = applying.data ? UNDO_BLOCKED : null;
 
   return (
     <InboxView
@@ -103,10 +114,12 @@ export default function Inbox() {
       // A failed resolve belongs to the row it was sent from. `resolve.variables`
       // still holds that row's input after the mutation settles, so the error is
       // rendered on the card Stack pressed and nowhere else.
-      resolveError={failed?.error ?? null}
+      resolveError={failed?.detail ?? null}
       resolveErrorId={failed?.id ?? null}
       onResolve={(input) => resolve.mutate(input)}
       onChoose={(input) => choose.mutate(input)}
+      onReopen={(id) => reopen.mutate(id)}
+      undoBlocked={undoBlocked}
       // Labels that failed to load leave the buttons on "loading…" rather than
       // printing ids; the error itself shows on the screen below.
       sessionLabels={labelsQuery.data}
@@ -135,6 +148,10 @@ export interface InboxViewProps {
   onResolve: (input: ResolveInput) => void;
   /** A candidate question's choice (a session, or none of them). */
   onChoose?: (input: ChoiceInput) => void;
+  /** Undo: an answered, unapplied row back to open (`queries.inboxReopen.ts`). */
+  onReopen?: (id: number) => void;
+  /** While the Apply worker holds the queue: the sentence Undo shows instead, disabled. */
+  undoBlocked?: string | null;
   /** Session id → its date and topic, for the candidate buttons. */
   sessionLabels?: ReadonlyMap<number, string>;
   /** The session labels could not be read. */
@@ -153,6 +170,8 @@ export function InboxView({
   initialTab = 'needs_you',
   onResolve,
   onChoose,
+  onReopen,
+  undoBlocked = null,
   sessionLabels,
   labelsError = null,
 }: InboxViewProps) {
@@ -227,6 +246,8 @@ export function InboxView({
             failure={resolveErrorId === item.id ? resolveError : null}
             onResolve={onResolve}
             onChoose={onChoose}
+            onReopen={onReopen}
+            undoBlocked={undoBlocked}
             sessionLabels={sessionLabels}
           />
         ))}
