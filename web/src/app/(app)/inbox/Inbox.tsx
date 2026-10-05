@@ -39,6 +39,7 @@ import {
   useSessionLabels,
   type ChoiceInput,
 } from '@/lib/queries.inboxChoice';
+import { useReopenAttentionItem } from '@/lib/queries.inboxReopen';
 import tokens from '@/styles/tokens.module.css';
 import shell from '../Shell.module.css';
 import styles from './Inbox.module.css';
@@ -73,22 +74,28 @@ export default function Inbox() {
   const statusQuery = useSyncStatus();
   const resolve = useResolveAttentionItem();
   const choose = useResolveChoice();
+  const reopen = useReopenAttentionItem();
   const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
   const labelIds = useMemo(() => candidateIds(items), [items]);
   const labelsQuery = useSessionLabels(labelIds);
 
-  // A resolve and a choice are two mutations over the same four columns; the
-  // card that sent the one in flight (or the one that failed) is whichever ran last.
+  // A resolve, a choice and an undo are three mutations over the same four
+  // columns; the card that sent the one in flight (or the one that failed) is
+  // whichever ran last.
   const pendingId = resolve.isPending
     ? (resolve.variables?.id ?? null)
     : choose.isPending
       ? (choose.variables?.id ?? null)
-      : null;
-  const failed = choose.error
-    ? { error: choose.error, id: choose.variables?.id ?? null }
-    : resolve.error
-      ? { error: resolve.error, id: resolve.variables?.id ?? null }
-      : null;
+      : reopen.isPending
+        ? (reopen.variables ?? null)
+        : null;
+  const failed = reopen.error
+    ? { error: reopen.error, id: reopen.variables ?? null }
+    : choose.error
+      ? { error: choose.error, id: choose.variables?.id ?? null }
+      : resolve.error
+        ? { error: resolve.error, id: resolve.variables?.id ?? null }
+        : null;
 
   return (
     <InboxView
@@ -107,6 +114,7 @@ export default function Inbox() {
       resolveErrorId={failed?.id ?? null}
       onResolve={(input) => resolve.mutate(input)}
       onChoose={(input) => choose.mutate(input)}
+      onReopen={(id) => reopen.mutate(id)}
       // Labels that failed to load leave the buttons on "loading…" rather than
       // printing ids; the error itself shows on the screen below.
       sessionLabels={labelsQuery.data}
@@ -135,6 +143,8 @@ export interface InboxViewProps {
   onResolve: (input: ResolveInput) => void;
   /** A candidate question's choice (a session, or none of them). */
   onChoose?: (input: ChoiceInput) => void;
+  /** Undo: an answered, unapplied row back to open (`queries.inboxReopen.ts`). */
+  onReopen?: (id: number) => void;
   /** Session id → its date and topic, for the candidate buttons. */
   sessionLabels?: ReadonlyMap<number, string>;
   /** The session labels could not be read. */
@@ -153,6 +163,7 @@ export function InboxView({
   initialTab = 'needs_you',
   onResolve,
   onChoose,
+  onReopen,
   sessionLabels,
   labelsError = null,
 }: InboxViewProps) {
@@ -227,6 +238,7 @@ export function InboxView({
             failure={resolveErrorId === item.id ? resolveError : null}
             onResolve={onResolve}
             onChoose={onChoose}
+            onReopen={onReopen}
             sessionLabels={sessionLabels}
           />
         ))}
