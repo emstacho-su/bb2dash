@@ -1,101 +1,154 @@
 'use client';
 
 /**
- * Sync button — the app-to-agent direction (Phase 9).
+ * Sync button — the app-to-agent direction (Phase 9), after the Phase 14 cut-over.
  *
- * The app cannot crawl Blackboard: every endpoint the crawler uses is
- * authorized by a session cookie obtained through NetID plus a Duo push that
- * only Stack can approve. So "Sync" is a *request*, not an action. It inserts
- * an `agent_requests` row, copies `claude "/bb-sync <id>"` to the clipboard,
- * and then shows that request's state until it is done — the crawl happens in
- * a Claude session with a logged-in Blackboard tab, and the cron folds the
- * result in behind it.
+ * The app cannot crawl Blackboard: every endpoint the crawler uses is authorized
+ * by a session cookie obtained through NetID plus a Duo push that only Stack can
+ * approve. So "Sync" is a *request*, not an action. It inserts an
+ * `agent_requests` row; since 2026-10-04 the `sync` container's runner, which
+ * holds that login, claims the row within about a minute and runs the sync.
+ * Nothing is copied and no terminal is named on a press.
  *
+ * The label then follows what the runner writes — its claim, the run it opens,
+ * the fold, the close — through `syncPhase`. The paste command of the Windows
+ * `/bb-sync` skill comes back only as the fallback: a request nothing has claimed
+ * after the grace says so, and a second press copies the command and shows it.
  * The clipboard is best-effort by design: it is denied outside a secure context
- * and in some embedded views, so the command is always shown in the toast as
- * well. A button that silently copies nothing is worse than one that says so.
+ * and in some embedded views, so the command is always shown in the toast too.
  *
  * One open request at a time. The tick never touches `kind = 'sync'` rows, so a
  * second press while one is queued or claimed would leave an orphan that nothing
  * ever closes. While a sync request is open (this tab's or any other's), pressing
- * the button re-copies that request's command instead of filing a new row.
+ * the button re-shows that request's status instead of filing a new row.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   copyToClipboard,
   syncCommand,
   useAgentRequest,
   useCreateAgentRequest,
   useOpenSyncRequest,
-  type AgentRequestState,
+  type AgentRequest,
 } from '@/lib/queries.sync';
+import { useSyncRun } from '@/lib/queries.sync-run';
+import { useNow } from '@/lib/use-now';
+import {
+  PHASE_LABEL,
+  SYNC_COPY,
+  closeAnnouncement,
+  isLivePhase,
+  isMovingPhase,
+  phaseTitle,
+  pressAction,
+  syncPhase,
+  type SyncPhase,
+} from '@/lib/sync-request-phase';
 import styles from './SyncButton.module.css';
 
-/** How long the "command copied" toast stays up. */
+/** How long a toast stays up. */
 const TOAST_MS = 15000;
 
-/** What the button says while a filed request is still moving. */
-const STATE_LABEL: Record<AgentRequestState, string> = {
-  queued: 'sync requested',
-  claimed: 'syncing…',
-  done: 'sync done',
-  failed: 'sync failed',
-  cancelled: 'sync cancelled',
-};
+/**
+ * How often the clock is re-read while a request is open, so a queued row
+ * nothing claims turns to "waiting on the container…" within this of the grace.
+ */
+const CLOCK_TICK_MS = 5000;
+
+type Toast =
+  | { kind: 'note'; text: string }
+  | { kind: 'fallback'; command: string; copied: boolean };
+
+/** The request this tab is watching: the one it filed, else the open one anybody filed. */
+function watchedRequest(
+  filed: AgentRequest | null | undefined,
+  open: AgentRequest | null | undefined,
+): AgentRequest | null {
+  return filed ?? open ?? null;
+}
 
 export function SyncButton() {
   const create = useCreateAgentRequest();
   const [requestId, setRequestId] = useState<number | null>(null);
-  const [toast, setToast] = useState<{ command: string; copied: boolean } | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
 
-  const request = useAgentRequest(requestId);
+  const filed = useAgentRequest(requestId);
   const open = useOpenSyncRequest();
-  const openRequest = open.data ?? null;
-  const state = request.data?.state ?? openRequest?.state ?? null;
+  const request = watchedRequest(filed.data, open.data);
+  const run = useSyncRun(request?.run_id ?? null, request?.state === 'claimed');
+  const now = useNow(request ? CLOCK_TICK_MS : null);
+  const phase: SyncPhase = syncPhase(request, run.data, now);
 
-  // The toast is transient; the request state below the button is not.
+  // The toast is transient; the request state in the label is not.
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), TOAST_MS);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  async function showCommand(id: number) {
-    const command = syncCommand(id);
-    const copied = await copyToClipboard(command);
-    setRequestId(id);
-    setToast({ command, copied });
-  }
-
-  async function requestSync() {
-    if (openRequest) {
-      await showCommand(openRequest.id);
+  // A request this tab saw moving gets one line when it closes. One the page
+  // loaded already closed says nothing: that report is Activity's.
+  const movingId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!request) return;
+    if (isMovingPhase(phase)) {
+      movingId.current = request.id;
       return;
     }
+    if ((phase === 'done' || phase === 'failed') && movingId.current === request.id) {
+      movingId.current = null;
+      setToast({ kind: 'note', text: closeAnnouncement(request) });
+    }
+  }, [phase, request]);
+
+  async function fileRequest() {
     try {
       const row = await create.mutateAsync({ kind: 'sync', scope: 'all' });
-      await showCommand(row.id);
+      setRequestId(row.id);
+      setToast({ kind: 'note', text: SYNC_COPY.requested });
     } catch {
       // The mutation's own error is rendered below; nothing to swallow here.
       setToast(null);
     }
   }
 
+  async function offerFallback(id: number) {
+    const command = syncCommand(id);
+    const copied = await copyToClipboard(command);
+    setRequestId(id);
+    setToast({ kind: 'fallback', command, copied });
+  }
+
+  async function press() {
+    const action = pressAction(phase);
+    if (action === 'file' || request === null) {
+      await fileRequest();
+      return;
+    }
+    if (action === 'fallback') {
+      await offerFallback(request.id);
+      return;
+    }
+    setRequestId(request.id);
+    setToast({ kind: 'note', text: phaseTitle(phase, request, now) });
+  }
+
   const busy = create.isPending;
-  const label = busy ? 'requesting…' : state ? STATE_LABEL[state] : 'Sync';
+  const label = busy ? 'requesting…' : PHASE_LABEL[phase];
 
   return (
     <span className={styles.wrap}>
       <button
         type="button"
         className={styles.button}
-        onClick={() => void requestSync()}
+        onClick={() => void press()}
         disabled={busy}
-        title="Ask a Claude session to crawl Blackboard"
+        title={phaseTitle(phase, request, now)}
       >
         <SyncIcon />
         {label}
+        {isLivePhase(phase) && <span className={styles.live} data-live="" aria-hidden="true" />}
       </button>
 
       {create.isError && (
@@ -106,12 +159,16 @@ export function SyncButton() {
 
       {toast && (
         <span className={styles.toast} role="status">
-          <span className={styles.toastLine}>
-            {toast.copied
-              ? 'command copied — run it in Claude Code with a logged-in Blackboard tab'
-              : 'copy this and run it in Claude Code with a logged-in Blackboard tab'}
-          </span>
-          <code className={styles.command}>{toast.command}</code>
+          {toast.kind === 'note' ? (
+            <span className={styles.toastLine}>{toast.text}</span>
+          ) : (
+            <>
+              <span className={styles.toastLine}>
+                {toast.copied ? SYNC_COPY.fallbackCopied : SYNC_COPY.fallbackCopy}
+              </span>
+              <code className={styles.command}>{toast.command}</code>
+            </>
+          )}
         </span>
       )}
     </span>

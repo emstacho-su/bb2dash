@@ -130,6 +130,8 @@ export interface AgentRequest {
   claimed_by: string | null;
   finished_at: string | null;
   sync_run_id: number | null;
+  /** The crawl's uuid, set when the claim registers its run (Phase 19; 091's `sync_register_run`). */
+  run_id: string | null;
   result: Record<string, unknown> | null;
 }
 
@@ -243,6 +245,8 @@ export const syncKeys = {
    * key would each show the other's request as its own.
    */
   openRequest: (kind: AgentRequestKind) => ['agent-request', 'open', kind] as const,
+  /** The run a claimed sync request opened, by its uuid (`queries.sync-run.ts`). */
+  syncRun: (runId: string) => ['sync-run', runId] as const,
   inboxQueueCount: () => ['inbox-queue-count'] as const,
   activity: (limit: number) => ['activity', limit] as const,
 } as const;
@@ -1076,7 +1080,7 @@ export function attentionItemsOptions(state?: AttentionState) {
 
 const AGENT_REQUEST_COLUMNS =
   'id, created_at, kind, scope, params, note, state, claimed_at, claimed_by, ' +
-  'finished_at, sync_run_id, result';
+  'finished_at, sync_run_id, run_id, result';
 
 /** One `agent_requests` row, polled while the Sync button is waiting on it. */
 export function agentRequestOptions(id: number | null) {

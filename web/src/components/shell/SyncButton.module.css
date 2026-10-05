@@ -40,6 +40,26 @@
   display: block;
 }
 
+/* The live mark: the sync container is working on the request right now. */
+.live {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: sync-live 1.2s ease-in-out infinite;
+}
+@keyframes sync-live {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live {
+    animation: none;
+  }
+}
+
 /* The toast hangs under the bar, anchored to the button. */
 .toast {
   position: absolute;
