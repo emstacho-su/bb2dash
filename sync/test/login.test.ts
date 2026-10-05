@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BLACKBOARD_ORIGIN,
+  DAILY_NULL_RETRY_MINUTES,
   DAILY_SYNC_NOT_BEFORE_HOUR,
   DEFAULT_KEEPALIVE_MINUTES,
   KEEPALIVE_JITTER_MINUTES,
@@ -588,7 +589,22 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     watch.stop();
   });
 
-  it('logs "nothing queued" when the database answers null (a sync already finished done today)', async () => {
+  /** An enqueue that answers from a script, one answer per call (the last repeats), noting each call's time. */
+  function scriptEnqueue(rpc: ReturnType<typeof fakeRpc>, answers: (string | null)[]): number[] {
+    const script = [...answers];
+    const times: number[] = [];
+    rpc.rpc.enqueue = vi.fn(async (trigger: 'just' | 'login') => {
+      rpc.calls.push(`sync_enqueue(${trigger})`);
+      times.push(Date.now());
+      return script.length > 1 ? script.shift()! : script[0]!;
+    });
+    return times;
+  }
+
+  const NOTHING_LINE = `${NEW_DAY_LINE}nothing queued (already synced today)`;
+
+  it('a daily null does not record the day: it asks again no sooner than an hour later, and an id records it', async () => {
+    expect(DAILY_NULL_RETRY_MINUTES).toBe(60);
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
     const page = fakePage([200]);
     const rpc = fakeRpc();
@@ -596,16 +612,75 @@ describe('the daily rule: one sync_enqueue(login) per New York day', () => {
     const watch = makeWatch(page, rpc, { log: (l) => lines.push(l) });
     watch.start();
     await advanceTo('2026-10-05T03:30:00Z');
-    rpc.rpc.enqueue = vi.fn(async (trigger: 'just' | 'login') => {
-      rpc.calls.push(`sync_enqueue(${trigger})`);
-      return null;
-    });
+    const times = scriptEnqueue(rpc, [null, '45']);
 
-    await advanceTo('2026-10-05T23:00:00Z');
+    // 10:05:15Z (06:05 New York): null. The checks at 10:25:30Z and 10:45:45Z are inside the hour.
+    await advanceTo('2026-10-05T11:05:00Z');
     expect(enqueues(rpc)).toBe(2);
-    expect(lines.filter((l) => l.startsWith(NEW_DAY_LINE))).toEqual([
-      `${NEW_DAY_LINE}nothing queued (already synced today)`,
-    ]);
+    expect(lines.filter((l) => l.startsWith(NEW_DAY_LINE))).toEqual([NOTHING_LINE]);
+
+    // 11:06:00Z, the first passing check an hour or more after the null: an id, which records the day.
+    await advanceTo('2026-10-05T11:07:00Z');
+    expect(enqueues(rpc)).toBe(3);
+    expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(DAILY_NULL_RETRY_MINUTES * MINUTE);
+    expect(lines.filter((l) => l.startsWith(NEW_DAY_LINE))).toEqual([NOTHING_LINE, `${NEW_DAY_LINE}45`]);
+
+    await advanceTo('2026-10-06T03:59:00Z');
+    expect(enqueues(rpc)).toBe(3);
+    watch.stop();
+  });
+
+  it('an entry at 00:00:40 New York answered null does not record the day: the daily rule asks at 06:00, and its id records it', async () => {
+    vi.setSystemTime(new Date('2026-10-05T04:00:40Z'));
+    const page = fakePage([200]);
+    const rpc = fakeRpc();
+    const lines: string[] = [];
+    const times = scriptEnqueue(rpc, [null, '46']);
+    const watch = makeWatch(page, rpc, { log: (l) => lines.push(l) });
+    watch.start();
+    await vi.advanceTimersByTimeAsync(1);
+    // The entry's own log line is unchanged.
+    expect(lines).toContain("login: sync_enqueue('login') -> nothing queued (already synced today)");
+    expect(rpc.calls).toEqual(['sync_login_ok', ENQUEUE]);
+
+    await advanceTo('2026-10-05T09:59:59Z');
+    expect(enqueues(rpc)).toBe(1);
+    await advanceTo('2026-10-05T10:21:00Z');
+    expect(enqueues(rpc)).toBe(2);
+    expect(syncDayOf(new Date(times[0]!))).toBe(syncDayOf(new Date(times[1]!)));
+    expect(lines.filter((l) => l.startsWith(NEW_DAY_LINE))).toEqual([`${NEW_DAY_LINE}46`]);
+
+    await advanceTo('2026-10-06T03:59:00Z');
+    expect(enqueues(rpc)).toBe(2);
+    watch.stop();
+  });
+
+  it('a null answered all day: at most one call an hour, one "nothing queued" line a day', async () => {
+    vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
+    const page = fakePage([200]);
+    const rpc = fakeRpc();
+    const lines: string[] = [];
+    const times = scriptEnqueue(rpc, [null]);
+    const watch = makeWatch(page, rpc, { log: (l) => lines.push(l) });
+    watch.start();
+
+    // The entry's null (23:00 New York on the 4th) backs the daily rule off too; then 00:00-05:59 waits.
+    await advanceTo('2026-10-05T09:59:59Z');
+    expect(enqueues(rpc)).toBe(1);
+
+    // 06:00 to 23:59:59 New York on the 5th: 18 hours.
+    await advanceTo('2026-10-06T03:59:59Z');
+    const daily = times.slice(1);
+    expect(daily.length).toBeGreaterThan(0);
+    expect(daily.length).toBeLessThanOrEqual(18);
+    times.slice(1).forEach((t, i) => {
+      expect(t - times[i]!).toBeGreaterThanOrEqual(DAILY_NULL_RETRY_MINUTES * MINUTE);
+    });
+    expect(lines.filter((l) => l === NOTHING_LINE)).toHaveLength(1);
+
+    // The next New York day logs its own first null, once.
+    await advanceTo('2026-10-06T23:00:00Z');
+    expect(lines.filter((l) => l === NOTHING_LINE)).toHaveLength(2);
     watch.stop();
   });
 

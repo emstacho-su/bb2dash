@@ -15,9 +15,9 @@
  *   * entering `alive` calls `sync_login_ok()`, then `sync_enqueue('login')` (the database queues the
  *     day's sync only if none finished done that New York day and none is open);
  *   * the first passing check at or after 06:00 New York (DAILY_SYNC_NOT_BEFORE_HOUR) on a day with no
- *     `sync_enqueue('login')` answered yet makes that call alone (no `sync_login_ok()`), so a login the
- *     keep-alive held overnight still queues the day's sync in the morning; a failed call is retried
- *     on the next passing check (W-72, 2026-10-05);
+ *     `sync_enqueue('login')` answered by an id yet makes that call alone (no `sync_login_ok()`), so a
+ *     login the keep-alive held overnight still queues the day's sync in the morning; a failed call
+ *     is asked again on the next passing check, a null after DAILY_NULL_RETRY_MINUTES (W-72);
  *   * it never claims, crawls or retries a sync.
  *
  * Ported from the spike's `docker/sync/spike/session-age.mjs`, onto injected ports so it runs on a
@@ -54,6 +54,12 @@ export const SYNC_DAY_TIME_ZONE = 'America/New_York';
  * otherwise queue the "morning" sync at midnight. Stack's own login (an entry) calls at any hour.
  */
 export const DAILY_SYNC_NOT_BEFORE_HOUR = 6;
+/**
+ * After a null answer the daily rule asks again no sooner than this (R2-2's sibling, R2-1). Null is
+ * decided on the database's clock, which can disagree with this container's about the New York day,
+ * so a null never settles the day; only an id does.
+ */
+export const DAILY_NULL_RETRY_MINUTES = 60;
 
 /** The RPC both enqueue paths make, as their log lines name it. */
 const ENQUEUE_LOGIN_CALL = "sync_enqueue('login')";
@@ -176,6 +182,35 @@ export function syncDayOf(at: Date): string {
   return newYorkClock(at).day;
 }
 
+/** What the daily rule remembers. Replaced whole after each answer, never edited in place. */
+interface DailyMemory {
+  /** The New York day of the last `sync_enqueue('login')` that returned an id. */
+  readonly enqueuedDay: string | null;
+  /** After a null answer: no daily call before this instant (epoch ms). */
+  readonly retryNotBeforeMs: number | null;
+  /** The New York day the daily rule last logged a null answer for. */
+  readonly nullLoggedDay: string | null;
+}
+
+const EMPTY_DAILY_MEMORY: DailyMemory = Object.freeze({
+  enqueuedDay: null,
+  retryNotBeforeMs: null,
+  nullLoggedDay: null,
+});
+
+/** Fold one answered `sync_enqueue('login')` in: an id settles its day; a null only backs off. */
+function rememberAnswer(memory: DailyMemory, queued: string | null, day: string, atMs: number): DailyMemory {
+  if (queued !== null) return { ...memory, enqueuedDay: day, retryNotBeforeMs: null };
+  return { ...memory, retryNotBeforeMs: atMs + DAILY_NULL_RETRY_MINUTES * MS_PER_MINUTE };
+}
+
+/** Whether a passing check at this instant makes the daily call. */
+function dailyCallDue(memory: DailyMemory, clock: NewYorkClock, atMs: number): boolean {
+  if (clock.day === memory.enqueuedDay) return false;
+  if (clock.hour < DAILY_SYNC_NOT_BEFORE_HOUR) return false;
+  return memory.retryNotBeforeMs === null || atMs >= memory.retryNotBeforeMs;
+}
+
 /** The delay to the next keep-alive tick: KEEPALIVE_MINUTES give or take the jitter. */
 export function keepaliveDelayMs(minutes: number, random: () => number): number {
   const jitter = (random() * 2 - 1) * KEEPALIVE_JITTER_MINUTES;
@@ -203,8 +238,8 @@ export class LoginWatch {
   private ticking = false;
   /** An RPC the last transition owed and could not make; retried on the next tick. */
   private owed: 'none' | 'raise' | 'alive' = 'none';
-  /** The New York day of the last `sync_enqueue('login')` that answered; null before the first. */
-  private enqueuedDay: string | null = null;
+  /** The daily rule's memory: the day an id settled, the null backoff, the day a null was logged. */
+  private daily: DailyMemory = EMPTY_DAILY_MEMORY;
 
   constructor(deps: LoginWatchDeps) {
     this.deps = deps;
@@ -355,9 +390,9 @@ export class LoginWatch {
     if (this.owed === 'alive' && this.state === 'alive') {
       try {
         await this.deps.rpc.loginOk();
-        const day = syncDayOf(this.now());
+        const at = this.now();
         const queued = await this.deps.rpc.enqueue('login');
-        this.enqueuedDay = day;
+        this.daily = rememberAnswer(this.daily, queued, syncDayOf(at), at.getTime());
         this.deps.log(`login: ${ENQUEUE_LOGIN_CALL} -> ${queued ?? NOTHING_QUEUED}`);
         this.owed = 'none';
       } catch (error) {
@@ -367,22 +402,35 @@ export class LoginWatch {
   }
 
   /**
-   * The daily rule: on a passing check, ask for the day's sync once per New York day. An entry into
-   * `alive` already asked (and recorded the day); while its call is still owed, `payOwed` retries it.
-   * A failure leaves the day unrecorded, so the next passing check asks again.
+   * The daily rule: on a passing check at or after DAILY_SYNC_NOT_BEFORE_HOUR, ask for the day's sync
+   * until an answer carries an id. An entry into `alive` already asked (an id settles the day there
+   * too); while its call is still owed, `payOwed` retries it. A null backs off DAILY_NULL_RETRY_MINUTES;
+   * a failure leaves no trace, so the next passing check asks again.
    */
   private async enqueueIfNewDay(): Promise<void> {
     // The state is `alive` here: the one caller, `checkNow`, runs this only on an alive verdict,
     // and `probeAndSettle` has called `enter('alive')` before returning one.
     if (this.owed !== 'none') return;
-    const clock = newYorkClock(this.now());
-    if (clock.day === this.enqueuedDay || clock.hour < DAILY_SYNC_NOT_BEFORE_HOUR) return;
+    const at = this.now();
+    const clock = newYorkClock(at);
+    if (!dailyCallDue(this.daily, clock, at.getTime())) return;
     try {
       const queued = await this.deps.rpc.enqueue('login');
-      this.enqueuedDay = clock.day;
-      this.deps.log(`${NEW_DAY_LOG_PREFIX} ${ENQUEUE_LOGIN_CALL} -> ${queued ?? NOTHING_QUEUED}`);
+      this.daily = rememberAnswer(this.daily, queued, clock.day, at.getTime());
+      this.logDailyAnswer(queued, clock.day);
     } catch (error) {
       this.deps.log(`login: ${ENQUEUE_LOGIN_CALL} failed: ${firstLine(error)}`);
     }
+  }
+
+  /** An id is logged every time; a null once per New York day, not on every hourly re-ask. */
+  private logDailyAnswer(queued: string | null, day: string): void {
+    if (queued !== null) {
+      this.deps.log(`${NEW_DAY_LOG_PREFIX} ${ENQUEUE_LOGIN_CALL} -> ${queued}`);
+      return;
+    }
+    if (this.daily.nullLoggedDay === day) return;
+    this.daily = { ...this.daily, nullLoggedDay: day };
+    this.deps.log(`${NEW_DAY_LOG_PREFIX} ${ENQUEUE_LOGIN_CALL} -> ${NOTHING_QUEUED}`);
   }
 }
