@@ -16,15 +16,19 @@ import {
   shotPath,
 } from './walk';
 
-/** The Sync button's title (`src/components/shell/SyncButton.tsx`). */
-const SYNC_TITLE = 'Ask a Claude session to crawl Blackboard';
+/**
+ * The Sync button's test id (`src/components/shell/SyncButton.tsx`). Its label and
+ * title follow the open request since Phase 14's cut-over, so neither is stable
+ * enough to find it by.
+ */
+const SYNC_BUTTON = 'sync-button';
 
 test('signed in', async ({ page, context }, testInfo) => {
   const writes = await guardWrites(context);
   dismissNativeDialogs(page);
 
   await openSignedIn(page, '/');
-  await expect(page.getByTitle(SYNC_TITLE)).toBeVisible();
+  await expect(page.getByTestId(SYNC_BUTTON)).toBeVisible();
   // "Undated" today, "Undated (N)" once W-46's T-17 lands.
   await expect(page.getByRole('button', { name: /^Undated\b/ })).toBeVisible();
 
