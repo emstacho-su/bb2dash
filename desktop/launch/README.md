@@ -65,8 +65,11 @@ its build. The two stages exist because Windows PowerShell 5.1 started detached
 (no console) exits 0 without running its script, and a plain child of the app
 dies with the app, while a process that child starts does not (2026-10-04).
 
-The helper (`Invoke-UpdateSwap` in `Bb2dashLaunch.psm1`) writes `swap-pending`
-first, then:
+The helper (`Invoke-UpdateSwap` in `Bb2dashLaunch.psm1`) first refuses, touching
+nothing (no marker, no mutex, no start; exit 5), while an existing `swap-pending`
+names another build and is younger than its two waits (60 s app + 120 s builder);
+an older one is a leftover and is overwritten. Otherwise it writes `swap-pending`,
+then:
 
 1. waits up to 60 s for every `bb2dash` process to exit;
 2. repoints `current` at `builds\<tree>\win-unpacked` with the same junction
@@ -74,8 +77,9 @@ first, then:
    puts the old target back if the new junction cannot be created;
 3. starts `Bb2dash-App` (or `current\bb2dash.exe` when the task is missing).
 
-If the app did not exit, the build is gone, or the junction cannot be moved, the
-old build stays current and the app is started on it. Each step is logged to
+If the build is gone or the junction cannot be moved, the old build stays
+current and the app is started on it; if the app never exited, nothing is
+started (the app gave up on the helper and is still running). Each step is logged to
 `logs\update-now.log`. The helper runs from the installed copy under
 `launch\`, which the builder refreshes after each successful build, so the first
 build carrying this feature installs it. An app built before the hand-off cannot

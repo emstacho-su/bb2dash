@@ -321,6 +321,8 @@ $script:PendingSwapFile = 'swap-pending'
 .SYNOPSIS
   What Update now may do once it has waited for the app: Swap (repoint current at the
   new build) and Launch, or Launch alone -- the old build stays current -- with the reason.
+  Nothing at all while the app is still running after the wait (-WaitedSeconds): the app
+  gave up on this helper and stays on its build, so starting it again would be wrong.
 #>
 function Get-UpdateSwapDecision {
     [CmdletBinding()]
@@ -328,13 +330,14 @@ function Get-UpdateSwapDecision {
         [Parameter(Mandatory)] [AllowEmptyString()][string] $Tree,
         [AllowEmptyString()][string] $ActiveTree = '',
         [bool] $BuildExists,
-        [bool] $AppExited
+        [bool] $AppExited,
+        [int] $WaitedSeconds = 60
     )
     if ($Tree -notmatch $script:ShaPattern) { throw "Tree must be 40 hex characters; got '$Tree'." }
     Assert-Sha -Name 'ActiveTree' -Value $ActiveTree
 
     if (-not $AppExited) {
-        return [pscustomobject]@{ Actions = [string[]] @('Launch'); Reason = 'the app did not exit in time: the old build stays current' }
+        return [pscustomobject]@{ Actions = [string[]] @(); Reason = "the app is still running after ${WaitedSeconds}s; nothing swapped, nothing started" }
     }
     if (-not $BuildExists) {
         return [pscustomobject]@{ Actions = [string[]] @('Launch'); Reason = "build $Tree is not on disk: the old build stays current" }
@@ -388,10 +391,11 @@ function Set-CurrentBuild {
 <#
 .SYNOPSIS
   Update now: wait for the app to exit, repoint `current` at build -Tree, start the app.
-  On any failure the old build stays current and the app is started on it; every step
-  is logged through -Log. While a live helper for another build holds the marker (younger
-  than -TimeoutSeconds + -LockWaitSeconds), this one refuses first: it writes nothing,
-  takes no mutex and starts nothing.
+  On any failure the old build stays current and the app is started on it, but only once
+  the app is gone: if it is still running after the wait, nothing is swapped or started.
+  Every step is logged through -Log. While a live helper for another build holds the
+  marker (younger than -TimeoutSeconds + -LockWaitSeconds), this one refuses first: it
+  writes nothing, takes no mutex and starts nothing.
 
 .OUTPUTS
   [pscustomobject] Swapped, Launched, Reason.
@@ -425,7 +429,7 @@ function Invoke-UpdateSwap {
     # Named before anything waits, so a build that finishes meanwhile keeps this build
     # (Get-BuildsToKeep). Removed when the swap is over, whatever happened.
     $marker = Join-Path $StateDir $script:PendingSwapFile
-    $swap = [pscustomobject]@{ Swapped = $false; Reason = '' }
+    $swap = [pscustomobject]@{ Swapped = $false; Launch = $false; Reason = '' }
     $mutex = $null
     $locked = $false
     try {
@@ -436,7 +440,7 @@ function Invoke-UpdateSwap {
             $swap = Invoke-SwapStep -StateDir $StateDir -Tree $Tree -TestAppRunning $TestAppRunning `
                 -Log $Log -TimeoutSeconds $TimeoutSeconds -PollMilliseconds $PollMilliseconds
         } else {
-            $swap.Reason = "the builder was still running after ${LockWaitSeconds}s: the old build stays current"
+            $swap = Get-BuilderBusyOutcome -LockWaitSeconds $LockWaitSeconds -TestAppRunning $TestAppRunning
             & $Log 'WARN' $swap.Reason
         }
     } finally {
@@ -445,6 +449,9 @@ function Invoke-UpdateSwap {
         Remove-Item -Force $marker -ErrorAction SilentlyContinue
     }
 
+    if (-not $swap.Launch) {
+        return [pscustomobject]@{ Swapped = $swap.Swapped; Launched = $false; Reason = $swap.Reason }
+    }
     $launched = $false
     $exe = Join-Path (Join-Path $StateDir 'current') $script:UpdateExeName
     try {
@@ -455,6 +462,20 @@ function Invoke-UpdateSwap {
         & $Log 'ERROR' "the app could not be started: $($_.Exception.Message)"
     }
     return [pscustomobject]@{ Swapped = $swap.Swapped; Launched = $launched; Reason = $swap.Reason }
+}
+
+<#
+  The builder held its mutex past the bound, so nothing is swapped. The old build is
+  started only when the app is gone; while it still runs, nothing is started.
+#>
+function Get-BuilderBusyOutcome {
+    param([int] $LockWaitSeconds, [scriptblock] $TestAppRunning)
+    if (& $TestAppRunning) {
+        $reason = "the builder was still running after ${LockWaitSeconds}s and so is the app; nothing swapped, nothing started"
+        return [pscustomobject]@{ Swapped = $false; Launch = $false; Reason = $reason }
+    }
+    $reason = "the builder was still running after ${LockWaitSeconds}s: the old build stays current"
+    return [pscustomobject]@{ Swapped = $false; Launch = $true; Reason = $reason }
 }
 
 <#
@@ -514,7 +535,8 @@ function Invoke-SwapStep {
         if ($leaf -match $script:ShaPattern) { $activeTree = $leaf }
     }
     $decision = Get-UpdateSwapDecision -Tree $Tree -ActiveTree $activeTree `
-        -BuildExists (Test-Path (Join-Path $target $script:UpdateExeName)) -AppExited $exited
+        -BuildExists (Test-Path (Join-Path $target $script:UpdateExeName)) -AppExited $exited `
+        -WaitedSeconds $TimeoutSeconds
     $level = if ($decision.Actions -contains 'Swap') { 'INFO' } else { 'WARN' }
     & $Log $level "update decision: [$($decision.Actions -join ', ')] because $($decision.Reason)"
 
@@ -528,15 +550,16 @@ function Invoke-SwapStep {
             & $Log 'ERROR' "$($set.Reason); the old build stays current"
         }
     }
-    return [pscustomobject]@{ Swapped = $swapped; Reason = $decision.Reason }
+    return [pscustomobject]@{ Swapped = $swapped; Launch = ($decision.Actions -contains 'Launch'); Reason = $decision.Reason }
 }
 
 <#
 .SYNOPSIS
   update-now.ps1's last resort, when the swap itself threw: wait (bounded) for the app to
   exit, then start it on whatever `current` points at, so a failed update never leaves
-  Stack with no app. Logging here is best effort -- a log that throws (which may be what
-  failed in the first place) never stops the restart -- and nothing here throws.
+  Stack with no app. If the app is still running after the wait, nothing is started: it
+  never quit, so Stack has an app. Logging here is best effort -- a log that throws (which
+  may be what failed in the first place) never stops the restart -- and nothing here throws.
 
 .OUTPUTS
   [pscustomobject] Launched.
@@ -562,8 +585,8 @@ function Invoke-UpdateFallback {
         try { $running = [bool] (& $TestAppRunning) } catch { $running = $false }
         if (-not $running) { break }
         if ((Get-Date) -ge $deadline) {
-            & $safeLog 'WARN' "the app was still running after ${TimeoutSeconds}s; starting it anyway"
-            break
+            & $safeLog 'WARN' "the app is still running after ${TimeoutSeconds}s; nothing started"
+            return [pscustomobject]@{ Launched = $false }
         }
         Start-Sleep -Milliseconds $PollMilliseconds
     }

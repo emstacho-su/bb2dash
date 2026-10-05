@@ -224,17 +224,27 @@ describe('startUpdateHelper (stage 1 hands off, then the helper’s marker; W-71
     await expect(start(timedOut.io)).rejects.toThrow(/30000 ms/);
   });
 
-  it('rejects when the marker never appears before the bound', async () => {
+  /** After stage 1 exited 0 a helper may exist, so every later failure says where to look (R2-2). */
+  const MAY_STILL_RUN = /; a helper may still be running: see logs\\update-now\.log$/;
+
+  it('rejects when the marker never appears before the bound, saying a helper may still run', async () => {
     const h = harness({ after: [null] });
     await expect(start(h.io)).rejects.toThrow(/did not start within/);
+    await expect(start(harness({ after: [null] }).io)).rejects.toThrow(MAY_STILL_RUN);
     expect(h.elapsed()).toBeGreaterThanOrEqual(HELPER_START_TIMEOUT_MS);
     expect(h.elapsed()).toBeLessThan(HELPER_START_TIMEOUT_MS + MARKER_POLL_MS);
   });
 
-  it('rejects at once when a new marker names another build', async () => {
+  it('rejects at once when a new marker names another build, saying a helper may still run', async () => {
     const h = harness({ after: [{ text: OTHER, modifiedMs: 2_000 }] });
     await expect(start(h.io)).rejects.toThrow(new RegExp(`names build ${OTHER}`));
+    await expect(start(harness({ after: [{ text: OTHER, modifiedMs: 2_000 }] }).io)).rejects.toThrow(MAY_STILL_RUN);
     expect(h.elapsed()).toBe(0);
+  });
+
+  it('says nothing about a running helper when stage 1 itself failed', async () => {
+    const error = await start(harness({ run: async () => 6 }).io).catch((e: unknown) => e);
+    expect(String(error)).not.toMatch(/may still be running/);
   });
 
   it('does not take a marker left over from before the press for the helper', async () => {

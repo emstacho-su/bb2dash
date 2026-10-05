@@ -404,6 +404,12 @@ export async function startUpdateHelper(
   await waitForSwapMarker(markerPath, target.tree, before, io);
 }
 
+/**
+ * Stage 1 exited 0, so a helper process may exist even when the wait fails. It never starts
+ * the app while the app runs (`Get-UpdateSwapDecision`), but the reason says where to look.
+ */
+const HELPER_MAY_STILL_RUN = '; a helper may still be running: see logs\\update-now.log';
+
 /** Poll the marker until it names `tree`, bounded by HELPER_START_TIMEOUT_MS. */
 async function waitForSwapMarker(
   markerPath: string,
@@ -418,11 +424,13 @@ async function waitForSwapMarker(
     // Second line of defence: the helper itself refuses first, while a fresh marker names
     // another build (Invoke-UpdateSwap); this catches one written after the press.
     if (verdict.kind === 'other-tree') {
-      throw new Error(`another update is running: ${PENDING_SWAP_FILE} names build ${verdict.tree}, not ${tree}`);
+      throw new Error(
+        `another update is running: ${PENDING_SWAP_FILE} names build ${verdict.tree}, not ${tree}${HELPER_MAY_STILL_RUN}`,
+      );
     }
     if (io.now() >= deadline) {
       throw new Error(
-        `the update helper did not start within ${HELPER_START_TIMEOUT_MS} ms: no ${PENDING_SWAP_FILE} for build ${tree} (logs\\update-now.log)`,
+        `the update helper did not start within ${HELPER_START_TIMEOUT_MS} ms: no ${PENDING_SWAP_FILE} for build ${tree}${HELPER_MAY_STILL_RUN}`,
       );
     }
     await io.sleep(MARKER_POLL_MS);

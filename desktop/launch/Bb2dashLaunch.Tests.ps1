@@ -273,10 +273,10 @@ Describe 'Get-UpdateSwapDecision' {
         ($d.Actions -join ',') | Should Be 'Swap,Launch'
     }
 
-    It 'only relaunches the old build when the app did not exit in time' {
-        $d = Get-UpdateSwapDecision -Tree $SHA_B -ActiveTree $SHA_A -BuildExists $true -AppExited $false
-        ($d.Actions -join ',') | Should Be 'Launch'
-        $d.Reason | Should Match 'did not exit'
+    It 'starts nothing and swaps nothing while the app is still running after the wait (R2-2)' {
+        $d = Get-UpdateSwapDecision -Tree $SHA_B -ActiveTree $SHA_A -BuildExists $true -AppExited $false -WaitedSeconds 60
+        ($d.Actions -join ',') | Should Be ''
+        $d.Reason | Should Be 'the app is still running after 60s; nothing swapped, nothing started'
     }
 
     It 'only relaunches when the new build is missing' {
@@ -314,7 +314,7 @@ Describe 'Invoke-UpdateSwap' {
         $script:launched[0] | Should Be (Join-Path (Join-Path $f.StateDir 'current') 'bb2dash.exe')
     }
 
-    It 'keeps the old build current and relaunches it when the app never exits' {
+    It 'keeps the old build current and starts nothing when the app never exits (R2-2)' {
         $f = New-SwapFixture
         $script:launched = 0
         $script:lines = @()
@@ -323,9 +323,12 @@ Describe 'Invoke-UpdateSwap' {
             -StartApp { param($exe) $script:launched++ } `
             -Log { param($level, $message) $script:lines += "$level $message" }
         $r.Swapped | Should Be $false
+        $r.Launched | Should Be $false
+        $r.Reason | Should Be 'the app is still running after 0s; nothing swapped, nothing started'
         (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
-        $script:launched | Should Be 1
-        ($script:lines -join "`n") | Should Match 'did not exit'
+        $script:launched | Should Be 0
+        ($script:lines -join "`n") | Should Match 'still running after 0s; nothing swapped, nothing started'
+        ($script:lines -join "`n") | Should Not Match 'app started'
     }
 
     It 'keeps the old build current and relaunches it when the new build is missing' {
@@ -464,6 +467,19 @@ Describe 'Invoke-UpdateSwap and the builder mutex' {
         } finally { $job | Wait-Job | Remove-Job -Force }
     }
 
+    It 'starts nothing past the mutex bound while the app is still running (R2-2)' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $job = Start-MutexHolder -Name $name -HoldSeconds 6
+        try {
+            $r = Invoke-TestSwap -Fixture $f -MutexName $name -LockWaitSeconds 1 -TestAppRunning { $true }
+            $r.Swapped | Should Be $false
+            $r.Launched | Should Be $false
+            $script:launched | Should Be 0
+            ($script:lines -join "`n") | Should Match 'nothing started'
+        } finally { $job | Wait-Job | Remove-Job -Force }
+    }
+
     It 'names its build in the pending-swap marker while it runs, and removes it after' {
         $f = New-SwapFixture
         $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
@@ -564,12 +580,15 @@ Describe 'Invoke-UpdateFallback (update-now.ps1 catch path)' {
         $script:startedAfter | Should Be 4
     }
 
-    It 'starts the app anyway once the bound has passed' {
+    It 'starts nothing while the app is still running once the bound has passed (R2-2)' {
         $script:started = 0
+        $script:lines = @()
         $r = Invoke-UpdateFallback -TimeoutSeconds 0 -PollMilliseconds 10 `
-            -TestAppRunning { $true } -StartApp { $script:started++ } -Log { param($level, $message) }
-        $script:started | Should Be 1
-        $r.Launched | Should Be $true
+            -TestAppRunning { $true } -StartApp { $script:started++ } `
+            -Log { param($level, $message) $script:lines += "$level $message" }
+        $script:started | Should Be 0
+        $r.Launched | Should Be $false
+        ($script:lines -join "`n") | Should Match 'still running after 0s; nothing started'
     }
 
     It 'still starts the app when logging itself throws, and never throws' {

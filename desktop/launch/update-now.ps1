@@ -24,8 +24,10 @@
        not registered).
 
   It runs from the installed copy under %LOCALAPPDATA%\bb2dash-launch\launch. If anything
-  fails, the old build stays current and the app is started on it. Every step of both
-  stages is logged to logs\update-now.log. The logic is Invoke-UpdateSwap and
+  fails, the old build stays current; if the app never exited, nothing is started,
+  otherwise the app is started on the old build. A live helper for another build (a
+  fresh swap-pending naming it) makes this one refuse and exit 5 without touching
+  anything. Every step of both stages is logged to logs\update-now.log. The logic is Invoke-UpdateSwap and
   Invoke-HelperHandoff in Bb2dashLaunch.psm1, pinned by Bb2dashLaunch.Tests.ps1.
 
 .EXAMPLE
@@ -117,10 +119,14 @@ try {
         $null = Invoke-UpdateFallback -TimeoutSeconds $TimeoutSeconds -TestAppRunning $testAppRunning `
             -StartApp { & $startApp '' } -Log $log
     } else {
-        # The module itself did not load: the same wait and start, inline.
+        # The module itself did not load: the same wait and start, inline (nothing while the app runs).
         $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
         while ((& $testAppRunning) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
-        try { & $startApp '' } catch { [Console]::Error.WriteLine("could not start the app: $($_.Exception.Message)") }
+        if (& $testAppRunning) {
+            [Console]::Error.WriteLine("the app is still running after ${TimeoutSeconds}s; nothing started")
+        } else {
+            try { & $startApp '' } catch { [Console]::Error.WriteLine("could not start the app: $($_.Exception.Message)") }
+        }
     }
     exit $EXIT_FAILED
 }

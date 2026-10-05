@@ -215,12 +215,15 @@ hand-packed build does none of this.
   app stays on its build and `main.log` says *Update now could not start the
   helper; staying on this build:* with the reason, for example
   *update-now.ps1 -Detach exited 6: no helper was started* or *the update
-  helper did not start within 20000 ms*. The helper waits for every bb2dash
-  process to exit, points `current` at the new build and starts `Bb2dash-App`.
-  If the app does not exit within 60 s, the build is missing or the junction
-  cannot be moved, the old build stays current and the app starts on it. Its
-  log is `%LOCALAPPDATA%\bb2dash-launch\logs\update-now.log` (both stages); the
-  app's side is in `main.log` under `[update]`.
+  helper did not start within 20000 ms: … ; a helper may still be running:
+  see logs\update-now.log*. The helper waits for every bb2dash process to
+  exit, points `current` at the new build and starts `Bb2dash-App`. If the
+  build is missing or the junction cannot be moved, the old build stays
+  current and the app starts on it; if the app never exited within 60 s,
+  nothing is started. A helper refuses outright, touching nothing, while a
+  fresh `swap-pending` names another build. Its log is
+  `%LOCALAPPDATA%\bb2dash-launch\logs\update-now.log` (both stages); the app's
+  side is in `main.log` under `[update]`.
 * **Forcing an update.** Open the account menu (the person icon, top right) and
   click **Update desktop app**. It first checks Docker (`docker version`, 10 s
   bound); with Docker not running it answers at once *Update failed: Docker isn't
