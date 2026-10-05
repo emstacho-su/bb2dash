@@ -132,7 +132,11 @@ export interface ForceUpdateDeps {
   /** The builder's `last-check.json`, or `null`. May throw. */
   readonly readLastCheck: () => BuildCheck | null;
   readonly buildOnDisk: (tree: string) => boolean;
-  /** Spawn the detached swap helper; resolves once it is running. */
+  /**
+   * Hand the swap helper off through update-now.ps1 -Detach; resolves only once the helper's
+   * swap-pending marker names the build (seconds, up to about 50 s); rejects when nothing is
+   * running.
+   */
   readonly startUpdate: (tree: string) => Promise<void>;
   /** Quit shortly after the result has been sent back. */
   readonly quitSoon: () => void;
