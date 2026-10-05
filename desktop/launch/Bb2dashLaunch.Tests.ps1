@@ -273,10 +273,10 @@ Describe 'Get-UpdateSwapDecision' {
         ($d.Actions -join ',') | Should Be 'Swap,Launch'
     }
 
-    It 'only relaunches the old build when the app did not exit in time' {
-        $d = Get-UpdateSwapDecision -Tree $SHA_B -ActiveTree $SHA_A -BuildExists $true -AppExited $false
-        ($d.Actions -join ',') | Should Be 'Launch'
-        $d.Reason | Should Match 'did not exit'
+    It 'starts nothing and swaps nothing while the app is still running after the wait (R2-2)' {
+        $d = Get-UpdateSwapDecision -Tree $SHA_B -ActiveTree $SHA_A -BuildExists $true -AppExited $false -WaitedSeconds 60
+        ($d.Actions -join ',') | Should Be ''
+        $d.Reason | Should Be 'the app is still running after 60s; nothing swapped, nothing started'
     }
 
     It 'only relaunches when the new build is missing' {
@@ -314,7 +314,7 @@ Describe 'Invoke-UpdateSwap' {
         $script:launched[0] | Should Be (Join-Path (Join-Path $f.StateDir 'current') 'bb2dash.exe')
     }
 
-    It 'keeps the old build current and relaunches it when the app never exits' {
+    It 'keeps the old build current and starts nothing when the app never exits (R2-2)' {
         $f = New-SwapFixture
         $script:launched = 0
         $script:lines = @()
@@ -323,9 +323,12 @@ Describe 'Invoke-UpdateSwap' {
             -StartApp { param($exe) $script:launched++ } `
             -Log { param($level, $message) $script:lines += "$level $message" }
         $r.Swapped | Should Be $false
+        $r.Launched | Should Be $false
+        $r.Reason | Should Be 'the app is still running after 0s; nothing swapped, nothing started'
         (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
-        $script:launched | Should Be 1
-        ($script:lines -join "`n") | Should Match 'did not exit'
+        $script:launched | Should Be 0
+        ($script:lines -join "`n") | Should Match 'still running after 0s; nothing swapped, nothing started'
+        ($script:lines -join "`n") | Should Not Match 'app started'
     }
 
     It 'keeps the old build current and relaunches it when the new build is missing' {
@@ -464,6 +467,19 @@ Describe 'Invoke-UpdateSwap and the builder mutex' {
         } finally { $job | Wait-Job | Remove-Job -Force }
     }
 
+    It 'starts nothing past the mutex bound while the app is still running (R2-2)' {
+        $f = New-SwapFixture
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $job = Start-MutexHolder -Name $name -HoldSeconds 6
+        try {
+            $r = Invoke-TestSwap -Fixture $f -MutexName $name -LockWaitSeconds 1 -TestAppRunning { $true }
+            $r.Swapped | Should Be $false
+            $r.Launched | Should Be $false
+            $script:launched | Should Be 0
+            ($script:lines -join "`n") | Should Match 'nothing started'
+        } finally { $job | Wait-Job | Remove-Job -Force }
+    }
+
     It 'names its build in the pending-swap marker while it runs, and removes it after' {
         $f = New-SwapFixture
         $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
@@ -476,6 +492,52 @@ Describe 'Invoke-UpdateSwap and the builder mutex' {
         $r.Swapped | Should Be $true
         $script:seen | Should Be $SHA_B
         Test-Path $marker | Should Be $false
+    }
+}
+
+Describe 'Invoke-UpdateSwap and a pending swap for another build (R2-1)' {
+
+    function Set-Marker {
+        param([pscustomobject] $Fixture, [string] $Tree, [int] $AgeSeconds = 0)
+        $path = Join-Path $Fixture.StateDir 'swap-pending'
+        [IO.File]::WriteAllText($path, $Tree)
+        if ($AgeSeconds -gt 0) { (Get-Item $path).LastWriteTime = (Get-Date).AddSeconds(-$AgeSeconds) }
+        return $path
+    }
+
+    It 'refuses while a fresh marker names another build: nothing written, no mutex, nothing started' {
+        $f = New-SwapFixture
+        $other = 'c' * 40
+        $marker = Set-Marker -Fixture $f -Tree $other
+        $before = (Get-Item $marker).LastWriteTimeUtc
+        $name = 'Local\Bb2dashTest' + [guid]::NewGuid().ToString('N')
+        $r = Invoke-TestSwap -Fixture $f -MutexName $name
+        $r.Swapped | Should Be $false
+        $r.Launched | Should Be $false
+        $r.Reason | Should Match "another update is in progress for build $other"
+        $script:launched | Should Be 0
+        ($script:lines -join "`n") | Should Match "another update is in progress for build $other"
+        [IO.File]::ReadAllText($marker) | Should Be $other
+        (Get-Item $marker).LastWriteTimeUtc | Should Be $before
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.Old
+        $m = $null
+        [System.Threading.Mutex]::TryOpenExisting($name, [ref] $m) | Should Be $false
+    }
+
+    It 'overwrites a marker for another build older than the wait bounds (a leftover) and swaps' {
+        $f = New-SwapFixture
+        # Invoke-TestSwap waits 1 s for the app and 5 s for the mutex: older than 6 s is a leftover.
+        $null = Set-Marker -Fixture $f -Tree ('c' * 40) -AgeSeconds 3600
+        $r = Invoke-TestSwap -Fixture $f -MutexName ('Local\Bb2dashTest' + [guid]::NewGuid().ToString('N'))
+        $r.Swapped | Should Be $true
+        (Get-CurrentTarget $f.StateDir) | Should Be $f.New
+    }
+
+    It 'proceeds over a fresh marker naming its own build' {
+        $f = New-SwapFixture
+        $null = Set-Marker -Fixture $f -Tree $SHA_B
+        $r = Invoke-TestSwap -Fixture $f -MutexName ('Local\Bb2dashTest' + [guid]::NewGuid().ToString('N'))
+        $r.Swapped | Should Be $true
     }
 }
 
@@ -518,12 +580,15 @@ Describe 'Invoke-UpdateFallback (update-now.ps1 catch path)' {
         $script:startedAfter | Should Be 4
     }
 
-    It 'starts the app anyway once the bound has passed' {
+    It 'starts nothing while the app is still running once the bound has passed (R2-2)' {
         $script:started = 0
+        $script:lines = @()
         $r = Invoke-UpdateFallback -TimeoutSeconds 0 -PollMilliseconds 10 `
-            -TestAppRunning { $true } -StartApp { $script:started++ } -Log { param($level, $message) }
-        $script:started | Should Be 1
-        $r.Launched | Should Be $true
+            -TestAppRunning { $true } -StartApp { $script:started++ } `
+            -Log { param($level, $message) $script:lines += "$level $message" }
+        $script:started | Should Be 0
+        $r.Launched | Should Be $false
+        ($script:lines -join "`n") | Should Match 'still running after 0s; nothing started'
     }
 
     It 'still starts the app when logging itself throws, and never throws' {
@@ -540,5 +605,139 @@ Describe 'Invoke-UpdateFallback (update-now.ps1 catch path)' {
             -TestAppRunning { $false } -StartApp { throw 'task missing' } `
             -Log { param($level, $message) throw 'disk full' } } | Should Not Throw
         $script:r.Launched | Should Be $false
+    }
+}
+
+# ---------------------------------------------------------------- the hand-off (2026-10-04)
+#
+# Windows PowerShell 5.1 started detached (no console) exits 0 without running its script,
+# so the app runs `update-now.ps1 -Detach` as a plain hidden child and that stage starts the
+# real helper with Start-Process (W-71). The argv is pure; the start is an injected scriptblock.
+
+$HANDOFF_SCRIPT = 'C:\Users\s\AppData\Local\bb2dash-launch\launch\update-now.ps1'
+$HANDOFF_STATE = 'C:\Users\s\AppData\Local\bb2dash-launch'
+$HANDOFF_POWERSHELL = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+
+function New-TestHandoffArguments {
+    param([hashtable] $Overrides = @{})
+    $inputs = @{ ScriptPath = $HANDOFF_SCRIPT; Tree = $SHA_B; StateDir = $HANDOFF_STATE; AppTaskName = 'Bb2dash-App'; TimeoutSeconds = 60 }
+    foreach ($k in $Overrides.Keys) { $inputs[$k] = $Overrides[$k] }
+    return New-HelperHandoffArgumentList @inputs
+}
+
+function Get-ArgumentAfter {
+    param([string[]] $Arguments, [string] $Name)
+    $i = [array]::IndexOf($Arguments, $Name)
+    if ($i -lt 0 -or $i -ge ($Arguments.Count - 1)) { return $null }
+    return $Arguments[$i + 1]
+}
+
+function Invoke-TestHandoff {
+    param([scriptblock] $StartProcess)
+    $script:lines = @()
+    return Invoke-HelperHandoff -PowerShellPath $HANDOFF_POWERSHELL -ScriptPath $HANDOFF_SCRIPT -Tree $SHA_B `
+        -StateDir $HANDOFF_STATE -AppTaskName 'Bb2dash-App' -TimeoutSeconds 60 -StartProcess $StartProcess `
+        -Log { param($level, $message) $script:lines += "$level $message" }
+}
+
+Describe 'New-HelperHandoffArgumentList (update-now.ps1 -Detach)' {
+
+    It 'runs the same script, and never with -Detach again' {
+        $a = New-TestHandoffArguments
+        ($a -contains '-Detach') | Should Be $false
+        (Get-ArgumentAfter $a '-File') | Should Be $HANDOFF_SCRIPT
+        ($a -contains '-NoProfile') | Should Be $true
+        ($a -contains '-NonInteractive') | Should Be $true
+    }
+
+    It 'leaves hiding the window to Start-Process -WindowStyle Hidden, not to the child argv (R2-7)' {
+        $a = New-TestHandoffArguments
+        ($a -contains '-WindowStyle') | Should Be $false
+        ($a -contains 'Hidden') | Should Be $false
+    }
+
+    It 'puts every PowerShell option before -File (what follows -File goes to the script)' {
+        $a = New-TestHandoffArguments
+        $file = [array]::IndexOf($a, '-File')
+        foreach ($option in @('-NoProfile', '-NonInteractive', '-ExecutionPolicy')) {
+            [array]::IndexOf($a, $option) | Should BeLessThan $file
+        }
+    }
+
+    It 'carries the tree, the state folder, the app task and the timeout' {
+        $a = New-TestHandoffArguments (@{ AppTaskName = 'Bb2dash-NoSuchTask'; TimeoutSeconds = 7 })
+        (Get-ArgumentAfter $a '-Tree') | Should Be $SHA_B
+        (Get-ArgumentAfter $a '-StateDir') | Should Be $HANDOFF_STATE
+        (Get-ArgumentAfter $a '-AppTaskName') | Should Be 'Bb2dash-NoSuchTask'
+        (Get-ArgumentAfter $a '-TimeoutSeconds') | Should Be '7'
+    }
+
+    It 'quotes an element with a space, because Start-Process joins the list unquoted' {
+        $a = New-TestHandoffArguments (@{ StateDir = 'C:\Users\s\OneDrive - Syracuse University\launch' })
+        (Get-ArgumentAfter $a '-StateDir') | Should Be '"C:\Users\s\OneDrive - Syracuse University\launch"'
+        $s = New-TestHandoffArguments (@{ ScriptPath = 'C:\a b\update-now.ps1' })
+        (Get-ArgumentAfter $s '-File') | Should Be '"C:\a b\update-now.ps1"'
+    }
+
+    It 'keeps a trailing backslash literal inside the quotes' {
+        $a = New-TestHandoffArguments (@{ StateDir = 'C:\a b\' })
+        (Get-ArgumentAfter $a '-StateDir') | Should Be '"C:\a b\\"'
+    }
+
+    It 'refuses a malformed tree and an element with a double quote' {
+        { New-TestHandoffArguments (@{ Tree = '..\evil' }) } | Should Throw
+        { New-TestHandoffArguments (@{ StateDir = 'C:\a" -Evil "b' }) } | Should Throw
+    }
+}
+
+Describe 'Invoke-HelperHandoff' {
+
+    It 'starts PowerShell once with the hand-off list, in the state folder, and logs the pid' {
+        $script:calls = @()
+        $r = Invoke-TestHandoff -StartProcess {
+            param($filePath, $argumentList, $workingDirectory)
+            $script:calls += , @($filePath, $argumentList, $workingDirectory)
+            return [pscustomobject]@{ Id = 4242 }
+        }
+        $r.Ok | Should Be $true
+        $r.ProcessId | Should Be 4242
+        $script:calls.Count | Should Be 1
+        $script:calls[0][0] | Should Be $HANDOFF_POWERSHELL
+        ($script:calls[0][1] -join ' ') | Should Be ((New-TestHandoffArguments) -join ' ')
+        $script:calls[0][2] | Should Be $HANDOFF_STATE
+        ($script:lines -join "`n") | Should Match 'INFO .*pid 4242'
+    }
+
+    It 'reports a start that throws, at ERROR, instead of swallowing it' {
+        $r = Invoke-TestHandoff -StartProcess { param($f, $a, $w) throw 'access denied' }
+        $r.Ok | Should Be $false
+        $r.Reason | Should Match 'access denied'
+        ($script:lines -join "`n") | Should Match 'ERROR .*access denied'
+    }
+
+    It 'counts a start that returns no process as a failure' {
+        $r = Invoke-TestHandoff -StartProcess { param($f, $a, $w) $null }
+        $r.Ok | Should Be $false
+        ($script:lines -join "`n") | Should Match 'ERROR'
+    }
+
+    It 'still reports a successful start when logging it throws (R2-3)' {
+        $script:starts = 0
+        $r = Invoke-HelperHandoff -PowerShellPath $HANDOFF_POWERSHELL -ScriptPath $HANDOFF_SCRIPT -Tree $SHA_B `
+            -StateDir $HANDOFF_STATE -AppTaskName 'Bb2dash-App' -TimeoutSeconds 60 `
+            -StartProcess { param($f, $a, $w) $script:starts++; [pscustomobject]@{ Id = 4242 } } `
+            -Log { param($level, $message) throw 'disk full' }
+        $r.Ok | Should Be $true
+        $r.ProcessId | Should Be 4242
+        $script:starts | Should Be 1
+    }
+
+    It 'still reports a failed start when logging the failure throws' {
+        $r = Invoke-HelperHandoff -PowerShellPath $HANDOFF_POWERSHELL -ScriptPath $HANDOFF_SCRIPT -Tree $SHA_B `
+            -StateDir $HANDOFF_STATE -AppTaskName 'Bb2dash-App' -TimeoutSeconds 60 `
+            -StartProcess { param($f, $a, $w) throw 'access denied' } `
+            -Log { param($level, $message) throw 'disk full' }
+        $r.Ok | Should Be $false
+        $r.Reason | Should Match 'access denied'
     }
 }
