@@ -1,0 +1,26 @@
+{
+  "name": "bb2dash-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Workspace runner (Phase 21): it takes queued questions through the five workspace_runner functions, routes each to a tier, runs the unmodified claude CLI on the owner's subscription with four read tools, streams the answer and stores it.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.9.2",
+    "@types/pg": "8.23.1",
+    "@vitest/coverage-v8": "5.0.1",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  }
+}
