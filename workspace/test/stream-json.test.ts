@@ -8,21 +8,31 @@ import { BUDGET_CAP_HOLDS, CLAUDE_CODE_VERSION } from '../src/config.js';
 import { mapTurnEnd } from '../src/errors.js';
 import { ALLOWED_TOOLS } from '../src/hooks/gate-rules.js';
 import { isUuidShaped, shouldRetryAsFresh } from '../src/providers/claude-cli.js';
+import { OAUTH_CREDENTIAL_SOURCE, checkInit, parseLine, readInit } from '../src/stream-json.js';
 import {
-  OAUTH_CREDENTIAL_SOURCE,
-  checkInit,
-  createTurnStream,
-  parseLine,
-  readInit,
-  type StreamSignal,
-  type TurnSummary,
-} from '../src/stream-json.js';
+  SCRUBBED,
+  SEARCH,
+  SEARCH_CONTEXT,
+  SESSION,
+  blockStart,
+  delta,
+  deltasOf,
+  hookResponse,
+  initLine,
+  replay,
+  resultLine,
+  stopsOf,
+  textDelta,
+  toolResult,
+  toolUse,
+  type Line,
+} from './helpers/stream-lines.js';
+
+// The fail-closed rule on the tool gate, in its own file: it registers its suite here.
+import './stream-json/gate.suite.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, 'fixtures');
-const SCRUBBED = '<scrubbed>';
-
-type Line = Record<string, unknown>;
 
 function readJsonl(name: string): Line[] {
   return fs
@@ -36,23 +46,6 @@ function readJson<T>(name: string): T {
   return JSON.parse(fs.readFileSync(path.join(FIXTURES, name), 'utf8')) as T;
 }
 
-interface Replay {
-  signals: StreamSignal[];
-  summary: TurnSummary;
-}
-
-function replay(lines: readonly unknown[]): Replay {
-  const stream = createTurnStream();
-  const signals = lines.flatMap((line) => stream.push(line));
-  return { signals, summary: stream.summary() };
-}
-
-const deltasOf = (signals: readonly StreamSignal[]): string =>
-  signals.flatMap((signal) => (signal.kind === 'delta' ? [signal.text] : [])).join('');
-
-const stopsOf = (signals: readonly StreamSignal[]) =>
-  signals.flatMap((signal) => (signal.kind === 'stop' ? [signal] : []));
-
 interface Recordings {
   claude_code_version: string;
   fixtures: Record<string, { exitCode: number; stderr: string | null; maxBudgetUsd: string }>;
@@ -60,86 +53,6 @@ interface Recordings {
 
 const recordings = readJson<Recordings>('recordings.json');
 const RECORDED = Object.keys(recordings.fixtures);
-
-// Hand-built lines for the cases no recording holds, in the shapes the recordings show.
-const SESSION = '0a0a0a0a-1111-4222-8333-444444444444';
-const base = { session_id: SESSION, parent_tool_use_id: null };
-
-const initLine = (overrides: Line = {}): Line => ({
-  type: 'system',
-  subtype: 'init',
-  session_id: SESSION,
-  tools: [...ALLOWED_TOOLS],
-  mcp_servers: [
-    { name: 'bb2dash', status: 'connected', source: 'dynamic' },
-    { name: 'rag', status: 'connected', source: 'dynamic' },
-  ],
-  model: 'claude-haiku-4-5-20251001',
-  permissionMode: 'dontAsk',
-  apiKeySource: 'none',
-  claude_code_version: CLAUDE_CODE_VERSION,
-  ...overrides,
-});
-
-const toolUse = (id: string, name: string, input: Line = {}): Line => ({
-  type: 'assistant',
-  message: { model: 'claude-haiku-4-5-20251001', role: 'assistant', content: [{ type: 'tool_use', id, name, input }] },
-  ...base,
-});
-
-const hookResponse = (toolName: string, exitCode: number): Line => ({
-  type: 'system',
-  subtype: 'hook_response',
-  hook_id: `hook-${toolName}`,
-  hook_name: `PreToolUse:${toolName}`,
-  hook_event: 'PreToolUse',
-  output: '',
-  stdout: '',
-  stderr: exitCode === 0 ? '' : 'denied',
-  exit_code: exitCode,
-  outcome: exitCode === 0 ? 'success' : 'error',
-  session_id: SESSION,
-});
-
-const toolResult = (id: string, isError = false): Line => ({
-  type: 'user',
-  message: {
-    role: 'user',
-    content: [{ tool_use_id: id, type: 'tool_result', content: SCRUBBED, ...(isError ? { is_error: true } : {}) }],
-  },
-  ...base,
-});
-
-const blockStart = (type: string, parent: string | null = null): Line => ({
-  type: 'stream_event',
-  event: { type: 'content_block_start', index: 0, content_block: { type } },
-  session_id: SESSION,
-  parent_tool_use_id: parent,
-});
-
-const delta = (deltaBody: Line, parent: string | null = null): Line => ({
-  type: 'stream_event',
-  event: { type: 'content_block_delta', index: 0, delta: deltaBody },
-  session_id: SESSION,
-  parent_tool_use_id: parent,
-});
-
-const textDelta = (text: string, parent: string | null = null): Line => delta({ type: 'text_delta', text }, parent);
-
-const resultLine = (overrides: Line = {}): Line => ({
-  type: 'result',
-  subtype: 'success',
-  is_error: false,
-  api_error_status: null,
-  num_turns: 1,
-  session_id: SESSION,
-  total_cost_usd: 0.01,
-  result: 'ignored',
-  ...overrides,
-});
-
-const SEARCH = 'mcp__bb2dash__search_materials';
-const SEARCH_CONTEXT = 'mcp__rag__search_context';
 
 describe('the recorded fixtures as files', () => {
   it('are the four recordings', () => {
@@ -578,95 +491,6 @@ describe('tool calls', () => {
   it('counts a tool_use once, however many assistant lines repeat it', () => {
     const { summary } = replay([initLine(), toolUse('t1', SEARCH, { q: 'x' }), toolUse('t1', SEARCH, { q: 'x' })]);
     expect(summary.toolCalls).toHaveLength(1);
-  });
-});
-
-describe('failing closed on the gate', () => {
-  it('stops the turn as cli_error when a tool result arrives with no PreToolUse hook response', () => {
-    const { signals, summary } = replay([initLine(), toolUse('t1', SEARCH, { q: 'x' }), toolResult('t1'), resultLine()]);
-    expect(stopsOf(signals)).toHaveLength(1);
-    expect(stopsOf(signals)[0]?.errorCode).toBe('cli_error');
-    expect(summary.violation).not.toBeNull();
-    expect(mapTurnEnd(summary)).toBe('cli_error');
-    expect(summary.toolCalls[0]?.ok).toBe(false);
-  });
-
-  it.each([[1], [3], [127], [-1]])('stops the turn as cli_error when the hook exits %s', (exitCode) => {
-    const { signals, summary } = replay([initLine(), toolUse('t1', SEARCH, { q: 'x' }), hookResponse(SEARCH, exitCode)]);
-    expect(stopsOf(signals)[0]?.errorCode).toBe('cli_error');
-    expect(mapTurnEnd({ ...summary, result: null })).toBe('cli_error');
-  });
-
-  it('stops the turn when the hook response carries no exit code at all', () => {
-    const response = { ...hookResponse(SEARCH, 0), exit_code: undefined };
-    const { signals } = replay([initLine(), toolUse('t1', SEARCH, { q: 'x' }), response]);
-    expect(stopsOf(signals)[0]?.errorCode).toBe('cli_error');
-  });
-
-  it('does not fail a turn that ended before a tool ran: no gate response and no result is a call that never happened', () => {
-    const ended = resultLine({ subtype: 'error_max_budget_usd', is_error: true });
-    const { signals, summary } = replay([initLine(), toolUse('t1', SEARCH, { q: 'x' }), ended]);
-    expect(stopsOf(signals)).toEqual([]);
-    expect(summary.violation).toBeNull();
-    expect(summary.toolCalls).toEqual([{ tool: 'search_materials', query: 'x', scope: null, ok: false }]);
-    expect(mapTurnEnd(summary)).toBe('budget_exceeded');
-  });
-
-  it('says nothing more once it has stopped a turn, but still reads the result line', () => {
-    const { signals, summary } = replay([
-      initLine(),
-      toolUse('t1', SEARCH, { q: 'x' }),
-      toolResult('t1'),
-      blockStart('text'),
-      textDelta('text after an ungated call'),
-      toolUse('t2', SEARCH, { q: 'y' }),
-      resultLine({ total_cost_usd: 0.5 }),
-    ]);
-    expect(stopsOf(signals)).toHaveLength(1);
-    expect(deltasOf(signals)).toBe('');
-    expect(summary.text).toBe('');
-    expect(summary.toolCalls).toHaveLength(1);
-    expect(summary.result?.totalCostUsd).toBe(0.5);
-    expect(mapTurnEnd(summary)).toBe('cli_error');
-  });
-
-  it('does not count a hook response for another tool', () => {
-    const { signals } = replay([
-      initLine(),
-      toolUse('t1', SEARCH, { q: 'x' }),
-      hookResponse('mcp__bb2dash__list_courses', 0),
-      toolResult('t1'),
-    ]);
-    expect(stopsOf(signals)[0]?.errorCode).toBe('cli_error');
-  });
-
-  it('ignores hook events that are not PreToolUse', () => {
-    const other = { ...hookResponse(SEARCH, 0), hook_event: 'PostToolUse', hook_name: `PostToolUse:${SEARCH}` };
-    const { signals } = replay([initLine(), toolUse('t1', SEARCH, { q: 'x' }), other, toolResult('t1')]);
-    expect(stopsOf(signals)[0]?.errorCode).toBe('cli_error');
-  });
-
-  it('accepts EndConversation with no hook response, stores nothing for it and lets the turn finish', () => {
-    const { signals, summary } = replay([
-      initLine(),
-      blockStart('text'),
-      textDelta('Goodbye.'),
-      toolUse('end1', 'EndConversation', {}),
-      toolResult('end1'),
-      resultLine(),
-    ]);
-    expect(stopsOf(signals)).toEqual([]);
-    expect(summary.toolCalls).toEqual([]);
-    expect(summary.violation).toBeNull();
-    expect(mapTurnEnd(summary)).toBeNull();
-    expect(summary.text).toBe('Goodbye.');
-  });
-
-  it('stops the turn when model output arrives before any init line', () => {
-    const { signals, summary } = replay([blockStart('text'), textDelta('hello')]);
-    expect(stopsOf(signals)[0]?.errorCode).toBe('cli_error');
-    expect(deltasOf(signals)).toBe('');
-    expect(summary.violation).not.toBeNull();
   });
 });
 
