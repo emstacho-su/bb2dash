@@ -19,6 +19,7 @@
 #   /app/mcp-materials/  package.json, node_modules, dist/index.js
 #   /app/mcp-rag/        package.json, node_modules, dist/, certs/prod-ca.crt, mcp-rag.sh
 #   /opt/fastembed/      the rag server's embedding model, baked in: nothing is downloaded at run time
+#   /usr/local/share/npm-global/  Claude Code at its pinned version, owned by root
 #   /app/turn/           empty, owned by node: the working directory of every `claude -p` turn
 #   /home/node/.claude/  owned by node: the workspace-claude-home volume mounts here
 #
@@ -75,8 +76,8 @@ RUN npm run build \
  && npm prune --omit=dev --no-audit --no-fund \
  && chmod -R u=rwX,go=rX /opt/fastembed
 
-# --- runtime -----------------------------------------------------------------------------------------
-FROM ${NODE_IMAGE}
+# --- cli: Claude Code at its pinned version ------------------------------------------------------------
+FROM ${NODE_IMAGE} AS cli
 
 # One exact version (brief 102, "CLI pin"): never the moving tag the dev container defaults to and
 # never the `stable` tag. 2.1.288 is the floor (its PreToolUse hook-skip fix and its headless SIGTERM
@@ -84,33 +85,50 @@ FROM ${NODE_IMAGE}
 # fixtures are recorded on it. A bump is a deliberate change.
 ARG CLAUDE_CODE_VERSION=2.1.289
 
-# The firewall's tools (iptables and ip6tables, ipset, dig from dnsutils, ip from iproute2, curl with
-# the CA bundle for its end check) and procps for task 12's process check. setpriv, which the
-# entrypoint drops privileges with, is util-linux and already in the base image.
+# By the dev container's recipe (bb2dash-stack .devcontainer/Dockerfile, B-48), with the version
+# written out: installed as node, into a prefix node owns for the length of the install.
+RUN mkdir -p /usr/local/share/npm-global \
+ && chown node:node /usr/local/share/npm-global
+USER node
+ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+# The pin cannot move by itself (rulings T1): once the CLI is installed its folder is root's, so the
+# node user every turn runs as can read and run it and cannot replace it; compose.yaml turns the
+# CLI's own updater off as well (DISABLE_AUTOUPDATER=1). In a stage of its own because the package's
+# install links its one large binary (about 250 MB) under two names, and a chown in a later layer of
+# the runtime stage would store that binary a second time. The runtime stage takes the folder in one
+# COPY, already root's.
+USER root
+RUN chown -R root:root /usr/local/share/npm-global
+
+# --- runtime -----------------------------------------------------------------------------------------
+FROM ${NODE_IMAGE}
+
+# The firewall's tools (iptables and ip6tables, ipset, dig from dnsutils, curl with the CA bundle for
+# its end check) and procps for task 12's process checks (ps, pgrep). No iproute2: no script in this
+# image calls `ip` (the firewall reads the container's IPv6 addresses from /proc/net/if_inet6).
+# setpriv, which the entrypoint drops privileges with, is util-linux and already in the base image.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       dnsutils \
-      iproute2 \
       ipset \
       iptables \
       procps \
  && rm -rf /var/lib/apt/lists/*
 
 # The CLI's config folder and the turns' working directory exist here, owned by node, so a new
-# workspace-claude-home volume takes that owner; the npm prefix is node's for the install below.
-RUN mkdir -p /home/node/.claude /app/turn /usr/local/share/npm-global \
- && chown node:node /home/node/.claude /app/turn /usr/local/share/npm-global
+# workspace-claude-home volume takes that owner.
+RUN mkdir -p /home/node/.claude /app/turn \
+ && chown node:node /home/node/.claude /app/turn
 
-# Claude Code, by the dev container's recipe (bb2dash-stack .devcontainer/Dockerfile, B-48), with the
-# version written out.
-USER node
+# Claude Code from the `cli` stage, root's (see there). The two settings are the recipe's: its
+# prefix, and its bin folder at the end of PATH.
+COPY --from=cli /usr/local/share/npm-global /usr/local/share/npm-global
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
-RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
- && npm cache clean --force
-USER root
 
 ENV NODE_ENV=production
 WORKDIR /app

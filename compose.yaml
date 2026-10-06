@@ -125,6 +125,8 @@ services:
       CLAUDE_CONFIG_DIR: /home/node/.claude
       # No telemetry, error reports or update checks: the firewall allows api.anthropic.com only.
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      # The CLI never updates itself: the image pins one version, and its install folder is root's.
+      DISABLE_AUTOUPDATER: "1"
       # The runner passes `--tools ""`, so there is no ToolSearch tool to load deferred MCP tools:
       # the four MCP tools must load upfront.
       ENABLE_TOOL_SEARCH: "false"
