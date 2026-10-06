@@ -328,3 +328,53 @@ in the same window.
 
 **Still red on `main` until PR #77 merges:** `phase15_100_db_test_runner_role.sql` from the main
 checkout (three names expected, four on prod). Stack's merge word for #77 is owed.
+
+## Task 19, first half, finished — Part B (2026-10-06)
+
+Stack ran Part B after 142 was on prod and pasted the `alter role workspace_runner with password
+'…';` line into an unsaved Supabase SQL editor tab ("1 and 2 complete"). Proof that both parts
+took, from a script that reads the stored secret, prints no part of it, and connects with it:
+`connected as workspace_runner | statement_timeout 15s`; `assignment_progress -> refused 42501`;
+`reading_progress -> refused 42501`; `workspace_messages -> refused 42501`;
+`may call workspace_claim: true`.
+
+## Task 5 — the Realtime spike (2026-10-06, PASS: the transport is Realtime Broadcast)
+
+Run in a tab of Stack's own Chrome, which he signed in to on the branch preview
+(`web-git-feat-workspace-21-emstacho-sus-projects.vercel.app`, phase branch at ad19814, W-66's
+task 4 skeleton). The PM drove the tab and the database; Stack typed his own sign-in.
+
+1. The conversation, as the owner, in one call (committed):
+   `begin; select set_config('request.jwt.claims', json_build_object('sub', public.app_owner(),
+   'role', 'authenticated')::text, true); set local role authenticated;
+   select public.workspace_ask(null, 'spike'); commit;` → conversation
+   `4afc277e-1601-47d3-abde-739884dc522d`, request 24, `queued` (no runner is up).
+2. The page, `/workspace?c=4afc277e-…`, before the send: the stream area carried
+   `data-topic="workspace:4afc277e-…"`, `data-channel="joined"`, `data-request-id="24"` and no
+   text.
+3. (b0) immediately before the send: a partition named for today (`messages_2026_10_06`) → 1;
+   active replication slots → 1; the request still `queued`.
+4. The send, at 18:07:47.99 UTC by the database's clock:
+   `select realtime.send(jsonb_build_object('request_id', 24, 'seq', 1, 'delta', 'spike-ok 1'),
+   'delta', 'workspace:4afc277e-1601-47d3-abde-739884dc522d', true)`.
+5. (b) after it: `select count(*) from realtime.messages where topic = 'workspace:4afc277e-…'`
+   → **1** (event `delta`, private true, extension `broadcast`, payload
+   `{"seq": 1, "delta": "spike-ok 1", "request_id": 24}` plus the `id` key `realtime.send` adds).
+6. (c) the page: the stream area read **`spike-ok 1`**, first seen at 18:07:49.29 UTC by the
+   laptop's clock, about 1.3 s after the send. No document was requested after the send: the
+   page's navigation-entry count stayed 1, a MutationObserver armed before the send was still
+   alive after it, and the tab's network log held no request. Screenshot:
+   `docs/planning/sprint-2/walks/walk-21/01-realtime-spike.png`.
+7. Only then the cancel, as the owner: `select public.workspace_cancel(24)` → true. The 'spike'
+   conversation stays until acceptance step 15 archives it.
+
+Readings for the builders:
+* The page had been joined for about 15 s when the send was made, and the project's Realtime had
+  been warm since Stack opened the preview that afternoon, so this is a warm delivery time. A
+  cold-start reading was not taken; the page's lobby channel (it joins on load, with or without
+  `?c=`) is what keeps the first answer of a sitting from starting cold.
+* The tab was in the background (`visibilityState` hidden) during the test: the broadcast still
+  arrived. After the cancel the area kept its text for 15 s, because the 5-second refetch does
+  not run in a hidden tab; task 16 must take the end of a stream from the `done` broadcast and
+  from a refetch on focus, never from the interval alone.
+* Partitions seen: `messages_2026_10_05` … `messages_2026_10_09`, daily bounds.
