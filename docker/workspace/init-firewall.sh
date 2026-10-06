@@ -37,8 +37,8 @@
 #     addresses on tcp/5432 only, each kind in a set of its own. No address is allowed on every
 #     port, and nothing but TCP leaves (DNS to the resolvers apart);
 #   * the two database hosts are read from the secret files, and each must end
-#     .pooler.supabase.com; anything else stops the start. A connection string is never printed,
-#     whole or in part;
+#     .pooler.supabase.com and name port 5432 or no port (102a, PM rulings U2); anything else
+#     stops the start. A connection string is never printed, whole or in part;
 #   * each name is resolved once and pinned in /etc/hosts, so every later connection uses the
 #     address that was allowed (a pooler name answers a different address per lookup). A pin that
 #     goes stale is healed by a restart, which runs this script again: the runner's database
@@ -46,6 +46,19 @@
 #
 # It reads nothing the node user can write: not the workspace-claude-home volume, not the
 # environment it was started with (PATH and HOME are set below), not ~/.curlrc or ~/.digrc.
+#
+# What it prints, into the container's log (102a, PM rulings U2), and nothing more:
+#   * the two fixed host names above, and the two fixed URLs of the end check
+#     (https://example.com and https://api.anthropic.com);
+#   * the name of each database secret and, once its host has passed the suffix and port rules,
+#     that pooler's host name;
+#   * the address of each resolver in /etc/resolv.conf that DNS is allowed to (Docker's own,
+#     127.0.0.11), the one port each name is allowed on and how many addresses it has;
+#   * a fixed sentence for each step, and for a refusal a fixed sentence beside the secret's or
+#     the host's name.
+# It never prints a user, a password, a database name, a query string or a whole connection
+# string; of a secret it refused it prints the secret's name and nothing of its value; and it
+# never prints the address of an allowed host.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -161,6 +174,14 @@ dsn_host() {
   host="${host,,}"
   if [ "${#host}" -gt "$HOSTNAME_MAX_LENGTH" ] || [[ ! "$host" =~ $DSN_HOST_RE ]]; then
     echo "its host does not end $DSN_HOST_SUFFIX"
+    return 1
+  fi
+  # The port (PM ruling U2). The pooler's addresses are allowed on tcp/5432 only, so a URL that
+  # names another port (6543, the transaction pooler's) could never connect: the start stops here
+  # instead of at the first query. A URL that names no port means 5432, Postgres's default. What
+  # follows the first colon is compared as text, so `05432`, an empty port and `5432:1` all fail.
+  if [[ "$hostport" == *:* ]] && [ "${hostport#*:}" != "$POSTGRES_PORT" ]; then
+    echo "its port is not $POSTGRES_PORT"
     return 1
   fi
   printf '%s\n' "$host"
