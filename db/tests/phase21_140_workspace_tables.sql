@@ -170,7 +170,7 @@ begin
   end if;
 
   -- Foreign keys: three on messages, two on requests, with their delete rules.
-  select string_agg(c.relname || '.' || a.attname || '->' || fc.relname || ':' || k.confdeltype,
+  select string_agg(c.relname || '.' || a.attname || '->' || fc.relname || ':' || k.confdeltype::text,
                     ', ' order by c.relname collate "C", a.attname collate "C")
     into v_got
     from pg_constraint k
