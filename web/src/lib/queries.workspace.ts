@@ -292,8 +292,9 @@ export function refusalFor(error: unknown): WorkspaceRefusal | null {
 /**
  * SQLSTATE 23503 from `workspace_ask()`: the foreign key refused a conversation
  * id that does not exist (a `?c=` typed by hand, or a stale link). It is not a
- * refusal of the question, so it has neither frozen sentence; the screen says
- * the conversation could not be loaded.
+ * refusal of the question, so it has neither refusal sentence. The screen says
+ * the conversation was not found, in the column's own line, and never shows the
+ * database's sentence about the foreign key (the PM's ruling U1).
  */
 const SQLSTATE_FOREIGN_KEY = '23503';
 

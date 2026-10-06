@@ -24,6 +24,11 @@
  * within two refetch intervals; past that the page waits for the read that a
  * mount or a return to the tab has already sent.
  *
+ * NOR BESIDE TEXT THAT IS ARRIVING. The screen re-reads the status at once when
+ * a request in view becomes `claimed` and when its first delta arrives
+ * (`useStatusOnAnswer` in `Workspace.tsx`), so a service that has just come
+ * back is not called offline for the rest of the 30 s.
+ *
  * While the service is offline a queued question waits and Stop still works;
  * it is answered when the service returns.
  */
