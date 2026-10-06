@@ -33,6 +33,7 @@ import {
   readOauthToken,
   refusedEnvNames,
 } from '../src/config.js';
+import { dsnParts } from '../src/db.js';
 import { buildArgs } from '../src/providers/claude-cli.js';
 import { makeThrowawayCa } from './helpers/throwaway-ca.js';
 
@@ -182,6 +183,34 @@ describe('the runner DSN', () => {
 
   it('refuses text that is not a URL', () => {
     expect(() => assertRunnerDsn('not a url')).toThrow(ConfigError);
+  });
+
+  // The connection is made from these parts alone (db.ts), so a DSN without one is refused at start, not at the first connect.
+  it.each([
+    ['host', 'postgresql://workspace_runner.projectref:not-a-password@/postgres?sslmode=require'],
+    ['user', 'postgresql://:not-a-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require'],
+    ['password', 'postgresql://workspace_runner.projectref@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require'],
+    ['database', 'postgresql://workspace_runner.projectref:not-a-password@aws-0-us-east-1.pooler.supabase.com:5432/?sslmode=require'],
+  ])('refuses a DSN that names no %s, and says which part without printing any', (part, dsn) => {
+    expect(() => assertRunnerDsn(dsn)).toThrow(ConfigError);
+    try {
+      assertRunnerDsn(dsn);
+    } catch (error) {
+      expect((error as Error).message).toContain(`names no ${part}`);
+      expect((error as Error).message).not.toContain('not-a-password');
+      expect((error as Error).message).not.toContain('pooler.supabase.com');
+      expect((error as Error).message).not.toContain('projectref');
+    }
+  });
+
+  it('hands the client the same DSN it accepted: every part the connection is made from is there', () => {
+    expect(dsnParts(assertRunnerDsn(DSN))).toEqual({
+      host: 'aws-0-us-east-1.pooler.supabase.com',
+      port: 5432,
+      user: 'workspace_runner.projectref',
+      password: 'not-a-password',
+      database: 'postgres',
+    });
   });
 
   it('never prints the DSN in its refusal', () => {

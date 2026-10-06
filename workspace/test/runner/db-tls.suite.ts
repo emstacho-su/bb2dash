@@ -190,6 +190,17 @@ describe('the handshake with a pooler, on the loopback interface', () => {
     expect(await connectOnce(impostor, STORED_FLAGS, another.certPem)).toBeNull();
   });
 
+  it("refuses the impostor even with node's own switch set: NODE_TLS_REJECT_UNAUTHORIZED=0 does not reach this connection", async () => {
+    vi.stubEnv('NODE_TLS_REJECT_UNAUTHORIZED', '0');
+    try {
+      const before = impostor.startups.length;
+      expect((await connectOnce(impostor, STORED_FLAGS, pinned.certPem))?.code).toMatch(CERTIFICATE_REFUSED);
+      expect(impostor.startups).toHaveLength(before);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('refuses a certificate the pinned CA signed for another host name', async () => {
     const before = misnamed.startups.length;
     const refused = await connectOnce(misnamed, STORED_FLAGS, pinned.certPem);
