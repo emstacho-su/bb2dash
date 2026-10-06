@@ -99,6 +99,8 @@ function freshState() {
     leaveGate: null as Promise<void> | null,
     /** When set, a leave fails with it. */
     leaveError: null as Error | null,
+    /** What a leave answers with: supabase-js resolves to 'ok', 'timed out' or 'error'. */
+    leaveAnswer: 'ok',
     /** The page's query string. */
     search: '',
     rows: {} as Record<string, Row[]>,
@@ -291,7 +293,7 @@ function fakeClient() {
       if (state.leaveGate) await state.leaveGate;
       state.open.delete(channel);
       if (state.leaveError) throw state.leaveError;
-      return 'ok';
+      return state.leaveAnswer;
     },
   };
 }

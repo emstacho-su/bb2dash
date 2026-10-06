@@ -453,6 +453,42 @@ describe('useWorkspaceStream: the one private channel', () => {
     }
   });
 
+  it.each(['timed out', 'error'])(
+    'logs a leave the client answers with "%s": it resolves, it does not throw',
+    async (answer) => {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const { rerender } = mount(A);
+        await joined(TOPIC_A);
+        fake.state.leaveAnswer = answer;
+
+        rerender({ conversationId: B, requestId: REQUEST });
+        await joined(TOPIC_B);
+
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(String(logged.mock.calls[0][0])).toContain(TOPIC_A);
+        expect(String(logged.mock.calls[0][0])).toContain(answer);
+      } finally {
+        logged.mockRestore();
+      }
+    },
+  );
+
+  it('logs nothing for a leave that answers ok', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { rerender } = mount(A);
+      await joined(TOPIC_A);
+
+      rerender({ conversationId: B, requestId: REQUEST });
+      await joined(TOPIC_B);
+
+      expect(logged).not.toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it('moves between a conversation and the lobby, one channel at a time', async () => {
     const { rerender } = mount(A);
     await joined(TOPIC_A);
