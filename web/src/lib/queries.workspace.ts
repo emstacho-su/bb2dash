@@ -119,8 +119,11 @@ export const WORKSPACE_ERROR_CODES: readonly WorkspaceErrorCode[] = [
   'sign_in_expired',
 ];
 
-/** The two states in which a request is still open. */
-const OPEN_STATES: readonly WorkspaceRequestState[] = ['queued', 'claimed'];
+/**
+ * The two states in which a request is still open. The one definition: the
+ * thread, and whatever else asks whether a request is open, imports this.
+ */
+export const WORKSPACE_OPEN_STATES: readonly WorkspaceRequestState[] = ['queued', 'claimed'];
 
 /** One row of `workspace_conversations`, without the runner's session id. */
 export interface WorkspaceConversation {
@@ -480,7 +483,7 @@ export function openRequestOf(
 ): WorkspaceRequest | null {
   if (!requests) return null;
   for (let index = requests.length - 1; index >= 0; index -= 1) {
-    if (OPEN_STATES.includes(requests[index].state)) return requests[index];
+    if (WORKSPACE_OPEN_STATES.includes(requests[index].state)) return requests[index];
   }
   return null;
 }
