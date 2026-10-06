@@ -735,8 +735,13 @@ pseudo-terminal: the line then behaves the same pasted into a terminal and run b
 `just up`, never an `up` without the service name. To run the list in another tree (tasks 19 to 22
 run in `bb2dash-wt-21`), change the one folder name after `cd`.
 
-(Wave 2b ran steps 1 to 10 against docker on 2026-10-06; step 10 failed and steps 11 to 39 are
-still unrun. The paragraph below is wave 2a's, as written then.)
+(Wave 2b ran steps 1 to 10 against docker on 2026-10-06, with the list as it then was; step 10
+failed, and every step after it is still unrun. The review round then changed the list for ruling
+V2 and renumbered it: steps 23 and 32 are new, the token smoke (now step 28) runs from `/app/turn`,
+steps 3, 4, 7, 19, 20 and 22 read the new literals, and what was 23 to 39 is now 24 to 41. The
+table of old and new numbers is under "Review round", at the end. Sections of this file written
+before the review round name the numbers they were written with. The paragraph below is wave 2a's,
+as written then.)
 
 **None of these lines has been run against docker.** Their quoting has: each docker line was read
 back out of this file in Git Bash and run with `docker` standing for a program that starts nothing
@@ -765,7 +770,7 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && git fetch origin && git me
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/grep-clean.test.mjs 2>&1 | grep -E "(tests|pass|fail) [0-9]+$"
 ```
-→ `tests 11`, `pass 11`, `fail 0`
+→ `tests 13`, `pass 13`, `fail 0` (11 before the review round's two tests)
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/workspace/init-firewall.test.mjs 2>&1 | grep -E "(tests|pass|fail) [0-9]+$"
 ```
@@ -777,6 +782,14 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/workspa
 cd /c/Users/stack/projects/bb2dash-wt-21-container && grep -c -E "CLAUDE_CODE_VERSION=latest|bb2dash-mcp:local" docker/workspace/Dockerfile; grep -c "^RUN chown -R root:root /usr/local/share/npm-global$" docker/workspace/Dockerfile; grep -c "^ *iproute2" docker/workspace/Dockerfile; grep -c 'DISABLE_AUTOUPDATER: "1"' compose.yaml
 ```
 → `0`, `1`, `0`, `1`
+
+Ruling V2's literals: the one copy of the CA and its mode, the mode of the turns' folder, the
+setting, the rag launcher's path, and no second CA under the rag server.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && grep -c "^COPY --from=harness-certs prod-ca.crt /app/certs/prod-ca.crt$" docker/workspace/Dockerfile; grep -c "^RUN chmod 0444 /app/certs/prod-ca.crt$" docker/workspace/Dockerfile; grep -c "^ && chmod 0555 /app/turn$" docker/workspace/Dockerfile; grep -c "^      WORKSPACE_DB_CA_FILE: /app/certs/prod-ca.crt$" compose.yaml; grep -c "^readonly CA_CERT=/app/certs/prod-ca.crt$" docker/workspace/mcp-rag.sh; cat docker/workspace/Dockerfile docker/workspace/mcp-rag.sh | grep -c "mcp-rag/certs"
+```
+→ `1`, `1`, `1`, `1`, `1`, `0`
 
 **5.** The four secret files exist (sizes only; nobody prints a file).
 
@@ -805,7 +818,7 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace config --format json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const e=JSON.parse(s).services.workspace.environment;console.log(Object.keys(e).sort().map(k=>k+'='+e[k]).join(' '))})"
 ```
-→ `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 CLAUDE_CONFIG_DIR=/home/node/.claude DISABLE_AUTOUPDATER=1 ENABLE_TOOL_SEARCH=false WORKSPACE_TURN_BUDGET_USD=1.00` and no other name
+→ `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 CLAUDE_CONFIG_DIR=/home/node/.claude DISABLE_AUTOUPDATER=1 ENABLE_TOOL_SEARCH=false WORKSPACE_DB_CA_FILE=/app/certs/prod-ca.crt WORKSPACE_TURN_BUDGET_USD=1.00` and no other name
 
 **8.** The `sync` service still renders the hash the live container was made with.
 
@@ -911,7 +924,7 @@ then `runner pid:` one number above 1, then `Uid:` with `1000` four times and fi
 `0000000000000000`. The pattern is anchored at both ends, so it matches the runner's own command line
 and neither `docker-init`'s, which holds the same words, nor this line's shell.
 
-**19.** No API key and no `DATABASE_URL`; the four settings.
+**19.** No API key and no `DATABASE_URL`; the five settings.
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace printenv ANTHROPIC_API_KEY; echo "exit=$?"
@@ -922,16 +935,23 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 ```
 → `exit=1`
 ```
-cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace printenv ENABLE_TOOL_SEARCH CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CONFIG_DIR DISABLE_AUTOUPDATER
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace printenv ENABLE_TOOL_SEARCH CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CONFIG_DIR DISABLE_AUTOUPDATER WORKSPACE_DB_CA_FILE
 ```
-→ four lines: `false`, `1`, `/home/node/.claude`, `1`
+→ five lines: `false`, `1`, `/home/node/.claude`, `1`, `/app/certs/prod-ca.crt`
 
-**20.** The frozen in-image layout.
+**20.** The in-image layout: the frozen paths, with ruling V2's two changes (the one CA under
+`/app/certs`, root's and read-only; `/app/turn` root's, 0555 and empty).
 
 ```
-cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'ls /app/workspace/dist/runner.js /app/workspace/dist/healthcheck.js /app/workspace/dist/hooks/tool-gate.js /app/workspace/claude/settings.json /app/workspace/prompts/system.md /app/workspace/package.json /app/mcp-materials/package.json /app/mcp-materials/dist/index.js /app/mcp-rag/package.json /app/mcp-rag/dist/index.js /app/mcp-rag/certs/prod-ca.crt /app/mcp-rag/mcp-rag.sh | wc -l; ls -d /app/workspace/node_modules /app/mcp-materials/node_modules /app/mcp-rag/node_modules /opt/fastembed | wc -l; stat -c "%U %a %n" /home/node/.claude /app/turn /run/workspace'
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'ls /app/workspace/dist/runner.js /app/workspace/dist/healthcheck.js /app/workspace/dist/hooks/tool-gate.js /app/workspace/claude/settings.json /app/workspace/prompts/system.md /app/workspace/package.json /app/mcp-materials/package.json /app/mcp-materials/dist/index.js /app/mcp-rag/package.json /app/mcp-rag/dist/index.js /app/certs/prod-ca.crt /app/mcp-rag/mcp-rag.sh | wc -l; ls -d /app/workspace/node_modules /app/mcp-materials/node_modules /app/mcp-rag/node_modules /opt/fastembed | wc -l; stat -c "%U:%G %a %n" /home/node/.claude /run/workspace /app/turn /app/certs /app/certs/prod-ca.crt; ls -A /app/turn | wc -l; ls -d /app/mcp-rag/certs 2>/dev/null | wc -l; test -r /app/certs/prod-ca.crt && echo "node reads the CA"'
 ```
-→ `12`, then `4`, then three lines owned by `node`, `/run/workspace` with mode `700`
+→ `12`, then `4`, then five lines: `/home/node/.claude` and `/run/workspace` are `node:node`'s, the
+second with mode `700`; then `root:root 555 /app/turn`, `root:root 755 /app/certs` and
+`root:root 444 /app/certs/prod-ca.crt`. Then `0` (the turns' folder is empty), `0` (no second CA
+under the rag server) and `node reads the CA`. If the last line is missing, `node` cannot reach the
+file (read the modes of the folder and the file above it): the rag launcher then exits 78, and after
+SR-1 the runner stops at its start, since a CA it cannot read is a configuration error (ruling V1),
+so step 15 would not have read `healthy`.
 
 **21.** The CLI's folder is root's, `node` cannot write it, and there is no `ip` program.
 
@@ -943,18 +963,46 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 **22.** `node` can write none of root's files.
 
 ```
-cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'for f in /etc/hosts /app/docker/workspace/init-firewall.sh /app/docker/workspace/entrypoint.sh /app/workspace/dist/runner.js /app/workspace/claude/settings.json /app/mcp-rag/mcp-rag.sh /opt/fastembed /dev/shm/bb2dash-workspace-firewall.up; do test -w "$f" && echo "WRITABLE $f"; done; echo done'
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'for f in /etc/hosts /app/docker/workspace/init-firewall.sh /app/docker/workspace/entrypoint.sh /app/workspace/dist/runner.js /app/workspace/claude/settings.json /app/mcp-rag/mcp-rag.sh /opt/fastembed /dev/shm/bb2dash-workspace-firewall.up /app/turn /app/certs /app/certs/prod-ca.crt; do test -w "$f" && echo "WRITABLE $f"; done; echo done'
 ```
 → `done` alone
 
-**23.** The pins: one line per allowed name, with how many addresses it has.
+**23.** Nothing can be planted where a turn loads project settings (ruling V2). As `node`, from the
+turns' own folder: making `.claude`, making a file and loosening the folder's mode all fail.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node -w /app/turn workspace sh -c 'exec 2>&1; pwd; mkdir .claude; echo "mkdir exit=$?"; touch settings.json; echo "touch exit=$?"; chmod 0777 .; echo "chmod exit=$?"; ls -A | wc -l; stat -c "%U:%G %a" .'
+```
+→ nine lines:
+
+```text
+/app/turn
+mkdir: cannot create directory '.claude': Permission denied
+mkdir exit=1
+touch: cannot touch 'settings.json': Permission denied
+touch exit=1
+chmod: changing permissions of '.': Operation not permitted
+chmod exit=1
+0
+root:root 555
+```
+
+Any `exit=0` here is the failing result: the image is not the ruling's. Stop, and before anything
+else take out what the line made, as root, so no later turn loads it:
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u root workspace sh -c 'rm -rf /app/turn/.claude /app/turn/settings.json; ls -A /app/turn | wc -l'
+```
+→ `0` (run only after a failing result; after a passing one there is nothing to remove)
+
+**24.** The pins: one line per allowed name, with how many addresses it has.
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'grep "pinned by init-firewall.sh" /etc/hosts | cut -d" " -f2 | sort | uniq -c'
 ```
 → three names (four if the two database secrets name different poolers), the counts those of step 14
 
-**24.** The rules and the sets, read as root.
+**25.** The rules and the sets, read as root.
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u root workspace sh -c 'iptables -S OUTPUT; ip6tables -S OUTPUT; for s in workspace-https workspace-postgres; do echo "$s $(ipset list "$s" | grep -c -E "^[0-9]")"; done'
@@ -962,16 +1010,16 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 → `-P OUTPUT DROP`, then the OUTPUT rules in the dry run's order as iptables prints them (loopback;
 udp and tcp 53 to `127.0.0.11`; the state rule; tcp 443 with `--match-set workspace-https dst`; tcp
 5432 with `--match-set workspace-postgres dst`; the reject), then `-P OUTPUT DROP` and the one
-loopback rule for IPv6, then `workspace-https 3` and `workspace-postgres 1` (the counts of step 23)
+loopback rule for IPv6, then `workspace-https 3` and `workspace-postgres 1` (the counts of step 24)
 
-**25.** The tool gate is wired, not only written.
+**26.** The tool gate is wired, not only written.
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const c=require('/app/workspace/claude/settings.json').hooks.PreToolUse[0].hooks[0].command;const r=require('child_process').spawnSync(c,{shell:true,input:JSON.stringify({hook_event_name:'PreToolUse',tool_name:'mcp__rag__search_context',tool_input:{query:'x',collection:'estac'}})});console.log(c,r.status)"
 ```
 → `node /app/workspace/dist/hooks/tool-gate.js 2`
 
-**26.** Egress by name (check (e) as the brief writes it).
+**27.** Egress by name (check (e) as the brief writes it).
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('https://example.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
@@ -1011,18 +1059,29 @@ docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' 
 ```
 → `bb2dash-wt21_workspace-net` and nothing else
 
-**27.** The token smoke (the PM's; one Haiku turn on Stack's plan; R19's line with this list's
-prefix, `-T`, and stdin closed so the CLI does not wait on it).
+**28.** The token smoke (the PM's; one Haiku turn on Stack's plan; R19's line with this list's
+prefix, `-T`, and stdin closed so the CLI does not wait on it), run from `/app/turn` (ruling V2: the
+smoke still passes from the folder every turn runs in, now root's and 0555). It is the one turn the
+list always had, moved to that folder with `-w /app/turn`: no second turn is spent.
 
 ```
-cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'CLAUDE_CODE_OAUTH_TOKEN="$(cat /run/secrets/claude_oauth_token)" claude -p --model haiku --tools "" --max-budget-usd 0.05 -- "Reply with the one word ok"' </dev/null; echo "exit=$?"
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node -w /app/turn workspace sh -c 'CLAUDE_CODE_OAUTH_TOKEN="$(cat /run/secrets/claude_oauth_token)" claude -p --model haiku --tools "" --max-budget-usd 0.05 -- "Reply with the one word ok"' </dev/null; echo "exit=$?"
 ```
 → `ok` (`^ok\.?$`, case ignored), then `exit=0`. If it fails on the network, the missing host goes
 into `HTTPS_HOSTS` in `docker/workspace/init-firewall.sh`, into 102a and into a DECISIONS row. If it
 fails because the CLI cannot write under `/usr/local/share/npm-global`, say so in 102a and the one
-COPY line gets `--chown=node:node` (ruling T1's exception).
+COPY line gets `--chown=node:node` (ruling T1's exception). If it fails because the CLI cannot write
+in its working directory, say so in 102a and stop: the folder's mode is the ruling's, and loosening
+it is the PM's call, not a fix to make at this step.
 
-**28.** Egress by literal address (ruling T1): these prove the address and port rule, not a failed
+The turn left nothing in its working directory, and the folder is as the image made it:
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'ls -A /app/turn | wc -l; stat -c "%U:%G %a" /app/turn'
+```
+→ `0`, then `root:root 555`
+
+**29.** Egress by literal address (ruling T1): these prove the address and port rule, not a failed
 lookup. First, on the host and not in the container, that the four targets answer from this laptop.
 The fourth is the pooler on 6543 (ruling U2: the claim is probed, not only stated); the program reads
 the pooler's host from the secret file and prints neither it nor anything else of the file:
@@ -1052,16 +1111,16 @@ the two HTTPS names and 6543 on the pooler answer from the host, as the host lin
 day, so those `blocked` lines are the port rule at work.) The lines hold allowed addresses: in 102a
 each is written as `<address>`, never as the number.
 
-**29.** A second run of the firewall, as root, is refused, and changes nothing.
+**30.** A second run of the firewall, as root, is refused, and changes nothing.
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u root workspace sh -c '/app/docker/workspace/init-firewall.sh; echo $?'
 ```
 → one `ERROR: the firewall was already raised in this container …` line, then `75`. Then run step
-26's first and fourth lines and step 28's second line again: still `blocked`, a number, and
-`1.1.1.1:443 blocked`.
+27's `example.com` and `api.anthropic.com` lines and step 29's `1.1.1.1` line again: still
+`blocked`, a number, and `1.1.1.1:443 blocked`.
 
-**30.** Ten TCP connects to each database secret's host on port 5432. It reads the host from each
+**31.** Ten TCP connects to each database secret's host on port 5432. It reads the host from each
 secret file inside the container and prints one count per secret, never the URL.
 
 ```
@@ -1069,16 +1128,69 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 ```
 → `10/10` twice (`0/10` for a file it cannot parse, and nothing else)
 
-**31.** One `search_context` call over stdio to the rag launcher, collection `bb2dash`. It prints one
+**32.** The runner's database connection is verified against the pinned CA (ruling V2, for SR-1).
+Inside the container, as `node`: a connect that trusts only `/app/certs/prod-ca.crt` succeeds, and
+the same connect trusting only a different CA fails. Three lines. First the different CA: a
+throwaway self-signed certificate made in the container's temp folder (its key goes to `/dev/null`;
+nothing trusts it and nothing else reads it).
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'rm -rf /tmp/w65-ca; mkdir -m 700 /tmp/w65-ca && openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=w65 throwaway CA" -keyout /dev/null -out /tmp/w65-ca/other-ca.crt 2>/dev/null; echo "openssl exit=$?"; grep -c "BEGIN CERTIFICATE" /tmp/w65-ca/other-ca.crt'
+```
+→ `openssl exit=0`, then `1`. (`openssl exit=127` means the image has no `openssl` program: say so
+in 102a and stop at this step. It is expected to be there: Debian's `ca-certificates`, which the
+image installs, depends on it.)
+
+Then the two connects. The program reads the DSN from the secret file and builds the client from
+its parsed parts (host, port, user, password, database), never from the string, with
+`ssl: { ca, rejectUnauthorized: true, servername: <host> }`: the settings ruling V1 gives the
+runner. It uses the runner's own `pg` module. It prints, per CA file, `connected as <the role>` or
+`refused: <the error's code>`, and nothing of the secret (a secret that does not parse prints
+`the secret did not parse`).
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const fs=require('fs'),{Client}=require('/app/workspace/node_modules/pg');let u;try{u=new URL(fs.readFileSync('/run/secrets/workspace_runner_db_url','utf8').trim())}catch{console.log('the secret did not parse');process.exit(1)}const once=async f=>{let c;try{c=new Client({host:u.hostname,port:Number(u.port||5432),user:decodeURIComponent(u.username),password:decodeURIComponent(u.password),database:decodeURIComponent(u.pathname.slice(1)),ssl:{ca:fs.readFileSync(f,'utf8'),rejectUnauthorized:true,servername:u.hostname},connectionTimeoutMillis:10000});c.on('error',()=>{});await c.connect();const r=await c.query('select current_user as u');return 'connected as '+r.rows[0].u}catch(e){return 'refused: '+(e.code||'no code')}finally{if(c)c.end().catch(()=>{})}};(async()=>{for(const f of ['/app/certs/prod-ca.crt','/tmp/w65-ca/other-ca.crt'])console.log(f,await once(f));process.exit(0)})()"
+```
+→ two lines:
+
+```text
+/app/certs/prod-ca.crt connected as workspace_runner
+/tmp/w65-ca/other-ca.crt refused: SELF_SIGNED_CERT_IN_CHAIN
+```
+
+The first line must read exactly so. The second must be `refused:` with a certificate code:
+`SELF_SIGNED_CERT_IN_CHAIN` is what the PM read on the host on 2026-10-06 against the system store,
+and what this program printed against a stand-in whose chain ends in its own root (below, "Review
+round"). `connected` on the second line is the failing result: the pooler's certificate is then not
+being checked. A second line of `refused: ECONNREFUSED`, `ETIMEDOUT`, `ENOENT` or `no code` proves
+nothing either way (the connect never reached the certificate, or the throwaway file is missing):
+read step 31 and the first line of this step again.
+
+Last, the throwaway goes:
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'rm -rf /tmp/w65-ca; ls -d /tmp/w65-ca 2>/dev/null | wc -l'
+```
+→ `0`
+
+What this step shows: from inside the container, behind the firewall, the pooler's certificate
+verifies against the CA the image holds and against no other, with the ruling's settings. What it
+does not show is the runner's own code: that `workspace/src/db.ts` builds its client this way
+whatever the DSN says is W-64's (its tests, with a CA made for the test). The two meet at step 15:
+after SR-1 a runner that reads `healthy` has reached the database through a connection checked
+against the file `WORKSPACE_DB_CA_FILE` names (step 19), and a missing or empty file stops it.
+
+**33.** One `search_context` call over stdio to the rag launcher, collection `bb2dash`. It prints one
 word: `ok` (a result that is not an error), `error`, `server exited` or `timeout`.
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const cp=require('child_process');const p=cp.spawn('bash',['/app/mcp-rag/mcp-rag.sh'],{stdio:['pipe','pipe','ignore']});let buf='';const send=m=>p.stdin.write(JSON.stringify(m)+'\n');const done=v=>{console.log(v);p.kill();process.exit(v==='ok'?0:1)};setTimeout(()=>done('timeout'),90000);p.on('exit',()=>done('server exited'));p.stdout.on('data',d=>{buf+=d;let i;while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i);buf=buf.slice(i+1);let m;try{m=JSON.parse(line)}catch{continue}if(m.id===1){send({jsonrpc:'2.0',method:'notifications/initialized'});send({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'search_context',arguments:{query:'Workspace',collection:'bb2dash'}}})}if(m.id===2)done(m.result&&(m.result.isError||false)===false?'ok':'error')}});send({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'w65-check',version:'0'}}})"
 ```
-→ `ok` (the search embedded its query with the model in `/opt/fastembed`: step 26 shows the model's
-host is blocked)
+→ `ok` (the search embedded its query with the model in `/opt/fastembed`: step 27 shows the model's
+host is blocked; and the launcher found the CA at `/app/certs/prod-ca.crt`, or it would have exited
+78 and the word would be `server exited`)
 
-**32.** Before the restart: when the firewall's marker was made, how many pins there are, and the
+**34.** Before the restart: when the firewall's marker was made, how many pins there are, and the
 container's id and start time.
 
 ```
@@ -1090,19 +1202,19 @@ docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(cd /c/Users/stack/projects/b
 ```
 → the Workspace container's id and start time
 
-**33.** Restart **(guard)** (ruling T1: a restart must re-raise the firewall).
+**35.** Restart **(guard)** (ruling T1: a restart must re-raise the firewall).
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace restart workspace; echo "exit=$?"
 ```
 → `exit=0`. Then step 15's line → `healthy` again (re-read while `starting`).
 
-**34.** After the restart: the marker went with it and was made anew, and the pins were rewritten.
+**36.** After the restart: the marker went with it and was made anew, and the pins were rewritten.
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'stat -c "marker made at %Y" /dev/shm/bb2dash-workspace-firewall.up; grep -c "pinned by init-firewall.sh" /etc/hosts'
 ```
-→ a later `marker made at` than step 32's, and the same pin count as step 32 (not twice it). Had
+→ a later `marker made at` than step 34's, and the same pin count as step 34 (not twice it). Had
 `/dev/shm` kept the marker, the second start would have been refused with 75 and the container would
 not be healthy.
 ```
@@ -1112,10 +1224,11 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 ```
 docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace ps -q workspace)"
 ```
-→ the same id as step 32 (a restart, not a new container) and a later start time. Then step 26's
-first and fourth lines and step 28's second line once more: `blocked`, a number, `1.1.1.1:443 blocked`.
+→ the same id as step 34 (a restart, not a new container) and a later start time. Then step 27's
+`example.com` and `api.anthropic.com` lines and step 29's `1.1.1.1` line once more: `blocked`, a
+number, `1.1.1.1:443 blocked`.
 
-**35.** Task 13: the image's filesystem into a scratch volume **(guard before)**. `w65-scan` is
+**37.** Task 13: the image's filesystem into a scratch volume **(guard before)**. `w65-scan` is
 created and never started, and is removed in the line that exports it. It carries the compose
 labels of the image it is made from (compose stamps `com.docker.compose.project` and
 `com.docker.compose.service` on an image it builds, and a container inherits its image's labels),
@@ -1132,7 +1245,7 @@ docker export w65-scan | MSYS_NO_PATHCONV=1 docker run --rm -i -v w65-scan-fs:/f
 ```
 → `exit=0`, then `w65-scan`
 
-**36.** Task 13: no secret in the image's files. The scan reads the whole image and can take minutes:
+**38.** Task 13: no secret in the image's files. The scan reads the whole image and can take minutes:
 run it in the background. `--redact` keeps a finding's value out of the output.
 
 ```
@@ -1140,7 +1253,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -v w65-scan-fs:/fs:ro -v "C:/Users/stack/proj
 ```
 → `0`
 
-**37.** Task 13: no secret in the image's history.
+**39.** Task 13: no secret in the image's history.
 
 ```
 docker history --no-trunc bb2dash-workspace:local | MSYS_NO_PATHCONV=1 docker run --rm -i -v "C:/Users/stack/projects/bb2dash-wt-21-container/docker/gitleaks-images.toml:/work/docker/gitleaks-images.toml:ro" -w /work ghcr.io/gitleaks/gitleaks:v8.30.1 stdin --config docker/gitleaks-images.toml --redact; echo $?
@@ -1151,7 +1264,7 @@ docker history --no-trunc bb2dash-workspace:local | grep -c -E "sk-ant-|sb_secre
 ```
 → `0`
 
-**38.** Task 13: the scratch volume goes **(guard after)**.
+**40.** Task 13: the scratch volume goes **(guard after)**.
 
 ```
 docker volume rm w65-scan-fs
@@ -1164,7 +1277,7 @@ under the allowlist's three paths (`/fs/usr/(include|lib|share)/`, `/fs/usr/loca
 `/fs/ms-playwright/`), so a hit there shows. Widening the allowlist is a DECISIONS call, not this
 stream's.
 
-**39.** When this tree is done with the test container (only one tree at a time runs it) **(guard)**.
+**41.** When this tree is done with the test container (only one tree at a time runs it) **(guard)**.
 
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace stop workspace
