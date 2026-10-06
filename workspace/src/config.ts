@@ -1,7 +1,7 @@
 /**
  * The runner's constants (brief 102, Contract, "The runner" and "Heartbeat, health and shutdown").
  * Every number the loop, the provider and the healthcheck share is named here, with the start-up
- * guards: the key guard, the runner DSN's checks and the per-answer budget.
+ * guards: the key guard, the runner DSN's checks, the pinned CA and the per-answer budget.
  */
 
 import fs from 'node:fs';
@@ -26,7 +26,12 @@ export const PATHS = Object.freeze({
   turnCwd: '/app/turn',
   runnerDbUrlSecret: '/run/secrets/workspace_runner_db_url',
   oauthTokenSecret: '/run/secrets/claude_oauth_token',
+  /** The CA the pooler's certificate is verified against, unless DB_CA_FILE_ENV names another file. */
+  dbCaFile: '/app/certs/prod-ca.crt',
 });
+
+/** Names the file that holds the pinned CA (PEM); PATHS.dbCaFile when it is not set. */
+export const DB_CA_FILE_ENV = 'WORKSPACE_DB_CA_FILE';
 
 /** How often the runner asks for the next queued request. */
 export const POLL_INTERVAL_MS = 2000;
@@ -98,7 +103,17 @@ export const REFUSED_ENV_NAMES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', '
 export const REFUSED_ENV_PREFIX = 'CLAUDE_CODE_USE_';
 
 const TRANSACTION_POOLER_PORT = '6543';
-const SSLMODE_ALLOWED = new Set(['require', 'verify-ca', 'verify-full', 'no-verify']);
+/**
+ * The sslmodes a DSN may carry. None of them decides how the connection is made: the runner
+ * verifies the pooler's certificate against the pinned CA whatever the DSN says (`db.ts`). A mode
+ * that asks for less (`no-verify` among them) is refused, so the stored secret never reads as if
+ * less were in force.
+ */
+const SSLMODE_ALLOWED = new Set(['require', 'verify-ca', 'verify-full']);
+const PEM_CERTIFICATE_HEADER = '-----BEGIN CERTIFICATE-----';
+/** The byte-order mark an editor may put in front of a file's text, by its code point. */
+const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
+const withoutMark = (text: string): string => (text.startsWith(BYTE_ORDER_MARK) ? text.slice(BYTE_ORDER_MARK.length) : text);
 /** Dollars with at most two decimals: the flag is written with two, so a third would reach the CLI rounded. */
 const BUDGET_SHAPE = /^\d+(\.\d{1,2})?$/;
 const RUNNER_NAME_PREFIX = 'workspace@';
@@ -163,7 +178,11 @@ export function parseTurnBudget(raw: string | undefined): number {
   return dollars;
 }
 
-/** The session pooler (never the transaction pooler on 6543) with an encrypted sslmode: the checks made for `sync_runner`. */
+/**
+ * The session pooler (never the transaction pooler on 6543) with an sslmode that asks for an
+ * encrypted, verified connection. The check reads what the secret says; what is enforced is in
+ * `db.ts`, which verifies against the pinned CA whatever the DSN says.
+ */
 export function assertRunnerDsn(dsn: string): string {
   let url: URL;
   try {
@@ -175,11 +194,29 @@ export function assertRunnerDsn(dsn: string): string {
     throw new ConfigError(`${DSN_SECRET_NAME} points at port 6543, the transaction pooler; use the session pooler on 5432`);
   }
   const sslmode = url.searchParams.get('sslmode')?.trim().toLowerCase() ?? null;
-  if (sslmode === null) throw new ConfigError(`${DSN_SECRET_NAME} names no sslmode; append ?uselibpqcompat=true&sslmode=require`);
+  if (sslmode === null) throw new ConfigError(`${DSN_SECRET_NAME} names no sslmode; append ?sslmode=verify-full`);
   if (!SSLMODE_ALLOWED.has(sslmode)) {
-    throw new ConfigError(`${DSN_SECRET_NAME} sets an sslmode that permits an unencrypted connection`);
+    throw new ConfigError(`${DSN_SECRET_NAME} sets an sslmode that asks for less than an encrypted, verified connection; use sslmode=verify-full`);
   }
   return dsn;
+}
+
+/**
+ * The pinned CA, read at start (ruling V1, SR-1): the PEM text of the file DB_CA_FILE_ENV names, or
+ * of PATHS.dbCaFile. A file that is missing, empty or holds no certificate stops the start: the
+ * runner never connects without it. The message names the file and the variable, never the text.
+ */
+export function readDbCa(env: Env, readFile: ReadFile): string {
+  const named = (env[DB_CA_FILE_ENV] ?? '').trim();
+  const file = named === '' ? PATHS.dbCaFile : named;
+  const text = withoutMark(readFile(file) ?? '');
+  if (text.trim() === '') {
+    throw new ConfigError(`the CA file ${file} (${DB_CA_FILE_ENV}) is missing or empty: the database connection is not made without it`);
+  }
+  if (!text.includes(PEM_CERTIFICATE_HEADER)) {
+    throw new ConfigError(`the CA file ${file} (${DB_CA_FILE_ENV}) holds no PEM certificate: the database connection is not made without it`);
+  }
+  return text;
 }
 
 function requireSecret(file: string, name: string, readFile: ReadFile): string {
@@ -196,6 +233,8 @@ export function readOauthToken(readFile: ReadFile): string {
 export interface RunnerConfig {
   /** The `workspace_runner` session-pooler DSN. Never logged. */
   readonly dbUrl: string;
+  /** The pinned CA's certificate, PEM: the only authority the pooler's certificate is verified against. */
+  readonly dbCa: string;
   readonly budgetUsd: number;
   /** The name the runner claims and sends heartbeats under. */
   readonly runnerName: string;
@@ -212,5 +251,6 @@ export function loadConfig(source: ConfigSource): RunnerConfig {
   assertSubscriptionEnv(source.env);
   const budgetUsd = parseTurnBudget(source.env[TURN_BUDGET_ENV]);
   const dbUrl = assertRunnerDsn(requireSecret(PATHS.runnerDbUrlSecret, DSN_SECRET_NAME, source.readFile));
-  return { dbUrl, budgetUsd, runnerName: `${RUNNER_NAME_PREFIX}${source.hostname}` };
+  const dbCa = readDbCa(source.env, source.readFile);
+  return { dbUrl, dbCa, budgetUsd, runnerName: `${RUNNER_NAME_PREFIX}${source.hostname}` };
 }

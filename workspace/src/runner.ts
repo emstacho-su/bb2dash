@@ -188,7 +188,7 @@ export async function main(): Promise<number> {
     stamp(`cannot start: ${messageOf(error)}`);
     return EXIT_CONFIG;
   }
-  const query = createPgQuery({ dsn: config.dbUrl, log: stamp, newClient: newPgClient });
+  const query = createPgQuery({ dsn: config.dbUrl, ca: config.dbCa, log: stamp, newClient: newPgClient });
   const claudeCli = createCliTurn({
     spawn: spawnClaude,
     readSystemPrompt: () => readSystemPrompt(),

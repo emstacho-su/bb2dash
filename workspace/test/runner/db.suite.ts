@@ -18,6 +18,8 @@ import { CONVERSATION_ID, STORED_SESSION_ID } from '../helpers/fakes.js';
 
 // A made-up DSN in the real one's shape; not a credential.
 const DSN = 'postgresql://workspace_runner.projectref:not-a-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require';
+// Stands in for the pinned CA where no handshake is made; db-tls.suite.ts makes real ones.
+const CA = '-----BEGIN CERTIFICATE-----\nnot-a-real-certificate\n-----END CERTIFICATE-----\n';
 
 interface Sent {
   sql: string;
@@ -214,7 +216,7 @@ describe('the connection', () => {
   it('connects once, says who it is, and reuses the connection', async () => {
     const logs: string[] = [];
     const { newClient, made } = fakeClients([() => ({ rows: [{ n: 1 }] }), () => ({ rows: [{ n: 2 }] })]);
-    const query = createPgQuery({ dsn: DSN, log: (line) => logs.push(line), newClient });
+    const query = createPgQuery({ dsn: DSN, ca: CA,log: (line) => logs.push(line), newClient });
     expect((await query('select 1')).rows).toEqual([{ n: 1 }]);
     expect((await query('select 2')).rows).toEqual([{ n: 2 }]);
     expect(made).toHaveLength(1);
@@ -224,7 +226,7 @@ describe('the connection', () => {
 
   it('keeps the connection after a statement the database refused', async () => {
     const { newClient, made } = fakeClients([() => withCode('workspace_stream: delta too long', '22023'), () => ({ rows: [] })]);
-    const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+    const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });
     await expect(query('select 1')).rejects.toMatchObject({ code: '22023' });
     await query('select 2');
     expect(made).toHaveLength(1);
@@ -232,7 +234,7 @@ describe('the connection', () => {
 
   it('drops the connection after a socket error and connects again on the next call', async () => {
     const { newClient, made } = fakeClients([() => withCode(`connect ECONNRESET ${DSN}`), () => ({ rows: [] })]);
-    const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+    const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });
     await expect(query('select 1')).rejects.toThrow(/ECONNRESET/);
     await query('select 2');
     expect(made).toHaveLength(2);
@@ -276,7 +278,7 @@ describe('the connection', () => {
 
     it('a call that fails late drops the connection it ran on, never the one opened since', async () => {
       const { newClient, made, held } = heldClients();
-      const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+      const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });
 
       const first = query('select 1');
       const second = query('select 2');
@@ -313,7 +315,7 @@ describe('the connection', () => {
 
     it('closes a connection once when both calls on it fail', async () => {
       const { newClient, made, held } = heldClients();
-      const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+      const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });
 
       const first = query('select 1');
       const second = query('select 2');
@@ -328,7 +330,7 @@ describe('the connection', () => {
 
     it('a late 57P01 from a dropped connection leaves the new one alone', async () => {
       const { newClient, made, held } = heldClients();
-      const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+      const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });
 
       const first = query('select 1');
       const second = query('select 2');
@@ -350,7 +352,7 @@ describe('the connection', () => {
 
   it('never lets the DSN, its password or its host into an error message', async () => {
     const { newClient } = fakeClients([() => withCode(`could not reach ${DSN} at aws-0-us-east-1.pooler.supabase.com with not-a-password`)]);
-    const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+    const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });
     const error = await query('select 1').catch((caught: Error) => caught);
     expect((error as Error).message).not.toContain('not-a-password');
     expect((error as Error).message).not.toContain('pooler.supabase.com');
@@ -359,7 +361,7 @@ describe('the connection', () => {
 
   it('closes the connection when asked', async () => {
     const { newClient, made } = fakeClients([() => ({ rows: [] })]);
-    const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+    const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });
     await query('select 1');
     await query.end();
     expect(made[0]?.ended).toBe(true);
@@ -376,7 +378,7 @@ describe('the connection', () => {
       end: async () => undefined,
       on: () => undefined,
     });
-    const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+    const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });
     await expect(query('select 1')).rejects.toThrow(/ENOTFOUND/);
     await expect(query('select 1')).resolves.toBeDefined();
     expect(attempts).toBe(2);
@@ -410,7 +412,7 @@ describe('the connection', () => {
   });
 
   it('makes a client for the DSN without opening a connection', () => {
-    const client = newPgClient(DSN) as unknown as { connectionParameters: { application_name: string; port: number; user: string } };
+    const client = newPgClient(DSN, CA) as unknown as { connectionParameters: { application_name: string; port: number; user: string } };
     expect(client.connectionParameters.application_name).toBe(APPLICATION_NAME);
     expect(client.connectionParameters.port).toBe(5432);
     expect(client.connectionParameters.user).toBe('workspace_runner.projectref');

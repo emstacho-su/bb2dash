@@ -23,12 +23,27 @@ tool call.
 | `src/replay.ts` | the stored history a fresh start carries in front of the question |
 | `src/hooks/tool-gate.ts`, `src/hooks/gate-rules.ts` | the `PreToolUse` hook and its rules: it only denies or stays silent |
 | `src/mcp-config.ts` | writes the two-server MCP config (paths only, never a key) |
-| `src/config.ts` | the constants, the key guard, the DSN checks, the per-answer budget |
-| `src/errors.ts`, `src/db.ts` | the eight error codes and their mapping, the five database calls |
+| `src/config.ts` | the constants, the key guard, the DSN checks, the pinned CA, the per-answer budget |
+| `src/errors.ts`, `src/db.ts` | the eight error codes and their mapping, the five database calls and the verified connection |
+| `src/db-retry.ts` | the one retry schedule for `workspace_begin` and `workspace_finish` when the database fails them |
 | `src/healthcheck.ts`, `src/alive.ts` | the container healthcheck and the alive file it reads |
 | `claude/settings.json` | the CLI settings the runner passes with `--settings` (the hook and the transcript retention) |
 | `prompts/system.md` | the text appended to the CLI's system prompt |
 | `test/fixtures/` | the router cases, and stream recordings with every tool result scrubbed |
+
+## The database connection
+
+The runner reaches the database as `workspace_runner` through the session pooler (port 5432; a DSN
+on 6543, the transaction pooler, is refused at start). The DSN is read from
+`/run/secrets/workspace_runner_db_url`.
+
+The pooler's certificate is verified against one pinned CA, whatever the DSN says. The CA is read at
+start from the file `WORKSPACE_DB_CA_FILE` names (`/app/certs/prod-ca.crt` when it is not set); a
+file that is missing, empty or holds no certificate stops the start. The connection is built from
+the DSN's host, port, user, password and database and never from the DSN string, so no flag in its
+query string decides how the connection is made, and the host name it gives is the name the
+certificate must carry. The DSN must still name an `sslmode` of `require`, `verify-ca` or
+`verify-full`; write `sslmode=verify-full` in a new one.
 
 ## Run the tests
 
@@ -43,8 +58,11 @@ npx vitest run --coverage
 `dist/hooks/tool-gate.js`). The test run builds `dist/` once first (`test/global-setup.ts`), because
 two suites run the built gate and the built healthcheck as processes.
 
-No test starts the `claude` CLI or opens a database connection: the provider tests replay the
-recorded fixtures (node stands in where a real process is needed), and the loop runs on fakes.
+No test starts the `claude` CLI or reaches a database: the provider tests replay the recorded
+fixtures (node stands in where a real process is needed), and the loop runs on fakes. The one
+network connection a test makes is to itself: `test/runner/db-tls.suite.ts` tries the TLS handshake
+against a stand-in pooler on the loopback interface, with a CA and certificates made for the run by
+`test/helpers/throwaway-ca.ts` (node:crypto; no key is read from a file or written to one).
 
 ## The recorded fixtures
 

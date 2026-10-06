@@ -4,7 +4,8 @@
  *
  * `createRpc` takes a bare query function, so the loop runs on a fake in tests; `createPgQuery` is
  * the real one: one session-pooler connection, reconnected after a failure, with one log line per
- * connect. Nothing here prints the DSN or any part of it.
+ * connect. The connection is verified against the pinned CA whatever the DSN says (`newPgClient`).
+ * Nothing here prints the DSN or any part of it.
  */
 
 import pg from 'pg';
@@ -193,15 +194,68 @@ export const PG_CLIENT_OPTIONS = Object.freeze({
   keepAlive: true,
 });
 
-/** A real pg.Client for the session-pooler DSN; connected by createPgQuery. */
-export function newPgClient(dsn: string): PgClientLike {
-  return new pg.Client({ connectionString: dsn, ...PG_CLIENT_OPTIONS }) as unknown as PgClientLike;
+/** The parts of the runner DSN a connection is made from. Its query string is not among them. */
+export interface DsnParts {
+  readonly host: string;
+  readonly port: number;
+  readonly user: string;
+  readonly password: string;
+  readonly database: string;
+}
+
+/** The session pooler's port, read when the DSN names none. */
+const DEFAULT_PG_PORT = 5432;
+
+/**
+ * The five parts of the DSN, percent-decoded. Every part must be there: the driver fills an empty
+ * one from the `PG*` environment or its own defaults, and the runner connects to what its secret
+ * names or not at all. The message names the part, never a value.
+ */
+export function dsnParts(dsn: string): DsnParts {
+  let url: URL;
+  try {
+    url = new URL(dsn);
+  } catch {
+    throw new Error('db: the DSN is not a URL');
+  }
+  let parts: DsnParts;
+  try {
+    parts = {
+      host: url.hostname,
+      port: url.port === '' ? DEFAULT_PG_PORT : Number(url.port),
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: decodeURIComponent(url.pathname.replace(/^\//, '')),
+    };
+  } catch {
+    throw new Error('db: the DSN holds a part that is not percent-encoded text');
+  }
+  for (const name of ['host', 'user', 'password', 'database'] as const) {
+    if (parts[name] === '') throw new Error(`db: the DSN names no ${name}`);
+  }
+  return parts;
+}
+
+/**
+ * A real pg.Client for the session pooler; connected by createPgQuery (ruling V1, SR-1).
+ *
+ * It is built from the DSN's parsed parts and never from the DSN string, so nothing in the DSN's
+ * query string reaches the driver: `sslmode=no-verify`, `uselibpqcompat=true` and `sslrootcert`
+ * cannot switch verification off or point it at another file. The pooler's certificate is verified
+ * against `ca` alone (not the system's store) and against the host name the DSN gives.
+ */
+export function newPgClient(dsn: string, ca: string): PgClientLike {
+  const { host, port, user, password, database } = dsnParts(dsn);
+  const ssl = { ca, rejectUnauthorized: true, servername: host };
+  return new pg.Client({ host, port, user, password, database, ssl, ...PG_CLIENT_OPTIONS }) as unknown as PgClientLike;
 }
 
 export interface PgQueryDeps {
   readonly dsn: string;
+  /** The pinned CA's certificate, PEM. */
+  readonly ca: string;
   readonly log: (line: string) => void;
-  readonly newClient: (dsn: string) => PgClientLike;
+  readonly newClient: (dsn: string, ca: string) => PgClientLike;
 }
 
 /**
@@ -235,7 +289,7 @@ export function createPgQuery(deps: PgQueryDeps): QueryFn & { end(): Promise<voi
   };
 
   const connect = async (): Promise<PgClientLike> => {
-    const fresh = deps.newClient(deps.dsn);
+    const fresh = deps.newClient(deps.dsn, deps.ca);
     fresh.on('error', (error) => {
       deps.log(`db: connection error: ${redactDsn(error.message, deps.dsn)}`);
       if (client === fresh) client = null;
