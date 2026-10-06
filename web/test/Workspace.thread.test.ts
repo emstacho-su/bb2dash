@@ -262,6 +262,21 @@ describe('buildTurns: rows that do not pair up', () => {
     expect(turns[1]).toMatchObject({ question: null, answer: orphan, text: 'kept', line: ERROR_SENTENCES.timeout });
   });
 
+  it('shows an answer once when its request is known and its question row was not read', () => {
+    const stored = answer(2, 42, { content: 'kept once' });
+    const turns = buildTurns({
+      messages: [question(1), stored],
+      requests: [request(42, 9, 'done')],
+      live: null,
+      stoppedRequestIds: NONE,
+    });
+
+    // The request's turn carries the answer; the answer does not also stand alone.
+    expect(turns.filter((each) => each.answer === stored)).toHaveLength(1);
+    expect(turns).toHaveLength(2);
+    expect(turns[1]).toMatchObject({ question: null, state: 'done', text: 'kept once' });
+  });
+
   it('gives every turn its own key', () => {
     const turns = buildTurns({
       messages: [question(1), question(3)],
