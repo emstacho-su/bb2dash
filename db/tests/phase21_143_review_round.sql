@@ -174,39 +174,17 @@ begin
 end $$;
 
 -- =============================================================================================
--- 1 to 5. The four changes, as they behave
+-- 1 to 5. The four changes, as they behave: one block per change
 -- =============================================================================================
+-- Each block sets the owner's uid and makes its own setup, so it holds whether it runs after the
+-- others (the Runner: one transaction) or alone (a dry run that sends one block per call).
 do $$
 declare
-  c_sid   constant text := '0a1b2c3d-0000-4000-8000-00000000a143';
-  c_day   constant interval := interval '1 day';
   v_owner uuid := app_owner();
-  v_out   jsonb;
-  v_claim record;
   v_row   record;
   v_case  record;
-  v_snap  jsonb;
-  v_now   jsonb;
-  v_got   text;
-  v_said  text;
   v_n     integer;
   v_ok    boolean;
-  v_f uuid;                                       -- F: one conversation, four requests in turn
-  v_f1_req bigint; v_f1_ans uuid;                 --   F1 finished done
-  v_f2_req bigint; v_f2_ans uuid;                 --   F2 finished failed / timeout
-  v_f3_req bigint; v_f3_ans uuid;                 --   F3 queued, later claimed and finished
-  v_f4_req bigint; v_f4_ans uuid;                 --   F4 claimed, then stopped
-  v_x_req bigint; v_x_ans uuid;                   -- X: stopped 11 minutes ago, its runner gone
-  v_y_req bigint; v_y_ans uuid;                   -- Y: stopped 9 minutes ago
-  v_q_req bigint;                                 -- Q: queued when the second sweep runs
-  v_h uuid; v_h_msg uuid;                         -- H: rows made by hand, as the session role
-  v_z_req bigint; v_z_ans uuid;                   --   Z failed / timeout 11 minutes ago
-  v_w_req bigint; v_w_ans uuid;                   --   W done 11 minutes ago
-  v_n_req bigint; v_n_ans uuid;                   --   N cancelled with no finished_at
-  v_k_req bigint; v_k_ans uuid;                   --   K failed 11 minutes ago, its answer finished
-  v_u_msg uuid;                                   --   U a user row that names Z
-  v_c1 uuid; v_c2 uuid; v_c3 uuid;                -- three chats last touched a day ago
-  v_c4 uuid; v_c4_msg uuid; v_c4_req bigint;      -- a fourth, answered now
 begin
   if v_owner is null then
     raise exception 'FAIL phase21_143: app_owner() returned null, so the owner cannot be simulated';
@@ -281,6 +259,33 @@ begin
     raise exception 'FAIL 2d: a stranger uid reads % row(s) of v_workspace_status, age hidden: %', v_n, v_ok;
   end if;
 
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+
+do $$
+declare
+  c_sid   constant text := '0a1b2c3d-0000-4000-8000-00000000a143';
+  v_owner uuid := app_owner();
+  v_out   jsonb;
+  v_claim record;
+  v_row   record;
+  v_case  record;
+  v_snap  jsonb;
+  v_now   jsonb;
+  v_got   text;
+  v_said  text;
+  v_ok    boolean;
+  v_f uuid;                                       -- F: one conversation, four requests in turn
+  v_f1_req bigint; v_f1_ans uuid;                 --   F1 finished done
+  v_f2_req bigint; v_f2_ans uuid;                 --   F2 finished failed / timeout
+  v_f3_req bigint; v_f3_ans uuid;                 --   F3 queued, later claimed and finished
+  v_f4_req bigint; v_f4_ans uuid;                 --   F4 claimed, then stopped
+begin
+  perform set_config('request.jwt.claim.sub', v_owner::text, true);
+  -- Setup, as in section 1: no other request may be open when this block claims.
+  update workspace_requests
+     set state = 'cancelled', error_code = 'cancelled', finished_at = now()
+   where state in ('queued', 'claimed');
   -- ---------------------------------------------------------------------------------------------
   -- 3. workspace_finish: only a claimed or a cancelled request
   -- ---------------------------------------------------------------------------------------------
@@ -408,6 +413,33 @@ begin
     raise exception 'FAIL 3c: finish on a cancelled request left % (cancel returned %)', row_to_json(v_row), v_ok;
   end if;
 
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+
+do $$
+declare
+  v_owner uuid := app_owner();
+  v_out   jsonb;
+  v_claim record;
+  v_row   record;
+  v_case  record;
+  v_n     integer;
+  v_ok    boolean;
+  v_x_req bigint; v_x_ans uuid;                   -- X: stopped 11 minutes ago, its runner gone
+  v_y_req bigint; v_y_ans uuid;                   -- Y: stopped 9 minutes ago
+  v_q_req bigint;                                 -- Q: queued when the second sweep runs
+  v_h uuid; v_h_msg uuid;                         -- H: rows made by hand, as the session role
+  v_z_req bigint; v_z_ans uuid;                   --   Z failed / timeout 11 minutes ago
+  v_w_req bigint; v_w_ans uuid;                   --   W done 11 minutes ago
+  v_n_req bigint; v_n_ans uuid;                   --   N cancelled with no finished_at
+  v_k_req bigint; v_k_ans uuid;                   --   K failed 11 minutes ago, its answer finished
+  v_u_msg uuid;                                   --   U a user row that names Z
+begin
+  perform set_config('request.jwt.claim.sub', v_owner::text, true);
+  -- Setup, as in section 1: no other request may be open when this block claims.
+  update workspace_requests
+     set state = 'cancelled', error_code = 'cancelled', finished_at = now()
+   where state in ('queued', 'claimed');
   -- ---------------------------------------------------------------------------------------------
   -- 4. CR-4: the orphan sweep
   -- ---------------------------------------------------------------------------------------------
@@ -528,6 +560,25 @@ begin
     raise exception 'FAIL 4c: an answer whose request has no finished_at was finished';
   end if;
 
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+
+do $$
+declare
+  c_sid   constant text := '0a1b2c3d-0000-4000-8000-00000000a143';
+  c_day   constant interval := interval '1 day';
+  v_owner uuid := app_owner();
+  v_claim record;
+  v_row   record;
+  v_n     integer;
+  v_c1 uuid; v_c2 uuid; v_c3 uuid;                -- three chats last touched a day ago
+  v_c4 uuid; v_c4_msg uuid; v_c4_req bigint;      -- a fourth, answered now
+begin
+  perform set_config('request.jwt.claim.sub', v_owner::text, true);
+  -- Setup, as in section 1: no other request may be open when this block claims.
+  update workspace_requests
+     set state = 'cancelled', error_code = 'cancelled', finished_at = now()
+   where state in ('queued', 'claimed');
   -- ---------------------------------------------------------------------------------------------
   -- 5. CR-7: archiving is not activity
   -- ---------------------------------------------------------------------------------------------
