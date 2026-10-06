@@ -7,7 +7,8 @@
  *
  *   * the tables and the view: `from(table)` reads `fake.state.rows[table]`,
  *     applies `.eq()` filters, and `.update()` writes back, so a list can lose
- *     a row a test archived;
+ *     a row a test archived; `fake.state.readGate` holds every read of a table
+ *     open, for the moment in which the rows are still being read;
  *   * the two RPCs: `workspace_ask` and `workspace_cancel` change the seeded
  *     rows the way migration 140's functions do (a question, its queued
  *     request, the 23505 refusal; an open request turned `cancelled`). A test
@@ -104,6 +105,8 @@ function freshState() {
     /** The page's query string. */
     search: '',
     rows: {} as Record<string, Row[]>,
+    /** When set, every read of a table waits on it before it answers: the rows are still being read. */
+    readGate: null as Promise<void> | null,
     /** Per table: every read of it answers with this error. */
     readErrors: {} as Record<string, { code: string; message: string }>,
     /** Per table: every `.update()` of it answers with this error; its reads still work. */
@@ -187,8 +190,12 @@ function tableChain(table: string): Record<string, unknown> {
       if (answer.error) return answer;
       return { data: (answer.data as Row[])[0] ?? null, error: null };
     },
-    then: (onFulfilled: (value: Answer) => unknown, onRejected?: (reason: unknown) => unknown) =>
-      Promise.resolve(settle()).then(onFulfilled, onRejected),
+    then: (onFulfilled: (value: Answer) => unknown, onRejected?: (reason: unknown) => unknown) => {
+      // A write is never held. With no gate the answer is as immediate as it always was.
+      const held = patch === null ? state.readGate : null;
+      const answered = held === null ? Promise.resolve(settle()) : held.then(settle);
+      return answered.then(onFulfilled, onRejected);
+    },
   });
   return chain;
 }

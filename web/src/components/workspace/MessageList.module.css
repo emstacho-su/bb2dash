@@ -61,9 +61,23 @@
   overflow-wrap: anywhere;
 }
 
-/* The state in words: queued, late-stream, or one error sentence. */
+/* The state in words: queued, late-stream, or one error sentence. The empty
+   column's one line is set the same way. */
 .line {
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-muted);
+}
+
+/* The column with no turn to show: one line, and for an id that was not found
+   the link back to an empty composer under it. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.emptyLink {
+  composes: btnGhost from '@/styles/tokens.module.css';
 }

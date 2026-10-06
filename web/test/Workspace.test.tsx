@@ -8,7 +8,9 @@
  *     built from the `ok: true` tool calls; content as plain text; never a
  *     tool's result, the stored query or the cost estimate;
  *   * the composer: "Ask", and "Stop" only while a request is open; Enter asks
- *     and Shift+Enter is a new line; each refusal has its one sentence;
+ *     and Shift+Enter is a new line; while a request is open Enter does not
+ *     send, and the database's refusal (23505) is the backstop for a request
+ *     this page had not read; each refusal has its one sentence;
  *   * the state under a question, from its `workspace_requests` row, with one
  *     sentence per `error_code`, and the stopped sentence at once after Stop;
  *   * the conversation list: archived rows left out, "Archive" on each row,
@@ -33,6 +35,7 @@ import {
   joined,
   openTopics,
   resetFake,
+  settle,
   type Row,
 } from './workspace-harness';
 
@@ -187,6 +190,38 @@ describe('the message column', () => {
     expect(container.textContent).not.toContain('Used:');
   });
 
+  it('labels a status line with no answer text "Status" for a screen reader, and an answer "The assistant answered"', async () => {
+    fake.state.rows = {
+      workspace_messages: [
+        question(1, 'one'),
+        answer(2, 41, { content: 'first' }),
+        question(3, 'two'),
+        answer(4, 42, { content: 'half a plan', error_code: 'cancelled' }),
+        question(5, 'three'),
+      ],
+      workspace_requests: [
+        request(41, 1, 'done'),
+        request(42, 3, 'cancelled', { error_code: 'cancelled' }),
+        request(43, 5, 'queued'),
+      ],
+    };
+    const { container } = open();
+    await screen.findByText('Waiting for the Workspace service');
+
+    // A line and no text: there is no answer to announce, only a status.
+    const waiting = within(turnOf(container, 43));
+    expect(waiting.getByText('Status')).toHaveClass('sr-only');
+    expect(waiting.queryByText('The assistant answered')).toBeNull();
+
+    // An answer, and a partial answer with its stopped sentence under it, are answers.
+    for (const requestId of [41, 42]) {
+      const answered = within(turnOf(container, requestId));
+      expect(answered.getByText('The assistant answered')).toHaveClass('sr-only');
+      expect(answered.queryByText('Status')).toBeNull();
+    }
+    expect(within(turnOf(container, 42)).getByText('You stopped this answer.')).toBeInTheDocument();
+  });
+
   it('renders <script> in content as literal text', async () => {
     seedAnswered({ content: '<script>alert(1)</script> and <b>bold</b>' });
     const { container } = open();
@@ -240,8 +275,9 @@ describe('the composer', () => {
   });
 
   it('asks on Enter, and leaves Shift+Enter to make a new line', async () => {
+    seedAnswered();
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     const box = type('  What is due this week?  ');
 
     // A key the page does not handle is not cancelled, so the browser adds the line.
@@ -258,8 +294,9 @@ describe('the composer', () => {
   });
 
   it('refuses an empty question with its sentence, before any request is sent', async () => {
+    seedAnswered();
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     type('   ');
 
     fireEvent.click(screen.getByRole('button', { name: labels.ASK_LABEL }));
@@ -268,20 +305,48 @@ describe('the composer', () => {
     expect(fake.state.rpcCalls).toEqual([]);
   });
 
-  it('says the conversation is still answering when the database refuses a second question', async () => {
-    fake.state.rows = {
-      workspace_messages: [question(1, 'What is due?')],
-      workspace_requests: [request(42, 1, 'queued')],
-    };
-    open();
-    await waitFor(() => expect(composer().stop).toBeInTheDocument());
+  it.each(['queued', 'claimed'])(
+    'does not send on Enter while a request is open (%s): the button reads Stop',
+    async (state) => {
+      fake.state.rows = {
+        workspace_messages: [question(1, 'What is due?')],
+        workspace_requests: [request(42, 1, state)],
+      };
+      open();
+      await waitFor(() => expect(composer().stop).toBeInTheDocument());
+      const box = type('and next week?');
 
-    // The button reads Stop; a question sent past it is refused by the database (23505).
+      // Enter is still the page's key: no new line is added, and nothing is sent.
+      expect(fireEvent.keyDown(box, { key: 'Enter' })).toBe(false);
+      await settle();
+
+      expect(fake.state.rpcCalls).toEqual([]);
+      expect(box).toHaveValue('and next week?');
+      expect(screen.queryByText(labels.REFUSAL_STILL_ANSWERING)).toBeNull();
+      // Shift+Enter is still the browser's new line.
+      expect(fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })).toBe(true);
+    },
+  );
+
+  it('says the conversation is still answering when the database refuses a second question (23505, the backstop)', async () => {
+    seedAnswered();
+    open();
+    await screen.findByText('Quiz 2.');
+    // Asked from another tab since this page last read: open in the database, and the
+    // button here still reads Ask. Enter sends, and the database refuses it.
+    fake.state.rows = {
+      workspace_messages: [...fake.state.rows.workspace_messages, question(3, 'And the reading?')],
+      workspace_requests: [...fake.state.rows.workspace_requests, request(42, 3, 'queued')],
+    };
+    expect(composer().ask).toBeInTheDocument();
+
     fireEvent.keyDown(type('and next week?'), { key: 'Enter' });
 
     expect(await screen.findByText('This conversation is still answering.')).toBeInTheDocument();
     expect(fake.state.rpcCalls.map((call) => call.fn)).toEqual(['workspace_ask']);
     expect(composer().box).toHaveValue('and next week?');
+    // The refused question brought the open request into view: the button reads Stop now.
+    await waitFor(() => expect(composer().stop).toBeInTheDocument());
   });
 
   it('opens the new conversation after a first question', async () => {
@@ -297,19 +362,21 @@ describe('the composer', () => {
     expect(fake.state.rpcCalls[0].args).toEqual({ p_conversation_id: null, p_text: 'spike' });
   });
 
-  it('says it could not load the conversation when its id does not exist (23503)', async () => {
+  it('says the conversation was not found when its id does not exist (23503), never the database`s sentence', async () => {
+    seedAnswered();
     fake.state.rpc.workspace_ask = () => ({
       data: null,
       error: { code: '23503', message: 'violates foreign key constraint' },
     });
-    open(`c=${B}`);
-    await joined(`workspace:${B}`);
+    const { container } = open();
+    await screen.findByText('Quiz 2.');
     type('hello?');
 
     fireEvent.click(screen.getByRole('button', { name: labels.ASK_LABEL }));
 
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Could not load this conversation: violates foreign key constraint');
+    expect(await screen.findByText('This conversation was not found.')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('violates foreign key constraint');
+    expect(container.textContent).not.toContain('Could not load this conversation');
     expect(screen.queryByText(labels.REFUSAL_QUESTION_LENGTH)).toBeNull();
     expect(composer().box).toHaveValue('hello?');
   });

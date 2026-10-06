@@ -3,9 +3,11 @@
  *
  * Brief 102's Contract freezes the sentences the Workspace page says ("Frozen
  * strings"; the three archive labels; the tier badges) and ruling T2 adds the
- * three skeleton strings. Each is PM wording and is asserted here word for
- * word, against the text of the brief, so a reworded sentence fails this file
- * and not a walk.
+ * three skeleton strings. Ruling U1 (2026-10-06) adds the three lines of the
+ * empty message column, the placeholder and the "Status" label, and accepts
+ * W-66's own ten strings as PM wording. Each is asserted here word for word,
+ * against the text of the brief and the rulings, so a reworded sentence fails
+ * this file and not a walk.
  *
  * None of them may carry a cost figure: the per-answer cap is a runner setting
  * the page cannot read, and the cost estimate is never shown.
@@ -115,6 +117,55 @@ describe('the three skeleton strings the PM accepted (ruling T2)', () => {
     expect(labels.conversationProblemLine('no such table')).toBe(
       'Could not load this conversation: no such table',
     );
+  });
+});
+
+describe('the strings ruling U1 added (PM wording, 2026-10-06)', () => {
+  it('has one line for each state of the empty message column', () => {
+    expect(labels.COLUMN_START_LINE).toBe('Ask a question to start a conversation.');
+    expect(labels.COLUMN_LOADING_LINE).toBe('Loading the conversation…');
+    expect(labels.COLUMN_NOT_FOUND_LINE).toBe('This conversation was not found.');
+  });
+
+  it('ends the loading line with the one ellipsis character, as "Answering…" does', () => {
+    expect(labels.COLUMN_LOADING_LINE.endsWith('…')).toBe(true);
+    expect(labels.COLUMN_LOADING_LINE).not.toContain('...');
+  });
+
+  it('has the visible placeholder of the text box, with no closing stop', () => {
+    expect(labels.QUESTION_PLACEHOLDER).toBe('Ask about your courses or your decisions');
+  });
+
+  it('labels a status line with no answer text "Status" for a screen reader', () => {
+    expect(labels.STATUS_ROLE_LABEL).toBe('Status');
+    expect(labels.STATUS_ROLE_LABEL).not.toBe(labels.ANSWER_ROLE_LABEL);
+  });
+
+  it('keeps the "New conversation" link, word for word', () => {
+    expect(labels.NEW_CONVERSATION_LABEL).toBe('New conversation');
+  });
+});
+
+describe('the ten strings of W-66 that ruling U1 accepted as PM wording', () => {
+  it('names the list, its two empty lines, the column and the text box', () => {
+    expect(labels.CONVERSATIONS_HEADING).toBe('Conversations');
+    expect(labels.NO_CONVERSATIONS_LINE).toBe('No conversations yet.');
+    expect(labels.NO_ARCHIVED_LINE).toBe('No archived conversations.');
+    expect(labels.MESSAGES_REGION_LABEL).toBe('Messages');
+    expect(labels.QUESTION_FIELD_LABEL).toBe('Question');
+  });
+
+  it('says who wrote a turn, for a screen reader', () => {
+    expect(labels.QUESTION_ROLE_LABEL).toBe('You asked');
+    expect(labels.ANSWER_ROLE_LABEL).toBe('The assistant answered');
+  });
+
+  it('has one problem line for each read or write that can fail', () => {
+    expect(labels.conversationsProblemLine('x')).toBe('Could not load the conversations: x');
+    expect(labels.statusProblemLine('x')).toBe('Could not load the Workspace service status: x');
+    expect(labels.askProblemLine('x')).toBe('Could not send this question: x');
+    expect(labels.stopProblemLine('x')).toBe('Could not stop this answer: x');
+    expect(labels.archiveProblemLine('x')).toBe('Could not change this conversation: x');
   });
 });
 

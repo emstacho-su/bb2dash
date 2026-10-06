@@ -17,6 +17,8 @@
  *     the live stream until then. The stored row is the record: it replaces
  *     whatever the stream showed, text held back behind a gap included.
  *
+ * `emptyColumnOf` says which line the column shows when it has no turn.
+ *
  * Nothing here reads a clock, the cache or the DOM.
  */
 
@@ -241,6 +243,47 @@ export function liveRequestOf(
   const newest = requests.at(-1) ?? null;
   if (newest === null) return null;
   return isStored(answersByRequest(messages).get(newest.id) ?? null) ? null : newest;
+}
+
+/* ---------------------------------------------------------------------------
+ * The column with no turn to show
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The three states of an empty message column (the PM's ruling U1). Each has
+ * its own line in `workspace-labels.ts`:
+ *   `start`    no conversation is selected;
+ *   `loading`  the conversation's rows are still being read;
+ *   `missing`  the id was not found.
+ */
+export type EmptyColumn = 'start' | 'loading' | 'missing';
+
+export interface EmptyColumnInput {
+  /** `?c=`, once parsed; null when no conversation is selected. */
+  conversationId: string | null;
+  /** Both reads of the conversation have answered, from the saved cache or the database. */
+  loaded: boolean;
+  /** A read failed: the problem line says why, and the column claims nothing. */
+  readFailed: boolean;
+  /** `workspace_ask` answered that the id does not exist (SQLSTATE 23503). */
+  askedIntoMissing: boolean;
+  /** How many turns the rows make. */
+  turns: number;
+}
+
+/**
+ * What the column says in place of its turns, or null when it shows them.
+ *
+ * A first question always stores its message and its request with the
+ * conversation, so an id whose two reads answered with no rows is one that
+ * does not exist, or is not the owner's. The database saying so itself
+ * (23503) outranks rows read before the conversation was gone.
+ */
+export function emptyColumnOf(input: EmptyColumnInput): EmptyColumn | null {
+  if (input.conversationId === null) return 'start';
+  if (input.askedIntoMissing) return 'missing';
+  if (input.turns > 0 || input.readFailed) return null;
+  return input.loaded ? 'missing' : 'loading';
 }
 
 /* ---------------------------------------------------------------------------
