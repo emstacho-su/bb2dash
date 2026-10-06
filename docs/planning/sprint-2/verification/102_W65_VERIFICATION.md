@@ -26,6 +26,11 @@ of the list passed, and step 10 failed because the embedding model's download ad
 403. No container was started; tasks 12 and 13 are still owed from step 10 on. See "Wave 2b" at the
 end.
 
+**Review round (2026-10-06)** did ruling V2, files only: the image holds one pinned CA at
+`/app/certs/prod-ca.crt` and the service names it in `WORKSPACE_DB_CA_FILE`; `/app/turn` is root's
+and 0555; the list gained three checks and is renumbered 1 to 41. No build and no container: every
+check that needs the image is still owed from step 10 on. See "Review round" at the end.
+
 ## The guard (read before and after everything this stream did)
 
 ```
@@ -1727,3 +1732,352 @@ run against fake tools (20 of 20).
 5. **When the build passes, the list runs from step 10 as written.** The finished stages are in
    Docker's build cache, so the second build is short. Nothing in steps 11 to 39 was changed by what
    was found here.
+
+## Review round (2026-10-06) — ruling V2, files only
+
+First step of the round: `git fetch origin`, `git merge origin/feat/workspace-21` into
+`feat/workspace-21-container` (a fast-forward to `e9f0852`, the phase branch with the two reviews
+and rulings V1 to V5; no conflict), pushed. bb2dash-stack needed no merge and has no change in this
+round: nothing in it names the CA's path, `/app/turn` or the new setting (`git grep` there finds
+only the host's own `scripts/mcp-rag.sh`, which reads the harness checkout's file, not the image's).
+
+**No docker command that changes state was run**: no build, no container, no `exec`. What was run
+against docker is `docker inspect` (the guard and one label) and `docker compose … config`. So
+nothing below shows what the image is like once built: every such check is a step of the list,
+still owed from step 10 on, and the build still waits for the embedding model's source (wave 2b).
+
+| V2 item | what changed | where | red → green |
+|---|---|---|---|
+| the image copies the CA to `/app/certs/prod-ca.crt`, root's and readable | one `COPY` from the `harness-certs` context and one `RUN chmod 0444`; the copy under `/app/mcp-rag/certs/` is gone | `docker/workspace/Dockerfile` | `1f9698d`, `f2dd191` → `6e9e4e6` |
+| the service sets `WORKSPACE_DB_CA_FILE=/app/certs/prod-ca.crt` | one line under `environment:`, and the comment over `secrets:` says what the one `*_FILE` variable names | `compose.yaml` | the same three |
+| the rag launcher may read the same file | `CA_CERT=/app/certs/prod-ca.crt`; its `[ -r "$CA_CERT" ] \|\| fail` check and the hand-over as `DATABASE_CA_CERT` are as they were | `docker/workspace/mcp-rag.sh` | the same three |
+| `/app/turn` is root's and 0555 | `chown root:root /app/turn` and `chmod 0555 /app/turn`; only `/home/node/.claude` is still handed to `node` | `docker/workspace/Dockerfile` | the same three |
+| `docker/grep-clean.test.mjs` and its literal checks follow | two tests (13 in all), each with planted wrong forms it must catch | `docker/grep-clean.test.mjs` | the two test commits |
+| the list gains the three checks and is renumbered | below | this file | `6032669` (docs) |
+
+One more commit, `6490367`, is a comment in the Dockerfile (who cannot write `/app/turn`).
+
+### RED, the tests before the files (`1f9698d`)
+
+```text
+node --test docker/grep-clean.test.mjs          (the files are still wave 2b's)
+✖ ruling V2: one pinned CA at /app/certs/prod-ca.crt, root's and read-only, named by the service and read by the rag launcher
+  + actual - expected
+  + [
+  +   'the runtime stage does not hold: COPY --chmod=0444 --from=harness-certs prod-ca.crt /app/certs/prod-ca.crt',
+  +   'another copy of the CA: COPY --from=harness-certs prod-ca.crt /app/mcp-rag/certs/prod-ca.crt',
+  +   'compose.yaml does not set WORKSPACE_DB_CA_FILE: /app/certs/prod-ca.crt for the workspace service',
+  +   'the rag launcher does not hold: readonly CA_CERT=/app/certs/prod-ca.crt',
+  +   'the rag launcher still names a CA file of its own'
+  + ]
+  - []
+✖ ruling V2: /app/turn is root's and 0555, so the runtime user can plant nothing where a turn loads project settings
+  + [
+  +   '/app/turn is not handed to root:root',
+  +   '/app/turn is handed to node:node',
+  +   '/app/turn is not given mode 0555'
+  + ]
+  - []
+ℹ tests 13
+ℹ pass 11
+ℹ fail 2
+```
+
+One more test commit before any code was committed (`f2dd191`, still red): the first form of the CA
+test expected `COPY --chmod=0444`. With that flag the mode of the folder `COPY` makes for the file
+(`/app/certs`) is the builder's to choose, and no build can be run in this round to read it: a
+folder without its search bit would leave the CA unreadable to `node`. The test now expects a plain
+`COPY` (the folder and the file are then root's, as every other `COPY` of this image is) and one
+`RUN chmod 0444` after it, the only command that may name the CA or its folder. Its run, in a
+scratch copy of that commit (`git archive f2dd191 …`, outside every repo, since the working tree
+already held the first form of the fix):
+
+```text
+node --test docker/grep-clean.test.mjs          (scratch copy of f2dd191)
+✖ ruling V2: one pinned CA at /app/certs/prod-ca.crt, root's and read-only, named by the service and read by the rag launcher
+  + [
+  +   'the runtime stage does not hold: COPY --from=harness-certs prod-ca.crt /app/certs/prod-ca.crt',
+  +   'another copy of the CA: COPY --from=harness-certs prod-ca.crt /app/mcp-rag/certs/prod-ca.crt',
+  +   'the runtime stage does not run: chmod 0444 /app/certs/prod-ca.crt',
+  +   'compose.yaml does not set WORKSPACE_DB_CA_FILE: /app/certs/prod-ca.crt for the workspace service',
+  +   'the rag launcher does not hold: readonly CA_CERT=/app/certs/prod-ca.crt',
+  +   'the rag launcher still names a CA file of its own'
+  + ]
+✖ ruling V2: /app/turn is root's and 0555, so the runtime user can plant nothing where a turn loads project settings
+  + [
+  +   '/app/turn is not handed to root:root',
+  +   '/app/turn is handed to node:node',
+  +   '/app/turn is not given mode 0555'
+  + ]
+ℹ tests 13
+ℹ pass 11
+ℹ fail 2
+```
+
+### GREEN (`6e9e4e6`)
+
+```text
+node --test docker/grep-clean.test.mjs
+✔ ruling V2: one pinned CA at /app/certs/prod-ca.crt, root's and read-only, named by the service and read by the rag launcher
+✔ ruling V2: /app/turn is root's and 0555, so the runtime user can plant nothing where a turn loads project settings
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+node --test docker/workspace/init-firewall.test.mjs
+ℹ tests 20
+ℹ pass 20
+ℹ fail 0
+bash -n docker/workspace/mcp-rag.sh docker/workspace/entrypoint.sh        → ok
+```
+
+The four changed files hold no carriage return (counted as bytes; `git ls-files --eol` reads
+`i/lf w/lf` for each).
+
+What the two tests hold, in words. Both read the Dockerfile's last stage only (the image), with
+line continuations joined, and each runs its check over planted wrong forms as well, so a check
+that matches nothing cannot pass:
+
+* **The CA.** The stage holds exactly `COPY --from=harness-certs prod-ca.crt /app/certs/prod-ca.crt`
+  and no other `COPY` of the file (a `--chown`, a `--chmod` or a second destination is another
+  line, and fails); exactly one shell command names the CA or its folder, `chmod 0444
+  /app/certs/prod-ca.crt`, and it comes after the copy; the `workspace` service holds
+  `WORKSPACE_DB_CA_FILE: /app/certs/prod-ca.crt` as a setting, not as a comment; the launcher holds
+  `readonly CA_CERT=/app/certs/prod-ca.crt`, its `[ -r "$CA_CERT" ] || fail` check and
+  `DATABASE_CA_CERT="$CA_CERT"`, and names no CA of its own. Planted: the image as it was before the
+  ruling (six problems), a copy that is `node`'s, a `chmod 0666` afterwards, a `chown -R node:node
+  /app/certs`, a mode set before the copy, and a setting that is only a comment.
+* **`/app/turn`.** The stage makes the folder, hands it to `root:root` and to nobody else, gives it
+  `0555` and no other mode, names it in no other command, and no `COPY`, `ADD`, `VOLUME` or
+  `WORKDIR` fills, mounts or remakes it; `compose.yaml` does not name it for the service (a mount
+  would hide the image's folder and its mode). Planted: the folder as it was before the ruling
+  (`chown node:node`, no mode), a later `chmod -R 0777`, a `COPY` into it, a compose volume on it,
+  and the same lines in a stage that is not the last.
+
+### What was chosen where the ruling leaves room
+
+1. **One CA file in the image, not two.** The ruling says the rag launcher may read the same file,
+   and it now does: `/app/mcp-rag/certs/` is no longer made. Both database connections are checked
+   against one root-owned file, and there is no second copy to forget. The brief still names the
+   old path in four places and the old owner of `/app/turn` in two; they are the PM's to change
+   (question 1).
+2. **A plain `COPY` and one `RUN chmod 0444`, not `COPY --chmod`** (above). The file is 0444
+   whatever mode the build host gave it (a Windows checkout hands Docker 0755). The cost is one
+   more layer that holds the 1,367-byte file again.
+3. **`chown root:root /app/turn` is written out**, though a folder made by `RUN` in a stage with no
+   `USER` line is root's already: the test then reads a literal and not the absence of one.
+4. **Mode 0555 is against `node`, not against root.** Root keeps every capability Docker gives a
+   container, so Docker's own healthcheck (`node …/healthcheck.js` as root, every 30 s: wave 2's
+   note for the security review) could still write there. It reads one file and writes none.
+5. **The compose comment over `secrets:`** said no `*_FILE` variable is set for this service. It now
+   says no variable names a secret's file, and that the one `*_FILE` variable names the public CA.
+   The brief's own sentence ("the service sets no `*_FILE` variable for them", the runner's two
+   secrets) is still true as written.
+
+What the image copies is public: `certs/prod-ca.crt` in the harness checkout (`e7997f3`, tracked,
+unchanged) is one certificate, `CN=Supabase Root 2021 CA`, self-signed, a CA, valid to 2031-04-26,
+1,367 bytes, with no private key in the file (read with Node's `X509Certificate`).
+
+Wave 2's note for the security review said "the runner's own connection follows its DSN's
+`sslmode`". After SR-1 (ruling V1, W-64's) that sentence no longer holds: the runner checks the
+certificate against the file this stream bakes, whatever the DSN says.
+
+### Checks run in the review round (read-only docker only)
+
+**The guard**, `docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1`:
+
+| when (2026-10-06, UTC) | output |
+|---|---|
+| 21:41:35, before the first compose read | `bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z` |
+| 21:42:20, after the config reads | the same |
+| after the list's lines were run against the stand-in docker | the same |
+| 21:52:14, after steps 1 to 9 and the last commit of code | the same |
+
+**The `sync` service is unchanged, and the two trees render it alike.** With only the Windows user
+variables (`SECRETS_DIR`, `BB2DASH_DIR`; `HARNESS_DIR` and `COMPOSE_PROFILES` unset):
+
+| where | `docker compose -f compose.yaml config --hash sync` |
+|---|---|
+| `C:/Users/stack/projects/bb2dash` (`main`, `e89aff5`) | `sync 448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7` |
+| `bb2dash-wt-21-container` after the edit (`6e9e4e6`) | the same |
+| the live container's label `com.docker.compose.config-hash` | `448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7` |
+
+The hash leaves the build section out, so the whole rendered service was compared as well
+(`config --format json` in each tree, `services.sync`): the same nineteen keys, and every one equal
+but `build`, where the one difference is `context`, each tree's own folder. Both trees render one
+service (`sync`), the network `default`, the volumes `bb-profile` and `course-files` and `sync`'s
+four secrets. An `up` from the merged file does not recreate the live container.
+
+**The compose file resolves with only the user variables set** (the same shell):
+
+```text
+docker compose -f compose.yaml config --quiet; echo "exit=$?"                 → exit=0
+docker compose -f compose.yaml config --services                             → sync
+docker compose -f compose.yaml --profile workspace config --services         → workspace, sync
+```
+
+**The `workspace` service as rendered for the test project** (`-p bb2dash-wt21 --profile workspace`,
+step 7's two lines and one more read):
+
+```text
+true true linux/amd64 workspace-net workspace 30s
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 CLAUDE_CONFIG_DIR=/home/node/.claude DISABLE_AUTOUPDATER=1 ENABLE_TOOL_SEARCH=false WORKSPACE_DB_CA_FILE=/app/certs/prod-ca.crt WORKSPACE_TURN_BUDGET_USD=1.00
+volumes: ["/home/node/.claude"]   tmpfs: none   user: unset   additional_contexts: harness-certs, harness-mcp
+```
+
+One new name in the environment, and it is a literal: nothing new is interpolated. No mount lands
+on `/app/turn` or `/app/certs`, so the image's own folders and modes are what a container sees.
+
+**Steps 1 to 9 of the list, run as they stand** (read back out of this file, from a shell with
+`SECRETS_DIR`, `HARNESS_DIR`, `COMPOSE_PROFILES` and `MSYS_NO_PATHCONV` unset; none changes docker
+state):
+
+| step | what | output | |
+|---|---|---|---|
+| 1 | the guard | above | pass |
+| 2 | fetch, merge, the runner is in the tree | `Already up to date.` · `runner merged: 1` · `2` | **stop, as the step says** (below) |
+| 3 | `grep-clean` | `tests 13` · `pass 13` · `fail 0` | pass |
+| 3 | the firewall's dry run | `tests 20` · `pass 20` · `fail 0` | pass |
+| 4 | the Dockerfile's and the service's literals | `0` · `1` · `0` · `1` | pass |
+| 4 | ruling V2's literals | `1` · `1` · `1` · `1` · `1` · `0` | pass |
+| 5 | the four secret files, sizes only | `169` · `108` · `41` · `109` bytes | pass |
+| 6 | compose with only the Windows user variables | `exit=0`; services: `sync` and nothing else | pass |
+| 7 | the service as rendered, and its environment | the two lines above | pass |
+| 8 | the `sync` service's hash, rendered and on the live container | the hash above, twice | pass |
+| 9 | the harness commit; nothing uncommitted under `mcp-server` or `certs` | `e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd` · `0` | pass |
+
+Step 2 read `1` at 21:51 UTC because the review round is still open: `feat/workspace-21-runner`
+then held five commits of W-64's (CR-1, CR-2, CR-3, CR-5, CR-6) that the phase branch does not have
+yet. That is the step doing its work: the image must not be built from a tree without the runner's
+round. It reads `0` once the PM has merged the round into `feat/workspace-21` and this tree has
+merged that.
+
+### The list: three new checks, renumbered 1 to 41
+
+The list under "Wave 2 — the lines for tasks 12 and 13" was changed in place (`6032669`). It still
+runs top to bottom: steps 1 to 9 need no image, step 10 is the build, and everything after it needs
+the image.
+
+| the ruling's check | list step | what the step reads |
+|---|---|---|
+| as `node`, creating `/app/turn/.claude` fails | 23 (new) | from `/app/turn` itself: `mkdir .claude`, `touch settings.json` and `chmod 0777 .` each exit 1; the folder is empty and `root:root 555` |
+| the token smoke still passes from that folder | 28 (was 27) | R19's line with `-w /app/turn`; then the folder is read again: empty, `root:root 555` |
+| the runner's connection is verified | 32 (new) | a throwaway self-signed CA made in `/tmp/w65-ca`; a connect trusting only `/app/certs/prod-ca.crt` reads `connected as workspace_runner`, the same connect trusting only the throwaway reads `refused: SELF_SIGNED_CERT_IN_CHAIN`; the throwaway is removed |
+
+Steps that read the new literals: 3 (13 tests), 4 (a second line of six counts), 7 and 19 (the
+setting), 20 (the CA's path, owner and mode; `/app/turn`'s owner, mode and emptiness; no
+`/app/mcp-rag/certs`; `node` reads the CA), 22 (`node` can write neither folder nor the file), 33
+(the rag search fails with `server exited` if the launcher cannot read the CA).
+
+Old and new numbers (sections of this file written before the review round keep the old ones):
+
+| before | 1 to 22 | none | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | none | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| now | 1 to 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 |
+
+While renumbering, two sentences that said "step 26's first and fourth lines" were reworded to name
+the lines (`example.com`, `api.anthropic.com`): wave 2b had added lines to that step, and "fourth"
+no longer pointed at the line meant.
+
+**The token smoke is one turn, not two.** The ruling asks that the smoke still pass from
+`/app/turn`. The list's one smoke was moved there rather than doubled: ruling U4 allows one small
+Haiku turn on Stack's plan, and a smoke from `/app/turn` shows everything the smoke from `/app`
+showed (the token, the firewall's one host, a CLI whose install folder is root's). If the PM wants
+both, it is the same line without `-w /app/turn` (question 2).
+
+**What step 32 shows and what it does not.** It shows, from inside the container and behind the
+firewall, that the pooler's certificate verifies against the CA the image holds and against no
+other, with the settings ruling V1 gives the runner (the client built from the DSN's parsed parts,
+`ssl: { ca, rejectUnauthorized: true, servername: <host> }`), through the runner's own `pg` module.
+It does not run the runner's code: W-64's module is being changed in this same round, and a pasted
+line cannot rest on its exports. That the runner itself connects this way is W-64's to prove (its
+tests); the two meet at step 15, where a runner that reads `healthy` after SR-1 has reached the
+database through a connection checked against the file step 19 shows it was given. The program
+logs in as `workspace_runner` once (the second connect ends at the certificate, before any login)
+and runs `select current_user`; it calls none of the five functions and touches no row.
+
+**Step 32's program, run without docker and without the database** (scratch only). A stand-in for
+the pooler was written for this: it answers the SSL request, serves TLS with a leaf for `localhost`
+signed by a root made for the run (the chain sent with its root, as the pooler sends its own), and
+answers a query with one row. The program was taken as the list holds it, with its four in-container
+paths replaced by scratch paths and a made-up DSN of the stored one's shape; the throwaway CA was
+made by the list's own `openssl` arguments (OpenSSL 3.5.8 here; the key to a file, since a Windows
+`openssl` has no `/dev/null`); `pg` is 8.23.0, the runner's pin:
+
+```text
+openssl exit=0
+1
+program: 889 chars; forbidden characters: 0
+--- the list's program:
+<the CA the stand-in's certificate is signed by> connected as workspace_runner
+<the throwaway CA> refused: SELF_SIGNED_CERT_IN_CHAIN
+exit=0
+--- control, verification off:
+<the CA the stand-in's certificate is signed by> connected as workspace_runner
+<the throwaway CA> connected as workspace_runner
+exit=0
+--- control, a secret that does not parse:
+the secret did not parse
+exit=1
+--- the stand-in is down:
+<the CA the stand-in's certificate is signed by> refused: ECONNREFUSED
+<the throwaway CA> refused: ECONNREFUSED
+exit=0
+```
+
+("Verification off" is the same program with `rejectUnauthorized:false`; the forbidden characters
+are `!`, `$`, a backtick and a double quote; the two scratch paths are printed here by what they
+are.) So the `refused` line is the certificate check and not the stand-in: with the check off, the
+throwaway connects. A secret that does not parse prints one fixed line. A connect that never
+reaches the certificate prints a code the step tells the reader not to count. This says nothing
+about the real pooler's chain: that is step 32 itself, in the container.
+
+**The lines' quoting, checked again without docker.** The same check as wave 2's ("the lines'
+quoting", above), over the list as it now stands, with `docker` standing for a native program that
+starts nothing and records what it was handed:
+
+```text
+calls: 69 (compose 48, of them exec 32; other docker 21); sh -c strings parsed: 17; node -e programs compiled: 11
+lines with a docker call: 58 of 58
+problems: 0
+```
+
+It read 50 lines in wave 2a; wave 2b added two and this round six (two of step 23, one of step 28,
+three of step 32). For the new lines it was also read that `-w /app/turn` arrives as `/app/turn`,
+that the `openssl` line's `-subj "/CN=w65 throwaway CA"` and `/dev/null` arrive unconverted, and
+that step 32's program arrives as the 889 characters run against the stand-in pooler; step 7's two
+piped lines printed their expected text from a stand-in render. The check can fail: five
+deliberately wrong lines gave 11 problems, among them a `-w /app/turn` without
+`MSYS_NO_PATHCONV=1`, which arrives as `C:/Program Files/Git/app/turn`.
+
+### What this round does not show
+
+No image exists, so each of these is a claim until its step is run:
+
+* that the two changed instructions build (a plain `COPY` from a named context, two `RUN`s of
+  `chown` and `chmod`; nothing new to Docker, and not run);
+* the owners and modes in a real image (step 20), and that `node` can make nothing in `/app/turn`
+  (step 23);
+* **that the CLI runs from a working directory it cannot write** (step 28, and every turn after
+  it). The earlier smoke's folder, `/app`, was root's too, and that smoke has never run either. If
+  the CLI needs to write there, step 28 says to stop and report, not to loosen the mode;
+* that `openssl` is in the image (step 32's first line; expected, since `ca-certificates` depends
+  on it in Debian), and what the real pooler answers to the throwaway CA (step 32's second line);
+* that the rag server still connects with the CA at its new path (step 33).
+
+### Questions for the PM, review round
+
+1. **The brief names the old literals in six places**, and this stream does not edit the brief:
+   `/app/mcp-rag/certs/prod-ca.crt` in the layout sentence (lines 279 to 280), in the rag entry's
+   `DATABASE_CA_CERT=` (line 615) and twice in the Seams table's row "W-64 and W-65" (line 834);
+   "`/app/turn` owned by `node`" in line 293 and in the same row of line 834. Neither literal is
+   one W-64's files name (`workspace/` holds no CA path of the rag server, and `/app/turn` is still
+   the turns' folder), so the seam's two sides still agree. If the PM would
+   rather keep a second copy of the CA under `/app/mcp-rag/certs/` so the first four stay true, it
+   is one `COPY` line, one constant in the launcher and one expected line in the test.
+2. **One smoke or two** (above): the list spends one Haiku turn, from `/app/turn`.
+3. **Step 2 reads `runner merged: 1` until the review round is integrated.** Nothing to rule, only
+   to expect: the build line is not to be pasted before it reads `0`.
+4. **Nothing in the image reads `WORKSPACE_DB_CA_FILE` until W-64's SR-1 change is merged.** In this
+   tree the runner's `config.ts` does not name the variable yet; the service sets it and the file is
+   there. No test here ties the two together across the seam: after the merge, step 19 (the
+   setting), step 15 (healthy) and step 32 are what show it end to end.
