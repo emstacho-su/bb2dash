@@ -297,3 +297,147 @@ signature, a SQLSTATE or a string.
 2. The three failing units above that are not this stream's.
 3. The send-and-receive half of unit 141, the empty-delta half of unit 142 and the partition
    predicate itself have never met a real partition.
+
+## Apply stage (2026-10-06, 15:58 to 16:10 UTC): stopped at the apply, nothing applied
+
+**140 and 141 are not on prod.** The dry run passed and the text sent was proven byte-identical to
+the two files, but the `apply_migration` call for 140 was refused by this session's permission
+layer before it reached the database. It was not retried and not attempted any other way; 141 was
+not attempted (same kind of action, and it follows 140). 142 was never in scope. The apply waits
+for Stack to allow it.
+
+### 1. Tree
+
+```
+$ git status --porcelain | wc -l                         0
+$ git rev-parse HEAD origin/feat/workspace-21-db
+e2782e15f70918abf360bbc4342bc28b571a7220
+e2782e15f70918abf360bbc4342bc28b571a7220
+$ git show HEAD:db/migrations/140_workspace_tables.sql | md5sum            877a72c1ee2ed9f03a1e8563c748e1e0   (24010 bytes)
+$ git show HEAD:db/migrations/141_workspace_realtime_policy.sql | md5sum   d3dcc40e4865b1a62a7d7b4e55df6a72   (2817 bytes)
+$ git ls-files --eol db/migrations/14[012]_*.sql          i/lf w/lf on all three
+```
+
+Both files are plain ASCII with no tab and no trailing space, and each ends in one newline.
+
+### 2. Prod before anything (SELECT only, 15:58:59 UTC)
+
+```
+migrations named 14%            0     (newest row: 20261005202612:095_bb_file_storage_key)
+workspace_* relations           0
+workspace_* functions           0
+policies on realtime.messages   0
+role workspace_runner           0
+partitions of realtime.messages 0
+```
+
+### 3. Dry run of 140 then 141, one `begin; … rollback;`
+
+Wave 1's dry runs could not show that the retyped text equalled the file. This one does. The text
+of each file went in as a dollar-quoted literal into a temp table, the database fingerprinted that
+literal, and a `do` block ran exactly that literal with `execute`, 140 first:
+
+```
+begin;
+create temp table _w63_files (ord int, name text, body text) on commit drop;
+insert into _w63_files values (1, '140_workspace_tables',          $w63f$<the whole file>$w63f$);
+insert into _w63_files values (2, '141_workspace_realtime_policy', $w63f$<the whole file>$w63f$);
+do $w63d$ declare r record; begin
+  for r in select * from _w63_files order by ord loop execute r.body; end loop;
+end $w63d$;
+select … md5(body), octet_length(body), the per-line fingerprint, task 2 (b)'s counts, the policy count …;
+rollback;
+```
+
+Result (one row):
+
+```
+dry_run: 140 then 141 executed from the text fingerprinted here, guards passed
+sent_text: 140_workspace_tables bytes=24010 md5=877a72c1ee2ed9f03a1e8563c748e1e0 crlf=false
+           141_workspace_realtime_policy bytes=2817 md5=d3dcc40e4865b1a62a7d7b4e55df6a72 crlf=false
+per_line_fingerprint: 140 fp_md5=2f25209721ef55c83fa7079e14ccee37 · 141 fp_md5=5e515170c6184526ca1f982a71d52aa7
+rls_tables 4 · msg_idx 2 · req_idx 2 · fks 5 · public_policies 9 · realtime_policies 1
+prosrc_md5: workspace_ask=0ff0f01cc79b62a2bd27624e201ce82c, workspace_cancel=299cd00999003be3eabed6ddfd951477,
+            workspace_prompt_max=7ea526f90e6dd154616ebddd7baf7538
+```
+
+Both md5 values equal the files' (section 1), and both per-line fingerprints equal the ones
+computed from the files on disk (the first four hex digits of each line's md5, joined, then md5).
+The three function bodies match wave 1's table. Both guard blocks ran inside the `execute` and
+raised nothing. What differs from a real apply: the statements ran inside `execute` in a `do`
+block, not at top level (wave 1 ran both files whole at top level).
+
+Read after the rollback (16:01:38 UTC): migrations named 14% 0, `workspace_*` relations 0,
+functions 0, policies on `realtime.messages` 0, role `workspace_runner` 0, `_w63_files` gone.
+`agent_requests` open at that moment: one row, id 1859, `inbox_feedback`, `queued` since
+2026-10-05 20:51 UTC; no `sync` row `queued` or `claimed`.
+
+### 4. The apply: refused, not made
+
+`mcp__claude_ai_Supabase__apply_migration`, project `goultdzqcavefcgnifdy`, name
+`140_workspace_tables`, query = the file's text. The call's answer, whole:
+
+```
+Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Production Deploy].
+```
+
+The refusal came from the session, not from Postgres, so nothing ran. Read straight after
+(16:03:22 UTC):
+
+```
+migrations named 14%            0     (newest row still 20261005202612:095_bb_file_storage_key)
+workspace_* relations           0
+workspace_* functions           0
+policies on realtime.messages   0
+role workspace_runner           0
+partitions of realtime.messages 0
+```
+
+So there is nothing to compare for the byte-identical rule yet (step 4 of the stage), and no
+md5 of a stored `statements[1]` to quote.
+
+### 5. The Runner, as prod stands (nothing applied)
+
+```
+$ node scripts/db-test.mjs --only phase21_140_workspace_tables.sql
+FAIL  phase21_140_workspace_tables.sql  FAIL phase21_140: migration 140 is not applied (public.workspace_conversations is missing)
+db-test: passed 0, failed 1, units 1
+$ node scripts/db-test.mjs --only phase12b_076_rls_initplan_and_truncate.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+db-test: passed 1, failed 0, units 1
+$ node scripts/db-test.mjs --only phase15_101_search_path_pin.sql
+PASS  phase15_101_search_path_pin.sql
+db-test: passed 1, failed 0, units 1
+$ node scripts/db-test.mjs --only phase15_100_db_test_runner_role.sql
+FAIL  phase15_100_db_test_runner_role.sql  FAIL db_test_runner memberships are anon(inherit=f,set=t), authenticated(inherit=f,set=t), sync_runner(inherit=f,set=t), expected anon(inherit=f,set=t), authenticated(inherit=f,set=t), sync_runner(inherit=f,set=t), workspace_runner(inherit=f,set=t)
+db-test: passed 0, failed 1, units 1
+
+$ node scripts/db-test.mjs                                       (16:03 UTC; node's own exit code 1)
+FAIL  grading_invariants.sql  FAIL D point-bearing assignments with no component, not excluded, not excepted: GEO.103.lecture/exam-1, IST.352/project-assignment-8-context-level-0-and-activity-diagrams
+FAIL  phase15_100_db_test_runner_role.sql  (as above)
+FAIL  phase18_122_supersede_rule.sql  FAIL (1) newest run 5485df45-56c2-40c7-a260-2080eed0ad8c wrote 4: 2->151, 74->2509, 150->967, 162->967
+FAIL  phase18_golden_truth.sql  FAIL Q7 file not current: 149; Q7 current file carries the phrase but is not in the truth: 2509
+FAIL  phase21_140_workspace_tables.sql  FAIL phase21_140: migration 140 is not applied (public.workspace_conversations is missing)
+FAIL  phase21_141_workspace_realtime.sql  FAIL phase21_141: migration 141 is not applied (realtime.messages has no policy)
+FAIL  phase21_142_workspace_runner.sql  FAIL phase21_142: migration 142 is not applied (no role workspace_runner)
+db-test: passed 61, failed 7, units 68
+```
+
+The same seven as wave 1, for the same reasons: the three `phase21_*` units and the branch's
+phase15_100 literal wait for the applies, and the other three follow prod's data and read no
+Workspace object.
+
+### 6. Still owed, in order
+
+1. Apply `140_workspace_tables`, then `141_workspace_realtime_policy`, each with the file's text.
+2. For both: `select name, md5(statements[1]) from supabase_migrations.schema_migrations where name
+   in ('140_workspace_tables', '141_workspace_realtime_policy')` against the two md5 values in
+   section 1. Earlier phases found `apply_migration` sometimes stores the text without its last
+   newline (69a) and sometimes with it (69c), so the comparison also reads
+   `md5(statements[1] || chr(10))`; the file's md5 without its last newline is
+   `a16a5dfc561b8b20fd3a4ee87ed5428a` (140) and `bd4d4de90c796a2d61777a413bcc856b` (141).
+3. Runner on `phase21_140_workspace_tables.sql` → PASS; task 2 (b)'s four counts (4, 2, 2, 5 in
+   the dry run); task 3 (b)'s policy count → 1; Runner on phase12b_076 and phase15_101 → PASS;
+   Runner on `phase21_141_workspace_realtime.sql` → PASS in its policy-only form, before anyone
+   opens the preview's `/workspace`; the whole suite once.
+4. 142 stays as it was: only when the PM says the port PR (task 6a) is ready.
