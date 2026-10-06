@@ -2,17 +2,22 @@
  * The claude CLI provider: the unmodified `claude` CLI run as `claude -p` on the owner's
  * subscription token (brief 102, Contract, "Argv, frozen" and "Continuity").
  *
- * This file holds the argv and the choice between a fresh start and a resumed one. The argv is an
- * array, spawned without a shell; the prompt is always its last element, after `--`, so a question
- * that begins with a flag is never read as one.
+ * This file holds the argv, the choice between a fresh start and a resumed one, and the process
+ * itself. The argv is an array, spawned without a shell; the prompt is always its last element,
+ * after `--`, so a question that begins with a flag is never read as one.
  */
 
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import { StringDecoder } from 'node:string_decoder';
 
 import { CLAUDE_BIN, PATHS } from '../config.js';
+import { mapTurnEnd, type ErrorCode } from '../errors.js';
 import { ALLOWED_TOOLS } from '../hooks/gate-rules.js';
-import type { Provider, TurnEvent, TurnInput } from './types.js';
+import { buildPrompt } from '../replay.js';
+import { checkInit, createTurnStream, parseLine, type InitFacts, type TurnSummary } from '../stream-json.js';
+import type { Provider, ResultEvent, TurnEvent, TurnInput } from './types.js';
 
 /** Tools removed from the model's view; the first six are built in, the seventh is the notes store's whole-note reader. */
 export const DISALLOWED_TOOLS = ['Bash', 'Read', 'Write', 'Edit', 'WebFetch', 'WebSearch', 'mcp__rag__get_document'] as const;
@@ -150,5 +155,268 @@ export function createClaudeCliProvider(turn: CliTurn): Provider {
   return {
     id: 'claude-cli',
     runTurn: (input, signal) => turn(input, signal),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The process: one CLI start per turn (two when a resume finds no session), read line by line.
+// ---------------------------------------------------------------------------------------------
+
+/** SIGTERM first; SIGKILL when the process is still there after this long. Under the 2 s a Stop is given. */
+export const KILL_GRACE_MS = 1500;
+const STDERR_KEEP_CHARS = 2000;
+const LOG_VALUE_MAX_CHARS = 80;
+const LOG_STDERR_MAX_CHARS = 200;
+
+export interface CliExit {
+  /** The exit code; null when a signal ended the process or it never started. */
+  readonly code: number | null;
+  readonly signal: string | null;
+  /** Why the process could not be started, when it could not. */
+  readonly error?: string;
+}
+
+export interface SpawnOptions {
+  readonly cwd: string;
+  readonly env: Record<string, string>;
+}
+
+/** The parts of a child process the turn uses, so a test can stand in a recorded stream. */
+export interface CliProcess {
+  readonly stdout: AsyncIterable<Buffer | string>;
+  readonly exited: Promise<CliExit>;
+  kill(signal: 'SIGTERM' | 'SIGKILL'): void;
+  /** The end of what the process wrote to stderr, for a log line. */
+  stderrText(): string;
+}
+
+export interface CliTurnDeps {
+  readonly spawn: (argv: readonly string[], options: SpawnOptions) => CliProcess;
+  readonly readSystemPrompt: () => string;
+  /** The subscription token, read from its file immediately before each start. */
+  readonly readOauthToken: () => string;
+  /** The runner's own environment, handed to the child with the token and two switches added. */
+  readonly baseEnv: Readonly<Record<string, string | undefined>>;
+  readonly log: (line: string) => void;
+  readonly newUuid?: () => string;
+  readonly killGraceMs?: number;
+}
+
+/** The child's environment: the runner's, plus the token and the two switches the service sets. */
+export function childEnv(baseEnv: Readonly<Record<string, string | undefined>>, token: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [name, value] of Object.entries(baseEnv)) {
+    if (value !== undefined) env[name] = value;
+  }
+  return {
+    ...env,
+    CLAUDE_CODE_OAUTH_TOKEN: token,
+    // With no built-in tools there is no tool to load deferred MCP tools, so they load upfront.
+    ENABLE_TOOL_SEARCH: 'false',
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+  };
+}
+
+/** The real process: the argv as an array, no shell, stdin closed. */
+export function spawnClaude(argv: readonly string[], options: SpawnOptions): CliProcess {
+  const [command, ...args] = argv;
+  if (command === undefined) throw new Error('claude-cli: an empty argv');
+  const child = spawn(command, args, { cwd: options.cwd, env: options.env, stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true });
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk: string) => {
+    stderr = `${stderr}${chunk}`.slice(-STDERR_KEEP_CHARS);
+  });
+  const exited = new Promise<CliExit>((resolve) => {
+    child.once('error', (error) => resolve({ code: null, signal: null, error: error.message }));
+    child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+  return {
+    stdout: child.stdout,
+    exited,
+    kill: (signal) => {
+      child.kill(signal);
+    },
+    stderrText: () => stderr,
+  };
+}
+
+/** Whole lines out of a byte stream, whatever pieces it arrives in. */
+async function* linesOf(stdout: AsyncIterable<Buffer | string>): AsyncGenerator<string> {
+  const decoder = new StringDecoder('utf8');
+  let pending = '';
+  for await (const chunk of stdout) {
+    pending += typeof chunk === 'string' ? chunk : decoder.write(chunk);
+    let end = pending.indexOf('\n');
+    while (end !== -1) {
+      yield pending.slice(0, end);
+      pending = pending.slice(end + 1);
+      end = pending.indexOf('\n');
+    }
+  }
+  pending += decoder.end();
+  if (pending !== '') yield pending;
+}
+
+interface Killer {
+  kill(): void;
+  clear(): void;
+}
+
+function createKiller(child: CliProcess, graceMs: number): Killer {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let asked = false;
+  return {
+    kill() {
+      if (asked) return;
+      asked = true;
+      child.kill('SIGTERM');
+      timer = setTimeout(() => child.kill('SIGKILL'), graceMs);
+    },
+    clear() {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    },
+  };
+}
+
+const logValue = (value: string | null): string => (value ?? 'missing').replace(/\s+/g, '_').slice(0, LOG_VALUE_MAX_CHARS);
+
+/** The one log line per init line read: the version, the credential source, the mode and the model. Never a token. */
+function initLogLine(init: InitFacts): string {
+  return [
+    'init',
+    `claude_code_version=${logValue(init.claudeCodeVersion)}`,
+    `credential_source=${logValue(init.credentialSource)}`,
+    `permissionMode=${logValue(init.permissionMode)}`,
+    `model=${logValue(init.model)}`,
+    `check=${checkInit(init).length === 0 ? 'pass' : 'refused'}`,
+  ].join(' ');
+}
+
+/** The first line of stderr, short, with the token and the prompt taken out. */
+function stderrForLog(stderr: string, hidden: readonly string[]): string {
+  let line = (stderr.split(/\r?\n/).find((text) => text.trim() !== '') ?? '').trim();
+  for (const secret of hidden) {
+    if (secret !== '') line = line.split(secret).join('<hidden>');
+  }
+  return line.slice(0, LOG_STDERR_MAX_CHARS);
+}
+
+interface Attempt {
+  readonly summary: TurnSummary;
+  readonly exit: CliExit;
+  /** True when the runner's abort ended the attempt. */
+  readonly aborted: boolean;
+}
+
+function failure(errorCode: ErrorCode): ResultEvent {
+  return { type: 'result', ok: false, errorCode, costUsd: null, claudeSessionId: null, model: null };
+}
+
+function resultOf(attempt: Attempt): ResultEvent {
+  const { summary } = attempt;
+  const errorCode = attempt.aborted ? 'cli_error' : mapTurnEnd(summary);
+  const sessionId = summary.init?.sessionId ?? null;
+  return {
+    type: 'result',
+    ok: errorCode === null,
+    errorCode,
+    costUsd: summary.result?.totalCostUsd ?? null,
+    // Only a session the CLI actually started: a resume that found none reports the id it was asked for.
+    claudeSessionId: isUuidShaped(sessionId) ? sessionId : null,
+    model: summary.model,
+  };
+}
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/**
+ * One turn of the real CLI. It always ends with exactly one result event; when the runner aborts,
+ * that result is a failure whose code the runner replaces with its own reason.
+ */
+export function createCliTurn(deps: CliTurnDeps): CliTurn {
+  const graceMs = deps.killGraceMs ?? KILL_GRACE_MS;
+  const newUuid = deps.newUuid ?? randomUUID;
+
+  return async function* cliTurn(input, signal) {
+    const log = (message: string): void => deps.log(`turn request=${input.requestId} ${message}`);
+
+    async function* attemptOnce(start: SessionStart, token: string): AsyncGenerator<TurnEvent, Attempt> {
+      const prompt = start.mode === 'fresh' ? buildPrompt(input.history, input.prompt) : input.prompt;
+      const argv = buildArgv({ model: input.model, session: start, systemPrompt: deps.readSystemPrompt(), budgetUsd: input.budgetUsd, prompt });
+      const child = deps.spawn(argv, { cwd: PATHS.turnCwd, env: childEnv(deps.baseEnv, token) });
+      const stream = createTurnStream();
+      const killer = createKiller(child, graceMs);
+      const onAbort = (): void => killer.kill();
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) killer.kill();
+      try {
+        for await (const lineText of linesOf(child.stdout)) {
+          const line = parseLine(lineText);
+          if (line === null) continue;
+          for (const out of stream.push(line)) {
+            if (out.kind === 'init') log(initLogLine(out.init));
+            if (out.kind === 'stop') {
+              log(`stopped: ${out.reason}`);
+              killer.kill();
+            }
+            if (signal.aborted) continue;
+            if (out.kind === 'delta') yield { type: 'delta', text: out.text };
+            if (out.kind === 'tool') yield { type: 'tool', id: out.id, call: out.call };
+          }
+        }
+        const exit = await child.exited;
+        if (exit.error !== undefined) log(`the CLI did not start: ${exit.error}`);
+        else if (exit.code !== 0 && !signal.aborted) {
+          const how = exit.code ?? `on ${exit.signal ?? 'a signal'}`;
+          log(`the CLI exited ${how}: ${stderrForLog(child.stderrText(), [token, input.prompt])}`);
+        }
+        return { summary: stream.summary(), exit, aborted: signal.aborted };
+      } finally {
+        signal.removeEventListener('abort', onAbort);
+        killer.clear();
+      }
+    }
+
+    if (signal.aborted) {
+      yield failure('cli_error');
+      return;
+    }
+    let token: string;
+    try {
+      token = deps.readOauthToken();
+    } catch (error) {
+      log(`no subscription token: ${messageOf(error)}`);
+      yield failure('sign_in_expired');
+      return;
+    }
+
+    let start = planSession({ storedSessionId: input.claudeSessionId, conversationId: input.conversationId }, newUuid);
+    let retried = false;
+    for (;;) {
+      let attempt: Attempt;
+      try {
+        attempt = yield* attemptOnce(start, token);
+      } catch (error) {
+        log(`could not run the CLI: ${messageOf(error)}`);
+        yield failure('cli_error');
+        return;
+      }
+      const outcome: StartOutcome = {
+        mode: start.mode,
+        exitCode: attempt.exit.code,
+        sawAssistant: attempt.summary.sawAssistant,
+        alreadyRetried: retried,
+      };
+      if (!attempt.aborted && shouldRetryAsFresh(outcome)) {
+        retried = true;
+        log('the resumed session did not start; retrying once as a fresh start with replay');
+        start = planSession({ storedSessionId: null, conversationId: input.conversationId }, newUuid);
+        continue;
+      }
+      yield resultOf(attempt);
+      return;
+    }
   };
 }

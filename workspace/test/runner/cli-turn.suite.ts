@@ -35,7 +35,6 @@ const FAILED = { code: 1, signal: null } as const;
 const lookup = readFixtureLines('claude-stream-lookup.jsonl');
 const resumeMissing = readFixtureLines('claude-stream-resume-missing.jsonl');
 const signInExpired = readFixtureLines('claude-stream-sign-in-expired.jsonl');
-const budgetStop = readFixtureLines('claude-stream-budget-stop.jsonl');
 const synthetic = readFixtureJson<Record<string, { lines: Line[] }>>('synthetic-rate-limit.json');
 const recordings = readFixtureJson<{ fixtures: Record<string, { exitCode: number }> }>('recordings.json');
 
@@ -330,6 +329,7 @@ describe('how a CLI turn ends', () => {
   });
 
   it('maps the budget-stop recording as recorded', async () => {
+    const budgetStop = readFixtureLines('claude-stream-budget-stop.jsonl');
     const exit = { code: recordings.fixtures['claude-stream-budget-stop.jsonl']!.exitCode, signal: null };
     const h = harness([{ lines: budgetStop, exit }]);
     const events = await run(h, input({ budgetUsd: 0.01 }));
