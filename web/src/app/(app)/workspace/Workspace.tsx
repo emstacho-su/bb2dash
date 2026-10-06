@@ -13,7 +13,9 @@
  * row `workspace_finish()` writes. The stored row is the record. The page
  * learns that a stream has ended from the `done` broadcast and from a refetch
  * when the tab regains focus; the 5 s interval is only the fallback while the
- * tab is in front, because it does not run in a hidden tab.
+ * tab is in front, because it does not run in a hidden tab. Whichever of them
+ * shows the request closed, the messages are then read once more
+ * (`useStoredRowOnClose`): a missed broadcast costs live text, never the answer.
  *
  * WHAT IS SHOWN UNDER A QUESTION comes from its `workspace_requests` row
  * (`components/workspace/thread.ts`). After Stop the stopped sentence shows at
@@ -35,7 +37,8 @@
  * `data-request-id` (the open request, when there is one).
  */
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Composer } from '@/components/workspace/Composer';
 import { ConversationList } from '@/components/workspace/ConversationList';
@@ -54,6 +57,7 @@ import {
   useWorkspaceMessages,
   useWorkspaceRequests,
   workspaceErrorReason,
+  workspaceKeys,
   type WorkspaceMessage,
   type WorkspaceRequest,
 } from '@/lib/queries.workspace';
@@ -197,6 +201,25 @@ function Thread(props: ThreadProps) {
   );
 }
 
+/**
+ * A request that stops being the open one has its stored row: `workspace_finish()`
+ * commits the request and the message together. So the messages are read once at
+ * that moment, whatever told the page (the `done` broadcast, a poll, a refetch on
+ * focus). Without it a missed broadcast could cost the answer, not only the live
+ * text: the messages are polled only while a request is open, the two polls keep
+ * their own time, and the requests poll can see the close first.
+ */
+function useStoredRowOnClose(conversationId: string | null, openRequestId: number | null): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (conversationId === null || openRequestId === null) return undefined;
+    return () => {
+      void queryClient.invalidateQueries({ queryKey: workspaceKeys.messages(conversationId) });
+    };
+  }, [conversationId, openRequestId, queryClient]);
+}
+
 export function Workspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -207,6 +230,7 @@ export function Workspace() {
   const requests = useWorkspaceRequests(conversationId);
   const openRequest = hydrated ? openRequestOf(requests.data) : null;
   const messages = useWorkspaceMessages(conversationId, openRequest !== null);
+  useStoredRowOnClose(conversationId, openRequest?.id ?? null);
   const requestRows = hydrated ? (requests.data ?? NO_REQUESTS) : NO_REQUESTS;
   const messageRows = hydrated ? (messages.data ?? NO_MESSAGES) : NO_MESSAGES;
 
