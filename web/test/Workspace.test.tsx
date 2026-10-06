@@ -14,14 +14,15 @@
  *   * the conversation list: archived rows left out, "Archive" on each row,
  *     and a "Show archived" toggle, off by default, whose rows read "Unarchive";
  *   * exactly one private channel: `workspace:<uuid>` or `workspace:lobby`;
- *   * the service line: offline once the clock passes `polled_at` + 120 s.
+ *   * the service line: offline once the clock passes `polled_at` + 120 s,
+ *     said only from a status row that was read recently.
  *
  * The stream's own cases (the end of a stream, a gap, hydration) are in
  * `use-workspace-stream.screen.test.tsx`; the pure thread rules in
  * `Workspace.thread.test.ts`.
  */
 
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, focusManager, type QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { newQueryClient } from './hydration-harness';
@@ -41,7 +42,9 @@ vi.mock('@/lib/supabase/client', async () =>
 vi.mock('next/navigation', async () => (await import('./workspace-harness')).navigationMock());
 
 const labels = await import('@/lib/workspace-labels');
-const { WORKSPACE_ERROR_CODES } = await import('@/lib/queries.workspace');
+const { WORKSPACE_ERROR_CODES, WORKSPACE_STATUS_REFETCH_MS, workspaceKeys } = await import(
+  '@/lib/queries.workspace'
+);
 const { Workspace } = await import('@/app/(app)/workspace/Workspace');
 
 const A = '6f1c2a54-9b1e-4c0d-8a55-0d2f3b7c9e11';
@@ -84,11 +87,11 @@ function seedAnswered(fields: Row = {}): void {
   };
 }
 
-/** The screen on `?c=A` unless told otherwise. */
-function open(search = `c=${A}`) {
+/** The screen on `?c=A` unless told otherwise, over an empty cache unless given one. */
+function open(search = `c=${A}`, client: QueryClient = newQueryClient()) {
   fake.state.search = search;
   return render(
-    <QueryClientProvider client={newQueryClient()}>
+    <QueryClientProvider client={client}>
       <Workspace />
     </QueryClientProvider>,
   );
@@ -120,6 +123,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  focusManager.setFocused(undefined);
 });
 
 describe('the message column', () => {
@@ -561,6 +565,79 @@ describe('the service line', () => {
     fake.state.rows = { v_workspace_status: heartbeat(Date.now()) };
     await advance(30_000);
     expect(screen.queryByText('The Workspace service is offline.')).toBeNull();
+  });
+
+  const OFFLINE = 'The Workspace service is offline.';
+  const TEN_MINUTES_MS = 10 * 60_000;
+  const NEVER_POLLED: Row = { polled_at: null, runner: null, open_requests: 0, oldest_open_at: null };
+
+  /** A client whose saved cache holds `row` for the status, read `ageMs` ago. */
+  function clientWithStatus(row: Row, ageMs: number): QueryClient {
+    const client = newQueryClient();
+    client.setQueryData(workspaceKeys.status(), row, { updatedAt: Date.now() - ageMs });
+    return client;
+  }
+
+  it('does not say offline from a restored row ten minutes old while the fresh read is on its way', async () => {
+    vi.useFakeTimers({ now: START });
+    // What the saved cache restores on a visit ten minutes after the last one.
+    const restored = { ...heartbeat(START - TEN_MINUTES_MS)[0], oldest_open_at: null };
+    // The service is up: the database holds a heartbeat from this second.
+    fake.state.rows = { v_workspace_status: heartbeat(START) };
+
+    open('', clientWithStatus(restored, TEN_MINUTES_MS));
+
+    // The first paint: the read has been sent and has not answered.
+    expect(fake.state.log).toContain('from:v_workspace_status');
+    expect(screen.queryByText(OFFLINE)).toBeNull();
+    await advance(100);
+    expect(screen.queryByText(OFFLINE)).toBeNull();
+  });
+
+  it('does not say offline on the first frame back from three minutes in a hidden tab, with the service up', async () => {
+    vi.useFakeTimers({ now: START });
+    focusManager.setFocused(true);
+    fake.state.rows = {
+      workspace_messages: [question(1, 'Draft a plan.'), answer(2, 42, { finished: false, tier: 'high' })],
+      workspace_requests: [request(42, 1, 'claimed')],
+      v_workspace_status: heartbeat(START),
+    };
+    const { container } = open();
+    await advance(100);
+    const channel = fake.state.channels.findLast((candidate) => candidate.topic === TOPIC_A);
+    if (!channel) throw new Error('no channel');
+    act(() => channel.emit('delta', { request_id: 42, seq: 1, delta: 'Week one: ' }));
+    expect(screen.queryByText(OFFLINE)).toBeNull();
+
+    // The tab goes to the background, where nothing is re-read. The runner keeps beating.
+    focusManager.setFocused(false);
+    for (let beat = 0; beat < 6; beat += 1) {
+      await advance(WORKSPACE_STATUS_REFETCH_MS);
+      fake.state.rows = { ...fake.state.rows, v_workspace_status: heartbeat(Date.now()) };
+    }
+
+    // The tab comes back. This is the frame the reader sees first: the row in hand is
+    // three minutes old, and the fresh read has not answered.
+    act(() => focusManager.setFocused(true));
+    expect(turnOf(container, 42).querySelector('[data-answer-text]')).toHaveTextContent('Week one:');
+    expect(screen.queryByText(OFFLINE)).toBeNull();
+    await advance(200);
+    expect(screen.queryByText(OFFLINE)).toBeNull();
+  });
+
+  it('trusts a status row for two refetch intervals after it was read, and no longer', async () => {
+    vi.useFakeTimers({ now: START });
+    fake.state.rows = { v_workspace_status: [NEVER_POLLED] };
+
+    const recent = open('', clientWithStatus(NEVER_POLLED, 2 * WORKSPACE_STATUS_REFETCH_MS));
+    expect(screen.getByText(OFFLINE)).toBeInTheDocument();
+    recent.unmount();
+
+    open('', clientWithStatus(NEVER_POLLED, 2 * WORKSPACE_STATUS_REFETCH_MS + 1));
+    expect(screen.queryByText(OFFLINE)).toBeNull();
+    // The fresh read answers: the service never polled, and now the page may say so.
+    await advance(100);
+    expect(screen.getByText(OFFLINE)).toBeInTheDocument();
   });
 
   it('reads a service that never polled as offline', async () => {
