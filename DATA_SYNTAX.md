@@ -276,6 +276,117 @@ the Google mirror sees patches, never delete + insert.
   run does not carry, on the same path with the same `item_kind`, share the row (old id to
   `detail.previous_ids`, link and children kept), counted as `rekeyed`.
 
+## Workspace (migrations 140-142)
+
+The Workspace is a chat: a question is a row the browser writes, an answer is a row the container
+runner writes, and a queue row joins them. Read-only v1: nothing here can write planner state or a
+fact table. Conversations are archived, never deleted (no delete policy on any of the four tables).
+
+**Tables** (140). Every `created_at` / `updated_at` is `timestamptz not null default now()`.
+
+* **`workspace_conversations`** — `id uuid` pk, `created_at`, `updated_at` (trigger
+  `set_updated_at()`), `title text` 1–120 characters (the first line of the first question, cut at
+  120; the owner may edit it), `claude_session_id text` (null, or lower-case uuid-shaped by check:
+  the CLI session the next turn resumes), `archived boolean` default false.
+* **`workspace_messages`** — `id uuid` pk, `conversation_id` → conversations (cascade),
+  `parent_message_id` → messages (set null; an answer's parent is its question), `role`
+  (`user` | `assistant`), `request_id` → requests (set null; set on an answer), `tier`
+  (`low` | `mid` | `high`), `provider` (`claude-cli` | `ollama` | `frontier-api`), `model` (the
+  full model id the CLI reported for the turn when the stream names one, else the alias),
+  `content text` default `''`, at most 100000 characters, and at most 8000 on a `user` row,
+  `tool_calls jsonb` default `[]`, `finished boolean` default false, `error_code`, `cost_usd
+  numeric(10,4)`, `duration_ms integer`, `created_at`. A question is stored trimmed, with
+  `finished = true`; `tier`, `provider`, `model` and `request_id` are null on it.
+* **`workspace_requests`** — the queue. `id bigint` identity pk, `created_at`, `conversation_id` →
+  conversations (cascade), `user_message_id` → messages (cascade), `state` default `queued`,
+  `claimed_at`, `claimed_by`, `finished_at`, `attempts integer` default 0, `error_code`. Unique
+  partial index `workspace_requests_one_open (conversation_id) where state in ('queued',
+  'claimed')`: one open request per conversation.
+* **`workspace_runner_heartbeat`** — one row, `id smallint` = 1 by check, `polled_at`, `runner`.
+  Empty until the service first runs.
+
+**`tool_calls`** is a json array of at most 20 elements in call order, each `{ "tool": text,
+"query": text | null, "scope": text | null, "ok": boolean }`. `tool` is the name after the last
+`__` (`search_materials`, `get_material_text`, `list_courses`, `search_context`); `query` is the
+call's `q` or `query`, cut at 200 characters; `scope` is the rag `collection`, the materials
+`course`, or `text_id` as text; `ok` is false for a denied, failed or unanswered call. The database
+checks the array and its length, not the elements.
+
+**`cost_usd`** is the CLI's `total_cost_usd` as reported: Claude Code's own list-price estimate,
+not a charge. On a resumed turn it is the session's running total, restarting after an abnormal
+exit. Never summed, never shown, not comparable across turns.
+
+**Request states.** `queued` → `claimed` → `done` | `failed`, and `queued` | `claimed` →
+`cancelled` (Stop). A `queued` request does not expire. `error_code`, on the request row and on the
+answer, is null or one of eight: `budget_exceeded`, `timeout`, `stale_claim`,
+`provider_not_configured`, `cli_error`, `cancelled`, `usage_limit`, `sign_in_expired`. The page
+chooses its sentence from the request row's code.
+
+**`v_workspace_status`** (140, `security_invoker`) — always exactly one row: `polled_at`, `runner`
+(the heartbeat, both null before the first one), `open_requests integer` and `oldest_open_at` (the
+queued and claimed requests). Offline = `polled_at` null or older than 120 s.
+
+**The browser's functions** (140; `security invoker`, `search_path = public, pg_temp`):
+
+* **`workspace_prompt_max()`** → `integer`, 8000 (`authenticated`, `service_role`). The web holds
+  the same number as `WORKSPACE_PROMPT_MAX`.
+* **`workspace_ask(p_conversation_id uuid, p_text text)`** → `jsonb` `{conversation_id,
+  message_id, request_id}` (`authenticated`). Creates the conversation when the id is null, then
+  the user message and a `queued` request. Raises **22023** for text that is empty or over 8000
+  characters after trimming, and for nothing else; a second open request in the conversation raises
+  **23505** from `workspace_requests_one_open`.
+* **`workspace_cancel(p_request_id bigint)`** → `boolean` (`authenticated`). `queued` or `claimed`
+  → `cancelled`, with `error_code = 'cancelled'` and `finished_at` on the request row; true when a
+  row changed.
+
+**The runner's functions** (142; `security definer`, executable by `workspace_runner` only). A
+refusal one raises itself is **22023**, in a message that starts with the function's name.
+
+* **`workspace_claim(p_runner text)`** → at most one row `(request_id bigint, conversation_id
+  uuid, user_message_id uuid, prompt text, claude_session_id text, prior_tier text, history
+  jsonb)`. First sweeps claims older than 10 minutes to `failed` / `stale_claim` (request row and
+  answer), then claims the oldest `queued` request (`for update skip locked`, `attempts + 1`).
+  `history` is the last 20 messages before the request's own user message, oldest first, as
+  `[{role, content}]` (`[]` for a first question; the question itself is `prompt`). `prior_tier`
+  is the tier of the conversation's latest answer, null when there is none. It does not stamp the
+  heartbeat.
+* **`workspace_begin(p_request_id bigint, p_tier text, p_provider text, p_model text)`** → `uuid`,
+  the new answer's id (`finished = false`, parent = the question, `model` = the alias). Refuses a
+  request that is not `claimed`, and a second call for one request.
+* **`workspace_stream(p_request_id bigint, p_seq integer, p_delta text)`** → `boolean`. False,
+  sending nothing, unless the request is still `claimed`. An empty delta sends nothing and consumes
+  no `seq`. Refuses a delta over 16000 characters and a `seq` below 1.
+* **`workspace_finish(p_request_id bigint, p_state text, p_content text, p_tool_calls jsonb,
+  p_error_code text, p_cost_usd numeric, p_duration_ms integer, p_claude_session_id text, p_model
+  text)`** → `void`. `p_state` is `done` or `failed`. A cancelled request stays cancelled and its
+  answer gets `cancelled`; any other request takes `p_state`, `finished_at` and `p_error_code`.
+  Content is cut at 100000 characters and `p_tool_calls` to its first 20 elements, neither refused
+  for length. A non-null `p_model` replaces the alias. The conversation's `claude_session_id` is
+  stamped, null when `p_claude_session_id` is not uuid-shaped.
+* **`workspace_heartbeat(p_runner text)`** → `void`. Upserts the one heartbeat row; called every
+  30 s.
+
+**Realtime** (141). Private Broadcast topic `workspace:<conversation uuid>`, two events:
+`delta` `{request_id, seq, delta}` (`seq` starts at 1 and rises by 1 per flush) and `done`
+`{request_id, message_id, state}`; `realtime.send` adds an `id` key to each. Policy
+`workspace_owner_receive` on `realtime.messages` lets the owner SELECT broadcast rows while
+`realtime.topic()` is `workspace:%` (which also covers `workspace:lobby`). There is no insert
+policy: clients only receive. A missed broadcast costs live text, never the answer; the stored row
+is the record.
+
+**Access.** RLS: the owner (`(select auth.uid()) = (select public.app_owner())`) reads all four
+tables; `anon` holds nothing. `authenticated`'s writes are **column-level** (the first such grants
+here): insert `title` and update `title`, `archived` on conversations; insert `conversation_id`,
+`role`, `content`, `finished` on messages (policy: `role = 'user' and finished`); insert
+`conversation_id`, `user_message_id` and update `state`, `error_code`, `finished_at` on requests
+(policies: insert `queued` only; update only `queued` | `claimed` → `cancelled`). It can never
+write `claude_session_id`, `tier`, `provider`, `model`, `tool_calls`, `cost_usd`, `claimed_by` or
+`attempts`. **`workspace_runner`** (142) is a login role, noinherit, nobypassrls, `statement_timeout
+= 15s`, with no table, view or sequence privilege in `public`: it reaches the queue only through
+its five functions. Its password is set out of band and is in no file. `db_test_runner` holds
+`insert, update, delete` on the four tables and the role `workspace_runner` with inherit false, for
+the `phase21_*` units.
+
 ## Seed state (2026-09-02)
 
 7 courses, 12 staff, 11 meeting patterns, 127 sessions, 25 grade components, 57 assignments,
