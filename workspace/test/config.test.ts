@@ -269,22 +269,26 @@ describe('the OAuth token', () => {
   });
 });
 
+// The package's own source, read as text by the two audits below: every .ts and .mjs file under src/ and test/.
+const PACKAGE_ROOT = path.resolve(HERE, '..');
+const SOURCE_DIRS = ['src', 'test'];
+const SOURCE_FILE = /\.(ts|mjs)$/;
+/** The repo's ceiling for one file. */
+const SOURCE_FILE_MAX_LINES = 800;
+
+const sourceFiles = SOURCE_DIRS.flatMap((dir) =>
+  fs
+    .readdirSync(path.join(PACKAGE_ROOT, dir), { recursive: true, encoding: 'utf8' })
+    .filter((name) => SOURCE_FILE.test(name))
+    .map((name) => path.join(dir, name).replaceAll(path.sep, '/')),
+).sort();
+const readSource = (file: string): string => fs.readFileSync(path.join(PACKAGE_ROOT, file), 'utf8');
+
 describe('the byte-order mark in source', () => {
   // The mark is invisible in an editor and in a diff, so a file that handles it spells it as an escape.
   const MARK = '\uFEFF';
   // The six characters of the escape. Not String.raw: the test transformer cooks the escape inside a template.
   const ESCAPE = '\\uFEFF';
-  const PACKAGE_ROOT = path.resolve(HERE, '..');
-  const SOURCE_DIRS = ['src', 'test'];
-  const SOURCE_FILE = /\.(ts|mjs)$/;
-
-  const sourceFiles = SOURCE_DIRS.flatMap((dir) =>
-    fs
-      .readdirSync(path.join(PACKAGE_ROOT, dir), { recursive: true, encoding: 'utf8' })
-      .filter((name) => SOURCE_FILE.test(name))
-      .map((name) => path.join(dir, name).replaceAll(path.sep, '/')),
-  ).sort();
-  const read = (file: string): string => fs.readFileSync(path.join(PACKAGE_ROOT, file), 'utf8');
 
   it('finds the source files it reads, config.ts and this file among them', () => {
     expect(sourceFiles).toContain('src/config.ts');
@@ -292,12 +296,24 @@ describe('the byte-order mark in source', () => {
   });
 
   it('is in no source file as a literal character', () => {
-    expect(sourceFiles.filter((file) => read(file).includes(MARK))).toEqual([]);
+    expect(sourceFiles.filter((file) => readSource(file).includes(MARK))).toEqual([]);
   });
 
   it('is written as an escape where config.ts strips it', () => {
     expect(ESCAPE).toHaveLength(6);
-    expect(read('src/config.ts')).toContain(`/^${ESCAPE}/`);
+    expect(readSource('src/config.ts')).toContain(`/^${ESCAPE}/`);
+  });
+});
+
+describe('the size of a source file', () => {
+  /** Lines as `wc -l` counts them: one per line end. */
+  const lineCount = (text: string): number => text.split('\n').length - 1;
+
+  it(`is at most ${SOURCE_FILE_MAX_LINES} lines, tests and suites included`, () => {
+    const over = sourceFiles
+      .map((file) => ({ file, lines: lineCount(readSource(file)) }))
+      .filter(({ lines }) => lines > SOURCE_FILE_MAX_LINES);
+    expect(over).toEqual([]);
   });
 });
 
