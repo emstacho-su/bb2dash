@@ -390,7 +390,7 @@ describe('claude-stream-sign-in-expired.jsonl', () => {
 
   it('is not retried as a fresh start: an assistant message arrived', () => {
     expect(summary.sawAssistant).toBe(true);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: 1, sawAssistant: summary.sawAssistant, alreadyRetried: false })).toBe(false);
+    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: 1, sawAssistant: summary.sawAssistant, alreadyRetried: false, stoppedByStream: false })).toBe(false);
   });
 });
 
@@ -417,11 +417,16 @@ describe('claude-stream-resume-missing.jsonl', () => {
 
   it('is retried once as a fresh start with replay', () => {
     const exitCode = meta?.exitCode ?? 0;
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: false })).toBe(true);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: true })).toBe(false);
-    expect(shouldRetryAsFresh({ mode: 'fresh', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: false })).toBe(false);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: 0, sawAssistant: summary.sawAssistant, alreadyRetried: false })).toBe(false);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: null, sawAssistant: false, alreadyRetried: false })).toBe(true);
+    expect(shouldRetryAsFresh({ mode: 'resume', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: false, stoppedByStream: false })).toBe(true);
+    expect(shouldRetryAsFresh({ mode: 'resume', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: true, stoppedByStream: false })).toBe(false);
+    expect(shouldRetryAsFresh({ mode: 'fresh', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: false, stoppedByStream: false })).toBe(false);
+    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: 0, sawAssistant: summary.sawAssistant, alreadyRetried: false, stoppedByStream: false })).toBe(false);
+    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: null, sawAssistant: false, alreadyRetried: false, stoppedByStream: false })).toBe(true);
+  });
+
+  it('is not the case of a start the runner killed on what the stream showed: that one is never started again', () => {
+    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: null, sawAssistant: false, alreadyRetried: false, stoppedByStream: true })).toBe(false);
+    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: 1, sawAssistant: false, alreadyRetried: false, stoppedByStream: true })).toBe(false);
   });
 });
 

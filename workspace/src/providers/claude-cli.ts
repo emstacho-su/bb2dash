@@ -138,14 +138,21 @@ export interface StartOutcome {
   /** Whether any `assistant` message arrived before the process ended. */
   readonly sawAssistant: boolean;
   readonly alreadyRetried: boolean;
+  /**
+   * Whether the runner killed this start on what its stream showed: a refused init line, a tool
+   * call with no answer from the gate, a turn reported as paid from usage credits.
+   */
+  readonly stoppedByStream: boolean;
 }
 
 /**
  * The one recovery (Contract, Continuity): a `--resume` start that exits non-zero before any
  * `assistant` message is retried, once per turn, as a fresh start with the stored history replayed.
+ * It is for a start that ended by itself. A start the runner killed also ends without exit code 0,
+ * and is never started again: its turn is stored under the code its stop named.
  */
 export function shouldRetryAsFresh(outcome: StartOutcome): boolean {
-  return outcome.mode === 'resume' && !outcome.alreadyRetried && !outcome.sawAssistant && outcome.exitCode !== 0;
+  return outcome.mode === 'resume' && !outcome.alreadyRetried && !outcome.sawAssistant && !outcome.stoppedByStream && outcome.exitCode !== 0;
 }
 
 /** One turn of the CLI, as a stream of events: the real process in the container, a replay in tests. */
@@ -424,6 +431,7 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
         exitCode: attempt.exit.code,
         sawAssistant: attempt.summary.sawAssistant,
         alreadyRetried: retried,
+        stoppedByStream: attempt.summary.violation !== null || attempt.summary.overage,
       };
       if (!attempt.aborted && shouldRetryAsFresh(outcome)) {
         retried = true;
