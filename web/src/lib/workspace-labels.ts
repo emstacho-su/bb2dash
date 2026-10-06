@@ -9,10 +9,15 @@
  * of them carries a cost figure: the per-answer cap is a runner setting the
  * page cannot read, and the stored cost estimate is never shown.
  *
- * NOT FROZEN. The last section holds the words the screen needs that the brief
- * does not spell: region names, the two empty lines, and the problem lines for
- * a read or a write that failed. They follow the forms the app already uses
- * (the Inbox's "Could not load …: <reason>") and are the PM's to reword.
+ * RULING U1 (2026-10-06) added the three lines of the empty message column,
+ * the placeholder of the text box and the "Status" label, and kept the
+ * "New conversation" link. They are PM wording too, and held the same way.
+ *
+ * ACCEPTED. The last section holds the words the screen needs that the brief
+ * does not spell: region names, the two empty lines of the list, and the
+ * problem lines for a read or a write that failed. W-66 wrote them in the
+ * forms the app already uses (the Inbox's "Could not load …: <reason>");
+ * ruling U1 accepted them as PM wording, so the test holds them as well.
  */
 
 import type { WorkspaceErrorCode, WorkspaceTier } from './queries.workspace';
@@ -100,20 +105,54 @@ export const PAGE_KICKER = 'Assistant';
 /** The Suspense fallback of the route. */
 export const LOADING_FALLBACK = 'Loading the Workspace…';
 
-/** A conversation that could not be read, or that does not exist. */
+/**
+ * A conversation that could not be read. An id that does not exist is not this
+ * line: it has its own (`COLUMN_NOT_FOUND_LINE`).
+ */
 export function conversationProblemLine(reason: string): string {
   return `Could not load this conversation: ${reason}`;
 }
 
 /* ---------------------------------------------------------------------------
- * Not frozen: W-66's wording, in the app's own forms
+ * Frozen: the empty message column, the placeholder, the status label and the
+ * way back to an empty composer (ruling U1)
+ * ------------------------------------------------------------------------ */
+
+/** The message column with no conversation selected. */
+export const COLUMN_START_LINE = 'Ask a question to start a conversation.';
+
+/** The message column while the conversation's rows are still being read. */
+export const COLUMN_LOADING_LINE = 'Loading the conversation…';
+
+/**
+ * The message column for a `?c=` id that has no rows, and for SQLSTATE 23503
+ * from `workspace_ask`. The database's own sentence about the foreign key is
+ * never shown.
+ */
+export const COLUMN_NOT_FOUND_LINE = 'This conversation was not found.';
+
+/** The visible placeholder of the composer's text box. */
+export const QUESTION_PLACEHOLDER = 'Ask about your courses or your decisions';
+
+/**
+ * What a screen reader hears before a status line that has no answer text
+ * beside it (a queued question, an answer not yet begun, a failure with no
+ * stored text). An answer with text keeps `ANSWER_ROLE_LABEL`.
+ */
+export const STATUS_ROLE_LABEL = 'Status';
+
+/**
+ * The link back to an empty composer, `/workspace` with no `?c=`: at the top of
+ * the list, and beside the not-found line.
+ */
+export const NEW_CONVERSATION_LABEL = 'New conversation';
+
+/* ---------------------------------------------------------------------------
+ * Accepted as PM wording (ruling U1): W-66's strings, in the app's own forms
  * ------------------------------------------------------------------------ */
 
 /** The name of the list region, and its heading. */
 export const CONVERSATIONS_HEADING = 'Conversations';
-
-/** The link back to an empty composer: `/workspace` with no `?c=`. */
-export const NEW_CONVERSATION_LABEL = 'New conversation';
 
 /** The list once it has answered with no rows. */
 export const NO_CONVERSATIONS_LINE = 'No conversations yet.';
