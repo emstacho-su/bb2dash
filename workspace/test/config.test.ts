@@ -269,6 +269,38 @@ describe('the OAuth token', () => {
   });
 });
 
+describe('the byte-order mark in source', () => {
+  // The mark is invisible in an editor and in a diff, so a file that handles it spells it as an escape.
+  const MARK = '﻿';
+  // The six characters of the escape. Not String.raw: the test transformer cooks the escape inside a template.
+  const ESCAPE = '\\uFEFF';
+  const PACKAGE_ROOT = path.resolve(HERE, '..');
+  const SOURCE_DIRS = ['src', 'test'];
+  const SOURCE_FILE = /\.(ts|mjs)$/;
+
+  const sourceFiles = SOURCE_DIRS.flatMap((dir) =>
+    fs
+      .readdirSync(path.join(PACKAGE_ROOT, dir), { recursive: true, encoding: 'utf8' })
+      .filter((name) => SOURCE_FILE.test(name))
+      .map((name) => path.join(dir, name).replaceAll(path.sep, '/')),
+  ).sort();
+  const read = (file: string): string => fs.readFileSync(path.join(PACKAGE_ROOT, file), 'utf8');
+
+  it('finds the source files it reads, config.ts and this file among them', () => {
+    expect(sourceFiles).toContain('src/config.ts');
+    expect(sourceFiles).toContain('test/config.test.ts');
+  });
+
+  it('is in no source file as a literal character', () => {
+    expect(sourceFiles.filter((file) => read(file).includes(MARK))).toEqual([]);
+  });
+
+  it('is written as an escape where config.ts strips it', () => {
+    expect(ESCAPE).toHaveLength(6);
+    expect(read('src/config.ts')).toContain(`/^${ESCAPE}/`);
+  });
+});
+
 describe('claude/settings.json', () => {
   const settings = JSON.parse(fs.readFileSync(SETTINGS, 'utf8')) as Record<string, unknown>;
 
