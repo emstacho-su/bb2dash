@@ -42,7 +42,7 @@ $ npm run typecheck
 (no output, exit 0)
 ```
 
-The fixture holds 56 cases: 18 `low`, 21 `high`, 17 `mid`; 11 of them are follow-ups (a prior tier
+The fixture holds 56 cases: 20 `low`, 21 `high`, 15 `mid`; 10 of them are follow-ups (a prior tier
 and at most 40 characters). The test asserts the floors itself (at least 30 cases, 8 per tier, 6
 follow-ups), that the fixture holds acceptance steps 3 to 7 word for word, and that they route `low`,
 `low`, `low`, `mid`, `high`.
@@ -61,3 +61,25 @@ How the rule's open words were read (the fixture is the executable form):
   "What should I write for the GEO.103 reflection?" and "What is the plan for week 5?" are `mid`.
 * Lengths are counted in code points after trimming, the way the database counts its 8000.
 * A first question has no prior tier, so a short one ("ok thanks") is `mid`.
+
+## Task 10 · tool gate hook (P-88)
+
+Files: `workspace/src/hooks/tool-gate.ts` (the hook the CLI runs), `workspace/src/hooks/gate-rules.ts`
+(its rules), `workspace/claude/settings.json`, `workspace/test/tool-gate.test.ts`.
+
+`gate-rules.ts` is one file more than the Files table lists. The hook file runs on load and is never
+imported: it has no "am I the main module" test that could fail and leave the gate silent, which
+would read as allow. The rules live beside it so the unit test can import them, and the same test
+runs the built `dist/hooks/tool-gate.js` as a process.
+
+### Red
+
+Commit: `test/tool-gate.test.ts` alone.
+
+```
+$ npx vitest run test/tool-gate.test.ts
+ FAIL  test/tool-gate.test.ts [ test/tool-gate.test.ts ]
+Error: Cannot find module '../src/hooks/gate-rules.js' imported from C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/test/tool-gate.test.ts
+ Test Files  1 failed (1)
+      Tests  no tests
+```
