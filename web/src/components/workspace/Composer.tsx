@@ -17,7 +17,7 @@
  * failure never loses it.
  */
 
-import { useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { ASK_LABEL, QUESTION_FIELD_LABEL, STOP_LABEL } from '@/lib/workspace-labels';
 import styles from './Composer.module.css';
 
@@ -40,10 +40,17 @@ export interface ComposerProps {
 
 export function Composer({ requestOpen, busy, refusal, onAsk, onStop, onEdit }: ComposerProps) {
   const [text, setText] = useState('');
+  /** A question is on its way. A ref, because a held Enter repeats before `busy` has rendered. */
+  const sending = useRef(false);
 
   async function ask() {
-    if (busy) return;
-    if (await onAsk(text)) setText('');
+    if (busy || sending.current) return;
+    sending.current = true;
+    try {
+      if (await onAsk(text)) setText('');
+    } finally {
+      sending.current = false;
+    }
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
