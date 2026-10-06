@@ -795,6 +795,14 @@ run on it in this order, with nothing under `web/` edited while they ran.
 | coverage | `npm run test:coverage` | `Tests  2768 passed (2768)` · exit 0 · all files, lines 91.41 % (floor 83 %) |
 | task 16's row | `npx vitest run test/Workspace.test.tsx test/TopNav.workspace.test.tsx test/workspace-labels.test.ts test/audits.test.ts test/use-workspace-stream test/queries.workspace` | `Test Files  9 passed (9)` · `Tests  263 passed (263)` |
 
+**Run again after a second merge.** While the wave ran the phase branch gained two of the PM's
+commits (f60a7e9, the regenerated `web/src/lib/supabase/database.types.ts`, and 0efe975, 102a).
+They were merged in as 9a23a4a, with no conflict and nothing of W-66's changed, and the five gates
+were run again on that commit, in the same order: `npx vitest run` → `Test Files  149 passed (149)`
+· `Tests  2768 passed (2768)`, exit 0; `npm run typecheck` exit 0; `npx eslint . --max-warnings 0`
+exit 0; `npm run build` exit 0, `○ /workspace`; `npm run test:coverage` exit 0, 2768 passed, all
+files lines 91.41 %.
+
 2768 = 2728 + 40: `workspace-labels` 23 → 31, `Workspace.thread` 37 → 43, `Workspace` 37 → 40,
 `Workspace.empty` 15 (new), `Workspace.rereads` 8 (new); `Workspace.failures` stays 19 (rewrites).
 The four screen files with new cases were run three times in a row: `Tests  82 passed (82)` each
