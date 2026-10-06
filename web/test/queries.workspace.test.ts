@@ -105,6 +105,12 @@ const MESSAGE = '0b0fe08b-1d79-41a7-9674-2a3de0b4986e';
 const OTHER_MESSAGE = 'c9a7d3e2-55aa-4f10-b1d2-7e8f9a0b1c2d';
 const NOW = Date.parse('2026-10-05T16:00:00Z');
 
+/** A conversation's requests as the page hands them to `messagesOptions`: one open, or none. */
+const ONE_OPEN = [
+  normalizeRequest({ id: 42, conversation_id: CONVERSATION, user_message_id: MESSAGE, state: 'claimed' })!,
+];
+const NONE_OPEN: never[] = [];
+
 function callsOn(target: string): Call[] {
   return stub.calls.filter((call) => call.target === target);
 }
@@ -605,7 +611,7 @@ describe('conversationsOptions: archived rows only when they are asked for', () 
   });
 });
 
-describe('messagesOptions: the stored rows, refetched every 5 s only while a request is open', () => {
+describe('messagesOptions: the stored rows, refetched every 5 s while a request is open', () => {
   it('reads one conversation, oldest first, and never the cost or the session', async () => {
     stub.result = {
       data: [
@@ -615,7 +621,7 @@ describe('messagesOptions: the stored rows, refetched every 5 s only while a req
       error: null,
     };
 
-    const rows = await run<unknown[]>(messagesOptions(CONVERSATION, false));
+    const rows = await run<unknown[]>(messagesOptions(CONVERSATION, NONE_OPEN));
 
     expect(callsOn('workspace_messages')).toEqual([
       {
@@ -632,32 +638,35 @@ describe('messagesOptions: the stored rows, refetched every 5 s only while a req
     expect(rows[0]).toMatchObject({ id: MESSAGE, role: 'user', content: 'spike', finished: true });
   });
 
-  it('refetches every 5 s while a request is open, and not at all otherwise', () => {
+  // Since the review round (ruling V4, CR-9) the interval is decided from the conversation's
+  // requests and the rows the query holds. The poll after a close is in
+  // `queries.workspace.poll.test.ts`.
+  it('refetches every 5 s while a request is open, and not at all with none open and nothing owed', () => {
     expect(WORKSPACE_MESSAGES_REFETCH_MS).toBe(5_000);
-    expect(messagesOptions(CONVERSATION, true).refetchInterval).toBe(5_000);
-    expect(messagesOptions(CONVERSATION, false).refetchInterval).toBe(false);
+    expect(intervalFor(messagesOptions(CONVERSATION, ONE_OPEN), [])).toBe(5_000);
+    expect(intervalFor(messagesOptions(CONVERSATION, NONE_OPEN), [])).toBe(false);
   });
 
   it('keeps one cache entry per conversation, whether or not a request is open', () => {
-    expect(messagesOptions(CONVERSATION, true).queryKey).toEqual(
-      messagesOptions(CONVERSATION, false).queryKey,
+    expect(messagesOptions(CONVERSATION, ONE_OPEN).queryKey).toEqual(
+      messagesOptions(CONVERSATION, NONE_OPEN).queryKey,
     );
-    expect(messagesOptions(CONVERSATION, false).queryKey).toEqual(
+    expect(messagesOptions(CONVERSATION, NONE_OPEN).queryKey).toEqual(
       workspaceKeys.messages(CONVERSATION),
     );
   });
 
   it('is off with no conversation, and refuses to run without a uuid', async () => {
-    expect(messagesOptions(null, false).enabled).toBe(false);
-    expect(messagesOptions(CONVERSATION, false).enabled).toBe(true);
-    await expect(run(messagesOptions(null, false))).rejects.toThrow(/conversation id/);
+    expect(messagesOptions(null, NONE_OPEN).enabled).toBe(false);
+    expect(messagesOptions(CONVERSATION, NONE_OPEN).enabled).toBe(true);
+    await expect(run(messagesOptions(null, NONE_OPEN))).rejects.toThrow(/conversation id/);
     expect(stub.calls).toEqual([]);
   });
 
   it('throws the database error', async () => {
     const error = { code: '42501', message: 'permission denied' };
     stub.result = { data: null, error };
-    await expect(run(messagesOptions(CONVERSATION, false))).rejects.toBe(error);
+    await expect(run(messagesOptions(CONVERSATION, NONE_OPEN))).rejects.toBe(error);
   });
 });
 
@@ -748,8 +757,8 @@ describe('statusOptions: v_workspace_status, the one row', () => {
 
 describe('the messages, open-request and status queries set staleTime: 0', () => {
   it('so a reload refetches on mount instead of trusting the restored cache', () => {
-    expect(messagesOptions(CONVERSATION, false).staleTime).toBe(0);
-    expect(messagesOptions(CONVERSATION, true).staleTime).toBe(0);
+    expect(messagesOptions(CONVERSATION, NONE_OPEN).staleTime).toBe(0);
+    expect(messagesOptions(CONVERSATION, ONE_OPEN).staleTime).toBe(0);
     expect(requestsOptions(CONVERSATION).staleTime).toBe(0);
     expect(statusOptions().staleTime).toBe(0);
   });
@@ -757,8 +766,8 @@ describe('the messages, open-request and status queries set staleTime: 0', () =>
 
 describe('the same three queries refetch when the tab regains focus', () => {
   it('whatever the client`s default is: the interval does not run in a hidden tab', () => {
-    expect(messagesOptions(CONVERSATION, false).refetchOnWindowFocus).toBe('always');
-    expect(messagesOptions(CONVERSATION, true).refetchOnWindowFocus).toBe('always');
+    expect(messagesOptions(CONVERSATION, NONE_OPEN).refetchOnWindowFocus).toBe('always');
+    expect(messagesOptions(CONVERSATION, ONE_OPEN).refetchOnWindowFocus).toBe('always');
     expect(requestsOptions(CONVERSATION).refetchOnWindowFocus).toBe('always');
     expect(statusOptions().refetchOnWindowFocus).toBe('always');
   });

@@ -10,12 +10,16 @@
  * the service is answering: a request in view becomes `claimed`, and its first
  * delta arrives.
  *
- * THE MESSAGES, ABOUT 3 S AND ABOUT 10 S AFTER STOP ON A CLAIMED REQUEST. The
- * runner sees the cancel within seconds and stores what it had written. That
- * row reaches the page at its `done` broadcast; if the broadcast is missed
- * nothing else reads it, because a stopped request is no longer polled. So the
- * page reads the messages twice more by the clock. A queued request has no
- * runner and no partial answer, so its Stop schedules nothing.
+ * THE MESSAGES, EVERY 5 S FOR UP TO 60 S AFTER A REQUEST CLOSES WITH ITS ANSWER
+ * UNSTORED (the review round's ruling V4, CR-9, which replaces U1's two timers
+ * at about 3 s and about 10 s). The runner sees the cancel within seconds and
+ * stores what it had written. That row reaches the page at its `done`
+ * broadcast; if the broadcast is missed, the poll brings it. The poll is
+ * decided from the rows (the newest request closed, its assistant row
+ * unfinished), not from what the page held when Stop was pressed, and it ends
+ * by itself: when the stored row lands, or 60 s after the page first saw the
+ * request so. A stopped request with no assistant row has no runner and no
+ * partial answer, so nothing is polled for it.
  *
  * Every case runs on a fake clock with the tab in front, so the only reads are
  * the ones the page asks for: nothing here waits on a real timer.
@@ -189,7 +193,7 @@ describe('the status is read again at once when the service is seen answering', 
   });
 });
 
-describe('after Stop on a claimed request the messages are read again about 3 s and about 10 s after the press', () => {
+describe('after a request closes with its answer unstored the messages are polled every 5 s, for up to 60 s', () => {
   const ANSWER = 'a7c1d2e3-55aa-4f10-b1d2-7e8f9a0b1c2d';
   const STOPPED = 'You stopped this answer.';
   const messageReads = () => reads('workspace_messages');
@@ -242,44 +246,85 @@ describe('after Stop on a claimed request the messages are read again about 3 s 
     return view;
   }
 
-  it('shows the stored partial answer at the 3 s read when its done broadcast is missed, then reads once more at 10 s', async () => {
+  it('shows the stored partial answer at the next poll when its done broadcast is missed, and then stops polling', async () => {
     const { container } = await stopMidAnswer();
     const before = messageReads();
 
     await advance(1_900); // 2.0 s after the press
     runnerStoresPartial();
-    await advance(900); // 2.9 s: nothing has read it
+    await advance(2_000); // 4.0 s: no poll yet
     expect(messageReads()).toBe(before);
     expect(answerText(container)).toBe('Week one: ');
 
-    await advance(200); // 3.1 s
+    await advance(1_300); // 5.3 s: the first poll
     expect(messageReads()).toBe(before + 1);
-    expect(answerText(container)).toBe('Week one: Monday');
-    expect(lineOf(container)).toBe(STOPPED);
-
-    await advance(6_800); // 9.9 s
-    expect(messageReads()).toBe(before + 1);
-    await advance(200); // 10.1 s
-    expect(messageReads()).toBe(before + 2);
-
-    // Two reads, not a poll: a minute on, nothing more.
-    await advance(60_000);
-    expect(messageReads()).toBe(before + 2);
-  });
-
-  it('shows it at the 10 s read when the runner stored it later than 3 s', async () => {
-    const { container } = await stopMidAnswer();
-
-    await advance(5_900); // 6.0 s after the press: the 3 s read came back with the unfinished row
-    expect(answerText(container)).toBe('Week one: ');
-    runnerStoresPartial();
-    await advance(3_900); // 9.9 s
-    expect(answerText(container)).toBe('Week one: ');
-
-    await advance(200); // 10.1 s
     expect(answerText(container)).toBe('Week one: Monday');
     expect(lineOf(container)).toBe(STOPPED);
     expect(screen.getByRole('button', { name: 'Ask' })).toBeInTheDocument();
+
+    // The stored row has landed: nothing is owed, and a minute on nothing more was read.
+    await advance(60_000);
+    expect(messageReads()).toBe(before + 1);
+  });
+
+  it('keeps polling for a runner that stores it later than 10 s', async () => {
+    const { container } = await stopMidAnswer();
+
+    await advance(11_900); // 12.0 s after the press: the polls at 5 s and 10 s brought the unfinished row
+    expect(answerText(container)).toBe('Week one: ');
+    expect(lineOf(container)).toBe(STOPPED);
+    runnerStoresPartial();
+
+    await advance(3_400); // 15.4 s: the third poll
+    expect(answerText(container)).toBe('Week one: Monday');
+    expect(lineOf(container)).toBe(STOPPED);
+  });
+
+  it('polls when Stop was pressed on a row the page still read as queued, and the runner had begun', async () => {
+    fake.state.rows = {
+      workspace_messages: [QUESTION_ROW],
+      workspace_requests: [requestRow('queued')],
+      v_workspace_status: heartbeat(START),
+    };
+    const { container } = await open();
+    expect(turn(container)).toHaveAttribute('data-turn', 'queued');
+
+    // Between two polls the runner claims the request and begins its row. This page has not read either.
+    fake.state.rows = {
+      ...fake.state.rows,
+      workspace_messages: [QUESTION_ROW, answerRow({ content: '', finished: false })],
+      workspace_requests: [requestRow('claimed')],
+    };
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await advance(100);
+    expect(fake.state.rows.workspace_requests[0]).toMatchObject({ state: 'cancelled' });
+    expect(lineOf(container)).toBe(STOPPED);
+
+    await advance(1_900); // 2.0 s after the press
+    runnerStoresPartial();
+    await advance(3_400); // 5.4 s: the first poll
+
+    expect(answerText(container)).toBe('Week one: Monday');
+    expect(lineOf(container)).toBe(STOPPED);
+  });
+
+  it('stops by itself 60 s after the close when the stored row never comes', async () => {
+    await stopMidAnswer();
+    const before = messageReads();
+
+    await advance(30_000);
+    const atHalf = messageReads();
+    // About one read every 5 s, not two reads and silence.
+    expect(atHalf - before).toBeGreaterThanOrEqual(5);
+    expect(atHalf - before).toBeLessThanOrEqual(6);
+
+    await advance(40_000); // 70 s after the press: the 60 s have passed
+    const atEnd = messageReads();
+    expect(atEnd - before).toBeGreaterThanOrEqual(11);
+    expect(atEnd - before).toBeLessThanOrEqual(13);
+
+    await advance(5 * 60_000);
+    expect(messageReads()).toBe(atEnd);
   });
 
   it('reads nothing again after Stop on a queued request: no runner holds a partial answer', async () => {
@@ -299,7 +344,7 @@ describe('after Stop on a claimed request the messages are read again about 3 s 
     expect(messageReads()).toBe(before);
   });
 
-  it('drops both reads when the page leaves the conversation', async () => {
+  it('stops polling when the page leaves the conversation', async () => {
     const view = await stopMidAnswer();
     const before = messageReads();
 
