@@ -253,6 +253,20 @@ describe('fresh starts, resumed turns and the one recovery', () => {
     expect(valueAfter(argv, '--permission-mode')).toBe('dontAsk');
   });
 
+  it.each([
+    ['fresh', null],
+    ['resume', STORED_SESSION_ID],
+  ] as const)('never hands the CLI a prompt that opens with a slash (%s start): it would be read as a command', async (_mode, stored) => {
+    const h = harness([{ lines: lookup, exit: OK }]);
+    await run(h, input({ prompt: '/model opus', claudeSessionId: stored }));
+    const argv = h.spawn.calls[0]!.argv;
+    const prompt = argv[argv.length - 1]!;
+    expect(argv[argv.length - 2]).toBe('--');
+    expect(prompt.startsWith('/')).toBe(false);
+    expect(prompt.endsWith('/model opus')).toBe(true);
+    expect(valueAfter(argv, '--model')).toBe('haiku');
+  });
+
   it.each([['not-a-uuid'], [`${STORED_SESSION_ID} --model opus`], ['--fork-session']])(
     'never puts the stored session id %j in argv: a fresh start with replay instead',
     async (stored) => {

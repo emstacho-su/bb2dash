@@ -17,6 +17,7 @@ export const REPLAY_HEADER = 'Earlier messages in this conversation, oldest firs
 export const QUESTION_HEADER = 'The new question:';
 const CUT_MARK = ' [cut]';
 const BLOCK_GAP = '\n\n';
+const COMMAND_PREFIX = '/';
 /** A cut message is kept only when at least this much of it fits. */
 const MIN_CUT_BYTES = 64;
 
@@ -45,10 +46,18 @@ function blockWithin(message: HistoryMessage, budget: number): { text: string; w
   return { text: `${label(message)}${prefixWithin(message.content, room)}${CUT_MARK}${BLOCK_GAP}`, whole: false };
 }
 
+/**
+ * The question as the CLI must read it: as a question. The CLI reads a prompt that opens with `/`
+ * as one of its own commands, so such a question goes under the question header instead.
+ */
+export function asQuestion(question: string): string {
+  return question.trimStart().startsWith(COMMAND_PREFIX) ? `${QUESTION_HEADER}${BLOCK_GAP}${question}` : question;
+}
+
 /** The prompt element: the question alone, or the replay and then the question. */
 export function buildPrompt(history: readonly HistoryMessage[], question: string): string {
   const stored = history.filter((message) => message.content !== '').slice(-HISTORY_REPLAY);
-  if (stored.length === 0) return question;
+  if (stored.length === 0) return asQuestion(question);
 
   const head = `${REPLAY_HEADER}${BLOCK_GAP}`;
   const tail = `${QUESTION_HEADER}${BLOCK_GAP}`;
@@ -61,6 +70,6 @@ export function buildPrompt(history: readonly HistoryMessage[], question: string
     budget -= utf8Bytes(block.text);
     if (!block.whole) break;
   }
-  if (blocks.length === 0) return question;
+  if (blocks.length === 0) return asQuestion(question);
   return `${head}${blocks.join('')}${tail}${question}`;
 }

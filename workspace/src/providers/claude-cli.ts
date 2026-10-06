@@ -15,7 +15,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { CLAUDE_BIN, PATHS } from '../config.js';
 import { mapTurnEnd, type ErrorCode } from '../errors.js';
 import { ALLOWED_TOOLS } from '../hooks/gate-rules.js';
-import { buildPrompt } from '../replay.js';
+import { asQuestion, buildPrompt } from '../replay.js';
 import { checkInit, createTurnStream, parseLine, type InitFacts, type TurnSummary } from '../stream-json.js';
 import type { Provider, ResultEvent, TurnEvent, TurnInput } from './types.js';
 
@@ -359,7 +359,7 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
     const log = (message: string): void => deps.log(`turn request=${input.requestId} ${message}`);
 
     async function* attemptOnce(start: SessionStart, token: string): AsyncGenerator<TurnEvent, Attempt> {
-      const prompt = start.mode === 'fresh' ? buildPrompt(input.history, input.prompt) : input.prompt;
+      const prompt = start.mode === 'fresh' ? buildPrompt(input.history, input.prompt) : asQuestion(input.prompt);
       const argv = buildArgv({ model: input.model, session: start, systemPrompt: deps.readSystemPrompt(), budgetUsd: input.budgetUsd, prompt });
       const child = deps.spawn(argv, { cwd: PATHS.turnCwd, env: childEnv(deps.baseEnv, token) });
       const stream = createTurnStream();
