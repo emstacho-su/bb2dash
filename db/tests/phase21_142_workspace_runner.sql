@@ -9,7 +9,8 @@
 --      has_function_privilege and pg_auth_members, never information_schema (it lists enabled
 --      roles only, so under an inherit-false membership a count of 0 there proves nothing).
 --   1. setup
---   2. claim: the oldest queued whatever its age, the history, prior_tier, no heartbeat stamp
+--   2. claim: the oldest queued whatever its age, the history, prior_tier, no heartbeat stamp,
+--      and the session id of the request's own conversation
 --   3. begin
 --   4. stream, and Stop
 --   5. finish on a cancelled request; the stale sweep; finish done; finish failed
@@ -227,12 +228,14 @@ declare
   c_sid_a constant text := '0a1b2c3d-0000-4000-8000-00000000a142';
   c_sid_b constant text := '0a1b2c3d-0000-4000-8000-00000000b142';
   c_sid_c constant text := '0a1b2c3d-0000-4000-8000-00000000c142';
+  c_sid_e constant text := '0a1b2c3d-0000-4000-8000-00000000e142';
   v_owner uuid := app_owner();
   v_out   jsonb;
   v_a uuid; v_a_msg uuid; v_a_req bigint; v_a_ans uuid;   -- A: 21 earlier messages, an old request
   v_b uuid; v_b_msg uuid; v_b_req bigint; v_b_ans uuid;   -- B: a first question, then Stop
   v_c uuid; v_c_msg uuid; v_c_req bigint; v_c_ans uuid;   -- C: a queued request, later finished done
   v_d_req bigint; v_d_ans uuid;                           -- D: a follow-up in B, finished failed
+  v_e uuid; v_e_req bigint;                               -- E: a request whose question sits in A
   v_claim record;
   v_row   record;
   v_case  record;
@@ -332,6 +335,26 @@ begin
   if v_n <> 0 then
     raise exception 'FAIL 2d: a claim with nothing queued returned % row(s)', v_n;
   end if;
+
+  -- 2e. The session id is the one of the request's own conversation. The browser cannot queue a
+  --     request whose question sits in another conversation (140's insert policy), but a role that
+  --     bypasses RLS can, as the session role does here: E's request names A's question. The claim
+  --     must hand back E's session, never A's.
+  insert into workspace_conversations (title, claude_session_id)
+  values ('phase21_142 E', c_sid_e) returning id into v_e;
+  insert into workspace_requests (conversation_id, user_message_id)
+  values (v_e, v_a_msg) returning id into v_e_req;
+  set local role workspace_runner;
+  select * into v_claim from workspace_claim('phase21_142');
+  reset role;
+  if v_claim.request_id is distinct from v_e_req or v_claim.conversation_id is distinct from v_e
+     or v_claim.claude_session_id is distinct from c_sid_e then
+    raise exception 'FAIL 2e: the claim of a request in conversation E returned % (expected session %, its own conversation''s)',
+      row_to_json(v_claim), c_sid_e;
+  end if;
+  update workspace_requests
+     set state = 'cancelled', error_code = 'cancelled', finished_at = now()
+   where id = v_e_req;
 
   -- C: queued now, in a conversation that already carries a session id.
   insert into workspace_conversations (title, claude_session_id)
