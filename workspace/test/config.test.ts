@@ -186,8 +186,14 @@ describe('the runner DSN', () => {
   });
 
   // The connection is made from these parts alone (db.ts), so a DSN without one is refused at start, not at the first connect.
+  it('refuses a DSN that names no host: with a user in front of it, that is not a URL at all', () => {
+    const noHost = 'postgresql://workspace_runner.projectref:not-a-password@/postgres?sslmode=require';
+    expect(() => assertRunnerDsn(noHost)).toThrow(ConfigError);
+    expect(() => assertRunnerDsn(noHost)).toThrow(/not a postgresql:\/\/ URL|names no host/);
+    expect(() => assertRunnerDsn('postgresql:///postgres?sslmode=require')).toThrow(/names no host/);
+  });
+
   it.each([
-    ['host', 'postgresql://workspace_runner.projectref:not-a-password@/postgres?sslmode=require'],
     ['user', 'postgresql://:not-a-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require'],
     ['password', 'postgresql://workspace_runner.projectref@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require'],
     ['database', 'postgresql://workspace_runner.projectref:not-a-password@aws-0-us-east-1.pooler.supabase.com:5432/?sslmode=require'],

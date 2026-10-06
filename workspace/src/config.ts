@@ -193,6 +193,11 @@ export function assertRunnerDsn(dsn: string): string {
   if (url.port === TRANSACTION_POOLER_PORT) {
     throw new ConfigError(`${DSN_SECRET_NAME} points at port 6543, the transaction pooler; use the session pooler on 5432`);
   }
+  // The connection is made from these parts alone, so each must be there (`db.ts`, `dsnParts`).
+  const parts = { host: url.hostname, user: url.username, password: url.password, database: url.pathname.replace(/^\//, '') };
+  for (const name of ['host', 'user', 'password', 'database'] as const) {
+    if (parts[name] === '') throw new ConfigError(`${DSN_SECRET_NAME} names no ${name}`);
+  }
   const sslmode = url.searchParams.get('sslmode')?.trim().toLowerCase() ?? null;
   if (sslmode === null) throw new ConfigError(`${DSN_SECRET_NAME} names no sslmode; append ?sslmode=verify-full`);
   if (!SSLMODE_ALLOWED.has(sslmode)) {
