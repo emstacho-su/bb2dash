@@ -286,3 +286,45 @@ The hand-over is in two parts, because the `alter role` line needs the role 142 
 * **Part B, owed after 142 is on prod.** A second line reads the stored secret and puts
   `alter role workspace_runner with password '…';` on his clipboard for an unsaved Supabase SQL
   editor tab.
+
+## Migrations 140, 141, 142 applied (2026-10-06)
+
+A pre-freeze round first tightened three things an independent check had found, while nothing
+was applied: 140's request insert policy requires a `user` message of the same conversation;
+140's cancel policy pins `error_code = 'cancelled'`; 142's `workspace_claim` joins the
+conversation by the request's own id. Unit 140 was split in two (608 and 419 lines). A second
+independent check dry-ran the final text with break-it probes and called it ready to apply.
+
+On Stack's word ("apply 140, 141, 142.") the PM applied them from the main session with
+`apply_migration`, each under its file's name, the query being the file's exact text:
+
+| migration | prod `schema_migrations` | `md5(statements[1])` on prod | `git show HEAD:<file> \| md5sum` | bytes |
+|---|---|---|---|---|
+| `140_workspace_tables` | version 20261006171547 | `64692ea53ee1c60c96e974d928b41a29` | `64692ea53ee1c60c96e974d928b41a29` | 24459 |
+| `141_workspace_realtime_policy` | applied 2026-10-06 | `d3dcc40e4865b1a62a7d7b4e55df6a72` | `d3dcc40e4865b1a62a7d7b4e55df6a72` | 2817 |
+| `142_workspace_runner_role` | applied 2026-10-06 | `28786bc625723f8d2317293d936b9254` | `28786bc625723f8d2317293d936b9254` | 24086 |
+
+Read on prod after the third apply: four `workspace_*` tables with row security, nine policies
+on them, one policy on `realtime.messages`, role `workspace_runner` present, five SECURITY
+DEFINER functions it can execute, `db_test_runner` a member of `anon`, `authenticated`,
+`sync_runner`, `workspace_runner`.
+
+Through the Runner against prod, from `bb2dash-wt-21-db` (each `node scripts/db-test.mjs --only
+<unit>` → `PASS`, `db-test: passed 1, failed 0, units 1`): `phase21_140_workspace_tables.sql`,
+`phase21_140b_workspace_writes.sql`, `phase21_141_workspace_realtime.sql`,
+`phase21_142_workspace_runner.sql`, `phase15_100_db_test_runner_role.sql` (the branch's
+four-name literal), `phase12b_076_rls_initplan_and_truncate.sql`,
+`phase15_101_search_path_pin.sql`.
+
+**Unit 141 ran its send-and-receive form (tasks 3 (a) and 17 (a)).** The unit's standalone
+partition test, run through `execute_sql` at 2026-10-06 17:17:45 UTC → `partition_covers_now`
+**true**, and the Runner on the unit right after it → `PASS`. Realtime made the partitions when
+Stack opened the preview's `/workspace` that afternoon (the page joins `workspace:lobby`):
+`messages_2026_10_05` … `messages_2026_10_09`, each
+`FOR VALUES FROM ('<day> 00:00:00') TO ('<next day> 00:00:00')`, so the unit's predicate (the
+bound parsed from `pg_get_expr(relpartbound)`) and task 5's name form agree. The same read showed
+two `supabase_realtime%` publications and one replication slot. Unit 142's empty-delta half ran
+in the same window.
+
+**Still red on `main` until PR #77 merges:** `phase15_100_db_test_runner_role.sql` from the main
+checkout (three names expected, four on prod). Stack's merge word for #77 is owed.
