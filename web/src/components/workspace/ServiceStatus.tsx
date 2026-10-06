@@ -17,11 +17,19 @@
  * way. The row comes from a cache restored before hydration, so it is read
  * only once `useHydrated()` is true.
  *
+ * AND NOTHING IS CLAIMED FROM AN OLD ROW. The row in hand can be far older than
+ * the 30 s it is re-read at: the saved cache restores the last visit's row, and
+ * a hidden tab re-reads nothing. Its heartbeat is then old because the row is,
+ * not because the service stopped. So the line is said only from a row read
+ * within two refetch intervals; past that the page waits for the read that a
+ * mount or a return to the tab has already sent.
+ *
  * While the service is offline a queued question waits and Stop still works;
  * it is answered when the service returns.
  */
 
 import {
+  WORKSPACE_STATUS_REFETCH_MS,
   isWorkspaceOffline,
   useWorkspaceStatus,
   workspaceErrorReason,
@@ -29,6 +37,9 @@ import {
 import { useHydrated } from '@/lib/use-hydrated';
 import { OFFLINE_LINE, statusProblemLine } from '@/lib/workspace-labels';
 import styles from './ServiceStatus.module.css';
+
+/** How long after it was read a status row may still speak: one missed re-read is allowed. */
+const STATUS_TRUSTED_FOR_MS = 2 * WORKSPACE_STATUS_REFETCH_MS;
 
 export function ServiceStatus({ now }: { now: number }) {
   const hydrated = useHydrated();
@@ -42,7 +53,10 @@ export function ServiceStatus({ now }: { now: number }) {
       </p>
     );
   }
-  if (status.data === undefined || !isWorkspaceOffline(status.data, now)) return null;
+  const readRecently = now - status.dataUpdatedAt <= STATUS_TRUSTED_FOR_MS;
+  if (status.data === undefined || !readRecently || !isWorkspaceOffline(status.data, now)) {
+    return null;
+  }
 
   return (
     <p className={styles.offline} role="status" data-workspace-offline>
