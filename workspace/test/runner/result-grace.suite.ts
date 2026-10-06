@@ -96,6 +96,29 @@ describe('the time a CLI gets to exit after its result line', () => {
     expect(RESULT_EXIT_GRACE_MS + KILL_GRACE_MS + OUTPUT_CLOSE_MS).toBeLessThan(TURN_TIMEOUT_MS);
   });
 
+  // Every other case here hands the turn a short stand-in. This one hands it none, so it is the
+  // provider's own default that is read: the constant above, to the millisecond.
+  it('is the 10 s itself when the turn is built with no time of its own: nothing at 9.999 s, SIGTERM at 10 s', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness([{ lines: ANSWERED, exit: OK, hang: true }], { resultExitGraceMs: undefined });
+      const pending = collect(h.turn(input(), new AbortController().signal));
+      // The whole stream is read here, the result line included, at no cost on the clock.
+      await vi.advanceTimersByTimeAsync(0);
+      const kills = h.spawn.processes[0]!.kills;
+      await vi.advanceTimersByTimeAsync(RESULT_EXIT_GRACE_MS - 1);
+      expect(kills).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(kills.map((kill) => kill.signal)).toEqual(['SIGTERM']);
+      const events = await pending;
+      expect(resultOf(events)).toMatchObject({ ok: true, errorCode: null, reported: true });
+      expect(textOf(events)).toBe('The whole answer.');
+      expect(h.logs.filter((line) => /did not exit within 10 s of its result line/.test(line))).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('kills a CLI that is still there after that time, and keeps the result', { timeout: 3000 }, async () => {
     const h = harness([{ lines: ANSWERED, exit: OK, hang: true }]);
     const started = Date.now();
