@@ -606,6 +606,26 @@ describe('useWorkspaceStream: the one private channel', () => {
     ]);
   });
 
+  it('says joining again while it rejoins the topic it just left', async () => {
+    const { result, rerender } = mount(A);
+    const first = await joined(TOPIC_A);
+    act(() => first.status('SUBSCRIBED'));
+    expect(result.current.channel).toBe('joined');
+
+    // Away and back before the lobby's join even starts: the state never saw another topic.
+    rerender({ conversationId: null, requestId: null });
+    rerender({ conversationId: A, requestId: REQUEST });
+    await waitFor(() => expect(fake.state.channels).toHaveLength(2));
+    await settle();
+
+    // The first channel is gone and the second has not answered: this is not "joined".
+    expect(fake.state.channels.map((channel) => channel.topic)).toEqual([TOPIC_A, TOPIC_A]);
+    expect(result.current).toMatchObject({ topic: TOPIC_A, channel: 'joining' });
+
+    act(() => fake.state.channels[1].status('SUBSCRIBED'));
+    expect(result.current.channel).toBe('joined');
+  });
+
   it('does not reopen the channel when only the followed request changes', async () => {
     const { rerender } = mount(A, 41);
     await joined(TOPIC_A);
