@@ -83,3 +83,37 @@ Error: Cannot find module '../src/hooks/gate-rules.js' imported from C:/Users/st
  Test Files  1 failed (1)
       Tests  no tests
 ```
+
+### Green
+
+```
+$ npx vitest run test/tool-gate.test.ts
+ Test Files  1 passed (1)
+      Tests  78 passed (78)
+$ npm run typecheck
+> tsc -p tsconfig.test.json
+(no output, exit 0)
+```
+
+The test builds `dist/` with `tsc -p tsconfig.json` in a `beforeAll` and runs
+`node dist/hooks/tool-gate.js` with the payload on stdin, the way the CLI runs a command hook.
+
+Task 12's wiring check, run here against the host build (the command string differs only in its
+path; task 12 reads the real one out of the image's `settings.json`):
+
+```
+$ node -e "const r=require('child_process').spawnSync('node dist/hooks/tool-gate.js',{shell:true,input:JSON.stringify({hook_event_name:'PreToolUse',tool_name:'mcp__rag__search_context',tool_input:{query:'x',collection:'estac'}})});console.log(r.status, JSON.stringify(String(r.stderr)), JSON.stringify(String(r.stdout)))"
+2 "collection must be one of: bb2dash, bb2dash-inbox-decisions\n" ""
+```
+
+What the gate does, in the test's words: allows the three materials tools and `search_context` on
+`bb2dash` and `bb2dash-inbox-decisions`; denies Bash, Read, Write, Edit, WebFetch, WebSearch, Task,
+ToolSearch, EndConversation, four `mcp__supabase*`-shaped names, `mcp__rag__get_document`, a name
+with a trailing space, an upper-case name and two prototype names; denies `search_context` with no
+collection or one off the list with the reason `collection must be one of: bb2dash,
+bb2dash-inbox-decisions`; denies `Bb2dash`, ` bb2dash`, `bb2dash ` (compared exactly); as a process,
+exit 0 with empty stdout and stderr for an allowed call, exit 2 with the reason on stderr for a
+denial, and exit 2 (never 1) for non-JSON stdin, empty stdin, stdin that is not there, a missing
+`tool_name`, and a `collection` that is an array, a number or null. `claude/settings.json` holds one
+`PreToolUse` entry, matcher `*`, one command hook `node /app/workspace/dist/hooks/tool-gate.js`,
+`"timeout": 600`.
