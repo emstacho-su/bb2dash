@@ -2,7 +2,9 @@
 
 Worker W-66 · branch `feat/workspace-21-web` · worktree `bb2dash-wt-21-web`. Owns the "W-66" row of
 brief 102 §Workers. Wave 1 tasks: **15** (query layer) and **4** (stream hook and route skeleton).
-Task 16 (the screen and the nav link) waits for the Realtime spike (task 5) and is not started.
+Wave 2, after the Realtime spike (task 5) passed: **16** (the screen and the nav link) and the
+list of ruling T2. It is under its own heading, "Wave 2", at the end; the sections before it are
+wave 1's record as it was written (the file was renamed from `102_W-66_VERIFICATION.md` in wave 2).
 
 Fixtures only: no database read or write, no prod change, no docker command. The database objects
 of migrations 140–142 are typed by hand from the Contract; every test stubs the Supabase client.
@@ -192,3 +194,291 @@ screen. No `composes` is used in the new CSS Module.
 * **Stream state is kept per request id** (the newest three per topic). "Ignored" is implemented as
   never rendered: a delta that reaches the page a moment before the page has read the open request
   is kept, and shows once the request is known.
+
+---
+
+## Wave 2
+
+2026-10-06 · branch `feat/workspace-21-web` · task **16** (the screen and the nav link) and the
+list ruling T2 handed to it. Fixtures only again: no database read or write, no prod change, no
+docker command, no `claude -p`, no secret or env value read.
+
+**First step.** `git fetch origin`, then `git merge origin/feat/workspace-21` → a fast-forward to
+bbb2d28 (49 commits, no change under `web/`), pushed. The brief on the branch did not change in
+that merge, so `rulings-3.md` was read beside it.
+
+**Starting count** (bbb2d28): `npx vitest run` → `Tests  2586 passed (2586)`, 139 files.
+
+All commands below run from `C:/Users/stack/projects/bb2dash-wt-21-web/web`.
+
+### 1. From the wave 1 check (ruling T2)
+
+| item | what was done | commits |
+|---|---|---|
+| the file name | `git mv` to `102_W66_VERIFICATION.md` | cbdf901 |
+| two test files over 800 lines | split into named siblings over one shared fake (below) | 5805678 |
+| a failed `removeChannel` is logged | red, red, green (below) | a36b1f0, edc7806, 5f86521 |
+| the effect is split | `openChannel`, `channelEvent`, `joinAfter`, `leaveChannel`; the longest function in the file is 41 lines | 5f86521, 6e7172b |
+| a request id past 2^53 | committed cases; green on the first run (below) | 0939e07 |
+| the real-client check | committed as `web/test/use-workspace-stream.realtime.test.tsx` | 9cc6f77 |
+| a queued request that turns cancelled with no broadcast | a committed case on a fake clock (section 3) | 5e1774a, 59aa05e |
+| `useNow(30_000)` in the offline line | wired in `Workspace.tsx`, proven on a fake clock (section 3) | 59aa05e |
+
+**The split.** Same 159 cases before and after (`Tests  159 passed`), nothing dropped.
+
+| file | lines before | lines now | holds |
+|---|---|---|---|
+| `test/queries.workspace.test.ts` | 944 | 764 | everything task 15's row lists (reads, the two RPCs, the normalisers, offline, the intervals) |
+| `test/queries.workspace.hooks.test.tsx` | new | 319 | the request-id reader, the archive write, the invalidation, the hooks, 23503 |
+| `test/use-workspace-stream.test.tsx` | 816 | 554 | everything task 4's row lists (the wire, the stream rule, the hook) |
+| `test/use-workspace-stream.screen.test.tsx` | new | 395 | the cases that mount the screen; in task 16 it gained the end of a stream |
+| `test/workspace-harness.tsx` | new | 355 | the one fake Supabase client those suites and task 16's share (not a test file) |
+
+Task 15's and task 4's row commands still name a file that holds what the row lists.
+
+**A failed leave is logged.**
+
+* RED (a36b1f0), `npx vitest run test/use-workspace-stream.test.tsx`:
+  `AssertionError: expected "error" to be called 1 times, but got 0 times` →
+  `Tests  1 failed | 44 passed (45)`. The leave rejected and `.catch(() => undefined)` swallowed it.
+* RED (edc7806), same command: `Tests  3 failed | 45 passed (48)`. supabase-js types a leave as
+  resolving to `'ok' | 'timed out' | 'error'`, so a failure can arrive as an answer, not a throw.
+* GREEN (5f86521), `npx vitest run test/use-workspace-stream.test.tsx test/use-workspace-stream.screen.test.tsx`:
+  `Test Files  2 passed (2)` · `Tests  60 passed (60)`. `leaveChannel` logs any answer but `ok`
+  (`workspace: leaving <topic> answered "<answer>"`) and any rejection
+  (`workspace: could not leave <topic>`, with the error); the next join still does not wait on it.
+
+**A request id past 2^53** (0939e07). `toRequestId` already refused what a number cannot hold
+exactly, so these cases were green on their first run and nothing under `src/` changed; there is no
+red to quote. They pin it: `2 ** 53`, `'9007199254740992'` and `'9007199254740993'` read as no
+request (the last would round to its neighbour as a number); a request row and an ask result with
+such an id are dropped; `parseDelta` and `parseDone` drop a broadcast that carries one, so a delta is
+never credited to the neighbouring request. `Number.MAX_SAFE_INTEGER` still reads.
+
+**The real-client check** (9cc6f77), `npx vitest run test/use-workspace-stream.realtime.test.tsx` →
+`Tests  5 passed (5)`, three runs in a row. The client is the real `@supabase/supabase-js` 2.116.0;
+only its transport is a fake WebSocket. It shows the join frame with `private: true` and a token, a
+pushed `broadcast` frame rendered as text, `phx_join` A / `phx_leave` A / `phx_join` B for a move,
+and one leave and one join for three moves made with no wait.
+
+It also corrected my own reading. I first wrote a case expecting a leave the server never answers
+to resolve to `timed out`; it failed (`expected "error" to be called 1 times, but got 0 times`).
+On this client the channel is already `leaving` when the leave is pushed, so
+`@supabase/phoenix` confirms it to itself at once (`if (!this.canPush()) leavePush.trigger("ok", {})`):
+`removeChannel` answers `ok` whether or not the server replies, and the channel removes itself
+from the client's list on close. The committed case says that. So on 2.116.0 the logged branches
+do not fire in practice; they stay for the other answers the type allows.
+
+### 2. Task 16: the strings and the nav link
+
+**`web/src/lib/workspace-labels.ts`.** Check: `npx vitest run test/workspace-labels.test.ts`.
+
+* RED (2ebaa27): `Failed Tests 19`, first of them
+  `AssertionError: expected undefined to be 'Waiting for the Workspace service'`.
+* GREEN (884b563): `Tests  23 passed (23)`.
+
+Held word for word against the brief: the queued line, the late-stream line, the offline line, the
+eight `error_code` sentences (the `sign_in_expired` one has no backticks; the stopped sentence is
+the one for `cancelled`), the two refusals, "Ask" and "Stop", "Archive", "Unarchive",
+"Show archived", the three tier badges, "Used:", and ruling T2's three skeleton strings (the kicker,
+the fallback, the problem line), which `page.tsx` now reads from there. No string in the module
+holds `$`, a money word, or any digit outside "1 to 8000".
+
+**`NAV_LINKS`.** Check: `npx vitest run test/TopNav.workspace.test.tsx`.
+
+* RED (ee1d617): `Failed Tests 3`, first of them
+  `AssertionError: expected [ 'Home', 'Planner', 'Inbox', …(2) ] to deeply equal [ 'Home', 'Planner', 'Inbox', …(3) ]`.
+* GREEN (138e1f7): with the two existing TopNav files, `Test Files  3 passed (3)` · `Tests  18 passed (18)`.
+
+One line in `TopNav.tsx`. `git diff --stat origin/main...HEAD -- web/src/components/shell/TopNav.module.css`
+prints nothing.
+
+### 3. Task 16: the screen
+
+`Workspace.tsx`, `Workspace.module.css`, and under `web/src/components/workspace/`:
+`ConversationList`, `MessageList`, `Composer`, `TierBadge`, `ServiceStatus` (each with its module),
+plus two small modules the Files table does not name: `thread.ts` (the pure rules) and `route.ts`
+(the path and `?c=`, spelled once).
+
+* RED (5e1774a), the five files at once: `Failed Tests 47`.
+  `test/Workspace.test.tsx (34 tests | 31 failed)`;
+  `test/use-workspace-stream.screen.test.tsx (17 tests | 11 failed)`;
+  `test/queries.workspace.test.ts (78 tests | 1 failed)` (`refetchOnWindowFocus`);
+  `test/queries.workspace.hooks.test.tsx (32 tests | 4 failed)` (23503 and the reason reader);
+  `test/Workspace.thread.test.ts`: `Error: Failed to resolve import "@/components/workspace/thread"`.
+* GREEN (59aa05e), the row's command and the audits beside it,
+  `npx vitest run test/Workspace.test.tsx test/TopNav.workspace.test.tsx test/workspace-labels.test.ts test/audits.test.ts test/raw-html.audit.test.ts test/status-vocabulary.test.ts test/Workspace.thread.test.ts`:
+  `Test Files  7 passed (7)` · `Tests  114 passed (114)`.
+
+Two cases in the red files were changed in the green commit, and the behaviour they hold was not.
+One was wrong about timing: TanStack calls a mutation's function a tick after `mutate`, so "the
+cancel was sent" is now waited for. The other, the focus case, passed for the wrong reason on real
+timers (the 5 s interval caught it), so it was moved onto a fake clock where only the focus refetch
+can explain it. The assertion that matters most, the stopped sentence in the same tick as the press,
+is still read with no wait.
+
+What the screen does, each with the file that holds it:
+
+| the Contract says | where it is held |
+|---|---|
+| one tier badge per assistant row | `Workspace.test.tsx` |
+| "Used:" from the `ok: true` calls, `tool · scope` or `tool`, `, `-joined in call order, an identical entry once, absent when none | `Workspace.test.tsx`, `Workspace.thread.test.ts` |
+| `<script>` in content is literal text; never a tool's result, the stored `query` or the cost | `Workspace.test.tsx` |
+| "Ask"; "Stop" only while a request is open; Enter asks, Shift+Enter is not cancelled | `Workspace.test.tsx` |
+| 1 to 8000 characters, refused before any request; 23505 → "This conversation is still answering." | `Workspace.test.tsx` |
+| 23503 → "Could not load this conversation: <reason>", not the question-length sentence | `Workspace.test.tsx`, `queries.workspace.hooks.test.tsx` |
+| the state under a question from its `workspace_requests` row; one sentence per code, chosen by the request row, with or without an assistant row | `Workspace.test.tsx`, `Workspace.thread.test.ts` |
+| after Stop the stopped sentence shows at once | `Workspace.test.tsx` (the RPC is held; the row still reads `claimed`) |
+| archived rows left out; "Archive" on each row; "Show archived" off by default, its rows "Unarchive", read only when on | `Workspace.test.tsx` |
+| lowest seq not 1 → only "Answering…" | `Workspace.test.tsx`, `use-workspace-stream.screen.test.tsx` |
+| exactly one private channel, `workspace:<uuid>` or `workspace:lobby` | `Workspace.test.tsx` |
+| offline once the clock passes `polled_at` + 120 s with no new data; back when a newer one arrives | `Workspace.test.tsx`, fake timers |
+| answers are `white-space: pre-wrap` text | `MessageList.module.css` `.text`; the nodes are React text |
+| the end of a stream: `done`, and a refetch on focus, never the interval alone | `use-workspace-stream.screen.test.tsx` |
+| a gap: text past a missing seq never shows; at `done` the stored row takes over | `use-workspace-stream.screen.test.tsx`, `Workspace.thread.test.ts` |
+
+**The end of a stream.** `messagesOptions`, `requestsOptions` and `statusOptions` set
+`refetchOnWindowFocus: 'always'`, so the refetch on focus does not rest on the app client's
+default. Three cases hold it, with the tab hidden (`focusManager.setFocused(false)`) and a client
+whose default is no refetch on focus; two of them run on a fake clock:
+
+* `done` arrives in a hidden tab → the stored row, the badge and "Ask" are there.
+* A queued request is cancelled in the database with no broadcast (task 5's own sequence): 15 s
+  pass in the background and the page still says "Waiting for the Workspace service"; the tab
+  regains focus and within 100 ms it says "You stopped this answer." and the button reads "Ask".
+* The requests query is read 0 times across three hidden intervals, once on focus, and once per
+  5 s again in the foreground.
+
+Checked that they bite: with `REFETCH_ON_FOCUS` set to `false` by hand, the last two fail
+(`expected 'Waiting for the Workspace service' to be 'You stopped this answer.'`,
+`expected 1 to be 2`); with the mark in `useStop` removed, the at-once case fails. Both edits were
+reverted before the commit.
+
+**Follow-up rounds.**
+
+* 6e7172b, refactor: `useStop`, `useArchive`, `StreamArea`, `ArchivedToggle`, `joinAfter`. No
+  function in the files I own is over 50 lines (the longest: `Thread`, 48).
+* f37c2b0, `test/Workspace.failures.test.tsx`: written after the screen, so not red-first. A failed
+  read of the list or the messages, a question that could not be sent, a Stop that failed or came
+  too late, an Archive that was refused, the button's wait, the column's scroll. All passed as
+  written but one: "the refusal is gone" needed a wait, for the same zero timer as above.
+* RED (279b45b), `npx vitest run test/Workspace.failures.test.tsx -t "same tick"`:
+  `AssertionError: expected [ 'workspace_ask', 'workspace_ask' ] to deeply equal [ 'workspace_ask' ]`.
+  Two Enters in one tick (a held key) sent the question twice, and the second came back as 23505.
+  GREEN (8dd8ab0), `npx vitest run test/Workspace.failures.test.tsx test/Workspace.test.tsx`:
+  `Tests  49 passed (49)`. The composer holds a question in flight in a ref.
+* 44ee672, refactor: that guard took `Composer` to 54 lines, so the text and the one-at-a-time ask
+  moved into `useQuestion`; `Composer` is 40 again.
+* RED (bc14a76), `npx vitest run test/Workspace.thread.test.ts`:
+  `AssertionError: expected [ { …(7) }, …(1) ] to have a length of 1 but got 2` →
+  `Tests  1 failed | 36 passed (37)`. Found reading my own diff: a request whose question row was
+  not read got its own turn carrying its assistant row, and the same row was then placed again as a
+  stand-alone turn, so the answer showed twice.
+  GREEN (f4cfcde), same command: `Tests  37 passed (37)`. The request's turn claims its answer
+  before the stand-alone pass.
+
+### 4. Gates (branch at f4cfcde, the last commit that changes `web/`)
+
+All six were run again from the start on f4cfcde, in this order, with nothing under `web/` edited
+while they ran. (An earlier full run on 8dd8ab0 was green too, 2719 cases; three commits followed it.)
+
+| gate | command | result |
+|---|---|---|
+| whole suite | `npx vitest run` | `Test Files  147 passed (147)` · `Tests  2720 passed (2720)` · exit 0 |
+| coverage | `npm run test:coverage` | `Tests  2720 passed (2720)` · exit 0 · all files, lines 91.33 % (floor 83 %) |
+| build | `npm run build` | exit 0; the route list holds `○ /workspace` |
+| types | `npm run typecheck` | exit 0 |
+| lint | `npx eslint . --max-warnings 0` | exit 0, no output |
+| task 16's row | `npx vitest run test/Workspace.test.tsx test/TopNav.workspace.test.tsx test/workspace-labels.test.ts test/audits.test.ts` | `Test Files  4 passed (4)` · `Tests  67 passed (67)` · exit 0 |
+
+2720 = 2586 at the start of the wave − 159 + 293. The ten Workspace files hold 293 cases:
+`queries.workspace` 78, `.hooks` 32, `use-workspace-stream` 49, `.screen` 17, `.realtime` 5,
+`Workspace` 34, `.thread` 37, `.failures` 15, `TopNav.workspace` 3, `workspace-labels` 23.
+
+Coverage of what the wave wrote: `Workspace.tsx` lines 100 %; `components/workspace/` lines 100 %;
+`queries.workspace.ts` lines 100 %; `use-workspace-stream.ts` lines 98.01 % (183–184, the
+reducer's unreachable `default`, as in wave 1).
+
+Standing scans, all in the suite and green: no "Submit" control; neither service-key word under
+`web/src` (my files were also grepped for them, for env reads and for raw-HTML sinks: no hit); no
+status spelled by a screen. No new dependency: `web/package.json` and `web/package-lock.json` are
+unchanged against `origin/main`. Every file I own is at most 800 lines (the largest:
+`test/queries.workspace.test.ts`, 764; `src/lib/queries.workspace.ts`, 733).
+
+`composes` in the built app: each new module composes straight from `tokens.module.css`, one level
+(`btnPrimary`, `btnGhost`, `input`, `tagOutline`). Read in the build's chunk:
+`button:"Composer-module__…__button "+e.i(79333).btnPrimary`, which resolves to
+`tokens-module__…__btnPrimary tokens-module__…__btn`. Nothing composes a local class that composes.
+
+### 5. Not done, and not proven
+
+* **I have not seen the screen in a browser.** My worktree has no `web/.env.local`, and I read no
+  env value. Every claim above is from jsdom, the type checker and the build. The layout (the list
+  beside the thread, the column's `max-height: 62dvh`, the two themes) is unseen until the PM's
+  walk on the preview.
+* **`/code-review` and `/security-review` were not run by me.** The brief gives both to the PM at
+  task 23, on the PRs. I read my own diff for the same things; that is not a review.
+* **The real leave** (section 1) is read from supabase-js under a fake socket, not from the live
+  server.
+
+### 6. Notes for the PM
+
+**Decisions in the screen that the Contract does not spell.** Each is small, and each is yours to
+overrule.
+
+1. **A claimed request with no text yet says "Answering…".** The Contract gives that line to a
+   stream whose lowest seq is not 1 and names no line for "claimed, nothing received yet". Blank
+   looked dead, and acceptance step 9 expects "Answering…" on a reloaded page before any delta has
+   arrived. The same line shows for the moment between a `done` row and its stored answer.
+2. **The partial text stays under the stopped sentence.** After Stop the page keeps what had
+   streamed until the runner's stored row replaces it, so the text does not blink out and back. For
+   a queued request cancelled with no runner (task 5's own case) no runner ever streamed; if a
+   delta was sent by hand first, it stays until a reload.
+3. **Enter while a request is open still sends the question**, and the database refuses it with
+   23505 ("refused by the database, not only by the button"). The button itself reads Stop.
+4. **The stream follows the newest request until its stored answer has landed**, not only an open
+   one, so there is no blank frame when the request row arrives before the message row.
+   `data-request-id` on the stream area is still the open request only.
+5. **A request whose question row was not read gets its own turn**, and so does an assistant row
+   with no request row. Nothing that was read is dropped.
+6. **Archiving the selected conversation moves the page to `/workspace`.**
+7. **A failed request with no code on either row** says the `cli_error` sentence (the runner's own
+   rule: anything unrecognised is `cli_error`).
+8. **The message column scrolls inside itself** (`max-height: 62dvh`) and follows an answer while
+   the reader is at its end, so the composer and Stop stay in reach during a long answer.
+9. **An assistant row with no stored tier gets no badge.** The page names no tier it was not given.
+
+**Wording that is mine, not frozen.** All in the last section of `workspace-labels.ts`, marked.
+
+| string | where |
+|---|---|
+| "Conversations" | the list's heading and its region name |
+| "New conversation" | a link to `/workspace` with no `?c=`, at the top of the list |
+| "No conversations yet." / "No archived conversations." | an answered, empty list |
+| "Messages", "Question" | screen-reader names of the column and the text box |
+| "You asked", "The assistant answered" | screen-reader labels inside a turn |
+| "Could not load the conversations: <reason>" | the list could not be read |
+| "Could not load the Workspace service status: <reason>" | the status could not be read |
+| "Could not send this question: <reason>" | a question failed for a reason that is neither refusal nor 23503 |
+| "Could not stop this answer: <reason>" | Stop failed |
+| "Could not change this conversation: <reason>" | Archive or Unarchive failed |
+
+`<reason>` is the error's own message. For 23503 that is the database's sentence about the foreign
+key, shown after "Could not load this conversation:".
+
+**"New conversation" is a control the Contract does not list.** Without it the only way back to an
+empty composer is the top bar's Workspace link. Say if it should go.
+
+**Files beyond the Files table**, all inside what W-66 owns: `web/src/components/workspace/thread.ts`,
+`web/src/components/workspace/route.ts`, `web/test/workspace-harness.tsx`,
+`web/test/queries.workspace.hooks.test.tsx`, `web/test/use-workspace-stream.screen.test.tsx`,
+`web/test/Workspace.thread.test.ts`, `web/test/Workspace.failures.test.tsx`. The two `.hooks` /
+`.screen` siblings are the split ruling T2 asked for; I chose their names.
+
+**For `walk21.spec.ts`.** The page carries these, none of them styled:
+`[data-workspace-stream]` with `data-topic`, `data-channel`, `data-channel-detail`,
+`data-request-id` (the open request); each turn `li[data-turn]` (`queued`, `streaming`, `done`,
+`failed`, `stopped`, or empty) with `data-request-id`; inside it `[data-tier]`,
+`[data-answer-text]`, `[data-used]`, `[data-turn-line]`; `[data-workspace-offline]` on the offline
+line; `[data-last-activity]` in a list row. The list is `navigation` "Conversations"; the box is
+`textbox` "Question"; the row buttons are named exactly "Archive" and "Unarchive".
