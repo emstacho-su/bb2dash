@@ -23,7 +23,9 @@
  * Contract: they are not on prod's generated types yet.
  */
 
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface Call {
@@ -95,6 +97,13 @@ const {
   setConversationArchived,
   statusOptions,
   toRequestId,
+  useAskWorkspace,
+  useCancelWorkspaceRequest,
+  useSetConversationArchived,
+  useWorkspaceConversations,
+  useWorkspaceMessages,
+  useWorkspaceRequests,
+  useWorkspaceStatus,
   workspaceKeys,
 } = await import('@/lib/queries.workspace');
 const { REFUSAL_QUESTION_LENGTH, REFUSAL_STILL_ANSWERING } = await import(
@@ -827,5 +836,109 @@ describe('invalidateWorkspaceConversation: what a question, a Stop or a finished
     const prefix = workspaceKeys.conversationsAll();
     expect(workspaceKeys.conversations(false).slice(0, prefix.length)).toEqual([...prefix]);
     expect(workspaceKeys.conversations(true).slice(0, prefix.length)).toEqual([...prefix]);
+  });
+});
+
+describe('the hooks', () => {
+  /** A client per test, with retries off so a refusal settles at once. */
+  function harness() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const invalidatedKeys = () => invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+    return { wrapper, invalidatedKeys };
+  }
+
+  it('read the list, the messages, the requests and the status through their options', async () => {
+    const { wrapper } = harness();
+    stub.result = { data: [], error: null };
+
+    const list = renderHook(() => useWorkspaceConversations(), { wrapper });
+    const messages = renderHook(() => useWorkspaceMessages(CONVERSATION, false), { wrapper });
+    const requests = renderHook(() => useWorkspaceRequests(CONVERSATION), { wrapper });
+    await waitFor(() => expect(list.result.current.data).toEqual([]));
+    await waitFor(() => expect(messages.result.current.data).toEqual([]));
+    await waitFor(() => expect(requests.result.current.data).toEqual([]));
+
+    stub.result = { data: { polled_at: null, runner: null, open_requests: 0 }, error: null };
+    const status = renderHook(() => useWorkspaceStatus(), { wrapper });
+    await waitFor(() => expect(status.result.current.data?.polled_at).toBeNull());
+    expect(status.result.current.data?.open_requests).toBe(0);
+  });
+
+  it('send nothing for the lobby: no conversation, no messages or requests read', async () => {
+    const { wrapper } = harness();
+
+    const messages = renderHook(() => useWorkspaceMessages(null, false), { wrapper });
+    const requests = renderHook(() => useWorkspaceRequests(null), { wrapper });
+
+    expect(messages.result.current.fetchStatus).toBe('idle');
+    expect(requests.result.current.fetchStatus).toBe('idle');
+    expect(stub.calls).toEqual([]);
+  });
+
+  it('refresh the new conversation after a first question', async () => {
+    const { wrapper, invalidatedKeys } = harness();
+    stub.result = {
+      data: { conversation_id: CONVERSATION, message_id: MESSAGE, request_id: 42 },
+      error: null,
+    };
+
+    const { result } = renderHook(() => useAskWorkspace(), { wrapper });
+    result.current.mutate({ conversationId: null, text: 'spike' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({
+      conversationId: CONVERSATION,
+      messageId: MESSAGE,
+      requestId: 42,
+    });
+    expect(invalidatedKeys()).toEqual([
+      workspaceKeys.conversationsAll(),
+      workspaceKeys.messages(CONVERSATION),
+      workspaceKeys.requests(CONVERSATION),
+    ]);
+  });
+
+  it('refresh the conversation after a refused question too, so its open request shows', async () => {
+    const { wrapper, invalidatedKeys } = harness();
+    stub.result = { data: null, error: { code: '23505', message: 'duplicate key' } };
+
+    const { result } = renderHook(() => useAskWorkspace(), { wrapper });
+    result.current.mutate({ conversationId: CONVERSATION, text: 'again' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBeInstanceOf(WorkspaceRefusal);
+    expect(result.current.error?.message).toBe(REFUSAL_STILL_ANSWERING);
+    expect(invalidatedKeys()).toContainEqual(workspaceKeys.requests(CONVERSATION));
+  });
+
+  it('refresh the conversation after Stop', async () => {
+    const { wrapper, invalidatedKeys } = harness();
+    stub.result = { data: true, error: null };
+
+    const { result } = renderHook(() => useCancelWorkspaceRequest(CONVERSATION), { wrapper });
+    result.current.mutate(42);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBe(true);
+    expect(invalidatedKeys()).toEqual([
+      workspaceKeys.conversationsAll(),
+      workspaceKeys.messages(CONVERSATION),
+      workspaceKeys.requests(CONVERSATION),
+    ]);
+  });
+
+  it('refresh both lists after Archive or Unarchive', async () => {
+    const { wrapper, invalidatedKeys } = harness();
+
+    const { result } = renderHook(() => useSetConversationArchived(), { wrapper });
+    result.current.mutate({ conversationId: CONVERSATION, archived: true });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(invalidatedKeys()).toEqual([workspaceKeys.conversationsAll()]);
   });
 });
