@@ -26,7 +26,9 @@ vi.mock('@/lib/supabase/client', async () =>
 
 const {
   WorkspaceRefusal,
+  askWorkspace,
   invalidateWorkspaceConversation,
+  normalizeRequest,
   setConversationArchived,
   toRequestId,
   useAskWorkspace,
@@ -60,6 +62,38 @@ describe('toRequestId: one number on both sides of every comparison', () => {
       expect(toRequestId(value)).toBeNull();
     },
   );
+
+  /**
+   * `workspace_requests.id` is a bigint, and a number holds an integer exactly
+   * only up to 2^53 - 1. Past that, two ids can read as one number, and a delta
+   * would be credited to the wrong request. So such an id reads as no request:
+   * its row is dropped and its deltas are never rendered.
+   */
+  it('reads the largest exact integer, and nothing past 2^53', () => {
+    expect(toRequestId(Number.MAX_SAFE_INTEGER)).toBe(9007199254740991);
+    expect(toRequestId('9007199254740991')).toBe(9007199254740991);
+
+    expect(toRequestId(2 ** 53)).toBeNull();
+    expect(toRequestId('9007199254740992')).toBeNull();
+    // As digits this id is exact; as a number it would round to its neighbour, 2^53.
+    expect(Number('9007199254740993')).toBe(2 ** 53);
+    expect(toRequestId('9007199254740993')).toBeNull();
+    expect(toRequestId('12345678901234567')).toBeNull();
+  });
+
+  it('drops a request row, and an ask result, whose id is past 2^53', async () => {
+    expect(
+      normalizeRequest({ id: '9007199254740993', user_message_id: MESSAGE, state: 'queued' }),
+    ).toBeNull();
+
+    fake.state.rpc.workspace_ask = () => ({
+      data: { conversation_id: CONVERSATION, message_id: MESSAGE, request_id: '9007199254740993' },
+      error: null,
+    });
+    await expect(askWorkspace({ conversationId: null, text: 'spike' })).rejects.toThrow(
+      /workspace_ask/,
+    );
+  });
 });
 
 

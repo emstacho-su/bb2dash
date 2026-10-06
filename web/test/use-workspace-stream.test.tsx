@@ -109,6 +109,19 @@ describe('parseDelta and parseDone: the named keys, and nothing else', () => {
     expect(parseDone({ request_id: '42' })?.requestId).toBe(42);
   });
 
+  it('drops a delta and a done whose request id is past 2^53, never crediting its neighbour', () => {
+    // JSON.parse hands such an id over already rounded: 9007199254740993 arrives as 2^53.
+    const rounded = JSON.parse('{"request_id": 9007199254740993, "seq": 1, "delta": "a"}');
+    expect(rounded.request_id).toBe(2 ** 53);
+    expect(parseDelta(rounded)).toBeNull();
+    expect(parseDelta({ request_id: '9007199254740993', seq: 1, delta: 'a' })).toBeNull();
+    expect(parseDone({ request_id: 2 ** 53 })).toBeNull();
+
+    expect(parseDelta({ request_id: Number.MAX_SAFE_INTEGER, seq: 1, delta: 'a' })?.requestId).toBe(
+      Number.MAX_SAFE_INTEGER,
+    );
+  });
+
   it.each([
     ['no payload', undefined],
     ['a string', 'delta'],
