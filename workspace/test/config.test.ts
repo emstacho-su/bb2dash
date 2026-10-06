@@ -216,10 +216,10 @@ describe('loadConfig', () => {
   });
 
   it('strips the byte-order mark and line ends a secret file may carry', () => {
-    const readFile = files({ [PATHS.runnerDbUrlSecret]: `﻿${DSN}\r\n`, [PATHS.oauthTokenSecret]: `${TOKEN}\n` });
+    const readFile = files({ [PATHS.runnerDbUrlSecret]: `\uFEFF${DSN}\r\n`, [PATHS.oauthTokenSecret]: `${TOKEN}\n` });
     expect(loadConfig({ env: {}, readFile, hostname: 'h' }).dbUrl).toBe(DSN);
     expect(readOauthToken(readFile)).toBe(TOKEN);
-    expect(cleanSecret(`﻿  ${TOKEN}\r\n`)).toBe(TOKEN);
+    expect(cleanSecret(`\uFEFF  ${TOKEN}\r\n`)).toBe(TOKEN);
   });
 
   it('refuses to start without the DSN secret', () => {
@@ -271,7 +271,7 @@ describe('the OAuth token', () => {
 
 describe('the byte-order mark in source', () => {
   // The mark is invisible in an editor and in a diff, so a file that handles it spells it as an escape.
-  const MARK = '﻿';
+  const MARK = '\uFEFF';
   // The six characters of the escape. Not String.raw: the test transformer cooks the escape inside a template.
   const ESCAPE = '\\uFEFF';
   const PACKAGE_ROOT = path.resolve(HERE, '..');
