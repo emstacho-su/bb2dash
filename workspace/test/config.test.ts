@@ -317,6 +317,47 @@ describe('the size of a source file', () => {
   });
 });
 
+describe('helpers written once (ruling V1, CR-12)', () => {
+  const src = sourceFiles.filter((file) => file.startsWith('src/'));
+  const DECLARES_MESSAGE_OF = /\b(?:const|function)\s+messageOf\b/;
+  /** The opening of the uuid pattern as it is spelled in a regular expression. */
+  const UUID_PATTERN_OPENING = '[0-9a-f]{8}-';
+
+  it('declares messageOf in errors.ts and nowhere else under src/', () => {
+    expect(src.filter((file) => DECLARES_MESSAGE_OF.test(readSource(file)))).toEqual(['src/errors.ts']);
+  });
+
+  it('imports messageOf from errors.ts in every other source file that calls it', () => {
+    const callers = src.filter((file) => file !== 'src/errors.ts' && /\bmessageOf\(/.test(readSource(file)));
+    expect(callers.length).toBeGreaterThanOrEqual(4);
+    for (const file of callers) expect(readSource(file), file).toMatch(/import \{[^}]*\bmessageOf\b[^}]*\} from '(?:\.\.?\/)+errors\.js';/);
+  });
+
+  it('writes the uuid shape in one source file', () => {
+    expect(src.filter((file) => readSource(file).includes(UUID_PATTERN_OPENING))).toEqual(['src/providers/claude-cli.ts']);
+  });
+});
+
+describe('the typecheck', () => {
+  const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, file), 'utf8')) as Record<string, unknown>;
+
+  it('reads the tests: tsconfig.test.json names its own exclude, without the test folder the build leaves out', () => {
+    const build = readJson('tsconfig.json');
+    const check = readJson('tsconfig.test.json');
+    expect(build.exclude).toContain('test');
+    expect(check.include).toContain('test/**/*.ts');
+    // An `exclude` that is not written here is inherited from the build's, and takes the tests out again.
+    expect(Array.isArray(check.exclude)).toBe(true);
+    expect(check.exclude).not.toContain('test');
+    expect(check.exclude).toEqual(expect.arrayContaining(['node_modules', 'dist']));
+  });
+
+  it('is the script the gate runs', () => {
+    const scripts = readJson('package.json').scripts as Record<string, string>;
+    expect(scripts.typecheck).toBe('tsc -p tsconfig.test.json');
+  });
+});
+
 describe('claude/settings.json', () => {
   const settings = JSON.parse(fs.readFileSync(SETTINGS, 'utf8')) as Record<string, unknown>;
 
