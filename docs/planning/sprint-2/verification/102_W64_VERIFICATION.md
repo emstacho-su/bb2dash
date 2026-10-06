@@ -1562,3 +1562,151 @@ the longest file is `test/runner/cli-turn.suite.ts` at 719 lines, the longest un
    … on port 6543 or without an `sslmode`") now also refuses `no-verify`, a DSN without one of the
    five parts, and a missing CA; the watchdog sentence gains the hold; the runner's constants list
    gains `FINISH_RETRY_MS` and `RESULT_EXIT_GRACE_MS`.
+
+### Second pass · after the PM's independent check
+
+The check read the round as built and found ruling V1 met on every item, with one must-fix (a
+missing test) and six minors. This pass did the must-fix and the one minor whose fix needs no
+ruling. First step: `git fetch origin`, `git merge origin/feat/workspace-21` (`Already up to date`:
+the branch was 19 commits ahead of the phase branch and none behind). No `claude -p` ran, no
+fixture was recorded again, nothing was sent to prod and no SQL ran, and the only docker command
+was the read-only guard.
+
+#### CR-5 · the 10 s is tied to the provider (must-fix, test only)
+
+Every case in `test/runner/result-grace.suite.ts` handed the turn a 60 ms stand-in
+(`resultExitGraceMs: GRACE_MS`), so the literal was pinned and the kill was tested, and nothing
+tied the two: with `deps.resultExitGraceMs ?? 60_000` at `claude-cli.ts:403` the suite passed. One
+case was added to "the time a CLI gets to exit after its result line". It builds the turn with no
+time of its own (`harness(scripts, { resultExitGraceMs: undefined })`) on a fake clock: after the
+result line nothing is killed at `RESULT_EXIT_GRACE_MS - 1`, the signals are `['SIGTERM']` one
+millisecond later, the result is `{ ok: true, errorCode: null, reported: true }` with the whole
+text, and the log says `did not exit within 10 s of its result line` once.
+
+There is no source change, so there is no commit on which the test fails. The red runs were made
+against two mutants of line 403 in the working tree, neither committed, and the line was put back
+before the commit (`git status` showed the suite file alone):
+
+```
+$ npx vitest run test/runner.test.ts          (claude-cli.ts:403 as `deps.resultExitGraceMs ?? 60_000`)
+ × is the 10 s itself when the turn is built with no time of its own: nothing at 9.999 s, SIGTERM at 10 s
+AssertionError: expected [] to deeply equal [ 'SIGTERM' ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 224 passed (225)
+
+$ npx vitest run test/runner.test.ts          (claude-cli.ts:403 as `deps.resultExitGraceMs ?? 9_999`)
+ × is the 10 s itself when the turn is built with no time of its own: nothing at 9.999 s, SIGTERM at 10 s
+AssertionError: expected [ { signal: 'SIGTERM', …(1) } ] to deeply equal []
+ Test Files  1 failed (1)
+      Tests  1 failed | 224 passed (225)
+```
+
+Green on the code as built, `bf846d4` (the test alone):
+
+```
+$ npx vitest run test/runner.test.ts
+ Test Files  1 passed (1)
+      Tests  225 passed (225)
+```
+
+#### SR-1 · the start check refuses what the connection cannot read (minor)
+
+`assertRunnerDsn` (`config.ts`) and `dsnParts` (`db.ts`) disagreed on one input. A DSN whose user,
+password or database holds a malformed percent escape passed the start check and was then refused
+by `dsnParts` on every connect, so the container would loop through the 180 s watchdog instead of
+exiting 2 with the reason. Port 0 has the same shape: it passed, and the driver reads 0 as no port
+and takes `PGPORT` or its own default. `assertRunnerDsn` now decodes the three parts as `dsnParts`
+does and refuses with `workspace_runner_db_url holds a part that is not percent-encoded text`, and
+refuses port 0 beside 6543 (`workspace_runner_db_url points at port 0, which is no port; use the
+session pooler on 5432`; `NO_PORT`, written `:0/` or `:00/`). Neither message prints a part of the
+DSN. The README's "The database connection" names the refusals.
+
+Red, `203a154` (`test/config.test.ts`):
+
+```
+$ npx vitest run test/config.test.ts
+ × refuses at start a DSN whose user holds a malformed percent escape, which the connection could never read
+ × refuses at start a DSN whose password holds a malformed percent escape, which the connection could never read
+ × refuses at start a DSN whose database holds a malformed percent escape, which the connection could never read
+ × refuses port 0 (written :0/), and says so without printing any part
+ × refuses port 0 (written :00/), and says so without printing any part
+AssertionError: expected function to throw an error, but it didn't
+ Test Files  1 failed (1)
+      Tests  5 failed | 102 passed (107)
+```
+
+The sixth new case ("still accepts a user, a password and a database that are percent-encoded as
+they should be") passes before and after: it holds the fix to what is malformed.
+
+Green, `b8774ed`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  695 passed (695)
+```
+
+`dsnParts` itself still reads port 0 as 0. No start reaches it with one: `main()` builds the
+connection from `loadConfig`'s DSN, which `assertRunnerDsn` has passed.
+
+#### Not changed: the PM's to rule
+
+Four of the check's minors say "PM rules" or "none needed for V1", and no ruling on them is in
+`rulings-5.md`. Nothing was built for them.
+
+1. **`ok` on the call that trips the count** (`stream-json.ts:206`, `:334`). False as built; the
+   check recommends keeping it and patching CR-6's sentence to "the result is not an error and the
+   call did not trip the count". No code change either way until the PM says.
+2. **Begin's lost reply** (`turn.ts:274-277`, `db-retry.ts:59`). Still built to CR-2's letter: a
+   22023 on any try is "nothing to close". The check reproduced the remainder (a network failure,
+   then 22023 "already has its assistant message": `skipped`, no finish, the request claimed until
+   the 10-minute sweep) and recommends closing it. What it would take: `retryDbCall` says on its
+   `refused` end whether an earlier try failed; `run()` sends that case to `closeUnbegun`; the case
+   at `closing.suite.ts:159` ("reads a 22023 on a later try as nothing to close too") is replaced.
+3. **A result for a tool-use id the stream never showed** (`stream-json.ts:325-327`). The check
+   asks for one resumed-session recording that uses a tool before a ruling. There is none: of the
+   four fixtures two carry tool calls and both were started with `--session-id`; the only `--resume`
+   recording is the one-line `claude-stream-resume-missing.jsonl`. In both tool recordings every
+   `tool_result` follows its own `tool_use` (0 results for an id not shown before). Whether the CLI
+   replays old results on `--resume` cannot be read from what is recorded, and a new recording
+   needs `claude -p`, which no worker runs.
+4. **The watchdog hold's two edges** (`runner.ts:106-109`, `:79-88`). As ruled; the check says none
+   is needed for V1.
+
+The seventh item (no test reads `main()`'s wiring of the CA) is no change in this stream: V2's
+container check proves it.
+
+#### Where the stream stands after the second pass
+
+```
+$ npm run typecheck                    (from workspace/)
+(no output, exit 0)
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  695 passed (695)
+$ npx vitest run --coverage
+ Test Files  9 passed (9)
+      Tests  695 passed (695)
+All files         |   93.03 |    88.32 |   91.98 |   94.99 |
+  config.ts       |   99.02 |    93.75 |     100 |   98.95 | 144
+  db-retry.ts     |   90.32 |       80 |     100 |    92.3 | 39-40
+  db.ts           |   95.57 |    82.89 |   96.15 |   96.87 | 74,294-295
+  runner.ts       |   77.96 |       75 |   64.28 |   82.17 | ...213,223,228-232
+  stream-json.ts  |   98.47 |    90.27 |     100 |     100 | ...321-325,345,374
+  turn.ts         |   97.65 |    94.11 |     100 |     100 | 113,129,137,192
+  claude-cli.ts   |   96.72 |     91.5 |   97.56 |   99.35 | 257
+Lines        : 94.99% ( 854/899 )
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+$ docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z
+(the same value as after the review round; unchanged)
+```
+
+695 against the review round's 688: `config.test.ts` 107 (was 101), `runner.test.ts` 225 (was
+224), the other seven files as they were. The size audit passes: the longest file is still
+`test/runner/cli-turn.suite.ts` at 719 lines; `test/config.test.ts` is 576, `src/config.ts` 273.
+Changed in this pass: `src/config.ts`, `README.md`, `test/config.test.ts`,
+`test/runner/result-grace.suite.ts` and this file. Every change was made with the editor tool.
