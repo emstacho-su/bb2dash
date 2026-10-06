@@ -27,6 +27,11 @@
  * a 23503 from `workspace_ask` says the same not-found line: the database's own
  * sentence about the foreign key is never shown.
  *
+ * THE SERVICE LINE is said from a status row re-read every 30 s, and re-read at
+ * once when a request in view becomes `claimed` and when its first delta
+ * arrives (`useStatusOnAnswer`), so the offline line does not sit beside text
+ * that is arriving.
+ *
  * TWO PARTS. `Workspace` reads the rows and holds the channel, and stays
  * mounted from one conversation to the next so the old channel is left before
  * the next is joined. `Thread` is keyed by the conversation: what was typed, a
@@ -276,6 +281,36 @@ function useStoredRowOnClose(conversationId: string | null, openRequestId: numbe
   }, [conversationId, openRequestId, queryClient]);
 }
 
+/** Read the status again, once, each time `requestId` becomes a request (or another one). */
+function useStatusRereadFor(requestId: number | null): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (requestId === null) return;
+    void queryClient.invalidateQueries({ queryKey: workspaceKeys.status() });
+  }, [requestId, queryClient]);
+}
+
+/**
+ * The offline line is said from a status row that is re-read every 30 s. A
+ * service that has just come back claims a waiting question and streams its
+ * answer inside those 30 s, so the line could sit beside text that is arriving.
+ * So the status is re-read at once at the two moments the page learns the
+ * service is answering (the PM's ruling U1): a request in view becomes
+ * `claimed`, and its first delta arrives. The runner beats on its own timer,
+ * so that read holds a current heartbeat.
+ */
+function useStatusOnAnswer(
+  openRequest: WorkspaceRequest | null,
+  followed: WorkspaceRequest | null,
+  stream: WorkspaceStreamView,
+): void {
+  useStatusRereadFor(openRequest?.state === 'claimed' ? openRequest.id : null);
+  // The first delta: text from seq 1, or a stream joined late (its text is held back).
+  const receiving = stream.text !== '' || stream.late;
+  useStatusRereadFor(followed !== null && receiving ? followed.id : null);
+}
+
 export function Workspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -295,6 +330,7 @@ export function Workspace() {
   // The newest request is followed until its stored answer has landed.
   const followed = liveRequestOf(requestRows, messageRows);
   const stream = useWorkspaceStream(conversationId, followed?.id ?? null);
+  useStatusOnAnswer(openRequest, followed, stream);
   const live =
     followed === null ? null : { requestId: followed.id, text: stream.text, late: stream.late };
 
