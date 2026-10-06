@@ -193,6 +193,13 @@ export const workspaceKeys = {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DIGITS = /^[1-9]\d{0,15}$/;
 
+/** A uuid in the lower case Postgres prints, or null for anything else. */
+function toUuid(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const lower = value.toLowerCase();
+  return UUID.test(lower) ? lower : null;
+}
+
 /**
  * `?c=` must be a uuid. Anything else is no conversation, and the page holds
  * the lobby channel. The id comes back in lower case: the Realtime topic is
@@ -200,9 +207,7 @@ const DIGITS = /^[1-9]\d{0,15}$/;
  * join a channel nothing is ever sent to.
  */
 export function parseConversationId(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const lower = value.toLowerCase();
-  return UUID.test(lower) ? lower : null;
+  return toUuid(value);
 }
 
 /** A conversation id for a filter or an argument: a uuid, or an error. */
@@ -363,7 +368,7 @@ export function normalizeToolCalls(value: unknown): WorkspaceToolCall[] {
 /** One `workspace_messages` row; null when it has no uuid id or no known role. */
 export function normalizeMessage(row: unknown): WorkspaceMessage | null {
   const raw = asRecord(row);
-  const id = parseConversationId(raw?.id);
+  const id = toUuid(raw?.id);
   const role = oneOf(ROLES, raw?.role);
   if (!raw || id === null || role === null) return null;
   return {
@@ -390,7 +395,7 @@ export function normalizeRequest(row: unknown): WorkspaceRequest | null {
     id,
     created_at: textOrNull(raw.created_at),
     conversation_id: parseConversationId(raw.conversation_id),
-    user_message_id: parseConversationId(raw.user_message_id),
+    user_message_id: toUuid(raw.user_message_id),
     state,
     claimed_at: textOrNull(raw.claimed_at),
     finished_at: textOrNull(raw.finished_at),
@@ -418,7 +423,7 @@ export function normalizeStatus(row: unknown): WorkspaceStatus {
 function normalizeAskResult(data: unknown): WorkspaceAskResult {
   const raw = asRecord(data);
   const conversationId = parseConversationId(raw?.conversation_id);
-  const messageId = parseConversationId(raw?.message_id);
+  const messageId = toUuid(raw?.message_id);
   const requestId = toRequestId(raw?.request_id);
   if (conversationId === null || messageId === null || requestId === null) {
     throw new Error('workspace_ask did not return the three ids');

@@ -54,7 +54,6 @@ export function Workspace() {
       )}
       <div
         className={styles.stream}
-        aria-live="polite"
         data-workspace-stream
         data-topic={stream.topic}
         data-channel={stream.channel}
