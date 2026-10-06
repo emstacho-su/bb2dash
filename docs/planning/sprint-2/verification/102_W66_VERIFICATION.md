@@ -1068,6 +1068,14 @@ and after).
 | build | `npm run build` | exit 0; `✓ Compiled successfully`; the route list holds `○ /workspace` |
 | coverage | `npm run test:coverage` | `Tests  2830 passed (2830)` · exit 0 · all files, lines 91.46 % (floor 83 %) |
 
+**Run again after a second merge.** While the round ran the phase branch gained one of the PM's
+commits (fc4cf2f: 102a and `project-state/DECISIONS.md`, the embedding model's source). It was
+merged in as 95af476 with no conflict; `git diff --stat 223ef2f 95af476 -- web` printed nothing.
+The five gates were run again on 95af476, in the same order: `npx vitest run` →
+`Test Files  153 passed (153)` · `Tests  2830 passed (2830)`, exit 0; `npm run typecheck` exit 0;
+`npx eslint . --max-warnings 0` exit 0, no output; `npm run build` exit 0, `○ /workspace`;
+`npm run test:coverage` exit 0, 2830 passed, all files lines 91.46 %.
+
 2830 = 2768 + 62: `queries.workspace.poll` 23 (new), `queries.workspace.clock` 20 (new),
 `workspace-clock` 10 (new), `Workspace.service` 7 (new), `Workspace.rereads` 8 → 10. The six timed
 files (`Workspace.rereads`, `Workspace.service`, `queries.workspace.poll`, `queries.workspace.clock`,
