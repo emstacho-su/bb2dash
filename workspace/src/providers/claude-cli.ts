@@ -126,6 +126,23 @@ export function readSystemPrompt(file: string = PATHS.systemPrompt): string {
   return fs.readFileSync(file, 'utf8').trimEnd();
 }
 
+export interface StartOutcome {
+  readonly mode: SessionStart['mode'];
+  /** The process's exit code; null when a signal ended it. */
+  readonly exitCode: number | null;
+  /** Whether any `assistant` message arrived before the process ended. */
+  readonly sawAssistant: boolean;
+  readonly alreadyRetried: boolean;
+}
+
+/**
+ * The one recovery (Contract, Continuity): a `--resume` start that exits non-zero before any
+ * `assistant` message is retried, once per turn, as a fresh start with the stored history replayed.
+ */
+export function shouldRetryAsFresh(outcome: StartOutcome): boolean {
+  return outcome.mode === 'resume' && !outcome.alreadyRetried && !outcome.sawAssistant && outcome.exitCode !== 0;
+}
+
 /** One turn of the CLI, as a stream of events: the real process in the container, a replay in tests. */
 export type CliTurn = (input: TurnInput, signal: AbortSignal) => AsyncIterable<TurnEvent>;
 

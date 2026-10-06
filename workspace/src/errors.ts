@@ -38,3 +38,49 @@ export class ProviderNotConfiguredError extends Error {
 export function errorCodeFor(error: unknown): ErrorCode {
   return error instanceof ProviderNotConfiguredError ? 'provider_not_configured' : 'cli_error';
 }
+
+/** The result subtype the CLI ends a turn with when `--max-budget-usd` is used up. */
+const BUDGET_STOP_SUBTYPE = 'error_max_budget_usd';
+const FINISHED_SUBTYPE = 'success';
+/** The `error` field of the CLI's own assistant message after an authentication failure. */
+const AUTHENTICATION_FAILED = 'authentication_failed';
+const HTTP_UNAUTHORIZED = 401;
+/** `rate_limit_info.status` when the plan's limit refuses the request. */
+const RATE_LIMIT_REJECTED = 'rejected';
+
+/** The structured facts of a finished stream that decide its code; a `TurnSummary` has them all. */
+export interface TurnEndFacts {
+  readonly violation: string | null;
+  readonly overage: boolean;
+  readonly assistantError: string | null;
+  readonly rateLimit: { readonly status: string | null } | null;
+  readonly result: {
+    readonly subtype: string | null;
+    readonly isError: boolean;
+    readonly apiErrorStatus: number | null;
+  } | null;
+}
+
+/**
+ * The error code a CLI turn ends under, or null for a finished answer. It keys on structured
+ * fields of the stream as recorded, never on result text:
+ *   the stream's own stop (a gate or init-line failure)      cli_error
+ *   a turn reported as paid from usage credits               usage_limit
+ *   result subtype `error_max_budget_usd`                    budget_exceeded
+ *   `subtype: success` with `is_error: false`                null
+ *   an authentication failure (the assistant line's `error`, or API status 401)   sign_in_expired
+ *   an error end after a plan rate-limit rejection (the rate-limit event's status, never an
+ *   `api_retry` event)                                       usage_limit
+ *   anything else, a stream with no result line included     cli_error
+ */
+export function mapTurnEnd(facts: TurnEndFacts): ErrorCode | null {
+  if (facts.violation !== null) return 'cli_error';
+  if (facts.overage) return 'usage_limit';
+  const result = facts.result;
+  if (result === null) return 'cli_error';
+  if (result.subtype === BUDGET_STOP_SUBTYPE) return 'budget_exceeded';
+  if (result.subtype === FINISHED_SUBTYPE && !result.isError) return null;
+  if (facts.assistantError === AUTHENTICATION_FAILED || result.apiErrorStatus === HTTP_UNAUTHORIZED) return 'sign_in_expired';
+  if (facts.rateLimit?.status === RATE_LIMIT_REJECTED) return 'usage_limit';
+  return 'cli_error';
+}
