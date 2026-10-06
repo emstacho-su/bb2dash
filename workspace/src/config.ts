@@ -86,7 +86,8 @@ export const REFUSED_ENV_PREFIX = 'CLAUDE_CODE_USE_';
 
 const TRANSACTION_POOLER_PORT = '6543';
 const SSLMODE_ALLOWED = new Set(['require', 'verify-ca', 'verify-full', 'no-verify']);
-const BUDGET_SHAPE = /^\d+(\.\d+)?$/;
+/** Dollars with at most two decimals: the flag is written with two, so a third would reach the CLI rounded. */
+const BUDGET_SHAPE = /^\d+(\.\d{1,2})?$/;
 const RUNNER_NAME_PREFIX = 'workspace@';
 const DSN_SECRET_NAME = 'workspace_runner_db_url';
 const TOKEN_SECRET_NAME = 'claude_oauth_token';
@@ -134,13 +135,17 @@ export function cleanSecret(raw: string): string {
   return raw.replace(/^﻿/, '').replace(/[\r\n]/g, '').trim();
 }
 
-/** `WORKSPACE_TURN_BUDGET_USD` in dollars: 1.00 when unset, refused outside 0.01 to 1.00. */
+/**
+ * `WORKSPACE_TURN_BUDGET_USD` in dollars: 1.00 when unset, refused outside 0.01 to 1.00 and with a
+ * third decimal, so `--max-budget-usd` receives the amount as it was written.
+ */
 export function parseTurnBudget(raw: string | undefined): number {
   const value = (raw ?? '').trim();
   if (value === '') return TURN_BUDGET_DEFAULT_USD;
   const dollars = BUDGET_SHAPE.test(value) ? Number(value) : Number.NaN;
   if (!Number.isFinite(dollars) || dollars < TURN_BUDGET_MIN_USD || dollars > TURN_BUDGET_MAX_USD) {
-    throw new ConfigError(`${TURN_BUDGET_ENV} must be an amount from ${TURN_BUDGET_MIN_USD.toFixed(2)} to ${TURN_BUDGET_MAX_USD.toFixed(2)}`);
+    const range = `${TURN_BUDGET_MIN_USD.toFixed(2)} to ${TURN_BUDGET_MAX_USD.toFixed(2)}`;
+    throw new ConfigError(`${TURN_BUDGET_ENV} must be an amount from ${range} with at most two decimals`);
   }
   return dollars;
 }
