@@ -378,3 +378,11 @@ Readings for the builders:
   not run in a hidden tab; task 16 must take the end of a stream from the `done` broadcast and
   from a refetch on focus, never from the interval alone.
 * Partitions seen: `messages_2026_10_05` … `messages_2026_10_09`, daily bounds.
+
+## Task 6a — the port PR (2026-10-06, done)
+
+[PR #77](https://github.com/emstacho-su/bb2dash/pull/77) merged on Stack's word ("merge 77") as
+e89aff5, about an hour after 142 was applied. The file on `main` is the phase branch's, blob for
+blob (acaa281). From the main checkout, fast-forwarded to e89aff5:
+`node scripts/db-test.mjs --only phase15_100_db_test_runner_role.sql` → `PASS`,
+`db-test: passed 1, failed 0, units 1`. The port branch and its worktree are removed.
