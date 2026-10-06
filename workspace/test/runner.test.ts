@@ -16,7 +16,7 @@ import { ProviderNotConfiguredError } from '../src/errors.js';
 import type { CliTurn } from '../src/providers/claude-cli.js';
 import { createProviders } from '../src/providers/index.js';
 import type { StoredToolCall, TurnEvent } from '../src/providers/types.js';
-import { createRunner, type RunnerDeps } from '../src/runner.js';
+import { createRunner, main, type RunnerDeps } from '../src/runner.js';
 import { startTurn, type TurnDeps } from '../src/turn.js';
 import { ABORTED, STORED_SESSION_ID, claimOf, delta, fakeRpc, result, scriptedTurn, type FakeRpc, type Step } from './helpers/fakes.js';
 
@@ -676,5 +676,29 @@ describe('the loop', () => {
     await vi.advanceTimersByTimeAsync(10);
     await running;
     expect(seen[0]).toBe('workspace@test');
+  });
+});
+
+describe('the entry', () => {
+  it('does not start the loop when it is imported', () => {
+    expect(typeof main).toBe('function');
+  });
+
+  it('refuses to start where its secrets are not mounted, with one line that names no value', async () => {
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    let exitCode: number;
+    try {
+      exitCode = await main();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(exitCode).toBe(2);
+    expect(written).toHaveLength(1);
+    expect(written[0]).toMatch(/workspace: cannot start: /);
+    expect(written[0]).not.toMatch(/postgres(ql)?:\/\//);
   });
 });

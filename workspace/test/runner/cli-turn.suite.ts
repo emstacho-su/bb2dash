@@ -3,11 +3,15 @@
  * recovery, the init check, failing closed on the gate, and how it kills. Part of runner.test.ts.
  */
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { CLAUDE_CODE_VERSION, PATHS } from '../../src/config.js';
 import { ALLOWED_TOOLS } from '../../src/hooks/gate-rules.js';
-import { createCliTurn, isUuidShaped, type CliTurnDeps } from '../../src/providers/claude-cli.js';
+import { createCliTurn, isUuidShaped, spawnClaude, type CliTurnDeps } from '../../src/providers/claude-cli.js';
 import type { HistoryMessage, TurnInput } from '../../src/providers/types.js';
 import { buildPrompt } from '../../src/replay.js';
 import {
@@ -466,6 +470,76 @@ describe('the init check and the gate, failing closed', () => {
     expect(events.filter((event) => event.type === 'tool')).toEqual([]);
     expect(resultOf(events)?.ok).toBe(true);
     expect(textOf(events)).toBe('Goodbye.');
+  });
+});
+
+describe('the real process (node standing in for the CLI)', () => {
+  const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
+  const options = { cwd: os.tmpdir(), env };
+
+  async function read(child: ReturnType<typeof spawnClaude>): Promise<string> {
+    let text = '';
+    for await (const chunk of child.stdout) text += chunk.toString();
+    return text;
+  }
+
+  it('reads stdout, the end of stderr and the exit code', async () => {
+    const script = "process.stdout.write('{\"type\":\"result\"}\\n'); process.stderr.write('a warning'); process.exitCode = 3;";
+    const child = spawnClaude([process.execPath, '-e', script], options);
+    expect(await read(child)).toBe('{"type":"result"}\n');
+    expect(await child.exited).toEqual({ code: 3, signal: null });
+    expect(child.stderrText()).toBe('a warning');
+  });
+
+  it('passes every argv element as it is, with no shell: an empty one, line breaks, quotes, a leading --', async () => {
+    const elements = ['--tools', '', 'line one\nline "two" with $HOME and `ticks`', '--', '--model opus'];
+    const child = spawnClaude([process.execPath, '-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', '--', ...elements], options);
+    expect(JSON.parse(await read(child))).toEqual(elements);
+    expect((await child.exited).code).toBe(0);
+  });
+
+  it('reports a program that cannot be started instead of throwing', async () => {
+    const child = spawnClaude(['w64-there-is-no-such-program'], options);
+    expect(await read(child)).toBe('');
+    const exit = await child.exited;
+    expect(exit.code).toBeNull();
+    expect(exit.error).toMatch(/ENOENT/);
+  });
+
+  it('kills a running process', async () => {
+    const child = spawnClaude([process.execPath, '-e', 'setInterval(() => undefined, 1000)'], options);
+    child.kill('SIGTERM');
+    const exit = await child.exited;
+    expect(exit.code === 0).toBe(false);
+    expect(exit.error).toBeUndefined();
+  });
+
+  it('refuses an empty argv', () => {
+    expect(() => spawnClaude([], options)).toThrow(/empty argv/);
+  });
+
+  it('runs a whole turn through a real process', async () => {
+    const lines = lookup.map((line) => JSON.stringify(line)).join('\n');
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'w64-cli-')), 'stream.jsonl');
+    fs.writeFileSync(file, `${lines}\n`);
+    const logs: string[] = [];
+    const turn = createCliTurn({
+      // The argv is the frozen one; node prints the recorded stream in place of the CLI.
+      spawn: (_argv, spawnOptions) =>
+        spawnClaude([process.execPath, '-e', `process.stdout.write(require('fs').readFileSync(${JSON.stringify(file)}))`], {
+          cwd: os.tmpdir(),
+          env: spawnOptions.env,
+        }),
+      readSystemPrompt: () => SYSTEM_PROMPT,
+      readOauthToken: () => TOKEN,
+      baseEnv: process.env,
+      log: (line) => logs.push(line),
+    });
+    const events = await collect(turn(input(), new AbortController().signal));
+    fs.rmSync(path.dirname(file), { recursive: true, force: true });
+    expect(resultOf(events)).toMatchObject({ ok: true, errorCode: null, costUsd: 0.038524 });
+    expect(textOf(events)).toBe((lookup[lookup.length - 1] as { result: string }).result);
+    expect(logs.some((line) => line.includes('check=pass'))).toBe(true);
   });
 });
 
