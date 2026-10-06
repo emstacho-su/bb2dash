@@ -478,3 +478,22 @@ firewall has never met a kernel: task 12 is their first real test.
 * A firewall that fails its end check leaves the container with deny-all; read the script's own
   output with `docker compose -p bb2dash-wt21 --profile workspace logs --tail 80 workspace`
   before changing anything, and fix the script with a failing test first.
+
+## Task 18 — advisors (2026-10-06 20:39 UTC, after 140–142)
+
+`get_advisors`, security: two lints, neither naming a `workspace_*` object or `realtime.messages`
+(`authenticated_security_definer_function_executable` for `app_owner()` and
+`calendar_push_now()`, the two on record; `auth_leaked_password_protection`). **0 on the
+Workspace.**
+`get_advisors`, performance: **0 `auth_rls_initplan`**; `unindexed_foreign_keys` 16 findings,
+**none on the four workspace tables**. One INFO lint does name two of this phase's indexes as
+unused (`workspace_messages_parent_idx`, `workspace_requests_user_message_idx`): the tables are a
+day old and hold one conversation; both indexes back foreign keys and stay.
+
+## Task 17, first part — types (2026-10-06)
+
+`web/src/lib/supabase/database.types.ts` regenerated from prod (f60a7e9): 298 lines added, none
+removed. It carries this phase's four tables, `v_workspace_status` and eight functions, and what
+`main`'s file still lacked from merged migrations 091, 093, 094 and 095 (fifteen `sync_*`
+functions and `bb_file_storage_key`). `npm run typecheck` in `web/` → exit 0. The full suites are
+run once the last worker branches are merged.
