@@ -122,9 +122,10 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # The CLI's config folder exists here, owned by node, so a new workspace-claude-home volume takes
-# that owner. The turns' working directory is root's and nobody may write it (102a, PM rulings V2):
-# every turn loads project settings from its working directory, so a `.claude` folder planted there
-# would be read by every later turn. The CLI keeps what it writes under CLAUDE_CONFIG_DIR.
+# that owner. The turns' working directory is root's and 0555 (102a, PM rulings V2), so the runtime
+# user can neither write it nor change its mode: every turn loads project settings from its working
+# directory, and a `.claude` folder planted there would be read by every later turn. The CLI keeps
+# what it writes under CLAUDE_CONFIG_DIR.
 RUN mkdir -p /home/node/.claude /app/turn \
  && chown node:node /home/node/.claude \
  && chown root:root /app/turn \
