@@ -230,11 +230,12 @@ create policy workspace_requests_owner_insert on public.workspace_requests
                            where m.id = user_message_id
                              and m.conversation_id = workspace_requests.conversation_id
                              and m.role = 'user'));
--- The one update the browser may make: Stop.
+-- The one update the browser may make: Stop, and a Stop made by hand carries Stop's own code.
 create policy workspace_requests_owner_cancel on public.workspace_requests
   for update to authenticated
   using ((select auth.uid()) = (select public.app_owner()) and state in ('queued', 'claimed'))
-  with check ((select auth.uid()) = (select public.app_owner()) and state = 'cancelled');
+  with check ((select auth.uid()) = (select public.app_owner())
+              and state = 'cancelled' and error_code = 'cancelled');
 
 create policy workspace_runner_heartbeat_owner_select on public.workspace_runner_heartbeat
   for select to authenticated
