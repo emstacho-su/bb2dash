@@ -265,3 +265,24 @@ Runner (W-64):
   `~/.claude/projects/C--Users-Public-bb2dash-w64-rec-cwd/`.
 * For the walks: the weekly plan window read 73% used at 03:29 UTC on 2026-10-06
   (`overageStatus` rejected, `out_of_credits`: consistent with Usage credits off).
+
+## Task 19, first half — the runner's password and DSN (2026-10-06)
+
+Stack's approval for the three migrations, 2026-10-06: "apply 140, 141, 142."
+
+The hand-over is in two parts, because the `alter role` line needs the role 142 creates.
+
+* **Part A, done 2026-10-06 16:19Z (Stack, in his own PowerShell window).** One line from the
+  clipboard made a 32-character password on the laptop and stored the session-pooler DSN as
+  `workspace_runner_db_url` in `SECRETS_DIR` (host and port taken from `sync_runner_db_url`,
+  `?uselibpqcompat=true&sslmode=require`). Its output, as he reported it:
+  `sync_runner_db_url uses a pooler host on port 5432: True`,
+  `harness_database_url uses a pooler host on port 5432: True`,
+  `stored workspace_runner_db_url (169 bytes)`. The two True lines are what the firewall's
+  `.pooler.supabase.com` rule rests on. The PM tested the line first against a throwaway folder of
+  fake secrets, and added `'workspace_runner_db_url'` to `$allowed` in
+  `SECRETS_DIR/set-secret.ps1` (a name; that file is in no repo). The password was never printed
+  and never passed through a chat.
+* **Part B, owed after 142 is on prod.** A second line reads the stored secret and puts
+  `alter role workspace_runner with password '…';` on his clipboard for an unsaved Supabase SQL
+  editor tab.
