@@ -12,13 +12,17 @@ import { describe, expect, it } from 'vitest';
 import { CLAUDE_CODE_VERSION, PATHS } from '../../src/config.js';
 import { ALLOWED_TOOLS } from '../../src/hooks/gate-rules.js';
 import { createCliTurn, isUuidShaped, spawnClaude, type CliTurnDeps } from '../../src/providers/claude-cli.js';
+import { createProviders } from '../../src/providers/index.js';
 import type { HistoryMessage, TurnInput } from '../../src/providers/types.js';
 import { buildPrompt } from '../../src/replay.js';
+import { startTurn } from '../../src/turn.js';
 import {
   CONVERSATION_ID,
   QUESTION,
   STORED_SESSION_ID,
+  claimOf,
   collect,
+  fakeRpc,
   fakeSpawn,
   readFixtureJson,
   readFixtureLines,
@@ -334,6 +338,70 @@ describe('fresh starts, resumed turns and the one recovery', () => {
     const events = await run(h, input({ claudeSessionId: STORED_SESSION_ID }));
     expect(h.spawn.calls).toHaveLength(1);
     expect(resultOf(events)?.errorCode).toBe('sign_in_expired');
+  });
+});
+
+// The recovery is for a --resume start that exits non-zero by itself. A start the runner killed on
+// what the stream showed also ends without exit code 0, and must never be started a second time.
+describe('a resumed start the runner itself killed is not the recovery case', () => {
+  const FRESH_SESSION_ID = '7c1d2e3f-4a5b-4c6d-8e7f-90a1b2c3d4e5';
+  const RAG_PENDING = {
+    mcp_servers: [
+      { name: 'bb2dash', status: 'connected' },
+      { name: 'rag', status: 'pending' },
+    ],
+  };
+  /** A second start that would answer, so a retry cannot hide behind a start that fails anyway. */
+  const wouldAnswer: FakeProcessOptions = {
+    lines: [initLine({ session_id: FRESH_SESSION_ID }), textDelta('an answer from a second start'), { ...success, session_id: FRESH_SESSION_ID }],
+    exit: OK,
+  };
+
+  it('starts the CLI once and stores cli_error, never a finished answer, when the resumed start has a refused init line', async () => {
+    const h = harness([{ lines: [initLine(RAG_PENDING)], exit: OK, hang: true }, wouldAnswer]);
+    const events = await run(h, input({ claudeSessionId: STORED_SESSION_ID, history: HISTORY }));
+    expect(resultOf(events)).toMatchObject({ ok: false, errorCode: 'cli_error' });
+    expect(h.spawn.calls).toHaveLength(1);
+    expect(valueAfter(h.spawn.calls[0]!.argv, '--resume')).toBe(STORED_SESSION_ID);
+    expect(h.spawn.processes[0]!.kills[0]?.signal).toBe('SIGTERM');
+    expect(textOf(events)).toBe('');
+    expect(events.filter((event) => event.type === 'result')).toHaveLength(1);
+    expect(h.logs.some((line) => /request=41/.test(line) && /rag is pending/.test(line))).toBe(true);
+    expect(h.logs.filter((line) => /fresh start/.test(line))).toEqual([]);
+  });
+
+  it('hands workspace_finish the stored session id unchanged for that turn', async () => {
+    // Refused on any start: before the fix the second, killed start's session id was stamped over the stored one.
+    const h = harness([
+      { lines: [initLine(RAG_PENDING)], exit: OK, hang: true },
+      { lines: [initLine({ ...RAG_PENDING, session_id: FRESH_SESSION_ID })], exit: OK, hang: true },
+    ]);
+    const fake = fakeRpc();
+    const deps = { rpc: fake.rpc, providers: createProviders({ claudeCli: h.turn }), log: (line: string) => h.logs.push(line), budgetUsd: 1, budgetCapHolds: true };
+    const outcome = await startTurn(deps, claimOf({ claudeSessionId: STORED_SESSION_ID })).done;
+    expect(outcome).toEqual({ state: 'failed', errorCode: 'cli_error' });
+    expect(fake.finishes).toHaveLength(1);
+    expect(fake.finishes[0]).toMatchObject({ state: 'failed', errorCode: 'cli_error', content: '', claudeSessionId: STORED_SESSION_ID });
+    expect(h.spawn.calls).toHaveLength(1);
+  });
+
+  it('starts no second call when a resumed turn is reported as paid from usage credits before any assistant line: one start, usage_limit', async () => {
+    const h = harness([{ lines: synthetic.paidFromUsageCredits!.lines, exit: OK, hang: true }, wouldAnswer]);
+    const events = await run(h, input({ claudeSessionId: STORED_SESSION_ID, history: HISTORY }));
+    expect(h.spawn.calls).toHaveLength(1);
+    expect(valueAfter(h.spawn.calls[0]!.argv, '--resume')).toBe(STORED_SESSION_ID);
+    expect(h.spawn.processes[0]!.kills[0]?.signal).toBe('SIGTERM');
+    expect(resultOf(events)).toMatchObject({ ok: false, errorCode: 'usage_limit' });
+    expect(textOf(events)).toBe('');
+    expect(h.logs.filter((line) => /fresh start/.test(line))).toEqual([]);
+  });
+
+  it('still retries a resumed start that a signal from outside ended before any output', async () => {
+    const h = harness([{ lines: [], exit: { code: null, signal: 'SIGKILL' } }, wouldAnswer]);
+    const events = await run(h, input({ claudeSessionId: STORED_SESSION_ID, history: HISTORY }));
+    expect(h.spawn.calls).toHaveLength(2);
+    expect(h.spawn.processes[0]!.kills).toEqual([]);
+    expect(resultOf(events)).toMatchObject({ ok: true, errorCode: null, claudeSessionId: FRESH_SESSION_ID });
   });
 });
 
