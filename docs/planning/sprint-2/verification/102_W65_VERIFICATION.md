@@ -760,7 +760,7 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/grep-cl
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/workspace/init-firewall.test.mjs 2>&1 | grep -E "(tests|pass|fail) [0-9]+$"
 ```
-→ `tests 18`, `pass 18`, `fail 0` (about 40 seconds)
+→ `tests 20`, `pass 20`, `fail 0` (about 45 seconds; 18 before wave 2b's two tests)
 
 **4.** The Dockerfile's and the service's literals.
 
@@ -823,11 +823,13 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 **11.** The image, and the one layer that holds the CLI.
 
 ```
-docker images bb2dash-workspace:local --format '{{.ID}} {{.Size}}'; docker history bb2dash-workspace:local --format '{{.Size}} {{.CreatedBy}}' | grep "npm-global"
+docker images bb2dash-workspace:local --format '{{.ID}} {{.Size}}'; docker history --no-trunc bb2dash-workspace:local --format '{{.Size}} {{.CreatedBy}}' | grep "npm-global"
 ```
 → the image's id and size, then three lines: the `COPY /usr/local/share/npm-global …` layer with its
 size, and two `ENV` lines of `0B`. Paste the COPY layer's size into 102a: about 250 MB when the copy
-kept the package's link, about 500 MB when it did not (the image works either way).
+kept the package's link, about 500 MB when it did not (the image works either way). `--no-trunc`
+(ruling U2): without it `docker history` cuts each line at 45 characters, and a grep can miss the
+words it looks for.
 
 **12.** Start **(guard)**.
 
@@ -974,6 +976,23 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('http://host.docker.internal:6080',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
 ```
 → `blocked` (run while `bb2dash-sync-1` is up)
+
+The same port by literal address (ruling U2), so the answer does not rest on whether
+`host.docker.internal` can be looked up from behind the firewall: Docker Desktop's address for the
+host (`192.168.65.254`), this container's own gateway (read from `/proc/net/route`), and whatever
+`host.docker.internal` resolves to, if it resolves at all.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const net=require('net'),fs=require('fs'),dns=require('dns').promises;const once=(a,p)=>new Promise(r=>{const s=net.connect({host:a,port:p,timeout:5000});s.on('connect',()=>{s.destroy();r('open')});s.on('timeout',()=>{s.destroy();r('blocked')});s.on('error',()=>r('blocked'))});(async()=>{const gw=fs.readFileSync('/proc/net/route','utf8').split('\n').map(l=>l.split('\t')).filter(f=>f[1]==='00000000').map(f=>f[2].match(/../g).reverse().map(h=>parseInt(h,16)).join('.'));const named=await dns.lookup('host.docker.internal').then(r=>[r.address],()=>[]);for(const a of [...new Set(['192.168.65.254',...gw,...named])])console.log(a+':6080',await once(a,6080))})()"
+```
+→ `192.168.65.254:6080 blocked`, then `<the gateway>:6080 blocked` (a third line only if
+`host.docker.internal` resolved to another address): every line `blocked`. That the port is
+published while this runs is read, not dialled (nothing connects to the sync container):
+
+```
+docker inspect -f '{{json .NetworkSettings.Ports}} {{.State.Status}}' bb2dash-sync-1
+```
+→ `{"6080/tcp":[{"HostIp":"127.0.0.1","HostPort":"6080"}]} running`
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('https://api.anthropic.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
 ```
@@ -995,12 +1014,14 @@ fails because the CLI cannot write under `/usr/local/share/npm-global`, say so i
 COPY line gets `--chown=node:node` (ruling T1's exception).
 
 **28.** Egress by literal address (ruling T1): these prove the address and port rule, not a failed
-lookup. First, on the host and not in the container, that the three targets answer from this laptop:
+lookup. First, on the host and not in the container, that the four targets answer from this laptop.
+The fourth is the pooler on 6543 (ruling U2: the claim is probed, not only stated); the program reads
+the pooler's host from the secret file and prints neither it nor anything else of the file:
 
 ```
-node -e "const net=require('net');const once=(h,p)=>new Promise(r=>{const s=net.connect({host:h,port:p,timeout:6000});s.on('connect',()=>{s.destroy();r('open')});s.on('timeout',()=>{s.destroy();r('no answer')});s.on('error',()=>r('no answer'))});(async()=>{for(const [h,p] of [['1.1.1.1',443],['api.anthropic.com',80],['goultdzqcavefcgnifdy.supabase.co',80]])console.log(h+':'+p,await once(h,p))})()"
+node -e "const net=require('net'),fs=require('fs');const once=(h,p)=>new Promise(r=>{const s=net.connect({host:h,port:p,timeout:6000});s.on('connect',()=>{s.destroy();r('open')});s.on('timeout',()=>{s.destroy();r('no answer')});s.on('error',()=>r('no answer'))});(async()=>{for(const [h,p] of [['1.1.1.1',443],['api.anthropic.com',80],['goultdzqcavefcgnifdy.supabase.co',80]])console.log(h+':'+p,await once(h,p));let v='not read';try{v=await once(new URL(fs.readFileSync('C:/Users/stack/.bb2dash-secrets/workspace_runner_db_url','utf8').trim()).hostname,6543)}catch{}console.log('the pooler:6543',v)})()"
 ```
-→ three lines ending `open` (as read on 2026-10-06)
+→ four lines ending `open` (the first three as read on 2026-10-06), the last `the pooler:6543 open`
 
 One public address that is not allowed, on 443:
 
@@ -1018,8 +1039,9 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 → four lines per pin, `<name> <address>:<port> open|blocked`. `open` on exactly these: each
 `api.anthropic.com` and `goultdzqcavefcgnifdy.supabase.co` address on `:443`, each pooler address on
 `:5432`. Every other line `blocked`: with step 14's counts, 4 `open` and 12 `blocked`. (Port 80 on
-the two HTTPS names and 6543 on the pooler answer from the host, so those `blocked` lines are the
-port rule at work.)
+the two HTTPS names and 6543 on the pooler answer from the host, as the host line above shows on the
+day, so those `blocked` lines are the port rule at work.) The lines hold allowed addresses: in 102a
+each is written as `<address>`, never as the number.
 
 **29.** A second run of the firewall, as root, is refused, and changes nothing.
 
@@ -1085,7 +1107,12 @@ docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(cd /c/Users/stack/projects/b
 first and fourth lines and step 28's second line once more: `blocked`, a number, `1.1.1.1:443 blocked`.
 
 **35.** Task 13: the image's filesystem into a scratch volume **(guard before)**. `w65-scan` is
-created and never started, carries no compose label, and is removed in the line that exports it.
+created and never started, and is removed in the line that exports it. It carries the compose
+labels of the image it is made from (compose stamps `com.docker.compose.project` and
+`com.docker.compose.service` on an image it builds, and a container inherits its image's labels),
+so for the seconds it exists a label filter on project `bb2dash-wt21` can list it; it has none of
+the labels compose gives a container it starts itself (no number, no config hash), and no compose
+command is run while it exists (ruling U2).
 
 ```
 docker volume create w65-scan-fs && docker create --name w65-scan bb2dash-workspace:local
