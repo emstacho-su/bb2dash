@@ -42,7 +42,7 @@ import {
   parseConversationId,
   toRequestId,
 } from './queries.workspace';
-import { getSupabaseBrowserClient } from './supabase/client';
+import { getSupabaseBrowserClient, type SupabaseBrowserClient } from './supabase/client';
 
 /* ---------------------------------------------------------------------------
  * Topics
@@ -227,11 +227,100 @@ export function streamView(
  * The hook
  * ------------------------------------------------------------------------ */
 
-const NOTHING_LEAVING: Promise<unknown> = Promise.resolve();
+const NOTHING_LEAVING: Promise<void> = Promise.resolve();
+
+/** What supabase-js answers a leave with when the server confirmed it. */
+const LEAVE_OK = 'ok';
 
 /** A failed join in words: the status, and the client's reason when it gave one. */
 function describeFailure(status: string, error: Error | undefined): string {
   return error?.message ? `${status}: ${error.message}` : status;
+}
+
+/** One stay on a topic: where its events go, what `done` moves, and whether the page has left. */
+interface Stay {
+  readonly topic: string;
+  readonly dispatch: (event: StreamEvent) => void;
+  readonly onDone: () => void;
+  readonly left: () => boolean;
+}
+
+/** The channel event for a status supabase-js reports: joined, or an error with its reason. */
+function channelEvent(topic: string, status: string, error: Error | undefined): StreamEvent {
+  if (status === CHANNEL_SUBSCRIBED) {
+    return { type: 'channel', topic, status: 'joined', detail: null };
+  }
+  return { type: 'channel', topic, status: 'error', detail: describeFailure(status, error) };
+}
+
+/**
+ * Open the topic's private channel and wire its two events and its status to
+ * the reducer. Nothing is acted on once the page has left the topic: a
+ * broadcast can still be on its way to a channel that is being closed.
+ */
+function openChannel(supabase: SupabaseBrowserClient, stay: Stay): RealtimeChannel {
+  const { topic, dispatch } = stay;
+  return supabase
+    .channel(topic, { config: { private: true } })
+    .on('broadcast', { event: EVENT_DELTA }, (message) => {
+      if (stay.left()) return;
+      const delta = parseDelta(message.payload);
+      if (delta !== null) dispatch({ type: 'delta', topic, ...delta });
+    })
+    .on('broadcast', { event: EVENT_DONE }, (message) => {
+      if (stay.left()) return;
+      const done = parseDone(message.payload);
+      if (done === null) return;
+      dispatch({ type: 'done', topic, requestId: done.requestId });
+      stay.onDone();
+    })
+    .subscribe((status, error) => {
+      if (stay.left()) return;
+      dispatch(channelEvent(topic, String(status), error));
+    });
+}
+
+/**
+ * Join the stay's topic once the last channel has left, so the page never
+ * holds two. `opened` is called in the same tick the channel is opened: the
+ * caller's cleanup must be able to leave it from that moment on.
+ */
+async function joinAfter(
+  leaving: Promise<void>,
+  supabase: SupabaseBrowserClient,
+  stay: Stay,
+  opened: (channel: RealtimeChannel) => void,
+): Promise<void> {
+  await leaving;
+  if (stay.left()) return;
+  // The last channel is gone and this one has not answered. Said here, after the wait,
+  // so a return to the topic just left does not keep reading "joined".
+  stay.dispatch({ type: 'channel', topic: stay.topic, status: 'joining', detail: null });
+  // A private channel is authorised by the owner's token (141's policy), and the join
+  // payload carries the token only once the socket has it.
+  await supabase.realtime.setAuth();
+  if (stay.left()) return;
+  opened(openChannel(supabase, stay));
+}
+
+/**
+ * Leave a channel. It is finished with whatever the leave answers, so the next
+ * join never waits on a failure; but a failure is logged, never swallowed.
+ * supabase-js resolves a leave to `ok`, `timed out` or `error`, and can reject.
+ */
+function leaveChannel(
+  supabase: SupabaseBrowserClient,
+  topic: string,
+  channel: RealtimeChannel,
+): Promise<void> {
+  return supabase.removeChannel(channel).then(
+    (answer) => {
+      if (answer !== LEAVE_OK) console.error(`workspace: leaving ${topic} answered "${answer}"`);
+    },
+    (error: unknown) => {
+      console.error(`workspace: could not leave ${topic}`, error);
+    },
+  );
 }
 
 /**
@@ -250,70 +339,33 @@ export function useWorkspaceStream(
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(streamReducer, topic, initialStreamState);
   /** The last channel's leave. The next join waits on it, so the page never holds two. */
-  const leaving = useRef<Promise<unknown>>(NOTHING_LEAVING);
+  const leaving = useRef<Promise<void>>(NOTHING_LEAVING);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
-    let cancelled = false;
+    let left = false;
     let channel: RealtimeChannel | null = null;
-
-    const join = async (): Promise<void> => {
-      await leaving.current;
-      if (cancelled) return;
-      // The last channel is gone and this one has not answered. Said here, after the wait,
-      // so a return to the topic just left does not keep reading "joined".
-      dispatch({ type: 'channel', topic, status: 'joining', detail: null });
-      // A private channel is authorised by the owner's token (141's policy), and the join
-      // payload carries the token only once the socket has it.
-      await supabase.realtime.setAuth();
-      if (cancelled) return;
-
-      channel = supabase
-        .channel(topic, { config: { private: true } })
-        .on('broadcast', { event: EVENT_DELTA }, (message) => {
-          if (cancelled) return;
-          const delta = parseDelta(message.payload);
-          if (delta !== null) dispatch({ type: 'delta', topic, ...delta });
-        })
-        .on('broadcast', { event: EVENT_DONE }, (message) => {
-          if (cancelled) return;
-          const done = parseDone(message.payload);
-          if (done === null) return;
-          dispatch({ type: 'done', topic, requestId: done.requestId });
-          invalidateWorkspaceConversation(queryClient, id);
-        })
-        .subscribe((status, error) => {
-          if (cancelled) return;
-          if (String(status) === CHANNEL_SUBSCRIBED) {
-            dispatch({ type: 'channel', topic, status: 'joined', detail: null });
-            return;
-          }
-          dispatch({
-            type: 'channel',
-            topic,
-            status: 'error',
-            detail: describeFailure(String(status), error),
-          });
-        });
+    const stay: Stay = {
+      topic,
+      dispatch,
+      onDone: () => invalidateWorkspaceConversation(queryClient, id),
+      left: () => left,
     };
 
     // A join that fails is not fatal: the stored rows are polled while a request is open.
     // It is recorded, so the screen can tell a quiet channel from a missing one.
-    join().catch((error: unknown) => {
-      if (cancelled) return;
-      dispatch({
-        type: 'channel',
-        topic,
-        status: 'error',
-        detail: error instanceof Error ? error.message : String(error),
-      });
+    joinAfter(leaving.current, supabase, stay, (opened) => {
+      channel = opened;
+    }).catch((error: unknown) => {
+      if (left) return;
+      const detail = error instanceof Error ? error.message : String(error);
+      dispatch({ type: 'channel', topic, status: 'error', detail });
     });
 
     return () => {
-      cancelled = true;
+      left = true;
       if (channel === null) return;
-      // Whatever the leave answers, this channel is finished with; only its end is awaited.
-      leaving.current = supabase.removeChannel(channel).catch(() => undefined);
+      leaving.current = leaveChannel(supabase, topic, channel);
     };
   }, [topic, id, queryClient]);
 

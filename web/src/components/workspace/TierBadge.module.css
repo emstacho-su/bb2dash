@@ -1,0 +1,6 @@
+/* The tier badge. Existing tokens only; Phase 22 restyles. */
+
+.badge {
+  composes: tagOutline from '@/styles/tokens.module.css';
+  align-self: flex-start;
+}
