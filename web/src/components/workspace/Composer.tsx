@@ -38,7 +38,11 @@ export interface ComposerProps {
   onEdit: () => void;
 }
 
-export function Composer({ requestOpen, busy, refusal, onAsk, onStop, onEdit }: ComposerProps) {
+/**
+ * The typed text, and asking with it one question at a time. The text is
+ * cleared only when the question was accepted.
+ */
+function useQuestion(busy: boolean, onAsk: (text: string) => Promise<boolean>) {
   const [text, setText] = useState('');
   /** A question is on its way. A ref, because a held Enter repeats before `busy` has rendered. */
   const sending = useRef(false);
@@ -52,6 +56,12 @@ export function Composer({ requestOpen, busy, refusal, onAsk, onStop, onEdit }: 
       sending.current = false;
     }
   }
+
+  return { text, setText, ask };
+}
+
+export function Composer({ requestOpen, busy, refusal, onAsk, onStop, onEdit }: ComposerProps) {
+  const { text, setText, ask } = useQuestion(busy, onAsk);
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Shift+Enter is the browser's new line. Enter while an input method is
