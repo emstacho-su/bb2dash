@@ -177,3 +177,77 @@ What the tests hold:
   `Provider` and throw `ProviderNotConfiguredError`, which maps to `provider_not_configured`.
 * `CliArgsInput.paths` is the one opening for task 9's two recording substitutions
   (`--mcp-config`, `--settings`); a test asserts nothing else changes when it is given.
+
+## Task 9 · four live recordings, the scrub, the stream parser (P-84, P-85)
+
+### Recording set-up (written before any recording ran)
+
+Host CLI: `claude --version` reads `2.1.290 (Claude Code)`, so every recording runs the pinned CLI as
+`npx -y @anthropic-ai/claude-code@2.1.289` (`--version` through it reads `2.1.289 (Claude Code)`).
+
+Recording directory, outside every repo and outside the home folder (so no ancestor folder holds a
+`CLAUDE.md` or a `.claude/`; `ls -d` on `C:/`, `C:/Users` and `C:/Users/Public` found neither):
+
+```
+C:/Users/Public/bb2dash-w64-rec/
+  cwd/            empty; the CLI's working directory, as /app/turn is in the image
+  mcp.json        substitution 1: the host's two user-scope registrations, bb2dash and rag
+  settings.json   substitution 2: workspace/claude/settings.json with the hook command's path changed
+  out/            the raw stdout, stderr and exit code of each recording (never committed)
+```
+
+* `mcp.json` was written by a script that copies `mcpServers.bb2dash` and `mcpServers.rag` out of the
+  host's user-scope registrations without printing a value, and refuses if any value has the shape of
+  a key, token or DSN. It printed: `bb2dash: type=stdio command=docker args=10 envNames=(none)
+  secretShapedValues=0` and `rag: type=stdio command=node.exe args=1
+  envNames=HARNESS_ENV_FILE,DATABASE_CA_CERT,FASTEMBED_CACHE_DIR secretShapedValues=0`. The bb2dash
+  registration has the shape `docker run -i --rm --mount <arg> -e <arg> -e <arg> bb2dash-mcp:local`
+  (the `mcp-server/README.md` recipe: the key is named by file path); the rag registration is
+  `node.exe <harness>/mcp-server/dist/index.js`.
+* `settings.json` differs from `workspace/claude/settings.json` in one string: the hook command is
+  `node C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/dist/hooks/tool-gate.js` (a `diff`
+  after mapping the path back shows no other difference). `dist/` was built with `npm run build`.
+* The shell: no inherited `CLAUDE*` or `ANTHROPIC*` variable. Each line removes every name that
+  `env | grep -E '^(CLAUDE|ANTHROPIC)' | cut -d= -f1` lists with `env -u` (this session's shell
+  listed ten); `ENABLE_TOOL_SEARCH=false` is set as the service sets it.
+* One thing the lines carry that the recipe does not name: `npm_config_script_shell=<bash>`. On
+  Windows `npx` starts a package's program through `cmd.exe`, which cuts a multi-line argument at its
+  first line break: a probe program run through `npx` received
+  `["-p","--tools","","--append-system-prompt","line one"]` for a four-line prompt followed by
+  `-- <question>`. With bash as npm's script shell the same probe received every element intact, the
+  empty `--tools` value and the `--` included. It changes how `npx` starts the CLI, not an argv
+  element.
+* The sync container's guard, read before the recordings. The bb2dash MCP registration starts a
+  `bb2dash-mcp:local` container for the session, as every Claude Code session on this host does (two
+  were already up from other sessions); the recordings run no other docker command.
+  `docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1` →
+  `bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z`.
+
+### The four recording lines (Git Bash, each one line, paste-ready)
+
+Each line is the frozen argv with the two substitutions. Lines 1 and 2 each spend one small Haiku
+turn on the plan; lines 3 and 4 spend none.
+
+1. Lookup (acceptance step 3's question; the argv's gate):
+
+```
+cd /c/Users/Public/bb2dash-w64-rec/cwd && env $(env | grep -E '^(CLAUDE|ANTHROPIC)' | cut -d= -f1 | sed 's/^/-u /' | tr '\n' ' ') ENABLE_TOOL_SEARCH=false npm_config_script_shell="$(cygpath -m "$(which bash)")" npx -y @anthropic-ai/claude-code@2.1.289 -p --model haiku --session-id "$(node -e "console.log(require('crypto').randomUUID())")" --tools "" --allowedTools mcp__bb2dash__search_materials mcp__bb2dash__get_material_text mcp__bb2dash__list_courses mcp__rag__search_context --disallowedTools Bash Read Write Edit WebFetch WebSearch mcp__rag__get_document --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config C:/Users/Public/bb2dash-w64-rec/mcp.json --setting-sources project --settings C:/Users/Public/bb2dash-w64-rec/settings.json --append-system-prompt "$(cat C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/prompts/system.md)" --system-prompt-snapshot off --output-format stream-json --verbose --include-partial-messages --include-hook-events --max-budget-usd 1.00 -- "What does the IST.323 syllabus say about late work?" > ../out/lookup.raw.jsonl 2> ../out/lookup.stderr.txt; echo "exit $?" | tee ../out/lookup.exit.txt
+```
+
+2. Budget stop (the same question with `--max-budget-usd 0.01`):
+
+```
+cd /c/Users/Public/bb2dash-w64-rec/cwd && env $(env | grep -E '^(CLAUDE|ANTHROPIC)' | cut -d= -f1 | sed 's/^/-u /' | tr '\n' ' ') ENABLE_TOOL_SEARCH=false npm_config_script_shell="$(cygpath -m "$(which bash)")" npx -y @anthropic-ai/claude-code@2.1.289 -p --model haiku --session-id "$(node -e "console.log(require('crypto').randomUUID())")" --tools "" --allowedTools mcp__bb2dash__search_materials mcp__bb2dash__get_material_text mcp__bb2dash__list_courses mcp__rag__search_context --disallowedTools Bash Read Write Edit WebFetch WebSearch mcp__rag__get_document --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config C:/Users/Public/bb2dash-w64-rec/mcp.json --setting-sources project --settings C:/Users/Public/bb2dash-w64-rec/settings.json --append-system-prompt "$(cat C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/prompts/system.md)" --system-prompt-snapshot off --output-format stream-json --verbose --include-partial-messages --include-hook-events --max-budget-usd 0.01 -- "What does the IST.323 syllabus say about late work?" > ../out/budget-stop.raw.jsonl 2> ../out/budget-stop.stderr.txt; echo "exit $?" | tee ../out/budget-stop.exit.txt
+```
+
+3. Resume missing (a `--resume` of a random uuid; no model turn):
+
+```
+cd /c/Users/Public/bb2dash-w64-rec/cwd && env $(env | grep -E '^(CLAUDE|ANTHROPIC)' | cut -d= -f1 | sed 's/^/-u /' | tr '\n' ' ') ENABLE_TOOL_SEARCH=false npm_config_script_shell="$(cygpath -m "$(which bash)")" npx -y @anthropic-ai/claude-code@2.1.289 -p --model haiku --resume "$(node -e "console.log(require('crypto').randomUUID())")" --tools "" --allowedTools mcp__bb2dash__search_materials mcp__bb2dash__get_material_text mcp__bb2dash__list_courses mcp__rag__search_context --disallowedTools Bash Read Write Edit WebFetch WebSearch mcp__rag__get_document --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config C:/Users/Public/bb2dash-w64-rec/mcp.json --setting-sources project --settings C:/Users/Public/bb2dash-w64-rec/settings.json --append-system-prompt "$(cat C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/prompts/system.md)" --system-prompt-snapshot off --output-format stream-json --verbose --include-partial-messages --include-hook-events --max-budget-usd 1.00 -- "What does the IST.323 syllabus say about late work?" > ../out/resume-missing.raw.jsonl 2> ../out/resume-missing.stderr.txt; echo "exit $?" | tee ../out/resume-missing.exit.txt
+```
+
+4. Sign-in expired (a deliberately bad `CLAUDE_CODE_OAUTH_TOKEN`; no model turn):
+
+```
+cd /c/Users/Public/bb2dash-w64-rec/cwd && env $(env | grep -E '^(CLAUDE|ANTHROPIC)' | cut -d= -f1 | sed 's/^/-u /' | tr '\n' ' ') ENABLE_TOOL_SEARCH=false CLAUDE_CODE_OAUTH_TOKEN=not-a-real-token-recorded-for-a-fixture npm_config_script_shell="$(cygpath -m "$(which bash)")" npx -y @anthropic-ai/claude-code@2.1.289 -p --model haiku --session-id "$(node -e "console.log(require('crypto').randomUUID())")" --tools "" --allowedTools mcp__bb2dash__search_materials mcp__bb2dash__get_material_text mcp__bb2dash__list_courses mcp__rag__search_context --disallowedTools Bash Read Write Edit WebFetch WebSearch mcp__rag__get_document --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config C:/Users/Public/bb2dash-w64-rec/mcp.json --setting-sources project --settings C:/Users/Public/bb2dash-w64-rec/settings.json --append-system-prompt "$(cat C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/prompts/system.md)" --system-prompt-snapshot off --output-format stream-json --verbose --include-partial-messages --include-hook-events --max-budget-usd 1.00 -- "What does the IST.323 syllabus say about late work?" > ../out/sign-in-expired.raw.jsonl 2> ../out/sign-in-expired.stderr.txt; echo "exit $?" | tee ../out/sign-in-expired.exit.txt
+```
