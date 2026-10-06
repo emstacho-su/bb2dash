@@ -37,6 +37,7 @@ import {
   MESSAGES_REGION_LABEL,
   NEW_CONVERSATION_LABEL,
   QUESTION_ROLE_LABEL,
+  STATUS_ROLE_LABEL,
 } from '@/lib/workspace-labels';
 import { TierBadge } from './TierBadge';
 import { conversationHref } from './route';
@@ -63,10 +64,13 @@ function Answer({ turn }: { turn: WorkspaceTurn }) {
   const tier = turn.answer?.tier ?? null;
   const used = usedLine(turn.answer?.tool_calls ?? []);
   if (tier === null && turn.text === '' && used === null && turn.line === null) return null;
+  // A line with no text beside it is a status, not an answer: a screen reader is not
+  // told "The assistant answered" before "Waiting for the Workspace service".
+  const statusOnly = turn.text === '' && turn.line !== null;
 
   return (
     <div className={styles.answer}>
-      <span className="sr-only">{ANSWER_ROLE_LABEL}</span>
+      <span className="sr-only">{statusOnly ? STATUS_ROLE_LABEL : ANSWER_ROLE_LABEL}</span>
       {tier !== null && <TierBadge tier={tier} />}
       {turn.text !== '' && (
         <p className={styles.text} data-answer-text>
