@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
 
 import { CLAUDE_BIN, PATHS, RESULT_EXIT_GRACE_MS } from '../config.js';
-import { mapTurnEnd, type ErrorCode } from '../errors.js';
+import { mapTurnEnd, messageOf, type ErrorCode } from '../errors.js';
 import { ALLOWED_TOOLS } from '../hooks/gate-rules.js';
 import { asQuestion, buildPrompt } from '../replay.js';
 import { checkInit, createTurnStream, parseLine, type InitFacts, type TurnSummary } from '../stream-json.js';
@@ -391,8 +391,6 @@ function resultOf(attempt: Attempt): ResultEvent {
     reported,
   };
 }
-
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
  * One turn of the real CLI. It always ends with exactly one result event; when the runner aborts,

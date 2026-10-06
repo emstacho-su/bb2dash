@@ -28,6 +28,7 @@ import {
   readTextOrNull,
 } from './config.js';
 import { createPgQuery, createRpc, newPgClient, type Claim } from './db.js';
+import { messageOf } from './errors.js';
 import { writeMcpConfig } from './mcp-config.js';
 import { createCliTurn, readSystemPrompt, spawnClaude } from './providers/claude-cli.js';
 import { createProviders } from './providers/index.js';
@@ -55,8 +56,6 @@ export interface Runner {
   /** SIGTERM or SIGINT: stop polling, end the turn in flight, exit 0. */
   shutdown(signalName: string): void;
 }
-
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export function createRunner(deps: RunnerDeps): Runner {
   const log = (message: string): void => deps.log(`runner ${message}`);

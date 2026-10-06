@@ -27,7 +27,7 @@ import {
 } from './config.js';
 import { retryDbCall } from './db-retry.js';
 import type { Claim, FinishArgs, WorkspaceRpc } from './db.js';
-import { errorCodeFor, type ErrorCode } from './errors.js';
+import { errorCodeFor, messageOf, type ErrorCode } from './errors.js';
 import type { Providers } from './providers/index.js';
 import type { Provider, ResultEvent, StoredToolCall, TurnInput } from './providers/types.js';
 import { routeTier } from './router.js';
@@ -65,8 +65,6 @@ export interface TurnHandle {
 }
 
 type Log = (message: string) => void;
-
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /** `text` in pieces of at most `size` characters (code points, the way the database counts). */
 function piecesOf(text: string, size: number): string[] {

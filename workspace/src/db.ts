@@ -9,7 +9,7 @@
 
 import pg from 'pg';
 
-import type { ErrorCode } from './errors.js';
+import { messageOf, type ErrorCode } from './errors.js';
 import type { HistoryMessage, ProviderId, StoredToolCall } from './providers/types.js';
 import { isTier, type Tier } from './tiers.js';
 
@@ -230,7 +230,7 @@ export function createPgQuery(deps: PgQueryDeps): QueryFn & { end(): Promise<voi
 
   /** The error a caller sees: the DSN redacted, the SQLSTATE kept. */
   const redacted = (error: unknown): Error & { code?: unknown } => {
-    const message = redactDsn(error instanceof Error ? error.message : String(error), deps.dsn);
+    const message = redactDsn(messageOf(error), deps.dsn);
     return Object.assign(new Error(message), { code: (error as { code?: unknown })?.code });
   };
 
