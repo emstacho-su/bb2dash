@@ -106,6 +106,8 @@ function freshState() {
     rows: {} as Record<string, Row[]>,
     /** Per table: every read of it answers with this error. */
     readErrors: {} as Record<string, { code: string; message: string }>,
+    /** Per table: every `.update()` of it answers with this error; its reads still work. */
+    writeErrors: {} as Record<string, { code: string; message: string }>,
     /** Per function: what replaces the built-in answer. */
     rpc: {} as Record<string, (args: Row) => Answer | Promise<Answer>>,
     /** When set, every RPC waits on it before it answers. */
@@ -159,6 +161,8 @@ function tableChain(table: string): Record<string, unknown> {
     if (error) return { data: null, error };
     const rows = state.rows[table] ?? [];
     if (patch === null) return { data: rows.filter(matches).map((row) => ({ ...row })), error: null };
+    const refused = state.writeErrors[table];
+    if (refused) return { data: null, error: refused };
     const change = patch;
     state.rows = { ...state.rows, [table]: rows.map((row) => (matches(row) ? { ...row, ...change } : row)) };
     return { data: null, error: null };
