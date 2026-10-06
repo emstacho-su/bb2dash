@@ -1,5 +1,5 @@
 {
-  "note": "What each recorded fixture is: the CLI's exit code, what was passed beside the frozen argv, and how the scrub treated it. The recordings were made on the host on 2026-10-06 (UTC) with the pinned CLI through npx; the lines that made them are in docs/planning/sprint-2/verification/102_W-64_VERIFICATION.md. test/scrub-recording.mjs is the scrub.",
+  "note": "What each recorded fixture is: the CLI's exit code, what was passed beside the frozen argv, and how the scrub treated it. The recordings were made on the host on 2026-10-06 (UTC) with the pinned CLI through npx; the lines that made them are in docs/planning/sprint-2/verification/102_W64_VERIFICATION.md. test/scrub-recording.mjs is the scrub.",
   "claude_code_version": "2.1.289",
   "question": "What does the IST.323 syllabus say about late work?",
   "fixtures": {

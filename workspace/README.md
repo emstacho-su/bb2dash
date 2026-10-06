@@ -54,4 +54,4 @@ signatures; the lookup's answer text is masked, since it quoted the document it 
 `test/fixtures/recordings.json` holds each recording's exit code. `synthetic-rate-limit.json` is not
 a recording: a plan-limit hit cannot be recorded on demand, so it is built by hand from the recorded
 shapes and says so. A CLI version bump means recording again; the lines are in
-`docs/planning/sprint-2/verification/102_W-64_VERIFICATION.md`.
+`docs/planning/sprint-2/verification/102_W64_VERIFICATION.md`.

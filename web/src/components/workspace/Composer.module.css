@@ -1,0 +1,33 @@
+/* The composer. Existing tokens only; Phase 22 restyles. */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.box {
+  composes: input from '@/styles/tokens.module.css';
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.button {
+  composes: btnPrimary from '@/styles/tokens.module.css';
+  flex: none;
+}
+
+/* A refused question: one frozen sentence. */
+.refusal {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}

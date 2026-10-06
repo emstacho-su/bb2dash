@@ -17,15 +17,15 @@
  *     while a request is open, and the three queries a reload must not trust
  *     from the restored cache set `staleTime: 0`.
  *
+ * Its sibling `queries.workspace.hooks.test.tsx` holds the request-id reader,
+ * the archive write, the invalidation and the hooks.
+ *
  * The Supabase browser client is a recording stub (the shape
  * `queries.sync.inboxApply.test.tsx` uses), so each request is asserted, and
  * nothing touches the network. The database objects are typed by hand from the
  * Contract: they are not on prod's generated types yet.
  */
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
-import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface Call {
@@ -82,7 +82,6 @@ const {
   askWorkspace,
   cancelWorkspaceRequest,
   conversationsOptions,
-  invalidateWorkspaceConversation,
   isWorkspaceOffline,
   messagesOptions,
   normalizeConversation,
@@ -94,16 +93,7 @@ const {
   parseConversationId,
   parseQuestion,
   requestsOptions,
-  setConversationArchived,
   statusOptions,
-  toRequestId,
-  useAskWorkspace,
-  useCancelWorkspaceRequest,
-  useSetConversationArchived,
-  useWorkspaceConversations,
-  useWorkspaceMessages,
-  useWorkspaceRequests,
-  useWorkspaceStatus,
   workspaceKeys,
 } = await import('@/lib/queries.workspace');
 const { REFUSAL_QUESTION_LENGTH, REFUSAL_STILL_ANSWERING } = await import(
@@ -174,20 +164,6 @@ describe('parseConversationId: ?c= must be a uuid', () => {
   ])('reads %s as no conversation', (_label, value) => {
     expect(parseConversationId(value)).toBeNull();
   });
-});
-
-describe('toRequestId: one number on both sides of every comparison', () => {
-  it('reads a positive integer, as a number or as digits', () => {
-    expect(toRequestId(42)).toBe(42);
-    expect(toRequestId('42')).toBe(42);
-  });
-
-  it.each([0, -1, 1.5, Number.NaN, '', '4 2', '1e3', '0x10', null, undefined, {}, true])(
-    'reads %s as no request',
-    (value) => {
-      expect(toRequestId(value)).toBeNull();
-    },
-  );
 });
 
 describe('parseQuestion: 1 to 8000 characters after trimming', () => {
@@ -340,35 +316,6 @@ describe('cancelWorkspaceRequest: workspace_cancel(p_request_id)', () => {
     const error = { code: '42501', message: 'permission denied' };
     stub.result = { data: null, error };
     await expect(cancelWorkspaceRequest(42)).rejects.toBe(error);
-  });
-});
-
-describe('setConversationArchived: the one column the list writes', () => {
-  it.each([true, false])('updates archived = %s on that conversation only', async (archived) => {
-    await setConversationArchived({ conversationId: CONVERSATION, archived });
-
-    expect(callsOn('workspace_conversations')).toEqual([
-      { target: 'workspace_conversations', op: 'update', args: [{ archived }] },
-      { target: 'workspace_conversations', op: 'eq', args: ['id', CONVERSATION] },
-    ]);
-  });
-
-  it('refuses an id that is not a uuid, and a flag that is not a boolean, before any request', async () => {
-    await expect(setConversationArchived({ conversationId: 'x', archived: true })).rejects.toThrow(
-      /conversation id/,
-    );
-    await expect(
-      setConversationArchived({ conversationId: CONVERSATION, archived: 'yes' as unknown as boolean }),
-    ).rejects.toThrow(/archived/);
-    expect(stub.calls).toEqual([]);
-  });
-
-  it('throws the database error', async () => {
-    const error = { code: '42501', message: 'permission denied' };
-    stub.result = { data: null, error };
-    await expect(
-      setConversationArchived({ conversationId: CONVERSATION, archived: true }),
-    ).rejects.toBe(error);
   });
 });
 
@@ -807,138 +754,11 @@ describe('the messages, open-request and status queries set staleTime: 0', () =>
   });
 });
 
-describe('invalidateWorkspaceConversation: what a question, a Stop or a finished answer moves', () => {
-  it('marks the list, the messages and the requests of that conversation stale', () => {
-    const queryClient = new QueryClient();
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined);
-
-    invalidateWorkspaceConversation(queryClient, CONVERSATION);
-
-    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
-      workspaceKeys.conversationsAll(),
-      workspaceKeys.messages(CONVERSATION),
-      workspaceKeys.requests(CONVERSATION),
-    ]);
-  });
-
-  it('marks only the list stale when there is no conversation yet', () => {
-    const queryClient = new QueryClient();
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined);
-
-    invalidateWorkspaceConversation(queryClient, null);
-
-    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
-      workspaceKeys.conversationsAll(),
-    ]);
-  });
-
-  it('keys both lists under the one prefix the invalidation names', () => {
-    const prefix = workspaceKeys.conversationsAll();
-    expect(workspaceKeys.conversations(false).slice(0, prefix.length)).toEqual([...prefix]);
-    expect(workspaceKeys.conversations(true).slice(0, prefix.length)).toEqual([...prefix]);
-  });
-});
-
-describe('the hooks', () => {
-  /** A client per test, with retries off so a refusal settles at once. */
-  function harness() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    const wrapper = ({ children }: { children: ReactNode }) =>
-      createElement(QueryClientProvider, { client: queryClient }, children);
-    const invalidatedKeys = () => invalidate.mock.calls.map(([filters]) => filters?.queryKey);
-    return { wrapper, invalidatedKeys };
-  }
-
-  it('read the list, the messages, the requests and the status through their options', async () => {
-    const { wrapper } = harness();
-    stub.result = { data: [], error: null };
-
-    const list = renderHook(() => useWorkspaceConversations(), { wrapper });
-    const messages = renderHook(() => useWorkspaceMessages(CONVERSATION, false), { wrapper });
-    const requests = renderHook(() => useWorkspaceRequests(CONVERSATION), { wrapper });
-    await waitFor(() => expect(list.result.current.data).toEqual([]));
-    await waitFor(() => expect(messages.result.current.data).toEqual([]));
-    await waitFor(() => expect(requests.result.current.data).toEqual([]));
-
-    stub.result = { data: { polled_at: null, runner: null, open_requests: 0 }, error: null };
-    const status = renderHook(() => useWorkspaceStatus(), { wrapper });
-    await waitFor(() => expect(status.result.current.data?.polled_at).toBeNull());
-    expect(status.result.current.data?.open_requests).toBe(0);
-  });
-
-  it('send nothing for the lobby: no conversation, no messages or requests read', async () => {
-    const { wrapper } = harness();
-
-    const messages = renderHook(() => useWorkspaceMessages(null, false), { wrapper });
-    const requests = renderHook(() => useWorkspaceRequests(null), { wrapper });
-
-    expect(messages.result.current.fetchStatus).toBe('idle');
-    expect(requests.result.current.fetchStatus).toBe('idle');
-    expect(stub.calls).toEqual([]);
-  });
-
-  it('refresh the new conversation after a first question', async () => {
-    const { wrapper, invalidatedKeys } = harness();
-    stub.result = {
-      data: { conversation_id: CONVERSATION, message_id: MESSAGE, request_id: 42 },
-      error: null,
-    };
-
-    const { result } = renderHook(() => useAskWorkspace(), { wrapper });
-    result.current.mutate({ conversationId: null, text: 'spike' });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({
-      conversationId: CONVERSATION,
-      messageId: MESSAGE,
-      requestId: 42,
-    });
-    expect(invalidatedKeys()).toEqual([
-      workspaceKeys.conversationsAll(),
-      workspaceKeys.messages(CONVERSATION),
-      workspaceKeys.requests(CONVERSATION),
-    ]);
-  });
-
-  it('refresh the conversation after a refused question too, so its open request shows', async () => {
-    const { wrapper, invalidatedKeys } = harness();
-    stub.result = { data: null, error: { code: '23505', message: 'duplicate key' } };
-
-    const { result } = renderHook(() => useAskWorkspace(), { wrapper });
-    result.current.mutate({ conversationId: CONVERSATION, text: 'again' });
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error).toBeInstanceOf(WorkspaceRefusal);
-    expect(result.current.error?.message).toBe(REFUSAL_STILL_ANSWERING);
-    expect(invalidatedKeys()).toContainEqual(workspaceKeys.requests(CONVERSATION));
-  });
-
-  it('refresh the conversation after Stop', async () => {
-    const { wrapper, invalidatedKeys } = harness();
-    stub.result = { data: true, error: null };
-
-    const { result } = renderHook(() => useCancelWorkspaceRequest(CONVERSATION), { wrapper });
-    result.current.mutate(42);
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toBe(true);
-    expect(invalidatedKeys()).toEqual([
-      workspaceKeys.conversationsAll(),
-      workspaceKeys.messages(CONVERSATION),
-      workspaceKeys.requests(CONVERSATION),
-    ]);
-  });
-
-  it('refresh both lists after Archive or Unarchive', async () => {
-    const { wrapper, invalidatedKeys } = harness();
-
-    const { result } = renderHook(() => useSetConversationArchived(), { wrapper });
-    result.current.mutate({ conversationId: CONVERSATION, archived: true });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(invalidatedKeys()).toEqual([workspaceKeys.conversationsAll()]);
+describe('the same three queries refetch when the tab regains focus', () => {
+  it('whatever the client`s default is: the interval does not run in a hidden tab', () => {
+    expect(messagesOptions(CONVERSATION, false).refetchOnWindowFocus).toBe('always');
+    expect(messagesOptions(CONVERSATION, true).refetchOnWindowFocus).toBe('always');
+    expect(requestsOptions(CONVERSATION).refetchOnWindowFocus).toBe('always');
+    expect(statusOptions().refetchOnWindowFocus).toBe('always');
   });
 });
