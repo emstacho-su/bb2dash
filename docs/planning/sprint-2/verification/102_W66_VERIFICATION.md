@@ -5,7 +5,8 @@ brief 102 §Workers. Wave 1 tasks: **15** (query layer) and **4** (stream hook a
 Wave 2, after the Realtime spike (task 5) passed: **16** (the screen and the nav link) and the
 list of ruling T2. It is under its own heading, "Wave 2"; the sections before it are wave 1's
 record as it was written (the file was renamed from `102_W-66_VERIFICATION.md` in wave 2).
-Wave 2b, the items of ruling U1, is under "Wave 2b" at the end.
+Wave 2b, the items of ruling U1, is under "Wave 2b". The review round, ruling V4 (CR-8, CR-9,
+CR-12), is under "Review round" at the end.
 
 Fixtures only: no database read or write, no prod change, no docker command. The database objects
 of migrations 140–142 are typed by hand from the Contract; every test stubs the Supabase client.
@@ -867,3 +868,294 @@ before this section was written).
 * **The acceptance script is not changed by this wave**, but step 8 reads slightly differently on
   the page: after Stop the stored partial answer now arrives within about ten seconds without a
   reload or a return to the tab.
+
+## Review round
+
+2026-10-06 · branch `feat/workspace-21-web` · scope: ruling V4 of `rulings-5.md` in full (CR-8,
+CR-9, CR-12), nothing else. CR-10 is recorded by the ruling and not changed. Fixtures only, as
+before: no database read or write, no prod change, no docker command of any kind, no `claude -p`,
+no secret or env value read.
+
+**First step.** `git fetch origin`, then `git merge origin/feat/workspace-21` → a fast-forward to
+e9f0852 (W-65's merge, 102a with the two reviews and rulings V1–V5), pushed. `rulings-5.md` was
+read in full, then `rulings-4.md` and `rulings-3.md`, and the findings under "/code-review main
+high" and "/security-review" in 102a.
+
+**Starting count** (e9f0852): `npx vitest run` → `Test Files  149 passed (149)` ·
+`Tests  2768 passed (2768)`, exit 0.
+
+All commands below run from `C:/Users/stack/projects/bb2dash-wt-21-web/web`.
+
+### 1. Ruling V4, item by item
+
+| V4 says | result | commits (red, green) |
+|---|---|---|
+| CR-12: one definition of the open states, imported where it is used | done: `WORKSPACE_OPEN_STATES`, written once under `src/`, with a standing audit | aa923d7, bfb1953 (moved to its final file in 69cd76a) |
+| CR-8: offline from the server's `polled_age_seconds` plus the local time since that read, on a monotonic clock, never the browser's wall clock | done | e152189, 5e09a3d |
+| CR-8: the column is optional; while it is absent the page falls back to today's wall-clock comparison | done: the standing service-line cases, whose rows have no such column, pass unchanged | e152189, 5e09a3d |
+| CR-9: the two timers after Stop go | done: `useStoredRowAfterStop`, `STOP_REREAD_DELAYS_MS` and the press counter are removed | d8fd1a5, 69cd76a |
+| CR-9: the messages query polls every 5 s while a request is open, and while the followed request's assistant row is unfinished and that request closed less than 60 s ago | done | d8fd1a5, 69cd76a |
+| CR-10 is recorded and not changed | not touched | none |
+
+223ef2f is a comment only (the clock module's header).
+
+### 2. CR-12: the open states
+
+The pair `queued`, `claimed` was written out in `queries.workspace.ts` and again in
+`components/workspace/thread.ts`. It is now `WORKSPACE_OPEN_STATES`, written once, exported from
+the query layer; `thread.ts` imports it. In the CR-9 commit the definition moved, with
+`openRequestOf`, into `lib/workspace-poll.ts` (the rule the pair decides) and
+`queries.workspace.ts` exports both on, so no importer changed.
+
+Check: `npx vitest run test/queries.workspace.poll.test.ts` (new file). Its audit reads every
+Workspace source file under `src/` (the route, `components/workspace/`, `lib/*workspace*`) for the
+pair written as an array literal.
+
+* RED (aa923d7): `❯ test/queries.workspace.poll.test.ts (4 tests | 3 failed)`:
+  `AssertionError: expected undefined to deeply equal [ 'queued', 'claimed' ]` (no export);
+  `expected [ 'queued', 'claimed' ] to deeply equal undefined`; and the audit,
+  `expected [ …(2) ] to deeply equal [ 'lib/queries.workspace.ts' ]`, the second being
+  `components/workspace/thread.ts`. The fourth case, that the audit finds the files it means to
+  read, passed as written.
+* GREEN (bfb1953): `Test Files  1 passed (1)` · `Tests  4 passed (4)`; every Workspace file and the
+  audits (`npx vitest run test/Workspace test/use-workspace-stream test/queries.workspace test/workspace-labels.test.ts test/TopNav.workspace.test.tsx test/audits.test.ts`):
+  `Test Files  14 passed (14)` · `Tests  352 passed (352)`.
+
+Left as it is, on purpose: `web/test/workspace-harness.tsx` keeps its own two-word list. It is the
+fake database's rule (what migration 140's `workspace_ask` and `workspace_cancel` check), and a
+fake that took its rule from the code under test would agree with a wrong list. The audit reads
+`src/` only. `src/lib/queries.sync.ts` names the same two words for `agent_requests`, the sync
+queue: another table, not this rule, and not W-66's file.
+
+### 3. CR-8: offline, by the database's count
+
+**What the page does now.**
+
+* `WorkspaceStatus.polled_age_seconds?: number | null` (hand-declared, optional).
+  `normalizeStatus` keeps a number that is finite and not negative, keeps null, and leaves the key
+  out when the column is absent or its value cannot be read.
+* `isWorkspaceOffline(status, nowMs, sinceReadMs = 0)`. With the count: null → offline;
+  otherwise `count × 1000 + sinceReadMs > 120 000`. `nowMs` is not read. Without the count: the
+  comparison as it was (`polled_at` against `nowMs`), and `sinceReadMs` is not read.
+* `lib/workspace-clock.ts` (new): `monotonicNowMs()` is `performance.now()`;
+  `useMonotonicNow(tickMs)` is that clock for a render, an external store shaped like
+  `use-now.ts` (which is unchanged); `stampRead(row)` and `readAtMs(row)` hold the moment this page
+  read a row, beside the row in a `WeakMap`, never in the row. The query cache is saved to
+  localStorage, and a monotonic reading means nothing to the next page load.
+* `statusOptions()`: the queryFn stamps the row it returns; `structuralSharing: false`, so a read
+  that brings an unchanged row is still its own object with its own moment; the view is read
+  whole (`select('*')`).
+* `ServiceStatus.tsx`: for a counted row, "read how long ago" is the monotonic clock against the
+  row's stamp (floor 0); the two-refetch trust window and the offline rule both use it. A counted
+  row with no stamp says nothing. For a row without the count, every line is as it was.
+
+**Why the view is read whole.** A select list that names `polled_age_seconds` fails until 143 is
+applied (PostgREST answers 42703 for a column that does not exist), and the page would show
+"Could not read the service status" on the preview. Read whole, the column is there or it is not.
+The view has four columns today and five after 143, none of them one the page must not read, and
+`normalizeStatus` keeps only the declared ones (a case holds that).
+
+Check: `npx vitest run test/workspace-clock.test.tsx test/queries.workspace.clock.test.ts test/Workspace.service.test.tsx test/queries.workspace.test.ts`
+
+* RED (e152189): `Test Files  4 failed (4)` · `Tests  5 failed | 80 passed (85)`.
+  The two files that import the new module do not load:
+  `Error: Failed to resolve import "@/lib/workspace-clock" from "test/queries.workspace.clock.test.ts"`
+  and the same from `test/workspace-clock.test.tsx` (`(0 test)` each, so their 30 cases have no
+  red of their own).
+  `test/Workspace.service.test.tsx (7 tests | 4 failed)`:
+  the browser's clock ten minutes ahead, a heartbeat 10 s old →
+  `AssertionError: expected <p class="_offline_33c9e2" …(2)></p> to be null` (a running service
+  called offline); ten minutes behind, a heartbeat five minutes old →
+  `Unable to find an element with the text: The Workspace service is offline.` (a stopped one
+  not called so); the same message for a row 100 s old that ages 30 s on the page; and a restored
+  row → `expected <p class="_offline_33c9e2" …(2)></p> to be null`.
+  `test/queries.workspace.test.ts (78 tests | 1 failed)`:
+  `AssertionError: expected [ Array(1) ] to deeply equal [ '*' ]`.
+  Three screen cases passed as written and pin the other side: an hour's jump of the system clock
+  between two reads does not make a running service offline, a null count reads as never polled,
+  and a restored row gives way to what the page's own read brings.
+* GREEN (5e09a3d), same command: `Test Files  4 passed (4)` · `Tests  115 passed (115)`
+  (10 + 20 + 7 + 78). Every Workspace file with the two clock files
+  (`npx vitest run test/Workspace test/use-workspace-stream test/queries.workspace test/workspace-labels.test.ts test/workspace-clock.test.tsx test/TopNav.workspace.test.tsx test/audits.test.ts test/use-now.test.tsx`):
+  `Test Files  18 passed (18)` · `Tests  394 passed (394)`.
+
+**Both sides of the apply.** Before 143: the six standing cases of "the service line" in
+`Workspace.test.tsx` and the four of `isWorkspaceOffline` in `queries.workspace.test.ts` have rows
+without the column; none was edited and all pass. After 143: the new files. The fake timers of
+this vitest (5.0.0) move `performance.now()` with the timers, and `vi.setSystemTime()` moves the
+wall clock alone; a throwaway probe showed both before any test was written (30 000 ms after
+`advanceTimersByTime(30_000)`, unchanged after `setSystemTime(+1 h)`), and
+`workspace-clock.test.tsx` now holds the same two facts.
+
+### 4. CR-9: the poll in place of the two timers
+
+**What the page does now.** `lib/workspace-poll.ts` (new) decides whether the messages are polled,
+from the rows:
+
+* a request is open (`queued` or `claimed`): every 5 s, as before;
+* the newest request has closed and its assistant row is unfinished
+  (`unstoredClosedRequestOf`): every 5 s, for 60 s (`WORKSPACE_CLOSED_POLL_MS`) from the moment
+  the messages query first saw it so.
+
+`messagesOptions(conversationId, requests)` and `useWorkspaceMessages(conversationId, requests)`
+take the conversation's requests in place of the `requestOpen` flag, and `refetchInterval` is a
+function of the query. TanStack asks it again after every read, so the poll ends by itself: when
+the stored row lands, or when the 60 s have passed. Nothing is armed at the press of Stop, so what
+the page held at that moment no longer matters, which was the finding.
+
+Check: `npx vitest run test/queries.workspace.poll.test.ts test/queries.workspace.test.ts test/queries.workspace.hooks.test.tsx test/Workspace.rereads.test.tsx`
+
+* RED (d8fd1a5): `Test Files  3 failed | 1 passed (4)` · `Tests  25 failed | 118 passed (143)`.
+  `test/queries.workspace.poll.test.ts (23 tests | 20 failed)`:
+  `TypeError: workspace.unstoredClosedRequestOf is not a function` (9 cases),
+  `Error: refetchInterval is not a function of the query` (9 cases),
+  `AssertionError: expected undefined to be 60000`, and the audit,
+  `expected [ 'lib/queries.workspace.ts' ] to deeply equal [ 'lib/workspace-poll.ts' ]`.
+  `test/queries.workspace.test.ts (78 tests | 1 failed)`: `expected 5000 to be false`.
+  `test/Workspace.rereads.test.tsx (10 tests | 4 failed)`:
+  `expected 4 to be 3` (a read at 3 s, where the poll makes none before 5 s);
+  `expected 'Week one: ' to be 'Week one: Monday'` (the runner stored at 12 s, after both timers);
+  `expected null to be 'Week one: Monday'` (Stop pressed on a row the page still read as
+  `queued` while the runner had begun: no timer was armed, the finding's own case);
+  `expected 2 to be greater than or equal to 5` (two reads in 30 s, not a poll).
+* GREEN (69cd76a), same command: `Test Files  4 passed (4)` · `Tests  143 passed (143)`. The 18
+  files of section 3: `Test Files  18 passed (18)` · `Tests  415 passed (415)`.
+
+What the screen cases hold, on a fake clock with the tab in front and the `done` broadcast never
+delivered: the partial answer stored 2 s after Stop is unread at 4 s and on the page at the first
+poll (5.3 s), with the stopped sentence still under it and the button back to Ask, and a minute on
+nothing more was read; stored at 12 s it shows at the third poll; with the row never stored there
+are 5 or 6 reads in the first 30 s, 11 to 13 by 70 s, and none in the five minutes after; Stop on
+a queued request with no assistant row reads nothing in 15 s; leaving the conversation ends it.
+
+### 5. Existing cases changed, and why
+
+No assertion was loosened. Each change is one the ruling makes necessary.
+
+* `queries.workspace.test.ts`: the status select list is `['*']` where it named four columns
+  (CR-8); the row the case expects back is unchanged. The interval case reads `refetchInterval` as
+  a function of the query through the file's own `intervalFor`, and expects the same two values,
+  5 000 and `false` (CR-9). Fourteen call sites pass `ONE_OPEN` or `NONE_OPEN` (a claimed request,
+  or none) where they passed `true` or `false`. The file has 78 cases before and after.
+* `queries.workspace.hooks.test.tsx`: two call sites pass `[]` where they passed `false`.
+* `Workspace.rereads.test.tsx`, the after-Stop group: the two cases that asserted a read at 3 s
+  and one more at 10 s ("two reads, not a poll") are rewritten for the poll, because V4 removes
+  what they asserted; two cases are new; "drops both reads when the page leaves the conversation"
+  is renamed "stops polling when the page leaves the conversation" with its body unchanged; the
+  queued-Stop case is unchanged. The four status cases above them are untouched.
+* `workspace-harness.tsx`: the fake's one-row read (`maybeSingle`, the status) now waits on
+  `readGate` as its list reads do. The CR-8 screen cases need a status read that does not answer.
+  The whole suite passed with it, so no standing case leaned on the gap.
+
+**Ruling U1 after this round.** The item "the messages are re-read about 3 s and about 10 s after
+the press" is replaced by V4, as V4 says. Every other item is as wave 2b left it, and its cases
+pass unedited: the three lines of the empty column, the not-found line and 23503, the placeholder,
+Enter over an open request, the status re-read at a claim and at a first delta
+(`Workspace.rereads.test.tsx`, first group, 4 cases), the partial text under the stopped sentence
+until the stored row replaces it, and "Status". No string in `workspace-labels.ts` was touched:
+`git diff e9f0852 -- web/src/lib/workspace-labels.ts web/test/workspace-labels.test.ts` is empty.
+
+### 6. Gates (branch at 223ef2f, the last commit that changes `web/`)
+
+All five were run on 223ef2f in this order with a clean tree (`git status --short` empty before
+and after).
+
+| gate | command | result |
+|---|---|---|
+| whole suite | `npx vitest run` | `Test Files  153 passed (153)` · `Tests  2830 passed (2830)` · exit 0 |
+| types | `npm run typecheck` | exit 0 |
+| lint | `npx eslint . --max-warnings 0` | exit 0, no output |
+| build | `npm run build` | exit 0; `✓ Compiled successfully`; the route list holds `○ /workspace` |
+| coverage | `npm run test:coverage` | `Tests  2830 passed (2830)` · exit 0 · all files, lines 91.46 % (floor 83 %) |
+
+2830 = 2768 + 62: `queries.workspace.poll` 23 (new), `queries.workspace.clock` 20 (new),
+`workspace-clock` 10 (new), `Workspace.service` 7 (new), `Workspace.rereads` 8 → 10. The six timed
+files (`Workspace.rereads`, `Workspace.service`, `queries.workspace.poll`, `queries.workspace.clock`,
+`workspace-clock`, `Workspace.test.tsx`) were run three times in a row: `Tests  110 passed (110)`
+each time.
+
+Coverage of what the round touched: `workspace-clock.ts`, `workspace-poll.ts` and
+`ServiceStatus.tsx` are not in the report's table, which lists only files with something
+uncovered; `queries.workspace.ts`, `Workspace.tsx` and `thread.ts` read lines 100 %.
+
+Sizes: the largest file of W-66's is `web/src/lib/queries.workspace.ts`, 789 lines (734 before the
+round); `web/test/queries.workspace.test.ts` 774; `web/test/Workspace.test.tsx` 725 (untouched).
+The new files: `workspace-poll.ts` 110, `workspace-clock.ts` 89, `queries.workspace.poll.test.ts`
+308, `queries.workspace.clock.test.ts` 219, `Workspace.service.test.tsx` 176,
+`workspace-clock.test.tsx` 122. No function is over 50 lines. No new dependency. Nothing outside
+`web/` and this file changed: `git diff --stat e9f0852 HEAD -- . ":(exclude)web"` printed nothing
+before this section was written.
+
+### 7. Decisions the ruling does not spell (each is the PM's to overrule)
+
+1. **The 60 s are counted from the moment this page first saw the request closed with its row
+   unfinished, on the page's monotonic clock.** The ruling says "closed less than 60 s ago". The
+   one timestamp of the close is `finished_at`, the database's, and setting it beside the
+   browser's clock is the fault CR-8 names: a laptop a minute ahead would never poll, one an hour
+   behind would poll for an hour. So `finished_at` is not read (a case holds that a close stamped
+   ten minutes either side of the browser's clock polls the same). What differs from the literal
+   reading: a page opened on a conversation whose last request closed long ago with its row still
+   unfinished polls for 60 s (12 reads) and stops, where the literal reading would not poll at
+   all. Once per conversation per page load.
+2. **"Its assistant row is unfinished" means a row exists and is unfinished.** A closed request
+   with no assistant row is not polled for: `workspace_begin()` is refused once a request is no
+   longer claimed, so no row can follow. This keeps U1's "Stop on a queued request reads nothing".
+3. **The status view is read whole** (`select('*')`), for the reason in section 3. The module's
+   header said every select list names its columns; it now says the three tables' lists do.
+4. **A counted row this page did not read itself says nothing**, online or offline, until the
+   page's own read answers (a mount sends it at once). The saved cache restores such rows, and
+   there is no monotonic measure of how long ago another page load read one. Before 143 the
+   restored row speaks as it did (within two refetch intervals by the wall clock), because that
+   is "today's comparison".
+5. **A count that cannot be read** (a string, a negative number, not finite) is treated as an
+   absent column, so the page falls back to `polled_at`, rather than as "never polled".
+6. **`messagesOptions` and `useWorkspaceMessages` changed their second argument** from a flag to
+   the conversation's requests. Both are W-66's and have one caller in `src/`.
+7. **`useStoredRowOnClose` stays.** It reads the messages once when a request stops being the open
+   one. The new poll runs only for an assistant row the page already holds unfinished; an answer
+   begun and finished between two polls is read by that hook.
+8. **The poll's 60 s belong to the messages query of one conversation and to one request.** A
+   later request stopped in the same conversation starts its own; a system clock that jumps
+   neither ends nor extends it.
+
+### 8. Not done, and not proven
+
+* **Nothing here ran against the database.** Migration 143 is not on this branch and not applied.
+  The column's name, type and null rule are taken from ruling V3 word for word; if W-63's view
+  differs (another name, a `numeric`, an interval), the page falls back to the wall clock
+  silently, which is the old fault. One `select polled_age_seconds from v_workspace_status` after
+  the apply settles it.
+* **That a named column fails before the apply (42703) is PostgREST's documented behaviour, not a
+  run of mine**, and so is "read whole, a new column simply appears". The preview walk on both
+  sides of the apply is the proof.
+* **The screen is still unseen in a browser by me.** Every line above is from jsdom, the type
+  checker and the build.
+* **`performance.now()` in a real browser.** Some browsers do not advance it while the machine
+  sleeps. After a wake the row in hand can then look fresher than it is until the next read (the
+  status is re-read every 30 s and on a return to the tab), so the line can be up to one read
+  late. The wall clock had the opposite fault. Not exercised.
+* **The first frame after the screen remounts** reads the clock store's last tick, as `useNow`
+  does: the store re-reads at subscribe. Same as before the round, for both clocks.
+* **`/code-review` and `/security-review` were not run by me.** The second run on the delta is the
+  PM's.
+
+### 9. Notes for the PM
+
+* **Six files beyond the brief's table**: `web/src/lib/workspace-clock.ts`,
+  `web/src/lib/workspace-poll.ts`, `web/test/workspace-clock.test.tsx`,
+  `web/test/queries.workspace.clock.test.ts`, `web/test/queries.workspace.poll.test.ts`,
+  `web/test/Workspace.service.test.tsx`. The two source files exist because
+  `queries.workspace.ts` had 66 lines of room and the round needed more; the four test files
+  because `queries.workspace.test.ts` (774) and `Workspace.test.tsx` (725) had none.
+* **`queries.workspace.ts` is at 789 of 800 lines.** Its next change should split it; the input
+  validation block (about 130 lines, no dependency on the rest) is the clean cut.
+* **For W-63.** The page takes `polled_age_seconds` as a JSON number, zero or more, or null.
+* **For the brief.** Two sentences of 102 now describe the page before this round: the offline
+  bullet ("reads the clock through `useNow(30_000)`": true only while the column is absent) and
+  U1's 3 s and 10 s. They are the PM's to change.
+* **For the acceptance script.** Step 8: after Stop the stored partial answer shows at the first
+  5 s poll after the runner stores it. Step 14 (offline within three minutes) is unchanged in
+  time: 120 s plus one tick of 30 s at most.
+* **A later cleanup, not this phase's.** Once 143 is applied everywhere the page runs, the
+  wall-clock branch of `isWorkspaceOffline`, the `now` prop of `ServiceStatus` and the fallback in
+  `sinceRead` can go.
