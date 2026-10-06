@@ -103,6 +103,8 @@ export const REFUSED_ENV_NAMES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', '
 export const REFUSED_ENV_PREFIX = 'CLAUDE_CODE_USE_';
 
 const TRANSACTION_POOLER_PORT = '6543';
+/** Port 0 as a URL spells it. The driver reads it as no port and takes `PGPORT` or its own default. */
+const NO_PORT = '0';
 /**
  * The sslmodes a DSN may carry. None of them decides how the connection is made: the runner
  * verifies the pooler's certificate against the pinned CA whatever the DSN says (`db.ts`). A mode
@@ -179,9 +181,10 @@ export function parseTurnBudget(raw: string | undefined): number {
 }
 
 /**
- * The session pooler (never the transaction pooler on 6543) with an sslmode that asks for an
- * encrypted, verified connection. The check reads what the secret says; what is enforced is in
- * `db.ts`, which verifies against the pinned CA whatever the DSN says.
+ * The session pooler (never the transaction pooler on 6543, never port 0) with an sslmode that asks
+ * for an encrypted, verified connection, and with every part `db.ts` connects from there and
+ * readable. The check reads what the secret says; what is enforced is in `db.ts`, which verifies
+ * against the pinned CA whatever the DSN says.
  */
 export function assertRunnerDsn(dsn: string): string {
   let url: URL;
@@ -193,10 +196,19 @@ export function assertRunnerDsn(dsn: string): string {
   if (url.port === TRANSACTION_POOLER_PORT) {
     throw new ConfigError(`${DSN_SECRET_NAME} points at port 6543, the transaction pooler; use the session pooler on 5432`);
   }
+  if (url.port === NO_PORT) {
+    throw new ConfigError(`${DSN_SECRET_NAME} points at port 0, which is no port; use the session pooler on 5432`);
+  }
   // The connection is made from these parts alone, so each must be there (`db.ts`, `dsnParts`).
   const parts = { host: url.hostname, user: url.username, password: url.password, database: url.pathname.replace(/^\//, '') };
   for (const name of ['host', 'user', 'password', 'database'] as const) {
     if (parts[name] === '') throw new ConfigError(`${DSN_SECRET_NAME} names no ${name}`);
+  }
+  // `dsnParts` percent-decodes these three on every connect: what it could not read is refused here, once, at start.
+  try {
+    for (const name of ['user', 'password', 'database'] as const) decodeURIComponent(parts[name]);
+  } catch {
+    throw new ConfigError(`${DSN_SECRET_NAME} holds a part that is not percent-encoded text`);
   }
   const sslmode = url.searchParams.get('sslmode')?.trim().toLowerCase() ?? null;
   if (sslmode === null) throw new ConfigError(`${DSN_SECRET_NAME} names no sslmode; append ?sslmode=verify-full`);

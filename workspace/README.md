@@ -35,7 +35,9 @@ tool call.
 
 The runner reaches the database as `workspace_runner` through the session pooler (port 5432; a DSN
 on 6543, the transaction pooler, is refused at start). The DSN is read from
-`/run/secrets/workspace_runner_db_url`.
+`/run/secrets/workspace_runner_db_url`. A DSN the connection could not be made from is refused at
+start as well, with the reason and no value: one that names no host, user, password or database,
+one whose user, password or database is not percent-encoded text, one on port 0.
 
 The pooler's certificate is verified against one pinned CA, whatever the DSN says. The CA is read at
 start from the file `WORKSPACE_DB_CA_FILE` names (`/app/certs/prod-ca.crt` when it is not set); a
