@@ -1,0 +1,34 @@
+{
+  "note": "What each recorded fixture is: the CLI's exit code, what was passed beside the frozen argv, and how the scrub treated it. The recordings were made on the host on 2026-10-06 (UTC) with the pinned CLI through npx; the lines that made them are in docs/planning/sprint-2/verification/102_W-64_VERIFICATION.md. test/scrub-recording.mjs is the scrub.",
+  "claude_code_version": "2.1.289",
+  "question": "What does the IST.323 syllabus say about late work?",
+  "fixtures": {
+    "claude-stream-lookup.jsonl": {
+      "recordedAt": "2026-10-06T03:29:34Z",
+      "exitCode": 0,
+      "session": "--session-id <new random uuid>",
+      "maxBudgetUsd": "1.00",
+      "credential": "the host's /login session",
+      "answerText": "masked",
+      "stderr": null
+    },
+    "claude-stream-resume-missing.jsonl": {
+      "recordedAt": "2026-10-06T03:32:54Z",
+      "exitCode": 1,
+      "session": "--resume <a random uuid no session has>",
+      "maxBudgetUsd": "1.00",
+      "credential": "the host's /login session",
+      "answerText": "none",
+      "stderr": "claude-stream-resume-missing.stderr.txt"
+    },
+    "claude-stream-sign-in-expired.jsonl": {
+      "recordedAt": "2026-10-06T03:33:10Z",
+      "exitCode": 1,
+      "session": "--session-id <new random uuid>",
+      "maxBudgetUsd": "1.00",
+      "credential": "CLAUDE_CODE_OAUTH_TOKEN set to a deliberately bad value",
+      "answerText": "the CLI's own error message, kept as recorded",
+      "stderr": null
+    }
+  }
+}

@@ -251,3 +251,121 @@ cd /c/Users/Public/bb2dash-w64-rec/cwd && env $(env | grep -E '^(CLAUDE|ANTHROPI
 ```
 cd /c/Users/Public/bb2dash-w64-rec/cwd && env $(env | grep -E '^(CLAUDE|ANTHROPIC)' | cut -d= -f1 | sed 's/^/-u /' | tr '\n' ' ') ENABLE_TOOL_SEARCH=false CLAUDE_CODE_OAUTH_TOKEN=not-a-real-token-recorded-for-a-fixture npm_config_script_shell="$(cygpath -m "$(which bash)")" npx -y @anthropic-ai/claude-code@2.1.289 -p --model haiku --session-id "$(node -e "console.log(require('crypto').randomUUID())")" --tools "" --allowedTools mcp__bb2dash__search_materials mcp__bb2dash__get_material_text mcp__bb2dash__list_courses mcp__rag__search_context --disallowedTools Bash Read Write Edit WebFetch WebSearch mcp__rag__get_document --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config C:/Users/Public/bb2dash-w64-rec/mcp.json --setting-sources project --settings C:/Users/Public/bb2dash-w64-rec/settings.json --append-system-prompt "$(cat C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/prompts/system.md)" --system-prompt-snapshot off --output-format stream-json --verbose --include-partial-messages --include-hook-events --max-budget-usd 1.00 -- "What does the IST.323 syllabus say about late work?" > ../out/sign-in-expired.raw.jsonl 2> ../out/sign-in-expired.stderr.txt; echo "exit $?" | tee ../out/sign-in-expired.exit.txt
 ```
+
+### What ran (2026-10-06 UTC; 2026-10-05 evening local)
+
+The session did not refuse a nested `claude -p`. Each line was run exactly as written above (copied
+out of this file with `grep '^cd /c/Users/Public/bb2dash-w64-rec/cwd'` into one script per line).
+
+| # | fixture | started (UTC) | exit | stdout lines | stderr | model turns |
+|---|---|---|---|---|---|---|
+| 1 | lookup | 03:29:34 | 0 | 95 | npm's own update notice only (not kept) | 3 API calls, one answer |
+| 3 | resume missing | 03:32:54 | 1 | 1 | `No conversation found with session ID: <uuid>` | none |
+| 4 | sign-in expired | 03:33:10 | 1 | 6 | empty | none (two 401 retries, cost 0) |
+| 2 | budget stop | see "The budget recording" below | | | | |
+
+The exit codes are kept in `workspace/test/fixtures/recordings.json` (one entry per recorded
+fixture: exit code, what was passed beside the frozen argv, whether a stderr sibling exists). That is
+the file that holds the resume-missing exit code.
+
+### The argv's gate: what the lookup recording shows
+
+Read from the raw stdout before the scrub (field names as the stream spells them).
+
+| argv element | what the stream shows | as the Contract says? |
+|---|---|---|
+| `--model haiku` | init `model` = `claude-haiku-4-5-20251001`; the same id on every `assistant` line (`message.model`) and as the one key of the result's `modelUsage` | yes |
+| `--session-id <uuid>` | every line's `session_id` is that uuid; the result line repeats it | yes |
+| `--tools ""` | init `tools` holds four names and nothing else: the three `mcp__bb2dash__*` tools and `mcp__rag__search_context`. No built-in tool, no `ToolSearch`, no `EndConversation` | yes |
+| `--allowedTools` (four) | both tool calls ran; the result's `permission_denials` is `[]` | yes |
+| `--disallowedTools` (seven) | `mcp__rag__get_document` is not in init `tools` (recorded, not asserted) | yes |
+| `--permission-mode dontAsk` | init `permissionMode` = `dontAsk` | yes |
+| `--permission-prompts none` | no prompt event in the stream | yes (nothing to prompt for) |
+| `--strict-mcp-config --mcp-config` | init `mcp_servers` = `[{name: bb2dash, status: connected, source: dynamic}, {name: rag, status: connected, source: dynamic}]`; none of the host's other servers | yes |
+| `--setting-sources project` | init `skills` (19) and `slash_commands` (55) hold only the CLI's own; none of the host's user skills, plugins (3, all `builtin`) or agents; no hook event but the gate's; the session's transcript holds no memory-file attachment | yes, with one note below |
+| `--settings` | the gate ran: one `hook_started` and one `hook_response` per tool call | yes |
+| `--append-system-prompt` | the answer is plain text, names the syllabus section it read, uses `course` with the course id | yes (behaviour, not a field) |
+| `--system-prompt-snapshot off` | accepted; nothing in the stream shows it either way | not observable |
+| `--output-format stream-json --verbose --include-partial-messages` | `stream_event` lines with `content_block_delta` | yes |
+| `--include-hook-events` | `system/hook_started` and `system/hook_response` lines | yes |
+| `--max-budget-usd 1.00` | accepted; `total_cost_usd` 0.038524 | yes |
+| `-- <prompt>` | the question was read as the prompt | yes |
+
+Nothing behaved against the Contract, so the argv test of task 8 is final as committed (no element
+changed). Notes for the PM, none of them a stop:
+
+* **The credential source field is `apiKeySource`, and its value is `none`.** It read `none` in the
+  lookup (the host's `/login` session) and `none` again in the sign-in-expired recording, where
+  `CLAUDE_CODE_OAUTH_TOKEN` was set in the environment. So `none` is the value for both OAuth
+  forms: no API key is in use. The init check accepts exactly that value
+  (`OAUTH_CREDENTIAL_SOURCE` in `src/stream-json.ts`) and refuses anything else.
+* **The init line lists a memory path.** `memory_paths` = `{auto: <config dir>/projects/<cwd
+  slug>/memory/}`, and the CLI created that folder, empty. No memory file was loaded (the cwd and
+  its ancestors hold none, and the transcript's attachments are `environment`, `model`,
+  `mcp_instructions_delta`, `total_tokens_reminder`, `budget_usd`, `session_context`, `date`,
+  `credential_org`), and with `--tools ""` the model has no tool that could write one. In the image
+  the folder will be `/home/node/.claude/projects/-app-turn/memory/`, shared by every conversation
+  because every turn runs in `/app/turn`.
+* **A hook event carries no tool-use id.** Its fields are `hook_id`, `hook_name`
+  (`PreToolUse:<tool name>`), `hook_event` (`PreToolUse`), `output`, `stdout`, `stderr`,
+  `exit_code` (0 on both calls) and `outcome` (`success`). The parser matches a hook response to
+  the oldest tool call of that name that has none yet. Order in the stream: the `assistant` line
+  with the `tool_use`, `hook_started`, `hook_response`, then the `user` line with the tool result.
+* **The model is told its budget.** The transcript holds `budget_usd` attachments (`used`, `total`,
+  `remaining`): 0 before the first call, 0.021412 after it, 0.0271861 after the second.
+* **A rate-limit event is on the wire, with the overage fields.** One `rate_limit_event` per
+  recording that reached the API: `rate_limit_info` = `{status: allowed, resetsAt, rateLimitType:
+  five_hour, overageStatus: rejected, overageDisabledReason: out_of_credits, isUsingOverage: false,
+  unifiedWindows: {five_hour: {utilization: 0.22, …}, seven_day: {utilization: 0.73, …}}}`. All
+  three overage fields (`overageStatus`, `overageDisabledReason`, `isUsingOverage`) are there, so the
+  runner ends a turn whose event reads `isUsingOverage` true and stores `usage_limit` (the Contract's
+  conditional). The weekly window read 73 % used at 03:29 UTC.
+* **Where the stream names the full model id:** the init line (`model`), every `assistant` line
+  (`message.model`) and the result's `modelUsage` key. The runner passes the id of the last real
+  `assistant` message, else the init line's, to `workspace_finish()`; the CLI's own error messages
+  carry `model: "<synthetic>"` and are never used.
+* **An API error ends as `subtype: success` with `is_error: true`.** The sign-in-expired result line
+  reads `{subtype: success, is_error: true, api_error_status: 401, terminal_reason: api_error,
+  total_cost_usd: 0, num_turns: 1}`, after an `assistant` line with `error: authentication_failed`,
+  `is_api_error_message: true` and `message.model: "<synthetic>"`, and two `system/api_retry` lines
+  (`error_status: 401`, `error: authentication_failed`). The exit code is 1. So "finished" is
+  `subtype: success` and `is_error: false` together, never the subtype alone.
+* **A resume of a missing session** writes one stdout line, `{type: result, subtype:
+  error_during_execution, is_error: true, num_turns: 0, total_cost_usd: 0, errors: ["No conversation
+  found with session ID: …"], session_id: <the id asked for>}`, the same sentence on stderr, and
+  exits 1. No init line. The `session_id` it reports is the missing one, so the runner never stores
+  a session id from a failed start.
+
+### The scrub
+
+`workspace/test/scrub-recording.mjs` is the scrub; the raw stdout stays in
+`C:/Users/Public/bb2dash-w64-rec/out/` and never enters git.
+
+```
+$ node test/scrub-recording.mjs <rec>/out/lookup.raw.jsonl test/fixtures/claude-stream-lookup.jsonl --mask-answer
+95 line(s) written, answer text masked
+$ node test/scrub-recording.mjs <rec>/out/sign-in-expired.raw.jsonl test/fixtures/claude-stream-sign-in-expired.jsonl
+6 line(s) written, answer text kept
+$ node test/scrub-recording.mjs <rec>/out/resume-missing.raw.jsonl test/fixtures/claude-stream-resume-missing.jsonl
+1 line(s) written, answer text kept
+```
+
+What it rewrites: every tool-result body (each `tool_result` block's `content`, and the `user`
+line's own `tool_use_result` copy) to `<scrubbed>`; the init line's `cwd`, `slash_commands`,
+`terminal_slash_commands`, `skills`, `plugins`, `agents`, `memory_paths`, `messaging_socket_path`
+and `powershell_path` to `<scrubbed>`; every thinking signature to `<scrubbed>` (thinking text was
+empty in all recordings). It refuses to write a file that still holds a drive path, a home-folder
+path, a JWT, an `sk-ant-` or `sb_secret_` shape, a DSN or an email address.
+
+**One thing more than the brief's scrub list: the lookup's answer text is masked.** The recorded
+answer quotes two sentences of the IST.323 syllabus word for word, so the answer itself was course
+text, in the 33 text deltas, in the last `assistant` line and in the result line. With
+`--mask-answer` every letter becomes `x` and every digit `9`; spaces, line breaks and punctuation
+stay, so each delta keeps its length and place and the deltas still join to the final text (456
+characters), which is what the parser test needs. The model's own tool inputs are kept as recorded
+(`{"q": "late work", "course": "IST.323"}`, `{"text_id": 733}`): the question's words, not the
+document's. The sign-in-expired fixture keeps the CLI's own error sentence unmasked.
+
+After the scrub, a walk over every string in the fixtures found none over 60 characters except the
+two masked answer copies, and `grep -i` for the owner's name, the school and the question's subject
+found only the model's own query `late work`.
