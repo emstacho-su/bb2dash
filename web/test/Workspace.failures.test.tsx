@@ -160,6 +160,22 @@ describe('a question that fails', () => {
     await waitFor(() => expect(field).toHaveValue(''));
     expect(fake.state.rpcCalls.map((call) => call.fn)).toEqual(['workspace_ask']);
   });
+
+  it('sends one question for two Enters in the same tick: a held key does not ask twice', async () => {
+    open();
+    await joined(TOPIC_A);
+    const field = type('What is due?');
+
+    // Both land before the page has re-rendered as busy.
+    act(() => {
+      fireEvent.keyDown(field, { key: 'Enter' });
+      fireEvent.keyDown(field, { key: 'Enter' });
+    });
+
+    await waitFor(() => expect(field).toHaveValue(''));
+    expect(fake.state.rpcCalls.map((call) => call.fn)).toEqual(['workspace_ask']);
+    expect(screen.queryByText(labels.REFUSAL_STILL_ANSWERING)).toBeNull();
+  });
 });
 
 describe('a Stop that does not stop', () => {
