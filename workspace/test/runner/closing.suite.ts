@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { DB_WATCHDOG_MS, FINISH_BACKOFF_FIRST_MS, FINISH_BACKOFF_MAX_MS, FINISH_RETRY_MS, HEARTBEAT_MS } from '../../src/config.js';
+import { DB_WATCHDOG_MS, FINISH_BACKOFF_FIRST_MS, FINISH_BACKOFF_MAX_MS, FINISH_RETRY_MS, HEARTBEAT_MS, TURN_TIMEOUT_MS } from '../../src/config.js';
 import { SHUTDOWN_GRACE_MS, createRunner } from '../../src/runner.js';
 import { startTurn } from '../../src/turn.js';
 import { STORED_SESSION_ID, claimOf, dbDown, dbRefusal, delta, result, scriptedTurn } from '../helpers/fakes.js';
@@ -212,6 +212,24 @@ describe('workspace_begin against a database that fails', () => {
     expect(await handle.done).toEqual({ state: 'failed', errorCode: 'cli_error' });
     expect(offsets(fake.finishTries)).toEqual(SCHEDULE.slice(0, 3));
     expect(fake.finishes[0]).toMatchObject({ state: 'failed', errorCode: 'cli_error' });
+  });
+
+  it('counts the 8-minute limit from the start of the turn, the time spent on begin included', async () => {
+    const scripted = scriptedTurn([delta(100, 'part of an answer')]);
+    const { fake, deps } = turnHarness(scripted.turn);
+    // Tries at 0 s to 60 s fail; the ninth, 75 s in, goes through.
+    fake.failBegin(dbDown(), 8);
+    const turnStartedAt = Date.now();
+    const handle = startTurn(deps, claimOf());
+    await vi.advanceTimersByTimeAsync(TURN_TIMEOUT_MS - 1000);
+    expect((scripted.startedAt ?? 0) - turnStartedAt).toBe(75_000);
+    expect(scripted.abortedAt).toBeNull();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect((scripted.abortedAt ?? 0) - turnStartedAt).toBe(TURN_TIMEOUT_MS);
+    expect(fake.finishes[0]).toMatchObject({ state: 'failed', errorCode: 'timeout', content: 'part of an answer' });
+    handle.stop('stale_claim');
+    await vi.advanceTimersByTimeAsync(TURN_TIMEOUT_MS);
+    await handle.done;
   });
 
   it('stops trying when the runner stops the turn, and closes the request under the runner\'s own reason', async () => {
