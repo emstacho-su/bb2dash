@@ -753,3 +753,12 @@ describe('the messages, open-request and status queries set staleTime: 0', () =>
     expect(statusOptions().staleTime).toBe(0);
   });
 });
+
+describe('the same three queries refetch when the tab regains focus', () => {
+  it('whatever the client`s default is: the interval does not run in a hidden tab', () => {
+    expect(messagesOptions(CONVERSATION, false).refetchOnWindowFocus).toBe('always');
+    expect(messagesOptions(CONVERSATION, true).refetchOnWindowFocus).toBe('always');
+    expect(requestsOptions(CONVERSATION).refetchOnWindowFocus).toBe('always');
+    expect(statusOptions().refetchOnWindowFocus).toBe('always');
+  });
+});

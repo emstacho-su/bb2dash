@@ -28,6 +28,7 @@ const {
   WorkspaceRefusal,
   askWorkspace,
   invalidateWorkspaceConversation,
+  isMissingConversation,
   normalizeRequest,
   setConversationArchived,
   toRequestId,
@@ -38,6 +39,7 @@ const {
   useWorkspaceMessages,
   useWorkspaceRequests,
   useWorkspaceStatus,
+  workspaceErrorReason,
   workspaceKeys,
 } = await import('@/lib/queries.workspace');
 const { REFUSAL_STILL_ANSWERING } = await import('@/lib/workspace-labels');
@@ -96,6 +98,50 @@ describe('toRequestId: one number on both sides of every comparison', () => {
   });
 });
 
+
+describe('isMissingConversation: workspace_ask on a conversation id that does not exist', () => {
+  const FOREIGN_KEY = {
+    code: '23503',
+    message: 'insert or update on table "workspace_messages" violates foreign key constraint',
+  };
+
+  it('reads SQLSTATE 23503, the foreign key, and no other code', () => {
+    expect(isMissingConversation(FOREIGN_KEY)).toBe(true);
+    for (const code of ['23505', '22023', '42501', '']) {
+      expect(isMissingConversation({ code, message: 'x' })).toBe(false);
+    }
+    expect(isMissingConversation(new Error('23503'))).toBe(false);
+    expect(isMissingConversation(null)).toBe(false);
+  });
+
+  it('is thrown as it came, never as the question-length refusal', async () => {
+    fake.state.rpc.workspace_ask = () => ({ data: null, error: FOREIGN_KEY });
+
+    const failure = await askWorkspace({ conversationId: OTHER_CONVERSATION, text: 'hello?' }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBe(FOREIGN_KEY);
+    expect(failure).not.toBeInstanceOf(WorkspaceRefusal);
+    expect(isMissingConversation(failure)).toBe(true);
+  });
+});
+
+describe('workspaceErrorReason: why a read or a write failed, in the words it came with', () => {
+  it('reads the message of an Error and of a database error object', () => {
+    expect(workspaceErrorReason(new Error('Failed to fetch'))).toBe('Failed to fetch');
+    expect(workspaceErrorReason({ code: '42501', message: 'permission denied' })).toBe(
+      'permission denied',
+    );
+  });
+
+  it('says so when it was given no reason', () => {
+    expect(workspaceErrorReason({ code: '42501' })).toBe('no reason given');
+    expect(workspaceErrorReason({ message: '' })).toBe('no reason given');
+    expect(workspaceErrorReason(null)).toBe('no reason given');
+    expect(workspaceErrorReason(undefined)).toBe('no reason given');
+  });
+});
 
 describe('setConversationArchived: the one column the list writes', () => {
   const ROWS = [
