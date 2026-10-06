@@ -117,3 +117,25 @@ denial, and exit 2 (never 1) for non-JSON stdin, empty stdin, stdin that is not 
 `tool_name`, and a `collection` that is an array, a number or null. `claude/settings.json` holds one
 `PreToolUse` entry, matcher `*`, one command hook `node /app/workspace/dist/hooks/tool-gate.js`,
 `"timeout": 600`.
+
+## Task 8 · provider seam, the argv and the system prompt (P-84)
+
+Files: `workspace/src/providers/types.ts`, `claude-cli.ts`, `ollama.ts`, `frontier-api.ts`,
+`index.ts`, `workspace/src/errors.ts`, `workspace/src/config.ts` (its constants; the start-up guards
+arrive with task 11), `workspace/prompts/system.md`, `workspace/test/providers.test.ts`,
+`workspace/test/claude-argv.test.ts`.
+
+### Red
+
+Commit: the two test files alone (no `src/providers/`, no `src/config.ts`, no `src/errors.ts`, no
+`prompts/system.md`).
+
+```
+$ npx vitest run test/providers.test.ts test/claude-argv.test.ts
+ FAIL  test/claude-argv.test.ts [ test/claude-argv.test.ts ]
+Error: Cannot find module '../src/config.js' imported from C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/test/claude-argv.test.ts
+ FAIL  test/providers.test.ts [ test/providers.test.ts ]
+Error: Cannot find module '../src/errors.js' imported from C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/test/providers.test.ts
+ Test Files  2 failed (2)
+      Tests  no tests
+```
