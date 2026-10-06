@@ -1,6 +1,6 @@
 /**
  * bb2dash — the Workspace page's own clock (Phase 21, the review round of
- * 2026-10-06; ruling V4, finding CR-8).
+ * 2026-10-06; ruling V4, findings CR-8 and CR-9).
  *
  * The page must not set the browser's wall clock beside the database's: a
  * laptop whose clock is minutes out would call a running service offline, or a
@@ -14,6 +14,8 @@
  *   * `stampRead`        the moment this page read a row. The database says how
  *                        old the heartbeat was at that moment
  *                        (`polled_age_seconds`); the time since is this page's.
+ *   * `monotonicNowMs`   the bare reading, for code that is not a render: the
+ *                        60 s of the poll after a close (`workspace-poll.ts`).
  *
  * NOTHING HERE IS KEPT IN THE QUERY CACHE. That cache is saved to localStorage,
  * and a monotonic reading means nothing to the next page load. So a stamp is
