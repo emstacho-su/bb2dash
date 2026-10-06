@@ -379,7 +379,8 @@ tables; `anon` holds nothing. `authenticated`'s writes are **column-level** (the
 here): insert `title` and update `title`, `archived` on conversations; insert `conversation_id`,
 `role`, `content`, `finished` on messages (policy: `role = 'user' and finished`); insert
 `conversation_id`, `user_message_id` and update `state`, `error_code`, `finished_at` on requests
-(policies: insert `queued` only; update only `queued` | `claimed` → `cancelled`). It can never
+(policies: insert `queued` only, and only naming a `user` message of the same conversation; update
+only `queued` | `claimed` → `cancelled` with `error_code = 'cancelled'`). It can never
 write `claude_session_id`, `tier`, `provider`, `model`, `tool_calls`, `cost_usd`, `claimed_by` or
 `attempts`. **`workspace_runner`** (142) is a login role, noinherit, nobypassrls, `statement_timeout
 = 15s`, with no table, view or sequence privilege in `public`: it reaches the queue only through
