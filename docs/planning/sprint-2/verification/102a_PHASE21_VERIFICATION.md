@@ -497,3 +497,41 @@ removed. It carries this phase's four tables, `v_workspace_status` and eight fun
 `main`'s file still lacked from merged migrations 091, 093, 094 and 095 (fifteen `sync_*`
 functions and `bb_file_storage_key`). `npm run typecheck` in `web/` → exit 0. The full suites are
 run once the last worker branches are merged.
+
+## Task 17 — the suites on the integrated branch (2026-10-06 20:56–21:03 UTC, b359da1)
+
+All four streams merged (database, runner, web through ruling U1, container files), types
+regenerated.
+
+| suite | command | result |
+|---|---|---|
+| web typecheck | `cd web; npm run typecheck` | exit 0 |
+| web lint | `npx eslint . --max-warnings 0` | exit 0 |
+| web build | `npm run build` | exit 0; `/workspace` in the route list |
+| web tests | `npx vitest run` | 149 files, **2768 passed**, 0 failed (2427 at the cut) |
+| web coverage | `npm run test:coverage` | exit 0; lines 91.41 % |
+| runner | `cd workspace; npm run typecheck; npx vitest run --coverage` | exit 0; 9 files, **566 passed**; `src/` lines 94.59 % |
+| materials server | `cd mcp-server; npx vitest run` | 6 files, **106 passed** (its code is unchanged) |
+| SQL | `node scripts/db-test.mjs` | `passed 66, failed 3, units 69` |
+| desktop | `git diff --stat origin/main...HEAD -- desktop` | prints nothing |
+
+The SQL suite's three failures are the three units ruling T3 names as failing from any checkout
+on prod's data, none of which reads a Workspace object: `grading_invariants.sql`
+(GEO.103.lecture/exam-1 and IST.352 project-assignment-8 have no component),
+`phase18_122_supersede_rule.sql` (run fcf9d587 wrote 4 supersede links) and
+`phase18_golden_truth.sql` (Q7: files 149 and 967 not current; 2509 and 2640 not in the truth).
+Every other unit passes, this phase's four included.
+
+## Tasks 12 and 13 — the first build failed outside the phase's code (2026-10-06)
+
+`docker compose -p bb2dash-wt21 --profile workspace build workspace`, run once from
+`bb2dash-wt-21-container`: exit 1 in the rag stage. The harness rag server's fastembed 2.1.0
+downloads the embedding model from `storage.googleapis.com/qdrant-fastembed/`, which answers 403
+(read from the laptop outside docker too) and the library unpacks the error body as an archive.
+The runner, materials and pinned-CLI stages finished. No image, no container, no docker command
+refused; the sync guard read the same at every step (five reads in `102_W65_VERIFICATION.md`,
+two more by the independent check). fastembed 2.1.1 (2026-09-30) moved the download to Hugging
+Face; measured in a scratch copy, the harness source builds unchanged on it, its embedder check
+passes and three test sentences match today's vectors at cosine 0.9999996 or better. The model
+source was put to Stack on 2026-10-06 (a one-line harness PR, or baking the host's cache); tasks
+12 and 13 resume at step 10 of W-65's list once he rules.
