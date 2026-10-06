@@ -63,6 +63,7 @@ const DONE_EVENT = { request_id: 42, message_id: ANSWER, state: 'done' };
 
 /** The same conversation after a second question was asked from another tab: request 43 is open. */
 const SECOND_QUESTION = 'c9a7d3e2-55aa-4f10-b1d2-000000000043';
+const SECOND_ANSWER = 'a7c1d2e3-55aa-4f10-b1d2-000000000043';
 const OTHER_TAB_ASKED_ROWS: Record<string, Row[]> = {
   workspace_messages: [
     ...ANSWERED_ROWS.workspace_messages,
@@ -283,16 +284,35 @@ describe('a Stop that does not stop', () => {
 
 describe('a refusal that has lost its reason', () => {
   it('takes "still answering" away once the answer is stored, and keeps what was typed', async () => {
-    fake.state.rows = { workspace_messages: [QUESTION_ROW], workspace_requests: [requestRow('queued')] };
+    fake.state.rows = ANSWERED_ROWS;
     open();
     const channel = await joined(TOPIC_A);
-    await screen.findByRole('button', { name: 'Stop' });
+    await screen.findByText('Quiz 2.');
+    // Enter sends only while this page sees nothing open, so the refusal comes by the
+    // backstop: a second question asked from another tab, not yet read here.
+    fake.state.rows = OTHER_TAB_ASKED_ROWS;
     fireEvent.keyDown(type('and next week?'), { key: 'Enter' });
     await screen.findByText(labels.REFUSAL_STILL_ANSWERING);
+    await screen.findByRole('button', { name: 'Stop' });
 
-    fake.state.rows = ANSWERED_ROWS;
-    act(() => channel.emit('done', DONE_EVENT));
-    expect(await screen.findByText('Quiz 2.')).toBeInTheDocument();
+    // Request 43 is answered.
+    fake.state.rows = {
+      workspace_messages: [
+        ...OTHER_TAB_ASKED_ROWS.workspace_messages,
+        {
+          id: SECOND_ANSWER,
+          conversation_id: A,
+          role: 'assistant',
+          request_id: 43,
+          tier: 'low',
+          content: 'Chapter 4.',
+          finished: true,
+        },
+      ],
+      workspace_requests: OTHER_TAB_ASKED_ROWS.workspace_requests.map((row) => ({ ...row, state: 'done' })),
+    };
+    act(() => channel.emit('done', { request_id: 43, message_id: SECOND_ANSWER, state: 'done' }));
+    expect(await screen.findByText('Chapter 4.')).toBeInTheDocument();
     await screen.findByRole('button', { name: 'Ask' });
 
     expect(screen.queryByText(labels.REFUSAL_STILL_ANSWERING)).toBeNull();

@@ -8,7 +8,9 @@
  *     built from the `ok: true` tool calls; content as plain text; never a
  *     tool's result, the stored query or the cost estimate;
  *   * the composer: "Ask", and "Stop" only while a request is open; Enter asks
- *     and Shift+Enter is a new line; each refusal has its one sentence;
+ *     and Shift+Enter is a new line; while a request is open Enter does not
+ *     send, and the database's refusal (23505) is the backstop for a request
+ *     this page had not read; each refusal has its one sentence;
  *   * the state under a question, from its `workspace_requests` row, with one
  *     sentence per `error_code`, and the stopped sentence at once after Stop;
  *   * the conversation list: archived rows left out, "Archive" on each row,
@@ -33,6 +35,7 @@ import {
   joined,
   openTopics,
   resetFake,
+  settle,
   type Row,
 } from './workspace-harness';
 
@@ -270,20 +273,48 @@ describe('the composer', () => {
     expect(fake.state.rpcCalls).toEqual([]);
   });
 
-  it('says the conversation is still answering when the database refuses a second question', async () => {
-    fake.state.rows = {
-      workspace_messages: [question(1, 'What is due?')],
-      workspace_requests: [request(42, 1, 'queued')],
-    };
-    open();
-    await waitFor(() => expect(composer().stop).toBeInTheDocument());
+  it.each(['queued', 'claimed'])(
+    'does not send on Enter while a request is open (%s): the button reads Stop',
+    async (state) => {
+      fake.state.rows = {
+        workspace_messages: [question(1, 'What is due?')],
+        workspace_requests: [request(42, 1, state)],
+      };
+      open();
+      await waitFor(() => expect(composer().stop).toBeInTheDocument());
+      const box = type('and next week?');
 
-    // The button reads Stop; a question sent past it is refused by the database (23505).
+      // Enter is still the page's key: no new line is added, and nothing is sent.
+      expect(fireEvent.keyDown(box, { key: 'Enter' })).toBe(false);
+      await settle();
+
+      expect(fake.state.rpcCalls).toEqual([]);
+      expect(box).toHaveValue('and next week?');
+      expect(screen.queryByText(labels.REFUSAL_STILL_ANSWERING)).toBeNull();
+      // Shift+Enter is still the browser's new line.
+      expect(fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })).toBe(true);
+    },
+  );
+
+  it('says the conversation is still answering when the database refuses a second question (23505, the backstop)', async () => {
+    seedAnswered();
+    open();
+    await screen.findByText('Quiz 2.');
+    // Asked from another tab since this page last read: open in the database, and the
+    // button here still reads Ask. Enter sends, and the database refuses it.
+    fake.state.rows = {
+      workspace_messages: [...fake.state.rows.workspace_messages, question(3, 'And the reading?')],
+      workspace_requests: [...fake.state.rows.workspace_requests, request(42, 3, 'queued')],
+    };
+    expect(composer().ask).toBeInTheDocument();
+
     fireEvent.keyDown(type('and next week?'), { key: 'Enter' });
 
     expect(await screen.findByText('This conversation is still answering.')).toBeInTheDocument();
     expect(fake.state.rpcCalls.map((call) => call.fn)).toEqual(['workspace_ask']);
     expect(composer().box).toHaveValue('and next week?');
+    // The refused question brought the open request into view: the button reads Stop now.
+    await waitFor(() => expect(composer().stop).toBeInTheDocument());
   });
 
   it('opens the new conversation after a first question', async () => {
