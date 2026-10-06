@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
 
-import { CLAUDE_BIN, PATHS } from '../config.js';
+import { CLAUDE_BIN, PATHS, RESULT_EXIT_GRACE_MS } from '../config.js';
 import { mapTurnEnd, type ErrorCode } from '../errors.js';
 import { ALLOWED_TOOLS } from '../hooks/gate-rules.js';
 import { asQuestion, buildPrompt } from '../replay.js';
@@ -173,6 +173,7 @@ export function createClaudeCliProvider(turn: CliTurn): Provider {
 export const KILL_GRACE_MS = 1500;
 /** After SIGKILL the output is closed this much later, in case a child of the CLI still holds the pipe open. */
 export const OUTPUT_CLOSE_MS = 400;
+const MS_PER_SECOND = 1000;
 const STDERR_KEEP_CHARS = 2000;
 const LOG_VALUE_MAX_CHARS = 80;
 const LOG_STDERR_MAX_CHARS = 200;
@@ -211,6 +212,8 @@ export interface CliTurnDeps {
   readonly log: (line: string) => void;
   readonly newUuid?: () => string;
   readonly killGraceMs?: number;
+  /** How long the CLI gets to exit after its result line; RESULT_EXIT_GRACE_MS when not given. */
+  readonly resultExitGraceMs?: number;
 }
 
 /** The child's environment: the runner's, plus the token and the two switches the service sets. */
@@ -303,6 +306,40 @@ function createKiller(child: CliProcess, graceMs: number): Killer {
   };
 }
 
+interface LingerGuard {
+  /** The result line was read: start the CLI's time to exit, once. */
+  arm(): void;
+  clear(): void;
+  /** True when the time ran out and the CLI was killed. */
+  fired(): boolean;
+}
+
+/**
+ * The CLI's time to exit after its `result` line (ruling V1, CR-5). A CLI that is still there when
+ * it runs out is killed; what the result line said stands, so a finished answer is never left to
+ * the turn's time limit.
+ */
+function createLingerGuard(killer: Killer, graceMs: number, log: (message: string) => void): LingerGuard {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let fired = false;
+  return {
+    arm() {
+      if (timer !== null || fired) return;
+      timer = setTimeout(() => {
+        timer = null;
+        fired = true;
+        log(`the CLI did not exit within ${graceMs / MS_PER_SECOND} s of its result line: killing it, the result is kept`);
+        killer.kill();
+      }, graceMs);
+    },
+    clear() {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    },
+    fired: () => fired,
+  };
+}
+
 const logValue = (value: string | null): string => (value ?? 'missing').replace(/\s+/g, '_').slice(0, LOG_VALUE_MAX_CHARS);
 
 /** The one log line per init line read: the version, the credential source, the mode and the model. Never a token. */
@@ -339,7 +376,9 @@ function failure(errorCode: ErrorCode): ResultEvent {
 
 function resultOf(attempt: Attempt): ResultEvent {
   const { summary } = attempt;
-  const errorCode = attempt.aborted ? 'cli_error' : mapTurnEnd(summary);
+  const reported = summary.result !== null;
+  // The runner's abort decides the code only when it cut the turn short: a result line already read stands.
+  const errorCode = attempt.aborted && !reported ? 'cli_error' : mapTurnEnd(summary);
   const sessionId = summary.init?.sessionId ?? null;
   return {
     type: 'result',
@@ -349,6 +388,7 @@ function resultOf(attempt: Attempt): ResultEvent {
     // Only a session the CLI actually started: a resume that found none reports the id it was asked for.
     claudeSessionId: isUuidShaped(sessionId) ? sessionId : null,
     model: summary.model,
+    reported,
   };
 }
 
@@ -360,6 +400,7 @@ const messageOf = (error: unknown): string => (error instanceof Error ? error.me
  */
 export function createCliTurn(deps: CliTurnDeps): CliTurn {
   const graceMs = deps.killGraceMs ?? KILL_GRACE_MS;
+  const resultExitGraceMs = deps.resultExitGraceMs ?? RESULT_EXIT_GRACE_MS;
   const newUuid = deps.newUuid ?? randomUUID;
 
   return async function* cliTurn(input, signal) {
@@ -371,6 +412,7 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
       const child = deps.spawn(argv, { cwd: PATHS.turnCwd, env: childEnv(deps.baseEnv, token) });
       const stream = createTurnStream();
       const killer = createKiller(child, graceMs);
+      const linger = createLingerGuard(killer, resultExitGraceMs, log);
       const onAbort = (): void => killer.kill();
       signal.addEventListener('abort', onAbort, { once: true });
       if (signal.aborted) killer.kill();
@@ -384,6 +426,7 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
               log(`stopped: ${out.reason}`);
               killer.kill();
             }
+            if (out.kind === 'result') linger.arm();
             if (signal.aborted) continue;
             if (out.kind === 'delta') yield { type: 'delta', text: out.text };
             if (out.kind === 'tool') yield { type: 'tool', id: out.id, call: out.call };
@@ -391,13 +434,14 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
         }
         const exit = await child.exited;
         if (exit.error !== undefined) log(`the CLI did not start: ${exit.error}`);
-        else if (exit.code !== 0 && !signal.aborted) {
+        else if (exit.code !== 0 && !signal.aborted && !linger.fired()) {
           const how = exit.code ?? `on ${exit.signal ?? 'a signal'}`;
           log(`the CLI exited ${how}: ${stderrForLog(child.stderrText(), [token, input.prompt])}`);
         }
         return { summary: stream.summary(), exit, aborted: signal.aborted };
       } finally {
         signal.removeEventListener('abort', onAbort);
+        linger.clear();
         killer.clear();
       }
     }

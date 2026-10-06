@@ -179,7 +179,11 @@ async function collect(provider: Provider, input: TurnInput, signal: AbortSignal
 type Ending = { readonly state: 'done' | 'failed'; readonly errorCode: ErrorCode | null };
 
 function endingOf(stopCode: StopCode | null, collected: Collected): Ending {
-  if (stopCode !== null) return { state: 'failed', errorCode: stopCode };
+  // A turn that produced a result is never stored as `timeout` (ruling V1, CR-5): the limit fell
+  // while the CLI was being given its time to exit, and what its result line said stands. The
+  // owner's Stop and the runner's own shutdown still decide the code.
+  const stop = stopCode === 'timeout' && collected.result?.reported === true ? null : stopCode;
+  if (stop !== null) return { state: 'failed', errorCode: stop };
   if (collected.thrown !== null) return { state: 'failed', errorCode: errorCodeFor(collected.thrown.error) };
   if (collected.result?.ok === true) return { state: 'done', errorCode: null };
   return { state: 'failed', errorCode: collected.result?.errorCode ?? 'cli_error' };

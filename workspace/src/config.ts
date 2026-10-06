@@ -38,6 +38,8 @@ export const STREAM_FLUSH_MS = 250;
 export const CANCEL_POLL_MS = 2000;
 /** A turn is killed here, under the database's 10-minute stale-claim sweep. */
 export const TURN_TIMEOUT_MS = 8 * 60 * 1000;
+/** After its `result` line the CLI gets this long to exit; then it is killed and the result is kept. */
+export const RESULT_EXIT_GRACE_MS = 10_000;
 /** The heartbeat's own timer, during turns too. */
 export const HEARTBEAT_MS = 30_000;
 /** With no heartbeat success for this long the runner exits non-zero, so the container restarts. */
