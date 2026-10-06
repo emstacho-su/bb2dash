@@ -86,6 +86,8 @@ const fake = vi.hoisted(() => {
     /** The page's query string. */
     search: '',
     rows: {} as Record<string, unknown[]>,
+    /** When set, every read answers with this error. */
+    readError: null as { code: string; message: string } | null,
   };
 
   return { state, FakeChannel };
@@ -95,7 +97,14 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
     from: (table: string) => {
       fake.state.log.push(`from:${table}`);
-      return readChain(fake.state.rows, table);
+      const chain = readChain(fake.state.rows, table);
+      const error = fake.state.readError;
+      if (error === null) return chain;
+      return {
+        ...chain,
+        then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+          Promise.resolve({ data: null, error }).then(onFulfilled, onRejected),
+      };
     },
     realtime: {
       setAuth: async () => {
@@ -193,6 +202,7 @@ beforeEach(() => {
   fake.state.leaveGate = null;
   fake.state.search = '';
   fake.state.rows = {};
+  fake.state.readError = null;
 });
 
 /** A promise a test settles by hand, to hold the fake client mid-call. */
@@ -727,6 +737,30 @@ describe('the route skeleton: /workspace?c= shows streamed text', () => {
 
     expect(streamArea(container)).not.toHaveAttribute('data-request-id');
     expect(streamArea(container).textContent).toBe('');
+  });
+
+  it('says so when the conversation cannot be read, and still holds its channel', async () => {
+    fake.state.search = `c=${A}`;
+    fake.state.readError = { code: 'PGRST205', message: 'no such table' };
+    const { container, findByRole } = render(tree(newQueryClient()));
+    await joined(TOPIC_A);
+
+    const alert = await findByRole('alert');
+
+    expect(alert).toHaveTextContent('Could not load this conversation: no such table');
+    expect(streamArea(container)).not.toHaveAttribute('data-request-id');
+    expect(openTopics()).toEqual([TOPIC_A]);
+  });
+
+  it('shows no problem line while the read is fine', async () => {
+    seedQueuedRequest();
+    const { container, queryByRole } = render(tree(newQueryClient()));
+    await joined(TOPIC_A);
+    await waitFor(() =>
+      expect(streamArea(container)).toHaveAttribute('data-request-id', String(REQUEST)),
+    );
+
+    expect(queryByRole('alert')).toBeNull();
   });
 
   it('renders nothing from the cache on the server', () => {
