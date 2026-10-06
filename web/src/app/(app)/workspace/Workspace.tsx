@@ -95,13 +95,30 @@ function problemLines(failed: { read: unknown; ask: unknown; stop: unknown }): s
 }
 
 /**
+ * The sentence of a refused question, while its reason holds. "Still answering"
+ * is about the conversation, so it goes once the rows show nothing open; the
+ * question-length sentence is about the text, and stays until the text changes.
+ */
+function refusalLine(asked: unknown, openRequest: WorkspaceRequest | null): string | null {
+  if (!(asked instanceof WorkspaceRefusal)) return null;
+  if (asked.reason === 'still_answering' && openRequest === null) return null;
+  return asked.message;
+}
+
+/**
  * Stop. The request is marked the moment the button is pressed, so the stopped
  * sentence shows at once; the mark comes off again if the database says the
  * request had already finished (false) or the cancel failed (it is still open).
+ *
+ * A Stop that failed is reported only while the request it was pressed on is
+ * the open one (`openRequest`, as the rows have it): once that request has
+ * finished there is nothing left to stop, and the next one never had Stop
+ * pressed on it.
  */
-function useStop(conversationId: string | null) {
+function useStop(conversationId: string | null, openRequest: WorkspaceRequest | null) {
   const [stopped, setStopped] = useState<ReadonlySet<number>>(NONE_STOPPED);
   const cancel = useCancelWorkspaceRequest(conversationId);
+  const failedOnOpen = openRequest !== null && openRequest.id === cancel.variables;
 
   function stop(requestId: number) {
     const unmark = () => setStopped((ids) => new Set([...ids].filter((id) => id !== requestId)));
@@ -114,7 +131,12 @@ function useStop(conversationId: string | null) {
     });
   }
 
-  return { stopped, stop, error: cancel.error, pending: cancel.isPending };
+  return {
+    stopped,
+    stop,
+    error: failedOnOpen ? cancel.error : null,
+    pending: cancel.isPending,
+  };
 }
 
 /** The message column's wrapper: what the channel is doing, as data attributes (see the header). */
@@ -155,7 +177,8 @@ interface ThreadProps {
 function Thread(props: ThreadProps) {
   const { conversationId, requests, messages, live, stream } = props;
   const ask = useAskWorkspace();
-  const { stopped, stop, error: stopError, pending: stopping } = useStop(conversationId);
+  const stopper = useStop(conversationId, props.openRequest);
+  const { stopped, stop, error: stopError, pending: stopping } = stopper;
 
   // Stop was pressed on it: it reads as stopped, and the button as Ask, before the row does.
   const openRequest =
@@ -187,7 +210,7 @@ function Thread(props: ThreadProps) {
       <Composer
         requestOpen={openRequest !== null}
         busy={ask.isPending || stopping}
-        refusal={ask.error instanceof WorkspaceRefusal ? ask.error.message : null}
+        refusal={refusalLine(ask.error, props.openRequest)}
         onAsk={handleAsk}
         onStop={() => {
           if (openRequest !== null) stop(openRequest.id);
