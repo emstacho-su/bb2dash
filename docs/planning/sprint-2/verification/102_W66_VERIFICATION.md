@@ -482,3 +482,110 @@ empty composer is the top bar's Workspace link. Say if it should go.
 `[data-answer-text]`, `[data-used]`, `[data-turn-line]`; `[data-workspace-offline]` on the offline
 line; `[data-last-activity]` in a list row. The list is `navigation` "Conversations"; the box is
 `textbox` "Question"; the row buttons are named exactly "Archive" and "Unarchive".
+
+### 7. Fix round (the PM's check of 3f1330d)
+
+2026-10-06, same branch. Four problems came back from the check: one must-fix and three minor.
+Three are fixed, each red first; the fourth waits for wording. Fixtures only, as before: no database
+read or write, no docker command that changes state, no `claude -p`, no secret or env value read.
+
+**First step.** `git fetch origin`, then `git merge origin/feat/workspace-21` → merge commit 59bb427
+(the phase branch was one docs commit ahead, 4ca39d9: `102a` and `DECISIONS.md`, nothing under
+`web/`), pushed. That commit carries git's own merge message.
+
+| problem | severity | result | commits (red, green) |
+|---|---|---|---|
+| a missed `done` broadcast could leave the page on "Answering…" with the answer stored | must-fix | fixed | 9581b15, cd7116c |
+| the offline line was said from an old status row | minor | fixed | 23d1963, ef1ef21 |
+| a refusal and a failed-Stop line outlived their reason | minor | fixed | 01c4bec, 8b4eec4 |
+| the message column is an empty box in three states | minor | not done: needs PM wording (below) | none |
+
+**The missed broadcast.** `Workspace.tsx` gained `useStoredRowOnClose`: when a request stops being
+the open one, the messages are read once. `workspace_finish()` commits the request and the row
+together, so that read holds the stored row. `messagesOptions` is unchanged, so task 15's row
+("refetches every 5 s only while a request is open") still holds.
+
+* RED (9581b15), `npx vitest run test/use-workspace-stream.screen.test.tsx`:
+  `AssertionError: expected null to be 'The stored answer.'` → `Tests  1 failed | 17 passed (18)`.
+  The case is the check's own sequence on a fake clock with the tab in front: claimed, one extra
+  read of the messages at 2.6 s to shift the two polls apart, the rows turned to `done` plus the
+  stored answer at 7.7 s with no broadcast, the requests poll at 10 s.
+* GREEN (cd7116c), the six Workspace files
+  (`test/use-workspace-stream.screen.test.tsx test/use-workspace-stream.test.tsx test/Workspace.test.tsx test/Workspace.failures.test.tsx test/queries.workspace.test.ts test/queries.workspace.hooks.test.tsx`):
+  `Test Files  6 passed (6)` · `Tests  226 passed (226)`. The case also holds that the close costs
+  exactly one read of the messages, and that nothing is read in the two minutes after it.
+
+**The offline line.** `ServiceStatus.tsx` says offline only from a row read within two refetch
+intervals (`STATUS_TRUSTED_FOR_MS = 2 * WORKSPACE_STATUS_REFETCH_MS`, compared against
+`dataUpdatedAt`). An older row says nothing until the read a mount or a return to the tab has
+already sent comes back.
+
+* RED (23d1963), `npx vitest run test/Workspace.test.tsx`: `Tests  3 failed | 34 passed (37)`, each
+  `AssertionError: expected <p class="_offline_33c9e2" …(2)></p> to be null`. The three: a row
+  restored ten minutes after it was read, with the service up (the first paint); the first frame
+  back from three minutes in a hidden tab during a streaming answer, with a current heartbeat in
+  the database; and the edge, a row read 60 000 ms ago speaks and one read 60 001 ms ago does not.
+* GREEN (ef1ef21), `npx vitest run test/Workspace.test.tsx test/Workspace.failures.test.tsx test/use-workspace-stream.screen.test.tsx`:
+  `Test Files  3 passed (3)` · `Tests  70 passed (70)`. The existing fake-clock case (offline past
+  `polled_at` + 120 s, back with a newer one) passes unchanged: the status is re-read every 30 s.
+
+**The two lines that outlived their reason.** In `Workspace.tsx`, `refusalLine` shows "This
+conversation is still answering." only while the rows show an open request (the question-length
+sentence still stays until the text changes), and `useStop` reports a failed Stop only while the
+request it was pressed on is the open one.
+
+* RED (01c4bec), `npx vitest run test/Workspace.failures.test.tsx`: `Tests  2 failed | 17 passed (19)`.
+  `AssertionError: expected [ Array(1) ] to deeply equal []` (received
+  `"Could not stop this answer: permission denied"`) after the request had finished, and
+  `AssertionError: expected <p class="_refusal_96f077" …(1)></p> to be null` after the answer was
+  stored.
+  Two more cases in that commit pin the other side and passed as written, so they have no red: the
+  refusal still shows for an open request the page had not read yet, and the question-length
+  refusal shows with no request open.
+* GREEN (8b4eec4), `npx vitest run test/Workspace.failures.test.tsx test/Workspace.test.tsx test/use-workspace-stream.screen.test.tsx`:
+  `Test Files  3 passed (3)` · `Tests  74 passed (74)`.
+
+One step past the fix as the check worded it. The check asked for the Stop line to go when no
+request is open. Keyed that way it came back under the next question's request, which never had
+Stop pressed on it (the mutation still holds the old error). So it is keyed on the request Stop
+was pressed on; the red case asks a second question and holds that no line returns.
+
+**Not done: the empty message column.** The check says it needs PM wording, to be decided at the
+preview walk. Nothing was changed. What the code can tell apart, for when the wording comes: no
+conversation selected (`?c=` absent or not a uuid); rows still being read; and a uuid whose reads
+answered with no rows (a first question always stores its message, so that is an id that does
+not exist or is not the owner's).
+
+**The check's probes, run again** on 8b4eec4 (the junction made, the probe config run from `web/`,
+the junction removed with `rmdir`; `web/node_modules` intact, worktree clean): 11 of 12 pass. The
+one that fails is the first form of the missed-broadcast probe (`probe.test.tsx`, P2). It holds the
+request row at `done` while a read of the messages sent after it still returns the unfinished row;
+`workspace_finish()` writes both in one transaction, so the database cannot answer that way. The
+second form (`probe2.test.tsx`, "events in their real order"), which is the one committed above,
+passes, as do both offline probes and the refusal probe.
+
+**Gates** (branch at 8b4eec4, the last commit that changes `web/`), all six run in this order with
+nothing under `web/` edited while they ran:
+
+| gate | command | result |
+|---|---|---|
+| whole suite | `npx vitest run` | `Test Files  147 passed (147)` · `Tests  2728 passed (2728)` · exit 0 |
+| types | `npm run typecheck` | exit 0 |
+| lint | `npx eslint . --max-warnings 0` | exit 0, no output |
+| task 16's row | `npx vitest run test/Workspace.test.tsx test/TopNav.workspace.test.tsx test/workspace-labels.test.ts test/audits.test.ts` | `Test Files  4 passed (4)` · `Tests  70 passed (70)` · exit 0 |
+| build | `npm run build` | exit 0; the route list holds `○ /workspace` |
+| coverage | `npm run test:coverage` | `Tests  2728 passed (2728)` · exit 0 · all files, lines 91.35 % (floor 83 %) |
+
+2728 = 2720 + 8: `use-workspace-stream.screen` 17 → 18, `Workspace` 34 → 37, `Workspace.failures`
+15 → 19. `Workspace.tsx` lines 100 %; `components/workspace/` lines 100 %. No function in the files
+changed is over 50 lines (`Thread` 49, `Workspace` 42); the largest file touched is
+`test/Workspace.test.tsx`, 658 lines. No new dependency, no new string in `workspace-labels.ts`.
+
+**Still not proven, and one thing left as it was.**
+
+* The screen is still unseen in a browser by me; every line above is from jsdom.
+* After Stop, text that arrives in the runner's last seconds is still appended under "You stopped
+  this answer." (the check's note 3 leaves that to the PM). The stored row of a stopped answer is
+  taken at its `done` broadcast or at the next focus refetch; if that broadcast is missed with the
+  tab in front, the page keeps the streamed text under the stopped sentence until then. The state
+  and the button are right in that case, so I left it.
