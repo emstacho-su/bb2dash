@@ -276,7 +276,7 @@ the Google mirror sees patches, never delete + insert.
   run does not carry, on the same path with the same `item_kind`, share the row (old id to
   `detail.previous_ids`, link and children kept), counted as `rekeyed`.
 
-## Workspace (migrations 140-142)
+## Workspace (migrations 140-143)
 
 The Workspace is a chat: a question is a row the browser writes, an answer is a row the container
 runner writes, and a queue row joins them. Read-only v1: nothing here can write planner state or a
@@ -285,7 +285,8 @@ fact table. Conversations are archived, never deleted (no delete policy on any o
 **Tables** (140). Every `created_at` / `updated_at` is `timestamptz not null default now()`.
 
 * **`workspace_conversations`** — `id uuid` pk, `created_at`, `updated_at` (trigger
-  `set_updated_at()`), `title text` 1–120 characters (the first line of the first question, cut at
+  `set_updated_at()`; since 143 it stays silent for an update whose only changed value is
+  `archived`, so archiving or restoring a chat does not move it in the list), `title text` 1–120 characters (the first line of the first question, cut at
   120; the owner may edit it), `claude_session_id text` (null, or lower-case uuid-shaped by check:
   the CLI session the next turn resumes), `archived boolean` default false.
 * **`workspace_messages`** — `id uuid` pk, `conversation_id` → conversations (cascade),
@@ -322,9 +323,13 @@ answer, is null or one of eight: `budget_exceeded`, `timeout`, `stale_claim`,
 `provider_not_configured`, `cli_error`, `cancelled`, `usage_limit`, `sign_in_expired`. The page
 chooses its sentence from the request row's code.
 
-**`v_workspace_status`** (140, `security_invoker`) — always exactly one row: `polled_at`, `runner`
-(the heartbeat, both null before the first one), `open_requests integer` and `oldest_open_at` (the
-queued and claimed requests). Offline = `polled_at` null or older than 120 s.
+**`v_workspace_status`** (140 and 143, `security_invoker`) — always exactly one row: `polled_at`,
+`runner` (the heartbeat, both null before the first one), `open_requests integer` and
+`oldest_open_at` (the queued and claimed requests), and last `polled_age_seconds integer` (143):
+the whole seconds from `polled_at` to the server's `now()`, rounded down, never negative, null
+before the first heartbeat. Offline = no heartbeat, or one older than 120 s, measured as
+`polled_age_seconds` plus the time since the page read it; the browser's wall clock is never
+compared with `polled_at`.
 
 **The browser's functions** (140; `security invoker`, `search_path = public, pg_temp`):
 
@@ -345,7 +350,11 @@ refusal one raises itself is **22023**, in a message that starts with the functi
 * **`workspace_claim(p_runner text)`** → at most one row `(request_id bigint, conversation_id
   uuid, user_message_id uuid, prompt text, claude_session_id text, prior_tier text, history
   jsonb)`. First sweeps claims older than 10 minutes to `failed` / `stale_claim` (request row and
-  answer), then claims the oldest `queued` request (`for update skip locked`, `attempts + 1`).
+  answer). Then (143) finishes an answer still unfinished although its request closed
+  (`cancelled`, `failed` or `done`) more than 10 minutes ago: `finished = true` and the request's
+  own `error_code`, nothing else written and nothing broadcast; a closed request with no
+  `finished_at` is left alone. Then claims the oldest `queued` request (`for update skip locked`,
+  `attempts + 1`).
   `history` is the last 20 messages before the request's own user message, oldest first, as
   `[{role, content}]` (`[]` for a first question; the question itself is `prompt`). `prior_tier`
   is the tier of the conversation's latest answer, null when there is none. It does not stamp the
@@ -358,8 +367,10 @@ refusal one raises itself is **22023**, in a message that starts with the functi
   no `seq`. Refuses a delta over 16000 characters and a `seq` below 1.
 * **`workspace_finish(p_request_id bigint, p_state text, p_content text, p_tool_calls jsonb,
   p_error_code text, p_cost_usd numeric, p_duration_ms integer, p_claude_session_id text, p_model
-  text)`** → `void`. `p_state` is `done` or `failed`. A cancelled request stays cancelled and its
-  answer gets `cancelled`; any other request takes `p_state`, `finished_at` and `p_error_code`.
+  text)`** → `void`. `p_state` is `done` or `failed`. Since 143 it refuses (22023) a request that
+  is not `claimed` or `cancelled`, so a request already `done` or `failed` cannot be finished
+  again and its stored answer cannot be written over. A cancelled request stays cancelled and its
+  answer gets `cancelled`; a claimed request takes `p_state`, `finished_at` and `p_error_code`.
   Content is cut at 100000 characters and `p_tool_calls` to its first 20 elements, neither refused
   for length. A non-null `p_model` replaces the alias. The conversation's `claude_session_id` is
   stamped, null when `p_claude_session_id` is not uuid-shaped.
