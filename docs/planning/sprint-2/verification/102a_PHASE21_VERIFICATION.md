@@ -584,3 +584,148 @@ SECURITY DEFINER functions, the Realtime policy, the spawn (an argv array, the p
 `--`), the tool gate's deny paths, the fail-closed stream checks, the privilege drop, the
 firewall's rule order and fail-closed paths, secrets in layers and logs, and every DOM sink of
 the screen.
+
+## /code-review main high
+
+**First run, 2026-10-06, on `feat/workspace-21` at d4b1b8d** (`git diff main...HEAD`, 113 files;
+every non-test source file read in full; the image had not been built, so the Dockerfile,
+entrypoint and firewall were reviewed by reading). Fourteen findings; the PM's severities and
+dispositions (rulings V1–V5 below). A second run on the delta is owed after the review round.
+
+| id | severity | status |
+|---|---|---|
+| CR-1 | HIGH | open |
+| CR-2 | MEDIUM | open |
+| CR-3 | HIGH | open |
+| CR-4 | MEDIUM | open |
+| CR-5 | MEDIUM | open |
+| CR-6 | MEDIUM | open |
+| CR-7 | LOW | open |
+| CR-8 | MEDIUM | open |
+| CR-9 | MEDIUM | open |
+| CR-10 | LOW | open |
+| CR-11 | LOW | open |
+| CR-12 | LOW | open |
+| CR-13 | LOW | open |
+| CR-14 | LOW | open |
+
+* **CR-1** `workspace/src/stream-json.ts`: any tool result with no PreToolUse hook answer ends
+  the turn as `cli_error`, including error results the CLI writes itself without running the
+  tool or the gate (a call to a tool that is not in its list).
+* **CR-2** `workspace/src/turn.ts`: every `workspace_begin()` failure is read as "no longer
+  claimed" and the turn is skipped without closing the request, so a passing database error
+  leaves it claimed for ten minutes.
+* **CR-3** `workspace/src/turn.ts`: `workspace_finish()` is tried three times a second apart and
+  then abandoned, so a database blip at the end of a turn discards a finished answer.
+* **CR-4** `142`: the stale sweep touches only requests still `claimed`, so an assistant row
+  whose request was cancelled is never finished when the runner never calls finish.
+* **CR-5** `workspace/src/providers/claude-cli.ts`: the turn waits for the process to exit after
+  the `result` line; a CLI that lingers turns a finished answer into a `timeout`.
+* **CR-6** `workspace/src/stream-json.ts`: hook answers are matched to tool calls by name in
+  arrival order, so two calls of one tool in one message can take each other's gate exit code.
+* **CR-7** `140`: the `updated_at` trigger fires on archive and unarchive, so an old chat jumps to
+  the top of the list.
+* **CR-8** `web/src/lib/queries.workspace.ts`: offline is decided by comparing the browser's
+  clock with the database's `polled_at`; a skewed clock gives a wrong service line.
+* **CR-9** `web/src/app/(app)/workspace/Workspace.tsx`: the re-read after Stop is two fixed
+  timers armed only when the cached row already reads `claimed`.
+* **CR-10** `142` / `queries.workspace.ts`: the claim always returns the history, and the page
+  re-reads every message every 5 s while a request is open.
+* **CR-11** `workspace/src/turn.ts`: the `BUDGET_CAP_HOLDS` branch cannot run; `TURN_CONCURRENCY`
+  is read by no source file.
+* **CR-12** helpers declared twice or three times (`OPEN_STATES`, `messageOf`, the uuid shape).
+* **CR-13** `140`: the prompt cap and the error-code list are repeated as literals.
+* **CR-14** `project-state/STATUS.md` is not yet updated on the branch (owed before the PR).
+
+## PM rulings for the review round (2026-10-06)
+
+### V1. Runner (W-64)
+
+* **CR-1 (HIGH).** The fail-closed hook rule covers results that are not errors: a tool result
+  that is not an error needs a gate allow (a PreToolUse hook response with exit 0) for that tool
+  name. An ERROR result with no hook answer (the CLI's own "No such tool available", a call the
+  CLI refused before running it) does not end the turn: the call is stored `ok: false` and the
+  turn goes on. `EndConversation` stays exempt. A gate exit other than 0 or 2 still ends the turn.
+* **CR-6.** Hook answers are not paired to calls by arrival order. `ok` is "the result is not an
+  error". The fail-closed check is a count per tool name: non-error results for a name never
+  exceed the exit-0 gate answers seen for that name.
+* **CR-2.** A `workspace_begin()` failure means "nothing to close" only when it is SQLSTATE 22023.
+  Any other failure is retried on the same schedule as finish; if begin still cannot be made the
+  runner closes the request with `workspace_finish(failed, cli_error)`.
+* **CR-3 (HIGH).** `workspace_finish()` is retried with backoff (1 s, 2 s, 4 s … capped at 15 s)
+  for up to 170 s (`FINISH_RETRY_MS = 170000`, `workspace/src/config.ts`) before the answer is
+  given up and logged. A 22023 from finish means the request is already closed: logged, not
+  retried. The database watchdog does not end the process while a finish is being retried inside
+  that window.
+* **CR-5.** After the `result` line the provider gives the CLI 10 s to exit
+  (`RESULT_EXIT_GRACE_MS = 10000`), then kills it and keeps the result. A turn that produced a
+  result is never stored as `timeout`.
+* **CR-12.** One `messageOf` helper and one uuid-shape constant in `workspace/src`, imported
+  where they are used.
+* **CR-11.** `BUDGET_CAP_HOLDS`, `NO_CAP_SENTENCE` and `TURN_CONCURRENCY` stay as the Contract
+  names them (the first two are the recorded O-2 fallback; not reached today).
+* **SR-1.** The runner verifies the pooler's certificate against the pinned CA whatever the DSN
+  says. `WORKSPACE_DB_CA_FILE` (default `/app/certs/prod-ca.crt`) is read at start; a missing or
+  empty file is a configuration error (fail-closed). `db.ts` builds the client from the parsed
+  parts of the DSN (host, port, user, password, database), never from the DSN string, with
+  `ssl: { ca, rejectUnauthorized: true, servername: <host> }`, so no flag in the DSN can switch
+  verification off. The DSN check still refuses port 6543; it no longer accepts `no-verify`; its
+  error text and the README no longer recommend an unverified form. The stored secret is not
+  changed. Proven on the host on 2026-10-06 with the stored secret: against the harness's
+  `certs/prod-ca.crt` the connection verifies (`connected as workspace_runner`); against the
+  system store alone it fails (`SELF_SIGNED_CERT_IN_CHAIN`). Tests use a local CA fixture made for
+  the test (never a real certificate's private key).
+
+### V2. Container (W-65)
+
+* The image copies the CA to `/app/certs/prod-ca.crt` (from the `harness-certs` build context;
+  root-owned, readable) and the service sets `WORKSPACE_DB_CA_FILE=/app/certs/prod-ca.crt`. The
+  rag launcher may read the same file.
+* `/app/turn` is root's and read-only (0555): nothing the runtime user plants there can be loaded
+  as project settings. The paste-ready list gains two checks: as `node`, creating
+  `/app/turn/.claude` fails; and the token smoke still passes from that folder.
+* The paste-ready list gains a check that the runner's connection is verified: inside the
+  container as `node`, a connect with the pinned CA succeeds and a connect with a different CA
+  file fails (a throwaway self-signed certificate made in the container's temp folder).
+* No docker state change in this round. The build still waits for the model source.
+
+### V3. Database (W-63): migration 143, written and dry-run only
+
+`db/migrations/143_workspace_review_round.sql`, additive (`create or replace` only; 140–142 are
+frozen and not edited), with `db/tests/phase21_143_review_round.sql`:
+
+* **CR-8.** `v_workspace_status` gains a last column `polled_age_seconds integer`: the whole
+  seconds between the server's `now()` and `polled_at`, null before the first heartbeat.
+* **Security note.** `workspace_finish` refuses (22023) unless the request is `claimed` or
+  `cancelled`. Everything else about it is unchanged.
+* **CR-4.** `workspace_claim`'s sweep also finishes an assistant row left unfinished when its
+  request has been closed (`cancelled`, `failed` or `done`) for more than 10 minutes: `finished`
+  true, and `error_code` the request's own code (so `cancelled` for a stopped one).
+* **CR-7.** The `workspace_conversations_updated_at` trigger no longer fires for an update that
+  changes only `archived` (`create or replace trigger … when (…)`), so archiving does not move a
+  chat to the top of the list.
+* Signatures, grants and the 142 guard's facts are unchanged; 143's own guard re-reads them (the
+  five functions, executable by `workspace_runner` only; the view still `security_invoker`).
+* Existing units are edited only where one of these four changes makes an assertion wrong.
+  `DATA_SYNTAX.md` follows.
+* NOT applied by anyone in this round: the PM applies it from the main session on Stack's word,
+  after an independent dry-run check, exactly as 140–142 were.
+
+### V4. Web (W-66)
+
+* **CR-8.** Offline is decided from the server's `polled_age_seconds` plus the local time that
+  has passed since that read (a monotonic clock), never from the browser's wall clock. The
+  hand-declared row treats the column as optional: while it is absent (before 143 is applied)
+  the page falls back to today's wall-clock comparison, so the preview works on both sides of the
+  apply.
+* **CR-9.** The two timers after Stop go. The messages query polls every 5 s while a request is
+  open, and also while the followed request's assistant row is unfinished and that request closed
+  less than 60 s ago.
+* **CR-12.** One definition of the open states, imported where it is used.
+* CR-10 (the page re-reads every message while a request is open; `workspace_claim` always
+  returns the history) is recorded and not changed in this phase.
+
+### V5. Recorded, not changed
+
+CR-13 (140 repeats the prompt cap and the error-code list as literals): 140 is frozen. CR-14
+(`project-state/STATUS.md` is not yet updated): owed at task 24, before the PR opens.
