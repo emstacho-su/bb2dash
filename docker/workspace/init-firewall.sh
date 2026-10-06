@@ -3,12 +3,15 @@
 # Default-deny egress for the Workspace container (brief 102 task 12; P-88).
 #
 # Run once, as root, by docker/workspace/entrypoint.sh before any Node or `claude` process starts.
-# When it exits 0 the container can reach four names and nothing else:
+# When it exits 0 the container can reach four names, each on one TCP port, and nothing else:
 #
-#   api.anthropic.com                   the `claude` CLI, on Stack's subscription token
-#   goultdzqcavefcgnifdy.supabase.co    the materials MCP server (the bb2dash project's API)
-#   the host of workspace_runner_db_url the runner's own queue connection (the session pooler)
-#   the host of harness_database_url    the rag MCP server (the harness store)
+#   api.anthropic.com                   tcp/443   the `claude` CLI, on Stack's subscription token
+#   goultdzqcavefcgnifdy.supabase.co    tcp/443   the materials MCP server (the bb2dash project's API)
+#   the host of workspace_runner_db_url tcp/5432  the runner's own queue connection (the session pooler)
+#   the host of harness_database_url    tcp/5432  the rag MCP server (the harness store)
+#
+# The allowlist is by address, and each of these addresses serves other tenants too (a CDN's edge,
+# a shared pooler): the port rule narrows what an allowed address can be asked, not who answers.
 #
 # A fork, not an import, of bb2dash-stack's .devcontainer/init-firewall.sh and firewall-lib.sh
 # (eb71e8b; themselves forked from anthropics/claude-code's dev container).
@@ -30,6 +33,9 @@
 #   * the refresh loop: no root process stays running after this script.
 #
 # New here:
+#   * a port rule (rulings T1 c): the two HTTPS names are allowed on tcp/443 only and the pooler
+#     addresses on tcp/5432 only, each kind in a set of its own. No address is allowed on every
+#     port, and nothing but TCP leaves (DNS to the resolvers apart);
 #   * the two database hosts are read from the secret files, and each must end
 #     .pooler.supabase.com; anything else stops the start. A connection string is never printed,
 #     whole or in part;
@@ -50,9 +56,14 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export HOME=/root
 export LC_ALL=C
 
-# The set iptables allows outbound traffic to. Its type is the dev firewall's (hash:net, which is
-# known to work under Docker Desktop on stack-laptop); this script only ever adds single addresses.
-readonly FIREWALL_SET=workspace-allowed
+# The two sets iptables allows outbound TCP to, and the one port each is allowed on: the addresses
+# of the HTTPS names, and the addresses of the database poolers. Their type is the dev firewall's
+# (hash:net, which is known to work under Docker Desktop on stack-laptop); this script only ever
+# adds single addresses.
+readonly HTTPS_SET=workspace-https
+readonly HTTPS_PORT=443
+readonly POSTGRES_SET=workspace-postgres
+readonly POSTGRES_PORT=5432
 readonly FIREWALL_SET_TYPE=hash:net
 # Claimed (mkdir) by the one run a container start may make. /dev/shm is the container's own tmpfs:
 # a restart empties it. The folder is root's and /dev/shm is sticky, so node cannot remove it.
@@ -67,12 +78,12 @@ readonly INET6_ADDRESSES=/proc/net/if_inet6
 # Ends every line this script adds to /etc/hosts, so the next start can take its own lines out.
 readonly PIN_MARK='# pinned by init-firewall.sh'
 
-# The two names every start allows (brief 102, "Non-root and egress").
-readonly -a ALLOWED_HOSTS=(
+# The two names every start allows, on tcp/443 (brief 102, "Non-root and egress").
+readonly -a HTTPS_HOSTS=(
   "api.anthropic.com"
   "goultdzqcavefcgnifdy.supabase.co"
 )
-# The secrets whose host is allowed too, and what such a host must end with.
+# The secrets whose host is allowed too, on tcp/5432, and what such a host must end with.
 readonly -a DSN_SECRETS=(
   "workspace_runner_db_url"
   "harness_database_url"
@@ -178,12 +189,12 @@ resolve_once() {
   dig -r +noall +answer +time="$DNS_TIMEOUT_S" +tries="$DNS_TRIES" A "$1" | awk '$4 == "A" {print $5}'
 }
 
-# allow_host <name>: resolve it once, put every address of that answer in the set and pin each
-# in /etc/hosts. Prints how many addresses it allowed on stdout; on a failure it says why on
-# stderr and returns 1. Every step is checked by hand: the caller tests this function's result,
+# allow_host <set> <name>: resolve the name once, put every address of that answer in the set and
+# pin each in /etc/hosts. Prints how many addresses it allowed on stdout; on a failure it says why
+# on stderr and returns 1. Every step is checked by hand: the caller tests this function's result,
 # and a shell does not stop on a failed command inside a function whose result is being tested.
 allow_host() {
-  local name="$1" answers address count=0
+  local set_name="$1" name="$2" answers address count=0
   answers="$(resolve_once "$name" || true)"
   while read -r address; do
     if [ -z "$address" ]; then continue; fi
@@ -195,7 +206,7 @@ allow_host() {
       echo "ignoring an answer for $name that is not a public address" >&2
       continue
     fi
-    if ! ipset add -exist "$FIREWALL_SET" "$address"; then
+    if ! ipset add -exist "$set_name" "$address"; then
       echo "an address of $name could not be added to the set" >&2
       return 1
     fi
@@ -212,9 +223,22 @@ allow_host() {
   echo "$count"
 }
 
+# allow_names <set> <port> <name>...: allow_host for each name. The first that cannot be allowed
+# stops the start.
+allow_names() {
+  local set_name="$1" port="$2" name count
+  shift 2
+  for name in "$@"; do
+    if ! count="$(allow_host "$set_name" "$name")"; then
+      fail "$name could not be allowed (the line above says why)"
+    fi
+    echo "Allowed $name on tcp/$port ($count address(es), pinned in $HOSTS_FILE)"
+  done
+}
+
 main() {
-  local secret host reason resolver kept name count
-  local -a hosts=()
+  local secret host reason resolver kept off_loopback
+  local -a postgres_hosts=()
   local -A seen=()
 
   # 0. One run per container start. A second run would flush the rules while the first run's
@@ -235,13 +259,16 @@ main() {
   # 1. The database hosts, before any rule is touched. Each secret must be a Postgres URL whose
   #    host ends .pooler.supabase.com; a host of any other kind would put an address of someone
   #    else's choosing on the allowlist, so the start stops instead.
-  hosts=("${ALLOWED_HOSTS[@]}")
   for secret in "${DSN_SECRETS[@]}"; do
     if ! host="$(dsn_host "$SECRETS_DIR/$secret")"; then
       reason="$host"
       fail "$secret: $reason"
     fi
-    hosts+=("$host")
+    # Both database secrets usually name the same pooler: one lookup, one pin.
+    if [ -z "${seen[$host]:-}" ]; then
+      seen[$host]=1
+      postgres_hosts+=("$host")
+    fi
     echo "The host of $secret ends $DSN_HOST_SUFFIX"
   done
 
@@ -255,7 +282,8 @@ main() {
   iptables -t nat -X
   iptables -t mangle -F
   iptables -t mangle -X
-  ipset destroy "$FIREWALL_SET" 2>/dev/null || true
+  ipset destroy "$HTTPS_SET" 2>/dev/null || true
+  ipset destroy "$POSTGRES_SET" 2>/dev/null || true
   if [ -n "$docker_dns_rules" ]; then
     echo "Restoring Docker DNS rules..."
     iptables -t nat -N DOCKER_OUTPUT 2>/dev/null || true
@@ -281,35 +309,32 @@ main() {
   done < <(awk '$1 == "nameserver" {print $2}' "$RESOLV_CONF")
 
   # 4. The allowlist. Each name is resolved once, now, while this script is the only thing
-  #    running; its addresses go into the set and into /etc/hosts. Lines an earlier start pinned
-  #    are taken out first, so a name is never left on an address that is no longer in the set.
-  #    /etc/hosts is a mounted file: it is rewritten in place, never replaced.
-  ipset create "$FIREWALL_SET" "$FIREWALL_SET_TYPE"
+  #    running; its addresses go into the set of its kind and into /etc/hosts. Lines an earlier
+  #    start pinned are taken out first, so a name is never left on an address that is no longer
+  #    in a set. /etc/hosts is a mounted file: it is rewritten in place, never replaced.
+  ipset create "$HTTPS_SET" "$FIREWALL_SET_TYPE"
+  ipset create "$POSTGRES_SET" "$FIREWALL_SET_TYPE"
   if [ ! -f "$HOSTS_FILE" ] || [ ! -w "$HOSTS_FILE" ]; then
     fail "$HOSTS_FILE cannot be written, so no name can be pinned"
   fi
   kept="$(grep -v -F -- "$PIN_MARK" "$HOSTS_FILE" || true)"
   printf '%s\n' "$kept" >"$HOSTS_FILE"
-  for name in "${hosts[@]}"; do
-    # Both database secrets usually name the same pooler: one lookup, one pin.
-    if [ -n "${seen[$name]:-}" ]; then continue; fi
-    seen[$name]=1
-    if ! count="$(allow_host "$name")"; then
-      fail "$name could not be allowed (the line above says why)"
-    fi
-    echo "Allowed $name ($count address(es), pinned in $HOSTS_FILE)"
-  done
+  allow_names "$HTTPS_SET" "$HTTPS_PORT" "${HTTPS_HOSTS[@]}"
+  allow_names "$POSTGRES_SET" "$POSTGRES_PORT" "${postgres_hosts[@]}"
 
-  # 5. Default deny. Replies to what this container opened come back in; new connections go out
-  #    only to an address in the set; everything else is refused at once (a reject, so a caller
-  #    gets an error instead of waiting out a timeout). There is no rule for the Docker network
-  #    this container sits on: its gateway and the Docker host are refused like any other address.
+  # 5. Default deny. Replies to what this container opened come back in. A new connection goes
+  #    out only as TCP, to an address in a set, on that set's one port: 443 for the HTTPS names,
+  #    5432 for the poolers. Everything else is refused at once (a reject, so a caller gets an
+  #    error instead of waiting out a timeout): another port on an allowed address, any other
+  #    address, UDP and ICMP. There is no rule for the Docker network this container sits on: its
+  #    gateway and the Docker host are refused like any other address.
   iptables -P INPUT DROP
   iptables -P FORWARD DROP
   iptables -P OUTPUT DROP
   iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
   iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-  iptables -A OUTPUT -m set --match-set "$FIREWALL_SET" dst -j ACCEPT
+  iptables -A OUTPUT -p tcp --dport "$HTTPS_PORT" -m set --match-set "$HTTPS_SET" dst -j ACCEPT
+  iptables -A OUTPUT -p tcp --dport "$POSTGRES_PORT" -m set --match-set "$POSTGRES_SET" dst -j ACCEPT
   iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
 
   # 6. IPv6: loopback only. A container with an IPv6 address and no ip6tables is an open door, so
@@ -327,9 +352,14 @@ main() {
     echo "No IPv6 here (ip6tables unavailable and the kernel lists no IPv6 addresses)"
   elif [ ! -r "$INET6_ADDRESSES" ]; then
     fail "ip6tables could not close IPv6 and $INET6_ADDRESSES cannot be read"
-  elif awk '$NF != "lo"' "$INET6_ADDRESSES" | grep -q .; then
-    fail "this container has an IPv6 address off loopback and ip6tables could not close it"
   else
+    # One awk reads the whole list and prints a count. Not a pipe into a reader that stops at the
+    # first line: under pipefail the writer's broken pipe would fail the pipeline, and a found
+    # address would read as none. Anything but a clean 0 stops the start.
+    off_loopback="$(awk '$NF != "lo" {found++} END {print found + 0}' "$INET6_ADDRESSES")"
+    if [ "$off_loopback" != 0 ]; then
+      fail "this container has an IPv6 address off loopback and ip6tables could not close it"
+    fi
     echo "No IPv6 here (ip6tables unavailable and no IPv6 address off loopback)"
   fi
 
@@ -347,7 +377,7 @@ main() {
 
   # 8. Raised. No refresh loop and no other root process is left behind.
   FIREWALL_UP=1
-  echo "Firewall raised: ${#seen[@]} name(s) allowed"
+  echo "Firewall raised: $((${#HTTPS_HOSTS[@]} + ${#postgres_hosts[@]})) name(s) allowed"
 }
 
 # Run only when executed, so the functions above can be read into a shell and tried on their own.
