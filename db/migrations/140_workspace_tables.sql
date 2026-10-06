@@ -222,9 +222,14 @@ create policy workspace_messages_owner_insert on public.workspace_messages
 create policy workspace_requests_owner_select on public.workspace_requests
   for select to authenticated
   using ((select auth.uid()) = (select public.app_owner()));
+-- A request names a question of its own conversation: a `user` message, never another chat's.
 create policy workspace_requests_owner_insert on public.workspace_requests
   for insert to authenticated
-  with check ((select auth.uid()) = (select public.app_owner()) and state = 'queued');
+  with check ((select auth.uid()) = (select public.app_owner()) and state = 'queued'
+              and exists (select 1 from public.workspace_messages m
+                           where m.id = user_message_id
+                             and m.conversation_id = workspace_requests.conversation_id
+                             and m.role = 'user'));
 -- The one update the browser may make: Stop.
 create policy workspace_requests_owner_cancel on public.workspace_requests
   for update to authenticated
