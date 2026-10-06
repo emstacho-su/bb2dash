@@ -97,14 +97,19 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
     from: (table: string) => {
       fake.state.log.push(`from:${table}`);
-      const chain = readChain(fake.state.rows, table);
       const error = fake.state.readError;
-      if (error === null) return chain;
-      return {
-        ...chain,
+      if (error === null) return readChain(fake.state.rows, table);
+      // A read the database refuses: every filter returns the chain, and it resolves to the error.
+      const failing: Record<string, unknown> = {};
+      const self = () => failing;
+      Object.assign(failing, {
+        select: self,
+        eq: self,
+        order: self,
         then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
           Promise.resolve({ data: null, error }).then(onFulfilled, onRejected),
-      };
+      });
+      return failing;
     },
     realtime: {
       setAuth: async () => {

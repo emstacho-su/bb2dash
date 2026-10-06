@@ -17,6 +17,9 @@
  * So the open request is read only once `useHydrated()` is true; the first
  * client render is the server's.
  *
+ * A read that fails is said, in the Inbox's form ("Could not load …"): the
+ * stream area would otherwise sit empty with no word of why.
+ *
  * The stream area carries what it is doing as data attributes, for a walk or a
  * spec to read: `data-topic` (the channel held), `data-channel` (joining,
  * joined, error), `data-channel-detail` (why, on an error) and
@@ -44,6 +47,11 @@ export function Workspace() {
 
   return (
     <section className={styles.workspace} aria-label="Workspace">
+      {hydrated && requests.error && (
+        <p className={styles.problem} role="alert">
+          Could not load this conversation: {requests.error.message}
+        </p>
+      )}
       <div
         className={styles.stream}
         aria-live="polite"
