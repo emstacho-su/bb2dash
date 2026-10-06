@@ -190,6 +190,38 @@ describe('the message column', () => {
     expect(container.textContent).not.toContain('Used:');
   });
 
+  it('labels a status line with no answer text "Status" for a screen reader, and an answer "The assistant answered"', async () => {
+    fake.state.rows = {
+      workspace_messages: [
+        question(1, 'one'),
+        answer(2, 41, { content: 'first' }),
+        question(3, 'two'),
+        answer(4, 42, { content: 'half a plan', error_code: 'cancelled' }),
+        question(5, 'three'),
+      ],
+      workspace_requests: [
+        request(41, 1, 'done'),
+        request(42, 3, 'cancelled', { error_code: 'cancelled' }),
+        request(43, 5, 'queued'),
+      ],
+    };
+    const { container } = open();
+    await screen.findByText('Waiting for the Workspace service');
+
+    // A line and no text: there is no answer to announce, only a status.
+    const waiting = within(turnOf(container, 43));
+    expect(waiting.getByText('Status')).toHaveClass('sr-only');
+    expect(waiting.queryByText('The assistant answered')).toBeNull();
+
+    // An answer, and a partial answer with its stopped sentence under it, are answers.
+    for (const requestId of [41, 42]) {
+      const answered = within(turnOf(container, requestId));
+      expect(answered.getByText('The assistant answered')).toHaveClass('sr-only');
+      expect(answered.queryByText('Status')).toBeNull();
+    }
+    expect(within(turnOf(container, 42)).getByText('You stopped this answer.')).toBeInTheDocument();
+  });
+
   it('renders <script> in content as literal text', async () => {
     seedAnswered({ content: '<script>alert(1)</script> and <b>bold</b>' });
     const { container } = open();
