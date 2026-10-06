@@ -3,8 +3,9 @@
 Worker W-66 · branch `feat/workspace-21-web` · worktree `bb2dash-wt-21-web`. Owns the "W-66" row of
 brief 102 §Workers. Wave 1 tasks: **15** (query layer) and **4** (stream hook and route skeleton).
 Wave 2, after the Realtime spike (task 5) passed: **16** (the screen and the nav link) and the
-list of ruling T2. It is under its own heading, "Wave 2", at the end; the sections before it are
-wave 1's record as it was written (the file was renamed from `102_W-66_VERIFICATION.md` in wave 2).
+list of ruling T2. It is under its own heading, "Wave 2"; the sections before it are wave 1's
+record as it was written (the file was renamed from `102_W-66_VERIFICATION.md` in wave 2).
+Wave 2b, the items of ruling U1, is under "Wave 2b" at the end.
 
 Fixtures only: no database read or write, no prod change, no docker command. The database objects
 of migrations 140–142 are typed by hand from the Contract; every test stubs the Supabase client.
@@ -589,3 +590,272 @@ changed is over 50 lines (`Thread` 49, `Workspace` 42); the largest file touched
   taken at its `done` broadcast or at the next focus refetch; if that broadcast is missed with the
   tab in front, the page keeps the streamed text under the stopped sentence until then. The state
   and the button are right in that case, so I left it.
+
+---
+
+## Wave 2b
+
+2026-10-06 · branch `feat/workspace-21-web` · scope: every item of ruling U1 in `rulings-4.md`,
+nothing else. Fixtures only, as before: no database read or write, no prod change, no docker
+command of any kind, no `claude -p`, no secret or env value read.
+
+**First step.** `git fetch origin`, then `git merge origin/feat/workspace-21` → a fast-forward to
+37f46cf (the phase branch held this branch's own wave 2 merge, W-64's wave 2 and the 102a commit
+that records rulings U1–U4), pushed. Brief 102 was read in full on that commit, with `rulings-3.md`
+and `rulings-4.md`.
+
+**Starting count** (37f46cf): `npx vitest run` → `Test Files  147 passed (147)` ·
+`Tests  2728 passed (2728)`.
+
+All commands below run from `C:/Users/stack/projects/bb2dash-wt-21-web/web`.
+
+### 1. Ruling U1, item by item
+
+| U1 says | result | commits (red, green) |
+|---|---|---|
+| the "New conversation" link at the top of the list stays | kept; the label moved among the PM's wording and is held word for word | 1d27422, d2728e5 |
+| a claimed request with no text yet shows "Answering…" | confirmed, no change; held by `Workspace.thread.test.ts` ("reads claimed as streaming", line `LATE_STREAM_LINE`) | none |
+| after Stop the partial text stays under "You stopped this answer." until the stored row replaces it | confirmed, no change; held by `Workspace.thread.test.ts` ("keeps the partial text under the stopped sentence until the stored row lands") and now on the screen by the after-Stop cases of section 6 | none |
+| a `?c=` uuid with no rows says "This conversation was not found." with the "New conversation" link; the composer does not ask into it | done | 1ed32dd, 3b9a14f |
+| a 23503 from `workspace_ask` shows the same line; the database's sentence is never shown | done | 1ed32dd, 3b9a14f |
+| the empty column's three lines, and the placeholder | done | 1ed32dd, 3b9a14f |
+| while a request is open Enter does not send; 23505 stays the backstop and keeps its test | done | ed2580d, 902fd9d |
+| the status is re-read at once when a request in view becomes `claimed` and when its first delta arrives | done | 0d9a467, 00c22c6 |
+| after Stop on a claimed request the messages are re-read about 3 s and about 10 s after the press | done | cb29832, bff4f3c |
+| the screen-reader label before a status line with no answer text is "Status" | done | 515f5f4, 7104bd6 |
+| the ten strings W-66 listed are accepted as PM wording; a failed leave is logged, nothing more | the ten are now asserted word for word in `workspace-labels.test.ts`; the leave is untouched | 1d27422, d2728e5 |
+| W-66's files beyond the brief's table are accepted | no change | none |
+
+### 2. The strings (`web/src/lib/workspace-labels.ts`)
+
+New, word for word from the ruling: `COLUMN_START_LINE` "Ask a question to start a conversation.",
+`COLUMN_LOADING_LINE` "Loading the conversation…" (the one ellipsis character, as "Answering…"
+has), `COLUMN_NOT_FOUND_LINE` "This conversation was not found.", `QUESTION_PLACEHOLDER`
+"Ask about your courses or your decisions" (no closing stop), `STATUS_ROLE_LABEL` "Status".
+`NEW_CONVERSATION_LABEL` moved into the PM's section. The file's last section is now headed
+"Accepted as PM wording (ruling U1)".
+
+Check: `npx vitest run test/workspace-labels.test.ts`.
+
+* RED (1d27422): `Test Files  1 failed (1)` · `Tests  4 failed | 27 passed (31)`, first of them
+  `AssertionError: expected undefined to be 'Ask a question to start a conversatio…'`.
+  The four other new cases passed as written, so they have no red: "New conversation" and the ten
+  accepted strings exist already.
+* GREEN (d2728e5): `Test Files  1 passed (1)` · `Tests  31 passed (31)`.
+
+The standing cases still hold over the new strings: no `$`, no money word, and no digit outside
+"1 to 8000".
+
+### 3. The empty column, an unknown `?c=`, 23503, the placeholder
+
+`emptyColumnOf()` in `thread.ts` (pure) decides one of `start`, `loading`, `missing`, or null;
+`MessageList` shows the line in place of the turns; `Workspace.tsx` feeds it and disables the
+composer on `missing`.
+
+* **start**: `?c=` absent or not a uuid.
+* **loading**: a uuid whose two reads (messages, requests) have not both answered. Before
+  hydration the page says this too, so the server never claims "not found".
+* **missing**: both reads answered with no rows and no error; or `workspace_ask` answered 23503.
+  The line is an alert, and the "New conversation" link (to `/workspace`) sits beside it, in the
+  column.
+* A read that failed is none of the three: the problem line says
+  "Could not load this conversation: <reason>" and the column claims nothing.
+* **The composer on `missing`**: the box and the button are disabled, and `ask` itself returns
+  early (a key event still reaches a disabled box). What was typed stays in the box.
+* **23503**: no problem line is built for it, so the database's sentence has no path to the
+  screen. It outranks rows read before the conversation was gone: the turns are replaced by the
+  line.
+* **The placeholder** is on the box in every state.
+
+Check: `npx vitest run test/Workspace.empty.test.tsx test/Workspace.thread.test.ts test/Workspace.test.tsx test/Workspace.failures.test.tsx test/use-workspace-stream`
+
+* RED (1ed32dd): `Test Files  4 failed | 3 passed (7)` · `Tests  21 failed | 165 passed (186)`.
+  `test/Workspace.empty.test.tsx (15 tests | 13 failed)`, for example
+  `Unable to find an element with the text: This conversation was not found.` and
+  `expected null to be 'loading'`;
+  `test/Workspace.thread.test.ts (43 tests | 6 failed)`: `TypeError: emptyColumnOf is not a function`;
+  `test/Workspace.test.tsx (37 tests | 1 failed)` and `test/Workspace.failures.test.tsx (19 tests | 1 failed)`:
+  the two cases that held the old 23503 wording, turned to the new one.
+  The two cases of the new file that passed as written pin the other side: a failed read does not
+  say "not found", and a conversation with rows says none of the three.
+* GREEN (3b9a14f), same command: `Test Files  7 passed (7)` · `Tests  186 passed (186)`.
+
+**Existing cases changed in the red commit, and why.** Under U1 a uuid with no rows is a
+conversation that was not found, so a case that asked into one was asking into a state that
+cannot be asked into. Each kept its assertions and gained a seeded, answered conversation:
+`Workspace.test.tsx` "asks on Enter…" and "refuses an empty question…";
+`Workspace.failures.test.tsx` "says it could not be sent…", "takes a refusal away once the text is
+edited", "makes the button wait…", "sends one question for two Enters…" and "still says "still
+answering" for an open request this page had not read". All seven passed before the code changed
+and after. Two were rewritten because they asserted what U1 forbids: the 23503 case of
+`Workspace.test.tsx` (it expected the foreign-key sentence in an alert) and "shows one line when
+the read and the question fail for the same reason" in `Workspace.failures.test.tsx`, which is now
+"says a failed read in its own words and a missing id in the not-found line, never the foreign-key
+sentence". `problemLines` no longer removes duplicates: its three lines have three different
+openings, so two can no longer be the same. The harness gained `readGate`, which holds the reads
+open for the loading cases; with no gate set a read answers exactly as it did.
+
+### 4. Enter while a request is open
+
+`Composer.tsx`: Enter is still prevented in every state (it never adds a line), and while a
+request is open it returns before `ask`. Shift+Enter is the browser's new line, as before.
+
+Check: `npx vitest run test/Workspace.test.tsx test/Workspace.failures.test.tsx`
+
+* RED (ed2580d): `Test Files  1 failed | 1 passed (2)` · `Tests  2 failed | 56 passed (58)`, both
+  `AssertionError: expected [ { fn: 'workspace_ask', …(1) } ] to deeply equal []`
+  (queued and claimed).
+* GREEN (902fd9d), `npx vitest run test/Workspace.test.tsx test/Workspace.failures.test.tsx test/Workspace.empty.test.tsx test/use-workspace-stream`:
+  `Test Files  6 passed (6)` · `Tests  145 passed (145)`.
+
+**The 23505 backstop keeps its tests.** The mapping (23505 → "This conversation is still
+answering.") is untouched in `queries.workspace.test.ts`. On the screen the refusal used to be
+reached by pressing Enter over an open request the page could see, which no longer sends. The
+three screen cases now reach it the way the backstop is reached: a second question asked from
+another tab, open in the database and not yet read by this page, so the button still reads Ask
+and Enter sends. They are "says the conversation is still answering when the database refuses a
+second question (23505, the backstop)" in `Workspace.test.tsx`, and "takes "still answering" away
+once the answer is stored…" and "still says "still answering" for an open request this page had
+not read" in `Workspace.failures.test.tsx`. They pass before and after the change.
+
+### 5. The status, at once, when the service is seen answering
+
+`Workspace.tsx`, `useStatusOnAnswer`: the status query is invalidated when the open request's row
+reads `claimed`, and when the followed request's first delta arrives (text from seq 1, or a
+stream joined late, whose text is held back). Each is once per request.
+
+Check: `npx vitest run test/Workspace.rereads.test.tsx` (new file; a fake clock, the tab in front).
+The scene: one queued question under a heartbeat five minutes old, so the offline line shows; then
+the service returns (a current heartbeat, the request claimed).
+
+* RED (0d9a467): `Test Files  1 failed (1)` · `Tests  3 failed | 1 passed (4)`, each
+  `AssertionError: expected 1 to be 2`: at 5.2 s (the requests poll has shown the claim) and 100 ms
+  after a first delta, the status had still been read once. The fourth case, a request that only
+  waits costs no extra read in 20 s, passed as written.
+* GREEN (00c22c6), with the screen's other files
+  (`test/Workspace.rereads.test.tsx test/Workspace.test.tsx test/Workspace.failures.test.tsx test/Workspace.empty.test.tsx test/use-workspace-stream`):
+  `Test Files  7 passed (7)` · `Tests  149 passed (149)`. The offline line is gone at 5.2 s in the
+  first case and 100 ms after the delta in the other two, with the status poll not due until 30 s.
+
+The delta cases also hold that the second delta costs no read, that the row on the page still
+read `queued` when the delta told it (so it was the delta), and that the claim, seen at the next
+poll, is the other moment: one more read and no more.
+
+### 6. The messages, about 3 s and about 10 s after Stop on a claimed request
+
+`Workspace.tsx`, `useStoredRowAfterStop`, called from `useStop`: each Stop pressed on a request
+whose row reads `claimed` schedules two reads of the messages (`STOP_REREAD_DELAYS_MS`, 3 000 and
+10 000). Leaving the conversation clears what is still to come.
+
+Check: `npx vitest run test/Workspace.rereads.test.tsx`. The scene: an answer being written, one
+delta ("Week one: ") on the page, Stop pressed, the cancel answered; then the runner stores
+"Week one: Monday" with `error_code` `cancelled`, and its `done` broadcast never arrives.
+
+* RED (cb29832): `Test Files  1 failed (1)` · `Tests  2 failed | 6 passed (8)`:
+  `AssertionError: expected 3 to be 4` (no read at 3.1 s) and
+  `AssertionError: expected 'Week one: ' to be 'Week one: Monday'` (stored at 6 s, never read).
+  Two cases pin the other side and passed as written: Stop on a queued request reads nothing in
+  the next 15 s, and unmounting after Stop drops both reads.
+* GREEN (bff4f3c), the same seven files as section 5: `Test Files  7 passed (7)` ·
+  `Tests  153 passed (153)`. Stored at 2 s: unread at 2.9 s, shown at 3.1 s, one more read at
+  10.1 s, none in the minute after. Stored at 6 s: still the partial text at 9.9 s, the stored row
+  at 10.1 s. The stopped sentence stays under the text throughout.
+
+This closes the last bullet of section 7 above ("if that broadcast is missed with the tab in
+front…").
+
+### 7. The screen-reader label
+
+`MessageList.tsx`, `Answer`: a turn with a line and no text gets `STATUS_ROLE_LABEL`; any turn
+with answer text keeps "The assistant answered".
+
+Check: `npx vitest run test/Workspace.test.tsx`
+
+* RED (515f5f4): `Test Files  1 failed (1)` · `Tests  1 failed | 39 passed (40)`,
+  `TestingLibraryElementError: Unable to find an element with the text: Status.`
+* GREEN (7104bd6), every Workspace file and the audits
+  (`npx vitest run test/Workspace test/use-workspace-stream test/workspace-labels.test.ts test/queries.workspace test/TopNav.workspace.test.tsx test/audits.test.ts`):
+  `Test Files  13 passed (13)` · `Tests  348 passed (348)`.
+
+The case holds three turns: a queued question ("Status", and no "The assistant answered"), a
+stored answer, and a partial answer with its stopped sentence under it (both "The assistant
+answered", and no "Status").
+
+### 8. Gates (branch at a8028d4, the last commit that changes `web/`)
+
+a8028d4 is comments only (two notes that said what the page did before U1). All five gates were
+run on it in this order, with nothing under `web/` edited while they ran.
+
+| gate | command | result |
+|---|---|---|
+| whole suite | `npx vitest run` | `Test Files  149 passed (149)` · `Tests  2768 passed (2768)` · exit 0 |
+| types | `npm run typecheck` | exit 0 |
+| lint | `npx eslint . --max-warnings 0` | exit 0, no output |
+| build | `npm run build` | exit 0; `✓ Compiled successfully`; the route list holds `○ /workspace` |
+| coverage | `npm run test:coverage` | `Tests  2768 passed (2768)` · exit 0 · all files, lines 91.41 % (floor 83 %) |
+| task 16's row | `npx vitest run test/Workspace.test.tsx test/TopNav.workspace.test.tsx test/workspace-labels.test.ts test/audits.test.ts test/use-workspace-stream test/queries.workspace` | `Test Files  9 passed (9)` · `Tests  263 passed (263)` |
+
+2768 = 2728 + 40: `workspace-labels` 23 → 31, `Workspace.thread` 37 → 43, `Workspace` 37 → 40,
+`Workspace.empty` 15 (new), `Workspace.rereads` 8 (new); `Workspace.failures` stays 19 (rewrites).
+The four screen files with new cases were run three times in a row: `Tests  82 passed (82)` each
+time.
+
+Coverage of what the wave touched: `app/(app)/workspace` lines 100 %; `components/workspace`
+lines 100 %; `queries.workspace.ts` lines 100 %. No function in the files changed is over 50 lines
+(`Composer` 49, `Thread` 46, `Workspace` 46). The largest file touched is
+`test/Workspace.test.tsx`, 725 lines; `Workspace.tsx` is 398. No new dependency. Nothing outside
+`web/` and this file changed (`git diff --stat 37f46cf -- . ":(exclude)web"` printed nothing
+before this section was written).
+
+### 9. Decisions the ruling does not spell (each is the PM's to overrule)
+
+1. **"The composer does not ask into it"** is built as: the box and the button are disabled.
+   The other readings (hide the composer; leave the box live and ignore the send) were not taken.
+2. **The "New conversation" link is in the column**, beside the not-found line. The list's own
+   link stays, so a not-found page has two links with that name.
+3. **Only the not-found line is an alert.** The start and loading lines are plain paragraphs.
+4. **"Not found" is said from the saved cache too**: both reads having answered counts whether the
+   answer came from the restored cache or the database. I could not find a way for the cache to
+   hold "no rows" for a conversation that exists (ids are made by the database, and a first
+   question stores its rows with the conversation), so the line does not wait for the fresh read.
+5. **Asking is allowed while the rows are still being read.** That is the one way a 23503 is
+   reached now, and it then says the not-found line at once.
+6. **After a 23503 the line stays until the page leaves that `?c=`**, and the turns read before
+   are not shown under it.
+7. **Enter over an open request is still prevented**, so it neither sends nor adds a line.
+8. **The two status moments are separate**, so one answer can cost two extra status reads (the
+   delta, then the claim at the next poll, or the other way round), a reload in the middle of an
+   answer included.
+   The invalidation cancels a read already in flight and starts another, so the row in hand is
+   always from a read begun after the page saw the answer.
+9. **Every Stop on a claimed request schedules both reads**; a second press inside ten seconds
+   replaces what the first still had to come. They are not skipped when the stored row has already
+   landed: two reads of one conversation.
+10. **"Status" goes by text, not by state**: a line and no answer text. A turn that shows a tier
+    badge and a line but no text is labelled "Status".
+
+### 10. Not done, and not proven
+
+* **The screen is still unseen in a browser by me.** Every line above is from jsdom, the type
+  checker and the build. The three lines, the link and the disabled box have their classes from
+  existing tokens (`MessageList.module.css` `.empty`, `.emptyLink` composing `btnGhost`); how they
+  look is for the preview walk.
+* **The two timed behaviours are proven on a fake clock over a fake client**, not against the
+  runner: that the runner's heartbeat is current when it claims, and that it stores a stopped
+  answer inside ten seconds, are the runner's own (task 21 reads Stop live, "within 10 s").
+* **`/code-review` and `/security-review` were not run by me.** The brief gives both to the PM at
+  task 23.
+
+### 11. Notes for the PM
+
+* **Two more test files beyond the Files table**: `web/test/Workspace.empty.test.tsx` and
+  `web/test/Workspace.rereads.test.tsx`. Putting their 23 cases into `Workspace.test.tsx` would
+  have taken it past 800 lines.
+* **For `walk21.spec.ts`.** The empty column carries `[data-column-empty]` with `start`, `loading`
+  or `missing`. Task 22's `02-empty.png` is described as "an empty message column": with no `?c=`
+  that column now reads "Ask a question to start a conversation.", and the box shows its
+  placeholder. On a not-found page `getByRole('link', { name: 'New conversation' })` matches two
+  links; scope it to the list or to `[data-workspace-stream]`.
+* **The acceptance script is not changed by this wave**, but step 8 reads slightly differently on
+  the page: after Stop the stored partial answer now arrives within about ten seconds without a
+  reload or a return to the tab.
