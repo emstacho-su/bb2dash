@@ -432,6 +432,27 @@ describe('useWorkspaceStream: the one private channel', () => {
     expect(result.current.text).toBe('from B');
   });
 
+  it('logs a leave that fails, and still joins the next channel', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { rerender } = mount(A);
+      await joined(TOPIC_A);
+      const failure = new Error('socket closed');
+      fake.state.leaveError = failure;
+
+      rerender({ conversationId: B, requestId: REQUEST });
+      await joined(TOPIC_B);
+
+      // The old channel is finished with either way, but the failure is said, never swallowed.
+      expect(logged).toHaveBeenCalledTimes(1);
+      expect(String(logged.mock.calls[0][0])).toContain(TOPIC_A);
+      expect(logged.mock.calls[0][1]).toBe(failure);
+      expect(openTopics()).toEqual([TOPIC_B]);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it('moves between a conversation and the lobby, one channel at a time', async () => {
     const { rerender } = mount(A);
     await joined(TOPIC_A);
