@@ -132,6 +132,10 @@ services:
       ENABLE_TOOL_SEARCH: "false"
       # The soft per-answer cap `--max-budget-usd` receives; the runner refuses a value outside 0.01–1.00.
       WORKSPACE_TURN_BUDGET_USD: "${WORKSPACE_TURN_BUDGET_USD:-1.00}"
+      # The pinned CA the runner checks the pooler's certificate against, whatever its DSN says; a
+      # missing or empty file stops the runner. Baked into the image, root's and read-only: a path
+      # to a public certificate, not a secret.
+      WORKSPACE_DB_CA_FILE: /app/certs/prod-ca.crt
     # Its own network, never `default`: it shares none with `sync`. No port is published.
     networks:
       - workspace-net
@@ -140,7 +144,8 @@ services:
       - workspace-claude-home:/home/node/.claude
     # Files, never values. The runner reads workspace_runner_db_url and claude_oauth_token at their
     # fixed paths; the materials server reads bb2dash_mcp_service_key, and the rag launcher
-    # harness_database_url. No `*_FILE` variable and no DATABASE_URL is set for this service.
+    # harness_database_url. No variable names a secret's file (the one `*_FILE` variable above
+    # names the public CA) and no DATABASE_URL is set for this service.
     secrets:
       - workspace_runner_db_url
       - claude_oauth_token

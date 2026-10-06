@@ -17,10 +17,12 @@
 #   /app/workspace/      package.json, node_modules, dist/ (runner.js, healthcheck.js, hooks/tool-gate.js),
 #                        claude/settings.json, prompts/system.md
 #   /app/mcp-materials/  package.json, node_modules, dist/index.js
-#   /app/mcp-rag/        package.json, node_modules, dist/, certs/prod-ca.crt, mcp-rag.sh
+#   /app/mcp-rag/        package.json, node_modules, dist/, mcp-rag.sh
+#   /app/certs/          prod-ca.crt, root's and 0444: the one pinned CA. The runner checks the pooler's
+#                        certificate against it (WORKSPACE_DB_CA_FILE) and the rag launcher reads the same file
 #   /opt/fastembed/      the rag server's embedding model, baked in: nothing is downloaded at run time
 #   /usr/local/share/npm-global/  Claude Code at its pinned version, owned by root
-#   /app/turn/           empty, owned by node: the working directory of every `claude -p` turn
+#   /app/turn/           empty, root's and 0555: the working directory of every `claude -p` turn
 #   /home/node/.claude/  owned by node: the workspace-claude-home volume mounts here
 #
 # No secret is copied, passed as a build argument or set in the environment. The four secret files
@@ -119,10 +121,14 @@ RUN apt-get update \
       procps \
  && rm -rf /var/lib/apt/lists/*
 
-# The CLI's config folder and the turns' working directory exist here, owned by node, so a new
-# workspace-claude-home volume takes that owner.
+# The CLI's config folder exists here, owned by node, so a new workspace-claude-home volume takes
+# that owner. The turns' working directory is root's and nobody may write it (102a, PM rulings V2):
+# every turn loads project settings from its working directory, so a `.claude` folder planted there
+# would be read by every later turn. The CLI keeps what it writes under CLAUDE_CONFIG_DIR.
 RUN mkdir -p /home/node/.claude /app/turn \
- && chown node:node /home/node/.claude /app/turn
+ && chown node:node /home/node/.claude \
+ && chown root:root /app/turn \
+ && chmod 0555 /app/turn
 
 # Claude Code from the `cli` stage, root's (see there). The two settings are the recipe's: its
 # prefix, and its bin folder at the end of PATH.
@@ -145,13 +151,21 @@ COPY --from=materials /build/package.json /app/mcp-materials/package.json
 COPY --from=materials /build/node_modules /app/mcp-materials/node_modules
 COPY --from=materials /build/dist /app/mcp-materials/dist
 
-# /app/mcp-rag: the harness rag MCP server, its pinned CA and its launcher; the model beside it.
+# /app/mcp-rag: the harness rag MCP server and its launcher; the model beside it.
 COPY --from=rag /build/package.json /app/mcp-rag/package.json
 COPY --from=rag /build/node_modules /app/mcp-rag/node_modules
 COPY --from=rag /build/dist /app/mcp-rag/dist
 COPY --from=rag /opt/fastembed /opt/fastembed
-COPY --from=harness-certs prod-ca.crt /app/mcp-rag/certs/prod-ca.crt
 COPY docker/workspace/mcp-rag.sh /app/mcp-rag/mcp-rag.sh
+
+# /app/certs: the one pinned CA, for both database connections (102a, PM rulings V2). The runner
+# verifies the bb2dash pooler's certificate against it whatever its DSN says (compose.yaml sets
+# WORKSPACE_DB_CA_FILE to this path), and the rag launcher hands the same file to the rag server.
+# A public certificate from the harness checkout's certs/ folder. A plain COPY, so the file and
+# the folder COPY makes for it are root's; then 0444 whatever mode the build host gave the file.
+# The runtime user can read it and cannot replace it.
+COPY --from=harness-certs prod-ca.crt /app/certs/prod-ca.crt
+RUN chmod 0444 /app/certs/prod-ca.crt
 
 # The root entrypoint and the firewall it raises. Root's files in a root-owned folder: nothing the
 # node user can write is ever read by either.

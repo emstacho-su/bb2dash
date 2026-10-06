@@ -11,16 +11,17 @@
 # paths only), and nothing here prints the URL.
 #
 # TLS is set the way the live harness-jobs service sets it: DATABASE_SSL empty, so the connection
-# is encrypted and the server's certificate is checked against the pinned CA in this image. The
-# embedding model is the copy baked into the image: the firewall refuses the model's host, so a
-# search must never need a download.
+# is encrypted and the server's certificate is checked against the pinned CA in this image. That
+# is the image's one CA file, /app/certs/prod-ca.crt (root's, read-only): the runner checks its own
+# connection against the same file (102a, PM rulings V2). The embedding model is the copy baked
+# into the image: the firewall refuses the model's host, so a search must never need a download.
 
 set -euo pipefail
 
 readonly HERE=/app/mcp-rag
 readonly SECRET_FILE=/run/secrets/harness_database_url
 readonly SERVER="$HERE/dist/index.js"
-readonly CA_CERT="$HERE/certs/prod-ca.crt"
+readonly CA_CERT=/app/certs/prod-ca.crt
 readonly MODEL_DIR=/opt/fastembed
 readonly EX_CONFIG=78
 
