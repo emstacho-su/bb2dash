@@ -142,6 +142,8 @@ const { LATE_STREAM_LINE } = await import('@/lib/workspace-labels');
 const { Workspace } = await import('@/app/(app)/workspace/Workspace');
 
 type StreamEvent = Parameters<typeof streamReducer>[1];
+/** `Omit` applied to each member of the union, so every event keeps its own keys. */
+type WithoutTopic<T> = T extends unknown ? Omit<T, 'topic'> : never;
 type Channel = InstanceType<typeof fake.FakeChannel>;
 
 const A = '6f1c2a54-9b1e-4c0d-8a55-0d2f3b7c9e11';
@@ -152,9 +154,9 @@ const TOPIC_B = `workspace:${B}`;
 const REQUEST = 42;
 
 /** Fold wire events into a state the way the hook's reducer does. */
-function fold(topic: string, events: readonly Omit<StreamEvent, 'topic'>[]) {
+function fold(topic: string, events: readonly WithoutTopic<StreamEvent>[]) {
   return events.reduce(
-    (state, event) => streamReducer(state, { ...event, topic } as StreamEvent),
+    (state, event) => streamReducer(state, { ...event, topic }),
     initialStreamState(topic),
   );
 }

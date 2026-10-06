@@ -1,0 +1,37 @@
+/* The Workspace screen (Phase 21). Existing tokens only, nothing composed;
+   Phase 22 restyles. */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+  max-width: 72ch;
+}
+
+/* The answer being written. It holds its place while empty, so the first
+   delta does not move the page. */
+.stream {
+  min-height: calc(var(--space-12) * 3);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Answers are plain text: line breaks are kept and nothing is parsed
+   (brief 102, O-5: no Markdown in v1). */
+.streamText {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The late-stream line, in place of half-written text. */
+.late {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--color-muted);
+}
