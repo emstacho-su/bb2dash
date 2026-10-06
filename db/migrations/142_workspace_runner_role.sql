@@ -149,7 +149,7 @@ begin
                               limit c_history) h),
                     '[]'::jsonb) as history
       from workspace_messages um
-      join workspace_conversations c on c.id = um.conversation_id
+      join workspace_conversations c on c.id = v_conv
      where um.id = v_message;
 end $$;
 
