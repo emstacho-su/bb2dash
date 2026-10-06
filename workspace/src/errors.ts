@@ -47,6 +47,9 @@ const AUTHENTICATION_FAILED = 'authentication_failed';
 const HTTP_UNAUTHORIZED = 401;
 /** `rate_limit_info.status` when the plan's limit refuses the request. */
 const RATE_LIMIT_REJECTED = 'rejected';
+/** The `error` field of the CLI's own assistant message after a rate-limit failure. */
+const RATE_LIMIT_ERROR = 'rate_limit';
+const HTTP_TOO_MANY_REQUESTS = 429;
 
 /** The structured facts of a finished stream that decide its code; a `TurnSummary` has them all. */
 export interface TurnEndFacts {
@@ -69,8 +72,9 @@ export interface TurnEndFacts {
  *   result subtype `error_max_budget_usd`                    budget_exceeded
  *   `subtype: success` with `is_error: false`                null
  *   an authentication failure (the assistant line's `error`, or API status 401)   sign_in_expired
- *   an error end after a plan rate-limit rejection (the rate-limit event's status, never an
- *   `api_retry` event)                                       usage_limit
+ *   an error end after a plan rate-limit rejection: the rate-limit event's status, or the terminal
+ *   error itself (the assistant line's `error` with API status 429); never an `api_retry` event
+ *                                                            usage_limit
  *   anything else, a stream with no result line included     cli_error
  */
 export function mapTurnEnd(facts: TurnEndFacts): ErrorCode | null {
@@ -81,6 +85,11 @@ export function mapTurnEnd(facts: TurnEndFacts): ErrorCode | null {
   if (result.subtype === BUDGET_STOP_SUBTYPE) return 'budget_exceeded';
   if (result.subtype === FINISHED_SUBTYPE && !result.isError) return null;
   if (facts.assistantError === AUTHENTICATION_FAILED || result.apiErrorStatus === HTTP_UNAUTHORIZED) return 'sign_in_expired';
-  if (facts.rateLimit?.status === RATE_LIMIT_REJECTED) return 'usage_limit';
+  if (facts.rateLimit?.status === RATE_LIMIT_REJECTED || endedOnRateLimit(facts.assistantError, result.apiErrorStatus)) return 'usage_limit';
   return 'cli_error';
+}
+
+/** The terminal error names a rate limit on both of its fields; one of them alone is not enough. */
+function endedOnRateLimit(assistantError: string | null, apiErrorStatus: number | null): boolean {
+  return assistantError === RATE_LIMIT_ERROR && apiErrorStatus === HTTP_TOO_MANY_REQUESTS;
 }
