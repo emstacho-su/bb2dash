@@ -43,6 +43,7 @@ import { asRecord } from './json-record';
 import { untypedClient } from './queries.sync';
 import { stampRead } from './workspace-clock';
 import { REFUSAL_QUESTION_LENGTH, REFUSAL_STILL_ANSWERING } from './workspace-labels';
+import { messagesPolled, openRequestOf } from './workspace-poll';
 
 /* ---------------------------------------------------------------------------
  * Constants
@@ -122,12 +123,6 @@ export const WORKSPACE_ERROR_CODES: readonly WorkspaceErrorCode[] = [
   'usage_limit',
   'sign_in_expired',
 ];
-
-/**
- * The two states in which a request is still open. The one definition: the
- * thread, and whatever else asks whether a request is open, imports this.
- */
-export const WORKSPACE_OPEN_STATES: readonly WorkspaceRequestState[] = ['queued', 'claimed'];
 
 /** One row of `workspace_conversations`, without the runner's session id. */
 export interface WorkspaceConversation {
@@ -496,19 +491,16 @@ function normalizeAskResult(data: unknown): WorkspaceAskResult {
  * ------------------------------------------------------------------------ */
 
 /**
- * The conversation's open request (`queued` or `claimed`), or null. The unique
- * index `workspace_requests_one_open` allows one at most; the newest wins if a
- * cached list ever held two.
+ * Which request is open, and which closed one is still owed its stored answer:
+ * the rules the polls are decided by. They live in `workspace-poll.ts` and are
+ * part of this module's surface.
  */
-export function openRequestOf(
-  requests: readonly WorkspaceRequest[] | null | undefined,
-): WorkspaceRequest | null {
-  if (!requests) return null;
-  for (let index = requests.length - 1; index >= 0; index -= 1) {
-    if (WORKSPACE_OPEN_STATES.includes(requests[index].state)) return requests[index];
-  }
-  return null;
-}
+export {
+  WORKSPACE_CLOSED_POLL_MS,
+  WORKSPACE_OPEN_STATES,
+  openRequestOf,
+  unstoredClosedRequestOf,
+} from './workspace-poll';
 
 /**
  * Offline: no heartbeat yet, or one more than 120 s old.
@@ -582,13 +574,19 @@ export function conversationsOptions(archived = false) {
 /**
  * One conversation's stored messages, oldest first.
  *
- * While a request is open this refetches every 5 s: a missed broadcast costs
- * live text, never the answer, because the stored row is the record. `staleTime`
- * is 0 so a reload refetches on mount instead of trusting the restored cache
- * (the app's default is 60 s). `requestOpen` is not part of the key: it changes
- * how often the one cache entry is re-read, not what it holds.
+ * This refetches every 5 s while a request is open, and for up to 60 s after
+ * the newest one closes with its answer unstored (`messagesPolled`, in
+ * `workspace-poll.ts`): a missed broadcast costs live text, never the answer,
+ * because the stored row is the record. `requests` is the conversation's
+ * requests as the page has them. It is not part of the key: it changes how
+ * often the one cache entry is re-read, not what it holds. `staleTime` is 0 so
+ * a reload refetches on mount instead of trusting the restored cache (the
+ * app's default is 60 s).
  */
-export function messagesOptions(conversationId: string | null, requestOpen: boolean) {
+export function messagesOptions(
+  conversationId: string | null,
+  requests: readonly WorkspaceRequest[] | undefined,
+) {
   return queryOptions({
     queryKey: workspaceKeys.messages(conversationId ?? NO_CONVERSATION),
     enabled: parseConversationId(conversationId) !== null,
@@ -602,7 +600,8 @@ export function messagesOptions(conversationId: string | null, requestOpen: bool
       if (error) throw error;
       return normalizeRows(data, normalizeMessage);
     },
-    refetchInterval: requestOpen ? WORKSPACE_MESSAGES_REFETCH_MS : false,
+    refetchInterval: (query) =>
+      messagesPolled(requests, query) ? WORKSPACE_MESSAGES_REFETCH_MS : false,
     refetchOnWindowFocus: REFETCH_ON_FOCUS,
     staleTime: 0,
   });
@@ -740,8 +739,11 @@ export function useWorkspaceConversations(archived = false) {
   return useQuery(conversationsOptions(archived));
 }
 
-export function useWorkspaceMessages(conversationId: string | null, requestOpen: boolean) {
-  return useQuery(messagesOptions(conversationId, requestOpen));
+export function useWorkspaceMessages(
+  conversationId: string | null,
+  requests: readonly WorkspaceRequest[] | undefined,
+) {
+  return useQuery(messagesOptions(conversationId, requests));
 }
 
 export function useWorkspaceRequests(conversationId: string | null) {
