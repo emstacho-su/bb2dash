@@ -387,7 +387,7 @@ describe('the message column follows an answer as it is written', () => {
   }
 
   function mount() {
-    const view = render(<MessageList turns={turnsWith('a')} />);
+    const view = render(<MessageList turns={turnsWith('a')} empty={null} />);
     const column = view.container.firstElementChild as HTMLElement;
     return { ...view, column };
   }
@@ -396,7 +396,7 @@ describe('the message column follows an answer as it is written', () => {
     const { column, rerender } = mount();
     size(column, 900);
 
-    rerender(<MessageList turns={turnsWith('a longer answer')} />);
+    rerender(<MessageList turns={turnsWith('a longer answer')} empty={null} />);
 
     expect(column.scrollTop).toBe(900);
   });
@@ -408,13 +408,13 @@ describe('the message column follows an answer as it is written', () => {
     fireEvent.scroll(column);
 
     size(column, 1200);
-    rerender(<MessageList turns={turnsWith('a longer answer')} />);
+    rerender(<MessageList turns={turnsWith('a longer answer')} empty={null} />);
     expect(column.scrollTop).toBe(100);
 
     column.scrollTop = 780;
     fireEvent.scroll(column);
     size(column, 1500);
-    rerender(<MessageList turns={turnsWith('a much longer answer')} />);
+    rerender(<MessageList turns={turnsWith('a much longer answer')} empty={null} />);
     expect(column.scrollTop).toBe(1500);
   });
 });

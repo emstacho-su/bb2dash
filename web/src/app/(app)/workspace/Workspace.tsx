@@ -21,6 +21,12 @@
  * (`components/workspace/thread.ts`). After Stop the stopped sentence shows at
  * once: the request is marked here before the database has answered.
  *
+ * WITH NO TURN TO SHOW the column says which of three states it is in (the
+ * PM's ruling U1): no conversation selected, rows still being read, or an id
+ * that was not found. A conversation that was not found is not asked into, and
+ * a 23503 from `workspace_ask` says the same not-found line: the database's own
+ * sentence about the foreign key is never shown.
+ *
  * TWO PARTS. `Workspace` reads the rows and holds the channel, and stays
  * mounted from one conversation to the next so the old channel is left before
  * the next is joined. `Thread` is keyed by the conversation: what was typed, a
@@ -45,7 +51,12 @@ import { ConversationList } from '@/components/workspace/ConversationList';
 import { MessageList } from '@/components/workspace/MessageList';
 import { ServiceStatus } from '@/components/workspace/ServiceStatus';
 import { CONVERSATION_PARAM, conversationHref } from '@/components/workspace/route';
-import { buildTurns, liveRequestOf, type LiveStream } from '@/components/workspace/thread';
+import {
+  buildTurns,
+  emptyColumnOf,
+  liveRequestOf,
+  type LiveStream,
+} from '@/components/workspace/thread';
 import {
   WORKSPACE_STATUS_REFETCH_MS,
   WorkspaceRefusal,
@@ -78,20 +89,21 @@ const NONE_STOPPED: ReadonlySet<number> = new Set();
 /** The key of the thread when no conversation is selected. */
 const NO_CONVERSATION_KEY = 'none';
 
-/** What went wrong, one line each. A refused question is not here: it has its own sentence. */
+/**
+ * What went wrong, one line each, in the reason it came with. Two failures of a
+ * question are not here, because each has its own words: a refusal has its
+ * sentence under the box, and an id that does not exist (23503) is the column's
+ * not-found line. The database's sentence about the foreign key is never shown.
+ */
 function problemLines(failed: { read: unknown; ask: unknown; stop: unknown }): string[] {
+  const { read, ask, stop } = failed;
   const lines: string[] = [];
-  if (failed.read) lines.push(conversationProblemLine(workspaceErrorReason(failed.read)));
-  if (failed.ask && !(failed.ask instanceof WorkspaceRefusal)) {
-    const reason = workspaceErrorReason(failed.ask);
-    // An id that does not exist (23503) is a conversation that cannot be loaded,
-    // not a bad question.
-    const missing = isMissingConversation(failed.ask);
-    lines.push(missing ? conversationProblemLine(reason) : askProblemLine(reason));
+  if (read) lines.push(conversationProblemLine(workspaceErrorReason(read)));
+  if (ask && !(ask instanceof WorkspaceRefusal) && !isMissingConversation(ask)) {
+    lines.push(askProblemLine(workspaceErrorReason(ask)));
   }
-  if (failed.stop) lines.push(stopProblemLine(workspaceErrorReason(failed.stop)));
-  // Two failures can say the same line (a read and a question, on an id that does not exist).
-  return [...new Set(lines)];
+  if (stop) lines.push(stopProblemLine(workspaceErrorReason(stop)));
+  return lines;
 }
 
 /**
@@ -159,6 +171,28 @@ function StreamArea(props: {
   );
 }
 
+/**
+ * Ask a question, and move to the conversation a first question made. `send`
+ * answers whether the question was accepted; a failure is not dropped: the
+ * mutation holds the error, and it is said above the column, in it, or under
+ * the box.
+ */
+function useQuestionSender(conversationId: string | null, onCreated: (id: string) => void) {
+  const ask = useAskWorkspace();
+
+  async function send(text: string): Promise<boolean> {
+    try {
+      const result = await ask.mutateAsync({ conversationId, text });
+      if (conversationId === null) onCreated(result.conversationId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  return { ask, send };
+}
+
 interface ThreadProps {
   conversationId: string | null;
   requests: readonly WorkspaceRequest[];
@@ -167,6 +201,8 @@ interface ThreadProps {
   openRequest: WorkspaceRequest | null;
   live: LiveStream | null;
   stream: WorkspaceStreamView;
+  /** Both reads of the conversation have answered. */
+  loaded: boolean;
   /** The conversation could not be read. */
   readError: unknown;
   now: number;
@@ -176,26 +212,22 @@ interface ThreadProps {
 
 function Thread(props: ThreadProps) {
   const { conversationId, requests, messages, live, stream } = props;
-  const ask = useAskWorkspace();
+  const { ask, send } = useQuestionSender(conversationId, props.onCreated);
   const stopper = useStop(conversationId, props.openRequest);
-  const { stopped, stop, error: stopError, pending: stopping } = stopper;
+  const { stopped, stop } = stopper;
 
   // Stop was pressed on it: it reads as stopped, and the button as Ask, before the row does.
   const openRequest =
     props.openRequest !== null && !stopped.has(props.openRequest.id) ? props.openRequest : null;
   const turns = buildTurns({ messages, requests, live, stoppedRequestIds: stopped });
-  const problems = problemLines({ read: props.readError, ask: ask.error, stop: stopError });
-
-  async function handleAsk(text: string): Promise<boolean> {
-    try {
-      const result = await ask.mutateAsync({ conversationId, text });
-      if (conversationId === null) props.onCreated(result.conversationId);
-      return true;
-    } catch {
-      // Not dropped: the mutation holds the error, and it is said above or under the box.
-      return false;
-    }
-  }
+  const empty = emptyColumnOf({
+    conversationId,
+    loaded: props.loaded,
+    readFailed: Boolean(props.readError),
+    askedIntoMissing: isMissingConversation(ask.error),
+    turns: turns.length,
+  });
+  const problems = problemLines({ read: props.readError, ask: ask.error, stop: stopper.error });
 
   return (
     <section className={styles.thread}>
@@ -205,13 +237,14 @@ function Thread(props: ThreadProps) {
         </p>
       ))}
       <StreamArea stream={stream} openRequestId={openRequest?.id}>
-        <MessageList turns={turns} />
+        <MessageList turns={turns} empty={empty} />
       </StreamArea>
       <Composer
         requestOpen={openRequest !== null}
-        busy={ask.isPending || stopping}
+        busy={ask.isPending || stopper.pending}
+        disabled={empty === 'missing'}
         refusal={refusalLine(ask.error, props.openRequest)}
-        onAsk={handleAsk}
+        onAsk={send}
         onStop={() => {
           if (openRequest !== null) stop(openRequest.id);
         }}
@@ -256,6 +289,8 @@ export function Workspace() {
   useStoredRowOnClose(conversationId, openRequest?.id ?? null);
   const requestRows = hydrated ? (requests.data ?? NO_REQUESTS) : NO_REQUESTS;
   const messageRows = hydrated ? (messages.data ?? NO_MESSAGES) : NO_MESSAGES;
+  // Until both have answered, an id with no rows is still being read, not "not found".
+  const loaded = hydrated && requests.data !== undefined && messages.data !== undefined;
 
   // The newest request is followed until its stored answer has landed.
   const followed = liveRequestOf(requestRows, messageRows);
@@ -278,6 +313,7 @@ export function Workspace() {
         openRequest={openRequest}
         live={live}
         stream={stream}
+        loaded={loaded}
         readError={hydrated ? (requests.error ?? messages.error) : null}
         now={now}
         onCreated={(id) => router.replace(conversationHref(id))}
