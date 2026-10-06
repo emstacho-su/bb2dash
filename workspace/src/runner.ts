@@ -4,7 +4,9 @@
  * It polls `workspace_claim()` every 2 s and answers one request at a time, oldest first. On its own
  * 30 s timer, during turns too, it calls `workspace_heartbeat()` and touches the alive file after
  * each success. With no heartbeat success for 180 s it ends any turn in flight and exits non-zero,
- * so the restart policy brings the container back. On SIGTERM or SIGINT it stops polling, ends a
+ * so the restart policy brings the container back; it waits with that while the turn in flight is
+ * retrying its `workspace_finish()` inside the 170 s that call is given (ruling V1, CR-3), so a
+ * finished answer is not thrown away by the restart. On SIGTERM or SIGINT it stops polling, ends a
  * turn in flight as `failed` / `stale_claim`, and exits 0.
  */
 
@@ -14,7 +16,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { touchAlive } from './alive.js';
-import { BUDGET_CAP_HOLDS, DB_WATCHDOG_MS, HEARTBEAT_MS, PATHS, POLL_INTERVAL_MS, loadConfig, readOauthToken, readTextOrNull } from './config.js';
+import {
+  BUDGET_CAP_HOLDS,
+  DB_WATCHDOG_MS,
+  FINISH_RETRY_MS,
+  HEARTBEAT_MS,
+  PATHS,
+  POLL_INTERVAL_MS,
+  loadConfig,
+  readOauthToken,
+  readTextOrNull,
+} from './config.js';
 import { createPgQuery, createRpc, newPgClient, type Claim } from './db.js';
 import { writeMcpConfig } from './mcp-config.js';
 import { createCliTurn, readSystemPrompt, spawnClaude } from './providers/claude-cli.js';
@@ -24,6 +36,7 @@ import { startTurn, type TurnDeps, type TurnHandle } from './turn.js';
 const EXIT_OK = 0;
 const EXIT_WATCHDOG = 1;
 const EXIT_CONFIG = 2;
+const MS_PER_SECOND = 1000;
 /** Once a stop is asked for, what is in flight gets this long before the loop returns anyway: inside the service's 30 s stop grace. */
 export const SHUTDOWN_GRACE_MS = 20_000;
 /** Closing the database connection at exit is given this long. */
@@ -47,13 +60,16 @@ const messageOf = (error: unknown): string => (error instanceof Error ? error.me
 
 export function createRunner(deps: RunnerDeps): Runner {
   const log = (message: string): void => deps.log(`runner ${message}`);
-  const state: { stopping: boolean; exitCode: number; turn: TurnHandle | null; wake: (() => void) | null; lastHeartbeatOk: number } = {
-    stopping: false,
-    exitCode: EXIT_OK,
-    turn: null,
-    wake: null,
-    lastHeartbeatOk: 0,
-  };
+  interface LoopState {
+    stopping: boolean;
+    exitCode: number;
+    turn: TurnHandle | null;
+    wake: (() => void) | null;
+    lastHeartbeatOk: number;
+    /** True once the log has said the watchdog is waiting for a finish; a heartbeat that succeeds clears it. */
+    watchdogHeld: boolean;
+  }
+  const state: LoopState = { stopping: false, exitCode: EXIT_OK, turn: null, wake: null, lastHeartbeatOk: 0, watchdogHeld: false };
 
   let giveUp: () => void = () => undefined;
   const gaveUp = new Promise<'gave up'>((resolve) => {
@@ -87,17 +103,30 @@ export function createRunner(deps: RunnerDeps): Runner {
       state.wake = done;
     });
 
+  /** True while the turn in flight is making its `workspace_finish()` and is still inside the retry window. */
+  const finishInWindow = (): boolean => {
+    const since = state.turn?.finishingSince() ?? null;
+    return since !== null && Date.now() - since < FINISH_RETRY_MS;
+  };
+
   const beat = async (): Promise<void> => {
     try {
       await deps.rpc.heartbeat(deps.runnerName);
       state.lastHeartbeatOk = Date.now();
+      state.watchdogHeld = false;
       deps.touchAlive();
     } catch (error) {
       log(`heartbeat failed: ${messageOf(error)}`);
     }
-    if (Date.now() - state.lastHeartbeatOk >= DB_WATCHDOG_MS) {
-      end(EXIT_WATCHDOG, `watchdog: no heartbeat has succeeded for ${DB_WATCHDOG_MS / 1000} s; exiting so the container restarts`);
+    if (Date.now() - state.lastHeartbeatOk < DB_WATCHDOG_MS) return;
+    const silentFor = `no heartbeat has succeeded for ${DB_WATCHDOG_MS / MS_PER_SECOND} s`;
+    // A finished answer is waiting to be stored: the restart waits for the finish's own window.
+    if (finishInWindow()) {
+      if (!state.watchdogHeld) log(`watchdog: ${silentFor}; held while the finish of the turn in flight is being retried`);
+      state.watchdogHeld = true;
+      return;
     }
+    end(EXIT_WATCHDOG, `watchdog: ${silentFor}; exiting so the container restarts`);
   };
 
   const nextClaim = async (): Promise<Claim | null> => {

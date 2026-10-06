@@ -151,6 +151,17 @@ export function redactDsn(text: string, dsn: string | null | undefined): string 
   return out;
 }
 
+/**
+ * The SQLSTATE of a refusal one of the five functions raises itself (migration 142, "REFUSALS"):
+ * the call was understood and turned down, so trying it again cannot change the answer.
+ */
+export const REFUSAL_SQLSTATE = '22023';
+
+/** True when `error` is one of the functions' own refusals, never a failure to reach the database. */
+export function isRefusal(error: unknown): boolean {
+  return (error as { code?: unknown } | null | undefined)?.code === REFUSAL_SQLSTATE;
+}
+
 /** The parts of a pg.Client the runner uses. */
 export interface PgClientLike {
   connect(): Promise<unknown>;

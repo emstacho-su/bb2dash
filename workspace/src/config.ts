@@ -45,6 +45,17 @@ export const DB_WATCHDOG_MS = 180_000;
 /** The healthcheck passes while the alive file is younger than this. */
 export const HEALTH_MAX_AGE_MS = 90_000;
 
+/**
+ * `workspace_finish()`, and `workspace_begin()` before it, are tried again for this long when the
+ * database fails them, so a finished answer outlives a short outage. Under DB_WATCHDOG_MS; the
+ * watchdog does not end the process while a finish is inside this window.
+ */
+export const FINISH_RETRY_MS = 170_000;
+/** The wait before the second try; each later wait is twice the one before it. */
+export const FINISH_BACKOFF_FIRST_MS = 1000;
+/** No wait between two tries is longer than this. */
+export const FINISH_BACKOFF_MAX_MS = 15_000;
+
 /** At most this many stored messages are replayed on a fresh start. */
 export const HISTORY_REPLAY = 20;
 /** The replay with its framing stays within this many bytes of UTF-8 (96 KiB). */

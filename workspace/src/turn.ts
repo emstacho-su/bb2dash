@@ -6,17 +6,26 @@
  * The runner's own stops: a false from `workspace_stream()` is the owner's Stop (`cancelled`), the
  * 8-minute limit is `timeout`, and a shutdown or the database watchdog is `stale_claim`. The first
  * stop wins. No code is retried on another model.
+ *
+ * Begin and finish against a database that fails (rulings V1, CR-2 and CR-3; `db-retry.ts` holds
+ * the schedule). A begin the function refuses (22023) means the request is no longer claimed:
+ * nothing ran and there is nothing to close. Any other begin failure is tried again; if begin still
+ * cannot be made the request is closed as `failed` / `cli_error`, so it is not left claimed. A
+ * finish is tried again for 170 s before the answer is given up; a finish the function refuses
+ * means the request is already closed.
  */
 
 import {
   CANCEL_POLL_MS,
   CONTENT_MAX_CHARS,
+  FINISH_RETRY_MS,
   NO_CAP_SENTENCE,
   STREAM_DELTA_MAX_CHARS,
   STREAM_FLUSH_MS,
   TOOL_CALLS_MAX,
   TURN_TIMEOUT_MS,
 } from './config.js';
+import { retryDbCall } from './db-retry.js';
 import type { Claim, FinishArgs, WorkspaceRpc } from './db.js';
 import { errorCodeFor, type ErrorCode } from './errors.js';
 import type { Providers } from './providers/index.js';
@@ -24,9 +33,7 @@ import type { Provider, ResultEvent, StoredToolCall, TurnInput } from './provide
 import { routeTier } from './router.js';
 import { TIER_ROUTES } from './tiers.js';
 
-/** `workspace_finish()` is tried this many times, this far apart, before the turn is left to the stale-claim sweep. */
-const FINISH_ATTEMPTS = 3;
-const FINISH_RETRY_MS = 1000;
+const MS_PER_SECOND = 1000;
 /** The database cannot store this character in text. */
 const NUL = '\u0000';
 
@@ -53,13 +60,13 @@ export interface TurnHandle {
   readonly done: Promise<TurnOutcome>;
   /** Stop the turn from outside (a shutdown, the watchdog). */
   stop(code: StopCode): void;
+  /** When the turn began making its `workspace_finish()` call, tries included; null before that and once it is over. */
+  finishingSince(): number | null;
 }
 
 type Log = (message: string) => void;
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** `text` in pieces of at most `size` characters (code points, the way the database counts). */
 function piecesOf(text: string, size: number): string[] {
@@ -195,16 +202,16 @@ function storedCalls(calls: readonly StoredToolCall[], log: Log): readonly Store
   return kept;
 }
 
+/** Close the request, trying again while the database fails; one log line says how it ended. */
 async function finishWithRetry(rpc: WorkspaceRpc, args: FinishArgs, log: Log): Promise<void> {
-  for (let attempt = 1; attempt <= FINISH_ATTEMPTS; attempt += 1) {
-    try {
-      await rpc.finish(args);
-      log(`finished state=${args.state} error=${args.errorCode ?? '-'} ms=${args.durationMs} tools=${args.toolCalls.length}`);
-      return;
-    } catch (error) {
-      log(`finish failed (try ${attempt} of ${FINISH_ATTEMPTS}): ${messageOf(error)}`);
-      if (attempt < FINISH_ATTEMPTS) await sleep(FINISH_RETRY_MS);
-    }
+  const end = await retryDbCall(() => rpc.finish(args), { what: 'finish', log });
+  if (end.outcome === 'made') {
+    log(`finished state=${args.state} error=${args.errorCode ?? '-'} ms=${args.durationMs} tools=${args.toolCalls.length}`);
+  } else if (end.outcome === 'refused') {
+    log(`finish refused, the request is already closed: ${messageOf(end.error)}`);
+  } else {
+    const window = FINISH_RETRY_MS / MS_PER_SECOND;
+    log(`finish given up after ${window} s, the answer is not stored and the stale-claim sweep closes the request: ${messageOf(end.error)}`);
   }
 }
 
@@ -212,6 +219,7 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
   const controller = new AbortController();
   const log: Log = (message) => deps.log(`turn request=${claim.requestId} ${message}`);
   const stopped: { code: StopCode | null } = { code: null };
+  const finishing: { since: number | null } = { since: null };
   const stopSwitch: StopSwitch = {
     code: () => stopped.code,
     stop: (code) => {
@@ -221,15 +229,46 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
     },
   };
 
+  /** The one `workspace_finish()` of the turn; `finishingSince()` is set while it is being made. */
+  async function finish(args: FinishArgs): Promise<void> {
+    finishing.since = Date.now();
+    try {
+      await finishWithRetry(deps.rpc, args, log);
+    } finally {
+      finishing.since = null;
+    }
+  }
+
   async function run(): Promise<TurnOutcome> {
     const startedAt = Date.now();
     const tier = routeTier(claim.prompt, claim.priorTier);
     const route = TIER_ROUTES[tier];
-    try {
-      await deps.rpc.begin(claim.requestId, tier, route.provider, route.model);
-    } catch (error) {
-      log(`begin refused, nothing ran: ${messageOf(error)}`);
+    const begun = await retryDbCall(() => deps.rpc.begin(claim.requestId, tier, route.provider, route.model), {
+      what: 'begin',
+      log,
+      signal: controller.signal,
+    });
+    if (begun.outcome === 'refused') {
+      log(`begin refused, nothing ran: ${messageOf(begun.error)}`);
       return { state: 'skipped', errorCode: null };
+    }
+    if (begun.outcome !== 'made') {
+      // Nothing ran, and the request is still claimed: close it under the runner's own stop when
+      // one ended the tries, as `cli_error` otherwise.
+      const ending: Ending = { state: 'failed', errorCode: stopped.code ?? 'cli_error' };
+      log(`begin could not be made, nothing ran; closing the request as ${ending.errorCode}: ${messageOf(begun.error)}`);
+      await finish({
+        requestId: claim.requestId,
+        state: ending.state,
+        content: '',
+        toolCalls: [],
+        errorCode: ending.errorCode,
+        costUsd: null,
+        durationMs: Date.now() - startedAt,
+        claudeSessionId: claim.claudeSessionId,
+        model: null,
+      });
+      return ending;
     }
     log(`started tier=${tier} provider=${route.provider} model=${route.model}`);
 
@@ -252,25 +291,21 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
     await streamer.drain();
 
     const ending = endingOf(stopped.code, collected);
-    await finishWithRetry(
-      deps.rpc,
-      {
-        requestId: claim.requestId,
-        state: ending.state,
-        content: storedContent(collected.content, ending, deps.budgetCapHolds, log),
-        toolCalls: storedCalls(collected.calls, log),
-        errorCode: ending.errorCode,
-        costUsd: collected.result?.costUsd ?? null,
-        durationMs: Date.now() - startedAt,
-        // `workspace_finish()` stamps what it is given, so a turn that reported no session (nothing
-        // started) hands back the stored id: the conversation keeps its session for the next turn.
-        claudeSessionId: collected.result?.claudeSessionId ?? claim.claudeSessionId,
-        model: collected.result?.model ?? null,
-      },
-      log,
-    );
+    await finish({
+      requestId: claim.requestId,
+      state: ending.state,
+      content: storedContent(collected.content, ending, deps.budgetCapHolds, log),
+      toolCalls: storedCalls(collected.calls, log),
+      errorCode: ending.errorCode,
+      costUsd: collected.result?.costUsd ?? null,
+      durationMs: Date.now() - startedAt,
+      // `workspace_finish()` stamps what it is given, so a turn that reported no session (nothing
+      // started) hands back the stored id: the conversation keeps its session for the next turn.
+      claudeSessionId: collected.result?.claudeSessionId ?? claim.claudeSessionId,
+      model: collected.result?.model ?? null,
+    });
     return ending;
   }
 
-  return { done: run(), stop: stopSwitch.stop };
+  return { done: run(), stop: stopSwitch.stop, finishingSince: () => finishing.since };
 }

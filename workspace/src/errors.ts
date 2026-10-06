@@ -23,6 +23,9 @@ export function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === 'string' && (ERROR_CODES as readonly string[]).includes(value);
 }
 
+/** What a caught value says, for a log line: an Error's message, anything else as text. */
+export const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
 /** Thrown by a provider that exists as a typed stub and is not connected. */
 export class ProviderNotConfiguredError extends Error {
   readonly providerId: ProviderId;
