@@ -323,7 +323,8 @@ export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): T
     for (const block of records(message.content)) {
       if (block.type !== 'tool_result' || stopped) continue;
       const tool = tools.get(text(block.tool_use_id) ?? '');
-      if (!tool) continue;
+      // A call has one result: a line that repeats it is not a second answer to count.
+      if (!tool || tool.resultSeen) continue;
       tool.resultSeen = true;
       tool.isError = block.is_error === true;
       if (!tool.counted) continue;
