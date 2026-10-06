@@ -50,8 +50,10 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export HOME=/root
 export LC_ALL=C
 
-# The set iptables allows outbound traffic to: single addresses, no ranges.
+# The set iptables allows outbound traffic to. Its type is the dev firewall's (hash:net, which is
+# known to work under Docker Desktop on stack-laptop); this script only ever adds single addresses.
 readonly FIREWALL_SET=workspace-allowed
+readonly FIREWALL_SET_TYPE=hash:net
 # Claimed (mkdir) by the one run a container start may make. /dev/shm is the container's own tmpfs:
 # a restart empties it. The folder is root's and /dev/shm is sticky, so node cannot remove it.
 readonly FIREWALL_RUN_MARKER=/dev/shm/bb2dash-workspace-firewall.up
@@ -282,7 +284,7 @@ main() {
   #    running; its addresses go into the set and into /etc/hosts. Lines an earlier start pinned
   #    are taken out first, so a name is never left on an address that is no longer in the set.
   #    /etc/hosts is a mounted file: it is rewritten in place, never replaced.
-  ipset create "$FIREWALL_SET" hash:ip
+  ipset create "$FIREWALL_SET" "$FIREWALL_SET_TYPE"
   if [ ! -f "$HOSTS_FILE" ] || [ ! -w "$HOSTS_FILE" ]; then
     fail "$HOSTS_FILE cannot be written, so no name can be pinned"
   fi
