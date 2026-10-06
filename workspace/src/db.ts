@@ -169,9 +169,22 @@ export function isStatementError(code: unknown): boolean {
   return !(code.startsWith('08') || code.startsWith('57P') || code === 'XX000');
 }
 
+/**
+ * Bounds on the connection, so a database that cannot be reached fails a call instead of holding
+ * it: the heartbeat then stops succeeding and the watchdog can do its work.
+ */
+export const PG_CLIENT_OPTIONS = Object.freeze({
+  application_name: APPLICATION_NAME,
+  /** A connect that has not answered by now is given up. */
+  connectionTimeoutMillis: 10_000,
+  /** Above the role's own 15 s statement_timeout: the database refuses first when it can. */
+  query_timeout: 20_000,
+  keepAlive: true,
+});
+
 /** A real pg.Client for the session-pooler DSN; connected by createPgQuery. */
 export function newPgClient(dsn: string): PgClientLike {
-  return new pg.Client({ connectionString: dsn, application_name: APPLICATION_NAME }) as unknown as PgClientLike;
+  return new pg.Client({ connectionString: dsn, ...PG_CLIENT_OPTIONS }) as unknown as PgClientLike;
 }
 
 export interface PgQueryDeps {

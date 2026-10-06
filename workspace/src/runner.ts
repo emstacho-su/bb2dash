@@ -24,6 +24,10 @@ import { startTurn, type TurnDeps, type TurnHandle } from './turn.js';
 const EXIT_OK = 0;
 const EXIT_WATCHDOG = 1;
 const EXIT_CONFIG = 2;
+/** Once a stop is asked for, what is in flight gets this long before the loop returns anyway: inside the service's 30 s stop grace. */
+export const SHUTDOWN_GRACE_MS = 20_000;
+/** Closing the database connection at exit is given this long. */
+const DB_CLOSE_MS = 2000;
 
 export interface RunnerDeps extends TurnDeps {
   /** The name the runner claims and sends heartbeats under. */
@@ -51,6 +55,12 @@ export function createRunner(deps: RunnerDeps): Runner {
     lastHeartbeatOk: 0,
   };
 
+  let giveUp: () => void = () => undefined;
+  const gaveUp = new Promise<'gave up'>((resolve) => {
+    giveUp = () => resolve('gave up');
+  });
+  let graceTimer: ReturnType<typeof setTimeout> | null = null;
+
   const end = (exitCode: number, why: string): void => {
     if (state.stopping) return;
     state.stopping = true;
@@ -58,7 +68,12 @@ export function createRunner(deps: RunnerDeps): Runner {
     log(why);
     state.turn?.stop('stale_claim');
     state.wake?.();
+    // What is in flight gets a bounded time to finish, so the process always exits.
+    graceTimer = setTimeout(giveUp, SHUTDOWN_GRACE_MS);
   };
+
+  /** The promise's end, or the end of the shutdown grace, whichever comes first. */
+  const orGiveUp = async <T>(work: Promise<T>): Promise<T | 'gave up'> => Promise.race([work, gaveUp]);
 
   /** A wait that a shutdown cuts short. */
   const pause = (ms: number): Promise<void> =>
@@ -102,7 +117,8 @@ export function createRunner(deps: RunnerDeps): Runner {
       const heartbeatTimer = setInterval(() => void beat(), HEARTBEAT_MS);
       try {
         while (!state.stopping) {
-          const claim = await nextClaim();
+          const claim = await orGiveUp(nextClaim());
+          if (claim === 'gave up') break;
           if (claim === null) {
             if (!state.stopping) await pause(POLL_INTERVAL_MS);
             continue;
@@ -110,15 +126,17 @@ export function createRunner(deps: RunnerDeps): Runner {
           state.turn = startTurn(deps, claim);
           // A request claimed while a shutdown arrived is ended at once, so it is not left claimed.
           if (state.stopping) state.turn.stop('stale_claim');
-          try {
-            await state.turn.done;
-          } catch (error) {
-            log(`turn request=${claim.requestId} crashed: ${messageOf(error)}`);
-          }
+          const ended = await orGiveUp(
+            state.turn.done.catch((error: unknown) => {
+              log(`turn request=${claim.requestId} crashed: ${messageOf(error)}`);
+            }),
+          );
+          if (ended === 'gave up') log(`turn request=${claim.requestId} did not finish within the shutdown grace; the stale-claim sweep will close it`);
           state.turn = null;
         }
       } finally {
         clearInterval(heartbeatTimer);
+        if (graceTimer !== null) clearTimeout(graceTimer);
       }
       return state.exitCode;
     },
@@ -162,7 +180,7 @@ export async function main(): Promise<number> {
   process.once('SIGTERM', () => runner.shutdown('SIGTERM'));
   process.once('SIGINT', () => runner.shutdown('SIGINT'));
   const exitCode = await runner.run();
-  await query.end();
+  await Promise.race([query.end(), new Promise((resolve) => setTimeout(resolve, DB_CLOSE_MS))]);
   stamp(`exiting ${exitCode}`);
   return exitCode;
 }

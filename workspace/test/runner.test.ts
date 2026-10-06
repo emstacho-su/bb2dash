@@ -16,7 +16,7 @@ import { ProviderNotConfiguredError } from '../src/errors.js';
 import type { CliTurn } from '../src/providers/claude-cli.js';
 import { createProviders } from '../src/providers/index.js';
 import type { StoredToolCall, TurnEvent } from '../src/providers/types.js';
-import { createRunner, main, type RunnerDeps } from '../src/runner.js';
+import { SHUTDOWN_GRACE_MS, createRunner, main, type RunnerDeps } from '../src/runner.js';
 import { startTurn, type TurnDeps } from '../src/turn.js';
 import { ABORTED, STORED_SESSION_ID, claimOf, delta, fakeRpc, result, scriptedTurn, type FakeRpc, type Step } from './helpers/fakes.js';
 
@@ -633,6 +633,40 @@ describe('the loop', () => {
     const heartbeatsAtExit = fake.heartbeats.length;
     await vi.advanceTimersByTimeAsync(5 * HEARTBEAT_MS);
     expect(fake.heartbeats).toHaveLength(heartbeatsAtExit);
+  });
+
+  it.each([
+    ['a shutdown', 0],
+    ['the watchdog', 1],
+  ] as const)('always exits after %s: a turn that cannot finish is left to the stale-claim sweep after 20 s', async (what, expected) => {
+    const scripted = scriptedTurn([delta(100, 'part of an answer')]);
+    const { fake, logs, deps } = loop(scripted.turn);
+    fake.rpc.finish = () => new Promise<void>(() => undefined);
+    fake.queue.push(claimOf());
+    const runner = createRunner(deps);
+    const running = runner.run();
+    let exitCode: number | null = null;
+    void running.then((code) => {
+      exitCode = code;
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    if (what === 'a shutdown') {
+      runner.shutdown('SIGTERM');
+    } else {
+      // The last heartbeat that succeeded was the one at the start, 1 s ago; the watchdog trips 180 s after it.
+      fake.rpc.heartbeat = () => Promise.reject(new Error('connection refused'));
+      await vi.advanceTimersByTimeAsync(DB_WATCHDOG_MS - 1000);
+    }
+    await vi.advanceTimersByTimeAsync(SHUTDOWN_GRACE_MS - 1000);
+    expect(exitCode).toBeNull();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(exitCode).toBe(expected);
+    expect(scripted.abortedAt).not.toBeNull();
+    expect(logs.some((line) => /request=41/.test(line) && /shutdown grace/.test(line))).toBe(true);
+  });
+
+  it('gives a stop less time than the service gives the container', () => {
+    expect(SHUTDOWN_GRACE_MS).toBeLessThan(30_000);
   });
 
   it('exits 0 at once when idle', async () => {

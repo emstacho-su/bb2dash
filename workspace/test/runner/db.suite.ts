@@ -2,11 +2,14 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { HEARTBEAT_MS } from '../../src/config.js';
 import {
   APPLICATION_NAME,
+  PG_CLIENT_OPTIONS,
   createPgQuery,
   createRpc,
   isStatementError,
+  newPgClient,
   redactDsn,
   type PgClientLike,
   type QueryResult,
@@ -288,5 +291,19 @@ describe('the connection', () => {
 
   it('names itself to the database', () => {
     expect(APPLICATION_NAME).toBe('bb2dash-workspace-runner');
+  });
+
+  it('bounds a connect and a query, so an unreachable database fails a call instead of holding it', () => {
+    expect(PG_CLIENT_OPTIONS).toMatchObject({ application_name: APPLICATION_NAME, keepAlive: true });
+    expect(PG_CLIENT_OPTIONS.connectionTimeoutMillis).toBeLessThanOrEqual(15_000);
+    expect(PG_CLIENT_OPTIONS.query_timeout).toBeGreaterThan(15_000);
+    expect(PG_CLIENT_OPTIONS.query_timeout).toBeLessThan(HEARTBEAT_MS);
+  });
+
+  it('makes a client for the DSN without opening a connection', () => {
+    const client = newPgClient(DSN) as unknown as { connectionParameters: { application_name: string; port: number; user: string } };
+    expect(client.connectionParameters.application_name).toBe(APPLICATION_NAME);
+    expect(client.connectionParameters.port).toBe(5432);
+    expect(client.connectionParameters.user).toBe('workspace_runner.projectref');
   });
 });
