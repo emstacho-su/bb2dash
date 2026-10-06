@@ -5,6 +5,8 @@
  * sibling holds the other half of every read and write: a failure is said, in
  * the app's "Could not …: <reason>" form, and the page is left in the state the
  * database is really in. Nothing is swallowed, and nothing typed is lost.
+ * A line that has lost its reason goes: "still answering" once nothing is
+ * answering, "could not stop" once the request it was pressed on has finished.
  *
  * It also holds the composer's waiting state and the message column's scroll,
  * which no Contract sentence names.
@@ -38,6 +40,26 @@ const QUESTION_ROW: Row = { id: QUESTION, conversation_id: A, role: 'user', cont
 function requestRow(state: string, fields: Row = {}): Row {
   return { id: 42, conversation_id: A, user_message_id: QUESTION, state, ...fields };
 }
+
+/** The conversation once request 42 is answered: the stored row and the closed request. */
+const ANSWERED_ROWS: Record<string, Row[]> = {
+  workspace_messages: [
+    QUESTION_ROW,
+    {
+      id: ANSWER,
+      conversation_id: A,
+      role: 'assistant',
+      request_id: 42,
+      tier: 'low',
+      content: 'Quiz 2.',
+      finished: true,
+    },
+  ],
+  workspace_requests: [requestRow('done')],
+};
+
+/** The broadcast `workspace_finish()` sends for it. */
+const DONE_EVENT = { request_id: 42, message_id: ANSWER, state: 'done' };
 
 function open(search = `c=${A}`) {
   fake.state.search = search;
@@ -201,21 +223,7 @@ describe('a Stop that does not stop', () => {
     seedClaimed();
     // The runner finished between the page's last read and the press.
     fake.state.rpc.workspace_cancel = () => {
-      fake.state.rows = {
-        workspace_messages: [
-          QUESTION_ROW,
-          {
-            id: ANSWER,
-            conversation_id: A,
-            role: 'assistant',
-            request_id: 42,
-            tier: 'low',
-            content: 'Quiz 2.',
-            finished: true,
-          },
-        ],
-        workspace_requests: [requestRow('done')],
-      };
+      fake.state.rows = ANSWERED_ROWS;
       return { data: false, error: null };
     };
     open();
@@ -225,6 +233,69 @@ describe('a Stop that does not stop', () => {
     await waitFor(() => expect(screen.queryByText(labels.STOPPED_SENTENCE)).toBeNull());
     expect(screen.getByRole('button', { name: 'Ask' })).toBeInTheDocument();
     expect(alerts()).toEqual([]);
+  });
+
+  it('takes the could-not-stop line away once that request has finished, and does not put it on the next', async () => {
+    seedClaimed();
+    fake.state.rpc.workspace_cancel = () => ({ data: null, error: DENIED });
+    open();
+    const channel = await joined(TOPIC_A);
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(alerts()).toEqual(['Could not stop this answer: permission denied']));
+
+    // The answer finishes by itself: there is nothing left to stop.
+    fake.state.rows = ANSWERED_ROWS;
+    act(() => channel.emit('done', DONE_EVENT));
+    expect(await screen.findByText('Quiz 2.')).toBeInTheDocument();
+    await waitFor(() => expect(alerts()).toEqual([]));
+
+    // The next question opens another request. Stop was never pressed on it.
+    fireEvent.keyDown(type('and next week?'), { key: 'Enter' });
+    expect(await screen.findByRole('button', { name: 'Stop' })).toBeInTheDocument();
+    expect(alerts()).toEqual([]);
+  });
+});
+
+describe('a refusal that has lost its reason', () => {
+  it('takes "still answering" away once the answer is stored, and keeps what was typed', async () => {
+    fake.state.rows = { workspace_messages: [QUESTION_ROW], workspace_requests: [requestRow('queued')] };
+    open();
+    const channel = await joined(TOPIC_A);
+    await screen.findByRole('button', { name: 'Stop' });
+    fireEvent.keyDown(type('and next week?'), { key: 'Enter' });
+    await screen.findByText(labels.REFUSAL_STILL_ANSWERING);
+
+    fake.state.rows = ANSWERED_ROWS;
+    act(() => channel.emit('done', DONE_EVENT));
+    expect(await screen.findByText('Quiz 2.')).toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Ask' });
+
+    expect(screen.queryByText(labels.REFUSAL_STILL_ANSWERING)).toBeNull();
+    expect(box()).toHaveValue('and next week?');
+  });
+
+  it('still says "still answering" for an open request this page had not read', async () => {
+    open();
+    await joined(TOPIC_A);
+    await screen.findByRole('button', { name: 'Ask' });
+    // Asked from another tab: open in the database, and not yet on this page.
+    fake.state.rows = { workspace_messages: [QUESTION_ROW], workspace_requests: [requestRow('queued')] };
+
+    fireEvent.keyDown(type('and next week?'), { key: 'Enter' });
+
+    expect(await screen.findByText(labels.REFUSAL_STILL_ANSWERING)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+  });
+
+  it('keeps the question-length refusal with no request open: its reason is the text', async () => {
+    fake.state.rows = ANSWERED_ROWS;
+    open();
+    await screen.findByText('Quiz 2.');
+    type('   ');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+    expect(await screen.findByText(labels.REFUSAL_QUESTION_LENGTH)).toBeInTheDocument();
   });
 });
 
