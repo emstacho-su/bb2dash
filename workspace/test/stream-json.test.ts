@@ -28,8 +28,9 @@ import {
   type Line,
 } from './helpers/stream-lines.js';
 
-// The fail-closed rule on the tool gate, in its own file: it registers its suite here.
+// The fail-closed rule on the tool gate, in its own files: each registers its suites here.
 import './stream-json/gate.suite.js';
+import './stream-json/gate-count.suite.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, 'fixtures');
@@ -447,7 +448,7 @@ describe('tool calls', () => {
     ]);
   });
 
-  it('keeps call order when results arrive out of order, and matches hooks to same-named calls in turn', () => {
+  it('keeps call order when results arrive out of order', () => {
     const { summary, signals } = replay([
       initLine(),
       toolUse('t1', SEARCH, { q: 'first' }),
