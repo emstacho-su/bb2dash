@@ -393,6 +393,35 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
     }
   });
 
+  test('a database secret on a port other than 5432 stops the start at deny-all, and nothing of it is printed (U2)', async () => {
+    const cases = [
+      ['the transaction pooler', { workspace_runner_db_url: dsn(POOLER, ':6543/postgres?sslmode=require') }, /workspace_runner_db_url: its port is not 5432/],
+      ['another port on the harness secret', { harness_database_url: dsn(POOLER, ':15439/postgres') }, /harness_database_url: its port is not 5432/],
+      ['a colon and no port', { workspace_runner_db_url: dsn(POOLER, ':/postgres') }, /workspace_runner_db_url: its port is not 5432/],
+    ];
+    for (const [label, secrets, sentence] of cases) {
+      const run = await raise(makeWorld({ secrets }));
+      assertDenyAll(run);
+      assert.match(run.out, sentence, label);
+      assert.equal(run.calls.filter((call) => call.startsWith('ipset create')).length, 0, `${label}: no set is made`);
+      assert.equal(lookups(run.calls).length, 0, `${label}: no name is looked up`);
+      assert.doesNotMatch(run.out, /6543|15439/, `${label}: the refused port is not printed`);
+      assert.equal(run.out.includes(POOLER), false, `${label}: the host of a refused secret is not printed`);
+    }
+  });
+
+  test('the header says what a start prints, and a start prints no more: names and the resolver, never an address of an allowed host (U2)', async () => {
+    const header = SOURCE.slice(0, SOURCE.indexOf('set -euo pipefail'));
+    assert.match(header, /^# What it prints/m, 'the header has its "What it prints" paragraph');
+    assert.match(header, /^# It never prints a user, a password, a connection string or any part of one, or the address of an\n# allowed host\.$/m);
+
+    const run = await happy();
+    for (const name of [API, PROJECT, POOLER]) assert.ok(run.out.includes(name), `${name} is named in the log`);
+    const addresses = new Set(run.out.match(/\b\d{1,3}(\.\d{1,3}){3}\b/g) ?? []);
+    assert.deepEqual([...addresses], [RESOLVER], "the one address in the log is the resolver's");
+    assertNoSecret(run.out);
+  });
+
   test('a name that does not resolve stops the start at deny-all', async () => {
     assertDenyAll(await raise(makeWorld({ dns: { [API]: null } })));
     assertDenyAll(await raise(makeWorld({ dns: { [POOLER]: [] } })));
@@ -523,6 +552,13 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
       `mysql://${user}@${POOLER}/postgres`,
       POOLER,
       `postgresql://${user}@ ${POOLER}/postgres`,
+      // A port that is not 5432 (U2): the transaction pooler's, a longer number, none after the colon, two.
+      `postgresql://${user}@${POOLER}:6543/postgres`,
+      `postgresql://${user}@${POOLER}:54329/postgres`,
+      `postgresql://${user}@${POOLER}:05432/postgres`,
+      `postgresql://${user}@${POOLER}:/postgres`,
+      `postgresql://${user}@${POOLER}:5432:6543/postgres`,
+      `postgresql://${POOLER}:6543`,
     ];
     const body = 'printf "%s" "$input" >dsn; got="$(dsn_host dsn)"; printf "%s\\t%s\\n" "$?" "$got"';
     const results = await eachLine(body, [...allowed.map(([url]) => url), ...refused]);
@@ -533,7 +569,7 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
       assert.equal(status, '1', url);
       assert.ok(said.length > 0, `a refusal says why: ${url}`);
       assertNoSecret(said);
-      assert.doesNotMatch(said, /evil|2001|44\.216/, `a refusal prints no part of the URL: ${url}`);
+      assert.doesNotMatch(said, /evil|2001|44\.216|6543|54329|05432|aws-/, `a refusal prints no part of the URL: ${url}`);
     });
   });
 
