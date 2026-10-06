@@ -391,12 +391,18 @@ describe('the state under a question', () => {
 
     fireEvent.click(screen.getByRole('button', { name: labels.STOP_LABEL }));
 
-    // The cancel is still on its way: the sentence and the Ask button are there already.
+    // In the same tick as the press: the sentence and the Ask button are there already.
     expect(screen.getByText('You stopped this answer.')).toBeInTheDocument();
     expect(turnOf(container, 42)).toHaveAttribute('data-turn', 'stopped');
     expect(composer().ask).toBeInTheDocument();
     expect(composer().stop).toBeNull();
-    expect(fake.state.rpcCalls).toEqual([{ fn: 'workspace_cancel', args: { p_request_id: 42 } }]);
+
+    // The cancel is sent and held: the database still reads claimed while the page says stopped.
+    await waitFor(() =>
+      expect(fake.state.rpcCalls).toEqual([{ fn: 'workspace_cancel', args: { p_request_id: 42 } }]),
+    );
+    expect(fake.state.rows.workspace_requests[0]).toMatchObject({ state: 'claimed' });
+    expect(screen.getByText('You stopped this answer.')).toBeInTheDocument();
 
     await act(async () => {
       held.release();

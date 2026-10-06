@@ -1,0 +1,86 @@
+'use client';
+
+/**
+ * The composer (Phase 21, task 16).
+ *
+ * A text box and one button. The button reads "Ask"; while a request is open
+ * it reads "Stop" (no control reads "Submit": `web/test/audits.test.ts`).
+ * Enter asks and Shift+Enter is a new line.
+ *
+ * A QUESTION IS 1 TO 8000 CHARACTERS AFTER TRIMMING. The page refuses anything
+ * else before a request is sent (`askWorkspace` measures it), and the database
+ * refuses the same text. A second question while one is open is refused by the
+ * database, not only by the button: Enter still sends it, and SQLSTATE 23505
+ * comes back as its one sentence. Each refusal is shown here, under the box.
+ *
+ * The typed text is kept until a question is accepted, so a refusal or a
+ * failure never loses it.
+ */
+
+import { useState, type KeyboardEvent } from 'react';
+import { ASK_LABEL, QUESTION_FIELD_LABEL, STOP_LABEL } from '@/lib/workspace-labels';
+import styles from './Composer.module.css';
+
+/** How tall the box starts, in lines. */
+const QUESTION_ROWS = 3;
+
+export interface ComposerProps {
+  /** A request is open in this conversation: the button stops it. */
+  requestOpen: boolean;
+  /** A question or a Stop is on its way: the button waits. */
+  busy: boolean;
+  /** The sentence of a refused question, or null. */
+  refusal: string | null;
+  /** Ask. Resolves true when the question was accepted. */
+  onAsk: (text: string) => Promise<boolean>;
+  onStop: () => void;
+  /** The text changed: a refusal about the old text no longer applies. */
+  onEdit: () => void;
+}
+
+export function Composer({ requestOpen, busy, refusal, onAsk, onStop, onEdit }: ComposerProps) {
+  const [text, setText] = useState('');
+
+  async function ask() {
+    if (busy) return;
+    if (await onAsk(text)) setText('');
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    // Shift+Enter is the browser's new line. Enter while an input method is composing picks a candidate.
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    void ask();
+  }
+
+  return (
+    <div className={styles.composer}>
+      <div className={styles.row}>
+        <textarea
+          className={styles.box}
+          aria-label={QUESTION_FIELD_LABEL}
+          rows={QUESTION_ROWS}
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            onEdit();
+          }}
+          onKeyDown={onKeyDown}
+        />
+        <button
+          type="button"
+          className={styles.button}
+          disabled={busy}
+          onClick={() => (requestOpen ? onStop() : void ask())}
+        >
+          {requestOpen ? STOP_LABEL : ASK_LABEL}
+        </button>
+      </div>
+      {refusal !== null && (
+        <p className={styles.refusal} role="alert">
+          {refusal}
+        </p>
+      )}
+    </div>
+  );
+}

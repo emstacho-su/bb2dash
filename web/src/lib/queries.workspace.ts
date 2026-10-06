@@ -61,6 +61,15 @@ export const WORKSPACE_OFFLINE_AFTER_MS = 120_000;
 /** `workspace_messages.tool_calls` holds at most this many elements (140's check). */
 export const WORKSPACE_TOOL_CALLS_MAX = 20;
 
+/**
+ * The messages, open-request and status queries re-read when the tab regains
+ * focus, whatever the client's default is. TanStack does not run a
+ * `refetchInterval` in a hidden tab (task 5's spike: a cancel went unseen for
+ * 15 s there), so the interval alone can never be how the page learns that a
+ * stream has ended: the `done` broadcast and this refetch are.
+ */
+const REFETCH_ON_FOCUS = 'always';
+
 /** The cache-key slot used when no conversation is selected; that query never runs. */
 const NO_CONVERSATION = 'none';
 
@@ -278,6 +287,31 @@ export function refusalFor(error: unknown): WorkspaceRefusal | null {
   const code = asRecord(error)?.code;
   const reason = typeof code === 'string' ? REFUSAL_BY_SQLSTATE.get(code) : undefined;
   return reason === undefined ? null : new WorkspaceRefusal(reason);
+}
+
+/**
+ * SQLSTATE 23503 from `workspace_ask()`: the foreign key refused a conversation
+ * id that does not exist (a `?c=` typed by hand, or a stale link). It is not a
+ * refusal of the question, so it has neither frozen sentence; the screen says
+ * the conversation could not be loaded.
+ */
+const SQLSTATE_FOREIGN_KEY = '23503';
+
+export function isMissingConversation(error: unknown): boolean {
+  return asRecord(error)?.code === SQLSTATE_FOREIGN_KEY;
+}
+
+/** What is said when a failure carries no message of its own. */
+const NO_REASON = 'no reason given';
+
+/**
+ * Why a read or a write failed, in the words it came with. A PostgREST error
+ * can reach here as a plain object with a `message`, not an `Error`, so both
+ * are read.
+ */
+export function workspaceErrorReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : asRecord(error)?.message;
+  return typeof message === 'string' && message !== '' ? message : NO_REASON;
 }
 
 /**
@@ -523,6 +557,7 @@ export function messagesOptions(conversationId: string | null, requestOpen: bool
       return normalizeRows(data, normalizeMessage);
     },
     refetchInterval: requestOpen ? WORKSPACE_MESSAGES_REFETCH_MS : false,
+    refetchOnWindowFocus: REFETCH_ON_FOCUS,
     staleTime: 0,
   });
 }
@@ -549,6 +584,7 @@ export function requestsOptions(conversationId: string | null) {
     },
     refetchInterval: (query) =>
       openRequestOf(query.state.data) === null ? false : WORKSPACE_MESSAGES_REFETCH_MS,
+    refetchOnWindowFocus: REFETCH_ON_FOCUS,
     staleTime: 0,
   });
 }
@@ -566,6 +602,7 @@ export function statusOptions() {
       return normalizeStatus(data);
     },
     refetchInterval: WORKSPACE_STATUS_REFETCH_MS,
+    refetchOnWindowFocus: REFETCH_ON_FOCUS,
     staleTime: 0,
   });
 }

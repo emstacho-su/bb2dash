@@ -276,10 +276,19 @@ describe('the end of a stream: the done broadcast and a refetch on focus, never 
     expect(container.querySelector('[data-tier]')).toHaveTextContent('Haiku · lookup');
   });
 
+  /** Move the fake clock, letting every timer and promise in between run. */
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
   it('shows a queued request that turned cancelled with no broadcast, when the tab regains focus', async () => {
+    vi.useFakeTimers();
     focusManager.setFocused(false);
     seed('queued');
-    const { container } = await following(quietClient());
+    const { container } = render(tree(quietClient()));
+    await advance(100);
     expect(lineUnderQuestion(container)).toBe('Waiting for the Workspace service');
 
     // Cancelled in the database, as task 5's cancel was. No runner had claimed it, so
@@ -288,9 +297,17 @@ describe('the end of a stream: the done broadcast and a refetch on focus, never 
       workspace_messages: [QUESTION_ROW],
       workspace_requests: [requestRow('cancelled', { error_code: 'cancelled' })],
     };
-    act(() => focusManager.setFocused(true));
 
-    await waitFor(() => expect(lineUnderQuestion(container)).toBe('You stopped this answer.'));
+    // Three intervals pass in the background and the page has not moved (what the spike saw).
+    await advance(15_000);
+    expect(lineUnderQuestion(container)).toBe('Waiting for the Workspace service');
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+
+    // The tab regains focus: well inside one interval, the page reads the row.
+    act(() => focusManager.setFocused(true));
+    await advance(100);
+
+    expect(lineUnderQuestion(container)).toBe('You stopped this answer.');
     expect(streamArea(container)).not.toHaveAttribute('data-request-id');
     expect(screen.getByRole('button', { name: 'Ask' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
@@ -298,11 +315,6 @@ describe('the end of a stream: the done broadcast and a refetch on focus, never 
 
   it('does not re-read an open request on the interval while the tab is hidden, and does on focus', async () => {
     vi.useFakeTimers();
-    const advance = async (ms: number) => {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(ms);
-      });
-    };
     const reads = () => fake.state.log.filter((entry) => entry === 'from:workspace_requests').length;
     focusManager.setFocused(false);
     seed('queued');
