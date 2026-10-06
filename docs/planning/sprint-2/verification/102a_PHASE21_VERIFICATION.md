@@ -535,3 +535,52 @@ Face; measured in a scratch copy, the harness source builds unchanged on it, its
 passes and three test sentences match today's vectors at cosine 0.9999996 or better. The model
 source was put to Stack on 2026-10-06 (a one-line harness PR, or baking the host's cache); tasks
 12 and 13 resume at step 10 of W-65's list once he rules.
+
+## /security-review
+
+**First run, 2026-10-06, on `feat/workspace-21` at d4b1b8d and bb2dash-stack `feat/workspace-21`
+at 80f6796** (before the image exists; a second run on the delta is owed once tasks 12 and 13 have
+passed). Four finders, one lens each (database, runner, container and umbrella, web), then an
+independent false-positive pass on every candidate; a finding is reported at confidence 8 of 10
+or more.
+
+The request the finders were given named what is already known and accepted, so that only a path
+beyond it would be reported: "(a) The container holds two write-capable credentials read only by
+the two MCP servers (the bb2dash service key for the materials server, the notes store's DSN for
+the rag server); read-only rests on tools-off, the four-name allowlist and the hook. (b) PUBLIC
+holds execute on pg_net's functions, so any database login, this one included, can make the
+database issue HTTP requests. (c) The firewall allowlist is by address and the allowed hosts
+serve other tenants. (d) Docker's healthcheck runs node as root every 30 s. (e) The CLI creates
+an empty auto-memory folder under its config dir. (f) An IPv6 fail-open in an earlier version of
+the firewall script was fixed with a test."
+
+Result: **no finding at the reporting bar** in either repository. Two candidates were raised, by
+two lenses, for the same thing, and both were held at confidence 7.
+
+| id | severity | status |
+|---|---|---|
+| SR-1 | MEDIUM | open |
+
+* **SR-1 (confidence 7, below the bar; the PM fixes it in this phase).** The runner's database
+  connection does not verify the pooler's certificate: the stored DSN's
+  `?uselibpqcompat=true&sslmode=require` parses to "encrypted, chain not verified", and
+  `workspace/src/config.ts` accepts it. With the firewall pinning one DNS answer for the pooler
+  name, someone able to answer the laptop's DNS on a shared network when the container starts
+  could stand in for the pooler, take the `workspace_runner` password, feed the runner questions
+  and read the answers the model writes from the two stores. It needs an active position on the
+  network. The same setting was deferred for `sync_runner` in Phase 14 (DECISIONS 2026-10-04); what
+  is new is what sits behind this connection, and that the pinned CA is already in the image for
+  the rag server. Fix: the runner verifies the certificate against the pinned CA whatever the DSN
+  says.
+
+Recorded below the bar, not findings: `workspace_finish` does not require the request to be
+`claimed` (a holder of the runner's own DSN could overwrite a stored answer; it gains no read
+access; goes on the deferred hardening list, a later migration in 143–149); `/app/turn` is
+node's and the argv loads project settings from it, so a file planted there after a compromise
+would persist (fix with SR-1: the folder is root's and read-only); the page shows a raw client
+error message to the signed-in owner, as the Inbox does. What the finders checked and found
+sound is in the PM session's review journal: every row policy and column grant, the five
+SECURITY DEFINER functions, the Realtime policy, the spawn (an argv array, the prompt last after
+`--`), the tool gate's deny paths, the fail-closed stream checks, the privilege drop, the
+firewall's rule order and fail-closed paths, secrets in layers and logs, and every DOM sink of
+the screen.
