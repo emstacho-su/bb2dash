@@ -902,3 +902,221 @@ the image:
   container shows the init line's `mcp_servers`.
 * The host leftovers listed above are as they were. `C:/Users/Public/bb2dash-w64-rec/out/` still
   holds the raw lookup output with syllabus text, in a folder every Windows user can read.
+
+## Wave 2
+
+The small fixes of ruling T3 ("Wave 2 small fixes", PM, 2026-10-06), worked the same day. First
+step: `git fetch origin`, then `git merge origin/feat/workspace-21` (a fast-forward to `bbb2d28`,
+since wave 1's commits were already in the phase branch; no conflict), pushed. Three fixes, each
+with its test committed and pushed failing before the change, then the rename of this file, then
+five readings that needed no code. No `claude -p` ran, no fixture was recorded again, and the only
+docker command was the read-only guard. This file was `102_W-64_VERIFICATION.md` until this wave.
+
+### Fix 1 · a failed call drops only the connection it ran on (`workspace/src/db.ts`)
+
+The fault, as the check reproduced it: `createPgQuery`'s `drop()` closed whichever connection was
+current. Two calls in flight on connection 1; the first fails and drops it; the next call opens
+connection 2; the second call fails late and `drop()` closes the healthy connection 2.
+
+Red, commit `317e86e` (`workspace/test/runner/db.suite.ts`, the block "with two calls in flight":
+clients whose statements stay open until the test answers or fails each one):
+
+```
+$ npx vitest run test/runner.test.ts
+       × a call that fails late drops the connection it ran on, never the one opened since
+       × a late 57P01 from a dropped connection leaves the new one alone
+AssertionError: expected 1 to be +0 // Object.is equality
+ ❯ test/runner/db.suite.ts:300:30
+    299|       await expect(second).rejects.toThrow(/terminated/);
+    300|       expect(made[1]?.ended).toBe(0);
+AssertionError: expected 1 to be +0 // Object.is equality
+ ❯ test/runner/db.suite.ts:343:30
+ Test Files  1 failed (1)
+      Tests  2 failed | 157 passed (159)
+```
+
+`made[1]` is connection 2 and `ended` counts its `end()` calls: the late failure closed it. The
+block's third case ("closes a connection once when both calls on it fail") passed on the old code
+and is kept as a guard on the fix.
+
+Green, commit `54fd3c6`:
+
+```
+$ npx vitest run test/runner.test.ts
+ Test Files  1 passed (1)
+      Tests  159 passed (159)
+```
+
+What changed: `drop(target)` takes the connection the failed call ran on. It clears the current
+connection only when that is the same one, and closes a connection at most once. A connect that
+fails drops nothing, because `connect()` already closes its own half-open client. `query.end()`
+still closes the current connection. The first case also asserts that the call after the late
+failure runs on connection 2 and no third connection is opened.
+
+### Fix 2 · the byte-order mark is written as an escape (`workspace/src/config.ts` and its test)
+
+`cleanSecret`'s regex held the invisible character itself, and `config.test.ts` built its inputs
+with the same character in two template strings.
+
+Red, commit `8ee5faf` (`workspace/test/config.test.ts`, the block "the byte-order mark in source":
+it reads every `.ts` and `.mjs` file under `src/` and `test/`):
+
+```
+$ npx vitest run test/config.test.ts
+     × is in no source file as a literal character
+     × is written as an escape where config.ts strips it
+AssertionError: expected [ 'src/config.ts', …(1) ] to deeply equal []
++   "src/config.ts",
++   "test/config.test.ts",
+AssertionError: expected '/**\n * The runner\'s constants (brie…' to contain '/^\uFEFF/'
+ Test Files  1 failed (1)
+      Tests  2 failed | 67 passed (69)
+```
+
+Green, commit `855e9fc`:
+
+```
+$ npx vitest run test/config.test.ts
+ Test Files  1 passed (1)
+      Tests  69 passed (69)
+$ grep -c $'\xEF\xBB\xBF' workspace/src/config.ts workspace/test/config.test.ts     (from the repo root)
+workspace/src/config.ts:0
+workspace/test/config.test.ts:0
+$ git grep -c -I $'\xEF\xBB\xBF' -- workspace
+(no output: no tracked file under workspace/ holds the three bytes)
+$ grep -n 'uFEFF' workspace/src/config.ts workspace/dist/config.js
+workspace/src/config.ts:135:  return raw.replace(/^\uFEFF/, '').replace(/[\r\n]/g, '').trim();
+workspace/dist/config.js:115:    return raw.replace(/^\uFEFF/, '').replace(/[\r\n]/g, '').trim();
+```
+
+Two things found on the way, both worth knowing for the next edit of these lines:
+
+* The test transformer cooks an escape inside a tagged template: `String.raw` with the escape in
+  it gives the one character, not six. A first draft of the third case built its expected text
+  that way and passed on the old code, so it proved nothing. The committed case builds the six
+  characters from a plain string and asserts their length is 6.
+* The edit that added the test's `MARK` line wrote the character where the escape was meant: the
+  red commit's line holds the character, read back with `cat -A`, so the scan named the test file
+  for three marks, not two. A later edit of this file kept the same escape as written, so it does
+  not happen every time, and nothing on screen shows which one happened. The four marks were
+  therefore rewritten by a one-off node script that builds both forms from character codes, and
+  the bytes were read back with the `grep` lines above. That is the one edit of this wave not made
+  with the edit tool; any later edit of these lines needs the same read-back.
+
+### Fix 3 · `workspace/test/stream-json.test.ts` is under 800 lines
+
+Red, commit `5a5d076` (`workspace/test/config.test.ts`, "the size of a source file", over the same
+list of files as the mark scan):
+
+```
+$ npx vitest run test/config.test.ts
+     × is at most 800 lines, tests and suites included
++     "file": "test/stream-json.test.ts",
++     "lines": 824,
+ Test Files  1 failed (1)
+      Tests  1 failed | 69 passed (70)
+```
+
+Green, commit `0eb33b3`:
+
+```
+$ npx vitest run test/config.test.ts
+ Test Files  1 passed (1)
+      Tests  70 passed (70)
+$ npx vitest run test/stream-json.test.ts          (task 9's command)
+ Test Files  1 passed (1)
+      Tests  109 passed (109)
+$ npx vitest run test/stream-json.test.ts --reporter=verbose | grep -c "failing closed on the gate"
+12
+$ wc -l test/stream-json.test.ts test/stream-json/gate.suite.ts test/helpers/stream-lines.ts
+  648 test/stream-json.test.ts
+  110 test/stream-json/gate.suite.ts
+  110 test/helpers/stream-lines.ts
+```
+
+The describe block "failing closed on the gate" (12 cases) is now
+`workspace/test/stream-json/gate.suite.ts`, which `stream-json.test.ts` imports the way
+`runner.test.ts` imports its suites, so task 9's command still runs it: 109 cases before and after.
+The hand-built stream lines and the `replay` helper that both files need moved to
+`workspace/test/helpers/stream-lines.ts`. Nothing was rewritten on the way: a `diff` of the moved
+block against lines 584 to 671 of the old file, and of the builders against lines 65 to 142 with
+`export` added, prints nothing. The largest files the stream owns are now `test/runner.test.ts`
+(746) and `test/runner/cli-turn.suite.ts` (718).
+
+Two files beyond the Files table, for the PM to list with the thirteen above:
+`workspace/test/stream-json/gate.suite.ts` and `workspace/test/helpers/stream-lines.ts`. Neither is
+under a path the image copies.
+
+### The rename
+
+`git mv docs/planning/sprint-2/verification/102_W-64_VERIFICATION.md
+docs/planning/sprint-2/verification/102_W64_VERIFICATION.md` (ruling T2: no hyphen). Two lines
+named the old file and now name the new one: the last line of `workspace/README.md` and the `note`
+of `workspace/test/fixtures/recordings.json`.
+
+### Read, no code change
+
+Each of the five is true as built. Line numbers are the source's at this wave's last commit.
+
+1. **`workspace_begin` is called once per request, before the provider.** `startTurn` is called
+   once per claim (`src/runner.ts:126`). Its `run()` calls `deps.rpc.begin` once
+   (`src/turn.ts:229`) and returns `skipped` if that call is refused; only after it does `collect`
+   run the provider (`src/turn.ts:248`). The resume retry is the loop inside the provider
+   (`src/providers/claude-cli.ts:418` to `444`), which holds no database call. Tests: "routes,
+   begins, flushes every 250 ms…" (one `begin` recorded), "does not run the provider when the
+   request is no longer claimed at begin", and "retries a --resume that exits non-zero…" (two CLI
+   starts inside one `runTurn`).
+2. **A turn whose stream reported no session id hands the claimed id back to `workspace_finish`.**
+   `claudeSessionId: collected.result?.claudeSessionId ?? claim.claudeSessionId`
+   (`src/turn.ts:267`). The provider reports an id only from an init line, and only when it is
+   uuid-shaped (`resultOf`, `src/providers/claude-cli.ts:343` to `350`); a start that never ran
+   reports null. Tests: "hands back the stored session id when the provider reported none…" and
+   "hands workspace_finish the stored session id unchanged for that turn".
+3. **A missing or empty `claude_oauth_token` file at turn time is stored as `sign_in_expired`, and
+   no CLI is started.** The token is read before the session is planned
+   (`src/providers/claude-cli.ts:409` to `416`): `readOauthToken` throws for a file that is
+   missing, empty or only white space (`requireSecret`, `src/config.ts:172` to `181`), the provider
+   logs it and yields its one result, `sign_in_expired`, before any `spawn`. Tests: "stores
+   sign_in_expired, and starts nothing, when the token file cannot be read" (no spawn call), "is
+   refused when the file is missing / empty / only white space", and "stores sign_in_expired as the
+   provider reported it".
+4. **The fail-closed hook rule is applied when a tool result arrives.** In `onUser`
+   (`src/stream-json.ts:311` to `328`) a `tool_result` for a counted tool whose `hookExit` is still
+   null stops the turn as `cli_error`; a hook response whose exit code is neither 0 nor 2 stops it
+   when that response arrives (`onHookResponse`, `:299` to `309`). A `tool_use` with no result is
+   not a violation, and `EndConversation` is not counted (`:279`). Tests: the moved suite's first
+   case and its "does not fail a turn that ended before a tool ran…" case.
+5. **A question whose first character after white space is `/` is framed under the line
+   `The new question:`.** `asQuestion` (`src/replay.ts:53` to `55`) tests
+   `question.trimStart().startsWith('/')` and returns the header, an empty line, then the question
+   as written. It is used for a resumed start and for a fresh start with no replay
+   (`src/providers/claude-cli.ts:369`, `src/replay.ts:60`); with a replay the question is always
+   under that header. Tests: "puts a question that opens with a slash under the question header…"
+   and "never hands the CLI a prompt that opens with a slash (fresh start / resume start)".
+
+### Where the stream stands after wave 2
+
+```
+$ npm run typecheck                    (from workspace/)
+(no output, exit 0)
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  566 passed (566)
+$ npx vitest run --coverage
+ Test Files  9 passed (9)
+      Tests  566 passed (566)
+All files         |    92.5 |    86.97 |   91.37 |   94.59 |
+  db.ts           |   94.89 |    81.08 |   95.83 |   96.34 | 73,229-230
+Lines        : 94.59% ( 753/796 )
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+$ docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z
+(the same value as after round 1; unchanged)
+```
+
+566 against round 1's 559: three cases for the connection, three for the mark, one for file size.
+By task: router 67, tool gate 78, providers and argv 54, stream parser 109, runner, MCP config,
+config and system prompt 258.
