@@ -19,7 +19,10 @@
  *
  * WHAT IS SHOWN UNDER A QUESTION comes from its `workspace_requests` row
  * (`components/workspace/thread.ts`). After Stop the stopped sentence shows at
- * once: the request is marked here before the database has answered.
+ * once: the request is marked here before the database has answered. The
+ * partial text stays under it until the stored row replaces it; after Stop on
+ * a claimed request the messages are read again about 3 s and about 10 s
+ * later, so that row shows even when its `done` broadcast is missed.
  *
  * WITH NO TURN TO SHOW the column says which of three states it is in (the
  * PM's ruling U1): no conversation selected, rows still being read, or an id
@@ -94,6 +97,9 @@ const NONE_STOPPED: ReadonlySet<number> = new Set();
 /** The key of the thread when no conversation is selected. */
 const NO_CONVERSATION_KEY = 'none';
 
+/** How long after Stop on a claimed request the messages are read again: about 3 s, and about 10 s. */
+const STOP_REREAD_DELAYS_MS: readonly number[] = [3_000, 10_000];
+
 /**
  * What went wrong, one line each, in the reason it came with. Two failures of a
  * question are not here, because each has its own words: a refusal has its
@@ -123,6 +129,30 @@ function refusalLine(asked: unknown, openRequest: WorkspaceRequest | null): stri
 }
 
 /**
+ * After Stop on a claimed request the runner sees the cancel within seconds and
+ * stores what it had written. That row reaches the page at its `done`
+ * broadcast; if the broadcast is missed nothing else reads it, because a
+ * stopped request is no longer polled. So the messages are read again about
+ * 3 s and about 10 s after each such press (the PM's ruling U1). `presses`
+ * counts them; leaving the conversation drops what is still to come.
+ */
+function useStoredRowAfterStop(conversationId: string | null, presses: number): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (conversationId === null || presses === 0) return undefined;
+    const timers = STOP_REREAD_DELAYS_MS.map((delay) =>
+      setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: workspaceKeys.messages(conversationId) });
+      }, delay),
+    );
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, [conversationId, presses, queryClient]);
+}
+
+/**
  * Stop. The request is marked the moment the button is pressed, so the stopped
  * sentence shows at once; the mark comes off again if the database says the
  * request had already finished (false) or the cancel failed (it is still open).
@@ -131,15 +161,24 @@ function refusalLine(asked: unknown, openRequest: WorkspaceRequest | null): stri
  * the open one (`openRequest`, as the rows have it): once that request has
  * finished there is nothing left to stop, and the next one never had Stop
  * pressed on it.
+ *
+ * Stop on a claimed request also has the messages read again by the clock
+ * (`useStoredRowAfterStop`). A queued request has no runner, so no partial
+ * answer is on its way.
  */
 function useStop(conversationId: string | null, openRequest: WorkspaceRequest | null) {
   const [stopped, setStopped] = useState<ReadonlySet<number>>(NONE_STOPPED);
+  const [midAnswerStops, setMidAnswerStops] = useState(0);
   const cancel = useCancelWorkspaceRequest(conversationId);
+  useStoredRowAfterStop(conversationId, midAnswerStops);
   const failedOnOpen = openRequest !== null && openRequest.id === cancel.variables;
 
   function stop(requestId: number) {
     const unmark = () => setStopped((ids) => new Set([...ids].filter((id) => id !== requestId)));
     setStopped((ids) => new Set([...ids, requestId]));
+    if (openRequest?.id === requestId && openRequest.state === 'claimed') {
+      setMidAnswerStops((count) => count + 1);
+    }
     cancel.mutate(requestId, {
       onSuccess: (changed) => {
         if (!changed) unmark();
