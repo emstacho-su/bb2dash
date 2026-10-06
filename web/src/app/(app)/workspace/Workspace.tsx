@@ -35,7 +35,7 @@
  * `data-request-id` (the open request, when there is one).
  */
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Composer } from '@/components/workspace/Composer';
 import { ConversationList } from '@/components/workspace/ConversationList';
@@ -84,7 +84,51 @@ function problemLines(failed: { read: unknown; ask: unknown; stop: unknown }): s
     lines.push(isMissingConversation(failed.ask) ? conversationProblemLine(reason) : askProblemLine(reason));
   }
   if (failed.stop) lines.push(stopProblemLine(workspaceErrorReason(failed.stop)));
-  return lines;
+  // Two failures can say the same line (a read and a question, on an id that does not exist).
+  return [...new Set(lines)];
+}
+
+/**
+ * Stop. The request is marked the moment the button is pressed, so the stopped
+ * sentence shows at once; the mark comes off again if the database says the
+ * request had already finished (false) or the cancel failed (it is still open).
+ */
+function useStop(conversationId: string | null) {
+  const [stopped, setStopped] = useState<ReadonlySet<number>>(NONE_STOPPED);
+  const cancel = useCancelWorkspaceRequest(conversationId);
+
+  function stop(requestId: number) {
+    const unmark = () => setStopped((ids) => new Set([...ids].filter((id) => id !== requestId)));
+    setStopped((ids) => new Set([...ids, requestId]));
+    cancel.mutate(requestId, {
+      onSuccess: (changed) => {
+        if (!changed) unmark();
+      },
+      onError: unmark,
+    });
+  }
+
+  return { stopped, stop, error: cancel.error, pending: cancel.isPending };
+}
+
+/** The message column's wrapper: what the channel is doing, as data attributes (see the header). */
+function StreamArea(props: {
+  stream: WorkspaceStreamView;
+  openRequestId: number | undefined;
+  children: ReactNode;
+}) {
+  const { stream } = props;
+  return (
+    <div
+      data-workspace-stream
+      data-topic={stream.topic}
+      data-channel={stream.channel}
+      data-channel-detail={stream.channelDetail ?? undefined}
+      data-request-id={props.openRequestId}
+    >
+      {props.children}
+    </div>
+  );
 }
 
 interface ThreadProps {
@@ -104,15 +148,14 @@ interface ThreadProps {
 
 function Thread(props: ThreadProps) {
   const { conversationId, requests, messages, live, stream } = props;
-  const [stopped, setStopped] = useState<ReadonlySet<number>>(NONE_STOPPED);
   const ask = useAskWorkspace();
-  const cancel = useCancelWorkspaceRequest(conversationId);
+  const { stopped, stop, error: stopError, pending: stopping } = useStop(conversationId);
 
   // Stop was pressed on it: it reads as stopped, and the button as Ask, before the row does.
   const openRequest =
     props.openRequest !== null && !stopped.has(props.openRequest.id) ? props.openRequest : null;
   const turns = buildTurns({ messages, requests, live, stoppedRequestIds: stopped });
-  const problems = problemLines({ read: props.readError, ask: ask.error, stop: cancel.error });
+  const problems = problemLines({ read: props.readError, ask: ask.error, stop: stopError });
 
   async function handleAsk(text: string): Promise<boolean> {
     try {
@@ -125,20 +168,6 @@ function Thread(props: ThreadProps) {
     }
   }
 
-  function handleStop() {
-    if (openRequest === null) return;
-    const requestId = openRequest.id;
-    const unmark = () => setStopped((ids) => new Set([...ids].filter((id) => id !== requestId)));
-    setStopped((ids) => new Set([...ids, requestId]));
-    cancel.mutate(requestId, {
-      // False: it had already finished, so the row says how. An error: it is still open.
-      onSuccess: (changed) => {
-        if (!changed) unmark();
-      },
-      onError: unmark,
-    });
-  }
-
   return (
     <section className={styles.thread}>
       {problems.map((line) => (
@@ -146,21 +175,17 @@ function Thread(props: ThreadProps) {
           {line}
         </p>
       ))}
-      <div
-        data-workspace-stream
-        data-topic={stream.topic}
-        data-channel={stream.channel}
-        data-channel-detail={stream.channelDetail ?? undefined}
-        data-request-id={openRequest?.id}
-      >
+      <StreamArea stream={stream} openRequestId={openRequest?.id}>
         <MessageList turns={turns} />
-      </div>
+      </StreamArea>
       <Composer
         requestOpen={openRequest !== null}
-        busy={ask.isPending || cancel.isPending}
+        busy={ask.isPending || stopping}
         refusal={ask.error instanceof WorkspaceRefusal ? ask.error.message : null}
         onAsk={handleAsk}
-        onStop={handleStop}
+        onStop={() => {
+          if (openRequest !== null) stop(openRequest.id);
+        }}
         onEdit={() => {
           if (ask.isError) ask.reset();
         }}

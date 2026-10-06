@@ -143,12 +143,19 @@ export interface ConversationListProps {
   onArchivedSelected: () => void;
 }
 
-export function ConversationList({ selectedId, now, onArchivedSelected }: ConversationListProps) {
-  const hydrated = useHydrated();
-  const [showArchived, setShowArchived] = useState(false);
-  const active = useWorkspaceConversations(false);
+/** "Show archived": off by default, and not remembered from one visit to the next. */
+function ArchivedToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label className={styles.toggle}>
+      <input type="checkbox" checked={on} onChange={(event) => onChange(event.target.checked)} />
+      {SHOW_ARCHIVED_LABEL}
+    </label>
+  );
+}
+
+/** Archive and Unarchive: the one write the list makes. */
+function useArchive(selectedId: string | null, onArchivedSelected: () => void) {
   const archive = useSetConversationArchived();
-  const context: RowContext = { selectedId, now, busy: archive.isPending };
 
   function setArchived(conversation: WorkspaceConversation, archived: boolean) {
     archive.mutate(
@@ -160,6 +167,17 @@ export function ConversationList({ selectedId, now, onArchivedSelected }: Conver
       },
     );
   }
+
+  return { setArchived, error: archive.error, busy: archive.isPending };
+}
+
+export function ConversationList({ selectedId, now, onArchivedSelected }: ConversationListProps) {
+  const hydrated = useHydrated();
+  const [showArchived, setShowArchived] = useState(false);
+  const active = useWorkspaceConversations(false);
+  const archive = useArchive(selectedId, onArchivedSelected);
+  const context: RowContext = { selectedId, now, busy: archive.busy };
+  const { setArchived } = archive;
 
   return (
     <nav className={styles.list} aria-label={CONVERSATIONS_HEADING}>
@@ -187,14 +205,7 @@ export function ConversationList({ selectedId, now, onArchivedSelected }: Conver
         />
       )}
 
-      <label className={styles.toggle}>
-        <input
-          type="checkbox"
-          checked={showArchived}
-          onChange={(event) => setShowArchived(event.target.checked)}
-        />
-        {SHOW_ARCHIVED_LABEL}
-      </label>
+      <ArchivedToggle on={showArchived} onChange={setShowArchived} />
 
       {hydrated && showArchived && (
         <ArchivedRows

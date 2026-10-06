@@ -279,6 +279,29 @@ function openChannel(supabase: SupabaseBrowserClient, stay: Stay): RealtimeChann
 }
 
 /**
+ * Join the stay's topic once the last channel has left, so the page never
+ * holds two. `opened` is called in the same tick the channel is opened: the
+ * caller's cleanup must be able to leave it from that moment on.
+ */
+async function joinAfter(
+  leaving: Promise<void>,
+  supabase: SupabaseBrowserClient,
+  stay: Stay,
+  opened: (channel: RealtimeChannel) => void,
+): Promise<void> {
+  await leaving;
+  if (stay.left()) return;
+  // The last channel is gone and this one has not answered. Said here, after the wait,
+  // so a return to the topic just left does not keep reading "joined".
+  stay.dispatch({ type: 'channel', topic: stay.topic, status: 'joining', detail: null });
+  // A private channel is authorised by the owner's token (141's policy), and the join
+  // payload carries the token only once the socket has it.
+  await supabase.realtime.setAuth();
+  if (stay.left()) return;
+  opened(openChannel(supabase, stay));
+}
+
+/**
  * Leave a channel. It is finished with whatever the leave answers, so the next
  * join never waits on a failure; but a failure is logged, never swallowed.
  * supabase-js resolves a leave to `ok`, `timed out` or `error`, and can reject.
@@ -327,22 +350,11 @@ export function useWorkspaceStream(
       left: () => left,
     };
 
-    const join = async (): Promise<void> => {
-      await leaving.current;
-      if (left) return;
-      // The last channel is gone and this one has not answered. Said here, after the wait,
-      // so a return to the topic just left does not keep reading "joined".
-      dispatch({ type: 'channel', topic, status: 'joining', detail: null });
-      // A private channel is authorised by the owner's token (141's policy), and the join
-      // payload carries the token only once the socket has it.
-      await supabase.realtime.setAuth();
-      if (left) return;
-      channel = openChannel(supabase, stay);
-    };
-
     // A join that fails is not fatal: the stored rows are polled while a request is open.
     // It is recorded, so the screen can tell a quiet channel from a missing one.
-    join().catch((error: unknown) => {
+    joinAfter(leaving.current, supabase, stay, (opened) => {
+      channel = opened;
+    }).catch((error: unknown) => {
       if (left) return;
       const detail = error instanceof Error ? error.message : String(error);
       dispatch({ type: 'channel', topic, status: 'error', detail });
