@@ -704,3 +704,200 @@ The same read before the round's first dry run (16:20:08 UTC) gave the same zero
   suite once.
 * Still never met a real partition: the send-and-receive half of unit 141, the empty-delta half
   of unit 142 and the partition predicate (unchanged from wave 1).
+
+## Review round (2026-10-06, 21:37 to 23:50 UTC): migration 143, written and dry-run only
+
+Ruling V3 (`rulings-5.md`; 102a, "PM rulings for the review round"). **Nothing was applied to
+prod.** `apply_migration` was not called; every statement that wrote ran inside `begin; …
+rollback;` through `execute_sql`. 140, 141 and 142 are on prod and were read, never edited.
+
+### What is on the branch
+
+| commit | what |
+|---|---|
+| `0218055` | test(21): `db/tests/phase21_143_review_round.sql`, red |
+| `b93356b` | feat(21): `db/migrations/143_workspace_review_round.sql` |
+| `c555d65` | docs(21): `DATA_SYNTAX.md`, `## Workspace (migrations 140-143)` |
+| `2101817` | test(21): unit 140, the status view's column list accepts 140's four alone or followed by 143's one |
+| `0e78128` | test(21): unit 143 split into one block per change, each with its own setup (no assertion changed) |
+
+**The fingerprint to apply against** (`git show HEAD:db/migrations/143_workspace_review_round.sql | md5sum`,
+LF only, `i/lf w/lf`): 25400 bytes, md5 `b6dcb28b0b8c4332490a753bb23382fa`. The two bodies as
+`pg_proc.prosrc` holds them: `workspace_finish` `1bcc855d63956911b8285628236707fb` (142's:
+`7bf98a41…`), `workspace_claim` `00eb625572c6f7d398d84adef786f050` (142's: `b1af4495…`).
+
+Both bodies are 142's plus the lines marked `143` and nothing else (`diff` of the text between
+`as $$` and `$$;`, 142 against 143): `workspace_finish` `35a36,40`, five lines added (the comment
+and the refusal); `workspace_claim` `3a4` and `25a27,40`, fifteen lines added (one constant, the
+orphan sweep with its comment). No line of 142 was changed or removed.
+
+### The four changes, as built
+
+* **CR-8.** `v_workspace_status` keeps its four columns and gains `polled_age_seconds integer`
+  last: `greatest(0, floor(extract(epoch from (now() - polled_at))))::integer` inside a `case`,
+  because `greatest` skips a null and would have turned "no heartbeat yet" into 0. The view states
+  `with (security_invoker = true)` again: `create or replace view` replaces a view's options.
+* **Security note.** `workspace_finish` raises 22023 `workspace_finish: request % is not claimed or
+  cancelled (it is %)` right after the request row is read and locked.
+* **CR-4.** A second statement in `workspace_claim`, after the stale sweep: `finished = true,
+  error_code = <the request's>` on unfinished assistant rows whose request is `cancelled`, `failed`
+  or `done` with `finished_at` more than 10 minutes old (its own constant, `c_orphan_after`).
+* **CR-7.** `create or replace trigger … when (…)`: the trigger fires unless `archived` is the only
+  value that differs between the old and the new row.
+* **Guard.** The view (invoker, five columns, grants), the five SECURITY DEFINER functions
+  (`workspace_runner` only, plpgsql, `search_path` pinned; none for anon, authenticated,
+  service_role or PUBLIC), no table privilege for `workspace_runner`, the trigger, and
+  phase15_101's three catalogue rules across `public`.
+* Three `comment on` statements replace the texts of 140 and 142 that this file made wrong.
+
+### How the dry runs were made
+
+As in the pre-freeze round: a text goes in as a dollar-quoted literal, the database fingerprints
+the literal, and a `do` block runs exactly that literal with `execute`. Two things are new.
+
+* **143 went in whole once** (call A), byte for byte. Every later call rebuilt 143's four objects
+  with a short scaffold instead of the 25 KB file: the view and the trigger typed, the two bodies
+  made from prod's own `prosrc` with `replace()`. The scaffold refuses to go on unless the four
+  fingerprints equal the ones read when the file itself ran: both `prosrc` md5s above,
+  `md5(pg_get_viewdef)` `5bfbef6b7072bdb9e7c996ab0388f2bd`, `md5(pg_get_triggerdef)`
+  `5e142a58ba10030c4a2e36e3c035d0ae`, options `{security_invoker=true}`.
+* **Unit texts went in block by block**, minified (comments, blank lines and runs of spaces out),
+  each refused unless its white-space-blind md5 equals the file's (`scratchpad/w63r5/build.mjs`).
+
+### 1. Red, through the Runner, prod as it stands (140 to 142 applied)
+
+```
+$ node scripts/db-test.mjs --only phase21_143_review_round.sql
+FAIL  phase21_143_review_round.sql  FAIL phase21_143: migration 143 is not applied (v_workspace_status has no column polled_age_seconds)
+```
+
+Expected until the PM applies 143. It is the same line before and after the unit's split.
+
+### 2. Call A: 143 whole, its guard, and the direct probes, red then green
+
+One rolled-back transaction: the probes against prod as it is, undone; then the file from its
+literal; then the same probes again.
+
+```
+sent text: 25400 bytes, md5 b6dcb28b0b8c4332490a753bb23382fa, crlf false      (= the file, byte for byte)
+143 executed from that text; its guard passed
+view columns: polled_at timestamp with time zone, runner text, open_requests integer, oldest_open_at timestamp with time zone, polled_age_seconds integer
+view options {security_invoker=true}
+view acl {postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,db_test_runner=r/postgres,authenticated=r/postgres}
+claim acl = finish acl = {postgres=X/postgres,workspace_runner=X/postgres}
+trigger: … FOR EACH ROW WHEN (((NOT (new.archived IS DISTINCT FROM old.archived)) OR (new.title IS DISTINCT FROM old.title)
+         OR (new.claude_session_id IS DISTINCT FROM old.claude_session_id) OR (new.updated_at IS DISTINCT FROM old.updated_at)
+         OR (new.created_at IS DISTINCT FROM old.created_at) OR (new.id IS DISTINCT FROM old.id))) EXECUTE FUNCTION set_updated_at()
+prosrc md5: the two above; the other six workspace_* functions unchanged from prod
+```
+
+| probe | **red**: prod as it is | **green**: with 143 |
+|---|---|---|
+| `polled_age_seconds`, no heartbeat row | `42703 column "polled_age_seconds" does not exist` | `null` |
+| right after a heartbeat | | `0` |
+| heartbeat 47.8 s old | | `47 integer` |
+| finish on a `done` request | `accepted`; its stored answer afterwards: `written over` | `22023 workspace_finish: request 47 is not claimed or cancelled (it is done)`; stored answer afterwards: `first answer` |
+| finish on a `claimed` request | `failed / timeout` | `failed / timeout` |
+| finish on a `cancelled` request | `cancelled, answer: partial, code cancelled, finished true` | the same |
+| answer of a request stopped 11 minutes ago, after one poll | `finished false, code null` | `finished true, code cancelled` |
+| answer of a request stopped 9 minutes ago, after one poll | `finished false, code null` | `finished false, code null` |
+| `updated_at` after an archive-only update | `moved to now(), archived true` | `still a day old, archived true` |
+| `updated_at` after a title update | `moved to now()` | `moved to now()` |
+
+### 3. Unit 143 with 143, from its own text, block by block
+
+| block | bytes sent | result |
+|---|---|---|
+| section 0, shape (22:55:55 UTC; with 143's three comments, md5-equal to the file's) | 6195 | text = file, every statement ran, no assertion raised |
+| sections 1 and 2, CR-8 | | **not run: held** (section 6 below) |
+| section 3, the finish refusal (23:45:49) | 6001 | text = file, every statement ran, no assertion raised |
+| section 4, CR-4 (23:46:30) | 6532 | text = file, every statement ran, no assertion raised |
+| section 5, CR-7 (23:45:49) | 3223 | text = file, every statement ran, no assertion raised |
+
+The unit's own `: PASS` row was not read: it is the last statement of a whole run, and the unit
+never ran whole. Sections 3 to 5 ran as the split file has them (`0e78128`); section 0 is the
+same text before and after the split.
+
+### 4. Unit 140, the one existing assertion 143 makes wrong
+
+Section 0 from its own text (10880 bytes), with 143, both forms in one call (23:44:02 UTC). The
+"before" text is the edited one with the three new lines put back by `replace()`; its md5 equals
+the committed file's before `2101817`.
+
+```
+red   (as committed before the edit): P0001 FAIL phase21_140 (shape): v_workspace_status columns are [polled_at
+      timestamp with time zone, runner text, open_requests integer, oldest_open_at timestamp with time zone,
+      polled_age_seconds integer]
+green (as edited): every statement ran, no assertion raised
+```
+
+No other existing assertion is made wrong by 143, so no other unit was edited: unit 140 checks
+only that a `set_updated_at()` trigger exists, unit 141 finishes a claimed request, unit 142
+finishes a cancelled and two claimed ones, and none of them archives a chat and reads `updated_at`.
+
+### 5. The Runner, prod as it stands (23:44 UTC, nothing applied)
+
+```
+PASS  phase21_140_workspace_tables.sql          (as edited)
+PASS  phase21_140b_workspace_writes.sql
+PASS  phase21_141_workspace_realtime.sql
+PASS  phase21_142_workspace_runner.sql
+FAIL  phase21_143_review_round.sql  FAIL phase21_143: migration 143 is not applied (v_workspace_status has no column polled_age_seconds)
+PASS  phase15_101_search_path_pin.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+PASS  phase15_100_db_test_runner_role.sql
+```
+
+`--list` plans 70 units; the new one is unit 69. Unit lengths: 613, 419, 279, 665, 660 lines.
+
+### 6. What was NOT proven, and why
+
+**Five `execute_sql` calls were held and came back `Invalid or expired requestState`** after about
+15 to 20 minutes each; none reached the database (read after: four view columns, no `when` on the
+trigger, 142's two bodies, no `postgres` membership in `workspace_runner`, no transaction left
+open). It is not the size: a 39.5 KB call went through and a 13.7 KB one was held. Every held
+call carried a unit block that has a `DELETE` with no `WHERE` (`delete from
+workspace_runner_heartbeat;`, the one-row table) or unit 076's two `truncate` tries; every call
+without one went through at once. The tool says of itself that destructive statements may need
+the user's confirmation, and this session has nobody to give it. That is the reading the evidence
+supports; it was not proven. **The statement was not reworded to get it past the hold.**
+
+So these are still owed, with 143, in a session where Stack can confirm:
+
+* unit 143, sections 1 and 2 (what they assert was seen in call A's probes: null, 0, 47, integer;
+  not from the unit's own text);
+* unit 142 whole (its section 1 has the same `delete`); unit 140's sections 1, 5, 6 and 7 (section
+  6 has it); unit 076 (the `truncate` tries);
+* units 140b, 141 and 101: no such statement, so they should go through; they were not sent for
+  lack of room in this session.
+
+Ready-made texts, built from the files by `scratchpad/w63r5/gen-calls.mjs` (nothing typed by
+hand, each `begin; … rollback;`, each unit in its own subtransaction with its PASS row carried
+out): `scratchpad/w63r5/calls/c1.sql` (143 + unit 143, 42.8 KB), `c2.sql` (+ unit 140, 41.6 KB),
+`c3.sql` (+ unit 142, 43.1 KB), `c4.sql` (+ 140b and 141, 40.0 KB), `c5.sql` (+ 101 and 076,
+26.3 KB). They carry 143 minified with its guard (15844 bytes). They were generated, not run.
+
+Also not proven: nothing here ran as `db_test_runner` with 143 in place (the dry runs are
+`postgres`); the Runner on unit 143 is owed after the apply.
+
+### 7. Choices beyond the letter of the ruling
+
+* `polled_age_seconds` is never negative (`greatest(0, …)`): a reader whose transaction began just
+  before the heartbeat's would otherwise read -1.
+* "An update that changes only `archived`" is read by value: the trigger stays silent when
+  `archived` is the only value that differs. An update that changes nothing at all (archiving a
+  chat that is already archived, or a title set to itself) still fires, as it did before 143.
+  Asked of the PM.
+* The orphan sweep reads "closed for more than 10 minutes" from `finished_at` alone. A closed
+  request with no `finished_at` (only a hand-made write makes one; `workspace_cancel`,
+  `workspace_finish` and the stale sweep all stamp it) is left alone.
+* The orphan sweep has no index of its own and runs on every poll (every 2 s). The ruling is
+  `create or replace` only, so none was added; on today's tables it reads a handful of rows.
+* The three `comment on` statements, and the trigger's when clause naming every column of the
+  table (unit 143 fails when a column is missing from it).
+
+### 8. A side effect every dry run has
+
+`workspace_requests.id` is an identity column and a sequence does not roll back, so each dry run
+and each Runner pass moves it on (the probe above met request 47 on a table that holds one row).
+Nothing reads the ids as a count.
