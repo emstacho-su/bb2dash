@@ -1,9 +1,9 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   ALLOWED_TOOLS,
@@ -17,7 +17,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE = path.resolve(HERE, '..');
 const BUILT_GATE = path.join(PACKAGE, 'dist', 'hooks', 'tool-gate.js');
 const SETTINGS = path.join(PACKAGE, 'claude', 'settings.json');
-const BUILD_TIMEOUT_MS = 120_000;
 const DENY = 2;
 const SILENT = 0;
 
@@ -163,14 +162,8 @@ describe('runGate', () => {
   });
 });
 
+// dist/ is built once per run by test/global-setup.ts.
 describe('the built gate, run as a process', () => {
-  beforeAll(() => {
-    execFileSync(process.execPath, [path.join(PACKAGE, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.json'], {
-      cwd: PACKAGE,
-      stdio: 'pipe',
-    });
-  }, BUILD_TIMEOUT_MS);
-
   it('is built where the image and the hook command expect it', () => {
     expect(fs.existsSync(BUILT_GATE)).toBe(true);
   });

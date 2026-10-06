@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
     environment: 'node',
+    // One build of dist/ before the run: the gate and the healthcheck are tested as processes.
+    globalSetup: ['test/global-setup.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
