@@ -139,3 +139,41 @@ Error: Cannot find module '../src/errors.js' imported from C:/Users/stack/projec
  Test Files  2 failed (2)
       Tests  no tests
 ```
+
+### Green (the argv provisional until task 9's lookup recording)
+
+```
+$ npx vitest run test/providers.test.ts test/claude-argv.test.ts
+ Test Files  2 passed (2)
+      Tests  54 passed (54)
+$ npm run typecheck
+> tsc -p tsconfig.test.json
+(no output, exit 0)
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+```
+
+One test line changed between red and green: the case "never puts the stored id `''` in argv"
+asserted `argv` does not contain the stored id, and an empty string is also the `--tools` value. The
+assertion is skipped for the empty id only; the same case still asserts no `--resume` and the new
+uuid after `--session-id`.
+
+What the tests hold:
+
+* `test/claude-argv.test.ts` spells the Contract's argv out as one literal list and compares
+  `buildArgv()` to it element for element, on the fresh form (`--session-id <new uuid>`) and on the
+  resumed form (`--resume <claude_session_id>`).
+* `planSession()` resumes a stored id only when it has the uuid shape migration 140 checks;
+  anything else (`not-a-uuid`, an upper-case uuid, an id with a flag behind it, an empty string) is a
+  fresh start under a new random uuid and never reaches argv. A new id is never the conversation's
+  own id, even when the generator returns it.
+* The prompt is the last element, after `--`, for a plain question, a prompt beginning `--model`, a
+  prompt that is only a flag, one beginning `--`, and one with line breaks and quotes.
+* `--append-system-prompt` carries `prompts/system.md` with trailing white space trimmed (what
+  `"$(cat prompts/system.md)"` gives in a shell, so the recording and the runner pass the same text).
+* `providers.test.ts`: three provider ids; the `ollama` and `frontier-api` stubs type-check as
+  `Provider` and throw `ProviderNotConfiguredError`, which maps to `provider_not_configured`.
+* `CliArgsInput.paths` is the one opening for task 9's two recording substitutions
+  (`--mcp-config`, `--settings`); a test asserts nothing else changes when it is given.

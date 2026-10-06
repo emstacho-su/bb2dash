@@ -3,12 +3,11 @@
  * receives. A code constant on purpose: there is no setting that changes it.
  */
 
+import type { ProviderId } from './providers/types.js';
+
 export const TIERS = ['low', 'mid', 'high'] as const;
 
 export type Tier = (typeof TIERS)[number];
-
-/** The three providers the seam names; only `claude-cli` is connected in v1. */
-export type ProviderId = 'claude-cli' | 'ollama' | 'frontier-api';
 
 export interface TierRoute {
   readonly provider: ProviderId;

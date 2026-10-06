@@ -250,7 +250,8 @@ describe('the session pair', () => {
     const start = planSession({ storedSessionId: stored, conversationId: CONVERSATION_ID }, () => NEW_SESSION_ID);
     expect(start).toEqual({ mode: 'fresh', sessionId: NEW_SESSION_ID });
     const argv = buildArgv(input({ session: start }));
-    expect(argv).not.toContain(stored);
+    // An empty stored id cannot be told apart from the empty --tools value, so it is checked by position.
+    if (stored !== '') expect(argv).not.toContain(stored);
     expect(argv).not.toContain('--resume');
     expect(valueAfter(argv, '--session-id')).toBe(NEW_SESSION_ID);
   });
