@@ -20,6 +20,12 @@ what waits for wave 2 is written out as paste-ready lines.
 state: see "Wave 2" at the end. The numbered list there replaces the draft lines wave 1 kept in this
 file, and the sections below are wave 1's record as written.
 
+**Wave 2b (2026-10-06)** did ruling U2 (the port check, the header, the bb2dash-stack wording, the
+list's four corrections) and then began the docker step. **The image did not build**: steps 1 to 9
+of the list passed, and step 10 failed because the embedding model's download address now answers
+403. No container was started; tasks 12 and 13 are still owed from step 10 on. See "Wave 2b" at the
+end.
+
 ## The guard (read before and after everything this stream did)
 
 ```
@@ -729,6 +735,9 @@ pseudo-terminal: the line then behaves the same pasted into a terminal and run b
 `just up`, never an `up` without the service name. To run the list in another tree (tasks 19 to 22
 run in `bb2dash-wt-21`), change the one folder name after `cd`.
 
+(Wave 2b ran steps 1 to 10 against docker on 2026-10-06; step 10 failed and steps 11 to 39 are
+still unrun. The paragraph below is wave 2a's, as written then.)
+
 **None of these lines has been run against docker.** Their quoting has: each docker line was read
 back out of this file in Git Bash and run with `docker` standing for a program that starts nothing
 and records what it was handed (a native Windows program, so Git Bash treats its arguments as it
@@ -1261,3 +1270,347 @@ Facts from this stream the PM's request can quote:
    (`docker compose stop workspace`) when he takes the line out.
 7. **`grep-clean` stays at 11 tests.** Wave 2's three rules are assertions inside the existing
    Dockerfile test, so the count the ruling names did not move.
+
+(Answered by rulings U2 on 2026-10-06: 1 and 2 accepted, 3 a refusal at the start, 4 corrected where
+it is a comment or a message, 5 and 6 accepted for v1. See "Wave 2b".)
+
+## Wave 2b (2026-10-06) — ruling U2, then the docker step (ruling U4)
+
+First step of the wave: `git fetch origin`, `git merge --no-edit origin/feat/workspace-21` into
+`feat/workspace-21-container` (no conflict; the phase branch was at `37f46cf`), pushed as `c7832ec`.
+bb2dash-stack needed no merge.
+
+### A. Ruling U2 (files only)
+
+| U2 item | what changed | where | red → green |
+|---|---|---|---|
+| a DSN whose port is not 5432 is refused at the start | `dsn_host` refuses it with the fixed sentence `its port is not 5432`; nothing of the value is printed | `docker/workspace/init-firewall.sh` | `af314fe`, `757b649` → `4dd15e3` |
+| the header says exactly what the script prints | a "What it prints" paragraph, held by a test that also reads a start's log | `docker/workspace/init-firewall.sh` | the same three commits |
+| bb2dash-stack wording, `secrets/` → `SECRETS_DIR` | comments and one message; no behaviour | bb2dash-stack `compose.yaml`, `.env.example`, `doctor/lib/checks-host.mjs` | `f858c0e` → `80f6796` |
+| the paste-ready list, four corrections | below | this file | `b4c33a2` (docs) |
+
+**The port check.** RED, the tests before the code (`af314fe`):
+
+```text
+node --test docker/workspace/init-firewall.test.mjs
+✖ a database secret on a port other than 5432 stops the start at deny-all, and nothing of it is printed (U2)
+    AssertionError: The host of workspace_runner_db_url ends .pooler.supabase.com … Firewall raised …
+    actual: 0,   expected: 1
+✖ the header says what a start prints, and a start prints no more: names and the resolver, never an address of an allowed host (U2)
+    AssertionError: the header has its "What it prints" paragraph
+✖ dsn_host: a pooler URL gives its host, anything else is refused with a fixed sentence
+    AssertionError: <the test's fake pooler URL, on port 6543>
+    actual: '0',   expected: '1'
+ℹ tests 20
+ℹ pass 17
+ℹ fail 3
+```
+
+The first failure is the wave 2a script doing what choice 3 said: a secret on 6543 started, and the
+firewall was raised. One more test commit (`757b649`, still red) changed one expected sentence of the
+header test before any code: the first wording said the script never prints "any part" of a
+connection string, and a pooler's host name is a part of one.
+
+GREEN (`4dd15e3`):
+
+```text
+node --test docker/workspace/init-firewall.test.mjs
+ℹ tests 20
+ℹ pass 20
+ℹ fail 0
+node --test docker/grep-clean.test.mjs
+ℹ tests 11
+ℹ pass 11
+ℹ fail 0
+```
+
+What the rule is, in words:
+
+* A URL that names a port other than 5432 stops the start, before any rule is touched, at deny-all,
+  with `<secret name>: its port is not 5432`. The text after the first colon of the host part is
+  compared as text, so `6543`, `54329`, `05432`, a colon with nothing after it and `5432:6543` are
+  all refused. The test reads that neither the port nor the host of a refused secret is printed.
+* **A URL that names no port is accepted**: it means 5432, Postgres's default, which both clients
+  use and which is the one port the pooler's addresses are allowed on. Wave 2a's test already held
+  three such URLs as allowed, and the runner's own config (`workspace/src/config.ts`) accepts them
+  too. If the PM wants an explicit `:5432` required, it is one condition in `dsn_host`.
+* **The header's paragraph is what the script prints, which is one thing more than the ruling's
+  short form** ("the fixed host names and each validated pooler host name, never a user, password,
+  URL or address"): the line `Allowing DNS to <resolver>` prints the address of each resolver in
+  `/etc/resolv.conf` (Docker's own, `127.0.0.11`), and the end check prints its two fixed URLs
+  (`https://example.com`, `https://api.anthropic.com`). The header says so, and says what never
+  shows: a user, a password, a database name, a query string, a whole connection string, anything of
+  a refused secret but its name, and the address of an allowed host. The test holds it: in a
+  working start's log the only IPv4 address is the resolver's. The script's output was not changed.
+
+**bb2dash-stack.** RED (`f858c0e`):
+
+```text
+node --test doctor/workspace.test.mjs doctor/doctor.test.mjs
+✖ compose.yaml, .env.example and the doctor say the secrets live in the folder SECRETS_DIR names, outside every repo (bb2dash rulings U2)
+    AssertionError: compose.yaml, the header
+ℹ tests 52
+ℹ pass 51
+ℹ fail 1
+```
+
+GREEN (`80f6796`): `tests 52`, `pass 52`, `fail 0`; the three other test files that read
+`compose.yaml`, `.env.example` or the README: 32 of 32.
+
+* `compose.yaml`: the header (where `just` gets `SECRETS_DIR`, where the secrets live, what the
+  `./secrets` fallback is for), the `secrets` line of the header's list, one comment over the
+  secrets block, and the dev container's comment ("Any secrets/ folder in it"). No line of YAML
+  changed: the twelve `file: ${SECRETS_DIR:-./secrets}/<name>` lines are as they were, and the test
+  reads one of them.
+* `.env.example`: the header line and the comment over `SECRETS_DIR`; the placeholder is
+  `/path/to/a-folder-outside-every-repo` (it was `/path/to/bb2dash-stack/secrets`). It is still an
+  absolute placeholder, which `doctor.test.mjs` asserts.
+* `doctor/lib/checks-host.mjs`: the message for an unset `SECRETS_DIR` reads `SECRETS_DIR is not
+  set: set it in .env to the folder that holds the secret files, outside every repo, absolute`
+  (its first words are unchanged: `doctor.test.mjs` reads them), and the function's comment.
+* The `justfile` is untouched. Its comment already says the secrets live outside every repo
+  (DECISIONS 2026-10-03) and that the repo folder is what an unset `SECRETS_DIR` falls back to.
+
+**The list's four corrections** (`b4c33a2`): step 11 reads `docker history --no-trunc`; step 35's
+note says the scan container carries the image's compose labels and is never started; step 26 gains
+a literal-address probe of port 6080 (Docker Desktop's host address, the container's own gateway,
+and whatever `host.docker.internal` resolves to) and a read, not a dial, of the sync container's
+published port; step 28's host line probes the pooler on 6543 (it reads the host from the secret
+file and prints nothing of it). Step 3's expected count is 20. The two new programs compile
+(`node --check`) and hold no `!`, `$`, backtick or double quote.
+
+### B. The docker step (tasks 12 and 13): stopped at step 10, the build
+
+**The image did not build, so no container was started and no check of task 12 or 13 that needs
+the image was run.** Steps 1 to 9 of the list passed. Step 10 failed in the `rag` stage: the
+embedding model's download address answers 403 to an anonymous caller (read from this laptop on
+2026-10-06, outside docker too), so the bake the Contract describes cannot work today. It is not the
+firewall, not Docker, not memory, and not this branch's code. Nothing was retried, no other way round was
+tried in docker, and the choice is the PM's ("Questions for the PM, wave 2b", below).
+
+**The guard**, `docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1`:
+
+| when (2026-10-06, UTC) | output |
+|---|---|
+| 20:18:54, before anything of the wave touched docker | `bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z` |
+| 20:24:29, step 1, before the first docker step | the same |
+| 20:27:07, after step 10 (the failed build) | the same |
+| 20:29:39, after reading what the failed build left | the same |
+| 20:40:49, the last read of the wave | the same |
+
+At that last read `docker compose -p bb2dash-wt21 --profile workspace ps --all workspace` printed its
+header and no row, and `docker ps -a` listed the same five containers as before the build.
+
+No refusal: the session ran every docker line it was given.
+
+**Before the build** (read-only): `docker ps -a` listed five containers, none of project
+`bb2dash-wt21` (`bb2dash-sync-1` up 22 hours and healthy, `bb2dash-harness-jobs-1`,
+`harness-postgres` and two `bb2dash-mcp:local` containers with Docker's own names). The daemon has
+12.5 GB; the laptop had 7.8 GB of 31.9 GB free. Docker 29.8.1, Compose v5.5.1.
+
+**Steps 1 to 9, as run** (each line is the list's, unchanged):
+
+| step | what | output | |
+|---|---|---|---|
+| 1 | the guard | above | pass |
+| 2 | fetch, merge, the runner is in the tree | `Already up to date.` · `runner merged: 0` · `2` (also `0` against `origin/feat/workspace-21-runner`, `95b04b6`; HEAD `b4c33a2`) | pass |
+| 3 | `grep-clean` | `tests 11` · `pass 11` · `fail 0` | pass |
+| 3 | the firewall's dry run | `tests 20` · `pass 20` · `fail 0` | pass |
+| 4 | the Dockerfile's and the service's literals | `0` · `1` · `0` · `1` | pass |
+| 5 | the four secret files, sizes only | `169` · `108` · `41` · `109` bytes, each above 0 | pass |
+| 6 | compose with only the Windows user variables | `exit=0`; services: `sync` and nothing else | pass |
+| 7 | the service as rendered for the test project | `true true linux/amd64 workspace-net workspace 30s` | pass |
+| 7 | its environment | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 CLAUDE_CONFIG_DIR=/home/node/.claude DISABLE_AUTOUPDATER=1 ENABLE_TOOL_SEARCH=false WORKSPACE_TURN_BUDGET_USD=1.00` | pass |
+| 8 | the `sync` service's hash, rendered and on the live container | `sync 448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7` · the same hash | pass |
+| 9 | the harness commit, and nothing uncommitted under `mcp-server` or `certs` | `e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd` (branch `main`) · `0` | pass |
+
+Task 12's compose config check (its check (d), the part that needs no container) is steps 6 to 8:
+pass.
+
+**Step 10, the build** (one build, in the background, 20:26:01 to 20:26:38 UTC):
+
+```text
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace build workspace; echo "exit=$?"
+exit=1
+```
+
+What finished before it stopped (BuildKit's own step numbers and times):
+
+```text
+#20 [runner 4/7] RUN npm ci --no-audit --no-fund                                       DONE 5.7s
+#25 [runner 7/7] RUN npm run build && npm prune --omit=dev --no-audit --no-fund         DONE 4.9s
+#18 [materials 4/7] RUN npm ci --no-audit --no-fund                                    DONE 10.7s
+#28 [materials 7/7] RUN npm run build && npm prune --omit=dev --no-audit --no-fund      DONE 4.1s
+#24 [cli 3/4] RUN npm install -g "@anthropic-ai/claude-code@2.1.289"                   DONE 14.7s
+#29 [cli 4/4] RUN chown -R root:root /usr/local/share/npm-global                       DONE 1.4s
+#23 [rag 4/7] RUN npm ci --no-audit --no-fund                                          DONE 16.6s
+#13 [stage-4 2/21] RUN apt-get update && apt-get install …                             CANCELED
+```
+
+So the runner, the materials server and the pinned CLI build as written, from W-64's package as
+merged. The step that failed:
+
+```text
+#32 [rag 7/7] RUN npm run build && FASTEMBED_CACHE_DIR=/opt/fastembed node scripts/verify-embedder.mjs && npm prune … && chmod -R u=rwX,go=rX /opt/fastembed
+#32 0.333 > @agentic-harness/rag-mcp-server@0.1.0 build
+#32 0.333 > tsc -p tsconfig.json
+#32 1.611 model:      BAAI/bge-small-en-v1.5
+#32 1.611 expected:   384 dimensions
+#32 1.611 cache dir:  /opt/fastembed
+#32 1.611 First run downloads ~130 MB from Hugging Face.
+#32 1.755 FAILED
+#32 1.756 EmbeddingError: Failed to load embedding model BAAI/bge-small-en-v1.5.
+#32 1.756   [cause]: Error: TAR_BAD_ARCHIVE: Unrecognized archive format
+#32 1.756     file: '/opt/fastembed/fast-bge-small-en-v1.5.tar.gz',
+#32 ERROR: process "/bin/sh -c npm run build && FASTEMBED_CACHE_DIR=/opt/fastembed node scripts/verify-embedder.mjs && …" did not complete successfully: exit code: 1
+```
+
+The harness's `tsc` passed; the model step failed 0.14 s after it began, which is not a download of
+130 MB.
+
+**The cause, read outside docker** (20:27 to 20:40 UTC; reads only, and one scratch install):
+
+* The harness rag server is on `fastembed` 2.1.0 (its `package-lock.json`; `npm ci` installs exactly
+  that). 2.1.0 fetches a dense model from one fixed address and does not look at the answer's
+  status (`node_modules/fastembed/lib/cjs/fastembed.js`, `downloadFileFromGCS`: the body is piped
+  into the `.tar.gz` file whatever it is, then unpacked):
+  `https://storage.googleapis.com/qdrant-fastembed/fast-bge-small-en-v1.5.tar.gz`.
+* That address answers 403 from this laptop, with no docker in the way:
+
+  ```text
+  curl -s -o /dev/null -w "%{http_code}\n" https://storage.googleapis.com/qdrant-fastembed/fast-bge-small-en-v1.5.tar.gz
+  403
+  <Error><Code>AccessDenied</Code><Message>Access denied.</Message><Details>Anonymous caller does not have
+  storage.objects.get access to the Google Cloud Storage object. … (or it may not exist).</Details></Error>
+  ```
+
+  The same with a browser's user agent, with and without a range; the bucket's own listing is 403
+  too. The 399-byte XML is what was written to `fast-bge-small-en-v1.5.tar.gz`: hence
+  `TAR_BAD_ARCHIVE`.
+* The library's author moved the download: `fastembed` 2.1.1 (published 2026-09-30; 3.0.0 on
+  2026-09-24) fetches dense models from Hugging Face, this one from `Qdrant/bge-small-en-v1.5-onnx-Q`
+  (read in the two packages' `lib/cjs/fastembed.js`, unpacked in scratch; neither holds the
+  `storage.googleapis.com` address any more).
+* Stack's host still answers searches because it has the model on disk already
+  (`agentic-harness/mcp-server/.fastembed-cache/fast-bge-small-en-v1.5/`, 2026-09-28), and the live
+  `harness-jobs` container has a `fastembed-cache` volume (not read here). **Any first download with the harness
+  as it is fails the same way**: a new machine, the dev container's `npm run verify:embedder`, or
+  `harness-jobs` if its volume is ever lost. That is the harness's, not this phase's, and it is in
+  the report for Stack.
+
+**What a fix would bake, measured in scratch** (no docker, no file of either repo changed; the
+harness checkout's `git status` read the same two untracked files before and after):
+
+| | the file | bytes | sha256 |
+|---|---|---|---|
+| what the host's rag server reads today (2.1.0, from the closed address) | `fast-bge-small-en-v1.5/model_optimized.onnx` | 132,883,455 | `20e3bd67…6b2e` |
+| what 2.1.1 downloads from Hugging Face | `Qdrant_bge-small-en-v1.5-onnx-Q/model_optimized.onnx` | 66,465,124 | `51f1bd0a…2431` (the scratch download, and Hugging Face's own `X-Linked-ETag`) |
+
+They are two different files. The second is, byte for byte, the file in the harness's Python
+ingestion cache (`~/.cache/fastembed/models--qdrant--bge-small-en-v1.5-onnx-q/…/model_optimized.onnx`:
+the same sha256), and the harness's own docs record the two routes as measured equal on 2026-09-09
+(`CONTEXT.md`, `docs/embeddings.md`: cosine 0.99999975 to 0.99999985). Measured again here: the five
+build inputs the Dockerfile's `rag` stage copies (`package.json`, `package-lock.json`,
+`tsconfig.json`, `src/`, `scripts/`) were copied to scratch, `npm ci`, then
+`npm install fastembed@2.1.1`, `npm run build`, and the stage's own bake line:
+
+```text
+FASTEMBED_CACHE_DIR=<scratch>/cache node scripts/verify-embedder.mjs
+model:      BAAI/bge-small-en-v1.5
+expected:   384 dimensions
+"What did we decide about the ledger cash invariant?"   dims 384   L2 1.000000
+"pgvector HNSW index configuration"                      dims 384   L2 1.000000
+OK — embedder matches the ingestion contract.
+exit 0
+```
+
+and three sentences embedded twice, once by the harness's installed 2.1.0 reading its own cache,
+once by 2.1.1 reading the Hugging Face files:
+
+```text
+sentence 1 cosine 0.99999977 maxAbsDiff 1.83e-4
+sentence 2 cosine 0.99999964 maxAbsDiff 3.55e-4
+sentence 3 cosine 0.99999981 maxAbsDiff 1.74e-4
+```
+
+So with 2.1.1 the harness's source builds unchanged, its embedder check passes, and its vectors
+agree with today's to six decimal places. 2.1.1 keeps its files under
+`<cache>/Qdrant_bge-small-en-v1.5-onnx-Q/` and skips a file that is already there
+(`retrieveModel`: "Files already present are skipped"), so a baked model should need no network at
+run time; step 31 of the list is what proves that behind the firewall. No file of the Workspace
+names the model's folder (`docker/workspace/mcp-rag.sh` and the Dockerfile name `/opt/fastembed`
+only), so **after such a bump in the harness this branch needs no change**: the same step 10 line
+would bake the Hugging Face model. This is evidence for a ruling, not a change: W-65 edits nothing
+in the harness.
+
+**What the failed build left** (read at 20:29 UTC):
+
+```text
+docker images | grep workspace                                                   → nothing: no bb2dash-workspace:local
+docker ps -a --filter label=com.docker.compose.project=bb2dash-wt21              → nothing
+docker network ls --filter name=bb2dash-wt21 · docker volume ls --filter name=bb2dash-wt21   → nothing, nothing
+```
+
+Build cache only (the finished stages; a second build reuses them). No container, network or volume
+of the test project exists, no scan container or scan volume was made, and nothing was pruned.
+
+**Steps 11 to 39: not run.** Each needs the image.
+
+| task 12 check | list steps | result |
+|---|---|---|
+| `grep-clean`, the firewall's dry run (a) | 3 | pass |
+| the Dockerfile's literals; compose resolves; `sync` only without the profile; the rendered service; the `sync` hash (d) | 4, 6, 7, 8 | pass |
+| the build, with the harness commit and the image's id and size | 9, 10, 11 | **fail**: step 10, the model's download address answers 403. Harness commit at build time `e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd`. No image, so no id and no size |
+| `up`, what it made, the firewall's log, healthy | 12 to 15 | not run |
+| `claude --version` equals the pin; the help grep | 16 | not run (the `cli` stage did install `@anthropic-ai/claude-code@2.1.289`, and the chown ran) |
+| processes run as `node`; the runner's capabilities | 17, 18 | not run |
+| `printenv ANTHROPIC_API_KEY` exits 1; `DATABASE_URL`; the four settings | 19 | not run (the rendered environment of step 7 holds neither name) |
+| no published ports | 7, and 26's network read | rendered: pass (`ports` undefined); on a running container: not run |
+| the in-image layout; root's files; the CLI's folder | 20 to 22 | not run |
+| the pins, the rules and the sets | 23, 24 | not run |
+| the gate wiring: the hook command from the image's `settings.json`, exit 2 | 25 | not run |
+| the firewall probes by name; `api.anthropic.com` answers | 26 | not run |
+| the firewall probes by literal address | 26 (6080), 28 | not run |
+| a second run of the firewall is refused | 29 | not run |
+| ten connects to each database host; one `search_context` over stdio | 30, 31 | not run |
+| the restart: healthy again, the marker gone, the pins rewritten | 32 to 34 | not run |
+| the token smoke (one Haiku turn) | 27 | not run: no turn was spent |
+
+| task 13 check | list steps | result |
+|---|---|---|
+| the exported filesystem scanned with gitleaks and the repo's config | 35, 36 | not run |
+| the history scanned with gitleaks; the brief's grep | 37 | not run |
+| triage of hits | | nothing to triage |
+
+**The firewall has still not met a kernel.** Everything this file says about it rests on the dry
+run against fake tools (20 of 20).
+
+### Questions for the PM, wave 2b
+
+1. **The image cannot be built until the model has a source that answers.** Three ways, the first
+   recommended:
+   * **(a) The harness moves to `fastembed` 2.1.1** (one dependency, its lock file; a harness PR,
+     not W-65's). Evidence above: it builds unchanged, its embedder check passes, the vectors agree
+     with today's to six decimal places, and the file is the one Python ingestion already uses. This
+     branch then needs no change; the build bakes whatever the harness checkout holds, and the new
+     harness commit goes into 102a at build time. It also repairs every first download of the
+     harness itself. The Contract's sentence stays true as written (the model is baked by loading
+     the built server's embedder once).
+   * **(b) Bake the host's copy**: a third named build context on
+     `${HARNESS_DIR}/mcp-server/.fastembed-cache` and one `COPY`. It is byte for byte what the host
+     reads today, and it needs no harness change, but the Contract says the stage never copies the
+     host's `.fastembed-cache`, the image then builds only on a machine that already has the model,
+     and `compose.yaml`, the Dockerfile and `grep-clean` all change.
+   * **(c) Wait** for the address to come back. Nothing suggests it will: the library's author
+     moved off it a week ago.
+2. **A URL with no port is accepted by the new port check** (it means 5432). One condition makes an
+   explicit `:5432` required, if the PM reads "refused" that way.
+3. **The header's paragraph lists one address and two URLs** the ruling's short form leaves out: the
+   resolver's own address (`Allowing DNS to 127.0.0.11`) and the end check's two fixed URLs. The
+   script's output was not changed to fit the sentence; the sentence was written to fit the output.
+   If the resolver's address should not be printed, it is one `echo`.
+4. **`.env.example`'s placeholder changed** (`/path/to/a-folder-outside-every-repo`): a value in an
+   example file, not a comment. It is the line a new machine copies, and it pointed inside the repo.
+5. **When the build passes, the list runs from step 10 as written.** The finished stages are in
+   Docker's build cache, so the second build is short. Nothing in steps 11 to 39 was changed by what
+   was found here.
