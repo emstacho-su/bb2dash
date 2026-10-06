@@ -866,10 +866,10 @@ So these are still owed, with 143, in a session where Stack can confirm:
 
 * unit 143, sections 1 and 2 (what they assert was seen in call A's probes: null, 0, 47, integer;
   not from the unit's own text);
-* unit 142 whole (its section 1 has the same `delete`); unit 140's sections 1, 5, 6 and 7 (section
-  6 has it); unit 076 (the `truncate` tries);
-* units 140b, 141 and 101: no such statement, so they should go through; they were not sent for
-  lack of room in this session.
+* unit 142's sections 1 to 7 (section 1 has the same `delete`; section 0 ran, section 9 below);
+  unit 140's sections 1, 5, 6 and 7 (section 6 has it); unit 076 (the `truncate` tries);
+* units 140b and 141: no such statement, so they should go through; they were not sent for lack
+  of room in this session. (Unit 101 ran whole, section 9 below.)
 
 Ready-made texts, built from the files by `scratchpad/w63r5/gen-calls.mjs` (nothing typed by
 hand, each `begin; … rollback;`, each unit in its own subtransaction with its PASS row carried
@@ -901,3 +901,41 @@ Also not proven: nothing here ran as `db_test_runner` with 143 in place (the dry
 `workspace_requests.id` is an identity column and a sequence does not roll back, so each dry run
 and each Runner pass moves it on (the probe above met request 47 on a table that holds one row).
 Nothing reads the ids as a count.
+
+### 9. Two more runs with 143, and prod afterwards
+
+One call, the scaffold then both texts (23:49:42 UTC):
+
+```
+unit 142, its opening select and section 0 (7109 bytes): text = file, every statement ran, no assertion raised
+      (the five signatures, SECURITY DEFINER, plpgsql, search_path, owner, comments, who executes them,
+       no table privilege, the role's attributes and members, all as before 143); partition_covers_now true
+unit phase15_101, whole (5237 bytes), in a subtransaction undone afterwards: text = file, every statement ran;
+      its PASS select returned {"result": "phase15_101_search_path_pin: PASS", "public_functions": 87,
+      "default_search_path": "\"$user\", public, extensions", "relpath_checked": "IST.323/syllabus_policy/323Fall26V1.3.1.docx"}
+```
+
+Where each of the task's seven units stands, with 143:
+
+| unit | from its own text, with 143 |
+|---|---|
+| `phase21_143_review_round` | sections 0, 3, 4, 5 ran clean; sections 1 and 2 held; PASS row not read |
+| `phase21_140_workspace_tables` | section 0 red then green; sections 1, 5, 6, 7 not sent (6 would be held) |
+| `phase21_140b_workspace_writes` | not sent |
+| `phase21_141_workspace_realtime` | not sent |
+| `phase21_142_workspace_runner` | section 0 ran clean; sections 1 to 7 held |
+| `phase15_101_search_path_pin` | whole, PASS row read |
+| `phase12b_076_rls_initplan_and_truncate` | held (sent once, together with unit 143) |
+
+Prod after the last dry run (SELECT only, 23:50:00 UTC), the same as at 21:37:44 before the first:
+
+```
+v_workspace_status columns   polled_at, runner, open_requests, oldest_open_at      options {security_invoker=true}
+its comment                  140's ("The Workspace service line (migration 140): …")
+trigger has a when clause    false
+prosrc md5 (first 8)         workspace_claim b1af4495, workspace_finish 7bf98a41, the other six unchanged
+migrations named 14%         140, 141, 142 (newest 20261006171717)
+workspace_runner's members   postgres (the creator's row), db_test_runner
+rows                         1 conversation, 1 message, requests cancelled:1, 0 heartbeat rows
+_w63* leftovers              0          idle in transaction   0
+```
