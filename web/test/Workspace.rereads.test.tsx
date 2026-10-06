@@ -10,12 +10,19 @@
  * the service is answering: a request in view becomes `claimed`, and its first
  * delta arrives.
  *
+ * THE MESSAGES, ABOUT 3 S AND ABOUT 10 S AFTER STOP ON A CLAIMED REQUEST. The
+ * runner sees the cancel within seconds and stores what it had written. That
+ * row reaches the page at its `done` broadcast; if the broadcast is missed
+ * nothing else reads it, because a stopped request is no longer polled. So the
+ * page reads the messages twice more by the clock. A queued request has no
+ * runner and no partial answer, so its Stop schedules nothing.
+ *
  * Every case runs on a fake clock with the tab in front, so the only reads are
  * the ones the page asks for: nothing here waits on a real timer.
  */
 
 import { QueryClientProvider, focusManager } from '@tanstack/react-query';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { newQueryClient } from './hydration-harness';
 import { fake, resetFake, type FakeChannel, type Row } from './workspace-harness';
@@ -179,5 +186,126 @@ describe('the status is read again at once when the service is seen answering', 
 
     expect(statusReads()).toBe(before);
     expect(screen.getByText(OFFLINE)).toBeInTheDocument();
+  });
+});
+
+describe('after Stop on a claimed request the messages are read again about 3 s and about 10 s after the press', () => {
+  const ANSWER = 'a7c1d2e3-55aa-4f10-b1d2-7e8f9a0b1c2d';
+  const STOPPED = 'You stopped this answer.';
+  const messageReads = () => reads('workspace_messages');
+
+  function answerRow(fields: Row): Row {
+    return { id: ANSWER, conversation_id: A, role: 'assistant', request_id: REQUEST, tier: 'high', ...fields };
+  }
+
+  /** An answer being written: the runner has claimed the request and begun its row. */
+  function seedAnswering(): void {
+    fake.state.rows = {
+      workspace_messages: [QUESTION_ROW, answerRow({ content: '', finished: false })],
+      workspace_requests: [requestRow('claimed')],
+      v_workspace_status: heartbeat(START),
+    };
+  }
+
+  /**
+   * The runner sees the cancel and stores what it had written: more than this page
+   * received. Its `done` broadcast is never delivered in these cases.
+   */
+  function runnerStoresPartial(): void {
+    fake.state.rows = {
+      ...fake.state.rows,
+      workspace_messages: [
+        QUESTION_ROW,
+        answerRow({ content: 'Week one: Monday', finished: true, error_code: 'cancelled' }),
+      ],
+    };
+  }
+
+  function answerText(container: HTMLElement): string | null {
+    return turn(container).querySelector('[data-answer-text]')?.textContent ?? null;
+  }
+
+  function lineOf(container: HTMLElement): string | null {
+    return turn(container).querySelector('[data-turn-line]')?.textContent ?? null;
+  }
+
+  /** The screen with one delta on it, Stop pressed, and the cancel answered. */
+  async function stopMidAnswer() {
+    seedAnswering();
+    const view = await open();
+    emitDelta(view.channel, 1, 'Week one: ');
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await advance(100);
+    expect(fake.state.rows.workspace_requests[0]).toMatchObject({ state: 'cancelled' });
+    expect(lineOf(view.container)).toBe(STOPPED);
+    expect(answerText(view.container)).toBe('Week one: ');
+    return view;
+  }
+
+  it('shows the stored partial answer at the 3 s read when its done broadcast is missed, then reads once more at 10 s', async () => {
+    const { container } = await stopMidAnswer();
+    const before = messageReads();
+
+    await advance(1_900); // 2.0 s after the press
+    runnerStoresPartial();
+    await advance(900); // 2.9 s: nothing has read it
+    expect(messageReads()).toBe(before);
+    expect(answerText(container)).toBe('Week one: ');
+
+    await advance(200); // 3.1 s
+    expect(messageReads()).toBe(before + 1);
+    expect(answerText(container)).toBe('Week one: Monday');
+    expect(lineOf(container)).toBe(STOPPED);
+
+    await advance(6_800); // 9.9 s
+    expect(messageReads()).toBe(before + 1);
+    await advance(200); // 10.1 s
+    expect(messageReads()).toBe(before + 2);
+
+    // Two reads, not a poll: a minute on, nothing more.
+    await advance(60_000);
+    expect(messageReads()).toBe(before + 2);
+  });
+
+  it('shows it at the 10 s read when the runner stored it later than 3 s', async () => {
+    const { container } = await stopMidAnswer();
+
+    await advance(5_900); // 6.0 s after the press: the 3 s read came back with the unfinished row
+    expect(answerText(container)).toBe('Week one: ');
+    runnerStoresPartial();
+    await advance(3_900); // 9.9 s
+    expect(answerText(container)).toBe('Week one: ');
+
+    await advance(200); // 10.1 s
+    expect(answerText(container)).toBe('Week one: Monday');
+    expect(lineOf(container)).toBe(STOPPED);
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeInTheDocument();
+  });
+
+  it('reads nothing again after Stop on a queued request: no runner holds a partial answer', async () => {
+    fake.state.rows = {
+      workspace_messages: [QUESTION_ROW],
+      workspace_requests: [requestRow('queued')],
+      v_workspace_status: heartbeat(START),
+    };
+    const { container } = await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await advance(100);
+    expect(lineOf(container)).toBe(STOPPED);
+    const before = messageReads();
+
+    await advance(15_000);
+
+    expect(messageReads()).toBe(before);
+  });
+
+  it('drops both reads when the page leaves the conversation', async () => {
+    const view = await stopMidAnswer();
+    const before = messageReads();
+
+    view.unmount();
+    await advance(15_000);
+
+    expect(messageReads()).toBe(before);
   });
 });
