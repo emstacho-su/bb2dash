@@ -280,7 +280,9 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
 
     const streamer = createStreamer(deps.rpc, claim.requestId, stopSwitch, log);
     const flushTimer = setInterval(() => streamer.tick(), STREAM_FLUSH_MS);
-    const timeLimit = setTimeout(() => stopSwitch.stop('timeout'), TURN_TIMEOUT_MS);
+    // The limit counts from the start of the turn: the time begin's tries took is part of it, so a
+    // turn still ends under the database's 10-minute sweep.
+    const timeLimit = setTimeout(() => stopSwitch.stop('timeout'), Math.max(0, TURN_TIMEOUT_MS - (Date.now() - startedAt)));
     const input: TurnInput = {
       requestId: claim.requestId,
       conversationId: claim.conversationId,
