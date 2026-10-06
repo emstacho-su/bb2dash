@@ -138,6 +138,16 @@ describe('the subscription guard', () => {
 });
 
 describe('the runner DSN', () => {
+  /** What the start check says of a DSN: its refusal, or 'accepted'. */
+  const refusalOf = (dsn: string): string => {
+    try {
+      assertRunnerDsn(dsn);
+      return 'accepted';
+    } catch (error) {
+      return (error as Error).message;
+    }
+  };
+
   it('accepts the session pooler with an sslmode', () => {
     expect(assertRunnerDsn(DSN)).toBe(DSN);
   });
@@ -207,6 +217,38 @@ describe('the runner DSN', () => {
       expect((error as Error).message).not.toContain('pooler.supabase.com');
       expect((error as Error).message).not.toContain('projectref');
     }
+  });
+
+  // What the start check lets through, the connection must be able to read: db.ts percent-decodes
+  // these three parts on every connect, and a start that passed must not then fail there for good.
+  it.each([
+    ['user', 'postgresql://workspace_runner%zz.projectref:not-a-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require'],
+    ['password', 'postgresql://workspace_runner.projectref:not-a-%password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require'],
+    ['database', 'postgresql://workspace_runner.projectref:not-a-password@aws-0-us-east-1.pooler.supabase.com:5432/post%gres?sslmode=require'],
+  ])('refuses at start a DSN whose %s holds a malformed percent escape, which the connection could never read', (_part, dsn) => {
+    expect(() => dsnParts(dsn)).toThrow(/not percent-encoded text/);
+    expect(() => assertRunnerDsn(dsn)).toThrow(ConfigError);
+    expect(refusalOf(dsn)).toBe('workspace_runner_db_url holds a part that is not percent-encoded text');
+    const mounted = files({ [PATHS.runnerDbUrlSecret]: dsn, [PATHS.oauthTokenSecret]: TOKEN, [DEFAULT_CA_FILE]: CA_PEM });
+    expect(() => loadConfig({ env: {}, readFile: mounted, hostname: 'h' })).toThrow(ConfigError);
+  });
+
+  it('still accepts a user, a password and a database that are percent-encoded as they should be', () => {
+    const encoded = 'postgresql://workspace_runner.projectref:not%2Da%40password@aws-0-us-east-1.pooler.supabase.com:5432/post%67res?sslmode=require';
+    expect(assertRunnerDsn(encoded)).toBe(encoded);
+    expect(dsnParts(encoded)).toMatchObject({ password: 'not-a@password', database: 'postgres' });
+  });
+
+  // The driver reads port 0 as no port and takes PGPORT or its own default: not what the secret names.
+  it.each([[':0/'], [':00/']])('refuses port 0 (written %s), and says so without printing any part', (port) => {
+    const onZero = DSN.replace(':5432/', port);
+    expect(() => assertRunnerDsn(onZero)).toThrow(ConfigError);
+    const message = refusalOf(onZero);
+    expect(message).toMatch(/port 0/);
+    expect(message).toMatch(/session pooler on 5432/);
+    expect(message).not.toContain('not-a-password');
+    expect(message).not.toContain('pooler.supabase.com');
+    expect(message).not.toContain('projectref');
   });
 
   it('hands the client the same DSN it accepted: every part the connection is made from is there', () => {
