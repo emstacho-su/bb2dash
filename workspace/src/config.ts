@@ -132,7 +132,7 @@ export function assertSubscriptionEnv(env: Env): void {
 
 /** A secret file's value without the byte-order mark and line ends an editor may have added. */
 export function cleanSecret(raw: string): string {
-  return raw.replace(/^﻿/, '').replace(/[\r\n]/g, '').trim();
+  return raw.replace(/^\uFEFF/, '').replace(/[\r\n]/g, '').trim();
 }
 
 /**

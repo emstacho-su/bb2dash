@@ -239,6 +239,115 @@ describe('the connection', () => {
     expect(made[0]?.ended).toBe(true);
   });
 
+  describe('with two calls in flight', () => {
+    interface Held {
+      /** Which connection the statement ran on, counted from 0. */
+      readonly connection: number;
+      readonly sql: string;
+      readonly answer: (result: QueryResult) => void;
+      readonly fail: (error: Error) => void;
+    }
+
+    /** Clients whose statements stay open until the test answers or fails each one. */
+    function heldClients() {
+      const made: Array<{ ended: number }> = [];
+      const held: Held[] = [];
+      const newClient = (): PgClientLike => {
+        const connection = made.length;
+        const record = { ended: 0 };
+        made.push(record);
+        return {
+          connect: async () => undefined,
+          query: (sql: string) => {
+            if (sql.includes('current_user')) return Promise.resolve({ rows: [{ role: 'workspace_runner' }] });
+            return new Promise<QueryResult>((answer, fail) => held.push({ connection, sql, answer, fail }));
+          },
+          end: async () => {
+            record.ended += 1;
+          },
+          on: () => undefined,
+        };
+      };
+      return { newClient, made, held };
+    }
+
+    /** One turn of the event loop: every statement already sent has reached its client. */
+    const sent = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+    it('a call that fails late drops the connection it ran on, never the one opened since', async () => {
+      const { newClient, made, held } = heldClients();
+      const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+
+      const first = query('select 1');
+      const second = query('select 2');
+      await sent();
+      expect(held.map((h) => h.connection)).toEqual([0, 0]);
+
+      // The first fails: connection 1 is dropped.
+      held[0]?.fail(withCode('read ECONNRESET'));
+      await expect(first).rejects.toThrow(/ECONNRESET/);
+      expect(made[0]?.ended).toBe(1);
+
+      // The next call opens connection 2.
+      const third = query('select 3');
+      await sent();
+      expect(made).toHaveLength(2);
+      expect(held[2]).toMatchObject({ connection: 1, sql: 'select 3' });
+
+      // The second fails late, on connection 1: connection 2 is healthy and stays open.
+      held[1]?.fail(withCode('Connection terminated unexpectedly'));
+      await expect(second).rejects.toThrow(/terminated/);
+      expect(made[1]?.ended).toBe(0);
+
+      held[2]?.answer({ rows: [{ n: 3 }] });
+      expect((await third).rows).toEqual([{ n: 3 }]);
+
+      // The call after it runs on connection 2 as well: no third connection is opened.
+      const fourth = query('select 4');
+      await sent();
+      expect(held[3]).toMatchObject({ connection: 1, sql: 'select 4' });
+      held[3]?.answer({ rows: [] });
+      await fourth;
+      expect(made).toHaveLength(2);
+    });
+
+    it('closes a connection once when both calls on it fail', async () => {
+      const { newClient, made, held } = heldClients();
+      const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+
+      const first = query('select 1');
+      const second = query('select 2');
+      await sent();
+      held[0]?.fail(withCode('read ECONNRESET'));
+      held[1]?.fail(withCode('read ECONNRESET'));
+      await expect(first).rejects.toThrow(/ECONNRESET/);
+      await expect(second).rejects.toThrow(/ECONNRESET/);
+      expect(made).toHaveLength(1);
+      expect(made[0]?.ended).toBe(1);
+    });
+
+    it('a late 57P01 from a dropped connection leaves the new one alone', async () => {
+      const { newClient, made, held } = heldClients();
+      const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
+
+      const first = query('select 1');
+      const second = query('select 2');
+      await sent();
+      held[0]?.fail(withCode('read ECONNRESET'));
+      await expect(first).rejects.toThrow(/ECONNRESET/);
+
+      const third = query('select 3');
+      await sent();
+      held[1]?.fail(withCode('terminating connection due to administrator command', '57P01'));
+      await expect(second).rejects.toMatchObject({ code: '57P01' });
+      expect(made[1]?.ended).toBe(0);
+
+      held[2]?.answer({ rows: [] });
+      await third;
+      expect(made).toHaveLength(2);
+    });
+  });
+
   it('never lets the DSN, its password or its host into an error message', async () => {
     const { newClient } = fakeClients([() => withCode(`could not reach ${DSN} at aws-0-us-east-1.pooler.supabase.com with not-a-password`)]);
     const query = createPgQuery({ dsn: DSN, log: () => undefined, newClient });
