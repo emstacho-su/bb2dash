@@ -386,3 +386,95 @@ e89aff5, about an hour after 142 was applied. The file on `main` is the phase br
 blob (acaa281). From the main checkout, fast-forwarded to e89aff5:
 `node scripts/db-test.mjs --only phase15_100_db_test_runner_role.sql` → `PASS`,
 `db-test: passed 1, failed 0, units 1`. The port branch and its worktree are removed.
+
+## Wave 2a (2026-10-06)
+
+Four pieces of work, none changing docker state (the guard read the same before and after):
+
+| stream | work | result | head |
+|---|---|---|---|
+| W-66 web | task 16: the Workspace screen and the nav link; ruling T2's list | pass after one fix round (2728 tests against 2427 at the cut; typecheck, eslint, build and coverage exit 0) | merged into the phase branch, 9413a09 |
+| W-64 runner | three small fixes, each red first | done (its own gates green) | merged into the phase branch, 7f7cc9d |
+| W-65 container | ruling T1: the port rule, the pinned CLI that cannot update itself, the doctor row, the paste-ready list for tasks 12 and 13 | pass | `feat/workspace-21-container` 124c630; bb2dash-stack `feat/workspace-21` 6255923 |
+| PM | the brief patched to rulings T1–T3 (43 items) | committed, 449bc32 | phase branch |
+
+The screen has not been seen in a browser yet; layout and both themes wait for the PM's walk.
+While extending its firewall tests W-65 found that wave 1's script could leave IPv6 open when
+`ip6tables` was unavailable and the address list was long (a pipe under `pipefail`); fixed with a
+red test, and named in the `/security-review` request. The image has never been built and the
+firewall has never met a kernel: task 12 is their first real test.
+
+## PM rulings after wave 2a (2026-10-06)
+
+### U1. Web (W-66)
+
+* The "New conversation" link at the top of the list stays (PM wording: "New conversation").
+* A claimed request with no text yet shows "Answering…". Confirmed.
+* After Stop, the partial text stays under "You stopped this answer." until the stored row
+  replaces it. It is not cleared.
+* A `?c=` uuid that has no rows: the message column says "This conversation was not found."
+  (PM wording) with the "New conversation" link; the composer does not ask into it. The database's
+  own foreign-key sentence is never shown: a 23503 from `workspace_ask` shows the same line.
+* The empty message column has three states with their own lines (PM wording): no conversation
+  selected: "Ask a question to start a conversation."; rows still being read: "Loading the
+  conversation…"; an unknown id: "This conversation was not found.". The text box has a visible
+  placeholder: "Ask about your courses or your decisions" (PM wording).
+* While a request is open, Enter does not send (the button reads Stop); the database's refusal
+  (23505) stays as the backstop and keeps its test.
+* The offline line beside a streaming answer: the status is re-read at once when a request in
+  view becomes `claimed` and when its first delta arrives, so "The Workspace service is offline."
+  cannot sit beside text that is arriving.
+* After Stop on a claimed request the page re-reads the messages about 3 s and about 10 s after
+  the press, so the stored partial answer shows even when its `done` broadcast is missed.
+* The screen-reader label before a status line with no answer text is "Status", not "The
+  assistant answered".
+* The ten strings W-66 listed as its own (section 6 of its verification file) are accepted as PM
+  wording. A failed leave is logged; nothing more is asked of it.
+* W-66's files beyond the brief's table are accepted: `web/src/components/workspace/thread.ts`,
+  `web/src/components/workspace/route.ts`, `web/test/workspace-harness.tsx`,
+  `web/test/queries.workspace.hooks.test.tsx`, `web/test/use-workspace-stream.screen.test.tsx`,
+  `web/test/Workspace.thread.test.ts`, `web/test/Workspace.failures.test.tsx`,
+  `web/test/use-workspace-stream.realtime.test.tsx`.
+
+### U2. Container (W-65)
+
+* `docker/workspace/init-firewall.test.mjs` stays (one more file in W-65's list).
+* The CLI installed in a stage of its own and copied into the runtime stage, root-owned: accepted.
+* A DSN whose port is not 5432 is refused at the start, fail-closed, with a fixed sentence that
+  prints no part of the value (the runner's own config already refuses 6543).
+* The firewall script's header says exactly what it prints: the fixed host names and each
+  validated pooler host name, never a user, password, URL or address.
+* bb2dash-stack wording that still says the secrets live in the repo's `secrets/` folder is
+  corrected to `SECRETS_DIR` where it is a comment or a message in a file W-65 already edits
+  (`compose.yaml` lines near the header and the secrets block, `.env.example`, the doctor's
+  message in `doctor/lib/checks-host.mjs`, the README). The `justfile`'s fallback behaviour is not
+  changed in this phase; its comment may say where the secrets really live.
+* The doctor's `secrets` row keeps asking for all 12 files whatever the profile; with the profile
+  off the Workspace row reads off without asking Docker. Accepted for v1.
+* The paste-ready list: `docker history` is read with `--no-trunc` where a step greps it; the
+  note about the scan container's labels says what is true (it carries the compose labels of the
+  image and is never started); the host's noVNC port gets a literal-address probe beside the
+  by-name one; the 6543 claim is either probed in the list or dropped.
+
+### U3. Runner (W-64)
+
+* `workspace/test/stream-json/gate.suite.ts` and `workspace/test/helpers/stream-lines.ts` are
+  accepted, and the standing size audit in `workspace/test/config.test.ts` stays.
+
+### U4. The docker step (tasks 12 and 13), now
+
+* Run in `C:/Users/stack/projects/bb2dash-wt-21-container` after it has merged the phase branch
+  (step 2 of W-65's list must print `runner merged: 0`), as project `bb2dash-wt21`, the service
+  named in every command. The guard is read before the first step and after every step that
+  changes docker state: `docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1` must
+  still read `bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02
+  2026-10-05T22:06:22…`. A changed value is a stop.
+* If the session refuses a docker command, do not rephrase it to get it through: stop at that
+  step and report the exact line, so the PM or Stack runs it.
+* The token smoke spends one small Haiku turn on Stack's plan; it is allowed (2026-10-05).
+* The laptop was critically low on memory on 2026-10-06: build with `docker compose ... build
+  workspace` only (never `--parallel`, never another build beside it), and if the build is killed
+  or the daemon reports out of memory, stop and report rather than retrying in a loop.
+* A firewall that fails its end check leaves the container with deny-all; read the script's own
+  output with `docker compose -p bb2dash-wt21 --profile workspace logs --tail 80 workspace`
+  before changing anything, and fix the script with a failing test first.
