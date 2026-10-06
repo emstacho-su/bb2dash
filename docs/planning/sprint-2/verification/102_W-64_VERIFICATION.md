@@ -252,7 +252,7 @@ cd /c/Users/Public/bb2dash-w64-rec/cwd && env $(env | grep -E '^(CLAUDE|ANTHROPI
 cd /c/Users/Public/bb2dash-w64-rec/cwd && env $(env | grep -E '^(CLAUDE|ANTHROPIC)' | cut -d= -f1 | sed 's/^/-u /' | tr '\n' ' ') ENABLE_TOOL_SEARCH=false CLAUDE_CODE_OAUTH_TOKEN=not-a-real-token-recorded-for-a-fixture npm_config_script_shell="$(cygpath -m "$(which bash)")" npx -y @anthropic-ai/claude-code@2.1.289 -p --model haiku --session-id "$(node -e "console.log(require('crypto').randomUUID())")" --tools "" --allowedTools mcp__bb2dash__search_materials mcp__bb2dash__get_material_text mcp__bb2dash__list_courses mcp__rag__search_context --disallowedTools Bash Read Write Edit WebFetch WebSearch mcp__rag__get_document --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config C:/Users/Public/bb2dash-w64-rec/mcp.json --setting-sources project --settings C:/Users/Public/bb2dash-w64-rec/settings.json --append-system-prompt "$(cat C:/Users/stack/projects/bb2dash-wt-21-runner/workspace/prompts/system.md)" --system-prompt-snapshot off --output-format stream-json --verbose --include-partial-messages --include-hook-events --max-budget-usd 1.00 -- "What does the IST.323 syllabus say about late work?" > ../out/sign-in-expired.raw.jsonl 2> ../out/sign-in-expired.stderr.txt; echo "exit $?" | tee ../out/sign-in-expired.exit.txt
 ```
 
-### What ran (2026-10-06 UTC; 2026-10-05 evening local)
+### What ran (2026-10-06 UTC: three in the evening of 2026-10-05 local, the fourth the next morning)
 
 The session did not refuse a nested `claude -p`. Each line was run exactly as written above (copied
 out of this file with `grep '^cd /c/Users/Public/bb2dash-w64-rec/cwd'` into one script per line).
@@ -262,7 +262,11 @@ out of this file with `grep '^cd /c/Users/Public/bb2dash-w64-rec/cwd'` into one 
 | 1 | lookup | 03:29:34 | 0 | 95 | npm's own update notice only (not kept) | 3 API calls, one answer |
 | 3 | resume missing | 03:32:54 | 1 | 1 | `No conversation found with session ID: <uuid>` | none |
 | 4 | sign-in expired | 03:33:10 | 1 | 6 | empty | none (two 401 retries, cost 0) |
-| 2 | budget stop | see "The budget recording" below | | | | |
+| 2 | budget stop | 14:23:01 | 1 | 24 | empty | 1 API call, stopped at its tool call |
+
+Lines 1, 3 and 4 ran in one sitting; line 2 ran eleven hours later, for the reason given under
+"The budget recording" below. Each recording that reached the API was run once: two turns on the
+plan in all (the lookup and the budget stop), as the recipe allows.
 
 The exit codes are kept in `workspace/test/fixtures/recordings.json` (one entry per recorded
 fixture: exit code, what was passed beside the frozen argv, whether a stderr sibling exists). That is
@@ -348,7 +352,12 @@ $ node test/scrub-recording.mjs <rec>/out/sign-in-expired.raw.jsonl test/fixture
 6 line(s) written, answer text kept
 $ node test/scrub-recording.mjs <rec>/out/resume-missing.raw.jsonl test/fixtures/claude-stream-resume-missing.jsonl
 1 line(s) written, answer text kept
+$ node test/scrub-recording.mjs <rec>/out/budget-stop.raw.jsonl test/fixtures/claude-stream-budget-stop.jsonl
+24 line(s) written, answer text kept
 ```
+
+The budget-stop recording holds no answer text and no tool result (it was stopped before either),
+so nothing in it needed the mask; its thinking text was empty, like the others'.
 
 What it rewrites: every tool-result body (each `tool_result` block's `content`, and the `user`
 line's own `tool_use_result` copy) to `<scrubbed>`; the init line's `cwd`, `slash_commands`,
@@ -369,3 +378,335 @@ document's. The sign-in-expired fixture keeps the CLI's own error sentence unmas
 After the scrub, a walk over every string in the fixtures found none over 60 characters except the
 two masked answer copies, and `grep -i` for the owner's name, the school and the question's subject
 found only the model's own query `late work`.
+
+### The budget recording (line 2)
+
+Run on 2026-10-06 at 14:23:01 UTC, exactly as line 2 is written above (the script made from this
+file by the same `grep`; a `diff` of the script against the line read from this file showed no
+difference before the run). The guard was read before and after:
+`docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1` →
+`bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z`
+both times, the value read before the first recording.
+
+Why it ran eleven hours after the other three. The lookup's first model call wrote the prompt
+cache: its `budget_usd` attachments read 0.021412 after the first call, 0.0271861 after the second
+and 0.038524 at the end. The first call's usage names a one-hour cache
+(`cache_creation.ephemeral_1h_input_tokens`). A budget run made inside that hour would have read the
+cache instead of writing it, and a first call that reads it costs about $0.0019 by the list prices
+that reproduce the recorded figure to the last digit (10,255 cache tokens, 10 input tokens and 167
+output tokens on Haiku 4.5: written, $0.021355; read, about $0.0019). The run could then have
+passed one cent only on its last response and ended as a finished answer: a recording that says
+nothing about the cap. So the budget line waited for a cold cache, and its usage shows one:
+`cache_creation_input_tokens` 10255, `cache_read_input_tokens` 0.
+
+What the stream shows (24 stdout lines, stderr empty, exit code 1):
+
+| | |
+|---|---|
+| init line | passes the check: `claude_code_version` 2.1.289, `apiKeySource` `none`, `permissionMode` `dontAsk`, `bb2dash` and `rag` connected, the four tools |
+| the one model call | an empty thinking block, then a `tool_use` of `mcp__bb2dash__search_materials` with `{"q": "late work policy", "course": "IST.323"}` |
+| the gate | `system/hook_started` for that call, before the result line; `system/hook_response` (`exit_code` 0, `outcome` `success`) is the recording's last line, after the result line |
+| tool result | none: there is no `user` line. The CLI stopped before the tool answered |
+| result line | `subtype` `error_max_budget_usd`, `is_error` true, `num_turns` 1, `total_cost_usd` 0.021355, `stop_reason` `tool_use`, `terminal_reason` `budget_exhausted`, `errors` `["Reached maximum budget ($0.01)"]`, `permission_denials` `[]`; no `result` key and no `api_error_status` key |
+| rate-limit event | none in this recording (the lookup carried one) |
+
+**The form recorded: a stop.** The CLI ended the turn at `--max-budget-usd`, so O-2's conditional
+branch does not apply: `BUDGET_CAP_HOLDS` stays `true` (`workspace/src/config.ts`), the no-cap
+sentence is never appended, and the fixture is asserted in the row's default form, a failed turn
+that maps to `budget_exceeded`. Nothing for the PM to tell Stack under O-2. `stream-json.test.ts`
+ties the two together: it computes O-2's own condition from the fixture (`success`, two or more
+turns, a cost above the cap) and asserts `BUDGET_CAP_HOLDS` is its opposite.
+
+What the runner stores for this turn (asserted on the fixture in `test/runner/cli-turn.suite.ts`):
+state `failed`, `error_code` `budget_exceeded`, empty content, `tool_calls`
+`[{"tool": "search_materials", "query": "late work policy", "scope": "IST.323", "ok": false}]`
+(the call is kept, `ok` false because its result never arrived), `cost_usd` 0.021355 as reported,
+the session id the init line gave and the model id `claude-haiku-4-5-20251001`.
+
+Notes for the PM, none of them a stop:
+
+* **One response overshoots the cap.** The first call alone cost $0.0214 against a cap of $0.01;
+  the CLI stopped before the next call. The Contract says so ("one response can overshoot it").
+* **The gate's answer can follow the result line.** The parser reads the output to its end and
+  applies the fail-closed rule when a tool result arrives, that is, for a tool that ran. A call the
+  CLI cut off before running it is not read as ungated; a test replays the fixture cut at its
+  result line and gets `budget_exceeded` with no violation either way.
+* **Task 21's cap turn needs a cold prompt cache.** It asks the same question with
+  `WORKSPACE_TURN_BUDGET_USD=0.01` and expects `budget_exceeded`. That is what this recording shows
+  when the first call writes the cache. Within an hour of another Haiku turn in the same container
+  the first call reads the cache (about $0.0019, the figure above), and the turn can finish with an
+  answer and no error code. This is worked out from the two recordings' cost figures, not observed.
+* **A budget-stopped turn leaves a session that ends on an unanswered tool call**, and the next
+  question in that conversation resumes it. That resume was not recorded (it would spend a turn). If
+  the CLI refuses it before any assistant message, the one recovery covers it; a follow-up question
+  after task 21's cap turn would show which.
+
+### Red
+
+Two red commits, because the fourth recording came later than the first three.
+
+`35819ab`: the three fixtures recorded that night, `recordings.json`, the synthetic file, the scrub
+and `test/stream-json.test.ts`, with no `src/stream-json.ts` (run again from that commit's tree on
+2026-10-06):
+
+```
+$ npx vitest run test/stream-json.test.ts
+ FAIL  test/stream-json.test.ts [ test/stream-json.test.ts ]
+Error: Cannot find module '../src/stream-json.js' imported from <35819ab>/workspace/test/stream-json.test.ts
+ Test Files  1 failed (1)
+      Tests  no tests
+```
+
+Between that commit and the budget recording one test stayed red on purpose (`73b10bf`: 88 of 89):
+"are the four recordings" lists four fixture names and three existed.
+
+`099ff8f`: the budget-stop fixture's own assertions, committed before the fixture and its
+`recordings.json` entry:
+
+```
+$ npx vitest run test/stream-json.test.ts test/runner.test.ts
+ FAIL  test/stream-json.test.ts [ test/stream-json.test.ts ]
+Error: ENOENT: no such file or directory, open '<worktree>\workspace\test\fixtures\claude-stream-budget-stop.jsonl'
+ FAIL  test/runner.test.ts > how a CLI turn ends > maps the budget-stop recording as recorded
+Error: ENOENT: no such file or directory, open '<worktree>\workspace\test\fixtures\claude-stream-budget-stop.jsonl'
+ Test Files  2 failed (2)
+      Tests  1 failed | 150 passed (151)
+```
+
+One test line was wrong and was changed with `099ff8f`: the runner's budget-stop case, written
+before the recording existed, took the result line to be the recording's last line. The recording's
+last line is the gate's answer, so the case now finds the result line by its type.
+
+### Green
+
+```
+$ npx vitest run test/stream-json.test.ts
+ Test Files  1 passed (1)
+      Tests  103 passed (103)
+$ npm run typecheck
+> tsc -p tsconfig.test.json
+(no output, exit 0)
+```
+
+Commits: `a575554` (the four lines, before any recording), `35819ab` (red), `73b10bf` (the parser,
+the error mapping, the recovery rule), `099ff8f` (red), `ee64b14` (the fourth fixture).
+
+What the test holds, in the row's order:
+
+* The lookup: the deltas of the last assistant message join to the recorded final text (456
+  characters, masked); `tool_calls` is `[{search_materials, "late work", "IST.323", ok: true},
+  {get_material_text, null, "733", ok: true}]`, each element with exactly the four keys; the init
+  line shows the pin, `apiKeySource` `none`, `dontAsk`, exactly `bb2dash` and `rag`, both connected,
+  the four tools and no `ToolSearch`; each of the two `tool_use` blocks has a `PreToolUse` hook
+  response with exit code 0; the rate-limit event carries the three overage fields.
+* The budget stop: as the section above.
+* Resume missing: one error result, no init line, no assistant message, exit code 1 from
+  `recordings.json`, the stderr sibling's sentence; `shouldRetryAsFresh()` says retry once, and not
+  twice, not for a fresh start, not after an assistant message.
+* Sign-in expired: `assistantError` `authentication_failed`, `api_error_status` 401, maps to
+  `sign_in_expired`; the same lines with other words in the text map the same way; none of the CLI's
+  own error text is streamed; the model named is the init line's, never `<synthetic>`.
+* Every recorded file: each tool-result body is the literal `<scrubbed>`; no drive path, home-folder
+  path, JWT, `sk-ant-`, `sb_secret_`, DSN or email shape; the init line's `cwd`, `slash_commands`,
+  `skills`, `plugins`, `agents`, `memory_paths` and `powershell_path` are `<scrubbed>`; every
+  thinking signature is `<scrubbed>`; every init line read shows the pin.
+* `synthetic-rate-limit.json` is named synthetic, is not in `recordings.json`, and carries three
+  hand-built cases: a turn that ends in error after a plan rate-limit rejection (`usage_limit`), a
+  turn reported as paid from usage credits (`isUsingOverage` true: stopped, `usage_limit`), and an
+  `api_retry` followed by a finished answer (not a plan-limit hit).
+* Hand-built lines, in the recorded shapes, for what no recording holds: a tool result that is an
+  error and one that never arrives (`ok` false); a denied call (gate exit 2: `ok` false, the turn
+  goes on); a tool result with no gate response, and a gate exit of 1 or 127 (each a stop,
+  `cli_error`); `EndConversation` (accepted, not stored, no gate response needed); subagent text
+  and thinking and tool-input deltas (never streamed); each way the init check fails.
+
+## Task 11 · runner loop, MCP config, key guard, system prompt test, healthcheck (P-85, P-88)
+
+Files: `workspace/src/runner.ts` (the loop and the entry), `turn.ts` (one turn), `replay.ts`,
+`db.ts`, `mcp-config.ts`, `healthcheck.ts`, `alive.ts`, `config.ts` (the start-up guards join its
+constants), `providers/claude-cli.ts` (the process joins the argv) and `providers/index.ts`;
+`workspace/test/runner.test.ts` with its four parts under `test/runner/` (`cli-turn.suite.ts`,
+`replay.suite.ts`, `db.suite.ts`, `health.suite.ts`), `test/helpers/fakes.ts`,
+`test/global-setup.ts`, `test/config.test.ts`, `test/mcp-config.test.ts`,
+`test/system-prompt.test.ts`.
+
+More files than the brief's table lists, all under `workspace/`: `src/turn.ts`, `src/replay.ts`
+and `src/alive.ts` (the turn, the replay and the alive file, each split out so no file passes 450
+lines and each can be tested alone); `test/runner/*.suite.ts` and `test/helpers/fakes.ts` (parts of
+`runner.test.ts`, which imports them, so the row's command runs them all);
+`test/global-setup.ts` (builds `dist/` once per run, because the gate and the healthcheck are
+tested as processes). The image copies `src/` whole, so the three new source files reach it with no
+change to W-65's Dockerfile.
+
+### Red
+
+`c82a995`: the four test files and their parts, before `runner.ts`, `turn.ts`, `replay.ts`,
+`alive.ts`, `db.ts`, `mcp-config.ts`, `healthcheck.ts` and the guards in `config.ts` existed (run
+again from that commit's tree on 2026-10-06):
+
+```
+$ npx vitest run test/runner.test.ts test/mcp-config.test.ts test/config.test.ts test/system-prompt.test.ts
+ ❯ test/config.test.ts (60 tests | 37 failed)
+ FAIL  test/mcp-config.test.ts [ test/mcp-config.test.ts ]
+Error: Cannot find module '../src/mcp-config.js' imported from <c82a995>/workspace/test/mcp-config.test.ts
+ FAIL  test/runner.test.ts [ test/runner.test.ts ]
+Error: Cannot find module '../src/runner.js' imported from <c82a995>/workspace/test/runner.test.ts
+ Test Files  3 failed | 1 passed (4)
+      Tests  37 failed | 40 passed (77)
+```
+
+The one file that passed at its first commit is `test/system-prompt.test.ts`: the brief has
+`prompts/system.md` written with task 8, before the recordings, so its test could not be red at
+task 11. The 23 `config.test.ts` cases that passed read constants task 8 had already written.
+
+### Green
+
+```
+$ npx vitest run test/runner.test.ts test/mcp-config.test.ts test/config.test.ts test/system-prompt.test.ts
+ Test Files  4 passed (4)
+      Tests  240 passed (240)
+$ npx vitest run --coverage
+ Test Files  9 passed (9)
+      Tests  542 passed (542)
+All files         |   92.43 |    86.84 |   91.19 |   94.55 |
+Statements   : 92.43% ( 867/938 )
+Branches     : 86.84% ( 482/555 )
+Functions    : 91.19% ( 176/193 )
+Lines        : 94.55% ( 747/790 )
+$ npm run typecheck
+> tsc -p tsconfig.test.json
+(no output, exit 0)
+```
+
+Line coverage of `src/` is 94.55 %, over the row's 80 % (`vitest.config.ts` holds the 80 as a
+threshold, so the command fails under it). The two files v8 counts at 0 are
+`src/healthcheck.ts` and `src/hooks/tool-gate.ts`: both are tested as built processes
+(`node dist/healthcheck.js`, `node dist/hooks/tool-gate.js`), which the coverage tool does not see.
+
+Commits: `c82a995` (red), `6816cf8` (the loop, the turn, the process, the MCP config, the key guard,
+the healthcheck), `6989194` (the turn in smaller parts; tests of the real spawn and of the entry),
+then three fixes from a read of the finished code, each with its test:
+
+* `04b8fa2`: after SIGTERM and SIGKILL the turn closes its read of stdout 400 ms later, so a child
+  of the CLI that still holds the pipe cannot keep a turn open; a turn whose provider reported no
+  session hands `workspace_finish()` the stored session id back instead of clearing it.
+* `c12f0e9`: the database client has a 10 s connect time-out, a 20 s query time-out and keep-alive,
+  so an unreachable database fails a call and the watchdog can act; once a stop is asked for, what
+  is in flight has 20 s, inside the service's 30 s stop grace, and the process then exits.
+* `ac87bef`: a question that opens with `/` goes under the line "The new question:" on a fresh
+  start and on a resumed turn alike, so the CLI does not read it as one of its own commands. It is
+  still the last argv element, after `--`. This is one thing more than the Contract's argv says (the
+  prompt element is the question, or the replay and the question); no recording tested how the CLI
+  reads a `-p` prompt that opens with a slash.
+
+What the tests hold, in the row's order:
+
+* **System prompt.** One case per rule of the Contract's bullet: read-only; the file or note behind
+  each fact; no invented number; speaker notes labelled; grades on the Grades screen; `collection`
+  on every `search_context` call with the two names and no other; `q`, and `course` when the
+  question names one; whole notes not available; other collections not listed; a quoted score
+  carries its date; plain text without Markdown symbols; a cut document said to be cut. Also: it
+  names the four tools and no other, carries no course AI-use rule, holds nothing bound to one
+  machine, and is itself plain text.
+* **One turn.** Claim, route, begin, deltas flushed every 250 ms with `seq` from 1 rising by 1, a
+  delta over 16000 characters split first (counted in characters, never cutting one in half),
+  finish; the content cut to 100000 characters first and the cut logged; 21 tool calls stored as
+  the first 20 in call order, the cut logged, the turn still `done`; a call keeps its place when
+  its result arrives later; failed and denied calls stored; `p_model` is the id the stream named,
+  or null; `cost_usd` is the stream's `total_cost_usd`, never a sum; no failed turn is retried on
+  another model.
+* **Stops.** Stop while text streams: the child is killed within 2 s and `cancelled` is stored;
+  with no text flushed for 2 s the runner calls `workspace_stream` with an empty delta, which uses
+  no `seq`; Stop during a tool call is seen and the child killed within 4 s; 8 minutes stores
+  `timeout`; a shutdown stores `stale_claim`; the first of two stops wins.
+* **The loop.** `workspace_claim` every 2 s; oldest first, one turn at a time;
+  `workspace_heartbeat` every 30 s on its own timer, during a turn too, the alive file touched
+  after each success and not after a failure; no heartbeat success for 180 s ends the turn in
+  flight and exits non-zero; SIGTERM and SIGINT each stop polling, kill the child, finish the turn
+  as `failed` / `stale_claim` and exit 0.
+* **The healthcheck**, as the built `dist/healthcheck.js`: exit 0 while the alive file's mtime is
+  under 90 s old, non-zero when it is older or missing.
+* **Sessions and the replay.** A fresh start passes `--session-id` with a new random uuid, never
+  the conversation's id, with the stored history in front of the question; a later turn passes
+  `--resume <claude_session_id>` and the question alone; the resume-missing fixture is retried
+  once as a fresh start with replay, and a second failure is `cli_error` with no session id; a
+  stored id that is not uuid-shaped (`not-a-uuid`, one with a flag behind it, `--fork-session`)
+  never reaches argv. The replay is built newest first, at most 20 messages, within 96 KiB with its
+  framing, emitted oldest first, and never repeats the request's own user message; 20 messages of
+  100000 characters stay within the limit; a full replay with an 8000-character question of 4-byte
+  characters keeps the prompt element under 131072 bytes.
+* **The init check and the gate.** Each failing init line (another version, an API key as the
+  credential, another permission mode, a third MCP server, a server not connected, a missing tool,
+  `ToolSearch`) kills the turn, stores `cli_error` and logs why; one log line per init line read
+  carries the request id, the version, the credential source, `permissionMode` and the model, and
+  no line holds the token; a tool that ran with no `PreToolUse` response, or a gate exit of 1 or
+  127, kills the turn as `cli_error`; `EndConversation` is accepted, not stored, and the turn
+  finishes.
+* **Error mapping**, on structured fields only: the budget-stop recording → `budget_exceeded`; the
+  sign-in-expired recording → `sign_in_expired`; the synthetic plan-limit rejection →
+  `usage_limit`; a turn reported as paid from usage credits is killed and stored `usage_limit`; a
+  stream with no result line, a CLI that cannot start → `cli_error`; a token file that cannot be
+  read → `sign_in_expired` with nothing started.
+* **Start-up guards.** Refused with `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+  `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_SIMPLE` or any `CLAUDE_CODE_USE_*` set (an empty value counts
+  as set); a DSN on port 6543, with no `sslmode`, or with `disable`, `allow` or `prefer`;
+  `WORKSPACE_TURN_BUDGET_USD` of 0 or 1.01. No refusal prints a value. `claude/settings.json` has
+  no `apiKeyHelper`, no `env` key, and `"cleanupPeriodDays": 30`.
+* **O-2.** With `budgetCapHolds` false the stored content's last line is `NO_CAP_SENTENCE`, also on
+  an answer cut at 100000 characters; with it true the sentence is absent.
+* **MCP config.** Exactly `bb2dash` and `rag`: `bb2dash` is `node`
+  `["/app/mcp-materials/dist/index.js"]` with `SUPABASE_URL=https://goultdzqcavefcgnifdy.supabase.co`
+  and `SUPABASE_SERVICE_ROLE_FILE=/run/secrets/bb2dash_mcp_service_key`; `rag` is `bash`
+  `["/app/mcp-rag/mcp-rag.sh"]` with no env; no string matches `postgres(ql)?://`, `sb_secret_` or
+  `eyJ`; written with mode 0600. The same file pins the seam with the image: `/app/workspace/`,
+  its three built entries, the hook command.
+* **The database side** (`db.suite.ts`): every statement is one of the five functions; the nine
+  `workspace_finish` arguments go in the function's order; no error message can carry the DSN, its
+  password or its host.
+
+What the image has to give the runner (for W-65; all of it is in the Contract): `claude` on `PATH`
+(the runner starts it by that name, as an argv array), `bash` for the `rag` launcher, the empty
+`/app/turn`, `/run/workspace` owned by `node`, the two secret files at their fixed paths, and
+`CLAUDE_CONFIG_DIR`. The runner sets `CLAUDE_CODE_OAUTH_TOKEN`, `ENABLE_TOOL_SEARCH=false` and
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` on the CLI child itself, from the token file, on every
+start; the rest of the child's environment is the runner's own.
+
+## Where the stream stands at the end of wave 1
+
+```
+$ npx vitest run            (from workspace/)
+ Test Files  9 passed (9)
+      Tests  542 passed (542)
+$ npm run typecheck
+(no output, exit 0)
+$ npx vitest run --coverage
+Lines        : 94.55% ( 747/790 )
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+```
+
+By task: router 67, tool gate 78, providers and argv 54, stream parser 103, runner, MCP config,
+config and system prompt 240.
+
+Nothing under the paths the image copies (`workspace/package.json`, `package-lock.json`,
+`tsconfig.json`, `src/`, `claude/`, `prompts/`) matches a pattern of `docker/grep-clean.test.mjs`
+(a drive path, a `.ps1`, PowerShell, `Move-Item`, OneDrive), comments included.
+
+Left on the host by the recordings, in no repo:
+
+* `C:/Users/Public/bb2dash-w64-rec/`: the four line scripts, `mcp.json` (paths only),
+  `settings.json` and `out/`, the raw output. `out/lookup.raw.jsonl` holds the two tool results,
+  which are syllabus text. It is kept so the scrub can be run again without recording again;
+  `rm -rf /c/Users/Public/bb2dash-w64-rec` removes it once the phase is merged.
+* `~/.claude/projects/C--Users-Public-bb2dash-w64-rec-cwd/`: the three session transcripts the CLI
+  wrote (the lookup, the budget stop, the sign-in-expired start) and an empty `memory` folder.
+
+Each recording that started its MCP servers (the lookup, the budget stop and the sign-in-expired
+start) also started one short-lived `bb2dash-mcp:local` container: the host's own registration of
+the materials server is `docker run -i --rm … bb2dash-mcp:local`, and the recipe names that
+registration. Each went away with its CLI: `docker ps` after the last recording lists only the two
+`bb2dash-mcp:local` containers other sessions started 18 and 19 hours earlier, with
+`bb2dash-sync-1`, `bb2dash-harness-jobs-1` and `harness-postgres` as they were. No docker command
+was run by hand except the read-only guard and `docker ps`.
