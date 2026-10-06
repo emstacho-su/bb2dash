@@ -32,6 +32,7 @@ import {
   readOauthToken,
   refusedEnvNames,
 } from '../src/config.js';
+import { buildArgs } from '../src/providers/claude-cli.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SETTINGS = path.resolve(HERE, '..', 'claude', 'settings.json');
@@ -179,6 +180,27 @@ describe('the per-answer budget', () => {
       expect(() => parseTurnBudget(raw)).toThrow(ConfigError);
     },
   );
+
+  // The flag is written with two decimals, so a third would reach the CLI rounded: 0.015 as 0.01, 0.999 as 1.00.
+  it.each([['0.015'], ['0.999'], ['0.125'], ['1.000'], ['0.010']])('refuses a third decimal: WORKSPACE_TURN_BUDGET_USD=%s', (raw) => {
+    expect(() => parseTurnBudget(raw)).toThrow(ConfigError);
+    expect(() => parseTurnBudget(raw)).toThrow(/two decimals/);
+    expect(() => loadConfig({ env: { WORKSPACE_TURN_BUDGET_USD: raw }, readFile: goodFiles, hostname: 'h' })).toThrow(ConfigError);
+  });
+
+  it('hands --max-budget-usd the same amount for every value it accepts, one cent to one dollar', () => {
+    for (let cents = 1; cents <= 100; cents += 1) {
+      const written = (cents / 100).toFixed(2);
+      const args = buildArgs({
+        model: 'haiku',
+        session: { mode: 'fresh', sessionId: '9f1c2d3e-4a5b-4c6d-8e7f-001122334455' },
+        systemPrompt: 'x',
+        budgetUsd: parseTurnBudget(written),
+        prompt: 'q',
+      });
+      expect(args[args.indexOf('--max-budget-usd') + 1]).toBe(written);
+    }
+  });
 });
 
 describe('loadConfig', () => {
