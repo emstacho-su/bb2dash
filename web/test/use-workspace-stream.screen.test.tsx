@@ -15,6 +15,9 @@
  *   * THE END OF A STREAM comes from the `done` broadcast and from a refetch
  *     when the tab regains focus, never from the 5 s interval alone: the spike
  *     showed the interval does not run in a hidden tab;
+ *   * a missed `done` broadcast costs live text, never the answer: when the
+ *     request row closes before the messages have read the stored row, the
+ *     messages are read once more;
  *   * a gap: text past a missing seq is never shown, and at `done` the stored
  *     row takes over;
  *   * nothing from the cache renders on the server, and server HTML hydrates
@@ -36,6 +39,7 @@ vi.mock('@/lib/supabase/client', async () =>
 );
 vi.mock('next/navigation', async () => (await import('./workspace-harness')).navigationMock());
 
+const { workspaceKeys } = await import('@/lib/queries.workspace');
 const { LOBBY_TOPIC } = await import('@/lib/use-workspace-stream');
 const labels = await import('@/lib/workspace-labels');
 const { Workspace } = await import('@/app/(app)/workspace/Workspace');
@@ -334,6 +338,52 @@ describe('the end of a stream: the done broadcast and a refetch on focus, never 
     // In the foreground the interval is the fallback for a missed broadcast.
     await advance(5_000);
     expect(reads()).toBe(before + 2);
+  });
+
+  it('reads the stored answer when the request row closes first and the done broadcast was missed', async () => {
+    vi.useFakeTimers();
+    focusManager.setFocused(true);
+    const messageReads = () =>
+      fake.state.log.filter((entry) => entry === 'from:workspace_messages').length;
+    const client = quietClient();
+    fake.state.search = `c=${A}`;
+    fake.state.rows = {
+      workspace_messages: [QUESTION_ROW, storedAnswer('', { finished: false })],
+      workspace_requests: [requestRow('claimed')],
+    };
+    const { container } = render(tree(client));
+    await advance(100);
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+
+    // The two polls are not locked together: each timer restarts from its own last answer.
+    // One extra read of the messages, half an interval in, stands in for that drift.
+    await advance(2_500);
+    await act(async () => {
+      await client.refetchQueries({ queryKey: workspaceKeys.messages(A) });
+    });
+    await advance(2_500); // 5.1 s: the requests poll, still claimed
+    await advance(2_600); // 7.7 s: the messages poll, still unfinished
+    expect(lineUnderQuestion(container)).toBe('Answering…');
+
+    // workspace_finish() commits the request and the stored row together. The done
+    // broadcast is missed, and the tab stays in front, so no focus refetch comes either.
+    fake.state.rows = {
+      workspace_messages: [QUESTION_ROW, storedAnswer('The stored answer.')],
+      workspace_requests: [requestRow('done')],
+    };
+    const before = messageReads();
+    await advance(2_500); // 10.2 s: the requests poll sees done; the messages poll was due at 12.6 s
+
+    // The request stopped being the open one: the messages are read once more, and that read
+    // holds the stored row.
+    expect(answerText(container)).toBe('The stored answer.');
+    expect(lineUnderQuestion(container)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeInTheDocument();
+    expect(messageReads()).toBe(before + 1);
+
+    // Nothing is open, so nothing polls: two minutes on, no further read.
+    await advance(120_000);
+    expect(messageReads()).toBe(before + 1);
   });
 
   it('never shows text past a missing seq, and lets the stored row take over at done', async () => {
