@@ -413,7 +413,9 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
   test('the header says what a start prints, and a start prints no more: names and the resolver, never an address of an allowed host (U2)', async () => {
     const header = SOURCE.slice(0, SOURCE.indexOf('set -euo pipefail'));
     assert.match(header, /^# What it prints/m, 'the header has its "What it prints" paragraph');
-    assert.match(header, /^# It never prints a user, a password, a connection string or any part of one, or the address of an\n# allowed host\.$/m);
+    // The pooler's host name is itself a part of a connection string, so the sentence names the parts that never show.
+    assert.match(header, /^# It never prints a user, a password, a database name, a query string or a whole connection$/m);
+    assert.match(header, /^# never prints the address of an allowed host\.$/m);
 
     const run = await happy();
     for (const name of [API, PROJECT, POOLER]) assert.ok(run.out.includes(name), `${name} is named in the log`);
