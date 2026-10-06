@@ -446,6 +446,14 @@ describe('how a CLI turn ends', () => {
     expect(h.spawn.processes[0]!.kills).toEqual([]);
   });
 
+  it('maps a rate-limit error end with no rejected event before it to usage_limit (synthetic)', async () => {
+    const h = harness([{ lines: synthetic.planLimitTerminalErrorOnly!.lines, exit: FAILED }]);
+    const events = await run(h);
+    expect(resultOf(events)).toMatchObject({ ok: false, errorCode: 'usage_limit' });
+    expect(h.spawn.processes[0]!.kills).toEqual([]);
+    expect(textOf(events)).toBe('');
+  });
+
   it('kills a turn reported as paid from usage credits and stores usage_limit (synthetic)', async () => {
     const h = harness([{ lines: synthetic.paidFromUsageCredits!.lines, exit: OK, hang: true }]);
     const events = await run(h);

@@ -447,6 +447,27 @@ describe('synthetic-rate-limit.json (not a recording)', () => {
     expect(stopsOf(signals)).toEqual([]);
   });
 
+  it('reads the terminal error itself: a rate-limit error end with no rejected event before it is usage_limit', () => {
+    const { signals, summary } = replay(synthetic.planLimitTerminalErrorOnly!.lines);
+    expect(summary.rateLimit).toBeNull();
+    expect(summary.assistantError).toBe('rate_limit');
+    expect(summary.result).toMatchObject({ isError: true, apiErrorStatus: 429 });
+    expect(mapTurnEnd(summary)).toBe('usage_limit');
+    expect(stopsOf(signals)).toEqual([]);
+    expect(deltasOf(signals)).toBe('');
+  });
+
+  it.each([
+    ['the assistant line names another error', { error: 'server_error' }, { api_error_status: 429 }],
+    ['the assistant line names no error', { error: undefined }, { api_error_status: 429 }],
+    ['the result carries another status', { error: 'rate_limit' }, { api_error_status: 500 }],
+    ['the result carries no status', { error: 'rate_limit' }, { api_error_status: null }],
+  ])('needs both terminal fields when no rejected event came: %s is cli_error', (_what, assistant, result) => {
+    const [init, requesting, retry, apiError, end] = synthetic.planLimitTerminalErrorOnly!.lines;
+    const lines = [init, requesting, retry, { ...apiError, ...assistant }, { ...end, ...result }];
+    expect(mapTurnEnd(replay(lines).summary)).toBe('cli_error');
+  });
+
   it('stops a turn reported as paid from usage credits and stores usage_limit', () => {
     const { signals, summary } = replay(synthetic.paidFromUsageCredits!.lines);
     expect(summary.rateLimit?.isUsingOverage).toBe(true);
