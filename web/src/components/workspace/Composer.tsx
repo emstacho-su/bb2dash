@@ -7,11 +7,15 @@
  * it reads "Stop" (no control reads "Submit": `web/test/audits.test.ts`).
  * Enter asks and Shift+Enter is a new line.
  *
+ * WHILE A REQUEST IS OPEN ENTER DOES NOT SEND (the PM's ruling U1): the button
+ * reads Stop, and a question typed meanwhile waits in the box. The database's
+ * refusal is the backstop, for an open request this page has not read yet
+ * (asked from another tab): Enter then sends, and SQLSTATE 23505 comes back as
+ * its one sentence.
+ *
  * A QUESTION IS 1 TO 8000 CHARACTERS AFTER TRIMMING. The page refuses anything
  * else before a request is sent (`askWorkspace` measures it), and the database
- * refuses the same text. A second question while one is open is refused by the
- * database, not only by the button: Enter still sends it, and SQLSTATE 23505
- * comes back as its one sentence. Each refusal is shown here, under the box.
+ * refuses the same text. Each refusal is shown here, under the box.
  *
  * The typed text is kept until a question is accepted, so a refusal or a
  * failure never loses it.
@@ -82,7 +86,10 @@ export function Composer(props: ComposerProps) {
     // Shift+Enter is the browser's new line. Enter while an input method is
     // composing picks a candidate.
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    // Enter is the page's key in every state, so it never adds a line. While a
+    // request is open it sends nothing: the button reads Stop.
     event.preventDefault();
+    if (requestOpen) return;
     void ask();
   }
 
