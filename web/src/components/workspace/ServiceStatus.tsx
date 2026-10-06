@@ -21,7 +21,11 @@
  * it is answered when the service returns.
  */
 
-import { isWorkspaceOffline, useWorkspaceStatus, workspaceErrorReason } from '@/lib/queries.workspace';
+import {
+  isWorkspaceOffline,
+  useWorkspaceStatus,
+  workspaceErrorReason,
+} from '@/lib/queries.workspace';
 import { useHydrated } from '@/lib/use-hydrated';
 import { OFFLINE_LINE, statusProblemLine } from '@/lib/workspace-labels';
 import styles from './ServiceStatus.module.css';

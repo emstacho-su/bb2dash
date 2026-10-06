@@ -247,7 +247,9 @@ interface Stay {
 
 /** The channel event for a status supabase-js reports: joined, or an error with its reason. */
 function channelEvent(topic: string, status: string, error: Error | undefined): StreamEvent {
-  if (status === CHANNEL_SUBSCRIBED) return { type: 'channel', topic, status: 'joined', detail: null };
+  if (status === CHANNEL_SUBSCRIBED) {
+    return { type: 'channel', topic, status: 'joined', detail: null };
+  }
   return { type: 'channel', topic, status: 'error', detail: describeFailure(status, error) };
 }
 

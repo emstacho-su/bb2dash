@@ -119,7 +119,9 @@ function Rows({ conversations, error, emptyLine, actionLabel, onAction, ...conte
 }
 
 /** Mounted only while "Show archived" is on, so the archived rows are read only when asked for. */
-function ArchivedRows(props: RowContext & { onUnarchive: (conversation: WorkspaceConversation) => void }) {
+function ArchivedRows(
+  props: RowContext & { onUnarchive: (conversation: WorkspaceConversation) => void },
+) {
   const { onUnarchive, ...context } = props;
   const archived = useWorkspaceConversations(true);
   return (

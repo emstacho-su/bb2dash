@@ -47,7 +47,8 @@ export function Composer({ requestOpen, busy, refusal, onAsk, onStop, onEdit }: 
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // Shift+Enter is the browser's new line. Enter while an input method is composing picks a candidate.
+    // Shift+Enter is the browser's new line. Enter while an input method is
+    // composing picks a candidate.
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     void ask();

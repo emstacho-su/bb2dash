@@ -80,8 +80,10 @@ function problemLines(failed: { read: unknown; ask: unknown; stop: unknown }): s
   if (failed.read) lines.push(conversationProblemLine(workspaceErrorReason(failed.read)));
   if (failed.ask && !(failed.ask instanceof WorkspaceRefusal)) {
     const reason = workspaceErrorReason(failed.ask);
-    // An id that does not exist (23503) is a conversation that cannot be loaded, not a bad question.
-    lines.push(isMissingConversation(failed.ask) ? conversationProblemLine(reason) : askProblemLine(reason));
+    // An id that does not exist (23503) is a conversation that cannot be loaded,
+    // not a bad question.
+    const missing = isMissingConversation(failed.ask);
+    lines.push(missing ? conversationProblemLine(reason) : askProblemLine(reason));
   }
   if (failed.stop) lines.push(stopProblemLine(workspaceErrorReason(failed.stop)));
   // Two failures can say the same line (a read and a question, on an id that does not exist).
