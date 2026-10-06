@@ -216,6 +216,8 @@ export interface FakeProcessOptions {
   readonly hang?: boolean;
   /** Ignore SIGTERM, so only SIGKILL ends the process. */
   readonly ignoreSigterm?: boolean;
+  /** Keep stdout open after the process is dead, as a child of the CLI holding the pipe would. */
+  readonly holdsOutput?: boolean;
   /** Cut the output into chunks of this many characters, so lines arrive in pieces. */
   readonly chunkChars?: number;
   readonly stderr?: string;
@@ -228,8 +230,8 @@ export interface FakeProcess {
 
 export function fakeProcess(options: FakeProcessOptions): FakeProcess {
   const kills: Array<{ signal: string; at: number }> = [];
-  let release: (exit: CliExit) => void = () => undefined;
-  const killed = new Promise<CliExit>((resolve) => {
+  let release: () => void = () => undefined;
+  const outputClosed = new Promise<void>((resolve) => {
     release = resolve;
   });
   let ended: CliExit | null = null;
@@ -253,7 +255,7 @@ export function fakeProcess(options: FakeProcessOptions): FakeProcess {
       yield Buffer.from(chunk, 'utf8');
     }
     if (options.hang) {
-      finish(await killed);
+      await outputClosed;
       return;
     }
     finish(options.exit);
@@ -268,9 +270,12 @@ export function fakeProcess(options: FakeProcessOptions): FakeProcess {
       kill(signal) {
         kills.push({ signal, at: Date.now() });
         if (signal === 'SIGTERM' && options.ignoreSigterm) return;
-        const exit: CliExit = { code: null, signal };
-        release(exit);
-        finish(exit);
+        finish({ code: null, signal });
+        if (!options.holdsOutput) release();
+      },
+      closeOutput() {
+        kills.push({ signal: 'closeOutput', at: Date.now() });
+        release();
       },
     },
   };

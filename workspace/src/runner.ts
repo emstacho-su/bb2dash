@@ -110,7 +110,11 @@ export function createRunner(deps: RunnerDeps): Runner {
           state.turn = startTurn(deps, claim);
           // A request claimed while a shutdown arrived is ended at once, so it is not left claimed.
           if (state.stopping) state.turn.stop('stale_claim');
-          await state.turn.done;
+          try {
+            await state.turn.done;
+          } catch (error) {
+            log(`turn request=${claim.requestId} crashed: ${messageOf(error)}`);
+          }
           state.turn = null;
         }
       } finally {

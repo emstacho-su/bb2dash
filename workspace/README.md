@@ -15,14 +15,18 @@ tool call.
 
 | path | what it is |
 |---|---|
-| `src/runner.ts` | the entry: the poll loop, the heartbeat, shutdown |
+| `src/runner.ts` | the entry: the poll loop, the heartbeat, the database watchdog, shutdown |
+| `src/turn.ts` | one turn: route, begin, stream the text in flushes, finish; Stop, the 8-minute limit |
 | `src/router.ts`, `src/tiers.ts` | question to tier, tier to provider and model alias |
-| `src/providers/` | the provider seam: `claude-cli` is connected, `ollama` and `frontier-api` are typed stubs |
-| `src/stream-json.ts` | reads the CLI's `stream-json` output |
-| `src/hooks/tool-gate.ts` | the `PreToolUse` hook: only denies or stays silent |
+| `src/providers/` | the provider seam: `claude-cli` (the argv, the process, the one recovery) is connected, `ollama` and `frontier-api` are typed stubs |
+| `src/stream-json.ts` | reads the CLI's `stream-json` output: the init check, answer text, tool calls, failing closed on the gate |
+| `src/replay.ts` | the stored history a fresh start carries in front of the question |
+| `src/hooks/tool-gate.ts`, `src/hooks/gate-rules.ts` | the `PreToolUse` hook and its rules: it only denies or stays silent |
 | `src/mcp-config.ts` | writes the two-server MCP config (paths only, never a key) |
-| `src/config.ts`, `src/errors.ts`, `src/db.ts`, `src/healthcheck.ts` | settings and the start-up guards, the eight error codes, the five database calls, the container healthcheck |
-| `claude/settings.json` | the CLI settings the runner passes with `--settings` (the hook, nothing else) |
+| `src/config.ts` | the constants, the key guard, the DSN checks, the per-answer budget |
+| `src/errors.ts`, `src/db.ts` | the eight error codes and their mapping, the five database calls |
+| `src/healthcheck.ts`, `src/alive.ts` | the container healthcheck and the alive file it reads |
+| `claude/settings.json` | the CLI settings the runner passes with `--settings` (the hook and the transcript retention) |
 | `prompts/system.md` | the text appended to the CLI's system prompt |
 | `test/fixtures/` | the router cases, and stream recordings with every tool result scrubbed |
 
@@ -36,7 +40,18 @@ npx vitest run --coverage
 ```
 
 `npm run build` writes `dist/` (the image runs `dist/runner.js`, `dist/healthcheck.js` and
-`dist/hooks/tool-gate.js`). `test/tool-gate.test.ts` builds before it runs the gate as a process.
+`dist/hooks/tool-gate.js`). The test run builds `dist/` once first (`test/global-setup.ts`), because
+two suites run the built gate and the built healthcheck as processes.
 
 No test starts the `claude` CLI or opens a database connection: the provider tests replay the
-recorded fixtures, and the loop runs on fakes.
+recorded fixtures (node stands in where a real process is needed), and the loop runs on fakes.
+
+## The recorded fixtures
+
+`test/fixtures/claude-stream-*.jsonl` were recorded once with the pinned CLI and the frozen argv,
+then scrubbed by `test/scrub-recording.mjs` (tool-result bodies, host paths and inventory, thinking
+signatures; the lookup's answer text is masked, since it quoted the document it read).
+`test/fixtures/recordings.json` holds each recording's exit code. `synthetic-rate-limit.json` is not
+a recording: a plan-limit hit cannot be recorded on demand, so it is built by hand from the recorded
+shapes and says so. A CLI version bump means recording again; the lines are in
+`docs/planning/sprint-2/verification/102_W-64_VERIFICATION.md`.

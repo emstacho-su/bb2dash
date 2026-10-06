@@ -573,9 +573,23 @@ describe('killing the CLI', () => {
     expect(kills[1]!.at - kills[0]!.at).toBeLessThan(2000);
   });
 
-  it('keeps the kill grace under the 2 s the Contract allows', async () => {
-    const { KILL_GRACE_MS: shipped } = await import('../../src/providers/claude-cli.js');
-    expect(shipped).toBeLessThan(2000);
+  it('stops reading when the output stays open after SIGKILL, so a turn can never hang on a held pipe', async () => {
+    const h = harness([{ lines: [initLine(), textDelta('part')], exit: OK, hang: true, ignoreSigterm: true, holdsOutput: true }]);
+    const controller = new AbortController();
+    const events: Awaited<ReturnType<typeof collect>> = [];
+    for await (const event of h.turn(input(), controller.signal)) {
+      events.push(event);
+      if (event.type === 'delta') controller.abort();
+    }
+    const kills = h.spawn.processes[0]!.kills;
+    expect(kills.map((kill) => kill.signal)).toEqual(['SIGTERM', 'SIGKILL', 'closeOutput']);
+    expect(kills[2]!.at - kills[0]!.at).toBeLessThan(2000);
+    expect(events.filter((event) => event.type === 'result')).toHaveLength(1);
+  });
+
+  it('keeps the whole kill sequence under the 2 s the Contract allows', async () => {
+    const { KILL_GRACE_MS: grace, OUTPUT_CLOSE_MS: close } = await import('../../src/providers/claude-cli.js');
+    expect(grace + close).toBeLessThan(2000);
   });
 
   it('starts nothing when the runner has already aborted', async () => {

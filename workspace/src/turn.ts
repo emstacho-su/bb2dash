@@ -262,7 +262,9 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
         errorCode: ending.errorCode,
         costUsd: collected.result?.costUsd ?? null,
         durationMs: Date.now() - startedAt,
-        claudeSessionId: collected.result?.claudeSessionId ?? null,
+        // `workspace_finish()` stamps what it is given, so a turn that reported no session (nothing
+        // started) hands back the stored id: the conversation keeps its session for the next turn.
+        claudeSessionId: collected.result?.claudeSessionId ?? claim.claudeSessionId,
         model: collected.result?.model ?? null,
       },
       log,

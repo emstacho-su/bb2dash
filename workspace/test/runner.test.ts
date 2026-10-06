@@ -470,6 +470,14 @@ describe('a turn and the database', () => {
     expect(without.fake.finishes[0]?.claudeSessionId).toBeNull();
   });
 
+  it('hands back the stored session id when the provider reported none, so the conversation keeps its session', async () => {
+    const nothingRan = harness(scriptedTurn([result(10, { ok: false, errorCode: 'sign_in_expired', claudeSessionId: null })]).turn);
+    const handle = startTurn(nothingRan.deps, claimOf({ claudeSessionId: STORED_SESSION_ID }));
+    await vi.advanceTimersByTimeAsync(100);
+    await handle.done;
+    expect(nothingRan.fake.finishes[0]).toMatchObject({ errorCode: 'sign_in_expired', claudeSessionId: STORED_SESSION_ID });
+  });
+
   it('keeps the session id and the model of a turn the runner stopped', async () => {
     const scripted = scriptedTurn([delta(100, 'part')]);
     const { fake, deps } = harness(scripted.turn);

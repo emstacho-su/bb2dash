@@ -164,6 +164,8 @@ export function createClaudeCliProvider(turn: CliTurn): Provider {
 
 /** SIGTERM first; SIGKILL when the process is still there after this long. Under the 2 s a Stop is given. */
 export const KILL_GRACE_MS = 1500;
+/** After SIGKILL the output is closed this much later, in case a child of the CLI still holds the pipe open. */
+export const OUTPUT_CLOSE_MS = 400;
 const STDERR_KEEP_CHARS = 2000;
 const LOG_VALUE_MAX_CHARS = 80;
 const LOG_STDERR_MAX_CHARS = 200;
@@ -186,6 +188,8 @@ export interface CliProcess {
   readonly stdout: AsyncIterable<Buffer | string>;
   readonly exited: Promise<CliExit>;
   kill(signal: 'SIGTERM' | 'SIGKILL'): void;
+  /** Stop reading stdout, whoever still holds it open. */
+  closeOutput(): void;
   /** The end of what the process wrote to stderr, for a log line. */
   stderrText(): string;
 }
@@ -229,13 +233,18 @@ export function spawnClaude(argv: readonly string[], options: SpawnOptions): Cli
   });
   const exited = new Promise<CliExit>((resolve) => {
     child.once('error', (error) => resolve({ code: null, signal: null, error: error.message }));
-    child.once('close', (code, signal) => resolve({ code, signal }));
+    // `exit`, not `close`: the turn reads stdout to its end before it asks, and `close` would wait
+    // on a pipe that a child of the CLI may still hold.
+    child.once('exit', (code, signal) => resolve({ code, signal }));
   });
   return {
     stdout: child.stdout,
     exited,
     kill: (signal) => {
       child.kill(signal);
+    },
+    closeOutput: () => {
+      child.stdout.destroy();
     },
     stderrText: () => stderr,
   };
@@ -245,14 +254,18 @@ export function spawnClaude(argv: readonly string[], options: SpawnOptions): Cli
 async function* linesOf(stdout: AsyncIterable<Buffer | string>): AsyncGenerator<string> {
   const decoder = new StringDecoder('utf8');
   let pending = '';
-  for await (const chunk of stdout) {
-    pending += typeof chunk === 'string' ? chunk : decoder.write(chunk);
-    let end = pending.indexOf('\n');
-    while (end !== -1) {
-      yield pending.slice(0, end);
-      pending = pending.slice(end + 1);
-      end = pending.indexOf('\n');
+  try {
+    for await (const chunk of stdout) {
+      pending += typeof chunk === 'string' ? chunk : decoder.write(chunk);
+      let end = pending.indexOf('\n');
+      while (end !== -1) {
+        yield pending.slice(0, end);
+        pending = pending.slice(end + 1);
+        end = pending.indexOf('\n');
+      }
     }
+  } catch {
+    // The output was closed under the reader (a killed process): what was read stands.
   }
   pending += decoder.end();
   if (pending !== '') yield pending;
@@ -271,7 +284,10 @@ function createKiller(child: CliProcess, graceMs: number): Killer {
       if (asked) return;
       asked = true;
       child.kill('SIGTERM');
-      timer = setTimeout(() => child.kill('SIGKILL'), graceMs);
+      timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        timer = setTimeout(() => child.closeOutput(), OUTPUT_CLOSE_MS);
+      }, graceMs);
     },
     clear() {
       if (timer !== null) clearTimeout(timer);
