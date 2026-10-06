@@ -24,6 +24,7 @@ import { loopHarness as loop, turnHarness as harness, useFakeClock } from './hel
 import './runner/cli-turn.suite.js';
 import './runner/closing.suite.js';
 import './runner/db.suite.js';
+import './runner/db-tls.suite.js';
 import './runner/health.suite.js';
 import './runner/replay.suite.js';
 import './runner/result-grace.suite.js';

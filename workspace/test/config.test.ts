@@ -10,6 +10,7 @@ import {
   CLAUDE_CODE_VERSION,
   CONTENT_MAX_CHARS,
   ConfigError,
+  DB_CA_FILE_ENV,
   DB_WATCHDOG_MS,
   HEALTH_MAX_AGE_MS,
   HEARTBEAT_MS,
@@ -33,6 +34,7 @@ import {
   refusedEnvNames,
 } from '../src/config.js';
 import { buildArgs } from '../src/providers/claude-cli.js';
+import { makeThrowawayCa } from './helpers/throwaway-ca.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SETTINGS = path.resolve(HERE, '..', 'claude', 'settings.json');
@@ -45,7 +47,14 @@ function files(map: Record<string, string>): (file: string) => string | null {
   return (file) => (file in map ? (map[file] ?? null) : null);
 }
 
-const goodFiles = files({ [PATHS.runnerDbUrlSecret]: DSN, [PATHS.oauthTokenSecret]: TOKEN });
+/** A certificate made for this run (test/helpers/throwaway-ca.ts): the shape of the pinned CA file, never a real one. */
+const CA_PEM = makeThrowawayCa('w64 config test CA').certPem;
+const DEFAULT_CA_FILE = '/app/certs/prod-ca.crt';
+const CA_FILE_ENV = 'WORKSPACE_DB_CA_FILE';
+/** The code point of the byte-order mark an editor may put in front of a file. */
+const BYTE_ORDER_MARK = 0xfeff;
+
+const goodFiles = files({ [PATHS.runnerDbUrlSecret]: DSN, [PATHS.oauthTokenSecret]: TOKEN, [DEFAULT_CA_FILE]: CA_PEM });
 
 describe('the constants the Contract names', () => {
   it('holds the loop and stream numbers', () => {
@@ -140,8 +149,35 @@ describe('the runner DSN', () => {
     expect(() => assertRunnerDsn(DSN.replace('&sslmode=require', ''))).toThrow(/sslmode/);
   });
 
-  it.each([['disable'], ['allow'], ['prefer']])('refuses sslmode=%s', (mode) => {
+  it.each([['disable'], ['allow'], ['prefer'], ['no-verify'], ['NO-VERIFY']])('refuses sslmode=%s', (mode) => {
+    expect(() => assertRunnerDsn(DSN.replace('sslmode=require', `sslmode=${mode}`))).toThrow(ConfigError);
     expect(() => assertRunnerDsn(DSN.replace('sslmode=require', `sslmode=${mode}`))).toThrow(/sslmode/);
+  });
+
+  it.each([['require'], ['verify-ca'], ['verify-full']])('accepts sslmode=%s', (mode) => {
+    const dsn = DSN.replace('sslmode=require', `sslmode=${mode}`);
+    expect(assertRunnerDsn(dsn)).toBe(dsn);
+  });
+
+  it('accepts the stored form as it is: its flags decide nothing, the runner verifies whatever they say', () => {
+    expect(DSN).toContain('?uselibpqcompat=true&sslmode=require');
+    expect(assertRunnerDsn(DSN)).toBe(DSN);
+  });
+
+  it('recommends no unverified form in any refusal, and names the verified one', () => {
+    const refusals = [DSN.replace(':5432/', ':6543/'), DSN.replace('&sslmode=require', ''), DSN.replace('sslmode=require', 'sslmode=no-verify'), DSN.replace('sslmode=require', 'sslmode=disable')].map((bad) => {
+      try {
+        assertRunnerDsn(bad);
+        return 'accepted';
+      } catch (error) {
+        return (error as Error).message;
+      }
+    });
+    for (const message of refusals) {
+      expect(message).not.toBe('accepted');
+      expect(message).not.toMatch(/uselibpqcompat|no-verify|sslmode=require/);
+    }
+    expect(refusals[1]).toMatch(/sslmode=verify-full/);
   });
 
   it('refuses text that is not a URL', () => {
@@ -216,7 +252,7 @@ describe('loadConfig', () => {
   });
 
   it('strips the byte-order mark and line ends a secret file may carry', () => {
-    const readFile = files({ [PATHS.runnerDbUrlSecret]: `\uFEFF${DSN}\r\n`, [PATHS.oauthTokenSecret]: `${TOKEN}\n` });
+    const readFile = files({ [PATHS.runnerDbUrlSecret]: `\uFEFF${DSN}\r\n`, [PATHS.oauthTokenSecret]: `${TOKEN}\n`, [DEFAULT_CA_FILE]: CA_PEM });
     expect(loadConfig({ env: {}, readFile, hostname: 'h' }).dbUrl).toBe(DSN);
     expect(readOauthToken(readFile)).toBe(TOKEN);
     expect(cleanSecret(`\uFEFF  ${TOKEN}\r\n`)).toBe(TOKEN);
@@ -252,6 +288,92 @@ describe('loadConfig', () => {
   it('never takes the DSN from the environment', () => {
     const env = { DATABASE_URL: 'postgresql://other', WORKSPACE_RUNNER_DB_URL: 'postgresql://other' };
     expect(loadConfig({ env, readFile: goodFiles, hostname: 'h' }).dbUrl).toBe(DSN);
+  });
+});
+
+describe('the pinned CA the database connection is verified against (ruling V1, SR-1)', () => {
+  const secrets = { [PATHS.runnerDbUrlSecret]: DSN, [PATHS.oauthTokenSecret]: TOKEN };
+  const OTHER_CA_FILE = '/run/workspace/another-ca.crt';
+  const messageFrom = (work: () => unknown): string => {
+    try {
+      work();
+      return 'started';
+    } catch (error) {
+      return error instanceof ConfigError ? error.message : `not a ConfigError: ${String(error)}`;
+    }
+  };
+
+  it('is read at /app/certs/prod-ca.crt when WORKSPACE_DB_CA_FILE is not set', () => {
+    expect(PATHS.dbCaFile).toBe(DEFAULT_CA_FILE);
+    expect(DB_CA_FILE_ENV).toBe(CA_FILE_ENV);
+    expect(loadConfig({ env: {}, readFile: goodFiles, hostname: 'h' }).dbCa).toBe(CA_PEM);
+  });
+
+  it('is read at the file WORKSPACE_DB_CA_FILE names, and only there', () => {
+    const read: string[] = [];
+    const other = makeThrowawayCa('w64 config test CA, another').certPem;
+    const map = files({ ...secrets, [DEFAULT_CA_FILE]: CA_PEM, [OTHER_CA_FILE]: other });
+    const readFile = (file: string): string | null => {
+      read.push(file);
+      return map(file);
+    };
+    expect(loadConfig({ env: { [CA_FILE_ENV]: OTHER_CA_FILE }, readFile, hostname: 'h' }).dbCa).toBe(other);
+    expect(read).toContain(OTHER_CA_FILE);
+    expect(read).not.toContain(DEFAULT_CA_FILE);
+  });
+
+  it.each([[''], ['   ']])('reads WORKSPACE_DB_CA_FILE=%j as not set', (value) => {
+    expect(loadConfig({ env: { [CA_FILE_ENV]: value }, readFile: goodFiles, hostname: 'h' }).dbCa).toBe(CA_PEM);
+  });
+
+  it('keeps the certificate text as the file holds it, line ends included, without a byte-order mark', () => {
+    const readFile = files({ ...secrets, [DEFAULT_CA_FILE]: `${String.fromCharCode(BYTE_ORDER_MARK)}${CA_PEM}` });
+    const { dbCa } = loadConfig({ env: {}, readFile, hostname: 'h' });
+    expect(dbCa).toBe(CA_PEM);
+    expect(dbCa.split('\n').length).toBeGreaterThan(3);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['only white space', ' \r\n\n'],
+    ['not a certificate', 'this file was meant to hold a certificate\n'],
+    ['a private key and no certificate', '-----BEGIN PRIVATE KEY-----\nnot-a-key\n-----END PRIVATE KEY-----\n'],
+  ])('refuses to start when the CA file is %s', (_what, content) => {
+    const readFile = files(content === undefined ? secrets : { ...secrets, [DEFAULT_CA_FILE]: content });
+    const message = messageFrom(() => loadConfig({ env: {}, readFile, hostname: 'h' }));
+    expect(message).toContain(DEFAULT_CA_FILE);
+    expect(message).toContain(CA_FILE_ENV);
+    expect(message).not.toMatch(/^started|^not a ConfigError/);
+  });
+
+  it('refuses to start when the file WORKSPACE_DB_CA_FILE names is missing, even with the default file in place', () => {
+    const message = messageFrom(() => loadConfig({ env: { [CA_FILE_ENV]: OTHER_CA_FILE }, readFile: goodFiles, hostname: 'h' }));
+    expect(message).toContain(OTHER_CA_FILE);
+    expect(message).not.toMatch(/^started|^not a ConfigError/);
+  });
+
+  it('never prints what the file holds, or anything of the DSN, in its refusal', () => {
+    const readFile = files({ ...secrets, [DEFAULT_CA_FILE]: 'a-line-that-must-not-be-printed\n' });
+    const message = messageFrom(() => loadConfig({ env: {}, readFile, hostname: 'h' }));
+    expect(message).not.toContain('a-line-that-must-not-be-printed');
+    expect(message).not.toContain('not-a-password');
+    expect(message).not.toContain('pooler.supabase.com');
+  });
+
+  it('checks the environment and the DSN before it reads the CA', () => {
+    const noCa = files(secrets);
+    expect(messageFrom(() => loadConfig({ env: { ANTHROPIC_API_KEY: 'x' }, readFile: noCa, hostname: 'h' }))).toMatch(/ANTHROPIC_API_KEY/);
+    const on6543 = files({ [PATHS.runnerDbUrlSecret]: DSN.replace(':5432/', ':6543/') });
+    expect(messageFrom(() => loadConfig({ env: {}, readFile: on6543, hostname: 'h' }))).toMatch(/6543/);
+  });
+
+  it('is named in the README, which recommends no unverified form of the DSN', () => {
+    const readme = fs.readFileSync(path.resolve(HERE, '..', 'README.md'), 'utf8');
+    expect(readme).toContain(CA_FILE_ENV);
+    expect(readme).toContain(DEFAULT_CA_FILE);
+    expect(readme).not.toMatch(/no-verify/);
+    expect(readme).not.toMatch(/append[^\n]*sslmode=require/);
   });
 });
 
