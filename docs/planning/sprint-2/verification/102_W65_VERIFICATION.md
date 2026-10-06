@@ -2,7 +2,8 @@
 
 Brief: `docs/planning/sprint-2/briefs/102_PHASE21_workspace.md` (frozen 2026-10-05) · Tasks 12, 13, 14 ·
 bb2dash branch `feat/workspace-21-container` (worktree `bb2dash-wt-21-container`) · bb2dash-stack branch
-`feat/workspace-21` (worktree `bb2dash-stack-wt-21`) · Written 2026-10-05, wave 1.
+`feat/workspace-21` (worktree `bb2dash-stack-wt-21`) · Wave 1 written 2026-10-05; wave 2 (rulings T1)
+added 2026-10-06, at the end.
 
 **Wave 1 is files and read-only checks only.** No `docker build`, `up`, `run`, `exec`, `stop` or `rm`
 was run by this stream, and no `just` verb. The image has not been built, so nothing below proves that
@@ -14,6 +15,10 @@ what waits for wave 2 is written out as paste-ready lines.
 | 12 | every file written; compose resolves; the `sync` service is unchanged; `grep-clean` 10 of 11 | the eleventh `grep-clean` test (needs W-64's `workspace/`), the build, every container check, the token smoke (PM) |
 | 13 | the scan lines written | the scan itself (needs the image) |
 | 14 | done: 46 of 46, every file check | nothing |
+
+**Wave 2a (2026-10-06)** changed files again on rulings T1 and again ran no docker step that changes
+state: see "Wave 2" at the end. The numbered list there replaces the draft lines wave 1 kept in this
+file, and the sections below are wave 1's record as written.
 
 ## The guard (read before and after everything this stream did)
 
@@ -156,6 +161,9 @@ The hash the edited file renders for `sync` is the hash the running container wa
 check in wave 1**; the list below is every place a choice had to be made, for the PM and the security
 review to rule on.
 
+(Ruled on 2026-10-06, T1: choices 2, 3 and 5 are kept; choice 4 became a port rule in wave 2, and
+the read behind choice 5 was fixed. The list below is wave 1's wording.)
+
 1. **Order: resolve first, then default deny.** As in the dev firewall, the four names are resolved
    while the OUTPUT policy is still ACCEPT, because Docker's embedded resolver may forward upstream from
    inside this container's network namespace. Only the root script is running in that window.
@@ -272,289 +280,11 @@ of the value. `is_public_ipv4`: 21 of 21 (8 public, 13 internal, including 172.1
 The two clauses the security review is asked to read (IPv6 closed; a DSN host that does not end
 `.pooler.supabase.com` fails closed) are step 6 and step 1 of `main`, and cases G1–G3 and C, C2 above.
 
-### Wave 2: the paste-ready lines (Git Bash)
+### The paste-ready lines, and task 13
 
-**Every line below is a Git Bash line**, run from `C:/Users/stack/projects/bb2dash-wt-21-container`. A
-container path that is its own argument is inside `sh -c '…'` or the line carries `MSYS_NO_PATHCONV=1`
-(read on this laptop: Git Bash leaves `sh -c '/app/…; echo $?'` alone and rewrites a bare `/run/secrets/x`
-to `C:/Program Files/Git/run/secrets/x`). The project is `bb2dash-wt21` and the service is named in every
-compose command. Never `just up`, never an `up` without the service name. `-T` may be added after
-`exec` on any line; it only turns the pseudo-terminal off.
-
-None of these lines has been run. Their quoting has: each of the 23 `exec` lines below was read back
-out of this file in Git Bash with `docker` replaced by a shell function that runs nothing in any
-container, and what the container would be handed was checked (every `sh -c` string parses under
-`sh -n`; every `node -e` program passes `node --check`, the two long ones included). That shows a line
-arrives as written. It does not show what it prints.
-
-Read the guard before and after every step and paste it here:
-
-```
-docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
-```
-
-**0. Before any docker step** (after the PM has merged the runner branch into the phase branch, and
-Stack has run task 19's snippet):
-
-```
-cd /c/Users/stack/projects/bb2dash-wt-21-container && git fetch origin && git merge --no-edit origin/feat/workspace-21
-```
-```
-git merge-base --is-ancestor feat/workspace-21-runner HEAD; echo $?
-```
-→ `0`
-```
-git ls-files workspace/src/runner.ts docker/workspace/Dockerfile | wc -l
-```
-→ `2`
-```
-node -e "console.log(Object.keys(require('./workspace/package.json').scripts||{}).includes('build'))"
-```
-→ `true` (the Dockerfile runs `npm run build` in `workspace/`)
-```
-stat -c %s /c/Users/stack/.bb2dash-secrets/workspace_runner_db_url
-```
-→ above 0 (the size only; nobody prints the file)
-```
-node --test docker/grep-clean.test.mjs
-```
-→ `pass 11`, `fail 0` (check (a))
-```
-grep -c -E "CLAUDE_CODE_VERSION=latest|bb2dash-mcp:local" docker/workspace/Dockerfile
-```
-→ `0`
-```
-env -u HARNESS_DIR -u COMPOSE_PROFILES docker compose -f compose.yaml config --quiet; echo $?
-```
-→ `0`
-```
-env -u HARNESS_DIR -u COMPOSE_PROFILES docker compose -f compose.yaml config --services
-```
-→ `sync`
-```
-docker compose -f compose.yaml config --hash sync; docker inspect -f '{{ index .Config.Labels "com.docker.compose.config-hash" }}' bb2dash-sync-1
-```
-→ the same hash twice (wave 1: `448f155a…e6e7`)
-
-**1. Build** (the harness commit is written here at build time):
-
-```
-export HARNESS_DIR=C:/Users/stack/agentic-harness
-```
-```
-git -C "$HARNESS_DIR" rev-parse HEAD; git -C "$HARNESS_DIR" status --short -- mcp-server certs | wc -l
-```
-→ the commit (wave 1 read `e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd`), then `0` (nothing uncommitted is baked)
-```
-docker compose -p bb2dash-wt21 --profile workspace build workspace; echo "exit=$?"
-```
-→ `exit=0`. The build downloads the base image, three `npm ci` sets, the CLI and the embedding model
-(about 130 MB): run it in the background, it will outlast a short tool call.
-```
-docker images bb2dash-workspace:local --format '{{.ID}} {{.Size}}'
-```
-
-**2. Start**
-
-```
-docker compose -p bb2dash-wt21 --profile workspace up -d --no-deps workspace; echo "exit=$?"
-```
-→ `exit=0`
-```
-docker network ls --filter name=bb2dash-wt21 --format '{{.Name}}'; docker volume ls --filter name=bb2dash-wt21 --format '{{.Name}}'
-```
-→ `bb2dash-wt21_workspace-net` and `bb2dash-wt21_workspace-claude-home`, and nothing else
-```
-docker compose -p bb2dash-wt21 --profile workspace logs --no-log-prefix workspace | grep -E "host of|Allowing DNS|Allowed |IPv6|Firewall"
-```
-→ the firewall's lines, ending `Firewall raised: 3 name(s) allowed` (4 if the two DSNs name different
-poolers). W-65's own line: it shows which IPv6 branch ran.
-```
-docker inspect -f '{{.State.Health.Status}}' $(docker compose -p bb2dash-wt21 --profile workspace ps -q workspace)
-```
-→ `healthy` (re-read every 10 s while it says `starting`; `unhealthy` is the failing result)
-
-**3. The brief's container checks, as the brief writes them**
-
-```
-docker compose -p bb2dash-wt21 --profile workspace config --format json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const w=JSON.parse(s).services.workspace;console.log([w.ports===undefined,w.init,w.platform,Object.keys(w.networks).join(),w.profiles.join(),w.stop_grace_period].join(' '))})"
-```
-→ `true true linux/amd64 workspace-net workspace 30s`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace claude --version
-```
-→ `2.1.289 (Claude Code)`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c "claude --help | grep -c -E -- '^  --(tools|permission-prompts|strict-mcp-config|setting-sources|system-prompt-snapshot|include-hook-events) '"
-```
-→ `6`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c "ps -o user=,args= -C node,claude | grep -v healthcheck.js | awk '{print \$1}' | sort -u"
-```
-→ `node`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace printenv ANTHROPIC_API_KEY; echo "exit=$?"
-```
-→ `exit=1`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace printenv DATABASE_URL; echo "exit=$?"
-```
-→ `exit=1`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace printenv ENABLE_TOOL_SEARCH
-```
-→ `false`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace printenv CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
-```
-→ `1`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace printenv CLAUDE_CONFIG_DIR
-```
-→ `/home/node/.claude`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace node -e "const c=require('/app/workspace/claude/settings.json').hooks.PreToolUse[0].hooks[0].command;const r=require('child_process').spawnSync(c,{shell:true,input:JSON.stringify({hook_event_name:'PreToolUse',tool_name:'mcp__rag__search_context',tool_input:{query:'x',collection:'estac'}})});console.log(c,r.status)"
-```
-→ `node /app/workspace/dist/hooks/tool-gate.js 2`
-
-The token smoke is the PM's, run right after the health check (one Haiku turn on Stack's plan):
-
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c 'CLAUDE_CODE_OAUTH_TOKEN="$(cat /run/secrets/claude_oauth_token)" claude -p --model haiku --tools "" --max-budget-usd 0.05 -- "Reply with the one word ok"'
-```
-→ exit 0 and `ok` (`^ok\.?$`, case ignored). If it fails on the network, the missing host goes into
-`ALLOWED_HOSTS` in `docker/workspace/init-firewall.sh`, into 102a and into a DECISIONS row.
-
-**4. Egress (check (e))**
-
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace node -e "fetch('https://example.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
-```
-→ `blocked`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace node -e "fetch('https://storage.googleapis.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
-```
-→ `blocked`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace node -e "fetch('http://host.docker.internal:6080',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
-```
-→ `blocked` (run while `bb2dash-sync-1` is up)
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace node -e "fetch('https://api.anthropic.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
-```
-→ a number (any HTTP status)
-```
-docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' $(docker compose -p bb2dash-wt21 --profile workspace ps -q workspace)
-```
-→ `bb2dash-wt21_workspace-net` and nothing else
-
-A second run of the firewall, as root, is refused (the in-image path is
-`/app/docker/workspace/init-firewall.sh`):
-
-```
-MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -u root workspace sh -c '/app/docker/workspace/init-firewall.sh; echo $?'
-```
-→ one `ERROR: the firewall was already raised in this container …` line, then `75`. Afterwards the
-`https://example.com` line above still → `blocked` and the `https://api.anthropic.com` line still → a
-number.
-
-**5. The two lines the brief leaves to W-65** (the PM reads both before they run; neither prints a DSN)
-
-Ten TCP connects to each DSN secret's host on port 5432. It reads the host from each secret file inside
-the container and prints one count per secret, `workspace_runner_db_url` first; on a file it cannot
-parse it prints `0/10` and nothing else:
-
-```
-MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c 'node -e "const net=require(\"net\"),fs=require(\"fs\");const once=h=>new Promise(r=>{const s=net.connect({host:h,port:5432,timeout:5000});s.on(\"connect\",()=>{s.destroy();r(1)});s.on(\"timeout\",()=>{s.destroy();r(0)});s.on(\"error\",()=>r(0))});(async()=>{for(const n of [\"workspace_runner_db_url\",\"harness_database_url\"]){let ok=0;try{const h=new URL(fs.readFileSync(\"/run/secrets/\"+n,\"utf8\").trim()).hostname;for(let i=0;i<10;i++)ok+=await once(h)}catch{ok=0}console.log(ok+\"/10\")}})()"'
-```
-→ `10/10` twice
-
-One `search_context` call over stdio to the launcher, collection `bb2dash`. It starts
-`bash /app/mcp-rag/mcp-rag.sh`, sends `initialize`, then `tools/call`, throws the server's stderr away
-and prints one word: `ok` (a result that is not an error), `error`, `server exited` or `timeout`:
-
-```
-MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c 'node -e "const cp=require(\"child_process\");const p=cp.spawn(\"bash\",[\"/app/mcp-rag/mcp-rag.sh\"],{stdio:[\"pipe\",\"pipe\",\"ignore\"]});let buf=\"\";const send=m=>p.stdin.write(JSON.stringify(m)+\"\n\");const done=v=>{console.log(v);p.kill();process.exit(v===\"ok\"?0:1)};setTimeout(()=>done(\"timeout\"),90000);p.on(\"exit\",()=>done(\"server exited\"));p.stdout.on(\"data\",d=>{buf+=d;let i;while((i=buf.indexOf(\"\n\"))>=0){const line=buf.slice(0,i);buf=buf.slice(i+1);let m;try{m=JSON.parse(line)}catch{continue}if(m.id===1){send({jsonrpc:\"2.0\",method:\"notifications/initialized\"});send({jsonrpc:\"2.0\",id:2,method:\"tools/call\",params:{name:\"search_context\",arguments:{query:\"Workspace\",collection:\"bb2dash\"}}})}if(m.id===2)done(m.result&&!m.result.isError?\"ok\":\"error\")}});send({jsonrpc:\"2.0\",id:1,method:\"initialize\",params:{protocolVersion:\"2024-11-05\",capabilities:{},clientInfo:{name:\"w65-check\",version:\"0\"}}})"'
-```
-→ `ok` (the search embedded its query with the model in `/opt/fastembed`: the firewall refuses the
-model's host, as the `storage.googleapis.com` line shows)
-
-**6. W-65's own extra lines** (not in the brief; each is a read)
-
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c 'ls /app/workspace/dist/runner.js /app/workspace/dist/healthcheck.js /app/workspace/dist/hooks/tool-gate.js /app/workspace/claude/settings.json /app/workspace/prompts/system.md /app/workspace/package.json /app/mcp-materials/package.json /app/mcp-materials/dist/index.js /app/mcp-rag/package.json /app/mcp-rag/dist/index.js /app/mcp-rag/certs/prod-ca.crt /app/mcp-rag/mcp-rag.sh | wc -l; ls -d /app/workspace/node_modules /app/mcp-materials/node_modules /app/mcp-rag/node_modules /opt/fastembed | wc -l'
-```
-→ `12`, then `4` (the frozen in-image layout)
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c 'stat -c "%U %a %n" /home/node/.claude /app/turn /run/workspace'
-```
-→ `node` owns all three; `/run/workspace` is `700`
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c 'grep -E "^Cap(Inh|Prm|Eff|Bnd|Amb)" /proc/$(pgrep -o -f dist/runner.js)/status'
-```
-→ five lines, each `0000000000000000` (the runner holds no capability and can regain none)
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c 'for f in /etc/hosts /app/docker/workspace/init-firewall.sh /app/docker/workspace/entrypoint.sh /app/workspace/dist/runner.js /app/mcp-rag/mcp-rag.sh /opt/fastembed; do test -w "$f" && echo "WRITABLE $f"; done; echo done'
-```
-→ `done` alone (`node` can write none of them)
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u node workspace sh -c 'grep -c "pinned by init-firewall.sh" /etc/hosts'
-```
-→ 3 or more
-```
-docker compose -p bb2dash-wt21 --profile workspace exec -u root workspace sh -c 'iptables -S; ip6tables -S; ipset list workspace-allowed | grep -c -E "^[0-9]"'
-```
-→ policies `DROP` on INPUT, FORWARD and OUTPUT in both families; the OUTPUT rules in the order of the
-dry run above; the count equals the number of pins
-
-**7. Stop and remove** (when the tree is done with the test container; named resources only):
-
-```
-docker compose -p bb2dash-wt21 --profile workspace stop workspace
-```
-```
-docker compose -p bb2dash-wt21 --profile workspace rm -sf workspace
-```
-
-The network and the volume stay until the PM removes them after acceptance step 15
-(`docker network rm bb2dash-wt21_workspace-net`, `docker volume rm bb2dash-wt21_workspace-claude-home`).
-
-## Task 13 — no secret in the image (wave 2: the lines)
-
-Nothing was scanned in wave 1: there is no image. The lines follow 82a's "Task 27 — image proofs": the
-image's filesystem exported with `docker create` and `docker export`, unpacked by `alpine:3.20` into a
-volume mounted at `/fs`, both `gitleaks` commands run inside `ghcr.io/gitleaks/gitleaks:v8.30.1` (on
-this laptop already) with `docker/gitleaks-images.toml`. `--redact` is added to both, so a finding is
-never printed with its value. Read the guard before the first line and after the last.
-
-```
-docker volume create w65-scan-fs && docker create --name w65-scan bb2dash-workspace:local
-```
-```
-docker export w65-scan | MSYS_NO_PATHCONV=1 docker run --rm -i -v w65-scan-fs:/fs alpine:3.20 tar -x -C /fs; echo "exit=$?"; docker rm w65-scan
-```
-```
-MSYS_NO_PATHCONV=1 docker run --rm -v w65-scan-fs:/fs:ro -v "C:/Users/stack/projects/bb2dash-wt-21-container/docker/gitleaks-images.toml:/work/docker/gitleaks-images.toml:ro" -w /work ghcr.io/gitleaks/gitleaks:v8.30.1 dir /fs --config docker/gitleaks-images.toml --redact; echo $?
-```
-→ `0`
-```
-docker history --no-trunc bb2dash-workspace:local | MSYS_NO_PATHCONV=1 docker run --rm -i -v "C:/Users/stack/projects/bb2dash-wt-21-container/docker/gitleaks-images.toml:/work/docker/gitleaks-images.toml:ro" -w /work ghcr.io/gitleaks/gitleaks:v8.30.1 stdin --config docker/gitleaks-images.toml --redact; echo $?
-```
-→ `0`
-```
-docker history --no-trunc bb2dash-workspace:local | grep -c -E "sk-ant-|sb_secret_|eyJhbGciOi|postgres(ql)?://[^ ]*:[^ @]*@"
-```
-→ `0`
-```
-docker volume rm w65-scan-fs
-```
-
-`w65-scan` is created and never started (the entrypoint does not run), carries no compose label, and is
-removed in the same line that exports it. The `dir` scan reads the whole image and can take minutes: run
-it in the background. A hit under the new vendor trees (`/fs/usr/local/share/npm-global/`, the three
-`node_modules` under `/fs/app/`, `/fs/opt/fastembed/`) is triaged by hand here with `--verbose` added;
-none of them is under the allowlist's `/fs/usr/(include|lib|share)/`, so a hit there will show. Widening
-the allowlist is a DECISIONS call, not this stream's.
+Wave 1 kept a draft of the docker lines for tasks 12 and 13 here (in git at `09b5c4a`). Rulings T1
+changed how they must be written, so they were rewritten in wave 2: see "Wave 2 — the lines for tasks
+12 and 13, top to bottom" at the end of this file. Task 13 has nothing to show before the image exists.
 
 ## Task 14 — bb2dash-stack: the secret name, the profile, the doctor row, the README
 
@@ -621,11 +351,14 @@ profile in `.env` (the task's check asks for that). So between the merge and acc
 Stack adds `COMPOSE_PROFILES=workspace` and runs `just up`, `just doctor` shows
 `workspace  not running: no container (set COMPOSE_PROFILES=workspace in .env, then just up)`.
 
+(Changed in wave 2 by ruling T1: with the profile off the row now reads `off` and is not a problem.
+See "Task 14, wave 2".)
+
 Two things beyond the row's list in the Files table, both small: the README's "What runs" table and its
 volumes line name the service and `workspace-claude-home`, and the umbrella `compose.yaml`'s header
 comment lists the service and the volume beside the line that said 11.
 
-## Questions for the PM
+## Questions for the PM (wave 1; answered by rulings T1 on 2026-10-06)
 
 1. **`npm run build` in `workspace/`.** The Dockerfile's runner stage runs `npm ci`, `npm run build`,
    `npm prune --omit=dev` and copies `/build/dist`. The Contract freezes `dist/runner.js`,
@@ -638,3 +371,866 @@ comment lists the service and the volume beside the line that said 11.
    edit to reverse.
 4. **`workspace_runner_db_url` must exist before `up`**: compose refuses to start a service whose
    secret file is missing, and the firewall refuses an empty one. Task 12's order already says so.
+
+## Wave 2 (2026-10-06) — rulings T1, files and read-only checks only
+
+Wave 2a is every item of ruling T1 and nothing that changes docker state. **No `docker build`, `up`,
+`run`, `exec`, `stop`, `rm`, `restart` or `create` was run by this stream, no `just` verb and no
+`claude -p`.** The image is still unbuilt: nothing here proves that it builds, or that the firewall
+works in a kernel. The build and every container check are the next step, with the PM, and are
+written out below as one numbered list.
+
+First step of the wave: `git fetch origin`, then `git merge origin/feat/workspace-21` into
+`feat/workspace-21-container` (no conflict; W-64's `workspace/` arrived with it), pushed as `ec302ce`.
+The phase branch gained one docs commit during the wave (`4ca39d9`); it was merged the same way
+(`2fccee8`). bb2dash-stack needed no merge.
+
+| T1 item | what changed | where | red → green |
+|---|---|---|---|
+| (a) every A record allowed and pinned | kept | `init-firewall.sh` | a test now holds it |
+| (b) non-public answers refused | kept | `init-firewall.sh` | a test now holds it |
+| (c) the port rule | two sets, each with one port: tcp/443 for the two HTTPS names, tcp/5432 for the poolers | `init-firewall.sh` | `17e2cfd` → `9a9bb85` |
+| (d) IPv6 when ip6tables cannot set rules | kept; the read no longer pipes into `grep -q` under pipefail | `init-firewall.sh` | `17e2cfd` → `9a9bb85` |
+| the pin cannot move by itself | `DISABLE_AUTOUPDATER=1` in the service; the CLI's folder is root's after the install | `compose.yaml`, `Dockerfile` | `6be6de3` → `c572a3a` |
+| no `iproute2` | removed: no script calls `ip` | `Dockerfile` | `6be6de3` → `c572a3a` |
+| the runner stage against W-64's real package | confirmed, and now asserted | `docker/grep-clean.test.mjs` | passes as written |
+| grep-clean 11 of 11 after the merge | 11 of 11 | | below |
+| literal-address probes, the restart line, the `pgrep` line, variables inside each line | written | the numbered list below | not run (docker) |
+| the doctor's Workspace row | off is not a problem; on, the container and the secret both count | bb2dash-stack | `496220e` → `6255923` |
+| the README's `secrets/` wording | corrected to `SECRETS_DIR` | bb2dash-stack | `496220e` → `6255923` |
+
+### The guard
+
+```text
+docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+```
+
+| when (2026-10-06) | output |
+|---|---|
+| before the merge, the first command of the wave | `bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z` |
+| after the compose edit and the config checks | the same |
+| after the last check of the wave | the same |
+
+### grep-clean, 11 of 11 with the real `workspace/` in the tree (task 12 check (a))
+
+Right after the merge, before any edit of wave 2 (`ec302ce`):
+
+```text
+node --test docker/grep-clean.test.mjs
+✔ every pattern catches its planted line (a pattern that matches nothing guards nothing)
+✔ comments are stripped, code is kept
+✔ the build contexts are the ones compose.yaml builds from
+✔ a COPY from a stage or a named build context is not a context source
+✔ an image is read through <Dockerfile>.dockerignore when it has one, else its context's .dockerignore
+✔ the workspace image has its own allow-list, and the root .dockerignore does not name it
+✔ the workspace Dockerfile pins the CLI, builds the materials server in a stage and copies named paths only
+✔ the .dockerignore exclusions keep host-built and secret folders out
+✔ sync: what docker/sync/Dockerfile copies is clean
+ℹ sync: 25 file(s) scanned of 29 copied
+✔ bb2dash-mcp: what mcp-server/Dockerfile copies is clean
+ℹ bb2dash-mcp: 14 file(s) scanned of 14 copied
+✔ workspace: what docker/workspace/Dockerfile copies is clean
+ℹ workspace: 41 file(s) scanned of 41 copied
+ℹ tests 11
+ℹ pass 11
+ℹ fail 0
+```
+
+The eleventh test, red in wave 1 for want of the package, reads W-64's real files now: 41 files copied,
+41 scanned, no Windows drive path, `.ps1`, PowerShell, `Move-Item` or OneDrive outside a comment. The
+count is still 11 at the end of the wave: wave 2's new assertions sit inside the Dockerfile test.
+
+### The firewall: the port rule and the IPv6 read
+
+**The dry run is now a committed test**, `docker/workspace/init-firewall.test.mjs` (wave 1 ran it from a
+scratch folder). It copies the script with its five place constants and its PATH line pointed at a
+scratch folder, runs it with a real bash against fake `iptables`, `ip6tables`, `iptables-save`, `ipset`,
+`dig` and `curl` that log their arguments, and reads the log back. New in wave 2: a small model of the
+OUTPUT chain built from that log, so a test can ask what a new connection to a literal address and
+port would meet. It proves the script's own logic. It proves nothing about netfilter, Docker's resolver
+or the real hosts. The image does not copy it (the Dockerfile copies named files only), and it is one
+file beyond the brief's Files table: see "Questions for the PM".
+
+RED, the test before the code (`17e2cfd`, the wave 1 script):
+
+```text
+node --test docker/workspace/init-firewall.test.mjs
+✖ the port rule (T1 c): tcp/443 to the two HTTPS names, tcp/5432 to the pooler, and no rule without a port
+    +   '-m set --match-set workspace-allowed dst -j ACCEPT',
+    -   '-p tcp --dport 443 -m set --match-set workspace-https dst -j ACCEPT',
+    -   '-p tcp --dport 5432 -m set --match-set workspace-postgres dst -j ACCEPT',
+✖ by literal address: an allowed address answers on its own port only, and no other address on any
+    AssertionError: 160.79.104.10 tcp/80        actual: 'open'   expected: 'blocked'
+✖ IPv6: a long list of addresses off loopback still stops the start (the read is not a pipe that can break)
+    actual: 0   expected: 1        (its log ends "Firewall raised: 3 name(s) allowed")
+✖ no pipe in the script feeds a reader that stops early (under pipefail a broken pipe reads as a failure)
+    + [ `elif awk '$NF != "lo"' "$INET6_ADDRESSES" | grep -q .; then` ]
+✖ an answer that is not a public IPv4 address is never allowed (T1 b)        (the set it must land in is not made yet)
+✖ a rule that cannot be added stops the start at deny-all with the failing command's own code
+✖ two database secrets on two poolers: both are allowed on 5432, neither on 443
+ℹ tests 18
+ℹ pass 11
+ℹ fail 7
+```
+
+The third line is a real fault of the wave 1 script, not only a style point: with `ip6tables`
+unavailable and 20,000 IPv6 addresses off loopback, `awk … | grep -q .` under `pipefail` failed as a
+pipeline (the reader stopped at the first line and broke the writer's pipe), the `elif` read that as
+"none found", and the start went on with IPv6 open. A short list did not show it, which is why wave
+1's cases G1 to G3 passed.
+
+GREEN (`9a9bb85`):
+
+```text
+node --test docker/workspace/init-firewall.test.mjs
+▶ docker/workspace/init-firewall.sh, dry run against fake tools
+  ✔ a start that works: one lookup a name, every address pinned, nothing of a connection string printed
+  ✔ the port rule (T1 c): tcp/443 to the two HTTPS names, tcp/5432 to the pooler, and no rule without a port
+  ✔ by literal address: an allowed address answers on its own port only, and no other address on any
+  ✔ DNS may go only to the resolvers in /etc/resolv.conf, and a resolver's address opens nothing else
+  ✔ no rule opens the Docker network: the gateway and the Docker host are refused like any other address
+  ✔ a second run in the same container is refused before it changes anything
+  ✔ a database secret that is not a pooler URL stops the start at deny-all, and nothing of it is printed
+  ✔ a name that does not resolve stops the start at deny-all
+  ✔ the end check: example.com reachable, or api.anthropic.com unreachable, stops the start at deny-all
+  ✔ IPv6 (T1 d): when ip6tables cannot set its rules, any IPv6 address off loopback stops the start
+  ✔ IPv6: a long list of addresses off loopback still stops the start (the read is not a pipe that can break)
+  ✔ no pipe in the script feeds a reader that stops early (under pipefail a broken pipe reads as a failure)
+  ✔ an answer that is not a public IPv4 address is never allowed (T1 b)
+  ✔ every address of the one answer is allowed and pinned (T1 a), and a pin an earlier start left is taken out
+  ✔ a rule that cannot be added stops the start at deny-all with the failing command's own code
+  ✔ two database secrets on two poolers: both are allowed on 5432, neither on 443
+  ✔ dsn_host: a pooler URL gives its host, anything else is refused with a fixed sentence
+  ✔ is_public_ipv4: loopback, private, carrier-grade NAT, link-local, multicast and reserved are not public
+ℹ tests 18
+ℹ pass 18
+ℹ fail 0
+```
+
+About 40 seconds on stack-laptop. Every wave 1 property has its test: one run per start (a second run
+exits 75 and calls no tool), deny-all on any failure before the last check (asserted on the modelled
+chain: policy DROP, one loopback rule, four addresses blocked), DNS only to resolv.conf's resolvers,
+no accept for the Docker network (the gateway and the Docker host are blocked on 6080, 443, 5432 and
+80), and a connection string never echoed (no password, no user and no `postgres://…` in any log,
+and no part of a refused URL in a refusal).
+
+The happy path's calls, in order (the fakes' log; the addresses are the test's):
+
+```text
+iptables-save -t nat
+iptables -F · -X · -t nat -F · -t nat -X · -t mangle -F · -t mangle -X
+ipset destroy workspace-https · ipset destroy workspace-postgres
+iptables -t nat -N DOCKER_OUTPUT · -N DOCKER_POSTROUTING · (the saved 127.0.0.11 rules, re-added)
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A OUTPUT -o lo -j ACCEPT
+iptables -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j ACCEPT
+iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
+ipset create workspace-https hash:net
+ipset create workspace-postgres hash:net
+dig -r +noall +answer +time=5 +tries=2 A api.anthropic.com                  → ipset add -exist workspace-https … (1)
+dig -r +noall +answer +time=5 +tries=2 A goultdzqcavefcgnifdy.supabase.co   → ipset add -exist workspace-https … (2)
+dig -r +noall +answer +time=5 +tries=2 A <the pooler host>                   → ipset add -exist workspace-postgres … (1)
+iptables -P INPUT DROP · -P FORWARD DROP · -P OUTPUT DROP
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 443 -m set --match-set workspace-https dst -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 5432 -m set --match-set workspace-postgres dst -j ACCEPT
+iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
+ip6tables -F · -X · -P INPUT DROP · -P FORWARD DROP · -P OUTPUT DROP · -A INPUT -i lo -j ACCEPT · -A OUTPUT -o lo -j ACCEPT
+curl -q -s -o /dev/null --connect-timeout 5 --max-time 15 https://example.com          (must fail)
+curl -q -s -o /dev/null --connect-timeout 5 --max-time 15 https://api.anthropic.com    (must succeed)
+```
+
+What the model reads off those rules (the test "by literal address"): the three HTTPS addresses are
+open on tcp/443 and blocked on 80, 5432 and 8443; the pooler address is open on tcp/5432 and blocked
+on 443 and 6543; UDP to any of them is blocked; `1.1.1.1` is blocked on 443, on 5432 and on udp/53.
+
+Choices made in wave 2, for the PM and the security review:
+
+1. **Two sets of the proven type, each with its own rule**, not one `hash:ip,port` set: `hash:net` is
+   the type the dev firewall proved under Docker Desktop on this laptop.
+2. **Which set a name goes into is fixed by where the name comes from**: the two names in the script
+   go to tcp/443, the host of each database secret to tcp/5432. A DSN's own port is not read.
+3. **A DSN whose port is not 5432 is not refused by the firewall.** The container starts, and that
+   connection is then refused by the port rule (the runner's own config already refuses 6543 for
+   `workspace_runner_db_url`; for `harness_database_url` the rag server would fail to connect). On
+   2026-10-06 both secrets name port 5432 (102a, task 19). See "Questions for the PM".
+4. **The script's constant `ALLOWED_HOSTS` is now `HTTPS_HOSTS`.** If the token smoke fails on the
+   network, the missing host goes there (tcp/443), into 102a and into a DECISIONS row.
+5. **The end check is unchanged** (`example.com` refused, `api.anthropic.com` answered). After default
+   deny an unpinned name cannot be looked up from inside the container, so `example.com` fails there
+   on the lookup; the literal-address probes of the list below are what prove the address rule.
+6. **The log line per name now says the port**: `Allowed <name> on tcp/<port> (<n> address(es), pinned
+   in /etc/hosts)`.
+
+`bash -n` passes on `entrypoint.sh`, `init-firewall.sh` and `mcp-rag.sh`; none of the changed files
+holds a carriage return.
+
+### The image: a CLI that cannot move under its pin, and no `iproute2`
+
+RED (`6be6de3`, the wave 1 Dockerfile and compose file):
+
+```text
+node --test docker/grep-clean.test.mjs
+✖ the workspace Dockerfile pins the CLI, builds the materials server in a stage and copies named paths only
+    + [
+    +   'after the CLI install its folder is not handed to root (chown -R root:root /usr/local/share/npm-global)',
+    +   'compose.yaml does not set DISABLE_AUTOUPDATER=1 for the workspace service'
+    + ]
+    - []
+ℹ tests 11
+ℹ pass 10
+ℹ fail 1
+```
+
+The test reads three rules; the first failure stops it, so the three were also printed on their own:
+`pinDrift` the two lines above, `unusedPackages` → `iproute2 is installed and no script in the image
+calls ip`, `runnerStageMismatches` → `[]`.
+
+GREEN (`c572a3a`): `tests 11`, `pass 11`, `fail 0`.
+
+* **`DISABLE_AUTOUPDATER: "1"`** is in the service's `environment:`. The runner hands its whole
+  environment to the CLI (`workspace/src/providers/claude-cli.ts`, `childEnv`), so the setting reaches
+  every turn. The block still interpolates nothing outside `build:`, the secret paths and
+  `WORKSPACE_TURN_BUDGET_USD`.
+* **The CLI's folder is root's**: `chown -R root:root /usr/local/share/npm-global` runs after the
+  install. **It runs in a stage of its own (`cli`), and the runtime stage copies the folder**
+  (`COPY --from=cli`). The reason is the package itself, read from the registry and from its tarball:
+  `@anthropic-ai/claude-code@2.1.289` is a 187 kB wrapper whose `postinstall` hard-links the
+  platform binary (`@anthropic-ai/claude-code-linux-x64`, 246 MB unpacked) onto `bin/claude.exe`. A
+  `chown -R` in a later layer of the runtime stage changes every file's owner, so that layer would
+  store the binary again (this is reasoning about image layers, not a measurement: nothing was built).
+  In a stage the install keeps the dev container's recipe to the letter (`USER node`,
+  `NPM_CONFIG_PREFIX=/usr/local/share/npm-global`, `npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"`),
+  the chown is the ruling's command, and the image carries the folder once. Not asked for in those
+  words: see "Questions for the PM". Whether the CLI must write there is the token smoke's to show
+  (step 27 of the list); if it must, the fix is `--chown=node:node` on the one COPY line.
+* **No `iproute2`**: no script in the image calls `ip` (the firewall reads the container's IPv6
+  addresses from `/proc/net/if_inet6`). The comment says so, and the test fails if a script starts
+  calling `ip` without the package, or the package comes back without a caller.
+* **The runner stage matches W-64's package as merged**: `workspace/package.json` has
+  `"build": "tsc -p tsconfig.json"`, `workspace/tsconfig.json` builds `src` into `dist`, and
+  `src/runner.ts`, `src/healthcheck.ts`, `src/hooks/tool-gate.ts`, `claude/settings.json` and
+  `prompts/system.md` are in the package; the six COPY paths are the six the test pins
+  (`package.json`, `package-lock.json`, `tsconfig.json`, `src`, `claude`, `prompts`); the image's
+  `CMD` is `node /app/workspace/dist/runner.js`, the service's healthcheck is
+  `node /app/workspace/dist/healthcheck.js`, and the hook `settings.json` wires is
+  `node /app/workspace/dist/hooks/tool-gate.js`. The runner's own path constants
+  (`workspace/src/config.ts`) name `/app/workspace/claude/settings.json`,
+  `/app/workspace/prompts/system.md`, `/app/turn`, `/run/workspace` and the two secret paths, as the
+  image lays them out. All of it is now asserted by the Dockerfile test.
+
+### Checks run in wave 2 (read-only docker only)
+
+From `bb2dash-wt-21-container`, at the wave's last commit:
+
+```text
+node --test docker/grep-clean.test.mjs                                        → tests 11, pass 11, fail 0
+node --test docker/workspace/init-firewall.test.mjs                           → tests 18, pass 18, fail 0
+grep -c -E "CLAUDE_CODE_VERSION=latest|bb2dash-mcp:local" docker/workspace/Dockerfile        → 0
+bash -n docker/workspace/entrypoint.sh · init-firewall.sh · mcp-rag.sh        → each ok
+git ls-files workspace/src/runner.ts docker/workspace/Dockerfile | wc -l      → 2
+```
+
+Compose, with `HARNESS_DIR` and `COMPOSE_PROFILES` unset and the two Windows user variables as they
+are on stack-laptop (`SECRETS_DIR=C:/Users/stack/.bb2dash-secrets`,
+`BB2DASH_DIR=C:/Users/stack/projects/bb2dash`):
+
+```text
+docker compose -f compose.yaml config --quiet; echo $?                        → 0
+docker compose -f compose.yaml config --services                              → sync
+docker compose -f compose.yaml --profile workspace config --services          → sync, workspace
+docker compose -p bb2dash-wt21 --profile workspace config --format json | node -e "…"
+                                                                              → true true linux/amd64 workspace-net workspace 30s
+the same render, the service's environment                                    → CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 CLAUDE_CONFIG_DIR=/home/node/.claude
+                                                                                DISABLE_AUTOUPDATER=1 ENABLE_TOOL_SEARCH=false WORKSPACE_TURN_BUDGET_USD=1.00
+```
+
+The `sync` service is unchanged by this branch:
+
+| where | `docker compose -f compose.yaml config --hash sync` |
+|---|---|
+| `C:/Users/stack/projects/bb2dash` (`main`) | `sync 448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7` |
+| `bb2dash-wt-21-container` at the wave's last commit | the same |
+| the live container's label (`com.docker.compose.config-hash`) | `448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7` |
+
+The rendered `sync` service itself (its whole JSON without `build`, with its four secrets and two
+volumes) is byte-identical between the two checkouts: 1845 bytes each. `git diff origin/main --
+compose.yaml` is 90 added lines and no removed line.
+
+Read on the host, for the list's literal-address probes: `1.1.1.1:443`, `api.anthropic.com:80`,
+`goultdzqcavefcgnifdy.supabase.co:80` and the pooler's `6543` each accept a TCP connection from this
+laptop (2026-10-06). So `blocked` for them inside the container is the firewall's doing.
+
+The four secret files the service mounts exist and are not empty (sizes only were read;
+`workspace_runner_db_url` is the 169 bytes 102a records). The harness checkout is at
+`e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd` with nothing uncommitted under `mcp-server` or `certs`;
+`alpine:3.20` and `ghcr.io/gitleaks/gitleaks:v8.30.1` are on the laptop; no `bb2dash-workspace:local`
+image and no container of project `bb2dash-wt21` exists.
+
+**Not yet true, by design:** `git merge-base --is-ancestor feat/workspace-21-runner HEAD; echo $?`
+read `1` during the wave, because W-64's wave 2 commits are on the runner branch and not yet on the
+phase branch. Step 2 of the list merges again and re-reads it; the build waits for `0`.
+
+### Task 14, wave 2 — the doctor's row follows the profile; the README names `SECRETS_DIR`
+
+RED (bb2dash-stack `496220e`):
+
+```text
+node --test doctor/workspace.test.mjs doctor/doctor.test.mjs
+✖ a missing workspace_runner_db_url exits 1 and is named, by the secrets row and by the workspace row
+✖ an empty workspace_runner_db_url exits 1, and one holding only a BOM and a newline counts as empty
+✖ with the profile off in .env the workspace row reads off and is not a problem, whatever Docker would say
+✖ off says how to turn the Workspace on, and its secret stays the secrets row's to name
+✖ with the profile on, the row is a problem unless the container is running and healthy and the secret is non-empty
+✖ the profile is read as compose reads it: a list, the environment over .env, and * for every profile
+✖ no workspace container exits 1 and says how to start it
+✖ the README has a Workspace section that says what it is, what it costs, how to restart it and where an answer is kept
+✖ the README tables name the Workspace: its secret, the three it shares, the doctor row and what runs
+✖ the README says the secrets live in the folder SECRETS_DIR names, outside every repo, never in a secrets/ folder here
+ℹ tests 51
+ℹ pass 41
+ℹ fail 10
+```
+
+GREEN (bb2dash-stack `6255923`): `tests 51`, `pass 51`, `fail 0` (46 in wave 1). The three other
+test files that read `compose.yaml`, `.env.example` or the README: 32 of 32. Task 14's check (d)
+reads as in wave 1, with `grep -c "workspace_runner_db_url" README.md` now 3; `git diff --stat
+origin/main...HEAD -- doctor/doctor.mjs` still prints nothing.
+
+The row, in words:
+
+* **Profile off** (`COMPOSE_PROFILES` does not name `workspace`; read from `.env` with the process
+  environment on top, as compose reads it, a comma-separated list where `*` means every profile):
+  the row reads `off (COMPOSE_PROFILES in .env does not name workspace; to turn it on:
+  COMPOSE_PROFILES=workspace in .env, then just up)`, asks Docker nothing and is not a problem,
+  whatever state a container is in.
+* **Profile on**: a problem unless the container is running and healthy **and**
+  `workspace_runner_db_url` is non-empty. A missing or empty secret is named in the row beside
+  Docker's answer (`running, healthy; workspace_runner_db_url is missing in SECRETS_DIR (…)`), never
+  its value. The `secrets` row names it too, as before, so that case now lists two problem rows.
+* The `secrets` row is unchanged: it still wants all 12 files whatever the profiles say (see
+  "Questions for the PM").
+
+The README: every place that put the secrets in this repo's `secrets/` folder now says the folder
+`SECRETS_DIR` names, outside every repo (the intro, the layout, "First time on a machine", "Secrets",
+the note under the verbs, the dev container's mounts, "Stack's machine steps"); the Workspace section
+says the container reaches the two HTTPS names on port 443 and the pooler on 5432; the doctor table's
+row says what off means; and the cost sentence is whole on one line: "costs nothing extra only while
+Usage credits are off on the Claude account".
+
+## Wave 2 — the lines for tasks 12 and 13, top to bottom (Git Bash)
+
+**Every line is a Git Bash line and stands alone.** It changes into the worktree itself, sets
+`SECRETS_DIR` and `HARNESS_DIR` itself (never a separate `export`), and carries `MSYS_NO_PATHCONV=1`
+wherever docker is handed a container path, so Git Bash rewrites nothing. The project is
+`bb2dash-wt21` and the service is named in every compose command. Every `exec` has `-T` (no
+pseudo-terminal: the line then behaves the same pasted into a terminal and run by a tool). Never
+`just up`, never an `up` without the service name. To run the list in another tree (tasks 19 to 22
+run in `bb2dash-wt-21`), change the one folder name after `cd`.
+
+**None of these lines has been run against docker.** Their quoting has: each docker line was read
+back out of this file in Git Bash and run with `docker` standing for a program that starts nothing
+and records what it was handed (a native Windows program, so Git Bash treats its arguments as it
+would docker's), from a shell with `SECRETS_DIR`, `HARNESS_DIR` and `COMPOSE_PROFILES` unset. The
+result is under the list.
+
+Read the guard (step 1) again after every step marked **(guard)**, and paste it into 102a.
+
+**1.** The guard.
+
+```
+docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+```
+→ `bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z`
+
+**2.** The tree holds the runner as the PM merged it (task loop 4c).
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && git fetch origin && git merge --no-edit origin/feat/workspace-21 && git merge-base --is-ancestor feat/workspace-21-runner HEAD; echo "runner merged: $?"; git ls-files workspace/src/runner.ts docker/workspace/Dockerfile | wc -l
+```
+→ `runner merged: 0`, then `2`. A `1` means the runner branch has commits the phase branch lacks: stop.
+
+**3.** The two test files.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/grep-clean.test.mjs 2>&1 | grep -E "(tests|pass|fail) [0-9]+$"
+```
+→ `tests 11`, `pass 11`, `fail 0`
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/workspace/init-firewall.test.mjs 2>&1 | grep -E "(tests|pass|fail) [0-9]+$"
+```
+→ `tests 18`, `pass 18`, `fail 0` (about 40 seconds)
+
+**4.** The Dockerfile's and the service's literals.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && grep -c -E "CLAUDE_CODE_VERSION=latest|bb2dash-mcp:local" docker/workspace/Dockerfile; grep -c "^RUN chown -R root:root /usr/local/share/npm-global$" docker/workspace/Dockerfile; grep -c "^ *iproute2" docker/workspace/Dockerfile; grep -c 'DISABLE_AUTOUPDATER: "1"' compose.yaml
+```
+→ `0`, `1`, `0`, `1`
+
+**5.** The four secret files exist (sizes only; nobody prints a file).
+
+```
+for n in workspace_runner_db_url claude_oauth_token bb2dash_mcp_service_key harness_database_url; do printf '%s %s\n' "$n" "$(stat -c %s "/c/Users/stack/.bb2dash-secrets/$n")"; done
+```
+→ four lines, each a size above 0
+
+**6.** What the desktop's sign-in task sees: only the two Windows user variables, no profile.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && ( unset HARNESS_DIR COMPOSE_PROFILES; SECRETS_DIR=C:/Users/stack/.bb2dash-secrets BB2DASH_DIR=C:/Users/stack/projects/bb2dash docker compose -f compose.yaml config --quiet ); echo "exit=$?"
+```
+→ `exit=0`
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && ( unset HARNESS_DIR COMPOSE_PROFILES; SECRETS_DIR=C:/Users/stack/.bb2dash-secrets BB2DASH_DIR=C:/Users/stack/projects/bb2dash docker compose -f compose.yaml config --services )
+```
+→ `sync` and nothing else
+
+**7.** The service as compose renders it for the test project.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace config --format json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const w=JSON.parse(s).services.workspace;console.log([w.ports===undefined,w.init,w.platform,Object.keys(w.networks).join(),w.profiles.join(),w.stop_grace_period].join(' '))})"
+```
+→ `true true linux/amd64 workspace-net workspace 30s`
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace config --format json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const e=JSON.parse(s).services.workspace.environment;console.log(Object.keys(e).sort().map(k=>k+'='+e[k]).join(' '))})"
+```
+→ `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 CLAUDE_CONFIG_DIR=/home/node/.claude DISABLE_AUTOUPDATER=1 ENABLE_TOOL_SEARCH=false WORKSPACE_TURN_BUDGET_USD=1.00` and no other name
+
+**8.** The `sync` service still renders the hash the live container was made with.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && ( unset HARNESS_DIR COMPOSE_PROFILES; SECRETS_DIR=C:/Users/stack/.bb2dash-secrets BB2DASH_DIR=C:/Users/stack/projects/bb2dash docker compose -f compose.yaml config --hash sync ); docker inspect -f '{{ index .Config.Labels "com.docker.compose.config-hash" }}' bb2dash-sync-1
+```
+→ `sync 448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7`, then the same hash alone
+
+**9.** The harness commit the image bakes (paste it into 102a), and nothing uncommitted beside it.
+
+```
+git -C C:/Users/stack/agentic-harness rev-parse HEAD; git -C C:/Users/stack/agentic-harness status --short -- mcp-server certs | wc -l
+```
+→ the commit (`e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd` on 2026-10-06), then `0`
+
+**10.** Build **(guard)**. It downloads the base image, three `npm ci` sets, the CLI (about 250 MB)
+and the embedding model: run it in the background, it outlasts a short tool call.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace build workspace; echo "exit=$?"
+```
+→ `exit=0`
+
+**11.** The image, and the one layer that holds the CLI.
+
+```
+docker images bb2dash-workspace:local --format '{{.ID}} {{.Size}}'; docker history bb2dash-workspace:local --format '{{.Size}} {{.CreatedBy}}' | grep "npm-global"
+```
+→ the image's id and size, then three lines: the `COPY /usr/local/share/npm-global …` layer with its
+size, and two `ENV` lines of `0B`. Paste the COPY layer's size into 102a: about 250 MB when the copy
+kept the package's link, about 500 MB when it did not (the image works either way).
+
+**12.** Start **(guard)**.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace up -d --no-deps workspace; echo "exit=$?"
+```
+→ `exit=0`
+
+**13.** What the start made.
+
+```
+docker network ls --filter name=bb2dash-wt21 --format '{{.Name}}'; docker volume ls --filter name=bb2dash-wt21 --format '{{.Name}}'
+```
+→ `bb2dash-wt21_workspace-net` and `bb2dash-wt21_workspace-claude-home`, and nothing else
+
+**14.** The firewall's own log.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace logs --no-log-prefix workspace | grep -E "host of|Allowing DNS|Allowed |IPv6|Firewall"
+```
+→ in this order (the address counts may differ; the IPv6 line is this one or one of the two
+`No IPv6 here …` lines, and which one goes into 102a):
+
+```text
+The host of workspace_runner_db_url ends .pooler.supabase.com
+The host of harness_database_url ends .pooler.supabase.com
+Allowing DNS to 127.0.0.11
+Allowed api.anthropic.com on tcp/443 (1 address(es), pinned in /etc/hosts)
+Allowed goultdzqcavefcgnifdy.supabase.co on tcp/443 (2 address(es), pinned in /etc/hosts)
+Allowed <the pooler's host name> on tcp/5432 (1 address(es), pinned in /etc/hosts)
+IPv6 closed (loopback only)
+Firewall configuration complete
+Firewall verification passed - unable to reach https://example.com as expected
+Firewall verification passed - able to reach https://api.anthropic.com as expected
+Firewall raised: 3 name(s) allowed
+```
+
+**15.** Health.
+
+```
+docker inspect -f '{{.State.Health.Status}}' "$(cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace ps -q workspace)"
+```
+→ `healthy` (read it again every 10 seconds while it says `starting`; `unhealthy` is the failing result)
+
+**16.** The CLI is the pinned one, and its help still lists the six flags.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace claude --version
+```
+→ `2.1.289 (Claude Code)`
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c "claude --help | grep -c -E -- '^  --(tools|permission-prompts|strict-mcp-config|setting-sources|system-prompt-snapshot|include-hook-events) '"
+```
+→ `6`
+
+**17.** Every Node and `claude` process is `node`'s (Docker's own healthcheck apart).
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c "ps -o user=,args= -C node,claude | grep -v healthcheck.js | awk '{print \$1}' | sort -u"
+```
+→ `node`
+
+**18.** The runner itself, not PID 1 (`docker-init`), holds no capability and can regain none.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'echo "pid 1: $(tr "\0" " " </proc/1/cmdline)"; p=$(pgrep -f "^node /app/workspace/dist/runner[.]js$"); echo "runner pid: $p"; grep -E "^(Uid|Cap(Inh|Prm|Eff|Bnd|Amb)):" /proc/$p/status'
+```
+→ `pid 1:` a command line that begins `/sbin/docker-init --` and ends with the runner's (`init: true`),
+then `runner pid:` one number above 1, then `Uid:` with `1000` four times and five `Cap…:` lines, each
+`0000000000000000`. The pattern is anchored at both ends, so it matches the runner's own command line
+and neither `docker-init`'s, which holds the same words, nor this line's shell.
+
+**19.** No API key and no `DATABASE_URL`; the four settings.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace printenv ANTHROPIC_API_KEY; echo "exit=$?"
+```
+→ `exit=1`
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace printenv DATABASE_URL; echo "exit=$?"
+```
+→ `exit=1`
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace printenv ENABLE_TOOL_SEARCH CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CONFIG_DIR DISABLE_AUTOUPDATER
+```
+→ four lines: `false`, `1`, `/home/node/.claude`, `1`
+
+**20.** The frozen in-image layout.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'ls /app/workspace/dist/runner.js /app/workspace/dist/healthcheck.js /app/workspace/dist/hooks/tool-gate.js /app/workspace/claude/settings.json /app/workspace/prompts/system.md /app/workspace/package.json /app/mcp-materials/package.json /app/mcp-materials/dist/index.js /app/mcp-rag/package.json /app/mcp-rag/dist/index.js /app/mcp-rag/certs/prod-ca.crt /app/mcp-rag/mcp-rag.sh | wc -l; ls -d /app/workspace/node_modules /app/mcp-materials/node_modules /app/mcp-rag/node_modules /opt/fastembed | wc -l; stat -c "%U %a %n" /home/node/.claude /app/turn /run/workspace'
+```
+→ `12`, then `4`, then three lines owned by `node`, `/run/workspace` with mode `700`
+
+**21.** The CLI's folder is root's, `node` cannot write it, and there is no `ip` program.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'stat -c "%U:%G %a" /usr/local/share/npm-global; find /usr/local/share/npm-global ! -user root | wc -l; for d in /usr/local/share/npm-global /usr/local/share/npm-global/bin /usr/local/share/npm-global/lib/node_modules/@anthropic-ai/claude-code; do test -w "$d" && echo "WRITABLE $d"; done; command -v ip || echo "no ip"'
+```
+→ `root:root 755`, then `0`, then `no ip` (no `WRITABLE` line)
+
+**22.** `node` can write none of root's files.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'for f in /etc/hosts /app/docker/workspace/init-firewall.sh /app/docker/workspace/entrypoint.sh /app/workspace/dist/runner.js /app/workspace/claude/settings.json /app/mcp-rag/mcp-rag.sh /opt/fastembed /dev/shm/bb2dash-workspace-firewall.up; do test -w "$f" && echo "WRITABLE $f"; done; echo done'
+```
+→ `done` alone
+
+**23.** The pins: one line per allowed name, with how many addresses it has.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'grep "pinned by init-firewall.sh" /etc/hosts | cut -d" " -f2 | sort | uniq -c'
+```
+→ three names (four if the two database secrets name different poolers), the counts those of step 14
+
+**24.** The rules and the sets, read as root.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u root workspace sh -c 'iptables -S OUTPUT; ip6tables -S OUTPUT; for s in workspace-https workspace-postgres; do echo "$s $(ipset list "$s" | grep -c -E "^[0-9]")"; done'
+```
+→ `-P OUTPUT DROP`, then the OUTPUT rules in the dry run's order as iptables prints them (loopback;
+udp and tcp 53 to `127.0.0.11`; the state rule; tcp 443 with `--match-set workspace-https dst`; tcp
+5432 with `--match-set workspace-postgres dst`; the reject), then `-P OUTPUT DROP` and the one
+loopback rule for IPv6, then `workspace-https 3` and `workspace-postgres 1` (the counts of step 23)
+
+**25.** The tool gate is wired, not only written.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const c=require('/app/workspace/claude/settings.json').hooks.PreToolUse[0].hooks[0].command;const r=require('child_process').spawnSync(c,{shell:true,input:JSON.stringify({hook_event_name:'PreToolUse',tool_name:'mcp__rag__search_context',tool_input:{query:'x',collection:'estac'}})});console.log(c,r.status)"
+```
+→ `node /app/workspace/dist/hooks/tool-gate.js 2`
+
+**26.** Egress by name (check (e) as the brief writes it).
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('https://example.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
+```
+→ `blocked`
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('https://storage.googleapis.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
+```
+→ `blocked`
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('http://host.docker.internal:6080',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
+```
+→ `blocked` (run while `bb2dash-sync-1` is up)
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('https://api.anthropic.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
+```
+→ a number (any HTTP status)
+```
+docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$(cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace ps -q workspace)"
+```
+→ `bb2dash-wt21_workspace-net` and nothing else
+
+**27.** The token smoke (the PM's; one Haiku turn on Stack's plan; R19's line with this list's
+prefix, `-T`, and stdin closed so the CLI does not wait on it).
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'CLAUDE_CODE_OAUTH_TOKEN="$(cat /run/secrets/claude_oauth_token)" claude -p --model haiku --tools "" --max-budget-usd 0.05 -- "Reply with the one word ok"' </dev/null; echo "exit=$?"
+```
+→ `ok` (`^ok\.?$`, case ignored), then `exit=0`. If it fails on the network, the missing host goes
+into `HTTPS_HOSTS` in `docker/workspace/init-firewall.sh`, into 102a and into a DECISIONS row. If it
+fails because the CLI cannot write under `/usr/local/share/npm-global`, say so in 102a and the one
+COPY line gets `--chown=node:node` (ruling T1's exception).
+
+**28.** Egress by literal address (ruling T1): these prove the address and port rule, not a failed
+lookup. First, on the host and not in the container, that the three targets answer from this laptop:
+
+```
+node -e "const net=require('net');const once=(h,p)=>new Promise(r=>{const s=net.connect({host:h,port:p,timeout:6000});s.on('connect',()=>{s.destroy();r('open')});s.on('timeout',()=>{s.destroy();r('no answer')});s.on('error',()=>r('no answer'))});(async()=>{for(const [h,p] of [['1.1.1.1',443],['api.anthropic.com',80],['goultdzqcavefcgnifdy.supabase.co',80]])console.log(h+':'+p,await once(h,p))})()"
+```
+→ three lines ending `open` (as read on 2026-10-06)
+
+One public address that is not allowed, on 443:
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const s=require('net').connect({host:'1.1.1.1',port:443,timeout:5000});s.on('connect',()=>{console.log('1.1.1.1:443 open');s.destroy()});s.on('timeout',()=>{console.log('1.1.1.1:443 blocked');s.destroy()});s.on('error',()=>console.log('1.1.1.1:443 blocked'))"
+```
+→ `1.1.1.1:443 blocked`
+
+Every allowed address, read from the container's own pins and dialled as an address, on its own port
+and on three that are not allowed:
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const net=require('net'),fs=require('fs');const once=(a,p)=>new Promise(r=>{const s=net.connect({host:a,port:p,timeout:5000});s.on('connect',()=>{s.destroy();r('open')});s.on('timeout',()=>{s.destroy();r('blocked')});s.on('error',()=>r('blocked'))});(async()=>{for(const l of fs.readFileSync('/etc/hosts','utf8').split('\n').filter(l=>l.endsWith('# pinned by init-firewall.sh'))){const [a,n]=l.split(' ');for(const p of [443,80,5432,6543])console.log(n,a+':'+p,await once(a,p))}})()"
+```
+→ four lines per pin, `<name> <address>:<port> open|blocked`. `open` on exactly these: each
+`api.anthropic.com` and `goultdzqcavefcgnifdy.supabase.co` address on `:443`, each pooler address on
+`:5432`. Every other line `blocked`: with step 14's counts, 4 `open` and 12 `blocked`. (Port 80 on
+the two HTTPS names and 6543 on the pooler answer from the host, so those `blocked` lines are the
+port rule at work.)
+
+**29.** A second run of the firewall, as root, is refused, and changes nothing.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u root workspace sh -c '/app/docker/workspace/init-firewall.sh; echo $?'
+```
+→ one `ERROR: the firewall was already raised in this container …` line, then `75`. Then run step
+26's first and fourth lines and step 28's second line again: still `blocked`, a number, and
+`1.1.1.1:443 blocked`.
+
+**30.** Ten TCP connects to each database secret's host on port 5432. It reads the host from each
+secret file inside the container and prints one count per secret, never the URL.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const net=require('net'),fs=require('fs');const once=h=>new Promise(r=>{const s=net.connect({host:h,port:5432,timeout:5000});s.on('connect',()=>{s.destroy();r(1)});s.on('timeout',()=>{s.destroy();r(0)});s.on('error',()=>r(0))});(async()=>{for(const n of ['workspace_runner_db_url','harness_database_url']){let ok=0;try{const h=new URL(fs.readFileSync('/run/secrets/'+n,'utf8').trim()).hostname;for(let i=0;i<10;i++)ok+=await once(h)}catch{ok=0}console.log(ok+'/10')}})()"
+```
+→ `10/10` twice (`0/10` for a file it cannot parse, and nothing else)
+
+**31.** One `search_context` call over stdio to the rag launcher, collection `bb2dash`. It prints one
+word: `ok` (a result that is not an error), `error`, `server exited` or `timeout`.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "const cp=require('child_process');const p=cp.spawn('bash',['/app/mcp-rag/mcp-rag.sh'],{stdio:['pipe','pipe','ignore']});let buf='';const send=m=>p.stdin.write(JSON.stringify(m)+'\n');const done=v=>{console.log(v);p.kill();process.exit(v==='ok'?0:1)};setTimeout(()=>done('timeout'),90000);p.on('exit',()=>done('server exited'));p.stdout.on('data',d=>{buf+=d;let i;while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i);buf=buf.slice(i+1);let m;try{m=JSON.parse(line)}catch{continue}if(m.id===1){send({jsonrpc:'2.0',method:'notifications/initialized'});send({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'search_context',arguments:{query:'Workspace',collection:'bb2dash'}}})}if(m.id===2)done(m.result&&(m.result.isError||false)===false?'ok':'error')}});send({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'w65-check',version:'0'}}})"
+```
+→ `ok` (the search embedded its query with the model in `/opt/fastembed`: step 26 shows the model's
+host is blocked)
+
+**32.** Before the restart: when the firewall's marker was made, how many pins there are, and the
+container's id and start time.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'stat -c "marker made at %Y" /dev/shm/bb2dash-workspace-firewall.up; grep -c "pinned by init-firewall.sh" /etc/hosts'
+```
+→ `marker made at <seconds>`, then the pin count (4 with step 14's counts)
+```
+docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace ps -q workspace)"
+```
+→ the Workspace container's id and start time
+
+**33.** Restart **(guard)** (ruling T1: a restart must re-raise the firewall).
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace restart workspace; echo "exit=$?"
+```
+→ `exit=0`. Then step 15's line → `healthy` again (re-read while `starting`).
+
+**34.** After the restart: the marker went with it and was made anew, and the pins were rewritten.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'stat -c "marker made at %Y" /dev/shm/bb2dash-workspace-firewall.up; grep -c "pinned by init-firewall.sh" /etc/hosts'
+```
+→ a later `marker made at` than step 32's, and the same pin count as step 32 (not twice it). Had
+`/dev/shm` kept the marker, the second start would have been refused with 75 and the container would
+not be healthy.
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace logs --no-log-prefix workspace | awk '/Firewall raised: /{raised++} /a second run is refused/{refused++} END{print raised+0, refused+0}'
+```
+→ `2 0` (one `Firewall raised` line per start, and no refusal in the container's own log)
+```
+docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace ps -q workspace)"
+```
+→ the same id as step 32 (a restart, not a new container) and a later start time. Then step 26's
+first and fourth lines and step 28's second line once more: `blocked`, a number, `1.1.1.1:443 blocked`.
+
+**35.** Task 13: the image's filesystem into a scratch volume **(guard before)**. `w65-scan` is
+created and never started, carries no compose label, and is removed in the line that exports it.
+
+```
+docker volume create w65-scan-fs && docker create --name w65-scan bb2dash-workspace:local
+```
+→ `w65-scan-fs`, then a container id
+```
+docker export w65-scan | MSYS_NO_PATHCONV=1 docker run --rm -i -v w65-scan-fs:/fs alpine:3.20 tar -x -C /fs; echo "exit=$?"; docker rm w65-scan
+```
+→ `exit=0`, then `w65-scan`
+
+**36.** Task 13: no secret in the image's files. The scan reads the whole image and can take minutes:
+run it in the background. `--redact` keeps a finding's value out of the output.
+
+```
+MSYS_NO_PATHCONV=1 docker run --rm -v w65-scan-fs:/fs:ro -v "C:/Users/stack/projects/bb2dash-wt-21-container/docker/gitleaks-images.toml:/work/docker/gitleaks-images.toml:ro" -w /work ghcr.io/gitleaks/gitleaks:v8.30.1 dir /fs --config docker/gitleaks-images.toml --redact; echo $?
+```
+→ `0`
+
+**37.** Task 13: no secret in the image's history.
+
+```
+docker history --no-trunc bb2dash-workspace:local | MSYS_NO_PATHCONV=1 docker run --rm -i -v "C:/Users/stack/projects/bb2dash-wt-21-container/docker/gitleaks-images.toml:/work/docker/gitleaks-images.toml:ro" -w /work ghcr.io/gitleaks/gitleaks:v8.30.1 stdin --config docker/gitleaks-images.toml --redact; echo $?
+```
+→ `0`
+```
+docker history --no-trunc bb2dash-workspace:local | grep -c -E "sk-ant-|sb_secret_|eyJhbGciOi|postgres(ql)?://[^ ]*:[^ @]*@"
+```
+→ `0`
+
+**38.** Task 13: the scratch volume goes **(guard after)**.
+
+```
+docker volume rm w65-scan-fs
+```
+→ `w65-scan-fs`
+
+A hit under the new vendor trees (`/fs/usr/local/share/npm-global/`, the three `node_modules` under
+`/fs/app/`, `/fs/opt/fastembed/`) is triaged by hand in 102a with `--verbose` added. None of them is
+under the allowlist's three paths (`/fs/usr/(include|lib|share)/`, `/fs/usr/local/include/`,
+`/fs/ms-playwright/`), so a hit there shows. Widening the allowlist is a DECISIONS call, not this
+stream's.
+
+**39.** When this tree is done with the test container (only one tree at a time runs it) **(guard)**.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace stop workspace
+```
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace rm -sf workspace
+```
+→ the container stopped, then removed. The network and the volume stay until the PM removes them
+after acceptance step 15 (`docker network rm bb2dash-wt21_workspace-net`,
+`docker volume rm bb2dash-wt21_workspace-claude-home`).
+
+## Wave 2 — the lines' quoting, checked without docker
+
+Run on 2026-10-06 over the 50 docker lines of the list above, read back out of this file from a shell
+with `SECRETS_DIR`, `HARNESS_DIR`, `COMPOSE_PROFILES` and `MSYS_NO_PATHCONV` unset, with `docker`
+standing for a native program that starts nothing and records its arguments, its folder and those
+variables:
+
+```text
+calls: 61 (compose 41, of them exec 25; other docker 20); sh -c strings parsed: 12; node -e programs compiled: 9
+lines with a docker call: 50 of 50
+problems: 0
+```
+
+For every compose call of the test project it checked: `SECRETS_DIR` and `HARNESS_DIR` hold the two
+folders and were set by the line itself; `MSYS_NO_PATHCONV=1`; `-p bb2dash-wt21 --profile workspace`;
+the service is named after `build`, `up`, `exec`, `logs`, `ps`, `restart`, `stop` and `rm`; `up` has
+`-d --no-deps`; every `exec` has `-T`; the call ran from the worktree. For every call: no argument
+shows Git Bash's path conversion (a bare `/run/secrets/x` otherwise arrives as
+`C:/Program Files/Git/run/secrets/x`, read on this laptop). Every `sh -c` string parses (`bash -n`),
+every `node -e` program compiles (`node --check`) and holds no `!`, which an interactive bash expands
+inside double quotes. The two lines that render the file as the desktop's sign-in task does were
+checked the other way round: `HARNESS_DIR` and `COMPOSE_PROFILES` unset, `SECRETS_DIR` set.
+
+The check can fail: three deliberately wrong lines (no prefix and a bare container path; a `!` in a
+program; an `up` without the service) gave 8 problems. The two piped lines of step 7 printed their
+expected text from a stand-in render. What this shows is that each line arrives as written. It does
+not show what a line prints from a real container: that is the next step.
+
+The lines of the list that do not call docker were run as they stand, from another folder, and gave
+what the list says: the two test runs (11 of 11, 18 of 18), step 4's four counts (`0`, `1`, `0`,
+`1`), step 5's four sizes (each above 0), step 9's commit and `0`, and step 28's host probe (three
+`open`). Step 2's line was not run whole: its fetch and merge were run on their own, and its
+ancestor check read `1` for the reason given above.
+
+## Wave 2 — for the `/security-review` request (ruling T1's last bullet)
+
+Facts from this stream the PM's request can quote:
+
+* **The allowlist is by address, and both kinds of host serve other tenants.** The bb2dash project's
+  name resolves to a CDN's edge addresses and the pooler is shared by many projects; `api.anthropic.com`
+  is one address for every customer. After wave 2 an allowed address can be reached on one TCP port
+  only (443 or 5432), which narrows what can be asked of it, not who answers. TLS names the peer on
+  443; the rag server checks the pooler's certificate against the pinned CA; the runner's own
+  connection follows its DSN's `sslmode`.
+* **Docker's healthcheck runs `node /app/workspace/dist/healthcheck.js` as root every 30 s.** The
+  service sets no `user:` (the entrypoint must start as root for the firewall), so a healthcheck
+  process is root's, with the container's added capabilities. It reads one file's age
+  (`/run/workspace/alive`, in a folder `node` owns) and runs code from a root-owned folder. The
+  entrypoint's drop does not cover it.
+* **Two write-capable credentials are mounted** (`bb2dash_mcp_service_key`, `harness_database_url`),
+  each read by one MCP server process; and `workspace_runner_db_url` and `claude_oauth_token` by the
+  runner. `node` can read all four files: the fence is the tool gate and the read-only tools, not
+  file permissions.
+* **Two clauses no container check exercises**, both held by the dry-run test only: IPv6 when
+  `ip6tables` cannot set its rules (the test "IPv6 (T1 d)" and the long-list test), and a DSN host
+  that does not end `.pooler.supabase.com` (the test "a database secret that is not a pooler URL").
+* **DNS after the firewall is up.** Rules allow DNS only to the resolvers in `/etc/resolv.conf`
+  (Docker's `127.0.0.11`). A name that is not pinned cannot be resolved from inside the container if
+  Docker forwards the query from the container's own network namespace, which is what the by-name
+  probes of step 26 would then show as `blocked`; the literal probes of step 28 do not depend on it.
+* The pg_net reach is W-63's and the PM's to word; nothing in this stream touches it.
+
+## Wave 2 — questions for the PM
+
+1. **A new file beyond the Files table: `docker/workspace/init-firewall.test.mjs`.** The ruling asks
+   for the dry-run harness to be extended and its run quoted, and the wave's rule asks for a test
+   committed failing before the fix; a scratch script cannot be committed failing. It sits in W-65's
+   folder, the image does not copy it, and `grep-clean` does not scan it. The Files table wants one
+   row for it, or it goes back to scratch.
+2. **The CLI is installed in a stage of its own and copied** (above, "The image"). The recipe and the
+   ruling's `chown -R root:root /usr/local/share/npm-global` are both in the Dockerfile to the
+   letter; the stage is the one thing not asked for. It keeps a 246 MB binary from being stored a
+   second time by the chown. Step 11 records the layer's size. If the PM wants the plain form (the
+   chown as one more `RUN` of the runtime stage), it is a six-line change and an image about that
+   much larger.
+3. **A DSN on a port other than 5432 is not refused at the start** (choice 3 above). The ruling
+   names the ports, not a check of the DSN's own. One word and `dsn_host` refuses it with a fixed
+   sentence.
+4. **bb2dash-stack still says "this repo's secrets/ folder" in three places the ruling did not
+   name**, so they were left: `.env.example` (its header line "Secrets are files in secrets/" and the
+   comment and placeholder over `SECRETS_DIR=/path/to/bb2dash-stack/secrets`), the doctor's message
+   for an unset `SECRETS_DIR` (`doctor/lib/checks-host.mjs`, `secretsDirOf`: "set it in .env to this
+   repo's secrets/ folder, absolute"; that file is W-65's for one comment only), and the justfile's
+   fallback to `justfile_directory() / "secrets"` with its comment. The README now says the fallback
+   exists and is not for real secrets.
+5. **The `secrets` row still wants `workspace_runner_db_url` when the profile is off** (all 12, as
+   the brief's check (a) reads and as it does for the dev container's tokens). Only the Workspace row
+   follows the profile, which is what the ruling says. With the profile off and that file missing,
+   `just doctor` shows one problem row, `secrets`.
+6. **With the profile off the Workspace row asks Docker nothing**, so a container left running after
+   the line is taken out of `.env` still reads `off`. The README tells Stack to stop it
+   (`docker compose stop workspace`) when he takes the line out.
+7. **`grep-clean` stays at 11 tests.** Wave 2's three rules are assertions inside the existing
+   Dockerfile test, so the count the ruling names did not move.
