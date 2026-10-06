@@ -156,6 +156,28 @@ describe('a result that is not an error needs a gate allow for its tool name', (
     expect(summary.toolCalls[0]?.ok).toBe(true);
   });
 
+  it('counts the result of a call once, however many user lines repeat it', () => {
+    const { signals, summary } = replay([
+      initLine(),
+      toolUse('t1', SEARCH, { q: 'x' }),
+      hookResponse(SEARCH, 0),
+      toolResult('t1'),
+      toolResult('t1'),
+      toolResult('t1'),
+      resultLine(),
+    ]);
+    expect(stopsOf(signals)).toEqual([]);
+    expect(summary.toolCalls).toEqual([{ tool: 'search_materials', query: 'x', scope: null, ok: true }]);
+    expect(signals.filter((signal) => signal.kind === 'tool')).toHaveLength(2);
+    expect(mapTurnEnd(summary)).toBeNull();
+  });
+
+  it('keeps the first result of a call: a repeated line cannot turn an error into an answer', () => {
+    const { signals, summary } = replay([initLine(), toolUse('t1', SEARCH, { q: 'x' }), toolResult('t1', true), toolResult('t1'), resultLine()]);
+    expect(stopsOf(signals)).toEqual([]);
+    expect(summary.toolCalls[0]?.ok).toBe(false);
+  });
+
   it('passes three calls of one tool with three allows, whatever order the results come in', () => {
     const { signals, summary } = replay([
       initLine(),
