@@ -55,29 +55,50 @@ export interface FakeRpc {
   readonly queue: Claim[];
   readonly claims: number[];
   readonly begins: Array<{ requestId: string; tier: string; provider: string; model: string }>;
+  /** When each `workspace_begin()` was tried, the tries that failed included. */
+  readonly beginTries: number[];
   readonly streams: StreamCall[];
   readonly finishes: FinishArgs[];
+  /** When each `workspace_finish()` was tried, the tries that failed included. */
+  readonly finishTries: number[];
   readonly heartbeats: Array<{ runner: string; at: number }>;
   /** From now on `workspace_stream()` answers false: the owner pressed Stop. */
   cancel(): void;
   /** From now on every call rejects, as when the database cannot be reached. */
   breakDatabase(): void;
-  failBegin(): void;
-  failFinish(times: number): void;
+  /** The database can be reached again. */
+  repairDatabase(): void;
+  /** The next `times` begins fail (all of them when no count is given): with the database's own refusal, or with `error`. */
+  failBegin(error?: Error, times?: number): void;
+  /** The next `times` finishes fail: as a database that cannot be reached, or with `error`. */
+  failFinish(times: number, error?: Error): void;
 }
+
+/** A refusal one of the five functions raises itself: SQLSTATE 22023 (migration 142). */
+export const dbRefusal = (message: string): Error => Object.assign(new Error(message), { code: '22023' });
+/** What a call sees when the database cannot be reached: no SQLSTATE. */
+export const dbDown = (): Error => new Error('connection refused');
 
 export function fakeRpc(): FakeRpc {
   let cancelled = false;
   let broken = false;
-  let beginFails = false;
-  let finishFailures = 0;
-  const down = (): Error => new Error('connection refused');
+  let beginFailure: { error: Error; left: number } | null = null;
+  let finishFailure: { error: Error; left: number } | null = null;
+  const down = dbDown;
+  /** The failure a scripted call still owes, used up by one. */
+  const owed = (failure: { error: Error; left: number } | null): Error | null => {
+    if (failure === null || failure.left <= 0) return null;
+    failure.left -= 1;
+    return failure.error;
+  };
   const fake: FakeRpc = {
     queue: [],
     claims: [],
     begins: [],
+    beginTries: [],
     streams: [],
     finishes: [],
+    finishTries: [],
     heartbeats: [],
     cancel: () => {
       cancelled = true;
@@ -85,11 +106,14 @@ export function fakeRpc(): FakeRpc {
     breakDatabase: () => {
       broken = true;
     },
-    failBegin: () => {
-      beginFails = true;
+    repairDatabase: () => {
+      broken = false;
     },
-    failFinish: (times) => {
-      finishFailures = times;
+    failBegin: (error = dbRefusal('workspace_begin: request 41 is not claimed (it is cancelled)'), times = Number.POSITIVE_INFINITY) => {
+      beginFailure = { error, left: times };
+    },
+    failFinish: (times, error = down()) => {
+      finishFailure = { error, left: times };
     },
     rpc: {
       async claim() {
@@ -98,8 +122,10 @@ export function fakeRpc(): FakeRpc {
         return fake.queue.shift() ?? null;
       },
       async begin(requestId, tier, provider, model) {
+        fake.beginTries.push(Date.now());
         if (broken) throw down();
-        if (beginFails) throw new Error('workspace_begin: the request is not claimed');
+        const failure = owed(beginFailure);
+        if (failure !== null) throw failure;
         fake.begins.push({ requestId, tier, provider, model });
         return '9c9c9c9c-0000-4000-8000-000000000001';
       },
@@ -109,11 +135,10 @@ export function fakeRpc(): FakeRpc {
         return !cancelled;
       },
       async finish(args) {
+        fake.finishTries.push(Date.now());
         if (broken) throw down();
-        if (finishFailures > 0) {
-          finishFailures -= 1;
-          throw down();
-        }
+        const failure = owed(finishFailure);
+        if (failure !== null) throw failure;
         fake.finishes.push(args);
       },
       async heartbeat(runner) {
