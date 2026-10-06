@@ -260,6 +260,9 @@ export function useWorkspaceStream(
     const join = async (): Promise<void> => {
       await leaving.current;
       if (cancelled) return;
+      // The last channel is gone and this one has not answered. Said here, after the wait,
+      // so a return to the topic just left does not keep reading "joined".
+      dispatch({ type: 'channel', topic, status: 'joining', detail: null });
       // A private channel is authorised by the owner's token (141's policy), and the join
       // payload carries the token only once the socket has it.
       await supabase.realtime.setAuth();
