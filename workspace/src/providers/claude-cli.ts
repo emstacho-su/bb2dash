@@ -393,8 +393,10 @@ function resultOf(attempt: Attempt): ResultEvent {
 }
 
 /**
- * One turn of the real CLI. It always ends with exactly one result event; when the runner aborts,
- * that result is a failure whose code the runner replaces with its own reason.
+ * One turn of the real CLI. It always ends with exactly one result event. When the runner aborts
+ * before the CLI's result line, that result is a failure whose code the runner replaces with its
+ * own reason; a result line already read is reported as it was (`reported`), and the CLI that
+ * stays after it is killed once its time to exit is over.
  */
 export function createCliTurn(deps: CliTurnDeps): CliTurn {
   const graceMs = deps.killGraceMs ?? KILL_GRACE_MS;

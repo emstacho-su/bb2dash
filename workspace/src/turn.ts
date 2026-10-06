@@ -241,6 +241,27 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
     }
   }
 
+  /**
+   * Begin could not be made: nothing ran, and the request is still claimed. It is closed under the
+   * runner's own stop when one ended the tries, as `cli_error` otherwise.
+   */
+  async function closeUnbegun(startedAt: number, error: unknown): Promise<TurnOutcome> {
+    const ending: Ending = { state: 'failed', errorCode: stopped.code ?? 'cli_error' };
+    log(`begin could not be made, nothing ran; closing the request as ${ending.errorCode}: ${messageOf(error)}`);
+    await finish({
+      requestId: claim.requestId,
+      state: ending.state,
+      content: '',
+      toolCalls: [],
+      errorCode: ending.errorCode,
+      costUsd: null,
+      durationMs: Date.now() - startedAt,
+      claudeSessionId: claim.claudeSessionId,
+      model: null,
+    });
+    return ending;
+  }
+
   async function run(): Promise<TurnOutcome> {
     const startedAt = Date.now();
     const tier = routeTier(claim.prompt, claim.priorTier);
@@ -254,24 +275,7 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
       log(`begin refused, nothing ran: ${messageOf(begun.error)}`);
       return { state: 'skipped', errorCode: null };
     }
-    if (begun.outcome !== 'made') {
-      // Nothing ran, and the request is still claimed: close it under the runner's own stop when
-      // one ended the tries, as `cli_error` otherwise.
-      const ending: Ending = { state: 'failed', errorCode: stopped.code ?? 'cli_error' };
-      log(`begin could not be made, nothing ran; closing the request as ${ending.errorCode}: ${messageOf(begun.error)}`);
-      await finish({
-        requestId: claim.requestId,
-        state: ending.state,
-        content: '',
-        toolCalls: [],
-        errorCode: ending.errorCode,
-        costUsd: null,
-        durationMs: Date.now() - startedAt,
-        claudeSessionId: claim.claudeSessionId,
-        model: null,
-      });
-      return ending;
-    }
+    if (begun.outcome !== 'made') return closeUnbegun(startedAt, begun.error);
     log(`started tier=${tier} provider=${route.provider} model=${route.model}`);
 
     const streamer = createStreamer(deps.rpc, claim.requestId, stopSwitch, log);
