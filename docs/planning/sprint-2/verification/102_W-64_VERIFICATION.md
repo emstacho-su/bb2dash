@@ -710,3 +710,195 @@ registration. Each went away with its CLI: `docker ps` after the last recording 
 `bb2dash-mcp:local` containers other sessions started 18 and 19 hours earlier, with
 `bb2dash-sync-1`, `bb2dash-harness-jobs-1` and `harness-postgres` as they were. No docker command
 was run by hand except the read-only guard and `docker ps`.
+
+## Round 1
+
+Fixes after the PM's independent check of wave 1 (2026-10-06). The check listed five items: one
+must-fix and four minor. Three are code fixes, each read against the brief first, each with its
+test committed and pushed failing before the code was written (the commit times below are minutes
+apart because each fix is a few lines; no red commit in this round was split out of finished work).
+Two need no code. No `claude -p` ran in this round and no fixture was recorded again; the only
+docker command was the read-only guard.
+
+### Fix 1 (must-fix) · a resumed start the runner killed is not started a second time
+
+Where: `workspace/src/providers/claude-cli.ts`, `shouldRetryAsFresh` and the place the turn builds
+its `StartOutcome`.
+
+Confirmed against the Contract. Continuity: "a `--resume` start that exits non-zero before any
+`assistant` message is retried as a fresh start with replay". Init-line check: the runner "kills
+the turn before any model call, storing `cli_error`". A start the runner kills on its own stream
+ends with exit code null, the rule read null as non-zero, and only the runner's abort signal was
+excluded, so the turn was started again.
+
+Red, `468e75a` (three cases in `test/runner/cli-turn.suite.ts`; each scripts a second start, so a
+retry shows as what it does and not as a start that fails anyway):
+
+```
+$ npx vitest run test/runner.test.ts
+     × starts the CLI once and stores cli_error, never a finished answer, when the resumed start has a refused init line
+     × hands workspace_finish the stored session id unchanged for that turn
+     × starts no second call when a resumed turn is reported as paid from usage credits before any assistant line: one start, usage_limit
+AssertionError: expected { type: 'result', ok: true, …(4) } to match object { ok: false, errorCode: 'cli_error' }
+-   "claudeSessionId": "5e0c1a52-7d7e-4b8f-9a44-0f6f1f6f0a11",
++   "claudeSessionId": "7c1d2e3f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+AssertionError: expected [ { …(2) }, { …(2) } ] to have a length of 1 but got 2
+ Test Files  1 failed (1)
+      Tests  3 failed | 152 passed (155)
+```
+
+The three failures are the check's three probes: (a) a finished answer where the Contract says
+`cli_error`; (b) the killed second start's session id handed to `workspace_finish` in place of the
+stored one (that case runs the real CLI turn through `startTurn` and reads the fake database's
+finish call); (c) two starts, so a second call after a turn was reported as paid from usage
+credits. A fourth case in the same commit is green before and after: a resumed start that a signal
+from outside ended, with no output, is still retried once.
+
+Green, `ac8a124`: `StartOutcome` gains `stoppedByStream` (the stream's `violation` is set, or its
+`overage` flag), and `shouldRetryAsFresh` refuses it. The rule's six existing unit calls in
+`test/stream-json.test.ts` pass the new field as false, and one more case holds the refusal.
+
+```
+$ npx vitest run test/runner.test.ts test/stream-json.test.ts
+ Test Files  2 passed (2)
+      Tests  259 passed (259)
+$ npm run typecheck
+(no output, exit 0)
+```
+
+The same three scenarios on the built `dist/`, with a fake process (a script kept outside the repo):
+
+```
+(a) resumed, init refused (rag pending), a second start would answer: starts=1 ok=false errorCode=cli_error session=stored retried=false
+(b) resumed, init refused on any start: starts=1 ok=false errorCode=cli_error session=stored retried=false
+(c) resumed, isUsingOverage true before any assistant line: starts=1 ok=false errorCode=usage_limit session=stored retried=false
+```
+
+The log line "the resumed session did not start; retrying once as a fresh start with replay" is
+now written only for a start that ended by itself.
+
+### Fix 2 (minor) · `usage_limit` is also read from the terminal error
+
+Where: `workspace/src/errors.ts`, `mapTurnEnd`.
+
+Confirmed against the Contract's Error codes bullet: "`usage_limit` when a turn ends in error after
+a plan rate-limit rejection (read the terminal error, not an `api_retry` event, and read the
+overage fields". The code read only a `rate_limit_event` with status `rejected`; the terminal
+error's own fields were not read.
+
+Red, `d2f749b`: a fourth scenario in `test/fixtures/synthetic-rate-limit.json`,
+`planLimitTerminalErrorOnly` (the plan-limit end with no rate-limit event at all; synthetic, like
+the other three, and outside the "recorded live" assertion).
+
+```
+$ npx vitest run test/stream-json.test.ts test/runner.test.ts
+     × reads the terminal error itself: a rate-limit error end with no rejected event before it is usage_limit
+     × maps a rate-limit error end with no rejected event before it to usage_limit (synthetic)
+AssertionError: expected 'cli_error' to be 'usage_limit' // Object.is equality
+ Test Files  2 failed (2)
+      Tests  2 failed | 263 passed (265)
+```
+
+Green, `9bd7605`: with no rejected event, the turn is `usage_limit` when the last assistant line's
+`error` is `rate_limit` and the result's `api_error_status` is 429 (`RATE_LIMIT_ERROR`,
+`HTTP_TOO_MANY_REQUESTS`). Both fields are needed: four cases hold that another assistant error, no
+assistant error, another status or no status each stay `cli_error`. An `api_retry` event is still
+never read.
+
+```
+$ npx vitest run test/stream-json.test.ts test/runner.test.ts
+ Test Files  2 passed (2)
+      Tests  265 passed (265)
+```
+
+Neither form of a plan-limit end can be recorded on demand, so which fields the CLI sends is still
+unproven; the mapping now takes either.
+
+### Fix 3 (minor) · a budget with a third decimal is refused at start
+
+Where: `workspace/src/config.ts`, `BUDGET_SHAPE` and `parseTurnBudget`.
+
+Confirmed against the Contract ("reads `WORKSPACE_TURN_BUDGET_USD` … the value `--max-budget-usd`
+receives"): the flag is written with two decimals, so `0.015` reached the CLI as `0.01` and `0.999`
+as `1.00`.
+
+Red, `eed6ac0`:
+
+```
+$ npx vitest run test/config.test.ts
+     × refuses a third decimal: WORKSPACE_TURN_BUDGET_USD=0.015
+     × refuses a third decimal: WORKSPACE_TURN_BUDGET_USD=0.999
+     × refuses a third decimal: WORKSPACE_TURN_BUDGET_USD=0.125
+     × refuses a third decimal: WORKSPACE_TURN_BUDGET_USD=1.000
+     × refuses a third decimal: WORKSPACE_TURN_BUDGET_USD=0.010
+AssertionError: expected function to throw an error, but it didn't
+ Test Files  1 failed (1)
+      Tests  5 failed | 61 passed (66)
+```
+
+Green, `b0c2216`: the accepted shape is dollars with at most two decimals, and the refusal says so.
+A sixth case, green before and after, holds that every value from 0.01 to 1.00 reaches the flag as
+the amount that was written.
+
+```
+$ npx vitest run test/config.test.ts
+ Test Files  1 passed (1)
+      Tests  66 passed (66)
+$ WORKSPACE_TURN_BUDGET_USD=0.015 node dist/runner.js; echo "exit=$?"
+workspace: cannot start: WORKSPACE_TURN_BUDGET_USD must be an amount from 0.01 to 1.00 with at most two decimals
+exit=2
+```
+
+`1.000` and `0.010` are refused too: the rule is the written shape, not the amount.
+
+### No code change
+
+* **`ac87bef`, the framing of a question that opens with `/`** (`workspace/src/replay.ts`,
+  `asQuestion`). The check's read is to keep it, and it is kept: the code is as it was. What it
+  does, for the Contract's Argv bullet: when the question's first character after leading white
+  space is `/`, the prompt element is `The new question:`, an empty line, then the question; on a
+  fresh start with a replay the question already sits under that header. The argv elements and
+  their order are unchanged and the prompt is still last, after `--`. No recording shows how the
+  CLI reads a `-p` prompt that opens with a slash. The Contract sentence and the DECISIONS row are
+  the PM's files.
+* **Thirteen files outside the brief's Files table**, all under `workspace/`, for 102a to record as
+  an accepted deviation: `workspace/tsconfig.test.json`, `workspace/src/alive.ts`,
+  `workspace/src/replay.ts`, `workspace/src/turn.ts`, `workspace/src/hooks/gate-rules.ts`,
+  `workspace/test/global-setup.ts`, `workspace/test/helpers/fakes.ts`,
+  `workspace/test/scrub-recording.mjs`, `workspace/test/fixtures/recordings.json`,
+  `workspace/test/runner/cli-turn.suite.ts`, `workspace/test/runner/db.suite.ts`,
+  `workspace/test/runner/health.suite.ts`, `workspace/test/runner/replay.suite.ts`. Round 1 adds no
+  file. The image copies `src/` whole and builds with `tsconfig.json`, so W-65's Dockerfile needs
+  no change.
+
+### Where the stream stands after round 1
+
+```
+$ npx vitest run --coverage            (from workspace/)
+ Test Files  9 passed (9)
+      Tests  559 passed (559)
+All files         |   92.46 |    87.01 |   91.23 |   94.58 |
+Lines        : 94.58% ( 751/794 )
+$ npm run typecheck
+(no output, exit 0)
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+$ docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z
+(the value recorded before and after the recordings; unchanged)
+```
+
+By task: router 67, tool gate 78, providers and argv 54, stream parser 109, runner, MCP config,
+config and system prompt 251.
+
+Two things this round leaves for the container checks (tasks 12 and 19), neither testable without
+the image:
+
+* If the `rag` server reads `pending` on the init line inside the container (it loads its model at
+  start), every turn ends `cli_error`, fresh and resumed alike. Before fix 1 a resumed turn in that
+  state was started a second time and could pass by accident; it no longer is. One turn in the test
+  container shows the init line's `mcp_servers`.
+* The host leftovers listed above are as they were. `C:/Users/Public/bb2dash-w64-rec/out/` still
+  holds the raw lookup output with syllabus text, in a folder every Windows user can read.
