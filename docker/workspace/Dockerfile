@@ -93,7 +93,7 @@ USER node
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
-# The pin cannot move by itself (rulings T1): once the CLI is installed its folder is root's, so the
+# The pin cannot move by itself (102a, PM rulings T1): once the CLI is installed its folder is root's, so the
 # node user every turn runs as can read and run it and cannot replace it; compose.yaml turns the
 # CLI's own updater off as well (DISABLE_AUTOUPDATER=1). In a stage of its own because the package's
 # install links its one large binary (about 250 MB) under two names, and a chown in a later layer of

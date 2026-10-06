@@ -59,7 +59,7 @@ export const WORKSPACE_IGNORE_LINES = Object.freeze([
 /** The version brief 102 pins the image's Claude Code CLI to (never `latest`, never the `stable` tag). */
 export const CLAUDE_CODE_PIN = '2.1.289';
 
-/** The CLI's install, by the dev container's recipe, and what hands its folder to root afterwards (rulings T1). */
+/** The CLI's install, by the dev container's recipe, and what hands its folder to root afterwards (102a, PM rulings T1). */
 const CLI_INSTALL = 'npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"';
 const CLI_HANDOVER = 'chown -R root:root /usr/local/share/npm-global';
 /** The scripts the workspace image runs, and a line of one that runs iproute2's `ip` (not iptables, ipset or ip6tables). */
@@ -81,7 +81,7 @@ function workspaceService(compose) {
   return start === -1 || end === -1 ? '' : compose.slice(start, end);
 }
 
-/** Rulings T1, "the pin cannot move by itself": every way the image's CLI could still change under its pin. */
+/** 102a, PM rulings T1, "the pin cannot move by itself": every way the image's CLI could still change under its pin. */
 export function pinDrift(dockerfile, compose) {
   const problems = [];
   const installAt = dockerfile.indexOf(CLI_INSTALL);
@@ -91,7 +91,7 @@ export function pinDrift(dockerfile, compose) {
   return problems;
 }
 
-/** Rulings T1: iproute2 is in the image only if one of its scripts calls `ip`. */
+/** PM rulings T1: iproute2 is in the image only if one of its scripts calls `ip`. */
 export function unusedPackages(dockerfile) {
   const callsIp = WORKSPACE_SCRIPTS.some((file) => CALLS_IP.test(stripComments(file, readRepo(file))));
   const installsIproute2 = /^\s+iproute2\b/m.test(dockerfile);
@@ -286,7 +286,7 @@ test('the workspace Dockerfile pins the CLI, builds the materials server in a st
   assert.deepEqual(fromWorkspace, [...WORKSPACE_COPIED_PATHS]);
   const roots = [...new Set(sources.map((source) => source.split('/')[0]))].sort();
   assert.deepEqual(roots, ['docker', 'mcp-server', 'workspace']);
-  // Rulings T1: the pin cannot move by itself, no package without a caller, and the runner stage
+  // PM rulings T1 (102a): the pin cannot move by itself, no package without a caller, and the runner stage
   // builds and runs the package as it is in this tree.
   const compose = readRepo('compose.yaml');
   assert.deepEqual(pinDrift(dockerfile, compose), []);

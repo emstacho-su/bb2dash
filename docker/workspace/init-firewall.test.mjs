@@ -2,7 +2,7 @@
 //
 //   node --test docker/workspace/init-firewall.test.mjs        (on Windows: from Git Bash)
 //
-// A dry run of docker/workspace/init-firewall.sh (brief 102 task 12; rulings T1) against fake
+// A dry run of docker/workspace/init-firewall.sh (brief 102 task 12; 102a, PM rulings T1) against fake
 // iptables, ip6tables, iptables-save, ipset, dig and curl that only log what they were asked. Each
 // test copies the script into a scratch folder with its five place constants and its PATH line pointed
 // at that folder, runs it with a real bash, and reads the log back.
@@ -15,7 +15,7 @@
 //
 // The image never copies this file (the Dockerfile copies named files only).
 
-import { describe, test } from 'node:test';
+import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -130,9 +130,17 @@ const BASE_WORLD = Object.freeze({
   inet6: '00000000000000000000000000000001 01 80 10 80       lo\n',
 });
 
+/** Every scratch folder a test made, so the suite can take them away when it ends. */
+const scratchDirs = [];
+function scratchDir(prefix) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  scratchDirs.push(dir);
+  return dir;
+}
+
 /** A scratch container: its files, the fake tools and the redirected script. `null` leaves a file out. */
 function makeWorld({ dns = {}, secrets = {}, hosts = BASE_WORLD.hosts, resolvConf = BASE_WORLD.resolvConf, inet6 = BASE_WORLD.inet6 } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'init-firewall-test-'));
+  const dir = scratchDir('init-firewall-test-');
   for (const sub of ['bin', 'dns', 'secrets', 'shm']) fs.mkdirSync(path.join(dir, sub));
   for (const name of Object.keys(FAKE_TOOLS)) fs.writeFileSync(path.join(dir, 'bin', name), fakeProgram(name), { mode: 0o755 });
   fs.writeFileSync(path.join(dir, 'fakes.sh'), FAKE_FUNCTIONS);
@@ -271,6 +279,10 @@ const happy = lazy(() => raise(makeWorld()));
 
 // Side by side: each run starts some fifty short processes, which is slow one after another on Windows.
 describe('docker/workspace/init-firewall.sh, dry run against fake tools', { concurrency: true }, () => {
+  after(() => {
+    for (const dir of scratchDirs) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   test('a start that works: one lookup a name, every address pinned, nothing of a connection string printed', async () => {
     const run = await happy();
     assert.equal(run.status, 0, run.out);
@@ -475,7 +487,7 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
 
   /** Runs `body` once per line of `inputs` with the script's functions defined; one `status<TAB>stdout` line each. */
   async function eachLine(body, inputs) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'init-firewall-fn-'));
+    const dir = scratchDir('init-firewall-fn-');
     fs.writeFileSync(path.join(dir, 'inputs'), inputs.map((input) => `${input}\n`).join(''));
     const driver = `source "$1"; set +e; cd "$2"; while IFS= read -r input; do ${body}; done <inputs`;
     const result = await runBash(['-c', driver, 'driver', toBashPath(SCRIPT), toBashPath(dir)]);

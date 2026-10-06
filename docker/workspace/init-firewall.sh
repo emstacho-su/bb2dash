@@ -33,7 +33,7 @@
 #   * the refresh loop: no root process stays running after this script.
 #
 # New here:
-#   * a port rule (rulings T1 c): the two HTTPS names are allowed on tcp/443 only and the pooler
+#   * a port rule (102a, PM rulings T1 c): the two HTTPS names are allowed on tcp/443 only and the pooler
 #     addresses on tcp/5432 only, each kind in a set of its own. No address is allowed on every
 #     port, and nothing but TCP leaves (DNS to the resolvers apart);
 #   * the two database hosts are read from the secret files, and each must end
