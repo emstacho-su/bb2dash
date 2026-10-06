@@ -729,3 +729,16 @@ frozen and not edited), with `db/tests/phase21_143_review_round.sql`:
 
 CR-13 (140 repeats the prompt cap and the error-code list as literals): 140 is frozen. CR-14
 (`project-state/STATUS.md` is not yet updated): owed at task 24, before the PR opens.
+
+## The embedding model's source — settled 2026-10-06
+
+Stack: "Bump the harness." [agentic-harness PR #40](https://github.com/emstacho-su/agentic-harness/pull/40)
+(`fix/fastembed-2.1.1`, 79ec491, worktree `C:/Users/stack/agentic-harness-wt-fastembed`) moves
+the rag server to fastembed 2.1.1. On that branch with an empty `.fastembed-cache`: `npm ci`
+exit 0; `npm run typecheck` exit 0; `npx vitest run` 11 files, 196 passed;
+`npm run verify:embedder` downloads the model and prints `OK — embedder matches the ingestion
+contract`, reference agreement min 0.999999 over the 10 Python reference items. The lock drops
+`tar` and its eight transitive packages and carries npm 11's peer annotations; no source change.
+Until it merges, the test container's build sets
+`HARNESS_DIR=C:/Users/stack/agentic-harness-wt-fastembed`; the commit read at build time goes
+into the docker section. The merge of PR #40 is Stack's word.
