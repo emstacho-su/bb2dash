@@ -194,21 +194,33 @@ export interface PgQueryDeps {
 }
 
 /**
- * A query function over one long-lived connection. A failed connect or query drops the client, so
- * the next call connects afresh; the error is rethrown with the DSN redacted.
+ * A query function over one long-lived connection. A failed query drops the connection it ran on,
+ * and only that one: with two calls in flight the later failure must not close the connection
+ * opened since. A failed connect closes its own half-open client. Either way the next call
+ * connects afresh, and the error is rethrown with the DSN redacted.
  */
 export function createPgQuery(deps: PgQueryDeps): QueryFn & { end(): Promise<void> } {
   let client: PgClientLike | null = null;
   let connecting: Promise<PgClientLike> | null = null;
+  /** Connections already closed here, so two failed calls on one connection close it once. */
+  const closed = new WeakSet<PgClientLike>();
 
-  const drop = async (): Promise<void> => {
-    const old = client;
-    client = null;
+  /** Close `target` and stop handing it out. The current connection is touched only when it is `target`. */
+  const drop = async (target: PgClientLike | null): Promise<void> => {
+    if (target === null || closed.has(target)) return;
+    closed.add(target);
+    if (client === target) client = null;
     try {
-      await old?.end();
+      await target.end();
     } catch {
       // The socket is already gone; closing it again is not news.
     }
+  };
+
+  /** The error a caller sees: the DSN redacted, the SQLSTATE kept. */
+  const redacted = (error: unknown): Error & { code?: unknown } => {
+    const message = redactDsn(error instanceof Error ? error.message : String(error), deps.dsn);
+    return Object.assign(new Error(message), { code: (error as { code?: unknown })?.code });
   };
 
   const connect = async (): Promise<PgClientLike> => {
@@ -241,19 +253,19 @@ export function createPgQuery(deps: PgQueryDeps): QueryFn & { end(): Promise<voi
     return connecting;
   };
 
-  const query = (async (sql: string, params?: readonly unknown[]) => {
+  const run = async (sql: string, params?: readonly unknown[]): Promise<QueryResult> => {
+    // A connect that fails has no connection to drop: connect() closed its own client.
+    const ranOn = await connected().catch((error: unknown) => {
+      throw redacted(error);
+    });
     try {
-      const current = await connected();
-      return await current.query(sql, params);
+      return await ranOn.query(sql, params);
     } catch (error) {
-      const message = redactDsn(error instanceof Error ? error.message : String(error), deps.dsn);
-      const code = (error as { code?: unknown })?.code;
-      if (!isStatementError(code)) await drop();
-      const wrapped = new Error(message) as Error & { code?: unknown };
-      wrapped.code = code;
-      throw wrapped;
+      const failure = redacted(error);
+      if (!isStatementError(failure.code)) await drop(ranOn);
+      throw failure;
     }
-  }) as QueryFn & { end(): Promise<void> };
-  query.end = drop;
-  return query;
+  };
+
+  return Object.assign(run, { end: (): Promise<void> => drop(client) });
 }
