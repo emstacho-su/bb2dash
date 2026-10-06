@@ -713,7 +713,10 @@ describe('requestsOptions: the open-request query', () => {
 });
 
 describe('statusOptions: v_workspace_status, the one row', () => {
-  it('reads the four columns of the one row', async () => {
+  // The view is read whole since the review round (ruling V4, CR-8): 143 adds a column the
+  // page must be able to read before and after it exists. `queries.workspace.clock.test.ts`
+  // holds that column; this row is 140's four.
+  it('reads the one row whole, and keeps the four columns 140 gives it', async () => {
     stub.result = {
       data: { polled_at: '2026-10-05T15:59:30+00:00', runner: 'workspace-1', open_requests: 0 },
       error: null,
@@ -722,9 +725,7 @@ describe('statusOptions: v_workspace_status, the one row', () => {
     const status = await run(statusOptions());
 
     expect(ops('v_workspace_status')).toEqual(['select', 'maybeSingle']);
-    expect(callsOn('v_workspace_status')[0].args).toEqual([
-      'polled_at, runner, open_requests, oldest_open_at',
-    ]);
+    expect(callsOn('v_workspace_status')[0].args).toEqual(['*']);
     expect(status).toEqual({
       polled_at: '2026-10-05T15:59:30+00:00',
       runner: 'workspace-1',
