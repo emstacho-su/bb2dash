@@ -191,19 +191,22 @@ export function buildTurns(input: BuildTurnsInput): WorkspaceTurn[] {
     }
   }
 
-  const placed = new Set(turns.flatMap((turn) => (turn.answer === null ? [] : [turn.answer.id])));
+  const unasked = input.requests
+    .filter((request) => !paired.has(request.id))
+    .map((request) => {
+      const answer = answers.get(request.id) ?? null;
+      return turnOf({ key: `request-${request.id}`, question: null, request, answer }, input);
+    });
+
+  // An answer a turn already carries does not also stand alone: it is shown once.
+  const placed = new Set(
+    [...turns, ...unasked].flatMap((turn) => (turn.answer === null ? [] : [turn.answer.id])),
+  );
   const alone = input.messages.filter(
     (message) => message.role === 'assistant' && !placed.has(message.id),
   );
-  const unasked = input.requests.filter((request) => !paired.has(request.id));
 
-  return [
-    ...withAnswersInPlace(turns, alone, input),
-    ...unasked.map((request) => {
-      const answer = answers.get(request.id) ?? null;
-      return turnOf({ key: `request-${request.id}`, question: null, request, answer }, input);
-    }),
-  ];
+  return [...withAnswersInPlace(turns, alone, input), ...unasked];
 }
 
 /**
