@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { LOADING_FALLBACK, PAGE_KICKER } from '@/lib/workspace-labels';
 import { Workspace } from './Workspace';
 import styles from '../Shell.module.css';
 
@@ -20,12 +21,12 @@ export default function WorkspacePage() {
     <>
       <header className={styles.header}>
         <div className={styles.headerText}>
-          <span className={styles.kicker}>Assistant</span>
+          <span className={styles.kicker}>{PAGE_KICKER}</span>
           <h1 className={styles.title}>Workspace</h1>
         </div>
       </header>
 
-      <Suspense fallback={<p className={styles.stubBody}>Loading the Workspace…</p>}>
+      <Suspense fallback={<p className={styles.stubBody}>{LOADING_FALLBACK}</p>}>
         <Workspace />
       </Suspense>
     </>
