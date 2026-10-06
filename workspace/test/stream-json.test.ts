@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { CLAUDE_CODE_VERSION } from '../src/config.js';
+import { BUDGET_CAP_HOLDS, CLAUDE_CODE_VERSION } from '../src/config.js';
 import { mapTurnEnd } from '../src/errors.js';
 import { ALLOWED_TOOLS } from '../src/hooks/gate-rules.js';
 import { isUuidShaped, shouldRetryAsFresh } from '../src/providers/claude-cli.js';
@@ -276,6 +276,76 @@ describe('claude-stream-lookup.jsonl', () => {
       overageDisabledReason: 'out_of_credits',
       isUsingOverage: false,
     });
+  });
+});
+
+describe('claude-stream-budget-stop.jsonl', () => {
+  const lines = readJsonl('claude-stream-budget-stop.jsonl');
+  const { signals, summary } = replay(lines);
+  const meta = recordings.fixtures['claude-stream-budget-stop.jsonl'];
+  const cap = Number(meta?.maxBudgetUsd);
+  const resultAt = lines.findIndex((line) => line.type === 'result');
+
+  it('was recorded with --max-budget-usd 0.01, exit code 1 and nothing on stderr', () => {
+    expect(meta).toMatchObject({ exitCode: 1, stderr: null, maxBudgetUsd: '0.01' });
+    expect(cap).toBe(0.01);
+  });
+
+  it('passes the init check', () => {
+    expect(readInit(lines[0])).not.toBeNull();
+    expect(checkInit(summary.init!)).toEqual([]);
+    expect(summary.init?.credentialSource).toBe(OAUTH_CREDENTIAL_SOURCE);
+  });
+
+  it('ends on the result subtype error_max_budget_usd, which maps to budget_exceeded', () => {
+    expect(summary.result).toMatchObject({ subtype: 'error_max_budget_usd', isError: true, numTurns: 1, apiErrorStatus: null });
+    expect(mapTurnEnd(summary)).toBe('budget_exceeded');
+    expect(stopsOf(signals)).toEqual([]);
+    expect(summary.violation).toBeNull();
+  });
+
+  it('shows the cap as a stop, so BUDGET_CAP_HOLDS is true (O-2)', () => {
+    const result = summary.result!;
+    const ranOnPastTheCap = result.subtype === 'success' && (result.numTurns ?? 0) >= 2 && (result.totalCostUsd ?? 0) > cap;
+    expect(ranOnPastTheCap).toBe(false);
+    expect(BUDGET_CAP_HOLDS).toBe(!ranOnPastTheCap);
+  });
+
+  it('reports the cost as the CLI gives it: one response overshot the cap before the stop', () => {
+    expect(summary.result?.totalCostUsd).toBe(0.021355);
+    expect(summary.result?.totalCostUsd).toBeGreaterThan(cap);
+    expect(summary.result?.sessionId).toBe(summary.init?.sessionId);
+    expect(summary.model).toBe('claude-haiku-4-5-20251001');
+  });
+
+  it('was stopped at its tool call: the call is kept with ok false, because its result never arrived', () => {
+    expect(lines.filter((line) => line.type === 'user')).toEqual([]);
+    expect(summary.toolCalls).toEqual([{ tool: 'search_materials', query: 'late work policy', scope: 'IST.323', ok: false }]);
+    expect(summary.sawAssistant).toBe(true);
+  });
+
+  it("holds the gate's answer after the result line, and does not read the cut-off call as ungated", () => {
+    const responses = lines.flatMap((line, index) => (line.type === 'system' && line.subtype === 'hook_response' ? [{ line, index }] : []));
+    expect(responses).toHaveLength(1);
+    expect(responses[0]?.line).toMatchObject({ hook_event: 'PreToolUse', hook_name: 'PreToolUse:mcp__bb2dash__search_materials', exit_code: 0 });
+    expect(responses[0]?.index).toBeGreaterThan(resultAt);
+    expect(replay(lines.slice(0, resultAt + 1)).summary.violation).toBeNull();
+    expect(mapTurnEnd(replay(lines.slice(0, resultAt + 1)).summary)).toBe('budget_exceeded');
+  });
+
+  it('streams no answer text', () => {
+    expect(deltasOf(signals)).toBe('');
+    expect(summary.text).toBe('');
+  });
+
+  it('does not read the error text: the same lines with other words map the same way', () => {
+    const reworded = lines.map((line) => (line.type === 'result' ? { ...line, errors: ['all good'], result: 'all good' } : line));
+    expect(mapTurnEnd(replay(reworded).summary)).toBe('budget_exceeded');
+  });
+
+  it('carries no rate-limit event', () => {
+    expect(lines.filter((line) => line.type === 'rate_limit_event')).toEqual([]);
+    expect(summary.rateLimit).toBeNull();
   });
 });
 

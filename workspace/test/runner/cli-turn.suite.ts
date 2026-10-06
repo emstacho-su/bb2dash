@@ -352,9 +352,23 @@ describe('how a CLI turn ends', () => {
     const h = harness([{ lines: budgetStop, exit }]);
     const events = await run(h, input({ budgetUsd: 0.01 }));
     expect(valueAfter(h.spawn.calls[0]!.argv, '--max-budget-usd')).toBe('0.01');
-    const recorded = budgetStop[budgetStop.length - 1] as { subtype: string; total_cost_usd: number };
+    // The result line is not the recording's last: the gate's answer for the cut-off tool call follows it.
+    const recorded = budgetStop.find((line) => line.type === 'result') as { subtype: string; total_cost_usd: number };
     expect(recorded.subtype).toBe('error_max_budget_usd');
-    expect(resultOf(events)).toMatchObject({ ok: false, errorCode: 'budget_exceeded', costUsd: recorded.total_cost_usd });
+    expect(budgetStop[budgetStop.length - 1]).toMatchObject({ type: 'system', subtype: 'hook_response', exit_code: 0 });
+    expect(resultOf(events)).toMatchObject({
+      ok: false,
+      errorCode: 'budget_exceeded',
+      costUsd: recorded.total_cost_usd,
+      model: 'claude-haiku-4-5-20251001',
+    });
+    expect(isUuidShaped(resultOf(events)?.claudeSessionId)).toBe(true);
+    expect(textOf(events)).toBe('');
+    // The tool call it cut off is reported once, unanswered; nothing stopped the turn but the cap.
+    expect(events.filter((event) => event.type === 'tool')).toEqual([
+      { type: 'tool', id: expect.any(String), call: { tool: 'search_materials', query: 'late work policy', scope: 'IST.323', ok: false } },
+    ]);
+    expect(h.logs.filter((line) => line.includes('stopped:'))).toEqual([]);
   });
 
   it('maps a plan rate-limit rejection to usage_limit (synthetic)', async () => {
