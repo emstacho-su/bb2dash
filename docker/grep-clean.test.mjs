@@ -59,7 +59,63 @@ export const WORKSPACE_IGNORE_LINES = Object.freeze([
 /** The version brief 102 pins the image's Claude Code CLI to (never `latest`, never the `stable` tag). */
 export const CLAUDE_CODE_PIN = '2.1.289';
 
+/** The CLI's install, by the dev container's recipe, and what hands its folder to root afterwards (rulings T1). */
+const CLI_INSTALL = 'npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"';
+const CLI_HANDOVER = 'chown -R root:root /usr/local/share/npm-global';
+/** The scripts the workspace image runs, and a line of one that runs iproute2's `ip` (not iptables, ipset or ip6tables). */
+const WORKSPACE_SCRIPTS = Object.freeze(['docker/workspace/entrypoint.sh', 'docker/workspace/init-firewall.sh', 'docker/workspace/mcp-rag.sh']);
+const CALLS_IP = /(^|[\s;&|(`])ip\s+-?[a-z0-9]/m;
+/** What the image runs out of the runner package, as the package's own source paths (brief 102, Seams, "W-64 and W-65"). */
+const RUNNER_SOURCES = Object.freeze(['src/runner.ts', 'src/healthcheck.ts', 'src/hooks/tool-gate.ts', 'claude/settings.json', 'prompts/system.md']);
+const RUNNER_ENTRY = 'CMD ["node", "/app/workspace/dist/runner.js"]';
+const RUNNER_HEALTHCHECK = 'test: ["CMD", "node", "/app/workspace/dist/healthcheck.js"]';
+const RUNNER_HOOK = 'node /app/workspace/dist/hooks/tool-gate.js';
+
 const imageNamed = (name) => IMAGES.find((image) => image.name === name);
+const readRepo = (relative) => fs.readFileSync(path.join(REPO, relative), 'utf8');
+
+/** The `workspace:` service block of compose.yaml, up to the top-level `volumes:` key. */
+function workspaceService(compose) {
+  const start = compose.indexOf('\n  workspace:\n');
+  const end = compose.indexOf('\nvolumes:\n', start);
+  return start === -1 || end === -1 ? '' : compose.slice(start, end);
+}
+
+/** Rulings T1, "the pin cannot move by itself": every way the image's CLI could still change under its pin. */
+export function pinDrift(dockerfile, compose) {
+  const problems = [];
+  const installAt = dockerfile.indexOf(CLI_INSTALL);
+  if (installAt === -1) problems.push('the CLI is not installed by the dev container recipe');
+  if (dockerfile.indexOf(CLI_HANDOVER, Math.max(installAt, 0)) === -1) problems.push(`after the CLI install its folder is not handed to root (${CLI_HANDOVER})`);
+  if (!/^ {6}DISABLE_AUTOUPDATER: "1"$/m.test(workspaceService(compose))) problems.push('compose.yaml does not set DISABLE_AUTOUPDATER=1 for the workspace service');
+  return problems;
+}
+
+/** Rulings T1: iproute2 is in the image only if one of its scripts calls `ip`. */
+export function unusedPackages(dockerfile) {
+  const callsIp = WORKSPACE_SCRIPTS.some((file) => CALLS_IP.test(stripComments(file, readRepo(file))));
+  const installsIproute2 = /^\s+iproute2\b/m.test(dockerfile);
+  if (installsIproute2 && !callsIp) return ['iproute2 is installed and no script in the image calls ip'];
+  if (!installsIproute2 && callsIp) return ['a script in the image calls ip and iproute2 is not installed'];
+  return [];
+}
+
+/** Where the image's layout and the runner package as it is in this tree disagree; none when the runner stage stands. */
+export function runnerStageMismatches(dockerfile, compose) {
+  const problems = [];
+  const manifest = JSON.parse(readRepo('workspace/package.json'));
+  const compiler = JSON.parse(readRepo('workspace/tsconfig.json')).compilerOptions ?? {};
+  if (typeof manifest.scripts?.build !== 'string') problems.push('workspace/package.json has no build script (the runner stage runs npm run build)');
+  if (compiler.rootDir !== 'src' || compiler.outDir !== 'dist') problems.push('workspace/tsconfig.json does not build src/ into dist/');
+  for (const source of RUNNER_SOURCES) {
+    if (!fs.existsSync(path.join(REPO, 'workspace', source))) problems.push(`workspace/${source} is not in the package`);
+  }
+  if (!dockerfile.includes(RUNNER_ENTRY)) problems.push(`the image does not start ${RUNNER_ENTRY}`);
+  if (!workspaceService(compose).includes(RUNNER_HEALTHCHECK)) problems.push(`the service's healthcheck is not ${RUNNER_HEALTHCHECK}`);
+  const hook = JSON.parse(readRepo('workspace/claude/settings.json')).hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
+  if (hook !== RUNNER_HOOK) problems.push(`workspace/claude/settings.json wires ${hook}, not ${RUNNER_HOOK}`);
+  return problems;
+}
 
 /** The ignore file a build of this image reads, repo-relative; null when the image has none. */
 export function ignoreFileOf(image) {
@@ -230,6 +286,12 @@ test('the workspace Dockerfile pins the CLI, builds the materials server in a st
   assert.deepEqual(fromWorkspace, [...WORKSPACE_COPIED_PATHS]);
   const roots = [...new Set(sources.map((source) => source.split('/')[0]))].sort();
   assert.deepEqual(roots, ['docker', 'mcp-server', 'workspace']);
+  // Rulings T1: the pin cannot move by itself, no package without a caller, and the runner stage
+  // builds and runs the package as it is in this tree.
+  const compose = readRepo('compose.yaml');
+  assert.deepEqual(pinDrift(dockerfile, compose), []);
+  assert.deepEqual(unusedPackages(dockerfile), []);
+  assert.deepEqual(runnerStageMismatches(dockerfile, compose), []);
 });
 
 test('the .dockerignore exclusions keep host-built and secret folders out', () => {
