@@ -1,6 +1,8 @@
 /**
- * The fail-closed rule on the tool gate: a tool that ran with no PreToolUse hook response, or with
- * one whose exit code is neither 0 nor 2, stops the turn as cli_error. Part of stream-json.test.ts.
+ * The fail-closed rule on the tool gate: a tool that answered with no allow from the gate, or a
+ * gate that exited with a code that is neither 0 nor 2, stops the turn as cli_error. The count per
+ * tool name and the error results that need no answer are in gate-count.suite.ts. Part of
+ * stream-json.test.ts.
  */
 
 import { describe, expect, it } from 'vitest';
