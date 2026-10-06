@@ -61,6 +61,19 @@ const ANSWERED_ROWS: Record<string, Row[]> = {
 /** The broadcast `workspace_finish()` sends for it. */
 const DONE_EVENT = { request_id: 42, message_id: ANSWER, state: 'done' };
 
+/** The same conversation after a second question was asked from another tab: request 43 is open. */
+const SECOND_QUESTION = 'c9a7d3e2-55aa-4f10-b1d2-000000000043';
+const OTHER_TAB_ASKED_ROWS: Record<string, Row[]> = {
+  workspace_messages: [
+    ...ANSWERED_ROWS.workspace_messages,
+    { id: SECOND_QUESTION, conversation_id: A, role: 'user', content: 'And the reading?', finished: true },
+  ],
+  workspace_requests: [
+    ...ANSWERED_ROWS.workspace_requests,
+    { id: 43, conversation_id: A, user_message_id: SECOND_QUESTION, state: 'queued' },
+  ],
+};
+
 function open(search = `c=${A}`) {
   fake.state.search = search;
   return render(
@@ -122,9 +135,10 @@ describe('a read that fails is said', () => {
 
 describe('a question that fails', () => {
   it('says it could not be sent, keeps the text, and shows neither refusal', async () => {
+    fake.state.rows = ANSWERED_ROWS;
     fake.state.rpc.workspace_ask = () => ({ data: null, error: DENIED });
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     type('What is due?');
 
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
@@ -135,24 +149,33 @@ describe('a question that fails', () => {
     expect(screen.queryByText(labels.REFUSAL_STILL_ANSWERING)).toBeNull();
   });
 
-  it('shows one line when the read and the question fail for the same reason', async () => {
-    const missing = { code: '23503', message: 'no such conversation' };
-    fake.state.readErrors = { workspace_requests: missing };
-    fake.state.rpc.workspace_ask = () => ({ data: null, error: missing });
-    open();
-    await waitFor(() => expect(alerts()).toHaveLength(1));
+  it('says a failed read in its own words and a missing id in the not-found line, never the foreign-key sentence', async () => {
+    fake.state.readErrors = { workspace_requests: DENIED };
+    fake.state.rpc.workspace_ask = () => ({
+      data: null,
+      error: { code: '23503', message: 'violates foreign key constraint' },
+    });
+    const { container } = open();
+    // A read that failed is not "not found": the page does not know, so the question may be sent.
+    await waitFor(() => expect(alerts()).toEqual(['Could not load this conversation: permission denied']));
     type('hello?');
 
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
 
     await waitFor(() => expect(fake.state.rpcCalls).toHaveLength(1));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Ask' })).toBeEnabled());
-    expect(alerts()).toEqual(['Could not load this conversation: no such conversation']);
+    await waitFor(() =>
+      expect(alerts()).toEqual([
+        'Could not load this conversation: permission denied',
+        'This conversation was not found.',
+      ]),
+    );
+    expect(container.textContent).not.toContain('violates foreign key constraint');
   });
 
   it('takes a refusal away once the text is edited', async () => {
+    fake.state.rows = ANSWERED_ROWS;
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     type('   ');
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     await screen.findByText(labels.REFUSAL_QUESTION_LENGTH);
@@ -164,8 +187,9 @@ describe('a question that fails', () => {
   });
 
   it('makes the button wait while a question is on its way, and does not send it twice', async () => {
+    fake.state.rows = ANSWERED_ROWS;
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     const held = gate();
     fake.state.rpcGate = held.promise;
     const field = type('What is due?');
@@ -184,8 +208,9 @@ describe('a question that fails', () => {
   });
 
   it('sends one question for two Enters in the same tick: a held key does not ask twice', async () => {
+    fake.state.rows = ANSWERED_ROWS;
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     const field = type('What is due?');
 
     // Both land before the page has re-rendered as busy.
@@ -275,11 +300,12 @@ describe('a refusal that has lost its reason', () => {
   });
 
   it('still says "still answering" for an open request this page had not read', async () => {
+    fake.state.rows = ANSWERED_ROWS;
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     await screen.findByRole('button', { name: 'Ask' });
     // Asked from another tab: open in the database, and not yet on this page.
-    fake.state.rows = { workspace_messages: [QUESTION_ROW], workspace_requests: [requestRow('queued')] };
+    fake.state.rows = OTHER_TAB_ASKED_ROWS;
 
     fireEvent.keyDown(type('and next week?'), { key: 'Enter' });
 

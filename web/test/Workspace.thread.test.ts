@@ -9,11 +9,13 @@
  *   * the sentence of a failed or cancelled request comes from the request
  *     row's `error_code`, with or without an assistant row;
  *   * a stored answer replaces the stream; text past a gap never shows;
- *   * the "Used:" line lists only the `ok: true` calls, each entry once.
+ *   * the "Used:" line lists only the `ok: true` calls, each entry once;
+ *   * a column with no turn says one of three things (ruling U1): start,
+ *     loading, or that the conversation was not found.
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildTurns, liveRequestOf, usedLine } from '@/components/workspace/thread';
+import { buildTurns, emptyColumnOf, liveRequestOf, usedLine } from '@/components/workspace/thread';
 import {
   WORKSPACE_ERROR_CODES,
   normalizeMessage,
@@ -343,5 +345,39 @@ describe('usedLine: the tools an answer used', () => {
 
   it('never shows the stored query', () => {
     expect(usedLine([call('search_materials', 'IST.323')])).not.toContain('never shown');
+  });
+});
+
+describe('emptyColumnOf: what the message column says while it holds no turn (ruling U1)', () => {
+  /** An id that has been read with no failure, no rows and no question asked into it. */
+  const READ = { conversationId: A, loaded: true, readFailed: false, askedIntoMissing: false, turns: 0 };
+
+  it('is "start" with no conversation selected, whatever else is true', () => {
+    expect(emptyColumnOf({ ...READ, conversationId: null })).toBe('start');
+    expect(emptyColumnOf({ ...READ, conversationId: null, loaded: false })).toBe('start');
+  });
+
+  it('is "loading" while the rows of a conversation are still being read', () => {
+    expect(emptyColumnOf({ ...READ, loaded: false })).toBe('loading');
+  });
+
+  it('is "missing" for an id whose reads answered with no rows', () => {
+    expect(emptyColumnOf(READ)).toBe('missing');
+  });
+
+  it('is nothing once there is a turn to show', () => {
+    expect(emptyColumnOf({ ...READ, turns: 1 })).toBeNull();
+    expect(emptyColumnOf({ ...READ, loaded: false, turns: 1 })).toBeNull();
+  });
+
+  it('is nothing when a read failed: the problem line says why, and "not found" is not claimed', () => {
+    expect(emptyColumnOf({ ...READ, readFailed: true })).toBeNull();
+    expect(emptyColumnOf({ ...READ, readFailed: true, loaded: false })).toBeNull();
+  });
+
+  it('is "missing" once workspace_ask said the id does not exist (23503), even over rows read before', () => {
+    expect(emptyColumnOf({ ...READ, askedIntoMissing: true, turns: 3 })).toBe('missing');
+    expect(emptyColumnOf({ ...READ, askedIntoMissing: true, loaded: false })).toBe('missing');
+    expect(emptyColumnOf({ ...READ, askedIntoMissing: true, readFailed: true })).toBe('missing');
   });
 });

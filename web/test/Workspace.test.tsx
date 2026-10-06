@@ -240,8 +240,9 @@ describe('the composer', () => {
   });
 
   it('asks on Enter, and leaves Shift+Enter to make a new line', async () => {
+    seedAnswered();
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     const box = type('  What is due this week?  ');
 
     // A key the page does not handle is not cancelled, so the browser adds the line.
@@ -258,8 +259,9 @@ describe('the composer', () => {
   });
 
   it('refuses an empty question with its sentence, before any request is sent', async () => {
+    seedAnswered();
     open();
-    await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
     type('   ');
 
     fireEvent.click(screen.getByRole('button', { name: labels.ASK_LABEL }));
@@ -297,19 +299,21 @@ describe('the composer', () => {
     expect(fake.state.rpcCalls[0].args).toEqual({ p_conversation_id: null, p_text: 'spike' });
   });
 
-  it('says it could not load the conversation when its id does not exist (23503)', async () => {
+  it('says the conversation was not found when its id does not exist (23503), never the database`s sentence', async () => {
+    seedAnswered();
     fake.state.rpc.workspace_ask = () => ({
       data: null,
       error: { code: '23503', message: 'violates foreign key constraint' },
     });
-    open(`c=${B}`);
-    await joined(`workspace:${B}`);
+    const { container } = open();
+    await screen.findByText('Quiz 2.');
     type('hello?');
 
     fireEvent.click(screen.getByRole('button', { name: labels.ASK_LABEL }));
 
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Could not load this conversation: violates foreign key constraint');
+    expect(await screen.findByText('This conversation was not found.')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('violates foreign key constraint');
+    expect(container.textContent).not.toContain('Could not load this conversation');
     expect(screen.queryByText(labels.REFUSAL_QUESTION_LENGTH)).toBeNull();
     expect(composer().box).toHaveValue('hello?');
   });
