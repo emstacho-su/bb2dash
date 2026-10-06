@@ -84,9 +84,89 @@ services:
         max-size: 10m
         max-file: "3"
 
+  # The Workspace runner (brief 102 task 12; P-85, P-88): it takes queued questions through the five
+  # `workspace_runner` functions and answers each with one `claude -p` turn on Stack's subscription
+  # token, with the materials and rag MCP servers beside it. Read-only: no tool it offers can write.
+  #
+  # Profile `workspace`, so a plain `up` never builds, starts, waits on or restarts it: the desktop's
+  # sign-in task runs this file with no profile. bb2dash-stack's .env sets COMPOSE_PROFILES=workspace,
+  # and with it `just up` builds and starts the service. Until the phase's PR is merged it runs only
+  # as its own project, with the service named in every command:
+  #   docker compose -p bb2dash-wt21 --profile workspace build workspace
+  #   docker compose -p bb2dash-wt21 --profile workspace up -d --no-deps workspace
+  #
+  # Nothing here is interpolated outside `build:`, the secret paths and WORKSPACE_TURN_BUDGET_USD, so
+  # this file resolves with only SECRETS_DIR and BB2DASH_DIR set.
+  workspace:
+    profiles: [workspace]
+    build:
+      context: .
+      dockerfile: docker/workspace/Dockerfile
+      # The harness rag server is built from the harness checkout, never copied from the host's
+      # node_modules or dist. HARNESS_DIR is the umbrella's setting; unset, the sibling folder.
+      additional_contexts:
+        harness-mcp: ${HARNESS_DIR:-../agentic-harness}/mcp-server
+        harness-certs: ${HARNESS_DIR:-../agentic-harness}/certs
+    image: bb2dash-workspace:local
+    # Intel only: the rag server's tokenizer has no linux-arm64 build.
+    platform: linux/amd64
+    # Passes SIGTERM to the runner and reaps the MCP server children a killed CLI leaves behind.
+    init: true
+    restart: unless-stopped
+    # On a stop the runner kills the CLI and closes its turn as failed / stale_claim, then exits 0.
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    # For the entrypoint's firewall alone (iptables, ipset). The entrypoint then drops to `node`
+    # with an empty bounding set, so the runner and everything it starts hold neither.
+    cap_add: [NET_ADMIN, NET_RAW]
+    environment:
+      # The CLI's config and transcripts live on the workspace-claude-home volume.
+      CLAUDE_CONFIG_DIR: /home/node/.claude
+      # No telemetry, error reports or update checks: the firewall allows api.anthropic.com only.
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      # The runner passes `--tools ""`, so there is no ToolSearch tool to load deferred MCP tools:
+      # the four MCP tools must load upfront.
+      ENABLE_TOOL_SEARCH: "false"
+      # The soft per-answer cap `--max-budget-usd` receives; the runner refuses a value outside 0.01–1.00.
+      WORKSPACE_TURN_BUDGET_USD: "${WORKSPACE_TURN_BUDGET_USD:-1.00}"
+    # Its own network, never `default`: it shares none with `sync`. No port is published.
+    networks:
+      - workspace-net
+    volumes:
+      # The CLI's transcripts (kept 30 days), so a conversation can be resumed. Not a credential.
+      - workspace-claude-home:/home/node/.claude
+    # Files, never values. The runner reads workspace_runner_db_url and claude_oauth_token at their
+    # fixed paths; the materials server reads bb2dash_mcp_service_key, and the rag launcher
+    # harness_database_url. No `*_FILE` variable and no DATABASE_URL is set for this service.
+    secrets:
+      - workspace_runner_db_url
+      - claude_oauth_token
+      - bb2dash_mcp_service_key
+      - harness_database_url
+    # Passes while /run/workspace/alive is under 90 s old: the runner touches it after each
+    # heartbeat (every 30 s), so healthy means the loop is alive and reached the database.
+    healthcheck:
+      test: ["CMD", "node", "/app/workspace/dist/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 volumes:
   bb-profile:
   course-files:
+  # The Workspace CLI's ~/.claude: transcripts only.
+  workspace-claude-home:
+
+networks:
+  # The Workspace's own bridge, so it is on no network another service is on.
+  workspace-net:
 
 secrets:
   novnc_password:
@@ -100,3 +180,11 @@ secrets:
   # The bb2dash service key; this file is its only home (brief 100, Local surfaces).
   bb2dash_mcp_service_key:
     file: ${SECRETS_DIR:-./secrets}/bb2dash_mcp_service_key
+  # The Workspace's three (brief 102): the runner's own database login through the session pooler
+  # (role workspace_runner, port 5432), the `claude setup-token` token, and the harness store's URL.
+  workspace_runner_db_url:
+    file: ${SECRETS_DIR:-./secrets}/workspace_runner_db_url
+  claude_oauth_token:
+    file: ${SECRETS_DIR:-./secrets}/claude_oauth_token
+  harness_database_url:
+    file: ${SECRETS_DIR:-./secrets}/harness_database_url
