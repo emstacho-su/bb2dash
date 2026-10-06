@@ -26,6 +26,7 @@ import './runner/closing.suite.js';
 import './runner/db.suite.js';
 import './runner/health.suite.js';
 import './runner/replay.suite.js';
+import './runner/result-grace.suite.js';
 
 const call = (n: number, ok = true): StoredToolCall => ({ tool: 'search_materials', query: `query ${n}`, scope: null, ok });
 const tool = (at: number, id: string, stored: StoredToolCall): Step => ({ at, event: { type: 'tool', id, call: stored } });
