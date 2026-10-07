@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DB_WATCHDOG_MS, FINISH_BACKOFF_FIRST_MS, FINISH_BACKOFF_MAX_MS, FINISH_RETRY_MS, HEARTBEAT_MS, TURN_TIMEOUT_MS } from '../../src/config.js';
 import { SHUTDOWN_GRACE_MS, createRunner } from '../../src/runner.js';
 import { startTurn } from '../../src/turn.js';
-import { STORED_SESSION_ID, claimOf, dbDown, dbRefusal, delta, result, scriptedTurn } from '../helpers/fakes.js';
+import { STORED_SESSION_ID, claimOf, dbDown, dbRefusal, delta, result, scriptedTurn, type FakeRpc } from '../helpers/fakes.js';
 import { loopHarness, turnHarness, useFakeClock } from '../helpers/turn-harness.js';
 
 /** When each try is made, in ms after the first: 1 s, 2 s, 4 s and 8 s apart, then every 15 s, the last at 170 s. */
@@ -118,7 +118,7 @@ describe('workspace_finish against a database that fails', () => {
 describe('workspace_begin against a database that fails', () => {
   useFakeClock();
 
-  it('reads a 22023 as nothing to close: nothing runs and nothing is finished', async () => {
+  it('reads a 22023 on the first try as nothing to close: nothing runs and nothing is finished', async () => {
     const scripted = scriptedTurn([result(10)]);
     const { fake, logs, deps } = turnHarness(scripted.turn);
     fake.failBegin(dbRefusal('workspace_begin: request 41 is not claimed (it is cancelled)'));
@@ -156,23 +156,72 @@ describe('workspace_begin against a database that fails', () => {
     expect(fake.finishes).toHaveLength(1);
   });
 
-  it('reads a 22023 on a later try as nothing to close too', async () => {
-    const scripted = scriptedTurn([result(10)]);
-    const { fake, deps } = turnHarness(scripted.turn);
+  /** A begin whose first try fails with `failure` and whose second the function refuses with `refusal`. */
+  function beginRefusedAfter(fake: FakeRpc, failure: Error, refusal: string): { tries: number } {
+    const seen = { tries: 0 };
     const original = fake.rpc.begin;
-    let tries = 0;
     fake.rpc.begin = async (...args) => {
-      tries += 1;
-      if (tries === 1) throw dbDown();
-      if (tries === 2) throw dbRefusal('workspace_begin: request 41 is not claimed (it is cancelled)');
+      seen.tries += 1;
+      if (seen.tries === 1) throw failure;
+      if (seen.tries === 2) throw dbRefusal(refusal);
       return original(...args);
     };
+    return seen;
+  }
+
+  // Ruling X1. A begin that committed and whose reply was lost is refused on the next try, and the
+  // request is still claimed with its assistant row unfinished: that is not "nothing to close".
+  it.each([
+    ['a database that could not be reached', dbDown()],
+    ['a statement the database cut', Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' })],
+  ])('closes the request as failed / cli_error when a 22023 follows %s in the same turn', async (_what, failure) => {
+    const scripted = scriptedTurn([delta(10, 'never streamed'), result(20)]);
+    const { fake, logs, deps } = turnHarness(scripted.turn);
+    const seen = beginRefusedAfter(fake, failure, 'workspace_begin: request 41 already has its assistant message');
+    const handle = startTurn(deps, claimOf({ claudeSessionId: STORED_SESSION_ID }));
+    await vi.advanceTimersByTimeAsync(FINISH_RETRY_MS + 5000);
+    expect(await handle.done).toEqual({ state: 'failed', errorCode: 'cli_error' });
+    expect(seen.tries).toBe(2);
+    expect(scripted.inputs).toHaveLength(0);
+    expect(fake.streams).toHaveLength(0);
+    expect(fake.finishes).toEqual([
+      {
+        requestId: '41',
+        state: 'failed',
+        content: '',
+        toolCalls: [],
+        errorCode: 'cli_error',
+        costUsd: null,
+        durationMs: FINISH_BACKOFF_FIRST_MS,
+        claudeSessionId: STORED_SESSION_ID,
+        model: null,
+      },
+    ]);
+    expect(logs.some((line) => /request=41/.test(line) && /begin refused after a failed try/.test(line))).toBe(true);
+    expect(logs.some((line) => /begin refused, nothing ran/.test(line))).toBe(false);
+  });
+
+  it('keeps trying to close a request whose begin was refused after a failure, on the finish schedule', async () => {
+    const { fake, deps } = turnHarness(scriptedTurn([result(10)]).turn);
+    beginRefusedAfter(fake, dbDown(), 'workspace_begin: request 41 already has its assistant message');
+    fake.failFinish(2);
     const handle = startTurn(deps, claimOf());
     await vi.advanceTimersByTimeAsync(FINISH_RETRY_MS + 5000);
-    expect(await handle.done).toEqual({ state: 'skipped', errorCode: null });
-    expect(tries).toBe(2);
-    expect(scripted.inputs).toHaveLength(0);
-    expect(fake.finishTries).toHaveLength(0);
+    expect(await handle.done).toEqual({ state: 'failed', errorCode: 'cli_error' });
+    expect(offsets(fake.finishTries)).toEqual(SCHEDULE.slice(0, 3));
+    expect(fake.finishes[0]).toMatchObject({ requestId: '41', state: 'failed', errorCode: 'cli_error', content: '' });
+  });
+
+  it('asks for the close once when the request turns out to be closed already: the finish is refused and not tried again', async () => {
+    const { fake, logs, deps } = turnHarness(scriptedTurn([result(10)]).turn);
+    beginRefusedAfter(fake, dbDown(), 'workspace_begin: request 41 is not claimed (it is cancelled)');
+    fake.failFinish(Number.POSITIVE_INFINITY, dbRefusal('workspace_finish: request 41 is failed, not claimed or cancelled'));
+    const handle = startTurn(deps, claimOf());
+    await vi.advanceTimersByTimeAsync(FINISH_RETRY_MS + 5000);
+    expect(await handle.done).toEqual({ state: 'failed', errorCode: 'cli_error' });
+    expect(fake.finishTries).toHaveLength(1);
+    expect(fake.finishes).toHaveLength(0);
+    expect(logs.some((line) => /request=41/.test(line) && /already closed/.test(line))).toBe(true);
   });
 
   it('closes the request as failed / cli_error when begin still cannot be made after 170 s', async () => {
