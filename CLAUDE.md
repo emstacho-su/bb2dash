@@ -85,8 +85,8 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
 * Workspace service (Phase 21): `workspace` in `compose.yaml` sits behind `profiles: [workspace]`, so a plain
   `up` never starts it; bb2dash-stack's `.env` turns it on (`COMPOSE_PROFILES=workspace`, acceptance step 13).
   Before the merge it runs only as compose project `bb2dash-wt21` from a phase worktree, the service named in
-  every command. It reaches the database only as the login role `workspace_runner`, through five SECURITY
-  DEFINER functions (`workspace_claim`, `workspace_begin`, `workspace_stream`, `workspace_finish`,
-  `workspace_heartbeat`; 142, 143), and mounts four secrets from `SECRETS_DIR` as files:
+  every command. Its runner reaches the database only as the login role `workspace_runner`, through five
+  SECURITY DEFINER functions (`workspace_claim`, `workspace_begin`, `workspace_stream`, `workspace_finish`,
+  `workspace_heartbeat`; 142, 143), and the service mounts four secrets from `SECRETS_DIR` as files:
   `workspace_runner_db_url`, `claude_oauth_token`, `bb2dash_mcp_service_key`, `harness_database_url` (the
   last two could write; each is read only by its own MCP server, accepted for v1, DECISIONS 2026-10-05).
