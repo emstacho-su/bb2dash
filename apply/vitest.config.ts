@@ -7,8 +7,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      // The two files that only run on load, as processes: their rules are in the modules beside them.
-      exclude: ['src/healthcheck.ts', 'src/hooks/tool-gate.ts'],
+      // The three files that only run on load, as processes: their rules are in the modules beside them.
+      exclude: ['src/healthcheck.ts', 'src/hooks/tool-gate.ts', 'src/mcp-sql/server.ts'],
       reporter: ['text', 'text-summary'],
       thresholds: {
         lines: 80,
