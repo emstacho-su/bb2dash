@@ -130,6 +130,27 @@ function lineOf(turn: Omit<WorkspaceTurn, 'key' | 'line'>, live: LiveStream | nu
   }
 }
 
+/**
+ * A pair of Markdown bold markers around a run of text on one line: `**like this**`.
+ * The opener stands at the start of a line or after a space, a bracket or a quote, and
+ * the closer before the end of a line, a space or punctuation, so `a**b**c`,
+ * `2 ** 3 ** 4` and `f(**kwargs)` are not pairs. The run holds no `*` and no line break.
+ */
+const BOLD_PAIR = /(^|[\s([“‘"'])\*\*(?=[^*\s])([^*\n]*?[^*\s])\*\*(?=$|[\s.,;:!?)\]”’"'])/gm;
+
+/**
+ * An answer as it is shown: the text as typed, less Markdown's bold markers.
+ *
+ * The page shows plain text (brief 102, O-5) and the system prompt asks for it, but a
+ * model sometimes writes `**bold**` all the same, and the asterisks then stood on the
+ * page (the PM's walk, W-3). Stack's ruling of 2026-10-07: strip them. Only a closed
+ * pair is dropped, so nothing is parsed into markup and the stored row is not changed;
+ * while an answer streams, an opener shows until its closer arrives.
+ */
+export function withoutBoldMarkers(text: string): string {
+  return text.replace(BOLD_PAIR, '$1$2');
+}
+
 interface TurnParts {
   key: string;
   question: WorkspaceMessage | null;
@@ -145,7 +166,7 @@ function turnOf(parts: TurnParts, input: BuildTurnsInput): WorkspaceTurn {
     request,
     answer,
     state: stateOf(request, input.stoppedRequestIds),
-    text: isStored(answer) ? answer.content : (live?.text ?? ''),
+    text: withoutBoldMarkers(isStored(answer) ? answer.content : (live?.text ?? '')),
   };
   return { key: parts.key, ...body, line: lineOf(body, live) };
 }
