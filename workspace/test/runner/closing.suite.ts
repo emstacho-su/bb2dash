@@ -1,7 +1,7 @@
 /**
- * Opening and closing a request against a database that fails (rulings V1, CR-2 and CR-3):
- * `workspace_finish()` and `workspace_begin()` on one retry schedule, what a 22023 means for each,
- * and the watchdog standing back while a finish is being retried. Part of runner.test.ts.
+ * Opening and closing a request against a database that fails (rulings V1, CR-2 and CR-3, and X1):
+ * `workspace_finish()` and `workspace_begin()` on one retry schedule of 110 s, what a 22023 means
+ * for each, and the watchdog standing back while a finish is being retried. Part of runner.test.ts.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -12,25 +12,32 @@ import { startTurn } from '../../src/turn.js';
 import { STORED_SESSION_ID, claimOf, dbDown, dbRefusal, delta, result, scriptedTurn, type FakeRpc } from '../helpers/fakes.js';
 import { loopHarness, turnHarness, useFakeClock } from '../helpers/turn-harness.js';
 
-/** When each try is made, in ms after the first: 1 s, 2 s, 4 s and 8 s apart, then every 15 s, the last at 170 s. */
-const SCHEDULE = [0, 1000, 3000, 7000, 15_000, 30_000, 45_000, 60_000, 75_000, 90_000, 105_000, 120_000, 135_000, 150_000, 165_000, 170_000];
+/** When each try is made, in ms after the first: 1 s, 2 s, 4 s and 8 s apart, then every 15 s, the last at 110 s. */
+const SCHEDULE = [0, 1000, 3000, 7000, 15_000, 30_000, 45_000, 60_000, 75_000, 90_000, 105_000, 110_000];
+/** How long the database leaves a request claimed before `workspace_claim()` sweeps it as stale (migration 142). */
+const STALE_CLAIM_MS = 10 * 60 * 1000;
 
 const offsets = (times: readonly number[]): number[] => times.map((at) => at - (times[0] ?? 0));
 
 describe('the retry schedule', () => {
-  it('is 1 s doubling to a 15 s cap, for 170 s, which ends before the watchdog would', () => {
-    expect(FINISH_RETRY_MS).toBe(170000);
+  it('is 1 s doubling to a 15 s cap, for 110 s, which ends before the watchdog would', () => {
+    expect(FINISH_RETRY_MS).toBe(110000);
     expect(FINISH_BACKOFF_FIRST_MS).toBe(1000);
     expect(FINISH_BACKOFF_MAX_MS).toBe(15000);
     expect(FINISH_RETRY_MS).toBeLessThan(DB_WATCHDOG_MS);
     expect(SCHEDULE[SCHEDULE.length - 1]).toBe(FINISH_RETRY_MS);
+  });
+
+  // Ruling X1: a turn is killed 8 minutes from its start, so its last finish try is made 590 s in.
+  it('fits behind the 8-minute limit inside the 10 minutes the database leaves a request claimed', () => {
+    expect(TURN_TIMEOUT_MS + FINISH_RETRY_MS).toBeLessThan(STALE_CLAIM_MS);
   });
 });
 
 describe('workspace_finish against a database that fails', () => {
   useFakeClock();
 
-  it('is tried again after 1 s, 2 s, 4 s and 8 s, then every 15 s, for 170 s', async () => {
+  it('is tried again after 1 s, 2 s, 4 s and 8 s, then every 15 s, for 110 s', async () => {
     const { fake, deps } = turnHarness(scriptedTurn([delta(10, 'the answer'), result(20)]).turn);
     fake.failFinish(Number.POSITIVE_INFINITY);
     const handle = startTurn(deps, claimOf());
@@ -39,7 +46,7 @@ describe('workspace_finish against a database that fails', () => {
     expect(offsets(fake.finishTries)).toEqual(SCHEDULE);
   });
 
-  it('gives the answer up after 170 s, says so once, and tries no more', async () => {
+  it('gives the answer up after 110 s, says so once, and tries no more', async () => {
     const { fake, logs, deps } = turnHarness(scriptedTurn([delta(10, 'the answer'), result(20)]).turn);
     fake.failFinish(Number.POSITIVE_INFINITY);
     const handle = startTurn(deps, claimOf());
@@ -51,7 +58,7 @@ describe('workspace_finish against a database that fails', () => {
     const givenUp = logs.filter((line) => /finish given up/.test(line));
     expect(givenUp).toHaveLength(1);
     expect(givenUp[0]).toMatch(/request=41/);
-    expect(givenUp[0]).toMatch(/170 s/);
+    expect(givenUp[0]).toMatch(/110 s/);
     expect(logs.filter((line) => /request=41/.test(line) && /finish failed/.test(line)).length).toBeGreaterThan(3);
     const tries = fake.finishTries.length;
     await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
@@ -61,7 +68,7 @@ describe('workspace_finish against a database that fails', () => {
   it.each([
     [4, 15_000],
     [8, 75_000],
-    [15, 170_000],
+    [11, 110_000],
   ])('stores the whole answer when the database comes back after %s failed tries', async (failures, storedAfter) => {
     const { fake, logs, deps } = turnHarness(scriptedTurn([delta(10, 'the answer'), result(20)]).turn);
     fake.failFinish(failures);
@@ -72,6 +79,21 @@ describe('workspace_finish against a database that fails', () => {
     expect(fake.finishes[0]).toMatchObject({ requestId: '41', state: 'done', content: 'the answer', errorCode: null });
     expect(offsets(fake.finishTries).pop()).toBe(storedAfter);
     expect(logs.some((line) => /finish given up/.test(line))).toBe(false);
+  });
+
+  // Ruling X1: a finish never arrives after the stale sweep.
+  it('makes its last try inside the 10-minute claim when the turn was killed at the 8-minute limit', async () => {
+    const scripted = scriptedTurn([delta(100, 'part of an answer')]);
+    const { fake, deps } = turnHarness(scripted.turn);
+    fake.failFinish(Number.POSITIVE_INFINITY);
+    const turnStartedAt = Date.now();
+    const handle = startTurn(deps, claimOf());
+    await vi.advanceTimersByTimeAsync(STALE_CLAIM_MS + 60_000);
+    expect(await handle.done).toEqual({ state: 'failed', errorCode: 'timeout' });
+    const sinceStart = fake.finishTries.map((at) => at - turnStartedAt);
+    expect(sinceStart[0]).toBe(TURN_TIMEOUT_MS);
+    expect(sinceStart[sinceStart.length - 1]).toBe(TURN_TIMEOUT_MS + FINISH_RETRY_MS);
+    expect(Math.max(...sinceStart)).toBeLessThan(STALE_CLAIM_MS);
   });
 
   it('reads a 22023 as a request that is already closed: logged, not tried again', async () => {
@@ -224,7 +246,7 @@ describe('workspace_begin against a database that fails', () => {
     expect(logs.some((line) => /request=41/.test(line) && /already closed/.test(line))).toBe(true);
   });
 
-  it('closes the request as failed / cli_error when begin still cannot be made after 170 s', async () => {
+  it('closes the request as failed / cli_error when begin still cannot be made after 110 s', async () => {
     const scripted = scriptedTurn([delta(10, 'never streamed'), result(20)]);
     const { fake, logs, deps } = turnHarness(scripted.turn);
     fake.failBegin(dbDown());
@@ -313,12 +335,13 @@ describe('the watchdog and a finish that is being retried', () => {
     return { ...loop, runner, exit, scripted };
   }
 
-  it('does not end the process while the finish is inside its 170 s, and the answer is stored when the database comes back', async () => {
+  it('does not end the process while the finish is inside its 110 s, and the answer is stored when the database comes back', async () => {
     const { fake, logs, runner, exit } = longTurnOnABrokenDatabase();
     await vi.advanceTimersByTimeAsync(1000);
     fake.breakDatabase();
-    // The last heartbeat that succeeded was at the start; the watchdog is due at 180 s, 80 s into the finish.
-    await vi.advanceTimersByTimeAsync(DB_WATCHDOG_MS + HEARTBEAT_MS);
+    // The last heartbeat that succeeded was at the start; the watchdog is due at 180 s, 80 s into the
+    // finish, whose window ends at 210 s. The database comes back at 186 s and the try at 190 s is made.
+    await vi.advanceTimersByTimeAsync(DB_WATCHDOG_MS + 5000);
     expect(exit.code).toBeNull();
     expect(fake.finishes).toHaveLength(0);
     expect(fake.finishTries.length).toBeGreaterThan(5);
@@ -336,11 +359,11 @@ describe('the watchdog and a finish that is being retried', () => {
     expect(exit.code).toBe(0);
   });
 
-  it('ends the process once the 170 s are over and the database is still gone', async () => {
+  it('ends the process once the 110 s are over and the database is still gone', async () => {
     const { fake, logs, exit } = longTurnOnABrokenDatabase();
     await vi.advanceTimersByTimeAsync(1000);
     fake.breakDatabase();
-    // The finish began at 100 s, so its window ends at 270 s.
+    // The finish began at 100 s, so its window ends at 210 s.
     await vi.advanceTimersByTimeAsync(100_000 + FINISH_RETRY_MS - 1000 - 5000);
     expect(exit.code).toBeNull();
     await vi.advanceTimersByTimeAsync(5000 + HEARTBEAT_MS + SHUTDOWN_GRACE_MS);
