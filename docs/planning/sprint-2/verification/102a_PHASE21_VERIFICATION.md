@@ -1274,3 +1274,417 @@ The three MEDIUM rows of the range review (R2-1, R2-2, R2-5) read `fixed` in its
   or shutdown that lands in the 10 s exit grace after a result still stores `cancelled` or
   `stale_claim` (CR-5 speaks of `timeout` only).
 * This round was read by its independent check, with mutants, and not by a third `/code-review`.
+
+## The PM's walk (2026-10-07): tasks 19 second half, 20, 21, 22
+
+Walked by the PM's hands (a workflow agent) in `bb2dash-wt-21` at `22b9335`, 07:24 to 08:23 UTC,
+against the branch preview `https://web-git-feat-workspace-21-emstacho-sus-projects.vercel.app`
+and the test container, rebuilt first from the phase branch so it holds fix round Z. No product
+file was changed. No docker command and no other command was refused.
+
+In short:
+
+| row | result |
+|---|---|
+| 19, second half | every select returned what the row expects; the first turn's log line reads credential source `none`. The usage percentages could not be read (below) |
+| 20 | the three planner reads are equal before and after; no `agent_requests` row was created or changed state inside the pair |
+| 21 | the cap, Stop and the queued question pass. Check (d), the two health readings, is **not done**: the walk's Opus turn ended after 27 s, so no reading at 60 s or 120 s counts |
+| 22 | the nine shots are in `walk-21/`; the two counts read 7 and 2; the list holds only 'spike' again |
+
+Nine turns were spent. The walk found three things about the product (the last part of this
+section), none of which stopped a check, and made one mistake of its own that spent no turn
+("The queued question").
+
+### The guard
+
+`docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1`, read twenty-one times, each time
+`bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z`:
+
+| UTC | when |
+|---|---|
+| 07:24:40 | first read of the sitting |
+| 07:25:53 | before the first docker step |
+| 07:26:15 | before `stop workspace` (step 41, in the container tree) |
+| 07:26:17 | after it |
+| 07:26:22 | after `rm -sf workspace` |
+| 07:26:29 | before the build |
+| 07:27:10 | after the build |
+| 07:27:17 | before the start |
+| 07:27:19 | after the start |
+| 07:28:06 | before task 13's scan container |
+| 07:29:21 | after the scan volume was removed |
+| 07:43:23 | before the recreate with the 0.01 cap |
+| 07:43:25 | after it |
+| 07:44:50 | before the recreate without the variable |
+| 07:44:51 | after it |
+| 07:47:17 | before `stop workspace` (for the offline shot) |
+| 07:47:18 | after it |
+| 08:15:15 | before `up -d --no-deps workspace` |
+| 08:15:17 | after it |
+| 08:17:03 | after the walk's last docker read |
+| 08:23:39 | last, before this record was committed |
+
+### Part A: the container on the final code
+
+Only one tree runs the test container, so W-65's step 41 came first, as its list writes it, from
+`bb2dash-wt-21-container`: `stop workspace` (exit 0) and `rm -sf workspace` (exit 0,
+`Container bb2dash-wt21-workspace-1 Removed`). The network and the volume stayed.
+
+Then, from `bb2dash-wt-21` (clean, `22b9335`; harness commit
+`57ee51fc18ee4f7f367b60b24bfe39968d58d86b`, nothing uncommitted under `mcp-server` or `certs`), the
+list's build and start lines with the folder changed and nothing else:
+
+```text
+cd /c/Users/stack/projects/bb2dash-wt-21 && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace build workspace; echo "exit=$?"
+cd /c/Users/stack/projects/bb2dash-wt-21 && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace up -d --no-deps workspace; echo "exit=$?"
+```
+
+| | |
+|---|---|
+| build | one build, 07:26:34 to 07:26:56 UTC, exit 0; 23 steps came from the build cache, so only the layers that hold the runner were made again |
+| image (step 11) | `sha256:a2ef9b2895180374513e69a45d9d3a04a75fa37883fdf27fce75e5a971a53265`, 1.66GB; the CLI's COPY layer 492MB and its two `ENV` lines 0B. The image before round Z was `sha256:5790950804c5…` |
+| start (steps 12, 13) | exit 0 at 07:27:19; the container's image is the new one and its tree `C:\Users\stack\projects\bb2dash-wt-21`; network `bb2dash-wt21_workspace-net`, volume `bb2dash-wt21_workspace-claude-home`, nothing else |
+
+The firewall's log on the new image (step 14):
+
+```text
+The host of workspace_runner_db_url ends .pooler.supabase.com
+The host of harness_database_url ends .pooler.supabase.com
+Allowing DNS to 127.0.0.11
+Allowed api.anthropic.com on tcp/443 (1 address(es), pinned in /etc/hosts)
+Allowed goultdzqcavefcgnifdy.supabase.co on tcp/443 (2 address(es), pinned in /etc/hosts)
+Allowed aws-0-us-east-1.pooler.supabase.com on tcp/5432 (3 address(es), pinned in /etc/hosts)
+IPv6 closed (loopback only)
+Firewall configuration complete
+Firewall verification passed - unable to reach https://example.com as expected
+Firewall verification passed - able to reach https://api.anthropic.com as expected
+Firewall raised: 3 name(s) allowed
+```
+
+The re-reads, each with the list's own line (the folder changed):
+
+| step | what | read |
+|---|---|---|
+| 15 | health | `healthy` at 07:27:27, the first read |
+| 16 | the CLI pin; the six flags in its help | `2.1.289 (Claude Code)`; `6` |
+| 17 | whose the Node and `claude` processes are | `node` |
+| 18 | the runner's capabilities | pid 1 is `/sbin/docker-init -- /app/docker/workspace/entrypoint.sh node /app/workspace/dist/runner.js`; runner pid 7; `Uid:` 1000 four times; `CapInh`, `CapPrm`, `CapEff`, `CapBnd`, `CapAmb` all `0000000000000000` |
+| 19 | no API key, no `DATABASE_URL`; the five settings | `exit=1`, `exit=1`; `false`, `1`, `/home/node/.claude`, `1`, `/app/certs/prod-ca.crt`. `WORKSPACE_TURN_BUDGET_USD` reads `1.00` |
+| 24 | the pins | 1 `api.anthropic.com`, 3 `aws-0-us-east-1.pooler.supabase.com`, 2 `goultdzqcavefcgnifdy.supabase.co` |
+| 25 | the rules and the sets, as root | `-P OUTPUT DROP`; loopback; udp and tcp 53 to `127.0.0.11`; the state rule; tcp 443 to `workspace-https`; tcp 5432 to `workspace-postgres`; the reject; IPv6 `-P OUTPUT DROP` and loopback only; `workspace-https 3`, `workspace-postgres 3` |
+| 32 | the pooler's certificate | `openssl exit=0`, `1`; `/app/certs/prod-ca.crt connected as workspace_runner`; `/tmp/w65-ca/other-ca.crt refused: SELF_SIGNED_CERT_IN_CHAIN`; the throwaway removed (`0`) |
+| 37 to 40 | task 13's scan of this image | files: `scanned ~80083552 bytes (80.08 MB)`, `no leaks found`, exit 0; history: `no leaks found`, exit 0; the brief's grep on the history `0`; the scratch volume and its container gone (`0`, `0`) |
+
+No token smoke was run: the first live turn below is the proof.
+
+### Part B: before the first turn
+
+**Usage (task 19): the percentages could not be read.** `/usage` is Stack's to type. The CLI
+reports the session and weekly figures in a `rate_limit_event` on its output stream; the runner
+reads that line for `usage_limit` and for the overage flag, and neither logs nor stores the
+figures. The runner's log of the first live turn holds three lines (started, init, finished) and
+none names a window. The CLI's own transcript of that turn, inside the container's volume, holds
+no line with `rate_limit`, `utilization`, `five_hour` or `seven_day`. No turn was spent to read
+them. What the walk does show: none of the nine turns ended `usage_limit`.
+
+**Task 20's reads**, immediately before the walk:
+
+* `select id, kind, state, to_char(created_at at time zone 'America/New_York', 'MM-DD HH24:MI') from agent_requests where created_at > now() - interval '24 hours' order by id`
+  → `1861 sync done 10-06 10:50`, `2034 sync done 10-06 14:48`. The case: 2026-10-07 (New York)
+  has no `sync` request yet, and no `sync` row is `queued` or `claimed`. Nothing of another kind is
+  `claimed`. `1859`, an `inbox_feedback` row queued on 10-05 16:51, is older than the 24 hours and
+  is not waited on; it was still `queued` after the walk, so it was not applied during it.
+* The three planner reads, at 2026-10-07T07:35:31.473870Z: `max(updated_at)` of
+  `assignment_progress` `2026-10-06 21:38:06.728207+00`; of `reading_progress`
+  `2026-10-06 21:37:44.966465+00`; `count(*)` of `assignments` `98`.
+
+**The sign-in.** `.env.testing` was not at the worktree's root. `git check-ignore -q .env.testing`
+answered 0 (ignored by `.gitignore:2`), so it was copied from the main checkout (133 bytes; never
+printed). The share token came from the Vercel connector and was kept outside every repo for the
+walk. `node e2e/login.mjs` saved the session; Playwright 1.63.0 had its Chromium already.
+
+### Part C: the walk
+
+The spec is `web/e2e/walk21.spec.ts`. `02 empty` runs by default. Every other test needed
+`WALK21_LIVE=1` and was run alone with `-g`, in the order below, with the selects read between
+them (since the walk it also needs `WALK21_ONLY`; see "The walk's own mistake"). The five questions went into one conversation, as Stack's acceptance steps 3 to 7 will; the
+cap turn got a conversation of its own.
+
+Immediately before `02-empty.png`:
+`select count(*) from workspace_conversations where not archived` → `1`.
+
+The turns that reached the CLI, in order (A is the walk's conversation `bb7c5c35…`, B the cap
+turn's `010825de…`):
+
+| # | request | in | question | tier and model as stored | ms | tools stored | ended |
+|---|---|---|---|---|---|---|---|
+| 1 | 388 | A | step 3 | `low`, `claude-haiku-4-5-20251001` | 6743 | `search_materials · IST.323` | `done` |
+| 2 | 389 | A | step 4 | `low`, `claude-haiku-4-5-20251001` | 10841 | `search_context · bb2dash-inbox-decisions` | `done` |
+| 3 | 390 | A | step 5 | `low`, `claude-haiku-4-5-20251001` | 7058 | `get_material_text · 733` | `done` |
+| 4 | 391 | A | step 6 | `mid`, `claude-sonnet-5-5` | 12060 | `search_materials · IST.352` twice, `get_material_text · 891`, `· 893` | `done` |
+| 5 | 392 | A | step 7 | `high`, `claude-opus-5-5` | 27089 | `search_materials · ECN.304` four times, `get_material_text · 218`, `· 800` | `done` |
+| 6 | 393 | B | step 7, under the 0.01 cap | `high`, `claude-opus-5-5` | 2615 | `search_materials · ECN.304`, `ok` false | `failed`, `budget_exceeded` |
+| 7 | 394 | B | step 3's, as the follow-up, same cap | `low`, `claude-haiku-4-5-20251001` | 8873 | `search_materials · IST.323`, `get_material_text · 733`, both `ok` | `failed`, `budget_exceeded` |
+| 8 | 395 | A | step 7 again, stopped | `high`, `claude-opus-5-5` | 14686 | five | `cancelled` |
+| 9 | 398 | A | step 3's, asked while the service was stopped | `low`, `claude-haiku-4-5-20251001` | 3132 | none | `done` |
+
+Every tool call of turns 1 to 5 is stored `ok` true.
+
+**Task 19's selects**, as the row writes them.
+
+After step 3's question:
+
+* `select tier, provider, model ~ 'haiku', finished, error_code from workspace_messages where role = 'assistant' order by created_at desc limit 1`
+  → `low`, `claude-cli`, true, true, null.
+* `select tool_calls @> '[{"tool":"search_materials","ok":true}]' from workspace_messages where role = 'assistant' order by created_at desc limit 1`
+  → true.
+* `select state from workspace_requests order by id desc limit 1` → `done`.
+* `select count(*) from workspace_conversations where claude_session_id is not null` → `1`.
+* `select model <> 'haiku' from workspace_messages where role = 'assistant' order by created_at desc limit 1`
+  → true (the full id is stored).
+* The credential source, from
+  `docker compose -p bb2dash-wt21 --profile workspace logs --tail 20 workspace`:
+
+  ```text
+  2026-10-07T07:36:15.071Z workspace: turn request=388 started tier=low provider=claude-cli model=haiku
+  2026-10-07T07:36:15.565Z workspace: turn request=388 init claude_code_version=2.1.289 credential_source=none permissionMode=dontAsk model=claude-haiku-4-5-20251001 check=pass
+  2026-10-07T07:36:21.807Z workspace: turn request=388 finished state=done error=- ms=6743 tools=1
+  ```
+
+  The CLI reports `apiKeySource: none`: no API key is in use. (The log writes the init line's
+  `apiKeySource` field as `credential_source`.) All nine init lines read the same, and
+  `printenv ANTHROPIC_API_KEY` exited 1 again after the walk.
+
+After step 4's question:
+
+* `select tool_calls @> '[{"tool":"search_context","scope":"bb2dash-inbox-decisions","ok":true}]' from workspace_messages where role = 'assistant' order by created_at desc limit 1`
+  → true. The answer names decisions 434 and 528 (and 537).
+
+After step 5's: `tool_calls @> '[{"tool":"get_material_text","ok":true}]'` on the newest assistant
+row → true (the row has no select for this one; read the same way).
+
+After the five questions, before the Stop:
+
+* `select tier, error_code from workspace_messages where role = 'assistant' order by created_at desc limit 5`
+  → `high`, `mid`, `low`, `low`, `low`, each with `error_code` null.
+
+After the walk:
+
+* `select count(*) from workspace_messages m, jsonb_array_elements(m.tool_calls) e where e->>'tool' = 'search_context' and (e->>'ok')::boolean and coalesce(e->>'scope', '') not in ('bb2dash', 'bb2dash-inbox-decisions')`
+  → `0`.
+
+One thing the brief expected otherwise: it names task 21's follow-up as the first resumed session
+that uses a tool. In this walk that was turn 2 (request 389), because the five questions share one
+conversation. The CLI kept one transcript for conversation A from 07:36:15 to 08:15:21 (every
+later turn resumed it, across two recreates and one stop of the container) and one for B. No
+turn logged the fresh-start retry. Every resumed turn's tool calls were allowed by the gate.
+
+**Task 21 (d), the health readings: not done.** The Opus turn (request 392) was claimed at
+07:41:31.19 and finished at 07:41:58.31 by the database's clock: 27.1 s. The reading taken 60 s
+into it, `healthy` at 07:42:34 (laptop clock), does not count: the request was `done` by then
+(`select state from workspace_requests order by id desc limit 1` → `done`). No reading was taken
+at 120 s. The row says to repeat the check on a longer request. No turn of this walk lasted 30 s,
+and which request would last 120 s is not something this walk could say, so no further turn was
+spent on it. It is the PM's call (questions, below).
+
+**Task 21, the cap.** `select count(*) from workspace_requests where state in ('queued', 'claimed')`
+→ `0` before each recreate. The recreate, with the list's start line and the variable in front:
+
+```text
+cd /c/Users/stack/projects/bb2dash-wt-21 && WORKSPACE_TURN_BUDGET_USD=0.01 SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace up -d --no-deps workspace
+```
+
+→ exit 0, `healthy` at 07:43:37, the container's Env `WORKSPACE_TURN_BUDGET_USD=0.01`. Step 7's
+question, in a new conversation:
+
+* `select error_code from workspace_messages where role = 'assistant' order by created_at desc limit 1`
+  → `budget_exceeded`.
+* `select state, error_code from workspace_requests order by id desc limit 1` → `failed`,
+  `budget_exceeded`.
+
+The page showed the badge "Opus · deep work" and "Stopped at the per-answer cost limit." with no
+answer text. The turn stopped after 2.6 s, and its session id was stored.
+
+**What the budget-stopped session did on resume (a reading).** One follow-up, step 3's question,
+was asked in the same chat while the cap was still 0.01 (the second recreate came after it). The
+session resumed: the init line passed its check, no fresh-start retry was logged, and the CLI wrote
+both turns into one transcript. The model made two tool calls, `search_materials · IST.323` and
+`get_material_text · 733`, both allowed by the gate and stored `ok` true, wrote 626 characters,
+and was then stopped by the cap again: `failed`, `budget_exceeded` on the message and on the
+request. The page kept the 626 characters and the "Used:" line above "Stopped at the per-answer
+cost limit.". What a follow-up does under the usual cap of 1.00 was not read.
+
+The second recreate, the same line without the variable: exit 0, `healthy` at 07:45:04, Env
+`WORKSPACE_TURN_BUDGET_USD=1.00`.
+
+**Task 21, Stop.** Step 7's question again, in conversation A. Stop was pressed once the turn read
+streaming with answer text on the page, 16 s after the question. The laptop's clock and the
+container's read about 2.4 s ahead of the database's; by the database's clock the cancel was
+stamped at 07:45:33.317 and the two selects were read at 07:45:38.606, 5.3 s later:
+
+* `select finished, error_code from workspace_messages where role = 'assistant' order by created_at desc limit 1`
+  → true, `cancelled`.
+* `select state from workspace_requests order by id desc limit 1` → `cancelled`.
+
+The runner's line: `turn request=395 finished state=failed error=cancelled ms=14686 tools=5`.
+
+**Task 21, the queued question.** `stop workspace` at 07:47:18 (exit 0), with no request open.
+`07-offline.png` was shot at 07:49:22, 2 minutes 4 seconds later. Step 3's question was asked in
+conversation A at 08:03:43.963 (the database's clock; request 398) and showed "Waiting for the
+Workspace service".
+
+* At 08:15:05, 11.35 minutes later:
+  `select state, error_code from workspace_requests order by id desc limit 1` → `queued`, null.
+* `up -d --no-deps workspace` at 08:15:16 (exit 0, `healthy` at 08:15:29). The runner started at
+  08:15:17.650 and began the turn at 08:15:18.080.
+* The same select → `done`, null. The request had waited 11.53 minutes. The answer used no tool:
+  the resumed session already held step 3's answer.
+
+**The walk's own mistake, which spent no turn.** The first `-g "queued question"`, at 07:49:24,
+also matched the name of the group the test stood in ("the cap, Stop and a queued question"), so
+Playwright started all five tests of that group. Before the run was ended at 08:01:35 (its own
+process tree, nothing else) it had asked step 7's question twice while the service was stopped:
+once in a new conversation (`427e9403…`, request 396, 07:49:30) and once in conversation A
+(request 397, 07:58:35). It wrote no shot and replaced none. Both requests were then stopped
+through the page as the owner (the spec's `stop a waiting question`: the Stop button, so
+`workspace_cancel`) at 08:03:08 and 08:03:21, while still `queued`:
+`claimed_at` null, `attempts` 0, no assistant row. The service never saw them. The group was
+renamed, the spec's header says why, and every `-g` pattern was checked with `--list` to select
+one test before anything else ran. One reading it left: request 396 waited 13.6 minutes and was
+still `queued`, null when it was stopped.
+
+After the walk the spec was tightened so the same slip cannot ask a question: a live test now runs
+only with `WALK21_LIVE=1` and `WALK21_ONLY` set to its exact name. Checked without a turn: with
+`WALK21_LIVE=1`, no `WALK21_ONLY` and a pattern that matches the whole group, all five tests are
+skipped; with `WALK21_ONLY` naming one test, that test runs and its neighbour is skipped. The
+newest request was still 398 afterwards.
+
+**`08-desktop.png`.** From the worktree: `npm ci` and `npm run build` in `desktop/` (both exit 0;
+Electron 44.4.1 fetched its binary on first use, as its own entry point does), `web/.env.local`
+written with the two public Supabase values (gitignored; the anon key copied from the secrets
+folder by a script that prints only that its role is `anon`), `npm run build` in `web/` and
+`next start -p 3021`. The spec then started the built shell as a second instance with
+`BB2DASH_APP_URL=http://localhost:3021`, the two Supabase values, `BB2DASH_SYNC_DRY_RUN=1` and a
+new temp folder as `--user-data-dir`, typed the test login into the shell's own window, opened
+Workspace from the top bar and the conversation from the list, and shot the window. It asserted
+that the window holds the shell's bridge (`window.bb2dashDesktop`), that its origin is the local
+build, and that its profile is the temp folder. Stack's running app was not touched: its four
+`bb2dash` processes had the same ids and start times before and after (13516, 31932, 37940 since
+10-05 18:16 local time; 42072 since 10-06 10:20), and `%APPDATA%\bb2dash\config.json` was last
+written on 2026-10-04. Afterwards the second instance was closed, its temp profile removed, and the local
+server stopped (nothing listens on 3021).
+
+**After the walk.**
+
+* Task 20's three reads again, at 2026-10-07T08:16:28.348334Z: `2026-10-06 21:38:06.728207+00`,
+  `2026-10-06 21:37:44.966465+00`, `98`. Equal pair by pair.
+* `select count(*) from agent_requests where created_at between '2026-10-07T07:35:31.473870Z' and '2026-10-07T08:16:28.348334Z' or claimed_at between '2026-10-07T07:35:31.473870Z' and '2026-10-07T08:16:28.348334Z' or finished_at between '2026-10-07T07:35:31.473870Z' and '2026-10-07T08:16:28.348334Z'`
+  → `0`.
+* The walk's three conversations (A, B and the stray one) were archived as the owner through the
+  list's Archive button (the spec's `archive the walk conversations`; three writes, one each).
+  `select count(*) from workspace_conversations where not archived` → `1` ('spike').
+* `ls docs/planning/sprint-2/walks/walk-21/0[2-8]-*.png | wc -l` → `7`;
+  `ls docs/planning/sprint-2/walks/walk-21/1[01]-*.png | wc -l` → `2`.
+* `npx playwright test -c e2e/playwright.config.ts walk21`, as the row writes it → 1 passed, 13
+  skipped, 0 failed. That run shot `02-empty.png` again; the shot kept is the first one.
+
+### The nine shots
+
+| shot | taken (UTC) | what it shows |
+|---|---|---|
+| `02-empty.png` | 07:35:51 | Workspace active in the top bar; the list holds only 'spike'; the column reads "Ask a question to start a conversation."; the "Ask" button. Taken before any live turn |
+| `03-lookup-haiku.png` | 07:36:29 | step 3's question; badge "Haiku · lookup"; "Used: search_materials · IST.323"; the answer names the file it read (`323Fall26V1.4.docx`) |
+| `04-decision-haiku.png` | 07:37:25 | step 4's question; badge "Haiku · lookup"; "Used: search_context · bb2dash-inbox-decisions"; decisions 434, 528 and 537 |
+| `10-document-haiku.png` | 07:39:37 | step 5's question; badge "Haiku · lookup"; the syllabus's section headings; "Used: get_material_text · 733" |
+| `11-standard-sonnet.png` | 07:41:13 | step 6's question; badge "Sonnet · standard"; the answer names the two decks and their slides; a "Used:" line with `search_materials` and two `get_material_text` |
+| `05-deep-opus.png` | 07:42:08 | step 7's question; badge "Opus · deep work"; the two-week plan; a "Used:" line |
+| `06-stopped.png` | 07:45:35 | the partial plan, ending mid-list, with "You stopped this answer." under it and the button back to "Ask"; shot 0.3 s after the press |
+| `07-offline.png` | 07:49:22 | "The Workspace service is offline." under the composer, 2 minutes 4 seconds after the stop |
+| `08-desktop.png` | 08:16:03 | conversation A inside the second desktop shell instance: the stopped turns and the last answer with its "Haiku · lookup" badge |
+
+How the shots of an answer were made. The message column is 62 % of the window's height and
+scrolls inside itself, so at 1440 by 900 a long answer's badge and its "Used:" line are never on
+screen together. The spec therefore makes the window tall enough to hold the whole turn before it
+shoots, prints what the page showed at 1440 by 900 first, and asserts that the question, the badge
+and the "Used:" line are on screen and uncovered. Shots 10 and 11 were each taken twice: the first
+`10` was taken before the spec did this (the turn sat with its badge cut off at the top), and the
+first retake of `11` had the top bar lying across the turn because the spec had scrolled the
+window. Both were the spec's faults. The kept shots were taken with `WALK21_RESHOOT=1`, which
+asks nothing and shoots the standing turn, so no turn was spent on them. Shots 03 and 04 were
+taken at 1440 by 900, where the whole turn fits, and the kept `10` one step before the spec gained
+its "uncovered" assertion; all three were looked at, and each shows its badge and its "Used:"
+line. Shots 06 and 07 are 1440 by 3640 with an empty lower part: that is the page, not the capture
+(W-1, below).
+
+### Turns spent
+
+Nine, as planned: five on Haiku (388, 389, 390, 394, 398), one on Sonnet (391), three on Opus
+(392; 393, cut by the cap after 2.6 s; 395, stopped after 14.7 s). None ended `usage_limit`. No
+token smoke, and nothing was asked a second time.
+
+### What the walk found about the product
+
+Nothing here was changed. None of it failed a check of rows 19 to 22.
+
+| id | severity | what |
+|---|---|---|
+| W-1 | MEDIUM | With a long conversation the page grows far past its window, into empty space |
+| W-2 | LOW | After a long answer finishes, its "Used:" line lands below the visible part of the column |
+| W-3 | LOW | One answer of nine was written with Markdown bold, and the page shows the asterisks |
+
+* **W-1.** With conversation A open at 1440 by 900 the body is 901 px tall and the document
+  4662 px (3640 px when the conversation had six turns): the window gets a scrollbar, and a wheel
+  turn outside the column scrolls into nothing. The screen-reader labels inside each turn ("You
+  asked", "The assistant answered", "Status") are `position: absolute` (`.sr-only`,
+  `web/src/app/globals.css`), and the scrolling column (`.column`, `MessageList.module.css`) is
+  not their containing block, so they are laid out outside its clip, as far down as the column's
+  whole content. Measured in a throwaway page, read-only: the lowest label's bottom edge is at
+  4662 px, the document's height exactly; with `position: relative` given to the column in that
+  page only, the document is 901 px. Seen in `06-stopped.png` and `07-offline.png` (the empty
+  lower part) and in `08-desktop.png` (the window's own scrollbar). It starts as soon as a
+  conversation is taller than the window, so Stack's part A will show it.
+* **W-2.** Read on turns 4 and 5 at 1440 by 900, straight after the stored row landed: the
+  "Used:" line was not on screen (`usedOnScreen: false` for requests 391 and 392, turns of 710 px
+  and 1317 px in a column 558 px tall). After a reload it is, because the column then opens at its
+  end. The likely cause, read and not tested: `growthOf()` in `MessageList.tsx` follows the number
+  of turns, the last text's length and the line under it, but not the "Used:" line, which arrives
+  with the stored row. For short answers (steps 3 and 4) the whole turn fits. Acceptance steps 3 to
+  5 ask Stack to read that line, so on a long answer he scrolls the column to find it.
+* **W-3.** Step 4's answer has `**Decision 434 (September 17).**` and two more like it (shot 04).
+  The system prompt asks for plain text with no `*` (`workspace/prompts/system.md`, line 27), and
+  the page shows text as typed (O-5). The other eight answers held none.
+
+Not the product's: the first run of `02 empty` printed one console error, "Failed to load
+resource: the server responded with a status of 401", with no address. The spec then began
+printing every refused response with its address, and no later page load had one.
+
+### Not done, and why
+
+* **Task 21 (d)**, the health readings at 60 s and 120 s: the Opus turn lasted 27.1 s (above).
+* **The usage percentages** of task 19 and of acceptance part A: nothing the runner keeps holds
+  them (above).
+* **A follow-up after a budget stop under the usual cap**: the one follow-up was asked under 0.01.
+
+Everything else in the task was done.
+
+### Questions for the PM
+
+1. Task 21 (d) cannot be met by the walk's Opus turn as the models answer today (27 s). Which
+   request should it be repeated on, or should the check be written for a turn of any length (two
+   readings while one request is `claimed`)?
+2. The usage read: is Stack's own `/usage` enough for 102a, or should the runner log the two
+   figures of the `rate_limit_event` it already reads (one line per turn, names and percentages)?
+3. W-1 is one CSS line and W-2 one term of `growthOf()`. Fix before Stack's part A, or record
+   both as Known issues?
+4. Was the follow-up meant to run under the 0.01 cap (as walked) or after the reset?
+5. The walk during which the stray requests 396 and 397 were made and cancelled changed no
+   planner row and no `agent_requests` row (the pair above). Is it accepted as walked?
+
+### What is left on the laptop
+
+* The test container `bb2dash-wt21-workspace-1`, up and `healthy` from `bb2dash-wt-21` on the
+  image `sha256:a2ef9b28…`, Env `WORKSPACE_TURN_BUDGET_USD=1.00`; no request `queued` or `claimed`.
+* In `bb2dash-wt-21`, gitignored and untracked: `.env.testing`, `web/.env.local`, `web/.next/`,
+  `web/e2e/.auth/state.json`, `web/e2e/.results/`, `desktop/node_modules/`, `desktop/dist/`.
+  `git status --short` shows nothing else untracked.
+* Three archived conversations (A, B and the stray one) beside 'spike', which is listed.
