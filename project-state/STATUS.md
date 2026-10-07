@@ -1168,7 +1168,7 @@ Nothing below is built in this phase (brief 102, "Out of scope"; each is a later
   and the claim always returns the history (CR-10); 140 repeats the prompt cap and the error-code list as literals
   (CR-13; 140 is frozen).
 
-## Phase 23: Inbox auto-apply, 2026-10-07, merged and live; three session-link answers not applied
+## Phase 23: Inbox auto-apply, 2026-10-07, merged and live; the session-answer fix is built, not merged
 
 Stack's ask (2026-10-07): after a sync, check the Inbox's "Answered, not applied" section and, when it
 holds items, run `/inbox-apply`. His three choices and what they amend are DECISIONS 2026-10-07 (six rows).
@@ -1191,7 +1191,9 @@ A host script then writes each decision's vault note and repo log entry.
   worker functions), 182 (`decision_filed_at`, `inbox_decisions_unfiled`, `inbox_decision_filed`) and 184
   (review round 1: `inbox_apply_claim` releases the worker's own claim only past 16 minutes) are **on
   prod, byte-identical**. **183 (one open `inbox_feedback` request, a unique index) went on at the cut-over,
-  with the skill, byte-identical.** Units: `phase23_180`, `_181` (run as the role), `_182`, `_183` pass.
+  with the skill, byte-identical.** **185 and 186 (the session-answer fix, below) are on prod,
+  byte-identical** (md5 `487951bcb80ac478df29788c1d271ad7`, `d26fd7e56792e7441967abb3e2f36838`). Units:
+  `phase23_180`, `_181` (run as the role), `_182`, `_183`, `_185`, `_186` pass.
 * **Sync runner** (`sync/src/loop.ts`, `db.ts`): step 11, after a done close only; a failure there is logged
   and never changes the sync's outcome. 159 tests, lines 91.96%.
 * **Web** (`InboxApplyButton.tsx`, `inbox-apply-phase.ts`): a press files the request and copies nothing;
@@ -1250,12 +1252,51 @@ items each, 122 s, 169 s and 117 s, reported cost 0.30, 0.43 and 0.39 USD.
 * Request 1859 is recorded **failed** (`not_applied`) and raised an `inbox-apply-failed` item; 2414's done
   close archived that item, though the three were still not applied.
 
-**Open after the first live run (none of it fixed; a fix is a new migration in 185–189 and a worker change)**
+**The session-answer fix, 2026-10-07 (Stack: "fix the session-link gap"), on `fix/phase23-session-links`, not merged**
 
-1. **Session-link answers.** Until fixed, every sync that closes done files a request, the three go to
-   one Claude run, and it ends failed again (inside the 12-runs-a-day cap).
-2. **A failure notice is closed by any later done close**, even one that left the same items unapplied.
-3. **A request filed by a sync carries no memory** of items an earlier run could not apply.
+* **Migration 185, on prod.** The role reads `bb_files` (21 columns that describe a file; never its
+  Blackboard link, its path on the host, its hash or the crawl's ids) and `sessions`, each through its own
+  policy, with no write on either. `inbox_apply_prepare` sends each session answer its file's link
+  (`session_link`: the file, his pick, the session the file carries now).
+* **Migration 186, on prod** (the review of 185). `inbox_apply_close`: `apply-login-required` is archived
+  by a close whose run started Claude and ended done or with an error only a signed-in run reaches;
+  `inbox-apply-failed` by a done close unless an answer a failed run could not apply still waits (and was
+  not answered again since). `inbox_apply_archive` refuses a record that carries `closed_itself`.
+* **Worker** (`apply/src/batch.ts`, `mcp-sql/rpc.ts`): a session answer with no note is archived by the
+  worker itself, as applied by the transform, only when the file already shows it: his pick is on the
+  file, or he said "none" and the file is unlinked. Everything else about a session answer goes to
+  Claude: a note, a pick that is not on the file, a superseded or missing file. The SQL server refuses
+  a record with `closed_itself`. 123 tests, lines 94.78%.
+* **Skill** (`skills/inbox-apply`): a session answer is never written here and always archived, in one
+  of three buckets by what the file shows (applied; not linked yet and answered after the last sync; not
+  applied, flagged); an item about a file always gets a context bundle; "skipped" is the server's word.
+* **Reviews.** `/code-review` on the first three commits: nine findings, eight acted on (the two notice
+  rules, the "not linked yet" promise, the bucket that said applied of every session answer, the
+  writer's missing file facts, the supersede answer, the rule built twice, this record). One declined:
+  having `link_file_sessions` stamp `applied_at` on the answer it consumes, so the worker needs no rule of
+  its own. It is the cleaner design and a change to the sync's transform with a backfill; a follow-up for
+  Stack. Security pass: no finding on the two reads; one LOW (a steered writer could mark his session
+  answer `closed_itself`), closed in the SQL server and in 186. **Neither review was re-run on the round
+  of fixes.**
+* **Live now, before the merge:** 185 and 186 only. The running `apply` image is still the cut-over's: it
+  ignores `session_link`, so the next request still hands 3435, 3436 and 3437 to Claude (which can now
+  read the files, under the old skill text). The worker and skill change go live when this merges and
+  `apply` is rebuilt alone. **Not run live.** Expected then: 3436 and 3437 recorded by the worker, 3435
+  (it has a note) read by Claude.
+* `phase23_181` on `main` reads failed since the cut-over: it counted every archived failure notice,
+  and prod has held a real one since request 2414. The units now count their own transaction's rows.
+
+**Open after the first live run**
+
+1. ~~Session-link answers.~~ Fixed on the branch above; live after its merge and an `apply` rebuild.
+2. ~~A failure notice is closed by any later done close.~~ Fixed by 186, on prod.
+3. **A request filed by a sync carries no memory** of items an earlier run could not apply: an answer
+   Claude cannot apply is tried again after every sync (one run, failed; the notice now stays). Not fixed.
+3a. **A `supersede/<file id>` answer is asked again once archived**: `supersede_replaced_files` (160) reads
+   an answer only while the item is resolved or dismissed. No such item exists on prod yet. The skill now
+   flags it; the fix is in the transform, as 163 was for session links. Not fixed.
+3b. **`link_file_sessions` does not stamp `applied_at`** on the answer it applies (the declined review
+   finding). Not fixed.
 4. A question the writer has for Stack can end in an archived record without an Inbox item (3425).
 5. **Not done from the cut-over list:** the exporter is not scheduled (14 decisions unfiled, test item 3782
    among them); Stack's acceptance walk; the bb2dash-stack verb and doctor rows.
