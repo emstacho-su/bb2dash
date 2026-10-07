@@ -128,6 +128,42 @@ describe('a turn in flight and a step of the wall clock (ruling Z1, R2-2)', () =
     expect(fake.finishes[0]).toMatchObject({ state: 'done', content: 'the answer', durationMs: 600 });
   });
 
+  // performance.now() counts fractions of a millisecond; the database's column and the log lines take whole ones.
+  describe('on a clock that counts fractions of a millisecond', () => {
+    function fractionalTurn() {
+      const h = turnHarness(timerTurn([[100, { type: 'delta', text: 'the answer' }], [500, { ...ABORTED, ok: true, errorCode: null }]]));
+      const reads = { count: 0 };
+      /** The harness's clock plus a fraction that differs from one read to the next. */
+      const now = (): number => {
+        reads.count += 1;
+        return h.clock.now() + ((reads.count * 37) % 100) / 100;
+      };
+      return { ...h, deps: { ...h.deps, now } };
+    }
+
+    it('stores the duration in whole milliseconds, and logs it so', async () => {
+      const { fake, logs, deps } = fractionalTurn();
+      void startTurn(deps, claimOf());
+      await vi.advanceTimersByTimeAsync(1000);
+      const stored = fake.finishes[0];
+      expect(stored).toMatchObject({ state: 'done', content: 'the answer' });
+      expect(Number.isInteger(stored?.durationMs)).toBe(true);
+      expect(Math.abs((stored?.durationMs ?? 0) - 600)).toBeLessThanOrEqual(1);
+      expect(logs.filter((line) => /finished state=done/.test(line) && / ms=\d+ /.test(line))).toHaveLength(1);
+    });
+
+    it('prints the wait before the last finish try, which is what is left of the window, to the millisecond', async () => {
+      const { fake, logs, deps } = fractionalTurn();
+      fake.failFinish(Number.POSITIVE_INFINITY);
+      void startTurn(deps, claimOf());
+      await vi.advanceTimersByTimeAsync(1000 + FINISH_RETRY_MS + 5000);
+      expect(logs.filter((line) => /finish given up/.test(line))).toHaveLength(1);
+      const waits = logs.filter((line) => /finish failed \(try/.test(line));
+      expect(waits.length).toBeGreaterThanOrEqual(RETRY_SCHEDULE.length - 1);
+      for (const line of waits) expect(line).toMatch(/next in \d+(\.\d{1,3})? s\)/);
+    });
+  });
+
   it('still asks every 2 s whether the request is claimed after the wall clock stepped backward: a Stop during a tool call stops the turn within 4 s', async () => {
     const call: StoredToolCall = { tool: 'search_materials', query: 'late work', scope: null, ok: false };
     const tool: Step = { at: 200, event: { type: 'tool', id: 't1', call } };

@@ -47,6 +47,12 @@ export interface TurnDeps {
   readonly budgetUsd: number;
   /** False only under O-2's conditional branch: the stored answer then ends with NO_CAP_SENTENCE. */
   readonly budgetCapHolds: boolean;
+  /**
+   * Milliseconds on a monotonic clock (ruling Z1, R2-2). Every duration a turn and the loop measure
+   * is read on it (the limit, the retry window, the 2 s between two asks about a Stop, the stored
+   * duration, the watchdog and its hold), so a step of the wall clock changes none of them.
+   */
+  readonly now: () => number;
 }
 
 /** The runner's own reasons to stop a turn. */
@@ -62,7 +68,7 @@ export interface TurnHandle {
   readonly done: Promise<TurnOutcome>;
   /** Stop the turn from outside (a shutdown, the watchdog). */
   stop(code: StopCode): void;
-  /** When the turn began making its `workspace_finish()` call, tries included; null before that and once it is over. */
+  /** When the turn began making its `workspace_finish()` call, tries included, on `TurnDeps.now`; null before that and once it is over. */
   finishingSince(): number | null;
 }
 
@@ -96,11 +102,11 @@ interface Streamer {
  * characters is split first. With no text flushed for 2 s it calls `workspace_stream()` with an
  * empty delta, which sends nothing and uses no seq, so a Stop pressed during a tool call is seen.
  */
-function createStreamer(rpc: WorkspaceRpc, requestId: string, stopSwitch: StopSwitch, log: Log): Streamer {
-  const state = { buffer: '', seq: 0, lastCallAt: Date.now(), busy: null as Promise<void> | null };
+function createStreamer(rpc: WorkspaceRpc, requestId: string, stopSwitch: StopSwitch, now: () => number, log: Log): Streamer {
+  const state = { buffer: '', seq: 0, lastCallAt: now(), busy: null as Promise<void> | null };
 
   const call = async (delta: string, seq: number): Promise<void> => {
-    state.lastCallAt = Date.now();
+    state.lastCallAt = now();
     try {
       if (!(await rpc.stream(requestId, seq, delta))) stopSwitch.stop('cancelled');
     } catch (error) {
@@ -120,7 +126,7 @@ function createStreamer(rpc: WorkspaceRpc, requestId: string, stopSwitch: StopSw
 
   const nextWork = (): Promise<void> | null => {
     if (state.buffer !== '') return flush();
-    return Date.now() - state.lastCallAt >= CANCEL_POLL_MS ? call('', Math.max(1, state.seq)) : null;
+    return now() - state.lastCallAt >= CANCEL_POLL_MS ? call('', Math.max(1, state.seq)) : null;
   };
 
   return {
@@ -211,8 +217,8 @@ function storedCalls(calls: readonly StoredToolCall[], log: Log): readonly Store
 }
 
 /** Close the request, trying again while the database fails; one log line says how it ended. */
-async function finishWithRetry(rpc: WorkspaceRpc, args: FinishArgs, log: Log): Promise<void> {
-  const end = await retryDbCall(() => rpc.finish(args), { what: 'finish', log });
+async function finishWithRetry(rpc: WorkspaceRpc, args: FinishArgs, now: () => number, log: Log): Promise<void> {
+  const end = await retryDbCall(() => rpc.finish(args), { what: 'finish', log, now });
   if (end.outcome === 'made') {
     log(`finished state=${args.state} error=${args.errorCode ?? '-'} ms=${args.durationMs} tools=${args.toolCalls.length}`);
   } else if (end.outcome === 'refused') {
@@ -237,11 +243,14 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
     },
   };
 
+  /** Whole milliseconds since `startedAt`, a reading of `deps.now`, which counts fractions of one. */
+  const elapsedMs = (startedAt: number): number => Math.round(deps.now() - startedAt);
+
   /** The one `workspace_finish()` of the turn; `finishingSince()` is set while it is being made. */
   async function finish(args: FinishArgs): Promise<void> {
-    finishing.since = Date.now();
+    finishing.since = deps.now();
     try {
-      await finishWithRetry(deps.rpc, args, log);
+      await finishWithRetry(deps.rpc, args, deps.now, log);
     } finally {
       finishing.since = null;
     }
@@ -264,7 +273,7 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
       toolCalls: [],
       errorCode: ending.errorCode,
       costUsd: null,
-      durationMs: Date.now() - startedAt,
+      durationMs: elapsedMs(startedAt),
       claudeSessionId: claim.claudeSessionId,
       model: null,
     });
@@ -272,12 +281,13 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
   }
 
   async function run(): Promise<TurnOutcome> {
-    const startedAt = Date.now();
+    const startedAt = deps.now();
     const tier = routeTier(claim.prompt, claim.priorTier);
     const route = TIER_ROUTES[tier];
     const begun = await retryDbCall(() => deps.rpc.begin(claim.requestId, tier, route.provider, route.model), {
       what: 'begin',
       log,
+      now: deps.now,
       signal: controller.signal,
     });
     // A refusal on the first try is the function's answer to this turn's only begin: the request is
@@ -289,11 +299,12 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
     if (begun.outcome !== 'made') return closeUnbegun(startedAt, begun);
     log(`started tier=${tier} provider=${route.provider} model=${route.model}`);
 
-    const streamer = createStreamer(deps.rpc, claim.requestId, stopSwitch, log);
+    const streamer = createStreamer(deps.rpc, claim.requestId, stopSwitch, deps.now, log);
     const flushTimer = setInterval(() => streamer.tick(), STREAM_FLUSH_MS);
     // The limit counts from the start of the turn: the time begin's tries took is part of it, so a
-    // turn still ends under the database's 10-minute sweep.
-    const timeLimit = setTimeout(() => stopSwitch.stop('timeout'), Math.max(0, TURN_TIMEOUT_MS - (Date.now() - startedAt)));
+    // turn still ends under the database's 10-minute sweep. That time is read on the monotonic
+    // clock, so a wall clock that stepped during the tries does not leave the turn a limit of 0.
+    const timeLimit = setTimeout(() => stopSwitch.stop('timeout'), Math.max(0, TURN_TIMEOUT_MS - (deps.now() - startedAt)));
     const input: TurnInput = {
       requestId: claim.requestId,
       conversationId: claim.conversationId,
@@ -317,7 +328,7 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
       toolCalls: storedCalls(collected.calls, log),
       errorCode: ending.errorCode,
       costUsd: collected.result?.costUsd ?? null,
-      durationMs: Date.now() - startedAt,
+      durationMs: elapsedMs(startedAt),
       // `workspace_finish()` stamps what it is given, so a turn that reported no session (nothing
       // started) hands back the stored id: the conversation keeps its session for the next turn.
       claudeSessionId: collected.result?.claudeSessionId ?? claim.claudeSessionId,
