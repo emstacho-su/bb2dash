@@ -499,7 +499,7 @@ describe('a secret file that holds a NUL character', () => {
 
   it.each([['little-endian'], ['big-endian']] as const)('refuses the token of a file saved as UTF-16 (%s), naming the secret and its file', (order) => {
     const message = messageFrom(() => readOauthToken(files({ [PATHS.oauthTokenSecret]: savedAsUtf16(TOKEN, order) })));
-    expect(message).toContain('claude_oauth_token');
+    expect(message).toMatch(/^the secret claude_oauth_token /);
     expect(message).toContain(PATHS.oauthTokenSecret);
     expect(message).toMatch(/NUL/);
     expect(message).not.toContain(TOKEN);
@@ -508,7 +508,7 @@ describe('a secret file that holds a NUL character', () => {
   it.each([['little-endian'], ['big-endian']] as const)('refuses to start on a DSN file saved as UTF-16 (%s), naming the secret and its file', (order) => {
     const readFile = files({ ...caOnly, [PATHS.runnerDbUrlSecret]: savedAsUtf16(DSN, order), [PATHS.oauthTokenSecret]: TOKEN });
     const message = messageFrom(() => loadConfig({ env: {}, readFile, hostname: 'h' }));
-    expect(message).toContain('workspace_runner_db_url');
+    expect(message).toMatch(/^the secret workspace_runner_db_url /);
     expect(message).toContain(PATHS.runnerDbUrlSecret);
     expect(message).toMatch(/NUL/);
     expect(message).not.toContain('not-a-password');
