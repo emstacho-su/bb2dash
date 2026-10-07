@@ -47,6 +47,9 @@ import styles from './MessageList.module.css';
 /** How close to its end, in pixels, the column must be scrolled to keep following an answer. */
 const FOLLOW_SLACK_PX = 96;
 
+/** The content height before the column has been looked at: no real height is negative. */
+const NOT_MEASURED = -1;
+
 /** The one line of each empty state. */
 const EMPTY_LINES: Readonly<Record<EmptyColumn, string>> = {
   start: COLUMN_START_LINE,
@@ -54,10 +57,43 @@ const EMPTY_LINES: Readonly<Record<EmptyColumn, string>> = {
   missing: COLUMN_NOT_FOUND_LINE,
 };
 
-/** What grows as an answer is written: the turns, and the last one's text and line. */
-function growthOf(turns: readonly WorkspaceTurn[]): string {
-  const last = turns.at(-1);
-  return `${turns.length}:${last?.text.length ?? 0}:${last?.line ?? ''}`;
+/**
+ * Keeps the end of the column in view while the reader is at it.
+ *
+ * WHAT IS FOLLOWED is the height of the column's content, read after every
+ * commit, and not a list of the things that can make it taller. The list was
+ * the fault (the PM's walk of 2026-10-07, W-2): it held the turn count, the
+ * last text's length and the line under it. The "Used:" line and the tier
+ * badge arrive with a row and change no character of the text, so they moved
+ * nothing, and a long answer ended with its "Used:" line under the visible
+ * part of the column.
+ *
+ * WHO IS FOLLOWING is as it was: a reader within `FOLLOW_SLACK_PX` of the end
+ * at their last scroll. Scrolling up lets go of it, and a commit that leaves
+ * the height as it was moves no one.
+ */
+function useFollowTheEnd() {
+  const box = useRef<HTMLDivElement>(null);
+  /** Whether the reader is at the end of the column. Scrolling up lets go of it. */
+  const following = useRef(true);
+  /** The height of the column's content at the last commit that changed it. */
+  const contentHeight = useRef(NOT_MEASURED);
+
+  useEffect(() => {
+    const element = box.current;
+    if (element === null || element.scrollHeight === contentHeight.current) return;
+    contentHeight.current = element.scrollHeight;
+    if (following.current) element.scrollTop = element.scrollHeight;
+  });
+
+  function noteScroll() {
+    const element = box.current;
+    if (element === null) return;
+    const fromEnd = element.scrollHeight - element.scrollTop - element.clientHeight;
+    following.current = fromEnd <= FOLLOW_SLACK_PX;
+  }
+
+  return { box, noteScroll };
 }
 
 function Answer({ turn }: { turn: WorkspaceTurn }) {
@@ -138,22 +174,7 @@ export interface MessageListProps {
 }
 
 export function MessageList({ turns, empty }: MessageListProps) {
-  const box = useRef<HTMLDivElement>(null);
-  /** Whether the reader is at the end of the column. Scrolling up lets go of it. */
-  const following = useRef(true);
-  const growth = growthOf(turns);
-
-  useEffect(() => {
-    const element = box.current;
-    if (element !== null && following.current) element.scrollTop = element.scrollHeight;
-  }, [growth]);
-
-  function noteScroll() {
-    const element = box.current;
-    if (element === null) return;
-    const fromEnd = element.scrollHeight - element.scrollTop - element.clientHeight;
-    following.current = fromEnd <= FOLLOW_SLACK_PX;
-  }
+  const { box, noteScroll } = useFollowTheEnd();
 
   return (
     <div ref={box} className={styles.column} onScroll={noteScroll}>
