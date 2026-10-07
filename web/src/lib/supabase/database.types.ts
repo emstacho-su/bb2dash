@@ -4062,6 +4062,7 @@ export type Database = {
         Row: {
           oldest_open_at: string | null
           open_requests: number | null
+          polled_age_seconds: number | null
           polled_at: string | null
           runner: string | null
         }
