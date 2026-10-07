@@ -1168,6 +1168,88 @@ Nothing below is built in this phase (brief 102, "Out of scope"; each is a later
   and the claim always returns the history (CR-10); 140 repeats the prompt cap and the error-code list as literals
   (CR-13; 140 is frozen).
 
+## Phase 23: Inbox auto-apply, 2026-10-07, built, not merged, not deployed
+
+Stack's ask (2026-10-07): after a sync, check the Inbox's "Answered, not applied" section and, when it
+holds items, run `/inbox-apply`. His three choices and what they amend are DECISIONS 2026-10-07 (six rows).
+Branch `feat/phase23-inbox-auto-apply`, [PR #79](https://github.com/emstacho-su/bb2dash/pull/79) (draft, against
+`main` since #78 merged the same evening) and bb2dash-stack #4; nothing of this phase is merged and no container
+of it is running. `/code-review` and the security pass ran on #79; round 1's fixes are in (DECISIONS).
+
+**How it works.** The `sync` container closes a sync done and calls `sync_request_inbox_apply` (180), which
+files one `inbox_feedback` request when `v_inbox_queue` is not empty. The Inbox's "Apply answers" button
+files the same request. The new `apply` container's worker claims it, runs `apply_resolutions()`, archives
+by itself the rows that need no reading, hands at most six of the rest to one `claude -p` run of
+`/inbox-apply`, builds the result from the tables and closes; the close files a follow-up for what is left.
+A host script then writes each decision's vault note and repo log entry.
+
+**What is built**
+
+* **Database.** 180 (`sync_request_inbox_apply`, the sync runner's fourteenth function), 181 (role
+  `inbox_apply_runner`, its read and write boundary, the write log `inbox_apply_writes` with its trigger, six
+  worker functions), 182 (`decision_filed_at`, `inbox_decisions_unfiled`, `inbox_decision_filed`) and 184
+  (review round 1: `inbox_apply_claim` releases the worker's own claim only past 16 minutes) are **on
+  prod, byte-identical**. **183 (one open `inbox_feedback` request, a unique index) is in the repo and NOT on
+  prod: it is applied at the cut-over, with the skill.** Units: `phase23_180`, `_181` (run as the role),
+  `_182` pass; `phase23_183` fails with "migration 183 is not applied" until then, by design.
+* **Sync runner** (`sync/src/loop.ts`, `db.ts`): step 11, after a done close only; a failure there is logged
+  and never changes the sync's outcome. 159 tests, lines 91.96%.
+* **Web** (`InboxApplyButton.tsx`, `inbox-apply-phase.ts`): a press files the request and copies nothing;
+  one line of state beside the button (who queued it, that it is running, the worker's first report line);
+  the lookup watches for a request a sync filed, and the page refreshes when the answered count moves; the
+  paste command only when nothing has claimed the request after 75 s. 2895 tests with Phase 21 merged in.
+* **Skills.** `skills/inbox-apply`: one document for the container and for a session, with `context.md` and
+  `writer.md` shared by both; the decision record replaces "archive only after the note exists".
+  `skills/bb-sync`: step 0 is gone; step 5b files the request after a done sync and runs the skill itself
+  only when nothing claims it.
+* **Exporter** (`scripts/inbox-decisions-export.mjs`, `inbox-decisions-pr.mjs`, `lib/inbox-decision-render.mjs`):
+  note, day file, ingest, mark; into a worktree on `docs/inbox-decisions` with one PR kept open. 27 tests;
+  a `--dry-run` against prod resolved the vault and reached both functions.
+* **Worker** (`apply/`): the batch, the tokenizer and the SQL guard, the tool gate, the report, the pass, the
+  `claude -p` run, the SQL MCP server with its two tools (`query`, read-only; `apply_item`, one item in a
+  transaction the server runs). 119 tests, lines 94.64%.
+* **Image** (`docker/apply/`, `compose.yaml` service `apply`, profile `apply`): builds as `bb2dash-wt23`;
+  its own network and volume, three secret files, no port, nothing shared with `sync`.
+
+**Not done, in the order it has to happen (the cut-over)**
+
+1. ~~PR #78 (Phase 21) merges.~~ Done 2026-10-07 20:27Z; #79 is against `main`.
+2. ~~Stack sets `inbox_apply_runner`'s password and writes `inbox_apply_db_url` into `SECRETS_DIR`.~~ Done
+   by Stack, 2026-10-07.
+3. ~~One real run under the test project name against a single answered test item.~~ **Done 2026-10-07
+   21:00Z, passed.** `-p bb2dash-wt23 --profile apply run --rm apply node /app/apply/dist/main.js --once`
+   (the `--once` flag was added for this: the worker takes the oldest queued request, which was Stack's
+   1859). Test request 2380, dated before 1859, with the 16 real answers in its skip list; test item 3782
+   asked for one labelled guest row in `course_staff` for IST.471. In 55 seconds: the firewall rose (three
+   names), the worker logged in as the role and claimed 2380, the session started `inbox-context` (16
+   reads) and `inbox-writer` (3 reads, one `apply_item`), the row was inserted and logged in
+   `inbox_apply_writes` against item 3782, the item was archived with a full `inbox-decision/1` record and
+   `applied_at`, and the request closed done, "1 answer applied", with no follow-up. Reported cost 0.20
+   USD. Request 1859 and the 16 real answers were not touched. The test row was deleted afterwards (the
+   role cannot delete); its log row and the archived item stay as the record. **Still unproven live:** a
+   refusal path, a follow-up chain, the templated rows, and the exporter filing a decision.
+4. The Phase 23 PR merges on Stack's word; `node scripts/install-skills.mjs`; **apply 183**.
+5. Rebuild `sync` (step 11 is in its image) only while no sync is open; start `apply`.
+6. Schedule `scripts/inbox-decisions-pr.mjs` on the host (with `SECRETS_DIR` and `HARNESS_DIR`); the
+   `bb2dash-stack` verbs and doctor rows.
+7. Stack's acceptance walk (the plan's seven steps). The first live run takes request 1859 and the 16
+   waiting items in batches of six.
+
+**Known, and said plainly**
+
+* The four units that assert live course data (`grading_invariants`, `phase16_106_v1_recheck`,
+  `phase18_122_supersede_rule`, `phase18_golden_truth`) failed on 2026-10-07; the rows they name were last
+  written by the 18:20Z sync, before this phase's first migration at 19:10Z.
+* `net.http_post` is executable by PUBLIC and cannot be revoked by the project's owner. After review round 1
+  a read cannot use it (the database refuses writes in a read-only transaction) and a write statement is
+  refused unless every call in it is on the allow-list; that list is still the only thing between a steered
+  writer and an outbound post. Worth a ticket with Supabase, or a look at whether pg_net can be dropped.
+* Two units read failed on any branch without this one: `phase23_183` by design, and on `main` the three
+  phase14 units that pin `sync_runner`'s function set at thirteen.
+* The worker's refusal of an API key reads "the Workspace runs on the subscription token only": Phase 21's
+  sentence, reused with its check.
+* The Vercel preview of the button has not been looked at by Stack.
+
 ## What's next — Sprint 2
 
 Planned 2026-09-24 on `docs/sprint2-planning` ([PR #28](https://github.com/emstacho-su/bb2dash/pull/28), merged as 67269b5 on 2026-09-27): requirements `docs/planning/sprint-2/91_REQUIREMENTS_v3.md`

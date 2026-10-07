@@ -28,6 +28,7 @@ export const IMAGES = Object.freeze([
   { name: 'sync', dockerfile: 'docker/sync/Dockerfile', context: '.' },
   { name: 'bb2dash-mcp', dockerfile: 'mcp-server/Dockerfile', context: 'mcp-server' },
   { name: 'workspace', dockerfile: 'docker/workspace/Dockerfile', context: '.' },
+  { name: 'apply', dockerfile: 'docker/apply/Dockerfile', context: '.' },
 ]);
 
 /** What BuildKit appends to a Dockerfile's name to find that Dockerfile's own ignore file. */

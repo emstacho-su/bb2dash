@@ -1,5 +1,7 @@
 /**
- * The runner, one pass (brief 100, "The runner, one pass"; B-43 and B-44: no LLM and no step 0).
+ * The runner, one pass (brief 100, "The runner, one pass"; B-43: no LLM here. B-44 as amended on
+ * 2026-10-07: the runner files the Inbox apply request after a done sync, and the `apply`
+ * container runs it).
  *
  *   1. sync_sweep_stale()
  *   2. sync_next(); nothing queued -> the pass ends
@@ -12,6 +14,8 @@
  *      leaves the row claimed and Phase 19's 30-minute rule closes it
  *   8–9. the files and the embed step (files.ts)
  *  10. sync_close(id, done | failed, report)
+ *  11. after a done close only: sync_request_inbox_apply(id), which files one `inbox_feedback`
+ *      request when the Inbox's answered queue is not empty (migration 180)
  *
  * Every step is an injected port, so the pass runs on fakes in loop.test.ts and integration.test.ts.
  */
@@ -86,7 +90,24 @@ async function finishRun(d: PassDeps, id: string, outcome: RunOutcome, attempts:
   });
   await d.rpc.close(id, state, report);
   d.log(`pass: request ${id} closed ${state}`);
+  if (state === 'done') await requestInboxApply(d, id);
   return state;
+}
+
+/**
+ * Step 11 (Phase 23, migration 180): after a sync that closed done, ask the database to file the
+ * Inbox apply request when answered items wait. The sync is already closed, so a failure here is
+ * logged and never changes its outcome; the Inbox's "Apply answers" button files the same request.
+ */
+async function requestInboxApply(d: PassDeps, syncId: string): Promise<void> {
+  try {
+    const requestId = await d.rpc.requestInboxApply(syncId);
+    if (requestId !== null) {
+      d.log(`pass: Inbox apply request ${requestId} is open for the answered items (after sync ${syncId})`);
+    }
+  } catch (error) {
+    d.log(`pass: could not file the Inbox apply request after sync ${syncId}: ${message(error)}`);
+  }
 }
 
 /**

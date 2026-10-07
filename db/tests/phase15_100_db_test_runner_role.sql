@@ -12,8 +12,8 @@
 --
 -- WHEN A LATER MIGRATION GRANTS A FURTHER MEMBERSHIP, extend the expected list in section 3 in the
 -- same PR (brief 95 §Seams, "Phases 14 and 21 (memberships)"): brief 100's
--- `094_sync_runner_test_membership.sql` adds `sync_runner`, and brief 102's 142 adds
--- `workspace_runner`, each with inherit false.
+-- `094_sync_runner_test_membership.sql` adds `sync_runner`, brief 102's 142 adds
+-- `workspace_runner`, and Phase 23's 181 adds `inbox_apply_runner`, each with inherit false.
 
 begin;
 
@@ -73,7 +73,7 @@ end $$;
 -- =============================================================================================
 do $$
 declare
-  v_expected text := 'anon(inherit=f,set=t), authenticated(inherit=f,set=t), sync_runner(inherit=f,set=t), workspace_runner(inherit=f,set=t)';
+  v_expected text := 'anon(inherit=f,set=t), authenticated(inherit=f,set=t), inbox_apply_runner(inherit=f,set=t), sync_runner(inherit=f,set=t), workspace_runner(inherit=f,set=t)';
   v_got      text;
   v_bad      text;
 begin

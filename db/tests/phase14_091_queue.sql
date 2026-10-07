@@ -2,7 +2,7 @@
 -- Phase 14 (brief 100), tasks 6, 11 and 13; split out of phase14_091_sync_runner.sql by R2 item 11.
 -- Worker W-55. The queue: shape, claim, register, outcome, close, quarantine, requeue.
 --
---   0. installed and shaped as the Contract freezes it (the thirteen, with 093)
+--   0. installed and shaped as the Contract freezes it (the fourteen, with 093 and 180)
 --   1. setup
 --   2. the recorded crawl loaded twice inserts 0 rows
 --   3. claim -> register -> outcome -> close, and the refusals on the way
@@ -41,7 +41,8 @@ declare
     'public.sync_sweep_stale()',
     'public.sync_enqueue(text)',
     'public.sync_login_ok()',
-    'public.sync_login_required()'];
+    'public.sync_login_required()',
+    'public.sync_request_inbox_apply(bigint)'];
 begin
   if not exists (select 1 from pg_roles where rolname = 'sync_runner') then
     raise exception 'FAIL phase14_091: migration 091 is not applied (no role sync_runner)';
@@ -89,17 +90,17 @@ begin
     v_fail := v_fail || 'sync_login_sync_due is not stable'::text;
   end if;
 
-  -- The thirteen (091's twelve and 093's sync_own_claims) are exactly what sync_runner can run with
-  -- the owner's rights (task 7's check, as 093 amends it).
+  -- The fourteen (091's twelve, 093's sync_own_claims and 180's sync_request_inbox_apply) are exactly
+  -- what sync_runner can run with the owner's rights (task 7's check, as 093 and 180 amend it).
   if (select string_agg(p.proname, ',' order by p.proname)
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.prosecdef
          and has_function_privilege('sync_runner', p.oid, 'execute'))
      is distinct from
      'sync_claim,sync_close,sync_enqueue,sync_file_stored,sync_file_worklist,sync_login_ok,'
-     'sync_login_required,sync_next,sync_own_claims,sync_register_run,sync_requeue_orphans,'
-     'sync_run_outcome,sync_sweep_stale' then
-    v_fail := v_fail || 'sync_runner can execute a SECURITY DEFINER function beyond the thirteen, or lacks one'::text;
+     'sync_login_required,sync_next,sync_own_claims,sync_register_run,sync_request_inbox_apply,'
+     'sync_requeue_orphans,sync_run_outcome,sync_sweep_stale' then
+    v_fail := v_fail || 'sync_runner can execute a SECURITY DEFINER function beyond the fourteen, or lacks one'::text;
   end if;
 
   if cardinality(v_fail) > 0 then
