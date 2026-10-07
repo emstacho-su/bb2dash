@@ -8,6 +8,7 @@
 import pg from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { assertRunnerDsn } from '../../src/config.js';
 import { APPLICATION_NAME, PG_CLIENT_OPTIONS, createPgQuery, dsnParts, newPgClient, type PgClientLike } from '../../src/db.js';
 import { startFakePooler, type FakePooler } from '../helpers/fake-pooler.js';
 import { makeThrowawayCa, type ThrowawayCa } from '../helpers/throwaway-ca.js';
@@ -87,6 +88,25 @@ describe('the client is built from the parsed parts of the DSN', () => {
     } catch (error) {
       expect((error as Error).message).not.toContain(PASSWORD);
       expect((error as Error).message).not.toContain(HOST);
+    }
+  });
+
+  // Ruling X1. The driver reads port 0 as no port and takes `PGPORT` or its own default in its place.
+  it.each([
+    ['written :0/', ':0'],
+    ['written :00/', ':00'],
+  ])('refuses port 0 (%s) as the start check does, so the port is never filled in from somewhere else', (_what, port) => {
+    vi.stubEnv('PGPORT', '6543');
+    const dsn = `postgresql://${USER}:${PASSWORD}@${HOST}${port}/postgres${STORED_FLAGS}`;
+    expect(() => assertRunnerDsn(dsn)).toThrow(/port 0/);
+    for (const read of [(): unknown => dsnParts(dsn), (): unknown => newPgClient(dsn, CA_TEXT)]) {
+      expect(read).toThrow(/DSN.*port 0/);
+      try {
+        read();
+      } catch (error) {
+        expect((error as Error).message).not.toContain(PASSWORD);
+        expect((error as Error).message).not.toContain(HOST);
+      }
     }
   });
 
