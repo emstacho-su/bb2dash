@@ -7,10 +7,12 @@
  * 8-minute limit is `timeout`, and a shutdown or the database watchdog is `stale_claim`. The first
  * stop wins. No code is retried on another model.
  *
- * Begin and finish against a database that fails (rulings V1, CR-2 and CR-3; `db-retry.ts` holds
- * the schedule). A begin the function refuses (22023) means the request is no longer claimed:
- * nothing ran and there is nothing to close. Any other begin failure is tried again; if begin still
- * cannot be made the request is closed as `failed` / `cli_error`, so it is not left claimed. A
+ * Begin and finish against a database that fails (rulings V1, CR-2 and CR-3, and X1; `db-retry.ts`
+ * holds the schedule). A begin the function refuses (22023) on the first try means the request is
+ * no longer claimed: nothing ran and there is nothing to close. Any other begin failure is tried
+ * again; if begin still cannot be made the request is closed as `failed` / `cli_error`, so it is not
+ * left claimed. A 22023 that follows such a failure is closed the same way: a begin that went
+ * through with its reply lost is refused on the next try, and its request is still claimed. A
  * finish is tried again for 170 s before the answer is given up; a finish the function refuses
  * means the request is already closed.
  */
@@ -25,7 +27,7 @@ import {
   TOOL_CALLS_MAX,
   TURN_TIMEOUT_MS,
 } from './config.js';
-import { retryDbCall } from './db-retry.js';
+import { retryDbCall, type RetryEnd } from './db-retry.js';
 import type { Claim, FinishArgs, WorkspaceRpc } from './db.js';
 import { errorCodeFor, messageOf, type ErrorCode } from './errors.js';
 import type { Providers } from './providers/index.js';
@@ -176,6 +178,9 @@ async function collect(provider: Provider, input: TurnInput, signal: AbortSignal
 
 type Ending = { readonly state: 'done' | 'failed'; readonly errorCode: ErrorCode | null };
 
+/** How the tries of a begin ended when it was not made. */
+type UnbegunEnd = Exclude<RetryEnd<string>, { readonly outcome: 'made' }>;
+
 function endingOf(stopCode: StopCode | null, collected: Collected): Ending {
   // A turn that produced a result is never stored as `timeout` (ruling V1, CR-5): the limit fell
   // while the CLI was being given its time to exit, and what its result line said stands. The
@@ -242,12 +247,15 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
   }
 
   /**
-   * Begin could not be made: nothing ran, and the request is still claimed. It is closed under the
-   * runner's own stop when one ended the tries, as `cli_error` otherwise.
+   * Begin did not go through as far as the runner can tell, nothing ran, and the request may still
+   * be claimed: every try failed, the runner's own stop ended the tries, or the function refused a
+   * try that followed a failed one. It is closed under the runner's own stop when there is one, as
+   * `cli_error` otherwise.
    */
-  async function closeUnbegun(startedAt: number, error: unknown): Promise<TurnOutcome> {
+  async function closeUnbegun(startedAt: number, end: UnbegunEnd): Promise<TurnOutcome> {
     const ending: Ending = { state: 'failed', errorCode: stopped.code ?? 'cli_error' };
-    log(`begin could not be made, nothing ran; closing the request as ${ending.errorCode}: ${messageOf(error)}`);
+    const why = end.outcome === 'refused' ? 'begin refused after a failed try, its reply may have been lost' : 'begin could not be made';
+    log(`${why}, nothing ran; closing the request as ${ending.errorCode}: ${messageOf(end.error)}`);
     await finish({
       requestId: claim.requestId,
       state: ending.state,
@@ -271,11 +279,13 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
       log,
       signal: controller.signal,
     });
-    if (begun.outcome === 'refused') {
+    // A refusal on the first try is the function's answer to this turn's only begin: the request is
+    // not claimed. A refusal that follows a failed try may answer a begin that already went through.
+    if (begun.outcome === 'refused' && !begun.afterFailure) {
       log(`begin refused, nothing ran: ${messageOf(begun.error)}`);
       return { state: 'skipped', errorCode: null };
     }
-    if (begun.outcome !== 'made') return closeUnbegun(startedAt, begun.error);
+    if (begun.outcome !== 'made') return closeUnbegun(startedAt, begun);
     log(`started tier=${tier} provider=${route.provider} model=${route.model}`);
 
     const streamer = createStreamer(deps.rpc, claim.requestId, stopSwitch, log);

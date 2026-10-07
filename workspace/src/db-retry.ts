@@ -17,8 +17,12 @@ const MS_PER_SECOND = 1000;
 export type RetryEnd<T> =
   /** The call went through. */
   | { readonly outcome: 'made'; readonly value: T }
-  /** The function refused the call (22023). */
-  | { readonly outcome: 'refused'; readonly error: unknown }
+  /**
+   * The function refused the call (22023). `afterFailure` is true when an earlier try of the same
+   * call failed in another way: that try may have gone through with its reply lost, so the refusal
+   * may be the answer to a call that was already made.
+   */
+  | { readonly outcome: 'refused'; readonly error: unknown; readonly afterFailure: boolean }
   /** Every try inside the window failed. */
   | { readonly outcome: 'gave_up'; readonly error: unknown }
   /** The caller's signal ended the tries before the window did. */
@@ -56,7 +60,8 @@ export async function retryDbCall<T>(call: () => Promise<T>, options: RetryOptio
     try {
       return { outcome: 'made', value: await call() };
     } catch (error) {
-      if (isRefusal(error)) return { outcome: 'refused', error };
+      // Only a try that failed in another way is followed by another try, so a later try means one did.
+      if (isRefusal(error)) return { outcome: 'refused', error, afterFailure: attempt > 1 };
       const left = deadline - Date.now();
       if (left <= 0) return { outcome: 'gave_up', error };
       if (options.signal?.aborted) return { outcome: 'stopped', error };
