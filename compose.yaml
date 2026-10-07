@@ -90,7 +90,9 @@ services:
   #
   # Profile `workspace`, so a plain `up` never builds, starts, waits on or restarts it: the desktop's
   # sign-in task runs this file with no profile. bb2dash-stack's .env sets COMPOSE_PROFILES=workspace,
-  # and with it `just up` builds and starts the service. Until the phase's PR is merged it runs only
+  # and with it, from bb2dash-stack/, `docker compose up -d --build workspace` builds and starts this
+  # one service (`just up` does too, but it rebuilds and can recreate every service, sync included:
+  # never while a sync is open). Until the phase's PR is merged it runs only
   # as its own project, with the service named in every command:
   #   docker compose -p bb2dash-wt21 --profile workspace build workspace
   #   docker compose -p bb2dash-wt21 --profile workspace up -d --no-deps workspace
