@@ -1,6 +1,6 @@
 -- bb2dash :: db/migrations/143_workspace_review_round.sql
--- Phase 21 (docs/planning/sprint-2/briefs/102_PHASE21_workspace.md), the review round: ruling V3
--- on `/code-review main high` (CR-4, CR-7, CR-8) and on the note under `/security-review`
+-- Phase 21 (docs/planning/sprint-2/briefs/102_PHASE21_workspace.md), the review round: rulings V3
+-- and X2 on `/code-review main high` (CR-4, CR-7, CR-8) and on the note under `/security-review`
 -- (docs/planning/sprint-2/verification/102a_PHASE21_VERIFICATION.md). Worker W-63.
 --
 -- WHY. The two reviews read 140 and 142 after they were applied. Those files are frozen (the repo
@@ -11,12 +11,13 @@
 --   1. v_workspace_status gains a last column, polled_age_seconds                        (CR-8)
 --   2. workspace_finish refuses a request that is not claimed or cancelled      (security note)
 --   3. workspace_claim's sweep also finishes an assistant row its request left behind    (CR-4)
---   4. the updated_at trigger does not fire for an update that changes only `archived`   (CR-7)
---   5. a guard block
+--   4. the updated_at trigger fires only when the title or the session id changes        (CR-7)
+--   5. a guard block, over the objects this file states and nothing else
 --
 -- ADDITIVE: `create or replace` only. No drop, no rename, no new object, no signature changed.
 -- `create or replace` keeps an object's owner, its grants and its comment, so no grant is stated
--- again; section 5 re-reads them instead. Two things it does NOT keep, and they are stated again:
+-- again; section 5 re-reads who executes the functions, and the units re-read the view's grants.
+-- Two things it does NOT keep, and they are stated again:
 --   * a view's options. `create or replace view` replaces the options list with the one it is
 --     given, even an empty one, so `with (security_invoker = true)` is written out below. Left
 --     out, the view would run as its owner and show the heartbeat to every caller.
@@ -187,8 +188,14 @@ comment on function public.workspace_finish(bigint, text, text, jsonb, text, num
 -- 142's sweep touches requests that are still claimed. When Stop is pressed the request becomes
 -- cancelled at once, and the assistant row is finished by the runner's own workspace_finish call.
 -- A runner that died before that call left the row unfinished for good. The second statement
--- below closes it once the request has been closed for 10 minutes, long enough that no finish of
--- a live turn is still on its way (a turn is killed at 8 minutes).
+-- below closes it once the request has been closed for more than 10 minutes. No finish of a live
+-- turn is still on its way by then: the runner kills a turn 480 s after it starts and makes its
+-- last finish try at most 110 s later (480 s + 110 s < 600 s), and the request was closed by a
+-- Stop pressed during that turn, not before it. A finish that came later all the same would
+-- still store its text: a cancelled request can be finished (section 2).
+--
+-- The boundary: `finished_at < now() - 10 minutes`, strictly. A request closed exactly 10 minutes
+-- ago is left for a later poll; one closed any longer ago is swept.
 create or replace function public.workspace_claim(p_runner text)
   returns table (request_id bigint, conversation_id uuid, user_message_id uuid, prompt text,
                  claude_session_id text, prior_tier text, history jsonb)
@@ -220,10 +227,11 @@ begin
    where m.request_id = s.id and m.role = 'assistant';
 
   -- 143, the orphan sweep: an assistant row still unfinished although its request closed
-  -- (cancelled, failed or done) more than 10 minutes ago. The row is finished with the request's
-  -- own code (cancelled for a stopped one, null for a done one). Its content, the request row and
-  -- the conversation are not touched, and nothing is broadcast. A closed request with no
-  -- finished_at is left alone: how long it has been closed is not known.
+  -- (cancelled, failed or done) more than 10 minutes ago: strictly more, so a request closed
+  -- exactly 10 minutes ago is not swept yet. The row is finished with the request's own code
+  -- (cancelled for a stopped one, null for a done one). Its content, the request row and the
+  -- conversation are not touched, and nothing is broadcast. A closed request with no finished_at
+  -- is left alone: how long it has been closed is not known.
   update workspace_messages m
      set finished = true, error_code = r.error_code
     from workspace_requests r
@@ -287,30 +295,32 @@ comment on function public.workspace_claim(text) is
   'heartbeat. workspace_runner only.';
 
 -- =============================================================================================
--- 4. The updated_at trigger: archiving is not activity (CR-7)
+-- 4. The updated_at trigger: only a new title or a new session id is activity (CR-7, ruling X2)
 -- =============================================================================================
 -- The list is ordered by updated_at, newest first, and 140's trigger stamped it on every update,
--- so archiving or restoring an old chat moved it to the top. The trigger now stays silent for an
--- update whose only changed value is `archived`. Every other update fires it as before: one that
--- changes any other column (with or without `archived`), and one that changes nothing at all.
--- workspace_finish does not depend on it: it writes updated_at itself.
+-- so archiving or restoring an old chat moved it to the top. The trigger now fires only when the
+-- title or the session id changes. An update that changes only `archived`, or changes nothing
+-- (archiving a chat that is already archived from a second tab, a title set to itself), leaves
+-- updated_at alone. workspace_finish does not depend on it: it writes updated_at itself, so an
+-- answer moves the chat also when its session id stays the same.
 --
--- Every column of the table is named, so a column added later must be added here too; the 143
--- unit fails when one is missing.
+-- The trigger no longer writes over an updated_at that an update sets. The page cannot set one:
+-- 140 grants `authenticated` update on title and archived only.
 create or replace trigger workspace_conversations_updated_at
   before update on public.workspace_conversations
   for each row
-  when (new.archived is not distinct from old.archived
-        or new.title is distinct from old.title
-        or new.claude_session_id is distinct from old.claude_session_id
-        or new.updated_at is distinct from old.updated_at
-        or new.created_at is distinct from old.created_at
-        or new.id is distinct from old.id)
+  when (old.title is distinct from new.title
+        or old.claude_session_id is distinct from new.claude_session_id)
   execute function public.set_updated_at();
 
 -- =============================================================================================
--- 5. Guard (scoped to schema public, as 142's is)
+-- 5. Guard: the objects this file states, and nothing else (ruling X2)
 -- =============================================================================================
+-- Each check reads an object this file replaced, or the five functions workspace_runner calls.
+-- The project-wide rules (every function pins a search_path, every view is security_invoker, no
+-- other SECURITY DEFINER function is open to `authenticated`) belong to unit phase15_101 and are
+-- not repeated here: an apply of this file must not abort on another stream's object. The
+-- view's grants and workspace_runner's empty table privileges are held by units 140, 142 and 143.
 do $$
 declare
   v_got text;
@@ -333,23 +343,33 @@ begin
     raise exception 'FAIL 143: v_workspace_status columns are [%]', v_got;
   end if;
 
-  -- (b) The view's grants came through: authenticated and service_role read it and nothing more,
-  --     anon and workspace_runner hold nothing.
-  if not has_table_privilege('authenticated', 'public.v_workspace_status', 'select')
-     or not has_table_privilege('service_role', 'public.v_workspace_status', 'select')
-     or has_table_privilege('authenticated', 'public.v_workspace_status',
-                            'insert, update, delete, truncate, references, trigger')
-     or has_table_privilege('anon', 'public.v_workspace_status',
-                            'select, insert, update, delete, truncate, references, trigger')
-     or has_any_column_privilege('anon', 'public.v_workspace_status',
-                                 'select, insert, update, references')
-     or has_table_privilege('workspace_runner', 'public.v_workspace_status',
-                            'select, insert, update, delete, truncate, references, trigger') then
-    raise exception 'FAIL 143: the grants on v_workspace_status are not 140''s';
+  -- (b) The two replaced functions kept their signatures: one function of each name, with the
+  --     arguments and the result 142 gave it (a changed argument list would have made a second
+  --     function beside the first), still SECURITY DEFINER with search_path pinned.
+  select string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ') returns '
+                    || pg_get_function_result(p.oid), '; ' order by p.proname, p.oid) into v_got
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and p.proname in ('workspace_claim', 'workspace_finish');
+  if v_got is distinct from
+     'workspace_claim(p_runner text) returns TABLE(request_id bigint, conversation_id uuid, '
+     'user_message_id uuid, prompt text, claude_session_id text, prior_tier text, history jsonb); '
+     'workspace_finish(p_request_id bigint, p_state text, p_content text, p_tool_calls jsonb, '
+     'p_error_code text, p_cost_usd numeric, p_duration_ms integer, p_claude_session_id text, '
+     'p_model text) returns void' then
+    raise exception 'FAIL 143: the signatures of workspace_claim and workspace_finish are [%]', v_got;
+  end if;
+  select string_agg(p.proname, ', ' order by p.proname) into v_bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and p.proname in ('workspace_claim', 'workspace_finish')
+     and (not p.prosecdef
+          or not coalesce(p.proconfig, '{}') @> array['search_path=public, pg_temp']);
+  if v_bad is not null then
+    raise exception 'FAIL 143: not security definer, or search_path not pinned: %', v_bad;
   end if;
 
-  -- (c) The five are still exactly the SECURITY DEFINER functions workspace_runner can execute,
-  --     each plpgsql with its search_path pinned.
+  -- (c) The five are still exactly the SECURITY DEFINER functions workspace_runner can execute.
   select string_agg(p.proname, ',' order by p.proname) into v_got
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prosecdef
@@ -357,18 +377,6 @@ begin
   if v_got is distinct from
      'workspace_begin,workspace_claim,workspace_finish,workspace_heartbeat,workspace_stream' then
     raise exception 'FAIL 143: workspace_runner executes SECURITY DEFINER functions %, expected the five', v_got;
-  end if;
-  select string_agg(p.proname, ', ' order by p.proname) into v_bad
-    from pg_proc p
-    join pg_namespace n on n.oid = p.pronamespace
-    join pg_language l on l.oid = p.prolang
-   where n.nspname = 'public'
-     and p.proname = any (array['workspace_claim', 'workspace_begin', 'workspace_stream',
-                                'workspace_finish', 'workspace_heartbeat'])
-     and (not p.prosecdef or l.lanname <> 'plpgsql'
-          or not coalesce(p.proconfig, '{}') @> array['search_path=public, pg_temp']);
-  if v_bad is not null then
-    raise exception 'FAIL 143: not security definer, not plpgsql or search_path not pinned: %', v_bad;
   end if;
 
   -- (d) None of the five is executable by anon, authenticated, service_role or PUBLIC.
@@ -385,71 +393,25 @@ begin
     raise exception 'FAIL 143: anon, authenticated, service_role or PUBLIC can execute %', v_bad;
   end if;
 
-  -- (e) workspace_runner still holds no table, view or sequence privilege in public.
-  select string_agg(c.relname, ', ' order by c.relname) into v_bad
-    from pg_class c join pg_namespace n on n.oid = c.relnamespace
-   where n.nspname = 'public' and c.relkind in ('r', 'v', 'm', 'p', 'f', 'S')
-     and (case when c.relkind = 'S'
-               then has_sequence_privilege('workspace_runner', c.oid, 'usage,select,update')
-               else has_table_privilege('workspace_runner', c.oid,
-                                        'select,insert,update,delete,truncate,references,trigger')
-          end);
-  if v_bad is not null then
-    raise exception 'FAIL 143: workspace_runner holds a privilege on %', v_bad;
-  end if;
-
-  -- (f) The trigger: still the table's one trigger, before update, for each row, on
-  --     set_updated_at(), enabled, and now with a when clause.
-  select string_agg(g.tgname, ', ' order by g.tgname) into v_got
+  -- (e) The trigger exists as stated: before update, for each row, on set_updated_at(), enabled,
+  --     and its condition is the title or the session id changing. The condition is read as the
+  --     catalogue prints it, brackets and line breaks aside.
+  select btrim(regexp_replace(
+           translate(substring(pg_get_triggerdef(g.oid) from ' WHEN \((.*)\) EXECUTE FUNCTION '),
+                     '()', ''),
+           '\s+', ' ', 'g')) into v_got
     from pg_trigger g
-   where g.tgrelid = 'public.workspace_conversations'::regclass and not g.tgisinternal;
-  if v_got is distinct from 'workspace_conversations_updated_at' then
-    raise exception 'FAIL 143: the triggers on workspace_conversations are [%]', v_got;
+   where g.tgrelid = 'public.workspace_conversations'::regclass
+     and g.tgname = 'workspace_conversations_updated_at'
+     and g.tgfoid = 'public.set_updated_at()'::regprocedure
+     and g.tgtype = 19          -- row (1) + before (2) + update (16)
+     and g.tgenabled = 'O';
+  if not found then
+    raise exception 'FAIL 143: workspace_conversations_updated_at is not an enabled before-update row trigger on set_updated_at()';
   end if;
-  if not exists (select 1 from pg_trigger g
-                  where g.tgrelid = 'public.workspace_conversations'::regclass
-                    and g.tgname = 'workspace_conversations_updated_at'
-                    and g.tgfoid = 'public.set_updated_at()'::regprocedure
-                    and g.tgtype = 19          -- row (1) + before (2) + update (16)
-                    and g.tgenabled = 'O'
-                    and g.tgqual is not null) then
-    raise exception 'FAIL 143: workspace_conversations_updated_at is not a before-update row trigger on set_updated_at() with a when clause';
-  end if;
-
-  -- (g) phase15_101's three catalogue rules still hold across public: every function of this
-  --     project pins a search_path, every view is security_invoker, and the only SECURITY DEFINER
-  --     functions on the API surface are app_owner() and calendar_push_now() (none for anon).
-  select string_agg(p.oid::regprocedure::text, ', ' order by p.oid::regprocedure::text) into v_bad
-    from pg_proc p
-   where p.pronamespace = 'public'::regnamespace
-     and not exists (select 1 from pg_depend d
-                      where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')
-     and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c
-                      where c like 'search_path=%');
-  if v_bad is not null then
-    raise exception 'FAIL 143: functions without search_path: %', v_bad;
-  end if;
-  select string_agg(c.relname, ', ' order by c.relname) into v_bad
-    from pg_class c
-   where c.relnamespace = 'public'::regnamespace and c.relkind = 'v'
-     and coalesce((select lower(split_part(o, '=', 2)) in ('true', 'on', '1', 'yes', 't', 'y')
-                     from unnest(c.reloptions) o
-                    where split_part(o, '=', 1) = 'security_invoker'), false) is false;
-  if v_bad is not null then
-    raise exception 'FAIL 143: these public views run as their owner: %', v_bad;
-  end if;
-  select coalesce(string_agg(p.proname || '()', ', ' order by p.proname), '') into v_got
-    from pg_proc p
-   where p.pronamespace = 'public'::regnamespace and p.prosecdef
-     and has_function_privilege('authenticated', p.oid, 'execute');
-  if v_got <> 'app_owner(), calendar_push_now()' then
-    raise exception 'FAIL 143: authenticated may execute these SECURITY DEFINER functions in public: [%]', v_got;
-  end if;
-  select string_agg(p.proname || '()', ', ' order by p.proname) into v_bad
-    from pg_proc p
-   where p.pronamespace = 'public'::regnamespace and p.prosecdef
-     and has_function_privilege('anon', p.oid, 'execute');
-  if v_bad is not null then
-    raise exception 'FAIL 143: anon may execute these SECURITY DEFINER functions in public: %', v_bad;
+  if v_got is distinct from
+     'old.title IS DISTINCT FROM new.title OR '
+     'old.claude_session_id IS DISTINCT FROM new.claude_session_id' then
+    raise exception 'FAIL 143: the condition of workspace_conversations_updated_at is [%]', v_got;
   end if;
 end $$;
