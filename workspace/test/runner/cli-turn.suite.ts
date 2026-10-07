@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 import { CLAUDE_CODE_VERSION, PATHS } from '../../src/config.js';
 import { ALLOWED_TOOLS } from '../../src/hooks/gate-rules.js';
 import { createCliTurn, isUuidShaped, spawnClaude, type CliTurnDeps } from '../../src/providers/claude-cli.js';
-import { createProviders } from '../../src/providers/index.js';
 import type { HistoryMessage, TurnInput } from '../../src/providers/types.js';
 import { buildPrompt } from '../../src/replay.js';
 import { startTurn } from '../../src/turn.js';
@@ -22,7 +21,6 @@ import {
   STORED_SESSION_ID,
   claimOf,
   collect,
-  fakeRpc,
   fakeSpawn,
   readFixtureJson,
   readFixtureLines,
@@ -31,6 +29,7 @@ import {
   valueAfter,
   type FakeProcessOptions,
 } from '../helpers/fakes.js';
+import { turnHarness } from '../helpers/turn-harness.js';
 
 type Line = Record<string, unknown>;
 
@@ -377,8 +376,7 @@ describe('a resumed start the runner itself killed is not the recovery case', ()
       { lines: [initLine(RAG_PENDING)], exit: OK, hang: true },
       { lines: [initLine({ ...RAG_PENDING, session_id: FRESH_SESSION_ID })], exit: OK, hang: true },
     ]);
-    const fake = fakeRpc();
-    const deps = { rpc: fake.rpc, providers: createProviders({ claudeCli: h.turn }), log: (line: string) => h.logs.push(line), budgetUsd: 1, budgetCapHolds: true };
+    const { fake, deps } = turnHarness(h.turn);
     const outcome = await startTurn(deps, claimOf({ claudeSessionId: STORED_SESSION_ID })).done;
     expect(outcome).toEqual({ state: 'failed', errorCode: 'cli_error' });
     expect(fake.finishes).toHaveLength(1);

@@ -27,6 +27,7 @@ import './runner/closing.suite.js';
 import './runner/db.suite.js';
 import './runner/db-tls.suite.js';
 import './runner/health.suite.js';
+import './runner/monotonic.suite.js';
 import './runner/replay.suite.js';
 import './runner/result-grace.suite.js';
 

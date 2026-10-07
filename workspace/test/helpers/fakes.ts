@@ -79,7 +79,8 @@ export const dbRefusal = (message: string): Error => Object.assign(new Error(mes
 /** What a call sees when the database cannot be reached: no SQLSTATE. */
 export const dbDown = (): Error => new Error('connection refused');
 
-export function fakeRpc(): FakeRpc {
+/** `now` is the clock the recorded times are read on: the wall clock unless a harness hands in its own. */
+export function fakeRpc(now: () => number = () => Date.now()): FakeRpc {
   let cancelled = false;
   let broken = false;
   let beginFailure: { error: Error; left: number } | null = null;
@@ -117,12 +118,12 @@ export function fakeRpc(): FakeRpc {
     },
     rpc: {
       async claim() {
-        fake.claims.push(Date.now());
+        fake.claims.push(now());
         if (broken) throw down();
         return fake.queue.shift() ?? null;
       },
       async begin(requestId, tier, provider, model) {
-        fake.beginTries.push(Date.now());
+        fake.beginTries.push(now());
         if (broken) throw down();
         const failure = owed(beginFailure);
         if (failure !== null) throw failure;
@@ -131,11 +132,11 @@ export function fakeRpc(): FakeRpc {
       },
       async stream(requestId, seq, delta) {
         if (broken) throw down();
-        fake.streams.push({ requestId, seq, delta, at: Date.now() });
+        fake.streams.push({ requestId, seq, delta, at: now() });
         return !cancelled;
       },
       async finish(args) {
-        fake.finishTries.push(Date.now());
+        fake.finishTries.push(now());
         if (broken) throw down();
         const failure = owed(finishFailure);
         if (failure !== null) throw failure;
@@ -143,7 +144,7 @@ export function fakeRpc(): FakeRpc {
       },
       async heartbeat(runner) {
         if (broken) throw down();
-        fake.heartbeats.push({ runner, at: Date.now() });
+        fake.heartbeats.push({ runner, at: now() });
       },
     },
   };
