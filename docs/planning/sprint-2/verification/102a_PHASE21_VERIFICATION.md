@@ -1042,3 +1042,116 @@ the run on the range `d4b1b8d..HEAD` follows below.
 * **W-66, section 11.** The two test files beyond the Files table
   (`web/test/Workspace.empty.test.tsx`, `web/test/Workspace.rereads.test.tsx`) stay: one file
   would have passed 800 lines.
+
+## Tasks 12 and 13 — the docker step, second run (2026-10-07 05:16 to 05:44 UTC): pass
+
+W-65 ran its 41-step list top to bottom from `bb2dash-wt-21-container` (the step-by-step table,
+with each output, is in `102_W65_VERIFICATION.md`, "Docker step, second run (2026-10-07)"). Every
+step passes; step 41 (stop and remove the test container) was left out on purpose. One Haiku turn
+was spent (the token smoke). No docker command was refused.
+
+**The guard**, `docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1`, read thirteen
+times by the worker and three times by the independent check, each time
+`bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z`:
+
+| UTC | when |
+|---|---|
+| 05:16:44 | before the first docker step |
+| 05:18:33 | right before the first build |
+| 05:24:55 | after the first build |
+| 05:25:12 | after the container started (first image) |
+| 05:31:19 | before the second build (the fix round) |
+| 05:31:27 | after the second build |
+| 05:31:49 | after the container was recreated on the second image |
+| 05:35:08 | before the restart of step 35 |
+| 05:35:19 | after the restart |
+| 05:36:02 | before task 13's scan container |
+| 05:38:27 | after the scan volume was removed |
+| 05:40:17 | after the last check |
+| 05:44:37 | last, after the record was committed and pushed |
+
+The `sync` service's rendered hash equals the live container's label before and after
+(`448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7`).
+
+| | |
+|---|---|
+| harness commit at each build | `57ee51fc18ee4f7f367b60b24bfe39968d58d86b` (`main`, PR #40), nothing uncommitted under `mcp-server` or `certs` |
+| build | 05:18:39 to 05:24:46 UTC, exit 0; the rag stage downloaded the model from Hugging Face and printed `OK — embedder matches the ingestion contract.` |
+| image | `sha256:5790950804c5813992d495efb945efb9a9832b45d0d0e57f9be78911e07577ae`, 1.66 GB (the second image, after the fix round; the first was `sha256:de4a7a0edac5…`) |
+| container | `bb2dash-wt21-workspace-1`, project `bb2dash-wt21`, `healthy`, no published ports, network `bb2dash-wt21_workspace-net`, volume `bb2dash-wt21_workspace-claude-home` |
+
+**The firewall's first meeting with a real kernel** (05:25:12 UTC, the whole log):
+
+```text
+The host of workspace_runner_db_url ends .pooler.supabase.com
+The host of harness_database_url ends .pooler.supabase.com
+Restoring Docker DNS rules...
+Allowing DNS to 127.0.0.11
+Allowed api.anthropic.com on tcp/443 (1 address(es), pinned in /etc/hosts)
+Allowed goultdzqcavefcgnifdy.supabase.co on tcp/443 (2 address(es), pinned in /etc/hosts)
+Allowed aws-0-us-east-1.pooler.supabase.com on tcp/5432 (6 address(es), pinned in /etc/hosts)
+IPv6 closed (loopback only)
+Firewall configuration complete
+Verifying firewall rules...
+Firewall verification passed - unable to reach https://example.com as expected
+Firewall verification passed - able to reach https://api.anthropic.com as expected
+Firewall raised: 3 name(s) allowed
+2026-10-07T05:25:12.791Z workspace: runner started as workspace@469c97cc522a
+2026-10-07T05:25:13.255Z workspace: db: connected as workspace_runner
+```
+
+It raised at the first try. One thing disagreed with the dry run, and it is the run's one fix
+round: Docker Desktop's resolver answers the pooler's name with each of its three addresses
+twice, and the script pinned and counted the answer's lines, not its addresses (6 pins for 3
+addresses; step 25 read the set at 3). Nothing was open that should not have been. Fixed
+test-first (`f5ab661` red, 20 of 21; `defc566` green, 21 of 21): `resolve_once` keeps the first
+line for an address. After the rebuild the line reads `(3 address(es), pinned in /etc/hosts)` and
+steps 10 to 40 pass.
+
+| task 12 and 13, what the steps showed | result |
+|---|---|
+| `claude --version` is the pin, 2.1.289; its folder is root's and `node` cannot write it | pass |
+| every Node and `claude` process is `node`'s; the runner holds no capability | pass |
+| no `ANTHROPIC_API_KEY`, no `DATABASE_URL`; the five settings | pass |
+| `/app/turn` is `root:root` 555 and nothing can be planted in it; the CA is `root:root` 444 and `node` reads it | pass |
+| default-deny at the kernel: `example.com`, `storage.googleapis.com`, `huggingface.co`, `1.1.1.1:443`, the three 6080 probes blocked; open on exactly the pinned address and port pairs | pass |
+| a second run of the firewall is refused (75); a restart raises it again with the pins rewritten, not doubled | pass |
+| ten connects to each database host on 5432 | 10 of 10, 10 of 10 |
+| the pooler's certificate verifies against `/app/certs/prod-ca.crt` and against no other CA | pass (`connected as workspace_runner`; the throwaway CA `refused: SELF_SIGNED_CERT_IN_CHAIN`) |
+| one `search_context` over stdio through the rag launcher, behind the firewall | pass |
+| the token smoke, one Haiku turn, run from `/app/turn` (ruling X4: the CLI runs from a folder it cannot write) | pass |
+| task 13: gitleaks over the image's files (80 MB scanned) and its history, with a control that fails on two made-up tokens | no leaks, exit 0; the brief's grep on the history 0 |
+
+**The independent check** (a fresh agent, read-only probes of its own, 05:46 to 05:58 UTC): every
+pass claim it tried to refute holds: the guard, the project and image, the kernel rules read as
+root (`-P OUTPUT DROP`, the two sets, IPv6 closed), `iptables -F` refused to `node`, no secret in
+`docker history`, `docker image inspect` or the runner's log, the certificate check, the gate
+wired in the built runner, and on prod `v_workspace_status` showing a heartbeat 5 s old
+(`polled_age_seconds` 5, `open_requests` 0). It also found what a pass claim does not say:
+
+* **The allowlist is by address, and on port 443 that can be walked around** (should-fix, a
+  design call, not a defect of the build). The project's Supabase host sits on Cloudflare's shared
+  addresses, so code running as `node` can reach any Cloudflare-hosted site by dialling the allowed
+  address with another server name: `example.com` answered 200 through `104.18.38.10:443`. Through
+  Anthropic's address the same request gets 403. The firewall's own end check ("example.com
+  refused") is true for example.com's own address only. The model has no tool that can do this
+  (tools are off; four read-only MCP tools); it needs code running as `node`, which can already
+  read the four secrets. The first `/security-review` request named this in the abstract ("the
+  allowlist is by address and both allowed hosts serve other tenants") and the review raised no
+  finding on it; this is the concrete proof. Closing it means a name-checking proxy in front of 443. Put to Stack
+  in the hand-off; STATUS lists it under the deferred hardening.
+* **DNS is a channel out** (note): Docker's resolver answers any name for `node`. The Contract
+  allows DNS to the resolver.
+* `console.anthropic.com` and `claude.ai` share `api.anthropic.com`'s address and connect (note).
+* pid 1 is Docker's own init, root's, from `init: true`; it runs no project code (note).
+* W-65's file, line 1371, still says "the runner's own connection follows its DSN's sslmode": true
+  when written, not since ruling V1 (the image verifies against the pinned CA whatever the DSN
+  says).
+
+**PM answers to W-65's questions.** The fix round is read by the PM (one `awk` condition, no rule
+changed) and goes through the delta review with the rest. The brief names `huggingface.co` beside
+`storage.googleapis.com` (`d46600b`). The CLI's layer is stored twice (492 MB for about 250 MB):
+kept, a Known issue. The test's five constants that equal today's public addresses stay (a test
+that dials nothing). The harness checkout's installed `node_modules` still holds fastembed 2.1.0
+under a lock that says 2.1.1: `npm ci` there is Stack's. Step 41 runs before the walks rebuild the
+container in `bb2dash-wt-21` (one tree at a time).
