@@ -559,7 +559,7 @@ two lenses, for the same thing, and both were held at confidence 7.
 
 | id | severity | status |
 |---|---|---|
-| SR-1 | MEDIUM | open |
+| SR-1 | MEDIUM | fixed |
 
 * **SR-1 (confidence 7, below the bar; the PM fixes it in this phase).** The runner's database
   connection does not verify the pooler's certificate: the stored DSN's
@@ -594,20 +594,20 @@ dispositions (rulings V1–V5 below). A second run on the delta is owed after th
 
 | id | severity | status |
 |---|---|---|
-| CR-1 | HIGH | open |
-| CR-2 | MEDIUM | open |
-| CR-3 | HIGH | open |
-| CR-4 | MEDIUM | open |
-| CR-5 | MEDIUM | open |
-| CR-6 | MEDIUM | open |
-| CR-7 | LOW | open |
-| CR-8 | MEDIUM | open |
-| CR-9 | MEDIUM | open |
-| CR-10 | LOW | open |
-| CR-11 | LOW | open |
-| CR-12 | LOW | open |
-| CR-13 | LOW | open |
-| CR-14 | LOW | open |
+| CR-1 | HIGH | fixed |
+| CR-2 | MEDIUM | fixed |
+| CR-3 | HIGH | fixed |
+| CR-4 | MEDIUM | fixed (143) |
+| CR-5 | MEDIUM | fixed |
+| CR-6 | MEDIUM | fixed |
+| CR-7 | LOW | fixed (143) |
+| CR-8 | MEDIUM | fixed (143 and the page) |
+| CR-9 | MEDIUM | fixed |
+| CR-10 | LOW | recorded, not changed (V4) |
+| CR-11 | LOW | kept as the Contract names them (V1) |
+| CR-12 | LOW | fixed |
+| CR-13 | LOW | recorded, 140 is frozen (V5) |
+| CR-14 | LOW | owed at task 24, before the PR opens (V5) |
 
 * **CR-1** `workspace/src/stream-json.ts`: any tool result with no PreToolUse hook answer ends
   the turn as `cli_error`, including error results the CLI writes itself without running the
@@ -843,3 +843,121 @@ percent-encoded text, a missing or certificate-less CA file), the fail-closed ru
 word it, migration 143 in the Tables section and the Files table with its unit (five phase21
 units), the five-column status view, `workspace_finish`'s refusal, the harness at fastembed 2.1.1
 (the Seams row), and the review-round test files.
+
+## The review round, second pass (2026-10-06 to 2026-10-07)
+
+Three streams, then one independent check; nothing was applied and no docker state changed.
+
+| stream | what | head | result |
+|---|---|---|---|
+| W-64 | ruling X1: begin's lost reply closes the request, `FINISH_RETRY_MS` 110000, the client's three bounds asserted on the built client, four small items each with a test that can fail | `3425b33` | typecheck exit 0; 714 tests, 0 failed; `src` lines 95.24%; longest file 719 lines |
+| W-63 | ruling X2: the trigger's condition, the guard cut to what 143 owns, the sweep's boundary tested at the boundary, the units name their rows | `6ef7e39` | 143 final: md5 `5e7afa73d1ccfc8b06327cc128d28e1d`, 23585 bytes |
+| PM | ruling X5: the brief's literals | `71f48ae`, `a279211` | the brief's checker passes (8 tables, 27 task rows in order) |
+
+Every red and green run of W-64's is quoted in `102_W64_VERIFICATION.md`, "Review round, second
+pass", with a mutant for each test-only item (the test fails when the code it guards is removed).
+
+**The independent check of 143's final text** (a fresh agent, 05:01 to 05:17 UTC on 2026-10-07,
+seven `execute_sql` calls, each `begin; … rollback;`): verdict **ready to apply**, no must-fix.
+
+| what it read | result |
+|---|---|
+| 140, 141, 142 unchanged against the phase branch; the file's md5 and size | pass |
+| the text: nine statements, `create or replace` and `comment on` only; no grant, revoke, alter, drop, delete, insert, password or DSN outside comment lines | pass |
+| the view: 140's four columns unchanged, `polled_age_seconds integer` last, `security_invoker` | pass |
+| `workspace_finish` against 142's body: five lines added, none changed | pass |
+| `workspace_claim` against 142's body: one constant and one statement added | pass |
+| the trigger's condition as the catalogue prints it | pass |
+| the file whole on prod as it was, rolled back: the database's own md5 of the text it executed equals the file's; the guard raised nothing; 8 catalogue values of 387 differ, each one 143's | pass |
+| unit 143 from its own text, less its one `delete` line: `phase21_143_review_round: PASS` | pass |
+| units 140 and 142 with 143 in place, less the same line | pass |
+
+Three notes it left, none a defect: a cancelled request can be finished more than once (inside
+the ruling); the trigger no longer writes over an `updated_at` a privileged role sets by hand (the
+page cannot set one); the runner's 110 s count from when its finish starts, so the margin under
+the 10-minute claim is a little under 10 s. A `delete` is held by `execute_sql` with or without a
+`where` (shown by elimination: no delete was sent), so those lines are the Runner's to prove.
+
+## PM rulings on the second pass (2026-10-07)
+
+### Y1. Runner (W-64): kept as built, three corners recorded
+
+* **The 110 s count from the finish's first try, not from the turn's start.** With a stream call in
+  flight on a dead connection at the kill, the last finish try can land about 8 s after the
+  database's 10-minute claim. Kept: with one runner the sweep runs only inside `workspace_claim()`,
+  which the runner calls between turns, so nothing sweeps the request while the finish is being
+  retried; and with 143 a finish that does arrive late is refused with 22023 and logged. Counting
+  the deadline from the turn's start is the fix if a second runner is ever added (Known issues).
+* **A stop that lands during begin's refused try closes the request `stale_claim`**, as every
+  unbegun close on a stop does. Kept: a stop is a stop.
+* **The connection-error listener reads `error.message` directly.** Kept: an empty message logs
+  nothing after the colon, and nothing reads that line.
+
+### Y2. Database (W-63): 143 is frozen at the checked text
+
+* 143's text does not change again: md5 `5e7afa73d1ccfc8b06327cc128d28e1d`, 23585 bytes.
+* Guard check (c) stays as written. It reads what `workspace_runner` can execute, which is the
+  fact the phase cares about; a function another stream leaves open to PUBLIC is a fact about the
+  runner too. A guard runs once, at the apply.
+* Unit 143's sections 1 and 2, and units 140 and 142 against 143, are proven by the Runner after
+  the apply, as 140 to 142's units were. A statement the tool holds for confirmation is not sent
+  another way.
+* Unit 140b's truncate try stays, Runner-only.
+
+### Y3. The brief and the records (PM)
+
+* The `DATA_SYNTAX.md` heading is `## Workspace (migrations 140-143)`; the brief's four mentions
+  follow it.
+* 143 is "`create or replace` and `comment on` only": a comment is additive.
+* `database.types.ts` is regenerated a second time after the apply.
+* The open item for task 6a's merge word is closed (PR #77, 2026-10-06).
+* The two review tables above read `fixed` now that the review round is merged
+  (`9df56e9` the runner, `d885d3a` the database, `5c7cb0e` the page, `0470bb4` the container's files).
+
+## Migration 143 applied (2026-10-07 05:21 UTC)
+
+Stack: "apply 143". Applied by the PM from the main session with `apply_migration`, name
+`143_workspace_review_round`, the query being the file's text at `6ef7e39`. Read back from
+`supabase_migrations.schema_migrations`:
+
+| version | name | md5 of the recorded text | bytes | the file |
+|---|---|---|---|---|
+| `20261006171547` | `140_workspace_tables` | `64692ea53ee1c60c96e974d928b41a29` | 24459 | equal |
+| `20261006171610` | `141_workspace_realtime_policy` | `d3dcc40e4865b1a62a7d7b4e55df6a72` | 2817 | equal |
+| `20261006171717` | `142_workspace_runner_role` | `28786bc625723f8d2317293d936b9254` | 24086 | equal |
+| `20261007052130` | `143_workspace_review_round` | `5e7afa73d1ccfc8b06327cc128d28e1d` | 23585 | equal |
+
+Each is one statement entry; `md5sum db/migrations/14[0123]_*.sql` on the phase branch prints the
+same four values.
+
+Through the Runner against prod, from the phase worktree at `d885d3a`
+(`node scripts/db-test.mjs --only <file>`, connected as `db_test_runner`):
+
+| unit | result |
+|---|---|
+| `phase21_140_workspace_tables.sql` | `PASS` |
+| `phase21_140b_workspace_writes.sql` | `PASS` |
+| `phase21_141_workspace_realtime.sql` | `PASS` |
+| `phase21_142_workspace_runner.sql` | `PASS` |
+| `phase21_143_review_round.sql` | `PASS` |
+| `phase15_100_db_test_runner_role.sql` | `PASS` |
+| the whole suite, `node scripts/db-test.mjs` | `passed 67, failed 3, units 70` |
+
+The three failures are the three of task 17 (`grading_invariants.sql`,
+`phase18_122_supersede_rule.sql`, `phase18_golden_truth.sql`): they read prod's course data, not
+this phase's objects, and go to STATUS "Known issues". `phase15_101_search_path_pin.sql` and
+`phase12b_076_rls_initplan_and_truncate.sql` are among the 67.
+
+**Types.** `generate_typescript_types` again; `web/src/lib/supabase/database.types.ts` gains one
+line and loses none (`polled_age_seconds: number | null` on `v_workspace_status`), `6eb6580`.
+
+## The suites on the integrated branch after the review round (2026-10-07, `6eb6580`)
+
+| suite | command | result |
+|---|---|---|
+| web typecheck | `npm run typecheck` | exit 0, no output |
+| web tests | `npx vitest run` | 153 files, 2830 tests, 0 failed |
+| web lint | `npx eslint .` | no output |
+| runner typecheck | `npm run typecheck` (in `workspace/`) | exit 0 |
+| runner tests | `npx vitest run` (in `workspace/`) | 9 files, 714 tests, 0 failed |
+| SQL | `node scripts/db-test.mjs` | `passed 67, failed 3, units 70` (above) |
