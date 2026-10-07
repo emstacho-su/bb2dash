@@ -2,8 +2,8 @@
  * "Apply answers" — the Inbox header's request button.
  *
  * Same shape and the same tokens as the top bar's Sync button, because it is
- * the same affordance: file a request, get a command on the clipboard, watch
- * the state. The one difference is where the toast hangs — this button sits at
+ * the same affordance: file a request and watch the state (Phase 23: the apply
+ * worker takes it; nothing is copied unless nothing claims it). The one difference is where the toast hangs — this button sits at
  * the left of a page header rather than at the right of the bar, so the panel
  * is anchored to its left edge and cannot run off the screen.
  */
@@ -46,6 +46,14 @@
   height: 14px;
   fill: currentColor;
   display: block;
+}
+
+/* The request's state in plain words, beside the button (R3-2; Phase 23). */
+.status {
+  margin-left: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-neutral-400);
+  white-space: nowrap;
 }
 
 /* The toast hangs under the button, anchored to its left edge. */

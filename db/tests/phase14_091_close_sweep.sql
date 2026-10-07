@@ -27,6 +27,11 @@ create temp table _t14 (label text primary key, id bigint, run_id uuid) on commi
 update agent_requests set state = 'cancelled'
  where kind = 'sync' and state in ('queued', 'claimed');
 
+-- Phase 23 (migration 183): one inbox_feedback request may be open at a time, and section 7 claims
+-- one of its own, so a real open one is set aside for this transaction.
+update agent_requests set state = 'cancelled'
+ where kind = 'inbox_feedback' and state in ('queued', 'claimed');
+
 update agent_requests set state = 'failed'
  where kind = 'sync' and state = 'done'
    and ((finished_at at time zone 'America/New_York')::date

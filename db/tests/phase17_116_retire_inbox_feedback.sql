@@ -13,6 +13,11 @@ begin;
 
 select set_config('w44.fail', '', true);
 
+-- Phase 23 (migration 183): one inbox_feedback request may be open at a time, and this unit
+-- inserts one, so a real open one is set aside for this transaction.
+update agent_requests set state = 'cancelled'
+ where kind = 'inbox_feedback' and state in ('queued', 'claimed');
+
 do $$
 declare
   v_fail   text[] := '{}';

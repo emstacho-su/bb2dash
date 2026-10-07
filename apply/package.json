@@ -1,0 +1,26 @@
+{
+  "name": "bb2dash-apply",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The apply worker (Phase 23): it takes queued inbox_feedback requests through the inbox_apply_runner functions, archives the answers that need no reading itself, and runs /inbox-apply with the unmodified claude CLI on the owner's subscription for the rest, as a database role that can only write what the skill allows.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "esbuild src/main.ts src/healthcheck.ts src/hooks/tool-gate.ts src/mcp-sql/server.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist --outbase=src --packages=external",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.9.2",
+    "@types/pg": "8.23.1",
+    "@vitest/coverage-v8": "5.0.1",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  }
+}

@@ -60,7 +60,7 @@ interface FixtureRow { kind: string; bb_course_id: string | null }
 const FIXTURE = readFixture() as { rows: FixtureRow[] };
 const PDF = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(3000, 0x41)]);
 const CDN = 'https://x.content.blackboardcdn.com/f?sig=1';
-const PASS_EVENTS = new Set(['claim', 'register', 'crawl', 'wait', 'files', 'embed', 'close']);
+const PASS_EVENTS = new Set(['claim', 'register', 'crawl', 'wait', 'files', 'embed', 'close', 'apply_request']);
 
 interface Req {
   id: number;
@@ -74,7 +74,7 @@ interface Req {
   created_at: Date;
 }
 
-/** An in-memory stand-in for the twelve functions, close enough to 091 to drive the runner. */
+/** An in-memory stand-in for the runner's functions (091, 093, 180), close enough to drive the runner. */
 class FakeDb {
   events: string[] = [];
   fns: string[] = [];
@@ -83,6 +83,10 @@ class FakeDb {
   bbRaw: { run_id: string; kind: string; bb_course_id: string | null }[] = [];
   files = [{ id: 901, stored: false }];
   stored: unknown[][] = [];
+  /** Rows in the Inbox's answered queue (v_inbox_queue), and what 180's function was asked and filed. */
+  answered = 2;
+  applyAsked: string[] = [];
+  applyFiled: { id: number; after: string }[] = [];
   private nextId = 500;
 
   insertRequest(params: Record<string, unknown>): number {
@@ -165,6 +169,18 @@ class FakeDb {
         const doneToday = this.requests.some((r) => r.state === 'done' && r.finished_at);
         if (params[0] === 'login' && doneToday) return one({ id: null });
         return one({ id: String(this.insertRequest({ trigger: params[0] })) });
+      }
+      case 'sync_request_inbox_apply': {
+        this.events.push('apply_request');
+        const after = String(params[0]);
+        this.applyAsked.push(after);
+        const r = req(after);
+        if (!r || r.kind !== 'sync' || r.state !== 'done' || r.claimed_by !== 'sync-runner') return one({ id: null });
+        if (this.answered === 0) return one({ id: null });
+        // Kept apart from `requests`: sync_next() must never see an inbox_feedback row.
+        const filed = { id: 9000 + this.applyFiled.length, after };
+        this.applyFiled.push(filed);
+        return one({ id: String(filed.id) });
       }
       case 'sync_login_ok':
         return one({ n: 0 });
@@ -250,9 +266,12 @@ describe('the runner end to end, on fakes', () => {
     try {
       const first = db.insertRequest({});
       const runner = startRunner(deps(db, state, tmp));
-      await until(() => db.requests.find((r) => r.id === first)?.state === 'done', 'the first request to close');
+      await until(() => db.applyAsked.length === 1, 'the first request to close and the Inbox apply request to be asked for');
+      expect(db.requests.find((r) => r.id === first)!.state).toBe('done');
 
-      expect(passOrder(db.events)).toEqual(['claim', 'register', 'crawl', 'wait', 'files', 'embed', 'close']);
+      expect(passOrder(db.events)).toEqual(['claim', 'register', 'crawl', 'wait', 'files', 'embed', 'close', 'apply_request']);
+      // Phase 23: two answered rows wait, so the done sync filed one Inbox apply request, named after itself.
+      expect(db.applyFiled).toEqual([{ id: 9000, after: String(first) }]);
       const runA = db.requests.find((r) => r.id === first)!.run_id!;
       expect(runA).toMatch(/^[0-9a-f-]{36}$/);
       expect(db.bbRaw.filter((b) => b.run_id === runA)).toHaveLength(9);
@@ -280,10 +299,15 @@ describe('the runner end to end, on fakes', () => {
       expect(out).toEqual([`sync_enqueue('just') -> request ${second.id}`]);
 
       db.events.length = 0;
+      db.answered = 0;
       const again = startRunner(deps(db, state, tmp));
-      await until(() => second.state === 'done', 'the second request to close');
+      await until(() => db.applyAsked.length === 2, 'the second request to close and the Inbox apply request to be asked for');
       await again.stop();
-      expect(passOrder(db.events)).toEqual(['claim', 'register', 'crawl', 'wait', 'files', 'close']);
+      expect(second.state).toBe('done');
+      expect(passOrder(db.events)).toEqual(['claim', 'register', 'crawl', 'wait', 'files', 'close', 'apply_request']);
+      // An empty answered queue: asked, and nothing filed.
+      expect(db.applyAsked).toEqual([String(first), String(second.id)]);
+      expect(db.applyFiled).toHaveLength(1);
       expect(second.run_id).not.toBe(runA);
       expect(db.bbRaw.filter((b) => b.run_id === second.run_id)).toHaveLength(9);
       expect(db.bbRaw).toHaveLength(18);

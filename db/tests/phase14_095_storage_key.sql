@@ -9,7 +9,8 @@
 --      key with 22023: 091's `#`-only key, the raw relpath, an arbitrary key. A refusal writes nothing.
 --   3. attributes and privileges: bb_file_storage_key is immutable, invoker-rights, path-pinned and
 --      callable by the suite; sync_file_stored is still SECURITY DEFINER, path-pinned, owned by
---      postgres and executable by sync_runner alone, and sync_runner's DEFINER set is 093's thirteen.
+--      postgres and executable by sync_runner alone, and sync_runner's DEFINER set is 093's thirteen
+--      and 180's sync_request_inbox_apply.
 --
 -- No loader: it needs one fixture bb_files row and no crawl. Every sync_file_stored call is made
 -- under `set local role sync_runner` (094); the setup and the reads run as the session role.
@@ -180,8 +181,8 @@ begin
      and has_function_privilege('sync_runner', p.oid, 'execute');
   if v_got is distinct from
      'sync_claim,sync_close,sync_enqueue,sync_file_stored,sync_file_worklist,sync_login_ok,'
-     'sync_login_required,sync_next,sync_own_claims,sync_register_run,sync_requeue_orphans,'
-     'sync_run_outcome,sync_sweep_stale' then
+     'sync_login_required,sync_next,sync_own_claims,sync_register_run,sync_request_inbox_apply,'
+     'sync_requeue_orphans,sync_run_outcome,sync_sweep_stale' then
     v_bad := v_bad || format('sync_runner executes SECURITY DEFINER functions %s', v_got);
   end if;
 

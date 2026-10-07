@@ -2,13 +2,13 @@
   "name": "bb2dash-scripts",
   "private": true,
   "version": "0.0.0",
-  "description": "Node helpers that run from the repo root: the SQL test runner for db/tests, and the Google consent helper.",
+  "description": "Node helpers that run from the repo root: the SQL test runner for db/tests, the Google consent helper, and the inbox-decisions exporter.",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test db-test.test.mjs google-consent.test.mjs sync-on-sonnet.test.mjs",
+    "test": "node --test db-test.test.mjs google-consent.test.mjs sync-on-sonnet.test.mjs inbox-decision-render.test.mjs inbox-decisions-export.test.mjs inbox-decisions-pr.test.mjs",
     "db-test": "node db-test.mjs"
   },
   "dependencies": {

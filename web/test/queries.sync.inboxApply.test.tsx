@@ -73,6 +73,7 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 
 const {
+  INBOX_APPLY_WATCH_MS,
   buildResolutionPatch,
   createAgentRequest,
   inboxApplyCommand,
@@ -81,6 +82,7 @@ const {
   openSyncRequestOptions,
   syncKeys,
   useCreateAgentRequest,
+  useRefreshInboxOnQueueChange,
   useResolveAttentionItem,
 } = await import('@/lib/queries.sync');
 
@@ -168,6 +170,37 @@ describe('the open-request lookup is per kind', () => {
   });
 });
 
+describe('the Inbox lookup notices a request a sync filed (Phase 23)', () => {
+  /** The interval react-query would use, given what the lookup last returned. */
+  function interval(options: { refetchInterval?: unknown }, data: unknown): unknown {
+    const fn = options.refetchInterval as (query: { state: { data: unknown } }) => unknown;
+    return fn({ state: { data } });
+  }
+
+  it('looks again every 30 seconds while nothing is open and answers wait', () => {
+    expect(INBOX_APPLY_WATCH_MS).toBe(30_000);
+    expect(interval(openInboxApplyRequestOptions({ watch: true }), null)).toBe(INBOX_APPLY_WATCH_MS);
+  });
+
+  it('never looks again by itself when it is not watching', () => {
+    expect(interval(openInboxApplyRequestOptions(), null)).toBe(false);
+    expect(interval(openInboxApplyRequestOptions({ watch: false }), null)).toBe(false);
+  });
+
+  it('keeps the 10-second cadence while a request is open, watching or not', () => {
+    const open = { id: 8, kind: 'inbox_feedback', state: 'queued' };
+    expect(interval(openInboxApplyRequestOptions({ watch: true }), open)).toBe(10_000);
+    expect(interval(openInboxApplyRequestOptions(), open)).toBe(10_000);
+  });
+
+  it('shares one cache key whether it watches or not, and leaves the Sync lookup alone', () => {
+    expect(openInboxApplyRequestOptions({ watch: true }).queryKey).toEqual(
+      openInboxApplyRequestOptions().queryKey,
+    );
+    expect(interval(openSyncRequestOptions(), null)).toBe(false);
+  });
+});
+
 describe('inboxQueueCountOptions — how many answers are waiting', () => {
   it('asks v_inbox_queue for a head count and nothing else', async () => {
     stub.result.count = 3;
@@ -186,6 +219,44 @@ describe('inboxQueueCountOptions — how many answers are waiting', () => {
   it('throws the Postgres error rather than showing a count of nothing', async () => {
     stub.result.error = { message: 'permission denied for view v_inbox_queue' };
     await expect(run(inboxQueueCountOptions())).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe('the answered count is how the page notices a run it never saw (Phase 23, review round 1)', () => {
+  function wrapper(queryClient: QueryClient) {
+    return function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    };
+  }
+  const interval = (data: unknown) =>
+    (inboxQueueCountOptions().refetchInterval as (query: { state: { data: unknown } }) => unknown)({ state: { data } });
+
+  it('the count is read again every 30 seconds while answers wait, and not at all when none do', () => {
+    expect(interval(3)).toBe(INBOX_APPLY_WATCH_MS);
+    expect(interval(0)).toBe(false);
+    expect(interval(undefined)).toBe(false);
+  });
+
+  it('a count that moved refreshes the Inbox list and the Home counts; the first read and a steady count do not', () => {
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { rerender } = renderHook(({ count }: { count: number | null }) => useRefreshInboxOnQueueChange(count), {
+      wrapper: wrapper(queryClient),
+      initialProps: { count: null as number | null },
+    });
+    rerender({ count: 3 });
+    rerender({ count: 3 });
+    expect(invalidate).not.toHaveBeenCalled();
+
+    rerender({ count: 0 });
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toEqual([syncKeys.attentionAll(), syncKeys.status()]);
+    // The count's own cache is not among them: a refresh never causes another.
+    expect(keys).not.toContainEqual(syncKeys.inboxQueueCount());
+
+    rerender({ count: null });
+    rerender({ count: 0 });
+    expect(invalidate).toHaveBeenCalledTimes(2);
   });
 });
 

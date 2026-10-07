@@ -1,6 +1,6 @@
 /**
- * The runner's database side: the twelve `sync_runner` functions of migration 091, and nothing
- * else. The role holds no table, view or sequence grant, so every call below is one of them.
+ * The runner's database side: the `sync_runner` functions of migrations 091, 093 and 180, and
+ * nothing else. The role holds no table, view or sequence grant, so every call below is one of them.
  *
  * `createRpc` takes a bare query function, so the loop and the integration test run on a fake;
  * `createPgQuery` is the real one: one session-pooler connection, reconnected after a failure,
@@ -73,6 +73,11 @@ export interface SyncRpc {
   enqueue(trigger: 'just' | 'login'): Promise<string | null>;
   loginOk(): Promise<number>;
   loginRequired(): Promise<string | null>;
+  /**
+   * After a sync this runner closed done (migration 180): the open Inbox apply request's id, filed
+   * now when answered items wait and none was open; null when the answered queue is empty.
+   */
+  requestInboxApply(after: string): Promise<string | null>;
 }
 
 const FOLD_STATUSES: readonly FoldStatus[] = ['running', 'ok', 'partial', 'failed'];
@@ -99,7 +104,7 @@ function asInt(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** The twelve functions, as typed calls. */
+/** The runner's functions, as typed calls. */
 export function createRpc(query: QueryFn): SyncRpc {
   const scalar = async (sql: string, params?: readonly unknown[]): Promise<unknown> =>
     Object.values(firstRow(await query(sql, params)) ?? {})[0];
@@ -182,6 +187,10 @@ export function createRpc(query: QueryFn): SyncRpc {
     },
     async loginRequired() {
       return optionalId(await scalar('select public.sync_login_required()::text as id'), 'sync_login_required');
+    },
+    async requestInboxApply(after) {
+      const id = await scalar('select public.sync_request_inbox_apply($1::bigint)::text as id', [asId(after, 'sync_request_inbox_apply')]);
+      return optionalId(id, 'sync_request_inbox_apply');
     },
   };
 }
