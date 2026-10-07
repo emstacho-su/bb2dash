@@ -7,8 +7,9 @@
 // A pack is four files: acceptance/<NN>/manifest.json, playbook.md and proofs.json, and the
 // browser tests in web/e2e/accept<NN>.spec.ts. The rules are about how they agree: a step names a
 // test that exists, a proof that exists, evidence its test really writes; a stage has its section
-// in the playbook; and nothing in the pack quotes an answer, because answers quote course material
-// and this repository is public.
+// in the playbook; nothing in the pack quotes an answer, because answers quote course material
+// and this repository is public; and a text the playbook gives as the page's own is one of the
+// app's strings, because the operator takes every sentence at its word.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +28,15 @@ const SAVE_NAME = /^[a-z][a-z0-9_]*$/;
 const DECLARED_TEST = /acceptStep\(\s*'([^']+)',\s*\{\s*shots:\s*\[([^\]]*)\]/g;
 const QUESTION = /export const QUESTION_(?:LOOKUP|DECISION|DOCUMENT|STANDARD|DEEP)\s*=\s*(['"])((?:(?!\1).)+)\1;/gs;
 const QUOTED = /"([^"\n]+)"|“([^”\n]+)”/g;
+
+/** The file in which the app spells what the Workspace page shows. */
+export const LABELS_PATH = 'web/src/lib/workspace-labels.ts';
+/** The marks a string is typed between in that file and in a browser-test file. */
+const QUOTE_MARKS = ["'", '"', '`'];
+/** One of the three words a playbook puts before a text of the page, then white space, then a text in code marks. */
+const TEXT_OF_THE_PAGE = /\b(reads|says|shows)\s+`([^`]+)`/g;
+/** The word "reads" with anything but a text in code marks after it, and the start of what does follow. */
+const READS_WITHOUT_TEXT = /\breads\b(?!\s+`)\s*([^\n]{0,30})/g;
 
 /* ---------------------------------------------------------------------------------------------
  * Reading a pack
@@ -345,6 +355,44 @@ function courseTextProblems({ manifest, playbook }, questions) {
   return problems;
 }
 
+/** The app's own strings for the Workspace page, as the file's text. A missing file is an error that names it. */
+export function labelsOf(repo) {
+  const file = path.join(repo, LABELS_PATH);
+  if (!fs.existsSync(file)) throw new Error(`${LABELS_PATH} is missing`);
+  return fs.readFileSync(file, 'utf8');
+}
+
+/** Whether the file's text holds this text with the same quote mark straight before it and straight after it. */
+const holdsQuoted = (source, text) => QUOTE_MARKS.some((mark) => source.includes(`${mark}${text}${mark}`));
+
+/**
+ * A text the playbook gives as the page's own must be one. Exactly this is checked, over the
+ * whole playbook, and nothing more:
+ *
+ * 1. The word "reads" is always followed by white space and a text in code marks. It is the
+ *    playbook's word for what a button, a line or a badge shows, and is used for nothing else.
+ * 2. A text in code marks that follows "reads", "says" or "shows", with only white space between,
+ *    stands in `LABELS_PATH` or in the phase's browser-test file as a whole quoted string: with a
+ *    quote mark (' or " or `) straight before it and the same mark straight after it. Words inside
+ *    a longer string are not a whole string.
+ *
+ * White space inside the code marks counts as one space, so a text may wrap over a line. A text in
+ * code marks after any other word is not read, and neither are plain words after "says" or
+ * "shows".
+ */
+function pageTextProblems({ phase, playbook, specText }, labels) {
+  const specPath = specPathOf(phase);
+  const problems = [...playbook.matchAll(READS_WITHOUT_TEXT)].map(
+    ([, after]) => `playbook.md: "reads" is followed by "${after.trim()}" and not by a text in code marks`,
+  );
+  for (const [, word, marked] of playbook.matchAll(TEXT_OF_THE_PAGE)) {
+    const text = marked.replace(/\s+/g, ' ');
+    if (holdsQuoted(labels, text) || holdsQuoted(specText, text)) continue;
+    problems.push(`playbook.md: "${word} \`${text}\`": "${text}" is not a whole quoted string of ${LABELS_PATH} or of ${specPath}`);
+  }
+  return problems;
+}
+
 function waivedProblems({ manifest }, repo) {
   return stepsOfKind(manifest, 'waived')
     .filter((step) => step.stands_on !== undefined && !fs.existsSync(path.join(repo, step.stands_on)))
@@ -369,6 +417,7 @@ export function packProblems(pack, { repo, manifestSchema }) {
     ...deadlineProblems(pack),
     ...playbookProblems(pack),
     ...courseTextProblems(pack, questionsOf(repo)),
+    ...pageTextProblems(pack, labelsOf(repo)),
     ...waivedProblems(pack, repo),
   ];
 }

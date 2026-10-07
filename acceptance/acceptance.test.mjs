@@ -5,9 +5,9 @@
 // Holds every acceptance pack under acceptance/<NN>/ to the rules in acceptance/README.md, with no
 // dependency and no network: the manifest against its schema, every automated step against the
 // browser-test file it names, every proof against proofs.json, every sandbox stage against the
-// playbook, and the rule that a pack quotes no course text. The rules themselves are in
-// pack-check.mjs; each one is shown to fail on a pack that breaks it, because a check that cannot
-// fail guards nothing.
+// playbook, the rule that a pack quotes no course text, and the rule that a playbook writes the
+// page's texts as the app has them. The rules themselves are in pack-check.mjs; each one is shown
+// to fail on a pack that breaks it, because a check that cannot fail guards nothing.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -346,7 +346,7 @@ test('every sandbox stage has its section in the playbook, naming each of its te
 test('a pack quotes no answer: no block quote, and no long quoted passage but the five questions', () => {
   const answer = 'Late work loses ten percent a day and is not taken after the third day, as the policy page of the syllabus has it.';
   assert.ok(answer.length > QUOTE_MAX_CHARS);
-  const quoted = problemsAfter((pack) => ({ ...pack, playbook: `${pack.playbook}\nThe answer reads "${answer}"\n` }));
+  const quoted = problemsAfter((pack) => ({ ...pack, playbook: `${pack.playbook}\nThe answer was "${answer}"\n` }));
   assert.equal(quoted.length, 1);
   assert.match(quoted[0], /^playbook\.md: quotes a passage of \d+ characters that is not one of the five questions/);
   const blockQuote = problemsAfter((pack) => ({ ...pack, playbook: `${pack.playbook}\n> ${answer}\n` }));
@@ -356,6 +356,30 @@ test('a pack quotes no answer: no block quote, and no long quoted passage but th
   // The five questions are the brief's own words, and may be quoted.
   const question = questionsOf(REPO)[0];
   assert.deepEqual(problemsAfter((pack) => ({ ...pack, playbook: `${pack.playbook}\nIt asks "${question}"\n` })), []);
+});
+
+test("a text the playbook gives as the page's own is one of the app's strings, and the word reads is kept for such a text", () => {
+  const withLine = (line) => problemsAfter((pack) => ({ ...pack, playbook: `${pack.playbook}\n${line}\n` }));
+  // The sentence the first proof run (2026-10-07) was failed on, word for word: a label in no code marks.
+  assert.deepEqual(withLine('- `8-stopped.png` shows a partly written answer, and the button reads Ask again, not Stop.'), [
+    'playbook.md: "reads" is followed by "Ask again, not Stop." and not by a text in code marks',
+  ]);
+  // The same words in code marks. They stand in workspace-labels.ts inside two longer sentences, and are no string of their own.
+  assert.ok(readText('web/src/lib/workspace-labels.ts').includes('Ask again'));
+  assert.deepEqual(withLine('The button reads `Ask again`, not `Stop`.'), [
+    'playbook.md: "reads `Ask again`": "Ask again" is not a whole quoted string of web/src/lib/workspace-labels.ts or of web/e2e/accept21.spec.ts',
+  ]);
+  assert.deepEqual(withLine('The page says `The Workspace is offline.` under the question box.'), [
+    'playbook.md: "says `The Workspace is offline.`": "The Workspace is offline." is not a whole quoted string of web/src/lib/workspace-labels.ts or of web/e2e/accept21.spec.ts',
+  ]);
+  // The app's own strings pass after each of the three words, on the next line too, and wrapped inside the code marks.
+  assert.deepEqual(withLine('The button reads `Ask`, and no button reads\n`Stop`.'), []);
+  assert.deepEqual(withLine('The page says `The Workspace service is offline.` and shows `Waiting for the\nWorkspace service` under the question.'), []);
+  // A string only the browser-test file holds passes as well: the top bar's link is not in workspace-labels.ts.
+  assert.ok(!readText('web/src/lib/workspace-labels.ts').includes("'Workspace'"));
+  assert.deepEqual(withLine('The link reads `Workspace`.'), []);
+  // Nothing else is read: a text in code marks after any other word, and plain words after says or shows.
+  assert.deepEqual(withLine('A row titled `no such title` is fine, the list says so, and `9.json` shows the rest.'), []);
 });
 
 test("a waived step's standing evidence must be a file of this repository", () => {

@@ -85,7 +85,11 @@ and `web/e2e/accept.lib.ts` (how a test records what it saw).
    parameters, one `select`, and a sentence saying what the row must show.
 5. **`acceptance/<NN>/playbook.md`.** One `## Stage: <id>` section per sandbox stage. For each step:
    what it does, and what must be true in the pictures and in the facts file for a pass. Say what is
-   *not* the product's fault too, so the operator can tell `blocked` from `fail`.
+   *not* the product's fault too, so the operator can tell `blocked` from `fail`. The operator gets
+   one section and nothing around it, and takes every sentence at its word. So write a text of the
+   page in code marks, exactly as the page has it (``the button reads `Ask` ``); repeat a thing's
+   name where "it" could be two things; and leave out "again", "still" and "as before", which can
+   each be read two ways.
 6. **Run the checks**, then try it: `node --test acceptance/acceptance.test.mjs`, then
    `just accept <NN> --check` from bb2dash-stack.
 
@@ -114,6 +118,11 @@ installed and reaches nothing.
   the stage's tests.
 - **No course text.** The playbook and the manifest quote no answer: no block quote, and no quoted
   passage longer than a short label, except the acceptance script's own questions.
+- **The page's texts, as the page has them.** In a playbook the word "reads" is always followed by
+  a text in code marks. A text in code marks that comes straight after "reads", "says" or "shows"
+  must stand in `web/src/lib/workspace-labels.ts` or in the phase's browser-test file as a whole
+  quoted string, with a quote mark straight before it and the same mark straight after it. That is
+  all the check reads: a text in code marks after any other word passes unread.
 
 ## For whoever maintains it
 
