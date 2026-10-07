@@ -165,15 +165,30 @@ test('a value is refused unless it is of its type', () => {
 
   assert.equal(taken('uuids', `${UUID_A},${UUID_B}`), `{${UUID_A},${UUID_B}}`);
   assert.equal(taken('uuids', UUID_A), `{${UUID_A}}`);
-  for (const bad of ['', `${UUID_A},`, `${UUID_A} ${UUID_B}`, `{${UUID_A}}`, Array(51).fill(UUID_A).join(',')]) refused('uuids', bad);
+  // The host hands a carried list over as JSON, and a single carried id as it is.
+  assert.equal(taken('uuids', JSON.stringify([UUID_A, UUID_B])), `{${UUID_A},${UUID_B}}`);
+  const badLists = ['', `${UUID_A},`, `${UUID_A} ${UUID_B}`, `{${UUID_A}}`, Array(51).fill(UUID_A).join(','), '[]', `["${UUID_A}", 7]`, `["${UUID_A}"`, `[["${UUID_A}"]]`];
+  for (const bad of badLists) refused('uuids', bad);
 
   assert.equal(taken('enum:low|mid|high', 'mid'), 'mid');
   for (const bad of ['', 'LOW', 'lowest', 'low|mid']) refused('enum:low|mid|high', bad);
 
   assert.equal(taken('fingerprint', FINGERPRINT), FINGERPRINT);
-  for (const bad of ['', 'ap=none', FINGERPRINT.replace('n=143', 'n=many'), `${FINGERPRINT};`, FINGERPRINT.replace(',at=', ',at=now()')]) {
-    refused('fingerprint', bad);
-  }
+  // The host saves planner-fingerprint's whole detail and hands that back, as JSON: the fingerprint is read out of it.
+  assert.equal(taken('fingerprint', JSON.stringify({ fingerprint: FINGERPRINT, newest_request_id: '866', newest_request_kind: 'sync' })), FINGERPRINT);
+  const badPrints = [
+    '',
+    'ap=none',
+    FINGERPRINT.replace('n=143', 'n=many'),
+    `${FINGERPRINT};`,
+    FINGERPRINT.replace(',at=', ',at=now()'),
+    JSON.stringify({ newest_request_id: '866' }),
+    JSON.stringify({ fingerprint: `${FINGERPRINT}' or '1'='1` }),
+    JSON.stringify({ fingerprint: { nested: FINGERPRINT } }),
+    JSON.stringify([FINGERPRINT]),
+    `{"fingerprint": "${FINGERPRINT}"`,
+  ];
+  for (const bad of badPrints) refused('fingerprint', bad);
 });
 
 test('a text parameter is a plain name: SQL metacharacters are refused', () => {
@@ -479,11 +494,13 @@ for (const name of Object.keys(GIVEN)) {
   });
 }
 
-test('the fingerprint that planner-fingerprint returns is one that planner-unchanged takes', async () => {
+test('what planner-fingerprint returns is what planner-unchanged takes, as the string or as the whole detail', async () => {
   const read = await runWith({ argv: argvFor('planner-fingerprint'), rows: [ROWS['planner-fingerprint'].pass] });
-  const again = await runWith({ argv: argvFor('planner-unchanged', { before: read.line.detail.fingerprint }), rows: [ROWS['planner-unchanged'].pass] });
-  assert.equal(again.code, EXIT.pass);
-  assert.deepEqual(again.clients[0].queries[3].values, [FINGERPRINT]);
+  for (const before of [read.line.detail.fingerprint, JSON.stringify(read.line.detail)]) {
+    const again = await runWith({ argv: argvFor('planner-unchanged', { before }), rows: [ROWS['planner-unchanged'].pass] });
+    assert.equal(again.code, EXIT.pass);
+    assert.deepEqual(again.clients[0].queries[3].values, [FINGERPRINT]);
+  }
 });
 
 test('the uuid list reaches the statement as one array value', async () => {
