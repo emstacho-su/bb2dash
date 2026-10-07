@@ -496,6 +496,24 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
     assert.equal(pinsOf(run.hosts).length, 4);
   });
 
+  test('an answer that repeats an address: each address is allowed, pinned and counted once', async () => {
+    // What a real resolver gave on 2026-10-07 (102a, the docker step's second run): Docker Desktop's
+    // answer for the pooler's name, a CNAME to a load balancer, held each of its three A records
+    // twice. Six lines are three addresses: the log's count and the pins say three.
+    const addresses = Object.freeze([POOLER_ADDRESS, '198.51.100.7', '203.0.113.21']);
+    const run = await raise(makeWorld({ dns: { [POOLER]: [...addresses, ...addresses] } }));
+    assert.equal(run.status, 0, run.out);
+    assert.deepEqual(
+      pinsOf(run.hosts).filter((line) => line.includes(` ${POOLER} `)),
+      addresses.map((address) => `${address} ${POOLER} ${PIN_MARK}`),
+    );
+    assert.ok(run.out.includes(`Allowed ${POOLER} on tcp/5432 (${addresses.length} address(es), pinned in `), run.out);
+    const chain = outputChain(run.calls);
+    assert.deepEqual([...chain.sets.get(POSTGRES_SET)].sort(), [...addresses].sort());
+    assert.equal(run.calls.filter((call) => call.startsWith('ipset add ') && call.includes(` ${POSTGRES_SET} `)).length, addresses.length, 'one ipset add an address');
+    assert.equal(lookups(run.calls).length, 3, 'still one lookup a name');
+  });
+
   test('a rule that cannot be added stops the start at deny-all with the failing command\'s own code', async () => {
     assertDenyAll(await raise(makeWorld(), { FAIL_IPTABLES: '-A OUTPUT -p tcp --dport 5432 -m set*' }), 4);
   });

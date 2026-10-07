@@ -203,11 +203,13 @@ is_public_ipv4() {
   return 0
 }
 
-# resolve_once <name>: the A records of ONE answer from this container's resolvers, one a line.
-# dig asks DNS only (never /etc/hosts, so an old pin cannot answer for itself), and -r keeps it
-# from reading a .digrc.
+# resolve_once <name>: the A records of ONE answer from this container's resolvers, one a line,
+# each address once and in the answer's order. dig asks DNS only (never /etc/hosts, so an old pin
+# cannot answer for itself), and -r keeps it from reading a .digrc. An answer can repeat a record:
+# Docker Desktop's resolver gives each address of the pooler's load balancer twice (read on
+# 2026-10-07), and a repeated line is not a second address to pin or to count.
 resolve_once() {
-  dig -r +noall +answer +time="$DNS_TIMEOUT_S" +tries="$DNS_TRIES" A "$1" | awk '$4 == "A" {print $5}'
+  dig -r +noall +answer +time="$DNS_TIMEOUT_S" +tries="$DNS_TRIES" A "$1" | awk '$4 == "A" && !seen[$5]++ {print $5}'
 }
 
 # allow_host <set> <name>: resolve the name once, put every address of that answer in the set and
