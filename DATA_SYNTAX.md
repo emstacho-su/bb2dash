@@ -285,10 +285,13 @@ fact table. Conversations are archived, never deleted (no delete policy on any o
 **Tables** (140). Every `created_at` / `updated_at` is `timestamptz not null default now()`.
 
 * **`workspace_conversations`** — `id uuid` pk, `created_at`, `updated_at` (trigger
-  `set_updated_at()`; since 143 it stays silent for an update whose only changed value is
-  `archived`, so archiving or restoring a chat does not move it in the list), `title text` 1–120 characters (the first line of the first question, cut at
-  120; the owner may edit it), `claude_session_id text` (null, or lower-case uuid-shaped by check:
-  the CLI session the next turn resumes), `archived boolean` default false.
+  `set_updated_at()`; since 143 it fires only when `title` or `claude_session_id` changes, so
+  archiving or restoring a chat, archiving one that is already archived, or a title set to itself
+  leaves `updated_at` alone and does not move the chat in the list; an answer moves it because
+  `workspace_finish` writes `updated_at` itself), `title text` 1–120 characters (the first line of
+  the first question, cut at 120; the owner may edit it), `claude_session_id text` (null, or
+  lower-case uuid-shaped by check: the CLI session the next turn resumes), `archived boolean`
+  default false.
 * **`workspace_messages`** — `id uuid` pk, `conversation_id` → conversations (cascade),
   `parent_message_id` → messages (set null; an answer's parent is its question), `role`
   (`user` | `assistant`), `request_id` → requests (set null; set on an answer), `tier`
@@ -352,9 +355,12 @@ refusal one raises itself is **22023**, in a message that starts with the functi
   jsonb)`. First sweeps claims older than 10 minutes to `failed` / `stale_claim` (request row and
   answer). Then (143) finishes an answer still unfinished although its request closed
   (`cancelled`, `failed` or `done`) more than 10 minutes ago: `finished = true` and the request's
-  own `error_code`, nothing else written and nothing broadcast; a closed request with no
-  `finished_at` is left alone. Then claims the oldest `queued` request (`for update skip locked`,
-  `attempts + 1`).
+  own `error_code`, nothing else written and nothing broadcast. The 10 minutes are strict
+  (`finished_at < now() - interval '10 minutes'`): a request closed exactly 10 minutes ago waits
+  for a later poll. The runner kills a turn at 480 s and makes its last finish try at most 110 s
+  later, so no finish of a live turn is still on its way; one that came later would still store
+  its text on a cancelled request. A closed request with no `finished_at` is left alone. Then
+  claims the oldest `queued` request (`for update skip locked`, `attempts + 1`).
   `history` is the last 20 messages before the request's own user message, oldest first, as
   `[{role, content}]` (`[]` for a first question; the question itself is `prompt`). `prior_tier`
   is the tier of the conversation's latest answer, null when there is none. It does not stamp the
@@ -373,7 +379,8 @@ refusal one raises itself is **22023**, in a message that starts with the functi
   answer gets `cancelled`; a claimed request takes `p_state`, `finished_at` and `p_error_code`.
   Content is cut at 100000 characters and `p_tool_calls` to its first 20 elements, neither refused
   for length. A non-null `p_model` replaces the alias. The conversation's `claude_session_id` is
-  stamped, null when `p_claude_session_id` is not uuid-shaped.
+  stamped, null when `p_claude_session_id` is not uuid-shaped, and its `updated_at` is set to
+  `now()` by the function itself (the trigger is silent when the session id stays the same).
 * **`workspace_heartbeat(p_runner text)`** → `void`. Upserts the one heartbeat row; called every
   30 s.
 
