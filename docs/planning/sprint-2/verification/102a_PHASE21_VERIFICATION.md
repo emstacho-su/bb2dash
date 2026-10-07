@@ -1013,7 +1013,7 @@ its config folder was not inspected.
 The skill took `d4b1b8d` as the commit to review, and that commit is a 38-line edit of this file.
 It found nothing wrong in the numbers (it re-ran the materials server's suite, 106 passed, and
 read prod for the two SQL failures) and ten gaps in this record. They stand and are settled here;
-the run on the range `d4b1b8d..HEAD` follows below.
+the run on the range `d4b1b8d..ac41858` is the next section but one.
 
 | # | the gap | settled |
 |---|---|---|
@@ -1155,3 +1155,80 @@ kept, a Known issue. The test's five constants that equal today's public address
 that dials nothing). The harness checkout's installed `node_modules` still holds fastembed 2.1.0
 under a lock that says 2.1.1: `npm ci` there is Stack's. Step 41 runs before the walks rebuild the
 container in `bb2dash-wt-21` (one tree at a time).
+
+### `/code-review` on the range `d4b1b8d..ac41858` (2026-10-07)
+
+The second run named the range, and read the fix round as it stood with the firewall's `defc566`
+in it: every touched source file, by reading only (it ran nothing). It found no place where a fix
+departs from rulings V1 to V5, X1 to X5 or Y1 to Y3, and eleven things of its own. None is
+CRITICAL or HIGH; the PM's severities and dispositions (rulings Z1 and Z2 below):
+
+| id | severity | status |
+|---|---|---|
+| R2-1 | MEDIUM | open |
+| R2-2 | MEDIUM | open |
+| R2-3 | LOW | recorded, not changed (Z2) |
+| R2-4 | LOW | recorded, not changed (Z2) |
+| R2-5 | MEDIUM | open |
+| R2-6 | LOW | recorded, a later migration (Z2) |
+| R2-7 | LOW | recorded, a follow-up (Z2) |
+| R2-8 | LOW | recorded (Z2) |
+| R2-9 | LOW | recorded (Z2) |
+| R2-10 | LOW | recorded (Z2) |
+| R2-11 | LOW | recorded (Z2) |
+
+* **R2-1** `workspace/src/turn.ts`, `providers/claude-cli.ts`: a `result` line read after the
+  8-minute kill still counts as reported, so a turn cut short can be stored `done` with the end of
+  its answer missing, or `cli_error` in place of `timeout`.
+* **R2-2** `workspace/src/db-retry.ts`, `runner.ts`, `turn.ts`: the 110 s retry window, the
+  watchdog hold and the turn limit read `Date.now()`, so a wall-clock step (the laptop sleeping,
+  the Docker VM's clock resynced) ends a retry early or gives a just-begun turn a limit of 0. The
+  page was moved to a monotonic clock in the same round for the same reason.
+* **R2-3** `workspace/src/stream-json.ts`: an allow is not used up when its own call errors, so a
+  later call of the same name with no gate answer passes the count.
+* **R2-4** `workspace/src/turn.ts`: a 22023 on begin's first try is read as "not claimed", but
+  `workspace_begin` raises 22023 for a tier or provider off its list too.
+* **R2-5** `workspace/src/db-retry.ts`: only 22023 ends the tries, so a statement the database
+  refuses for its own content (a NUL inside `tool_calls`, which is not stripped as `content` is)
+  is retried for 110 s, the answer is given up, and the queue waits meanwhile.
+* **R2-6** `db/migrations/143_workspace_review_round.sql`: the orphan sweep runs on every poll
+  with no index that narrows it to unfinished assistant rows.
+* **R2-7** `web/src/lib/queries.workspace.ts`, `ServiceStatus.tsx`: the wall-clock fallback for a
+  status row without `polled_age_seconds` cannot be reached now that 143 is applied, and stays.
+* **R2-8** `workspace/src/config.ts`: `assertRunnerDsn` repeats `dsnParts`' checks by hand.
+* **R2-9** `web/src/lib/workspace-clock.ts`: a copy of `use-now.ts`'s store with another clock.
+* **R2-10** `workspace/src`: `MS_PER_SECOND` declared four times; a second byte-order-mark strip.
+* **R2-11** `workspace/src/stream-json.ts`: three flags set in place, against the immutability
+  rule; the file's local-state style from before the round.
+
+## PM rulings on the review of the range (2026-10-07)
+
+### Z1. Runner (W-64): one fix round
+
+* **R2-1. A result line read after the runner's own abort is not a reported result.** When the
+  runner has aborted the turn (the 8-minute limit, a Stop, a shutdown), a `result` line the
+  provider reads afterwards does not make the turn `done` and does not replace the abort's code.
+  A result read before the abort still wins, as CR-5 ruled.
+* **R2-2. The runner's durations are measured on a monotonic clock**: the finish and begin retry
+  window, the watchdog hold, and the turn limit computed after begin's retries. Timestamps that
+  are written or logged stay wall-clock.
+* **R2-5. A statement the database refuses is not retried, and NUL never reaches it.** NUL
+  characters are stripped from every string inside `tool_calls`. A failure that is the statement's
+  own (the data, integrity and syntax classes; 22023 keeps its own meaning; 57014 and every
+  connection failure stay retried) ends the tries at once. A finish refused that way is followed
+  by one minimal close of the same request (`failed`, `cli_error`, no content, no tool calls), so
+  the request does not sit claimed until the 10-minute sweep.
+* **From the security review on the delta: a secret file holding a NUL is refused at start**, by
+  a configuration error that names the file and no part of its value.
+
+### Z2. Recorded, not changed in this phase
+
+* **R2-3.** Only a CLI that skips its own hook reaches it; pairing by arrival order was ruled out
+  in CR-6 because parallel calls of one name make it wrong.
+* **R2-4.** It needs the route table and the database to disagree, and the request then waits for
+  the 10-minute sweep. Closing every unbegun request instead would wipe the conversation's session
+  id when Stop lands before begin. Revisit when a second provider is added.
+* **R2-6.** The tables are small; a partial index is migration 144's if history ever makes the
+  sweep cost.
+* **R2-7.** Removing the unreachable fallback is a follow-up (STATUS, Known issues).
+* **R2-8, R2-9, R2-10, R2-11.** Cleanup and style, not behaviour.
