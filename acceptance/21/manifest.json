@@ -34,16 +34,6 @@
       "id": "walk-proofs",
       "kind": "host",
       "actions": [
-        { "action": "db.proof", "with": { "name": "turn", "request": "carry:3.request_id", "tier": "low", "tool": "search_materials" } },
-        {
-          "action": "db.proof",
-          "with": { "name": "turn", "request": "carry:4.request_id", "tier": "low", "tool": "search_context", "scope": "bb2dash-inbox-decisions" }
-        },
-        { "action": "db.proof", "with": { "name": "turn", "request": "carry:5.request_id", "tier": "low", "tool": "get_material_text" } },
-        { "action": "db.proof", "with": { "name": "turn", "request": "carry:6.request_id", "tier": "mid" } },
-        { "action": "db.proof", "with": { "name": "turn", "request": "carry:7.request_id", "tier": "high" } },
-        { "action": "db.proof", "with": { "name": "turn-stopped", "request": "carry:8.request_id" } },
-        { "action": "db.proof", "with": { "name": "turn", "request": "carry:9.request_id", "tier": "high" } },
         { "action": "workspace.noApiKey" },
         { "action": "workspace.credentialSource", "with": { "request": "carry:9.request_id" } },
         { "action": "db.proof", "with": { "name": "planner-unchanged", "before": "carry:planner_before.fingerprint" } }
@@ -52,16 +42,7 @@
     { "id": "stop", "kind": "host", "actions": [{ "action": "workspace.stop" }] },
     { "id": "offline", "kind": "sandbox", "tests": ["14a offline"], "deadline": { "after": "workspace.stop", "seconds": 180 } },
     { "id": "start", "kind": "host", "actions": [{ "action": "workspace.startNoBuild" }] },
-    { "id": "back", "kind": "sandbox", "tests": ["14b back", "15 archive"] },
-    {
-      "id": "back-proofs",
-      "kind": "host",
-      "actions": [
-        { "action": "db.proof", "with": { "name": "turn-answered-after", "request": "carry:14a.request_id", "after": "carry:14a.still_queued_at" } },
-        { "action": "db.proof", "with": { "name": "spike-archived" } },
-        { "action": "db.proof", "with": { "name": "conversations-archived", "ids": "carry:3.conversation_id" } }
-      ]
-    }
+    { "id": "back", "kind": "sandbox", "tests": ["14b back", "15 archive"] }
   ],
   "steps": [
     {

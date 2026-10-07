@@ -243,7 +243,7 @@ test("a test title starts with its step's id, a stage test belongs to one step, 
   );
 });
 
-test('a proof must exist in proofs.json with the same parameter names, a value of the stated type, and a host action that runs it', () => {
+test("a proof must exist in proofs.json with the same parameter names and a value of the stated type, and a host step's proof is run by its own stage", () => {
   assert.ok(
     problemsAfter((pack) => { stepOf(pack.manifest, '3').proofs[0].name = 'turn-fast'; }).some((line) =>
       line.startsWith('step 3: proofs.json holds no proof named "turn-fast"'),
@@ -264,15 +264,25 @@ test('a proof must exist in proofs.json with the same parameter names, a value o
       line.startsWith('step 3: proof "turn", parameter "tier":'),
     ),
   );
-  // The step's proof is there, and no host stage runs it: the host would never read it.
-  const dropped = problemsAfter((pack) => { stageOf(pack.manifest, 'walk-proofs').actions.shift(); });
-  assert.ok(dropped.includes('step 3: no host stage after "walk" runs its proof "turn" with the same values'));
+  // A host step's proof is read by its own stage and nowhere else: without the action the host would never read it.
+  const dropped = problemsAfter((pack) => { stageOf(pack.manifest, 'walk-proofs').actions.pop(); });
+  assert.ok(dropped.includes('step 11: stage "walk-proofs" does not run its proof "planner-unchanged" with the same values'));
+  const otherValues = problemsAfter((pack) => { stepOf(pack.manifest, '11').proofs[0].with.before = 'carry:planner_before.newest_request_id'; });
+  assert.ok(otherValues.includes('step 11: stage "walk-proofs" does not run its proof "planner-unchanged" with the same values'));
   // A host action names a proof that proofs.json does not hold.
   assert.ok(
-    problemsAfter((pack) => { stageOf(pack.manifest, 'back-proofs').actions[1].with.name = 'spike-gone'; }).some((line) =>
-      line.startsWith('stage back-proofs: proofs.json holds no proof named "spike-gone"'),
+    problemsAfter((pack) => { stageOf(pack.manifest, 'go-live').actions[1].with.name = 'planner-gone'; }).some((line) =>
+      line.startsWith('stage go-live: proofs.json holds no proof named "planner-gone"'),
     ),
   );
+});
+
+test("an automated step's proofs are the host's to read after the step's stage: no host stage has to list them", () => {
+  // Each proof is read once (the PM's ruling of 2026-10-07): a step that lists a proof no host stage runs is whole.
+  const moved = problemsAfter((pack) => {
+    stepOf(pack.manifest, '14b').proofs.push({ name: 'turn', with: { request: 'carry:14a.request_id', tier: 'low' } });
+  });
+  assert.deepEqual(moved, []);
 });
 
 test('proofs.json itself is held: a parameter type off the list and a statement that could write are reported', () => {
@@ -297,12 +307,16 @@ test('a host step names a host stage and an action that stage runs', () => {
   );
 });
 
-test('a carried value must come from an earlier step or an earlier saved proof', () => {
-  const early = problemsAfter((pack) => {
-    stageOf(pack.manifest, 'walk-proofs').actions[0].with.request = 'carry:14a.request_id';
-    stepOf(pack.manifest, '3').proofs[0].with.request = 'carry:14a.request_id';
-  });
+test('a carried value must come from a step that has already run or from a proof saved earlier', () => {
+  const credentialSource = (manifest) => stageOf(manifest, 'walk-proofs').actions.find((entry) => entry.action === 'workspace.credentialSource');
+  const early = problemsAfter((pack) => { credentialSource(pack.manifest).with.request = 'carry:14a.request_id'; });
   assert.ok(early.includes('stage walk-proofs: "carry:14a.request_id" is read before step 14a has run'));
+  // A step's own proofs are read straight after its stage: a step of that stage may be carried, a later stage's may not.
+  assert.equal(stepOf(loadPack(REPO, '21').manifest, '9').proofs[0].with.request, 'carry:9.request_id');
+  const ahead = problemsAfter((pack) => { stepOf(pack.manifest, '3').proofs[0].with.request = 'carry:14a.request_id'; });
+  assert.deepEqual(ahead, ['step 3: "carry:14a.request_id" is read before step 14a has run']);
+  const noSuchStep = problemsAfter((pack) => { stepOf(pack.manifest, '15').proofs[1].with.ids = 'carry:16.conversation_id'; });
+  assert.deepEqual(noSuchStep, ['step 15: "carry:16.conversation_id" names no earlier step and no saved proof']);
   const unsaved = problemsAfter((pack) => {
     stageOf(pack.manifest, 'walk-proofs').actions.at(-1).with.before = 'carry:planner_start.fingerprint';
     stepOf(pack.manifest, '11').proofs[0].with.before = 'carry:planner_start.fingerprint';
@@ -401,7 +415,7 @@ test('Phase 21: the stages are the plan\'s, in its order, and the host only name
   assert.equal(manifest.base_url, 'https://web-xi-ten-uy9xk6c6p0.vercel.app');
   assert.deepEqual(
     manifest.stages.map((stage) => `${stage.id}:${stage.kind}`),
-    ['prepare:prepare', 'go-live:host', 'walk:sandbox', 'walk-proofs:host', 'stop:host', 'offline:sandbox', 'start:host', 'back:sandbox', 'back-proofs:host'],
+    ['prepare:prepare', 'go-live:host', 'walk:sandbox', 'walk-proofs:host', 'stop:host', 'offline:sandbox', 'start:host', 'back:sandbox'],
   );
   const actionsOf = (id) => stageOf(manifest, id).actions.map((entry) => (entry.action === 'db.proof' ? `db.proof ${entry.with.name}` : entry.action));
   assert.deepEqual(actionsOf('go-live'), [
@@ -414,21 +428,14 @@ test('Phase 21: the stages are the plan\'s, in its order, and the host only name
   ]);
   assert.deepEqual(stageOf(manifest, 'go-live').actions[1].with, { name: 'planner-fingerprint', save: 'planner_before' });
   assert.deepEqual(stageOf(manifest, 'go-live').actions[2].with, { container: 'bb2dash-wt21-workspace-1' });
-  assert.deepEqual(actionsOf('walk-proofs'), [
-    'db.proof turn',
-    'db.proof turn',
-    'db.proof turn',
-    'db.proof turn',
-    'db.proof turn',
-    'db.proof turn-stopped',
-    'db.proof turn',
-    'workspace.noApiKey',
-    'workspace.credentialSource',
-    'db.proof planner-unchanged',
-  ]);
+  // Steps 10 and 11, and nothing else: the proofs of the walk's own steps are read once, straight after the walk.
+  assert.deepEqual(actionsOf('walk-proofs'), ['workspace.noApiKey', 'workspace.credentialSource', 'db.proof planner-unchanged']);
+  assert.deepEqual(stageOf(manifest, 'walk-proofs').actions[1].with, { request: 'carry:9.request_id' });
+  assert.deepEqual(stageOf(manifest, 'walk-proofs').actions[2].with, { name: 'planner-unchanged', before: 'carry:planner_before.fingerprint' });
   assert.deepEqual(actionsOf('stop'), ['workspace.stop']);
   assert.deepEqual(actionsOf('start'), ['workspace.startNoBuild']);
-  assert.deepEqual(actionsOf('back-proofs'), ['db.proof turn-answered-after', 'db.proof spike-archived', 'db.proof conversations-archived']);
+  // No stage follows `back`: the proofs of steps 14b and 15 are those steps' own.
+  assert.equal(manifest.stages.at(-1).id, 'back');
   assert.deepEqual(stageOf(manifest, 'walk').tests, WALK_TESTS);
   assert.deepEqual(stageOf(manifest, 'offline').tests, ['14a offline']);
   assert.deepEqual(stageOf(manifest, 'offline').deadline, { after: 'workspace.stop', seconds: 180 });
@@ -470,14 +477,26 @@ test("Phase 21: the steps are the acceptance script's fifteen, and each is done 
   assert.deepEqual(turn('7'), { request: 'carry:7.request_id', tier: 'high' });
   assert.deepEqual(turn('9'), { request: 'carry:9.request_id', tier: 'high' });
   assert.deepEqual(stepOf(manifest, '8').proofs, [{ name: 'turn-stopped', with: { request: 'carry:8.request_id' } }]);
+  assert.equal(stepOf(manifest, '10').stage, 'walk-proofs');
   assert.deepEqual(stepOf(manifest, '10').actions, ['workspace.noApiKey', 'workspace.credentialSource']);
-  assert.deepEqual(stageOf(manifest, 'walk-proofs').actions[8].with, { request: 'carry:9.request_id' });
+  assert.equal(stepOf(manifest, '11').stage, 'walk-proofs');
   assert.deepEqual(stepOf(manifest, '11').proofs, [{ name: 'planner-unchanged', with: { before: 'carry:planner_before.fingerprint' } }]);
+  assert.equal(stepOf(manifest, '13').stage, 'go-live');
   assert.deepEqual(stepOf(manifest, '13').actions, ['workspace.stopTestRunner', 'workspace.ensureProfile', 'workspace.start', 'workspace.doctorRow']);
-  assert.deepEqual(
-    stepOf(manifest, '15').proofs.map((proof) => proof.name),
-    ['spike-archived', 'conversations-archived'],
-  );
+  assert.deepEqual(stepOf(manifest, '14b').proofs, [
+    { name: 'turn-answered-after', with: { request: 'carry:14a.request_id', after: 'carry:14a.still_queued_at' } },
+  ]);
+  assert.deepEqual(stepOf(manifest, '15').proofs, [{ name: 'spike-archived' }, { name: 'conversations-archived', with: { ids: 'carry:3.conversation_id' } }]);
+});
+
+test('Phase 21: each proof is read once: no host stage runs a proof that an automated step lists', () => {
+  const { manifest } = loadPack(REPO, '21');
+  const hostRuns = manifest.stages.flatMap((stage) => stage.actions ?? []).filter((entry) => entry.action === 'db.proof').map((entry) => entry.with.name);
+  // The two the host reads as actions: the planner before the walk (a reading, saved) and step 11's comparison.
+  assert.deepEqual(hostRuns, ['planner-fingerprint', 'planner-unchanged']);
+  const stepLists = manifest.steps.filter((step) => step.kind === 'auto').flatMap((step) => (step.proofs ?? []).map((proof) => proof.name));
+  assert.deepEqual(stepLists, ['turn', 'turn', 'turn', 'turn', 'turn', 'turn-stopped', 'turn', 'turn-answered-after', 'spike-archived', 'conversations-archived']);
+  assert.deepEqual(hostRuns.filter((name) => stepLists.includes(name)), []);
 });
 
 test('Phase 21: the browser-test file holds the eleven titles of the interface spec, and nothing else', () => {

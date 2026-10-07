@@ -80,7 +80,8 @@ and `web/e2e/accept.lib.ts` (how a test records what it saw).
    shape of `accept21.spec.ts`.
 3. **`acceptance/<NN>/manifest.json`.** The stages in order (`prepare`, then `host` and `sandbox`
    stages as the script needs them) and every step. An `auto` step names its stage, its test, the
-   files its test leaves as evidence, and the proofs that must also pass.
+   files its test leaves as evidence, and the proofs that must also pass. The host reads those
+   proofs itself after the step's stage, so they are not listed a second time as host actions.
 4. **`acceptance/<NN>/proofs.json`.** One entry per fact the laptop must read for itself: its typed
    parameters, one `select`, and a sentence saying what the row must show.
 5. **`acceptance/<NN>/playbook.md`.** One `## Stage: <id>` section per sandbox stage. For each step:
@@ -108,10 +109,11 @@ installed and reaches nothing.
 - Every test of a stage belongs to exactly one step, and the browser-test file holds no test that no
   stage runs.
 - Every proof a step or a host action names is in `proofs.json`, with the same parameter names and
-  values of the stated types; and for every proof a step lists, a later host stage runs that proof
-  with the same values.
+  values of the stated types; and for every proof a `host` step lists, the step's own stage runs
+  that proof with the same values.
 - A carried value (`carry:<step>.<field>`) comes from a step that has already run, or from a proof
-  saved earlier.
+  saved earlier. A host action reads what the stages before its own left; an `auto` step's proofs
+  may also carry from a step of the step's own stage.
 - Every statement in `proofs.json` is one read: it starts with `select` or `with`, reads schema
   `public` only, never names a column that holds message text, and uses exactly its own parameters.
 - Every sandbox stage has its `## Stage:` section in the playbook, and the section names each of
@@ -148,10 +150,14 @@ host hands in (`ACCEPT_IN`): for example `{"3": {"request_id": 412, "conversatio
 test reads an earlier step of its own stage from that step's facts file, and an earlier stage's
 from `carry.json`. Phase 21's tests need `3.conversation_id` and `14a.request_id` there.
 
-**A step's proofs** are read by the host straight after the step's sandbox stage, and only when
-the operator's verdict, the browser test and the evidence files all stand. Phase 21's manifest also
-lists them as actions of its `walk-proofs` and `back-proofs` stages, which reads each of those
-facts a second time; a `host` step's proofs are read there and nowhere else.
+**Each proof is read once.** An `auto` step's proofs are read by the host straight after the
+step's sandbox stage, and only when the operator's verdict, the browser test and the evidence files
+all stand. No host stage lists them. A `host` step's proofs are `db.proof` actions of the step's
+own host stage, and are read there and nowhere else. Phase 21's manifest therefore holds two
+`db.proof` actions: `planner-fingerprint` in `go-live`, which saves how the planner stood before
+the walk, and `planner-unchanged` in `walk-proofs`, which is step 11. Its `walk-proofs` stage also
+runs step 10's two container checks, and nothing follows its `back` stage: the proofs of steps 14b
+and 15 are those steps' own.
 
 **The switch.** A browser test is skipped where it is declared unless `ACCEPT=1`, and then only the
 test whose exact title is `ACCEPT_ONLY` runs. With neither set, `npx playwright test -c

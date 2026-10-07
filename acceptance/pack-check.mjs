@@ -231,12 +231,10 @@ function proofProblems({ manifest, proofs }) {
   for (const step of manifest.steps.filter((candidate) => candidate.proofs !== undefined)) {
     for (const proof of step.proofs) {
       problems.push(...proofUseProblems(`step ${step.id}`, proof.name, proof.with ?? {}, proofs));
-      if (step.kind === 'auto') {
-        const after = hostStages.filter((stage) => stageIndex(manifest, stage.id) > stageIndex(manifest, step.stage));
-        if (!after.some((stage) => stageRunsProof(stage, proof))) {
-          problems.push(`step ${step.id}: no host stage after "${step.stage}" runs its proof "${proof.name}" with the same values`);
-        }
-      } else if (!hostStages.some((stage) => stage.id === step.stage && stageRunsProof(stage, proof))) {
+      // Each proof is read once. An automated step's proofs are the host's to read straight after
+      // the step's sandbox stage, so no host stage lists them; a host step's proof is an action
+      // of its own stage, and is read there.
+      if (step.kind === 'host' && !hostStages.some((stage) => stage.id === step.stage && stageRunsProof(stage, proof))) {
         problems.push(`step ${step.id}: stage "${step.stage}" does not run its proof "${proof.name}" with the same values`);
       }
     }
@@ -261,22 +259,39 @@ function hostStepProblems({ manifest }) {
   return problems;
 }
 
-/** A carried value comes from a step whose stage has already run, or from a proof saved earlier. */
+/**
+ * A carried value comes from a step that has already run, or from a proof saved earlier. A host
+ * action reads what the stages before its own left. An automated step's proofs are read straight
+ * after the step's own stage, so they may carry from a step of that stage too.
+ */
 function carryProblems({ manifest }) {
   const problems = [];
   const saved = new Set();
-  const stageOfStep = new Map(stepsOfKind(manifest, 'auto').map((step) => [step.id, stageIndex(manifest, step.stage)]));
+  const autoSteps = stepsOfKind(manifest, 'auto');
+  const stageOfStep = new Map(autoSteps.map((step) => [step.id, stageIndex(manifest, step.stage)]));
+  /** Why this value cannot be read at the stage of this index, or null. `ownStage`: a step of that stage has run too. */
+  const problemOf = (value, index, ownStage) => {
+    const reference = CARRY.exec(String(value));
+    if (reference === null) return null;
+    const [, source] = reference;
+    if (saved.has(source)) return null;
+    if (!stageOfStep.has(source)) return `"${value}" names no earlier step and no saved proof`;
+    const from = stageOfStep.get(source);
+    const hasRun = from !== -1 && (from < index || (ownStage && from === index));
+    return hasRun ? null : `"${value}" is read before step ${source} has run`;
+  };
+  const problemsOf = (label, values, index, ownStage) =>
+    Object.values(values ?? {})
+      .map((value) => problemOf(value, index, ownStage))
+      .filter((problem) => problem !== null)
+      .map((problem) => `${label}: ${problem}`);
   manifest.stages.forEach((stage, index) => {
     for (const action of stage.actions ?? []) {
-      for (const value of Object.values(action.with ?? {})) {
-        const reference = CARRY.exec(String(value));
-        if (reference === null) continue;
-        const [, source] = reference;
-        if (saved.has(source)) continue;
-        if (!stageOfStep.has(source)) problems.push(`stage ${stage.id}: "${value}" names no earlier step and no saved proof`);
-        else if (stageOfStep.get(source) >= index || stageOfStep.get(source) === -1) problems.push(`stage ${stage.id}: "${value}" is read before step ${source} has run`);
-      }
+      problems.push(...problemsOf(`stage ${stage.id}`, action.with, index, false));
       if (action.action === 'db.proof' && action.with?.save !== undefined) saved.add(String(action.with.save));
+    }
+    for (const step of autoSteps.filter((candidate) => candidate.stage === stage.id)) {
+      for (const proof of step.proofs ?? []) problems.push(...problemsOf(`step ${step.id}`, proof.with, index, true));
     }
   });
   return problems;
