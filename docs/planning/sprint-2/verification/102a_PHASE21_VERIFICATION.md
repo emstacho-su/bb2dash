@@ -100,8 +100,16 @@ this phase is a stop.
 
 ## Docker lines (tasks 12, 13, 19–22)
 
-To be filled by W-65 and the PM before each line is run: one paste-ready Git Bash line per step,
-project `bb2dash-wt21`, the service named in every command.
+The lines are W-65's list: `102_W65_VERIFICATION.md`, "Wave 2 — the lines for tasks 12 and 13, top to
+bottom (Git Bash)", 41 steps since the review round, each one paste-ready with `SECRETS_DIR` and
+`HARNESS_DIR` set inside the line, project `bb2dash-wt21`, the service named in every command.
+The build line as run:
+
+```text
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace build workspace; echo "exit=$?"
+```
+
+The guard reads of each docker sitting are pasted in that sitting's section of this file.
 
 ## Recording lines (task 9)
 
@@ -517,7 +525,8 @@ regenerated.
 
 The SQL suite's three failures are the three units ruling T3 names as failing from any checkout
 on prod's data, none of which reads a Workspace object: `grading_invariants.sql`
-(GEO.103.lecture/exam-1 and IST.352 project-assignment-8 have no component),
+(`GEO.103.lecture/exam-1` and `IST.352/project-assignment-8-context-level-0-and-activity-diagrams`
+have no component),
 `phase18_122_supersede_rule.sql` (run fcf9d587 wrote 4 supersede links) and
 `phase18_golden_truth.sql` (Q7: files 149 and 967 not current; 2509 and 2640 not in the truth).
 Every other unit passes, this phase's four included.
@@ -961,3 +970,75 @@ line and loses none (`polled_age_seconds: number | null` on `v_workspace_status`
 | runner typecheck | `npm run typecheck` (in `workspace/`) | exit 0 |
 | runner tests | `npx vitest run` (in `workspace/`) | 9 files, 714 tests, 0 failed |
 | SQL | `node scripts/db-test.mjs` | `passed 67, failed 3, units 70` (above) |
+
+## The reviews on the delta (2026-10-07)
+
+### `/security-review` method on `d4b1b8d..HEAD` (at `93c285f`)
+
+The skill reviews a whole branch against `main`, so the delta was reviewed with the skill's own
+method (one finder with the repo for context, then one false-positive filter per finding, keep
+confidence 8 or above) over `git diff d4b1b8d..HEAD -- . ':!docs' ':!project-state'`: 52 files,
+about 1300 changed lines of non-test source, every touched source file read in full, with `pg`
+8.23.0's own connection code read for SR-1.
+
+Result: **no finding at 0.7 or above**, so nothing went to the filter. Each fix was traced end to
+end and asked "does it close what it claims":
+
+| fix | closes it | how it was read |
+|---|---|---|
+| SR-1: nothing in the DSN can turn verification off or name another CA; a bad CA file stops the runner | yes | the client is built from parts with no `connectionString`, so `pg` never parses the DSN's query; `rejectUnauthorized` is explicit, so `NODE_TLS_REJECT_UNAUTHORIZED` does not apply; with `ca` given Node loads no other roots |
+| `workspace_finish` (143) refuses a request that is not claimed or cancelled | yes | the row is read `for update` and refused before any write; `create or replace` keeps owner and grants; the guard re-reads them |
+| the fail-closed tool rule | yes | allows and results are counted per full tool name; an allow that arrives after its result does not count; `EndConversation` is the only exemption |
+| `/app/turn` root-owned 0555 | yes | no volume is mounted over it; `node` has an empty bounding set and `no-new-privileges` |
+| no secret reaches a log line, a stored error or the answer | yes | every database error is rebuilt from a redacted message and its SQLSTATE; only one of the eight codes is stored |
+
+Hardening it noted, below the bar (STATUS, "Hardening noted by the security reviews"):
+
+* `/run/workspace/mcp.json` is written by the runner as `node` at start and could be a root-owned
+  file in the image, since its content is constant. Reaching it needs code running as `node`,
+  which can already read the four secrets.
+* A token file holding a NUL byte (saved as UTF-16, say) would put part of the token into the
+  container log through Node's own spawn error text. `set-secret.ps1` writes UTF-8, so the stored
+  file does not; refusing a NUL in the runner's secret read closes it.
+* A CA file with a `BEGIN CERTIFICATE` line and no parseable certificate passes the start check
+  and fails at every connect instead: fail-closed, later than intended.
+* The gate count is per tool name, not per call. Only a CLI that skips its own hook reaches it.
+
+Its limits, as it stated them: read-only from the repo (no docker, no database, no network); the
+image was not inspected as built (the docker step below does that); CLI 2.1.289's own loading from
+its config folder was not inspected.
+
+### `/code-review d4b1b8d high`: it read one commit, not the range
+
+The skill took `d4b1b8d` as the commit to review, and that commit is a 38-line edit of this file.
+It found nothing wrong in the numbers (it re-ran the materials server's suite, 106 passed, and
+read prod for the two SQL failures) and ten gaps in this record. They stand and are settled here;
+the run on the range `d4b1b8d..HEAD` follows below.
+
+| # | the gap | settled |
+|---|---|---|
+| 1 | "resume at step 10" skips steps 1 to 9 after the harness changed | the list ran again from step 1 on 2026-10-07 (the docker step, below) |
+| 2 | no wave 2b rulings in this file | ruling Y4, below |
+| 3 | the guard reads are cited, not pasted | pasted in the docker step's section, below |
+| 4 | the harness commit at the failed build is missing | `e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd` (harness `main` on 2026-10-06); the passing build's is in the docker step's section |
+| 5 | `phase18_122_supersede_rule.sql`'s message is cut | in full: `FAIL (1) newest run fcf9d587-8a8b-4ee1-949f-8db767940f95 wrote 4: 2->151, 74->2509, 150->2640, 162->2640`. The count is the 4 the unit expects; the links are not (it expects `74->149`, `150->967`, `162->967`): files 149 and 967 were superseded by 2509 and 2640 in a later sync |
+| 6 | no row for the container stream's tests on the integrated branch | on `93c285f`: `node --test docker/grep-clean.test.mjs` → tests 13, pass 13, fail 0; `node --test docker/workspace/init-firewall.test.mjs` → tests 20, pass 20, fail 0 |
+| 7 | "Docker lines" still read "to be filled", and the build line quoted was not the line run | that section now points at the list and quotes the line as run |
+| 8 | an assignment id written without its slash and cut short | corrected in place: `IST.352/project-assignment-8-context-level-0-and-activity-diagrams` |
+| 9 | the fastembed evidence leaves out that 2.1.1 loads a different model file | it does: 2.1.0 read a 132,883,455-byte `model_optimized.onnx`; 2.1.1 downloads the 66,465,124-byte quantized file `Qdrant/bge-small-en-v1.5-onnx-Q`, which is byte for byte the file the harness's Python ingestion already uses. The two routes agree at cosine 0.9999996 or better on the test sentences. Told to Stack in the hand-off |
+| 10 | "a one-line harness PR" understates it | harness PR #40 is 2 files, +43 −118: one line of `package.json` and the lock file (159 changed lines, dropping `tar` and eight transitive packages). Stack was told the same day, before he said "merge the harness pr." |
+
+### Y4. Wave 2b's open items (PM, 2026-10-07)
+
+* **W-65.** A DSN that names no port is accepted and means 5432, the driver's default; the stored
+  secrets all name the port. The firewall's log may print the resolver's address
+  (`127.0.0.11`, not a secret). `.env.example`'s placeholder pointing outside every repo is right.
+* **W-66, section 9.** Accepted as built: the disabled composer on a not-found page; the second
+  "New conversation" link in the column; only the not-found line is an alert; "not found" said
+  from the restored cache; asking allowed while rows are still being read; the 23503 line stays
+  until the page leaves that `?c=`; Enter over an open request prevented; "Status" labelled by
+  text. Its items 8 and 9 (the two status moments, the two reads after Stop) were replaced in the
+  review round by CR-9's poll (ruling V4).
+* **W-66, section 11.** The two test files beyond the Files table
+  (`web/test/Workspace.empty.test.tsx`, `web/test/Workspace.rereads.test.tsx`) stay: one file
+  would have passed 800 lines.
