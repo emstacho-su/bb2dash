@@ -363,5 +363,7 @@ acceptStep('15 archive', { shots: ['before', 'after', 'archived'] }, async ({ pa
   const archivedSpikes = spikeRows.filter({ has: unarchive });
   await expect(archivedSpikes.first(), "a conversation titled 'spike' is among the archived").toBeVisible();
   rec.note({ spike_archived_rows: await archivedSpikes.count() });
+  // The archived list can be longer than the window, and 'spike' is among its oldest rows.
+  await archivedSpikes.first().scrollIntoViewIfNeeded();
   await rec.shot(page, 'archived');
 });

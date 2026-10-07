@@ -192,22 +192,24 @@ export type StepBody = (fixtures: { page: Page; context: BrowserContext }, rec: 
  */
 export function acceptStep(title: string, declared: StepDeclaration, body: StepBody): void {
   stepOf(title);
-  test.describe(() => {
-    test.skip(!isSelected(process.env, title), "an acceptance test runs only when ACCEPT=1 and ACCEPT_ONLY is its exact title");
-    test(title, async ({ page, context }) => {
-      test.setTimeout(ACCEPT_TEST_TIMEOUT_MS);
-      const rec = new Recorder(title, declared.shots, settings().outDir);
-      try {
-        await body({ page, context }, rec);
-        rec.expectEveryShotTaken();
-      } catch (error) {
-        rec.note({ test_error: firstLine(error) });
-        await rec.failShot(page);
-        throw error;
-      } finally {
-        rec.save();
-      }
-    });
+  if (!isSelected(process.env, title)) {
+    // Declared, so a listing shows it, and skipped where it stands: no hook runs and no page is opened.
+    test.skip(title, () => {});
+    return;
+  }
+  test(title, async ({ page, context }) => {
+    test.setTimeout(ACCEPT_TEST_TIMEOUT_MS);
+    const rec = new Recorder(title, declared.shots, settings().outDir);
+    try {
+      await body({ page, context }, rec);
+      rec.expectEveryShotTaken();
+    } catch (error) {
+      rec.note({ test_error: firstLine(error) });
+      await rec.failShot(page);
+      throw error;
+    } finally {
+      rec.save();
+    }
   });
 }
 
