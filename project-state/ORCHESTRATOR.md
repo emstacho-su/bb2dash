@@ -305,18 +305,30 @@ Learned in Phase 21 (2026-10-07; each from `verification/102a_PHASE21_VERIFICATI
      branch preview, with the PM's test container running: step 1 is your look at claude.ai, Settings, Usage, to
      confirm Usage credits are still off, and step 12 is reading the D-1 reversal row and the preview-walk row in
      DECISIONS before you say "merge". Then steps 13 to 15 on `main`: step 13 is adding
-     `COMPOSE_PROFILES=workspace` to bb2dash-stack's `.env` before `just up`, and you end with "accepted".
+     `COMPOSE_PROFILES=workspace` to bb2dash-stack's `.env` before `just up` (only when no sync is open; the PM
+     reads the queue first), and you end with "accepted".
 
-  Six things are put to you with it. None is accepted for you; item 3 needs your answer before you say "merge":
+  Six things are put to you with it. None is accepted for you; item 3 needs your answer before you say "merge",
+  and is best answered before the bb2dash PR opens:
   2. **The firewall question, whenever you like.** The Workspace container's firewall allows addresses, not names,
      and code running inside it could reach other Cloudflare-hosted sites through the Supabase project's shared
      addresses. The assistant itself cannot. Live with it in v1, or have a name-checking proxy built? (DECISIONS
      2026-10-07; STATUS, section "Phase 14 deferred (R-96)", bullet "Hardening noted by the security reviews, below
      the bar".)
-  3. **The walk's screenshots are in a public repository.** The nine shots in
-     `docs/planning/sprint-2/walks/walk-21/` show real answers: a quoted syllabus sentence, slide summaries, and
-     three of your Inbox decisions. Keep them, or have them replaced with cropped ones and the branch rewritten
-     before the merge? (DECISIONS 2026-10-07.)
+  3. **The walk's screenshots are in a public repository, and they are already public.** The nine shots in
+     `docs/planning/sprint-2/walks/walk-21/` show real answers. As they stand after the retakes: a sentence quoted
+     from the IST.323 syllabus (03, 04) and that syllabus's section headings (10); three of your Inbox decisions on
+     ECN.304 Quiz 2, with the score (04, 10); slide summaries of two IST.352 decks (11); and two ECN.304 study
+     plans (05 to 08) with the course's dates ("Exam 2 is Thu Nov 5"), slide-by-slide content, what the Exam 1
+     study guide says Exam 1 covers, two self-quiz questions with the line "Several quiz questions above are
+     adapted from it", and a line from your decision notes 538 and 545. STATUS, section "Phase 21", lists them
+     shot by shot. They have been on pushed branches since 2026-10-07 (`feat/workspace-21`,
+     `feat/workspace-21-web` and `feat/workspace-21-docs`), with the first sitting's fuller takes of five of them
+     in the history. A rewrite takes them off the branches and keeps them out of `main`'s history. It does not
+     take them off GitHub: a commit that a rewrite drops stays reachable by its id, and through any pull request
+     that referenced it, until GitHub Support purges it. So a rewrite is cleanest before the bb2dash PR exists,
+     and the PM either asks you this before opening that PR or opens it and says so in STATUS. Keep them, or have
+     them replaced with cropped ones and the branches rewritten? (DECISIONS 2026-10-07.)
   4. **One answer showed Markdown asterisks (W-3).** The page shows text as typed, and one answer in the PM's walk
      (the decision question, your step 4) came back with `**` around three lines. Strip the markers on the page,
      press the prompt harder, or leave it? (DECISIONS 2026-10-07; STATUS, Known issues.)
