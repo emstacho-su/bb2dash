@@ -58,14 +58,10 @@ Opus). Read your own model from your system prompt.
   **Exception:** if Stack says in this session to go ahead on the current model, continue here
   without relaunching, and name the model in step 6's report.
 
-## Step 0 — Apply Stack's Inbox answers first
+## Step 0 — (moved: Inbox answers are applied after the sync, step 5b)
 
-A crawl raises new Inbox questions; the answered ones should be applied and archived before that
-happens, so the Inbox never mixes old answers with new questions. Run `/inbox-apply` (the skill
-in `skills/inbox-apply/SKILL.md`) with no argument: it files its own `inbox_feedback` request,
-processes `v_inbox_queue`, records each decision, archives the rows and reports. Then continue
-here. Skip it only when `select count(*) from v_inbox_queue` is 0, or when an `inbox_feedback`
-request is already `claimed` (another session is on it); say which in the status line.
+Until Phase 23 this step ran `/inbox-apply` before the crawl. Stack's call on 2026-10-07: answers
+are applied after the sync, by the `apply` container's worker. Nothing to do here; go to step 1.
 
 ## Step 1 — Login check (always first, never skipped)
 
@@ -401,6 +397,33 @@ of a claim in a chat message.
 
 Never leave a request `claimed`: a stale claim holds the tick's quarantine grace window open
 (migration 039) for up to 30 minutes and delays the bookkeeping of any other crawl.
+
+## Step 5b — File the Inbox apply request (only after a sync that closed done)
+
+The container's runner does this by itself (migration 180). This skill is the fallback for a sync the
+container did not run, so it files the same request by hand. Skip the step when the sync failed.
+
+```sql
+select (select count(*) from v_inbox_queue) as answered,
+       (select id from agent_requests where kind = 'inbox_feedback' and state in ('queued', 'claimed')
+         order by created_at limit 1) as open_request;
+```
+
+- `answered = 0`: nothing to apply. Say so and go to step 6.
+- `open_request` is not null: one is already open (one at a time, migration 183). Use that id.
+- Otherwise file one:
+
+  ```sql
+  insert into agent_requests (kind, scope, state, params, note)
+  values ('inbox_feedback', 'all', 'queued', jsonb_build_object('trigger', 'sync', 'after', $1),
+          'queued by /bb-sync after sync ' || $1)
+  returning id;
+  ```
+
+The `apply` container's worker claims a queued request within about a minute. Wait 75 seconds,
+then read its `state` and `claimed_by`. If it is still `queued`, the worker is not running: run
+`/inbox-apply <id>` in this session (the skill in `skills/inbox-apply/SKILL.md`). Report which
+happened in step 6, with the request id.
 
 ## Step 6 — Report to Stack, in plain language
 
