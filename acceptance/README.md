@@ -23,10 +23,9 @@ container, its firewall, the wrapper script) is in bb2dash-stack.
    operator. It runs one browser test per step, opens every screenshot, reads what the page said,
    and writes a report with a verdict per step. It has no Docker, no database and no way to reach
    anything but the site, and it is thrown away when the stage ends.
-5. **Host proofs.** As soon as a sandbox stage ends, the laptop reads the facts behind each of its
-   steps itself, read-only, from the database: which model level answered, which tool was used,
-   that Stop was stored as cancelled, that the planner is exactly as it was. The operator's word is
-   never the only evidence for these.
+5. **Host proofs.** After a stage the laptop reads the facts itself, read-only, from the database:
+   which model level answered, which tool was used, that Stop was stored as cancelled, that the
+   planner is exactly as it was. The operator's word is never the only evidence for these.
 6. **Verdict.** The run writes its report, the verdict and every screenshot to a folder outside
    every repository (`C:/Users/stack/.bb2dash-accept/<phase>/<run>/`), because answers quote course
    material and this repository is public.
@@ -81,9 +80,7 @@ and `web/e2e/accept.lib.ts` (how a test records what it saw).
    shape of `accept21.spec.ts`.
 3. **`acceptance/<NN>/manifest.json`.** The stages in order (`prepare`, then `host` and `sandbox`
    stages as the script needs them) and every step. An `auto` step names its stage, its test, the
-   files its test leaves as evidence, and the proofs that must also pass. A `host` step is a label
-   and a sentence: each action of its stage that proves it carries `"step": "<id>"`. A `waived`
-   step says why in its text, and names the file that stands in its place when one does.
+   files its test leaves as evidence, and the proofs that must also pass.
 4. **`acceptance/<NN>/proofs.json`.** One entry per fact the laptop must read for itself: its typed
    parameters, one `select`, and a sentence saying what the row must show.
 5. **`acceptance/<NN>/playbook.md`.** One `## Stage: <id>` section per sandbox stage. For each step:
@@ -107,11 +104,10 @@ installed and reaches nothing.
 - Every test of a stage belongs to exactly one step, and the browser-test file holds no test that no
   stage runs.
 - Every proof a step or a host action names is in `proofs.json`, with the same parameter names and
-  values of the stated types.
-- A `host` step names a host stage, and at least one action of that stage carries its label.
-- A carried value comes from a step that has already run (`carry:<step>.<field>`) or from
-  something the host saved earlier (`carry:host.<name>`). A stage's deadline counts from one.
-- A file under `docs/` that a step's text names is in the repository.
+  values of the stated types; and for every proof a step lists, a later host stage runs that proof
+  with the same values.
+- A carried value (`carry:<step>.<field>`) comes from a step that has already run, or from a proof
+  saved earlier.
 - Every statement in `proofs.json` is one read: it starts with `select` or `with`, reads schema
   `public` only, never names a column that holds message text, and uses exactly its own parameters.
 - Every sandbox stage has its `## Stage:` section in the playbook, and the section names each of
@@ -131,28 +127,12 @@ installed and reaches nothing.
 - `pw-<slug of the title>.json`, Playwright's own report for that one test. The slug is the title in
   lower case with every run of other characters as one hyphen (`9-reload-mid-answer`).
 
-**What crosses from one stage to the next** is the carry-over. After a sandbox stage the host takes
-the ids and the times out of each step's facts file (a whole number, a uuid, an ISO time, a short
-list of ids; nothing else), and files them under the step's id. A manifest value
-`carry:3.request_id` reads one back. What the host's own actions save sits under `host`:
-`carry:host.stopped_at` and `carry:host.started_at` are the times of the last stop and start of the
-Workspace, and a `db.proof` with `"save": "planner_before"` leaves its whole detail at
-`carry:host.planner_before`.
-
-The next sandbox stage gets the ids and times as `carry.json` in the folder the host hands in
-(`ACCEPT_IN`), for example `{"3": {"request_id": 412, "conversation_id": "…"}, "host":
-{"stopped_at": "…"}}`. A test reads an earlier step of its own stage from that step's facts file,
-and an earlier stage's from `carry.json`. Phase 21's tests need `3.conversation_id` and
-`14a.request_id` there.
-
-**A stage's deadline** is `{"from": "carry:host.stopped_at", "plus_seconds": 180}`: so many seconds
-after a time the run already has. The host works it out and hands it to the tests as
-`ACCEPT_DEADLINE`.
-
-**A step's proofs** are run by the host itself, as soon as the step's sandbox stage has ended and
-only when the operator's verdict, the browser test and the evidence files all stand. Phase 21's
-manifest also lists the same proofs as actions of its `walk-proofs` and `back-proofs` stages; those
-read each fact a second time.
+**What crosses from one stage to the next** is `carry.json` in the folder the host hands in
+(`ACCEPT_IN`): one object per step id or saved proof name, holding ids and times only, for example
+`{"3": {"request_id": 412, "conversation_id": "…"}, "planner_before": {"fingerprint": "…"}}`. A
+manifest value `carry:3.request_id` reads the same thing. A test reads an earlier step of its own
+stage from that step's facts file, and an earlier stage's from `carry.json`. Phase 21's tests need
+`3.conversation_id` and `14a.request_id` there.
 
 **The switch.** A browser test is skipped where it is declared unless `ACCEPT=1`, and then only the
 test whose exact title is `ACCEPT_ONLY` runs. With neither set, `npx playwright test -c
@@ -164,12 +144,10 @@ rolled back, and prints one line: `{"name", "pass", "detail"}`, with `"blocked":
 says the run must be repeated. `detail` holds ids, counts, codes and times, never message text. It
 exits 0 for a pass, 1 for a fail, 3 for blocked, and 2 when it could give no verdict.
 
-Parameter types: `integer`, `uuid`, `time` (ISO, with its zone), `uuids` (one uuid, several joined
-by commas, or a JSON list), `text` (a plain name: letters, digits and single `_`, `.` or `-`),
-`fingerprint` (what `planner-fingerprint` returns: the string, or its whole detail as JSON, which
-is how the host hands a saved proof back), and `enum:a|b|c`. A `?` after a type makes the
-parameter optional. `$1` in the statement is the first parameter the proof declares, `$2` the
-second.
+Parameter types: `integer`, `uuid`, `time` (ISO, with its zone), `uuids` (uuids joined by commas),
+`text` (a plain name: letters, digits and single `_`, `.` or `-`), `fingerprint` (what
+`planner-fingerprint` returns), and `enum:a|b|c`. A `?` after a type makes the parameter optional.
+`$1` in the statement is the first parameter the proof declares, `$2` the second.
 
 **A statement's verdict** is in the one row it returns: `ok` true passes, anything else does not,
 and `blocked` true outranks both.

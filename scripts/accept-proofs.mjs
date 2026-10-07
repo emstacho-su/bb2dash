@@ -108,42 +108,20 @@ const ENUM_CHOICE = /^[a-z0-9_-]+$/;
 
 const isTime = (raw) => ISO_TIME.test(raw) && !Number.isNaN(Date.parse(raw));
 
-/** The value of a parameter the host handed over as JSON, or undefined when it is not JSON. */
-function fromJson(raw) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * A list of uuids as one Postgres array value. The host hands a carried list over as a JSON list
- * and a single carried id as it is; a pack may write a few out, joined by commas.
- */
-function uuidArray(raw) {
-  const ids = raw.startsWith('[') ? fromJson(raw) : raw.split(',');
-  const good = Array.isArray(ids) && ids.length >= 1 && ids.length <= UUIDS_MAX && ids.every((id) => typeof id === 'string' && UUID.test(id));
-  return good ? `{${ids.join(',')}}` : null;
-}
-
-/**
- * A planner fingerprint. The host saves planner-fingerprint's whole detail and hands that back as
- * JSON; the fingerprint is read out of it. Either way it must be the fingerprint's exact form.
- */
-function fingerprintOf(raw) {
-  const print = raw.startsWith('{') ? fromJson(raw)?.fingerprint : raw;
-  return typeof print === 'string' && FINGERPRINT.test(print) ? print : null;
-}
-
 /** type → [what a value must be, how it reaches the statement]. */
 const TYPES = {
   integer: ['a whole number', (raw) => (/^(0|[1-9][0-9]{0,17})$/.test(raw) ? raw : null)],
   uuid: ['a lower-case uuid', (raw) => (UUID.test(raw) ? raw : null)],
   time: ['an ISO time with its zone', (raw) => (isTime(raw) ? raw : null)],
-  uuids: [`1 to ${UUIDS_MAX} uuids, joined by commas or as a JSON list`, uuidArray],
+  uuids: [
+    `1 to ${UUIDS_MAX} uuids joined by commas`,
+    (raw) => {
+      const ids = raw.split(',');
+      return ids.length <= UUIDS_MAX && ids.every((id) => UUID.test(id)) ? `{${ids.join(',')}}` : null;
+    },
+  ],
   text: [`a plain name of at most ${TEXT_MAX} characters`, (raw) => (raw.length <= TEXT_MAX && PLAIN_TEXT.test(raw) ? raw : null)],
-  fingerprint: ["a planner fingerprint, or planner-fingerprint's detail holding one", fingerprintOf],
+  fingerprint: ["a planner fingerprint, as planner-fingerprint's detail gives it", (raw) => (FINGERPRINT.test(raw) ? raw : null)],
 };
 
 /** Read a declared type: `integer`, `text?`, `enum:low|mid|high`. */

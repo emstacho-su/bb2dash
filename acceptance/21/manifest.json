@@ -3,24 +3,22 @@
   "phase": "21",
   "base_url": "https://web-xi-ten-uy9xk6c6p0.vercel.app",
   "stages": [
-    { "id": "prepare", "kind": "prepare", "text": "Fetch the commit under test and install the browser tests' packages." },
+    { "id": "prepare", "kind": "prepare" },
     {
       "id": "go-live",
       "kind": "host",
-      "text": "Note the planner as it stands, stop the old test runner, and start the Workspace service alone.",
       "actions": [
         { "action": "runner.record" },
         { "action": "db.proof", "with": { "name": "planner-fingerprint", "save": "planner_before" } },
-        { "action": "workspace.stopTestRunner", "step": "13", "with": { "container": "bb2dash-wt21-workspace-1" } },
-        { "action": "workspace.ensureProfile", "step": "13" },
-        { "action": "workspace.start", "step": "13" },
-        { "action": "workspace.doctorRow", "step": "13" }
+        { "action": "workspace.stopTestRunner", "with": { "container": "bb2dash-wt21-workspace-1" } },
+        { "action": "workspace.ensureProfile" },
+        { "action": "workspace.start" },
+        { "action": "workspace.doctorRow" }
       ]
     },
     {
       "id": "walk",
       "kind": "sandbox",
-      "text": "Open the Workspace, ask the five questions, stop one answer and reload during another.",
       "tests": [
         "2 open",
         "3 lookup haiku",
@@ -35,7 +33,6 @@
     {
       "id": "walk-proofs",
       "kind": "host",
-      "text": "Read the walk's turns from the database, show that no API key is in use, and compare the planner with how it stood.",
       "actions": [
         { "action": "db.proof", "with": { "name": "turn", "request": "carry:3.request_id", "tier": "low", "tool": "search_materials" } },
         {
@@ -47,30 +44,18 @@
         { "action": "db.proof", "with": { "name": "turn", "request": "carry:7.request_id", "tier": "high" } },
         { "action": "db.proof", "with": { "name": "turn-stopped", "request": "carry:8.request_id" } },
         { "action": "db.proof", "with": { "name": "turn", "request": "carry:9.request_id", "tier": "high" } },
-        { "action": "workspace.noApiKey", "step": "10" },
-        { "action": "workspace.credentialSource", "step": "10", "with": { "request": "carry:9.request_id" } },
-        { "action": "db.proof", "step": "11", "with": { "name": "planner-unchanged", "before": "carry:host.planner_before" } }
+        { "action": "workspace.noApiKey" },
+        { "action": "workspace.credentialSource", "with": { "request": "carry:9.request_id" } },
+        { "action": "db.proof", "with": { "name": "planner-unchanged", "before": "carry:planner_before.fingerprint" } }
       ]
     },
-    { "id": "stop", "kind": "host", "text": "Stop the Workspace service.", "actions": [{ "action": "workspace.stop" }] },
-    {
-      "id": "offline",
-      "kind": "sandbox",
-      "text": "Within three minutes of the stop the page says the service is offline, and a question asked then waits.",
-      "tests": ["14a offline"],
-      "deadline": { "from": "carry:host.stopped_at", "plus_seconds": 180 }
-    },
-    { "id": "start", "kind": "host", "text": "Start the Workspace service again.", "actions": [{ "action": "workspace.startNoBuild" }] },
-    {
-      "id": "back",
-      "kind": "sandbox",
-      "text": "The question that waited is answered, and the run's conversations are archived through the page.",
-      "tests": ["14b back", "15 archive"]
-    },
+    { "id": "stop", "kind": "host", "actions": [{ "action": "workspace.stop" }] },
+    { "id": "offline", "kind": "sandbox", "tests": ["14a offline"], "deadline": { "after": "workspace.stop", "seconds": 180 } },
+    { "id": "start", "kind": "host", "actions": [{ "action": "workspace.startNoBuild" }] },
+    { "id": "back", "kind": "sandbox", "tests": ["14b back", "15 archive"] },
     {
       "id": "back-proofs",
       "kind": "host",
-      "text": "Read the answered question and the archived conversations from the database.",
       "actions": [
         { "action": "db.proof", "with": { "name": "turn-answered-after", "request": "carry:14a.request_id", "after": "carry:14a.still_queued_at" } },
         { "action": "db.proof", "with": { "name": "spike-archived" } },
@@ -95,7 +80,8 @@
     {
       "id": "2-desktop",
       "kind": "waived",
-      "text": "The desktop-window half of step 2 is not run again. The shot from the PM's walk of 2026-10-07 stands: docs/planning/sprint-2/walks/walk-21/08-desktop.png."
+      "text": "The desktop-window half of step 2 is not run again: the shot from the PM's walk of 2026-10-07 stands.",
+      "stands_on": "docs/planning/sprint-2/walks/walk-21/08-desktop.png"
     },
     {
       "id": "3",
@@ -166,20 +152,23 @@
       "id": "10",
       "kind": "host",
       "text": "No API key is present in the Workspace container, and the runner's log for step 9's question reads credential_source=none.",
-      "stage": "walk-proofs"
+      "stage": "walk-proofs",
+      "actions": ["workspace.noApiKey", "workspace.credentialSource"]
     },
     {
       "id": "11",
       "kind": "host",
       "text": "The planner is as it was before the walk, and no sync or Inbox apply ran in between (if one did, the run is blocked and is repeated).",
-      "stage": "walk-proofs"
+      "stage": "walk-proofs",
+      "proofs": [{ "name": "planner-unchanged", "with": { "before": "carry:planner_before.fingerprint" } }]
     },
     { "id": "12", "kind": "waived", "text": "Stack's word to merge: overtaken by the merge of 2026-10-07." },
     {
       "id": "13",
       "kind": "host",
       "text": "The old test runner is stopped, the workspace profile line is in place, the Workspace is started alone, and the doctor's workspace row is green.",
-      "stage": "go-live"
+      "stage": "go-live",
+      "actions": ["workspace.stopTestRunner", "workspace.ensureProfile", "workspace.start", "workspace.doctorRow"]
     },
     {
       "id": "14a",
