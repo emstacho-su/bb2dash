@@ -368,6 +368,12 @@ interface Attempt {
   readonly exit: CliExit;
   /** True when the runner's abort ended the attempt. */
   readonly aborted: boolean;
+  /**
+   * True when the CLI's result line was read before any abort by the runner. A result line read
+   * after the abort is not a reported result (ruling Z1, R2-1): the CLI wrote it while it was being
+   * killed, and the text that came with it was not taken.
+   */
+  readonly reported: boolean;
 }
 
 function failure(errorCode: ErrorCode): ResultEvent {
@@ -375,9 +381,8 @@ function failure(errorCode: ErrorCode): ResultEvent {
 }
 
 function resultOf(attempt: Attempt): ResultEvent {
-  const { summary } = attempt;
-  const reported = summary.result !== null;
-  // The runner's abort decides the code only when it cut the turn short: a result line already read stands.
+  const { summary, reported } = attempt;
+  // The runner's abort decides the code when it cut the turn short: only a result line read before it stands.
   const errorCode = attempt.aborted && !reported ? 'cli_error' : mapTurnEnd(summary);
   const sessionId = summary.init?.sessionId ?? null;
   return {
@@ -394,8 +399,9 @@ function resultOf(attempt: Attempt): ResultEvent {
 
 /**
  * One turn of the real CLI. It always ends with exactly one result event. When the runner aborts
- * before the CLI's result line, that result is a failure whose code the runner replaces with its
- * own reason; a result line already read is reported as it was (`reported`), and the CLI that
+ * before the CLI's result line is read, that result is a failure whose code the runner replaces
+ * with its own reason, whatever the CLI goes on to write while it is being killed (ruling Z1,
+ * R2-1); a result line read before the abort is reported as it was (`reported`), and the CLI that
  * stays after it is killed once its time to exit is over.
  */
 export function createCliTurn(deps: CliTurnDeps): CliTurn {
@@ -416,6 +422,8 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
       const onAbort = (): void => killer.kill();
       signal.addEventListener('abort', onAbort, { once: true });
       if (signal.aborted) killer.kill();
+      /** True once a result line was read after the runner's abort. */
+      let lateResult = false;
       try {
         for await (const lineText of linesOf(child.stdout)) {
           const line = parseLine(lineText);
@@ -426,7 +434,10 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
               log(`stopped: ${out.reason}`);
               killer.kill();
             }
-            if (out.kind === 'result') linger.arm();
+            if (out.kind === 'result') {
+              linger.arm();
+              if (signal.aborted) lateResult = true;
+            }
             if (signal.aborted) continue;
             if (out.kind === 'delta') yield { type: 'delta', text: out.text };
             if (out.kind === 'tool') yield { type: 'tool', id: out.id, call: out.call };
@@ -438,7 +449,8 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
           const how = exit.code ?? `on ${exit.signal ?? 'a signal'}`;
           log(`the CLI exited ${how}: ${stderrForLog(child.stderrText(), [token, input.prompt])}`);
         }
-        return { summary: stream.summary(), exit, aborted: signal.aborted };
+        const summary = stream.summary();
+        return { summary, exit, aborted: signal.aborted, reported: summary.result !== null && !lateResult };
       } finally {
         signal.removeEventListener('abort', onAbort);
         linger.clear();

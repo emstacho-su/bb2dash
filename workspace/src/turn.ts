@@ -184,7 +184,8 @@ type UnbegunEnd = Exclude<RetryEnd<string>, { readonly outcome: 'made' }>;
 function endingOf(stopCode: StopCode | null, collected: Collected): Ending {
   // A turn that produced a result is never stored as `timeout` (ruling V1, CR-5): the limit fell
   // while the CLI was being given its time to exit, and what its result line said stands. The
-  // owner's Stop and the runner's own shutdown still decide the code.
+  // owner's Stop and the runner's own shutdown still decide the code. A result the provider read
+  // only after the abort is not `reported` (ruling Z1, R2-1), so the limit's own code stands then.
   const stop = stopCode === 'timeout' && collected.result?.reported === true ? null : stopCode;
   if (stop !== null) return { state: 'failed', errorCode: stop };
   if (collected.thrown !== null) return { state: 'failed', errorCode: errorCodeFor(collected.thrown.error) };

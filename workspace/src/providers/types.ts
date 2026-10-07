@@ -65,9 +65,10 @@ export interface ResultEvent {
   /** The full model id the provider named for the turn, or null when it named none. */
   readonly model: string | null;
   /**
-   * True when the provider's own end-of-turn report was read (the CLI's `result` line): the turn
-   * produced a result, whatever ended the process afterwards, and the runner's time limit does not
-   * overrule it. False or absent for an end the provider made up for a turn that was cut short.
+   * True when the provider's own end-of-turn report (the CLI's `result` line) was read before any
+   * abort by the runner: the turn produced a result, whatever ended the process afterwards, and the
+   * runner's time limit does not overrule it. False or absent for an end the provider made up for a
+   * turn that was cut short, a report read only after the runner's abort included (ruling Z1, R2-1).
    */
   readonly reported?: boolean;
 }
