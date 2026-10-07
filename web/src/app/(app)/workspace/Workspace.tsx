@@ -31,7 +31,8 @@
  * handed that id, and goes to its end when the question becomes one of its
  * turns, wherever the reader had scrolled to (`MessageList.tsx`). There is no
  * optimistic turn: the question is shown when the rows bring it. A turn asked
- * from another tab carries no such id and moves no one.
+ * from another tab carries no such id, and a reader who has scrolled up is
+ * left where they are.
  *
  * WITH NO TURN TO SHOW the column says which of three states it is in (the
  * PM's ruling U1): no conversation selected, rows still being read, or an id
