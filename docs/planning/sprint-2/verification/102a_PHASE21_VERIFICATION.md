@@ -113,8 +113,8 @@ The guard reads of each docker sitting are pasted in that sitting's section of t
 
 ## Recording lines (task 9)
 
-To be filled from W-64's verification file: one paste-ready line per fixture, and the CLI version
-each was recorded on.
+The four lines are in `102_W64_VERIFICATION.md`, "The four recording lines": one paste-ready line
+per fixture, each recorded on CLI 2.1.289. They were run by the worker in wave 1; Stack ran none.
 
 ## Wave 1 (2026-10-05 → 2026-10-06)
 
@@ -623,7 +623,7 @@ dispositions (rulings V1–V5 below). A second run on the delta is owed after th
 | CR-11 | LOW | kept as the Contract names them (V1) |
 | CR-12 | LOW | fixed |
 | CR-13 | LOW | recorded, 140 is frozen (V5) |
-| CR-14 | LOW | owed at task 24, before the PR opens (V5) |
+| CR-14 | LOW | done at task 24 (STATUS, `12bedf5` and `66dd0c1`) |
 
 * **CR-1** `workspace/src/stream-json.ts`: any tool result with no PreToolUse hook answer ends
   the turn as `cli_error`, including error results the CLI writes itself without running the
@@ -2252,3 +2252,57 @@ What has changed since each run, read with `git diff --stat <commit> HEAD -- <fo
   `docs/` and `project-state/`. Both file suites were run there on 2026-10-07 at about 10:50 UTC:
   `tests 13`, `pass 13`, `fail 0` and `tests 21`, `pass 21`, `fail 0`.
 * **bb2dash-stack.** Not run again for this section; the figure is the fix round's at `5200df6`.
+
+## The walk's two layout fixes (W-66, merged at `25979bb`)
+
+W-1 and W-2, found by the first sitting, were fixed test-first by W-66 (`23c228d` red and `392c35f`
+green for W-1: `position: relative` on the message column, so its screen-reader labels are laid
+out inside the box that scrolls; `65ac8a9` red and `bff1c24` green for W-2: the column follows its
+own measured height while the reader is at its end, in place of a list of what can grow). Gates on
+the merged branch: web typecheck exit 0, 154 files and 2840 tests, eslint clean, build ok, lines
+91.46% (`102_W66_VERIFICATION.md`, "Walk defects W-1 and W-2").
+
+An independent check then measured both in Chromium on the built page (a local `next start` of the
+fix and of the phase branch before it, an invented session against a stand-in backend, no live
+turn): with eight long turns at 1440 by 900 the document was 7918 px before and 901 px after, the
+same as every other screen; the column still scrolls inside itself; the labels are still in the
+accessibility tree; the stored row's "Used:" line lands inside the column when the reader is at
+its end and moves nothing when they have scrolled up; mutants that undo either fix fail tests;
+0 of 1,296,000 pixels differ elsewhere on the page. Its one finding is not the fix's: the app
+shell is 0.92 px taller than its window on every screen, on `main` too (the top bar renders 52.92
+px against a rail sized for 52). Ruling: W-1 is closed at "the conversation adds nothing to the
+page"; the shell's pixel is its own item (STATUS, Known issues). The second sitting showed both
+fixes on the real page.
+
+**What no `/code-review` read.** The last `/code-review` range ends at `ac41858`. After it came
+three small rounds: the runner's round Z (rulings Z1), the umbrella's fix round, and these two web
+fixes. Each was read by an independent check that ran mutants against it (and, for the web fixes,
+a real browser), and none by a third `/code-review` or `/security-review`. Both PRs are open for
+one if Stack wants it.
+
+## Task 25 — both PRs open, the preview live (2026-10-07)
+
+| check | result |
+|---|---|
+| `gh pr view 78 --repo emstacho-su/bb2dash --json state,headRefName` | `OPEN`, `feat/workspace-21`, mergeable |
+| `gh pr view 3 --repo emstacho-su/bb2dash-stack --json state,headRefName` | `OPEN`, `feat/workspace-21`, mergeable |
+| the Vercel connector's `web_fetch_vercel_url` on `https://web-git-feat-workspace-21-emstacho-sus-projects.vercel.app/login`, 11:17:04 UTC | HTTP 200, the page titled "Sign in · bb2dash" (deployment `dpl_BY8hkcUdpQJ3zNLbmuiqVu8KdBsJ`) |
+| the branch against `main` | 2 commits behind (PR #77's two), merges cleanly |
+| a scan of the whole branch diff for secret shapes (`sk-ant-`, a JWT, `sb_secret_`, a DSN with a password) before the PR opened | none; the one DSN-shaped line is a made-up test value (`db.example`) |
+
+Opened together; bb2dash merges first. Each PR's description carries the preview link, the gates,
+the walk's proofs, and what is Stack's: the acceptance walk and the questions put to him.
+
+**Task 23's first grep, said plainly.** `grep -c "net.http_post"` on this file read 0 until the
+note under the `/security-review` request was written on 2026-10-07; the request as sent named
+pg_net's functions as a whole and that any database login can make the database send HTTP
+requests, not `net.http_post` and its two tables by name. PM ruling: row 23 is met in substance
+(the reviewer was told the reach and raised no finding on it); the brief's row 23 says so.
+
+**The public screenshots.** The PM opened the bb2dash PR knowing the walk's shots hold real
+answers (a quoted syllabus sentence, slide summaries, three Inbox decisions) and that the
+repository is public. They were already on three pushed branches, so holding the PR back would
+have hidden nothing; replacing them means rewriting those branches, which waits for Stack's word.
+It is the first line of the hand-off.
+
+The PM stops here: ready when Stack says so.
