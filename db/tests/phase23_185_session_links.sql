@@ -6,8 +6,8 @@
 --      withheld, no write on either table, the two function bodies
 --   1. the role reads bb_files (its columns only) and sessions, and is refused the rest
 --   2. inbox_apply_prepare: a session answer carries its file's link; any other row carries none
---   3. inbox_apply_close: a failure notice stays while an answered row waits; the sign-in notice
---      closes on a done run that started Claude; both close once the queue is empty
+--
+-- 185 also re-created inbox_apply_close; 186 replaced that body, and phase23_186_notices.sql tests it.
 --
 -- Every call is made under `set local role inbox_apply_runner` (181 grants db_test_runner the
 -- role with inherit false). RUN IT: `node scripts/db-test.mjs --only phase23_185_session_links.sql`.
@@ -37,10 +37,6 @@ begin
   if position('session_link' in (select prosrc from pg_proc
                                   where oid = 'public.inbox_apply_prepare(bigint)'::regprocedure)) = 0 then
     raise exception 'FAIL phase23_185: migration 185 is not applied (inbox_apply_prepare sends no session_link)';
-  end if;
-  if position('v_waiting' in (select prosrc from pg_proc
-                               where oid = 'public.inbox_apply_close(bigint, text, jsonb)'::regprocedure)) = 0 then
-    raise exception 'FAIL phase23_185: migration 185 is not applied (inbox_apply_close is still 181''s body)';
   end if;
 
   foreach c in array v_read loop
@@ -298,95 +294,6 @@ begin
   exception when sqlstate '22023' then
     reset role;
   end;
-end $$;
-
--- =============================================================================================
--- 3. inbox_apply_close: when the two notices close
--- =============================================================================================
-do $$
-declare
-  v_r bigint := (select id from _t185 where label = 'r1');
-  v_follow bigint;
-  v_open_failed int;
-  v_open_login int;
-
-  -- Open items of each notice, after the latest close.
-  v_count text := $q$select count(*) filter (where ref = 'inbox-apply-failed'),
-                            count(*) filter (where ref = 'apply-login-required')
-                       from attention_items
-                      where state = 'open' and ref in ('inbox-apply-failed', 'apply-login-required')$q$;
-  v_new text := $q$insert into agent_requests (kind, scope, state, claimed_at, claimed_by, claim_attempts, note)
-                   values ('inbox_feedback', 'all', 'claimed', now(), 'inbox-apply-runner', 1, 'phase23_185 next')
-                   returning id$q$;
-begin
-  -- (a) A run that could not apply some answers, then one whose sign-in had expired: two notices.
-  --     Neither archived anything, so neither files a follow-up.
-  set local role inbox_apply_runner;
-  v_follow := inbox_apply_close(v_r, 'failed', '{"lines": ["3 could not be applied"], "error": "not_applied", "archived": 0, "skip": []}'::jsonb);
-  reset role;
-  execute v_new into v_r;
-  set local role inbox_apply_runner;
-  perform inbox_apply_close(v_r, 'failed', '{"lines": [], "error": "sign_in_expired", "archived": 0, "skip": []}'::jsonb);
-  reset role;
-  execute v_count into v_open_failed, v_open_login;
-  if v_follow is not null or v_open_failed <> 1 or v_open_login <> 1 then
-    raise exception 'FAIL 3a: after two failed closes: follow-up %, % failure and % sign-in notices open, expected none, 1 and 1',
-      v_follow, v_open_failed, v_open_login;
-  end if;
-
-  -- (b) A done close that never started Claude, with answers still waiting: both stay.
-  execute v_new into v_r;
-  set local role inbox_apply_runner;
-  perform inbox_apply_close(v_r, 'done', '{"lines": ["Nothing to apply"], "archived": 0, "skip": [], "claude": {"started": false}}'::jsonb);
-  reset role;
-  execute v_count into v_open_failed, v_open_login;
-  if v_open_failed <> 1 or v_open_login <> 1 then
-    raise exception 'FAIL 3b: a done close that started nothing, over a waiting queue, left % failure and % sign-in notices open, expected 1 and 1',
-      v_open_failed, v_open_login;
-  end if;
-
-  -- (c) A done close of a run that started Claude: the sign-in works, so that notice closes. The
-  --     answers of (a) still wait, so the failure notice stays (the first live run lost it here).
-  execute v_new into v_r;
-  set local role inbox_apply_runner;
-  perform inbox_apply_close(v_r, 'done', '{"lines": ["2 recorded only"], "archived": 0, "skip": [], "claude": {"started": true}}'::jsonb);
-  reset role;
-  execute v_count into v_open_failed, v_open_login;
-  if v_open_failed <> 1 or v_open_login <> 0 then
-    raise exception 'FAIL 3c: a done run over a waiting queue left % failure and % sign-in notices open, expected 1 and 0',
-      v_open_failed, v_open_login;
-  end if;
-  if not exists (select 1 from attention_items
-                  where ref = 'apply-login-required' and state = 'archived' and archived_by = 'inbox-apply-runner' and archived_at = now()
-                    and decision->>'closed_itself' = 'true' and decision->>'trigger' = 'inbox_apply_close') then
-    raise exception 'FAIL 3c: the sign-in notice was not archived as closed_itself by the close';
-  end if;
-
-  -- (d) Nothing answered is left: the failure notice closes, on a run that started nothing too.
-  update attention_items
-     set state = 'archived', archived_at = now(), archived_by = 'phase23_185 setup',
-         decision = '{"change": "test setup"}'::jsonb
-   where state in ('resolved', 'dismissed');
-  -- A sign-in notice raised again, to see the empty queue close it without a Claude run.
-  execute v_new into v_r;
-  set local role inbox_apply_runner;
-  perform inbox_apply_close(v_r, 'failed', '{"lines": [], "error": "sign_in_expired", "archived": 0, "skip": []}'::jsonb);
-  reset role;
-  execute v_new into v_r;
-  set local role inbox_apply_runner;
-  perform inbox_apply_close(v_r, 'done', '{"lines": ["Nothing to apply"], "archived": 0, "skip": [], "claude": {"started": false}}'::jsonb);
-  reset role;
-  execute v_count into v_open_failed, v_open_login;
-  if v_open_failed <> 0 or v_open_login <> 0 then
-    raise exception 'FAIL 3d: a done close over an empty queue left % failure and % sign-in notices open, expected 0 and 0',
-      v_open_failed, v_open_login;
-  end if;
-  if (select count(*) from attention_items
-       where ref in ('inbox-apply-failed', 'apply-login-required') and state = 'archived'
-         and archived_by = 'inbox-apply-runner' and decision->>'closed_itself' = 'true'
-         and archived_at = now()) <> 3 then  -- this transaction's own: prod holds real ones
-    raise exception 'FAIL 3d: the notices were not all archived as closed_itself';
-  end if;
 end $$;
 
 -- =============================================================================================
