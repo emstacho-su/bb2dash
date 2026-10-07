@@ -38,6 +38,24 @@ type BuiltClient = PgClientLike & {
 };
 const build = (dsn: string, ca: string): BuiltClient => newPgClient(dsn, ca) as BuiltClient;
 
+/**
+ * Where the driver (pg 8.23.0, pinned in package.json) keeps the three bounds on a client it built,
+ * each the field it acts on: `connect()` arms its timer from `_connectionTimeoutMillis`, `query()`
+ * its read timer from `connectionParameters.query_timeout`, and the connection switches TCP
+ * keep-alive on from `connection._keepAlive`. Left out of the options they read 0, false and false.
+ */
+type BoundClient = BuiltClient & {
+  _connectionTimeoutMillis: number;
+  connectionParameters: { query_timeout: number | false };
+  connection: { _keepAlive: boolean };
+};
+
+const boundsOf = (client: BoundClient): { connectionTimeoutMillis: number; query_timeout: number | false; keepAlive: boolean } => ({
+  connectionTimeoutMillis: client._connectionTimeoutMillis,
+  query_timeout: client.connectionParameters.query_timeout,
+  keepAlive: client.connection._keepAlive,
+});
+
 describe('the client is built from the parsed parts of the DSN', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -78,10 +96,23 @@ describe('the client is built from the parsed parts of the DSN', () => {
     expect(client.connectionParameters).toMatchObject({ host: HOST, port: 5432, user: USER, password: PASSWORD, database: 'postgres' });
   });
 
-  it('keeps the bounds on a connect and a query, and its name', () => {
-    const client = build(DSN, CA_TEXT) as BuiltClient & { connectionParameters: { query_timeout?: number } };
-    expect(client.connectionParameters.application_name).toBe(APPLICATION_NAME);
-    expect(PG_CLIENT_OPTIONS.connectionTimeoutMillis).toBeLessThanOrEqual(15_000);
+  // Ruling X1: read from the client `newPgClient` built, never from the constant it was built with,
+  // so a `newPgClient` that drops one of the three fails here.
+  it('carries the three bounds on the client as built: the time a connect gets, the time a query gets, the keep-alive', () => {
+    const bounds = boundsOf(build(DSN, CA_TEXT) as BoundClient);
+    expect(bounds).toEqual({
+      connectionTimeoutMillis: PG_CLIENT_OPTIONS.connectionTimeoutMillis,
+      query_timeout: PG_CLIENT_OPTIONS.query_timeout,
+      keepAlive: PG_CLIENT_OPTIONS.keepAlive,
+    });
+    // Each is switched on: the driver reads 0, false and false as no bound at all.
+    expect(bounds.connectionTimeoutMillis).toBeGreaterThan(0);
+    expect(bounds.query_timeout).toBeGreaterThan(0);
+    expect(bounds.keepAlive).toBe(true);
+  });
+
+  it('keeps its name on the client as built', () => {
+    expect(build(DSN, CA_TEXT).connectionParameters.application_name).toBe(APPLICATION_NAME);
   });
 
   it('takes nothing from the PG* environment: not the host, the user, the password, the database, the port or the ssl mode', () => {
