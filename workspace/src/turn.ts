@@ -28,6 +28,7 @@ import {
   CONTENT_MAX_CHARS,
   FINISH_RETRY_MS,
   NO_CAP_SENTENCE,
+  NUL,
   STREAM_DELTA_MAX_CHARS,
   STREAM_FLUSH_MS,
   TOOL_CALLS_MAX,
@@ -42,8 +43,6 @@ import { routeTier } from './router.js';
 import { TIER_ROUTES } from './tiers.js';
 
 const MS_PER_SECOND = 1000;
-/** The database cannot store this character in text. */
-const NUL = '\u0000';
 
 export interface TurnDeps {
   readonly rpc: WorkspaceRpc;
