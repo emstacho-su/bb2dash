@@ -1417,6 +1417,11 @@ No new dependency. Nothing outside `web/` and this file changed:
   (558 px) plus the bar, the heading, the composer and the padding, about 343 px: a window
   shorter than about 903 px scrolls by the difference, onto real content. Inferred from the walk's
   two numbers; my static page stands a 56 px block in for the top bar and cannot say.
+  *Correction, 2026-10-07 (PM, from 102a, "The retake sitting"):* the real page does not scroll by
+  the difference in a shorter window. On the fixed page the document is 1 px taller than its
+  window at both heights read: 901 px in a 900 px window (1440 by 900, at every length the column
+  had), and 767 px in a 766 px window in the desktop shell. A 3000 px wheel turn outside the
+  column moved the window 1 px. The 1 px is the app shell's, the same on every screen.
 * **`/code-review` and `/security-review` were not run by me.**
 
 ### 9. Notes for the PM
@@ -1424,6 +1429,11 @@ No new dependency. Nothing outside `web/` and this file changed:
 * **For the retake.** A full-page shot of the fixed page is the window's height, so 06 and 07 lose
   their empty lower part. `fitTurnInShot` is still needed: a turn taller than the column cannot
   show its badge and its "Used:" line together, by design.
+  *Correction, 2026-10-07 (PM, from 102a, "The retake sitting"):* the fixed page is 1 px taller
+  than its window (the document is 901 px in a 900 px window), so a full-page shot is not the
+  window's height. The retake shoots the window and not the page: 11, 05, 06 and 07 are 1440 by
+  900, each read back from its file, and each shot first asserts that the document is at most 1 px
+  taller than the window. 06 and 07 have no empty lower part.
 * **For acceptance steps 3 to 5.** With the reader at the end, a long answer now ends with its
   "Used:" line in view. A reader who has scrolled more than 96 px up is left where they are, and
   finds the line by scrolling down, as before.
