@@ -1,15 +1,17 @@
 -- bb2dash :: db/tests/phase21_143_review_round.sql
--- Phase 21 (docs/planning/sprint-2/briefs/102_PHASE21_workspace.md), the review round (ruling V3;
--- 102a, CR-4, CR-7, CR-8 and the note under `/security-review`). Worker W-63.
+-- Phase 21 (docs/planning/sprint-2/briefs/102_PHASE21_workspace.md), the review round (rulings V3
+-- and X2; 102a, CR-4, CR-7, CR-8 and the note under `/security-review`). Worker W-63.
 -- Tests migration 143, the four changes it makes to objects of 140 and 142:
 --
---   0. installed and shaped: the view's five columns, its option and its grants; the trigger's
---      definition; the two replaced functions' attributes
+--   0. installed and shaped: the view's five columns, its option and its grants; the trigger and
+--      its condition; the two replaced functions' attributes
 --   1. setup
 --   2. CR-8: v_workspace_status.polled_age_seconds
 --   3. the security note: workspace_finish refuses a request that is not claimed or cancelled
---   4. CR-4: workspace_claim also finishes an assistant row its request left behind
---   5. CR-7: an update that changes only `archived` does not move updated_at
+--   4. CR-4: workspace_claim also finishes an assistant row its request left behind, with the
+--      10 minutes tested at the boundary
+--   5. CR-7: updated_at moves when the title or the session id changes, and for nothing else the
+--      page can send; workspace_finish stamps it itself
 --
 -- Units 140, 140b, 141 and 142 still hold everything else about these objects; this unit holds
 -- what 143 changed and nothing more.
@@ -19,7 +21,8 @@
 -- the reads that check an effect run as the session role. Everything happens in one transaction,
 -- where now() never moves, so the unit sets finished_at and updated_at itself wherever an age
 -- matters. On prod a real question can sit queued and the heartbeat row exists once the service
--- has run, so section 1 cancels every open request and deletes the heartbeat row, inside this
+-- has run, so section 1 cancels every open request and deletes the heartbeat row (named by its
+-- id: a delete with no `where` is held by `execute_sql` for a confirmation), inside this
 -- transaction only.
 --
 -- AN `execute_sql` DRY RUN of this unit adds, inside its own transaction and before the unit,
@@ -98,8 +101,8 @@ begin
   end if;
 
   -- The trigger: the table's one trigger, before update, for each row, on set_updated_at(),
-  -- enabled, with a when clause that compares every column of the table (so a column added later
-  -- cannot be forgotten: an update of it together with `archived` would otherwise be silent).
+  -- enabled, and its condition is the title or the session id changing, nothing more (ruling X2).
+  -- The condition is read as the catalogue prints it, brackets and line breaks aside.
   select string_agg(g.tgname, ', ' order by g.tgname collate "C") into v_got
     from pg_trigger g
    where g.tgrelid = 'public.workspace_conversations'::regclass and not g.tgisinternal;
@@ -117,13 +120,13 @@ begin
   if v_def is null then
     v_fail := v_fail || 'workspace_conversations_updated_at is not an enabled before-update row trigger on set_updated_at() with a when clause'::text;
   else
-    select string_agg(a.attname, ', ' order by a.attnum) into v_got
-      from pg_attribute a
-     where a.attrelid = 'public.workspace_conversations'::regclass and a.attnum > 0
-       and not a.attisdropped
-       and v_def !~ format('\mnew\.%s IS (NOT )?DISTINCT FROM old\.%s\M', a.attname, a.attname);
-    if v_got is not null then
-      v_fail := v_fail || format('the trigger''s when clause does not compare column(s) %s: %s', v_got, v_def);
+    v_got := btrim(regexp_replace(
+               translate(substring(v_def from ' WHEN \((.*)\) EXECUTE FUNCTION '), '()', ''),
+               '\s+', ' ', 'g'));
+    if v_got is distinct from
+       'old.title IS DISTINCT FROM new.title OR '
+       'old.claude_session_id IS DISTINCT FROM new.claude_session_id' then
+      v_fail := v_fail || format('the trigger''s condition is not "the title or the session id changed": %s', v_def);
     end if;
   end if;
 
@@ -197,7 +200,7 @@ begin
   update workspace_requests
      set state = 'cancelled', error_code = 'cancelled', finished_at = now()
    where state in ('queued', 'claimed');
-  delete from workspace_runner_heartbeat;
+  delete from workspace_runner_heartbeat where id = 1;
 
   -- ---------------------------------------------------------------------------------------------
   -- 2. CR-8: polled_age_seconds
@@ -434,6 +437,8 @@ declare
   v_n_req bigint; v_n_ans uuid;                   --   N cancelled with no finished_at
   v_k_req bigint; v_k_ans uuid;                   --   K failed 11 minutes ago, its answer finished
   v_u_msg uuid;                                   --   U a user row that names Z
+  v_e_req bigint; v_e_ans uuid;                   --   E failed exactly 10 minutes ago
+  v_l_req bigint; v_l_ans uuid;                   --   L failed 10 minutes and 1 second ago
 begin
   perform set_config('request.jwt.claim.sub', v_owner::text, true);
   -- Setup, as in section 1: no other request may be open when this block claims.
@@ -473,7 +478,8 @@ begin
 
   -- H: rows no function writes, made by hand. Z failed and W done 11 minutes ago with their
   -- answers unfinished; N cancelled with no finished_at; K failed 11 minutes ago with a FINISHED
-  -- answer that carries no code; U a user row, unfinished, that names Z's request.
+  -- answer that carries no code; U a user row, unfinished, that names Z's request; E and L failed
+  -- exactly 10 minutes ago and one second longer, their answers unfinished (the boundary).
   insert into workspace_conversations (title) values ('phase21_143 H') returning id into v_h;
   insert into workspace_messages (conversation_id, role, content, finished)
   values (v_h, 'user', 'question H', true) returning id into v_h_msg;
@@ -495,6 +501,15 @@ begin
   values (v_h, 'assistant', v_k_req, 'kept', true) returning id into v_k_ans;
   insert into workspace_messages (conversation_id, role, request_id, content, finished)
   values (v_h, 'user', v_z_req, 'not an answer', false) returning id into v_u_msg;
+  insert into workspace_requests (conversation_id, user_message_id, state, error_code, finished_at)
+  values (v_h, v_h_msg, 'failed', 'cli_error', now() - interval '10 minutes') returning id into v_e_req;
+  insert into workspace_requests (conversation_id, user_message_id, state, error_code, finished_at)
+  values (v_h, v_h_msg, 'failed', 'cli_error', now() - interval '10 minutes 1 second')
+  returning id into v_l_req;
+  insert into workspace_messages (conversation_id, role, request_id, content, finished)
+  values (v_h, 'assistant', v_e_req, 'left behind', false) returning id into v_e_ans;
+  insert into workspace_messages (conversation_id, role, request_id, content, finished)
+  values (v_h, 'assistant', v_l_req, 'left behind', false) returning id into v_l_ans;
 
   -- 4a. One poll with nothing queued: no row comes back, and the sweep has still run.
   set local role workspace_runner;
@@ -511,7 +526,10 @@ begin
       ('W, done 11 minutes ago: finished, no code',                    v_w_ans, true,  null,        'left behind'),
       ('N, cancelled with no finished_at: left alone',                 v_n_ans, false, null,        'left behind'),
       ('K, an answer already finished: its code is not rewritten',     v_k_ans, true,  null,        'kept'),
-      ('U, a user row: left alone',                                    v_u_msg, false, null,        'not an answer')
+      ('U, a user row: left alone',                                    v_u_msg, false, null,        'not an answer'),
+      -- The boundary: "more than 10 minutes" is strict.
+      ('E, failed exactly 10 minutes ago: left alone',                 v_e_ans, false, null,        'left behind'),
+      ('L, failed 10 minutes and 1 second ago: finished, cli_error',   v_l_ans, true,  'cli_error', 'left behind')
     ) as x(label, id, finished, code, content)
   loop
     select m.finished, m.error_code, m.content into v_row from workspace_messages m where m.id = v_case.id;
@@ -555,9 +573,12 @@ begin
     raise exception 'FAIL 4c: the poll claimed request % (expected Q, %) and Y''s answer reads %',
       v_claim.request_id, v_q_req, row_to_json(v_row);
   end if;
-  -- N (no finished_at) is still left alone after a second poll.
+  -- N (no finished_at) is still left alone after a second poll, and so is E (exactly 10 minutes).
   if (select m.finished from workspace_messages m where m.id = v_n_ans) is not false then
     raise exception 'FAIL 4c: an answer whose request has no finished_at was finished';
+  end if;
+  if (select m.finished from workspace_messages m where m.id = v_e_ans) is not false then
+    raise exception 'FAIL 4c: an answer whose request closed exactly 10 minutes ago was finished';
   end if;
 
   perform set_config('request.jwt.claim.sub', '', true);
@@ -570,9 +591,13 @@ declare
   v_owner uuid := app_owner();
   v_claim record;
   v_row   record;
-  v_n     integer;
+  v_case  record;
+  v_got   text;
+  v_msg   uuid;
+  v_req   bigint;
   v_c1 uuid; v_c2 uuid; v_c3 uuid;                -- three chats last touched a day ago
-  v_c4 uuid; v_c4_msg uuid; v_c4_req bigint;      -- a fourth, answered now
+  v_c4 uuid;                                      -- a fourth, answered now for the first time
+  v_c5 uuid;                                      -- a fifth, answered now in the session it had
 begin
   perform set_config('request.jwt.claim.sub', v_owner::text, true);
   -- Setup, as in section 1: no other request may be open when this block claims.
@@ -580,10 +605,9 @@ begin
      set state = 'cancelled', error_code = 'cancelled', finished_at = now()
    where state in ('queued', 'claimed');
   -- ---------------------------------------------------------------------------------------------
-  -- 5. CR-7: archiving is not activity
+  -- 5. CR-7: what moves updated_at (ruling X2)
   -- ---------------------------------------------------------------------------------------------
-  -- Four chats last touched a day ago. updated_at is set at insert: an update cannot set it back,
-  -- because the trigger fires on an update that changes updated_at.
+  -- Five chats last touched a day ago; the fifth already has a session id.
   insert into workspace_conversations (title, updated_at)
   values ('phase21_143 archive', now() - c_day) returning id into v_c1;
   insert into workspace_conversations (title, updated_at)
@@ -592,52 +616,88 @@ begin
   values ('phase21_143 both', now() - c_day) returning id into v_c3;
   insert into workspace_conversations (title, updated_at)
   values ('phase21_143 answered', now() - c_day) returning id into v_c4;
+  insert into workspace_conversations (title, updated_at, claude_session_id)
+  values ('phase21_143 resumed', now() - c_day, c_sid) returning id into v_c5;
 
-  -- 5a. Archive, then restore, as the owner's page does: updated_at stays a day old both times.
-  set local role authenticated;
-  update workspace_conversations set archived = true where id = v_c1;
-  reset role;
-  select c.archived, c.updated_at = now() - c_day as kept into v_row
-    from workspace_conversations c where c.id = v_c1;
-  if v_row.archived is not true or v_row.kept is not true then
-    raise exception 'FAIL 5a: archiving left archived %, updated_at kept %', v_row.archived, v_row.kept;
-  end if;
-  set local role authenticated;
-  update workspace_conversations set archived = false where id = v_c1;
-  reset role;
-  select c.archived, c.updated_at = now() - c_day as kept into v_row
-    from workspace_conversations c where c.id = v_c1;
-  if v_row.archived is not false or v_row.kept is not true then
-    raise exception 'FAIL 5a: restoring left archived %, updated_at kept %', v_row.archived, v_row.kept;
-  end if;
+  -- 5a to 5d. The owner's page, one update after another, in this order. After each one
+  -- updated_at is either still a day old (kept) or now() (moved).
+  for v_case in
+    select * from (values
+      ('5a archive only',
+       v_c1, 'archived = true',  'kept',  true,  'phase21_143 archive'),
+      ('5b nothing changes: archiving a chat that is already archived',
+       v_c1, 'archived = true',  'kept',  true,  'phase21_143 archive'),
+      ('5a restore only',
+       v_c1, 'archived = false', 'kept',  false, 'phase21_143 archive'),
+      ('5c archive, with the title sent as it already is',
+       v_c1, 'archived = true, title = ''phase21_143 archive''', 'kept', true, 'phase21_143 archive'),
+      ('5c a title set to itself',
+       v_c2, 'title = ''phase21_143 title''', 'kept', false, 'phase21_143 title'),
+      ('5c a title set to itself by name',
+       v_c2, 'title = title',    'kept',  false, 'phase21_143 title'),
+      ('5d a new title',
+       v_c2, 'title = ''phase21_143 renamed''', 'moved', false, 'phase21_143 renamed'),
+      ('5d a new title together with archived',
+       v_c3, 'archived = true, title = ''phase21_143 both, renamed''', 'moved', true,
+       'phase21_143 both, renamed')
+    ) as x(label, id, sets, want, archived, title)
+  loop
+    set local role authenticated;
+    execute format('update workspace_conversations set %s where id = %L', v_case.sets, v_case.id);
+    reset role;
+    select case when c.updated_at = now() - c_day then 'kept'
+                when c.updated_at = now() then 'moved'
+                else c.updated_at::text end as got,
+           c.archived, c.title
+      into v_row from workspace_conversations c where c.id = v_case.id;
+    if v_row.got is distinct from v_case.want or v_row.archived is distinct from v_case.archived
+       or v_row.title is distinct from v_case.title then
+      raise exception 'FAIL % (set %): updated_at %, expected %; the row reads archived %, title %',
+        v_case.label, v_case.sets, v_row.got, v_case.want, v_row.archived, v_row.title;
+    end if;
+  end loop;
 
-  -- 5b. A new title moves it, alone or together with archived.
-  set local role authenticated;
-  update workspace_conversations set title = 'phase21_143 renamed' where id = v_c2;
-  update workspace_conversations set archived = true, title = 'phase21_143 both, renamed' where id = v_c3;
-  reset role;
-  select count(*) filter (where c.updated_at = now()) into v_n
-    from workspace_conversations c where c.id in (v_c2, v_c3);
-  if v_n <> 2 then
-    raise exception 'FAIL 5b: % of the 2 title updates moved updated_at to now()', v_n;
-  end if;
+  -- 5e. An answer moves it, and the stamp is workspace_finish's own. C4's first answer changes
+  --     the session id, so the trigger fires as well. C5 is answered in the session it already
+  --     had: neither the title nor the session id changes, the trigger is silent, and updated_at
+  --     moves only because workspace_finish writes it.
+  for v_case in
+    select * from (values
+      ('a first answer: the session id changes', v_c4),
+      ('an answer in the session the chat already had', v_c5)
+    ) as x(label, id)
+  loop
+    insert into workspace_messages (conversation_id, role, content, finished)
+    values (v_case.id, 'user', 'question', true) returning id into v_msg;
+    insert into workspace_requests (conversation_id, user_message_id)
+    values (v_case.id, v_msg) returning id into v_req;
+    set local role workspace_runner;
+    select * into v_claim from workspace_claim('phase21_143');
+    perform workspace_begin(v_req, 'low', 'claude-cli', 'haiku');
+    perform workspace_finish(v_req, 'done', 'answer', '[]'::jsonb, null, null, null, c_sid, null);
+    reset role;
+    select c.updated_at = now() as moved, c.claude_session_id into v_row
+      from workspace_conversations c where c.id = v_case.id;
+    if v_claim.request_id is distinct from v_req or v_row.moved is not true
+       or v_row.claude_session_id is distinct from c_sid then
+      raise exception 'FAIL 5e (%): the chat reads % (claimed request %, expected %)',
+        v_case.label, row_to_json(v_row), v_claim.request_id, v_req;
+    end if;
+  end loop;
 
-  -- 5c. An answer moves it: workspace_finish writes updated_at itself.
-  insert into workspace_messages (conversation_id, role, content, finished)
-  values (v_c4, 'user', 'question C4', true) returning id into v_c4_msg;
-  insert into workspace_requests (conversation_id, user_message_id)
-  values (v_c4, v_c4_msg) returning id into v_c4_req;
-  set local role workspace_runner;
-  select * into v_claim from workspace_claim('phase21_143');
-  perform workspace_begin(v_c4_req, 'low', 'claude-cli', 'haiku');
-  perform workspace_finish(v_c4_req, 'done', 'answer', '[]'::jsonb, null, null, null, c_sid, null);
+  -- 5f. The trigger no longer writes over an updated_at that an update sets, so what keeps the
+  --     column true for the page is 140's column grant: the owner's role updates title and
+  --     archived, and nothing else.
+  set local role authenticated;
+  begin
+    update workspace_conversations set updated_at = now() - c_day where id = v_c2;
+    v_got := 'no error';
+  exception when others then
+    v_got := sqlstate;
+  end;
   reset role;
-  select c.updated_at = now() as moved, c.claude_session_id into v_row
-    from workspace_conversations c where c.id = v_c4;
-  if v_claim.request_id is distinct from v_c4_req or v_row.moved is not true
-     or v_row.claude_session_id is distinct from c_sid then
-    raise exception 'FAIL 5c: after an answer the chat reads % (claimed request %, expected %)',
-      row_to_json(v_row), v_claim.request_id, v_c4_req;
+  if v_got <> '42501' then
+    raise exception 'FAIL 5f: the owner''s role setting updated_at got %, expected 42501', v_got;
   end if;
 
   perform set_config('request.jwt.claim.sub', '', true);
