@@ -1,0 +1,19 @@
+# The apply image's build context is the repo root (docker/apply/Dockerfile, Phase 23). BuildKit
+# reads this file, and not the root .dockerignore, because it sits beside that Dockerfile under the
+# Dockerfile's own name: the sync image's allow-list (the root file) is not touched.
+#
+# An allow-list: only the folders that Dockerfile copies from are sent. Of workspace/ only src/
+# goes, because the worker's bundle is built from apply/src and the Phase 21 modules it imports.
+# Every node_modules, dist and coverage folder and every .env file stay out, so nothing host-built
+# and nothing secret reaches a layer. The pinned CA comes from the named context `harness-certs`.
+*
+!docker/apply/
+!apply/
+!workspace/src/
+!mcp-server/
+!skills/inbox-apply/
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
