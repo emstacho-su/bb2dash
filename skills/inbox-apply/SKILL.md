@@ -28,9 +28,9 @@ and nothing here writes a file.
 |---|---|---|
 | Started by | the worker, as `/inbox-apply <request> --unattended --items <ids>` | Stack: `claude "/inbox-apply <id>"`, or no id |
 | Request claimed, queue read, request closed by | the worker, in code (steps 1, 2 and 6 are done) | this session (steps 1, 2 and 6) |
-| SQL | `mcp__db__query` (read-only) and `mcp__db__execute_sql`, as the role `inbox_apply_runner` | the Supabase MCP's `execute_sql`, as the service role |
+| SQL | `mcp__db__query` (one read-only select) and `mcp__db__apply_item` (one item, the writer only), as the role `inbox_apply_runner` | the Supabase MCP's `execute_sql`, as the service role |
 | What holds the write rules | Postgres (migration 181): the role cannot write outside them | the rules in `writer.md`; nothing else stands between a wrong answer and a wrong row |
-| Open and archive an item | `inbox_apply_begin_item`, `inbox_apply_archive` | `archive_attention_item` |
+| Open and archive an item | the server, inside `mcp__db__apply_item` | `archive_attention_item` |
 | Report | one fixed line; the worker writes the request's result from the tables | step 7, to Stack |
 
 Arguments: the `agent_requests.id` (`claude "/inbox-apply 57"`), or nothing (step 1 finds or files

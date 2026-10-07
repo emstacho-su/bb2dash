@@ -17,7 +17,7 @@
  * Every step is an injected port, so the pass runs on fakes in loop.test.ts.
  */
 
-import { planBatch, templatedDecision } from './batch.js';
+import { planBatch, templatedDecision, type Prepared } from './batch.js';
 import { MAX_RUNS_PER_DAY, POLL_INTERVAL_MS } from './config.js';
 import type { ApplyRpc } from './db.js';
 import { buildReport, type ClaudeOutcome } from './report.js';
@@ -40,8 +40,16 @@ function message(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).split('\n')[0] ?? '';
 }
 
-/** Steps 2 to 6 for a claimed request. Throws only when a database call does. */
-async function work(d: PassDeps, requestId: number): Promise<'done' | 'failed'> {
+/** What steps 2 to 4 leave for the close: the queue as it was read, the batch, and how the run ended. */
+interface BatchRun {
+  readonly prepared: Prepared;
+  readonly batchIds: readonly number[];
+  readonly claude: ClaudeOutcome | null;
+  readonly capped: boolean;
+}
+
+/** Steps 2 to 4 for a claimed request. `onRun` is told before Claude is started, so a later throw still knows it was. */
+async function runBatch(d: PassDeps, requestId: number, onRun: () => void): Promise<BatchRun> {
   const prepared = await d.rpc.prepare(requestId);
   const plan = planBatch(prepared);
 
@@ -62,30 +70,57 @@ async function work(d: PassDeps, requestId: number): Promise<'done' | 'failed'> 
     d.log(`pass: request ${requestId}: today's ${prepared.runsToday} runs reached the cap; ${batchIds.length} item(s) wait`);
   } else if (batchIds.length > 0) {
     d.log(`pass: request ${requestId}: ${plan.templated.length} recorded here, ${batchIds.length} to Claude, ${plan.deferred.length} deferred, ${plan.skipped.length} skipped`);
+    onRun();
     claude = await d.runClaude({ requestId, itemIds: batchIds });
   }
+  return { prepared, batchIds, claude, capped };
+}
 
+/** Steps 5 and 6: what the request did, read from the tables, then the close. */
+async function finish(d: PassDeps, requestId: number, run: BatchRun): Promise<'done' | 'failed'> {
   const facts = await d.rpc.runFacts(requestId);
-  const report = buildReport({ trigger: prepared.trigger, batchIds, priorSkip: prepared.skip, facts, claude, capped });
+  const report = buildReport({
+    trigger: run.prepared.trigger,
+    batchIds: run.batchIds,
+    priorSkip: run.prepared.skip,
+    facts,
+    claude: run.claude,
+    capped: run.capped,
+  });
   const followUp = await d.rpc.close(requestId, report.state, report.result);
   d.log(`pass: request ${requestId} closed ${report.state}${followUp === null ? '' : `; follow-up ${followUp} queued`}`);
   return report.state;
+}
+
+/** How many items this request has archived, for the fallback close; 0 when even that cannot be read. */
+async function archivedSoFar(d: PassDeps, requestId: number): Promise<number> {
+  try {
+    return (await d.rpc.runFacts(requestId)).archivedIds.length;
+  } catch {
+    return 0;
+  }
 }
 
 export async function runPass(d: PassDeps): Promise<PassOutcome> {
   const request = await d.rpc.claim();
   if (request === null) return 'idle';
   d.log(`pass: claimed request ${request.id}`);
+  let started = false;
   try {
-    return await work(d, request.id);
+    const run = await runBatch(d, request.id, () => {
+      started = true;
+    });
+    return await finish(d, request.id, run);
   } catch (error) {
     d.log(`pass: request ${request.id} failed: ${message(error)}`);
     try {
       await d.rpc.close(request.id, 'failed', {
         lines: ['The apply worker hit an error before it could finish.'],
         error: 'cli_error',
-        archived: 0,
-        claude: { started: false },
+        // What was archived before the error stays archived and is counted, so the close files the
+        // follow-up for the rest; a run that started Claude counts toward the day's cap.
+        archived: await archivedSoFar(d, request.id),
+        claude: { started },
       });
     } catch (closeError) {
       d.log(`pass: request ${request.id} could not be closed (${message(closeError)}); the next claim releases it`);

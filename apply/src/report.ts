@@ -86,11 +86,12 @@ const ERROR_SENTENCE: Readonly<Record<RunError, string>> = Object.freeze({
 });
 
 /** The first line: what happened, in the Inbox's words. */
-function headline(changed: number, recordedOnly: number, notApplied: number): string {
+function headline(changed: number, recordedOnly: number, notApplied: number, notReached: number): string {
   const parts: string[] = [];
   if (changed > 0) parts.push(`${plural(changed, 'answer', 'answers')} applied`);
   if (recordedOnly > 0) parts.push(`${recordedOnly} recorded only`);
   if (notApplied > 0) parts.push(`${notApplied} could not be applied`);
+  if (notReached > 0) parts.push(`${notReached} not reached`);
   return parts.length === 0 ? 'Nothing to apply' : parts.join(', ');
 }
 
@@ -99,7 +100,13 @@ export function buildReport(input: ReportInput): Report {
   const { facts, claude } = input;
   const archived = new Set(facts.archivedIds);
   const left = new Set(facts.leftIds);
-  const notApplied = input.batchIds.filter((id) => !archived.has(id) && left.has(id));
+  const waiting = input.batchIds.filter((id) => !archived.has(id) && left.has(id));
+  // Only a run that finished by itself shows an item could not be applied. One that was cut short
+  // (the time limit, a stop, the plan's limit, an expired sign-in) never reached what is left, and
+  // those items must stay in the follow-up's reach, not in its skip list.
+  const finished = claude !== null && claude.error === null;
+  const notApplied = finished ? waiting : [];
+  const notReached = finished || claude === null ? [] : waiting;
   const changed = facts.changedIds.length;
   const recordedOnly = facts.archivedIds.length - changed;
   // What the follow-up must leave alone: this run's failures, and the earlier ones still waiting.
@@ -108,9 +115,10 @@ export function buildReport(input: ReportInput): Report {
   const error: RunError | null =
     claude?.error ?? (input.capped ? 'daily_cap' : notApplied.length > 0 || facts.unarchivedWrites.length > 0 ? 'not_applied' : null);
 
-  const lines = [headline(changed, recordedOnly, notApplied.length)];
+  const lines = [headline(changed, recordedOnly, notApplied.length, notReached.length)];
   if (error !== null) lines.push(claude?.detail ?? ERROR_SENTENCE[error]);
   if (notApplied.length > 0) lines.push(`Not applied: ${plural(notApplied.length, 'item', 'items')} ${notApplied.join(', ')}.`);
+  if (notReached.length > 0) lines.push(`Not reached: ${plural(notReached.length, 'item', 'items')} ${notReached.join(', ')}.`);
   if (facts.unarchivedWrites.length > 0) {
     lines.push(`Written but not archived, check these: ${plural(facts.unarchivedWrites.length, 'item', 'items')} ${facts.unarchivedWrites.join(', ')}.`);
   }

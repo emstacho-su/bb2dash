@@ -49,7 +49,8 @@ export const CONTEXT_AGENT = 'inbox-context';
 export const WRITER_AGENT = 'inbox-writer';
 
 export const QUERY_TOOL = 'mcp__db__query';
-export const EXECUTE_TOOL = 'mcp__db__execute_sql';
+/** The writer's one tool: an item's statements and its record, in a transaction the server runs (`mcp-sql/rpc.ts`). */
+export const APPLY_TOOL = 'mcp__db__apply_item';
 export const MATERIALS_TOOLS = [
   'mcp__bb2dash__search_materials',
   'mcp__bb2dash__get_material_text',

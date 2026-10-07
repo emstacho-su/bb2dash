@@ -17,14 +17,14 @@ import { StringDecoder } from 'node:string_decoder';
 
 import { CLAUDE_BIN, CLAUDE_CODE_VERSION } from '../../workspace/src/config.js';
 import { mapTurnEnd } from '../../workspace/src/errors.js';
-import type { CliProcess, SpawnOptions } from '../../workspace/src/providers/claude-cli.js';
+import type { CliExit, CliProcess, SpawnOptions } from '../../workspace/src/providers/claude-cli.js';
 import { parseLine, readInit } from '../../workspace/src/stream-json.js';
 import {
   AGENT_TOOL_NAMES,
   CONTEXT_AGENT,
   CONTEXT_MODEL,
   DISALLOWED_TOOLS,
-  EXECUTE_TOOL,
+  APPLY_TOOL,
   KILL_GRACE_MS,
   MATERIALS_TOOLS,
   MCP_SERVERS,
@@ -67,7 +67,7 @@ export function buildAgents(contextSpec: string, writerRules: string): Json {
     [WRITER_AGENT]: {
       description: 'The one writer: applies each item in its own transaction and archives it with its record.',
       prompt: writerRules,
-      tools: [QUERY_TOOL, EXECUTE_TOOL],
+      tools: [QUERY_TOOL, APPLY_TOOL],
       model: WRITER_MODEL,
     },
   };
@@ -97,7 +97,7 @@ export function buildArgs(input: CliArgsInput): string[] {
     '--model', ORCHESTRATOR_MODEL,
     '--tools', AGENT_TOOL_NAMES[0],
     '--agents', JSON.stringify(input.agents),
-    '--allowedTools', ...AGENT_TOOL_NAMES, QUERY_TOOL, EXECUTE_TOOL, ...MATERIALS_TOOLS,
+    '--allowedTools', ...AGENT_TOOL_NAMES, QUERY_TOOL, APPLY_TOOL, ...MATERIALS_TOOLS,
     '--disallowedTools', ...DISALLOWED_TOOLS,
     '--permission-mode', REQUIRED_PERMISSION_MODE,
     '--strict-mcp-config',
@@ -126,7 +126,7 @@ export function checkInit(line: unknown, pinnedVersion: string = CLAUDE_CODE_VER
   for (const server of init.mcpServers) {
     if (server.status !== MCP_CONNECTED) problems.push(`the MCP server ${server.name} is ${server.status}, not connected`);
   }
-  for (const tool of [QUERY_TOOL, EXECUTE_TOOL, ...MATERIALS_TOOLS]) {
+  for (const tool of [QUERY_TOOL, APPLY_TOOL, ...MATERIALS_TOOLS]) {
     if (!init.tools.includes(tool)) problems.push(`tools does not hold ${tool}`);
   }
   for (const tool of DISALLOWED_TOOLS) {
@@ -173,36 +173,76 @@ export interface RunDeps {
 }
 
 interface StreamFacts {
-  initProblems: string[] | null;
-  sawInit: boolean;
-  assistantError: string | null;
-  rateLimitStatus: string | null;
-  overage: boolean;
-  result: { subtype: string | null; isError: boolean; apiErrorStatus: number | null; costUsd: number | null } | null;
+  readonly initProblems: readonly string[] | null;
+  readonly sawInit: boolean;
+  readonly assistantError: string | null;
+  readonly rateLimitStatus: string | null;
+  readonly overage: boolean;
+  readonly result: { readonly subtype: string | null; readonly isError: boolean; readonly apiErrorStatus: number | null; readonly costUsd: number | null } | null;
 }
 
-/** Fold one stdout line into the facts that decide how the run ended. */
-function read(line: Json, facts: StreamFacts): void {
+const NO_FACTS: StreamFacts = { initProblems: null, sawInit: false, assistantError: null, rateLimitStatus: null, overage: false, result: null };
+
+/** The facts with one stdout line folded in: a new object, the old one untouched. */
+function read(line: Json, facts: StreamFacts): StreamFacts {
   if (line.type === 'system' && line.subtype === 'init' && !facts.sawInit) {
-    facts.sawInit = true;
-    facts.initProblems = checkInit(line);
-  } else if (line.type === 'assistant' && typeof line.error === 'string') {
-    facts.assistantError = line.error;
-  } else if (line.type === 'rate_limit_event' && isRecord(line.rate_limit_info)) {
+    return { ...facts, sawInit: true, initProblems: checkInit(line) };
+  }
+  if (line.type === 'assistant' && typeof line.error === 'string') return { ...facts, assistantError: line.error };
+  if (line.type === 'rate_limit_event' && isRecord(line.rate_limit_info)) {
     const info = line.rate_limit_info;
-    facts.rateLimitStatus = typeof info.status === 'string' ? info.status : null;
-    if (info.isUsingOverage === true) facts.overage = true;
-  } else if (line.type === 'result') {
-    facts.result = {
-      subtype: typeof line.subtype === 'string' ? line.subtype : null,
-      isError: line.is_error === true,
-      apiErrorStatus: typeof line.api_error_status === 'number' ? line.api_error_status : null,
-      costUsd: typeof line.total_cost_usd === 'number' && Number.isFinite(line.total_cost_usd) ? line.total_cost_usd : null,
+    return { ...facts, rateLimitStatus: typeof info.status === 'string' ? info.status : null, overage: facts.overage || info.isUsingOverage === true };
+  }
+  if (line.type === 'result') {
+    return {
+      ...facts,
+      result: {
+        subtype: typeof line.subtype === 'string' ? line.subtype : null,
+        isError: line.is_error === true,
+        apiErrorStatus: typeof line.api_error_status === 'number' ? line.api_error_status : null,
+        costUsd: typeof line.total_cost_usd === 'number' && Number.isFinite(line.total_cost_usd) ? line.total_cost_usd : null,
+      },
     };
   }
+  return facts;
 }
 
 const failed = (error: RunError, detail: string): ClaudeOutcome => ({ exitCode: null, timedOut: false, costUsd: null, error, detail });
+
+interface RunEnd {
+  readonly exit: CliExit;
+  readonly facts: StreamFacts;
+  readonly timedOut: boolean;
+  readonly aborted: boolean;
+  readonly timeoutMs: number;
+}
+
+/** How a run that was started ended, from its exit and what its stream showed. */
+function outcomeOf(end: RunEnd, log: (line: string) => void): ClaudeOutcome {
+  const { exit, facts } = end;
+  const base = { exitCode: exit.code, timedOut: end.timedOut, costUsd: facts.result?.costUsd ?? null };
+  if (exit.error !== undefined) {
+    log(`claude: did not start: ${exit.error}`);
+    return { ...base, error: 'cli_error', detail: 'The Claude CLI could not be started.' };
+  }
+  if (end.timedOut) return { ...base, error: 'timed_out', detail: `The run was stopped at ${Math.round(end.timeoutMs / MS_PER_MINUTE)} minutes.` };
+  if (end.aborted) return { ...base, error: 'interrupted', detail: 'The worker was stopped during the run.' };
+  if (facts.initProblems === null || facts.initProblems.length > 0) {
+    return { ...base, error: 'cli_error', detail: 'The Claude CLI did not start in the expected configuration.' };
+  }
+  const code = mapTurnEnd({
+    violation: null,
+    overage: facts.overage,
+    assistantError: facts.assistantError,
+    rateLimit: facts.rateLimitStatus === null ? null : { status: facts.rateLimitStatus },
+    result: facts.result,
+  });
+  if (code === null) return { ...base, error: exit.code === 0 ? null : 'cli_error', detail: null };
+  log(`claude: ended as ${code} (exit ${exit.code ?? 'by signal'})`);
+  // Phase 21's mapping has codes of its own (a cancelled turn, a stale claim); none is a run's end here.
+  const known = (RUN_END_CODES as readonly string[]).includes(code) ? (code as RunError) : 'cli_error';
+  return { ...base, error: known, detail: null };
+}
 
 /**
  * Run the CLI once for a batch and report how it ended. `signal` is the worker's stop: an abort
@@ -229,7 +269,7 @@ export async function runClaude(input: CliArgsInput, deps: RunDeps, signal: Abor
     return failed('cli_error', 'The Claude CLI could not be started.');
   }
 
-  const facts: StreamFacts = { initProblems: null, sawInit: false, assistantError: null, rateLimitStatus: null, overage: false, result: null };
+  let facts = NO_FACTS;
   let timedOut = false;
   let killTimer: ReturnType<typeof setTimeout> | null = null;
   let asked = false;
@@ -254,7 +294,7 @@ export async function runClaude(input: CliArgsInput, deps: RunDeps, signal: Abor
     for await (const lineText of linesOf(child.stdout)) {
       const line = parseLine(lineText);
       if (line === null) continue;
-      read(line, facts);
+      facts = read(line, facts);
       if (facts.initProblems !== null && facts.initProblems.length > 0 && !asked) {
         deps.log(`claude: the init line was refused: ${facts.initProblems.join('; ')}`);
         kill();
@@ -265,29 +305,7 @@ export async function runClaude(input: CliArgsInput, deps: RunDeps, signal: Abor
       }
     }
     const exit = await child.exited;
-    const base = { exitCode: exit.code, timedOut, costUsd: facts.result?.costUsd ?? null };
-    if (exit.error !== undefined) {
-      deps.log(`claude: did not start: ${exit.error}`);
-      return { ...base, error: 'cli_error', detail: 'The Claude CLI could not be started.' };
-    }
-    if (timedOut) return { ...base, error: 'timed_out', detail: `The run was stopped at ${Math.round(timeoutMs / MS_PER_MINUTE)} minutes.` };
-    if (signal.aborted) return { ...base, error: 'interrupted', detail: 'The worker was stopped during the run.' };
-    if (facts.initProblems === null || facts.initProblems.length > 0) {
-      return { ...base, error: 'cli_error', detail: 'The Claude CLI did not start in the expected configuration.' };
-    }
-    const code = mapTurnEnd({
-      violation: null,
-      overage: facts.overage,
-      assistantError: facts.assistantError,
-      rateLimit: facts.rateLimitStatus === null ? null : { status: facts.rateLimitStatus },
-      result: facts.result,
-    });
-    if (code === null && exit.code !== 0) return { ...base, error: 'cli_error', detail: null };
-    if (code === null) return { ...base, error: null, detail: null };
-    deps.log(`claude: ended as ${code} (exit ${exit.code ?? 'by signal'})`);
-    // Phase 21's mapping has codes of its own (a cancelled turn, a stale claim); none is a run's end here.
-    const known = (RUN_END_CODES as readonly string[]).includes(code) ? (code as RunError) : 'cli_error';
-    return { ...base, error: known, detail: null };
+    return outcomeOf({ exit, facts, timedOut, aborted: signal.aborted, timeoutMs }, deps.log);
   } finally {
     clearTimeout(timer);
     if (killTimer !== null) clearTimeout(killTimer);

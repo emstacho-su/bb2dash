@@ -1,145 +1,177 @@
 /**
- * The SQL guard (Phase 23): what text the two SQL tools accept. Pure.
+ * The SQL guard (Phase 23, rewritten in review round 1): what text the two tools accept. Pure.
  *
- * The boundary is the database's: the role `inbox_apply_runner` can read and write only what
- * migration 181 grants, and a write that names no answered Inbox item is refused there. This guard
- * is the second line, for what a grant cannot express:
- *   * `net.http_post` and its neighbours are executable by PUBLIC on this platform and cannot be
- *     revoked by the project's owner, so a SQL session could post what it reads to any host. No
- *     statement may name another schema's functions, change the search path, or name an HTTP,
- *     dblink, file or large-object function.
- *   * the worker's own bookkeeping functions (claim, prepare, close, run_facts) and its write log
- *     are not Claude's to call or write.
- *   * a statement must be one of the few kinds a run needs.
+ * WHAT THE DATABASE ALREADY HOLDS, measured on prod 2026-10-07. The role `inbox_apply_runner` has
+ * usage on four schemas: public, information_schema, pg_catalog and `net` (pg_net, through PUBLIC,
+ * which the project's owner cannot revoke). In `public` it can read and write only what migration
+ * 181 grants. So the one thing a grant does not stop is a post to another host through `net`, and
+ * that needs a write (pg_net queues a request with an insert).
  *
- * The check is on the text with comments and string contents removed, so a quoted answer that
- * mentions `net.` is fine and a forbidden name cannot hide inside a comment. It is a deny rule on
- * text, not a parser: when in doubt it refuses.
+ *   query        runs inside a READ ONLY transaction (`server.ts`). The database itself refuses
+ *                every write there: pg_net, the worker's bookkeeping functions, a data-modifying
+ *                CTE. The guard only keeps it to one select and refuses the few functions that
+ *                act on the session rather than on rows.
+ *
+ *   write        one statement of the writer's, run inside the transaction the server opens for an
+ *                item. Here the guard is an ALLOW-list on real tokens, not a deny-list on text:
+ *                the statement is an insert or an update on one of the skill's tables, or a call of
+ *                raise_attention, and every name that is called must be one the list holds. A
+ *                function the list does not hold is refused by name, whatever it is, so a new way
+ *                to reach outside the database is refused without being known here first.
+ *
+ * The text is read by `lexer.ts`, as the server's lexer reads it. What that cannot read is refused.
  */
 
-export type SqlMode = 'query' | 'execute';
+import { lex, statements, type Token } from './lexer.js';
+
 export type SqlVerdict = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 export const SQL_MAX_CHARS = 20_000;
 
-const QUERY_LEADS = new Set(['select', 'with']);
-const EXECUTE_LEADS = new Set(['select', 'with', 'insert', 'update', 'begin', 'commit', 'rollback']);
+/** Tables the writer inserts into, and the wider set it updates (`courses` for group_notes; 181 grants that column alone). */
+export const INSERT_TABLES: readonly string[] = ['assignments', 'assignment_progress', 'course_staff'];
+export const UPDATE_TABLES: readonly string[] = [...INSERT_TABLES, 'courses'];
+const RAISE = 'raise_attention';
 
-/** Schemas whose objects no statement may name. `public` and unqualified names are the only ones used. */
-const FORBIDDEN_SCHEMAS = [
+/** Schemas no statement names. The role has usage on `net` alone among them; the rest are refused on principle. */
+const FORBIDDEN_SCHEMAS = new Set([
   'net', 'vault', 'storage', 'auth', 'extensions', 'pgsodium', 'cron', 'realtime', 'graphql', 'graphql_public',
   'supabase_functions', 'supabase_migrations', 'pgbouncer', 'pg_catalog', 'information_schema', 'pg_temp', 'pg_toast',
-];
-const FORBIDDEN_SCHEMA = new RegExp(`\\b(${FORBIDDEN_SCHEMAS.join('|')})\\s*\\.`);
+]);
 
-/** Functions that reach outside the database, read files, or change the session. */
-const FORBIDDEN_FUNCTION =
-  /\b(http_get|http_post|http_put|http_patch|http_delete|http_head|http_collect_response|http|dblink\w*|pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_file|lo_import|lo_export|lo_get|lo_put|pg_sleep|set_config|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|query_to_xml|xpath)\s*\(/;
+/** What a read may not call: functions that act on the session or run a query given as text. */
+const QUERY_DENIED = /^(pg_sleep.*|pg_advisory.*|pg_try_advisory.*|set_config|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|query_to_xml.*|cursor_to_xml.*|table_to_xml.*|schema_to_xml.*|database_to_xml.*|ts_stat|ts_rewrite|dblink.*|lo_.*|pg_read_.*|pg_ls_.*|pg_stat_file|http.*)$/;
+
+/** Functions a write statement may call. */
+const WRITE_FUNCTIONS = new Set([
+  RAISE,
+  'now', 'clock_timestamp', 'current_date', 'coalesce', 'nullif', 'greatest', 'least',
+  'lower', 'upper', 'initcap', 'btrim', 'ltrim', 'rtrim', 'trim', 'concat', 'concat_ws', 'format', 'length', 'char_length',
+  'replace', 'substring', 'substr', 'left', 'right', 'split_part', 'regexp_replace', 'position', 'overlay', 'strpos',
+  'to_char', 'to_timestamp', 'to_date', 'to_number', 'date_trunc', 'make_date', 'make_timestamptz', 'extract', 'age', 'timezone',
+  'round', 'abs', 'ceil', 'floor', 'trunc',
+  'jsonb_build_object', 'jsonb_build_array', 'to_jsonb', 'jsonb_set', 'jsonb_strip_nulls',
+  'array_append', 'array_remove', 'array_length', 'unnest',
+  'max', 'min', 'count', 'sum', 'string_agg', 'array_agg', 'bool_or', 'bool_and',
+]);
+
+/** Keywords and type names that are followed by `(` without being a call. */
+const PAREN_WORDS = new Set([
+  'values', 'in', 'exists', 'any', 'all', 'some', 'select', 'from', 'where', 'and', 'or', 'not', 'on', 'as', 'when', 'then', 'else',
+  'case', 'set', 'using', 'returning', 'by', 'having', 'limit', 'offset', 'between', 'like', 'ilike', 'is', 'distinct', 'filter',
+  'over', 'conflict', 'cast', 'array', 'row', 'join', 'union', 'except', 'intersect', 'with', 'lateral',
+  'numeric', 'decimal', 'varchar', 'char', 'character', 'timestamp', 'timestamptz', 'time', 'interval', 'bit', 'float',
+]);
 
 /**
- * The worker's own functions and table, and the sync runner's functions: bookkeeping Claude does
- * not do. The table `sync_runs` is read (the latest run id, for raise_attention), so only a call
- * of a `sync_` function is refused.
+ * Words that never appear in what the writer sends, wherever they stand. Short on purpose: the
+ * statement's first word and the call list already decide what it is, and `do` is not here because
+ * an upsert reads `on conflict (...) do update`.
  */
-const WORKER_ONLY =
-  /\b(inbox_apply_claim|inbox_apply_prepare|inbox_apply_close|inbox_apply_run_facts|inbox_apply_is_own_claim|inbox_apply_log_write|inbox_apply_writes|apply_resolutions|archive_attention_item)\b|\b(sync_\w+)\s*\(/;
-
-const SESSION_WORDS = /\b(search_path|session_authorization|pg_read_all_data|pg_write_all_data)\b/;
+const WRITE_DENIED_WORDS = new Set(['delete', 'truncate', 'merge', 'copy', 'grant', 'revoke', 'create', 'alter', 'drop']);
 
 const deny = (reason: string): SqlVerdict => ({ ok: false, reason });
 
-/**
- * The text with comments removed and every string's contents emptied, lower-cased, and with the
- * double quotes of quoted identifiers dropped (`"net".http_post` reads as `net.http_post`).
- * Null when a string or a comment is never closed.
- */
-export function maskSql(sql: string): string | null {
-  let out = '';
-  let i = 0;
-  while (i < sql.length) {
-    const two = sql.slice(i, i + 2);
-    const ch = sql[i]!;
-    if (two === '--') {
-      const end = sql.indexOf('\n', i);
-      i = end === -1 ? sql.length : end;
-    } else if (two === '/*') {
-      const end = sql.indexOf('*/', i + 2);
-      if (end === -1) return null;
-      out += ' ';
-      i = end + 2;
-    } else if (ch === "'") {
-      // A standard or E'' string: '' and \' both stay inside it.
-      let j = i + 1;
-      for (;;) {
-        if (j >= sql.length) return null;
-        if (sql[j] === '\\') j += 2;
-        else if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
-        else if (sql[j] === "'") break;
-        else j += 1;
-      }
-      out += "''";
-      i = j + 1;
-    } else if (ch === '$') {
-      const tag = /^\$[A-Za-z_]*\$/.exec(sql.slice(i))?.[0];
-      if (tag === undefined) {
-        out += ch;
-        i += 1;
-      } else {
-        const end = sql.indexOf(tag, i + tag.length);
-        if (end === -1) return null;
-        out += "''";
-        i = end + tag.length;
-      }
-    } else if (ch === '"') {
-      i += 1;
-    } else {
-      out += ch;
-      i += 1;
-    }
-  }
-  return out.toLowerCase();
+const isSymbol = (token: Token | undefined, text: string): boolean => token?.kind === 'symbol' && token.text === text;
+/** True for the keyword `text`: an unquoted word of that name. */
+const isWord = (token: Token | undefined, text: string): boolean => token?.kind === 'word' && token.text === text && token.quoted !== true;
+
+/** The one statement of the text as tokens, or the reason there is not exactly one readable statement. */
+function oneStatement(sql: unknown): { readonly tokens: readonly Token[] } | { readonly reason: string } {
+  if (typeof sql !== 'string' || sql.trim() === '') return { reason: 'sql must be non-empty text' };
+  if (sql.length > SQL_MAX_CHARS) return { reason: `sql is longer than ${SQL_MAX_CHARS} characters` };
+  const lexed = lex(sql);
+  if (!lexed.ok) return { reason: lexed.reason };
+  const parts = statements(lexed.tokens);
+  if (parts.length === 0) return { reason: 'sql holds no statement' };
+  if (parts.length > 1) return { reason: 'one statement at a time' };
+  return { tokens: parts[0]! };
 }
 
-/** The statements of masked text: split on `;`, blank ones dropped. */
-function statements(masked: string): string[] {
-  return masked
-    .split(';')
-    .map((part) => part.trim())
-    .filter((part) => part !== '');
+/** The first name of a forbidden schema that is used as a qualifier (`net.x`), or null. */
+function forbiddenSchema(tokens: readonly Token[]): string | null {
+  for (let i = 0; i < tokens.length - 1; i += 1) {
+    const token = tokens[i]!;
+    if (token.kind === 'word' && FORBIDDEN_SCHEMAS.has(token.text) && isSymbol(tokens[i + 1], '.')) return token.text;
+  }
+  return null;
 }
 
-/** Whether the tool may run this text. `query` is one read statement; `execute` is a writer's batch. */
-export function checkSql(sql: unknown, mode: SqlMode): SqlVerdict {
-  if (typeof sql !== 'string' || sql.trim() === '') return deny('sql must be non-empty text');
-  if (sql.length > SQL_MAX_CHARS) return deny(`sql is longer than ${SQL_MAX_CHARS} characters`);
-  if (sql.includes('\u0000')) return deny('sql holds a NUL character');
+/** Every name directly followed by `(`, with the index it stands at and its qualifier when it has one. */
+function calls(tokens: readonly Token[]): { readonly name: Token; readonly at: number; readonly qualifier: string | null }[] {
+  const found = [];
+  for (let i = 0; i < tokens.length - 1; i += 1) {
+    const token = tokens[i]!;
+    if (token.kind !== 'word' || !isSymbol(tokens[i + 1], '(')) continue;
+    const qualified = isSymbol(tokens[i - 1], '.') && tokens[i - 2]?.kind === 'word';
+    found.push({ name: token, at: i, qualifier: qualified ? tokens[i - 2]!.text : null });
+  }
+  return found;
+}
 
-  const masked = maskSql(sql);
-  if (masked === null) return deny('sql holds a string or a comment that is never closed');
+/** Whether the query tool may run this text: one select, nothing that acts on the session. */
+export function checkQuery(sql: unknown): SqlVerdict {
+  const read = oneStatement(sql);
+  if ('reason' in read) return deny(read.reason);
+  const { tokens } = read;
+  const lead = tokens[0]!;
+  if (!isWord(lead, 'select') && !isWord(lead, 'with')) {
+    return deny(`the query tool runs one select; this starts with "${lead.text.slice(0, 20)}"`);
+  }
+  const schema = forbiddenSchema(tokens);
+  if (schema !== null) return deny(`sql names the schema ${schema}; only public is used`);
+  for (const call of calls(tokens)) {
+    if (QUERY_DENIED.test(call.name.text)) return deny(`sql calls ${call.name.text}, which is not allowed`);
+  }
+  return { ok: true };
+}
 
-  const parts = statements(masked);
-  if (parts.length === 0) return deny('sql holds no statement');
-  if (mode === 'query' && parts.length !== 1) return deny('the query tool runs one statement; use one select');
+/** The table a write statement targets, with the index of its name, or null when the statement has no such shape. */
+function target(tokens: readonly Token[], after: number): { readonly table: string; readonly at: number } | null {
+  let at = after;
+  if (isWord(tokens[at], 'public') && isSymbol(tokens[at + 1], '.')) at += 2;
+  const name = tokens[at];
+  return name?.kind === 'word' ? { table: name.text, at } : null;
+}
 
-  const leads = mode === 'query' ? QUERY_LEADS : EXECUTE_LEADS;
-  for (const part of parts) {
-    const lead = /^[a-z]+/.exec(part)?.[0] ?? '';
-    if (!leads.has(lead)) {
-      return deny(`a statement starts with "${lead || part.slice(0, 12)}"; allowed here: ${[...leads].join(', ')}`);
+/** Whether the writer may run this statement inside an item's transaction. */
+export function checkWrite(sql: unknown): SqlVerdict {
+  const read = oneStatement(sql);
+  if ('reason' in read) return deny(read.reason);
+  const { tokens } = read;
+  const lead = tokens[0]!;
+
+  let tableAt = -1;
+  if (isWord(lead, 'insert')) {
+    if (!isWord(tokens[1], 'into')) return deny('an insert must read: insert into <table> ...');
+    const into = target(tokens, 2);
+    if (into === null || !INSERT_TABLES.includes(into.table)) return deny(`an insert goes into one of: ${INSERT_TABLES.join(', ')}`);
+    tableAt = into.at;
+  } else if (isWord(lead, 'update')) {
+    const updated = target(tokens, 1);
+    if (updated === null || !UPDATE_TABLES.includes(updated.table)) return deny(`an update is on one of: ${UPDATE_TABLES.join(', ')}`);
+    tableAt = updated.at;
+  } else if (isWord(lead, 'select')) {
+    const called = target(tokens, 1);
+    if (called === null || called.table !== RAISE || !isSymbol(tokens[called.at + 1], '(')) {
+      return deny(`the only select a write may be is: select ${RAISE}(...); read with the query tool`);
     }
+  } else {
+    return deny(`a write statement is an insert, an update, or select ${RAISE}(...); this starts with "${lead.text.slice(0, 20)}"`);
   }
 
-  const schema = FORBIDDEN_SCHEMA.exec(masked);
-  if (schema) return deny(`sql names the schema ${schema[1]}; only public is used`);
-  const fn = FORBIDDEN_FUNCTION.exec(masked);
-  if (fn) return deny(`sql calls ${fn[1]}, which is not allowed`);
-  const worker = WORKER_ONLY.exec(masked);
-  if (worker) return deny(`sql names ${worker[1] ?? worker[2]}, which is not Claude's to use`);
-  const session = SESSION_WORDS.exec(masked);
-  if (session) return deny(`sql names ${session[1]}, which is not allowed`);
-  if (mode === 'query' && /\b(insert|update|delete|into|inbox_apply_begin_item|inbox_apply_archive|raise_attention|nextval|setval)\b/.test(masked)) {
-    return deny('the query tool only reads; writes go through the writer');
+  for (const token of tokens) {
+    if (token.kind === 'word' && token.quoted !== true && WRITE_DENIED_WORDS.has(token.text)) return deny(`"${token.text}" is not part of a write statement`);
   }
-  if (/\bdelete\b|\btruncate\b|\bmerge\b/.test(masked)) return deny('rows are never deleted or merged here');
+  const schema = forbiddenSchema(tokens);
+  if (schema !== null) return deny(`sql names the schema ${schema}; only public is used`);
+
+  for (const call of calls(tokens)) {
+    // `insert into assignments (id, ...)`: the table's name before its column list is not a call.
+    if (call.at === tableAt) continue;
+    if (call.qualifier !== null && call.qualifier !== 'public') return deny(`sql calls ${call.qualifier}.${call.name.text}; only public's functions are called`);
+    if (call.name.quoted !== true && call.qualifier === null && PAREN_WORDS.has(call.name.text)) continue;
+    if (!WRITE_FUNCTIONS.has(call.name.text)) return deny(`sql calls ${call.name.text}, which a write statement may not call`);
+  }
   return { ok: true };
 }

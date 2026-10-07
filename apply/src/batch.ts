@@ -2,8 +2,8 @@
  * What one run works on (Phase 23). Pure.
  *
  * `inbox_apply_prepare()` returns the whole answered queue. The rows that need no reading are
- * archived by the worker itself with a templated record: applied by the transform, kept, or
- * dismissed, and carrying no note. A note can ask for more than the bucket says ("keep mine, and
+ * archived by the worker itself with a templated record: applied by the transform, kept,
+ * dismissed, or a notice about a request, and carrying no note. A note can ask for more than the bucket says ("keep mine, and
  * mark it submitted"), so any row with a note goes to Claude. Of the rest, at most
  * `BATCH_MAX_ITEMS` go to Claude in this run; the close files a follow-up for what is left.
  */
@@ -12,13 +12,17 @@ import { BATCH_MAX_ITEMS } from './config.js';
 
 export const DECISION_SCHEMA = 'inbox-decision/1';
 
-export type TemplatedBucket = 'applied_by_transform' | 'kept' | 'dismissed';
+export type TemplatedBucket = 'applied_by_transform' | 'kept' | 'dismissed' | 'recorded_elsewhere';
+
+/** `attention_items.entity` of a notice the worker or the sync raised about a request: it names no course row. */
+export const NOTICE_ENTITY = 'agent_request';
 
 /** One row of `v_inbox_queue`, as `inbox_apply_prepare()` returns it. */
 export interface QueueRow {
   readonly id: number;
   readonly kind: string;
   readonly courseId: string | null;
+  readonly entity: string | null;
   readonly ref: string | null;
   readonly question: string;
   readonly state: string;
@@ -77,6 +81,7 @@ export function parsePrepared(value: unknown): Prepared {
       id,
       kind: String(entry.kind ?? ''),
       courseId: textOrNull(entry.course_id),
+      entity: textOrNull(entry.entity),
       ref: textOrNull(entry.ref),
       question: String(entry.question ?? ''),
       state: String(entry.state ?? ''),
@@ -101,6 +106,9 @@ export function templatedBucket(row: QueueRow): TemplatedBucket | null {
   if (row.wasApplied) return 'applied_by_transform';
   if (row.kind === 'conflict' && row.accept === 'keep') return 'kept';
   if (row.state === 'dismissed') return 'dismissed';
+  // A confirmed notice ("the apply run failed", "log in again") asks for no row change: a full
+  // Sonnet and Opus run to archive it would spend one of the day's runs on nothing.
+  if (row.entity === NOTICE_ENTITY) return 'recorded_elsewhere';
   return null;
 }
 
@@ -108,6 +116,7 @@ const TEMPLATED_RULE: Readonly<Record<TemplatedBucket, (row: QueueRow) => string
   applied_by_transform: (row) => `Applied by apply_resolutions()${row.appliedAt === null ? '' : ` at ${row.appliedAt}`}.`,
   kept: () => 'Keep mine stands until Blackboard changes the value (attention_keep_stands).',
   dismissed: () => 'Dismissed without a note.',
+  recorded_elsewhere: () => 'A notice about a request, acknowledged; it names no course row, so nothing was changed.',
 });
 
 /** The record of a row archived without Claude: the `inbox-decision/1` shape migration 181 checks. */

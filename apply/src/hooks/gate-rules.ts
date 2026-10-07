@@ -7,17 +7,19 @@
  *
  *   the session        starts the two agents, reads SQL, searches the materials
  *   inbox-context      reads SQL, searches the materials
- *   inbox-writer       reads SQL and runs the writer's batches
+ *   inbox-writer       reads SQL and applies items (`apply_item`)
  *
  * So only the writer can reach the tool that writes, whatever a row or a file told the session to
- * do. Every SQL text is also put through the guard here, before the server sees it. The gate only
+ * do. Every SQL text, and every statement of an item, is also put through the guard here, before
+ * the server sees it. The gate only
  * denies or stays silent, and anything it cannot read is a denial: it never fails open. The
  * process around it and the answer's shape are Phase 21's (`workspace/src/hooks`).
  */
 
 import type { GateDecision } from '../../../workspace/src/hooks/gate-rules.js';
-import { AGENT_TOOL_NAMES, CONTEXT_AGENT, EXECUTE_TOOL, MATERIALS_TOOLS, QUERY_TOOL, WRITER_AGENT } from '../config.js';
-import { checkSql } from '../mcp-sql/guard.js';
+import { AGENT_TOOL_NAMES, APPLY_TOOL, CONTEXT_AGENT, MATERIALS_TOOLS, QUERY_TOOL, WRITER_AGENT } from '../config.js';
+import { checkQuery } from '../mcp-sql/guard.js';
+import { readApplyItem } from '../mcp-sql/rpc.js';
 
 const SHOWN_MAX = 80;
 const SESSION = '';
@@ -29,9 +31,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function sqlDecision(input: unknown, mode: 'query' | 'execute'): GateDecision {
-  const verdict = checkSql(isRecord(input) ? input.sql : undefined, mode);
+function queryDecision(input: unknown): GateDecision {
+  const verdict = checkQuery(isRecord(input) ? input.sql : undefined);
   return verdict.ok ? { allow: true } : deny(`sql refused: ${verdict.reason}`);
+}
+
+function applyDecision(input: unknown): GateDecision {
+  const read = readApplyItem(input);
+  return 'reason' in read ? deny(`apply_item refused: ${read.reason}`) : { allow: true };
 }
 
 /** The decision for one PreToolUse payload, as parsed from the hook's stdin. */
@@ -56,11 +63,11 @@ export function decide(payload: unknown): GateDecision {
     return { allow: true };
   }
 
-  if (toolName === QUERY_TOOL) return sqlDecision(payload.tool_input, 'query');
+  if (toolName === QUERY_TOOL) return queryDecision(payload.tool_input);
 
-  if (toolName === EXECUTE_TOOL) {
+  if (toolName === APPLY_TOOL) {
     if (agent !== WRITER_AGENT) return deny(`only the ${WRITER_AGENT} agent writes`);
-    return sqlDecision(payload.tool_input, 'execute');
+    return applyDecision(payload.tool_input);
   }
 
   if ((MATERIALS_TOOLS as readonly string[]).includes(toolName)) return { allow: true };
