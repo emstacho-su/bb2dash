@@ -439,6 +439,28 @@ describe('the connection', () => {
     expect(attempts).toBe(2);
   });
 
+  // Ruling X1. Node reports a refused connect to a host with two addresses as an AggregateError with
+  // no message and the reason in `code`: without the code the log line would end in nothing.
+  it('names a failed connect by its code when the error carries no message', async () => {
+    const refused = (): Error =>
+      Object.assign(new AggregateError([new Error('connect ECONNREFUSED ::1:5432'), new Error('connect ECONNREFUSED 127.0.0.1:5432')], ''), {
+        code: 'ECONNREFUSED',
+      });
+    const newClient = (): PgClientLike => ({
+      connect: async () => {
+        throw refused();
+      },
+      query: async () => ({ rows: [] }),
+      end: async () => undefined,
+      on: () => undefined,
+    });
+    const query = createPgQuery({ dsn: DSN, ca: CA, log: () => undefined, newClient });
+    const error = await query('select 1').catch((caught: Error) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('ECONNREFUSED');
+    expect(error).toMatchObject({ code: 'ECONNREFUSED' });
+  });
+
   it('knows which SQLSTATEs leave a session usable', () => {
     expect(isStatementError('22023')).toBe(true);
     expect(isStatementError('23505')).toBe(true);

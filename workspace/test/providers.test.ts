@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ERROR_CODES, ProviderNotConfiguredError, errorCodeFor } from '../src/errors.js';
+import { ERROR_CODES, ProviderNotConfiguredError, errorCodeFor, messageOf } from '../src/errors.js';
 import { createFrontierApiProvider } from '../src/providers/frontier-api.js';
 import { PROVIDER_IDS, createProviders } from '../src/providers/index.js';
 import { createOllamaProvider } from '../src/providers/ollama.js';
@@ -105,6 +105,40 @@ describe('the two stubs', () => {
   it('maps the stub error to provider_not_configured', () => {
     expect(errorCodeFor(new ProviderNotConfiguredError('ollama'))).toBe('provider_not_configured');
     expect(errorCodeFor(new Error('anything else'))).toBe('cli_error');
+  });
+});
+
+describe('what a caught value says in a log line (ruling X1)', () => {
+  /** A refused connect to a host with two addresses, as node reports it: no message, the reason in `code`. */
+  const refusedConnect = (): Error =>
+    Object.assign(new AggregateError([new Error('connect ECONNREFUSED ::1:5432'), new Error('connect ECONNREFUSED 127.0.0.1:5432')], ''), {
+      code: 'ECONNREFUSED',
+    });
+
+  it("is an Error's message", () => {
+    expect(messageOf(new Error('connection refused'))).toBe('connection refused');
+  });
+
+  it("is the Error's code when its message is empty", () => {
+    expect(refusedConnect().message).toBe('');
+    expect(messageOf(refusedConnect())).toBe('ECONNREFUSED');
+    expect(messageOf(Object.assign(new Error(''), { code: '57P01' }))).toBe('57P01');
+  });
+
+  it('is the message when there is one, whatever the code', () => {
+    const refusal = Object.assign(new Error('workspace_begin: request 41 is not claimed'), { code: '22023' });
+    expect(messageOf(refusal)).toBe('workspace_begin: request 41 is not claimed');
+  });
+
+  it('stays empty when the message is empty and the code is not text', () => {
+    expect(messageOf(new Error(''))).toBe('');
+    expect(messageOf(Object.assign(new Error(''), { code: 111 }))).toBe('');
+  });
+
+  it('is the text of anything that is not an Error', () => {
+    expect(messageOf('plain text')).toBe('plain text');
+    expect(messageOf(undefined)).toBe('undefined');
+    expect(messageOf({ code: 'ECONNREFUSED' })).toBe('[object Object]');
   });
 });
 
