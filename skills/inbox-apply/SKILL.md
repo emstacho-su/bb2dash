@@ -105,7 +105,7 @@ decision and is the `bucket` of its record; only the first needs the context sta
 | Bucket (`bucket`) | How to tell | Default |
 |---|---|---|
 | **Needs a change** (`needs_change`) | `was_applied = false`, `state = resolved`, and the answer names or implies a row change: a stack_must_confirm / missing on an assignment ("add it", "yes", a value), a course-map answer that names a date or group | Context stage, then the change |
-| **Applied by the transform** (`applied_by_transform`) | `was_applied = true`; or a session answer (ref `session_link/<file id>`, entity `bb_file`, field `session_id`), whatever `was_applied` says | Record only: "applied by apply_resolutions() at <applied_at>"; for a session answer, what `bb_files.session_id` shows now (below) |
+| **Applied by the transform** (`applied_by_transform`) | `was_applied = true`; or a session answer (ref `session_link/<file id>`, entity `bb_file`, field `session_id`) whose file agrees with it: his pick is the file's `session_id`, or he said "none" and the file is unlinked | Record only: "applied by apply_resolutions() at <applied_at>"; for a session answer, what the file's row shows |
 | **Kept** (`kept`) | `kind = conflict`, `accept = keep` | Record only. `attention_keep_stands()` keeps it settled after archiving (090) |
 | **Dismissed** (`dismissed`) | `state = dismissed` | Record only, with the note as the reason |
 | **Recorded elsewhere** (`recorded_elsewhere`) | the note says another item carried the effect (e.g. "applied via #162") | Verify that item is applied; record only |
@@ -114,19 +114,33 @@ A note can move a row out of its default: "keep mine, and mark it submitted" is 
 
 **A session answer is never this skill's to write.** "Which class is this file for?" is asked and
 applied by `link_file_sessions` at the fold: a pick (`resolution.session_id`) is set on the file
-while it is unlinked, "none" (`accept = none`) leaves it unlinked and quiet, and an archived answer
-still counts (migrations 123, 163). `bb_files` cannot be written from here in either mode. So the
-item is always archived, record only, with what the file's row shows: the pick is on it; or it is
-not linked yet and the next sync's fold sets it; or it carries another session than the pick, which
-is flagged, not fixed. What its note asks beyond the link (file it under another bucket, treat it
-as a reading) is flagged as a code change or raised for Stack, never done. It is never left in the
-queue because the fold has not been seen to apply it.
+while it is unlinked and the week's classes are still the ones he was shown (the item's
+`to_value`), "none" (`accept = none`) leaves it unlinked and quiet, and an archived answer still
+counts (migrations 123, 163). `bb_files` cannot be written from here in either mode. So the item
+is always archived with no write, and its bucket says what is true of the file:
+
+| What the file's row shows | Bucket | Record |
+|---|---|---|
+| his pick is on it, or "none" and it is unlinked | `applied_by_transform` | "recorded only; file <id> carries session <n>, his pick" |
+| his pick is not on it, the file is unlinked, and he answered after the last sync finished | `recorded_elsewhere` | "recorded only; not linked yet, the next sync's fold reads this answer" |
+| anything else: it carries another session, it is superseded or gone, or a sync has run since his answer and left it unlinked (the week's classes changed, or his pick is not one of them) | `needs_change` | "recorded only; NOT applied: <why>", and `flagged.code_change` with what it would take (a relink by hand, or a rule in the transform) |
+
+What its note asks beyond the link (file it under another bucket, treat it as a reading) is
+flagged as a code change, never done. Never raise a new item under the ref `session_link/<file
+id>`: that ref is the fold's, and its next question would overwrite yours.
+
+**A `supersede/<file id>` answer has a known gap.** `supersede_replaced_files` reads it only while
+the item is resolved or dismissed (migration 160), so once it is archived the next fold asks the
+same question again. Archive it all the same (an item left behind fails every run), bucket
+`needs_change`, and flag it: `{"code_change": "supersede_replaced_files must read an archived
+answer, as link_file_sessions does since 163"}`.
 
 ## Step 3 — Context (Sonnet, read-only, one agent per course or per 3 items)
 
 Spawn the `inbox-context` agent (unattended), or an agent with `model: sonnet` and the text of
 `context.md` (session). One bundle per item that needs a change, in the shape `context.md` fixes.
-Record-only items need no bundle.
+Record-only items need no bundle, with one exception: an item about a file (entity `bb_file`)
+always gets one, because its record states what the file's row shows.
 
 ## Step 4 — Change and archive (Opus, one writer)
 

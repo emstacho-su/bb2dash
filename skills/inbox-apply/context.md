@@ -22,7 +22,9 @@ For each item you are given, return one bundle with these headings, in this orde
    storage_path, bytes, downloaded_at, text_status, superseded_by, notes from bb_files where id =
    $file`. For a session answer add the week's classes: `select id, session_date, kind, topic from
    sessions where course_id = $course and week_no = $week order by session_date`, and say which
-   one the file carries now and which one Stack picked.
+   one the file carries now, which one Stack picked, whether the item's `to_value` is still that
+   list of class ids, and whether a sync has finished since he answered (the item's `resolved_at`
+   against the latest row of `sync_runs`).
 3. **Blackboard facts** — `v_gradebook_latest` for the assignment: `possible`,
    `counts_toward_grade`, `submission_status`, `display_score`, `category_id`.
 4. **Course precedent** — comparable CONFIRMED rows in the same course (same `type`, same
@@ -36,9 +38,9 @@ For each item you are given, return one bundle with these headings, in this orde
    order by archived_at desc limit 20`. Quote the rule of the closest one.
 7. **Recommended change** — the exact SQL, touching only `assignments`, `assignment_progress`,
    `course_staff` and `courses.group_notes`, or "none needed", with the reason. For an item about
-   a file it is always "none needed": `bb_files` is the transform's (`link_file_sessions` applies
-   a session answer at the fold, from an archived row too). Say what the file's row shows, and what
-   of the note, if anything, would take a code change.
+   a file there is no SQL to recommend: `bb_files` is the transform's to write. Say what the file's
+   row shows, which of SKILL.md's three cases a session answer is in, and what of the answer or its
+   note would take a code change.
 8. **Risks / unverified** — anything you could not confirm, and any duplicate, conflict or
    contradiction you noticed between sources.
 
