@@ -39,6 +39,7 @@ function fakeRpc(over: Partial<SyncRpc> = {}, request: SyncRequest | null = { id
     enqueue: vi.fn(async () => null),
     loginOk: vi.fn(async () => { rec.calls.push('login_ok'); return 0; }),
     loginRequired: vi.fn(async () => '1'),
+    requestInboxApply: vi.fn(async (): Promise<string | null> => { rec.calls.push('apply_request'); return null; }),
     ...over,
   };
   return { rpc, rec };
@@ -78,11 +79,12 @@ describe('one pass', () => {
     expect(rec.calls).toEqual(['sweep', 'next']);
   });
 
-  it('done: probe, claim, register, crawl, wait, files, close done; the pass flag brackets it', async () => {
+  it('done: probe, claim, register, crawl, wait, files, close done, then the Inbox apply request; the pass flag brackets it', async () => {
     const { rpc, rec } = fakeRpc();
     const d = deps(rpc, rec);
     expect(await runPass(d)).toBe('done');
-    expect(rec.calls).toEqual(['sweep', 'next', 'probe', 'login_ok', 'claim', 'register', 'crawl', 'wait', 'outcome', 'files', 'close done']);
+    expect(rec.calls).toEqual(['sweep', 'next', 'probe', 'login_ok', 'claim', 'register', 'crawl', 'wait', 'outcome', 'files', 'close done', 'apply_request']);
+    expect(rpc.requestInboxApply).toHaveBeenCalledWith('501');
     expect(rpc.registerRun).toHaveBeenCalledWith('501', RUN_ID);
     expect(d.crawl).toHaveBeenCalledWith(RUN_ID);
     expect(rec.closes[0]).toMatchObject({ id: '501', state: 'done', report: { lines: ['Files: nothing new to pull'], error: null, claim_attempts: 1 } });
@@ -190,6 +192,58 @@ describe('one pass', () => {
   });
 });
 
+describe('the Inbox apply request after a done sync (Phase 23, migration 180)', () => {
+  it('logs the request the database filed', async () => {
+    const lines: string[] = [];
+    const { rpc, rec } = fakeRpc({ requestInboxApply: vi.fn(async () => '9001') });
+    expect(await runPass(deps(rpc, rec, { log: (l) => lines.push(l) }))).toBe('done');
+    expect(lines).toContain('pass: Inbox apply request 9001 is open for the answered items (after sync 501)');
+  });
+
+  it('says nothing was filed when the answered queue is empty', async () => {
+    const lines: string[] = [];
+    const { rpc, rec } = fakeRpc();
+    await runPass(deps(rpc, rec, { log: (l) => lines.push(l) }));
+    expect(lines.some((l) => l.includes('Inbox apply'))).toBe(false);
+  });
+
+  it('a failed fold never asks for it', async () => {
+    const { rpc, rec } = fakeRpc({ runOutcome: vi.fn(async () => ({ syncRunId: '62', status: 'failed' as const, summary: {} })) });
+    expect(await runPass(deps(rpc, rec))).toBe('failed');
+    expect(rpc.requestInboxApply).not.toHaveBeenCalled();
+  });
+
+  it('a files step that fails the sync never asks for it', async () => {
+    const { rpc, rec } = fakeRpc();
+    const d = deps(rpc, rec, { files: vi.fn(async () => { throw new Error('worklist read failed'); }) });
+    expect(await runPass(d)).toBe('failed');
+    expect(rpc.requestInboxApply).not.toHaveBeenCalled();
+  });
+
+  it('a dead login never asks for it', async () => {
+    const { rpc, rec } = fakeRpc();
+    expect(await runPass(deps(rpc, rec, { login: { check: async () => 'dead' as Verdict } }))).toBe('login_required');
+    expect(rpc.requestInboxApply).not.toHaveBeenCalled();
+  });
+
+  it('a crawl that throws never asks for it', async () => {
+    const { rpc, rec } = fakeRpc();
+    expect(await runPass(deps(rpc, rec, { crawl: vi.fn(async () => { throw new Error('boom'); }) }))).toBe('crawl_failed');
+    expect(rpc.requestInboxApply).not.toHaveBeenCalled();
+  });
+
+  it('a throw from it is logged and the sync still reads done', async () => {
+    const lines: string[] = [];
+    const { rpc, rec } = fakeRpc({ requestInboxApply: vi.fn(async () => { throw new Error('connection terminated'); }) });
+    const d = deps(rpc, rec, { log: (l) => lines.push(l) });
+    expect(await runPass(d)).toBe('done');
+    expect(rec.closes).toHaveLength(1);
+    expect(rec.closes[0]!.state).toBe('done');
+    expect(lines).toContain('pass: could not file the Inbox apply request after sync 501: connection terminated');
+    expect(d.setPassRunning).toHaveBeenLastCalledWith(false);
+  });
+});
+
 describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
   interface Row { state: string; run_id: string | null; claimed_by: string | null; attempts: number }
 
@@ -200,6 +254,7 @@ describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
       ['602', { state: 'claimed', run_id: '00000000-1491-4000-8000-0000000000cc', claimed_by: 'bb-sync session', attempts: 0 }],
     ]);
     const closes: { id: string; state: string; report: Report }[] = [];
+    const applyAfter: string[] = [];
     const rpc: SyncRpc = {
       sweepStale: async () => 0,
       ownClaims: async () =>
@@ -232,8 +287,12 @@ describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
       enqueue: async () => null,
       loginOk: async () => 0,
       loginRequired: async () => '1',
+      requestInboxApply: async (after) => {
+        applyAfter.push(after);
+        return null;
+      },
     };
-    return { rpc, rows, closes };
+    return { rpc, rows, closes, applyAfter };
   }
 
   function stateDeps(rpc: SyncRpc, over: Partial<PassDeps> = {}): PassDeps {
@@ -251,11 +310,14 @@ describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
   }
 
   it('a fold-wait timeout leaves the claim; the next pass waits again and closes it done', async () => {
-    const { rpc, rows, closes } = statefulRpc();
+    const { rpc, rows, closes, applyAfter } = statefulRpc();
     expect(await runPass(stateDeps(rpc, { waitFold: async () => null }))).toBe('fold_timeout');
     expect(rows.get('601')!.state).toBe('claimed');
+    expect(applyAfter).toEqual([]);
     expect(await runPass(stateDeps(rpc))).toBe('idle');
     expect(closes).toEqual([expect.objectContaining({ id: '601', state: 'done' })]);
+    // Phase 23: a resumed sync that closes done asks for the Inbox apply request too.
+    expect(applyAfter).toEqual(['601']);
   });
 
   it('a stop during the fold wait leaves the claim; the next runner closes it', async () => {
@@ -279,12 +341,13 @@ describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
   });
 
   it('a resumed run that failed closes failed, and the files step is not run', async () => {
-    const { rpc, closes } = statefulRpc('failed');
+    const { rpc, closes, applyAfter } = statefulRpc('failed');
     const files = vi.fn(async () => ({ files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null }));
     await runPass(stateDeps(rpc, { waitFold: async () => null }));
     await runPass(stateDeps(rpc, { files }));
     expect(closes.map((c) => [c.id, c.state, c.report.error])).toEqual([['601', 'failed', 'fold failed']]);
     expect(files).not.toHaveBeenCalled();
+    expect(applyAfter).toEqual([]);
   });
 
   it('R2 item 7: the third claim of a request reports claim_attempts 3', async () => {

@@ -4,7 +4,7 @@
 name: bb2dash
 
 services:
-  # The runner (`sync/dist/main.js`): it takes queued sync requests through the twelve `sync_runner`
+  # The runner (`sync/dist/main.js`): it takes queued sync requests through the fourteen `sync_runner`
   # functions, holds Stack's Blackboard login in `bb-profile` (Chromium headful on Xvfb, the login page
   # at http://127.0.0.1:6080/vnc.html), pulls files into `course-files` and runs the embed step.
   sync:
