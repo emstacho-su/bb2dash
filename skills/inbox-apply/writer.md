@@ -30,6 +30,17 @@ what you may write.
   row after it comes back with the result.
 - A record-only item (applied by the transform, kept, dismissed, recorded elsewhere) gets no
   write: archive it with its record and move on.
+- A session answer (ref `session_link/<file id>`) is record-only, bucket `applied_by_transform`:
+  `link_file_sessions` applies it at the fold, from an archived row too, and `bb_files` is not
+  yours to write. Its `change` says what the file's row shows now ("recorded only; file 2489
+  carries session 45, his pick", or "not linked yet; the next sync's fold sets it"). A file that
+  carries another session than his pick, and anything his note asks beyond the link, goes in
+  `flagged`.
+- Every item you are given ends archived: with its change, or record-only with what could not be
+  done in `flagged` or raised for Stack. Never leave an item unarchived because you could not
+  verify what another function did with it, or because the change it needs is not yours to make:
+  an item left behind fails the run and is sent again at the next one. `skipped` is the server's
+  word for an item that was taken back, never yours.
 
 ## One item, one transaction
 
@@ -113,6 +124,6 @@ One line per item, in the order given, and nothing else:
 
 ```
 item <id>: archived (<change, a few words>)
-item <id>: skipped: <why>
+item <id>: skipped: <the server answered skipped: taken back or archived meanwhile>
 item <id>: failed: <the error's first line>
 ```

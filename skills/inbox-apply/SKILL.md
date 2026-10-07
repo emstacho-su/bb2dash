@@ -94,7 +94,8 @@ the transform", not as work.
 valid result: close the request (`done`, result `{"archived":0}`) and report the open counts.
 
 Unattended, the worker has done all of this, and has already archived the rows that need no
-reading (applied by the transform, kept, or dismissed, with no note). `--items` is what is left.
+reading (applied by the transform, kept, or dismissed, with no note; a session answer whose file
+agrees with it). `--items` is what is left.
 
 ## The buckets
 
@@ -104,12 +105,22 @@ decision and is the `bucket` of its record; only the first needs the context sta
 | Bucket (`bucket`) | How to tell | Default |
 |---|---|---|
 | **Needs a change** (`needs_change`) | `was_applied = false`, `state = resolved`, and the answer names or implies a row change: a stack_must_confirm / missing on an assignment ("add it", "yes", a value), a course-map answer that names a date or group | Context stage, then the change |
-| **Applied by the transform** (`applied_by_transform`) | `was_applied = true` | Record only: "applied by apply_resolutions() at <applied_at>" |
+| **Applied by the transform** (`applied_by_transform`) | `was_applied = true`; or a session answer (ref `session_link/<file id>`, entity `bb_file`, field `session_id`), whatever `was_applied` says | Record only: "applied by apply_resolutions() at <applied_at>"; for a session answer, what `bb_files.session_id` shows now (below) |
 | **Kept** (`kept`) | `kind = conflict`, `accept = keep` | Record only. `attention_keep_stands()` keeps it settled after archiving (090) |
 | **Dismissed** (`dismissed`) | `state = dismissed` | Record only, with the note as the reason |
 | **Recorded elsewhere** (`recorded_elsewhere`) | the note says another item carried the effect (e.g. "applied via #162") | Verify that item is applied; record only |
 
 A note can move a row out of its default: "keep mine, and mark it submitted" is a change.
+
+**A session answer is never this skill's to write.** "Which class is this file for?" is asked and
+applied by `link_file_sessions` at the fold: a pick (`resolution.session_id`) is set on the file
+while it is unlinked, "none" (`accept = none`) leaves it unlinked and quiet, and an archived answer
+still counts (migrations 123, 163). `bb_files` cannot be written from here in either mode. So the
+item is always archived, record only, with what the file's row shows: the pick is on it; or it is
+not linked yet and the next sync's fold sets it; or it carries another session than the pick, which
+is flagged, not fixed. What its note asks beyond the link (file it under another bucket, treat it
+as a reading) is flagged as a code change or raised for Stack, never done. It is never left in the
+queue because the fold has not been seen to apply it.
 
 ## Step 3 — Context (Sonnet, read-only, one agent per course or per 3 items)
 
