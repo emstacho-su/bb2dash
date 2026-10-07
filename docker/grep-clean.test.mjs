@@ -71,6 +71,19 @@ const RUNNER_ENTRY = 'CMD ["node", "/app/workspace/dist/runner.js"]';
 const RUNNER_HEALTHCHECK = 'test: ["CMD", "node", "/app/workspace/dist/healthcheck.js"]';
 const RUNNER_HOOK = 'node /app/workspace/dist/hooks/tool-gate.js';
 
+/** Ruling V2 (102a, the review round): the one pinned CA in the image, root's and read-only, and the setting that names it. */
+export const DB_CA_FILE = '/app/certs/prod-ca.crt';
+const DB_CA_COPY = `COPY --from=harness-certs prod-ca.crt ${DB_CA_FILE}`;
+const DB_CA_CHMOD = `chmod 0444 ${DB_CA_FILE}`;
+const DB_CA_SETTING = `WORKSPACE_DB_CA_FILE: ${DB_CA_FILE}`;
+/** The rag launcher reads the same file: where it looks, the check it keeps, and how the path reaches the server. */
+const RAG_CA_LINES = Object.freeze([`readonly CA_CERT=${DB_CA_FILE}`, '[ -r "$CA_CERT" ] || fail ', 'DATABASE_CA_CERT="$CA_CERT"']);
+const RAG_CA_OF_ITS_OWN = /\/app\/mcp-rag\/certs|\$HERE\/certs/;
+/** Ruling V2: the working directory of every turn, root's, and the one mode it may be given. */
+export const TURN_DIR = '/app/turn';
+const TURN_DIR_OWNER = 'root:root';
+const TURN_DIR_MODE = '0555';
+
 const imageNamed = (name) => IMAGES.find((image) => image.name === name);
 const readRepo = (relative) => fs.readFileSync(path.join(REPO, relative), 'utf8');
 
@@ -114,6 +127,78 @@ export function runnerStageMismatches(dockerfile, compose) {
   if (!workspaceService(compose).includes(RUNNER_HEALTHCHECK)) problems.push(`the service's healthcheck is not ${RUNNER_HEALTHCHECK}`);
   const hook = JSON.parse(readRepo('workspace/claude/settings.json')).hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
   if (hook !== RUNNER_HOOK) problems.push(`workspace/claude/settings.json wires ${hook}, not ${RUNNER_HOOK}`);
+  return problems;
+}
+
+/** The instructions of a Dockerfile's last stage (the runtime stage): continuations joined, comments and blank lines dropped. */
+export function runtimeInstructions(dockerfile) {
+  const lines = dockerfile
+    .replace(/\\\r?\n/g, ' ')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
+  return lines.slice(lines.findLastIndex((line) => /^FROM\s/i.test(line)) + 1);
+}
+
+const isRun = (instruction) => /^RUN\s/i.test(instruction);
+
+/** Each shell command of the given RUN instructions that names `target` or a path under it, as its words. */
+function commandsNaming(instructions, target) {
+  return instructions
+    .filter(isRun)
+    .flatMap((line) => line.replace(/^RUN\s+/i, '').split(/&&|;/))
+    .map((command) => command.trim().split(/\s+/))
+    .filter((words) => words.some((word) => word === target || word.startsWith(`${target}/`)));
+}
+
+/** Ruling V2: every way the image, the service or the rag launcher could miss the one pinned CA. */
+export function caFileProblems(dockerfile, compose, launcher) {
+  const problems = [];
+  const runtime = runtimeInstructions(dockerfile);
+  // A plain COPY from the named context is root's; any flag (a --chown among them) makes it another line.
+  const copies = runtime.filter((line) => /^COPY\s/i.test(line) && line.includes('prod-ca.crt'));
+  if (!copies.includes(DB_CA_COPY)) problems.push(`the runtime stage does not hold: ${DB_CA_COPY}`);
+  for (const other of copies.filter((line) => line !== DB_CA_COPY)) problems.push(`another copy of the CA: ${other}`);
+  // One command may name the CA or its folder: the one that makes the file read-only, after the copy.
+  const commands = commandsNaming(runtime, path.posix.dirname(DB_CA_FILE)).map((words) => words.join(' '));
+  if (!commands.includes(DB_CA_CHMOD)) problems.push(`the runtime stage does not run: ${DB_CA_CHMOD}`);
+  for (const other of commands.filter((command) => command !== DB_CA_CHMOD)) problems.push(`another command names the CA or its folder: ${other}`);
+  const copiedAt = runtime.indexOf(DB_CA_COPY);
+  if (copiedAt !== -1 && commandsNaming(runtime.slice(0, copiedAt), DB_CA_FILE).length > 0) problems.push('the CA is given its mode before it is copied');
+  const service = stripComments('compose.yaml', workspaceService(compose));
+  if (!service.split(/\r?\n/).includes(`      ${DB_CA_SETTING}`)) problems.push(`compose.yaml does not set ${DB_CA_SETTING} for the workspace service`);
+  const code = stripComments('mcp-rag.sh', launcher);
+  for (const line of RAG_CA_LINES) {
+    if (!code.includes(line)) problems.push(`the rag launcher does not hold: ${line.trim()}`);
+  }
+  if (RAG_CA_OF_ITS_OWN.test(code)) problems.push('the rag launcher still names a CA file of its own');
+  return problems;
+}
+
+/** Ruling V2: every way the runtime user could still write the working directory of a turn. */
+export function turnDirProblems(dockerfile, compose) {
+  const problems = [];
+  const runtime = runtimeInstructions(dockerfile);
+  const namesIt = (text) => text.split(/\s+/).some((word) => word === TURN_DIR || word.startsWith(`${TURN_DIR}/`));
+  const commands = commandsNaming(runtime, TURN_DIR);
+  /** The first word after the program's name that is not an option: chown's owner, chmod's mode. */
+  const firstOperands = (program) => commands.filter((words) => words[0] === program).map((words) => words.slice(1).find((word) => !word.startsWith('-')));
+  if (!commands.some((words) => words[0] === 'mkdir')) problems.push(`${TURN_DIR} is not made in the runtime stage`);
+  for (const words of commands.filter(([program]) => !['mkdir', 'chown', 'chmod'].includes(program))) {
+    problems.push(`a command other than mkdir, chown and chmod names ${TURN_DIR}: ${words.join(' ')}`);
+  }
+  const owners = firstOperands('chown');
+  if (!owners.includes(TURN_DIR_OWNER)) problems.push(`${TURN_DIR} is not handed to ${TURN_DIR_OWNER}`);
+  for (const owner of owners.filter((given) => given !== TURN_DIR_OWNER)) problems.push(`${TURN_DIR} is handed to ${owner}`);
+  const modes = firstOperands('chmod');
+  if (!modes.includes(TURN_DIR_MODE)) problems.push(`${TURN_DIR} is not given mode ${TURN_DIR_MODE}`);
+  for (const mode of modes.filter((given) => given !== TURN_DIR_MODE)) problems.push(`${TURN_DIR} is given mode ${mode}`);
+  for (const line of runtime.filter((instruction) => /^(COPY|ADD|VOLUME|WORKDIR)\s/i.test(instruction) && namesIt(instruction))) {
+    problems.push(`an instruction fills, mounts or remakes ${TURN_DIR}: ${line}`);
+  }
+  if (stripComments('compose.yaml', workspaceService(compose)).includes(TURN_DIR)) {
+    problems.push(`compose.yaml names ${TURN_DIR} for the workspace service (a mount would hide the image's folder and its mode)`);
+  }
   return problems;
 }
 
@@ -292,6 +377,59 @@ test('the workspace Dockerfile pins the CLI, builds the materials server in a st
   assert.deepEqual(pinDrift(dockerfile, compose), []);
   assert.deepEqual(unusedPackages(dockerfile), []);
   assert.deepEqual(runnerStageMismatches(dockerfile, compose), []);
+});
+
+test("ruling V2: one pinned CA at /app/certs/prod-ca.crt, root's and read-only, named by the service and read by the rag launcher", () => {
+  const dockerfile = readRepo(imageNamed('workspace').dockerfile);
+  assert.deepEqual(caFileProblems(dockerfile, readRepo('compose.yaml'), readRepo('docker/workspace/mcp-rag.sh')), []);
+  // The check can fail: the image as it was before the ruling (the CA under the rag server alone, no setting).
+  const before = caFileProblems(
+    'FROM base\nCOPY --from=harness-certs prod-ca.crt /app/mcp-rag/certs/prod-ca.crt\n',
+    '\n  workspace:\n    environment:\n      DISABLE_AUTOUPDATER: "1"\nvolumes:\n',
+    'readonly HERE=/app/mcp-rag\nreadonly CA_CERT="$HERE/certs/prod-ca.crt"\n[ -r "$CA_CERT" ] || fail "no"\nDATABASE_CA_CERT="$CA_CERT" exec node x\n',
+  );
+  assert.deepEqual(before, [
+    `the runtime stage does not hold: ${DB_CA_COPY}`,
+    'another copy of the CA: COPY --from=harness-certs prod-ca.crt /app/mcp-rag/certs/prod-ca.crt',
+    `the runtime stage does not run: ${DB_CA_CHMOD}`,
+    `compose.yaml does not set ${DB_CA_SETTING} for the workspace service`,
+    `the rag launcher does not hold: readonly CA_CERT=${DB_CA_FILE}`,
+    'the rag launcher still names a CA file of its own',
+  ]);
+  // Nor is a copy that is node's, a mode or an owner changed afterwards, a mode set too early, or a
+  // setting that is only a comment, let through.
+  const tight = `FROM base\n${DB_CA_COPY}\nRUN ${DB_CA_CHMOD}\n`;
+  const set = `\n  workspace:\n    environment:\n      ${DB_CA_SETTING}\nvolumes:\n`;
+  const reads = RAG_CA_LINES.join('\n');
+  assert.deepEqual(caFileProblems(tight, set, reads), []);
+  assert.deepEqual(caFileProblems(tight.replace('COPY ', 'COPY --chown=node:node '), set, reads), [
+    `the runtime stage does not hold: ${DB_CA_COPY}`,
+    `another copy of the CA: COPY --chown=node:node --from=harness-certs prod-ca.crt ${DB_CA_FILE}`,
+  ]);
+  assert.deepEqual(caFileProblems(`${tight}RUN chmod 0666 ${DB_CA_FILE}\n`, set, reads), [`another command names the CA or its folder: chmod 0666 ${DB_CA_FILE}`]);
+  assert.deepEqual(caFileProblems(`${tight}RUN chown -R node:node /app/certs\n`, set, reads), ['another command names the CA or its folder: chown -R node:node /app/certs']);
+  assert.deepEqual(caFileProblems(`FROM base\nRUN ${DB_CA_CHMOD}\n${DB_CA_COPY}\n`, set, reads), ['the CA is given its mode before it is copied']);
+  assert.deepEqual(caFileProblems(tight, set.replace(`      ${DB_CA_SETTING}`, `      # ${DB_CA_SETTING}`), reads), [
+    `compose.yaml does not set ${DB_CA_SETTING} for the workspace service`,
+  ]);
+});
+
+test("ruling V2: /app/turn is root's and 0555, so the runtime user can plant nothing where a turn loads project settings", () => {
+  const dockerfile = readRepo(imageNamed('workspace').dockerfile);
+  assert.deepEqual(turnDirProblems(dockerfile, readRepo('compose.yaml')), []);
+  // The check can fail: the folder as it was before the ruling (node's), and three other ways to leave it writable.
+  const service = (lines) => `\n  workspace:\n${lines}volumes:\n`;
+  const before = turnDirProblems(`FROM base\nRUN mkdir -p /home/node/.claude ${TURN_DIR} \\\n && chown node:node /home/node/.claude ${TURN_DIR}\n`, service(''));
+  assert.deepEqual(before, [`${TURN_DIR} is not handed to ${TURN_DIR_OWNER}`, `${TURN_DIR} is handed to node:node`, `${TURN_DIR} is not given mode ${TURN_DIR_MODE}`]);
+  const tight = `FROM base\nRUN mkdir -p ${TURN_DIR} && chown ${TURN_DIR_OWNER} ${TURN_DIR} && chmod ${TURN_DIR_MODE} ${TURN_DIR}\n`;
+  assert.deepEqual(turnDirProblems(tight, service('')), []);
+  assert.deepEqual(turnDirProblems(`${tight}RUN chmod -R 0777 ${TURN_DIR}\n`, service('')), [`${TURN_DIR} is given mode 0777`]);
+  assert.deepEqual(turnDirProblems(`${tight}COPY workspace/claude ${TURN_DIR}/.claude\n`, service('')), [
+    `an instruction fills, mounts or remakes ${TURN_DIR}: COPY workspace/claude ${TURN_DIR}/.claude`,
+  ]);
+  assert.equal(turnDirProblems(tight, service(`    volumes:\n      - turn:${TURN_DIR}\n`)).length, 1);
+  // A stage before the last one is not the image: only the runtime stage is read.
+  assert.equal(turnDirProblems(`${tight}FROM base\n`, service('')).length, 3);
 });
 
 test('the .dockerignore exclusions keep host-built and secret folders out', () => {
