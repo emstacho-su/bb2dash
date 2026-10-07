@@ -9,6 +9,10 @@
 // test that exists, a proof that exists, evidence its test really writes; a stage has its section
 // in the playbook; and nothing in the pack quotes an answer, because answers quote course material
 // and this repository is public.
+//
+// The host wrapper in bb2dash-stack checks a manifest again before a run
+// (scripts/lib/accept-manifest.mjs), against its own list of actions. What is here is what can be
+// known in this repository, so that a pack that would be refused there fails a test here first.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,9 +24,19 @@ import { validate } from './schema-lite.mjs';
 export const QUOTE_MAX_CHARS = 60;
 
 const PHASE_DIR = /^[0-9]{1,2}[a-z]?$/;
-/** `carry:<step or saved name>.<field>`: a value the host read earlier in the run. */
-const CARRY = /^carry:([a-z0-9][a-z0-9_-]*)\.([a-z][a-z0-9_]*)$/;
-const SAVE_NAME = /^[a-z][a-z0-9_]*$/;
+/** `carry:<step>.<field>`: a value the run read earlier. The step `host` holds what the host's own actions saved. */
+const CARRY_PREFIX = 'carry:';
+const CARRY = /^carry:([0-9a-z][0-9a-z._-]{0,40})\.([a-z][a-z0-9_]{0,40})$/;
+const HOST = 'host';
+const SAVE_NAME = /^[a-z][a-z0-9_]{0,40}$/;
+/** What bb2dash-stack's actions save for `carry:host.<name>`, beside the name a `db.proof` saves its detail under. */
+const HOST_SAVES = Object.freeze({
+  'workspace.start': ['started_at'],
+  'workspace.startNoBuild': ['started_at'],
+  'workspace.stop': ['stopped_at'],
+});
+/** A file of this repository named in a step's text. */
+const NAMED_FILE = /\bdocs\/[A-Za-z0-9._/-]+\.[a-z0-9]{2,5}\b/g;
 /** How the browser-test file declares a test: its title, then the shots it takes. */
 const DECLARED_TEST = /acceptStep\(\s*'([^']+)',\s*\{\s*shots:\s*\[([^\]]*)\]/g;
 const QUESTION = /export const QUESTION_(?:LOOKUP|DECISION|DOCUMENT|STANDARD|DEEP)\s*=\s*(['"])((?:(?!\1).)+)\1;/gs;
@@ -89,16 +103,7 @@ function proofOfAction(action) {
   return { name, save, values };
 }
 
-const sameValues = (left, right) => JSON.stringify(Object.entries(left).sort()) === JSON.stringify(Object.entries(right).sort());
-
-/** Whether a host stage runs this proof with exactly these values. */
-function stageRunsProof(stage, proof) {
-  return stage.actions.some((action) => {
-    if (action.action !== 'db.proof') return false;
-    const run = proofOfAction(action);
-    return run.name === proof.name && sameValues(run.values, proof.with ?? {});
-  });
-}
+const isCarried = (value) => typeof value === 'string' && value.startsWith(CARRY_PREFIX);
 
 function duplicates(values) {
   return [...new Set(values.filter((value, index) => values.indexOf(value) !== index))];
@@ -198,7 +203,7 @@ function proofUseProblems(label, name, values, proofs) {
       if (!spec.optional) problems.push(`${label}: proof "${name}" is not given "${key}"`);
       continue;
     }
-    if (CARRY.test(String(values[key]))) continue;
+    if (isCarried(values[key])) continue;
     try {
       coerceParam(spec, String(values[key]));
     } catch (error) {
@@ -208,78 +213,83 @@ function proofUseProblems(label, name, values, proofs) {
   return problems;
 }
 
+/** Every proof a host action or a step names is in proofs.json, with its parameters. */
 function proofProblems({ manifest, proofs }) {
   const problems = [];
-  const hostStages = stagesOfKind(manifest, 'host');
-  for (const stage of hostStages) {
+  for (const stage of stagesOfKind(manifest, 'host')) {
     for (const action of stage.actions.filter((entry) => entry.action === 'db.proof')) {
       const run = proofOfAction(action);
       if (run.save !== undefined && !SAVE_NAME.test(String(run.save))) problems.push(`stage ${stage.id}: "${run.save}" is not a name to save under`);
       problems.push(...proofUseProblems(`stage ${stage.id}`, run.name, run.values, proofs));
     }
   }
-  for (const step of manifest.steps.filter((candidate) => candidate.proofs !== undefined)) {
-    for (const proof of step.proofs) {
-      problems.push(...proofUseProblems(`step ${step.id}`, proof.name, proof.with ?? {}, proofs));
-      if (step.kind === 'auto') {
-        const after = hostStages.filter((stage) => stageIndex(manifest, stage.id) > stageIndex(manifest, step.stage));
-        if (!after.some((stage) => stageRunsProof(stage, proof))) {
-          problems.push(`step ${step.id}: no host stage after "${step.stage}" runs its proof "${proof.name}" with the same values`);
-        }
-      } else if (!hostStages.some((stage) => stage.id === step.stage && stageRunsProof(stage, proof))) {
-        problems.push(`step ${step.id}: stage "${step.stage}" does not run its proof "${proof.name}" with the same values`);
-      }
-    }
+  for (const step of stepsOfKind(manifest, 'auto')) {
+    for (const proof of step.proofs ?? []) problems.push(...proofUseProblems(`step ${step.id}`, proof.name, proof.with ?? {}, proofs));
   }
   return problems;
 }
 
+/** A host step is a label: its stage is a host stage, and at least one action there carries the label. */
 function hostStepProblems({ manifest }) {
   const problems = [];
-  for (const step of stepsOfKind(manifest, 'host')) {
+  const hostSteps = stepsOfKind(manifest, 'host');
+  for (const step of hostSteps) {
     const stage = manifest.stages.find((candidate) => candidate.id === step.stage);
     if (stage === undefined) problems.push(`step ${step.id}: stage "${step.stage}" does not exist`);
     else if (stage.kind !== 'host') problems.push(`step ${step.id}: stage "${step.stage}" is a ${stage.kind} stage, not a host stage`);
-    else {
-      const run = stage.actions.map((action) => action.action);
-      for (const action of (step.actions ?? []).filter((name) => !run.includes(name))) {
-        problems.push(`step ${step.id}: stage "${step.stage}" does not run the action "${action}"`);
+    else if (!stage.actions.some((action) => action.step === step.id)) problems.push(`step ${step.id}: no action of stage "${step.stage}" is labelled with it`);
+  }
+  for (const stage of stagesOfKind(manifest, 'host')) {
+    for (const action of stage.actions.filter((entry) => entry.step !== undefined)) {
+      if (!hostSteps.some((step) => step.id === action.step && step.stage === stage.id)) {
+        problems.push(`stage ${stage.id}: ${action.action} is labelled with step ${action.step}, which is not a host step of this stage`);
       }
     }
-    if (step.actions === undefined && step.proofs === undefined) problems.push(`step ${step.id}: a host step names at least one action or proof`);
   }
   return problems;
 }
 
-/** A carried value comes from a step whose stage has already run, or from a proof saved earlier. */
+/**
+ * Why a carried value cannot be read where it is read, or null. `saved` is what the host has
+ * saved so far; `at` is the stage that reads; a step's own proofs may read their own stage.
+ */
+function carriedProblem(value, { manifest, saved, at, ownStage }) {
+  const reference = CARRY.exec(value);
+  if (reference === null) return `"${value}" is not a carry:<step>.<field> reference`;
+  const [, source, field] = reference;
+  if (source === HOST) return saved.has(field) ? null : `"${value}" is saved by no earlier action`;
+  const step = manifest.steps.find((candidate) => candidate.id === source);
+  if (step === undefined) return `"${value}" names no step of the pack`;
+  if (step.kind !== 'auto') return `"${value}" names a step that carries nothing over`;
+  const from = stageIndex(manifest, step.stage);
+  return from !== -1 && (from < at || (ownStage && from === at)) ? null : `"${value}" is read before step ${source} has run`;
+}
+
+const carriedValuesOf = (values) => Object.values(values ?? {}).filter(isCarried);
+
+/** Every carried value of the pack, in the order a run reads them: nothing is read before something made it. */
 function carryProblems({ manifest }) {
   const problems = [];
   const saved = new Set();
-  const stageOfStep = new Map(stepsOfKind(manifest, 'auto').map((step) => [step.id, stageIndex(manifest, step.stage)]));
-  manifest.stages.forEach((stage, index) => {
+  manifest.stages.forEach((stage, at) => {
+    const scope = { manifest, saved, at, ownStage: false };
     for (const action of stage.actions ?? []) {
-      for (const value of Object.values(action.with ?? {})) {
-        const reference = CARRY.exec(String(value));
-        if (reference === null) continue;
-        const [, source] = reference;
-        if (saved.has(source)) continue;
-        if (!stageOfStep.has(source)) problems.push(`stage ${stage.id}: "${value}" names no earlier step and no saved proof`);
-        else if (stageOfStep.get(source) >= index || stageOfStep.get(source) === -1) problems.push(`stage ${stage.id}: "${value}" is read before step ${source} has run`);
+      for (const value of carriedValuesOf(action.with)) {
+        const problem = carriedProblem(value, scope);
+        if (problem !== null) problems.push(`stage ${stage.id}: ${problem}`);
       }
+      for (const name of HOST_SAVES[action.action] ?? []) saved.add(name);
       if (action.action === 'db.proof' && action.with?.save !== undefined) saved.add(String(action.with.save));
     }
-  });
-  return problems;
-}
-
-function deadlineProblems({ manifest }) {
-  const problems = [];
-  manifest.stages.forEach((stage, index) => {
-    if (stage.deadline === undefined) return;
-    const before = manifest.stages[index - 1];
-    const runs = before?.kind === 'host' && before.actions.some((action) => action.action === stage.deadline.after);
-    if (!runs) {
-      problems.push(`stage ${stage.id}: its deadline counts from "${stage.deadline.after}", which the stage before it ("${before?.id ?? 'none'}") does not run`);
+    if (stage.deadline !== undefined) {
+      const problem = carriedProblem(stage.deadline.from, scope);
+      if (problem !== null) problems.push(`stage ${stage.id}: its deadline: ${problem}`);
+    }
+    for (const step of stepsOfKind(manifest, 'auto').filter((candidate) => candidate.stage === stage.id)) {
+      for (const value of (step.proofs ?? []).flatMap((proof) => carriedValuesOf(proof.with))) {
+        const problem = carriedProblem(value, { ...scope, ownStage: true });
+        if (problem !== null) problems.push(`step ${step.id}: ${problem}`);
+      }
     }
   });
   return problems;
@@ -345,10 +355,14 @@ function courseTextProblems({ manifest, playbook }, questions) {
   return problems;
 }
 
-function waivedProblems({ manifest }, repo) {
-  return stepsOfKind(manifest, 'waived')
-    .filter((step) => step.stands_on !== undefined && !fs.existsSync(path.join(repo, step.stands_on)))
-    .map((step) => `step ${step.id}: stands on ${step.stands_on}, which is not in the repository`);
+/** A file of this repository that a step's text names (the picture that stands in a waived step's place) is there. */
+function namedFileProblems({ manifest }, repo) {
+  return manifest.steps.flatMap((step) =>
+    [...(step.text ?? '').matchAll(NAMED_FILE)]
+      .map((match) => match[0])
+      .filter((file) => !fs.existsSync(path.join(repo, file)))
+      .map((file) => `step ${step.id}: its text names ${file}, which is not in the repository`),
+  );
 }
 
 /**
@@ -366,9 +380,8 @@ export function packProblems(pack, { repo, manifestSchema }) {
     ...hostStepProblems(pack),
     ...proofProblems(pack),
     ...carryProblems(pack),
-    ...deadlineProblems(pack),
     ...playbookProblems(pack),
     ...courseTextProblems(pack, questionsOf(repo)),
-    ...waivedProblems(pack, repo),
+    ...namedFileProblems(pack, repo),
   ];
 }

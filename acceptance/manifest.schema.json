@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/emstacho-su/bb2dash/blob/main/acceptance/manifest.schema.json",
   "title": "An acceptance pack's manifest: acceptance/<NN>/manifest.json",
-  "description": "The stages of one phase's acceptance run, in the order the host runs them, and the steps of the phase's acceptance script with who does each. acceptance/README.md says it in plain words; acceptance/acceptance.test.mjs holds every pack to this schema and to the rules a schema cannot say.",
+  "description": "The stages of one phase's acceptance run, in the order the host runs them, and the steps of the phase's acceptance script with who does each. acceptance/README.md says it in plain words; acceptance/acceptance.test.mjs holds every pack to this schema and to the rules a schema cannot say. The host wrapper in bb2dash-stack reads the same shape (scripts/lib/accept-manifest.mjs) and refuses a field it does not know.",
   "$comment": "Only the keywords acceptance/schema-lite.mjs checks are used here: type, const, enum, pattern, minLength, maxLength, minimum, maximum, required, properties, additionalProperties, items, minItems, maxItems, oneOf and $ref to #/$defs.",
   "type": "object",
   "additionalProperties": false,
@@ -21,13 +21,13 @@
   },
   "$defs": {
     "phase": {
-      "description": "The phase, as its folder is named: acceptance/21/, acceptance/12b/.",
+      "description": "The phase, as its folder is named: acceptance/21/.",
       "type": "string",
       "pattern": "^[0-9]{1,2}[a-z]?$"
     },
-    "stageId": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+    "stageId": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,30}$" },
     "stepId": {
-      "description": "A step of the acceptance script: its number, a letter when one step is two tests (14a), a suffix when half of it is done another way (2-desktop).",
+      "description": "A step of the acceptance script: its number, a letter when one step is two tests (14a), a suffix when half of it is done another way (2-desktop). Never `host`: that name is the host's own, for what it saves.",
       "type": "string",
       "pattern": "^[0-9]{1,2}[a-z]?(-[a-z0-9]+)?$"
     },
@@ -41,11 +41,6 @@
       "description": "A file the step's test writes into the stage's output folder, by bare name.",
       "type": "string",
       "pattern": "^[0-9a-z][0-9a-z.-]{0,60}\\.(png|json)$"
-    },
-    "repoPath": {
-      "description": "A file of this repository, from its root.",
-      "type": "string",
-      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$"
     },
     "proofName": {
       "description": "A proof of this pack's proofs.json.",
@@ -67,8 +62,13 @@
         "db.proof"
       ]
     },
+    "carried": {
+      "description": "A value the run read earlier: carry:<step>.<field> for an id or a time in that step's facts file, carry:host.<name> for what a host action saved.",
+      "type": "string",
+      "pattern": "^carry:([0-9]{1,2}[a-z]?|host)\\.[a-z][a-z0-9_]{0,40}$"
+    },
     "value": {
-      "description": "A literal, or carry:<step or saved name>.<field>: a value the host read earlier in the run.",
+      "description": "A literal, or a carried value (see `carried`).",
       "type": ["string", "integer"],
       "maxLength": 200
     },
@@ -79,7 +79,11 @@
       "required": ["action"],
       "properties": {
         "action": { "$ref": "#/$defs/actionName" },
-        "with": { "$ref": "#/$defs/with" }
+        "with": { "$ref": "#/$defs/with" },
+        "step": {
+          "description": "The host step this action proves, when it proves one.",
+          "$ref": "#/$defs/stepId"
+        }
       }
     },
     "proofRef": {
@@ -100,37 +104,40 @@
           "required": ["id", "kind"],
           "properties": {
             "id": { "$ref": "#/$defs/stageId" },
-            "kind": { "const": "prepare" }
+            "kind": { "const": "prepare" },
+            "text": { "$ref": "#/$defs/text" }
           }
         },
         {
-          "description": "The host runs these actions itself, in this order, and stops at the first that fails.",
+          "description": "The host runs these actions itself, in this order, and stops at the first that does not pass.",
           "type": "object",
           "additionalProperties": false,
           "required": ["id", "kind", "actions"],
           "properties": {
             "id": { "$ref": "#/$defs/stageId" },
             "kind": { "const": "host" },
+            "text": { "$ref": "#/$defs/text" },
             "actions": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/$defs/hostAction" } }
           }
         },
         {
-          "description": "A fresh sandbox container in which the Claude operator runs these tests, one at a time, in this order.",
+          "description": "A fresh sandbox container in which the Claude operator runs these tests, one at a time, in this order. Afterwards the host reads each step's proofs itself.",
           "type": "object",
           "additionalProperties": false,
           "required": ["id", "kind", "tests"],
           "properties": {
             "id": { "$ref": "#/$defs/stageId" },
             "kind": { "const": "sandbox" },
+            "text": { "$ref": "#/$defs/text" },
             "tests": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/testTitle" } },
             "deadline": {
-              "description": "The stage has a time limit: this many seconds after the named action of the host stage just before it. The host hands it to the tests as ACCEPT_DEADLINE.",
+              "description": "The stage has a time limit: so many seconds after a time the run already has. The host hands it to the tests as ACCEPT_DEADLINE.",
               "type": "object",
               "additionalProperties": false,
-              "required": ["after", "seconds"],
+              "required": ["from", "plus_seconds"],
               "properties": {
-                "after": { "$ref": "#/$defs/actionName" },
-                "seconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+                "from": { "$ref": "#/$defs/carried" },
+                "plus_seconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
               }
             }
           }
@@ -151,15 +158,14 @@
           }
         },
         {
-          "description": "Not run, and the text says why. stands_on names the evidence that stands in its place, when there is some.",
+          "description": "Not run, and the text says why, and names what stands in its place when something does.",
           "type": "object",
           "additionalProperties": false,
           "required": ["id", "kind", "text"],
           "properties": {
             "id": { "$ref": "#/$defs/stepId" },
             "kind": { "const": "waived" },
-            "text": { "$ref": "#/$defs/text" },
-            "stands_on": { "$ref": "#/$defs/repoPath" }
+            "text": { "$ref": "#/$defs/text" }
           }
         },
         {
@@ -178,7 +184,7 @@
           }
         },
         {
-          "description": "The host does it alone: the named actions of one host stage, and the proofs that stage runs. No sandbox takes part.",
+          "description": "The host does it alone. The step is a label and a sentence: the actions of its stage that carry the label are what proves it.",
           "type": "object",
           "additionalProperties": false,
           "required": ["id", "kind", "text", "stage"],
@@ -186,9 +192,7 @@
             "id": { "$ref": "#/$defs/stepId" },
             "kind": { "const": "host" },
             "text": { "$ref": "#/$defs/text" },
-            "stage": { "$ref": "#/$defs/stageId" },
-            "actions": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "$ref": "#/$defs/actionName" } },
-            "proofs": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/proofRef" } }
+            "stage": { "$ref": "#/$defs/stageId" }
           }
         }
       ]
