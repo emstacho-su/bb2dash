@@ -497,7 +497,7 @@ declare
   v_ok  boolean;
   v_row record;
 begin
-  delete from workspace_runner_heartbeat;
+  delete from workspace_runner_heartbeat where id = 1;
 
   select count(*), bool_and(s.polled_at is null and s.runner is null) into v_n, v_ok
     from v_workspace_status s;
