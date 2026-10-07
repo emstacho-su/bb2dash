@@ -176,3 +176,14 @@ Parameter types: `integer`, `uuid`, `time` (ISO, with its zone), `uuids` (uuids 
 
 **A statement's verdict** is in the one row it returns: `ok` true passes, anything else does not,
 and `blocked` true outranks both.
+
+## What the first proof run taught (2026-10-07)
+
+The first proof run walked steps 2 to 9 on the live site, and the operator failed step 8 on the
+playbook, not on the product: "the button reads Ask again, not Stop" meant "reads Ask once more",
+and was read as a button labelled "Ask again". So a playbook sentence must be readable one way
+only, with every text of the page in code marks exactly as the page has it, and a rule now checks
+that. The operator's `notes` are where it reports what is not a step's pass condition: in that run
+it noticed that an answer asked after a Stop said the earlier reply was empty, which is worth
+knowing and is no reason to fail the step. A proof run (`--proof`) never counts as acceptance,
+whatever its result.

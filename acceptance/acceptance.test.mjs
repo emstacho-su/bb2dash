@@ -540,6 +540,13 @@ test('README.md says what a pack is made of: three files and one browser-test fi
   }
 });
 
+test('README.md ends with what the first proof run taught: one reading, what notes are for, and that a proof run is no acceptance', () => {
+  const headings = readText('acceptance/README.md').split('\n').filter((line) => line.startsWith('## '));
+  assert.equal(headings.at(-1), '## What the first proof run taught (2026-10-07)');
+  const section = readText('acceptance/README.md').split(`${headings.at(-1)}\n`)[1];
+  for (const said of ['Ask again', '`notes`', '`--proof`', 'never counts as acceptance']) assert.ok(section.includes(said), said);
+});
+
 /* ---------------------------------------------------------------------------------------------
  * Where login.mjs saves the session
  * ------------------------------------------------------------------------------------------ */
