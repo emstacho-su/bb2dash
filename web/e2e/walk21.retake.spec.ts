@@ -28,8 +28,11 @@
  * * `w2 document haiku` and `long opus` each spend a turn and take no shot.
  *   They stay at the column's end, scroll nothing and reload nothing, and read
  *   whether the turn's last line is wholly inside the column's visible box
- *   once the stored row has landed (W-2). `long opus` is also the turn task
- *   21 (d) is repeated on: the PM reads the container's health while it waits.
+ *   once the stored row has landed (W-2). An answer that cannot show W-2 fails
+ *   by name, and is not a pass: one too short to make the column scroll
+ *   (`w2 document haiku`), or one that used no tool and so has no "Used:" line.
+ *   `long opus` is also the turn task 21 (d) is repeated on: the PM reads the
+ *   container's health while it waits.
  * * `06 stopped`, `07 offline` and `08 desktop` are the first sitting's tests
  *   under the window rule. They stand in `walk21.spec.ts`.
  * * `w1 numbers` asks nothing and shoots nothing: it prints the document's
@@ -67,6 +70,8 @@ import {
   endReading,
   expectDocumentFitsWindow,
   expectLongAndContained,
+  expectTallerThanColumn,
+  expectUsedLineInside,
   openArchivedByRow,
   retakeAnsweredTurn,
 } from './walk21.window';
@@ -105,7 +110,10 @@ test.describe('second sitting, W-1 and W-2 on the real page (WALK21_LIVE=1)', ()
     await expect(turn).toHaveAttribute('data-turn', /^(done|failed|stopped)$/, { timeout: TURN_TIMEOUT_MS });
     await reportTurn(page, 'w2 document haiku, as the turn closed', askedAt);
     // The "Used:" line arrives with the stored row.
-    await expect(turn.locator('[data-used]')).toBeAttached({ timeout: STORED_ROW_TIMEOUT_MS });
+    await expect(
+      turn.locator('[data-used]'),
+      'the stored row brings a "Used:" line (an answer that used no tool has none, and cannot show W-2)',
+    ).toBeAttached({ timeout: STORED_ROW_TIMEOUT_MS });
     await page.waitForTimeout(AFTER_ROW_MS);
     const landed = await endReading(page, 'w2 document haiku, the stored row has landed');
     await page.waitForTimeout(STORED_SETTLE_MS);
@@ -114,8 +122,10 @@ test.describe('second sitting, W-1 and W-2 on the real page (WALK21_LIVE=1)', ()
     await expect(turn).toHaveAttribute('data-turn', 'done');
     await expect(turn.locator('[data-tier]')).toHaveText(BADGE_LOW);
     await expect(turn.locator('[data-used]')).toContainText('get_material_text');
-    expect(landed.used?.inside, 'the "Used:" line landed wholly inside the column\'s visible box (W-2)').toBe(true);
-    expect(settled.used?.inside, 'and it is still there once the page has settled').toBe(true);
+    // Before the line's place is read: a column with nothing to scroll proves nothing about W-2.
+    expectTallerThanColumn(landed, 'w2 document haiku');
+    expectUsedLineInside(landed, 'w2 document haiku', 'the "Used:" line landed wholly inside the column\'s visible box (W-2)');
+    expectUsedLineInside(settled, 'w2 document haiku', 'and it is still there once the page has settled');
     await expectDocumentFitsWindow(page, 'w2 document haiku');
   });
 
@@ -141,7 +151,8 @@ test.describe('second sitting, W-1 and W-2 on the real page (WALK21_LIVE=1)', ()
     if (settled.line !== null) {
       expect(settled.line.inside, "the line under the answer is wholly inside the column's visible box").toBe(true);
     } else {
-      expect(settled.used?.inside, 'the "Used:" line landed wholly inside the column\'s visible box (W-2)').toBe(true);
+      // No line under the answer: the last line is the "Used:" line, when the answer used a tool.
+      expectUsedLineInside(settled, 'long opus', 'the "Used:" line landed wholly inside the column\'s visible box (W-2)');
     }
     await expectDocumentFitsWindow(page, 'long opus');
   });

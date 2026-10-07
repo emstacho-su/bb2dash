@@ -202,6 +202,38 @@ export async function endReading(page: Page, label: string): Promise<EndReading>
   return reading;
 }
 
+/**
+ * W-2 shows only where something had to scroll: the column's content is taller than its visible
+ * box. In a column that holds the whole answer every line is "inside the box", whatever the page
+ * does when the stored row lands, so a short answer proves nothing. It fails the test by name: it
+ * is not a pass, and it is not W-2 failing (the third `/code-review`, R3-3).
+ */
+export function expectTallerThanColumn(reading: EndReading, label: string): void {
+  const { columnScrollHeight, columnClientHeight } = reading.layout;
+  expect(
+    columnScrollHeight,
+    `${label}: the answer was too short to show W-2. The column holds ${columnScrollHeight} px of content in a ` +
+      `${columnClientHeight} px box (the turn is ${reading.turnHeight} px), so nothing had to scroll. ` +
+      'This is not a pass and not a failure of W-2: ask again',
+  ).toBeGreaterThan(columnClientHeight);
+}
+
+/**
+ * The last turn's "Used:" line is wholly inside the column's visible box (W-2).
+ *
+ * A turn with no "Used:" line is named for what it is before the line is looked for: an answer
+ * that used no tool. That is not a failure of W-2; it is a turn with no such line to read W-2 on,
+ * and the test fails saying so, not on `undefined` (R3-3).
+ */
+export function expectUsedLineInside(reading: EndReading, label: string, message: string): void {
+  expect(
+    reading.used,
+    `${label}: the answer used no tool, so the turn has no "Used:" line. ` +
+      'This is not a failure of W-2: the turn has no such line to read W-2 on. Ask again',
+  ).not.toBeNull();
+  expect(reading.used?.inside, message).toBe(true);
+}
+
 /* ---------------------------------------------------------------------------
  * The retakes: a standing turn of the first sitting's archived conversation
  * ------------------------------------------------------------------------ */
