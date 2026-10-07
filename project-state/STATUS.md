@@ -970,7 +970,9 @@ is answered when the service is back.
 * **Suites at the phase head (2026-10-07):** web 2840 tests in 154 files (2427 at the cut), typecheck and lint
   clean; runner 810 tests; SQL `passed 67, failed 3, units 70`, the three failures being prod-data units that are
   not this phase's (Known issues); the container's two file-level suites 13 of 13 and 21 of 21; bb2dash-stack's
-  doctor tests 65 of 65 (52 before its fix round). `desktop/` is untouched.
+  doctor tests 65 of 65 (52 before its fix round). `desktop/` is untouched. Each figure, with the commit it was run
+  on, is in 102a under "The suites at the phase head"; the web run itself is quoted in `102_W66_VERIFICATION.md`
+  ("Walk defects W-1 and W-2", section 6).
 * **The transport (task 5, 2026-10-06):** in Stack's signed-in preview tab one broadcast reached the page about
   1.3 s after it was sent, with no reload (`walks/walk-21/01-realtime-spike.png`).
 * **The command line (task 9):** recorded on CLI 2.1.289. Every element of the frozen argv behaved as the Contract
@@ -1050,7 +1052,8 @@ Workspace's.
 
 **Not done yet:**
 1. **Both PRs** (task 25). The PM opens them together, with the preview link, right after this update, and then
-   stops at "ready when you say so".
+   stops at "ready when you say so". One thing bears on when the bb2dash PR opens: the screenshots question (item 2
+   of the six below).
 2. **Two things the walk did not show live.** Both are recorded as not shown, not as passed:
    * **The health check through a long answer (task 21 (d)).** The task wants the container read as healthy 60 s
      and 120 s into one answer, to show that an answer longer than the 90 s "alive" window does not make the service
@@ -1075,8 +1078,8 @@ Workspace's.
   PM reads the queue first), `just doctor`, stop and start the service once, and say "accepted". Two things to
   know going in. On a long answer the "Used:" line is at the answer's end; the column keeps it in view unless he
   has scrolled up. And step 4's answer is the one that showed asterisks in the PM's walk (item 3 below).
-* **Six things put to him. None is accepted on his behalf. None blocks the walk; the second needs his answer
-  before he says "merge":**
+* **Six things put to him. None is accepted on his behalf. None blocks the walk. The second has a clock on it: it
+  is best answered before the bb2dash PR opens, and it needs his answer before he says "merge":**
   1. **The firewall question.** The container's firewall allows addresses, not names, and the Supabase project sits
      on addresses Cloudflare shares. A program running inside the container could reach other Cloudflare-hosted
      sites through them. The assistant cannot do this; it would take code running inside the container, which
@@ -1084,10 +1087,38 @@ Workspace's.
      build the proxy? (DECISIONS 2026-10-07; section "Phase 14 deferred (R-96)" above, bullet "Hardening noted by
      the security reviews, below the bar".)
   2. **The walk's screenshots are in a public repository and show real answers.** The nine shots in
-     `docs/planning/sprint-2/walks/walk-21/` show a quoted syllabus sentence, slide summaries of two decks, and
-     three of his Inbox decisions (one with a quiz score, which the tracked decision log already holds). The brief
-     asks for the shots; whether quoted course text belongs in a public repository is his call. Keep them, or have
-     them replaced with cropped ones and the branch rewritten before the merge? (DECISIONS 2026-10-07.)
+     `docs/planning/sprint-2/walks/walk-21/`, read again file by file on 2026-10-07 as they stand after the retakes
+     (the list first given here was the first sitting's check's, made before five shots were taken again):
+     * `02-empty`: no answer. Like the seven other browser shots it shows his course list (seven course names).
+     * `03-lookup-haiku`: one sentence quoted from the IST.323 syllabus on late work, with the syllabus's file name.
+     * `04-decision-haiku`: that sentence again, and three of his Inbox decisions on ECN.304 Quiz 2 (434, 528 and
+       537) with their dates and the score, 6 of 8 (the tracked decision log already holds the score).
+     * `10-document-haiku`: the end of decision 537, and the section headings of the IST.323 syllabus.
+     * `11-standard-sonnet`: summaries of slides from two IST.352 decks, named by file and slide number.
+     * `05-deep-opus`: the start of a two-week ECN.304 study plan: the course's dates (two units with their class
+       days, Fall Break, "Exam 2 is Thu Nov 5"), slide-by-slide content of the Environmental Economics deck, and a
+       line drawn from his Inbox decision notes 538 and 545 on how ECN.304 quizzes are announced.
+     * `06-stopped`, `07-offline` and `08-desktop`: the end of a four-week ECN.304 study plan: which slides of each
+       deck were read, what `ECN304 F26 Exam1 Study Guide.pdf` says Exam 1 covers, and the line "Several quiz
+       questions above are adapted from it" (06 and 07 also show two of the plan's self-quiz questions).
+
+     **They are already public.** The repository is public (no forks), and the shots have been on pushed branches
+     since 2026-10-07: commit `29f107d` (the first sitting's nine) is on `origin/feat/workspace-21`,
+     `origin/feat/workspace-21-web` and `origin/feat/workspace-21-docs`, and `de6b28a` (the five retakes) is on the
+     first and the last. The first sitting's takes of 05, 06, 07, 08 and 11 are still in that history and show more
+     than today's files: 05 is the whole two-week plan with the required readings by title, and 11 is the whole
+     IST.352 answer.
+
+     **What a rewrite can and cannot undo.** Rewriting the branches takes the shots off them and keeps them out of
+     `main`'s history. It does not take them off GitHub: a commit that a rewrite drops stays reachable by its id,
+     and through any pull request that referenced it, until GitHub Support purges it (GitHub's guide "Removing
+     sensitive data from a repository"), and nothing recalls a copy already fetched. So a rewrite is cleanest
+     before the bb2dash PR exists. No PR has been opened from any of the three branches (read 2026-10-07).
+
+     The brief asks for the shots; whether quoted course text belongs in a public repository is his call. Keep
+     them, or have them replaced with cropped ones and the branches rewritten? The order is the PM's call and is
+     not made in this update: either this one question goes to him before the bb2dash PR opens, or the PR opens
+     and this item then says it was opened knowing the above. (DECISIONS 2026-10-07.)
   3. **One answer showed Markdown asterisks (W-3).** The answer to the decision question (acceptance step 4) had
      three lines wrapped in `**`. The page shows text exactly as typed (his O-5 answer) and the assistant is
      already asked for plain text. One answer of the first sitting's nine did not follow that; none of the second
@@ -1285,8 +1316,11 @@ Remaining advisor items: ~~7 pre-existing mutable `search_path` functions (`set_
   plan's limit is hit, and neither logs nor stores the figures. So the percentages are Stack's own read (`/usage`).
   Logging the two figures, one line per turn, is a follow-up.
 * **A plain run of Phase 21's walk spec shoots `02-empty.png` again**
-  (`npx playwright test -c e2e/playwright.config.ts walk21`: the one test that asks nothing runs by default). Run
-  the spec with `WALK21_ONLY` set, or put the file back from git afterwards. The kept shot is the first sitting's.
+  (`npx playwright test -c e2e/playwright.config.ts walk21`: the one test that asks nothing, `02 empty`, runs by
+  default). Setting `WALK21_ONLY` does not skip it: that test stands outside the live groups, so the variable is
+  not read for it. Either run one test by name with `-g "<its name>"` (every test but `02 empty` also needs
+  `WALK21_LIVE=1` and `WALK21_ONLY` set to that name), or put the file back from git afterwards. The kept shot is
+  the first sitting's.
 * **The harness checkout's installed `node_modules` still holds fastembed 2.1.0** under a lock file that says 2.1.1
   (`C:/Users/stack/agentic-harness/mcp-server`, since harness PR #40 merged on 2026-10-06). The host's `rag` server
   keeps working: the model already on disk stays valid either way. `npm ci` in that folder brings it level; it is
