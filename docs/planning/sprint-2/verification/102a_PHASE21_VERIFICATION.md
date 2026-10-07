@@ -2157,3 +2157,55 @@ Everything else in the sitting's list was done.
   09:45:29), `web/e2e/.results/`, `desktop/node_modules/`, `desktop/dist/`.
 * Four archived conversations (the first sitting's three and this sitting's one) beside 'spike',
   which is listed.
+
+## The retake sitting's independent check, and the PM's rulings on it (2026-10-07)
+
+A fresh agent opened the five retaken shots and the four kept ones, read the spec, and re-ran the
+reads (10:05 to 10:20 UTC). 06, 07 and 08 hold; 02, 03, 04 and 10 are the first sitting's files,
+byte for byte (02 was shot again by the closing run and put back from git). 17 of its 19 reads
+hold. The two that do not, and what it noted:
+
+* **11 and 05 show the badge and no "Used:" line**, and the record could not confirm whose ruling
+  "start" was. Ruled below.
+* **Task 20's values can no longer be re-read as equal, for a reason outside the Workspace**: a
+  real sync (`agent_requests` 2207, queued by the sync runner at 10:06:19 UTC, done 10:08:04) ran
+  after the sitting and marked `IST.323/quiz-06` and `quiz-07` graded. The sitting's own pair
+  (09:35:10 to 09:58:32) is equal, with no `agent_requests` row inside it, and no Workspace request
+  or message exists after 09:58:32. The record's line "no sync request yet" on 2026-10-07 is true
+  until 10:06.
+* The committed spec is two lines longer above `retake 11` than the file the logged runs used
+  (written again at 09:59:14, after the kept shots); it typechecks and lints, and the closing run
+  loaded it.
+* A plain `npx playwright test … walk21` run shoots `02-empty.png` again: run the spec with
+  `WALK21_ONLY`, as the sitting did, or put the file back from git.
+* A window-sized shot cannot by itself show W-1 is gone; the proof is the document-height
+  assertion before each shot (901 in a 900 px window in every run; 767 in 766 in the shell) and a
+  3000 px wheel turn outside the column moving the window 1 px.
+
+### W-S. Rulings (PM)
+
+* **Shots 11 and 05 stand as kept: the turn's start, with the question and the badge.** The
+  ruling was the PM's. The brief's row 22 (c) names the badge for those two shots and no "Used:"
+  line, and the PM's order for the sitting ("scroll to the turn's end") was wrong against it. The
+  "Used:" line of each turn is asserted by its text and is shown for other turns in 03, 04, 10,
+  06, 07 and 08.
+* **How the ruling reached the walker, said plainly.** The walker asked the PM by message. The
+  PM's reply did not go to the running walker: it started a second copy of the same agent in the
+  same worktree, which read the reply, edited the spec to "start" at 09:48:23 UTC and ran
+  `retake 05` once (09:48:54). The PM stopped that copy at 09:49:47 (the walker saw one of its own
+  commands end with exit 137 at that moment and went on). Two agents shared the worktree for two
+  minutes. Nothing was doubled: `workspace_requests` holds three requests for the sitting (399,
+  400, 401), no docker state changed in those two minutes, and the kept shots are the walker's
+  own runs: 11 at 09:49:47 and 05 at 09:50:42, which replaced the copy's take. A PM does not reply by message to an agent that
+  is still running a walk again: the agent takes its stated default and the PM rules afterwards.
+* **Task 21 (d) is recorded as not shown live.** Repeated once on a longer request, as the row
+  says: request 400 (Opus) ran 76.75 s. The 60 s reading counts (`healthy`, state `claimed`,
+  `polled_age_seconds` 2); the 120 s reading does not (the request was done). That the heartbeat
+  and the health check hold through a turn longer than the 90 s alive window is held by the
+  runner's tests on a fake clock, and by one live reading at 61 s. STATUS lists it.
+* **Two small things for STATUS, Known issues**: one 401 on a read of `agent_requests` on the first
+  page load after a fresh sign-in (seen once in each sitting, not a Workspace read, not looked
+  into); and in the desktop shell the window draws its own page scrollbar with 1 px of travel on
+  every screen (the app shell is 1 px taller than its window, the same on `main`).
+* **The walk as a whole spent twelve turns on Stack's plan** (nine in the first sitting, three in
+  the second) and the docker step's one smoke: thirteen.
