@@ -181,6 +181,22 @@ export function isStatementError(code: unknown): boolean {
   return !(code.startsWith('08') || code.startsWith('57P') || code === 'XX000');
 }
 
+/** The SQLSTATE classes of a failure that is the statement's own: data exception, integrity constraint violation, syntax error or access rule violation. */
+const OWN_FAILURE_CLASSES = ['22', '23', '42'] as const;
+
+/**
+ * True when the database refused a statement for what it is or holds (ruling Z1, R2-5): a value it
+ * cannot store, a constraint, a function it cannot call. The same statement gets the same answer,
+ * so it is not tried again. Narrower than `isStatementError`: a statement cut at its time limit
+ * (57014) leaves the session usable too, and may go through on another try. Never 22023, the
+ * functions' own refusal, which keeps the meaning `isRefusal` gives it.
+ */
+export function isBadStatement(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (typeof code !== 'string' || !isStatementError(code) || code === REFUSAL_SQLSTATE) return false;
+  return OWN_FAILURE_CLASSES.some((sqlClass) => code.startsWith(sqlClass));
+}
+
 /**
  * Bounds on the connection, so a database that cannot be reached fails a call instead of holding
  * it: the heartbeat then stops succeeding and the watchdog can do its work.

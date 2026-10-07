@@ -15,6 +15,12 @@
  * through with its reply lost is refused on the next try, and its request is still claimed. A
  * finish is tried again for 110 s before the answer is given up; a finish the function refuses
  * means the request is already closed.
+ *
+ * A statement the database refuses for what it is or holds (ruling Z1, R2-5; `isBadStatement`) is
+ * not tried again. A finish refused that way is followed by one minimal close of the request,
+ * `failed` / `cli_error` with nothing of the turn in it, so the request is not left claimed until
+ * the 10-minute sweep; if that call fails too it is logged and left. A begin refused that way goes
+ * straight to the close of a request that could not be begun.
  */
 
 import {
@@ -198,6 +204,14 @@ type Ending = { readonly state: 'done' | 'failed'; readonly errorCode: ErrorCode
 /** How the tries of a begin ended when it was not made. */
 type UnbegunEnd = Exclude<RetryEnd<string>, { readonly outcome: 'made' }>;
 
+/** Why a request is closed without having been begun, for the log. */
+const UNBEGUN_REASON: Record<UnbegunEnd['outcome'], string> = {
+  refused: 'begin refused after a failed try, its reply may have been lost',
+  bad_statement: 'begin refused by the database as a statement it cannot take, not tried again',
+  gave_up: 'begin could not be made',
+  stopped: 'begin could not be made',
+};
+
 function endingOf(stopCode: StopCode | null, collected: Collected): Ending {
   // A turn that produced a result is never stored as `timeout` (ruling V1, CR-5): the limit fell
   // while the CLI was being given its time to exit, and what its result line said stands. The
@@ -231,13 +245,36 @@ function storedCalls(calls: readonly StoredToolCall[], log: Log): readonly Store
   return kept;
 }
 
-/** Close the request, trying again while the database fails; one log line says how it ended. */
-async function finishWithRetry(rpc: WorkspaceRpc, args: FinishArgs, now: () => number, log: Log): Promise<void> {
+/**
+ * The one call that follows a finish the database refused for what it held (ruling Z1, R2-5): the
+ * request is closed with nothing of the turn in it. It is made once; whatever fails it, it is
+ * logged and left to the stale-claim sweep.
+ */
+async function closeMinimal(rpc: WorkspaceRpc, minimal: FinishArgs, log: Log): Promise<void> {
+  try {
+    await rpc.finish(minimal);
+    log(`closed as ${minimal.state} / ${minimal.errorCode ?? '-'} with no content and no tool calls: the answer is not stored`);
+  } catch (error) {
+    log(`the minimal close failed too, the stale-claim sweep closes the request: ${messageOf(error)}`);
+  }
+}
+
+/**
+ * Close the request, trying again while the database fails; one log line says how it ended. A
+ * finish the database refuses as a statement is followed by `minimal`, once. `minimal` is null
+ * when `args` is that close already: it is then logged and left, never sent a second time.
+ */
+async function finishWithRetry(rpc: WorkspaceRpc, args: FinishArgs, minimal: FinishArgs | null, now: () => number, log: Log): Promise<void> {
   const end = await retryDbCall(() => rpc.finish(args), { what: 'finish', log, now });
   if (end.outcome === 'made') {
     log(`finished state=${args.state} error=${args.errorCode ?? '-'} ms=${args.durationMs} tools=${args.toolCalls.length}`);
   } else if (end.outcome === 'refused') {
     log(`finish refused, the request is already closed: ${messageOf(end.error)}`);
+  } else if (end.outcome === 'bad_statement' && minimal !== null) {
+    log(`finish refused by the database as a statement it cannot take, not tried again: ${messageOf(end.error)}`);
+    await closeMinimal(rpc, minimal, log);
+  } else if (end.outcome === 'bad_statement') {
+    log(`the minimal close was refused by the database as a statement it cannot take, the stale-claim sweep closes the request: ${messageOf(end.error)}`);
   } else {
     const window = FINISH_RETRY_MS / MS_PER_SECOND;
     log(`finish given up after ${window} s, the answer is not stored and the stale-claim sweep closes the request: ${messageOf(end.error)}`);
@@ -261,11 +298,30 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
   /** Whole milliseconds since `startedAt`, a reading of `deps.now`, which counts fractions of one. */
   const elapsedMs = (startedAt: number): number => Math.round(deps.now() - startedAt);
 
-  /** The one `workspace_finish()` of the turn; `finishingSince()` is set while it is being made. */
-  async function finish(args: FinishArgs): Promise<void> {
+  /**
+   * A close with nothing of a turn in it: no content, no tool calls, no cost, no model, and the
+   * session id the claim came with, so the conversation keeps the session it had.
+   */
+  const emptyClose = (errorCode: ErrorCode, durationMs: number): FinishArgs => ({
+    requestId: claim.requestId,
+    state: 'failed',
+    content: '',
+    toolCalls: [],
+    errorCode,
+    costUsd: null,
+    durationMs,
+    claudeSessionId: claim.claudeSessionId,
+    model: null,
+  });
+
+  /**
+   * The one `workspace_finish()` of the turn, and `minimal` after it when the database refuses it
+   * as a statement; `finishingSince()` is set while they are being made.
+   */
+  async function finish(args: FinishArgs, minimal: FinishArgs | null): Promise<void> {
     finishing.since = deps.now();
     try {
-      await finishWithRetry(deps.rpc, args, deps.now, log);
+      await finishWithRetry(deps.rpc, args, minimal, deps.now, log);
     } finally {
       finishing.since = null;
     }
@@ -273,26 +329,16 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
 
   /**
    * Begin did not go through as far as the runner can tell, nothing ran, and the request may still
-   * be claimed: every try failed, the runner's own stop ended the tries, or the function refused a
-   * try that followed a failed one. It is closed under the runner's own stop when there is one, as
-   * `cli_error` otherwise.
+   * be claimed: every try failed, the runner's own stop ended the tries, the function refused a try
+   * that followed a failed one, or the database refused the statement itself. It is closed under
+   * the runner's own stop when there is one, as `cli_error` otherwise.
    */
   async function closeUnbegun(startedAt: number, end: UnbegunEnd): Promise<TurnOutcome> {
-    const ending: Ending = { state: 'failed', errorCode: stopped.code ?? 'cli_error' };
-    const why = end.outcome === 'refused' ? 'begin refused after a failed try, its reply may have been lost' : 'begin could not be made';
-    log(`${why}, nothing ran; closing the request as ${ending.errorCode}: ${messageOf(end.error)}`);
-    await finish({
-      requestId: claim.requestId,
-      state: ending.state,
-      content: '',
-      toolCalls: [],
-      errorCode: ending.errorCode,
-      costUsd: null,
-      durationMs: elapsedMs(startedAt),
-      claudeSessionId: claim.claudeSessionId,
-      model: null,
-    });
-    return ending;
+    const errorCode: ErrorCode = stopped.code ?? 'cli_error';
+    log(`${UNBEGUN_REASON[end.outcome]}, nothing ran; closing the request as ${errorCode}: ${messageOf(end.error)}`);
+    // This close is the minimal one already, so nothing follows it when the database refuses it.
+    await finish(emptyClose(errorCode, elapsedMs(startedAt)), null);
+    return { state: 'failed', errorCode };
   }
 
   async function run(): Promise<TurnOutcome> {
@@ -336,19 +382,21 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
     await streamer.drain();
 
     const ending = endingOf(stopped.code, collected);
-    await finish({
+    const durationMs = elapsedMs(startedAt);
+    const answer: FinishArgs = {
       requestId: claim.requestId,
       state: ending.state,
       content: storedContent(collected.content, ending, deps.budgetCapHolds, log),
       toolCalls: storedCalls(collected.calls, log),
       errorCode: ending.errorCode,
       costUsd: collected.result?.costUsd ?? null,
-      durationMs: elapsedMs(startedAt),
+      durationMs,
       // `workspace_finish()` stamps what it is given, so a turn that reported no session (nothing
       // started) hands back the stored id: the conversation keeps its session for the next turn.
       claudeSessionId: collected.result?.claudeSessionId ?? claim.claudeSessionId,
       model: collected.result?.model ?? null,
-    });
+    };
+    await finish(answer, emptyClose('cli_error', durationMs));
     return ending;
   }
 

@@ -286,6 +286,20 @@ describe('workspace_begin refused as a statement the database cannot take (rulin
     expect(fake.finishes[0]).toMatchObject({ requestId: '41', state: 'failed', errorCode: 'cli_error', content: '' });
   });
 
+  // That close is the minimal one already: refused as a statement, it is the "close that fails too".
+  it('sends that close once when the database refuses it as a statement too: no second minimal close, one line, the sweep is left to close it', async () => {
+    const { fake, logs, deps } = turnHarness(scriptedTurn([result(10)]).turn);
+    fake.failBegin(dbError('22P05'));
+    fake.failFinish(Number.POSITIVE_INFINITY, dbError('23514', 'violates check constraint'));
+    const outcome = outcomeOf(startTurn(deps, claimOf()));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(outcome.value).toEqual({ state: 'failed', errorCode: 'cli_error' });
+    await vi.advanceTimersByTimeAsync(FINISH_RETRY_MS + 5000);
+    expect(fake.finishTries).toHaveLength(1);
+    expect(logs.filter((line) => /request=41/.test(line) && /minimal close was refused/.test(line) && /stale-claim sweep/.test(line))).toHaveLength(1);
+    expect(logs.some((line) => /finish refused by the database/.test(line))).toBe(false);
+  });
+
   it('still tries a begin again after a statement cut at its time limit', async () => {
     const scripted = scriptedTurn([delta(10, 'the answer'), result(20)]);
     const { fake, deps } = turnHarness(scripted.turn);
