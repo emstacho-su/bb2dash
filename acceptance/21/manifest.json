@@ -1,0 +1,203 @@
+{
+  "schema": 1,
+  "phase": "21",
+  "base_url": "https://web-xi-ten-uy9xk6c6p0.vercel.app",
+  "stages": [
+    { "id": "prepare", "kind": "prepare" },
+    {
+      "id": "go-live",
+      "kind": "host",
+      "actions": [
+        { "action": "runner.record" },
+        { "action": "db.proof", "with": { "name": "planner-fingerprint", "save": "planner_before" } },
+        { "action": "workspace.stopTestRunner", "with": { "container": "bb2dash-wt21-workspace-1" } },
+        { "action": "workspace.ensureProfile" },
+        { "action": "workspace.start" },
+        { "action": "workspace.doctorRow" }
+      ]
+    },
+    {
+      "id": "walk",
+      "kind": "sandbox",
+      "tests": [
+        "2 open",
+        "3 lookup haiku",
+        "4 decision haiku",
+        "5 document haiku",
+        "6 standard sonnet",
+        "7 deep opus",
+        "8 stopped",
+        "9 reload mid-answer"
+      ]
+    },
+    {
+      "id": "walk-proofs",
+      "kind": "host",
+      "actions": [
+        { "action": "db.proof", "with": { "name": "turn", "request": "carry:3.request_id", "tier": "low", "tool": "search_materials" } },
+        {
+          "action": "db.proof",
+          "with": { "name": "turn", "request": "carry:4.request_id", "tier": "low", "tool": "search_context", "scope": "bb2dash-inbox-decisions" }
+        },
+        { "action": "db.proof", "with": { "name": "turn", "request": "carry:5.request_id", "tier": "low", "tool": "get_material_text" } },
+        { "action": "db.proof", "with": { "name": "turn", "request": "carry:6.request_id", "tier": "mid" } },
+        { "action": "db.proof", "with": { "name": "turn", "request": "carry:7.request_id", "tier": "high" } },
+        { "action": "db.proof", "with": { "name": "turn-stopped", "request": "carry:8.request_id" } },
+        { "action": "db.proof", "with": { "name": "turn", "request": "carry:9.request_id", "tier": "high" } },
+        { "action": "workspace.noApiKey" },
+        { "action": "workspace.credentialSource", "with": { "request": "carry:9.request_id" } },
+        { "action": "db.proof", "with": { "name": "planner-unchanged", "before": "carry:planner_before.fingerprint" } }
+      ]
+    },
+    { "id": "stop", "kind": "host", "actions": [{ "action": "workspace.stop" }] },
+    { "id": "offline", "kind": "sandbox", "tests": ["14a offline"], "deadline": { "after": "workspace.stop", "seconds": 180 } },
+    { "id": "start", "kind": "host", "actions": [{ "action": "workspace.startNoBuild" }] },
+    { "id": "back", "kind": "sandbox", "tests": ["14b back", "15 archive"] },
+    {
+      "id": "back-proofs",
+      "kind": "host",
+      "actions": [
+        { "action": "db.proof", "with": { "name": "turn-answered-after", "request": "carry:14a.request_id", "after": "carry:14a.still_queued_at" } },
+        { "action": "db.proof", "with": { "name": "spike-archived" } },
+        { "action": "db.proof", "with": { "name": "conversations-archived", "ids": "carry:3.conversation_id" } }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "1",
+      "kind": "human",
+      "text": "Usage credits are off (claude.ai, Settings, Usage), and the plan's session and weekly percentages from /usage. Stack's to read: the run does not check it."
+    },
+    {
+      "id": "2",
+      "kind": "auto",
+      "text": "Open Workspace from the top bar on the live site.",
+      "stage": "walk",
+      "test": "2 open",
+      "evidence": ["2-open.png", "2.json"]
+    },
+    {
+      "id": "2-desktop",
+      "kind": "waived",
+      "text": "The desktop-window half of step 2 is not run again: the shot from the PM's walk of 2026-10-07 stands.",
+      "stands_on": "docs/planning/sprint-2/walks/walk-21/08-desktop.png"
+    },
+    {
+      "id": "3",
+      "kind": "auto",
+      "text": "The syllabus lookup: the badge reads Haiku, the Used line names search_materials, and the answer names the file it read.",
+      "stage": "walk",
+      "test": "3 lookup haiku",
+      "evidence": ["3-start.png", "3-end.png", "3.json"],
+      "proofs": [{ "name": "turn", "with": { "request": "carry:3.request_id", "tier": "low", "tool": "search_materials" } }]
+    },
+    {
+      "id": "4",
+      "kind": "auto",
+      "text": "The decision lookup: Haiku, and the Used line names search_context in the inbox-decisions collection.",
+      "stage": "walk",
+      "test": "4 decision haiku",
+      "evidence": ["4-start.png", "4-end.png", "4.json"],
+      "proofs": [
+        { "name": "turn", "with": { "request": "carry:4.request_id", "tier": "low", "tool": "search_context", "scope": "bb2dash-inbox-decisions" } }
+      ]
+    },
+    {
+      "id": "5",
+      "kind": "auto",
+      "text": "The document pull: Haiku, and the Used line names get_material_text.",
+      "stage": "walk",
+      "test": "5 document haiku",
+      "evidence": ["5-start.png", "5-end.png", "5.json"],
+      "proofs": [{ "name": "turn", "with": { "request": "carry:5.request_id", "tier": "low", "tool": "get_material_text" } }]
+    },
+    {
+      "id": "6",
+      "kind": "auto",
+      "text": "The middle-tier question: the badge reads Sonnet, standard.",
+      "stage": "walk",
+      "test": "6 standard sonnet",
+      "evidence": ["6-start.png", "6-end.png", "6.json"],
+      "proofs": [{ "name": "turn", "with": { "request": "carry:6.request_id", "tier": "mid" } }]
+    },
+    {
+      "id": "7",
+      "kind": "auto",
+      "text": "The study-plan question: the badge reads Opus.",
+      "stage": "walk",
+      "test": "7 deep opus",
+      "evidence": ["7-start.png", "7-end.png", "7.json"],
+      "proofs": [{ "name": "turn", "with": { "request": "carry:7.request_id", "tier": "high" } }]
+    },
+    {
+      "id": "8",
+      "kind": "auto",
+      "text": "Asked again and stopped part-way: the answer ends and says it was stopped.",
+      "stage": "walk",
+      "test": "8 stopped",
+      "evidence": ["8-stopped.png", "8.json"],
+      "proofs": [{ "name": "turn-stopped", "with": { "request": "carry:8.request_id" } }]
+    },
+    {
+      "id": "9",
+      "kind": "auto",
+      "text": "Asked a third time and reloaded mid-answer: the page says it is answering, shows no half-written text, and then holds the finished answer.",
+      "stage": "walk",
+      "test": "9 reload mid-answer",
+      "evidence": ["9-reloaded.png", "9-end.png", "9.json"],
+      "proofs": [{ "name": "turn", "with": { "request": "carry:9.request_id", "tier": "high" } }]
+    },
+    {
+      "id": "10",
+      "kind": "host",
+      "text": "No API key is present in the Workspace container, and the runner's log for step 9's question reads credential_source=none.",
+      "stage": "walk-proofs",
+      "actions": ["workspace.noApiKey", "workspace.credentialSource"]
+    },
+    {
+      "id": "11",
+      "kind": "host",
+      "text": "The planner is as it was before the walk, and no sync or Inbox apply ran in between (if one did, the run is blocked and is repeated).",
+      "stage": "walk-proofs",
+      "proofs": [{ "name": "planner-unchanged", "with": { "before": "carry:planner_before.fingerprint" } }]
+    },
+    { "id": "12", "kind": "waived", "text": "Stack's word to merge: overtaken by the merge of 2026-10-07." },
+    {
+      "id": "13",
+      "kind": "host",
+      "text": "The old test runner is stopped, the workspace profile line is in place, the Workspace is started alone, and the doctor's workspace row is green.",
+      "stage": "go-live",
+      "actions": ["workspace.stopTestRunner", "workspace.ensureProfile", "workspace.start", "workspace.doctorRow"]
+    },
+    {
+      "id": "14a",
+      "kind": "auto",
+      "text": "With the Workspace stopped the page says the service is offline within three minutes, and a question asked then waits.",
+      "stage": "offline",
+      "test": "14a offline",
+      "evidence": ["14a-offline.png", "14a-queued.png", "14a.json"]
+    },
+    {
+      "id": "14b",
+      "kind": "auto",
+      "text": "With the Workspace started again, the question that waited is answered.",
+      "stage": "back",
+      "test": "14b back",
+      "evidence": ["14b-start.png", "14b-end.png", "14b.json"],
+      "proofs": [{ "name": "turn-answered-after", "with": { "request": "carry:14a.request_id", "after": "carry:14a.still_queued_at" } }]
+    },
+    {
+      "id": "15",
+      "kind": "auto",
+      "text": "The spike conversation and the run's own conversation are archived through the page, and the list no longer shows them.",
+      "stage": "back",
+      "test": "15 archive",
+      "evidence": ["15-before.png", "15-after.png", "15-archived.png", "15.json"],
+      "proofs": [
+        { "name": "spike-archived" },
+        { "name": "conversations-archived", "with": { "ids": "carry:3.conversation_id" } }
+      ]
+    }
+  ]
+}
