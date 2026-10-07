@@ -44,7 +44,7 @@ const SCROLL_SETTLE_MS = 300;
 /** One wheel turn outside the column, far longer than the window. */
 const WHEEL_PX = 3000;
 /** A device-scaled shot may round each side by a pixel. */
-export const SHOT_ROUNDING_PX = 2;
+const SHOT_ROUNDING_PX = 2;
 
 /* ---------------------------------------------------------------------------
  * W-1: the document against its window
@@ -138,7 +138,7 @@ function pngSize(path: string): { width: number; height: number } {
 /**
  * Runs the shot's assertions, then shoots the window as it is: not the page, and nothing resized.
  * A failed assertion saves the window as `<name>-FAIL.png` and rethrows. The file is then read
- * back from disk, and the window is read from the page, for the caller to compare.
+ * back from disk, and the window is read from the page, for `expectShotIsTheWindow`.
  */
 export async function shootWindowAfter(page: Page, name: string, assertions: () => Promise<void>): Promise<WindowShot> {
   try {
@@ -158,9 +158,24 @@ export async function shootWindowAfter(page: Page, name: string, assertions: () 
 }
 
 /**
+ * The file on disk is the window the page reports, side for side: its CSS pixels times its device
+ * pixel ratio. A shot of the whole page is as tall as the document, and fails here. At a whole
+ * ratio the sizes are equal; at a fractional one each side may round (`SHOT_ROUNDING_PX`).
+ *
+ * This compares two things the test did not make, the file and the page's own numbers (the third
+ * `/code-review`, R3-8: it was the file against the constant the test had just set).
+ */
+export function expectShotIsTheWindow(shot: WindowShot): void {
+  const slack = Number.isInteger(shot.devicePixelRatio) ? 0 : SHOT_ROUNDING_PX;
+  const told = `the shot is the window, not the page: ${JSON.stringify(shot)}`;
+  expect(Math.abs(shot.width - shot.windowWidth * shot.devicePixelRatio), told).toBeLessThanOrEqual(slack);
+  expect(Math.abs(shot.height - shot.windowHeight * shot.devicePixelRatio), told).toBeLessThanOrEqual(slack);
+}
+
+/**
  * Runs the shot's assertions, then shoots the window: 1440 by 900, not the page. A failed
  * assertion saves the window as `<name>-FAIL.png` and rethrows. The file is then read back:
- * a shot that is not the window's size fails the test.
+ * a shot that is not the size of the window the page reports fails the test.
  */
 export async function assertThenShootWindow(page: Page, name: string, assertions: () => Promise<void>): Promise<void> {
   const shot = await shootWindowAfter(page, name, async () => {
@@ -168,7 +183,7 @@ export async function assertThenShootWindow(page: Page, name: string, assertions
     await assertions();
   });
   console.log(`[walk21] ${name} shot at ${utcNow()}, ${shot.width} by ${shot.height}`);
-  expect({ width: shot.width, height: shot.height }, 'the shot is the window, not the page').toEqual(VIEWPORT);
+  expectShotIsTheWindow(shot);
 }
 
 /* ---------------------------------------------------------------------------

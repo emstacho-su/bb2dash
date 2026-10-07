@@ -126,10 +126,10 @@ import {
   signInToShell,
 } from './walk21.desktop';
 import {
-  SHOT_ROUNDING_PX,
   assertThenShootWindow,
   endReading,
   expectDocumentFitsWindow,
+  expectShotIsTheWindow,
   shootWindowAfter,
 } from './walk21.window';
 
@@ -406,10 +406,7 @@ test.describe('the desktop shell (WALK21_LIVE=1)', () => {
         expectOwnProfile(facts, shell.userDataDir);
         await expectConversationInShell(window, row, start, DESKTOP_SHOT);
       });
-      expect(
-        Math.abs(shot.height - shot.windowHeight * shot.devicePixelRatio),
-        'the shot is the window, not the page',
-      ).toBeLessThanOrEqual(SHOT_ROUNDING_PX);
+      expectShotIsTheWindow(shot);
       const printed = await desktopShotFacts(window, facts, shell.userDataDir, shot);
       console.log(`[walk21] ${DESKTOP_SHOT} shot at ${utcNow()} in a second shell instance: ${JSON.stringify(printed)}`);
     } finally {
