@@ -5,7 +5,8 @@
 --      not, with claim_attempts; never another claimant's row, never a closed one
 --   2. (item 6) sync_close(..., 'failed', ...) on a registered request whose run is still running
 --      marks the run failed with the error in notes; a run that already folded keeps its status
---   3. privileges: sync_runner executes the thirteen; anon and authenticated execute none
+--   3. privileges: sync_runner executes the fourteen (the thirteen and 180's
+--      sync_request_inbox_apply); anon and authenticated execute none
 --
 -- Every call is made under `set local role sync_runner` (094). RUN IT:
 -- `node scripts/db-test.mjs --only phase14_093_review_fixes.sql`. NOTHING IS COMMITTED.
@@ -130,7 +131,7 @@ begin
 end $$;
 
 -- =============================================================================================
--- 3. Privileges: the thirteen, and nobody else
+-- 3. Privileges: the fourteen, and nobody else
 -- =============================================================================================
 do $$
 begin
@@ -140,9 +141,9 @@ begin
          and has_function_privilege('sync_runner', p.oid, 'execute'))
      is distinct from
      'sync_claim,sync_close,sync_enqueue,sync_file_stored,sync_file_worklist,sync_login_ok,'
-     'sync_login_required,sync_next,sync_own_claims,sync_register_run,sync_requeue_orphans,'
-     'sync_run_outcome,sync_sweep_stale' then
-    raise exception 'FAIL 3: sync_runner does not execute exactly the thirteen';
+     'sync_login_required,sync_next,sync_own_claims,sync_register_run,sync_request_inbox_apply,'
+     'sync_requeue_orphans,sync_run_outcome,sync_sweep_stale' then
+    raise exception 'FAIL 3: sync_runner does not execute exactly the fourteen';
   end if;
   if has_function_privilege('anon', 'public.sync_own_claims()', 'execute')
      or has_function_privilege('authenticated', 'public.sync_own_claims()', 'execute')
