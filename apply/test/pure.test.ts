@@ -4,7 +4,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { BATCH_MAX_ITEMS, RUN_BUDGET_DEFAULT_USD, assertApplyDsn, loadConfig, parseRunBudget, PATHS } from '../src/config.js';
-import { parsePrepared, planBatch, templatedBucket, templatedDecision, type QueueRow } from '../src/batch.js';
+import { parsePrepared, planBatch, templatedBucket, templatedDecision as decisionOf, templatedRecord, type QueueRow } from '../src/batch.js';
+
+/** The record of a row the worker archives itself; the bucket named is the one the test expects it to get. */
+function templatedDecision(row: QueueRow, bucket: string, requestId: number): Record<string, unknown> {
+  const record = templatedRecord(row);
+  if (record === null || record.bucket !== bucket) throw new Error(`expected a ${bucket} row, got ${record?.bucket ?? 'a row for a reader'}`);
+  return decisionOf(record, requestId);
+}
 import { checkQuery, checkWrite } from '../src/mcp-sql/guard.js';
 import { lex, statements } from '../src/mcp-sql/lexer.js';
 import { decide } from '../src/hooks/gate-rules.js';
@@ -127,20 +134,19 @@ describe('the batch', () => {
     // His pick is on the file: the fold applied it (123, 163).
     expect(templatedBucket(sessionRow({}))).toBe('applied_by_transform');
     expect(templatedDecision(sessionRow({}), 'applied_by_transform', 9).rule).toBe(
-      'link_file_sessions set session 45 on file 2489 from this answer (migrations 123, 163).',
+      'File 2489 carries session 45, his pick, set by link_file_sessions (migrations 123, 163).',
     );
     // "None": the file stays unlinked, which is the answer applied.
     const none = sessionRow({ pick: null, file_session_id: null }, { accept: 'none' });
     expect(templatedBucket(none)).toBe('applied_by_transform');
-    expect(templatedDecision(none, 'applied_by_transform', 9).rule).toMatch(/^Answered none: link_file_sessions leaves file 2489 unlinked/);
-    // Answered since the last fold: the fold reads an archived answer too (163).
-    const pending = sessionRow({ file_session_id: null });
-    expect(templatedBucket(pending)).toBe('applied_by_transform');
-    expect(templatedDecision(pending, 'applied_by_transform', 9).rule).toMatch(/^File 2489 is not linked yet: link_file_sessions reads this answer at the next sync/);
+    expect(templatedDecision(none, 'applied_by_transform', 9).rule).toMatch(/^Answered none: file 2489 is unlinked/);
   });
 
   it('sends a session answer to a reader when it carries a note or the file does not agree with it', () => {
     expect(templatedBucket(sessionRow({}, { has_note: true }))).toBeNull();
+    // A pick that is not on the file: answered since the last fold, or declined by one that read
+    // it. The row cannot say which, so nothing is recorded on a promise.
+    expect(templatedBucket(sessionRow({ file_session_id: null }))).toBeNull();
     // The file carries another session than the one he picked.
     expect(templatedBucket(sessionRow({ file_session_id: 44 }))).toBeNull();
     // "None", and the file is linked all the same.
@@ -343,6 +349,10 @@ describe('the tool gate', () => {
     expect(write({ item: 0 })).toMatch(/item must be the item id/);
     expect(write({ record: 'confirmed' })).toMatch(/record must be the inbox-decision\/1 object/);
     expect(write({ record: { change: 'x'.repeat(20_001) } })).toMatch(/the record is longer than/);
+    // "Closed itself" is how a question nobody answered is archived: on Stack's answer it would
+    // make link_file_sessions read the answer as never given (163).
+    expect(write({ record: { change: 'recorded only', closed_itself: true } })).toMatch(/the record may not carry closed_itself/);
+    expect(write({ record: { change: 'recorded only', closed_itself: false } })).toMatch(/the record may not carry closed_itself/);
     expect(allowed({ tool_name: 'mcp__db__apply_item', agent_type: 'inbox-writer', tool_input: null })).toMatch(/the arguments are not an object/);
   });
 

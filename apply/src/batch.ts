@@ -6,7 +6,7 @@
  * dismissed, or a notice about a request, and carrying no note. A note can ask for more than the bucket says ("keep mine, and
  * mark it submitted"), so any row with a note goes to Claude. A session answer ("which class is
  * this file for?") is the transform's to apply, in `link_file_sessions`, and the role cannot write
- * `bb_files`: when the file shows what the fold did with the answer, the worker records it too
+ * `bb_files`: when the file shows the fold did what the answer says, the worker records it too
  * (migration 185 sends the file's link with the row). Of the rest, at most
  * `BATCH_MAX_ITEMS` go to Claude in this run; the close files a follow-up for what is left.
  */
@@ -58,6 +58,8 @@ export interface Prepared {
 export interface Templated {
   readonly row: QueueRow;
   readonly bucket: TemplatedBucket;
+  /** Why no reading was needed: the `rule` of the row's record. */
+  readonly rule: string;
 }
 
 export interface BatchPlan {
@@ -133,53 +135,49 @@ export function parsePrepared(value: unknown): Prepared {
 const ACCEPT_NONE = 'none';
 
 /**
- * What `link_file_sessions` did, or will do, with a session answer, when the file's own row says
- * so; null when the file and the answer disagree, and somebody has to read it.
+ * What the file's own row shows `link_file_sessions` did with a session answer; null when the
+ * file does not show it, and somebody has to read the item.
  *
- * The fold applies a pick only while the file is unlinked, reads an answer from an archived row
- * too (163), and leaves a "none" unlinked without asking again.
+ * Only what is already true is recorded here. A pick that is not on the file yet is one of two
+ * things the row cannot tell apart: answered since the last fold (the next one sets it, from an
+ * archived row too, 163), or declined by a fold that has already read it (the week's classes are
+ * no longer the ones he was shown). That one gets a reader.
  */
 function sessionLinkRule(row: QueueRow): string | null {
   const link = row.sessionLink;
   if (link === null || row.state !== 'resolved' || !link.fileCurrent) return null;
   if (link.pick === null) {
     return row.accept === ACCEPT_NONE && link.fileSessionId === null
-      ? `Answered none: link_file_sessions leaves file ${link.fileId} unlinked and does not ask again while the week's classes stay as shown (migrations 123, 163).`
+      ? `Answered none: file ${link.fileId} is unlinked, as link_file_sessions leaves it (migrations 123, 163).`
       : null;
   }
-  if (link.fileSessionId === link.pick) {
-    return `link_file_sessions set session ${link.pick} on file ${link.fileId} from this answer (migrations 123, 163).`;
-  }
-  return link.fileSessionId === null
-    ? `File ${link.fileId} is not linked yet: link_file_sessions reads this answer at the next sync, from an archived row too (migration 163), and sets session ${link.pick} while the week's classes stay as shown.`
+  return link.fileSessionId === link.pick
+    ? `File ${link.fileId} carries session ${link.pick}, his pick, set by link_file_sessions (migrations 123, 163).`
     : null;
 }
 
-/** The bucket of a row the worker can record without reading anything, or null. */
-export function templatedBucket(row: QueueRow): TemplatedBucket | null {
+/** The bucket and the rule of a row the worker can record without reading anything, or null. */
+export function templatedRecord(row: QueueRow): Templated | null {
+  const as = (bucket: TemplatedBucket, rule: string): Templated => ({ row, bucket, rule });
   if (row.hasNote) return null;
-  if (row.wasApplied) return 'applied_by_transform';
-  if (sessionLinkRule(row) !== null) return 'applied_by_transform';
-  if (row.kind === 'conflict' && row.accept === 'keep') return 'kept';
-  if (row.state === 'dismissed') return 'dismissed';
+  if (row.wasApplied) return as('applied_by_transform', `Applied by apply_resolutions()${row.appliedAt === null ? '' : ` at ${row.appliedAt}`}.`);
+  const sessionRule = sessionLinkRule(row);
+  if (sessionRule !== null) return as('applied_by_transform', sessionRule);
+  if (row.kind === 'conflict' && row.accept === 'keep') return as('kept', 'Keep mine stands until Blackboard changes the value (attention_keep_stands).');
+  if (row.state === 'dismissed') return as('dismissed', 'Dismissed without a note.');
   // A confirmed notice ("the apply run failed", "log in again") asks for no row change: a full
   // Sonnet and Opus run to archive it would spend one of the day's runs on nothing.
-  if (row.entity === NOTICE_ENTITY) return 'recorded_elsewhere';
+  if (row.entity === NOTICE_ENTITY) return as('recorded_elsewhere', 'A notice about a request, acknowledged; it names no course row, so nothing was changed.');
   return null;
 }
 
-const TEMPLATED_RULE: Readonly<Record<TemplatedBucket, (row: QueueRow) => string>> = Object.freeze({
-  applied_by_transform: (row) =>
-    row.wasApplied
-      ? `Applied by apply_resolutions()${row.appliedAt === null ? '' : ` at ${row.appliedAt}`}.`
-      : (sessionLinkRule(row) ?? 'Applied by the transform.'),
-  kept: () => 'Keep mine stands until Blackboard changes the value (attention_keep_stands).',
-  dismissed: () => 'Dismissed without a note.',
-  recorded_elsewhere: () => 'A notice about a request, acknowledged; it names no course row, so nothing was changed.',
-});
+/** The bucket alone, or null for a row that needs a reader. */
+export function templatedBucket(row: QueueRow): TemplatedBucket | null {
+  return templatedRecord(row)?.bucket ?? null;
+}
 
 /** The record of a row archived without Claude: the `inbox-decision/1` shape migration 181 checks. */
-export function templatedDecision(row: QueueRow, bucket: TemplatedBucket, requestId: number): Record<string, unknown> {
+export function templatedDecision({ row, bucket, rule }: Templated, requestId: number): Record<string, unknown> {
   return {
     schema: DECISION_SCHEMA,
     item: row.id,
@@ -191,7 +189,7 @@ export function templatedDecision(row: QueueRow, bucket: TemplatedBucket, reques
     ref: row.ref,
     question: row.question,
     change: 'recorded only',
-    rule: TEMPLATED_RULE[bucket](row),
+    rule,
     sources: ['apply worker (no reading needed)'],
     flagged: null,
   };
@@ -208,9 +206,9 @@ export function planBatch(prepared: Prepared, max: number = BATCH_MAX_ITEMS): Ba
       skipped.push(row.id);
       continue;
     }
-    const bucket = templatedBucket(row);
-    if (bucket === null) rest.push(row);
-    else templated.push({ row, bucket });
+    const record = templatedRecord(row);
+    if (record === null) rest.push(row);
+    else templated.push(record);
   }
   return {
     templated,
