@@ -58,6 +58,12 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   Search UIs must scrub/label PPTX `[notes]` speaker-note markers and `Page N` headers.
 * GUI: layout spec = the Nocturne artboards; CSS Modules + custom properties, no Tailwind.
   No fabricated numbers anywhere — no grade display until real gradebook data exists.
+* Workspace (Phase 21): a chat page at `/workspace`. A container runner answers each question with one
+  `claude -p` turn of the pinned CLI (2.1.289) on Stack's Claude subscription: no API key, never `--bare`,
+  never the Agent SDK. A heuristic router picks Haiku, Sonnet or Opus. **v1 is read-only**: the assistant's
+  tools are off, four read tools over the materials and the two bb2dash notes collections pass a gate, and
+  the runner's database login cannot reach planner state (`assignment_progress`, `reading_progress`) or a
+  fact table. Migrations 140–143 are frozen; a fix is a new migration in 144–149.
 
 ## Environment gotchas (cloud sessions)
 
@@ -76,3 +82,11 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   outside every repo; the service key's only home is `bb2dash_mcp_service_key` there. Never
   `docker compose up` or recreate `sync` while a sync is open, and never touch the `bb-profile` volume (it is
   the login). The Windows `/bb-sync` skill stays the fallback. Keep OS-bound code behind thin adapters.
+* Workspace service (Phase 21): `workspace` in `compose.yaml` sits behind `profiles: [workspace]`, so a plain
+  `up` never starts it; bb2dash-stack's `.env` turns it on (`COMPOSE_PROFILES=workspace`, acceptance step 13).
+  Before the merge it runs only as compose project `bb2dash-wt21` from a phase worktree, the service named in
+  every command. Its runner reaches the database only as the login role `workspace_runner`, through five
+  SECURITY DEFINER functions (`workspace_claim`, `workspace_begin`, `workspace_stream`, `workspace_finish`,
+  `workspace_heartbeat`; 142, 143), and the service mounts four secrets from `SECRETS_DIR` as files:
+  `workspace_runner_db_url`, `claude_oauth_token`, `bb2dash_mcp_service_key`, `harness_database_url` (the
+  last two could write; each is read only by its own MCP server, accepted for v1, DECISIONS 2026-10-05).

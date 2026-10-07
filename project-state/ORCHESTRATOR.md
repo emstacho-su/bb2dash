@@ -1,7 +1,7 @@
 # bb2dash — Orchestrator context
 
 > The document a PM session loads at the start of every sitting. Call it with `/bb2dash-pm`.
-> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-10-04** (Phase 14 merged 2026-10-04 on Stack's word, all four PRs, before acceptance; the sync container is live with his login; A1–A9 is his, in one sitting; §1 row 14, §4). Before that, **2026-10-03, evening** (sprint 2 audit `docs/planning/sprint-2/108_SPRINT2_AUDIT_2026-10-03.md`: §1 and §4 corrected to what `main` and prod show; Phase 14 is in flight in its own session with the container runner live against prod; Phase 18's owed list re-read against the syncs since 10-01; Stack's queue consolidated in 108 §5). Before that, **2026-10-03** (Phase 19 **merged 2026-10-03** on Stack's word as PR #60, 206ee3a, production deployed; worktrees and branches removed: migrations 130–139 and 170–172 live and md5-identical (138–139 round 2; 170–171 round 3 and 172 round 4 in the overflow block 170–179, DECISIONS); the PM drove it to the end with a self-paced loop over the task ledger `verification/99_PHASE19_LEDGER.md`, on Stack's 2026-10-03 word; task 27, the first register-first sync, is his next Sync). Before that, **2026-09-30** (Phase 20: PR-A #39 and harness PR-B #36 (+ #37) merged, PR-C open; V-2 walked in `101a_V2_VERIFICATION.md`, closed closed on Stack's word 2026-09-30; Session A's status in §6). Before that, **2026-09-30** (Phase 18 merged on Stack's word "merge this phase" **before its gate sync**: migrations 120–129 live, 160 opening Phase 18's overflow block 160–169 for the review fix; tasks 16–19, 26, 28 and task 14's 48 h re-read owed to the first `/bb-sync` on `main`, which is now the gate; Phase 17 merged as PR #43). Before that, **2026-09-30** (Phase 17 built on `feat/web-polish-17`, PR open, not merged: migrations 110–119 and 150 live and md5-identical, 150 opening Phase 17's overflow block 150–159; round-3 walk 24/24 on the preview; waiting on Stack's T-24 and T-26 sittings and his look at round 3). Before that, **2026-09-29** (PRs #30 Phase 15, #31 logon build + the `estac` → `stack` path pass, and #32 sync file pull merged on Stack's word; R1 done and its gate-out green on `main`, so R3 and R4 are open; every live path reads `C:/Users/stack/...`; Task 0 started 15:25Z). Before that, **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
+> Updated with each phase PR, like STATUS and DECISIONS. Last update: **2026-10-07** (Phase 21, the Workspace, is built on `feat/workspace-21` in bb2dash and bb2dash-stack and is not merged; no PR is open yet: migrations 140–143 live and byte-identical, the image built and proven as test project `bb2dash-wt21`, both reviews run with no HIGH finding open and three MEDIUM ones left for one more runner fix round (ruling Z1 in 102a); that round and the PM's walk come next, then both PRs, then Stack's 15-step acceptance after Phase 14's own; §1 row 21, §2 rules 5 and 6, §4, §6 D2). Before that, **2026-10-04** (Phase 14 merged 2026-10-04 on Stack's word, all four PRs, before acceptance; the sync container is live with his login; A1–A9 is his, in one sitting; §1 row 14, §4). Before that, **2026-10-03, evening** (sprint 2 audit `docs/planning/sprint-2/108_SPRINT2_AUDIT_2026-10-03.md`: §1 and §4 corrected to what `main` and prod show; Phase 14 is in flight in its own session with the container runner live against prod; Phase 18's owed list re-read against the syncs since 10-01; Stack's queue consolidated in 108 §5). Before that, **2026-10-03** (Phase 19 **merged 2026-10-03** on Stack's word as PR #60, 206ee3a, production deployed; worktrees and branches removed: migrations 130–139 and 170–172 live and md5-identical (138–139 round 2; 170–171 round 3 and 172 round 4 in the overflow block 170–179, DECISIONS); the PM drove it to the end with a self-paced loop over the task ledger `verification/99_PHASE19_LEDGER.md`, on Stack's 2026-10-03 word; task 27, the first register-first sync, is his next Sync). Before that, **2026-09-30** (Phase 20: PR-A #39 and harness PR-B #36 (+ #37) merged, PR-C open; V-2 walked in `101a_V2_VERIFICATION.md`, closed closed on Stack's word 2026-09-30; Session A's status in §6). Before that, **2026-09-30** (Phase 18 merged on Stack's word "merge this phase" **before its gate sync**: migrations 120–129 live, 160 opening Phase 18's overflow block 160–169 for the review fix; tasks 16–19, 26, 28 and task 14's 48 h re-read owed to the first `/bb-sync` on `main`, which is now the gate; Phase 17 merged as PR #43). Before that, **2026-09-30** (Phase 17 built on `feat/web-polish-17`, PR open, not merged: migrations 110–119 and 150 live and md5-identical, 150 opening Phase 17's overflow block 150–159; round-3 walk 24/24 on the preview; waiting on Stack's T-24 and T-26 sittings and his look at round 3). Before that, **2026-09-29** (PRs #30 Phase 15, #31 logon build + the `estac` → `stack` path pass, and #32 sync file pull merged on Stack's word; R1 done and its gate-out green on `main`, so R3 and R4 are open; every live path reads `C:/Users/stack/...`; Task 0 started 15:25Z). Before that, **2026-09-27** (PR #28 merged as 67269b5; the briefs verified in three
 > rounds, record `105_BRIEF_VERIFICATION_2026-09-27.md`; §6's prompts rewritten to them). Before that, **2026-09-24** (**sprint 2 planned**:
 > requirements `91_REQUIREMENTS_v3.md`, research `92_*` + `93_SPRINT2_RESEARCH_SYNTHESIS.md`, phases
 > `94_SPRINT2_PHASES.md`, briefs `95_`–`103_`; planning PR open on `docs/sprint2-planning`; every
@@ -56,7 +56,7 @@ gitignored `.env` at registration (2026-09-29: `dist` built, 88 unit tests, `npm
 | 19 | Content identity, per-crawl history, sync honesty | `briefs/99_PHASE19_content_history.md` | R-38, R-41, R-64, R-65, R-71, R-76 | 130–139, 170–172 live (overflow block 170–179) | **merged 2026-10-03** (PR #60, 206ee3a); with 15 and 18 also on `main`, Phase 14's W-55 and W-56 now wait only on the spike PASS |
 | 14 | Containers (R-28) | `briefs/100_PHASE14_containers.md` (supersedes `82_`'s Contract) | R-81..R-96; S2-containers-1 | 091, 093, 094 live; 092 struck | **merged 2026-10-04** on Stack's word before acceptance (#62, #67, harness #39, bb2dash-stack #1); the `sync` container runs live since 2026-10-03 22:52Z; Stack's acceptance sitting A1–A9 is owed (§4) |
 | 20 | Harness closure: V-2 on record, note quality, checkpoint redaction | `briefs/101_PHASE20_harness_closure.md` | R-97..R-104, R-106 | none here | **PR-A (#39, 2904b20) and PR-B (harness #36, ea0e199; + harness #37, 00539be) and PR-C (#48, cb1d7e7) merged 2026-09-30**; live steps done; V-2 walked in `verification/101a_V2_VERIFICATION.md`, closed on Stack's word 2026-09-30; tasks 2 (request 458, 2026-10-01) and 29 done; two harness follow-ups still unfiled (108 §2) |
-| 21 | Workspace: chat routed by complexity, on the subscription | `briefs/102_PHASE21_workspace.md` | S2-workspace-1 | 140–149 | planned; after 14 |
+| 21 | Workspace: chat routed by complexity, on the subscription | `briefs/102_PHASE21_workspace.md` (frozen 2026-10-05) | S2-workspace-1; P-83..P-88 | 140–143 live (144–149 its slack) | **built on `feat/workspace-21` (bb2dash and bb2dash-stack), not merged** (2026-10-07): no PR open yet; the image runs only as test project `bb2dash-wt21`; next one more runner fix round (ruling Z1) and the PM's walk, then both PRs, then Stack's 15-step acceptance after Phase 14's (§4, §6 D2; record `verification/102a_PHASE21_VERIFICATION.md`) |
 | 22 | Styling | `briefs/103_PHASE22_styling.md` | R-53, R-46; S2-styling-1 | none | planned; last |
 
 Outside the phases: R-109 and the state-doc refresh landed on the planning branch (Stage D); R-105 and
@@ -92,9 +92,11 @@ Rules that fall out of the graph:
    dev container) may be cut after task 1. W-55 (sync runner and database) and W-56 (images, MCP, desktop,
    repo hygiene) are cut only after the spike's PASS, with 15, 18 and 19 on `main` (brief 100). It
    inherits 18's scripted fetch and embed step (P-36) and 19's register-first driver.
-5. **21 after 14**, **22 last** (Stack's "cleaning" placement; the Workspace page is in 22's inventory).
+5. **21 after 14**, **22 last** (Stack's "cleaning" placement; the Workspace page is in 22's inventory). Phase 21
+   started on 2026-10-05, the day after Phase 14 merged, and is built and not merged on 2026-10-07; its acceptance
+   walk comes after Phase 14's own (A5, A7 and A9 are still open there). Phase 22 waits for Phase 21's merge.
 6. **Migration ranges with slack**: 091–099 (14), 100–104 (15), 105–109 (16), 110–119 (17), 120–129 (18),
-   130–139 (19), 140–149 (21), 170–179 (19's overflow, taken 2026-10-03 for 170–172; DECISIONS), 150–159 (17's overflow, taken 2026-09-29 for migration 150; DECISIONS), 160–169 (18's
+   130–139 (19), 140–149 (21; 140–143 are on prod and frozen, 144–149 are its slack), 170–179 (19's overflow, taken 2026-10-03 for 170–172; DECISIONS), 150–159 (17's overflow, taken 2026-09-29 for migration 150; DECISIONS), 160–169 (18's
    overflow, taken 2026-09-30 for migration 160; DECISIONS). A phase that runs out takes the next free block of ten and records it in
    DECISIONS, never a number inside another phase's block. Every migration is additive, applied under the
    file's name, byte-identical.
@@ -280,6 +282,24 @@ Learned at the sprint 1 close (2026-09-22) and in sprint 2 planning (2026-09-24)
   claude.ai skills (task 19). Done: the Duo login, secrets 11/11, the MCP key move, `.wslconfig`, Docker autostart,
   `node scripts/install-skills.mjs` (2026-10-05 22:0xZ), the sync image rebuilt from `main` 2e39199 (22:06Z).
 
+* **Phase 21, the Workspace (built 2026-10-07, not merged; no PR open yet).** Nothing is asked of you until the PM
+  has finished one more runner fix round (ruling Z1 in 102a: the three MEDIUM findings the last code review left
+  open, none HIGH), walked the preview and opened both PRs. Then, after Phase 14's A5, A7 and A9 above:
+  1. **The acceptance walk, 15 steps in two parts** (brief 102, "Stack's acceptance script"). Steps 1 to 12 on the
+     branch preview, with the PM's test container running: step 1 is your look at claude.ai, Settings, Usage, to
+     confirm Usage credits are still off, and step 12 is reading the D-1 reversal row and the preview-walk row in
+     DECISIONS before you say "merge". Then steps 13 to 15 on `main`: step 13 is adding
+     `COMPOSE_PROFILES=workspace` to bb2dash-stack's `.env` before `just up`, and you end with "accepted".
+  2. **One question, whenever you like.** The Workspace container's firewall allows addresses, not names, and code
+     running inside it could reach other Cloudflare-hosted sites through the Supabase project's shared addresses.
+     The assistant itself cannot. Live with it in v1, or have a name-checking proxy built? (DECISIONS 2026-10-07;
+     STATUS, the deferred hardening list.)
+  3. **Three SQL units fail on prod's course data** from any checkout (`grading_invariants.sql`,
+     `phase18_122_supersede_rule.sql`, `phase18_golden_truth.sql`; STATUS, Known issues). They are not Phase 21's;
+     say which session takes them.
+  4. **`npm ci` in `C:/Users/stack/agentic-harness/mcp-server`**, yours to run or to ask for: its installed
+     `node_modules` still holds fastembed 2.1.0 under a lock that says 2.1.1.
+
 ## 5. Context the orchestrator reviews at session start
 
 Read in this order. Each line says what the file is for and what to look for.
@@ -313,6 +333,8 @@ brief's B-table. Before cutting workers, the phase's PM reads that brief's resid
 `docs/planning/sprint-2/105_BRIEF_VERIFICATION_2026-09-27.md`
 §3 and fixes or strikes each one in the phase's own PR. The used sprint 1 prompts are history in
 `docs/planning/sprint-1-hub/104_SPRINT1_SESSION_PROMPTS.md`.
+
+**Position on 2026-10-07 (Phase 21):** D2 has run since 2026-10-05, and Phase 21 is built on `feat/workspace-21` in bb2dash and in bb2dash-stack; nothing is merged and no PR is open. Done: the freeze with Stack's answers, four worker streams each with an independent check, migrations 140–143 on prod (frozen), the image built from harness `main` 57ee51f and proven as test project `bb2dash-wt21` (tasks 12 and 13), both reviews on the branch and both on the delta (the `/code-review` run on the range `d4b1b8d..ac41858` is in 102a: eleven findings, R2-1 to R2-11, none CRITICAL or HIGH, three MEDIUM open, eight recorded under ruling Z2). Next, the PM's: one more runner fix round for the three open findings (ruling Z1: R2-1, R2-2 and R2-5, and a secret file holding a NUL refused at start; not on the phase branch yet, and the runner's 714 tests are counted before it), the walk on the preview and in a second desktop window (tasks 19 second half, 20, 21 and 22), both PRs (task 25), then "ready when you say so". Then Stack's: the 15-step acceptance, after Phase 14's own (§4). F (Phase 22) waits for this merge. The worktrees, the test project and the cleanup owed are under D2 below.
 
 **Position on 2026-10-04:** Phase 14 merged on 2026-10-04 before its acceptance sitting (#62 and #67 in bb2dash, with the harness and stack PRs; DECISIONS 2026-10-04), so Phases 14–20 are all on `main`; what is open from 14 is Stack's A1–A9 sitting and the cut-over, listed in §4 by its session. D2 (Phase 21) has its gate (14 and 15 on `main`) and starts by putting O-1..O-5 to Stack; F (Phase 22) after 21; E (Stack's open items, §4) any sitting. Phase 18's last code item, task 19, landed in the crawler PR of 2026-10-04; what Phase 18 still owes is `98a` §2/§5 (two reads in Stack's tab) and the walk-18 screenshots on prod.
 
@@ -453,6 +475,38 @@ D1 — Phase 14
 > merging. Stop at "ready when you say so".
 
 D2 — Phase 21
+
+*Status 2026-10-07:* run on 2026-10-05. Built, not merged, no PR open (STATUS, section "Phase 21"; record
+`docs/planning/sprint-2/verification/102a_PHASE21_VERIFICATION.md`). The prompt below is kept for the record. Where the
+frozen brief says something else, the brief wins: both PRs open together and bb2dash merges first; the password was
+handed over as task 19 describes; the walk is 15 steps in two parts, with "merge" after step 12 and "accepted" after
+step 15.
+
+* **Worktrees and branches that exist (2026-10-07), all under `C:/Users/stack/projects/`.** In bb2dash, six beside
+  the main checkout: `bb2dash-wt-21` (`feat/workspace-21`, the phase branch, the PM's), `bb2dash-wt-21-db`
+  (`feat/workspace-21-db`, W-63), `bb2dash-wt-21-runner` (`feat/workspace-21-runner`, W-64),
+  `bb2dash-wt-21-container` (`feat/workspace-21-container`, W-65), `bb2dash-wt-21-web` (`feat/workspace-21-web`,
+  W-66) and `bb2dash-wt-21-docs` (`feat/workspace-21-docs`, task 24's docs). In bb2dash-stack, one:
+  `bb2dash-stack-wt-21` (`feat/workspace-21`).
+* **The test project.** Until the merge the Workspace container runs only as compose project `bb2dash-wt21`
+  (container `bb2dash-wt21-workspace-1`, network `bb2dash-wt21_workspace-net`, volume
+  `bb2dash-wt21_workspace-claude-home`), started from a phase worktree with the service named in every command:
+  never `just up`, never an `up` without a service name, never a changed `BB2DASH_DIR` (DECISIONS 2026-10-05). One
+  tree at a time runs it: it was built in `bb2dash-wt-21-container` and is stopped and removed there before the
+  walks rebuild it in `bb2dash-wt-21`. Before and after every docker step, read the live sync container's guard
+  value (102a, "The live sync container: the guard value"); a changed id or start time made by this phase is a stop.
+* **Cleanup owed after the merge** (the merge only on Stack's word, bb2dash first):
+  1. Before acceptance step 13: stop the test container, so only the live project answers.
+  2. After acceptance step 15: remove the test project's leftovers by name: the container
+     (`docker compose -p bb2dash-wt21 --profile workspace rm -sf workspace`), the network
+     `bb2dash-wt21_workspace-net` and the volume `bb2dash-wt21_workspace-claude-home`. Never a project-wide `down`
+     against `bb2dash`.
+  3. Delete task 9's raw recordings, which hold syllabus text: `C:/Users/stack/.bb2dash-w64-rec-out`,
+     `C:/Users/Public/bb2dash-w64-rec/` and the three transcripts under
+     `~/.claude/projects/C--Users-Public-bb2dash-w64-rec-cwd/`.
+  4. Remove the seven worktrees and their branches, local and remote, in both repos; pull both main checkouts;
+     update memory.
+  5. The acceptance record as a docs-only PR (PR #76's precedent), with its DECISIONS row.
 
 > `/bb2dash-pm` Start Phase 21: `docs/planning/sprint-2/briefs/102_PHASE21_workspace.md`, S2-workspace-1.
 > PROVISIONAL until I answer 93 §5 (B-5; and B-42, B-48, B-51 through Phases 15 and 14) and approve 94. Gate: task
