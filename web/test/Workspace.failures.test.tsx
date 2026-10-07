@@ -12,11 +12,11 @@
  * which no Contract sentence names.
  */
 
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { newQueryClient } from './hydration-harness';
-import { fake, gate, joined, resetFake, type Row } from './workspace-harness';
+import { NEW_REQUEST, fake, gate, joined, resetFake, settle, type Row } from './workspace-harness';
 
 vi.mock('@/lib/supabase/client', async () =>
   (await import('./workspace-harness')).supabaseClientMock(),
@@ -577,5 +577,200 @@ describe('the message column follows what arrives with the stored row', () => {
     rerender(<MessageList turns={writing(MORE_TEXT)} empty={null} />);
 
     expect(column.scrollTop).toBe(480);
+  });
+});
+
+/**
+ * The third review's R3-5. The column follows a reader who was within 96 px of its end at their
+ * last scroll, and asking brought no one back to it: a question asked from further up appeared,
+ * and was answered, out of view. The reader's own question takes the column to its end and it
+ * follows from there (the PM's ruling of 2026-10-07); a turn they did not ask moves no one.
+ *
+ * These run the page and not the column alone: who asked is the page's to know.
+ */
+describe('the message column goes to its end when the reader asks', () => {
+  const ASKED = 'and next week?';
+  const OTHER_TABS_QUESTION = 'And the reading?';
+  const OWN_QUESTION = 'c9a7d3e2-55aa-4f10-b1d2-000000000900';
+  const OWN_ANSWER = 'a7c1d2e3-55aa-4f10-b1d2-000000000900';
+  /** The answer to it, as the runner flushes it. Each flush is longer than the waiting line. */
+  const FLUSHES = [
+    'Next week has two things due: quiz 3 on Wednesday,',
+    ' and the chapter 5 reading response on Friday.',
+  ];
+  const USED_LINE = 'Used: search_materials · IST.323';
+  /** How far from its end the column still follows (`FOLLOW_SLACK_PX`). */
+  const SLACK_PX = 96;
+  /** The stand-in layout: the column's own height, and what one turn adds to its content. */
+  const COLUMN_PX = 400;
+  const TURN_PX = 600;
+
+  afterEach(() => {
+    focusManager.setFocused(undefined);
+  });
+
+  /**
+   * The column, with a stand-in for the layout jsdom does not do: it is as tall as what it
+   * holds, 600 px a turn and 1 px a character, so a turn, a delta or a line makes it taller.
+   */
+  function laidOutColumn(): HTMLElement {
+    const column = screen.getByRole('list', { name: labels.MESSAGES_REGION_LABEL }).parentElement;
+    if (column === null) throw new Error('the turns have no column');
+    Object.defineProperty(column, 'clientHeight', { configurable: true, value: COLUMN_PX });
+    Object.defineProperty(column, 'scrollHeight', {
+      configurable: true,
+      get: () => column.querySelectorAll('li').length * TURN_PX + (column.textContent ?? '').length,
+    });
+    return column;
+  }
+
+  /** Conversation A answered, and the reader back at the top of its column: more than 96 px from the end. */
+  async function openScrolledUp() {
+    fake.state.rows = ANSWERED_ROWS;
+    open();
+    const channel = await joined(TOPIC_A);
+    await screen.findByText('Quiz 2.');
+    const column = laidOutColumn();
+    column.scrollTop = 0;
+    fireEvent.scroll(column);
+    expect(column.scrollHeight - column.clientHeight).toBeGreaterThan(SLACK_PX);
+    return { column, channel };
+  }
+
+  /** The reader asks from up there, and the question is added to the thread. */
+  async function ask(column: HTMLElement): Promise<void> {
+    fireEvent.keyDown(type(ASKED), { key: 'Enter' });
+    await within(column).findByText(ASKED);
+  }
+
+  /** jsdom does not clamp a scroll: at its end, the column's `scrollTop` is its content's height. */
+  async function atItsEnd(column: HTMLElement): Promise<void> {
+    await waitFor(() => expect(column.scrollTop).toBe(column.scrollHeight));
+  }
+
+  /** The rows once the runner has stored request 900's answer: its text, its tier, the tool it used. */
+  function storedRows(content: string): Record<string, Row[]> {
+    const { workspace_messages: messages, workspace_requests: requests } = fake.state.rows;
+    const answer: Row = {
+      id: OWN_ANSWER,
+      conversation_id: A,
+      role: 'assistant',
+      request_id: NEW_REQUEST,
+      tier: 'mid',
+      content,
+      tool_calls: [{ tool: 'search_materials', scope: 'IST.323', ok: true }],
+      finished: true,
+    };
+    return {
+      ...fake.state.rows,
+      workspace_messages: [...messages, answer],
+      workspace_requests: requests.map((row) => (row.id === NEW_REQUEST ? { ...row, state: 'done' } : row)),
+    };
+  }
+
+  it('is at its end once their question is added, wherever they had scrolled to', async () => {
+    const { column } = await openScrolledUp();
+
+    await ask(column);
+
+    expect(column.querySelectorAll('li')).toHaveLength(2);
+    await atItsEnd(column);
+  });
+
+  it('follows the answer to it from there: each delta, and the lines of the stored row', async () => {
+    const { column, channel } = await openScrolledUp();
+    await ask(column);
+
+    FLUSHES.forEach((delta, index) => {
+      const before = column.scrollHeight;
+      act(() => channel.emit('delta', { request_id: NEW_REQUEST, seq: index + 1, delta }));
+      expect(column.scrollHeight).toBeGreaterThan(before);
+      expect(column.scrollTop).toBe(column.scrollHeight);
+    });
+
+    const written = column.scrollHeight;
+    fake.state.rows = storedRows(FLUSHES.join(''));
+    act(() => channel.emit('done', { request_id: NEW_REQUEST, message_id: OWN_ANSWER, state: 'done' }));
+    await within(column).findByText(USED_LINE);
+    expect(column.scrollHeight).toBeGreaterThan(written);
+    await atItsEnd(column);
+  });
+
+  it('lets go again when the reader scrolls back up while that answer is written', async () => {
+    const { column, channel } = await openScrolledUp();
+    await ask(column);
+    await settle();
+    column.scrollTop = 0;
+    fireEvent.scroll(column);
+
+    act(() => channel.emit('delta', { request_id: NEW_REQUEST, seq: 1, delta: FLUSHES[0] }));
+
+    expect(column).toHaveTextContent(FLUSHES[0]);
+    expect(column.scrollTop).toBe(0);
+  });
+
+  it('stays where the reader left it when a turn arrives that they did not ask', async () => {
+    const { column } = await openScrolledUp();
+
+    // Asked from another tab. This page reads it when its own tab comes back to the front.
+    fake.state.rows = OTHER_TAB_ASKED_ROWS;
+    act(() => focusManager.setFocused(true));
+    await within(column).findByText(OTHER_TABS_QUESTION);
+    await settle();
+
+    expect(column.querySelectorAll('li')).toHaveLength(2);
+    expect(column.scrollTop).toBe(0);
+  });
+
+  it("stays there when their question is refused and the turn that arrives is another tab's", async () => {
+    const { column } = await openScrolledUp();
+    // Open in the database and not yet read here: Enter sends, and the database refuses.
+    fake.state.rows = OTHER_TAB_ASKED_ROWS;
+
+    fireEvent.keyDown(type(ASKED), { key: 'Enter' });
+    await screen.findByText(labels.REFUSAL_STILL_ANSWERING);
+    await within(column).findByText(OTHER_TABS_QUESTION);
+    await settle();
+
+    expect(box()).toHaveValue(ASKED);
+    expect(column.scrollTop).toBe(0);
+  });
+
+  it('goes to its end when the rows bring the question before `workspace_ask()` has answered', async () => {
+    const { column } = await openScrolledUp();
+    // The database has stored the question. Its answer to this page is still on the way.
+    const answered = gate();
+    fake.state.rpc.workspace_ask = async () => {
+      fake.state.rows = {
+        workspace_messages: [
+          ...ANSWERED_ROWS.workspace_messages,
+          { id: OWN_QUESTION, conversation_id: A, role: 'user', content: ASKED, finished: true },
+        ],
+        workspace_requests: [
+          ...ANSWERED_ROWS.workspace_requests,
+          { id: NEW_REQUEST, conversation_id: A, user_message_id: OWN_QUESTION, state: 'queued' },
+        ],
+      };
+      await answered.promise;
+      return {
+        data: { conversation_id: A, message_id: OWN_QUESTION, request_id: NEW_REQUEST },
+        error: null,
+      };
+    };
+    fireEvent.keyDown(type(ASKED), { key: 'Enter' });
+    await waitFor(() => expect(fake.state.rpcCalls).toHaveLength(1));
+
+    // The tab regains focus and the rows are re-read: the turn is shown, and the page cannot yet say whose it is.
+    act(() => focusManager.setFocused(true));
+    await within(column).findByText(ASKED);
+    await settle();
+    expect(column.scrollTop).toBe(0);
+
+    await act(async () => {
+      answered.release();
+      await answered.promise;
+    });
+
+    await atItsEnd(column);
   });
 });
