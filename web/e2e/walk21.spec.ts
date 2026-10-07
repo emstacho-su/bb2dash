@@ -28,9 +28,10 @@
  *   assertion fails, the screen is saved as `<name>-FAIL.png` and the test
  *   fails: the assertion is never relaxed to fit the screen.
  * * The message column scrolls inside itself, so a long answer's badge and its
- *   "Used:" line are not on screen together at 1440 by 900. A turn's shot is
- *   taken in a window made tall enough to hold the whole turn (`fitTurnInShot`),
- *   and what the page showed at 1440 by 900 is printed first.
+ *   "Used:" line are not on screen together at 1440 by 900. In the first
+ *   sitting a turn's shot was taken in a window made tall enough to hold the
+ *   whole turn (`fitTurnInShot`), and what the page showed at 1440 by 900 was
+ *   printed first. Shots 03, 04 and 10 are that sitting's.
  * * `WALK21_RESHOOT=1` takes a question's shot again without asking: the
  *   conversation's last turn must still be that question's.
  * * The page writes only as the signed-in owner does: `workspace_ask` and
@@ -47,6 +48,37 @@
  *   instance: the worktree's `desktop/` build under its own `--user-data-dir`,
  *   pointed at a local `next start` of the branch (`WALK21_DESKTOP_APP_URL`).
  *   It never touches the running app or `%APPDATA%\bb2dash\config.json`.
+ *
+ * THE RETAKE SITTING (2026-10-07, after W-66 fixed the walk's W-1 and W-2).
+ * Five shots were taken again under one rule: A SHOT IS THE WINDOW, 1440 by
+ * 900, never the whole page and never a window made tall. A full-page shot of
+ * a tall window is what hid W-2 in the first sitting. Where the proof is
+ * further up or down a conversation than fits, the column is scrolled, as a
+ * reader would (`scrollColumnToTurnStart`). Every window shot first asserts
+ * that the document is at most 1 px taller than its window (W-1; the app's
+ * shell is 1 px taller than the window on every screen, which is not this
+ * phase's).
+ *
+ * * `retake 11` and `retake 05` ask nothing. They open the first sitting's
+ *   archived conversation by its row under "Show archived"
+ *   (`WALK21_ARCHIVED_CONVERSATION`) and shoot the standing turn with the
+ *   column scrolled to that turn's START. A turn taller than the column cannot
+ *   show its badge and its "Used:" line together, and the brief's row 22 (c)
+ *   names the badge for these two shots: the question and the badge are
+ *   asserted inside the column's visible box, the "Used:" line by its text,
+ *   and where that line stands is printed. (The sitting first shot them at the
+ *   turn's end, with the "Used:" line in view and the badge out of it. Those
+ *   takes were replaced; 102a's section on the retake sitting says how the
+ *   choice of "start" reached it.)
+ * * `w2 document haiku` and `long opus` each spend a turn and take no shot.
+ *   They stay at the column's end, scroll nothing and reload nothing, and read
+ *   whether the turn's last line is wholly inside the column's visible box
+ *   once the stored row has landed (W-2). `long opus` is also the turn task
+ *   21 (d) is repeated on: the PM reads the container's health while it waits.
+ * * `06 stopped`, `07 offline` and `08 desktop` are the first sitting's tests
+ *   under the window rule.
+ * * `w1 numbers` asks nothing and shoots nothing: it prints the document's
+ *   height against the window's, and the column's content against its box.
  */
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -97,6 +129,9 @@ const QUESTION_DOCUMENT = 'Open the IST.323 syllabus and list its section headin
 const QUESTION_STANDARD =
   "Explain how a systems analyst's role differs from a project manager's, using the IST.352 slides";
 const QUESTION_DEEP = 'Draft a two-week study plan for ECN.304 from the lecture slides';
+/** The retake sitting's one long request (task 21 (d), repeated once): written to take long, and it routes to deep work. */
+const QUESTION_LONG =
+  'Draft a detailed four-week study plan for ECN.304 from the lecture slides, deck by deck and slide by slide, with a short self-quiz for each week.';
 
 /** The page's own strings (`src/lib/workspace-labels.ts`). Copied, not imported. */
 const BADGE_LOW = 'Haiku · lookup';
@@ -107,6 +142,8 @@ const QUEUED_LINE = 'Waiting for the Workspace service';
 const OFFLINE_LINE = 'The Workspace service is offline.';
 const STOPPED_SENTENCE = 'You stopped this answer.';
 const BUDGET_SENTENCE = 'Stopped at the per-answer cost limit.';
+const SHOW_ARCHIVED_LABEL = 'Show archived';
+const UNARCHIVE_LABEL = 'Unarchive';
 
 /** Task 5's conversation, which stays in the list until acceptance step 15. */
 const SPIKE_TITLE = 'spike';
@@ -305,6 +342,11 @@ async function wholeOnScreen(locator: Locator): Promise<boolean> {
  */
 async function expectShown(locator: Locator): Promise<void> {
   await expect(locator).toBeInViewport({ ratio: 1 });
+  await expectUncovered(locator);
+}
+
+/** Nothing lies over the element's middle: it is what a reader sees at that point of the window. */
+async function expectUncovered(locator: Locator): Promise<void> {
   const uncovered = await locator.evaluate((element) => {
     const box = element.getBoundingClientRect();
     const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
@@ -404,6 +446,264 @@ async function askAndShoot(page: Page, live: LiveQuestion): Promise<void> {
   await assertThenShoot(page, live.shot, () => expectAnswered(page, live));
 }
 
+/* ---------------------------------------------------------------------------
+ * The retake sitting: shots at the window's size, and the layout's numbers
+ * ------------------------------------------------------------------------ */
+
+/** The app's shell is 1 px taller than its window on every screen; more than that is W-1. */
+const PAGE_OVER_WINDOW_MAX_PX = 1;
+/** Half the gap between two turns: the column's edge then falls between this turn and the one before. */
+const TURN_START_CLEAR_PX = 12;
+/** Sub-pixel layout: an edge may sit this far past the box it is inside. */
+const EDGE_SLACK_PX = 0.5;
+/** A scroll made by the spec has reached the page's own scroll handler. */
+const SCROLL_SETTLE_MS = 300;
+/** After the stored row's lines are on the page: the column follows them in the same frame. */
+const AFTER_ROW_MS = 1000;
+/** The stored row follows a closed request within one read; a minute covers a missed broadcast and a poll. */
+const STORED_ROW_TIMEOUT_MS = MINUTE_MS;
+/** One wheel turn outside the column, far longer than the window. */
+const WHEEL_PX = 3000;
+/** A device-scaled shot may round each side by a pixel. */
+const SHOT_ROUNDING_PX = 2;
+
+/** The message column: the one box of the screen that scrolls (`MessageList.module.css`, `.column`). */
+function messageColumn(page: Page): Locator {
+  return page.locator('[data-workspace-stream] > div');
+}
+
+/** The width and height a PNG file says it has (its IHDR chunk). */
+function pngSize(path: string): { width: number; height: number } {
+  const header = readFileSync(path).subarray(0, 24);
+  return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) };
+}
+
+/** The document against its window, and the column's content against its box. */
+interface Layout {
+  /** `document.documentElement.scrollHeight`. */
+  documentHeight: number;
+  bodyHeight: number;
+  /** `window.innerHeight` and `window.innerWidth`. */
+  windowHeight: number;
+  windowWidth: number;
+  windowScrollY: number;
+  columnScrollHeight: number;
+  columnClientHeight: number;
+  columnScrollTop: number;
+  /** How far the column is scrolled from its end. */
+  columnFromEnd: number;
+}
+
+async function layoutOf(page: Page): Promise<Layout> {
+  return messageColumn(page).evaluate((box) => {
+    if (!/(auto|scroll)/.test(getComputedStyle(box).overflowY)) throw new Error('the message column does not scroll');
+    return {
+      documentHeight: document.documentElement.scrollHeight,
+      bodyHeight: Math.round(document.body.getBoundingClientRect().height),
+      windowHeight: globalThis.innerHeight,
+      windowWidth: globalThis.innerWidth,
+      windowScrollY: Math.round(globalThis.scrollY),
+      columnScrollHeight: box.scrollHeight,
+      columnClientHeight: box.clientHeight,
+      columnScrollTop: Math.round(box.scrollTop),
+      columnFromEnd: Math.round(box.scrollHeight - box.scrollTop - box.clientHeight),
+    };
+  });
+}
+
+/** W-1: however long the conversation, the document is at most 1 px taller than its window. */
+async function expectDocumentFitsWindow(page: Page, label: string): Promise<Layout> {
+  const layout = await layoutOf(page);
+  console.log(`[walk21] ${label}: layout ${JSON.stringify(layout)}`);
+  expect(
+    layout.documentHeight,
+    `the document is at most ${PAGE_OVER_WINDOW_MAX_PX} px taller than its window (W-1)`,
+  ).toBeLessThanOrEqual(layout.windowHeight + PAGE_OVER_WINDOW_MAX_PX);
+  return layout;
+}
+
+/** Where an element stands in the column that scrolls it. */
+interface InColumn {
+  /** Wholly inside the column's visible box, and inside the window. */
+  inside: boolean;
+  /** The element's edges, in pixels from the top of the column's visible box. */
+  top: number;
+  bottom: number;
+  /** The height of the column's visible box. */
+  boxHeight: number;
+}
+
+async function inColumnBox(element: Locator): Promise<InColumn> {
+  return element.first().evaluate((node, slack) => {
+    let box = node.parentElement;
+    while (box !== null && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+    if (box === null) throw new Error('the element is in no scrolling column');
+    const own = node.getBoundingClientRect();
+    const boxTop = box.getBoundingClientRect().top + box.clientTop;
+    const visibleTop = Math.max(boxTop, 0);
+    const visibleBottom = Math.min(boxTop + box.clientHeight, globalThis.innerHeight);
+    return {
+      inside: own.height > 0 && own.top >= visibleTop - slack && own.bottom <= visibleBottom + slack,
+      top: Math.round(own.top - boxTop),
+      bottom: Math.round(own.bottom - boxTop),
+      boxHeight: box.clientHeight,
+    };
+  }, EDGE_SLACK_PX);
+}
+
+/** Scrolls the column, and only the column, until the turn's start stands just under the column's upper edge. */
+async function scrollColumnToTurnStart(page: Page, turn: Locator): Promise<void> {
+  await turn.evaluate((element, clear) => {
+    let box = element.parentElement;
+    while (box !== null && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+    if (box === null) throw new Error('the turn is in no scrolling column');
+    const boxTop = box.getBoundingClientRect().top + box.clientTop;
+    box.scrollTop += element.getBoundingClientRect().top - boxTop - clear;
+  }, TURN_START_CLEAR_PX);
+  await page.waitForTimeout(SCROLL_SETTLE_MS);
+}
+
+/**
+ * Runs the shot's assertions, then shoots the window: 1440 by 900, not the page. A failed
+ * assertion saves the window as `<name>-FAIL.png` and rethrows. The file is then read back:
+ * a shot that is not the window's size fails the test.
+ */
+async function assertThenShootWindow(page: Page, name: string, assertions: () => Promise<void>): Promise<void> {
+  const path = join(SHOT_DIR, name);
+  try {
+    expect(page.viewportSize(), "the window is the config's 1440 by 900").toEqual(VIEWPORT);
+    await assertions();
+  } catch (error) {
+    await page.screenshot({ path: join(SHOT_DIR, name.replace(/\.png$/, '-FAIL.png')) });
+    throw error;
+  }
+  await page.screenshot({ path });
+  const size = pngSize(path);
+  console.log(`[walk21] ${name} shot at ${utcNow()}, ${size.width} by ${size.height}`);
+  expect(size, 'the shot is the window, not the page').toEqual(VIEWPORT);
+}
+
+/** What stands at the column's end, and whether a reader who stayed there sees it. Never the answer. */
+interface EndReading {
+  /** The "Used:" line of the last turn; null when the turn has none. */
+  used: InColumn | null;
+  /** The line under the last turn (stopped, a limit); null when the turn has none. */
+  line: InColumn | null;
+  turnHeight: number | null;
+  layout: Layout;
+  readAt: string;
+}
+
+async function endReading(page: Page, label: string): Promise<EndReading> {
+  const turn = lastTurn(page);
+  const used = turn.locator('[data-used]');
+  const line = turn.locator('[data-turn-line]');
+  const box = await turn.boundingBox();
+  const reading: EndReading = {
+    used: (await used.count()) === 0 ? null : await inColumnBox(used),
+    line: (await line.count()) === 0 ? null : await inColumnBox(line),
+    turnHeight: box === null ? null : Math.round(box.height),
+    layout: await layoutOf(page),
+    readAt: utcNow(),
+  };
+  console.log(`[walk21] ${label}: ${JSON.stringify(reading)}`);
+  return reading;
+}
+
+/**
+ * Opens an archived conversation the way a reader does: "Show archived" on, then its row.
+ * Only the row's link is pressed, never its "Unarchive" button.
+ */
+async function openArchivedByRow(page: Page, id: string): Promise<Locator> {
+  await openSettled(page, '/workspace');
+  await workspaceReady(page);
+  const list = conversationList(page);
+  await list.getByRole('checkbox', { name: SHOW_ARCHIVED_LABEL }).check();
+  const link = list.locator(`a[href$="c=${id}"]`);
+  await expect(link, `conversation ${id} is listed under "${SHOW_ARCHIVED_LABEL}"`).toHaveCount(1);
+  // `has` is read from inside each row, so the link is named from the page, not from the list.
+  const row = list.locator('ul > li').filter({ has: page.locator(`a[href$="c=${id}"]`) });
+  await expect(row.getByRole('button', { name: UNARCHIVE_LABEL, exact: true }), 'the row is an archived one').toHaveCount(1);
+  await link.click();
+  await expect(page).toHaveURL(new RegExp(`/workspace\\?c=${id}$`));
+  await workspaceReady(page);
+  await expect(page.locator('li[data-turn]').first()).toBeAttached();
+  await page.waitForTimeout(SETTLE_MS);
+  return link;
+}
+
+interface Retake {
+  question: string;
+  shot: string;
+  badge: string;
+}
+
+/**
+ * Takes an answered turn's shot again without asking anything: the first sitting's archived
+ * conversation, opened by its row, the column scrolled to that turn's start, the window as it is.
+ *
+ * The shot shows what the brief's row 22 (c) names for it: the question and the badge. The
+ * "Used:" line of a turn taller than the column is further down than the picture reaches: it is
+ * asserted by its text, and where it stands is printed.
+ */
+async function retakeAnsweredTurn(page: Page, retake: Retake): Promise<void> {
+  const conversation = conversationFrom('WALK21_ARCHIVED_CONVERSATION');
+  const link = await openArchivedByRow(page, conversation);
+  const turn = page.locator('li[data-turn="done"]').filter({ has: page.getByText(retake.question, { exact: true }) });
+  const question = turn.getByText(retake.question, { exact: true });
+  const badge = turn.locator('[data-tier]');
+  const used = turn.locator('[data-used]');
+  await assertThenShootWindow(page, retake.shot, async () => {
+    await expect(link).toHaveAttribute('aria-current', 'page');
+    await expect(turn, 'one answered turn asks this question').toHaveCount(1);
+    await expect(badge).toHaveText(retake.badge);
+    await expect(used).toHaveText(/^Used: \S/);
+    await expect(turn.locator('[data-answer-text]')).not.toBeEmpty();
+    await scrollColumnToTurnStart(page, turn);
+    const questionAt = await inColumnBox(question);
+    const badgeAt = await inColumnBox(badge);
+    const usedAt = await inColumnBox(used);
+    const box = await turn.boundingBox();
+    const facts = {
+      conversation,
+      request: await turn.getAttribute('data-request-id'),
+      badge: await textOrNull(badge),
+      used: await textOrNull(used),
+      turnHeight: box === null ? null : Math.round(box.height),
+      questionAt,
+      badgeAt,
+      usedAt,
+    };
+    console.log(`[walk21] ${retake.shot} (retake, nothing asked): ${JSON.stringify(facts)}`);
+    expect(questionAt.inside, "the question is wholly inside the column's visible box").toBe(true);
+    expect(badgeAt.inside, "the badge is wholly inside the column's visible box").toBe(true);
+    await expectUncovered(question);
+    await expectUncovered(badge);
+    const layout = await expectDocumentFitsWindow(page, retake.shot);
+    expect(layout.windowScrollY, 'the window itself is not scrolled').toBe(0);
+  });
+}
+
+/** The conversation is longer than its column, the page is not, and a wheel turn outside the column goes nowhere. */
+async function expectLongAndContained(page: Page, label: string): Promise<void> {
+  expect(page.viewportSize(), "the window is the config's 1440 by 900").toEqual(VIEWPORT);
+  const layout = await expectDocumentFitsWindow(page, label);
+  expect(layout.columnScrollHeight, 'the conversation is longer than its column').toBeGreaterThan(
+    layout.columnClientHeight,
+  );
+  // Before the fix a wheel turn outside the column scrolled the window into empty space.
+  await page.getByRole('heading', { name: 'Workspace', level: 1 }).hover();
+  await page.mouse.wheel(0, WHEEL_PX);
+  await page.waitForTimeout(SCROLL_SETTLE_MS);
+  const moved = await page.evaluate(() => Math.round(globalThis.scrollY));
+  const turns = await page.locator('li[data-turn]').count();
+  console.log(`[walk21] ${label}: ${turns} turns; a ${WHEEL_PX} px wheel turn on the heading moved the window ${moved} px`);
+  expect(moved, 'a wheel turn outside the column moves the window at most 1 px').toBeLessThanOrEqual(
+    PAGE_OVER_WINDOW_MAX_PX,
+  );
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
+}
+
 test.describe('standing data (before any live turn)', () => {
   test('02 empty', async ({ page }) => {
     await openSettled(page, '/workspace');
@@ -479,6 +779,87 @@ test.describe('the five questions (acceptance steps 3 to 7; WALK21_LIVE=1)', () 
   });
 });
 
+// The retake sitting (2026-10-07). See the header: a shot is the window, and nothing is made tall.
+test.describe('second sitting, W-1 and W-2 on the real page (WALK21_LIVE=1)', () => {
+  liveOnlyByName('reads the first sitting\'s conversation, or spends a live turn');
+  test.setTimeout(LIVE_TEST_TIMEOUT_MS);
+
+  // Nothing is asked: the first sitting's Sonnet turn, shot again at the window's size.
+  test('retake 11', async ({ page }) => {
+    await retakeAnsweredTurn(page, { question: QUESTION_STANDARD, shot: '11-standard-sonnet.png', badge: BADGE_MID });
+  });
+
+  // Nothing is asked: the first sitting's Opus turn, shot again at the window's size.
+  test('retake 05', async ({ page }) => {
+    await retakeAnsweredTurn(page, { question: QUESTION_DEEP, shot: '05-deep-opus.png', badge: BADGE_HIGH });
+  });
+
+  // One Haiku turn, in a new conversation. W-2 live: the reader stays at the end, and the "Used:" line lands in view.
+  test('w2 document haiku', async ({ page }) => {
+    await openSettled(page, '/workspace');
+    await workspaceReady(page);
+    const askedAt = await ask(page, QUESTION_DOCUMENT);
+    console.log(`[walk21] w2 document haiku: asked at ${askedAt} in conversation ${conversationOf(page)}`);
+    const turn = lastTurn(page);
+    // From here nothing is scrolled and nothing is reloaded.
+    await expect(turn).toHaveAttribute('data-turn', /^(done|failed|stopped)$/, { timeout: TURN_TIMEOUT_MS });
+    await reportTurn(page, 'w2 document haiku, as the turn closed', askedAt);
+    // The "Used:" line arrives with the stored row.
+    await expect(turn.locator('[data-used]')).toBeAttached({ timeout: STORED_ROW_TIMEOUT_MS });
+    await page.waitForTimeout(AFTER_ROW_MS);
+    const landed = await endReading(page, 'w2 document haiku, the stored row has landed');
+    await page.waitForTimeout(STORED_SETTLE_MS);
+    const settled = await endReading(page, 'w2 document haiku, settled');
+    await reportTurn(page, 'w2 document haiku', askedAt);
+    await expect(turn).toHaveAttribute('data-turn', 'done');
+    await expect(turn.locator('[data-tier]')).toHaveText(BADGE_LOW);
+    await expect(turn.locator('[data-used]')).toContainText('get_material_text');
+    expect(landed.used?.inside, 'the "Used:" line landed wholly inside the column\'s visible box (W-2)').toBe(true);
+    expect(settled.used?.inside, 'and it is still there once the page has settled').toBe(true);
+    await expectDocumentFitsWindow(page, 'w2 document haiku');
+  });
+
+  // One Opus turn on a long request, in the same conversation, never stopped. While it waits the PM
+  // reads the container's health and the request's state 60 s and 120 s after the claim (task 21 (d)).
+  test('long opus', async ({ page }) => {
+    await openSettled(page, conversationPath(conversationFrom('WALK21_CONVERSATION')));
+    await workspaceReady(page);
+    const askedAt = await ask(page, QUESTION_LONG);
+    const turn = lastTurn(page);
+    await expect(turn).toHaveAttribute('data-request-id', /^\d+$/);
+    console.log(
+      `[walk21] long opus: asked at ${askedAt}, request ${await turn.getAttribute('data-request-id')}, conversation ${conversationOf(page)}`,
+    );
+    // From here nothing is scrolled, nothing is reloaded and Stop is not pressed.
+    await expect(turn).toHaveAttribute('data-turn', /^(done|failed|stopped)$/, { timeout: TURN_TIMEOUT_MS });
+    console.log(`[walk21] long opus: the page showed the turn closed at ${utcNow()}`);
+    await page.waitForTimeout(STORED_SETTLE_MS);
+    await reportTurn(page, 'long opus', askedAt);
+    const settled = await endReading(page, 'long opus, settled');
+    await expect(turn.locator('[data-tier]')).toHaveText(BADGE_HIGH);
+    // However it ended (done, the cost limit, the time limit), the reader who stayed at the end sees the turn's last line.
+    if (settled.line !== null) {
+      expect(settled.line.inside, "the line under the answer is wholly inside the column's visible box").toBe(true);
+    } else {
+      expect(settled.used?.inside, 'the "Used:" line landed wholly inside the column\'s visible box (W-2)').toBe(true);
+    }
+    await expectDocumentFitsWindow(page, 'long opus');
+  });
+
+  // Nothing is asked and nothing is shot: W-1's numbers on the real page, for both sittings' conversations.
+  test('w1 numbers', async ({ page }) => {
+    const listed = conversationFrom('WALK21_CONVERSATION');
+    const archived = conversationFrom('WALK21_ARCHIVED_CONVERSATION');
+    await openSettled(page, conversationPath(listed));
+    await workspaceReady(page);
+    await expect(page.locator('li[data-turn]').first()).toBeAttached();
+    await page.waitForTimeout(SETTLE_MS);
+    await expectLongAndContained(page, `w1 numbers, this sitting's conversation ${listed}`);
+    await openArchivedByRow(page, archived);
+    await expectLongAndContained(page, `w1 numbers, the first sitting's conversation ${archived}`);
+  });
+});
+
 // The name of a group must hold no test's name: `-g` matches the group's name too, and a
 // group named after its tests runs all of them (it did once, on 2026-10-07; see 102a).
 test.describe('task 21 live states (WALK21_LIVE=1)', () => {
@@ -519,30 +900,55 @@ test.describe('task 21 live states (WALK21_LIVE=1)', () => {
     }).toPass({ timeout: TURN_TIMEOUT_MS, intervals: [250] });
     await page.getByRole('button', { name: 'Stop', exact: true }).click();
     console.log(`[walk21] 06-stopped.png: Stop pressed at ${utcNow()} on request ${await turn.getAttribute('data-request-id')}`);
-    await assertThenShoot(page, '06-stopped.png', async () => {
+    const line = turn.locator('[data-turn-line]');
+    // The window as it is (the retake sitting's rule): nothing is scrolled and nothing is made tall.
+    await assertThenShootWindow(page, '06-stopped.png', async () => {
       await expect(turn).toHaveAttribute('data-turn', 'stopped');
       await expect(text).not.toBeEmpty();
-      await expect(turn.locator('[data-turn-line]')).toHaveText(STOPPED_SENTENCE);
+      await expect(line).toHaveText(STOPPED_SENTENCE);
       await expect(page.getByRole('button', { name: 'Ask', exact: true })).toBeVisible();
-      await fitTurnInShot(page, '06-stopped.png');
-      // The sentence stands under the partial answer, and both are on screen.
+      // The sentence stands under the partial answer, in the column's visible box, with answer text above it.
       const answerBox = await text.boundingBox();
-      const lineBox = await turn.locator('[data-turn-line]').boundingBox();
+      const lineBox = await line.boundingBox();
       expect(answerBox !== null && lineBox !== null && lineBox.y >= answerBox.y + answerBox.height - 1).toBe(true);
-      await expectShown(turn.locator('[data-turn-line]'));
-      await expectShown(turn.locator('[data-tier]'));
+      const lineAt = await inColumnBox(line);
+      console.log(`[walk21] 06-stopped.png: the stopped sentence in the column ${JSON.stringify(lineAt)}`);
+      expect(lineAt.inside, "the stopped sentence is wholly inside the column's visible box").toBe(true);
+      await expectUncovered(line);
       await expect(text).toBeInViewport();
+      await expectDocumentFitsWindow(page, '06-stopped.png');
     });
+    await expect(turn.locator('[data-tier]')).toHaveText(BADGE_HIGH);
+    // The runner's stored row then replaces the live text. The reader stayed at the end: the sentence is still in view.
+    await page.waitForTimeout(STORED_SETTLE_MS);
     await reportTurn(page, '06-stopped.png', askedAt);
+    const settled = await endReading(page, '06-stopped.png, after the stored row');
+    expect(settled.line?.inside, 'the stopped sentence stays in view when the stored row lands').toBe(true);
+    await expectDocumentFitsWindow(page, '06-stopped.png, after the stored row');
   });
 
   // Run within three minutes of `docker compose -p bb2dash-wt21 --profile workspace stop workspace`.
   test('07 offline', async ({ page }) => {
     await openSettled(page, conversationPath(conversationFrom('WALK21_CONVERSATION')));
-    await assertThenShoot(page, '07-offline.png', async () => {
-      const offline = page.locator('[data-workspace-offline]');
+    const offline = page.locator('[data-workspace-offline]');
+    await assertThenShootWindow(page, '07-offline.png', async () => {
       await expect(offline).toBeVisible({ timeout: OFFLINE_WAIT_MS });
       await expect(offline).toHaveText(OFFLINE_LINE);
+      // Under the composer, and on screen whole.
+      const questionBox = await page.getByRole('textbox', { name: 'Question' }).boundingBox();
+      const offlineBox = await offline.boundingBox();
+      expect(
+        questionBox !== null && offlineBox !== null && offlineBox.y >= questionBox.y + questionBox.height - 1,
+        'the offline line stands under the composer',
+      ).toBe(true);
+      await expectShown(offline);
+      // The long conversation above it: turns in the column, more of them than the column holds.
+      await expect(lastTurn(page)).toBeInViewport();
+      const layout = await expectDocumentFitsWindow(page, '07-offline.png');
+      expect(layout.columnScrollHeight, 'the conversation is longer than its column').toBeGreaterThan(
+        layout.columnClientHeight,
+      );
+      expect(layout.windowScrollY, 'the window itself is not scrolled').toBe(0);
     });
   });
 
@@ -737,28 +1143,50 @@ test.describe('the desktop shell (WALK21_LIVE=1)', () => {
       await window.waitForTimeout(SETTLE_MS);
 
       const shot = '08-desktop.png';
+      const shotPath = join(SHOT_DIR, shot);
+      const shell = await app.evaluate(({ app: electronApp }) => ({
+        electron: process.versions.electron,
+        ownProfile: electronApp.getPath('userData'),
+        packaged: electronApp.isPackaged,
+      }));
+      let layout: Layout;
       try {
+        // Its own profile, asserted before anything is shot: the folder this test made under the
+        // temp folder, and so not `%APPDATA%\bb2dash`, the running app's.
+        expect(userDataDir.startsWith(tmpdir()), 'the folder this test made is under the temp folder').toBe(true);
+        expect(shell.ownProfile, "the second instance's profile folder is the temp folder").toBe(userDataDir);
         // Inside the shell: the preload's bridge is there, which no browser has.
         expect(await window.evaluate(() => 'bb2dashDesktop' in globalThis), 'the window is the desktop shell').toBe(true);
         expect(new URL(window.url()).origin, 'the shell shows the local build of the branch').toBe(start.appUrl);
         await expect(window.getByRole('heading', { name: 'Workspace', level: 1 })).toBeVisible();
         // The same conversation: selected in the list, its turns in the column, the last one on screen.
         await expect(row).toHaveAttribute('aria-current', 'page');
+        const title = ((await row.locator('span').first().textContent()) ?? '').trim();
+        expect(title, 'the row has a title').not.toBe('');
         const turns = window.locator('li[data-turn]');
         await expect(turns.first()).toBeAttached();
-        await expect(turns.first().getByText(QUESTION_LOOKUP, { exact: true })).toBeAttached();
+        // A conversation's title is its first question (cut at 120 characters; the walk's are shorter).
+        await expect(turns.first().getByText(title, { exact: true })).toBeAttached();
         await expect(turns.last().locator('[data-tier]')).toBeAttached();
         await expect(turns.last()).toBeInViewport();
+        // The long conversation, and W-1 in the shell's own window: no page scrollbar with travel beyond 1 px.
+        layout = await expectDocumentFitsWindow(window, shot);
+        expect(layout.columnScrollHeight, 'the conversation is longer than its column').toBeGreaterThan(
+          layout.columnClientHeight,
+        );
+        expect(layout.windowScrollY, 'the window itself is not scrolled').toBe(0);
       } catch (error) {
         await window.screenshot({ path: join(SHOT_DIR, shot.replace(/\.png$/, '-FAIL.png')) });
         throw error;
       }
-      await window.screenshot({ path: join(SHOT_DIR, shot) });
-      const shell = await app.evaluate(({ app: electronApp }) => ({
-        electron: process.versions.electron,
-        ownProfile: electronApp.getPath('userData'),
-        packaged: electronApp.isPackaged,
-      }));
+      // The window as the shell opened it: not resized, and not the whole page.
+      await window.screenshot({ path: shotPath });
+      const size = pngSize(shotPath);
+      const ratio = await window.evaluate(() => globalThis.devicePixelRatio);
+      expect(
+        Math.abs(size.height - layout.windowHeight * ratio),
+        'the shot is the window, not the page',
+      ).toBeLessThanOrEqual(SHOT_ROUNDING_PX);
       const facts = {
         turns: await window.locator('li[data-turn]').count(),
         lastTurn: await window.locator('li[data-turn]').last().getAttribute('data-turn'),
@@ -766,6 +1194,8 @@ test.describe('the desktop shell (WALK21_LIVE=1)', () => {
         ownProfileIsTheTempFolder: shell.ownProfile === userDataDir,
         electron: shell.electron,
         packaged: shell.packaged,
+        shot: `${size.width} by ${size.height}`,
+        devicePixelRatio: ratio,
       };
       console.log(`[walk21] ${shot} shot at ${utcNow()} in a second shell instance: ${JSON.stringify(facts)}`);
     } finally {
