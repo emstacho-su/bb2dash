@@ -249,10 +249,11 @@ begin
        format('delete from workspace_messages where id = %L', v_msg)),
       ('delete a request', '42501',
        format('delete from workspace_requests where id = %s', v_req)),
-      ('delete the heartbeat', '42501', 'delete from workspace_runner_heartbeat'),
+      ('delete the heartbeat', '42501', 'delete from workspace_runner_heartbeat where id = 1'),
       ('insert a heartbeat', '42501',
        'insert into workspace_runner_heartbeat (id, polled_at, runner) values (1, now(), ''me'')'),
-      ('update the heartbeat', '42501', 'update workspace_runner_heartbeat set runner = ''me'''),
+      ('update the heartbeat', '42501',
+       'update workspace_runner_heartbeat set runner = ''me'' where id = 1'),
       ('truncate the messages', '42501', 'truncate workspace_messages')
     ) as x(label, want, stmt)
   loop

@@ -256,7 +256,7 @@ begin
   update workspace_requests
      set state = 'cancelled', error_code = 'cancelled', finished_at = now()
    where state in ('queued', 'claimed');
-  delete from workspace_runner_heartbeat;
+  delete from workspace_runner_heartbeat where id = 1;
 
   -- A: m1..m21 five days ago, a minute apart (odd = user, even = assistant; the latest assistant,
   -- m20, is tier high), then a question asked three days ago and still queued.

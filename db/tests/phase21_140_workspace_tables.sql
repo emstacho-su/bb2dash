@@ -80,7 +80,12 @@ begin
       into v_got
       from pg_attribute a
      where a.attrelid = to_regclass('public.' || r.rel) and a.attnum > 0 and not a.attisdropped;
-    if v_got is distinct from r.want then
+    -- Migration 143 adds one column after the view's four, and unit 143 holds the five. This
+    -- unit runs on both sides of that apply, so it accepts 140's four alone or followed by that
+    -- one column, and nothing else.
+    if v_got is distinct from r.want
+       and not (r.rel = 'v_workspace_status'
+                and v_got is not distinct from r.want || ', polled_age_seconds integer') then
       v_fail := v_fail || format('%s columns are [%s]', r.rel, v_got);
     end if;
   end loop;
@@ -492,7 +497,7 @@ declare
   v_ok  boolean;
   v_row record;
 begin
-  delete from workspace_runner_heartbeat;
+  delete from workspace_runner_heartbeat where id = 1;
 
   select count(*), bool_and(s.polled_at is null and s.runner is null) into v_n, v_ok
     from v_workspace_status s;
