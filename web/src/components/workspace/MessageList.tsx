@@ -71,17 +71,36 @@ const EMPTY_LINES: Readonly<Record<EmptyColumn, string>> = {
  * WHO IS FOLLOWING is as it was: a reader within `FOLLOW_SLACK_PX` of the end
  * at their last scroll. Scrolling up lets go of it, and a commit that leaves
  * the height as it was moves no one.
+ *
+ * ASKING BRINGS THE READER BACK (the third review's R3-5; the PM's ruling of
+ * 2026-10-07). `ownQuestion` is the id of the question this page sent, once it
+ * is a turn of the column. The first commit that has it takes the column to
+ * its end from wherever it was scrolled to, and the reader follows from there:
+ * a question asked from further up is not shown, and answered, out of view.
+ * It happens once a question, so scrolling up during the answer lets go as
+ * before. A turn the reader did not ask (another tab's, a re-read of the rows)
+ * is no one's `ownQuestion` and moves no one who has scrolled up.
  */
-function useFollowTheEnd() {
+function useFollowTheEnd(ownQuestion: string | null) {
   const box = useRef<HTMLDivElement>(null);
   /** Whether the reader is at the end of the column. Scrolling up lets go of it. */
   const following = useRef(true);
   /** The height of the column's content at the last commit that changed it. */
   const contentHeight = useRef(NOT_MEASURED);
+  /** The question of the reader's own that the column last went to its end for. */
+  const broughtBackFor = useRef<string | null>(null);
 
   useEffect(() => {
     const element = box.current;
-    if (element === null || element.scrollHeight === contentHeight.current) return;
+    if (element === null) return;
+    const asked = ownQuestion !== null && ownQuestion !== broughtBackFor.current;
+    if (asked) {
+      broughtBackFor.current = ownQuestion;
+      following.current = true;
+    }
+    // The reader's own question moves the column even when this commit made it no taller:
+    // the rows can bring the turn a commit before the page learns the question is its own.
+    if (!asked && element.scrollHeight === contentHeight.current) return;
     contentHeight.current = element.scrollHeight;
     if (following.current) element.scrollTop = element.scrollHeight;
   });
@@ -171,10 +190,20 @@ export interface MessageListProps {
   turns: readonly WorkspaceTurn[];
   /** The state the column says it is in, in place of its turns; null shows the turns. */
   empty: EmptyColumn | null;
+  /**
+   * The id of the question this page last sent, as `workspace_ask()` answered with it; null or
+   * absent when it has sent none. Its turn takes the column to its end (`useFollowTheEnd`).
+   */
+  askedQuestionId?: string | null;
 }
 
-export function MessageList({ turns, empty }: MessageListProps) {
-  const { box, noteScroll } = useFollowTheEnd();
+export function MessageList({ turns, empty, askedQuestionId = null }: MessageListProps) {
+  // The reader's own question, from the commit in which it is one of the turns.
+  const ownQuestion =
+    askedQuestionId !== null && turns.some((turn) => turn.question?.id === askedQuestionId)
+      ? askedQuestionId
+      : null;
+  const { box, noteScroll } = useFollowTheEnd(ownQuestion);
 
   return (
     <div ref={box} className={styles.column} onScroll={noteScroll}>

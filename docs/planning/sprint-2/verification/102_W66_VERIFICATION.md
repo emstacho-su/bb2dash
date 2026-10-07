@@ -1442,3 +1442,134 @@ No new dependency. Nothing outside `web/` and this file changed:
 * **The two one-off scripts** (the built-CSS measure and the Vite harness with its driver) are in
   the session's scratch folder, not in the repo. `e2e/workspace-layout.spec.ts` repeats the W-1
   measure on demand; nothing committed repeats the W-2 one.
+
+## Asking while scrolled up (R3-5, 2026-10-07)
+
+2026-10-07 · branch `feat/workspace-21-web` · scope: finding R3-5 of the third `/code-review`
+(range ac41858..HEAD) and the PM's ruling on it, nothing else. Fixtures only: no database read or
+write, no docker command, no live turn, no walk test run or listed, no browser. No secret or env
+file was read. `web/e2e/` was not touched.
+
+**First step.** `git fetch origin`, then `git merge --ff-only origin/feat/workspace-21` → a
+fast-forward from 4db75fa to 7726633 (17 commits; `git diff --name-only 4db75fa 7726633 -- web/src
+web/test` printed nothing, and under `web/` only `e2e/walk21.spec.ts` changed), pushed.
+
+**Starting count** (7726633): `npx vitest run` → `Tests  2840 passed (2840)`, exit 0.
+
+All commands below run from `C:/Users/stack/projects/bb2dash-wt-21-web/web`.
+
+### 1. The finding, as read
+
+Confirmed. In `useFollowTheEnd()` the only thing that ever set `following` was the reader's own
+scroll (`noteScroll`: within 96 px of the end, or not). A reader further up who asked stayed let
+go: the question was added under the visible part of the column, and so were its answer's deltas
+and the stored row.
+
+### 2. How the column learns that the reader asked
+
+The three candidates, against what the page holds:
+
+| signal | what it is here | verdict |
+|---|---|---|
+| the pending question | `ask.isPending`, or the text in the box | cannot tell the reader's turn from another tab's: a refused question was pending too, and the turn that then arrives is the other tab's |
+| an optimistic turn | none exists: the question is shown when the rows bring it | nothing to read |
+| the ask's own answer | `workspace_ask()` returns `message_id`; the mutation already holds it, normalised (`ask.data.messageId`) | **taken**: it is the `id` of the stored user row, so it is exactly `turn.question.id` |
+
+The change is one optional prop and one ref:
+
+* `Thread` (`Workspace.tsx`) passes `askedQuestionId={ask.data?.messageId ?? null}` to `MessageList`.
+* `MessageList` hands the hook that id only once a turn carries it (`ownQuestion`).
+* `useFollowTheEnd(ownQuestion)`: on the first commit with an `ownQuestion` it has not yet acted
+  on, the reader is following again and the column is scrolled to its end, whether or not that
+  commit made it taller. The id is remembered (`broughtBackFor`), so it happens once a question.
+
+Unchanged: the 96 px rule, following the measured height, and no movement on a commit that leaves
+the height as it was. No new dependency. The prop is optional so the eight standing scroll cases
+mount `MessageList` exactly as they did.
+
+### 3. The tests
+
+Six cases in `test/Workspace.failures.test.tsx`, in a new `describe` after the standing ones. They
+run the whole screen on the fake client (who asked is the page's to know) with a stand-in for the
+layout jsdom does not do: the column is 400 px tall and its content 600 px a turn plus 1 px a
+character, so a turn, a delta or a line makes it taller. Each starts on an answered conversation
+with the reader back at the top of the column.
+
+RED (e0283a3): `npx vitest run test/Workspace.failures.test.tsx` →
+`Tests  3 failed | 28 passed (31)`. `npm run typecheck` and
+`npx eslint test/Workspace.failures.test.tsx` were clean on that commit: the cases name no prop.
+
+GREEN (012e93d), same command: `Tests  31 passed (31)`.
+
+What breaks each. The three that passed on the red commit are pins; each change below was made in
+the working tree, the file run, and the tree put back (`git status` clean after each):
+
+| case | on e0283a3 | fails when |
+|---|---|---|
+| is at its end once their question is added, wherever they had scrolled to | failed: `expected +0 to be 1326` | asking does not bring the reader back (the fault) |
+| follows the answer to it from there: each delta, and the lines of the stored row | failed: `expected +0 to be 1359`, at the first delta | the fault; or the question moves the column once and the reader is not following again (tried: `expected 1326 to be 1359` at the first delta, the only case to fail) |
+| goes to its end when the rows bring the question before `workspace_ask()` has answered | failed: `expected +0 to be 1326` | the fault; or the own question only sets following and waits for the column to grow (tried: stays 0, the only case to fail) |
+| lets go again when the reader scrolls back up while that answer is written | passed | the column is pulled for as long as the own question is among the turns (tried: `expected 1359 to be +0`, the only case to fail) |
+| stays where the reader left it when a turn arrives that they did not ask | passed | any new question pulls, whoever asked it (tried: 1328, not 0) |
+| stays there when their question is refused and the turn that arrives is another tab's | passed | the same (tried); or pressing Ask is the signal and not the accepted question (tried: 1328, not 0) |
+
+The last two changes also fail the third row's case at its middle line, where the turn is on
+screen and `workspace_ask()` has not answered. That line states what the chosen signal can know;
+the refused question is what rules the other signals out.
+
+**The standing cases are unchanged** (the six of the W-2 round and the two before them):
+`git diff 7726633 3e75514 -- web/test/Workspace.failures.test.tsx` holds three changed import
+lines and one hunk of additions after line 581. All eight pass.
+
+### 4. Gates (branch at 3e75514)
+
+Run on 012e93d with a clean tree, and again on the tree that was then committed as 3e75514 (a
+comment in `Workspace.tsx` reworded, no line of code). Both runs gave the same lines:
+
+| gate | command | result |
+|---|---|---|
+| types | `npm run typecheck` | exit 0 |
+| whole suite | `npx vitest run` | `Test Files  154 passed (154)` · `Tests  2846 passed (2846)` · exit 0 |
+| lint | `npx eslint .` | exit 0, no output |
+| build | `npm run build` | exit 0; `✓ Compiled successfully`; the route list holds `○ /workspace` |
+| coverage (012e93d) | `npx vitest run --coverage` | `Tests  2846 passed (2846)` · exit 0 · all files, lines 91.47 %; `MessageList.tsx` and `Workspace.tsx` lines 100 % |
+
+2846 = 2840 + 6: `Workspace.failures` 25 → 31.
+
+Sizes: `test/Workspace.failures.test.tsx` 776 lines (581 before), `MessageList.tsx` 213 (184),
+`Workspace.tsx` 380 (372). None is over 800. The test file has 24 lines of room: the next scroll
+case should first move the three scroll `describe`s to a file of their own. Three files changed,
+all under `web/src` and `web/test`; `git diff --stat 7726633 3e75514 -- . ":(exclude)web"` printed
+nothing before this section was written.
+
+### 5. Decisions the ruling does not spell (each is the PM's to overrule)
+
+1. **A refused question does not bring the reader back.** The reader pressed Enter, the database
+   answered "still answering", and the turn that arrives is another tab's. The ruling's words are
+   the reader's own question being added, so the column stays. The refusal's sentence is under the
+   box, which does not scroll.
+2. **The column moves on that commit even when it grew by nothing.** The rows can bring the turn
+   before `workspace_ask()` has answered (a re-read on focus in between). The page learns a commit
+   later that the turn is its own, and goes to the end then.
+3. **Once a question.** After the column has gone to its end for a question, the 96 px rule is the
+   only rule again: a reader who scrolls up during the answer is let go.
+4. **A first question is not a case here.** It makes a conversation, the thread is keyed by the
+   conversation and mounts new, and a new column starts at its end as it always did. No test of
+   this round covers it.
+5. **The tests run the screen, not the column alone.** A column-only case would have had to name
+   the prop and would not have shown that the page passes it.
+
+### 6. Not done, and not proven
+
+* **Not seen in a browser.** The six cases are jsdom with a stand-in layout. The line that moves
+  the column (`scrollTop = scrollHeight` in the effect) is the one measured in Chromium in the W-2
+  round; when it now also runs was not measured. No live turn was spent.
+* **`/code-review` and `/security-review` were not run by me.**
+
+### 7. Notes for the PM
+
+* **To see it on the real page:** in a conversation taller than the column, scroll to the top, ask.
+  The question, the answer as it is written and its "Used:" line are in view. Scroll up more than
+  96 px during the answer and the column stays where it is put.
+* **A turn from another tab** still moves a reader who is at the end (they are following, as
+  before) and leaves alone a reader who has scrolled up.
