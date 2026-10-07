@@ -1167,3 +1167,268 @@ before this section was written.
 * **A later cleanup, not this phase's.** Once 143 is applied everywhere the page runs, the
   wall-clock branch of `isWorkspaceOffline`, the `now` prop of `ServiceStatus` and the fallback in
   `sinceRead` can go.
+
+## Walk defects W-1 and W-2 (2026-10-07)
+
+2026-10-07 · branch `feat/workspace-21-web` · scope: the two defects the PM's walk found (102a,
+"The PM's walk (2026-10-07)", W-1 and W-2; ruling W-R), nothing else. W-3 is the PM's. Fixtures and
+static pages only: no database read or write, no docker command, no live turn, no sign-in. The
+worktree has no `web/.env.local`, no `.env.testing` and no saved session; none was copied in, and
+no secret or env file was read.
+
+**First step.** `git fetch origin`, then `git merge --ff-only origin/feat/workspace-21` → a
+fast-forward from f5eb041 to 29f107d (101 commits; under `web/` only the PM's
+`e2e/walk21.spec.ts` and one line of `database.types.ts`), pushed. During the round the phase
+branch gained a2d16cc (102a and a comment in `compose.yaml`). It was merged as 0e169ba with no
+conflict; `git diff --stat bff1c24 0e169ba -- web` printed nothing.
+
+**Starting count** (29f107d): `npx vitest run` → `Test Files  153 passed (153)` ·
+`Tests  2830 passed (2830)`, exit 0.
+
+All commands below run from `C:/Users/stack/projects/bb2dash-wt-21-web/web`.
+
+### 1. In short
+
+| defect | cause, as confirmed | fix | commits (red, green) |
+|---|---|---|---|
+| W-1 | the message column scrolls and was not positioned, so the page, not the column, contained the `.sr-only` labels of its turns | `position: relative` on `.column` | 23c228d, 392c35f |
+| W-2 | the column followed a key (turn count, last text's length, the line under it); the stored row adds the "Used:" line and changes none of the three | the column follows the measured height of its content, after every commit | 65ac8a9, bff1c24 |
+
+Both were measured in a real browser before and after (sections 2 and 5). Five files changed, all
+under `web/`: `src/components/workspace/MessageList.module.css`, `MessageList.tsx`,
+`test/Workspace.failures.test.tsx`, and two new ones, `test/Workspace.layout.test.tsx` and
+`e2e/workspace-layout.spec.ts`. `e2e/walk21.spec.ts` was not touched.
+
+### 2. W-1: the cause, read and then measured
+
+**Read.** `.sr-only` (`src/app/globals.css`) is `position: absolute`, 1 px by 1 px, with no
+offsets. `.column` (`MessageList.module.css`) had `overflow-y: auto` and `max-height: 62dvh` and no
+`position`. No rule in the screen's six stylesheets, nor in `Shell.module.css`, set `position` at
+all, and the walk's own measure (the lowest label's bottom edge at the document's height) says
+nothing further out contained the labels either. What contains an absolute box is its nearest
+positioned ancestor, and a box that scrolls clips and moves only what it contains. So each label
+stayed where the unscrolled column would have put it, and the document grew to hold them. The
+walk's reading is right.
+
+**Measured, and how.** A static page with the CSS `next build` wrote, because the worktree has no
+`web/.env.local` (so no `next start` of the signed-in page). A one-off script, not committed,
+reads every `.next/static/chunks/*.css`, finds the class names the build gave the screen
+(`.MessageList-module__Jxouaa__column` and the rest), and builds the screen's frame from them
+(shell, main, heading, list head, thread, column, composer; a 56 px block stands in for the top
+bar) around six turns of 24 lines each. The repo's Playwright (1.63.0, its Chromium build 1243)
+laid it out at 1440 by 900 with every network request aborted.
+
+| | before (build of 29f107d) | after (build of 392c35f) |
+|---|---|---|
+| the built `.column` rule | ends `…;overflow-y:auto`, no `position` | `…;position:relative;overflow-y:auto` |
+| body | 900 px | 900 px |
+| document | 3204 px | 900 px |
+| the column: its box, its content | 558 px, 3627 px | 558 px, 3627 px |
+| labels in the column; their `offsetParent` | 12; `body` | 12; the column |
+| the lowest label's bottom edge | 3204 px, the document's height exactly | the same place, now inside the column's own scrolling content |
+| a 3000 px wheel turn with the pointer on the heading | the window scrolled 2304 px, into nothing | 0 px |
+| the last label once the column is scrolled to its end | still at y = 3203 | y = 134: it moved with its answer |
+
+The same shape as the walk's 901 px of body in 4662 px of document, and 901 px with the column
+positioned.
+
+**The other columns of the page.** The message column is the only box on the screen that scrolls.
+`ConversationList.module.css` and `Composer.module.css` have no `overflow` rule (a long list
+grows the page with real rows), and neither component renders a `.sr-only`: the two in
+`MessageList.tsx` are the only ones under `components/workspace/` and the route. Nothing to fix
+there, and nothing was changed. Outside this page ten other rules in `src/` make a box scroll;
+they were not changed. Of the app's other `.sr-only` labels I read the two that sit beside a
+scroller (`CourseSidebar`'s is in the scrim button, outside `.inner`; `SearchPanel`'s is in the
+filter row, above `.results`). That is a reading of two, not an audit of the app.
+
+### 3. W-1: the tests
+
+Two, because each catches what the other cannot.
+
+* **`test/Workspace.layout.test.tsx`** (new, 4 cases), in the pattern the repo already has for CSS
+  facts on a rendered tree (`GradesTables.layout.test.tsx`). It reads the screen's six stylesheets
+  and `globals.css` for which classes scroll, which are positioned and which are absolute, mapped
+  to the names the modules render. Then: every box that scrolls must be positioned; and on the
+  mounted screen (list, column, composer; a conversation with all three labels), going up from
+  each absolute box, no scrolling ancestor may come before a positioned one. It runs in every unit
+  run, on the real markup: it would have failed the day the labels were added.
+* **`e2e/workspace-layout.spec.ts`** (new, 2 tests), a real layout. Not a walk: it opens no host
+  and needs no session (it sets an empty `storageState` for itself). A static page of the column's
+  markup under `globals.css` and `MessageList.module.css` as written, six turns of 24 lines, in the
+  harness's Chromium at the config's 1440 by 900.
+  `npx playwright test -c e2e/playwright.config.ts workspace-layout`.
+
+RED (23c228d):
+
+* `npx vitest run test/Workspace.layout.test.tsx` → `Tests  2 failed | 2 passed (4)`.
+  "positions every box that scrolls on the Workspace screen, so it contains what it scrolls":
+  `expected [ Array(1) ] to deeply equal []`, the one being
+  `"components/workspace/MessageList.module.css: .column"`.
+  "leaves no screen-reader label of a conversation outside the column that scrolls it":
+  `expected [ …(4) ] to deeply equal []`: `"You asked"`, `"The assistant answered"`, `"You asked"`
+  and `"Status"`, each `is not contained by components/workspace/MessageList.module.css: .column`.
+  The two that passed as written are the premises: the list of stylesheets is the folder, and
+  `.sr-only` is absolute while `.column` scrolls.
+* `npx playwright test -c e2e/playwright.config.ts workspace-layout` → `2 failed`.
+  "a long conversation does not make the page taller than its window": `Expected: 900`,
+  `Received: 2900` (the document's height). "a screen-reader label is contained by the column, and
+  scrolls with what it names": `Expected: true`, `Received: false` (the labels' `offsetParent` is
+  not the column).
+
+GREEN (392c35f): `Tests  4 passed (4)`; `2 passed (621ms)`.
+
+What breaks each:
+
+| test | fails when |
+|---|---|
+| reads every stylesheet of the screen | a `*.module.css` is added under `components/workspace/` and not to the test's list |
+| writes a label as an absolute box, and the column as one that scrolls | `.sr-only` stops being absolute, or `.column` stops scrolling: the premise has moved and the other cases need a second look |
+| positions every box that scrolls | `position` comes off `.column`, or any rule of the six stylesheets gains `overflow: auto` or `scroll` without one |
+| leaves no label outside the column that scrolls it | an absolute box (a label today) is rendered inside a scrolling box with no positioned box between them |
+| spec: the page is not taller than its window | anything inside the column is contained by the page again: the document outgrows the window |
+| spec: a label is contained, and scrolls with what it names | a label's `offsetParent` is not the column, or a label is more than 2 px from the top of its question or answer after the column is scrolled |
+
+One thing the red run caught in my own first draft, before any commit: the mounted case passed on
+the unfixed tree. It matched rendered classes by their source names, and Vitest renders
+`_column_5be3d9`, so it found no scroller and had nothing to fail on. It was rewritten to map the
+names through each module, and then failed as above.
+
+### 4. W-2: the cause, and the tests
+
+**Read.** `MessageList.tsx` scrolled the column to its end in an effect keyed on `growthOf(turns)`:
+`${turns.length}:${last.text.length}:${last.line}`. While an answer is written the text grows and
+the key changes. When `workspace_finish()`'s row lands, the text is the stored content (the same
+characters the stream showed), the line is still null, and the row adds the "Used:" line under the
+text. The key is the same string, the effect does not run, and the column stays scrolled to where
+the text ended. The walk's reading is right. The tier badge has the same fault: it is in neither
+term, and it arrives over text that is already there when the first deltas reach the page before
+the poll has read the row `workspace_begin()` wrote. The error and stopped sentences did not have
+it: they are the `line` term.
+
+**Tests**: six cases in `test/Workspace.failures.test.tsx`, beside the column's two standing
+scroll cases and with their fake for the sizes jsdom does not have (`scrollHeight`,
+`clientHeight`). The turns are built by the page's own `buildTurns` from rows as the database has
+them. Each case starts with the reader at the end of 900 px of content.
+
+RED (65ac8a9): `npx vitest run test/Workspace.failures.test.tsx` →
+`Tests  2 failed | 23 passed (25)`, both `AssertionError: expected 900 to be 930`: the "Used:"
+line and the badge are on the page, the text is unchanged, and the column has not moved.
+
+GREEN (bff1c24), same command: `Tests  25 passed (25)`.
+
+What breaks each. The four that passed on the red commit are pins, so each was run once against
+the change it guards (in the working tree, then put back; `git diff` confirmed):
+
+| case | on 65ac8a9 | fails when |
+|---|---|---|
+| keeps the "Used:" line in view when it arrives under text that does not change | failed | the column follows something the stored row's extra lines do not change (the old key; or text only: tried, fails) |
+| keeps the end in view when the tier badge arrives over text that is already there | failed | the same |
+| keeps the stopped sentence in view (and an error sentence: two cases) | passed | the column follows text only: tried, both fail |
+| does not pull the column down for the stored row once the reader has scrolled up | passed | the scroll no longer asks whether the reader is at the end: tried, fails, and so does the standing "lets go once the reader scrolls up" |
+| leaves a reader a few lines above the end where they are when nothing has grown | passed | the column scrolls on every commit, grown or not: tried, fails |
+
+**The fix.** `useFollowTheEnd()` in `MessageList.tsx`: after every commit the column's
+`scrollHeight` is compared with the last one seen, and when it has changed and the reader is
+following, the column is scrolled to its end. `growthOf` is gone: there is no list of what can
+grow left to fall behind the markup. Who is following is unchanged, in the same lines as before:
+within 96 px of the end at the reader's last scroll.
+
+### 5. W-2 in a browser
+
+The real `MessageList`, `thread.ts` and their stylesheets, bundled by the Vite that Vitest
+installs (8.3.0; a one-off harness, not committed, with `next/link` stubbed), mounted on a bare
+page with the thread's 80ch measure. A script showed it one state at a time, as ordinary React
+updates: two answered turns, then a third whose answer arrives as deltas 25 ms apart, then the
+row. Same Chromium, 1440 by 900; the column is 558 px tall.
+
+| case | before (65ac8a9) | after (bff1c24) |
+|---|---|---|
+| a 60-delta answer (a turn of 1106 px), the reader at the end, the stored row lands | `scrollTop` 1366 → 1366; 23 px from the end; the "Used:" line not wholly in the column (its bottom edge 6 px under the column's) | 1366 → 1389; 0 px from the end; the "Used:" line in view, 17 px clear |
+| the same, the reader 400 px up after a wheel turn | 966 → 966 | 966 → 966 |
+| the badge arrives over a 4-delta answer (a turn of 92 px) | 352 → 352; 31 px from the end | 352 → 383; 0 px |
+| the badge arrives over a 60-delta answer | 0 px from the end (1336 → 1366) | the same |
+| Stop: the partial row with the stopped sentence | 0 px from the end, the sentence in view | the same |
+
+Two readings. The long-answer badge was already kept in view before the fix, by Chromium's own
+scroll anchoring (the badge goes in above what is on screen); over a short answer nothing kept it.
+And the walk read `usedOnScreen: false` on turns of 710 px and 1317 px: the first row is that
+case.
+
+For the third row's "before", 65ac8a9's `MessageList.tsx` was put back in the working tree for one
+harness build and the fixed file restored straight after. Every other "before" was measured before
+the fix was written.
+
+### 6. Gates (branch at 0e169ba)
+
+Run on bff1c24, the last commit that changes `web/`, and again in the same order on 0e169ba (the
+merge) with a clean tree before and after. Both runs gave the same lines:
+
+| gate | command | result |
+|---|---|---|
+| types | `npm run typecheck` | exit 0 |
+| whole suite | `npx vitest run` | `Test Files  154 passed (154)` · `Tests  2840 passed (2840)` · exit 0 |
+| lint | `npx eslint .` | exit 0, no output |
+| build | `npm run build` | exit 0; `✓ Compiled successfully`; the route list holds `○ /workspace` |
+| coverage | `npx vitest run --coverage` | `Tests  2840 passed (2840)` · exit 0 · all files, lines 91.46 % (floor 83 %); `MessageList.tsx` lines 100 % |
+| the browser spec | `npx playwright test -c e2e/playwright.config.ts workspace-layout` | `2 passed` |
+
+2840 = 2830 + 10: `Workspace.layout` 4 (new), `Workspace.failures` 19 → 25.
+
+Sizes: `test/Workspace.failures.test.tsx` 581 lines (440 before), `test/Workspace.layout.test.tsx`
+242, `e2e/workspace-layout.spec.ts` 136, `MessageList.tsx` 184 (163), `MessageList.module.css` 90
+(83). None of the round's files is over 800 lines. Six files under `web/` are, none of them
+W-66's and none touched: `src/lib/supabase/database.types.ts` 4807 (generated),
+`src/lib/queries.sync.ts` 1412, `test/Inbox.test.tsx` 1015, `test/crawler.attempts.test.ts` 866,
+`src/components/planner/PlannerWeek.module.css` 846, `test/queries.plannerSeries.test.tsx` 843.
+No new dependency. Nothing outside `web/` and this file changed:
+`git diff --stat 29f107d bff1c24 -- . ":(exclude)web"` printed nothing.
+
+### 7. Decisions the task does not spell (each is the PM's to overrule)
+
+1. **Both kinds of test for W-1.** The task names two and asks for the one that would have caught
+   the bug. The unit file is the one that would have, on the real markup, in every run; the spec
+   is the only one that lays anything out. The spec's markup is kept by hand to match
+   `MessageList.tsx`.
+2. **The spec reads two source stylesheets, not the built app.** `walk.ts` says specs never read
+   `src/`. This one is not a walk and says so in its header. Reading the build's CSS would have
+   made it need a build first and depend on how Next names a class; the build's CSS was measured
+   once, by the one-off script of section 2. The spec also runs in `npm run walk` (two tests,
+   under a second, no host).
+3. **W-2 is not one more term in `growthOf`.** The list was the fault, and a longer list is still
+   a list: the next part added to a turn would fall behind it again. The measured height cannot.
+   What that widens: the column now follows growth anywhere in it (an earlier turn's row landing
+   late, not only the last turn's), and whatever Phase 22 adds to a turn.
+4. **Only `.column` is positioned.** The list and the composer do not scroll. If either gains a
+   scroller without a position, the unit file fails.
+5. **The scroll is still a `useEffect`**, as before: it lands just after the line is painted, not
+   before. A layout effect would close that frame; it was not asked for and was left.
+
+### 8. Not done, and not proven
+
+* **The page itself is still unseen in a browser by me.** W-1 was measured on a static page with
+  the build's CSS, W-2 on the column alone under Vite's build, with rows written by hand and
+  deltas timed by a script: not a live turn through Realtime and the query cache. The walk spec's
+  own `usedOnScreen` on a live long answer, and the retaken shots, are the proof on the page.
+* **Chromium only** (Playwright's build 1243; the desktop shell is Chromium too). No other engine
+  was measured. The long-answer badge row leans on Chromium's scroll anchoring before the fix and
+  on the fix after it; the jsdom case does not depend on either.
+* **The page is as tall as its content after W-1, which at 1440 by 900 is one pixel more than the
+  window by the walk's own measure** (901 px, before and after). That is the column's 62dvh
+  (558 px) plus the bar, the heading, the composer and the padding, about 343 px: a window
+  shorter than about 903 px scrolls by the difference, onto real content. Inferred from the walk's
+  two numbers; my static page stands a 56 px block in for the top bar and cannot say.
+* **`/code-review` and `/security-review` were not run by me.**
+
+### 9. Notes for the PM
+
+* **For the retake.** A full-page shot of the fixed page is the window's height, so 06 and 07 lose
+  their empty lower part. `fitTurnInShot` is still needed: a turn taller than the column cannot
+  show its badge and its "Used:" line together, by design.
+* **For acceptance steps 3 to 5.** With the reader at the end, a long answer now ends with its
+  "Used:" line in view. A reader who has scrolled more than 96 px up is left where they are, and
+  finds the line by scrolling down, as before.
+* **Not touched**: the independent check's note that the column's default scrollbar cuts its
+  rounded corners in the desktop shell. It is not one of this round's two.
+* **The two one-off scripts** (the built-CSS measure and the Vite harness with its driver) are in
+  the session's scratch folder, not in the repo. `e2e/workspace-layout.spec.ts` repeats the W-1
+  measure on demand; nothing committed repeats the W-2 one.
