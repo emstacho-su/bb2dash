@@ -2,11 +2,16 @@
  * Phase 21's walk screenshots (brief 102, task 22): `walk-21/02` … `08`, `10`
  * and `11`, with the live turns of tasks 19 and 21 inside the same walk.
  *
+ * THE WALK RUNS ONLY WHEN IT IS ASKED FOR. Without `WALK21=1` every test in
+ * every walk21 file is skipped where it is declared: no page is opened, nothing
+ * is read and no file is written into the walk folder. A plain
+ * `npx playwright test` or `npm run walk` lists the walk as skipped.
+ *
  * Run from `web/` against the branch preview, after `e2e/login.mjs` has saved
  * a session for that host, with `WALK_BASE_URL` (and `WALK_VERCEL_SHARE` for
  * `login.mjs`) set:
  *
- *   npx playwright test -c e2e/playwright.config.ts walk21
+ *   WALK21=1 npx playwright test -c e2e/playwright.config.ts walk21
  *
  * The walk is two test files and four of helpers. This one holds the first
  * sitting's tests, in the order they are walked; `walk21.retake.spec.ts` holds
@@ -16,13 +21,15 @@
  * `walk21.window.ts` (the retake sitting's: a shot is the window) and
  * `walk21.desktop.ts` (the second shell instance).
  *
- * * `02 empty` reads standing data and runs by default. It is taken first in
- *   the walk, before any live turn, while the list holds only task 5's 'spike'.
+ * * `02 empty` reads standing data and needs only the switch. It is taken first
+ *   in the walk, before any live turn, while the list holds only task 5's
+ *   'spike'. When `WALK21_ONLY` names another test it stays out of the run.
  * * Every other test needs live state (the test container answering, stopped,
  *   or under the 0.01 cap) and most spend a turn of Stack's Claude plan, so
- *   each is skipped unless `WALK21_LIVE=1` and `WALK21_ONLY` is its exact name:
+ *   each is skipped unless `WALK21_LIVE=1` is set too and `WALK21_ONLY` is its
+ *   exact name:
  *
- *     WALK21_LIVE=1 WALK21_ONLY="03 lookup haiku" npx playwright test -c e2e/playwright.config.ts walk21 -g "03 lookup haiku"
+ *     WALK21=1 WALK21_LIVE=1 WALK21_ONLY="03 lookup haiku" npx playwright test -c e2e/playwright.config.ts walk21 -g "03 lookup haiku"
  *
  *   Run them one at a time, while each one's state holds, in the order they
  *   stand here. The PM reads the brief's selects between them. `-g` matches a
@@ -51,7 +58,8 @@
  * * A line is printed per turn with its ids, state, badge and "Used:" line.
  *   An answer's text is never printed: it can hold course material.
  * * Shots go to `docs/planning/sprint-2/walks/walk-21/` by explicit path
- *   (`walkShot`); the config's `shotDir` stays Phase 17's.
+ *   (`walkShot`, which refuses without the switch); the config's `shotDir`
+ *   stays Phase 17's.
  * * `06 stopped`, `07 offline` and `08 desktop` are the first sitting's tests
  *   under the retake sitting's rule: each shoots the window as it is, and first
  *   asserts that the document is at most 1 px taller than its window (W-1).
@@ -95,12 +103,14 @@ import {
   lastTurn,
   listedTitles,
   liveOnlyByName,
+  notWhenAnotherIsNamed,
   openSettled,
   registerWalkHooks,
   reportTurn,
   textOrNull,
   turnClosed,
   utcNow,
+  walkOnlyWhenAsked,
   workspaceReady,
 } from './walk21.lib';
 import { askAndShoot, assertThenShoot } from './walk21.first';
@@ -123,10 +133,15 @@ import {
   shootWindowAfter,
 } from './walk21.window';
 
+walkOnlyWhenAsked();
 registerWalkHooks();
 
+const EMPTY_TEST = '02 empty';
+
 test.describe('standing data (before any live turn)', () => {
-  test('02 empty', async ({ page }) => {
+  notWhenAnotherIsNamed(EMPTY_TEST);
+
+  test(EMPTY_TEST, async ({ page }) => {
     await openSettled(page, '/workspace');
     await assertThenShoot(page, '02-empty.png', async () => {
       await workspaceReady(page);

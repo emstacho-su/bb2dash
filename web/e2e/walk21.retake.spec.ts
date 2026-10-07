@@ -1,8 +1,9 @@
 /**
  * Phase 21's walk, THE RETAKE SITTING (2026-10-07, after W-66 fixed the walk's
- * W-1 and W-2). The walk and how a live test is run are described at the top
- * of `walk21.spec.ts`: each test here needs `WALK21_LIVE=1` and `WALK21_ONLY`
- * set to its exact name.
+ * W-1 and W-2). The walk, its switch and how a live test is run are described
+ * at the top of `walk21.spec.ts`: without `WALK21=1` every test here is
+ * skipped, and each one needs `WALK21_LIVE=1` and `WALK21_ONLY` set to its
+ * exact name.
  *
  * Five shots were taken again under one rule: A SHOT IS THE WINDOW, 1440 by
  * 900, never the whole page and never a window made tall. A full-page shot of
@@ -59,6 +60,7 @@ import {
   registerWalkHooks,
   reportTurn,
   utcNow,
+  walkOnlyWhenAsked,
   workspaceReady,
 } from './walk21.lib';
 import {
@@ -69,6 +71,7 @@ import {
   retakeAnsweredTurn,
 } from './walk21.window';
 
+walkOnlyWhenAsked();
 registerWalkHooks();
 
 /** After the stored row's lines are on the page: the column follows them in the same frame. */

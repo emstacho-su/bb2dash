@@ -5,10 +5,10 @@
  * sitting's way in `walk21.first.ts`, the retake sitting's in
  * `walk21.window.ts`.
  *
- * Here, in this order: which tests run and where a shot goes; the walk's
- * numbers and the page's strings; the hooks every walk file registers; the
- * page's vocabulary (open, ask, read a turn); the one helper for the message
- * column.
+ * Here, in this order: the walk's switch and the one way a path into the walk
+ * folder is made; the walk's numbers and the page's strings; the hooks every
+ * walk file registers; the page's vocabulary (open, ask, read a turn); the one
+ * helper for the message column.
  *
  * Not a spec: the config's `testMatch` takes `*.spec.ts` only. Like the specs,
  * it drives the built app from the outside and imports nothing from `src/`.
@@ -30,15 +30,41 @@ export const CHECKOUT_ROOT = join(__dirname, '..', '..');
 const SHOT_DIR = join(CHECKOUT_ROOT, 'docs', 'planning', 'sprint-2', 'walks', 'walk-21');
 
 /* ---------------------------------------------------------------------------
- * Which tests run, and where a shot goes
+ * The switch: the walk runs only when it is asked for
  * ------------------------------------------------------------------------ */
 
+/** The walk's one switch: `WALK21=1`. */
+const WALK_SWITCH = 'WALK21';
+const ASKED_FOR = process.env[WALK_SWITCH] === '1';
 const LIVE = process.env['WALK21_LIVE'] === '1';
-/** The one live test this run may execute: its exact name. */
+/** The one test this run may execute when it is set: its exact name. */
 const ONLY = process.env['WALK21_ONLY'] ?? '';
 
 /**
- * A live test runs only when it is asked for twice: `WALK21_LIVE=1`, and `WALK21_ONLY` set to
+ * Called once at the top of each walk21 spec file, before anything else in it.
+ *
+ * Without `WALK21=1` every test of the file is skipped where it is declared: no hook runs, no page
+ * is opened, nothing is read and nothing is written. A plain `npx playwright test` or
+ * `npm run walk` therefore lists the walk as skipped. The walk reads Stack's own conversation list
+ * on prod and writes its shots into a tracked folder of dated evidence, and `02 empty` holds only
+ * while that list is what it was on the day of the walk: none of that belongs in a run nobody
+ * asked for (the third `/code-review`, R3-7).
+ */
+export function walkOnlyWhenAsked(): void {
+  test.skip(!ASKED_FOR, `Phase 21's walk runs only when it is asked for: set ${WALK_SWITCH}=1`);
+}
+
+/**
+ * For a test that spends nothing, and so needs no `WALK21_LIVE`, but shoots: when `WALK21_ONLY`
+ * names another test it stays out of the run, and its dated shot is left as it is. Called once at
+ * the top of its group.
+ */
+export function notWhenAnotherIsNamed(title: string): void {
+  test.skip(ONLY !== '' && ONLY !== title, `WALK21_ONLY names another test ("${ONLY}")`);
+}
+
+/**
+ * A live test runs only when it is asked for twice more: `WALK21_LIVE=1`, and `WALK21_ONLY` set to
  * its exact name. `-g` alone is not enough: it matches a group's name too, and on 2026-10-07 one
  * pattern started five live tests (102a, "The walk's own mistake"). This rule was added after
  * that walk. Called once at the top of each live group.
@@ -50,11 +76,17 @@ export function liveOnlyByName(what: string): void {
   });
 }
 
+/** A shot's name: a bare `.png` file name, so the path made from it stays in the walk folder. */
+const SHOT_NAME = /^[0-9a-z][0-9a-z-]*\.png$/i;
+
 /**
  * Where a shot goes: `docs/planning/sprint-2/walks/walk-21/`, by explicit path (the config's
- * `shotDir` stays Phase 17's).
+ * `shotDir` stays Phase 17's). The one place a path into that folder is made, and it refuses
+ * unless the walk was asked for: no file is written there by a run without the switch.
  */
 export function walkShot(name: string): string {
+  if (!ASKED_FOR) throw new Error(`no file is written into walk-21/ unless ${WALK_SWITCH}=1`);
+  if (!SHOT_NAME.test(name)) throw new Error(`a shot's name is a bare .png file name, not "${name}"`);
   return join(SHOT_DIR, name);
 }
 
