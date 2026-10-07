@@ -1,7 +1,7 @@
 /**
  * The apply worker's process (Phase 23): the wiring around `loop.ts`.
  *
- *   node /app/apply/dist/main.js
+ *   node /app/apply/dist/main.js [--once]
  *
  * It reads its configuration (refusing an API key in the environment), writes the MCP config,
  * builds the two agents from the skill's own files, and loops. A heartbeat every 30 s reaches the
@@ -26,6 +26,7 @@ import { runLoop } from './loop.js';
 import { writeMcpConfig } from './mcp-config.js';
 
 export const HEARTBEAT_MS = 30_000;
+export const ONCE_FLAG = '--once';
 const EXIT_OK = 0;
 const EXIT_CONFIG = 1;
 
@@ -41,6 +42,8 @@ export interface WorkerDeps {
   readonly log: (line: string) => void;
   readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   readonly setInterval: (fn: () => void, ms: number) => { stop(): void };
+  /** `--once`: one pass, then stop. For a first run against one test item, and for a look by hand. */
+  readonly once?: boolean;
 }
 
 export interface Worker {
@@ -73,7 +76,14 @@ export function startWorker(deps: WorkerDeps): Worker {
     rpc,
     log: deps.log,
     runClaude: (input) => runClaude({ ...input, agents, budgetUsd: deps.config.budgetUsd }, runDeps, stopping.signal),
-    sleep: (ms) => deps.sleep(ms, stopping.signal),
+    // The loop sleeps only after a pass: under `--once` that is the moment to stop instead.
+    sleep: (ms) => {
+      if (deps.once === true) {
+        stopping.abort();
+        return Promise.resolve();
+      }
+      return deps.sleep(ms, stopping.signal);
+    },
     shouldStop: () => stopping.signal.aborted,
   }).finally(async () => {
     beat.stop();
@@ -120,6 +130,7 @@ async function main(): Promise<number> {
     run: { spawn: spawnClaude, readOauthToken: () => readOauthToken(readTextOrNull) },
     log,
     sleep: sleepUntil,
+    once: process.argv.includes(ONCE_FLAG),
     setInterval: (fn, ms) => {
       const timer = setInterval(fn, ms);
       return { stop: () => clearInterval(timer) };
@@ -131,7 +142,7 @@ async function main(): Promise<number> {
       worker.stop();
     });
   }
-  log('apply worker: started');
+  log(process.argv.includes(ONCE_FLAG) ? 'apply worker: started for one pass (--once)' : 'apply worker: started');
   await worker.done;
   log('apply worker: stopped');
   return EXIT_OK;

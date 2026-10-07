@@ -619,6 +619,14 @@ describe('the worker', () => {
     await worker.done;
   });
 
+  it('--once runs exactly one pass and stops by itself', async () => {
+    const w = workerDeps({ once: true });
+    const worker = startWorker(w.deps);
+    await worker.done;
+    expect(w.events.filter((e) => e === 'inbox_apply_claim')).toHaveLength(1);
+    expect(w.events.slice(-2)).toEqual(['interval stopped', 'end']);
+  });
+
   it('refuses to start when a skill file is empty', () => {
     const w = workerDeps({ readSkillFile: () => '' });
     expect(() => startWorker(w.deps)).toThrow(/context\.md or writer\.md is empty/);
