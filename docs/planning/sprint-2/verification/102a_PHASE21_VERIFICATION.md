@@ -742,3 +742,9 @@ contract`, reference agreement min 0.999999 over the 10 Python reference items. 
 Until it merges, the test container's build sets
 `HARNESS_DIR=C:/Users/stack/agentic-harness-wt-fastembed`; the commit read at build time goes
 into the docker section. The merge of PR #40 is Stack's word.
+
+**PR #40 merged 2026-10-06 on Stack's word ("merge the harness pr.") as 57ee51f**, its six checks
+green. The harness main checkout was a clean `main` and is fast-forwarded to it; the branch and
+its worktree are removed. `HARNESS_DIR` for the Workspace build is `C:/Users/stack/agentic-harness`
+(main, 57ee51f). The host's installed rag server still holds fastembed 2.1.0 in `node_modules`
+until `npm ci` is run there; that is Stack's to run or to ask for.

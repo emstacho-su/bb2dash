@@ -238,7 +238,7 @@ describe('the hooks', () => {
     fake.state.rows = { v_workspace_status: [{ polled_at: null, runner: null, open_requests: 0 }] };
 
     const list = renderHook(() => useWorkspaceConversations(), { wrapper });
-    const messages = renderHook(() => useWorkspaceMessages(CONVERSATION, false), { wrapper });
+    const messages = renderHook(() => useWorkspaceMessages(CONVERSATION, []), { wrapper });
     const requests = renderHook(() => useWorkspaceRequests(CONVERSATION), { wrapper });
     await waitFor(() => expect(list.result.current.data).toEqual([]));
     await waitFor(() => expect(messages.result.current.data).toEqual([]));
@@ -252,7 +252,7 @@ describe('the hooks', () => {
   it('send nothing for the lobby: no conversation, no messages or requests read', async () => {
     const { wrapper } = harness();
 
-    const messages = renderHook(() => useWorkspaceMessages(null, false), { wrapper });
+    const messages = renderHook(() => useWorkspaceMessages(null, []), { wrapper });
     const requests = renderHook(() => useWorkspaceRequests(null), { wrapper });
 
     expect(messages.result.current.fetchStatus).toBe('idle');

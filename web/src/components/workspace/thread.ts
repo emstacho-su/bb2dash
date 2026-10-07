@@ -22,12 +22,13 @@
  * Nothing here reads a clock, the cache or the DOM.
  */
 
-import type {
-  WorkspaceErrorCode,
-  WorkspaceMessage,
-  WorkspaceRequest,
-  WorkspaceRequestState,
-  WorkspaceToolCall,
+import {
+  WORKSPACE_OPEN_STATES,
+  type WorkspaceErrorCode,
+  type WorkspaceMessage,
+  type WorkspaceRequest,
+  type WorkspaceRequestState,
+  type WorkspaceToolCall,
 } from '@/lib/queries.workspace';
 import {
   ERROR_SENTENCES,
@@ -84,8 +85,6 @@ const STATE_IN_WORDS: Readonly<Record<WorkspaceRequestState, TurnState>> = {
   cancelled: 'stopped',
 };
 
-const OPEN_STATES: readonly WorkspaceRequestState[] = ['queued', 'claimed'];
-
 /** A failed request that carries no code reads as the runner's own catch-all. */
 const UNRECOGNISED_FAILURE: WorkspaceErrorCode = 'cli_error';
 
@@ -100,7 +99,9 @@ function stateOf(
   if (request === null) return null;
   // Stop shows at once, but only over an open row: a request that had already
   // finished stays finished.
-  if (stoppedRequestIds.has(request.id) && OPEN_STATES.includes(request.state)) return 'stopped';
+  if (stoppedRequestIds.has(request.id) && WORKSPACE_OPEN_STATES.includes(request.state)) {
+    return 'stopped';
+  }
   return STATE_IN_WORDS[request.state];
 }
 

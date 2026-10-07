@@ -20,9 +20,11 @@
  * WHAT IS SHOWN UNDER A QUESTION comes from its `workspace_requests` row
  * (`components/workspace/thread.ts`). After Stop the stopped sentence shows at
  * once: the request is marked here before the database has answered. The
- * partial text stays under it until the stored row replaces it; after Stop on
- * a claimed request the messages are read again about 3 s and about 10 s
- * later, so that row shows even when its `done` broadcast is missed.
+ * partial text stays under it until the stored row replaces it. That row shows
+ * even when its `done` broadcast is missed: while the newest request is closed
+ * and its assistant row unfinished, the messages query keeps polling every 5 s
+ * for up to 60 s (`lib/workspace-poll.ts`; the review round's ruling V4, which
+ * replaced two fixed timers here).
  *
  * WITH NO TURN TO SHOW the column says which of three states it is in (the
  * PM's ruling U1): no conversation selected, rows still being read, or an id
@@ -97,9 +99,6 @@ const NONE_STOPPED: ReadonlySet<number> = new Set();
 /** The key of the thread when no conversation is selected. */
 const NO_CONVERSATION_KEY = 'none';
 
-/** How long after Stop on a claimed request the messages are read again: about 3 s, and about 10 s. */
-const STOP_REREAD_DELAYS_MS: readonly number[] = [3_000, 10_000];
-
 /**
  * What went wrong, one line each, in the reason it came with. Two failures of a
  * question are not here, because each has its own words: a refusal has its
@@ -129,30 +128,6 @@ function refusalLine(asked: unknown, openRequest: WorkspaceRequest | null): stri
 }
 
 /**
- * After Stop on a claimed request the runner sees the cancel within seconds and
- * stores what it had written. That row reaches the page at its `done`
- * broadcast; if the broadcast is missed nothing else reads it, because a
- * stopped request is no longer polled. So the messages are read again about
- * 3 s and about 10 s after each such press (the PM's ruling U1). `presses`
- * counts them; leaving the conversation drops what is still to come.
- */
-function useStoredRowAfterStop(conversationId: string | null, presses: number): void {
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (conversationId === null || presses === 0) return undefined;
-    const timers = STOP_REREAD_DELAYS_MS.map((delay) =>
-      setTimeout(() => {
-        void queryClient.invalidateQueries({ queryKey: workspaceKeys.messages(conversationId) });
-      }, delay),
-    );
-    return () => {
-      for (const timer of timers) clearTimeout(timer);
-    };
-  }, [conversationId, presses, queryClient]);
-}
-
-/**
  * Stop. The request is marked the moment the button is pressed, so the stopped
  * sentence shows at once; the mark comes off again if the database says the
  * request had already finished (false) or the cancel failed (it is still open).
@@ -162,23 +137,19 @@ function useStoredRowAfterStop(conversationId: string | null, presses: number): 
  * finished there is nothing left to stop, and the next one never had Stop
  * pressed on it.
  *
- * Stop on a claimed request also has the messages read again by the clock
- * (`useStoredRowAfterStop`). A queued request has no runner, so no partial
- * answer is on its way.
+ * Nothing is scheduled here for the partial answer the runner then stores. The
+ * cancel refreshes the conversation, and the messages query polls for that row
+ * from what the rows then say (`lib/workspace-poll.ts`), whatever this page
+ * held when the button was pressed.
  */
 function useStop(conversationId: string | null, openRequest: WorkspaceRequest | null) {
   const [stopped, setStopped] = useState<ReadonlySet<number>>(NONE_STOPPED);
-  const [midAnswerStops, setMidAnswerStops] = useState(0);
   const cancel = useCancelWorkspaceRequest(conversationId);
-  useStoredRowAfterStop(conversationId, midAnswerStops);
   const failedOnOpen = openRequest !== null && openRequest.id === cancel.variables;
 
   function stop(requestId: number) {
     const unmark = () => setStopped((ids) => new Set([...ids].filter((id) => id !== requestId)));
     setStopped((ids) => new Set([...ids, requestId]));
-    if (openRequest?.id === requestId && openRequest.state === 'claimed') {
-      setMidAnswerStops((count) => count + 1);
-    }
     cancel.mutate(requestId, {
       onSuccess: (changed) => {
         if (!changed) unmark();
@@ -306,8 +277,10 @@ function Thread(props: ThreadProps) {
  * commits the request and the message together. So the messages are read once at
  * that moment, whatever told the page (the `done` broadcast, a poll, a refetch on
  * focus). Without it a missed broadcast could cost the answer, not only the live
- * text: the messages are polled only while a request is open, the two polls keep
- * their own time, and the requests poll can see the close first.
+ * text: the two polls keep their own time, the requests poll can see the close
+ * first, and the poll after a close runs only for an assistant row the page
+ * already holds unfinished. An answer begun and finished between two polls is
+ * read here.
  */
 function useStoredRowOnClose(conversationId: string | null, openRequestId: number | null): void {
   const queryClient = useQueryClient();
@@ -358,10 +331,11 @@ export function Workspace() {
   const now = useNow(WORKSPACE_STATUS_REFETCH_MS);
 
   const requests = useWorkspaceRequests(conversationId);
-  const openRequest = hydrated ? openRequestOf(requests.data) : null;
-  const messages = useWorkspaceMessages(conversationId, openRequest !== null);
-  useStoredRowOnClose(conversationId, openRequest?.id ?? null);
   const requestRows = hydrated ? (requests.data ?? NO_REQUESTS) : NO_REQUESTS;
+  const openRequest = openRequestOf(requestRows);
+  // The messages poll is decided from the requests: one open, or one just closed and unstored.
+  const messages = useWorkspaceMessages(conversationId, requestRows);
+  useStoredRowOnClose(conversationId, openRequest?.id ?? null);
   const messageRows = hydrated ? (messages.data ?? NO_MESSAGES) : NO_MESSAGES;
   // Until both have answered, an id with no rows is still being read, not "not found".
   const loaded = hydrated && requests.data !== undefined && messages.data !== undefined;

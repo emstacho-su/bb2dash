@@ -28,7 +28,8 @@
  *
  * WHAT IS NEVER READ. `claude_session_id` (the runner's), `cost_usd` (an
  * estimate that is never shown) and the tool results (never stored). The
- * select lists below name their columns for that reason.
+ * select lists of the three tables name their columns for that reason. The
+ * status view holds none of them and is read whole (see `STATUS_COLUMNS`).
  */
 
 import {
@@ -40,7 +41,9 @@ import {
 } from '@tanstack/react-query';
 import { asRecord } from './json-record';
 import { untypedClient } from './queries.sync';
+import { stampRead } from './workspace-clock';
 import { REFUSAL_QUESTION_LENGTH, REFUSAL_STILL_ANSWERING } from './workspace-labels';
+import { messagesPolled, openRequestOf } from './workspace-poll';
 
 /* ---------------------------------------------------------------------------
  * Constants
@@ -57,6 +60,8 @@ export const WORKSPACE_MESSAGES_REFETCH_MS = 5_000;
 
 /** A heartbeat older than this reads as offline. The runner beats every 30 s. */
 export const WORKSPACE_OFFLINE_AFTER_MS = 120_000;
+
+const MS_PER_SECOND = 1_000;
 
 /** `workspace_messages.tool_calls` holds at most this many elements (140's check). */
 export const WORKSPACE_TOOL_CALLS_MAX = 20;
@@ -119,9 +124,6 @@ export const WORKSPACE_ERROR_CODES: readonly WorkspaceErrorCode[] = [
   'sign_in_expired',
 ];
 
-/** The two states in which a request is still open. */
-const OPEN_STATES: readonly WorkspaceRequestState[] = ['queued', 'claimed'];
-
 /** One row of `workspace_conversations`, without the runner's session id. */
 export interface WorkspaceConversation {
   id: string;
@@ -172,6 +174,12 @@ export interface WorkspaceStatus {
   runner: string | null;
   open_requests: number;
   oldest_open_at: string | null;
+  /**
+   * Migration 143's column: the heartbeat's age in whole seconds as the database
+   * counts it, null before the first heartbeat. Optional: the key is absent while
+   * 143 is not applied, and for a count that cannot be read.
+   */
+  polled_age_seconds?: number | null;
 }
 
 /** What `workspace_ask()` answers with, normalised. */
@@ -439,6 +447,16 @@ export function normalizeRequest(row: unknown): WorkspaceRequest | null {
 }
 
 /**
+ * `polled_age_seconds` as the row keeps it: the database's count, null when the
+ * column is there and no heartbeat has been written, and `undefined` when the
+ * column is absent or its value cannot be read, so the page falls back.
+ */
+function heartbeatAgeOf(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/**
  * The one row of `v_workspace_status`. The view always returns exactly one
  * row; a missing one reads the way the row does before the first heartbeat.
  */
@@ -446,11 +464,13 @@ export function normalizeStatus(row: unknown): WorkspaceStatus {
   const raw = asRecord(row) ?? {};
   const counted = raw.open_requests;
   const open = typeof counted === 'string' ? Number(counted) : counted;
+  const age = heartbeatAgeOf(raw.polled_age_seconds);
   return {
     polled_at: textOrNull(raw.polled_at),
     runner: textOrNull(raw.runner),
     open_requests: typeof open === 'number' && Number.isSafeInteger(open) && open > 0 ? open : 0,
     oldest_open_at: textOrNull(raw.oldest_open_at),
+    ...(age === undefined ? {} : { polled_age_seconds: age }),
   };
 }
 
@@ -471,28 +491,39 @@ function normalizeAskResult(data: unknown): WorkspaceAskResult {
  * ------------------------------------------------------------------------ */
 
 /**
- * The conversation's open request (`queued` or `claimed`), or null. The unique
- * index `workspace_requests_one_open` allows one at most; the newest wins if a
- * cached list ever held two.
+ * Which request is open, and which closed one is still owed its stored answer:
+ * the rules the polls are decided by. They live in `workspace-poll.ts` and are
+ * part of this module's surface.
  */
-export function openRequestOf(
-  requests: readonly WorkspaceRequest[] | null | undefined,
-): WorkspaceRequest | null {
-  if (!requests) return null;
-  for (let index = requests.length - 1; index >= 0; index -= 1) {
-    if (OPEN_STATES.includes(requests[index].state)) return requests[index];
-  }
-  return null;
-}
+export {
+  WORKSPACE_CLOSED_POLL_MS,
+  WORKSPACE_OPEN_STATES,
+  openRequestOf,
+  unstoredClosedRequestOf,
+} from './workspace-poll';
 
 /**
- * Offline: the heartbeat is null (never polled) or more than 120 s old. A time
- * that cannot be read is treated as no heartbeat.
+ * Offline: no heartbeat yet, or one more than 120 s old.
+ *
+ * With 143's `polled_age_seconds` the age is the database's own count at the
+ * read plus `sinceReadMs`, the time this page's monotonic clock has counted
+ * since. The browser's wall clock is never set beside the database's: a laptop
+ * minutes out would call a running service offline (CR-8).
+ *
+ * While the column is absent (143 not applied) it is the comparison the page
+ * made before: `polled_at` against `nowMs`, the wall clock. A time that cannot
+ * be read is treated as no heartbeat.
  */
 export function isWorkspaceOffline(
-  status: Pick<WorkspaceStatus, 'polled_at'>,
+  status: Pick<WorkspaceStatus, 'polled_at' | 'polled_age_seconds'>,
   nowMs: number,
+  sinceReadMs = 0,
 ): boolean {
+  const countedSeconds = status.polled_age_seconds;
+  if (countedSeconds === null) return true;
+  if (countedSeconds !== undefined) {
+    return countedSeconds * MS_PER_SECOND + sinceReadMs > WORKSPACE_OFFLINE_AFTER_MS;
+  }
   if (status.polled_at === null) return true;
   const polledMs = Date.parse(status.polled_at);
   if (!Number.isFinite(polledMs)) return true;
@@ -512,7 +543,13 @@ const MESSAGE_COLUMNS =
 const REQUEST_COLUMNS =
   'id, created_at, conversation_id, user_message_id, state, claimed_at, finished_at, error_code';
 
-const STATUS_COLUMNS = 'polled_at, runner, open_requests, oldest_open_at';
+/**
+ * The status view is read whole. 143 adds `polled_age_seconds`, and a list that
+ * named it would fail (42703) until 143 is applied; read whole, the column is
+ * there or it is not. The view holds nothing that must not be read, and
+ * `normalizeStatus` keeps only the columns the row declares.
+ */
+const STATUS_COLUMNS = '*';
 
 /**
  * The conversation list, newest activity first. By default only conversations
@@ -537,13 +574,19 @@ export function conversationsOptions(archived = false) {
 /**
  * One conversation's stored messages, oldest first.
  *
- * While a request is open this refetches every 5 s: a missed broadcast costs
- * live text, never the answer, because the stored row is the record. `staleTime`
- * is 0 so a reload refetches on mount instead of trusting the restored cache
- * (the app's default is 60 s). `requestOpen` is not part of the key: it changes
- * how often the one cache entry is re-read, not what it holds.
+ * This refetches every 5 s while a request is open, and for up to 60 s after
+ * the newest one closes with its answer unstored (`messagesPolled`, in
+ * `workspace-poll.ts`): a missed broadcast costs live text, never the answer,
+ * because the stored row is the record. `requests` is the conversation's
+ * requests as the page has them. It is not part of the key: it changes how
+ * often the one cache entry is re-read, not what it holds. `staleTime` is 0 so
+ * a reload refetches on mount instead of trusting the restored cache (the
+ * app's default is 60 s).
  */
-export function messagesOptions(conversationId: string | null, requestOpen: boolean) {
+export function messagesOptions(
+  conversationId: string | null,
+  requests: readonly WorkspaceRequest[] | undefined,
+) {
   return queryOptions({
     queryKey: workspaceKeys.messages(conversationId ?? NO_CONVERSATION),
     enabled: parseConversationId(conversationId) !== null,
@@ -557,7 +600,8 @@ export function messagesOptions(conversationId: string | null, requestOpen: bool
       if (error) throw error;
       return normalizeRows(data, normalizeMessage);
     },
-    refetchInterval: requestOpen ? WORKSPACE_MESSAGES_REFETCH_MS : false,
+    refetchInterval: (query) =>
+      messagesPolled(requests, query) ? WORKSPACE_MESSAGES_REFETCH_MS : false,
     refetchOnWindowFocus: REFETCH_ON_FOCUS,
     staleTime: 0,
   });
@@ -590,7 +634,14 @@ export function requestsOptions(conversationId: string | null) {
   });
 }
 
-/** `v_workspace_status`: the runner's heartbeat, re-read every 30 s. */
+/**
+ * `v_workspace_status`: the runner's heartbeat, re-read every 30 s.
+ *
+ * Each row is stamped with the moment this page read it (`workspace-clock.ts`):
+ * the heartbeat's age is the database's count plus the time since. Structural
+ * sharing is off so that a read which brings an unchanged row is still its own
+ * object with its own moment; shared, it would keep the first read's.
+ */
 export function statusOptions() {
   return queryOptions({
     queryKey: workspaceKeys.status(),
@@ -600,11 +651,12 @@ export function statusOptions() {
         .select(STATUS_COLUMNS)
         .maybeSingle();
       if (error) throw error;
-      return normalizeStatus(data);
+      return stampRead(normalizeStatus(data));
     },
     refetchInterval: WORKSPACE_STATUS_REFETCH_MS,
     refetchOnWindowFocus: REFETCH_ON_FOCUS,
     staleTime: 0,
+    structuralSharing: false,
   });
 }
 
@@ -687,8 +739,11 @@ export function useWorkspaceConversations(archived = false) {
   return useQuery(conversationsOptions(archived));
 }
 
-export function useWorkspaceMessages(conversationId: string | null, requestOpen: boolean) {
-  return useQuery(messagesOptions(conversationId, requestOpen));
+export function useWorkspaceMessages(
+  conversationId: string | null,
+  requests: readonly WorkspaceRequest[] | undefined,
+) {
+  return useQuery(messagesOptions(conversationId, requests));
 }
 
 export function useWorkspaceRequests(conversationId: string | null) {
