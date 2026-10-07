@@ -74,6 +74,17 @@ export interface TurnHandle {
 
 type Log = (message: string) => void;
 
+/**
+ * `value` with NUL taken out of every string in it: a string itself, and the keys and values of an
+ * array or an object at any depth. Anything else is handed back as it is.
+ */
+function withoutNul<T>(value: T): T {
+  if (typeof value === 'string') return value.split(NUL).join('') as T;
+  if (Array.isArray(value)) return value.map((item: unknown) => withoutNul(item)) as T;
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, inner]) => [withoutNul(key), withoutNul(inner)])) as T;
+}
+
 /** `text` in pieces of at most `size` characters (code points, the way the database counts). */
 function piecesOf(text: string, size: number): string[] {
   const chars = [...text];
@@ -167,7 +178,7 @@ async function collect(provider: Provider, input: TurnInput, signal: AbortSignal
   try {
     for await (const event of provider.runTurn(input, signal)) {
       if (event.type === 'delta') {
-        const text = event.text.split(NUL).join('');
+        const text = withoutNul(event.text);
         content += text;
         streamer.add(text);
       } else if (event.type === 'tool') {
@@ -209,9 +220,13 @@ function storedContent(body: string, ending: Ending, budgetCapHolds: boolean, lo
   return `${chars.slice(0, room).join('')}${suffix}`;
 }
 
-/** The first 20 calls of the turn, in call order; the rest are dropped and counted in the log. */
+/**
+ * The first 20 calls of the turn, in call order; the rest are dropped and counted in the log. NUL is
+ * taken out of every string in them (ruling Z1, R2-5): the array is sent as JSON, where a NUL is an
+ * escape the database refuses to store.
+ */
 function storedCalls(calls: readonly StoredToolCall[], log: Log): readonly StoredToolCall[] {
-  const kept = calls.slice(0, TOOL_CALLS_MAX);
+  const kept = withoutNul(calls.slice(0, TOOL_CALLS_MAX));
   if (calls.length > kept.length) log(`tool calls: kept ${kept.length}, dropped ${calls.length - kept.length}`);
   return kept;
 }
