@@ -2306,3 +2306,105 @@ have hidden nothing; replacing them means rewriting those branches, which waits 
 It is the first line of the hand-off.
 
 The PM stops here: ready when Stack says so.
+
+## The third reviews: what no review had read (2026-10-07, after the PRs opened)
+
+Stack: "continue". The PM used it to close the gap named under "What no `/code-review` read": the
+three small rounds after `ac41858`. Nothing was merged.
+
+### `/code-review ac41858..HEAD high` on bb2dash (PR #78, at `7726633`)
+
+It read the runner's round Z, the two web layout fixes and the walk's specs, and ran the runner's
+suite (810 passed). Each fix does what its ruling says; migrations 140 to 143 accept the minimal
+close. Eleven findings, none CRITICAL or HIGH; the PM's severities and dispositions:
+
+| id | severity | status |
+|---|---|---|
+| R3-1 | MEDIUM | recorded: hardening, outside this phase's files (W-T) |
+| R3-2 | LOW | recorded (W-T) |
+| R3-3 | LOW | fixed (merged `4dbcaba`) |
+| R3-4 | LOW | recorded (W-T) |
+| R3-5 | MEDIUM | fixed (`012e93d`, merged `5bfe6bb`) |
+| R3-6 | LOW | recorded (W-T) |
+| R3-7 | MEDIUM | fixed (merged `4dbcaba`) |
+| R3-8 | LOW | fixed (merged `4dbcaba`) |
+| R3-9 | LOW | recorded (W-T) |
+| R3-10 | MEDIUM | fixed (merged `4dbcaba`) |
+| R3-11 | LOW | fixed (merged `4dbcaba`) |
+
+* **R3-1** `mcp-server/src/env-file.ts` (Phase 14's file, in the image): the NUL refusal of ruling
+  Z1 covers the runner's two secrets only. The materials server's key, saved as UTF-16 with no
+  line end, passes its own clean-up; every materials call then fails with Node's
+  `Headers.append: "Bearer <key>" is an invalid header value`, which goes back to the model as the
+  tool's error and into the CLI's transcript. The stored file is UTF-8 (41 bytes), so this is not
+  the state today.
+* **R3-2** `workspace/src/providers/claude-cli.ts`: a result read before the abort stops counting
+  if a second result line is read after it. No recording shows a CLI writing two result lines.
+* **R3-3** `web/e2e/walk21.spec.ts`: the live W-2 test never asserts the turn is taller than the
+  column, so a short answer would pass with or without the fix (the recorded sitting had 878 px
+  against 558); the long-Opus test fails on `undefined` when an answer used no tool.
+* **R3-4** `web/src/components/workspace/MessageList.tsx`: the column's height is measured after a
+  commit, so growth without one (the web font swapping in on a cold load) is caught up at the next
+  commit, up to 30 s later, by a small jump for a reader sitting at the end.
+* **R3-5** the same hook: nothing resumes following when the reader asks a new question, so a
+  question asked while scrolled up appears, and is answered, out of view.
+* **R3-6** `workspace/src/turn.ts`: after a refused finish and its minimal close, the turn's own
+  promise still resolves with the ending it computed, not the one stored. Nothing reads it today.
+* **R3-7** `web/e2e/walk21.spec.ts`: `02 empty` runs on every unfiltered run of the e2e folder,
+  depends on prod holding exactly one conversation titled 'spike', and writes into the tracked
+  walk folder either way.
+* **R3-8** the same spec: three assertions restate what the lines before them built.
+* **R3-9** `workspace/src/alive.ts`: round Z moved every in-process duration to the monotonic
+  clock and left the alive file's age, read across two processes, on the wall clock.
+* **R3-10, R3-11** the spec is 1212 lines against the 800-line rule, and walks up to the scrolling
+  ancestor in three places.
+
+### The umbrella's fix round and a security read of both deltas (a workflow: three readers, one skeptic per finding)
+
+* **Security, over `ac41858..HEAD` in bb2dash and `80f6796..HEAD` in bb2dash-stack: no finding at
+  0.7 or above.** Traced end to end and holding: the minimal close is built only from the turn's
+  own claim and cannot close another request; every error on the new retry, refusal and close
+  paths is rebuilt through the redaction, and the NUL refusal names a secret and a path, never a
+  value; the firewall's de-duplication drops no address and lets none in; the doctor's new
+  `docker compose config --services` call takes no value from `.env` as a command; the web change
+  adds no raw HTML sink.
+* **bb2dash-stack, two readers (correctness, and the operator who follows the README): ten
+  findings, seven confirmed by their skeptics, all LOW; three refuted** (acceptance step 13's
+  `just up`, which DECISIONS rules on, and two wordings of the doctor's rows). Confirmed: the
+  first-time step promised every row green before the Blackboard login of the next step;
+  `.env.example` gave the opposite order to the README for switching the Workspace off (the PM's
+  own sentence of the round before); the README called `up -d --build workspace` a restart, which
+  leaves a running, unchanged container alone; three mutants of the new profile check survived
+  all 65 tests; and bb2dash's `compose.yaml` comment carried two pre-merge command lines that
+  would have gone to `main` as if current. All fixed: the umbrella's at `eb4e0cf` (test-first, each of the
+  three new cases shown to fail its mutant), then `190fa43` for one more sentence its own check asked for (the
+  first-time step now names `job collect` beside `blackboard` as a row still red a minute in, and why), 70 of
+  70 tests; bb2dash's comment at `82a23f1`.
+
+### W-T. Rulings (PM)
+
+* **R3-5 is fixed**: the reader's own new question takes the column to its end and resumes
+  following; a turn that arrives unasked does not pull a reader who has scrolled up.
+* **R3-7, R3-10, R3-11, R3-3, R3-8 are fixed in the PM's spec**: the walk runs only when switched
+  on, no file is over 800 lines, one helper finds the column, the W-2 tests fail for the right
+  reason only, and the desktop test asks the running instance for its own profile folder.
+* **R3-1 is recorded as hardening and not fixed here.** It is the same fault ruling Z1 closed for
+  the runner, in a file Phase 14 owns and the host's materials server shares; the fix is one
+  refusal in `cleanSecretText` and its tests, then an image rebuild. It needs a wrongly encoded
+  secret file, and a materials server with such a file answers nothing, which shows at once.
+  STATUS lists it with the other hardening.
+* **R3-2, R3-4, R3-6, R3-9 are recorded** (STATUS, Known issues): each needs an input no recording
+  shows or moves nothing a user sees. None is worth another image rebuild before acceptance.
+* **The umbrella's seven LOW findings are fixed** (three sentences, three test cases, one
+  comment), and `CLAUDE.md` now carries S-1's rule.
+* With this, every line of both PRs up to `7726633` and `5200df6` has been read by a `/code-review` or by
+  its equivalent with skeptics, and by the security method. The fixes of this pass itself (R3-5, the spec,
+  the umbrella's sentences and cases) are held by their own independent checks: the web fix against three
+  mutants and in Chromium against a stand-in backend, the spec by its title list and a skipped run, the
+  umbrella's cases against their mutants.
+
+Gates at the phase head after this pass (`4dbcaba` and the docs commit that follows): web typecheck exit
+0, 154 files and 2846 tests, eslint clean; a plain `npx playwright test … walk21` reports 19 skipped and
+writes nothing; runner 810 (unchanged since round Z); bb2dash-stack 70 of 70 at `190fa43`. The test
+container was not rebuilt: nothing under `workspace/`, `docker/` or `mcp-server/` changed in this pass, and
+the rendered `workspace` service's hash still equals the running container's label.
