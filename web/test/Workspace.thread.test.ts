@@ -15,7 +15,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildTurns, emptyColumnOf, liveRequestOf, usedLine } from '@/components/workspace/thread';
+import {
+  buildTurns,
+  emptyColumnOf,
+  liveRequestOf,
+  usedLine,
+  withoutBoldMarkers,
+} from '@/components/workspace/thread';
 import {
   WORKSPACE_ERROR_CODES,
   normalizeMessage,
@@ -379,5 +385,59 @@ describe('emptyColumnOf: what the message column says while it holds no turn (ru
     expect(emptyColumnOf({ ...READ, askedIntoMissing: true, turns: 3 })).toBe('missing');
     expect(emptyColumnOf({ ...READ, askedIntoMissing: true, loaded: false })).toBe('missing');
     expect(emptyColumnOf({ ...READ, askedIntoMissing: true, readFailed: true })).toBe('missing');
+  });
+});
+
+describe('withoutBoldMarkers: an answer is shown without Markdown`s bold markers (Stack, 2026-10-07)', () => {
+  it('drops a pair of ** around a run of text and keeps the text', () => {
+    expect(withoutBoldMarkers('**Decision 434 (September 17).** You chose "Keep mine".')).toBe(
+      'Decision 434 (September 17). You chose "Keep mine".',
+    );
+  });
+
+  it('drops every pair, on every line, and leaves the lines as they are', () => {
+    expect(withoutBoldMarkers('**A.** one\n**B.** two\nplain')).toBe('A. one\nB. two\nplain');
+    expect(withoutBoldMarkers('**a** **b**')).toBe('a b');
+  });
+
+  it('drops a pair inside a sentence, and one that stands beside punctuation', () => {
+    expect(withoutBoldMarkers('Late work is **not** accepted (**firm**).')).toBe('Late work is not accepted (firm).');
+  });
+
+  it.each([
+    ['def f(**kwargs):'],
+    ['2 ** 3 ** 4'],
+    ['a**b**c'],
+    ['**open\nclose**'],
+    ['****'],
+    ['*****'],
+    ['** spaced **'],
+    ['one *emphasis* stays as typed'],
+    ['a lone ** here'],
+    ['**Decision 43'],
+    [''],
+  ])('leaves %j as it was typed', (text) => {
+    expect(withoutBoldMarkers(text)).toBe(text);
+  });
+});
+
+describe('buildTurns: the text shown has no bold markers, stored or live', () => {
+  it('shows a stored answer without them and leaves the stored row alone', () => {
+    const stored = answer(2, 42, { content: '**Quiz 2.** It is on Friday.' });
+    expect(turn([question(1), stored], [request(42, 1, 'done')]).text).toBe('Quiz 2. It is on Friday.');
+    expect(stored.content).toBe('**Quiz 2.** It is on Friday.');
+  });
+
+  it('shows the live text without a pair that has closed, and an opener still waiting as typed', () => {
+    const live = (text: string) => ({ requestId: 42, text, late: false });
+    expect(turn([question(1)], [request(42, 1, 'claimed')], live('**The syllabus** says')).text).toBe(
+      'The syllabus says',
+    );
+    expect(turn([question(1)], [request(42, 1, 'claimed')], live('**The syl')).text).toBe('**The syl');
+  });
+
+  it('does not touch the question, which is shown as the reader typed it', () => {
+    const asked = question(1, 'what does **kwargs** mean?');
+    expect(turn([asked], [request(42, 1, 'queued')]).question?.content).toBe('what does **kwargs** mean?');
   });
 });

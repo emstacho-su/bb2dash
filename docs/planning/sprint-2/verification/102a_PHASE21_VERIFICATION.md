@@ -2408,3 +2408,46 @@ Gates at the phase head after this pass (`4dbcaba` and the docs commit that foll
 writes nothing; runner 810 (unchanged since round Z); bb2dash-stack 70 of 70 at `190fa43`. The test
 container was not rebuilt: nothing under `workspace/`, `docker/` or `mcp-server/` changed in this pass, and
 the rendered `workspace` service's hash still equals the running container's label.
+
+## Stack's answers, W-3 fixed, and the merge (2026-10-07)
+
+Stack: "keep the screenshots. leave for now... Strip the bold asterisks. Merge."
+
+| what was put to him | his answer | what the PM did |
+|---|---|---|
+| the walk's shots in the public repository | keep | nothing: the shots stay as taken, no branch is rewritten |
+| the firewall's address allowlist on port 443 | leave for now | nothing: it stays deferred hardening (STATUS), no proxy scheduled |
+| W-3, an answer that came back with Markdown bold | strip the bold asterisks | fixed, below |
+| merge | "Merge." | both PRs merged, bb2dash #78 first, then bb2dash-stack #3, right after this commit |
+
+Still his: the plan's usage read (`/usage`), `npm ci` in the harness checkout's `mcp-server`, and
+which session takes the three prod-data SQL units.
+
+**W-3, test-first, by the PM** (ultracode had been switched off; one pure function, so no worker):
+
+* Red, `d7192c1`: `npx vitest run test/Workspace.thread.test.ts` → 16 failed of 60, each
+  `withoutBoldMarkers is not a function` or the marked text still shown.
+* Green, `3d9ebb1`: the same file 60 passed; the whole suite 154 files, 2863 tests, 0 failed
+  (2846 before); `npm run typecheck` exit 0; `npx eslint` on the two changed folders clean;
+  `npm run build` compiled.
+* The rule (`web/src/components/workspace/thread.ts`, `withoutBoldMarkers()`, applied where
+  `buildTurns()` chooses the text shown, stored or live): a closed pair of `**` around a run of
+  text on one line is dropped and the words stay. The opener stands at the start of a line or
+  after a space, a bracket or a quote, and the closer before the end of a line, a space or
+  punctuation; the run holds no `*` and no line break. So `**Decision 434 (September 17).**`
+  reads `Decision 434 (September 17).`, and `f(**kwargs)`, `2 ** 3 ** 4`, `a**b**c`, a pair
+  across a line break, `****`, a single `*emphasis*` and an opener whose closer has not streamed
+  in yet all stay as typed. Nothing becomes markup: the answer is still a React text node (O-5).
+  The stored row is not changed, and the question is shown as the reader typed it.
+* Not done for this one function, said plainly: no `/code-review`, no `/security-review`, no
+  independent check, and it was not looked at on the real page (it spends a live turn to get a
+  bold answer on purpose). It is held by its seventeen cases. The first answer on production
+  that would have carried asterisks is the proof.
+
+**The merge.** Stack said "Merge." before walking part A of the acceptance, as he did for Phase
+14 on 2026-10-04. So: both PRs merge now; all fifteen acceptance steps are his to walk on `main`;
+the `**Phase 21 accepted` row is not written; production shows the Workspace link from the merge
+on, and until step 13 starts the Workspace from bb2dash-stack its questions are answered by the
+test container (`bb2dash-wt21`, image `sha256:a2ef9b28…`, healthy, the 1.00 cap), which stays up.
+The merge commits and the acceptance go into the docs-only PR that follows acceptance step 15
+(PR #76's precedent).

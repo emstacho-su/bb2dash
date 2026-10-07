@@ -11,6 +11,9 @@
  * nodes in a `white-space: pre-wrap` paragraph: line breaks are kept, nothing
  * is parsed, and `<script>` in an answer is the eight characters it is typed
  * with (brief 102, O-5: no Markdown in v1). There is no raw-HTML sink here.
+ * One thing is taken out before the text gets here: a closed pair of bold
+ * markers, `**like this**` (`withoutBoldMarkers()` in `thread.ts`; Stack's
+ * ruling of 2026-10-07). The words stay; nothing becomes markup.
  *
  * NEVER SHOWN: a tool's result (it is never stored), the stored `query` of a
  * tool call, and the cost estimate (the query layer does not even read it).
