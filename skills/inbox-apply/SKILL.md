@@ -133,14 +133,17 @@ Under `--dry-run`, stop before this step and print the bundles.
 From the bb2dash checkout:
 
 ```bash
-node scripts/inbox-decisions-export.mjs
+node scripts/inbox-decisions-pr.mjs
 ```
 
-It resolves the vault, writes one note per decision under the vault's
-`projects/bb2dash/decisions/`, ingests them, appends the day's `docs/inbox-decisions/<date>.md`
-on the `docs/inbox-decisions` branch, and marks each row filed (migration 182). It prints one
-line per decision and stops, filing nothing, when the vault does not resolve: report that line.
-Unattended, skip this step; the host runs the exporter on its own schedule.
+It runs `scripts/inbox-decisions-export.mjs` into a worktree of its own on the
+`docs/inbox-decisions` branch: the exporter resolves the vault, writes one note per decision under
+the vault's `projects/bb2dash/decisions/`, ingests them, appends the day's
+`docs/inbox-decisions/<date>.md` and marks each row filed (migration 182); the script then commits
+the day file, pushes, and keeps one PR open for Stack to merge. It needs `SECRETS_DIR` and
+`HARNESS_DIR` in the environment. It prints one line per decision and files nothing when the vault
+does not resolve: report that line. It never touches the checkout it is run from. Unattended, skip
+this step; the host runs the same script on a schedule.
 
 ## Step 6 — Close the request (session only)
 
