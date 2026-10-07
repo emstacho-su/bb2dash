@@ -202,7 +202,10 @@ interface ToolState {
   ungated: boolean;
 }
 
-/** A call is ok when its result arrived and is not an error; the gate's exit code is no part of it. */
+/**
+ * A call is ok when its result arrived, is not an error and did not trip the count (rulings V1,
+ * CR-6, and X1); the gate's exit code is no part of it.
+ */
 const toolOk = (tool: ToolState): boolean => tool.resultSeen && !tool.isError && !tool.ungated;
 const stored = (tool: ToolState): StoredToolCall => toStoredToolCall(tool.name, tool.input, toolOk(tool));
 
