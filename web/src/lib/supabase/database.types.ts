@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       agent_requests: {
         Row: {
+          claim_attempts: number
           claimed_at: string | null
           claimed_by: string | null
           created_at: string
@@ -31,6 +32,7 @@ export type Database = {
           sync_run_id: number | null
         }
         Insert: {
+          claim_attempts?: number
           claimed_at?: string | null
           claimed_by?: string | null
           created_at?: string
@@ -46,6 +48,7 @@ export type Database = {
           sync_run_id?: number | null
         }
         Update: {
+          claim_attempts?: number
           claimed_at?: string | null
           claimed_by?: string | null
           created_at?: string
@@ -2525,6 +2528,181 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_conversations: {
+        Row: {
+          archived: boolean
+          claude_session_id: string | null
+          created_at: string
+          id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          archived?: boolean
+          claude_session_id?: string | null
+          created_at?: string
+          id?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          archived?: boolean
+          claude_session_id?: string | null
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      workspace_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          cost_usd: number | null
+          created_at: string
+          duration_ms: number | null
+          error_code: string | null
+          finished: boolean
+          id: string
+          model: string | null
+          parent_message_id: string | null
+          provider: string | null
+          request_id: number | null
+          role: string
+          tier: string | null
+          tool_calls: Json
+        }
+        Insert: {
+          content?: string
+          conversation_id: string
+          cost_usd?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          finished?: boolean
+          id?: string
+          model?: string | null
+          parent_message_id?: string | null
+          provider?: string | null
+          request_id?: number | null
+          role: string
+          tier?: string | null
+          tool_calls?: Json
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          cost_usd?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          finished?: boolean
+          id?: string
+          model?: string | null
+          parent_message_id?: string | null
+          provider?: string | null
+          request_id?: number | null
+          role?: string
+          tier?: string | null
+          tool_calls?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_messages_parent_message_id_fkey"
+            columns: ["parent_message_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_messages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_requests: {
+        Row: {
+          attempts: number
+          claimed_at: string | null
+          claimed_by: string | null
+          conversation_id: string
+          created_at: string
+          error_code: string | null
+          finished_at: string | null
+          id: number
+          state: string
+          user_message_id: string
+        }
+        Insert: {
+          attempts?: number
+          claimed_at?: string | null
+          claimed_by?: string | null
+          conversation_id: string
+          created_at?: string
+          error_code?: string | null
+          finished_at?: string | null
+          id?: never
+          state?: string
+          user_message_id: string
+        }
+        Update: {
+          attempts?: number
+          claimed_at?: string | null
+          claimed_by?: string | null
+          conversation_id?: string
+          created_at?: string
+          error_code?: string | null
+          finished_at?: string | null
+          id?: never
+          state?: string
+          user_message_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_requests_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_requests_user_message_id_fkey"
+            columns: ["user_message_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_runner_heartbeat: {
+        Row: {
+          id: number
+          polled_at: string
+          runner: string
+        }
+        Insert: {
+          id: number
+          polled_at: string
+          runner: string
+        }
+        Update: {
+          id?: number
+          polled_at?: string
+          runner?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       v_announcements_unread: {
@@ -3880,6 +4058,16 @@ export type Database = {
         }
         Relationships: []
       }
+      v_workspace_status: {
+        Row: {
+          oldest_open_at: string | null
+          open_requests: number | null
+          polled_age_seconds: number | null
+          polled_at: string | null
+          runner: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       app_owner: { Args: never; Returns: string }
@@ -3966,6 +4154,7 @@ export type Database = {
         Returns: boolean
       }
       bb_file_relpath: { Args: { p_file_id: number }; Returns: string }
+      bb_file_storage_key: { Args: { p_relpath: string }; Returns: string }
       bb_jarray: { Args: { p: Json }; Returns: Json }
       bb_resolve_course: { Args: { p_bb_course_id: string }; Returns: string }
       bb_slug: { Args: { p_text: string }; Returns: string }
@@ -4155,7 +4344,117 @@ export type Database = {
         Returns: Json
       }
       sync_change_lines: { Args: { p_stages: Json }; Returns: Json }
+      sync_claim: { Args: { p_id: number }; Returns: boolean }
+      sync_close: {
+        Args: { p_id: number; p_report: Json; p_state: string }
+        Returns: undefined
+      }
+      sync_enqueue: { Args: { p_trigger: string }; Returns: number }
+      sync_file_stored: {
+        Args: {
+          p_bytes: number
+          p_id: number
+          p_key: string
+          p_mime: string
+          p_relpath: string
+          p_sha256: string
+          p_text_status: string
+        }
+        Returns: boolean
+      }
+      sync_file_worklist: {
+        Args: never
+        Returns: {
+          attempt_id: string
+          bucket: string
+          file_name: string
+          id: number
+          mime: string
+          relpath: string
+          source_url: string
+        }[]
+      }
+      sync_login_ok: { Args: never; Returns: number }
+      sync_login_required: { Args: never; Returns: number }
+      sync_login_sync_due: { Args: { p_now: string }; Returns: boolean }
+      sync_next: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: number
+          params: Json
+        }[]
+      }
+      sync_own_claims: {
+        Args: never
+        Returns: {
+          claim_attempts: number
+          claimed_at: string
+          id: number
+          run_id: string
+        }[]
+      }
+      sync_register_run: {
+        Args: { p_id: number; p_run_id: string }
+        Returns: boolean
+      }
+      sync_requeue_orphans: { Args: never; Returns: number }
+      sync_run_outcome: {
+        Args: { p_run_id: string }
+        Returns: {
+          status: string
+          summary: Json
+          sync_run_id: number
+        }[]
+      }
+      sync_sweep_stale: { Args: never; Returns: number }
       transform_tick: { Args: never; Returns: Json }
+      workspace_ask: {
+        Args: { p_conversation_id: string; p_text: string }
+        Returns: Json
+      }
+      workspace_begin: {
+        Args: {
+          p_model: string
+          p_provider: string
+          p_request_id: number
+          p_tier: string
+        }
+        Returns: string
+      }
+      workspace_cancel: { Args: { p_request_id: number }; Returns: boolean }
+      workspace_claim: {
+        Args: { p_runner: string }
+        Returns: {
+          claude_session_id: string
+          conversation_id: string
+          history: Json
+          prior_tier: string
+          prompt: string
+          request_id: number
+          user_message_id: string
+        }[]
+      }
+      workspace_finish: {
+        Args: {
+          p_claude_session_id: string
+          p_content: string
+          p_cost_usd: number
+          p_duration_ms: number
+          p_error_code: string
+          p_model: string
+          p_request_id: number
+          p_state: string
+          p_tool_calls: Json
+        }
+        Returns: undefined
+      }
+      workspace_heartbeat: { Args: { p_runner: string }; Returns: undefined }
+      workspace_prompt_max: { Args: never; Returns: number }
+      workspace_stream: {
+        Args: { p_delta: string; p_request_id: number; p_seq: number }
+        Returns: boolean
+      }
     }
     Enums: {
       aggregation_rule:

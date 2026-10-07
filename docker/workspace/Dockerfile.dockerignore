@@ -1,0 +1,18 @@
+# The Workspace image's build context is the repo root (docker/workspace/Dockerfile, brief 102 task 12).
+# BuildKit reads this file, and not the root .dockerignore, because it sits beside that Dockerfile
+# under the Dockerfile's own name: the sync image's allow-list (the root file) is not touched.
+#
+# An allow-list: only the three folders that Dockerfile copies from are sent. Every node_modules,
+# dist and coverage folder and every .env file stay out, so nothing host-built (a Windows
+# node_modules has the wrong native binaries) and nothing secret reaches a layer. The harness `rag`
+# server does not come from this context at all: compose.yaml hands its folder to the build as the
+# named contexts `harness-mcp` and `harness-certs`.
+*
+!docker/workspace/
+!workspace/
+!mcp-server/
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*

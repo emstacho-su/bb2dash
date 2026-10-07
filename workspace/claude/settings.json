@@ -1,0 +1,17 @@
+{
+  "cleanupPeriodDays": 30,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /app/workspace/dist/hooks/tool-gate.js",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

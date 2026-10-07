@@ -50,6 +50,7 @@ const NAV_LINKS = [
   { href: '/inbox', label: 'Inbox' },
   { href: '/grades', label: 'Grades' },
   { href: '/materials', label: 'Materials' },
+  { href: '/workspace', label: 'Workspace' },
 ] as const;
 
 export function TopNav({ userEmail }: { userEmail: string | null }) {
