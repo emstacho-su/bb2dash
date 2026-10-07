@@ -939,3 +939,258 @@ workspace_runner's members   postgres (the creator's row), db_test_runner
 rows                         1 conversation, 1 message, requests cancelled:1, 0 heartbeat rows
 _w63* leftovers              0          idle in transaction   0
 ```
+
+## Review round, second pass (2026-10-07, 04:05 to 04:40 UTC): ruling X2
+
+Ruling X2 (`rulings-6.md`). **Nothing was applied to prod.** `apply_migration` was not called;
+every statement that wrote ran inside `begin; … rollback;` through `execute_sql`. 140, 141 and 142
+were read, never edited. **Two things the task asked for were not done, and section 6 says why:**
+unit 143 did not run whole and its PASS row was not read; units 140, 140b, 142 and 076 were not
+dry-run with 143 in this pass.
+
+### What is on the branch
+
+| commit | what |
+|---|---|
+| `53d055b` | test(21): units 140, 140b and 142 name the heartbeat row they delete or update |
+| `d359a2d` | test(21): unit 143 for ruling X2, committed red, before the migration |
+| `33704e7` | feat(21): migration 143 follows ruling X2 (trigger, guard, the sweep's boundary) |
+| `49071ea` | docs(21): `DATA_SYNTAX.md` follows 143 as ruled in X2 |
+
+**The fingerprint to apply against** (`git show HEAD:db/migrations/143_workspace_review_round.sql | md5sum`,
+LF only): **23585 bytes, md5 `5e7afa73d1ccfc8b06327cc128d28e1d`**. The first pass's text
+(`c82d087`) was 25400 bytes, `b6dcb28b…`. `pg_proc.prosrc` with 143: `workspace_finish`
+`1bcc855d63956911b8285628236707fb` (unchanged from the first pass), `workspace_claim`
+`8123369c3e6f8fbb88927fbe574423f6` (a comment inside the body changed; no statement did).
+`diff` of the two bodies, 142 against 143: `workspace_finish` `35a36,40`; `workspace_claim` `3a4`
+and `25a27,41`. Lines added, none of 142's changed or removed.
+
+### What changed in 143
+
+1. **The trigger** fires only `when (old.title is distinct from new.title or
+   old.claude_session_id is distinct from new.claude_session_id)`.
+2. **The guard** keeps: (a) the view is `security_invoker` with its five columns in order; (b) the
+   two replaced functions' signatures, `prosecdef` and pinned `search_path`; (c) the five are
+   exactly the SECURITY DEFINER functions `workspace_runner` executes; (d) none of the five is open
+   to `anon`, `authenticated`, `service_role` or PUBLIC; (e) the trigger exists, enabled, with its
+   condition. Gone: the view's grants, `workspace_runner`'s table privileges, "the table's one
+   trigger", plpgsql, and unit 101's three project-wide rules.
+3. **The boundary** is stated in the file's header comment, in the body's comment and in
+   `DATA_SYNTAX.md`: `finished_at < now() - interval '10 minutes'`, strictly. Exactly 10 minutes
+   is left; any longer is swept. The statement itself did not change.
+4. **The live-turn comment** reads for 480 s + 110 s < 600 s, and adds that a finish arriving
+   later still stores its text on a cancelled request (unit 143, 4b).
+
+### How the dry runs were made
+
+As before: each text goes in as a dollar-quoted literal with the white-space-blind md5 of its
+file, and a `do` block runs exactly that literal with `execute`. New in this pass: a text that
+differs is reported as a row instead of raised, so the result rows and the `rollback` always run;
+no call reported one. Generators: `scratchpad/w63r7/` (`h.mjs`, `gen-ab.mjs`, `gen-b2.mjs`,
+`gen-e.mjs`, `gen-f.mjs`); the texts sent: `scratchpad/w63r7/calls/`.
+
+| call | bytes | carried | result |
+|---|---|---|---|
+| A | 39214 | 143 whole, byte for byte, with its guard; the scaffold; two probes | went through |
+| B | 44209 | 143's statements; unit 143 whole, five blocks and its PASS select | **held**, nothing ran |
+| B2a | 25184 | 143's statements; unit 143 sections 0 and 5 | went through |
+| B2b | 26162 | 143's statements; unit 143 sections 3 and 4 | went through |
+| E | 20014 | the scaffold; 143's guard; the first pass's guard | went through |
+| F | 18321 | the scaffold; units 141 and 101 whole | went through |
+
+"143's statements" is the file minified (comments and white space out), everything before the
+guard block, md5-equal to the file's. "The scaffold" makes 143's four objects from prod's own 142
+definitions (the view and the trigger typed, the two bodies by `replace()`); call A ran it on
+prod as it is and then ran the file, and the five fingerprints were equal (`view 5bfbef6b…`,
+`trigger f5c6a5ba…`, `options {security_invoker=true}`, and the two bodies comment- and
+white-space-blind, `claim f5e315c9…`, `finish 32e47fcb…`). Calls E and F refuse to go on unless
+the scaffold gives those five again; both did. The scaffold leaves 142's three comments.
+
+### 1. The Runner, prod as it stands (04:05 UTC, nothing applied)
+
+```
+PASS  phase21_140_workspace_tables.sql
+PASS  phase21_140b_workspace_writes.sql
+PASS  phase21_141_workspace_realtime.sql
+PASS  phase21_142_workspace_runner.sql
+FAIL  phase21_143_review_round.sql  FAIL phase21_143: migration 143 is not applied (v_workspace_status has no column polled_age_seconds)
+PASS  phase15_101_search_path_pin.sql
+PASS  phase12b_076_rls_initplan_and_truncate.sql
+PASS  phase15_100_db_test_runner_role.sql
+```
+
+The four existing phase21 units pass as edited in `53d055b`; unit 143 fails only with "not applied".
+
+### 2. Call A: 143 whole with its guard, and the direct probes, red then green
+
+```
+text sent: bytes 23585, md5 5e7afa73d1ccfc8b06327cc128d28e1d, equal to the file byte for byte: true
+143: executed whole from the text sent; its guard passed
+columns: polled_at timestamp with time zone, runner text, open_requests integer, oldest_open_at timestamp with time zone, polled_age_seconds integer
+trigger: … FOR EACH ROW WHEN (((old.title IS DISTINCT FROM new.title) OR (old.claude_session_id IS DISTINCT FROM new.claude_session_id))) EXECUTE FUNCTION set_updated_at()
+prosrc md5: workspace_claim 8123369c…, workspace_finish 1bcc855d…; the other six unchanged from prod
+claim acl = finish acl = {postgres=X/postgres,workspace_runner=X/postgres}
+view acl {postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,db_test_runner=r/postgres,authenticated=r/postgres}
+comment md5: view 71fe4373…, claim ffdae7c1…, finish 148559c6… (the first pass's: the comments did not change)
+```
+
+**The trigger.** Five chats last touched a day ago: 1 archive only; 2 archive a chat already
+archived; 3 a title set to itself; 4 a new title; 5 answered by `workspace_finish` in the session
+it already had.
+
+| trigger | result |
+|---|---|
+| **red**: prod as it is (140, no condition) | `1 moved, 2 moved, 3 moved, 4 moved, 5 moved` |
+| **red**: the first pass (`c82d087`) | `1 kept, 2 moved, 3 moved, 4 moved, 5 moved` |
+| **green**: 143 | `1 kept, 2 kept, 3 kept, 4 moved, 5 moved` |
+| mutant: 143, `workspace_finish` without its own `updated_at = now()` | `1 kept, 2 kept, 3 kept, 4 moved, 5 kept` |
+
+**The boundary.** Four failed requests with an unfinished answer, then one poll.
+
+| | 9 min 59.999999 s | exactly 10 min | 10 min 0.000001 s | 10 min 1 s |
+|---|---|---|---|---|
+| prod as it is (142, no second sweep) | left | left | left | left |
+| **143** | left | **left** | **swept (cli_error)** | swept (cli_error) |
+| mutant: the sweep with `<=` | left | swept (cli_error) | swept | swept |
+
+### 3. Unit 143 with 143, from its own text: sections 0, 3, 4 and 5 (calls B2a, B2b)
+
+```
+143: every statement before its guard block executed from the text sent        (both calls)
+GREEN unit 143 section 0: every statement ran, no assertion raised
+GREEN unit 143 section 3: every statement ran, no assertion raised
+GREEN unit 143 section 4: every statement ran, no assertion raised
+GREEN unit 143 section 5: every statement ran, no assertion raised
+```
+
+The same sections, red, against the code before the fix and against mutants (each in a
+subtransaction that is undone):
+
+```
+RED section 0, the first pass's trigger:
+  P0001 FAIL phase21_143 (shape): the trigger's condition is not "the title or the session id changed": CREATE TRIGGER
+  workspace_conversations_updated_at … WHEN (((NOT (new.archived IS DISTINCT FROM old.archived)) OR (new.title IS DISTINCT FROM
+  old.title) OR (new.claude_session_id IS DISTINCT FROM old.claude_session_id) OR (new.updated_at IS DISTINCT FROM old.updated_at)
+  OR (new.created_at IS DISTINCT FROM old.created_at) OR (new.id IS DISTINCT FROM old.id))) EXECUTE FUNCTION set_updated_at()
+RED section 5, the first pass's trigger:
+  P0001 FAIL 5b nothing changes: archiving a chat that is already archived (set archived = true): updated_at moved, expected kept
+RED section 5, 140's trigger (no condition):
+  P0001 FAIL 5a archive only (set archived = true): updated_at moved, expected kept
+MUTANT section 5, workspace_finish without its own updated_at:
+  P0001 FAIL 5e (an answer in the session the chat already had): the chat reads {"moved":false,"claude_session_id":"0a1b2c3d-…"}
+MUTANT section 4, the sweep with <=:
+  P0001 FAIL 4a (E, failed exactly 10 minutes ago: left alone): the row reads {"finished":true,"error_code":"cli_error","content":"left behind"}
+```
+
+Section 5 pins the four cases of the ruling (5a archive only, 5b a no-op update, 5c a title set
+to itself, 5d a title change) and 5e, that `workspace_finish` still stamps `updated_at`.
+
+### 4. Call E: the guard
+
+```
+143 by the scaffold: its five fingerprints equal the file's (call A)
+143's guard on 143's objects: passed
+control: the first pass's guard on 143's objects: passed
+```
+
+Another stream's object present, one at a time (`_w63_*`, created and undone inside the call):
+
+| present | **red**: the first pass's guard | **green**: 143's guard |
+|---|---|---|
+| a function with no `search_path` | `FAIL 143: functions without search_path: _w63_foreign()` | passed |
+| a view that runs as its owner | `FAIL 143: these public views run as their owner: _w63_foreign_view` | passed |
+| a SECURITY DEFINER function open to `authenticated` only | `FAIL 143: authenticated may execute these SECURITY DEFINER functions in public: [_w63_foreign_sd(), app_owner(), calendar_push_now()]` | passed |
+
+What the guard owns, changed one thing at a time; it raises each time:
+
+| mutation | the guard says |
+|---|---|
+| the view replaced without its option | `v_workspace_status is not security_invoker` |
+| the first pass's trigger | `the condition of workspace_conversations_updated_at is [NOT new.archived IS DISTINCT FROM old.archived OR …]` |
+| the trigger with no condition | `the condition … is [<NULL>]` |
+| the trigger disabled | `is not an enabled before-update row trigger on set_updated_at()` |
+| `workspace_finish` as security invoker | `not security definer, or search_path not pinned: workspace_finish` |
+| `workspace_claim` with `search_path` not pinned | `not security definer, or search_path not pinned: workspace_claim` |
+| `workspace_claim` granted to `authenticated` | `anon, authenticated, service_role or PUBLIC can execute workspace_claim` |
+| a second `workspace_claim` beside the first | `the signatures of workspace_claim and workspace_finish are [… workspace_claim(p_runner text, p_x integer) returns integer; …]` |
+| `workspace_heartbeat` revoked from `workspace_runner` | `workspace_runner executes SECURITY DEFINER functions workspace_begin,workspace_claim,workspace_finish,workspace_stream, expected the five` |
+| another SECURITY DEFINER function left open to PUBLIC | `workspace_runner executes SECURITY DEFINER functions _w63_sd,workspace_begin,…, expected the five` |
+
+**The last row is another stream's object aborting the apply.** Check (c) reads every SECURITY
+DEFINER function in `public` that `workspace_runner` can execute, and PUBLIC reaches
+`workspace_runner`. It is the ruling's wording ("the five … are exactly what `workspace_runner`
+executes"), so it was kept, not narrowed. Unit 101 fails on the same object. Asked of the PM.
+
+The guard has no unit of its own (it lives in the migration), so its red and green are these runs.
+
+### 5. Call F: units 141 and 101 whole, with 143 (by the scaffold)
+
+```
+unit phase21_141_workspace_realtime, whole: {"result": "phase21_141 send and receive: PASS", "realtime_policies": 1, "partition_covers_now": "true"}
+unit phase15_101_search_path_pin, whole:    {"result": "phase15_101_search_path_pin: PASS", "public_functions": 87,
+                                             "default_search_path": "\"$user\", public, extensions", "relpath_checked": "IST.323/syllabus_policy/323Fall26V1.3.1.docx"}
+```
+
+### 6. What was NOT proven, and why
+
+**Call B was held.** It came back `Invalid or expired requestState` about 15 minutes after it was
+sent, and nothing reached the database (read at 04:31:47 UTC: four view columns, no condition on
+the trigger, 142's two bodies, no transaction open). B carried unit 143 whole. Of everything in
+it, one statement was in no call that went through: section 1's
+
+```sql
+delete from workspace_runner_heartbeat where id = 1;
+```
+
+Every other block of the unit went through afterwards, from the same text, in B2a and B2b. So the
+reading the evidence supports is that `execute_sql` holds a delete for confirmation **whether or
+not it names its row**, which is not what ruling X2 expected of `where id = 1`. It is not proven:
+B was also the largest call (44.2 KB; the largest that has gone through is 39.5 KB), and the two
+were not separated. **They were not separated on purpose.** Telling them apart means sending a
+delete to see whether the confirmation is asked for, and no session here can answer it. The
+statement was not reworded and section 1 was not rebuilt without its delete to get it through.
+
+Still owed, with 143, in a session where Stack can confirm, or through the Runner after the apply:
+
+* **unit 143, sections 1 and 2** (`polled_age_seconds`: null with no heartbeat, 0 after one, whole
+  seconds rounded down, never negative, hidden from a stranger uid). Nothing in this pass read the
+  column's value; the first pass's call A did (null, 0, 47, integer), against a view definition
+  that has not changed since (`md5(pg_get_viewdef)` `5bfbef6b…` in both passes).
+* **unit 143's PASS row.** The unit never ran whole, so the row was not read.
+* **units 140 and 142 with 143**: each has the same delete (140 section 6, 142 section 1). Not
+  sent in this pass. The first pass ran section 0 of each with 143.
+* **unit 140b with 143**: it tries `delete from … where id = …` four times as the owner, and one
+  `truncate workspace_messages`, each from a literal and each expected to be refused (42501). Not
+  sent. The truncate is outside ruling X2's wording, which names deletes only; asked of the PM.
+* **unit 076 with 143**: section 4 is two truncate tries. Not sent, in whole or in part.
+
+All four pass through the Runner against prod as it is (section 1). 143 changes one view, two
+function bodies and one trigger's condition, and no grant, policy or table.
+
+Also not proven: nothing here ran as `db_test_runner` with 143 in place (the dry runs are
+`postgres`).
+
+### 7. Choices beyond the letter of the ruling
+
+* The header comment adds one sentence the ruling did not ask for: a finish that arrives after
+  the sweep still stores its text on a cancelled request. Unit 143 4b holds it.
+* The trigger no longer writes over an `updated_at` that an update sets. The page cannot set one
+  (140 grants `authenticated` update on `title` and `archived` only); unit 143 5f holds that.
+* Unit 143 keeps assertions the guard dropped (the view's grants, the table's one trigger,
+  plpgsql, the owner, the comments): a unit failing does not abort an apply.
+
+### 8. Prod afterwards (SELECT only, 04:39:18 UTC), the same as at 04:05:45 before the first call
+
+```
+v_workspace_status columns   polled_at, runner, open_requests, oldest_open_at      options {security_invoker=true}
+its comment                  140's ("The Workspace service line (migration 140): …")
+trigger                      … FOR EACH ROW EXECUTE FUNCTION set_updated_at()      no condition, enabled
+prosrc md5 (first 8)         workspace_claim b1af4495, workspace_finish 7bf98a41, the other six unchanged
+acl                          workspace_claim = workspace_heartbeat = {postgres=X/postgres,workspace_runner=X/postgres}
+migrations named 14%         140, 141, 142 (newest 20261006171717)
+workspace_runner's members   postgres (the creator's row), db_test_runner
+rows                         1 conversation, 1 message, requests cancelled:1, 0 heartbeat rows
+_w63* leftovers              0 relations, 0 functions, no second workspace_claim      idle in transaction   0
+```
+
+`workspace_requests.id` moved on, as every dry run and Runner pass moves it (first pass, section 8).
