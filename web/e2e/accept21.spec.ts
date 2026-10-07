@@ -51,7 +51,6 @@ import {
   STOPPED_SENTENCE,
   STORED_SETTLE_MS,
   UNARCHIVE_LABEL,
-  UUID,
   conversationList,
   conversationPath,
   expectUncovered,
@@ -73,10 +72,13 @@ import {
   conversationOfStep,
   conversationOfStepOrNull,
   conversationShown,
+  conversationsOfRows,
   expectAnswered,
   expectShotsShowTheTurn,
   readTurn,
   registerAcceptHooks,
+  rowOfConversation,
+  rowsTitled,
   shootTurn,
   stageDeadlineMs,
   turnFacts,
@@ -314,12 +316,6 @@ acceptStep('14b back', { shots: ['start', 'end'] }, async ({ page }, rec) => {
   await expect(offline, 'the service is back: the page does not call it offline').toHaveCount(0);
 });
 
-/** The conversations of the list's rows, from each row's link. */
-async function conversationsOf(rows: Locator): Promise<string[]> {
-  const ids = await rows.locator('a').evaluateAll((links) => links.map((link) => new URL((link as HTMLAnchorElement).href).searchParams.get('c') ?? ''));
-  return ids.filter((id) => UUID.test(id));
-}
-
 /** The run's own conversations: what its steps asked into, as far as this stage can read. */
 function ownConversations(): string[] {
   const ids = [conversationOfStepOrNull(FIRST_QUESTION_STEP), conversationOfStepOrNull(OFFLINE_STEP), conversationOfStepOrNull('14b')];
@@ -335,11 +331,9 @@ acceptStep('15 archive', { shots: ['before', 'after', 'archived'] }, async ({ pa
   await workspaceReady(page);
 
   const list = conversationList(page);
-  const rows = list.locator('ul > li');
-  // `has` is read from inside each row, so the link and the title are named from the page.
-  const rowOf = (id: string) => rows.filter({ has: page.locator(`a[href$="c=${id}"]`) });
-  const spikeRows = rows.filter({ has: page.locator('a > span:first-child', { hasText: new RegExp(`^\\s*${SPIKE_TITLE}\\s*$`) }) });
-  const spikes = await conversationsOf(spikeRows);
+  const rowOf = (id: string) => rowOfConversation(page, id);
+  const spikeRows = rowsTitled(page, SPIKE_TITLE);
+  const spikes = await conversationsOfRows(spikeRows);
   const toArchive = [...new Set([...spikes, ...own])];
   rec.note({ own_ids: own, spike_ids: spikes, spike_was_already_archived: spikes.length === 0, listed_before: (await listedTitles(page)).length });
   await rec.shot(page, 'before');

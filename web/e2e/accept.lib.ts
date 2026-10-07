@@ -6,10 +6,12 @@
  *
  *   ACCEPT_ONLY="<title>" npx playwright test -c e2e/accept.config.ts
  *
- * Here, in this order: how a test is declared (the switch and the exact-title
- * rule); the hooks every file registers; the recorder (window-sized shots and
- * one facts file per step); what an earlier step left behind; reading a turn;
- * a question asked and recorded; and the one table write, Archive.
+ * Here, in this order: the recorder (window-sized shots and one facts file per
+ * step); how a test is declared (the switch and the exact-title rule); the
+ * hooks every file registers; what an earlier step left behind; reading a turn;
+ * a question asked and recorded; the conversation list's rows; and the one
+ * table write, Archive. `workspace-acceptance-helpers.spec.ts` drives the
+ * parts that read the page against a still copy of it.
  *
  * THE SWITCH. Without `ACCEPT=1` every test is skipped where it is declared:
  * no hook runs, no page is opened, nothing is written. With it, a test runs
@@ -58,6 +60,7 @@ import {
   UUID,
   VIEWPORT,
   ask,
+  conversationList,
   conversationOf,
   conversationPath,
   expectUncovered,
@@ -510,6 +513,34 @@ export async function askAndRecord(page: Page, rec: Recorder, live: LiveQuestion
   await expectAnswered(turn, live);
   await expectShotsShowTheTurn(turn, live.question, shots);
   return reading;
+}
+
+/* ---------------------------------------------------------------------------
+ * The conversation list's rows
+ * ------------------------------------------------------------------------ */
+
+/** Every row of the list: the listed conversations and, once "Show archived" is ticked, the archived ones. */
+export function listRows(page: Page): Locator {
+  return conversationList(page).locator('ul > li');
+}
+
+/** The row of one conversation. `has` is read from inside each row, so the link is named from the page. */
+export function rowOfConversation(page: Page, id: string): Locator {
+  return listRows(page).filter({ has: page.locator(`a[href$="c=${id}"]`) });
+}
+
+/** The rows whose title is exactly this: a longer title that only holds the words is another conversation. */
+export function rowsTitled(page: Page, title: string): Locator {
+  const exactly = new RegExp(`^\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
+  return listRows(page).filter({ has: page.locator('a > span:first-child', { hasText: exactly }) });
+}
+
+/** The conversations of some rows, from each row's link (`?c=<uuid>`). */
+export async function conversationsOfRows(rows: Locator): Promise<string[]> {
+  const ids = await rows
+    .locator('a')
+    .evaluateAll((links) => links.map((link) => new URLSearchParams((link.getAttribute('href') ?? '').split('?')[1] ?? '').get('c') ?? ''));
+  return ids.filter((id) => UUID.test(id));
 }
 
 /* ---------------------------------------------------------------------------
