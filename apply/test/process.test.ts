@@ -397,7 +397,7 @@ const NO_FACTS: RunFacts = { archivedIds: [], changedIds: [], unarchivedWrites: 
 const FINISHED: ClaudeOutcome = { exitCode: 0, timedOut: false, costUsd: 0.5, error: null, detail: null };
 
 function queueRow(id: number, over: Record<string, unknown> = {}) {
-  return { id, kind: 'stack_must_confirm', courseId: 'IST.352', entity: 'assignment', ref: `r${id}`, question: `q${id}`, state: 'resolved', accept: null, hasNote: false, wasApplied: false, appliedAt: null, ...over };
+  return { id, kind: 'stack_must_confirm', courseId: 'IST.352', entity: 'assignment', ref: `r${id}`, question: `q${id}`, state: 'resolved', accept: null, hasNote: false, wasApplied: false, appliedAt: null, sessionLink: null, ...over };
 }
 
 function passDeps(over: { rpc?: Partial<ApplyRpc>; claude?: ClaudeOutcome | (() => Promise<ClaudeOutcome>); maxRunsPerDay?: number } = {}) {

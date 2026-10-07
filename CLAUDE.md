@@ -75,8 +75,10 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   `docs/inbox-decisions/<date>.md` are rendered from it by `scripts/inbox-decisions-pr.mjs` on the host.
   The sync still holds no LLM (B-43). Claude's SQL there is two tools: `query` (one select, in a read-only
   transaction) and `apply_item` (one item; the server runs the transaction and checks each statement against
-  an allow-list). Migrations 180–182 and 184 are frozen; **183 is applied at the cut-over** (STATUS,
-  "Phase 23"); a fix is a new migration in 185–189.
+  an allow-list). Migrations 180–186 are frozen (183 went on at the cut-over, 2026-10-07); a fix is a new
+  migration in 187–189. Since 185 the role also reads `bb_files` (21 columns, never `source_url`,
+  `local_path` or `sha256`) and `sessions`, and writes neither: a session answer (`session_link/<file id>`)
+  is `link_file_sessions`'s to apply, and the worker records it only when the file already shows it.
 
 ## Environment gotchas (cloud sessions)
 

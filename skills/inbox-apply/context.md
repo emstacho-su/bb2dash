@@ -15,7 +15,16 @@ For each item you are given, return one bundle with these headings, in this orde
 
 1. **Answer** — Stack's words, the note, when.
 2. **Current row(s)** — `select *` of the row the ref names (assignments + assignment_progress;
-   course_staff; courses) as it is now.
+   course_staff; courses) as it is now. When the item is about a file (entity `bb_file`; the ref
+   is the file's id, or `session_link/<file id>` for a session answer), read the file by name,
+   never `select *` (the container's login reads these columns and no others): `select id,
+   course_id, path, file_name, bucket, week_no, session_id, link_confidence, classified_by,
+   storage_path, bytes, downloaded_at, text_status, superseded_by, notes from bb_files where id =
+   $file`. For a session answer add the week's classes: `select id, session_date, kind, topic from
+   sessions where course_id = $course and week_no = $week order by session_date`, and say which
+   one the file carries now, which one Stack picked, whether the item's `to_value` is still that
+   list of class ids, and whether a sync has finished since he answered (the item's `resolved_at`
+   against the latest row of `sync_runs`).
 3. **Blackboard facts** — `v_gradebook_latest` for the assignment: `possible`,
    `counts_toward_grade`, `submission_status`, `display_score`, `category_id`.
 4. **Course precedent** — comparable CONFIRMED rows in the same course (same `type`, same
@@ -28,7 +37,10 @@ For each item you are given, return one bundle with these headings, in this orde
    where state = 'archived' and decision ? 'change' and course_id = $course
    order by archived_at desc limit 20`. Quote the rule of the closest one.
 7. **Recommended change** — the exact SQL, touching only `assignments`, `assignment_progress`,
-   `course_staff` and `courses.group_notes`, or "none needed", with the reason.
+   `course_staff` and `courses.group_notes`, or "none needed", with the reason. For an item about
+   a file there is no SQL to recommend: `bb_files` is the transform's to write. Say what the file's
+   row shows, which of SKILL.md's three cases a session answer is in, and what of the answer or its
+   note would take a code change.
 8. **Risks / unverified** — anything you could not confirm, and any duplicate, conflict or
    contradiction you noticed between sources.
 

@@ -26,6 +26,12 @@ export const ROWS_MAX = 200;
 export const TEXT_MAX_CHARS = 60_000;
 export const STATEMENTS_MAX = 12;
 export const RECORD_MAX_CHARS = 20_000;
+/**
+ * Keys of a decision that only the database's own functions write. `closed_itself` marks a
+ * question nobody answered (114, 162): `link_file_sessions` skips an archived answer that carries
+ * it (163), so on Stack's answer it would undo the answer.
+ */
+export const RECORD_RESERVED_KEYS: readonly string[] = ['closed_itself'];
 
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
@@ -122,6 +128,8 @@ export function readApplyItem(args: unknown): { readonly input: ApplyItemInput }
   if (args.statements.length > STATEMENTS_MAX) return { reason: `at most ${STATEMENTS_MAX} statements for one item` };
   if (!isRecord(args.record)) return { reason: 'record must be the inbox-decision/1 object' };
   if (JSON.stringify(args.record).length > RECORD_MAX_CHARS) return { reason: `the record is longer than ${RECORD_MAX_CHARS} characters` };
+  const reserved = RECORD_RESERVED_KEYS.find((key) => key in (args.record as Record<string, unknown>));
+  if (reserved !== undefined) return { reason: `the record may not carry ${reserved}: it marks a question nobody answered` };
   for (const [index, statement] of (args.statements as string[]).entries()) {
     const verdict = checkWrite(statement);
     if (!verdict.ok) return { reason: `statement ${index + 1}: ${verdict.reason}` };

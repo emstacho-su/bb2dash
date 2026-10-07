@@ -30,6 +30,23 @@ what you may write.
   row after it comes back with the result.
 - A record-only item (applied by the transform, kept, dismissed, recorded elsewhere) gets no
   write: archive it with its record and move on.
+- A session answer (ref `session_link/<file id>`) gets no write: `link_file_sessions` applies it
+  at the fold, from an archived row too, and `bb_files` is not yours to write. Its bucket and its
+  `change` say what is true of the file, by SKILL.md's three cases: `applied_by_transform` only
+  when the file agrees with the answer; `recorded_elsewhere` when it is not linked yet and he
+  answered after the last sync; `needs_change` with `flagged.code_change` when the answer was not
+  and will not be applied. Never write "applied" of an answer the file does not show. Anything his
+  note asks beyond the link goes in `flagged`.
+- The facts of a file are in the item's bundle. If you must read the file yourself, name the
+  columns (the container's login reads these and no others, and `select *` is refused):
+  `select id, course_id, path, file_name, bucket, week_no, session_id, link_confidence, classified_by, storage_path, bytes, downloaded_at, text_status, superseded_by, notes from bb_files where id = $file`.
+- A `supersede/<file id>` answer: archive it, bucket `needs_change`, flagged as SKILL.md says (the
+  transform does not read it once archived, a known gap).
+- Every item you are given ends archived: with its change, or record-only with what could not be
+  done in `flagged` or raised for Stack. Never leave an item unarchived because you could not
+  verify what another function did with it, or because the change it needs is not yours to make:
+  an item left behind fails the run and is sent again at the next one. `skipped` is the server's
+  word for an item that was taken back, never yours.
 
 ## One item, one transaction
 
@@ -113,6 +130,6 @@ One line per item, in the order given, and nothing else:
 
 ```
 item <id>: archived (<change, a few words>)
-item <id>: skipped: <why>
+item <id>: skipped: <the server answered skipped: taken back or archived meanwhile>
 item <id>: failed: <the error's first line>
 ```

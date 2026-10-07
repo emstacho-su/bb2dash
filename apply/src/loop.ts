@@ -53,9 +53,10 @@ async function runBatch(d: PassDeps, requestId: number, onRun: () => void): Prom
   const prepared = await d.rpc.prepare(requestId);
   const plan = planBatch(prepared);
 
-  for (const { row, bucket } of plan.templated) {
+  for (const entry of plan.templated) {
+    const { row } = entry;
     try {
-      const archived = await d.rpc.archive(requestId, row.id, templatedDecision(row, bucket, requestId));
+      const archived = await d.rpc.archive(requestId, row.id, templatedDecision(entry, requestId));
       if (!archived) d.log(`pass: item ${row.id} was taken back before it could be recorded`);
     } catch (error) {
       // One row's refusal never stops the request: it stays in the queue and is reported as left.
