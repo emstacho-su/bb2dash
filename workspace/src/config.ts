@@ -80,6 +80,8 @@ export const CONTENT_MAX_CHARS = 100_000;
 export const TOOL_CALLS_MAX = 20;
 /** A stored tool call's `query` is cut here. */
 export const TOOL_QUERY_MAX_CHARS = 200;
+/** The character the database cannot store in text, and that no secret saved as text holds. */
+export const NUL = '\u0000';
 
 /** The per-answer cost cap (`WORKSPACE_TURN_BUDGET_USD`): its default and the range it is refused outside. */
 export const TURN_BUDGET_DEFAULT_USD = 1.0;
@@ -162,8 +164,17 @@ export function assertSubscriptionEnv(env: Env): void {
   }
 }
 
-/** A secret file's value without the byte-order mark and line ends an editor may have added. */
-export function cleanSecret(raw: string): string {
+/**
+ * A secret file's value without the byte-order mark and line ends an editor may have added.
+ *
+ * A value that holds a NUL character is refused (ruling Z1): a file saved as UTF-16 reads that way,
+ * and node quotes a value with a NUL in the error it throws when a child is started with it.
+ * `source` names the secret and its file in the refusal; nothing of the value is in it.
+ */
+export function cleanSecret(raw: string, source: string): string {
+  if (raw.includes(NUL)) {
+    throw new ConfigError(`${source} holds a NUL character: save the file as plain UTF-8 text (a file saved as UTF-16 reads this way)`);
+  }
   return raw.replace(/^\uFEFF/, '').replace(/[\r\n]/g, '').trim();
 }
 
@@ -239,7 +250,7 @@ export function readDbCa(env: Env, readFile: ReadFile): string {
 }
 
 function requireSecret(file: string, name: string, readFile: ReadFile): string {
-  const value = cleanSecret(readFile(file) ?? '');
+  const value = cleanSecret(readFile(file) ?? '', `the secret ${name} (read at ${file})`);
   if (value === '') throw new ConfigError(`the secret ${name} is missing or empty (read at ${file})`);
   return value;
 }

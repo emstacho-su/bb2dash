@@ -10,10 +10,8 @@ import { DB_WATCHDOG_MS, FINISH_BACKOFF_FIRST_MS, FINISH_BACKOFF_MAX_MS, FINISH_
 import { SHUTDOWN_GRACE_MS, createRunner } from '../../src/runner.js';
 import { startTurn } from '../../src/turn.js';
 import { STORED_SESSION_ID, claimOf, dbDown, dbRefusal, delta, result, scriptedTurn, type FakeRpc } from '../helpers/fakes.js';
-import { loopHarness, turnHarness, useFakeClock } from '../helpers/turn-harness.js';
+import { RETRY_SCHEDULE as SCHEDULE, loopHarness, turnHarness, useFakeClock } from '../helpers/turn-harness.js';
 
-/** When each try is made, in ms after the first: 1 s, 2 s, 4 s and 8 s apart, then every 15 s, the last at 110 s. */
-const SCHEDULE = [0, 1000, 3000, 7000, 15_000, 30_000, 45_000, 60_000, 75_000, 90_000, 105_000, 110_000];
 /** How long the database leaves a request claimed before `workspace_claim()` sweeps it as stale (migration 142). */
 const STALE_CLAIM_MS = 10 * 60 * 1000;
 

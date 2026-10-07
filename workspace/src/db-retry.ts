@@ -5,11 +5,17 @@
  * A try that fails is made again after 1 s, then 2 s, 4 s, 8 s and every 15 s after that, for 110 s
  * from the first try; the last try is made as the 110 s end. A refusal the function raises itself
  * (SQLSTATE 22023) is an answer, not a failure: it ends the tries at once, and the end says whether
- * a failed try came before it.
+ * a failed try came before it. A statement the database refuses for what it is or holds (a data,
+ * integrity or syntax SQLSTATE; ruling Z1, R2-5) ends the tries at once too: the same statement
+ * gets the same answer. A statement cut at its time limit (57014) and every failure to reach the
+ * database are tried again.
+ *
+ * The 110 s are read on the caller's monotonic clock (ruling Z1, R2-2): a step of the wall clock in
+ * the middle of the tries neither ends them early nor adds to them.
  */
 
 import { FINISH_BACKOFF_FIRST_MS, FINISH_BACKOFF_MAX_MS, FINISH_RETRY_MS } from './config.js';
-import { isRefusal } from './db.js';
+import { isBadStatement, isRefusal } from './db.js';
 import { messageOf } from './errors.js';
 
 const BACKOFF_FACTOR = 2;
@@ -24,6 +30,8 @@ export type RetryEnd<T> =
    * may be the answer to a call that was already made.
    */
   | { readonly outcome: 'refused'; readonly error: unknown; readonly afterFailure: boolean }
+  /** The database refused the statement for what it is or holds (`isBadStatement`): no further try was made. */
+  | { readonly outcome: 'bad_statement'; readonly error: unknown }
   /** Every try inside the window failed. */
   | { readonly outcome: 'gave_up'; readonly error: unknown }
   /** The caller's signal ended the tries before the window did. */
@@ -33,6 +41,8 @@ export interface RetryOptions {
   /** The call's name in the log: `begin` or `finish`. */
   readonly what: string;
   readonly log: (message: string) => void;
+  /** Milliseconds on a monotonic clock: the window is counted on it. */
+  readonly now: () => number;
   /** Ends the tries early, between two of them. A try in flight is never cut. */
   readonly signal?: AbortSignal;
 }
@@ -55,7 +65,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 export async function retryDbCall<T>(call: () => Promise<T>, options: RetryOptions): Promise<RetryEnd<T>> {
-  const deadline = Date.now() + FINISH_RETRY_MS;
+  const deadline = options.now() + FINISH_RETRY_MS;
   let backoff = FINISH_BACKOFF_FIRST_MS;
   for (let attempt = 1; ; attempt += 1) {
     try {
@@ -63,7 +73,9 @@ export async function retryDbCall<T>(call: () => Promise<T>, options: RetryOptio
     } catch (error) {
       // Only a try that failed in another way is followed by another try, so a later try means one did.
       if (isRefusal(error)) return { outcome: 'refused', error, afterFailure: attempt > 1 };
-      const left = deadline - Date.now();
+      if (isBadStatement(error)) return { outcome: 'bad_statement', error };
+      // Whole milliseconds: the clock counts fractions of one, and the wait is printed.
+      const left = Math.round(deadline - options.now());
       if (left <= 0) return { outcome: 'gave_up', error };
       if (options.signal?.aborted) return { outcome: 'stopped', error };
       const wait = Math.min(backoff, left);

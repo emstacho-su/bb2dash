@@ -34,7 +34,8 @@ import {
   refusedEnvNames,
 } from '../src/config.js';
 import { dsnParts } from '../src/db.js';
-import { buildArgs } from '../src/providers/claude-cli.js';
+import { buildArgs, createCliTurn } from '../src/providers/claude-cli.js';
+import { CONVERSATION_ID, QUESTION, collect, fakeSpawn } from './helpers/fakes.js';
 import { makeThrowawayCa } from './helpers/throwaway-ca.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -332,7 +333,7 @@ describe('loadConfig', () => {
     const readFile = files({ [PATHS.runnerDbUrlSecret]: `\uFEFF${DSN}\r\n`, [PATHS.oauthTokenSecret]: `${TOKEN}\n`, [DEFAULT_CA_FILE]: CA_PEM });
     expect(loadConfig({ env: {}, readFile, hostname: 'h' }).dbUrl).toBe(DSN);
     expect(readOauthToken(readFile)).toBe(TOKEN);
-    expect(cleanSecret(`\uFEFF  ${TOKEN}\r\n`)).toBe(TOKEN);
+    expect(cleanSecret(`\uFEFF  ${TOKEN}\r\n`, 'the secret under test')).toBe(TOKEN);
   });
 
   it('refuses to start without the DSN secret', () => {
@@ -465,6 +466,105 @@ describe('the OAuth token', () => {
     ['only white space', files({ [PATHS.oauthTokenSecret]: ' \r\n' })],
   ])('is refused when the file is %s', (_what, readFile) => {
     expect(() => readOauthToken(readFile)).toThrow(/claude_oauth_token/);
+  });
+});
+
+// From the security review on the delta (ruling Z1): a token saved as UTF-16 would reach the log
+// through node's own spawn error, which quotes the value it refuses.
+describe('a secret file that holds a NUL character', () => {
+  const NUL = '\u0000';
+  /** What a byte that is not UTF-8 reads as: the replacement character, two of them for the mark of a UTF-16 file. */
+  const REPLACEMENT = String.fromCharCode(0xfffd);
+  /** What a file saved as UTF-16 with its mark reads as when it is read as UTF-8: a NUL beside every character. */
+  const savedAsUtf16 = (text: string, order: 'little-endian' | 'big-endian'): string => {
+    const bytes = Buffer.from(`${String.fromCharCode(BYTE_ORDER_MARK)}${text}`, 'utf16le');
+    return (order === 'little-endian' ? bytes : bytes.swap16()).toString('utf8');
+  };
+  /** Made up, and made of characters the refusal has no word for: capitals, digits and signs it does not use. */
+  const ODD_SECRET = 'QZJGXWKHBVYPMD0234579~#%^&*+=!?@$';
+  const messageFrom = (work: () => unknown): string => {
+    try {
+      work();
+      return 'no refusal';
+    } catch (error) {
+      return error instanceof ConfigError ? error.message : `not a ConfigError: ${String(error)}`;
+    }
+  };
+  const caOnly = { [DEFAULT_CA_FILE]: CA_PEM };
+
+  it('reads a UTF-16 file as text with a NUL beside every character, which is what is refused', () => {
+    expect(savedAsUtf16('ab', 'little-endian')).toBe(`${REPLACEMENT}${REPLACEMENT}a${NUL}b${NUL}`);
+    expect(savedAsUtf16('ab', 'big-endian')).toBe(`${REPLACEMENT}${REPLACEMENT}${NUL}a${NUL}b`);
+  });
+
+  it.each([['little-endian'], ['big-endian']] as const)('refuses the token of a file saved as UTF-16 (%s), naming the secret and its file', (order) => {
+    const message = messageFrom(() => readOauthToken(files({ [PATHS.oauthTokenSecret]: savedAsUtf16(TOKEN, order) })));
+    expect(message).toMatch(/^the secret claude_oauth_token /);
+    expect(message).toContain(PATHS.oauthTokenSecret);
+    expect(message).toMatch(/NUL/);
+    expect(message).not.toContain(TOKEN);
+  });
+
+  it.each([['little-endian'], ['big-endian']] as const)('refuses to start on a DSN file saved as UTF-16 (%s), naming the secret and its file', (order) => {
+    const readFile = files({ ...caOnly, [PATHS.runnerDbUrlSecret]: savedAsUtf16(DSN, order), [PATHS.oauthTokenSecret]: TOKEN });
+    const message = messageFrom(() => loadConfig({ env: {}, readFile, hostname: 'h' }));
+    expect(message).toMatch(/^the secret workspace_runner_db_url /);
+    expect(message).toContain(PATHS.runnerDbUrlSecret);
+    expect(message).toMatch(/NUL/);
+    expect(message).not.toContain('not-a-password');
+    expect(message).not.toContain('pooler.supabase.com');
+    expect(message).not.toMatch(/postgres/);
+  });
+
+  it.each([
+    ['at the start', `${NUL}${TOKEN}`],
+    ['in the middle', `not-a-real${NUL}-token`],
+    ['at the end', `${TOKEN}${NUL}`],
+    ['after the line end', `${TOKEN}\n${NUL}`],
+  ])('refuses a value with one NUL %s', (_where, value) => {
+    expect(messageFrom(() => readOauthToken(files({ [PATHS.oauthTokenSecret]: value })))).toMatch(/claude_oauth_token.*NUL/);
+    expect(() => cleanSecret(value, 'the secret under test')).toThrow(ConfigError);
+  });
+
+  it.each([
+    ['the token', (value: string) => () => readOauthToken(files({ [PATHS.oauthTokenSecret]: value }))],
+    ['the DSN', (value: string) => () => loadConfig({ env: {}, readFile: files({ ...caOnly, [PATHS.runnerDbUrlSecret]: value }), hostname: 'h' })],
+  ])('says nothing of the value when it refuses %s: not one of its characters, no NUL, no replacement character', (_what, read) => {
+    for (const order of ['little-endian', 'big-endian'] as const) {
+      const message = messageFrom(read(savedAsUtf16(ODD_SECRET, order)));
+      expect(message).toMatch(/NUL/);
+      expect([...new Set(ODD_SECRET)].filter((char) => message.includes(char))).toEqual([]);
+      expect(message).not.toContain(NUL);
+      expect(message).not.toContain(REPLACEMENT);
+    }
+  });
+
+  it('names what it was handed and nothing else when cleanSecret is called by itself', () => {
+    const message = messageFrom(() => cleanSecret(savedAsUtf16(ODD_SECRET, 'little-endian'), 'the secret under test'));
+    expect(message.startsWith('the secret under test ')).toBe(true);
+    expect([...new Set(ODD_SECRET)].filter((char) => message.includes(char))).toEqual([]);
+  });
+
+  // The token is read immediately before each CLI start, so this is where a token file is refused.
+  it('starts no CLI on such a token: the turn ends sign_in_expired and the log names the file, not the value', async () => {
+    const logs: string[] = [];
+    const spawn = fakeSpawn({ lines: [], exit: { code: 0, signal: null } });
+    const turn = createCliTurn({
+      spawn: spawn.spawn,
+      readSystemPrompt: () => 'You are read-only.',
+      readOauthToken: () => readOauthToken(files({ [PATHS.oauthTokenSecret]: savedAsUtf16(ODD_SECRET, 'little-endian') })),
+      baseEnv: { PATH: '/usr/bin' },
+      log: (line) => logs.push(line),
+    });
+    const input = { requestId: '41', conversationId: CONVERSATION_ID, model: 'haiku', prompt: QUESTION, history: [], claudeSessionId: null, budgetUsd: 1 };
+    const events = await collect(turn(input, new AbortController().signal));
+    expect(spawn.calls).toHaveLength(0);
+    expect(events).toEqual([{ type: 'result', ok: false, errorCode: 'sign_in_expired', costUsd: null, claudeSessionId: null, model: null }]);
+    const said = logs.filter((line) => /no subscription token/.test(line));
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain(PATHS.oauthTokenSecret);
+    expect(said[0]).not.toContain(NUL);
+    expect(said[0]).not.toContain(ODD_SECRET.slice(0, 4));
   });
 });
 

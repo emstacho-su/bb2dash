@@ -8,6 +8,10 @@
  * retrying its `workspace_finish()` inside the 110 s that call is given (rulings V1, CR-3, and X1), so a
  * finished answer is not thrown away by the restart. On SIGTERM or SIGINT it stops polling, ends a
  * turn in flight as `failed` / `stale_claim`, and exits 0.
+ *
+ * The 180 s and the 110 s are read on a monotonic clock (ruling Z1, R2-2), so a wall clock that
+ * steps (the laptop slept, the VM's clock was set) neither trips the watchdog nor ends its hold.
+ * The wall clock is read only to stamp a log line.
  */
 
 import fs from 'node:fs';
@@ -105,19 +109,19 @@ export function createRunner(deps: RunnerDeps): Runner {
   /** True while the turn in flight is making its `workspace_finish()` and is still inside the retry window. */
   const finishInWindow = (): boolean => {
     const since = state.turn?.finishingSince() ?? null;
-    return since !== null && Date.now() - since < FINISH_RETRY_MS;
+    return since !== null && deps.now() - since < FINISH_RETRY_MS;
   };
 
   const beat = async (): Promise<void> => {
     try {
       await deps.rpc.heartbeat(deps.runnerName);
-      state.lastHeartbeatOk = Date.now();
+      state.lastHeartbeatOk = deps.now();
       state.watchdogHeld = false;
       deps.touchAlive();
     } catch (error) {
       log(`heartbeat failed: ${messageOf(error)}`);
     }
-    if (Date.now() - state.lastHeartbeatOk < DB_WATCHDOG_MS) return;
+    if (deps.now() - state.lastHeartbeatOk < DB_WATCHDOG_MS) return;
     const silentFor = `no heartbeat has succeeded for ${DB_WATCHDOG_MS / MS_PER_SECOND} s`;
     // A finished answer is waiting to be stored: the restart waits for the finish's own window.
     if (finishInWindow()) {
@@ -139,7 +143,7 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   return {
     async run() {
-      state.lastHeartbeatOk = Date.now();
+      state.lastHeartbeatOk = deps.now();
       log(`started as ${deps.runnerName}`);
       void beat();
       const heartbeatTimer = setInterval(() => void beat(), HEARTBEAT_MS);
@@ -174,6 +178,9 @@ export function createRunner(deps: RunnerDeps): Runner {
   };
 }
 
+/** The runner's clock for durations: milliseconds since the process started, which no step of the wall clock moves. */
+export const monotonicNow = (): number => performance.now();
+
 function stamp(line: string): void {
   process.stdout.write(`${new Date().toISOString()} workspace: ${line}\n`);
 }
@@ -202,6 +209,7 @@ export async function main(): Promise<number> {
     log: stamp,
     budgetUsd: config.budgetUsd,
     budgetCapHolds: BUDGET_CAP_HOLDS,
+    now: monotonicNow,
     runnerName: config.runnerName,
     touchAlive: () => touchAlive(PATHS.aliveFile),
   });

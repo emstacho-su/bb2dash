@@ -2045,3 +2045,662 @@ bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:0
 `workspace/test` is over 800 lines; the longest is still `test/runner/cli-turn.suite.ts` at 719,
 `test/runner/db.suite.ts` is 497 and `test/runner/closing.suite.ts` 403; the longest under `src/`
 is `providers/claude-cli.ts` at 490, with `db.ts` at 340.
+
+## Fix round Z (2026-10-07)
+
+Ruling Z1 of `rulings-8.md` (the PM, 2026-10-07): three findings of `/code-review` on the range
+`d4b1b8d..ac41858` (R2-1, R2-2, R2-5) and one hardening item from the security review on the
+delta. First step: `git fetch origin`, `git merge origin/feat/workspace-21` (a fast-forward to
+`ac41858`: the branch held nothing of its own; no conflict), pushed.
+
+The code and its tests are eleven commits of 2026-10-07, `0ba9da8` to `4ccffe5`, all on origin: a
+red commit and a green one for each of R2-1, R2-2, R2-5a, R2-5b with R2-5c, and the secret, and one
+test-only commit after the last. Every red and green run quoted below is the named commit's own
+tree, run in a copy of `workspace/` outside the worktree (the session's scratch folder:
+`git archive <commit> workspace` laid over a copy with its own `node_modules`). The copy at
+`ac41858` with no edit: 9 files, 714 passed. A mutant is one or two exact-string edits to a source
+file in the worktree, one `vitest run`, and the file restored with `git checkout --` before the
+next (`git status` showed nothing of them after each batch); the commit each batch ran on is
+named. No `claude -p` ran, no fixture was recorded again, no database was called, no migration was
+touched, and the only docker command was the read-only guard at the end.
+
+Three of the red commits name what did not exist yet (`TurnDeps.now` and `monotonicNow`;
+`isBadStatement`; the second argument of `cleanSecret`), so `npm run typecheck` fails on
+`f5e69e4`, `0085337` and `7d745b0` and on no other commit. vitest does not typecheck, so their red
+runs are the cases' own failures.
+
+### 1 · R2-1 · a result line read after the runner's abort is not a reported result (`workspace/src/providers/claude-cli.ts`)
+
+What was wrong. The CLI turn reads its process's output to the end after it has asked for the
+kill. A `result` line among what it read then still set `reported`, and `endingOf` (`turn.ts`)
+lets a reported result stand over the 8-minute limit (CR-5). So a CLI whose last chunk, deltas and
+a success result, was read after the limit had killed it was stored `done` with the text up to the
+abort (the deltas of that chunk are dropped: nothing is yielded after the abort), and one that
+wrote an error result while it was being killed was stored `cli_error`, not `timeout`.
+
+The fix. `attemptOnce` notes a result line it reads while the runner's signal is aborted
+(`lateResult`), and the attempt's `reported` is "a result line was read, and none after the
+abort". `resultOf` then takes the branch it already had for a turn cut short: `ok: false`,
+`errorCode: 'cli_error'` for the runner to replace, `reported: false`. `endingOf` is not changed:
+with `reported` false the limit's own code stands, and Stop and a shutdown stood over a reported
+result already. A result line read before the abort is reported as before, so the 10 s the CLI
+gets to exit after its result line is still not an abort of the turn. The comment on
+`ResultEvent.reported` (`providers/types.ts`) and the one in `endingOf` say so.
+
+17 cases, `test/runner/abort-result.suite.ts`. `FakeProcessOptions.linesOnKill`
+(`test/helpers/fakes.ts`) is what a hanging process still writes, as one chunk, once it is told to
+stop, so the reader sees it after the kill.
+
+| the result line | read | the provider's result event | the turn as stored |
+|---|---|---|---|
+| success | after the abort | `ok: false`, `cli_error`, `reported: false` | (provider case only; the chunk row below is the turn's) |
+| error (`error_during_execution`) | after the abort | the same | limit: `timeout`; Stop: `cancelled`; shutdown: `stale_claim` |
+| budget stop | after the abort | the same | limit: `timeout` |
+| deltas and a success result, one chunk (the review's case) | after the abort | the same, and the chunk's deltas are no text | limit: `timeout`; Stop: `cancelled`; shutdown: `stale_claim`; content the text before the abort |
+| success | before the abort | `ok: true`, `reported: true`, cost 0.01 | limit: `done` with its answer |
+| budget stop | before the abort | `budget_exceeded`, `reported: true` | limit: `budget_exceeded` |
+| error | before the abort | `cli_error`, `reported: true` | (provider case only) |
+| success, then more output after the kill | before the abort | `ok: true`, `reported: true` | (provider case only) |
+
+Red, `0ba9da8`:
+
+```
+$ npx vitest run
+ × does not report a success result the CLI wrote while it was being killed: the code is the runner's to give
+ × does not report an error result the CLI wrote while it was being killed: the code is the runner's to give
+ × does not report a budget stop the CLI wrote while it was being killed: the code is the runner's to give
+ × takes nothing from a last chunk read after the abort: its deltas are no answer text, its success result no result
+ × is timeout, never done, when the last chunk (deltas and a success result) is read after the limit killed the CLI
+ × is timeout, not the code of an error result the CLI wrote while the limit was killing it
+ × is timeout, not the code of a budget stop the CLI wrote while the limit was killing it
+AssertionError: expected { type: 'result', ok: true, …(5) } to match object { ok: false, …(2) }
+AssertionError: expected { type: 'result', ok: false, …(5) } to match object { ok: false, …(2) }
+AssertionError: expected { state: 'done', errorCode: null } to deeply equal { state: 'failed', …(1) }
+AssertionError: expected { state: 'failed', …(1) } to deeply equal { state: 'failed', …(1) }
+ Test Files  1 failed | 8 passed (9)
+      Tests  7 failed | 724 passed (731)
+```
+
+Green, `bfb9d91`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  731 passed (731)
+```
+
+What breaks each case. Ten of the seventeen pass on the red tree: they hold what must not change.
+Five mutants on `bfb9d91`:
+
+```
+$ npx vitest run          (a: `lateResult = false` where it is set, the code before the fix)
+ the same seven cases as the red run fail
+      Tests  7 failed | 724 passed (731)
+
+$ npx vitest run          (b: `reported: summary.result !== null && !signal.aborted`, every aborted turn unreported)
+ × still reports a success result read before the abort, as it was written
+ × still reports a budget stop read before the abort, as it was written
+ × still reports an error result read before the abort, as it was written
+ × keeps a result read before the abort when more output follows the kill
+ × keeps a success result: the turn is done with its whole answer
+ × keeps an error result under its own code, not timeout
+ × keeps the result when the runner's abort arrives while the CLI is being given its time
+      Tests  7 failed | 724 passed (731)
+
+$ npx vitest run          (c: `const stop = stopCode;` in endingOf, the limit stands over a reported result)
+ × keeps a success result: the turn is done with its whole answer
+ × keeps an error result under its own code, not timeout
+ × is never stored as timeout: the limit falling on a reported result keeps the answer
+ × keeps a reported error result under its own code, not timeout
+      Tests  4 failed | 727 passed (731)
+
+$ npx vitest run          (d: a reported result stands over every stop, in endingOf)
+ × lets the runner's other stops stand over a reported result: cancelled
+ × lets the runner's other stops stand over a reported result: stale_claim
+      Tests  2 failed | 729 passed (731)
+
+$ npx vitest run          (e: a and d together)
+ the seven of the red run, the two of d, and
+ × is cancelled when Stop killed the CLI and a success result is read after it
+ × is cancelled when Stop killed the CLI and an error result is read after it
+ × is stale_claim when a shutdown killed the CLI and a success result is read after it
+ × is stale_claim when a shutdown killed the CLI and an error result is read after it
+      Tests  13 failed | 718 passed (731)
+```
+
+The four Stop and shutdown cases are held from two sides: either the provider's flag or the turn's
+rule keeps them green, and they fail only when both are gone (e).
+
+Kept as it was: the cost, the session id and the model are still read from the stream whenever its
+lines arrive, so a turn stored `timeout` on a late result line carries that line's
+`total_cost_usd`. A CLI that wrote two result lines, one before the abort and one after, is not
+reported (the parser keeps the last line's facts, and those are the late one's); no recording
+shows a second result line.
+
+### 2 · R2-2 · the runner's durations are read on a monotonic clock (`workspace/src/db-retry.ts`, `turn.ts`, `runner.ts`)
+
+The clock is a dependency, as the database and the providers are: `TurnDeps.now` (`turn.ts`,
+which `RunnerDeps` extends) and `RetryOptions.now` (`db-retry.ts`), milliseconds. `main()` hands
+in `monotonicNow` (`runner.ts`), which is `performance.now()`. What reads it:
+
+| duration | where | on the wall clock, a step did this |
+|---|---|---|
+| the 110 s retry window of begin and finish | `retryDbCall`: the deadline and what is left of it | forward: the next failed try gave the answer up; backward: the tries went on for the length of the step |
+| the turn's limit after begin's retries | `run()`: `TURN_TIMEOUT_MS` minus the time since the start | forward: a limit of 0, the turn stored `timeout` before it ran; backward: a limit longer by the length of the step |
+| the watchdog's hold | `finishInWindow` (`runner.ts`) and `finishing.since` (`turn.ts`) | forward: the hold ended at once; backward: it lasted for the length of the step |
+| the watchdog's 180 s | `beat()`: `lastHeartbeatOk` | forward: one failed heartbeat after the step ended the process; backward: the watchdog did not trip for the length of the step |
+| the 2 s between two asks about a Stop | the streamer's `lastCallAt` | backward: no ask for the length of the step, so a Stop during a tool call went unseen |
+| the stored `duration_ms` | `elapsedMs` | the step was added to it, or subtracted (a negative duration) |
+
+The ruling names the first three. The last three are moved too because the round's instruction is
+that the wall clock stays only where a time is written or logged, and each had a failure of its
+own (the right-hand column; each has a case below). What still reads the wall clock under
+`src/`: the stamp on a log line (`stamp`, `runner.ts`), the alive file's own time (`alive.ts`) and
+the healthcheck, a separate process that compares that file's time with now (`healthcheck.ts`).
+A case reads the source and fails if any other file under `src/` reads it.
+
+`performance.now()` counts fractions of a millisecond, so two numbers are rounded to whole ones:
+the stored duration (`elapsedMs`; `db.ts` already rounded what it sent, the `ms=` of the
+`finished` line did not) and what is left of the window in `retryDbCall`, which is the wait
+printed before the last try.
+
+The tests take the clock the code takes. `testClock()` (`test/helpers/turn-harness.ts`) gives a
+harness `now`, which moves only as the fake timers run, and `stepWallClock(ms)`, which moves the
+wall clock alone (`vi.setSystemTime`: no timer fires, each keeps the time it had left). The fake
+database records its times on `now`. `RETRY_SCHEDULE` moved into the harness, and
+`closing.suite.ts` imports it. 19 cases, `test/runner/monotonic.suite.ts`: 17 in the red commit,
+and the two for the fractions added with the fix (mutants f and g are their proof).
+
+Red, `f5e69e4`:
+
+```
+$ npx vitest run
+ × makes the same twelve finish tries at the same times when the wall clock steps forward in the middle of them
+ × makes the same twelve finish tries at the same times when the wall clock steps backward in the middle of them
+ × stores the answer on the try the schedule names when the database comes back after the wall clock stepped forward
+ × does not give the turn a limit of 0 when the wall clock stepped forward: the answer is stored done
+ × kills the turn 8 minutes of running time after its start when the wall clock stepped forward, no sooner and no later
+ × kills the turn 8 minutes of running time after its start when the wall clock stepped backward, no sooner and no later
+ × stores the duration as the time the turn ran when the wall clock stepped forward in the middle of it
+ × stores the duration as the time the turn ran when the wall clock stepped backward in the middle of it
+ × still asks every 2 s whether the request is claimed after the wall clock stepped backward: a Stop during a tool call stops the turn within 4 s
+ × trips after 180 s of running time without a heartbeat when the wall clock stepped forward, no sooner and no later
+ × trips after 180 s of running time without a heartbeat when the wall clock stepped backward, no sooner and no later
+ × holds the watchdog for the 110 s of running time a finish is given, and no longer, when the wall clock stepped forward
+ × holds the watchdog for the 110 s of running time a finish is given, and no longer, when the wall clock stepped backward
+ × stores a finished answer when the database comes back inside the window, although the wall clock stepped forward in the middle of the finish
+ × is performance.now(): a step of the wall clock does not move it
+ × is the clock main() hands the loop and every turn
+ × leaves the wall clock to the log stamp, the alive file and the healthcheck that reads it
+AssertionError: expected [ +0, 1000, 3000, 7000, 15000, 30000 ] to deeply equal [ +0, 1000, 3000, 7000, 15000, …(7) ]
+AssertionError: expected [ +0, 1000, 3000, 7000, 15000, …(7) ] to deeply equal [ +0, 1000, 3000, 7000, 15000, …(7) ]
+AssertionError: expected [] to have a length of 1 but got +0
+AssertionError: expected { requestId: '41', …(8) } to match object { Object (state, errorCode, ...) }
+AssertionError: expected [ 1791259207001 ] to have a length of +0 but got 1
+AssertionError: expected { Object (requestId, state, ...) } to match object { state: 'done', …(2) }
+AssertionError: expected 1 to be null
+AssertionError: expected null to be 1 // Object.is equality
+TypeError: monotonicNow is not a function
+AssertionError: expected '/**\n * The Workspace runner: the con…' to match /^\s+now: monotonicNow,$/m
+AssertionError: expected [ 'alive.ts', 'db-retry.ts', …(3) ] to deeply equal [ 'alive.ts', 'healthcheck.ts', …(1) ]
+ Test Files  1 failed | 8 passed (9)
+      Tests  17 failed | 731 passed (748)
+```
+
+The red commit's message says "Seventeen of the eighteen fail": the tree holds seventeen, and all
+seventeen fail. The eighteenth was a backward row of "stores the answer on the try the schedule
+names", taken out before the commit because it passed on the old code too (a backward step only
+lengthened the old window) and so could not fail for the reason it was written for.
+
+Green, `030371c`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  750 passed (750)
+```
+
+What breaks each case: eight mutants on `030371c`, each one duration put back on the wall clock
+(or one rounding taken out). The audit case fails with every one that puts a wall-clock read back.
+
+```
+$ npx vitest run          (a: the deadline and what is left of it on the wall clock, db-retry.ts)
+ × makes the same twelve finish tries at the same times when the wall clock steps forward in the middle of them
+ × makes the same twelve finish tries at the same times when the wall clock steps backward in the middle of them
+ × stores the answer on the try the schedule names when the database comes back after the wall clock stepped forward
+ × stores a finished answer when the database comes back inside the window, although the wall clock stepped forward in the middle of the finish
+ × leaves the wall clock to the log stamp, the alive file and the healthcheck that reads it
+      Tests  5 failed | 745 passed (750)
+
+$ npx vitest run          (b: the limit after begin counted on the wall clock, turn.ts)
+ × does not give the turn a limit of 0 when the wall clock stepped forward: the answer is stored done
+ × kills the turn 8 minutes of running time after its start when the wall clock stepped forward, no sooner and no later
+ × kills the turn 8 minutes of running time after its start when the wall clock stepped backward, no sooner and no later
+ × leaves the wall clock to the log stamp, the alive file and the healthcheck that reads it
+      Tests  4 failed | 746 passed (750)
+
+$ npx vitest run          (c: the hold on the wall clock, finishInWindow and finishing.since)
+ × holds the watchdog for the 110 s of running time a finish is given, and no longer, when the wall clock stepped forward
+ × holds the watchdog for the 110 s of running time a finish is given, and no longer, when the wall clock stepped backward
+ × stores a finished answer when the database comes back inside the window, although the wall clock stepped forward in the middle of the finish
+ × leaves the wall clock to the log stamp, the alive file and the healthcheck that reads it
+      Tests  4 failed | 746 passed (750)
+
+$ npx vitest run          (d: the watchdog's 180 s on the wall clock, runner.ts)
+ × trips after 180 s of running time without a heartbeat when the wall clock stepped forward, no sooner and no later
+ × trips after 180 s of running time without a heartbeat when the wall clock stepped backward, no sooner and no later
+ × holds the watchdog for the 110 s of running time a finish is given, and no longer, when the wall clock stepped backward
+ × leaves the wall clock to the log stamp, the alive file and the healthcheck that reads it
+      Tests  4 failed | 746 passed (750)
+
+$ npx vitest run          (e: the streamer's lastCallAt on the wall clock, turn.ts)
+ × still asks every 2 s whether the request is claimed after the wall clock stepped backward: a Stop during a tool call stops the turn within 4 s
+ × leaves the wall clock to the log stamp, the alive file and the healthcheck that reads it
+      Tests  2 failed | 748 passed (750)
+
+$ npx vitest run          (f: the stored duration not rounded)
+ × stores the duration in whole milliseconds, and logs it so
+      Tests  1 failed | 749 passed (750)
+
+$ npx vitest run          (g: what is left of the window not rounded)
+ × prints the wait before the last finish try, which is what is left of the window, to the millisecond
+AssertionError: expected 'turn request=41 finish failed (try 11…' to match /next in \d+(\.\d{1,3})? s\)/
+      Tests  1 failed | 749 passed (750)
+
+$ npx vitest run          (h: `monotonicNow` returning the wall clock)
+ × is performance.now(): a step of the wall clock does not move it
+ × leaves the wall clock to the log stamp, the alive file and the healthcheck that reads it
+AssertionError: expected 18000000 to be less than 60000
+      Tests  2 failed | 748 passed (750)
+```
+
+The two duration cases ("stores the duration as the time the turn ran …") have no mutant of their
+own: their red run is the proof (an hour added, an hour subtracted). The hold is held apart from
+the retry window by a finish call that never returns, so only `finishInWindow` decides when the
+process ends (mutant c, with the window itself left on the monotonic clock).
+
+### 3 · R2-5 · a statement the database refuses is not tried again, and NUL never reaches it (`workspace/src/turn.ts`, `db.ts`, `db-retry.ts`)
+
+**(a) NUL in the stored tool calls.** `withoutNul` (`turn.ts`) takes NUL out of a string, and out
+of the keys and values of an array or an object at any depth; anything else is handed back as it
+is. `storedCalls` runs the first 20 calls through it, and the answer text is cleaned by the same
+function. The array is sent as JSON, where a NUL is the six-character escape the database refuses
+to store (22P05). 3 cases in `test/runner/refused-statement.suite.ts`: a call's own strings, keys
+and values three levels down with a number, a boolean and a null left alone, and what the real
+`createRpc(...).finish` is sent (the fourth parameter, read as text).
+
+Red, `8be5e65`:
+
+```
+$ npx vitest run
+ × takes NUL out of every string of a stored tool call before the finish call, as it does out of the content
+ × takes it out of keys and values at any depth, and leaves what is not a string as it was
+ × sends workspace_finish a tool-call parameter with no NUL escape, and a content with no NUL
+ Test Files  1 failed | 8 passed (9)
+      Tests  3 failed | 750 passed (753)
+```
+
+Green, `e65f5ac`: `Tests  753 passed (753)`.
+
+**(b) Which failures are the statement's own.** `isBadStatement(error)` (`db.ts`): the error's
+code is a SQLSTATE of class 22, 23 or 42, and is not 22023. It uses `isStatementError` for the
+shape (five characters, and a statement-level failure) and then narrows to the three classes.
+`isStatementError` itself is not tightened: it decides whether a failed call drops its connection
+(`createPgQuery`), an existing case pins 57014 as true there, and a statement cut at its time
+limit does leave the session usable. `retryDbCall` (`db-retry.ts`) has a fifth end,
+`bad_statement`, checked after the 22023 refusal and before the window: no wait, no further try.
+57014, 40001, 40P01, 53300, P0001 (a `raise exception` with no SQLSTATE of its own), class 08,
+57P01, XX000, node's own codes and a failure with no code are tried again as before.
+
+**(c) What follows.** A finish that ends `bad_statement` is logged (`finish refused by the
+database as a statement it cannot take, not tried again: …`) and followed by `closeMinimal`: one
+`workspace_finish` call, never on the schedule. Its payload is `emptyClose('cli_error', …)`:
+`failed`, `cli_error`, content empty, tool calls `[]`, cost null, model null, the duration the
+refused finish carried, and the session id the claim came with. When it goes through:
+`closed as failed / cli_error with no content and no tool calls: the answer is not stored`. When
+it fails, on anything: `the minimal close failed too, the stale-claim sweep closes the request: …`,
+and nothing more is sent. A begin that ends `bad_statement` goes straight to `closeUnbegun`, the
+close the lost-reply rule uses (`begin refused by the database as a statement it cannot take, not
+tried again, nothing ran; closing the request as cli_error: …`), which is still made on the finish
+schedule when the database cannot be reached. That close is built by the same `emptyClose` and is
+the minimal one already, so when the database refuses it as a statement too it is logged and left
+(`the minimal close was refused by the database …`), never sent a second time. `runner.ts` is not
+changed for this: the watchdog is held while `finishingSince()` is set, and a refused finish with
+its minimal close is over at once.
+
+44 cases in the same suite: 43 in the red commit, and the one for the unbegun close that is not
+sent twice added with the fix (mutant c4 is its proof).
+
+Red, `0085337`:
+
+```
+$ npx vitest run
+ × reads 22P05 as one (a character the database cannot store): the same statement gets the same answer
+   (and 22021, 22P02, 22003, 23505, 23514, 42883, 42501, 42601: nine)
+ × does not read 22023 as one (the functions' own refusal, which keeps its own meaning)
+   (and 57014, 40001, 40P01, 53300, P0001, 08006, 57P01, XX000, ECONNRESET, EPIPE, 2200, 22p05: thirteen)
+ × does not read a failure with no code as one, nor a value that is not an error
+ × makes exactly one more call after a 22P05, the minimal close, with no wait
+ × makes exactly one more call after a 23514, the minimal close, with no wait
+ × makes exactly one more call after a 42883, the minimal close, with no wait
+ × gives up with one line when the minimal close is refused too: two calls, no loop
+ × gives up the same way when the minimal close fails on the connection: it is one call, not a schedule
+ × makes the minimal close as soon as a try is refused that way, when earlier tries failed on the connection
+ × goes straight to the close after a 22P05: one try, no wait, and nothing runs
+ × goes straight to the close after a 23505: one try, no wait, and nothing runs
+ × goes straight to the close after a 42883: one try, no wait, and nothing runs
+ × keeps trying that close on the finish schedule when the database then cannot be reached, as the lost-reply rule does
+ × is not held: the refused finish and its minimal close are over at once, and the process ends at 180 s
+TypeError: isBadStatement is not a function
+AssertionError: expected null not to be null
+AssertionError: expected [ +0, 1000, 3000, 7000 ] to deeply equal [ +0, 1000, 3000, 3000 ]
+AssertionError: expected null to deeply equal { state: 'failed', …(1) }
+AssertionError: expected [ 1791259200000, 1791259201000, …(10) ] to have a length of 1 but got 12
+AssertionError: expected [ 1791259300000, 1791259301000, …(7) ] to have a length of 2 but got 9
+ Test Files  1 failed | 8 passed (9)
+      Tests  34 failed | 762 passed (796)
+```
+
+23 of the 34 fail because the predicate is not there; the other eleven fail on what the runner
+did: it tried a 22P05 again on the schedule (twelve begin tries where one is expected, nine finish
+tries by 180 s where two are). Nine cases pass on the red tree and hold what must not change:
+the seven "still tries the finish again on the schedule after …" (57014, 40001, P0001, 08006,
+57P01, ECONNRESET, a database that cannot be reached), "still reads a 22023 as a request that is
+already closed: one call, and no minimal close after it" and "still tries a begin again after a
+statement cut at its time limit". Mutants b2 and b3 break them.
+
+Green, `02e3e2d`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  797 passed (797)
+```
+
+What breaks each case: ten mutants on `02e3e2d`.
+
+```
+$ npx vitest run          (a1: the tool calls not cleaned)
+ the three cases of the red run of (a) fail
+      Tests  3 failed | 794 passed (797)
+
+$ npx vitest run          (a2: values cleaned, keys not)      (a3: one level deep only)
+ × takes it out of keys and values at any depth, and leaves what is not a string as it was
+      Tests  1 failed | 796 passed (797)                       (each)
+
+$ npx vitest run          (b1: the `isBadStatement` line out of retryDbCall, the code before the fix)
+ the eleven behaviour cases of the red run fail, and
+ × sends that close once when the database refuses it as a statement too: no second minimal close, one line, the sweep is left to close it
+      Tests  12 failed | 785 passed (797)
+
+$ npx vitest run          (b2: every statement error read as the statement's own, 57014 among them)
+ × does not read a failure with another SQLSTATE as "no longer claimed"
+ × closes the request as failed / cli_error when a 22023 follows a statement the database cut in the same turn
+ × does not read 57014 as one (a statement cut at its time limit)
+ × does not read 40001 as one (a serialization failure)
+ × does not read 40P01 as one (a deadlock)
+ × does not read 53300 as one (too many connections)
+ × does not read P0001 as one (an exception raised with no SQLSTATE of its own)
+ × does not read EPIPE as one (node's own code, five characters long)
+ × still tries the finish again on the schedule after a statement cut at its time limit, and stores the whole answer
+ × still tries the finish again on the schedule after a serialization failure, and stores the whole answer
+ × still tries the finish again on the schedule after an exception with no SQLSTATE of its own, and stores the whole answer
+ × still tries a begin again after a statement cut at its time limit
+      Tests  12 failed | 785 passed (797)
+
+$ npx vitest run          (b3: 22023 read as the statement's own, and checked before the refusal)
+ × reads a 22023 as a request that is already closed: logged, not tried again
+ × stops trying on a 22023 that comes after failures of another kind
+ × reads a 22023 on the first try as nothing to close: nothing runs and nothing is finished
+ × closes the request as failed / cli_error when a 22023 follows a database that could not be reached in the same turn
+ × closes the request as failed / cli_error when a 22023 follows a statement the database cut in the same turn
+ × asks for the close once when the request turns out to be closed already: the finish is refused and not tried again
+ × does not read 22023 as one (the functions' own refusal, which keeps its own meaning)
+ × still reads a 22023 as a request that is already closed: one call, and no minimal close after it
+ × does not run the provider when the request is no longer claimed at begin
+      Tests  9 failed | 788 passed (797)
+
+$ npx vitest run          (c1: no minimal close after a refused finish)
+ × makes exactly one more call after a 22P05, the minimal close, with no wait          (and 23514, 42883)
+ × gives up with one line when the minimal close is refused too: two calls, no loop
+ × gives up the same way when the minimal close fails on the connection: it is one call, not a schedule
+ × makes the minimal close as soon as a try is refused that way, when earlier tries failed on the connection
+ × is not held: the refused finish and its minimal close are over at once, and the process ends at 180 s
+      Tests  7 failed | 790 passed (797)
+
+$ npx vitest run          (c2: the minimal close made through retryDbCall, on the schedule)
+ × makes exactly one more call after a 22P05, the minimal close, with no wait          (and 23514, 42883)
+ × gives up with one line when the minimal close is refused too: two calls, no loop
+ × gives up the same way when the minimal close fails on the connection: it is one call, not a schedule
+      Tests  5 failed | 792 passed (797)
+
+$ npx vitest run          (c3: the minimal close carrying the turn's own session id, cost and model)
+ × makes exactly one more call after a 22P05, the minimal close, with no wait          (and 23514, 42883)
+ × makes the minimal close as soon as a try is refused that way, when earlier tries failed on the connection
+      Tests  4 failed | 793 passed (797)
+
+$ npx vitest run          (c4: an unbegun request's close followed by another minimal close)
+ × sends that close once when the database refuses it as a statement too: no second minimal close, one line, the sweep is left to close it
+AssertionError: expected [ 1791259200000, 1791259200000 ] to have a length of 1 but got 2
+      Tests  1 failed | 796 passed (797)
+```
+
+An earlier form of c2 called `finishWithRetry` for the minimal close and so called itself without
+end: the run did not finish its file (`Test Files  8 passed (9)`, 649 of 797 run). The form above
+is the one that answers.
+
+### 4 · A secret file that holds a NUL is refused (`workspace/src/config.ts`)
+
+`cleanSecret(raw, source)` refuses a value with a NUL character anywhere in it, before it strips
+anything, as a `ConfigError`: `<source> holds a NUL character: save the file as plain UTF-8 text
+(a file saved as UTF-16 reads this way)`. `requireSecret`, the one reader of the DSN and of the
+token, passes `the secret <name> (read at <file>)` as the source, so the refusal names the secret
+and its file and holds nothing of the value. `NUL` is declared once, in `config.ts`; `turn.ts`
+imports it.
+
+Where each is refused. The DSN: at start, in `loadConfig` (`cannot start: the secret
+workspace_runner_db_url (read at /run/secrets/workspace_runner_db_url) holds a NUL character: …`,
+exit 2), before the DSN's own checks read it. The token: where it is read, immediately before
+each CLI start. The turn then ends `sign_in_expired` as it does for a token that is missing, no
+CLI is started, and the one log line is `no subscription token: the secret claude_oauth_token
+(read at /run/secrets/claude_oauth_token) holds a NUL character: …`. The runner itself starts
+with such a token file (see Questions for the PM).
+
+Why it matters, read on this host's node (v24.19.0) with a made-up value: a child started with a
+NUL in an environment value throws `ERR_INVALID_ARG_VALUE`, "The property
+'options.env['MADE_UP']' must be a string without null bytes. Received" followed by the value
+itself in quotes. The CLI turn logs what `spawn` throws (`could not run the CLI: …`), so a token
+saved as UTF-16 was one log line away.
+
+13 cases in `test/config.test.ts`, under "a secret file that holds a NUL character". The UTF-16
+values are made the way the file would read: the text with its mark encoded as UTF-16, either
+byte order, then decoded as UTF-8 (the first case pins what that gives: two replacement
+characters, then a NUL beside every character).
+
+Red, `7d745b0`:
+
+```
+$ npx vitest run
+ × refuses the token of a file saved as UTF-16 (little-endian), naming the secret and its file
+ × refuses the token of a file saved as UTF-16 (big-endian), naming the secret and its file
+ × refuses to start on a DSN file saved as UTF-16 (little-endian), naming the secret and its file
+ × refuses to start on a DSN file saved as UTF-16 (big-endian), naming the secret and its file
+ × refuses a value with one NUL at the start
+ × refuses a value with one NUL in the middle
+ × refuses a value with one NUL at the end
+ × refuses a value with one NUL after the line end
+ × says nothing of the value when it refuses the token: not one of its characters, no NUL, no replacement character
+ × says nothing of the value when it refuses the DSN: not one of its characters, no NUL, no replacement character
+ × names what it was handed and nothing else when cleanSecret is called by itself
+ × starts no CLI on such a token: the turn ends sign_in_expired and the log names the file, not the value
+AssertionError: expected 'no refusal' to contain 'claude_oauth_token'
+AssertionError: expected 'workspace_runner_db_url is not a post…' to contain '/run/secrets/workspace_runner_db_url'
+AssertionError: expected [ { argv: [ 'claude', …(44) ], …(1) } ] to have a length of +0 but got 1
+ Test Files  1 failed | 8 passed (9)
+      Tests  12 failed | 798 passed (810)
+```
+
+On the red tree the UTF-16 token was handed to the (fake) spawn as it came, and the UTF-16 DSN was
+refused only as "not a postgresql:// URL", with no file named.
+
+Green, `e859a7d`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  810 passed (810)
+```
+
+"The error text holds none of the value's characters": the two "says nothing of the value" cases
+use a made-up secret of 33 distinct characters the refusal has no word for (capitals other than
+the five of NUL and UTF, digits other than 8, 1 and 6, and signs), saved as UTF-16 in both byte
+orders, and assert that not one of them, no NUL and no replacement character is in the message.
+
+What breaks each case: five mutants on `e859a7d`.
+
+```
+$ npx vitest run          (a: the check never true, the code before the fix)
+ the twelve cases of the red run fail
+      Tests  12 failed | 798 passed (810)
+
+$ npx vitest run          (b: the refusal quotes the value, as node's own error does)
+ × says nothing of the value when it refuses the token: not one of its characters, no NUL, no replacement character
+ × says nothing of the value when it refuses the DSN: not one of its characters, no NUL, no replacement character
+ × names what it was handed and nothing else when cleanSecret is called by itself
+AssertionError: expected [ 'Q', 'Z', 'J', 'G', 'X', 'W', …(27) ] to deeply equal []
+      Tests  3 failed | 807 passed (810)
+
+$ npx vitest run          (c: the source names the secret and no file)
+ × refuses the token of a file saved as UTF-16 (little-endian), naming the secret and its file     (and big-endian)
+ × refuses to start on a DSN file saved as UTF-16 (little-endian), naming the secret and its file  (and big-endian)
+ × starts no CLI on such a token: the turn ends sign_in_expired and the log names the file, not the value
+      Tests  5 failed | 805 passed (810)
+
+$ npx vitest run          (d: only a NUL in first place refused)
+ eleven fail: every case of the red run but "refuses a value with one NUL at the start"
+      Tests  11 failed | 799 passed (810)
+
+$ npx vitest run          (e: the refusal thrown as a plain Error)
+ × refuses a value with one NUL at the start          (and in the middle, at the end, after the line end)
+ × names what it was handed and nothing else when cleanSecret is called by itself
+      Tests  5 failed | 805 passed (810)
+```
+
+Mutant e showed a gap: the four UTF-16 cases passed with a plain `Error`, because their helper
+kept the message of an error that is not a `ConfigError` behind a prefix. `4ccffe5` (test only)
+reads the message from its first word, which only a `ConfigError` gives. The same mutant on
+`4ccffe5`: `Tests  9 failed | 801 passed (810)`, the four among them.
+
+One tool note. The editor wrote two escapes of the red commit's new block as the characters
+themselves (the byte-order mark, the replacement character). The suite's own audit ("is in no
+source file as a literal character") failed on it before the commit, and the two are now spelled
+by code point (`String.fromCharCode`). No file under `src/` or changed in `test/` holds a literal
+mark, replacement character or NUL.
+
+### Not changed (ruling Z2)
+
+The gate count per tool name (R2-3), the first-try 22023 skip on begin (R2-4), the two parse
+checks of the DSN (R2-8), `MS_PER_SECOND` declared four times (R2-10) and the three in-place flags
+(R2-11) are as they were. `finishing.since` now holds a reading of the monotonic clock; it is set
+and cleared where it was. `workspace/README.md` is not edited: no sentence in it became wrong, and
+no file was added under `src/`.
+
+### Recorded, not changed
+
+1. **A late result line's cost is stored.** (Section 1.) The ruling speaks of the state and the
+   code; the stream's cost, session id and model are read as before.
+2. **How the turn reports its own end.** `TurnHandle.done` still resolves with the turn's own
+   ending when the finish was refused and the minimal close stored `failed` / `cli_error` (as it
+   does when a finish is given up after 110 s). Only tests read it; the log says what was stored.
+3. **The minimal close stamps the claim's session id**, not the one the turn reported: it is the
+   only id known to be storable (it came from the database), and it is what the close of an
+   unbegun request already carries. A fresh start whose finish is refused therefore leaves the
+   conversation without a session, and its next question starts fresh with the stored history.
+4. **An unbegun close under a stop.** `closeUnbegun` still closes under the runner's own stop when
+   there is one (`stale_claim`), a begin refused as a statement included, as recorded in the pass
+   before.
+5. **NUL elsewhere in the finish call.** The content and the tool calls are cleaned. The model id
+   (the stream's own text) is not; the session id is uuid-shaped or null. A NUL in the model id
+   is a value the database cannot store as text (a class 22 failure as I read its error codes; no
+   database was called in this round), so it would now not be tried again and the request would
+   be closed by the minimal close.
+6. **A lone surrogate in a tool call's text** is written by `JSON.stringify` as an escape, which
+   the database's JSON reader refuses (class 22 again, on the same reading). Before this round
+   that finish was tried for 110 s and the request left to the sweep; now it gets the minimal
+   close at once and the answer is not stored. Nothing makes the text well-formed first.
+7. **`isStatementError('EPIPE')` is true** (five capitals and digits, none of its three
+   exceptions), so a call that failed with that code would keep its connection. Not this round's
+   change, and `isBadStatement` does not inherit it (EPIPE is in none of the three classes; a case
+   holds that).
+
+### Questions for the PM
+
+1. **"Refused at start" and the token.** Ruling Z1 says a secret file holding a NUL is refused at
+   start. The DSN is. The token is read before each CLI start and never at the runner's start, so
+   a token file saved as UTF-16 fails each turn as `sign_in_expired` with the file named in the
+   log, and the runner starts. Should `loadConfig` also read the token file once and refuse to
+   start on a NUL (and only on a NUL, so a missing token still starts as it does today)?
+2. **The cost of a late result line** (Recorded 1): stored as the line says, or null because the
+   line is not a reported result?
+3. **The session id of the minimal close** (Recorded 3): the claim's stored id, as built, or the
+   id the turn reported?
+4. **The durations the ruling does not name.** The watchdog's own 180 s, the 2 s between two asks
+   about a Stop and the stored duration are on the monotonic clock too (section 2). If only the
+   three named were meant, putting them back is three small edits (the reads of mutants d and e
+   of section 2, and `elapsedMs`), and the audit case would then name `runner.ts` and `turn.ts`.
+
+### Files of the round
+
+`workspace/src/`: `config.ts`, `db-retry.ts`, `db.ts`, `providers/claude-cli.ts`, `runner.ts`,
+`turn.ts`, and a comment in `providers/types.ts`. `workspace/test/`: three new suites
+(`runner/abort-result.suite.ts`, `runner/monotonic.suite.ts`,
+`runner/refused-statement.suite.ts`, each imported by `runner.test.ts`), `config.test.ts`,
+`helpers/fakes.ts`, `helpers/turn-harness.ts`, and a line or two each in
+`runner/cli-turn.suite.ts` and `runner/closing.suite.ts`. And this file. Nothing outside
+`workspace/` but this file; migrations 140 to 143, `workspace/README.md` and `project-state/` were
+not touched.
+
+Two tool notes. Where an edit held template text or several lines at once, it was applied with a
+short node script of exact-string replaces, each required to match once, written back as LF
+(`git diff ac41858..4ccffe5 -- workspace` shows no carriage return). And the mutants were edits to
+the worktree, each restored from git, where the pass before used a scratch copy; the red and green
+runs are from the scratch copy, as before.
+
+### Where the stream stands after round Z
+
+On `4ccffe5`, from `workspace/`:
+
+```
+$ npm run typecheck
+(no output, exit 0)
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  810 passed (810)
+$ npx vitest run --coverage
+ Test Files  9 passed (9)
+      Tests  810 passed (810)
+All files         |   93.68 |    89.27 |   92.76 |   95.39 |
+  config.ts       |   99.05 |       94 |     100 |   98.98 | 148
+  db-retry.ts     |    90.9 |    83.33 |     100 |   92.59 | 54-55
+  db.ts           |   98.36 |    86.74 |     100 |   99.01 | 74
+  errors.ts       |   97.22 |    93.75 |   83.33 |   96.29 | 23
+  runner.ts       |   78.33 |    71.42 |   65.51 |   82.35 | ...221,231,236-240
+  stream-json.ts  |   98.47 |    90.27 |     100 |     100 | ...324-328,348,377
+  turn.ts         |   98.02 |    94.18 |     100 |     100 | ...153,161,228,255
+  claude-cli.ts   |   97.31 |    92.72 |   97.56 |   99.36 | 257
+Lines        : 95.39% ( 890/933 )
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+$ docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z
+(the same value as after the pass before; unchanged)
+```
+
+810 against the pass before's 714: `runner.test.ts` 322 (was 239: 17 for R2-1, 19 for R2-2, 47
+for R2-5), `config.test.ts` 120 (was 107: the 13 of the secret), the other seven files as they
+were. The size audit passes: no file under `workspace/src` or `workspace/test` is over 800 lines;
+the longest is still `test/runner/cli-turn.suite.ts`, at 717, with `test/runner.test.ts` at 688
+and `test/config.test.ts` at 676; the three new suites are 214, 297 and 341; the longest under
+`src/` is `providers/claude-cli.ts` at 502, with `turn.ts` at 403 and `db.ts` at 356.

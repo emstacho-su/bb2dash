@@ -79,7 +79,8 @@ export const dbRefusal = (message: string): Error => Object.assign(new Error(mes
 /** What a call sees when the database cannot be reached: no SQLSTATE. */
 export const dbDown = (): Error => new Error('connection refused');
 
-export function fakeRpc(): FakeRpc {
+/** `now` is the clock the recorded times are read on: the wall clock unless a harness hands in its own. */
+export function fakeRpc(now: () => number = () => Date.now()): FakeRpc {
   let cancelled = false;
   let broken = false;
   let beginFailure: { error: Error; left: number } | null = null;
@@ -117,12 +118,12 @@ export function fakeRpc(): FakeRpc {
     },
     rpc: {
       async claim() {
-        fake.claims.push(Date.now());
+        fake.claims.push(now());
         if (broken) throw down();
         return fake.queue.shift() ?? null;
       },
       async begin(requestId, tier, provider, model) {
-        fake.beginTries.push(Date.now());
+        fake.beginTries.push(now());
         if (broken) throw down();
         const failure = owed(beginFailure);
         if (failure !== null) throw failure;
@@ -131,11 +132,11 @@ export function fakeRpc(): FakeRpc {
       },
       async stream(requestId, seq, delta) {
         if (broken) throw down();
-        fake.streams.push({ requestId, seq, delta, at: Date.now() });
+        fake.streams.push({ requestId, seq, delta, at: now() });
         return !cancelled;
       },
       async finish(args) {
-        fake.finishTries.push(Date.now());
+        fake.finishTries.push(now());
         if (broken) throw down();
         const failure = owed(finishFailure);
         if (failure !== null) throw failure;
@@ -143,7 +144,7 @@ export function fakeRpc(): FakeRpc {
       },
       async heartbeat(runner) {
         if (broken) throw down();
-        fake.heartbeats.push({ runner, at: Date.now() });
+        fake.heartbeats.push({ runner, at: now() });
       },
     },
   };
@@ -245,6 +246,11 @@ export interface FakeProcessOptions {
   readonly holdsOutput?: boolean;
   /** Cut the output into chunks of this many characters, so lines arrive in pieces. */
   readonly chunkChars?: number;
+  /**
+   * What a hanging process still writes once it is told to stop, as one chunk, before its output
+   * closes: a CLI that ends its turn on the signal. The reader sees it after the kill.
+   */
+  readonly linesOnKill?: ReadonlyArray<unknown>;
   readonly stderr?: string;
 }
 
@@ -269,7 +275,8 @@ export function fakeProcess(options: FakeProcessOptions): FakeProcess {
     ended = exit;
     settle(exit);
   };
-  const body = options.lines.map((line) => `${JSON.stringify(line)}\n`).join('');
+  const textOfLines = (lines: ReadonlyArray<unknown>): string => lines.map((line) => `${JSON.stringify(line)}\n`).join('');
+  const body = textOfLines(options.lines);
   const size = options.chunkChars ?? body.length;
   const chunks: string[] = [];
   for (let at = 0; at < body.length; at += Math.max(1, size)) chunks.push(body.slice(at, at + Math.max(1, size)));
@@ -281,6 +288,7 @@ export function fakeProcess(options: FakeProcessOptions): FakeProcess {
     }
     if (options.hang) {
       await outputClosed;
+      if (options.linesOnKill) yield Buffer.from(textOfLines(options.linesOnKill), 'utf8');
       return;
     }
     finish(options.exit);
