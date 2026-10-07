@@ -563,6 +563,13 @@ serve other tenants. (d) Docker's healthcheck runs node as root every 30 s. (e) 
 an empty auto-memory folder under its config dir. (f) An IPv6 fail-open in an earlier version of
 the firewall script was fixed with a test."
 
+Note, 2026-10-07 (task 23's first grep, read before the PRs open): item (b) of the request, as
+quoted above, names pg_net's functions as a whole. It names neither `net.http_post` nor its two
+tables. Those are what `PUBLIC` holds on pg_net's schema, the same for every database login,
+`workspace_runner` and `sync_runner` included, and `postgres` cannot revoke it (DECISIONS
+2026-10-06, the `workspace_runner` row; STATUS, "Phase 14 deferred (R-96)", bullet "The pg_net
+reach"). The quoted request is left as it was sent.
+
 Result: **no finding at the reporting bar** in either repository. Two candidates were raised, by
 two lenses, for the same thing, and both were held at confidence 7.
 
@@ -2178,6 +2185,12 @@ hold. The two that do not, and what it noted:
   loaded it.
 * A plain `npx playwright test … walk21` run shoots `02-empty.png` again: run the spec with
   `WALK21_ONLY`, as the sitting did, or put the file back from git.
+  Corrected 2026-10-07 (the docs pass's check): `WALK21_ONLY` does not skip `02 empty`. That test
+  stands in the group 'standing data (before any live turn)', which never calls `liveOnlyByName`,
+  so the variable is not read for it (the spec's header: "`02 empty` reads standing data and runs
+  by default"). What kept it out of the sitting's runs was each run's `-g "<name>"` pattern. So:
+  run one test by name with `-g` (every test but `02 empty` also needs `WALK21_LIVE=1` and
+  `WALK21_ONLY` set to that name), or put the file back from git afterwards.
 * A window-sized shot cannot by itself show W-1 is gone; the proof is the document-height
   assertion before each shot (901 in a 900 px window in every run; 767 in 766 in the shell) and a
   3000 px wheel turn outside the column moving the window 1 px.
@@ -2209,3 +2222,33 @@ hold. The two that do not, and what it noted:
   every screen (the app shell is 1 px taller than its window, the same on `main`).
 * **The walk as a whole spent twelve turns on Stack's plan** (nine in the first sitting, three in
   the second) and the docker step's one smoke: thirteen.
+
+## The suites at the phase head (2026-10-07, gathered for task 24's docs)
+
+One place for the figures STATUS gives, each with the commit it was run on and where that run is
+recorded. The phase head is `6651abc`.
+
+| suite | figure | run on | where the run is |
+|---|---|---|---|
+| web tests | 154 files, 2840 tests, 0 failed (2427 at the cut); typecheck and lint exit 0 | `0e169ba`, W-66's walk fixes, merged as `25979bb` | `102_W66_VERIFICATION.md`, "Walk defects W-1 and W-2 (2026-10-07)", section 6: `Test Files  154 passed (154)` · `Tests  2840 passed (2840)` |
+| runner | 9 files, 810 tests, 0 failed | the merged branch at `134ee64` | "Fix round Z", above |
+| SQL | `passed 67, failed 3, units 70` | `d885d3a`, against prod, after 143 was applied | "Migration 143 applied", above |
+| container: `docker/grep-clean.test.mjs` | 13 of 13 | `93c285f`, and again on `31406db` for this section | "`/code-review d4b1b8d high`", row 6 of its table, above |
+| container: `docker/workspace/init-firewall.test.mjs` | 21 of 21 | `defc566`, and again on `31406db` for this section | "Tasks 12 and 13 — the docker step, second run", above |
+| bb2dash-stack: the doctor's tests | 65 of 65 (52 before its fix round) | bb2dash-stack `5200df6` | "`/code-review main high` on bb2dash-stack", above |
+
+What has changed since each run, read with `git diff --stat <commit> HEAD -- <folder>`:
+
+* **Web.** This file's last web row is 153 files and 2830 tests at `6eb6580`, before W-66's walk
+  fixes. 2840 = 2830 + 10: `Workspace.layout` 4 (new) and `Workspace.failures` 19 → 25 (W-66's
+  count). Since `0e169ba` one file has changed under `web/`, the walk's Playwright spec
+  `web/e2e/walk21.spec.ts`, which the unit suite does not load (it includes `test/**/*.test.{ts,tsx}`
+  only). `git ls-files web` counts 154 test files at the head.
+* **Runner and SQL.** Nothing has changed under `workspace/` since `134ee64`, or under `db/` since
+  `d885d3a`. The SQL figure is the last whole run in this file, which holds no run of the suite
+  after the real sync of 10:06 UTC; its three failing units read prod's course data.
+* **Container.** Nothing has changed under `docker/` since `defc566`; `compose.yaml` gained a
+  comment (S-1). `31406db` is the docs branch: its tree equals the phase head's outside
+  `docs/` and `project-state/`. Both file suites were run there on 2026-10-07 at about 10:50 UTC:
+  `tests 13`, `pass 13`, `fail 0` and `tests 21`, `pass 21`, `fail 0`.
+* **bb2dash-stack.** Not run again for this section; the figure is the fix round's at `5200df6`.
