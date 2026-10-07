@@ -147,7 +147,7 @@ export const SPIKE_TITLE = 'spike';
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CONVERSATION_URL = /\/workspace\?c=([0-9a-f-]{36})$/;
 /** A file named in an answer: a reading for the PM, not an assertion. */
-const FILE_NAME = /\.(pdf|docx?|pptx?|xlsx?)\b/i;
+export const FILE_NAME = /\.(pdf|docx?|pptx?|xlsx?)\b/i;
 
 /* ---------------------------------------------------------------------------
  * The hooks every walk file registers

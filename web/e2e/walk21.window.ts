@@ -130,7 +130,7 @@ export interface WindowShot {
 }
 
 /** The width and height a PNG file says it has (its IHDR chunk). */
-function pngSize(path: string): { width: number; height: number } {
+export function pngSize(path: string): { width: number; height: number } {
   const header = readFileSync(path).subarray(0, 24);
   return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) };
 }
@@ -254,7 +254,7 @@ export function expectUsedLineInside(reading: EndReading, label: string, message
  * ------------------------------------------------------------------------ */
 
 /** Scrolls the column, and only the column, until the turn's start stands just under the column's upper edge. */
-async function scrollColumnToTurnStart(page: Page, turn: Locator): Promise<void> {
+export async function scrollColumnToTurnStart(page: Page, turn: Locator): Promise<void> {
   await inColumnBox(turn, { clearPx: TURN_START_CLEAR_PX });
   await page.waitForTimeout(SCROLL_SETTLE_MS);
 }

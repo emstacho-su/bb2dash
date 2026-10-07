@@ -28,6 +28,9 @@ const OUTPUT_DIR = join(__dirname, '.results');
 export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
+  // The acceptance run's specs have a config of their own (`accept.config.ts`): they are never
+  // part of a walk, and a walk is never part of them.
+  testIgnore: '**/accept*.spec.ts',
   outputDir: OUTPUT_DIR,
   // One browser at a time: the walk reads one account's live data, and the
   // screenshots are evidence, so they are taken in a stable order.
