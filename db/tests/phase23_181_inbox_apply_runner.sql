@@ -1,5 +1,6 @@
 -- bb2dash :: db/tests/phase23_181_inbox_apply_runner.sql
--- Phase 23 (Inbox auto-apply; DECISIONS 2026-10-07). Tests migration 181, with 184's claim, acting as the role:
+-- Phase 23 (Inbox auto-apply; DECISIONS 2026-10-07). Tests migration 181, with 184's claim and
+-- 185's reads and close, acting as the role:
 --
 --   0. installed and shaped: the role, its seven functions, its exact table privileges
 --   1. what the role must be refused: tables outside its list, delete, a state change, a column
@@ -9,7 +10,8 @@
 --   4. the run: claim -> prepare -> begin_item -> write -> archive -> run_facts -> close done
 --   5. the decision shape is enforced; an item taken back is skipped
 --   6. the follow-up: filed after a run that archived something, never for skipped rows
---   7. a failed close raises one item; a later done close archives it
+--   7. a failed close raises one item; a later done close archives it once no answered row waits
+--      (185; phase23_185_session_links.sql holds the rest of that rule)
 --   8. claim, as 184 amends it: it releases the worker's own claim past 16 minutes and anybody's
 --      past 30, and leaves a live claim alone, the worker's own included
 --
@@ -98,8 +100,8 @@ begin
      'assignment_progress:insert,assignment_progress:select,assignment_progress:update,'
      'assignments:insert,assignments:select,assignments:update,attention_items:select,'
      'bb_gradebook:select,course_staff:insert,course_staff:select,course_staff:update,'
-     'courses:select,grade_components:select,inbox_apply_writes:insert,sync_runs:select,'
-     'v_gradebook_latest:select,v_inbox_queue:select' then
+     'courses:select,grade_components:select,inbox_apply_writes:insert,sessions:select,'
+     'sync_runs:select,v_gradebook_latest:select,v_inbox_queue:select' then
     v_fail := v_fail || format('the role holds table privileges %s', v_got);
   end if;
 
@@ -110,6 +112,12 @@ begin
      or has_column_privilege('inbox_apply_runner', 'public.attention_items', 'state', 'update')
      or has_column_privilege('inbox_apply_runner', 'public.attention_items', 'applied_at', 'update') then
     v_fail := v_fail || 'the role''s column privileges are not courses.group_notes and app_settings.gcal_dirty alone'::text;
+  end if;
+  -- 185: bb_files is read by column, so it is not in the table list above; no column of it is written.
+  if not has_column_privilege('inbox_apply_runner', 'public.bb_files', 'session_id', 'select')
+     or has_column_privilege('inbox_apply_runner', 'public.bb_files', 'source_url', 'select')
+     or has_any_column_privilege('inbox_apply_runner', 'public.bb_files', 'insert, update') then
+    v_fail := v_fail || 'the role does not read bb_files by its 185 columns alone'::text;
   end if;
 
   if not (select relrowsecurity from pg_class where oid = 'public.inbox_apply_writes'::regclass) then
@@ -524,23 +532,42 @@ begin
     raise exception 'FAIL 6: a failed run that archived something filed no follow-up for the rest';
   end if;
 
-  -- The follow-up runs, skips C, archives nothing new: done, no further follow-up, and the two
-  -- failure items close themselves.
+  -- The follow-up runs Claude, skips C, archives nothing new: done, no further follow-up. The run
+  -- proves the sign-in, so that notice closes; C still waits, so the failure notice stays (185).
   set local role inbox_apply_runner;
   perform inbox_apply_claim();
   v_follow := inbox_apply_close(v_follow, 'done', jsonb_build_object(
-    'lines', jsonb_build_array('Nothing new to apply'), 'archived', 1, 'skip', jsonb_build_array(v_c)));
+    'lines', jsonb_build_array('Nothing new to apply'), 'archived', 1, 'skip', jsonb_build_array(v_c),
+    'claude', jsonb_build_object('started', true)));
   reset role;
   if v_follow is not null then
     raise exception 'FAIL 6: a follow-up was filed for a queue that holds only skipped rows';
   end if;
+  if (select count(*) from attention_items where ref = 'inbox-apply-failed' and state = 'open') <> 1
+     or exists (select 1 from attention_items where ref = 'apply-login-required' and state = 'open') then
+    raise exception 'FAIL 7: a done run over a waiting answer did not leave the failure notice open and close the sign-in notice';
+  end if;
+
+  -- C leaves the queue (taken back, or answered again and applied): the next done close archives
+  -- the failure notice.
+  update attention_items
+     set state = 'archived', archived_at = now(), archived_by = 'phase23_181 setup',
+         decision = '{"change": "test setup"}'::jsonb
+   where id = v_c;
+  insert into agent_requests (kind, scope, state, claimed_at, claimed_by, claim_attempts, note)
+  values ('inbox_feedback', 'all', 'claimed', now(), 'inbox-apply-runner', 1, 'phase23_181 R4')
+  returning id into v_r3;
+  set local role inbox_apply_runner;
+  v_follow := inbox_apply_close(v_r3, 'done', '{"lines": ["Nothing to apply"], "archived": 0, "skip": []}'::jsonb);
+  reset role;
   if exists (select 1 from attention_items
               where ref in ('inbox-apply-failed', 'apply-login-required') and state = 'open') then
-    raise exception 'FAIL 7: a done close left a failure item open';
+    raise exception 'FAIL 7: a done close over an empty queue left a failure item open';
   end if;
   if (select count(*) from attention_items
        where ref in ('inbox-apply-failed', 'apply-login-required') and state = 'archived'
-         and archived_by = 'inbox-apply-runner' and decision->>'closed_itself' = 'true') <> 2 then
+         and archived_by = 'inbox-apply-runner' and decision->>'closed_itself' = 'true'
+         and archived_at = now()) <> 2 then  -- this transaction's own: prod holds real ones since the cut-over
     raise exception 'FAIL 7: the failure items were not archived as closed_itself';
   end if;
 end $$;
