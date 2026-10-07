@@ -1,12 +1,15 @@
 /**
- * The Inbox's "Apply answers" button — the second app-to-agent request.
+ * The Inbox's "Apply answers" button — the second app-to-agent request, after
+ * Phase 23 (Inbox auto-apply).
  *
  * The app cannot apply an answer itself: deciding what "yes, that one" means
  * for a given row takes reading the syllabus, the gradebook and what the course
- * already does, which is a Claude session's job, not a mutation's. So this
- * button is a request, exactly like Sync: it files an `agent_requests` row of
- * kind `inbox_feedback`, copies `claude "/inbox-apply <id>"`, and then shows
- * that request's state until the worker closes it.
+ * already does. So this button is a request, exactly like Sync: it files an
+ * `agent_requests` row of kind `inbox_feedback` and the `apply` container's
+ * worker takes it. Nothing is copied on a press. The same request is filed by
+ * the sync container after a sync, so the button also follows a request it did
+ * not file. The paste command comes back only as the fallback for a request
+ * nothing has claimed.
  *
  * The query hooks are stubbed (the real `inboxApplyCommand` and
  * `copyToClipboard` are kept), so no query client and no network are involved —
@@ -16,12 +19,40 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+interface Row {
+  id: number;
+  state: string;
+  created_at: string;
+  claimed_by: string | null;
+  finished_at: string | null;
+  params: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+}
+
+const WORKER = 'inbox-apply-runner';
+const secondsAgo = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+
+function row(over: Partial<Row> = {}): Row {
+  return {
+    id: 8,
+    state: 'queued',
+    created_at: secondsAgo(5),
+    claimed_by: null,
+    finished_at: null,
+    params: {},
+    result: null,
+    ...over,
+  };
+}
+
 const mutateAsync = vi.fn();
-const createState = { isPending: false, isError: false, error: null as Error | null };
-const requestState = { data: null as { state: string } | null };
-const openState = { data: null as { id: number; state: string } | null, isPending: false };
+const createState = { isPending: false, isError: false, error: null as unknown };
+const requestState = { data: null as Row | null };
+const openState = { data: null as Row | null, isPending: false };
 const queueState = { data: undefined as number | undefined };
 const refreshOnSettled = vi.fn();
+const openLookup = vi.fn();
+const followedIds: (number | null)[] = [];
 
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({ from: vi.fn() }),
@@ -32,8 +63,14 @@ vi.mock('@/lib/queries.sync', async (importOriginal) => {
   return {
     ...actual,
     useCreateAgentRequest: () => ({ mutateAsync, ...createState }),
-    useAgentRequest: () => requestState,
-    useOpenInboxApplyRequest: () => openState,
+    useAgentRequest: (id: number | null) => {
+      followedIds.push(id);
+      return requestState;
+    },
+    useOpenInboxApplyRequest: (options?: { watch?: boolean }) => {
+      openLookup(options);
+      return openState;
+    },
     useInboxQueueCount: () => queueState,
     useRefreshInboxOnSettled: refreshOnSettled,
   };
@@ -45,6 +82,7 @@ const writeText = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  followedIds.length = 0;
   createState.isPending = false;
   createState.isError = false;
   createState.error = null;
@@ -76,7 +114,7 @@ describe('Apply answers — the label (R3-2)', () => {
     render(<InboxApplyButton />);
     expect(screen.getByRole('button', { name: /Apply/ })).toHaveAttribute(
       'title',
-      'Ask a Claude session to apply your Inbox answers',
+      'Ask the apply worker to apply your Inbox answers',
     );
   });
 
@@ -87,45 +125,50 @@ describe('Apply answers — the label (R3-2)', () => {
   });
 });
 
-describe('Apply answers — the clipboard command', () => {
-  it('files an inbox_feedback request and copies claude "/inbox-apply <id>"', async () => {
+describe('Apply answers — a press files the request and copies nothing', () => {
+  it('files an inbox_feedback request, says the worker takes it, and leaves the clipboard alone', async () => {
     queueState.data = 3;
-    mutateAsync.mockResolvedValue({ id: 42, state: 'queued' });
+    mutateAsync.mockResolvedValue(row({ id: 42 }));
     render(<InboxApplyButton />);
 
     screen.getByRole('button', { name: 'Apply answers' }).click();
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(writeText).toHaveBeenCalledWith('claude "/inbox-apply 42"');
+    expect(
+      await screen.findByText('Requested. The apply worker takes it within about a minute.'),
+    ).toBeInTheDocument();
     expect(mutateAsync).toHaveBeenCalledWith({ kind: 'inbox_feedback', scope: 'all' });
+    expect(writeText).not.toHaveBeenCalled();
+    expect(screen.queryByText(/claude "\/inbox-apply/)).toBeNull();
   });
 
-  it('shows nothing under the button once the command is copied; the title names it', async () => {
-    queueState.data = 2;
-    mutateAsync.mockResolvedValue({ id: 7, state: 'queued' });
-    const { container } = render(<InboxApplyButton />);
-    screen.getByRole('button', { name: 'Apply answers' }).click();
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(screen.getByRole('button')).toHaveAttribute(
-        'title',
-        'Command copied: claude "/inbox-apply 7"',
-      ),
-    );
-    expect(screen.queryByText('claude "/inbox-apply 7"')).toBeNull();
-    expect(container.querySelectorAll('button')).toHaveLength(1);
-  });
-
-  it('still shows the command when the clipboard is denied, and says it was not copied', async () => {
-    queueState.data = 2;
-    mutateAsync.mockResolvedValue({ id: 9, state: 'queued' });
-    writeText.mockRejectedValue(new Error('clipboard blocked'));
+  it('follows the request it filed by id', async () => {
+    queueState.data = 3;
+    mutateAsync.mockResolvedValue(row({ id: 42 }));
     render(<InboxApplyButton />);
     screen.getByRole('button', { name: 'Apply answers' }).click();
+    await waitFor(() => expect(followedIds).toContain(42));
+  });
 
-    expect(await screen.findByText('claude "/inbox-apply 9"')).toBeInTheDocument();
-    expect(screen.getByText('copy this and run it in Claude Code')).toBeInTheDocument();
+  it('surfaces a failed insert rather than pretending an apply was requested', () => {
+    queueState.data = 2;
+    createState.isError = true;
+    createState.error = new Error('row-level security');
+    render(<InboxApplyButton />);
+    expect(screen.getByRole('alert').textContent).toContain('row-level security');
+  });
+
+  it('a request the database refused because one is already open is not an error: it follows that one', async () => {
+    queueState.data = 2;
+    const refused = Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+    mutateAsync.mockRejectedValue(refused);
+    createState.isError = true;
+    createState.error = refused;
+    render(<InboxApplyButton />);
+
+    screen.getByRole('button', { name: 'Apply answers' }).click();
+
+    expect(await screen.findByText('A request is already open. Following that one.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
@@ -138,40 +181,130 @@ describe('Apply answers — the request state', () => {
       ['failed', 'failed'],
       ['cancelled', 'cancelled'],
     ] as const) {
-      requestState.data = { state };
+      requestState.data = row({ state, claimed_by: state === 'queued' ? null : WORKER });
       const view = render(<InboxApplyButton />);
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
       view.unmount();
     }
   });
 
-  it('surfaces a failed insert rather than pretending an apply was requested', () => {
-    queueState.data = 2;
-    createState.isError = true;
-    createState.error = new Error('row-level security');
+  it('says who queued it: the last sync, or this button', () => {
+    queueState.data = 3;
+    openState.data = row({ params: { trigger: 'sync', after: 1900 } });
+    const view = render(<InboxApplyButton />);
+    expect(screen.getByRole('status').textContent).toBe('Queued after the last sync');
+    view.unmount();
+
+    openState.data = row({ params: {} });
     render(<InboxApplyButton />);
-    expect(screen.getByRole('alert').textContent).toContain('row-level security');
+    expect(screen.getByRole('status').textContent).toBe('Queued from Apply answers');
+  });
+
+  it("says the worker is applying while it holds the claim, and shows its first report line once it closes", () => {
+    queueState.data = 3;
+    openState.data = row({ state: 'claimed', claimed_by: WORKER });
+    const view = render(<InboxApplyButton />);
+    expect(screen.getByRole('button', { name: 'running' })).toBeInTheDocument();
+    expect(screen.getByRole('status').textContent).toBe('Applying your answers now');
+    view.unmount();
+
+    openState.data = null;
+    requestState.data = row({
+      state: 'done',
+      claimed_by: WORKER,
+      finished_at: secondsAgo(1),
+      result: { lines: ['3 answers applied, 1 recorded only'], archived: 4 },
+    });
+    render(<InboxApplyButton />);
+    expect(screen.getByRole('button', { name: 'done' })).toBeInTheDocument();
+    expect(screen.getByRole('status').textContent).toBe('3 answers applied, 1 recorded only');
+  });
+
+  it('a closed request with no report shows no line: nothing is invented', () => {
+    requestState.data = row({ state: 'done', claimed_by: WORKER, result: null });
+    render(<InboxApplyButton />);
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });
 
 describe('Apply answers — one open request at a time', () => {
-  it('re-copies the open request instead of filing a second one', async () => {
+  it('a press while one is queued re-shows its status: nothing filed, nothing copied', async () => {
     queueState.data = 3;
-    openState.data = { id: 8, state: 'queued' };
+    openState.data = row({ id: 8 });
     render(<InboxApplyButton />);
 
     screen.getByRole('button', { name: 'queued' }).click();
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(writeText).toHaveBeenCalledWith('claude "/inbox-apply 8"');
+    expect(
+      await screen.findByText('Requested; the apply worker takes queued requests within about a minute'),
+    ).toBeInTheDocument();
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it('follows a request it finds open (one a sync filed), so its close is still read', () => {
+    queueState.data = 3;
+    openState.data = row({ id: 77, params: { trigger: 'sync', after: 1900 } });
+    render(<InboxApplyButton />);
+    expect(followedIds).toContain(77);
+  });
+
+  it('shows a claimed request found on load as running, before this tab filed anything', () => {
+    queueState.data = 3;
+    openState.data = row({ state: 'claimed', claimed_by: WORKER });
+    render(<InboxApplyButton />);
+    expect(screen.getByRole('button', { name: 'running' })).toBeInTheDocument();
+  });
+
+  it('a newer open request replaces a closed one this tab was following', () => {
+    queueState.data = 3;
+    requestState.data = row({ id: 8, state: 'done', claimed_by: WORKER });
+    openState.data = row({ id: 9, state: 'claimed', claimed_by: WORKER });
+    render(<InboxApplyButton />);
+    expect(screen.getByRole('button', { name: 'running' })).toBeInTheDocument();
+  });
+});
+
+describe('Apply answers — the fallback when nothing claims the request', () => {
+  it('past the grace the button says it is waiting on the worker', () => {
+    queueState.data = 3;
+    openState.data = row({ created_at: secondsAgo(120) });
+    render(<InboxApplyButton />);
+    expect(screen.getByRole('button', { name: 'waiting on the worker…' })).toBeInTheDocument();
+    expect(screen.getByRole('status').textContent).toBe('Nothing has taken the request yet');
+  });
+
+  it('a press then copies claude "/inbox-apply <id>" and shows it', async () => {
+    queueState.data = 3;
+    openState.data = row({ id: 8, created_at: secondsAgo(120) });
+    render(<InboxApplyButton />);
+
+    screen.getByRole('button', { name: 'waiting on the worker…' }).click();
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('claude "/inbox-apply 8"'));
+    expect(await screen.findByText('claude "/inbox-apply 8"')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Nothing has claimed this request. If the apply worker is down, the command is copied; run it in Claude Code.',
+      ),
+    ).toBeInTheDocument();
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('shows a claimed request found on load as applying, before this tab filed anything', () => {
+  it('still shows the command when the clipboard is denied, and says it was not copied', async () => {
     queueState.data = 3;
-    openState.data = { id: 8, state: 'claimed' };
+    openState.data = row({ id: 9, created_at: secondsAgo(120) });
+    writeText.mockRejectedValue(new Error('clipboard blocked'));
     render(<InboxApplyButton />);
-    expect(screen.getByRole('button', { name: 'running' })).toBeInTheDocument();
+
+    screen.getByRole('button', { name: 'waiting on the worker…' }).click();
+
+    expect(await screen.findByText('claude "/inbox-apply 9"')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Nothing has claimed this request. If the apply worker is down, copy this and run it in Claude Code.',
+      ),
+    ).toBeInTheDocument();
   });
 });
 
@@ -189,7 +322,7 @@ describe('Apply answers — nothing to apply', () => {
 
   it('stays live on an empty queue while a request is still open', () => {
     queueState.data = 0;
-    openState.data = { id: 8, state: 'claimed' };
+    openState.data = row({ state: 'claimed', claimed_by: WORKER });
     render(<InboxApplyButton />);
     expect(screen.getByRole('button', { name: 'running' })).toBeEnabled();
   });
@@ -202,14 +335,33 @@ describe('Apply answers — nothing to apply', () => {
   });
 });
 
+describe('Apply answers — noticing a request a sync filed', () => {
+  it('keeps looking for an open request while answers wait', () => {
+    queueState.data = 3;
+    render(<InboxApplyButton />);
+    expect(openLookup).toHaveBeenLastCalledWith({ watch: true });
+  });
+
+  it('does not keep looking when nothing is answered, or before the count is known', () => {
+    queueState.data = 0;
+    const view = render(<InboxApplyButton />);
+    expect(openLookup).toHaveBeenLastCalledWith({ watch: false });
+    view.unmount();
+
+    queueState.data = undefined;
+    render(<InboxApplyButton />);
+    expect(openLookup).toHaveBeenLastCalledWith({ watch: false });
+  });
+});
+
 describe('Apply answers — when the worker closes the request', () => {
-  it('asks the Inbox to refresh on the polled request state', () => {
-    requestState.data = { state: 'done' };
+  it('asks the Inbox to refresh on the followed request state', () => {
+    requestState.data = row({ state: 'done', claimed_by: WORKER });
     render(<InboxApplyButton />);
     expect(refreshOnSettled).toHaveBeenLastCalledWith('done');
   });
 
-  it('passes null while nothing has been filed from this tab', () => {
+  it('passes null while no request is followed', () => {
     render(<InboxApplyButton />);
     expect(refreshOnSettled).toHaveBeenLastCalledWith(null);
   });

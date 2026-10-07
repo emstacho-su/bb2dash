@@ -53,6 +53,7 @@ import {
   phaseTitle,
   pressAction,
   syncPhase,
+  watchedRequest,
   type SyncPhase,
 } from '@/lib/sync-request-phase';
 import styles from './SyncButton.module.css';
@@ -85,19 +86,6 @@ function clockTick(request: AgentRequest | null): number | null {
   if (!request) return null;
   if (request.state === 'queued') return QUEUE_TICK_MS;
   return isOpenState(request.state) ? null : CLOSED_TICK_MS;
-}
-
-/**
- * The request this tab shows: the one it follows by id, unless that one has
- * closed and a different row is open now — then the open row, so a finished
- * request of this tab's never hides a newer one and a press never files beside it.
- */
-function watchedRequest(
-  followed: AgentRequest | null | undefined,
-  open: AgentRequest | null | undefined,
-): AgentRequest | null {
-  if (followed && open && followed.id !== open.id && !isOpenState(followed.state)) return open;
-  return followed ?? open ?? null;
 }
 
 /** The first read error among the queries still asked, for the alert line. */

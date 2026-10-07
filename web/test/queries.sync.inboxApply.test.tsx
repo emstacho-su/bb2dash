@@ -73,6 +73,7 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 
 const {
+  INBOX_APPLY_WATCH_MS,
   buildResolutionPatch,
   createAgentRequest,
   inboxApplyCommand,
@@ -165,6 +166,37 @@ describe('the open-request lookup is per kind', () => {
     expect(openInboxApplyRequestOptions().queryKey).toEqual(syncKeys.openRequest('inbox_feedback'));
     expect(syncKeys.openRequest('inbox_feedback')).not.toEqual(syncKeys.openRequest('sync'));
     expect(openInboxApplyRequestOptions().queryKey).not.toEqual(syncKeys.openSyncRequest());
+  });
+});
+
+describe('the Inbox lookup notices a request a sync filed (Phase 23)', () => {
+  /** The interval react-query would use, given what the lookup last returned. */
+  function interval(options: { refetchInterval?: unknown }, data: unknown): unknown {
+    const fn = options.refetchInterval as (query: { state: { data: unknown } }) => unknown;
+    return fn({ state: { data } });
+  }
+
+  it('looks again every 30 seconds while nothing is open and answers wait', () => {
+    expect(INBOX_APPLY_WATCH_MS).toBe(30_000);
+    expect(interval(openInboxApplyRequestOptions({ watch: true }), null)).toBe(INBOX_APPLY_WATCH_MS);
+  });
+
+  it('never looks again by itself when it is not watching', () => {
+    expect(interval(openInboxApplyRequestOptions(), null)).toBe(false);
+    expect(interval(openInboxApplyRequestOptions({ watch: false }), null)).toBe(false);
+  });
+
+  it('keeps the 10-second cadence while a request is open, watching or not', () => {
+    const open = { id: 8, kind: 'inbox_feedback', state: 'queued' };
+    expect(interval(openInboxApplyRequestOptions({ watch: true }), open)).toBe(10_000);
+    expect(interval(openInboxApplyRequestOptions(), open)).toBe(10_000);
+  });
+
+  it('shares one cache key whether it watches or not, and leaves the Sync lookup alone', () => {
+    expect(openInboxApplyRequestOptions({ watch: true }).queryKey).toEqual(
+      openInboxApplyRequestOptions().queryKey,
+    );
+    expect(interval(openSyncRequestOptions(), null)).toBe(false);
   });
 });
 

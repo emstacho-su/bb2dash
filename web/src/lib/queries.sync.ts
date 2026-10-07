@@ -87,8 +87,9 @@ export type SyncRunStatus = 'running' | 'ok' | 'partial' | 'failed';
 /**
  * `agent_requests.kind` — the check constraint, as migration 077 left it:
  * `check (kind in ('sync','transform','inbox_feedback'))`. `inbox_feedback` is
- * the Inbox's "Apply answers" button asking a Claude session to run
- * `/inbox-apply`.
+ * the request the `apply` container's worker runs `/inbox-apply` for: filed by
+ * the Inbox's "Apply answers" button, and by the sync container after a sync
+ * (Phase 23, migration 180).
  */
 export type AgentRequestKind = 'sync' | 'transform' | 'inbox_feedback';
 
@@ -640,7 +641,8 @@ export function syncCommand(requestId: number): string {
 }
 
 /**
- * The command Stack pastes to have a Claude session apply his Inbox answers.
+ * The fallback command: what Stack pastes to have a Claude session apply his
+ * Inbox answers when the apply worker has not claimed the request (Phase 23).
  *
  * Same contract as `syncCommand`: the string IS the interface with the
  * `/inbox-apply` skill, so the id is validated before it is interpolated
@@ -1137,13 +1139,37 @@ export function openRequestOptions(kind: AgentRequestKind) {
   return openRequestQuery(kind, syncKeys.openRequest(kind));
 }
 
-/** The Inbox's "Apply answers" button: the newest open `inbox_feedback` row. */
-export function openInboxApplyRequestOptions() {
-  return openRequestOptions('inbox_feedback');
+/**
+ * How often the Inbox looks for an `inbox_feedback` request while none is open
+ * and answers wait (Phase 23): the sync container files one after a sync, without
+ * this page, so the button has to notice it. Slower than the open cadence; the
+ * request only appears at the end of a sync.
+ */
+export const INBOX_APPLY_WATCH_MS = 30 * 1000;
+
+export interface OpenInboxApplyOptions {
+  /** True while answered rows wait: keep looking for a request somebody else filed. */
+  watch?: boolean;
 }
 
-/** One lookup, two keys — the only thing that varies is the kind it filters on. */
-function openRequestQuery(kind: AgentRequestKind, queryKey: readonly unknown[]) {
+/** The Inbox's "Apply answers" button: the newest open `inbox_feedback` row. */
+export function openInboxApplyRequestOptions(options: OpenInboxApplyOptions = {}) {
+  return openRequestQuery(
+    'inbox_feedback',
+    syncKeys.openRequest('inbox_feedback'),
+    options.watch === true ? INBOX_APPLY_WATCH_MS : false,
+  );
+}
+
+/**
+ * One lookup, two keys — the kind it filters on, and how often it looks again
+ * while nothing is open (never, unless the caller watches for a row it did not file).
+ */
+function openRequestQuery(
+  kind: AgentRequestKind,
+  queryKey: readonly unknown[],
+  idleIntervalMs: number | false = false,
+) {
   return queryOptions({
     queryKey,
     queryFn: async (): Promise<AgentRequest | null> => {
@@ -1159,8 +1185,8 @@ function openRequestQuery(kind: AgentRequestKind, queryKey: readonly unknown[]) 
       if (error) throw error;
       return (data ?? null) as unknown as AgentRequest | null;
     },
-    // Same cadence as agentRequestOptions: only a Claude session moves these rows.
-    refetchInterval: (query) => (query.state.data ? 10 * 1000 : false),
+    // Same cadence as agentRequestOptions while a row is open: only a worker moves these rows.
+    refetchInterval: (query) => (query.state.data ? 10 * 1000 : idleIntervalMs),
     staleTime: 0,
   });
 }
@@ -1169,8 +1195,9 @@ function openRequestQuery(kind: AgentRequestKind, queryKey: readonly unknown[]) 
  * How many answered rows `/inbox-apply` still has to work through.
  *
  * `v_inbox_queue` (migration 090) is every resolved or dismissed row the worker
- * has not archived yet. Only the number is wanted — the button says "Apply 3
- * answers" — so this is a head count, not a fetch of the rows themselves.
+ * has not archived yet. Only the number is wanted — it gates the button and tells
+ * it to watch for a request a sync filed — so this is a head count, not a fetch
+ * of the rows themselves.
  */
 export function inboxQueueCountOptions() {
   return queryOptions({
@@ -1341,8 +1368,8 @@ export function useOpenSyncRequest() {
   return useQuery(openSyncRequestOptions());
 }
 
-export function useOpenInboxApplyRequest() {
-  return useQuery(openInboxApplyRequestOptions());
+export function useOpenInboxApplyRequest(options: OpenInboxApplyOptions = {}) {
+  return useQuery(openInboxApplyRequestOptions(options));
 }
 
 export function useInboxQueueCount() {

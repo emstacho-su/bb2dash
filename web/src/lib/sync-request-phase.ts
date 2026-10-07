@@ -150,6 +150,20 @@ export function isOpenState(state: AgentRequestState): boolean {
   return state === 'queued' || state === 'claimed';
 }
 
+/**
+ * The request a tab shows: the one it follows by id, unless that one has closed
+ * and a different row is open now — then the open row, so a finished request of
+ * this tab's never hides a newer one and a press never files beside it. Shared by
+ * the Sync button and the Inbox's Apply answers button.
+ */
+export function watchedRequest<T extends { id: number; state: AgentRequestState }>(
+  followed: T | null | undefined,
+  open: T | null | undefined,
+): T | null {
+  if (followed && open && followed.id !== open.id && !isOpenState(followed.state)) return open;
+  return followed ?? open ?? null;
+}
+
 /** Milliseconds since an ISO instant, or 0 when the instant is unreadable. */
 function sinceMs(iso: string | null, now: number): number {
   if (!iso) return 0;
