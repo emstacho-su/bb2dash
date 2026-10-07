@@ -84,8 +84,11 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   the login). The Windows `/bb-sync` skill stays the fallback. Keep OS-bound code behind thin adapters.
 * Workspace service (Phase 21): `workspace` in `compose.yaml` sits behind `profiles: [workspace]`, so a plain
   `up` never starts it; bb2dash-stack's `.env` turns it on (`COMPOSE_PROFILES=workspace`, acceptance step 13).
-  Before the merge it runs only as compose project `bb2dash-wt21` from a phase worktree, the service named in
-  every command. Its runner reaches the database only as the login role `workspace_runner`, through five
+  From bb2dash-stack it is started, restarted and rebuilt alone (`docker compose up -d --build workspace`,
+  `docker compose restart workspace`); `just up` rebuilds every service and is never run while a sync is open
+  (DECISIONS 2026-10-07). On the phase branch, before the merge, it runs only as compose project `bb2dash-wt21`
+  from a phase worktree, the service named in every command. Its runner reaches the database only as the login
+  role `workspace_runner`, through five
   SECURITY DEFINER functions (`workspace_claim`, `workspace_begin`, `workspace_stream`, `workspace_finish`,
   `workspace_heartbeat`; 142, 143), and the service mounts four secrets from `SECRETS_DIR` as files:
   `workspace_runner_db_url`, `claude_oauth_token`, `bb2dash_mcp_service_key`, `harness_database_url` (the

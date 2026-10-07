@@ -92,10 +92,9 @@ services:
   # sign-in task runs this file with no profile. bb2dash-stack's .env sets COMPOSE_PROFILES=workspace,
   # and with it, from bb2dash-stack/, `docker compose up -d --build workspace` builds and starts this
   # one service (`just up` does too, but it rebuilds and can recreate every service, sync included:
-  # never while a sync is open). Until the phase's PR is merged it runs only
-  # as its own project, with the service named in every command:
-  #   docker compose -p bb2dash-wt21 --profile workspace build workspace
-  #   docker compose -p bb2dash-wt21 --profile workspace up -d --no-deps workspace
+  # never while a sync is open). On the phase branch, before its PR merged, it ran only as its own
+  # test project, `-p bb2dash-wt21 --profile workspace`, with the service named in every command
+  # (brief 102; 102a holds the lines).
   #
   # Nothing here is interpolated outside `build:`, the secret paths and WORKSPACE_TURN_BUDGET_USD, so
   # this file resolves with only SECRETS_DIR and BB2DASH_DIR set.
