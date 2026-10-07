@@ -35,12 +35,14 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
 * Facts live in `assignments`; Stack's planner state lives in `assignment_progress` /
   `reading_progress` and is **never overwritten by syncs** — one sanctioned exception (Phase 12b):
   a newly posted or changed Blackboard score advances `assignment_progress.status` to `graded`,
-  forward-only, never from excused or DNF. A second, narrower path: `/inbox-apply` (which runs as
-  `bb-sync` step 0) has written `assignment_progress` from Stack's answered Inbox items (scores,
+  forward-only, never from excused or DNF. A second, narrower path: `/inbox-apply` (since Phase 23
+  run by the `apply` container after a sync and from the Inbox's "Apply answers" button; before
+  that as `bb-sync` step 0) has written `assignment_progress` from Stack's answered Inbox items (scores,
   notes, one inserted row; `docs/inbox-decisions/2026-09-22.md`, `2026-09-23.md`); sanctioned
   narrowly on 2026-09-27 (DECISIONS, batch item 59): only rows named in an Inbox item Stack answered
   himself, status only when his words say so, scores as Blackboard shows them, every write in that
-  day's log. `reading_progress` has no such path. Status values and labels live in `web/src/lib/progress-status.ts`.
+  day's log (since Phase 23: in `inbox_apply_writes` when it is made, and in the day file once the
+  exporter has run). `reading_progress` has no such path. Status values and labels live in `web/src/lib/progress-status.ts`.
 * Grades show one deterministic figure, "graded so far" (`web/src/lib/graded-so-far.ts`), computed
   only from mirrored Blackboard scores, `grade_components` and column links; what it leaves out is
   named under it. No what-if, no projections.
@@ -64,6 +66,15 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   tools are off, four read tools over the materials and the two bb2dash notes collections pass a gate, and
   the runner's database login cannot reach planner state (`assignment_progress`, `reading_progress`) or a
   fact table. Migrations 140–143 are frozen; a fix is a new migration in 144–149.
+* Inbox auto-apply (Phase 23): after a sync that closed done, the `sync` container files an
+  `inbox_feedback` request when the Inbox's answered queue is not empty; the `apply` container's worker
+  (`apply/`) claims it, records the rows that need no reading itself, and runs `/inbox-apply` with one
+  `claude -p` run for the rest. It writes as the role `inbox_apply_runner`, which can write only
+  `assignments`, `assignment_progress`, `course_staff` and `courses.group_notes`, each write logged against
+  an answered Inbox item (181). The decision is stored on the archived row first; the vault note and
+  `docs/inbox-decisions/<date>.md` are rendered from it by `scripts/inbox-decisions-pr.mjs` on the host.
+  The sync still holds no LLM (B-43). Migrations 180–182 are frozen; **183 is applied at the cut-over**
+  (STATUS, "Phase 23"); a fix is a new migration in 184–189.
 
 ## Environment gotchas (cloud sessions)
 
@@ -82,6 +93,13 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   outside every repo; the service key's only home is `bb2dash_mcp_service_key` there. Never
   `docker compose up` or recreate `sync` while a sync is open, and never touch the `bb-profile` volume (it is
   the login). The Windows `/bb-sync` skill stays the fallback. Keep OS-bound code behind thin adapters.
+* Apply service (Phase 23): `apply` in `compose.yaml` sits behind `profiles: [apply]`, on its own network
+  `apply-net`, and mounts neither `bb-profile` nor `course-files`: a Claude process never shares a network
+  or a volume with the Blackboard login (`docker/apply/image.test.mjs`). Its secrets are files:
+  `inbox_apply_db_url` (the role's session-pooler DSN), `claude_oauth_token` and `bb2dash_mcp_service_key`
+  (read by the materials server only). Its firewall is generated from the Workspace's
+  (`node docker/apply/fork-firewall.mjs --write` after that script changes). Start, restart and rebuild it
+  alone (`docker compose up -d --build apply`), never through a bare `up` while a sync is open.
 * Workspace service (Phase 21): `workspace` in `compose.yaml` sits behind `profiles: [workspace]`, so a plain
   `up` never starts it; bb2dash-stack's `.env` turns it on (`COMPOSE_PROFILES=workspace`, acceptance step 13).
   From bb2dash-stack it is started, restarted and rebuilt alone (`docker compose up -d --build workspace`,
