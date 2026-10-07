@@ -54,10 +54,12 @@ export const HEALTH_MAX_AGE_MS = 90_000;
 
 /**
  * `workspace_finish()`, and `workspace_begin()` before it, are tried again for this long when the
- * database fails them, so a finished answer outlives a short outage. Under DB_WATCHDOG_MS; the
- * watchdog does not end the process while a finish is inside this window.
+ * database fails them, so a finished answer outlives a short outage. A turn is killed at
+ * TURN_TIMEOUT_MS from its start and the last finish try is made at most this much later, so the
+ * runner closes the request inside the database's 10-minute claim (ruling X1). Under
+ * DB_WATCHDOG_MS; the watchdog does not end the process while a finish is inside this window.
  */
-export const FINISH_RETRY_MS = 170_000;
+export const FINISH_RETRY_MS = 110_000;
 /** The wait before the second try; each later wait is twice the one before it. */
 export const FINISH_BACKOFF_FIRST_MS = 1000;
 /** No wait between two tries is longer than this. */

@@ -13,7 +13,7 @@
  * again; if begin still cannot be made the request is closed as `failed` / `cli_error`, so it is not
  * left claimed. A 22023 that follows such a failure is closed the same way: a begin that went
  * through with its reply lost is refused on the next try, and its request is still claimed. A
- * finish is tried again for 170 s before the answer is given up; a finish the function refuses
+ * finish is tried again for 110 s before the answer is given up; a finish the function refuses
  * means the request is already closed.
  */
 

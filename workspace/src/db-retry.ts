@@ -1,10 +1,11 @@
 /**
  * One retry schedule for the two calls that open and close a request's answer, `workspace_begin()`
- * and `workspace_finish()` (rulings V1, CR-2 and CR-3).
+ * and `workspace_finish()` (rulings V1, CR-2 and CR-3, and X1).
  *
- * A try that fails is made again after 1 s, then 2 s, 4 s, 8 s and every 15 s after that, for 170 s
- * from the first try; the last try is made as the 170 s end. A refusal the function raises itself
- * (SQLSTATE 22023) is an answer, not a failure: it ends the tries at once.
+ * A try that fails is made again after 1 s, then 2 s, 4 s, 8 s and every 15 s after that, for 110 s
+ * from the first try; the last try is made as the 110 s end. A refusal the function raises itself
+ * (SQLSTATE 22023) is an answer, not a failure: it ends the tries at once, and the end says whether
+ * a failed try came before it.
  */
 
 import { FINISH_BACKOFF_FIRST_MS, FINISH_BACKOFF_MAX_MS, FINISH_RETRY_MS } from './config.js';

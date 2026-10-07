@@ -5,7 +5,7 @@
  * 30 s timer, during turns too, it calls `workspace_heartbeat()` and touches the alive file after
  * each success. With no heartbeat success for 180 s it ends any turn in flight and exits non-zero,
  * so the restart policy brings the container back; it waits with that while the turn in flight is
- * retrying its `workspace_finish()` inside the 170 s that call is given (ruling V1, CR-3), so a
+ * retrying its `workspace_finish()` inside the 110 s that call is given (rulings V1, CR-3, and X1), so a
  * finished answer is not thrown away by the restart. On SIGTERM or SIGINT it stops polling, ends a
  * turn in flight as `failed` / `stale_claim`, and exits 0.
  */
