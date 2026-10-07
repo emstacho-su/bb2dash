@@ -1688,3 +1688,139 @@ Everything else in the task was done.
   `web/e2e/.auth/state.json`, `web/e2e/.results/`, `desktop/node_modules/`, `desktop/dist/`.
   `git status --short` shows nothing else untracked.
 * Three archived conversations (A, B and the stray one) beside 'spike', which is listed.
+
+## `/code-review main high` on bb2dash-stack (2026-10-07)
+
+The umbrella repository's branch (`feat/workspace-21` at `80f6796` against its `origin/main`
+`eb71e8b`: 10 files, +709 −65) had been read by the first `/security-review` ("no finding at the
+reporting bar in either repository") and not yet by `/code-review`. Run on 2026-10-07: it
+rendered the umbrella `compose.yaml` against the phase worktree and the harness checkout in a
+scratch copy (the `workspace` service appears only with the profile on, on its own network, with
+its four secrets; all 12 secrets merge with no include conflict), confirmed the doctor's new row
+is read-only and that its 52 tests run no real Docker, and found no logic bug in the row or the
+wiring. Fifteen findings; the PM's severities and dispositions:
+
+| id | severity | status |
+|---|---|---|
+| S-1 | HIGH | fixed (`1bafad0`, `374c40d`) |
+| S-2 | MEDIUM | fixed (the round, `5200df6`) |
+| S-3 | LOW | fixed (the round, `5200df6`) |
+| S-4 | LOW | recorded: the brief freezes `COMPOSE_PROFILES=workspace` in `.env.example` |
+| S-5 | MEDIUM | fixed (the round, `5200df6`) |
+| S-6 | LOW | recorded: accepted for v1 in the brief (task 14) |
+| S-7 | LOW | recorded |
+| S-8 | LOW | fixed (the round, `5200df6`) |
+| S-9 | LOW | fixed (the round, `5200df6`) |
+| S-10 | LOW | fixed (the round, `5200df6`) |
+| S-11 | LOW | recorded |
+| S-12 | LOW | fixed (the round, `5200df6`) |
+| S-13 | LOW | recorded |
+| S-14 | LOW | recorded |
+| S-15 | LOW | recorded |
+
+* **S-1** `README.md`, the doctor's hint, `.env.example`: every documented way to start, restart
+  or wipe the Workspace went through `just up`, which is `docker compose up -d --build` for the
+  whole project and can rebuild and recreate the live `sync` container in the middle of a sync.
+  Ruling: the Workspace is started, restarted and rebuilt alone
+  (`docker compose up -d --build workspace`); where `just up` stays, the sentence beside it says
+  what it does and that it is not run while a sync is open.
+* **S-2** `README.md`: the `.pooler.supabase.com` host rule was stated for
+  `workspace_runner_db_url` only; the Workspace's firewall applies it to `harness_database_url`
+  too, and a machine with another harness store would loop at start.
+* **S-3** `.env.example`: a relative `HARNESS_DIR` is resolved against bb2dash's folder for the
+  image's build contexts, not against the umbrella folder.
+* **S-4** `.env.example`: the profile ships on, so every `just up` also builds the Workspace
+  image, and a failed build stops the whole `up`.
+* **S-5** `doctor/lib/checks-docker.mjs`: the doctor read `COMPOSE_PROFILES` with its own `.env`
+  parser, which keeps an inline comment and does not interpolate, so it could say `off` and exit 0
+  while compose had the profile on. Ruling: it decides as compose does.
+* **S-6** the row reads `off` without looking at Docker, so a Workspace container still running
+  with the profile removed is not shown.
+* **S-7** `ps --all` also lists one-off `run` containers and the row judges the first entry.
+* **S-8** the `off` text always said `.env` does not name the profile, even when the process
+  environment turned it off.
+* **S-9** `README.md`: "every row green" straight after the first start is not true for up to a
+  minute (health `starting`).
+* **S-10** `doctor/workspace.test.mjs`: an assertion that cannot fail (the role name matched in
+  the cell that found the row).
+* **S-11, S-13, S-14, S-15** the test file's scripted world duplicated, temp folders the tests
+  leave, a status literal declared twice, two durations written into messages.
+* **S-12** `README.md`: `cp -r secrets.example <folder>` nests the files when the folder exists.
+
+The fix round in the umbrella repository (W-65, test-first; `80f6796` to `374c40d`, then the PM's
+two README sentences, `d0d2578`, `9903717`, `5200df6`): `node --test doctor/doctor.test.mjs
+doctor/workspace.test.mjs` → 65 tests, 65 pass (52 before). An independent check ran each code item
+against a mutant and read every README instruction as a reader would; S-1 holds across the whole
+branch (no instruction left that starts, restarts, rebuilds or wipes the Workspace through a
+whole-project `up` without the warning beside it, and the rendered `workspace` service has no
+`depends_on`, so `up -d --build workspace` names one service). It asked for two more sentences,
+which the PM added with a test line each: a Workspace that is already looping is stopped first
+(`docker compose stop workspace`), then the profile line is taken out, because once the line is
+gone the doctor reads the row as `off` and no longer looks at the container; and the profile line
+is written plainly, because `just` reads `.env` itself and passes a `${VAR:-default}` value on
+empty. One commit of that pair (`9903717`) left a README test red for a minute; `5200df6` is green.
+Task 14's greps all hold at `5200df6`, and `doctor/doctor.mjs` is unchanged against `origin/main`.
+
+Kept as the worker built it: the PowerShell form of the copy line beside the ruled one; a
+`COMPOSE_PROFILES` that names the profile while compose has no `workspace` service stays a problem,
+and a failed `docker compose config --services` reads `unknown` and is a problem; `.env.example`
+keeps its two relative folder values (side by side they resolve to the right folders). One line
+outside that repository said the same thing as S-1: the comment over the `workspace` service in
+bb2dash's own `compose.yaml`; it follows in this branch.
+
+## The walk's independent check, and the PM's rulings on it (2026-10-07)
+
+A fresh agent opened each of the nine shots and looked at it, read the spec for the assertion
+that guards each shot, and re-ran the reads that still hold after the walk (08:28 to 08:36 UTC).
+
+| what | result |
+|---|---|
+| the nine shots show what task 22 says each must show | holds for all nine |
+| every shot is guarded by an assertion that can fail | holds, except `08-desktop.png`'s "the profile is the temp folder", which the spec prints and does not assert |
+| task 19's reads (tiers, providers, models, tool calls, no call outside the two bb2dash scopes) | hold |
+| the cap turn, the stopped turn, the queued then done request | hold |
+| task 20: the three planner values, read again twice after the archive writes | unchanged; no `agent_requests` row moved |
+| the end state: the guard, the container from `bb2dash-wt-21`, healthy, the 1.00 cap, no ports, nothing left running, the worktree clean, no secret in the spec, the shots' names or the record | holds |
+| task 21 (d), the health readings 60 s and 120 s into the Opus turn | not shown: the turn lasted 27.1 s |
+| task 19, the usage percentages before the first turn | not read |
+| task 22 (a), "0 failed" | the passing run left no file; the newest run on disk is a failed one, the walker's own check that its archive test refuses to run without the names it archives |
+
+What it saw on the screen, beyond the walker's three defects:
+
+* **W-1 shows from four turns on**: in `11-standard-sonnet.png` and `05-deep-opus.png` as well as
+  06, 07 and 08.
+* **W-3 is in the answer to acceptance step 4**, which Stack asks himself: three lines read
+  `**Decision 434 (September 17).**` with the asterisks as typed.
+* **A later turn's "Used:" line can leave out a source.** The Opus answers cite Inbox decision
+  notes 538 and 545 and their "Used:" lines name no `search_context`: the notes reached the model
+  through the resumed session from turn 2. True to what that turn called, and less than what it
+  drew on.
+* The message column in the desktop shell shows the default scrollbar with arrow buttons, cutting
+  its rounded corners (cosmetic).
+* **The repository is public, and these are the first walk shots whose content is assistant
+  answers**: one quoted syllabus sentence, slide summaries of two decks, and decision text with a
+  quiz score (the score is already in the tracked decision log). The brief asks for the shots.
+  Whether quoted course text belongs in a public repository is Stack's call, put to him in the
+  hand-off.
+
+### W-R. Rulings (PM)
+
+* **W-1 and W-2 are fixed before Stack's part A** (W-66, test-first, with a check in a real
+  browser), and the shots that show W-1 are taken again on the fixed page.
+* **W-3 is recorded and put to Stack**: the page shows text as typed by decision (O-5), the
+  system prompt already asks for plain text, and one answer of nine did not follow it. Whether to
+  strip emphasis markers on the page, press the prompt harder, or leave it is his.
+* **Task 21 (d) is repeated once on a longer request**, as the row says, in the sitting that
+  retakes the shots. If that turn also ends before the 120 s reading, (d) is recorded as not shown
+  live: the heartbeat during a turn is then held by the runner's tests on a fake clock only.
+* **The usage percentages are Stack's own read at acceptance step 1.** Nothing the runner logs or
+  stores holds them. Logging the two figures of the rate-limit line the runner already reads is a
+  follow-up (Known issues).
+* **The cap follow-up was asked under the 0.01 cap, as the row orders it**: accepted. The two stray
+  requests (396, 397), queued by a mis-aimed test run while the service was stopped and stopped
+  through the page before any runner saw them, changed no planner row and spent no turn: the walk
+  is accepted as walked.
+* **The spec asserts what the record says it asserts**: the 08 test gains the expect on its
+  profile folder, and the sitting ends on a passing run so the newest run on disk is green.
+* **"The first resumed session that uses a tool"** was turn 2 of the walk (request 389), not the
+  cap follow-up, because the five questions share one conversation as Stack's steps 3 to 7 will.
