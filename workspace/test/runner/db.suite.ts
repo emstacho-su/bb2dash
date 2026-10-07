@@ -359,6 +359,61 @@ describe('the connection', () => {
     expect((error as Error).message).toContain('<redacted>');
   });
 
+  describe('a connection error between calls', () => {
+    /** Clients whose `error` listener the test fires, as the driver does when a socket fails with no call in flight. */
+    function listeningClients() {
+      const made: Array<{ fire: (error: Error) => void }> = [];
+      const newClient = (): PgClientLike => {
+        const record = { fire: (_error: Error): void => undefined };
+        made.push(record);
+        return {
+          connect: async () => undefined,
+          query: async (sql: string) => (sql.includes('current_user') ? { rows: [{ role: 'workspace_runner' }] } : { rows: [] }),
+          end: async () => undefined,
+          on: (_event, listener) => {
+            record.fire = listener;
+          },
+        };
+      };
+      return { newClient, made };
+    }
+
+    it('is logged once, with the DSN, its password and its host taken out', async () => {
+      const logs: string[] = [];
+      const { newClient, made } = listeningClients();
+      const query = createPgQuery({ dsn: DSN, ca: CA, log: (line) => logs.push(line), newClient });
+      await query('select 1');
+      made[0]?.fire(new Error(`read ECONNRESET ${DSN} at aws-0-us-east-1.pooler.supabase.com with not-a-password`));
+      const said = logs.filter((line) => /connection error/.test(line));
+      expect(said).toHaveLength(1);
+      expect(said[0]).toContain('read ECONNRESET');
+      expect(said[0]).toContain('<redacted>');
+      expect(said[0]).not.toContain(DSN);
+      expect(said[0]).not.toContain('not-a-password');
+      expect(said[0]).not.toContain('pooler.supabase.com');
+    });
+
+    it('makes the next call connect afresh', async () => {
+      const { newClient, made } = listeningClients();
+      const query = createPgQuery({ dsn: DSN, ca: CA, log: () => undefined, newClient });
+      await query('select 1');
+      made[0]?.fire(new Error('Connection terminated unexpectedly'));
+      await query('select 2');
+      expect(made).toHaveLength(2);
+    });
+
+    it('on a connection already replaced leaves the one in use alone', async () => {
+      const { newClient, made } = listeningClients();
+      const query = createPgQuery({ dsn: DSN, ca: CA, log: () => undefined, newClient });
+      await query('select 1');
+      made[0]?.fire(new Error('Connection terminated unexpectedly'));
+      await query('select 2');
+      made[0]?.fire(new Error('read ECONNRESET'));
+      await query('select 3');
+      expect(made).toHaveLength(2);
+    });
+  });
+
   it('closes the connection when asked', async () => {
     const { newClient, made } = fakeClients([() => ({ rows: [] })]);
     const query = createPgQuery({ dsn: DSN, ca: CA,log: () => undefined, newClient });

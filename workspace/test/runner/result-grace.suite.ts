@@ -143,6 +143,29 @@ describe('the time a CLI gets to exit after its result line', () => {
     expect(said[0]).toMatch(/result is kept/);
   });
 
+  // Ruling X1. The kill is the runner's own and has its line; the exit on SIGTERM it causes is not a second event.
+  it('does not also log a CLI it killed after the result line as an exit on a signal', { timeout: 3000 }, async () => {
+    const h = harness([{ lines: ANSWERED, exit: OK, hang: true, stderr: 'Terminated' }]);
+    const events = await collect(h.turn(input(), new AbortController().signal));
+    expect(h.spawn.processes[0]!.kills.map((kill) => kill.signal)).toEqual(['SIGTERM']);
+    expect(resultOf(events)).toMatchObject({ ok: true, errorCode: null, reported: true });
+    expect(h.logs.filter((line) => /did not exit/.test(line))).toHaveLength(1);
+    expect(h.logs.filter((line) => /the CLI exited/.test(line))).toEqual([]);
+  });
+
+  // The line the guard keeps back is still written for an exit the runner did not cause.
+  it('still logs a CLI that exits non-zero by itself after its result line', async () => {
+    const h = harness([{ lines: budgetStop, exit: FAILED, stderr: 'the budget is used up' }]);
+    const events = await collect(h.turn(input(), new AbortController().signal));
+    expect(h.spawn.processes[0]!.kills).toEqual([]);
+    expect(resultOf(events)).toMatchObject({ ok: false, errorCode: 'budget_exceeded', reported: true });
+    const said = h.logs.filter((line) => /the CLI exited/.test(line));
+    expect(said).toHaveLength(1);
+    expect(said[0]).toMatch(/request=41/);
+    expect(said[0]).toMatch(/the CLI exited 1: the budget is used up/);
+    expect(h.logs.some((line) => /did not exit/.test(line))).toBe(false);
+  });
+
   it('kills nothing when the CLI exits by itself inside that time', { timeout: 3000 }, async () => {
     const h = harness([{ lines: ANSWERED, exit: OK }]);
     const events = await collect(h.turn(input(), new AbortController().signal));
