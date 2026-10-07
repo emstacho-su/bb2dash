@@ -104,6 +104,55 @@ describe('the batch', () => {
     expect(templatedDecision(row({ entity: 'agent_request' }), 'recorded_elsewhere', 1).rule).toMatch(/A notice about a request/);
   });
 
+  /** A session-link answer as 185's inbox_apply_prepare returns it: the file, Stack's pick, the file's link now. */
+  const sessionRow = (link: Record<string, unknown>, over: Partial<Record<string, unknown>> = {}): QueueRow =>
+    row({
+      entity: 'bb_file', ref: 'session_link/2489', field: 'session_id', course_id: 'GEO.103.lecture',
+      session_link: { file_id: 2489, pick: 45, file_found: true, file_current: true, file_session_id: 45, ...link },
+      ...over,
+    });
+
+  it('reads the session link of a row, and none where prepare sent none or sent it broken', () => {
+    expect(sessionRow({}).sessionLink).toEqual({ fileId: 2489, pick: 45, fileCurrent: true, fileSessionId: 45 });
+    expect(sessionRow({ pick: null, file_session_id: null }).sessionLink).toEqual({ fileId: 2489, pick: null, fileCurrent: true, fileSessionId: null });
+    // A file that is gone or superseded is not current, whatever else the object says.
+    expect(sessionRow({ file_found: false }).sessionLink?.fileCurrent).toBe(false);
+    expect(sessionRow({ file_current: false }).sessionLink?.fileCurrent).toBe(false);
+    expect(row({}).sessionLink).toBeNull();
+    expect(row({ session_link: 'x' }).sessionLink).toBeNull();
+    expect(row({ session_link: { file_id: 'x', pick: 45 } }).sessionLink).toBeNull();
+  });
+
+  it('records a session answer by itself when the file shows what link_file_sessions did with it', () => {
+    // His pick is on the file: the fold applied it (123, 163).
+    expect(templatedBucket(sessionRow({}))).toBe('applied_by_transform');
+    expect(templatedDecision(sessionRow({}), 'applied_by_transform', 9).rule).toBe(
+      'link_file_sessions set session 45 on file 2489 from this answer (migrations 123, 163).',
+    );
+    // "None": the file stays unlinked, which is the answer applied.
+    const none = sessionRow({ pick: null, file_session_id: null }, { accept: 'none' });
+    expect(templatedBucket(none)).toBe('applied_by_transform');
+    expect(templatedDecision(none, 'applied_by_transform', 9).rule).toMatch(/^Answered none: link_file_sessions leaves file 2489 unlinked/);
+    // Answered since the last fold: the fold reads an archived answer too (163).
+    const pending = sessionRow({ file_session_id: null });
+    expect(templatedBucket(pending)).toBe('applied_by_transform');
+    expect(templatedDecision(pending, 'applied_by_transform', 9).rule).toMatch(/^File 2489 is not linked yet: link_file_sessions reads this answer at the next sync/);
+  });
+
+  it('sends a session answer to a reader when it carries a note or the file does not agree with it', () => {
+    expect(templatedBucket(sessionRow({}, { has_note: true }))).toBeNull();
+    // The file carries another session than the one he picked.
+    expect(templatedBucket(sessionRow({ file_session_id: 44 }))).toBeNull();
+    // "None", and the file is linked all the same.
+    expect(templatedBucket(sessionRow({ pick: null, file_session_id: 44 }, { accept: 'none' }))).toBeNull();
+    // Neither a pick nor "none".
+    expect(templatedBucket(sessionRow({ pick: null, file_session_id: null }))).toBeNull();
+    // The file is gone or superseded.
+    expect(templatedBucket(sessionRow({ file_current: false }))).toBeNull();
+    // A dismissed one is still just dismissed.
+    expect(templatedBucket(sessionRow({ file_session_id: 44 }, { state: 'dismissed' }))).toBe('dismissed');
+  });
+
   it('splits the queue: templated, at most six for Claude, the rest deferred, skipped rows left out', () => {
     const queue = [
       queueRow({ id: 1, was_applied: true }),
