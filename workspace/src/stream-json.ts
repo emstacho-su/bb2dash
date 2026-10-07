@@ -6,11 +6,19 @@
  *   init    the `system/init` line's facts, once;
  *   delta   answer text: main-thread `text_delta` events only, never thinking or tool input;
  *   tool    a tool call, when it is made and again when its result is known;
- *   stop    the turn must be killed: the init line failed its check, a tool ran with no answer from
- *           the gate, the gate exited with a code that is neither 0 nor 2, or the turn is being paid
- *           from usage credits;
+ *   stop    the turn must be killed: the init line failed its check, a tool answered with no allow
+ *           from the gate, the gate exited with a code that is neither 0 nor 2, or the turn is
+ *           being paid from usage credits;
  *   result  the `result` line's facts.
  * After a stop it says nothing more, but still reads the result line.
+ *
+ * The gate rule (rulings V1, CR-1 and CR-6). The gate's answer names a tool and no call, so answers
+ * are never paired to calls: they are counted. A tool result that is not an error needs an allow (a
+ * PreToolUse hook response with exit 0) for its tool name: the results that are not errors for a
+ * name never outnumber the allows seen for it, and the one that would stops the turn. An error
+ * result needs none: the CLI writes those itself for a call it refused before the gate ran (a tool
+ * it does not have) and for a call the gate denied; the call is stored with ok false and the turn
+ * goes on.
  */
 
 import { CLAUDE_CODE_VERSION, TOOL_QUERY_MAX_CHARS } from './config.js';
@@ -188,12 +196,17 @@ interface ToolState {
   readonly input: unknown;
   /** False for `EndConversation`: accepted, never stored, outside the gate rule. */
   readonly counted: boolean;
-  hookExit: number | null;
   resultSeen: boolean;
   isError: boolean;
+  /** True for the call whose result arrived with no allow left for its tool name: the turn was stopped on it. */
+  ungated: boolean;
 }
 
-const toolOk = (tool: ToolState): boolean => tool.hookExit === HOOK_ALLOW_EXIT && tool.resultSeen && !tool.isError;
+/**
+ * A call is ok when its result arrived, is not an error and did not trip the count (rulings V1,
+ * CR-6, and X1); the gate's exit code is no part of it.
+ */
+const toolOk = (tool: ToolState): boolean => tool.resultSeen && !tool.isError && !tool.ungated;
 const stored = (tool: ToolState): StoredToolCall => toStoredToolCall(tool.name, tool.input, toolOk(tool));
 
 function readRateLimit(info: Json): RateLimitFacts {
@@ -219,8 +232,10 @@ function readResult(line: Json): ResultFacts {
 
 export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): TurnStream {
   const tools = new Map<string, ToolState>();
-  /** Gate answers that arrived before their tool call was seen, by tool name. */
-  const earlyHooks = new Map<string, number[]>();
+  /** By tool name: the gate's allows seen so far, and the results that were not errors. */
+  const allows = new Map<string, number>();
+  const answered = new Map<string, number>();
+  const countOf = (counts: ReadonlyMap<string, number>, name: string): number => counts.get(name) ?? 0;
   let init: InitFacts | null = null;
   let joined = '';
   let separatorPending = false;
@@ -271,15 +286,14 @@ export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): T
     const id = text(block.id);
     const name = text(block.name);
     if (id === null || name === null || tools.has(id)) return [];
-    const early = earlyHooks.get(name)?.shift();
     const tool: ToolState = {
       id,
       name,
       input: block.input,
       counted: name !== END_CONVERSATION_TOOL,
-      hookExit: early ?? null,
       resultSeen: false,
       isError: false,
+      ungated: false,
     };
     tools.set(id, tool);
     return tool.counted ? [{ kind: 'tool', id, call: stored(tool) }] : [];
@@ -301,9 +315,7 @@ export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): T
     if (line.hook_event !== PRE_TOOL_USE || !hookName.startsWith(HOOK_NAME_PREFIX)) return [];
     const toolName = hookName.slice(HOOK_NAME_PREFIX.length);
     const exit = typeof line.exit_code === 'number' && Number.isInteger(line.exit_code) ? line.exit_code : Number.NaN;
-    const waiting = [...tools.values()].find((tool) => tool.name === toolName && tool.hookExit === null);
-    if (waiting) waiting.hookExit = exit;
-    else earlyHooks.set(toolName, [...(earlyHooks.get(toolName) ?? []), exit]);
+    if (exit === HOOK_ALLOW_EXIT) allows.set(toolName, countOf(allows, toolName) + 1);
     if (exit === HOOK_ALLOW_EXIT || exit === HOOK_DENY_EXIT) return [];
     return [stop('cli_error', `the tool gate exited ${Number.isNaN(exit) ? 'with no code' : exit} for ${shortToolName(toolName)}`)];
   };
@@ -314,13 +326,18 @@ export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): T
     for (const block of records(message.content)) {
       if (block.type !== 'tool_result' || stopped) continue;
       const tool = tools.get(text(block.tool_use_id) ?? '');
-      if (!tool) continue;
+      // A call has one result: a line that repeats it is not a second answer to count.
+      if (!tool || tool.resultSeen) continue;
       tool.resultSeen = true;
       tool.isError = block.is_error === true;
       if (!tool.counted) continue;
-      if (tool.hookExit === null) {
-        signals.push(stop('cli_error', `the tool call ${shortToolName(tool.name)} ran with no answer from the tool gate`));
-        continue;
+      if (!tool.isError) {
+        answered.set(tool.name, countOf(answered, tool.name) + 1);
+        if (countOf(answered, tool.name) > countOf(allows, tool.name)) {
+          tool.ungated = true;
+          signals.push(stop('cli_error', `the tool call ${shortToolName(tool.name)} answered with no allow from the tool gate`));
+          continue;
+        }
       }
       signals.push({ kind: 'tool', id: tool.id, call: stored(tool) });
     }

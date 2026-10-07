@@ -198,6 +198,7 @@ describe('the CLI turn on the lookup recording', () => {
       costUsd: 0.038524,
       claudeSessionId: recorded.session_id,
       model: 'claude-haiku-4-5-20251001',
+      reported: true,
     });
   });
 
@@ -313,7 +314,7 @@ describe('fresh starts, resumed turns and the one recovery', () => {
     ]);
     const events = await run(h, input({ claudeSessionId: STORED_SESSION_ID }));
     expect(h.spawn.calls).toHaveLength(2);
-    expect(resultOf(events)).toEqual({ type: 'result', ok: false, errorCode: 'cli_error', costUsd: null, claudeSessionId: null, model: null });
+    expect(resultOf(events)).toEqual({ type: 'result', ok: false, errorCode: 'cli_error', costUsd: null, claudeSessionId: null, model: null, reported: false });
   });
 
   it('never reports the session id of a resume that found no session', async () => {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   CANCEL_POLL_MS,
@@ -14,53 +14,25 @@ import {
 } from '../src/config.js';
 import { ProviderNotConfiguredError } from '../src/errors.js';
 import type { CliTurn } from '../src/providers/claude-cli.js';
-import { createProviders } from '../src/providers/index.js';
 import type { StoredToolCall, TurnEvent } from '../src/providers/types.js';
-import { SHUTDOWN_GRACE_MS, createRunner, main, type RunnerDeps } from '../src/runner.js';
-import { startTurn, type TurnDeps } from '../src/turn.js';
-import { ABORTED, STORED_SESSION_ID, claimOf, delta, fakeRpc, result, scriptedTurn, type FakeRpc, type Step } from './helpers/fakes.js';
+import { SHUTDOWN_GRACE_MS, createRunner, main } from '../src/runner.js';
+import { startTurn } from '../src/turn.js';
+import { ABORTED, STORED_SESSION_ID, claimOf, delta, result, scriptedTurn, type FakeRpc, type Step } from './helpers/fakes.js';
+import { loopHarness as loop, turnHarness as harness, useFakeClock } from './helpers/turn-harness.js';
 
 // The rest of the runner's behaviour, in files small enough to read: each registers its own suites.
 import './runner/cli-turn.suite.js';
+import './runner/closing.suite.js';
 import './runner/db.suite.js';
+import './runner/db-tls.suite.js';
 import './runner/health.suite.js';
 import './runner/replay.suite.js';
+import './runner/result-grace.suite.js';
 
 const call = (n: number, ok = true): StoredToolCall => ({ tool: 'search_materials', query: `query ${n}`, scope: null, ok });
 const tool = (at: number, id: string, stored: StoredToolCall): Step => ({ at, event: { type: 'tool', id, call: stored } });
 const textSent = (fake: FakeRpc): Array<[number, string]> => fake.streams.filter((s) => s.delta !== '').map((s) => [s.seq, s.delta]);
 const pollsSent = (fake: FakeRpc) => fake.streams.filter((s) => s.delta === '');
-
-interface Harness {
-  readonly fake: FakeRpc;
-  readonly logs: string[];
-  readonly deps: TurnDeps;
-}
-
-function harness(turn: CliTurn, overrides: Partial<TurnDeps> = {}): Harness {
-  const fake = fakeRpc();
-  const logs: string[] = [];
-  const deps: TurnDeps = {
-    rpc: fake.rpc,
-    providers: createProviders({ claudeCli: turn }),
-    log: (line) => logs.push(line),
-    budgetUsd: 1,
-    budgetCapHolds: true,
-    ...overrides,
-  };
-  return { fake, logs, deps };
-}
-
-/** A fake clock for the suite that calls it: the turn and the loop run on timers. */
-function useFakeClock(): void {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-10-06T04:00:00Z'));
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-}
 
 describe('one turn', () => {
   useFakeClock();
@@ -421,16 +393,6 @@ describe('a turn and the database', () => {
     expect(fake.finishes).toHaveLength(1);
   });
 
-  it('gives up on workspace_finish after three tries and says so', async () => {
-    const { fake, logs, deps } = harness(scriptedTurn([delta(10, 'ok'), result(20)]).turn);
-    fake.failFinish(99);
-    const handle = startTurn(deps, claimOf());
-    await vi.advanceTimersByTimeAsync(20_000);
-    await handle.done;
-    expect(fake.finishes).toHaveLength(0);
-    expect(logs.some((line) => /request=41/.test(line) && /finish failed/.test(line))).toBe(true);
-  });
-
   it('keeps a turn going when one stream call fails: the stored row is the record', async () => {
     const scripted = scriptedTurn([delta(100, 'one '), delta(400, 'two'), result(600)]);
     const { fake, logs, deps } = harness(scripted.turn);
@@ -492,29 +454,6 @@ describe('a turn and the database', () => {
 
 describe('the loop', () => {
   useFakeClock();
-
-  interface Loop {
-    readonly fake: FakeRpc;
-    readonly logs: string[];
-    readonly touches: number[];
-    readonly deps: RunnerDeps;
-  }
-
-  function loop(turn: CliTurn): Loop {
-    const fake = fakeRpc();
-    const logs: string[] = [];
-    const touches: number[] = [];
-    const deps: RunnerDeps = {
-      rpc: fake.rpc,
-      providers: createProviders({ claudeCli: turn }),
-      log: (line) => logs.push(line),
-      budgetUsd: 1,
-      budgetCapHolds: true,
-      runnerName: 'workspace@test',
-      touchAlive: () => touches.push(Date.now()),
-    };
-    return { fake, logs, touches, deps };
-  }
 
   it('polls workspace_claim every 2 s while nothing is queued', async () => {
     const { fake, deps } = loop(scriptedTurn([result(10)]).turn);

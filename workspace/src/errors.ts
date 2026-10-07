@@ -23,6 +23,18 @@ export function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === 'string' && (ERROR_CODES as readonly string[]).includes(value);
 }
 
+/**
+ * What a caught value says, for a log line: an Error's message, anything else as text. An Error
+ * with no message says its `code` when that is text (ruling X1): node reports a refused connect to
+ * a host with two addresses as an AggregateError with an empty message and `code: 'ECONNREFUSED'`.
+ */
+export function messageOf(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  if (error.message !== '') return error.message;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : '';
+}
+
 /** Thrown by a provider that exists as a typed stub and is not connected. */
 export class ProviderNotConfiguredError extends Error {
   readonly providerId: ProviderId;

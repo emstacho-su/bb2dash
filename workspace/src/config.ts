@@ -1,7 +1,7 @@
 /**
  * The runner's constants (brief 102, Contract, "The runner" and "Heartbeat, health and shutdown").
  * Every number the loop, the provider and the healthcheck share is named here, with the start-up
- * guards: the key guard, the runner DSN's checks and the per-answer budget.
+ * guards: the key guard, the runner DSN's checks, the pinned CA and the per-answer budget.
  */
 
 import fs from 'node:fs';
@@ -26,7 +26,12 @@ export const PATHS = Object.freeze({
   turnCwd: '/app/turn',
   runnerDbUrlSecret: '/run/secrets/workspace_runner_db_url',
   oauthTokenSecret: '/run/secrets/claude_oauth_token',
+  /** The CA the pooler's certificate is verified against, unless DB_CA_FILE_ENV names another file. */
+  dbCaFile: '/app/certs/prod-ca.crt',
 });
+
+/** Names the file that holds the pinned CA (PEM); PATHS.dbCaFile when it is not set. */
+export const DB_CA_FILE_ENV = 'WORKSPACE_DB_CA_FILE';
 
 /** How often the runner asks for the next queued request. */
 export const POLL_INTERVAL_MS = 2000;
@@ -38,12 +43,27 @@ export const STREAM_FLUSH_MS = 250;
 export const CANCEL_POLL_MS = 2000;
 /** A turn is killed here, under the database's 10-minute stale-claim sweep. */
 export const TURN_TIMEOUT_MS = 8 * 60 * 1000;
+/** After its `result` line the CLI gets this long to exit; then it is killed and the result is kept. */
+export const RESULT_EXIT_GRACE_MS = 10_000;
 /** The heartbeat's own timer, during turns too. */
 export const HEARTBEAT_MS = 30_000;
 /** With no heartbeat success for this long the runner exits non-zero, so the container restarts. */
 export const DB_WATCHDOG_MS = 180_000;
 /** The healthcheck passes while the alive file is younger than this. */
 export const HEALTH_MAX_AGE_MS = 90_000;
+
+/**
+ * `workspace_finish()`, and `workspace_begin()` before it, are tried again for this long when the
+ * database fails them, so a finished answer outlives a short outage. A turn is killed at
+ * TURN_TIMEOUT_MS from its start and the last finish try is made at most this much later, so the
+ * runner closes the request inside the database's 10-minute claim (ruling X1). Under
+ * DB_WATCHDOG_MS; the watchdog does not end the process while a finish is inside this window.
+ */
+export const FINISH_RETRY_MS = 110_000;
+/** The wait before the second try; each later wait is twice the one before it. */
+export const FINISH_BACKOFF_FIRST_MS = 1000;
+/** No wait between two tries is longer than this. */
+export const FINISH_BACKOFF_MAX_MS = 15_000;
 
 /** At most this many stored messages are replayed on a fresh start. */
 export const HISTORY_REPLAY = 20;
@@ -85,7 +105,19 @@ export const REFUSED_ENV_NAMES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', '
 export const REFUSED_ENV_PREFIX = 'CLAUDE_CODE_USE_';
 
 const TRANSACTION_POOLER_PORT = '6543';
-const SSLMODE_ALLOWED = new Set(['require', 'verify-ca', 'verify-full', 'no-verify']);
+/** Port 0 as a URL spells it. The driver reads it as no port and takes `PGPORT` or its own default. */
+const NO_PORT = '0';
+/**
+ * The sslmodes a DSN may carry. None of them decides how the connection is made: the runner
+ * verifies the pooler's certificate against the pinned CA whatever the DSN says (`db.ts`). A mode
+ * that asks for less (`no-verify` among them) is refused, so the stored secret never reads as if
+ * less were in force.
+ */
+const SSLMODE_ALLOWED = new Set(['require', 'verify-ca', 'verify-full']);
+const PEM_CERTIFICATE_HEADER = '-----BEGIN CERTIFICATE-----';
+/** The byte-order mark an editor may put in front of a file's text, by its code point. */
+const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
+const withoutMark = (text: string): string => (text.startsWith(BYTE_ORDER_MARK) ? text.slice(BYTE_ORDER_MARK.length) : text);
 /** Dollars with at most two decimals: the flag is written with two, so a third would reach the CLI rounded. */
 const BUDGET_SHAPE = /^\d+(\.\d{1,2})?$/;
 const RUNNER_NAME_PREFIX = 'workspace@';
@@ -150,7 +182,12 @@ export function parseTurnBudget(raw: string | undefined): number {
   return dollars;
 }
 
-/** The session pooler (never the transaction pooler on 6543) with an encrypted sslmode: the checks made for `sync_runner`. */
+/**
+ * The session pooler (never the transaction pooler on 6543, never port 0) with an sslmode that asks
+ * for an encrypted, verified connection, and with every part `db.ts` connects from there and
+ * readable. The check reads what the secret says; what is enforced is in `db.ts`, which verifies
+ * against the pinned CA whatever the DSN says.
+ */
 export function assertRunnerDsn(dsn: string): string {
   let url: URL;
   try {
@@ -161,12 +198,44 @@ export function assertRunnerDsn(dsn: string): string {
   if (url.port === TRANSACTION_POOLER_PORT) {
     throw new ConfigError(`${DSN_SECRET_NAME} points at port 6543, the transaction pooler; use the session pooler on 5432`);
   }
+  if (url.port === NO_PORT) {
+    throw new ConfigError(`${DSN_SECRET_NAME} points at port 0, which is no port; use the session pooler on 5432`);
+  }
+  // The connection is made from these parts alone, so each must be there (`db.ts`, `dsnParts`).
+  const parts = { host: url.hostname, user: url.username, password: url.password, database: url.pathname.replace(/^\//, '') };
+  for (const name of ['host', 'user', 'password', 'database'] as const) {
+    if (parts[name] === '') throw new ConfigError(`${DSN_SECRET_NAME} names no ${name}`);
+  }
+  // `dsnParts` percent-decodes these three on every connect: what it could not read is refused here, once, at start.
+  try {
+    for (const name of ['user', 'password', 'database'] as const) decodeURIComponent(parts[name]);
+  } catch {
+    throw new ConfigError(`${DSN_SECRET_NAME} holds a part that is not percent-encoded text`);
+  }
   const sslmode = url.searchParams.get('sslmode')?.trim().toLowerCase() ?? null;
-  if (sslmode === null) throw new ConfigError(`${DSN_SECRET_NAME} names no sslmode; append ?uselibpqcompat=true&sslmode=require`);
+  if (sslmode === null) throw new ConfigError(`${DSN_SECRET_NAME} names no sslmode; append ?sslmode=verify-full`);
   if (!SSLMODE_ALLOWED.has(sslmode)) {
-    throw new ConfigError(`${DSN_SECRET_NAME} sets an sslmode that permits an unencrypted connection`);
+    throw new ConfigError(`${DSN_SECRET_NAME} sets an sslmode that asks for less than an encrypted, verified connection; use sslmode=verify-full`);
   }
   return dsn;
+}
+
+/**
+ * The pinned CA, read at start (ruling V1, SR-1): the PEM text of the file DB_CA_FILE_ENV names, or
+ * of PATHS.dbCaFile. A file that is missing, empty or holds no certificate stops the start: the
+ * runner never connects without it. The message names the file and the variable, never the text.
+ */
+export function readDbCa(env: Env, readFile: ReadFile): string {
+  const named = (env[DB_CA_FILE_ENV] ?? '').trim();
+  const file = named === '' ? PATHS.dbCaFile : named;
+  const text = withoutMark(readFile(file) ?? '');
+  if (text.trim() === '') {
+    throw new ConfigError(`the CA file ${file} (${DB_CA_FILE_ENV}) is missing or empty: the database connection is not made without it`);
+  }
+  if (!text.includes(PEM_CERTIFICATE_HEADER)) {
+    throw new ConfigError(`the CA file ${file} (${DB_CA_FILE_ENV}) holds no PEM certificate: the database connection is not made without it`);
+  }
+  return text;
 }
 
 function requireSecret(file: string, name: string, readFile: ReadFile): string {
@@ -183,6 +252,8 @@ export function readOauthToken(readFile: ReadFile): string {
 export interface RunnerConfig {
   /** The `workspace_runner` session-pooler DSN. Never logged. */
   readonly dbUrl: string;
+  /** The pinned CA's certificate, PEM: the only authority the pooler's certificate is verified against. */
+  readonly dbCa: string;
   readonly budgetUsd: number;
   /** The name the runner claims and sends heartbeats under. */
   readonly runnerName: string;
@@ -199,5 +270,6 @@ export function loadConfig(source: ConfigSource): RunnerConfig {
   assertSubscriptionEnv(source.env);
   const budgetUsd = parseTurnBudget(source.env[TURN_BUDGET_ENV]);
   const dbUrl = assertRunnerDsn(requireSecret(PATHS.runnerDbUrlSecret, DSN_SECRET_NAME, source.readFile));
-  return { dbUrl, budgetUsd, runnerName: `${RUNNER_NAME_PREFIX}${source.hostname}` };
+  const dbCa = readDbCa(source.env, source.readFile);
+  return { dbUrl, dbCa, budgetUsd, runnerName: `${RUNNER_NAME_PREFIX}${source.hostname}` };
 }

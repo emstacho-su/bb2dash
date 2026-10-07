@@ -1120,3 +1120,928 @@ bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:0
 566 against round 1's 559: three cases for the connection, three for the mark, one for file size.
 By task: router 67, tool gate 78, providers and argv 54, stream parser 109, runner, MCP config,
 config and system prompt 258.
+
+## Review round
+
+Ruling V1 (PM, 2026-10-06; `rulings-5.md`, written into `102a_PHASE21_VERIFICATION.md` under "PM
+rulings for the review round"), from `/code-review main high` (CR-1, CR-2, CR-3, CR-5, CR-6, CR-12;
+CR-11 is a no-change) and `/security-review` (SR-1). First step: `git fetch origin`, then
+`git merge origin/feat/workspace-21` into this branch (to `e9f0852`, no conflict), pushed; the phase
+branch's one later commit (`fc4cf2f`, docs) was merged the same way before this section was written.
+Each fix has its test committed and pushed failing before the code. No `claude -p` ran, no fixture
+was recorded again, nothing was sent to prod, and the only docker command was the read-only guard.
+
+### CR-1 and CR-6 · the gate rule counts allows per tool name (`workspace/src/stream-json.ts`)
+
+The gate's answer (`hook_response`) names a tool and no call: the recordings show `hook_id`,
+`hook_name`, `exit_code` and no tool-use id (`claude-stream-lookup.jsonl` line 24). So answers are
+counted, never paired. `allows` holds, per tool name, the PreToolUse responses with exit 0;
+`answered` holds the results that were not errors. In `onUser` a result that is not an error raises
+`answered` for its name, and when that passes `allows` the turn is stopped as `cli_error`. An error
+result needs no answer: its call is stored `ok: false` and the turn goes on. `EndConversation` stays
+outside the rule (`counted: false`); a gate exit that is neither 0 nor 2 still stops the turn in
+`onHookResponse`. `ok` is "the result arrived and is not an error" (`toolOk`); the exit code is no
+part of it. `earlyHooks` and `hookExit` are gone.
+
+The two recordings that carry tool calls and hook events were read again for their order:
+
+| recording | order as recorded |
+|---|---|
+| `claude-stream-lookup.jsonl` | `tool_use` (search_materials) line 18, `hook_started` 19, `hook_response` exit 0 line 24, `tool_result` 25; `tool_use` (get_material_text) 40, `hook_started` 41, `hook_response` exit 0 line 45, `tool_result` 46; `result` 95 |
+| `claude-stream-budget-stop.jsonl` | `tool_use` 19, `hook_started` 20, `result` (`error_max_budget_usd`) 23, `hook_response` exit 0 line 24, no `tool_result` at all |
+
+(1-based line numbers.) Each allow is in the stream before the result of its call; in the budget
+stop the allow comes after the `result` line and nothing is ever counted against it.
+
+Red, `946164d` (`test/stream-json/gate-count.suite.ts`, registered by `stream-json.test.ts`):
+
+```
+$ npx vitest run test/stream-json.test.ts
+ × does not end the turn on an error result for a tool the CLI does not have: the call is stored ok false and the answer goes on
+ × does not end the turn on an error result for an allowed tool the CLI refused before the gate ran: the call is stored ok false and the answer goes on
+ × sends the tool signal again for the error result, so the stored call is the one with its result
+ × lets a later, allowed call of the same turn answer after an error result with no gate answer
+ × ends the turn when the only gate answer was a deny (exit 2) and the result is not an error
+ × gives each call its own result and kills nothing: the deny first, the first call answered
+ × gives each call its own result and kills nothing: the allow first, the second call answered
+ × ends the turn when both come back answered: two results that are not errors against one allow
+ × lookup with the gate answers taken out and the first result an error: the first call is ok false and the turn goes on to the second
+ Test Files  1 failed (1)
+      Tests  9 failed | 124 passed (133)
+```
+
+Green, `e77f10b`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  590 passed (590)
+```
+
+A second pair, found while reading the fix: with a count, a tool-result line carried twice would be
+two answers against one allow and end a good turn. A call's first result stands and only it is
+counted. Red `19070e1` (`2 failed | 133 passed (135)`: "counts the result of a call once, however
+many user lines repeat it", "keeps the first result of a call: a repeated line cannot turn an error
+into an answer"); green `a7dd38b` (`688 passed (688)`).
+
+The cases the round asked for by name: an error result with no hook answer (two cases: a tool the
+CLI does not have, an allowed tool refused before the gate ran; the text after it still streams and
+the turn maps to a finished answer); a result that is not an error with no allow (no answer at all;
+a deny only; two answers against one allow; an allow for another tool); two calls of one tool in
+one message where one is denied (four orders of the two gate answers and the two results, each
+call keeps its own result, no stop; once more with both calls in one `assistant` line and both
+results in one `user` line). The recordings are replayed as recorded, with the gate answers taken
+out, with only the second taken out, and with the first result turned into an error.
+
+Three things to know:
+
+1. **The one call that trips the count keeps `ok: false`.** Its result is not an error, so by
+   CR-6's sentence alone it would read `ok: true`. Two assertions that were already there hold it
+   false (`gate.suite.ts`, first case; `stream-json.test.ts`, "never gives ok true to a call the
+   gate denied, even if a result without an error flag follows"), and the turn is `cli_error`
+   either way. Kept as it was (`ToolState.ungated`); a question for the PM below.
+2. **An allow that an error result left unused stays in the count.** After an allowed call whose
+   result is an error, a later result of the same tool with no gate answer of its own passes
+   (1 answered against 1 allow). That is the count as ruled; no test asserts it as wanted.
+3. One existing title changed and no assertion: "keeps call order when results arrive out of
+   order" lost its second half, "and matches hooks to same-named calls in turn".
+
+### CR-3 and CR-2 · begin and finish on one retry schedule (`workspace/src/db-retry.ts`, `turn.ts`, `runner.ts`)
+
+`retryDbCall` (`src/db-retry.ts`, new) makes a call, and after a failure makes it again after 1 s,
+2 s, 4 s, 8 s and then every 15 s, for 170 s from the first try; the last try is made as the 170 s
+end. With a database that fails every try that is 16 tries, at 0, 1, 3, 7, 15, 30, 45 … 165 and
+170 s. `FINISH_RETRY_MS = 170_000`, `FINISH_BACKOFF_FIRST_MS = 1000` and
+`FINISH_BACKOFF_MAX_MS = 15_000` are in `src/config.ts`. A refusal the function raises itself
+(SQLSTATE 22023; `REFUSAL_SQLSTATE` and `isRefusal` in `src/db.ts`) ends the tries at once.
+
+* **Finish** (`finishWithRetry`, `turn.ts`): stored → `finished state=…`; 22023 → `finish refused,
+  the request is already closed: …`, not tried again; 170 s over → `finish given up after 170 s,
+  the answer is not stored and the stale-claim sweep closes the request: …`, once.
+* **Begin** (`run`, `turn.ts`): 22023 → `begin refused, nothing ran`, outcome `skipped`, no finish.
+  Any other failure is tried again on the same schedule. A begin that still cannot be made closes
+  the request with `workspace_finish(failed, cli_error)` (empty content, no tool calls, the stored
+  session id handed back), itself on the finish schedule (`closeUnbegun`).
+* **The runner's own stop during begin's tries**: a shutdown ends the tries between two of them and
+  the request is closed as `failed` / `stale_claim`, the code the Contract gives a turn in flight at
+  shutdown. Without that a SIGTERM would wait out the 170 s.
+* **The 8-minute limit counts from the start of the turn**, the time begin's tries took included
+  (`Math.max(0, TURN_TIMEOUT_MS - (Date.now() - startedAt))`), so a turn whose begin was retried
+  still ends under the database's 10-minute sweep. Its own red and green pair below.
+* **The watchdog** (`beat`, `runner.ts`): when no heartbeat has succeeded for 180 s and the turn in
+  flight is making its finish and is less than 170 s into it (`TurnHandle.finishingSince()`,
+  `finishInWindow`), the runner logs once `watchdog: … held while the finish of the turn in flight
+  is being retried` and does not end. The next heartbeat tick looks again; a finish call that
+  never returns stops holding it when the 170 s are over. A turn that is not finishing is ended as
+  before. The hold is for the finish alone, as ruled: begin's tries do not hold the watchdog.
+
+Red, `d4a1007` (`test/runner/closing.suite.ts`, registered by `runner.test.ts`):
+
+```
+$ npx vitest run test/runner.test.ts
+ × is 1 s doubling to a 15 s cap, for 170 s, which ends before the watchdog would
+ × is tried again after 1 s, 2 s, 4 s and 8 s, then every 15 s, for 170 s
+ × gives the answer up after 170 s, says so once, and tries no more
+ × stores the whole answer when the database comes back after 4 failed tries
+ × stores the whole answer when the database comes back after 8 failed tries
+ × stores the whole answer when the database comes back after 15 failed tries
+ × reads a 22023 as a request that is already closed: logged, not tried again
+ × stops trying on a 22023 that comes after failures of another kind
+ × says it is finishing only while the finish is being made
+ × tries again after any other failure, on the same schedule, and then answers the request
+ × does not read a failure with another SQLSTATE as "no longer claimed"
+ × reads a 22023 on a later try as nothing to close too
+ × closes the request as failed / cli_error when begin still cannot be made after 170 s
+ × keeps trying to close a request it could not begin, on the finish schedule
+ × stops trying when the runner stops the turn, and closes the request under the runner's own reason
+ × does not end the process while the finish is inside its 170 s, and the answer is stored when the database comes back
+ × ends the process once the 170 s are over and the database is still gone
+ × is not held past the window by a finish call that never returns
+ Test Files  1 failed (1)
+      Tests  18 failed | 160 passed (178)
+```
+
+Green, `a5da6b6`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  609 passed (609)
+```
+
+The time limit: red `30ffaa4` (`npx vitest run test/runner.test.ts -t "counts the 8-minute limit"`:
+`1 failed`, "counts the 8-minute limit from the start of the turn, the time spent on begin
+included"); green `04a4b3a` (`680 passed (680)`).
+
+Existing tests, and what happened to each:
+
+* "gives up on workspace_finish after three tries and says so" (`runner.test.ts`) is gone: the
+  ruling makes it wrong. "gives the answer up after 170 s, says so once, and tries no more" stands
+  in its place.
+* "does not run the provider when the request is no longer claimed at begin" is unchanged. The fake
+  database's `failBegin()` now raises what migration 142 raises (`workspace_begin: request 41 is
+  not claimed (it is cancelled)`, SQLSTATE 22023); it used to throw an error with no SQLSTATE.
+* "tries workspace_finish again after a failure" is unchanged and passes (1 s, then 2 s).
+* The turn and loop harness moved to `test/helpers/turn-harness.ts`, so the new suites share it;
+  `runner.test.ts` went from 746 to 685 lines.
+
+### CR-5 · the CLI gets 10 s to exit after its result line (`workspace/src/providers/claude-cli.ts`, `turn.ts`)
+
+`RESULT_EXIT_GRACE_MS = 10_000` (`src/config.ts`). When the stream gives its `result` signal the
+provider arms a timer (`createLingerGuard`); a CLI still there when it runs out is logged (`the CLI
+did not exit within 10 s of its result line: killing it, the result is kept`) and killed by the
+existing sequence (SIGTERM, SIGKILL after 1.5 s, the output closed 0.4 s later). The result event
+carries `reported` (`providers/types.ts`): true when a result line was read. The runner's abort
+decides the code only when it cut the turn before a result line (`resultOf`); and in `endingOf`
+(`turn.ts`) the 8-minute limit does not overrule a reported result, so a turn that produced a
+result is never stored as `timeout`, also when the limit falls inside the 10 s. The owner's Stop
+and a shutdown still decide the code (`cancelled`, `stale_claim`).
+
+The one recovery is unchanged by this: a `--resume` that found no session (one error result, no
+assistant message) and then stayed is killed, ends with no exit code, and is started again as
+fresh, as a resume that exits 1 by itself is.
+
+Red, `e099c21` (`test/runner/result-grace.suite.ts`):
+
+```
+$ npx vitest run test/runner.test.ts
+ × is 10 s, and with the kill sequence still far inside the 8-minute limit
+ × kills a CLI that is still there after that time, and keeps the result
+ × kills nothing when the CLI exits by itself inside that time
+ × goes on to SIGKILL and closes the output when the CLI ignores SIGTERM and its pipe stays open
+ × keeps the whole lookup recording when the CLI stays after it
+ × keeps an error result as it was reported: a budget stop that stays is budget_exceeded, not cli_error
+ × still makes the one recovery: a resume that found no session and then stayed is started again as fresh
+ × keeps the result when the runner's abort arrives while the CLI is being given its time
+ × says a result was not reported when the turn was cut before its result line
+ × says a result was not reported when the process ends with no result line
+ × is never stored as timeout: the limit falling on a reported result keeps the answer
+ × keeps a reported error result under its own code, not timeout
+ Test Files  1 failed (1)
+      Tests  12 failed | 181 passed (193)
+```
+
+Green, `1f704b5`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  624 passed (624)
+```
+
+Two assertions that compare the whole result event gained the new field (`cli-turn.suite.ts`:
+`reported: true` on the lookup recording's result, `reported: false` on a start that printed
+nothing). `failure()` (no CLI was started) carries no `reported`.
+
+### CR-12 · one `messageOf`, one uuid shape (`workspace/src/errors.ts`)
+
+`messageOf` is declared in `src/errors.ts` and imported by `turn.ts`, `runner.ts`, `db.ts`,
+`db-retry.ts` and `providers/claude-cli.ts`; the copies in `turn.ts`, `runner.ts` and
+`claude-cli.ts` are gone, and `db.ts` no longer spells it out inline. The uuid shape was already
+written in one file under `workspace/src` (`UUID_SHAPE`, `providers/claude-cli.ts`, behind
+`isUuidShaped`); the two other copies CR-12 counted are in `web/src` (W-66's). An audit in
+`config.test.ts` pins both.
+
+The same commit closes a gap found on the way: `tsconfig.test.json` extends `tsconfig.json`, whose
+`exclude` holds `test`, and an `exclude` that is not written again is inherited. So `npm run
+typecheck` read `src/` and `vitest.config.ts` and none of the tests (`npx tsc -p tsconfig.test.json
+--listFilesOnly` listed 20 files, none under `test/`). `tsconfig.test.json` now names its own
+`exclude` (`node_modules`, `dist`); the listing then held the 21 files that were under `test/` at
+that commit, and they passed as they were.
+
+Red, `c027401`:
+
+```
+$ npx vitest run test/config.test.ts
+ × declares messageOf in errors.ts and nowhere else under src/
+ × imports messageOf from errors.ts in every other source file that calls it
+ × reads the tests: tsconfig.test.json names its own exclude, without the test folder the build leaves out
+ Test Files  1 failed (1)
+      Tests  3 failed | 72 passed (75)
+```
+
+Green, `0440514`:
+
+```
+$ npm run typecheck
+(no output, exit 0)
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  629 passed (629)
+```
+
+### SR-1 · the connection is verified against the pinned CA whatever the DSN says (`workspace/src/config.ts`, `db.ts`)
+
+* **The CA is read at start.** `readDbCa` (`config.ts`) reads the file `WORKSPACE_DB_CA_FILE` names
+  (`DB_CA_FILE_ENV`), or `/app/certs/prod-ca.crt` (`PATHS.dbCaFile`) when it is unset or blank. A
+  file that is missing, empty, only white space, or holds no `-----BEGIN CERTIFICATE-----` block is
+  a `ConfigError` (exit 2, `cannot start: …`): the message names the file and the variable, never
+  what the file holds. The text reaches `RunnerConfig.dbCa` as it is in the file, without a
+  byte-order mark. The environment and the DSN are still checked before it is read.
+* **The client is built from parts.** `dsnParts` (`db.ts`) takes host, port, user, password and
+  database out of the DSN (percent-decoded; port 5432 when none is named) and nothing of its query
+  string. `newPgClient(dsn, ca)` hands the driver those five with
+  `ssl: { ca, rejectUnauthorized: true, servername: host }` and no `connectionString`.
+  `createPgQuery` takes `ca` and passes it on every connect.
+* **Every part must be there.** The driver fills an empty host, user, password or database from
+  the `PG*` environment or its defaults, so `dsnParts` refuses a DSN without one, and
+  `assertRunnerDsn` refuses it at start (`workspace_runner_db_url names no password`). Its own red
+  and green pair below.
+* **The DSN check.** Port 6543 is still refused. `no-verify` is no longer accepted: the modes are
+  `require`, `verify-ca`, `verify-full`. The refusals name `sslmode=verify-full` and no unverified
+  form; the README gained "The database connection" and recommends none either. The stored
+  secret's form (`?uselibpqcompat=true&sslmode=require`) is accepted unchanged, and its flags
+  decide nothing.
+
+What the driver does with the same DSN as a string, which is why the string is never passed
+(`pg` 8.23.0; the first two and the last line are cases in the suite, the third is what the red
+run showed):
+
+```
+"?uselibpqcompat=true&sslmode=require"  →  ssl {"rejectUnauthorized":false}
+"?sslmode=no-verify"                    →  ssl {"rejectUnauthorized":false}
+"?sslmode=verify-full&sslrootcert=…"    →  the driver opens the file the DSN names
+from parts, any of the above            →  ssl {"ca":"<the pinned CA>","rejectUnauthorized":true,"servername":"<host>"}
+```
+
+The handshake is tried for real, against a stand-in pooler on the loopback interface
+(`test/helpers/fake-pooler.ts`: it accepts the SSLRequest, does the TLS handshake with the
+certificate it was given, and greets a client that got through; it speaks no SQL). The CA and the
+server certificates are made for the run by `test/helpers/throwaway-ca.ts` with node:crypto (a P-256
+key pair and a few lines of DER); nothing is read from a file or written to one, and no key
+outlives the process, so no real key is involved. What the handshake gives:
+
+```
+signed by the pinned CA, for the host dialled        connected (user, database and application_name as the DSN and db.ts give them)
+signed by another CA, its own certificate sent too   SELF_SIGNED_CERT_IN_CHAIN: self-signed certificate in certificate chain
+signed by another CA, sent alone                     UNABLE_TO_VERIFY_LEAF_SIGNATURE: unable to verify the first certificate
+signed by the pinned CA, for another host name       ERR_TLS_CERT_ALTNAME_INVALID: Hostname/IP does not match certificate's altnames
+```
+
+(The codes were read once with a throwaway probe that was not committed; the third line is from
+that probe only, the committed impostor sends its CA's certificate as the real pooler does.) The
+second line is the code the PM saw on the host against the system store. The impostor is refused
+the same way under six forms of the DSN (the stored form, `sslmode=no-verify`, `sslmode=disable`,
+`ssl=false`, another `sslrootcert`, no flag at all) and, under the stored form, with
+`NODE_TLS_REJECT_UNAUTHORIZED=0` set; each time the pooler receives no startup message. Pinning the
+other CA turns both answers round. A separate case sets `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`,
+`PGDATABASE`, `PGSSLMODE=disable` and `PGSSLROOTCERT` and reads the built client: every part and
+the `ssl` object are still the DSN's and the pinned CA's.
+
+Red, `0fa1a4c` (`test/runner/db-tls.suite.ts`, `test/config.test.ts`; the commit message says
+forty-one cases, the run says 40):
+
+```
+$ npx vitest run
+ × refuses sslmode=no-verify
+ × refuses sslmode=NO-VERIFY
+ × recommends no unverified form in any refusal, and names the verified one
+ × is read at /app/certs/prod-ca.crt when WORKSPACE_DB_CA_FILE is not set
+ × is read at the file WORKSPACE_DB_CA_FILE names, and only there
+ × reads WORKSPACE_DB_CA_FILE="" as not set
+ × reads WORKSPACE_DB_CA_FILE="   " as not set
+ × keeps the certificate text as the file holds it, line ends included, without a byte-order mark
+ × refuses to start when the CA file is missing | empty | only white space | not a certificate | a private key and no certificate   (5)
+ × refuses to start when the file WORKSPACE_DB_CA_FILE names is missing, even with the default file in place
+ × is named in the README, which recommends no unverified form of the DSN
+ × reads the host, the port, the user, the password and the database, and nothing else
+ × decodes a user and a password that are percent-encoded
+ × reads port 5432 when the DSN names none
+ × refuses a DSN with no host | no user | no password | no database | text that is not a URL, so no part is ever filled in from somewhere else   (5)
+ × builds a client that verifies against the given CA and the host name: (the six forms)   (6)
+ × takes nothing from the PG* environment: not the host, the user, the password, the database, the port or the ssl mode
+ × hands the DSN and the CA to the client it opens, on every connect
+ × refuses a pooler whose certificate another CA signed, whatever the DSN says: (the six forms)   (6)
+ × refuses the same pooler when only the other CA is pinned: the pin, not the system store, decides
+ × refuses a certificate the pinned CA signed for another host name
+ × fails the call, with nothing of the DSN in the message, when the runner meets the impostor
+ Test Files  2 failed | 7 passed (9)
+      Tests  40 failed | 639 passed (679)
+```
+
+On the code as built the client connected to the impostor under the stored form (`expected null
+not to be null`), and with `sslrootcert` in the DSN the driver went to open the named file
+(`ENOENT … another-ca.crt`, from `pg-connection-string`).
+
+Green, `d591423`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  679 passed (679)
+```
+
+The parts at start: red `d4c0464` (`npx vitest run test/config.test.ts`: `4 failed | 97 passed
+(101)`, "refuses a DSN that names no host | user | password | database, and says which part without
+printing any"); green `b75d210` (`686 passed (686)`). The host case was reworded in the green
+commit: a DSN with a user and no host is not a URL at all, and is refused as that.
+
+Existing tests: `goodFiles` and the byte-order-mark case in `config.test.ts` gained the CA file;
+`db.suite.ts` passes a stand-in CA to `createPgQuery` and `newPgClient` (their signatures grew);
+"refuses sslmode=%s" gained `no-verify`. No assertion was loosened.
+
+For W-65: the runner now needs a readable PEM file at `/app/certs/prod-ca.crt`, or at the path
+`WORKSPACE_DB_CA_FILE` names, before it will start; without it the container exits 2 with
+`cannot start: the CA file … is missing or empty`.
+
+### CR-11 · no change
+
+`BUDGET_CAP_HOLDS`, `NO_CAP_SENTENCE` and `TURN_CONCURRENCY` are as they were (`src/config.ts`);
+their tests pass unchanged.
+
+### Files of the round
+
+New under `workspace/` (W-64 owns the folder): `src/db-retry.ts`; `test/helpers/turn-harness.ts`,
+`test/helpers/fake-pooler.ts`, `test/helpers/throwaway-ca.ts`; `test/runner/closing.suite.ts`,
+`test/runner/result-grace.suite.ts`, `test/runner/db-tls.suite.ts`;
+`test/stream-json/gate-count.suite.ts`. Changed: `src/config.ts`, `src/db.ts`, `src/errors.ts`,
+`src/runner.ts`, `src/stream-json.ts`, `src/turn.ts`, `src/providers/claude-cli.ts`,
+`src/providers/types.ts`, `README.md`, `tsconfig.test.json`, and the tests named above. Nothing
+outside `workspace/` but this file. Migrations 140, 141 and 142 were read, not touched.
+
+One tool note: the change to `src/stream-json.ts` in `e77f10b` was applied with a short node script
+(exact-string replaces, written back as LF; `git diff` showed no carriage return) and not with the
+editor tool. Every other change was made with the editor tool.
+
+### Where the stream stands after the review round
+
+```
+$ npm run typecheck                    (from workspace/; it now reads test/ as well)
+(no output, exit 0)
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  688 passed (688)
+$ npx vitest run --coverage
+ Test Files  9 passed (9)
+      Tests  688 passed (688)
+All files         |   92.89 |    88.28 |   91.98 |   94.84 |
+  config.ts       |   98.95 |    93.47 |     100 |   98.88 | 142
+  db-retry.ts     |   90.32 |       80 |     100 |    92.3 | 39-40
+  db.ts           |   94.69 |    82.89 |   96.15 |   95.83 | 74,231,294-295
+  runner.ts       |   77.96 |       75 |   64.28 |   82.17 | ...213,223,228-232
+  stream-json.ts  |   98.47 |    90.27 |     100 |     100 | ...321-325,345,374
+  turn.ts         |   97.65 |    94.11 |     100 |     100 | 113,129,137,192
+  claude-cli.ts   |   96.72 |     91.5 |   97.56 |   99.35 | 257
+Lines        : 94.84% ( 847/893 )
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+$ docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z
+(the same value as after wave 2; unchanged)
+```
+
+688 against wave 2's 566. By file: `config.test.ts` 101, `runner.test.ts` 224,
+`stream-json.test.ts` 135, `tool-gate.test.ts` 78, `router.test.ts` 67, `claude-argv.test.ts` 43,
+`system-prompt.test.ts` 17, `mcp-config.test.ts` 12, `providers.test.ts` 11. The size audit passes:
+the longest file is `test/runner/cli-turn.suite.ts` at 719 lines, the longest under `src/` is
+`providers/claude-cli.ts` at 490.
+
+### Questions for the PM
+
+1. **A begin whose answer was lost.** Migration 142 raises 22023 from `workspace_begin` for two
+   things: "request … is not claimed" and "request … already has its assistant message" (the two
+   `raise exception` of section 3). If a begin commits and its reply is lost, the next try gets the
+   second, which by the ruling reads as "nothing to close": the request stays claimed with an
+   unfinished assistant row until the 10-minute sweep. Built to the letter (the case "reads a 22023
+   on a later try as nothing to close too"). One way out that is safe on 142 and on 143: a 22023
+   that follows a failure of another kind closes the request with `workspace_finish(failed,
+   cli_error)`.
+2. **A request closed with no begin has no assistant row.** `workspace_finish` then updates no
+   message and its `done` broadcast carries `message_id` null; the request reads `failed` /
+   `cli_error`. Does the page show a line for it (W-66)?
+3. **`ok` on the call that trips the count** (above, CR-1 and CR-6, point 1): false as built, true
+   by CR-6's sentence alone. Which?
+4. **The start-up check also refuses a CA file that holds no PEM certificate**, beyond "missing or
+   empty": otherwise the fault shows only at the first connect. Say if it should go.
+5. **A tool result for a call the stream never showed** (no `assistant` line with that tool-use
+   id) is still passed over, as before the round: with no call there is no tool name to count
+   under. Recorded, not changed.
+6. Contract sentences the round makes owed in the brief (the PM's file): the config bullet ("refuses
+   … on port 6543 or without an `sslmode`") now also refuses `no-verify`, a DSN without one of the
+   five parts, and a missing CA; the watchdog sentence gains the hold; the runner's constants list
+   gains `FINISH_RETRY_MS` and `RESULT_EXIT_GRACE_MS`.
+
+### Second pass · after the PM's independent check
+
+The check read the round as built and found ruling V1 met on every item, with one must-fix (a
+missing test) and six minors. This pass did the must-fix and the one minor whose fix needs no
+ruling. First step: `git fetch origin`, `git merge origin/feat/workspace-21` (`Already up to date`:
+the branch was 19 commits ahead of the phase branch and none behind). No `claude -p` ran, no
+fixture was recorded again, nothing was sent to prod and no SQL ran, and the only docker command
+was the read-only guard.
+
+#### CR-5 · the 10 s is tied to the provider (must-fix, test only)
+
+Every case in `test/runner/result-grace.suite.ts` handed the turn a 60 ms stand-in
+(`resultExitGraceMs: GRACE_MS`), so the literal was pinned and the kill was tested, and nothing
+tied the two: with `deps.resultExitGraceMs ?? 60_000` at `claude-cli.ts:403` the suite passed. One
+case was added to "the time a CLI gets to exit after its result line". It builds the turn with no
+time of its own (`harness(scripts, { resultExitGraceMs: undefined })`) on a fake clock: after the
+result line nothing is killed at `RESULT_EXIT_GRACE_MS - 1`, the signals are `['SIGTERM']` one
+millisecond later, the result is `{ ok: true, errorCode: null, reported: true }` with the whole
+text, and the log says `did not exit within 10 s of its result line` once.
+
+There is no source change, so there is no commit on which the test fails. The red runs were made
+against two mutants of line 403 in the working tree, neither committed, and the line was put back
+before the commit (`git status` showed the suite file alone):
+
+```
+$ npx vitest run test/runner.test.ts          (claude-cli.ts:403 as `deps.resultExitGraceMs ?? 60_000`)
+ × is the 10 s itself when the turn is built with no time of its own: nothing at 9.999 s, SIGTERM at 10 s
+AssertionError: expected [] to deeply equal [ 'SIGTERM' ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 224 passed (225)
+
+$ npx vitest run test/runner.test.ts          (claude-cli.ts:403 as `deps.resultExitGraceMs ?? 9_999`)
+ × is the 10 s itself when the turn is built with no time of its own: nothing at 9.999 s, SIGTERM at 10 s
+AssertionError: expected [ { signal: 'SIGTERM', …(1) } ] to deeply equal []
+ Test Files  1 failed (1)
+      Tests  1 failed | 224 passed (225)
+```
+
+Green on the code as built, `bf846d4` (the test alone):
+
+```
+$ npx vitest run test/runner.test.ts
+ Test Files  1 passed (1)
+      Tests  225 passed (225)
+```
+
+#### SR-1 · the start check refuses what the connection cannot read (minor)
+
+`assertRunnerDsn` (`config.ts`) and `dsnParts` (`db.ts`) disagreed on one input. A DSN whose user,
+password or database holds a malformed percent escape passed the start check and was then refused
+by `dsnParts` on every connect, so the container would loop through the 180 s watchdog instead of
+exiting 2 with the reason. Port 0 has the same shape: it passed, and the driver reads 0 as no port
+and takes `PGPORT` or its own default. `assertRunnerDsn` now decodes the three parts as `dsnParts`
+does and refuses with `workspace_runner_db_url holds a part that is not percent-encoded text`, and
+refuses port 0 beside 6543 (`workspace_runner_db_url points at port 0, which is no port; use the
+session pooler on 5432`; `NO_PORT`, written `:0/` or `:00/`). Neither message prints a part of the
+DSN. The README's "The database connection" names the refusals.
+
+Red, `203a154` (`test/config.test.ts`):
+
+```
+$ npx vitest run test/config.test.ts
+ × refuses at start a DSN whose user holds a malformed percent escape, which the connection could never read
+ × refuses at start a DSN whose password holds a malformed percent escape, which the connection could never read
+ × refuses at start a DSN whose database holds a malformed percent escape, which the connection could never read
+ × refuses port 0 (written :0/), and says so without printing any part
+ × refuses port 0 (written :00/), and says so without printing any part
+AssertionError: expected function to throw an error, but it didn't
+ Test Files  1 failed (1)
+      Tests  5 failed | 102 passed (107)
+```
+
+The sixth new case ("still accepts a user, a password and a database that are percent-encoded as
+they should be") passes before and after: it holds the fix to what is malformed.
+
+Green, `b8774ed`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  695 passed (695)
+```
+
+`dsnParts` itself still reads port 0 as 0. No start reaches it with one: `main()` builds the
+connection from `loadConfig`'s DSN, which `assertRunnerDsn` has passed.
+
+#### Not changed: the PM's to rule
+
+Four of the check's minors say "PM rules" or "none needed for V1", and no ruling on them is in
+`rulings-5.md`. Nothing was built for them.
+
+1. **`ok` on the call that trips the count** (`stream-json.ts:206`, `:334`). False as built; the
+   check recommends keeping it and patching CR-6's sentence to "the result is not an error and the
+   call did not trip the count". No code change either way until the PM says.
+2. **Begin's lost reply** (`turn.ts:274-277`, `db-retry.ts:59`). Still built to CR-2's letter: a
+   22023 on any try is "nothing to close". The check reproduced the remainder (a network failure,
+   then 22023 "already has its assistant message": `skipped`, no finish, the request claimed until
+   the 10-minute sweep) and recommends closing it. What it would take: `retryDbCall` says on its
+   `refused` end whether an earlier try failed; `run()` sends that case to `closeUnbegun`; the case
+   at `closing.suite.ts:159` ("reads a 22023 on a later try as nothing to close too") is replaced.
+3. **A result for a tool-use id the stream never showed** (`stream-json.ts:325-327`). The check
+   asks for one resumed-session recording that uses a tool before a ruling. There is none: of the
+   four fixtures two carry tool calls and both were started with `--session-id`; the only `--resume`
+   recording is the one-line `claude-stream-resume-missing.jsonl`. In both tool recordings every
+   `tool_result` follows its own `tool_use` (0 results for an id not shown before). Whether the CLI
+   replays old results on `--resume` cannot be read from what is recorded, and a new recording
+   needs `claude -p`, which no worker runs.
+4. **The watchdog hold's two edges** (`runner.ts:106-109`, `:79-88`). As ruled; the check says none
+   is needed for V1.
+
+The seventh item (no test reads `main()`'s wiring of the CA) is no change in this stream: V2's
+container check proves it.
+
+#### Where the stream stands after the second pass
+
+```
+$ npm run typecheck                    (from workspace/)
+(no output, exit 0)
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  695 passed (695)
+$ npx vitest run --coverage
+ Test Files  9 passed (9)
+      Tests  695 passed (695)
+All files         |   93.03 |    88.32 |   91.98 |   94.99 |
+  config.ts       |   99.02 |    93.75 |     100 |   98.95 | 144
+  db-retry.ts     |   90.32 |       80 |     100 |    92.3 | 39-40
+  db.ts           |   95.57 |    82.89 |   96.15 |   96.87 | 74,294-295
+  runner.ts       |   77.96 |       75 |   64.28 |   82.17 | ...213,223,228-232
+  stream-json.ts  |   98.47 |    90.27 |     100 |     100 | ...321-325,345,374
+  turn.ts         |   97.65 |    94.11 |     100 |     100 | 113,129,137,192
+  claude-cli.ts   |   96.72 |     91.5 |   97.56 |   99.35 | 257
+Lines        : 94.99% ( 854/899 )
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+$ docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z
+(the same value as after the review round; unchanged)
+```
+
+695 against the review round's 688: `config.test.ts` 107 (was 101), `runner.test.ts` 225 (was
+224), the other seven files as they were. The size audit passes: the longest file is still
+`test/runner/cli-turn.suite.ts` at 719 lines; `test/config.test.ts` is 576, `src/config.ts` 273.
+Changed in this pass: `src/config.ts`, `README.md`, `test/config.test.ts`,
+`test/runner/result-grace.suite.ts` and this file. Every change was made with the editor tool.
+
+## Review round, second pass
+
+Ruling X1 of `rulings-6.md` (the PM, 2026-10-06), item by item. The "Second pass" above this
+heading answered `rulings-5.md`; this one answers what the review round's workers and checks
+raised. First step: `git fetch origin`, `git merge origin/feat/workspace-21` (one commit, the PM's
+`8680abc` in 102a; no conflict), pushed as `8df9647`.
+
+The code and its tests are eleven commits of 2026-10-06, `d2f6325` to `fa84d36`, all on origin.
+Every run quoted below was made again on 2026-10-07 in a copy of `workspace/` outside the worktree
+(the session's scratch folder; `git archive <commit> workspace/src workspace/test` laid over a copy
+with its own `node_modules`), so each red run is the named commit's own tree and each mutant is one
+edit to that copy, never to the worktree. The copy at `8df9647` with no edit: 9 files, 714 passed.
+No `claude -p` ran, no fixture was recorded again, nothing was sent to prod and no SQL ran, and the
+only docker command was the read-only guard.
+
+### 1 · Begin's lost reply (`workspace/src/db-retry.ts`, `turn.ts`)
+
+`retryDbCall`'s `refused` end says whether a failed try came before the refusal (`afterFailure`:
+only a try that failed in another way is followed by another try, so a refusal on any try but the
+first has one). `run()` reads a refusal as "nothing to close" (`skipped`, no finish) only on the
+first try. A refusal after a failed try goes to `closeUnbegun`, which calls
+`workspace_finish(failed, cli_error)` with no content, no tool calls and the stored session id, on
+the finish schedule; when that finish is itself refused (the request was closed after all) it is
+logged once and not tried again. The log line: `begin refused after a failed try, its reply may
+have been lost, nothing ran; closing the request as cli_error: …`. The case "reads a 22023 on a
+later try as nothing to close too" (CR-2's letter) is replaced by four.
+
+Red, `d2f6325` (`test/runner/closing.suite.ts`):
+
+```
+$ npx vitest run
+ × closes the request as failed / cli_error when a 22023 follows a database that could not be reached in the same turn
+ × closes the request as failed / cli_error when a 22023 follows a statement the database cut in the same turn
+ × keeps trying to close a request whose begin was refused after a failure, on the finish schedule
+ × asks for the close once when the request turns out to be closed already: the finish is refused and not tried again
+AssertionError: expected { state: 'skipped', errorCode: null } to deeply equal { state: 'failed', …(1) }
+ Test Files  1 failed | 8 passed (9)
+      Tests  4 failed | 694 passed (698)
+```
+
+Green, `a145cd8`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  698 passed (698)
+```
+
+"A 22023 on the first try still skips" is held from both sides. Two mutants of the one condition in
+`run()`, on the copy at `8df9647`:
+
+```
+$ npx vitest run          (`if (begun.outcome === 'refused') {`: every refusal skips, the code before X1)
+ the same four cases as the red run fail
+      Tests  4 failed | 710 passed (714)
+
+$ npx vitest run          (no refusal skips)
+ × reads a 22023 on the first try as nothing to close: nothing runs and nothing is finished
+ × does not run the provider when the request is no longer claimed at begin
+AssertionError: expected { state: 'failed', …(1) } to deeply equal { state: 'skipped', errorCode: null }
+      Tests  2 failed | 712 passed (714)
+```
+
+### 2 · A finish never arrives after the stale sweep (`workspace/src/config.ts`)
+
+`FINISH_RETRY_MS = 110_000`. Nothing else holds the number: the backoff counts its window from it
+(`retryDbCall`, 1 s doubling to the 15 s cap, the last try made as the window ends), the watchdog
+hold reads it (`finishInWindow`, `runner.ts`), and the give-up line prints it (`finish given up
+after 110 s, …`). The tries are made 0, 1, 3, 7, 15, 30, 45, 60, 75, 90, 105 and 110 s after the
+first: twelve, where 170 s gave sixteen. The sentences that named 170 now name 110: the comment on
+the constant, the headers of `db-retry.ts`, `runner.ts` and `turn.ts`, and in
+`test/runner/closing.suite.ts` the header, `SCHEDULE` and its comment, six case names and the
+comment on where the window ends (270 s, now 210 s). The case
+"stores the whole answer when the database comes back after %s failed tries" has its last row at
+11 failures and 110 s (was 15 and 170 s), and the watchdog case lets the database back at 186 s so
+that the try at 190 s is the one that stores the answer (the window now ends at 210 s).
+
+```
+$ grep -rn -E '170 s|170_000|170000' workspace/src workspace/test workspace/README.md | wc -l
+0
+```
+
+The review round's CR-3 section above still says 170: it is the record of what was built then.
+
+Two cases are new. "fits behind the 8-minute limit inside the 10 minutes the database leaves a
+request claimed" is the arithmetic (`TURN_TIMEOUT_MS + FINISH_RETRY_MS` under 600 000). "makes its
+last try inside the 10-minute claim when the turn was killed at the 8-minute limit" runs a turn
+with no result against a database that fails every finish: the first try is 480 s after the turn's
+start, the last 590 s, none at 600 s or later.
+
+Red, `83a2c08`:
+
+```
+$ npx vitest run
+ × is 1 s doubling to a 15 s cap, for 110 s, which ends before the watchdog would
+ × fits behind the 8-minute limit inside the 10 minutes the database leaves a request claimed
+ × is tried again after 1 s, 2 s, 4 s and 8 s, then every 15 s, for 110 s
+ × gives the answer up after 110 s, says so once, and tries no more
+ × stores the whole answer when the database comes back after 11 failed tries
+ × makes its last try inside the 10-minute claim when the turn was killed at the 8-minute limit
+ × closes the request as failed / cli_error when begin still cannot be made after 110 s
+AssertionError: expected 170000 to be 110000 // Object.is equality
+AssertionError: expected 650000 to be less than 600000
+AssertionError: expected [ +0, 1000, 3000, 7000, 15000, …(11) ] to deeply equal [ +0, 1000, 3000, 7000, 15000, …(7) ]
+AssertionError: expected 'turn request=41 finish given up after…' to match /110 s/
+AssertionError: expected 120000 to be 110000 // Object.is equality
+ Test Files  1 failed | 8 passed (9)
+      Tests  7 failed | 693 passed (700)
+```
+
+Green, `2ee9eb0`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  700 passed (700)
+```
+
+The hold follows the window and a test fails when it does not. A mutant of `finishInWindow` on the
+copy at `8df9647`:
+
+```
+$ npx vitest run          (`Date.now() - since < 170_000` in place of `< FINISH_RETRY_MS`)
+ × is not held past the window by a finish call that never returns
+AssertionError: expected null to be 1 // Object.is equality
+      Tests  1 failed | 713 passed (714)
+```
+
+### 3 · The three bounds are read from the client as built (`test/runner/db-tls.suite.ts`)
+
+Test only, `eced0d7`. The case it replaces read `PG_CLIENT_OPTIONS.connectionTimeoutMillis`, the
+constant, so a `newPgClient` that dropped a bound passed. "carries the three bounds on the client
+as built: the time a connect gets, the time a query gets, the keep-alive" reads them from the
+client `newPgClient` returns, each from the field the driver acts on (pg 8.23.0, the pin):
+`_connectionTimeoutMillis` (`client.js:116`, the timer armed at `:167`),
+`connectionParameters.query_timeout` (`connection-parameters.js:124`, read at `client.js:702`) and
+`connection._keepAlive` (`connection.js:24`, used at `:48`). It asserts they equal the three of
+`PG_CLIENT_OPTIONS` and that each is switched on (over 0, over 0, `true`): left out of the options
+the driver reads 0, `false` and `false`. The client's name has its own case.
+
+There is no source change, so no commit on which the test fails. The proof is three mutants of
+`newPgClient` in the copy at `8df9647`, one bound dropped in each
+(`const { <name>: _dropped, ...bounds } = PG_CLIENT_OPTIONS;` and `...bounds` in the options):
+
+```
+$ npx vitest run test/runner.test.ts          (connectionTimeoutMillis dropped)
+ × carries the three bounds on the client as built: the time a connect gets, the time a query gets, the keep-alive
+AssertionError: expected { connectionTimeoutMillis: +0, …(2) } to deeply equal { Object (connectionTimeoutMillis, query_timeout, ...) }
+-   "connectionTimeoutMillis": 10000,
++   "connectionTimeoutMillis": 0,
+ Test Files  1 failed (1)
+      Tests  1 failed | 238 passed (239)
+
+$ npx vitest run test/runner.test.ts          (query_timeout dropped)
+ × carries the three bounds on the client as built: the time a connect gets, the time a query gets, the keep-alive
+AssertionError: expected { Object (connectionTimeoutMillis, query_timeout, ...) } to deeply equal { Object (connectionTimeoutMillis, query_timeout, ...) }
+-   "query_timeout": 20000,
++   "query_timeout": false,
+ Test Files  1 failed (1)
+      Tests  1 failed | 238 passed (239)
+
+$ npx vitest run test/runner.test.ts          (keepAlive dropped)
+ × carries the three bounds on the client as built: the time a connect gets, the time a query gets, the keep-alive
+AssertionError: expected { Object (connectionTimeoutMillis, query_timeout, ...) } to deeply equal { Object (connectionTimeoutMillis, query_timeout, ...) }
+-   "keepAlive": true,
++   "keepAlive": false,
+ Test Files  1 failed (1)
+      Tests  1 failed | 238 passed (239)
+```
+
+The same three mutants on the commit before the test, `2ee9eb0`, each pass
+(`Tests  230 passed (230)`): that was the check's must-fix. Green on the code as built, `eced0d7`:
+
+```
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  701 passed (701)
+```
+
+### 4 · Four small ones, each with a test that can fail
+
+**The redaction on the connection-error listener** (`test/runner/db.suite.ts`, test only,
+`98c4c32`). Three cases under "a connection error between calls" fire the `error` listener
+`createPgQuery` puts on its client, as the driver does when a socket fails with no call in flight:
+the line is logged once with the DSN, its password and its host taken out; the next call connects
+afresh; an error on a connection already replaced leaves the one in use alone. On the copy at
+`8df9647`, the listener logging `error.message` as it came:
+
+```
+$ npx vitest run
+ × is logged once, with the DSN, its password and its host taken out
+AssertionError: expected 'db: connection error: read ECONNRESET…' to contain '<redacted>'
+      Tests  1 failed | 713 passed (714)
+```
+
+**The `!linger.fired()` guard** (`test/runner/result-grace.suite.ts`, test only, `98c4c32`). A CLI
+that stays after its result line is killed and the line `did not exit within … of its result line`
+is written once; the exit on SIGTERM that the kill causes is not a second line. A second case
+holds the other side: a CLI that exits 1 by itself after its result line is still logged (`the CLI
+exited 1: the budget is used up`). With the guard taken out of the condition:
+
+```
+$ npx vitest run
+ × does not also log a CLI it killed after the result line as an exit on a signal
+AssertionError: expected [ Array(1) ] to deeply equal []
++   "turn request=41 the CLI exited on SIGTERM: Terminated",
+      Tests  1 failed | 713 passed (714)
+```
+
+Both mutants pass on the commit before these cases, `eced0d7` (`Tests  231 passed (231)` of
+`test/runner.test.ts`). Green, `98c4c32`: `Tests  706 passed (706)`.
+
+**`messageOf` falls back to the error's code** (`workspace/src/errors.ts`). An `Error` with an
+empty message says its `code` when that is text; with a message it says the message whatever the
+code; with neither it stays empty; anything that is not an `Error` is its text, as before. Node
+reports a refused connect to a host with two addresses as an `AggregateError` with no message and
+`code: 'ECONNREFUSED'`, and a line such as `heartbeat failed: ` ended in nothing. Red, `f2f6ce7`
+(`test/providers.test.ts`, `test/runner/db.suite.ts`):
+
+```
+$ npx vitest run
+ × is the Error's code when its message is empty
+ × names a failed connect by its code when the error carries no message
+AssertionError: expected '' to be 'ECONNREFUSED' // Object.is equality
+ Test Files  2 failed | 7 passed (9)
+      Tests  2 failed | 710 passed (712)
+```
+
+Green, `82fff88`: `Tests  712 passed (712)`.
+
+**`dsnParts` refuses port 0** (`workspace/src/db.ts`), as `assertRunnerDsn` has since the pass
+before: `db: the DSN points at port 0, which is no port`, written `:0/` or `:00/`, with `PGPORT`
+set to 6543 in the test so that a port filled in from the environment would show. The message
+holds no part of the DSN. Red, `9268a7b` (`test/runner/db-tls.suite.ts`):
+
+```
+$ npx vitest run
+ × refuses port 0 (written :0/) as the start check does, so the port is never filled in from somewhere else
+ × refuses port 0 (written :00/) as the start check does, so the port is never filled in from somewhere else
+AssertionError: expected [Function] to throw an error
+ Test Files  1 failed | 8 passed (9)
+      Tests  2 failed | 712 passed (714)
+```
+
+Green, `0a20c0e`: `Tests  714 passed (714)`.
+
+### Kept as recorded
+
+`ok` on the call that trips the count stays false: no code changed, and the comment on `toolOk`
+(`stream-json.ts`) now reads as CR-6's sentence does (`fa84d36`). A tool result for a tool-use id
+the stream never showed is still passed over. The start check still refuses a CA file with no
+certificate block. The watchdog hold is not widened.
+
+### Recorded, not changed
+
+1. **Where the 110 s count from.** The window opens at the finish's own first try, and that try
+   waits for the CLI's exit after the kill (SIGTERM, SIGKILL 1.5 s later, the output closed 0.4 s
+   after that) and for `drain()`, which waits for a `workspace_stream()` call in flight. On a
+   connection that has gone dead that call ends when the client's `query_timeout` does, 20 s. A
+   probe in the scratch copy (never committed) let the connection die 2.5 s before the limit, so
+   the 2 s cancel poll was in flight when the limit fell:
+
+   ```
+   PROBE first finish try at 498250 ms, last at 608250 ms, the claim is stale at 600000 ms
+   PROBE last try minus first: 110000 ms (FINISH_RETRY_MS 110000)
+   AssertionError: expected 608250 to be less than 600000
+   ```
+
+   So "the last finish try is at most 110 s after the kill" holds when nothing is in flight at the
+   kill (the committed case: 480 s, 590 s) and can be up to about 22 s later when a stream call
+   is; a try also takes up to 20 s to fail or land. What it costs with one runner: nothing. The
+   sweep runs only inside `workspace_claim()`, and the runner calls that only between turns
+   (`run()` waits for the turn's `done`, the finish included), so no sweep falls between a live
+   turn's kill and its finish; and once 143 is applied a finish that did come after a sweep is
+   refused with 22023 and logged. Not changed: X1 gives the number and says nothing else changes.
+   What would close it: the finish's deadline counted from the turn's start (480 s + 110 s) and
+   not from its own first try.
+2. **A refusal after a failed try while the runner is stopping.** When the runner's own stop
+   (a shutdown, the watchdog) lands while the refused try is in flight, the close carries the
+   stop's code, `stale_claim`, as every close of an unbegun request does (`closeUnbegun`:
+   `stopped.code ?? 'cli_error'`). X1's sentence says `cli_error`. No case of its own.
+3. **The listener's line reads `error.message` itself** (`db.ts:298`), not `messageOf`: a
+   connection error with an empty message would be logged with nothing after the colon. X1 names
+   `messageOf` and the listener's redaction, not this.
+
+### Files of the pass
+
+`workspace/src/`: `config.ts`, `db-retry.ts`, `db.ts`, `errors.ts`, `turn.ts`, and a comment each
+in `runner.ts` and `stream-json.ts`. `workspace/test/`: `providers.test.ts`,
+`runner/closing.suite.ts`, `runner/db-tls.suite.ts`, `runner/db.suite.ts`,
+`runner/result-grace.suite.ts`. And this file. Nothing outside `workspace/` but this file;
+migrations 140 to 143 and `project-state/` were not touched.
+
+One tool note: the 170-to-110 change to `test/runner/closing.suite.ts` in `83a2c08` was applied
+with a short node script (exact-string replaces, each required to match once, written back as LF;
+`git diff a22e661..8df9647 -- workspace` shows no carriage return) and not with the editor tool.
+
+### Where the stream stands after this pass
+
+On `8df9647`, from `workspace/`:
+
+```
+$ npm run typecheck
+(no output, exit 0)
+$ npx vitest run
+ Test Files  9 passed (9)
+      Tests  714 passed (714)
+$ npx vitest run --coverage
+ Test Files  9 passed (9)
+      Tests  714 passed (714)
+All files         |   93.36 |    88.81 |   92.45 |   95.24 |
+  config.ts       |   99.02 |    93.75 |     100 |   98.95 | 146
+  db-retry.ts     |   90.32 |       80 |     100 |    92.3 | 44-45
+  db.ts           |   98.27 |    85.89 |     100 |   98.97 | 74
+  errors.ts       |   97.22 |    93.75 |   83.33 |   96.29 | 23
+  runner.ts       |   77.96 |    71.42 |   64.28 |   82.17 | ...213,223,228-232
+  stream-json.ts  |   98.47 |    90.27 |     100 |     100 | ...324-328,348,377
+  turn.ts         |   97.67 |    94.44 |     100 |     100 | 115,131,139,197
+  claude-cli.ts   |   96.72 |     91.5 |   97.56 |   99.35 | 257
+Lines        : 95.24% ( 862/905 )
+$ grep -rn -- "--bare" workspace/src | wc -l          (from the repo root)
+0
+$ grep -rn "claude-agent-sdk" workspace/src workspace/package.json web/src web/package.json | wc -l
+0
+$ docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1
+bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z
+(the same value as after the pass before; unchanged)
+```
+
+714 against the pass before's 695: `runner.test.ts` 239 (was 225), `providers.test.ts` 16 (was
+11), the other seven files as they were. The size audit passes: no file under `workspace/src` or
+`workspace/test` is over 800 lines; the longest is still `test/runner/cli-turn.suite.ts` at 719,
+`test/runner/db.suite.ts` is 497 and `test/runner/closing.suite.ts` 403; the longest under `src/`
+is `providers/claude-cli.ts` at 490, with `db.ts` at 340.

@@ -55,6 +55,42 @@ export const toolUse = (id: string, name: string, input: Line = {}): Line => ({
   ...base,
 });
 
+export interface ToolUseBlock {
+  readonly id: string;
+  readonly name: string;
+  readonly input?: Line;
+}
+
+const MESSAGE_ID = 'msg_two_calls_in_one_message';
+
+/**
+ * One assistant message that makes several tool calls, in the recorded shape: the CLI writes one
+ * `assistant` line per content block, and the lines of one message share its id.
+ */
+export const toolUsesInOneMessage = (calls: readonly ToolUseBlock[]): Line[] =>
+  calls.map(({ id, name, input }) => ({
+    type: 'assistant',
+    message: {
+      id: MESSAGE_ID,
+      model: 'claude-haiku-4-5-20251001',
+      role: 'assistant',
+      content: [{ type: 'tool_use', id, name, input: input ?? {} }],
+    },
+    ...base,
+  }));
+
+/** The same message with every call in one `assistant` line, which the parser reads the same way. */
+export const toolUsesInOneLine = (calls: readonly ToolUseBlock[]): Line => ({
+  type: 'assistant',
+  message: {
+    id: MESSAGE_ID,
+    model: 'claude-haiku-4-5-20251001',
+    role: 'assistant',
+    content: calls.map(({ id, name, input }) => ({ type: 'tool_use', id, name, input: input ?? {} })),
+  },
+  ...base,
+});
+
 export const hookResponse = (toolName: string, exitCode: number): Line => ({
   type: 'system',
   subtype: 'hook_response',
