@@ -1013,7 +1013,7 @@ its config folder was not inspected.
 The skill took `d4b1b8d` as the commit to review, and that commit is a 38-line edit of this file.
 It found nothing wrong in the numbers (it re-ran the materials server's suite, 106 passed, and
 read prod for the two SQL failures) and ten gaps in this record. They stand and are settled here;
-the run on the range `d4b1b8d..ac41858` is the next section but one.
+the run on the range `d4b1b8d..ac41858` has its own heading below, after the docker step.
 
 | # | the gap | settled |
 |---|---|---|
@@ -1156,7 +1156,7 @@ that dials nothing). The harness checkout's installed `node_modules` still holds
 under a lock that says 2.1.1: `npm ci` there is Stack's. Step 41 runs before the walks rebuild the
 container in `bb2dash-wt-21` (one tree at a time).
 
-### `/code-review` on the range `d4b1b8d..ac41858` (2026-10-07)
+## `/code-review` on the range `d4b1b8d..ac41858` (2026-10-07)
 
 The second run named the range, and read the fix round as it stood with the firewall's `defc566`
 in it: every touched source file, by reading only (it ran nothing). It found no place where a fix
