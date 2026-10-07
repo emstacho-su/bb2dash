@@ -1,0 +1,51 @@
+{
+  "planner-fingerprint": {
+    "params": {},
+    "sql": "select true as ok,\n       'ap=' || coalesce(to_char((select max(p.updated_at) from public.assignment_progress p) at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'), 'none')\n       || ',rp=' || coalesce(to_char((select max(q.updated_at) from public.reading_progress q) at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'), 'none')\n       || ',n=' || (select count(*) from public.assignments a)::text\n       || ',at=' || to_char(now() at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') as fingerprint,\n       r.id as newest_request_id, r.kind as newest_request_kind, r.state as newest_request_state,\n       r.created_at as newest_request_created_at, r.claimed_at as newest_request_claimed_at,\n       r.finished_at as newest_request_finished_at\n  from (select 1 as one) one\n  left join lateral (select g.id, g.kind, g.state, g.created_at, g.claimed_at, g.finished_at\n                       from public.agent_requests g\n                      order by g.id desc\n                      limit 1) r on true",
+    "expect": "One row, always ok: a reading, not a check. fingerprint holds the newest assignment_progress and reading_progress change, the count of assignments and the time of this read, as one string; the other columns are the newest agent_requests row."
+  },
+  "planner-unchanged": {
+    "params": {
+      "before": "fingerprint"
+    },
+    "sql": "with given as (\n  select substring($1::text from '^(.*),at=') as planner,\n         substring($1::text from ',at=(.*)$')::timestamptz as since\n), seen as (\n  select 'ap=' || coalesce(to_char((select max(p.updated_at) from public.assignment_progress p) at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'), 'none')\n       || ',rp=' || coalesce(to_char((select max(q.updated_at) from public.reading_progress q) at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'), 'none')\n       || ',n=' || (select count(*) from public.assignments a)::text as planner\n), moved as (\n  select count(*)::integer as n, min(g.id) as first_id, max(g.id) as last_id\n    from public.agent_requests g, given\n   where g.created_at >= given.since or g.claimed_at >= given.since or g.finished_at >= given.since\n)\nselect (seen.planner = given.planner) as ok,\n       (moved.n > 0) as blocked,\n       given.planner as planner_before, seen.planner as planner_now,\n       given.since as since, now() as read_at,\n       moved.n as requests_in_window, moved.first_id as first_request_id, moved.last_id as last_request_id\n  from given, seen, moved",
+    "expect": "One row. ok when the three planner values read the same as in the fingerprint. blocked when an agent_requests row was created, claimed or finished since the fingerprint was read: a sync or an Inbox apply ran in between, so the comparison proves nothing and the run is repeated."
+  },
+  "turn": {
+    "params": {
+      "request": "integer",
+      "tier": "enum:low|mid|high",
+      "tool": "text?",
+      "scope": "text?"
+    },
+    "sql": "select (r.state = 'done' and r.error_code is null\n        and m.id is not null and m.tier = $2::text and m.provider = 'claude-cli'\n        and m.finished and m.error_code is null\n        and ($4::text is null or $3::text is not null)\n        and ($3::text is null\n             or m.tool_calls @> jsonb_build_array(\n                  jsonb_strip_nulls(jsonb_build_object('tool', $3::text, 'scope', $4::text, 'ok', true))))) as ok,\n       r.id as request_id, r.state as request_state, r.error_code as request_error_code, r.conversation_id,\n       r.created_at, r.claimed_at, r.finished_at,\n       m.id as message_id, m.tier, m.provider, m.model, m.finished, m.error_code as message_error_code,\n       (select coalesce(jsonb_agg(jsonb_build_object('tool', e.value->>'tool', 'scope', e.value->>'scope', 'ok', e.value->'ok')\n                                  order by e.ordinality), '[]'::jsonb)\n          from jsonb_array_elements(m.tool_calls) with ordinality e) as tools\n  from public.workspace_requests r\n  left join public.workspace_messages m on m.request_id = r.id and m.role = 'assistant'\n where r.id = $1::bigint",
+    "expect": "One row. ok when the request is done with no error code and its answer was written at the given tier by provider claude-cli, is finished with no error code, and (when a tool is given) its tool calls hold that tool, with that scope when one is given, marked ok."
+  },
+  "turn-stopped": {
+    "params": {
+      "request": "integer"
+    },
+    "sql": "select (r.state = 'cancelled' and r.error_code = 'cancelled'\n        and (m.id is null or (m.finished and m.error_code = 'cancelled'))) as ok,\n       r.id as request_id, r.state as request_state, r.error_code as request_error_code, r.conversation_id,\n       r.created_at, r.claimed_at, r.finished_at,\n       m.id as message_id, m.tier, m.finished, m.error_code as message_error_code\n  from public.workspace_requests r\n  left join public.workspace_messages m on m.request_id = r.id and m.role = 'assistant'\n where r.id = $1::bigint",
+    "expect": "One row. ok when the request is cancelled with the code cancelled, and its answer, if the runner had begun one, is finished with the code cancelled."
+  },
+  "turn-answered-after": {
+    "params": {
+      "request": "integer",
+      "after": "time"
+    },
+    "sql": "select (r.state = 'done' and r.error_code is null and r.claimed_at > $2::timestamptz\n        and m.id is not null and m.finished and m.error_code is null) as ok,\n       r.id as request_id, r.state as request_state, r.error_code as request_error_code, r.conversation_id,\n       r.created_at, r.claimed_at, r.finished_at,\n       $2::timestamptz as claimed_after,\n       m.id as message_id, m.tier, m.finished, m.error_code as message_error_code\n  from public.workspace_requests r\n  left join public.workspace_messages m on m.request_id = r.id and m.role = 'assistant'\n where r.id = $1::bigint",
+    "expect": "One row. ok when the request is done with no error code, was claimed after the given time, and its answer is finished with no error code: a question that waited while the service was stopped was answered once it came back."
+  },
+  "spike-archived": {
+    "params": {},
+    "sql": "select (count(*) filter (where c.archived) = 1 and count(*) filter (where not c.archived) = 0) as ok,\n       (count(*) filter (where c.archived))::integer as archived,\n       (count(*) filter (where not c.archived))::integer as listed\n  from public.workspace_conversations c\n where c.title = 'spike'",
+    "expect": "One row. ok when exactly one conversation titled 'spike' is archived and none is still listed."
+  },
+  "conversations-archived": {
+    "params": {
+      "ids": "uuids"
+    },
+    "sql": "with wanted as (\n  select unnest($1::uuid[]) as id\n)\nselect (count(*) > 0 and count(*) = count(c.id) and count(*) = count(*) filter (where c.archived)) as ok,\n       count(*)::integer as asked_for,\n       count(c.id)::integer as found,\n       (count(*) filter (where c.archived))::integer as archived,\n       coalesce(array_agg(w.id) filter (where c.id is null or not c.archived), '{}') as not_archived\n  from wanted w\n  left join public.workspace_conversations c on c.id = w.id",
+    "expect": "One row. ok when every conversation named exists and is archived; not_archived lists the ids that are missing or still listed."
+  }
+}
