@@ -186,6 +186,8 @@ function tableChain(table: string): Record<string, unknown> {
       return chain;
     },
     maybeSingle: async (): Promise<Answer> => {
+      // The one-row read (the status) is held like any other read.
+      if (state.readGate) await state.readGate;
       const answer = settle();
       if (answer.error) return answer;
       return { data: (answer.data as Row[])[0] ?? null, error: null };

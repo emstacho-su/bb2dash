@@ -729,3 +729,117 @@ frozen and not edited), with `db/tests/phase21_143_review_round.sql`:
 
 CR-13 (140 repeats the prompt cap and the error-code list as literals): 140 is frozen. CR-14
 (`project-state/STATUS.md` is not yet updated): owed at task 24, before the PR opens.
+
+## The embedding model's source — settled 2026-10-06
+
+Stack: "Bump the harness." [agentic-harness PR #40](https://github.com/emstacho-su/agentic-harness/pull/40)
+(`fix/fastembed-2.1.1`, 79ec491, worktree `C:/Users/stack/agentic-harness-wt-fastembed`) moves
+the rag server to fastembed 2.1.1. On that branch with an empty `.fastembed-cache`: `npm ci`
+exit 0; `npm run typecheck` exit 0; `npx vitest run` 11 files, 196 passed;
+`npm run verify:embedder` downloads the model and prints `OK — embedder matches the ingestion
+contract`, reference agreement min 0.999999 over the 10 Python reference items. The lock drops
+`tar` and its eight transitive packages and carries npm 11's peer annotations; no source change.
+Until it merges, the test container's build sets
+`HARNESS_DIR=C:/Users/stack/agentic-harness-wt-fastembed`; the commit read at build time goes
+into the docker section. The merge of PR #40 is Stack's word.
+
+**PR #40 merged 2026-10-06 on Stack's word ("merge the harness pr.") as 57ee51f**, its six checks
+green. The harness main checkout was a clean `main` and is fast-forwarded to it; the branch and
+its worktree are removed. `HARNESS_DIR` for the Workspace build is `C:/Users/stack/agentic-harness`
+(main, 57ee51f). The host's installed rag server still holds fastembed 2.1.0 in `node_modules`
+until `npm ci` is run there; that is Stack's to run or to ask for.
+
+## The review round (2026-10-06)
+
+The four streams fixed what rulings V1–V4 named, each with its test committed failing first; no
+docker state changed and nothing was applied to prod.
+
+| stream | scope | result | head |
+|---|---|---|---|
+| W-64 runner | CR-1, CR-6, CR-2, CR-3, CR-5, CR-12, SR-1 | built; two independent checks each found one test that could not fail (fixed, and one more owed in the second pass); 695 tests, lines 94.99 % | `feat/workspace-21-runner` 4575ed7 |
+| W-63 database | migration 143, written and dry-run only | independent check: pass for the text it read (md5 b6dcb28b…); the PM then ruled two changes (X2), so a second pass and a second check follow | `feat/workspace-21-db` c82d087 |
+| W-66 web | CR-8, CR-9, CR-12 | done; gates green on its tree | merged, 5c7cb0e |
+| W-65 container | the CA at `/app/certs/prod-ca.crt`, `/app/turn` root-owned and read-only, the list | done in files; grep-clean 13 of 13, firewall dry run 20 of 20 | merged, 0470bb4 |
+
+SR-1's premise was proven on the host with the stored secret before the fix was ruled: against
+the harness's `certs/prod-ca.crt` the pooler's certificate verifies
+(`connected as workspace_runner`); against the system store alone it fails
+(`SELF_SIGNED_CERT_IN_CHAIN`). The runner's tests prove the rest against a loopback stand-in with
+a throwaway CA: another CA is refused under six DSN forms, `no-verify` and
+`uselibpqcompat=true` among them.
+
+## PM rulings on the review round's questions (2026-10-06)
+
+### X1. Runner (W-64)
+
+* **`ok` on the call that trips the count stays false.** CR-6's sentence reads: `ok` is "the
+  result is not an error and the call did not trip the count".
+* **Begin's lost reply.** A 22023 from `workspace_begin()` that follows a failure of another kind
+  in the same turn does not read as "nothing to close": the runner closes the request with
+  `workspace_finish(failed, cli_error)`. A 22023 on the first try still means skip.
+* **A finish never arrives after the stale sweep.** `FINISH_RETRY_MS` is 110000 (was 170000): a
+  turn is killed at 8 minutes from its start and the last finish try is at most 110 s later, so
+  the request is closed by the runner inside the database's 10-minute claim. The backoff
+  (1 s doubling, capped at 15 s) and the watchdog hold follow the new window.
+* **The bounds on the database client are tested for real.** The test that builds the client
+  asserts `connectionTimeoutMillis`, `query_timeout` and `keepAlive` on the built client, and
+  fails if `newPgClient` drops any of them (the check's must-fix).
+* **Small, each with a test that can fail:** the redaction on the connection-error listener; the
+  `!linger.fired()` guard (a CLI killed after its result line is not also logged as a SIGTERM
+  exit); `messageOf` falls back to the error's code when its message is empty; `dsnParts` refuses
+  port 0 as `assertRunnerDsn` does.
+* **Kept as recorded:** a tool result for a tool-use id the stream never showed is passed over;
+  no recording is a resumed session that used a tool, and task 21's follow-up question after the
+  cap turn is the first one that will be. The start check's refusal of a CA file with no
+  certificate block stays. The watchdog hold needs no widening.
+
+### X2. Database (W-63): 143 changes before it freezes
+
+* **CR-7, the reading.** The `updated_at` trigger on `workspace_conversations` fires only when
+  `title` or `claude_session_id` changes
+  (`when (old.title is distinct from new.title or old.claude_session_id is distinct from
+  new.claude_session_id)`). An update that changes only `archived`, or changes nothing (archiving
+  an already-archived chat from a second tab, a title set to itself), leaves `updated_at` alone.
+  `workspace_finish` keeps setting `updated_at` itself. Unit 143 pins all four cases.
+* **The guard asserts only what 143 owns.** The project-wide rules of unit 101 (every function
+  pinned, no new SECURITY DEFINER function open to `authenticated`) leave 143's guard: an apply
+  must not abort on another stream's objects. The guard keeps: the view is `security_invoker`
+  with its five columns in order; the two functions keep their signatures, `prosecdef` and
+  pinned `search_path`; the five runner functions are exactly what `workspace_runner` executes
+  and none is open to `anon`, `authenticated`, `service_role` or PUBLIC; the trigger exists with
+  its condition.
+* **The sweep's boundary is tested at the boundary:** a request closed exactly 10 minutes ago is
+  not swept and one closed a second longer is (or the reverse, whichever the code says; the unit
+  pins it and the comment states it).
+* **The units name their rows.** `delete from workspace_runner_heartbeat where id = 1` (never a
+  delete with no `where`), so a dry run through `execute_sql` is not held for confirmation.
+* The sweep's comment about a live turn's finish holds again with X1's 110 s
+  (480 s + 110 s < 600 s). A closed request with no `finished_at` (only a hand-made cancel makes
+  one) is not swept: accepted. No new index.
+* Still dry-run only. The PM applies 143 on Stack's word after an independent check of the final
+  text.
+
+### X3. Web (W-66): accepted as built
+
+The 60 s after a close is counted on the page's own clock from when it first saw the close; the
+status view is read whole; `polled_age_seconds` is a JSON number or null (143 makes it an
+`integer`); a restored status row says nothing until the page's own read; the test fake keeps
+its own list. `queries.workspace.ts` is at 789 of 800 lines: its next change splits out the
+input-validation block.
+
+### X4. Container (W-65): accepted as built
+
+One CA copy at `/app/certs/prod-ca.crt`, read by the runner and by the rag launcher; `/app/turn`
+root-owned and 0555; one token smoke, run from `/app/turn`. If the pinned CLI cannot run from a
+folder it cannot write, stop and report (the mode is not loosened without a ruling).
+
+### X5. The brief (PM)
+
+The brief's literals follow: the CA path (`/app/certs/prod-ca.crt`, one copy), `/app/turn`
+(root, 0555), `WORKSPACE_DB_CA_FILE`, `DISABLE_AUTOUPDATER=1`, the constants
+(`FINISH_RETRY_MS` 110000, `RESULT_EXIT_GRACE_MS` 10000), the config bullet (verification against
+the pinned CA whatever the DSN says; refuses `no-verify`, port 0 and 6543, a part that is not
+percent-encoded text, a missing or certificate-less CA file), the fail-closed rule as V1 and X1
+word it, migration 143 in the Tables section and the Files table with its unit (five phase21
+units), the five-column status view, `workspace_finish`'s refusal, the harness at fastembed 2.1.1
+(the Seams row), and the review-round test files.
