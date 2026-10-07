@@ -24,7 +24,7 @@ vi.mock('@/lib/supabase/client', async () =>
 vi.mock('next/navigation', async () => (await import('./workspace-harness')).navigationMock());
 
 const labels = await import('@/lib/workspace-labels');
-const { normalizeMessage } = await import('@/lib/queries.workspace');
+const { normalizeMessage, normalizeRequest } = await import('@/lib/queries.workspace');
 const { MessageList } = await import('@/components/workspace/MessageList');
 const { buildTurns } = await import('@/components/workspace/thread');
 const { Workspace } = await import('@/app/(app)/workspace/Workspace');
@@ -436,5 +436,146 @@ describe('the message column follows an answer as it is written', () => {
     size(column, 1500);
     rerender(<MessageList turns={turnsWith('a much longer answer')} empty={null} />);
     expect(column.scrollTop).toBe(1500);
+  });
+});
+
+/**
+ * The PM's walk of 2026-10-07, W-2: after a long answer finished, its "Used:"
+ * line was under the visible part of the column. The stored row stores the text
+ * already on screen, and adds lines no character of that text accounts for.
+ */
+describe('the message column follows what arrives with the stored row', () => {
+  const LIVE_TEXT = 'Quiz 2 is due on Friday.';
+  const MORE_TEXT = `${LIVE_TEXT} The reading is chapter 4.`;
+  const USED = [{ tool: 'search_materials', scope: 'IST.323', ok: true }];
+
+  /** Request 42's assistant row: as `workspace_begin()` writes it, unless `fields` say it is stored. */
+  function answerRow(fields: Row = {}): Row {
+    return {
+      id: ANSWER,
+      conversation_id: A,
+      role: 'assistant',
+      request_id: 42,
+      tier: 'mid',
+      content: '',
+      tool_calls: [],
+      finished: false,
+      error_code: null,
+      ...fields,
+    };
+  }
+
+  /** Request 42 as the page builds it: from its rows, and the text of its stream. */
+  function turnsOfRequest(rows: { request: Row; answer?: Row; text: string }) {
+    const messages = [QUESTION_ROW, ...(rows.answer ? [rows.answer] : [])].flatMap(
+      (row) => normalizeMessage(row) ?? [],
+    );
+    const requests = [rows.request].flatMap((row) => normalizeRequest(row) ?? []);
+    return buildTurns({
+      messages,
+      requests,
+      live: { requestId: 42, text: rows.text, late: false },
+      stoppedRequestIds: new Set(),
+    });
+  }
+
+  type Turns = ReturnType<typeof turnsOfRequest>;
+
+  /** jsdom lays nothing out: give the column the sizes a browser would. */
+  function size(column: HTMLElement, scrollHeight: number): void {
+    Object.defineProperty(column, 'scrollHeight', { configurable: true, value: scrollHeight });
+    Object.defineProperty(column, 'clientHeight', { configurable: true, value: 400 });
+  }
+
+  /** The column while `written` grows to `grown`, with the reader at its end: 900 px of content, scrolled to 900. */
+  function mountAtTheEnd(written: Turns, grown: Turns) {
+    const view = render(<MessageList turns={written} empty={null} />);
+    const column = view.container.firstElementChild as HTMLElement;
+    size(column, 900);
+    view.rerender(<MessageList turns={grown} empty={null} />);
+    expect(column.scrollTop).toBe(900);
+    return { ...view, column };
+  }
+
+  /** An answer being written, its begun row already read. */
+  const writing = (text: string) =>
+    turnsOfRequest({ request: requestRow('claimed'), answer: answerRow(), text });
+
+  /** The same answer stored: the text that was on screen, and the tools it used. */
+  const stored = () =>
+    turnsOfRequest({
+      request: requestRow('done'),
+      answer: answerRow({ content: MORE_TEXT, tool_calls: USED, finished: true }),
+      text: MORE_TEXT,
+    });
+
+  it('keeps the "Used:" line in view when it arrives under text that does not change', () => {
+    const { column, container, rerender } = mountAtTheEnd(writing(LIVE_TEXT), writing(MORE_TEXT));
+    expect(container.querySelector('[data-used]')).toBeNull();
+
+    size(column, 930);
+    rerender(<MessageList turns={stored()} empty={null} />);
+
+    expect(container.querySelector('[data-answer-text]')).toHaveTextContent(MORE_TEXT);
+    expect(container.querySelector('[data-used]')).toHaveTextContent('Used: search_materials · IST.323');
+    expect(column.scrollTop).toBe(930);
+  });
+
+  it('keeps the end in view when the tier badge arrives over text that is already there', () => {
+    // The first deltas can reach the page before it has read the row `workspace_begin()` wrote.
+    const unread = (text: string) => turnsOfRequest({ request: requestRow('claimed'), text });
+    const { column, container, rerender } = mountAtTheEnd(unread(LIVE_TEXT), unread(MORE_TEXT));
+    expect(container.querySelector('[data-tier]')).toBeNull();
+
+    size(column, 930);
+    rerender(<MessageList turns={writing(MORE_TEXT)} empty={null} />);
+
+    expect(container.querySelector('[data-tier]')).toHaveTextContent('Sonnet · standard');
+    expect(column.scrollTop).toBe(930);
+  });
+
+  it.each([
+    ['the stopped sentence', 'cancelled', 'cancelled'],
+    ['an error sentence', 'failed', 'timeout'],
+  ] as const)('keeps %s in view when it arrives under a partial answer', (_name, state, code) => {
+    const { column, rerender } = mountAtTheEnd(writing(LIVE_TEXT), writing(MORE_TEXT));
+
+    size(column, 940);
+    rerender(
+      <MessageList
+        turns={turnsOfRequest({
+          request: requestRow(state, { error_code: code }),
+          answer: answerRow({ content: MORE_TEXT, finished: true, error_code: code }),
+          text: MORE_TEXT,
+        })}
+        empty={null}
+      />,
+    );
+
+    expect(screen.getByText(labels.ERROR_SENTENCES[code])).toBeInTheDocument();
+    expect(column.scrollTop).toBe(940);
+  });
+
+  it('does not pull the column down for the stored row once the reader has scrolled up', () => {
+    const { column, container, rerender } = mountAtTheEnd(writing(LIVE_TEXT), writing(MORE_TEXT));
+    column.scrollTop = 100;
+    fireEvent.scroll(column);
+
+    size(column, 930);
+    rerender(<MessageList turns={stored()} empty={null} />);
+
+    expect(container.querySelector('[data-used]')).not.toBeNull();
+    expect(column.scrollTop).toBe(100);
+  });
+
+  it('leaves a reader a few lines above the end where they are when nothing has grown', () => {
+    const { column, rerender } = mountAtTheEnd(writing(LIVE_TEXT), writing(MORE_TEXT));
+    // 20 px from the end: still following, and not to be moved by a render that adds nothing.
+    column.scrollTop = 480;
+    fireEvent.scroll(column);
+
+    rerender(<MessageList turns={writing(MORE_TEXT)} empty={null} />);
+
+    expect(column.scrollTop).toBe(480);
   });
 });
