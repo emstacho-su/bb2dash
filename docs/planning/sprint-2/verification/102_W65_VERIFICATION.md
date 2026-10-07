@@ -31,6 +31,12 @@ end.
 and 0555; the list gained three checks and is renumbered 1 to 41. No build and no container: every
 check that needs the image is still owed from step 10 on. See "Review round" at the end.
 
+**Docker step, second run (2026-10-07)**: the image builds (the harness is on `fastembed` 2.1.1) and
+steps 1 to 40 of the list pass on it, the token smoke among them. The firewall met a real kernel for
+the first time and raised; one count was wrong (a resolver that repeats its answer), fixed
+test-first in one round and rebuilt. Tasks 12 and 13 are done as far as this stream's checks go. The
+test container is left up and healthy for the PM's walk; step 41 is not run. See the last section.
+
 ## The guard (read before and after everything this stream did)
 
 ```
@@ -748,6 +754,12 @@ table of old and new numbers is under "Review round", at the end. Sections of th
 before the review round name the numbers they were written with. The paragraph below is wave 2a's,
 as written then.)
 
+(The docker step's second run, 2026-10-07, ran steps 1 to 40 against docker; step 41 was left unrun
+on purpose, so the container stays up for the PM's walk. Its outputs are in the last section of this
+file. The list was corrected in place that day at seven steps, and each says so where it stands:
+step 3's firewall count is 21, step 9's commit, the address counts of steps 14, 25, 29 and 34, and
+one new line in step 27 for the embedding model's new host.)
+
 **None of these lines has been run against docker.** Their quoting has: each docker line was read
 back out of this file in Git Bash and run with `docker` standing for a program that starts nothing
 and records what it was handed (a native Windows program, so Git Bash treats its arguments as it
@@ -779,7 +791,8 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/grep-cl
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && node --test docker/workspace/init-firewall.test.mjs 2>&1 | grep -E "(tests|pass|fail) [0-9]+$"
 ```
-→ `tests 20`, `pass 20`, `fail 0` (about 45 seconds; 18 before wave 2b's two tests)
+→ `tests 21`, `pass 21`, `fail 0` (about 45 seconds; 18 before wave 2b's two tests, 20 before the
+test the docker step's second run added on 2026-10-07)
 
 **4.** The Dockerfile's and the service's literals.
 
@@ -837,7 +850,9 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && ( unset HARNESS_DIR COMPOS
 ```
 git -C C:/Users/stack/agentic-harness rev-parse HEAD; git -C C:/Users/stack/agentic-harness status --short -- mcp-server certs | wc -l
 ```
-→ the commit (`e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd` on 2026-10-06), then `0`
+→ the commit (`e7997f3e3ddc402a3c8f535d3b926bbd61d6adbd` on 2026-10-06;
+`57ee51fc18ee4f7f367b60b24bfe39968d58d86b` on 2026-10-07, after harness PR #40 moved it to
+`fastembed` 2.1.1), then `0`
 
 **10.** Build **(guard)**. It downloads the base image, three `npm ci` sets, the CLI (about 250 MB)
 and the embedding model: run it in the background, it outlasts a short tool call.
@@ -893,6 +908,10 @@ Firewall verification passed - unable to reach https://example.com as expected
 Firewall verification passed - able to reach https://api.anthropic.com as expected
 Firewall raised: 3 name(s) allowed
 ```
+
+On 2026-10-07 the three counts read 1, 2 and 3. A count is of addresses, each once: this laptop's
+resolver answers the pooler's name with each of its three A records twice, and since `defc566` the
+script pins and counts the three (before it, the line read 6 and step 25 disagreed with step 24).
 
 **15.** Health.
 
@@ -1015,7 +1034,9 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 → `-P OUTPUT DROP`, then the OUTPUT rules in the dry run's order as iptables prints them (loopback;
 udp and tcp 53 to `127.0.0.11`; the state rule; tcp 443 with `--match-set workspace-https dst`; tcp
 5432 with `--match-set workspace-postgres dst`; the reject), then `-P OUTPUT DROP` and the one
-loopback rule for IPv6, then `workspace-https 3` and `workspace-postgres 1` (the counts of step 24)
+loopback rule for IPv6, then one line per set, each the sum of step 24's counts for its kind:
+`workspace-https 3` and `workspace-postgres 3` on 2026-10-07 (the pooler's count was written here as
+1 before a real resolver had answered). A set smaller than its pins is the failing result
 
 **26.** The tool gate is wired, not only written.
 
@@ -1032,6 +1053,15 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 → `blocked`
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('https://storage.googleapis.com',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
+```
+→ `blocked`
+
+Added on 2026-10-07: the host the embedding model is downloaded from since the harness moved to
+`fastembed` 2.1.1 (step 9's commit). The line above is the brief's, for the host the older version
+used; this one is for the host the image's own copy of the library names.
+
+```
+cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace node -e "fetch('https://huggingface.co',{signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status),()=>console.log('blocked'))"
 ```
 → `blocked`
 ```
@@ -1111,7 +1141,8 @@ cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack
 ```
 → four lines per pin, `<name> <address>:<port> open|blocked`. `open` on exactly these: each
 `api.anthropic.com` and `goultdzqcavefcgnifdy.supabase.co` address on `:443`, each pooler address on
-`:5432`. Every other line `blocked`: with step 14's counts, 4 `open` and 12 `blocked`. (Port 80 on
+`:5432`. Every other line `blocked`: one `open` and three `blocked` per pin, so with 2026-10-07's
+counts (six pins) 6 `open` and 18 `blocked`. (Port 80 on
 the two HTTPS names and 6543 on the pooler answer from the host, as the host line above shows on the
 day, so those `blocked` lines are the port rule at work.) The lines hold allowed addresses: in 102a
 each is written as `<address>`, never as the number.
@@ -1201,7 +1232,7 @@ container's id and start time.
 ```
 cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace exec -T -u node workspace sh -c 'stat -c "marker made at %Y" /dev/shm/bb2dash-workspace-firewall.up; grep -c "pinned by init-firewall.sh" /etc/hosts'
 ```
-→ `marker made at <seconds>`, then the pin count (4 with step 14's counts)
+→ `marker made at <seconds>`, then the pin count (the sum of step 24's counts: 6 on 2026-10-07)
 ```
 docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(cd /c/Users/stack/projects/bb2dash-wt-21-container && SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt21 --profile workspace ps -q workspace)"
 ```
@@ -2081,3 +2112,404 @@ No image exists, so each of these is a claim until its step is run:
    tree the runner's `config.ts` does not name the variable yet; the service sets it and the file is
    there. No test here ties the two together across the seam: after the merge, step 19 (the
    setting), step 15 (healthy) and step 32 are what show it end to end.
+
+## Docker step, second run (2026-10-07) — tasks 12 and 13
+
+**The image builds, the container is up and healthy, and every step from 1 to 40 passed on the image
+that is now running.** One step failed on the way: step 25, on the first image, where the firewall
+had pinned six lines for the pooler's three addresses. That was this stream's script. It was fixed
+test-first (one round of the two allowed), the image was rebuilt, and the list was run again from
+step 10. Step 41 (stop and remove the test container) was not run, on purpose: the PM walks the
+preview against this container next. One Haiku turn was spent (step 28), and no second one.
+
+First step of the run: `git fetch origin`, `git merge --no-edit origin/feat/workspace-21` (a
+fast-forward, `45712fc..9df56e9`, the runner's review round with SR-1), pushed. Nothing was merged
+to `main`, nothing was applied to the database, no file of the harness was edited, and no command
+was refused.
+
+### The guard
+
+`docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1`, every reading the same line:
+`bd4d4ae8bb716c53141fcae699d3872dd72c44622674209ed496d04d28305f02 2026-10-05T22:06:22.891074981Z`.
+
+| when (2026-10-07, UTC) | read |
+|---|---|
+| 05:16:44, step 1, before the first docker step | the line above |
+| 05:18:33, right before the first build | the same |
+| 05:24:55, after the first build | the same |
+| 05:25:12, after the container started (first image) | the same |
+| 05:31:19, before the second build (the fix round) | the same |
+| 05:31:27, after the second build | the same |
+| 05:31:49, after the container was made again on the second image | the same |
+| 05:35:08, before the restart of step 35 | the same |
+| 05:35:19, after the restart | the same |
+| 05:36:02, before task 13's scan container | the same |
+| 05:38:27, after the scan volume was removed | the same |
+| 05:40:17, after the last check | the same |
+
+Before the first docker step `docker ps -a` listed the same five containers as on 2026-10-06
+(`bb2dash-sync-1` up 31 hours and healthy, `bb2dash-harness-jobs-1`, `harness-postgres`, and the two
+`bb2dash-mcp:local` containers with Docker's own names), no image named `bb2dash-workspace`, and no
+network or volume of project `bb2dash-wt21`. The laptop had 5.3 GB of 31.2 GB free; the daemon has
+12.5 GB. One build ran at a time, each waited for.
+
+### What ran, in order
+
+1. Steps 1 to 9 (no image needed): all pass.
+2. Step 10, the first build, 05:18:39 to 05:24:46 UTC: `exit=0`.
+3. Steps 11 to 26 on the first image. Step 25 failed its count: the set held 3 pooler addresses and
+   step 24 had read 6 pins. Step 26 had been sent in the same paste as 24 and 25 and passed; nothing
+   after it was run on the first image.
+4. The fix round: a failing test (`f5ab661`), then the fix (`defc566`), both pushed.
+5. Step 10 again, the second build, 05:31:21 to 05:31:26 UTC (38 steps from the cache; only the copy
+   of the two scripts and the `sed`/`chmod` after it ran): `exit=0`.
+6. Steps 11 to 40 on the second image: all pass. Step 28, the token smoke, ran once, here.
+
+### The image and what it bakes
+
+| | |
+|---|---|
+| the image now running | `sha256:5790950804c5813992d495efb945efb9a9832b45d0d0e57f9be78911e07577ae`, `1.66GB` (1,657,569,563 bytes), `amd64`, made 2026-10-07T05:31:25Z |
+| the first image (before the fix) | `sha256:de4a7a0edac5086283fbe8bf55a340bb092674bc105eb2d29f5101354c32257c`, `1.66GB`. Docker dropped it when its container was made again; nothing was removed by hand |
+| the harness commit baked | `57ee51fc18ee4f7f367b60b24bfe39968d58d86b` (branch `main`, "Merge pull request #40 … fastembed-2.1.1"), nothing uncommitted under `mcp-server` or `certs`; read before each build |
+| the CLI's layer | `492MB COPY /usr/local/share/npm-global /usr/local/share/npm-global # buildkit`: the copy did not keep the package's link, so the binary is stored twice. The image works either way (step 11's note) |
+| the embedding model | `fastembed` 2.1.1 in `/app/mcp-rag/node_modules`; `/opt/fastembed` holds `Qdrant_bge-small-en-v1.5-onnx-Q`, 65M, 5 files, all root's |
+
+The step that failed on 2026-10-06 now passes, with no change on this branch (as wave 2b said it
+would after the harness's bump):
+
+```text
+#43 [rag 7/7] RUN npm run build  && FASTEMBED_CACHE_DIR=/opt/fastembed node scripts/verify-embedder.mjs  && npm prune … && chmod -R u=rwX,go=rX /opt/fastembed
+#43 2.062 model:      BAAI/bge-small-en-v1.5
+#43 2.062 expected:   384 dimensions
+#43 2.062 cache dir:  /opt/fastembed
+#43 2.062 First run downloads ~130 MB from Hugging Face.
+#43 110.0 "What did we decide about the ledger cash invariant?"
+#43 110.0   dims  384
+#43 110.0   L2    1.000000  (bge vectors are L2-normalised, expect ~1.0)
+#43 110.3 "pgvector HNSW index configuration"
+#43 110.3   dims  384
+#43 110.3 OK — embedder matches the ingestion contract.
+#43 DONE 111.3s
+```
+
+The long parts of the first build: the runtime stage's `apt-get` 133.7 s, the rag server's `npm ci`
+218.0 s, the bake above 111.3 s, the export 28.9 s. The two instructions the review round added (a
+plain `COPY` of the CA from the named context, then `RUN chmod 0444`) and the `/app/turn` line built
+as written.
+
+### The firewall, the first time it met a real kernel
+
+The first start's log, whole, as the container printed it (05:25:12 UTC, the first image):
+
+```text
+The host of workspace_runner_db_url ends .pooler.supabase.com
+The host of harness_database_url ends .pooler.supabase.com
+Restoring Docker DNS rules...
+Allowing DNS to 127.0.0.11
+Allowed api.anthropic.com on tcp/443 (1 address(es), pinned in /etc/hosts)
+Allowed goultdzqcavefcgnifdy.supabase.co on tcp/443 (2 address(es), pinned in /etc/hosts)
+Allowed aws-0-us-east-1.pooler.supabase.com on tcp/5432 (6 address(es), pinned in /etc/hosts)
+IPv6 closed (loopback only)
+Firewall configuration complete
+Verifying firewall rules...
+Firewall verification passed - unable to reach https://example.com as expected
+Firewall verification passed - able to reach https://api.anthropic.com as expected
+Firewall raised: 3 name(s) allowed
+2026-10-07T05:25:12.791Z workspace: runner started as workspace@469c97cc522a
+2026-10-07T05:25:13.255Z workspace: db: connected as workspace_runner
+```
+
+What that shows, read against the dry run:
+
+* **It raised at the first try, in under a second, and its own end check passed**: `example.com`
+  refused, `api.anthropic.com` answered. The lines and their order are the dry run's.
+* **The IPv6 line is `IPv6 closed (loopback only)`**: `ip6tables` works in Docker Desktop's kernel
+  on this laptop, so neither of the two `No IPv6 here …` branches was taken.
+* **Docker's own DNS rules were found and put back** (`Restoring Docker DNS rules...`), and the one
+  resolver is `127.0.0.11`.
+* **Both database secrets name the same pooler** (one lookup, one `Allowed` line for it).
+* **The set type and the port rule work as written**: `hash:net` sets, and `iptables -S OUTPUT`
+  prints the six rules in the dry run's order (step 25, below).
+* **One thing disagreed with the dry run: the pooler's count.** The line says 6 addresses. There are
+  3. That is the next section.
+
+After the fix **every probe agreed with the dry run**: the rules in its order, the sets the size of
+the pins, by name and by literal address `open` on exactly the allowed address and port pairs and
+`blocked` everywhere else (steps 25, 27, 29), a second run refused with 75 (step 30), and a restart
+raised it again with the pins rewritten, not doubled (steps 34 to 36).
+
+### Step 25 on the first image, and the fix round
+
+What step 24 and step 25 read on the first image:
+
+```text
+      1 api.anthropic.com
+      6 aws-0-us-east-1.pooler.supabase.com
+      2 goultdzqcavefcgnifdy.supabase.co
+…
+workspace-https 3
+workspace-postgres 3
+```
+
+The rules were right and so was the set. The pins were not: six lines for the pooler against three
+addresses in its set. Diagnosed with reads only, inside the container (no address printed):
+
+```text
+pin lines per name (all / distinct addresses):
+api.anthropic.com 1 1
+goultdzqcavefcgnifdy.supabase.co 2 2
+aws-0-us-east-1.pooler.supabase.com 6 3
+every pinned address is in its set:
+      1 api.anthropic.com in workspace-https
+      6 aws-0-us-east-1.pooler.supabase.com in workspace-postgres
+      2 goultdzqcavefcgnifdy.supabase.co in workspace-https
+```
+
+and the resolver's own answer, the same on three lookups (`dig` as the script calls it, addresses
+written by number of first appearance):
+
+```text
+aws-0-us-east-1.pooler.supabase.com. IN CNAME pool-tcp-us-east-1-e9f793b-79951640844772aa.elb.us-east-1.amazonaws.com.
+pool-tcp-us-east-1-e9f793b-79951640844772aa.elb.us-east-1.amazonaws.com. IN A <address 1>
+pool-tcp-us-east-1-e9f793b-79951640844772aa.elb.us-east-1.amazonaws.com. IN A <address 2>
+pool-tcp-us-east-1-e9f793b-79951640844772aa.elb.us-east-1.amazonaws.com. IN A <address 3>
+pool-tcp-us-east-1-e9f793b-79951640844772aa.elb.us-east-1.amazonaws.com. IN A <address 1>
+pool-tcp-us-east-1-e9f793b-79951640844772aa.elb.us-east-1.amazonaws.com. IN A <address 2>
+pool-tcp-us-east-1-e9f793b-79951640844772aa.elb.us-east-1.amazonaws.com. IN A <address 3>
+```
+
+**The cause:** Docker Desktop's resolver answers the pooler's name, a CNAME to a load balancer, with
+each of its three A records twice. The script took an answer's lines for its addresses: it pinned
+each line in `/etc/hosts` and counted each. `ipset add -exist` took the repeats without complaint,
+which is why the set was right. **Nothing was open that should not have been**: every pinned
+address was in the set, and the set held nothing unpinned. What was wrong was the count the log
+prints ("how many addresses it has", in the header's words) and three redundant lines in
+`/etc/hosts`. The two HTTPS names answer without repeats. The dry run could not have shown this:
+its fake `dig` only ever answered each address once.
+
+**RED** (`f5ab661`, the test before the code): the fake `dig` gives the pooler three addresses,
+each twice, and the test expects three pins, three `ipset add` calls, `3 address(es)` in the log,
+and still one lookup a name.
+
+```text
+node --test docker/workspace/init-firewall.test.mjs
+✖ an answer that repeats an address: each address is allowed, pinned and counted once
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+    [
+      '<POOLER_ADDRESS> aws-0-us-east-1.pooler.supabase.com # pinned by init-firewall.sh',
+      '198.51.100.7 aws-0-us-east-1.pooler.supabase.com # pinned by init-firewall.sh',
+      '203.0.113.21 aws-0-us-east-1.pooler.supabase.com # pinned by init-firewall.sh',
+  +   '<POOLER_ADDRESS> aws-0-us-east-1.pooler.supabase.com # pinned by init-firewall.sh',
+  +   '198.51.100.7 aws-0-us-east-1.pooler.supabase.com # pinned by init-firewall.sh',
+  +   '203.0.113.21 aws-0-us-east-1.pooler.supabase.com # pinned by init-firewall.sh'
+    ]
+ℹ tests 21
+ℹ pass 20
+ℹ fail 1
+```
+
+(The three addresses are the test's own, and none was read from the container: the constant the
+file has used for its pooler since wave 1, written here by its name, and two from the ranges kept
+for documentation. The output is otherwise as printed.)
+
+**GREEN** (`defc566`): one condition in `resolve_once`. It keeps the first line for an address and
+drops a repeat, in the answer's order: `awk '$4 == "A" && !seen[$5]++ {print $5}'`.
+
+```text
+bash -n docker/workspace/init-firewall.sh                 → ok
+node --test docker/workspace/init-firewall.test.mjs       → tests 21, pass 21, fail 0
+node --test docker/grep-clean.test.mjs                    → tests 13, pass 13, fail 0
+```
+
+It is inside the Contract ("adds every A record of that one answer to the set and pins each"): every
+address of the answer is still allowed and pinned, once. The fix changes no rule, no set and no
+host. On the second image steps 14, 24 and 25 read `3 address(es)`, `3` pins and
+`workspace-postgres 3`. This small change went through its test and the list; it was not put through
+`/code-review` or `/security-review` by this stream (the review round's reviews were of the tree
+before it).
+
+### Steps 1 to 41
+
+Each line is the list's, as it stands. Where a step ran on both images and the two outputs differ,
+both are given; "both images" means the outputs were the same. An output is quoted as printed;
+` · ` separates its lines.
+
+| step | what | output | result |
+|---|---|---|---|
+| 1 | the guard | `bd4d4ae8…05f02 2026-10-05T22:06:22.891074981Z` (the table above) | pass |
+| 2 | fetch, merge, the runner is in the tree | `Updating 45712fc..9df56e9` · `Fast-forward` · `runner merged: 0` · `2` (also `0` against `origin/feat/workspace-21-runner`, `3425b33`) | pass |
+| 3 | `grep-clean` | `tests 13` · `pass 13` · `fail 0` | pass |
+| 3 | the firewall's dry run | `tests 20` · `pass 20` · `fail 0` before the fix round; `tests 21` · `pass 21` · `fail 0` after it | pass |
+| 4 | the Dockerfile's and the service's literals | `0` · `1` · `0` · `1` | pass |
+| 4 | ruling V2's literals | `1` · `1` · `1` · `1` · `1` · `0` | pass |
+| 5 | the four secret files, sizes only | `169` · `108` · `41` · `109` bytes | pass |
+| 6 | compose with only the Windows user variables | `exit=0`; services: `sync` and nothing else | pass |
+| 7 | the service as rendered for the test project | `true true linux/amd64 workspace-net workspace 30s` | pass |
+| 7 | its environment | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 CLAUDE_CONFIG_DIR=/home/node/.claude DISABLE_AUTOUPDATER=1 ENABLE_TOOL_SEARCH=false WORKSPACE_DB_CA_FILE=/app/certs/prod-ca.crt WORKSPACE_TURN_BUDGET_USD=1.00` | pass |
+| 8 | the `sync` service's hash, rendered and on the live container | `sync 448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7` · `448f155ac0209cc0a233a9d09653fd02ebb3eda51fc84ec02ff9a5341ac7e6e7` | pass |
+| 9 | the harness commit; nothing uncommitted beside it | `57ee51fc18ee4f7f367b60b24bfe39968d58d86b` · `0` (before each build) | pass |
+| 10 | build | `Image bb2dash-workspace:local Built` · `exit=0`, twice (6 min 7 s, then 5 s from the cache) | pass |
+| 11 | the image, and the CLI's layer | first image `de4a7a0edac5 1.66GB`, second `5790950804c5 1.66GB`; both: `0B ENV PATH=…/usr/local/share/npm-global/bin` · `0B ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global` · `492MB COPY /usr/local/share/npm-global /usr/local/share/npm-global # buildkit` | pass |
+| 12 | start | first image: `Network bb2dash-wt21_workspace-net Created` · `Volume bb2dash-wt21_workspace-claude-home Created` · `Container bb2dash-wt21-workspace-1 Started` · `exit=0`; second: `Container bb2dash-wt21-workspace-1 Recreated` · `Started` · `exit=0` | pass |
+| 13 | what the start made | `bb2dash-wt21_workspace-net` · `bb2dash-wt21_workspace-claude-home`, nothing else (both images) | pass |
+| 14 | the firewall's own log | the eleven lines of the list, in its order. The pooler's line: `Allowed aws-0-us-east-1.pooler.supabase.com on tcp/5432 (6 address(es), pinned in /etc/hosts)` on the first image, `(3 address(es), …` on the second. The IPv6 line: `IPv6 closed (loopback only)` | pass on the second image; the first image's count is the finding above |
+| 15 | health | `healthy` (first image: read at 05:25:31, its first probe, 5 s after the start, having exited 0; second image: read at 05:32:01, 12 s after the start) | pass |
+| 16 | the CLI's version; the six flags in its help | `2.1.289 (Claude Code)` · `6` (both images) | pass |
+| 17 | every Node and `claude` process is `node`'s | `node` (both images) | pass |
+| 18 | the runner holds no capability | `pid 1: /sbin/docker-init -- /app/docker/workspace/entrypoint.sh node /app/workspace/dist/runner.js` · `runner pid: 7` · `Uid: 1000 1000 1000 1000` · `CapInh:`, `CapPrm:`, `CapEff:`, `CapBnd:`, `CapAmb:` each `0000000000000000` (both images) | pass |
+| 19 | no API key, no `DATABASE_URL`; the five settings | `exit=1` · `exit=1` · `false` · `1` · `/home/node/.claude` · `1` · `/app/certs/prod-ca.crt` (both images) | pass |
+| 20 | the in-image layout | `12` · `4` · `node:node 755 /home/node/.claude` · `node:node 700 /run/workspace` · `root:root 555 /app/turn` · `root:root 755 /app/certs` · `root:root 444 /app/certs/prod-ca.crt` · `0` · `0` · `node reads the CA` (both images) | pass |
+| 21 | the CLI's folder is root's; no `ip` | `root:root 755` · `0` · `no ip`, no `WRITABLE` line (both images) | pass |
+| 22 | `node` can write none of root's files | `done` alone (both images) | pass |
+| 23 | nothing can be planted in `/app/turn` | `/app/turn` · `mkdir: cannot create directory '.claude': Permission denied` · `mkdir exit=1` · `touch: cannot touch 'settings.json': Permission denied` · `touch exit=1` · `chmod: changing permissions of '.': Operation not permitted` · `chmod exit=1` · `0` · `root:root 555` (both images; the removal line was not needed) | pass |
+| 24 | the pins | first image `1 api.anthropic.com` · `6 aws-0-us-east-1.pooler.supabase.com` · `2 goultdzqcavefcgnifdy.supabase.co`; second image `1` · `3` · `2` | pass on the second image |
+| 25 | the rules and the sets | `-P OUTPUT DROP` · `-A OUTPUT -o lo -j ACCEPT` · `-A OUTPUT -d 127.0.0.11/32 -p udp -m udp --dport 53 -j ACCEPT` · `-A OUTPUT -d 127.0.0.11/32 -p tcp -m tcp --dport 53 -j ACCEPT` · `-A OUTPUT -m state --state RELATED,ESTABLISHED -j ACCEPT` · `-A OUTPUT -p tcp -m tcp --dport 443 -m set --match-set workspace-https dst -j ACCEPT` · `-A OUTPUT -p tcp -m tcp --dport 5432 -m set --match-set workspace-postgres dst -j ACCEPT` · `-A OUTPUT -j REJECT --reject-with icmp-admin-prohibited` · `-P OUTPUT DROP` · `-A OUTPUT -o lo -j ACCEPT` · `workspace-https 3` · `workspace-postgres 3`. The same on both images: on the first, 3 in the set against step 24's 6 pins | **fail on the first image** (the fix round); pass on the second |
+| 26 | the tool gate is wired | `node /app/workspace/dist/hooks/tool-gate.js 2` (both images) | pass |
+| 27 | egress by name | `example.com`: `blocked` · `storage.googleapis.com`: `blocked` · `huggingface.co` (the line added today): `blocked` (the laptop itself reads `200` from it) · `host.docker.internal:6080`: `blocked` · `192.168.65.254:6080 blocked` · `172.20.0.1:6080 blocked` (the gateway; no third line) · `{"6080/tcp":[{"HostIp":"127.0.0.1","HostPort":"6080"}]} running` · `api.anthropic.com`: `404` · networks: `bb2dash-wt21_workspace-net` | pass |
+| 28 | the token smoke, from `/app/turn` | `ok` · `exit=0` (05:33:20 to 05:33:23 UTC, one Haiku turn); then `0` · `root:root 555` | pass |
+| 29 | egress by literal address | on the host: `1.1.1.1:443 open` · `api.anthropic.com:80 open` · `goultdzqcavefcgnifdy.supabase.co:80 open` · `the pooler:6543 open`. In the container: `1.1.1.1:443 blocked`; then 24 lines, four per pin: `open` on `api.anthropic.com <address>:443`, on both `goultdzqcavefcgnifdy.supabase.co <address>:443` and on the three `aws-0-us-east-1.pooler.supabase.com <address>:5432`, `blocked` on the other 18 (6 `open`, 18 `blocked`) | pass |
+| 30 | a second run of the firewall is refused | `ERROR: the firewall was already raised in this container (/dev/shm/bb2dash-workspace-firewall.up exists): a second run is refused; restart the container to raise it again` · `75`; then `blocked` · `404` · `1.1.1.1:443 blocked` | pass |
+| 31 | ten connects to each database host on 5432 | `10/10` · `10/10` | pass |
+| 32 | the pooler's certificate verifies against the pinned CA and no other | `openssl exit=0` · `1`; `/app/certs/prod-ca.crt connected as workspace_runner` · `/tmp/w65-ca/other-ca.crt refused: SELF_SIGNED_CERT_IN_CHAIN`; then `0` (the throwaway is gone) | pass |
+| 33 | one `search_context` over stdio, collection `bb2dash` | `ok` | pass |
+| 34 | before the restart | `marker made at 1791351109` · `6`; `b92ad34a73894cb47bf74862ca664f033bc731ddb52e97317383a040c6f11dd5 2026-10-07T05:31:48.961044837Z` | pass |
+| 35 | restart | `Container bb2dash-wt21-workspace-1 Started` · `exit=0`; health `starting` at 05:35:21, `healthy` at 05:35:34 | pass |
+| 36 | after the restart | `marker made at 1791351319` (210 s later) · `6` (not 12); `2 0`; the same id, `2026-10-07T05:35:18.798684933Z`; then `blocked` · `404` · `1.1.1.1:443 blocked` | pass |
+| 37 | task 13: the image's filesystem into a scratch volume | `w65-scan-fs` · `0852738fb5527f1ab3a897a9479f7af72010d2d387bf2e01f183f366fb1802a4`; `exit=0` · `w65-scan` | pass |
+| 38 | task 13: no secret in the image's files | `INF scanned ~80076787 bytes (80.08 MB) in 14.5s` · `INF no leaks found` · `0` | pass |
+| 39 | task 13: no secret in the image's history | `INF scanned ~95957 bytes (95.96 KB) in 149ms` · `INF no leaks found` · `0`; the grep: `0` | pass |
+| 40 | task 13: the scratch volume goes | `w65-scan-fs` | pass |
+| 41 | stop and remove the test container | not run | skipped on purpose: the container stays up for the PM's walk |
+
+Three notes on how lines were run:
+
+* **Step 29's last line** was run as the list holds it with one thing appended on the host side, a
+  pipe into `awk` that writes each address as `<address n>` and counts the two words, so no allowed
+  address reached the screen or this file.
+* **Step 36's log** also shows the stop between the two starts was clean:
+  `workspace: runner SIGTERM received: stopping` · `workspace: exiting 0`, then the firewall's lines
+  again with `3 address(es)` for the pooler, then `runner started` and `db: connected as
+  workspace_runner`.
+* **The list's quoting check was not run again.** One line was added to the list today (step 27,
+  `huggingface.co`): it is step 27's first line with another URL, and it was run as it stands.
+
+### Task 12's checks
+
+| task 12 check | list steps | result |
+|---|---|---|
+| `grep-clean`, the firewall's dry run (a) | 3 | pass: 13 of 13, 21 of 21 |
+| the Dockerfile's literals; compose resolves; `sync` only without the profile; the rendered service; the `sync` hash (d) | 4, 6, 7, 8 | pass |
+| the build, with the harness commit and the image's id and size | 9, 10, 11 | pass: harness `57ee51fc18ee4f7f367b60b24bfe39968d58d86b`; image `sha256:5790950804c5…77ae`, `1.66GB` |
+| `up`, what it made, the firewall's log, healthy | 12 to 15 | pass |
+| `claude --version` equals the pin; the help grep | 16 | pass: `2.1.289 (Claude Code)`, `6` |
+| processes run as `node`; the runner's capabilities | 17, 18 | pass |
+| `printenv ANTHROPIC_API_KEY` exits 1; `DATABASE_URL`; the five settings | 19 | pass |
+| no published ports | 7, and 27's network read | pass: `ports` undefined; one network, `bb2dash-wt21_workspace-net` |
+| the in-image layout; root's files; the CLI's folder | 20 to 22 | pass. The CLI's folder is `root:root`: the smoke passed with it so, and ruling T1's `--chown=node:node` exception was not needed |
+| nothing can be planted where a turn loads project settings (ruling V2) | 23 | pass |
+| the pins, the rules and the sets | 24, 25 | pass, after the fix round |
+| the gate wiring: the hook command from the image's `settings.json`, exit 2 | 26 | pass |
+| the firewall probes by name; `api.anthropic.com` answers | 27 | pass |
+| the firewall probes by literal address | 27 (6080), 29 | pass |
+| a second run of the firewall is refused | 30 | pass: 75, and nothing changed |
+| ten connects to each database host; the connection verified against the pinned CA (ruling V2); one `search_context` over stdio | 31, 32, 33 | pass |
+| the restart: healthy again, the marker made anew, the pins rewritten | 34 to 36 | pass |
+| the token smoke (one Haiku turn), from `/app/turn` | 28 | pass: `ok`, `exit=0`. **The pinned CLI runs from a folder it cannot write** (ruling X4's question), and left nothing in it |
+
+What the smoke settles that was open: the setup-token works inside a default-deny container
+(Phase 14's A7 path, its first proof); `api.anthropic.com` on 443 is the only host the CLI needed
+for a turn with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, so `HTTPS_HOSTS` gains nothing and no
+DECISIONS row is owed for a host; the CLI's install folder can stay root's. After the smoke the
+volume holds seven names at its top, all `node`'s (`.claude.json`, `backups`, `policy-limits.json`
+and its stamp, `projects`, `remote-settings.json`, `sessions`; six files in all, 108K), and a count
+of files in it that hold a token, key, JWT or password-bearing DSN shape reads 0.
+
+### Task 13's checks
+
+| task 13 check | list steps | result |
+|---|---|---|
+| the guard before and after | 37, 40 | the same line at 05:36:02 and at 05:38:27 UTC |
+| the exported filesystem scanned with gitleaks and the repo's config | 37, 38 | pass: `no leaks found`, `0` |
+| the history scanned with gitleaks; the brief's grep | 39 | pass: `no leaks found`, `0`; the grep `0` |
+| triage of hits | | nothing to triage: no hit, in the vendor trees or anywhere else. The allowlist was not touched |
+
+The scan was of the image now running (`5790950804c5`). The scratch volume held 1.1G in 16,635
+files: `/fs/app` with its six folders, `/fs/opt/fastembed`, and no `/fs/run/secrets` (the secrets
+arrive at start, so the image has no such folder). gitleaks reads text: of that it scanned 80 MB,
+passing over binaries and the three allowlisted base-image trees. The CLI's npm folder is not under
+them (`/fs/usr/local/share/…` does not match `^/fs/usr/(include|lib|share)/`).
+
+**The scan can fail.** A control, in a scratch folder outside every repo and not in the scan volume:
+two files, each holding one made-up token of a shape gitleaks knows (random letters, no real
+credential), one under `app/` and one under `usr/local/share/npm-global/`, scanned by the same
+command with the same config:
+
+```text
+INF scanned ~112 bytes (112 bytes) in 129ms
+WRN leaks found: 2
+gitleaks exit=1
+```
+
+The scratch folder was removed afterwards. `w65-scan` was created, never started, and removed in the
+line that exported it; `w65-scan-fs` was removed at step 40. Neither exists now.
+
+### What is left running
+
+* **`bb2dash-wt21-workspace-1`**, compose project `bb2dash-wt21`, service `workspace`: `running`,
+  `healthy`, 0 restarts by Docker, started 2026-10-07T05:35:18Z (step 35's restart), on image
+  `sha256:5790950804c5…77ae`. Its last three health probes at the last read each exited 0. It is
+  connected to the database as `workspace_runner` and polling; no question was asked of it.
+* Its network `bb2dash-wt21_workspace-net` and its volume `bb2dash-wt21_workspace-claude-home`.
+* The image `bb2dash-workspace:local` and the build cache.
+* Everything that was there before, untouched: `bb2dash-sync-1` (the guard), `bb2dash-harness-jobs-1`,
+  `harness-postgres`, the two `bb2dash-mcp:local` containers. Nothing was pruned, and no `docker rm`,
+  `docker volume rm` or `docker rmi` was run except the list's own two for the scan.
+
+Only one tree at a time runs the test container, and it is this one's. Before the walks rebuild it
+in `bb2dash-wt-21` (task 19, second half), step 41's two lines take this one down.
+
+### What this run does not show
+
+* **No question went through the runner.** The smoke ran the CLI directly. The first turn the runner
+  itself makes (claim, begin, the CLI with its two MCP servers and the gate, stream, finish) is
+  task 19's second half, the PM's.
+* **The far side of migration 143.** It is not on production; the runner connected and reads
+  healthy on this side of it.
+* **`/usage`** was not read before or after the one turn.
+* **The fix round's change was not reviewed** by anyone but this stream.
+* **The model is baked, not that it never tries the network.** Step 33's search answered behind a
+  firewall that refuses `huggingface.co` and `storage.googleapis.com`, so nothing was downloaded;
+  whether the library attempts a request first and falls back was not read.
+
+### Questions for the PM, second run
+
+1. **The fix round (`f5ab661`, `defc566`): one condition in `resolve_once`.** A repeated A record is
+   pinned and counted once. It was inside this stream's files and the Contract, so it was made
+   without a ruling, as the run's rules allow; it is one of the two rounds. If the PM wants it
+   reviewed before the walks, it is one condition and its comment in the script, and one test.
+2. **The brief names one model host, and the model now comes from another.** Its task 12 (e) says
+   "the same line for `https://storage.googleapis.com` → `blocked` (no model download is possible at
+   runtime)". Since the harness moved to `fastembed` 2.1.1 the library downloads from
+   `https://huggingface.co` (read in the image's own copy). The list keeps the brief's line and
+   gained one for the new host; both read `blocked`. The brief's sentence is the PM's to change.
+3. **The harness checkout on the host still has `fastembed` 2.1.0 installed**
+   (`mcp-server/node_modules/fastembed/package.json`), under a `package.json` and lock that say
+   2.1.1. The image is not affected: its `rag` stage runs `npm ci` from the lock and holds 2.1.1.
+   The host's own rag server keeps using the old library and its old cache until someone runs
+   `npm ci` there. That is the harness's, and Stack's or the PM's to do; nothing was changed.
+4. **The CLI's layer is 492MB, not about 250MB.** The `COPY --from=cli` did not keep the package's
+   link, so its one large binary is stored twice. The image works. Halving it is a change to how the
+   stage hands the folder over, which was not tried here: say if it is wanted.
+5. **Step 41 is owed.** The container, its network and its volume stay until the PM is done with
+   this tree's container; the two lines are in the list.
+6. **Other firewalls that pin or count an answer's lines** would read the same repeats from this
+   resolver. bb2dash-stack's dev firewall, which this script was forked from, was not read for it in
+   this run.
+7. **The firewall test's address constants are real ones.** `docker/workspace/init-firewall.test.mjs`
+   has held, since wave 1, the addresses the allowed names resolved to when it was written, and a
+   count inside the container (a count, no address printed) reads that five of today's six pins
+   equal them. They are public addresses of public services, in a test that dials nothing, and this
+   file still writes every allowed address as `<address>`. If the PM would rather the test used the
+   documentation ranges throughout, as today's new test does for its two new addresses, it is a
+   change of five constants.
