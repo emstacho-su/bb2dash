@@ -1,5 +1,5 @@
 -- bb2dash :: db/tests/phase23_181_inbox_apply_runner.sql
--- Phase 23 (Inbox auto-apply; DECISIONS 2026-10-07). Tests migration 181, acting as the role:
+-- Phase 23 (Inbox auto-apply; DECISIONS 2026-10-07). Tests migration 181, with 184's claim, acting as the role:
 --
 --   0. installed and shaped: the role, its seven functions, its exact table privileges
 --   1. what the role must be refused: tables outside its list, delete, a state change, a column
@@ -10,8 +10,8 @@
 --   5. the decision shape is enforced; an item taken back is skipped
 --   6. the follow-up: filed after a run that archived something, never for skipped rows
 --   7. a failed close raises one item; a later done close archives it
---   8. claim releases the worker's own dead claim and anybody's older than 30 minutes, and leaves
---      a live claim of somebody else's alone
+--   8. claim, as 184 amends it: it releases the worker's own claim past 16 minutes and anybody's
+--      past 30, and leaves a live claim alone, the worker's own included
 --
 -- Every call is made under `set local role inbox_apply_runner` (181 grants db_test_runner the
 -- role with inherit false). RUN IT: `node scripts/db-test.mjs --only phase23_181_inbox_apply_runner.sql`.
@@ -41,6 +41,9 @@ declare
 begin
   if not exists (select 1 from pg_roles where rolname = 'inbox_apply_runner') then
     raise exception 'FAIL phase23_181: migration 181 is not applied (no role inbox_apply_runner)';
+  end if;
+  if position('c_own_release_after' in (select prosrc from pg_proc where oid = 'public.inbox_apply_claim()'::regprocedure)) = 0 then
+    raise exception 'FAIL phase23_181: migration 184 is not applied (inbox_apply_claim is still 181''s body)';
   end if;
   foreach f in array v_fns loop
     if to_regprocedure(f) is null then
@@ -551,15 +554,26 @@ declare
   v_id bigint;
   v_row record;
 begin
-  -- (a) The worker's own claim, still open when it asks for work: closed failed, interrupted.
+  -- (a) The worker's own claim (184): while it is younger than 16 minutes it is a live run, of this
+  --     worker or of another container holding the same login, and nothing is taken beside it.
   insert into agent_requests (kind, scope, state, claimed_at, claimed_by, claim_attempts, note)
-  values ('inbox_feedback', 'all', 'claimed', now(), 'inbox-apply-runner', 1, 'phase23_181 mine')
+  values ('inbox_feedback', 'all', 'claimed', now() - interval '15 minutes', 'inbox-apply-runner', 1, 'phase23_181 mine')
   returning id into v_mine;
   set local role inbox_apply_runner;
   select c.id into v_id from inbox_apply_claim() c;
   reset role;
-  select state, result->>'error' as error into v_row from agent_requests where id = v_mine;
-  if v_id is not null or v_row.state <> 'failed' or v_row.error <> 'interrupted' then
+  if v_id is not null or (select state from agent_requests where id = v_mine) <> 'claimed' then
+    raise exception 'FAIL 8: a 15-minute claim of the worker''s own was touched (claim returned %)', v_id;
+  end if;
+
+  --     Past 16 minutes no process is behind it: closed failed, interrupted, and counted as a run.
+  update agent_requests set claimed_at = now() - interval '17 minutes' where id = v_mine;
+  set local role inbox_apply_runner;
+  select c.id into v_id from inbox_apply_claim() c;
+  reset role;
+  select state, result->>'error' as error, result->'claude'->>'started' as started into v_row
+    from agent_requests where id = v_mine;
+  if v_id is not null or v_row.state <> 'failed' or v_row.error <> 'interrupted' or v_row.started <> 'true' then
     raise exception 'FAIL 8: the worker''s dead claim reads % (claim returned %)', row_to_json(v_row), v_id;
   end if;
   if (select count(*) from attention_items where ref = 'inbox-apply-failed' and state = 'open') <> 1 then

@@ -73,8 +73,10 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   `assignments`, `assignment_progress`, `course_staff` and `courses.group_notes`, each write logged against
   an answered Inbox item (181). The decision is stored on the archived row first; the vault note and
   `docs/inbox-decisions/<date>.md` are rendered from it by `scripts/inbox-decisions-pr.mjs` on the host.
-  The sync still holds no LLM (B-43). Migrations 180–182 are frozen; **183 is applied at the cut-over**
-  (STATUS, "Phase 23"); a fix is a new migration in 184–189.
+  The sync still holds no LLM (B-43). Claude's SQL there is two tools: `query` (one select, in a read-only
+  transaction) and `apply_item` (one item; the server runs the transaction and checks each statement against
+  an allow-list). Migrations 180–182 and 184 are frozen; **183 is applied at the cut-over** (STATUS,
+  "Phase 23"); a fix is a new migration in 185–189.
 
 ## Environment gotchas (cloud sessions)
 

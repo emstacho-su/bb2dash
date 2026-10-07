@@ -22,7 +22,7 @@
  * pure functions rather than trusted field by field.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   queryOptions,
   useMutation,
@@ -1210,6 +1210,10 @@ export function inboxQueueCountOptions() {
       if (error) throw error;
       return count ?? 0;
     },
+    // While answers wait, the worker can archive them without this page ever seeing its request
+    // (a sync-filed run of rows that need no reading takes about a second): the count is how the
+    // page notices. With nothing waiting there is nothing to watch.
+    refetchInterval: (query) => ((query.state.data ?? 0) > 0 ? INBOX_APPLY_WATCH_MS : false),
     staleTime: 60 * 1000,
   });
 }
@@ -1430,6 +1434,26 @@ export function useCreateAgentRequest() {
  * reload. Filing a request changes nothing yet, so this is the moment that
  * matters. Idempotent: a state that has not moved invalidates nothing.
  */
+/**
+ * When the answered count moves between two reads of it, the worker (or another tab) changed what
+ * the queue holds: the Inbox list and the Home counts refresh. This covers the run the request
+ * polling never sees: one that opens and closes between two looks, and the first request of a
+ * follow-up chain. The first read is not a change, and the count's own cache is left alone, so a
+ * refresh never causes another.
+ */
+export function useRefreshInboxOnQueueChange(count: number | null) {
+  const queryClient = useQueryClient();
+  const last = useRef<number | null>(null);
+  useEffect(() => {
+    if (count === null) return;
+    const before = last.current;
+    last.current = count;
+    if (before === null || before === count) return;
+    void queryClient.invalidateQueries({ queryKey: syncKeys.attentionAll() });
+    void queryClient.invalidateQueries({ queryKey: syncKeys.status() });
+  }, [queryClient, count]);
+}
+
 export function useRefreshInboxOnSettled(state: AgentRequestState | null) {
   const queryClient = useQueryClient();
   useEffect(() => {

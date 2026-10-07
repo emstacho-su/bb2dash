@@ -1172,8 +1172,9 @@ Nothing below is built in this phase (brief 102, "Out of scope"; each is a later
 
 Stack's ask (2026-10-07): after a sync, check the Inbox's "Answered, not applied" section and, when it
 holds items, run `/inbox-apply`. His three choices and what they amend are DECISIONS 2026-10-07 (six rows).
-Branch `feat/phase23-inbox-auto-apply`, **stacked on PR #78** (it reuses `workspace/`); nothing is merged
-and no container of this phase is running.
+Branch `feat/phase23-inbox-auto-apply`, [PR #79](https://github.com/emstacho-su/bb2dash/pull/79) (draft, against
+`main` since #78 merged the same evening) and bb2dash-stack #4; nothing of this phase is merged and no container
+of it is running. `/code-review` and the security pass ran on #79; round 1's fixes are in (DECISIONS).
 
 **How it works.** The `sync` container closes a sync done and calls `sync_request_inbox_apply` (180), which
 files one `inbox_feedback` request when `v_inbox_queue` is not empty. The Inbox's "Apply answers" button
@@ -1186,7 +1187,8 @@ A host script then writes each decision's vault note and repo log entry.
 
 * **Database.** 180 (`sync_request_inbox_apply`, the sync runner's fourteenth function), 181 (role
   `inbox_apply_runner`, its read and write boundary, the write log `inbox_apply_writes` with its trigger, six
-  worker functions) and 182 (`decision_filed_at`, `inbox_decisions_unfiled`, `inbox_decision_filed`) are **on
+  worker functions), 182 (`decision_filed_at`, `inbox_decisions_unfiled`, `inbox_decision_filed`) and 184
+  (review round 1: `inbox_apply_claim` releases the worker's own claim only past 16 minutes) are **on
   prod, byte-identical**. **183 (one open `inbox_feedback` request, a unique index) is in the repo and NOT on
   prod: it is applied at the cut-over, with the skill.** Units: `phase23_180`, `_181` (run as the role),
   `_182` pass; `phase23_183` fails with "migration 183 is not applied" until then, by design.
@@ -1194,8 +1196,8 @@ A host script then writes each decision's vault note and repo log entry.
   and never changes the sync's outcome. 159 tests, lines 91.96%.
 * **Web** (`InboxApplyButton.tsx`, `inbox-apply-phase.ts`): a press files the request and copies nothing;
   one line of state beside the button (who queued it, that it is running, the worker's first report line);
-  the lookup watches for a request a sync filed; the paste command only when nothing has claimed the request
-  after 75 s. 2456 tests on the branch before the stack; the Inbox files re-run after it.
+  the lookup watches for a request a sync filed, and the page refreshes when the answered count moves; the
+  paste command only when nothing has claimed the request after 75 s. 2895 tests with Phase 21 merged in.
 * **Skills.** `skills/inbox-apply`: one document for the container and for a session, with `context.md` and
   `writer.md` shared by both; the decision record replaces "archive only after the note exists".
   `skills/bb-sync`: step 0 is gone; step 5b files the request after a done sync and runs the skill itself
@@ -1203,14 +1205,15 @@ A host script then writes each decision's vault note and repo log entry.
 * **Exporter** (`scripts/inbox-decisions-export.mjs`, `inbox-decisions-pr.mjs`, `lib/inbox-decision-render.mjs`):
   note, day file, ingest, mark; into a worktree on `docs/inbox-decisions` with one PR kept open. 27 tests;
   a `--dry-run` against prod resolved the vault and reached both functions.
-* **Worker** (`apply/`): the batch, the SQL guard, the tool gate, the report, the pass, the `claude -p` run,
-  the SQL MCP server. 90 tests, lines 92.85%.
+* **Worker** (`apply/`): the batch, the tokenizer and the SQL guard, the tool gate, the report, the pass, the
+  `claude -p` run, the SQL MCP server with its two tools (`query`, read-only; `apply_item`, one item in a
+  transaction the server runs). 119 tests, lines 94.64%.
 * **Image** (`docker/apply/`, `compose.yaml` service `apply`, profile `apply`): builds as `bb2dash-wt23`;
   its own network and volume, three secret files, no port, nothing shared with `sync`.
 
 **Not done, in the order it has to happen (the cut-over)**
 
-1. PR #78 (Phase 21) merges; this branch's PR is then against `main`.
+1. ~~PR #78 (Phase 21) merges.~~ Done 2026-10-07 20:27Z; #79 is against `main`.
 2. Stack sets `inbox_apply_runner`'s password and writes `inbox_apply_db_url` into `SECRETS_DIR` (the
    session-pooler DSN, user `inbox_apply_runner.goultdzqcavefcgnifdy`, port 5432, `?sslmode=verify-full`).
    Nothing can connect as the role until then, so **no real run of the worker has been made**.
@@ -1229,9 +1232,12 @@ A host script then writes each decision's vault note and repo log entry.
 * The four units that assert live course data (`grading_invariants`, `phase16_106_v1_recheck`,
   `phase18_122_supersede_rule`, `phase18_golden_truth`) failed on 2026-10-07; the rows they name were last
   written by the 18:20Z sync, before this phase's first migration at 19:10Z.
-* `net.http_post` is executable by PUBLIC and cannot be revoked by the project's owner: the SQL guard is the
-  only thing between a prompt-injected SQL session and an outbound post (DECISIONS). Worth a ticket with
-  Supabase, or a look at whether pg_net can be dropped.
+* `net.http_post` is executable by PUBLIC and cannot be revoked by the project's owner. After review round 1
+  a read cannot use it (the database refuses writes in a read-only transaction) and a write statement is
+  refused unless every call in it is on the allow-list; that list is still the only thing between a steered
+  writer and an outbound post. Worth a ticket with Supabase, or a look at whether pg_net can be dropped.
+* Two units read failed on any branch without this one: `phase23_183` by design, and on `main` the three
+  phase14 units that pin `sync_runner`'s function set at thirteen.
 * The worker's refusal of an API key reads "the Workspace runs on the subscription token only": Phase 21's
   sentence, reused with its check.
 * The Vercel preview of the button has not been looked at by Stack.

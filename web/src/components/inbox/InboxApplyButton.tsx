@@ -37,6 +37,7 @@ import {
   useCreateAgentRequest,
   useInboxQueueCount,
   useOpenInboxApplyRequest,
+  useRefreshInboxOnQueueChange,
   useRefreshInboxOnSettled,
 } from '@/lib/queries.sync';
 import {
@@ -88,6 +89,9 @@ export function InboxApplyButton() {
   // When the worker closes the request it has archived rows and moved the count;
   // the list and the footer refresh on that transition, not on a reload.
   useRefreshInboxOnSettled(request?.state ?? null);
+  // A run this page never saw a request for (it opened and closed between two looks, or it was
+  // the first of a follow-up chain) still moved the answered count: refresh on that too.
+  useRefreshInboxOnQueueChange(count);
 
   useEffect(() => {
     if (!toast) return;

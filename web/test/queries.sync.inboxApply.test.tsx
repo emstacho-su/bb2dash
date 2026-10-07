@@ -82,6 +82,7 @@ const {
   openSyncRequestOptions,
   syncKeys,
   useCreateAgentRequest,
+  useRefreshInboxOnQueueChange,
   useResolveAttentionItem,
 } = await import('@/lib/queries.sync');
 
@@ -218,6 +219,44 @@ describe('inboxQueueCountOptions — how many answers are waiting', () => {
   it('throws the Postgres error rather than showing a count of nothing', async () => {
     stub.result.error = { message: 'permission denied for view v_inbox_queue' };
     await expect(run(inboxQueueCountOptions())).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe('the answered count is how the page notices a run it never saw (Phase 23, review round 1)', () => {
+  function wrapper(queryClient: QueryClient) {
+    return function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    };
+  }
+  const interval = (data: unknown) =>
+    (inboxQueueCountOptions().refetchInterval as (query: { state: { data: unknown } }) => unknown)({ state: { data } });
+
+  it('the count is read again every 30 seconds while answers wait, and not at all when none do', () => {
+    expect(interval(3)).toBe(INBOX_APPLY_WATCH_MS);
+    expect(interval(0)).toBe(false);
+    expect(interval(undefined)).toBe(false);
+  });
+
+  it('a count that moved refreshes the Inbox list and the Home counts; the first read and a steady count do not', () => {
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { rerender } = renderHook(({ count }: { count: number | null }) => useRefreshInboxOnQueueChange(count), {
+      wrapper: wrapper(queryClient),
+      initialProps: { count: null as number | null },
+    });
+    rerender({ count: 3 });
+    rerender({ count: 3 });
+    expect(invalidate).not.toHaveBeenCalled();
+
+    rerender({ count: 0 });
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toEqual([syncKeys.attentionAll(), syncKeys.status()]);
+    // The count's own cache is not among them: a refresh never causes another.
+    expect(keys).not.toContainEqual(syncKeys.inboxQueueCount());
+
+    rerender({ count: null });
+    rerender({ count: 0 });
+    expect(invalidate).toHaveBeenCalledTimes(2);
   });
 });
 

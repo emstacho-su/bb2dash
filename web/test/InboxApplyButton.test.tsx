@@ -51,6 +51,7 @@ const requestState = { data: null as Row | null };
 const openState = { data: null as Row | null, isPending: false };
 const queueState = { data: undefined as number | undefined };
 const refreshOnSettled = vi.fn();
+const refreshOnQueueChange = vi.fn();
 const openLookup = vi.fn();
 const followedIds: (number | null)[] = [];
 
@@ -73,6 +74,7 @@ vi.mock('@/lib/queries.sync', async (importOriginal) => {
     },
     useInboxQueueCount: () => queueState,
     useRefreshInboxOnSettled: refreshOnSettled,
+    useRefreshInboxOnQueueChange: refreshOnQueueChange,
   };
 });
 
@@ -364,5 +366,16 @@ describe('Apply answers — when the worker closes the request', () => {
   it('passes null while no request is followed', () => {
     render(<InboxApplyButton />);
     expect(refreshOnSettled).toHaveBeenLastCalledWith(null);
+  });
+
+  it('also refreshes on the answered count, for a run it never saw a request for', () => {
+    queueState.data = 3;
+    const view = render(<InboxApplyButton />);
+    expect(refreshOnQueueChange).toHaveBeenLastCalledWith(3);
+    view.unmount();
+
+    queueState.data = undefined;
+    render(<InboxApplyButton />);
+    expect(refreshOnQueueChange).toHaveBeenLastCalledWith(null);
   });
 });
