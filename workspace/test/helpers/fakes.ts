@@ -245,6 +245,11 @@ export interface FakeProcessOptions {
   readonly holdsOutput?: boolean;
   /** Cut the output into chunks of this many characters, so lines arrive in pieces. */
   readonly chunkChars?: number;
+  /**
+   * What a hanging process still writes once it is told to stop, as one chunk, before its output
+   * closes: a CLI that ends its turn on the signal. The reader sees it after the kill.
+   */
+  readonly linesOnKill?: ReadonlyArray<unknown>;
   readonly stderr?: string;
 }
 
@@ -269,7 +274,8 @@ export function fakeProcess(options: FakeProcessOptions): FakeProcess {
     ended = exit;
     settle(exit);
   };
-  const body = options.lines.map((line) => `${JSON.stringify(line)}\n`).join('');
+  const textOfLines = (lines: ReadonlyArray<unknown>): string => lines.map((line) => `${JSON.stringify(line)}\n`).join('');
+  const body = textOfLines(options.lines);
   const size = options.chunkChars ?? body.length;
   const chunks: string[] = [];
   for (let at = 0; at < body.length; at += Math.max(1, size)) chunks.push(body.slice(at, at + Math.max(1, size)));
@@ -281,6 +287,7 @@ export function fakeProcess(options: FakeProcessOptions): FakeProcess {
     }
     if (options.hang) {
       await outputClosed;
+      if (options.linesOnKill) yield Buffer.from(textOfLines(options.linesOnKill), 'utf8');
       return;
     }
     finish(options.exit);

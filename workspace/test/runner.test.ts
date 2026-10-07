@@ -21,6 +21,7 @@ import { ABORTED, STORED_SESSION_ID, claimOf, delta, result, scriptedTurn, type 
 import { loopHarness as loop, turnHarness as harness, useFakeClock } from './helpers/turn-harness.js';
 
 // The rest of the runner's behaviour, in files small enough to read: each registers its own suites.
+import './runner/abort-result.suite.js';
 import './runner/cli-turn.suite.js';
 import './runner/closing.suite.js';
 import './runner/db.suite.js';
