@@ -1,8 +1,15 @@
 /* The message column. Existing tokens only, no new colour; Phase 22 restyles. */
 
 /* The column scrolls inside itself, so the composer under it stays in reach
-   while a long answer is written. */
+   while a long answer is written.
+
+   It is positioned because it scrolls: a box clips and moves only what it
+   contains, and each turn's screen-reader label is an absolute box
+   (`.sr-only`, globals.css). Left to the page, the labels stayed where the
+   unscrolled column would have put them, and the document grew as tall as
+   the whole conversation (W-1). */
 .column {
+  position: relative;
   min-height: calc(var(--space-12) * 3);
   max-height: 62dvh;
   overflow-y: auto;
