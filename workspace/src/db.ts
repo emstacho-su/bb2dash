@@ -205,11 +205,14 @@ export interface DsnParts {
 
 /** The session pooler's port, read when the DSN names none. */
 const DEFAULT_PG_PORT = 5432;
+/** Port 0 is no port: the driver takes `PGPORT` or its own default in its place. */
+const NO_PORT = 0;
 
 /**
  * The five parts of the DSN, percent-decoded. Every part must be there: the driver fills an empty
  * one from the `PG*` environment or its own defaults, and the runner connects to what its secret
- * names or not at all. The message names the part, never a value.
+ * names or not at all. Port 0 is refused for the same reason, as `assertRunnerDsn` refuses it at
+ * start (ruling X1). The message names the part, never a value.
  */
 export function dsnParts(dsn: string): DsnParts {
   let url: URL;
@@ -233,6 +236,7 @@ export function dsnParts(dsn: string): DsnParts {
   for (const name of ['host', 'user', 'password', 'database'] as const) {
     if (parts[name] === '') throw new Error(`db: the DSN names no ${name}`);
   }
+  if (parts.port === NO_PORT) throw new Error('db: the DSN points at port 0, which is no port');
   return parts;
 }
 
