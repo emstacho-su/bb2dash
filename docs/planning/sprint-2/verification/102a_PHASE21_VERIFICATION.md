@@ -1165,11 +1165,11 @@ CRITICAL or HIGH; the PM's severities and dispositions (rulings Z1 and Z2 below)
 
 | id | severity | status |
 |---|---|---|
-| R2-1 | MEDIUM | open |
-| R2-2 | MEDIUM | open |
+| R2-1 | MEDIUM | fixed (round Z) |
+| R2-2 | MEDIUM | fixed (round Z) |
 | R2-3 | LOW | recorded, not changed (Z2) |
 | R2-4 | LOW | recorded, not changed (Z2) |
-| R2-5 | MEDIUM | open |
+| R2-5 | MEDIUM | fixed (round Z) |
 | R2-6 | LOW | recorded, a later migration (Z2) |
 | R2-7 | LOW | recorded, a follow-up (Z2) |
 | R2-8 | LOW | recorded (Z2) |
@@ -1232,3 +1232,45 @@ CRITICAL or HIGH; the PM's severities and dispositions (rulings Z1 and Z2 below)
   sweep cost.
 * **R2-7.** Removing the unreachable fallback is a follow-up (STATUS, Known issues).
 * **R2-8, R2-9, R2-10, R2-11.** Cleanup and style, not behaviour.
+
+## Fix round Z (2026-10-07, merged at `134ee64`)
+
+W-64, test-first, each item a red commit then a green one (`102_W64_VERIFICATION.md`, "Fix round Z
+(2026-10-07)"); then an independent check in a copy of the tree, with mutants for every item.
+
+| item | what changed | red, then green | the check's mutants |
+|---|---|---|---|
+| R2-1 | a `result` line read while the runner's abort signal is set is not a reported result (`providers/claude-cli.ts`); a result read before the abort still wins | 7 failed of 731, then 731 passed | the fix reversed: 7 fail; every aborted turn unreported: 7 fail |
+| R2-2 | an injected monotonic clock (`performance.now()`) for the retry window, the watchdog hold and the turn limit, and also for the watchdog's own 180 s, the 2 s Stop poll and the stored duration | 17 failed of 748, then 750 passed | `Date.now()` put back in each place, one at a time: 5, 4 and 4 fail |
+| R2-5 | NUL stripped from `tool_calls` at any depth; `isBadStatement` (classes 22, 23, 42, not 22023) ends the tries at once; a refused finish gets one minimal close; a refused begin goes straight to its close | 3 failed of 753, then 753; 34 failed of 796, then 797 | not cleaned: 3 fail; statement errors retried again: 12 fail; no minimal close: 7 fail; the close made twice: 7 fail |
+| the NUL secret | `cleanSecret` refuses a value holding a NUL, naming the secret and its file and nothing of the value | 12 failed of 810, then 810 | not refused: 12 fail; the refusal quoting the value: 3 fail |
+
+Gates on the merged branch: runner `npm run typecheck` exit 0; `npx vitest run` 9 files, 810
+tests, 0 failed (the check ran it four times and once shuffled); `src` lines 95.39% (890 of 933);
+longest file 717 lines. Regressions the check tried and could not make: the finish is still
+retried for up to 110 s on a connection failure; a 22023 from finish is still "already closed";
+begin's lost reply still closes the request; a 22023 on begin's first try still skips; the
+watchdog still holds while a finish is retried in the window; a turn with a result before any
+abort is never stored `timeout`. Its verdict: sound, notes only.
+
+The three MEDIUM rows of the range review (R2-1, R2-2, R2-5) read `fixed` in its table.
+
+### Z3. The round's questions (PM, 2026-10-07)
+
+* **A token file holding a NUL is refused where the token is read, before each CLI start**, not
+  at the runner's start: the turn ends `sign_in_expired` and the log names the file. The DSN is
+  refused at start. Kept: the brief has the token read immediately before each CLI start, so a
+  replaced token file needs no restart.
+* **The monotonic clock's wider reach** (the watchdog's 180 s, the Stop poll, the stored
+  duration): kept.
+* **A turn stored under the abort's code keeps the late line's cost**: kept, it is what the CLI
+  reported as spent.
+* **The minimal close stamps the claim's stored session id**, as the unbegun close does: kept.
+* **Recorded, not changed** (STATUS, Known issues): a NUL in the model id, or a lone surrogate in
+  a tool call's text, is refused by the database once and the request closed by the minimal
+  close, so that answer is not stored (one line each would save it: the model id through
+  `withoutNul`, `toWellFormed()` on the strings). `isStatementError('EPIPE')` reads true, so a call
+  failing with that code keeps a broken connection until the watchdog restarts the runner. A Stop
+  or shutdown that lands in the 10 s exit grace after a result still stores `cancelled` or
+  `stale_claim` (CR-5 speaks of `timeout` only).
+* This round was read by its independent check, with mutants, and not by a third `/code-review`.
