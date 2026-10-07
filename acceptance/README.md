@@ -127,12 +127,22 @@ installed and reaches nothing.
 - `pw-<slug of the title>.json`, Playwright's own report for that one test. The slug is the title in
   lower case with every run of other characters as one hyphen (`9-reload-mid-answer`).
 
-**What crosses from one stage to the next** is `carry.json` in the folder the host hands in
-(`ACCEPT_IN`): one object per step id or saved proof name, holding ids and times only, for example
-`{"3": {"request_id": 412, "conversation_id": "…"}, "planner_before": {"fingerprint": "…"}}`. A
-manifest value `carry:3.request_id` reads the same thing. A test reads an earlier step of its own
-stage from that step's facts file, and an earlier stage's from `carry.json`. Phase 21's tests need
-`3.conversation_id` and `14a.request_id` there.
+**What crosses from one stage to the next** is the carry-over, which the host keeps. After a
+sandbox stage it takes the ids and the times out of each step's facts file and files them under the
+step's id: a field crosses only when its name says what it is (`request_id`, `archived_ids`,
+`still_queued_at`) and its value is one. A manifest value `carry:3.request_id` reads one back. A
+host proof with `"save": "planner_before"` leaves its detail under that name, read back as
+`carry:planner_before.fingerprint`.
+
+The next sandbox stage gets the ids and times, and nothing else, as `carry.json` in the folder the
+host hands in (`ACCEPT_IN`): for example `{"3": {"request_id": 412, "conversation_id": "…"}}`. A
+test reads an earlier step of its own stage from that step's facts file, and an earlier stage's
+from `carry.json`. Phase 21's tests need `3.conversation_id` and `14a.request_id` there.
+
+**A step's proofs** are read by the host straight after the step's sandbox stage, and only when
+the operator's verdict, the browser test and the evidence files all stand. Phase 21's manifest also
+lists them as actions of its `walk-proofs` and `back-proofs` stages, which reads each of those
+facts a second time; a `host` step's proofs are read there and nowhere else.
 
 **The switch.** A browser test is skipped where it is declared unless `ACCEPT=1`, and then only the
 test whose exact title is `ACCEPT_ONLY` runs. With neither set, `npx playwright test -c
