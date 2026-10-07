@@ -1214,12 +1214,20 @@ A host script then writes each decision's vault note and repo log entry.
 **Not done, in the order it has to happen (the cut-over)**
 
 1. ~~PR #78 (Phase 21) merges.~~ Done 2026-10-07 20:27Z; #79 is against `main`.
-2. Stack sets `inbox_apply_runner`'s password and writes `inbox_apply_db_url` into `SECRETS_DIR` (the
-   session-pooler DSN, user `inbox_apply_runner.goultdzqcavefcgnifdy`, port 5432, `?sslmode=verify-full`).
-   Nothing can connect as the role until then, so **no real run of the worker has been made**.
-3. One real run under the test project name (`-p bb2dash-wt23 --profile apply up -d apply`) against a
-   single answered test item, before anything else: the first time the real CLI, the real SQL server and
-   the real role meet.
+2. ~~Stack sets `inbox_apply_runner`'s password and writes `inbox_apply_db_url` into `SECRETS_DIR`.~~ Done
+   by Stack, 2026-10-07.
+3. ~~One real run under the test project name against a single answered test item.~~ **Done 2026-10-07
+   21:00Z, passed.** `-p bb2dash-wt23 --profile apply run --rm apply node /app/apply/dist/main.js --once`
+   (the `--once` flag was added for this: the worker takes the oldest queued request, which was Stack's
+   1859). Test request 2380, dated before 1859, with the 16 real answers in its skip list; test item 3782
+   asked for one labelled guest row in `course_staff` for IST.471. In 55 seconds: the firewall rose (three
+   names), the worker logged in as the role and claimed 2380, the session started `inbox-context` (16
+   reads) and `inbox-writer` (3 reads, one `apply_item`), the row was inserted and logged in
+   `inbox_apply_writes` against item 3782, the item was archived with a full `inbox-decision/1` record and
+   `applied_at`, and the request closed done, "1 answer applied", with no follow-up. Reported cost 0.20
+   USD. Request 1859 and the 16 real answers were not touched. The test row was deleted afterwards (the
+   role cannot delete); its log row and the archived item stay as the record. **Still unproven live:** a
+   refusal path, a follow-up chain, the templated rows, and the exporter filing a decision.
 4. The Phase 23 PR merges on Stack's word; `node scripts/install-skills.mjs`; **apply 183**.
 5. Rebuild `sync` (step 11 is in its image) only while no sync is open; start `apply`.
 6. Schedule `scripts/inbox-decisions-pr.mjs` on the host (with `SECRETS_DIR` and `HARNESS_DIR`); the
