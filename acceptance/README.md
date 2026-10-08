@@ -129,8 +129,11 @@ installed and reaches nothing.
   `<alias>.title = '<a literal>'`.
 - Every sandbox stage has its `## Stage:` section in the playbook, and the section names each of
   the stage's tests.
-- **No course text.** The playbook and the manifest quote no answer: no block quote, and no quoted
-  passage longer than a short label, except the acceptance script's own questions.
+- **No course text.** The playbook and the manifest quote no answer: no block quote, and no long
+  passage between double quotes, single quotes or code marks. Long is more than twelve words (in
+  double quotes, also more than sixty characters). A passage is read across line breaks, so
+  wrapping one does not hide it. The acceptance script's own questions and the app's own strings
+  are the two exceptions.
 - **The page's texts, as the page has them.** In a playbook the word "reads" is always followed by
   a text in code marks. A text in code marks that comes straight after "reads", "says" or "shows"
   must stand in `web/src/lib/workspace-labels.ts` or in the phase's browser-test file as a whole

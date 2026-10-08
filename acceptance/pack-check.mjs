@@ -17,8 +17,10 @@ import path from 'node:path';
 import { coerceParam, parseParamSpec, validatePack } from '../scripts/accept-proofs.mjs';
 import { validate } from './schema-lite.mjs';
 
-/** A quoted passage longer than this is refused unless it is one of the five questions. */
+/** A passage in double quotes longer than this is refused, unless it is a question or a text of the app's own. */
 export const QUOTE_MAX_CHARS = 60;
+/** And so is a passage of more words than this, in double quotes, single quotes or code marks. */
+export const QUOTE_MAX_WORDS = 12;
 
 const PHASE_DIR = /^[0-9]{1,2}[a-z]?$/;
 /** `carry:<step or saved name>.<field>`: a value the host read earlier in the run. */
@@ -32,7 +34,14 @@ const RUN_FIELDS = ['started_at'];
 /** How the browser-test file declares a test: its title, then the shots it takes. */
 const DECLARED_TEST = /acceptStep\(\s*'([^']+)',\s*\{\s*shots:\s*\[([^\]]*)\]/g;
 const QUESTION = /export const (QUESTION_(?:LOOKUP|DECISION|DOCUMENT|STANDARD|DEEP))\s*=\s*(['"])((?:(?!\2).)+)\2;/gs;
-const QUOTED = /"([^"\n]+)"|“([^”\n]+)”/g;
+/** The marks a passage can stand between. Each is read in text whose white space is one space, so a passage may wrap. */
+const DOUBLE_QUOTED = /"([^"]+)"|“([^”]+)”/g;
+/**
+ * In single quotes. An apostrophe inside a word (isn't, the answer's) neither opens nor closes
+ * one: the opening mark has no letter or digit before it, the closing mark none after it.
+ */
+const SINGLE_QUOTED = /(?<![A-Za-z0-9])'((?:[^']|(?<=[A-Za-z])'(?=[A-Za-z]))+)'(?![A-Za-z0-9])/g;
+const CODE_MARKED = /`([^`]+)`/g;
 
 /** The file in which the app spells what the Workspace page shows. */
 export const LABELS_PATH = 'web/src/lib/workspace-labels.ts';
@@ -375,22 +384,6 @@ function stringsOf(value) {
   return Object.values(value).flatMap(stringsOf);
 }
 
-function quoteProblems(file, text, questions) {
-  return [...text.matchAll(QUOTED)]
-    .map((match) => match[1] ?? match[2])
-    .filter((passage) => passage.length > QUOTE_MAX_CHARS && !questions.includes(passage))
-    .map((passage) => `${file}: quotes a passage of ${passage.length} characters that is not one of the five questions`);
-}
-
-/** Kept simple on purpose: a pack does not quote an answer. No block quote, and no long quoted passage. */
-function courseTextProblems({ manifest, playbook }, questions) {
-  const problems = [];
-  if (/^\s*>/m.test(playbook)) problems.push('playbook.md: holds a block quote (a line that starts with ">")');
-  problems.push(...quoteProblems('playbook.md', playbook, questions));
-  for (const text of stringsOf(manifest)) problems.push(...quoteProblems('manifest.json', text, questions));
-  return problems;
-}
-
 /** The app's own strings for the Workspace page, as the file's text. A missing file is an error that names it. */
 export function labelsOf(repo) {
   const file = path.join(repo, LABELS_PATH);
@@ -400,6 +393,43 @@ export function labelsOf(repo) {
 
 /** Whether the file's text holds this text with the same quote mark straight before it and straight after it. */
 const holdsQuoted = (source, text) => QUOTE_MARKS.some((mark) => source.includes(`${mark}${text}${mark}`));
+
+const wordsIn = (passage) => passage.trim().split(' ').length;
+
+/**
+ * The long passages a text holds between marks: in double quotes, more than QUOTE_MAX_CHARS
+ * characters or QUOTE_MAX_WORDS words; in single quotes or code marks, more than QUOTE_MAX_WORDS
+ * words (a path or a command in code marks is long in characters and short in words).
+ */
+function longPassages(text) {
+  const flat = text.replace(/\s+/g, ' ');
+  const double = [...flat.matchAll(DOUBLE_QUOTED)].map((match) => match[1] ?? match[2]);
+  const other = [SINGLE_QUOTED, CODE_MARKED].flatMap((marked) => [...flat.matchAll(marked)].map((match) => match[1]));
+  return [
+    ...double.filter((passage) => passage.length > QUOTE_MAX_CHARS || wordsIn(passage) > QUOTE_MAX_WORDS),
+    ...other.filter((passage) => wordsIn(passage) > QUOTE_MAX_WORDS),
+  ];
+}
+
+function quoteProblems(file, text, isOwn) {
+  return longPassages(text)
+    .filter((passage) => !isOwn(passage))
+    .map((passage) => `${file}: quotes a passage of ${passage.length} characters that is not one of the five questions and not a text of the app's own`);
+}
+
+/**
+ * Kept simple on purpose: a pack does not quote an answer. No block quote, and no long passage in
+ * quote marks or code marks, but for the acceptance script's own questions and the app's own
+ * strings (a whole quoted string of `LABELS_PATH` or of the phase's browser-test file).
+ */
+function courseTextProblems({ manifest, playbook, specText }, questions, labels) {
+  const isOwn = (passage) => questions.includes(passage) || holdsQuoted(labels, passage) || holdsQuoted(specText, passage);
+  const problems = [];
+  if (/^\s*>/m.test(playbook)) problems.push('playbook.md: holds a block quote (a line that starts with ">")');
+  problems.push(...quoteProblems('playbook.md', playbook, isOwn));
+  for (const text of stringsOf(manifest)) problems.push(...quoteProblems('manifest.json', text, isOwn));
+  return problems;
+}
 
 /**
  * A text the playbook gives as the page's own must be one. Exactly this is checked, over the
@@ -442,6 +472,7 @@ function waivedProblems({ manifest }, repo) {
 export function packProblems(pack, { repo, manifestSchema }) {
   const shape = validate(manifestSchema, pack.manifest).map((line) => `manifest.json: ${line}`);
   if (shape.length > 0) return shape;
+  const labels = labelsOf(repo);
   return [
     ...identityProblems(pack),
     ...proofsFileProblems(pack),
@@ -452,8 +483,8 @@ export function packProblems(pack, { repo, manifestSchema }) {
     ...carryProblems(pack),
     ...deadlineProblems(pack),
     ...playbookProblems(pack),
-    ...courseTextProblems(pack, questionsOf(repo)),
-    ...pageTextProblems(pack, labelsOf(repo)),
+    ...courseTextProblems(pack, questionsOf(repo), labels),
+    ...pageTextProblems(pack, labels),
     ...waivedProblems(pack, repo),
   ];
 }
