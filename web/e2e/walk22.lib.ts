@@ -1,15 +1,24 @@
 /**
  * What every spec of Phase 22's walk shares (brief 103, task 0). The specs run in the walk box
  * (`scripts/walk-box.mjs` at the root): a throwaway container that builds this checkout's web app,
- * signs in as the owner and reads production data. So a spec only reads, and it says so itself:
+ * signs in as the owner and reads production data. So a spec only reads, and it does not have to
+ * remember to say so: it takes `test` from here, never from `@playwright/test`.
  *
- *   const writes = await guardWrites22(context);   // first, before the page is opened
- *   await quietSync(context);                      // the Sync label stays "Sync" while the walk looks
- *   …
- *   if (shotsAsked22()) await page.screenshot({ path: shotPath22('01-home-dark.png') });
- *   assertNoWrites(writes);                        // from ./walk
+ *   import { expect, quietSync, shotPath22, shotsAsked22, test } from './walk22.lib';
  *
- * Here, in this order: where a shot goes; the write guard; the quiet Sync button.
+ *   test('home, dark', async ({ page, context }) => {
+ *     await quietSync(context);                    // the Sync label stays "Sync" while the walk looks
+ *     …
+ *     if (shotsAsked22()) await page.screenshot({ path: shotPath22('01-home-dark.png') });
+ *   });
+ *
+ * That `test` puts the write guard on the context before the test runs and fails the test
+ * afterwards if it tried to write. `walk.ts` has an older guard with nearly the same name,
+ * `guardWrites`, which lets every RPC through; a spec written from Phase 22 on never takes it
+ * (`test/walk22-lib.test.ts` reads every new file under `web/e2e` and holds that).
+ *
+ * Here, in this order: where a shot goes; the write guard; the guarded `test`; the quiet Sync
+ * button.
  *
  * Not a spec: the config's `testMatch` takes `*.spec.ts` only. Like the specs, it drives the built
  * app from the outside and imports nothing from `src/`. What it copies from there (the Sync
@@ -18,8 +27,8 @@
 
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import type { BrowserContext, Route } from '@playwright/test';
-import { guardWrites } from './walk';
+import { test as playwrightTest, type BrowserContext, type Route } from '@playwright/test';
+import { assertNoWrites, guardWrites } from './walk';
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
@@ -197,6 +206,9 @@ const GUARDED = new WeakMap<BrowserContext, string[]>();
  *
  * Returns the record, for `assertNoWrites` from `./walk`. Call it before the page is opened, and
  * before `quietSync`. Calling it again on the same context returns the same record.
+ *
+ * A spec does not call this for the context Playwright hands it: `test` below already has. It is
+ * called by hand only for a context the spec opens itself (`browser.newContext()`).
  */
 export async function guardWrites22(context: BrowserContext): Promise<string[]> {
   const known = GUARDED.get(context);
@@ -220,6 +232,35 @@ export async function guardWrites22(context: BrowserContext): Promise<string[]> 
   GUARDED.set(context, attempted);
   return attempted;
 }
+
+/* ---------------------------------------------------------------------------
+ * The guarded test
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The guard around one test: on the context before `runTest` runs the test, and after it the
+ * test fails if anything was recorded. The body of the `writes22` fixture, apart so that it can be
+ * tested without a browser.
+ */
+export async function withWriteGuard22(context: BrowserContext, runTest: (writes: string[]) => Promise<void>): Promise<void> {
+  const writes = await guardWrites22(context);
+  await runTest(writes);
+  assertNoWrites(writes);
+}
+
+/**
+ * Playwright's `test`, with the write guard on every test of the spec that takes it from here.
+ * `writes22` is an automatic fixture: it runs for each test whether the test names it or not,
+ * before the test's own page is opened, and it fails the test that tried to write. A spec cannot
+ * leave the guard out or take the older one by mistake, because it never names a guard at all.
+ *
+ * A test may name `writes22` to read the record. One that ends with anything in it fails.
+ */
+export const test = playwrightTest.extend<{ writes22: string[] }>({
+  writes22: [({ context }, use) => withWriteGuard22(context, use), { auto: true }],
+});
+
+export { expect } from '@playwright/test';
 
 /* ---------------------------------------------------------------------------
  * The quiet Sync button
@@ -437,7 +478,8 @@ export function quietSyncAnswer(phase: SyncPhase22, request: QuietRequest, now: 
  *
  * The button's reads of `agent_requests` and of its run in `sync_runs` are answered here, and so
  * is its insert: a press of Sync shows its toast, files nothing, and is not recorded as a write.
- * Everything else goes on to the write guard, which must be on the context first.
+ * Everything else goes on to the write guard, which must be on the context first (it is, in
+ * every test of a spec that takes `test` from here).
  *
  * Calling it again pins another phase; the page reads it at its next poll (10 s) or on a reload.
  */
