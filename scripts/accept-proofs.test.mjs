@@ -10,6 +10,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+
 import {
   EXIT,
   ProofError,
@@ -23,7 +25,7 @@ import {
   run,
   validatePack,
 } from './accept-proofs.mjs';
-import { PACK_21, SHA, argvFor, columnsOf } from './accept-proofs-kit.mjs';
+import { PACK_21, REPO, SHA, argvFor, columnsOf } from './accept-proofs-kit.mjs';
 
 const UUID_A = '0b6f7c1e-2d3a-4b5c-8d9e-0f1a2b3c4d5e';
 const UUID_B = '9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d';
@@ -130,8 +132,41 @@ test('the pack is read from the commit it is given, never from the working tree'
   };
   assert.deepEqual(Object.keys(readPackAt({ phase: '21', sha: SHA, gitShow })).sort(), Object.keys(PACK_21).sort());
   assert.deepEqual(asked, [`${SHA}:acceptance/21/proofs.json`]);
-  assert.throws(() => readPackAt({ phase: '21', sha: SHA, gitShow: () => { throw new Error('fatal: path does not exist'); } }), /no acceptance\/21\/proofs\.json at/);
   assert.throws(() => readPackAt({ phase: '21', sha: SHA, gitShow: () => '{ not json' }), /is not valid JSON/);
+});
+
+test("a pack that cannot be read says why, in git's own first line", () => {
+  const refusedWith = (gitShow, pattern) =>
+    assert.throws(
+      () => readPackAt({ phase: '21', sha: SHA, gitShow }),
+      (error) => error instanceof ProofError && error.code === 'bad_pack' && pattern.test(error.message),
+    );
+  // What git wrote, first line only: a commit that was never fetched is not "no proofs.json".
+  const gitFailed = Object.assign(new Error(`Command failed: git show ${SHA}:acceptance/21/proofs.json`), {
+    status: 128,
+    stderr: `fatal: bad object ${SHA}\nhint: a second line nobody needs\n`,
+  });
+  refusedWith(() => { throw gitFailed; }, new RegExp(`^acceptance/21/proofs\\.json at ${SHA} could not be read: git said "fatal: bad object ${SHA}"$`));
+  // No git at all: there is no stderr, and the error's own first line is the cause.
+  refusedWith(() => { throw Object.assign(new Error('spawnSync git ENOENT\n    at somewhere'), { code: 'ENOENT' }); }, /could not be read: spawnSync git ENOENT$/);
+
+  // The real git, asked for a path this commit does not hold, and for a commit this repository does not hold.
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO, encoding: 'utf8' }).trim();
+  assert.throws(() => readPackAt({ phase: '99', sha: head }), /could not be read: git said "fatal: path 'acceptance\/99\/proofs\.json' does not exist in /);
+  assert.throws(() => readPackAt({ phase: '21', sha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' }), /could not be read: git said "fatal: .*deadbeef/);
+});
+
+test('through run(), the cause of an unread pack is on stderr and the one line still says bad_pack', async () => {
+  const out = [];
+  const err = [];
+  const code = await run(['99', 'turn', '--sha', execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO, encoding: 'utf8' }).trim()], {
+    out: (line) => out.push(line),
+    err: (line) => err.push(line),
+    clientFactory: async () => assert.fail('no connection is opened for a pack that cannot be read'),
+  });
+  assert.equal(code, EXIT.error);
+  assert.deepEqual(out.map((line) => JSON.parse(line)), [{ name: 'turn', pass: false, detail: { error: 'bad_pack' } }]);
+  assert.match(err.join('\n'), /git said "fatal: path 'acceptance\/99\/proofs\.json' does not exist/);
 });
 
 /* ---------------------------------------------------------------------------------------------
