@@ -2,7 +2,8 @@
 
 Phase 22, brief `docs/planning/sprint-2/briefs/103_PHASE22_styling.md`. Worker W-67, branch
 `feat/styling-22-foundation`, worktree `bb2dash-wt-22-foundation`, cut from `feat/styling-22` at c42924f.
-Written 2026-10-08. Tasks 1 and 2: the token audit ratchet and its frozen allowlist.
+Written 2026-10-08. Tasks 1 and 2: the token audit ratchet and its frozen allowlist. A checker round followed
+the same day (findings CR-1 and CR-2). It has its own section below, and the numbers here are the ones after it.
 
 No file under `web/src` was touched, not even for a probe. Nothing under `project-state/` was touched. The
 brief was not edited. No dependency was added: the scanner imports nothing.
@@ -13,19 +14,26 @@ brief was not edited. No dependency was added: the scanner imports nothing.
 |---|---|
 | `10ed7d4` | feat(22-T1): `web/test/token-audit.scan.ts`, `web/test/token-audit.test.ts`, the four baselines |
 | `ce2519f` | feat(22-T2): `web/test/token-audit.allowlist.ts`, the scanner's three allowances, the entry checks, two baselines lowered |
-| this commit | docs(22): this note, with the task-2 sha |
+| `2fd1d44` | docs(22): this note, with the task-2 sha |
+| `172a0ee` | fix(22-T2): CR-1, first step: a width condition is read whole at any depth |
+| `a1afeae` | fix(22-T2): CR-2: an A5 entry names exactly one key of its file |
+| `efac39b` | fix(22-T2): CR-1, second step: a width condition that holds a function fails whole |
+| this commit | docs(22): the checker round on the record |
 
 **The task-2 commit is `ce2519f5fea5c752cc712f3df0e15a924f5e5328`.** After it the allowlist file is not edited
 by anyone. The check at the PR:
 
     git diff --quiet ce2519f5fea5c752cc712f3df0e15a924f5e5328 HEAD -- web/test/token-audit.allowlist.ts
 
-It exits 0 today. The file's blob at that commit is `b2e43b9636bb9f34c5174da51e911e5de9c1c1d2`.
+It exits 0 today, after the checker round too. The file's blob at that commit is
+`b2e43b9636bb9f34c5174da51e911e5de9c1c1d2`, and it is the blob on the branch now.
 
-## The four gates, on the task-2 tree
+## The four gates
 
 Each command was run by itself from `web/`. No result was read through a pipe: the output went to a file and
 the exit code came from the shell.
+
+On the task-2 tree (`ce2519f`):
 
 | Command | Exit | Result |
 |---|---|---|
@@ -34,7 +42,17 @@ the exit code came from the shell.
 | `npm run typecheck` | 0 | `tsc --noEmit`, no error |
 | `npx eslint . --max-warnings 0` | 0 | no output |
 
-2999 is `main`'s 2913 plus the 86 cases of the new file. The first `npm test`, at task 1, gave 2981.
+After the checker round (`efac39b`):
+
+| Command | Exit | Result |
+|---|---|---|
+| `npx vitest run test/token-audit.test.ts` | 0 | 1 file, 89 passed (89), 0 failed |
+| `npm test` | 0 | 157 files, 3002 passed (3002), 0 failed |
+| `npm run typecheck` | 0 | `tsc --noEmit`, no error |
+| `npx eslint . --max-warnings 0` | 0 | no output |
+
+2999 is `main`'s 2913 plus the 86 cases of the new file. 3002 is the same 2913 plus 89: the round added three
+cases. The first `npm test`, at task 1, gave 2981.
 
 ## Task 1: the token audit ratchet (P-15)
 
@@ -181,6 +199,86 @@ sums were compared before and after, and matched. The allowlist probe ran before
 | Unresolved | the live pass told the token file is elsewhere | 1 | 1,591 unresolved references listed |
 | Stale entry | `.barArea`'s value written as `121px` in the allowlist | 1 | the entry reported stale, and `UpcomingTracker.module.css` at 20 above its 19 |
 
+## The checker round: CR-1 and CR-2
+
+An independent checker reviewed tasks 1 and 2 and sent two findings. Both were verified and both are right.
+Both fixes are in files that are not frozen. **The allowlist file was not changed**, so the task-2 sha stands.
+No baseline was changed: the four sums are still 35, 123, 106 and 72.
+
+| Finding | Verdict | Where the fix is | Commits |
+|---|---|---|---|
+| CR-1: a width wrapped in `calc()` is not read, so a breakpoint outside the set passes | right, applied | `widthLengths` in `web/test/token-audit.scan.ts` | `172a0ee`, `efac39b` |
+| CR-2: A5 lets every key of that name through in its file, and the entry check asks only for one or more | right, applied | the A5 entry check in `web/test/token-audit.test.ts` | `a1afeae` |
+
+### RED, then GREEN
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: one new fixture case per finding, against the task-2 code | `npx vitest run test/token-audit.test.ts` | 1 | 2 failed, 86 passed (88) |
+| GREEN: both fixes | same | 0 | 88 passed (88) |
+| RED: the arithmetic case of CR-1 | same | 1 | 1 failed, 88 passed (89) |
+| GREEN: a width condition that holds a function fails whole | same | 0 | 89 passed (89) |
+
+### CR-1: what was wrong, and what A1 does now
+
+`widthLengths` read only a pair of parentheses with no pair inside it. In `(max-width: calc(700px))` that
+pair is `(700px)`, which names no width, so the prelude gave no length and was not checked at all. The same
+held for `@container`. The brief says of A1: "any other value fails".
+
+Now a pair of parentheses is a width condition when its own text names a width, at any depth. A plain one
+gives its numbers, as before. One that holds a function or a group of its own comes back whole, as written.
+That text equals no allowed value, so the case fails. A height beside a width in a grouped condition, such as
+`((max-height: 500px) or (min-width: 600px))`, is still not read.
+
+The fix is not the one-level regex the checker proposed. Two reasons, both checked:
+
+* **Depth.** A direct call with that regex gives `[]` for `(max-width: calc((700px)))` and for
+  `(min-width: calc(100vw - (2 * 10px)))`. It is the same hole one level down. It also reads the height in
+  `((max-height: 500px) or (min-width: 600px))` as a width.
+* **Arithmetic.** Reading the numbers inside `calc()` is not enough. `(max-width: calc(720px + 720px))` is
+  1440px. Read as numbers it is 720px twice, both in the frozen set, so it passed. `(max-width: var(--x))`
+  gave no number and was not counted as a width query. `172a0ee` had this hole and `efac39b` closed it.
+
+**Default taken**, the most conservative reading: a breakpoint is one of the eight literals, written plain.
+A function in a width condition fails whatever its value, so `calc(720px)` fails too. No width query on the
+tree uses a function today: the 17 `@media` queries and the one `@container` are all plain.
+
+### CR-2: what was wrong, and what A5 does now
+
+The scanner lets an A5 key's name through anywhere in its file. The entry check asked that the file sets the
+key at least once. So a second inline `height` in `PlannerWeek.tsx`, or more `marginLeft` keys in
+`CourseClasswork.tsx`, counted 0 and nothing failed.
+
+The check now asks for exactly one key of that name in the file, read with nothing let through. That is A3's
+exactly-one rule, for A5. Each file holds exactly one such key today (line 123 in both). The scanner did not
+change: the name still counts 0 in its file, and the A5 case is what fails when a second key appears. That
+case's title gained the word "once". The title the task row names, "A5 holds exactly two keys", is unchanged.
+
+### The probes, before and after
+
+The probes ran in a scratch copy of `web/src` and `web/test` outside the repository, with the worktree's
+vitest. No file under `web/src` in the worktree was touched. Each probe appended one line to one file of the
+copy, ran `npx vitest run test/token-audit.test.ts` by itself, and put the file back. "Before" is the audit
+as it stood at `2fd1d44`. "After" is `efac39b`.
+
+| Probe | File of the copy | Exit before | Exit after | The case that fails after |
+|---|---|---|---|---|
+| `@media (max-width: calc(700px))` | `TopNav.module.css` | 0 | 1 | "breakpoint set equals {480, 620, 640, 720, 760, 820, 900, 1023.98}" |
+| `@media (max-width: calc(100vw - (2 * 10px)))` | same | 0 | 1 | the same |
+| `@media (max-width: calc((700px)))` | same | 0 | 1 | the same |
+| `@media (max-width: calc(720px))` | same | 0 | 1 | the same |
+| `@media (max-width: calc(720px + 720px))` | same | 0 | 1 | the same |
+| `@media (max-width: var(--color-text))` | same | 0 | 1 | the same |
+| `@media (max-width: 700px)`, plain | same | 1 | 1 | the same |
+| `@media (max-width: 720px)`, plain, the control | same | 0 | 0 | none |
+| `@container (min-width: calc(650px))` | `CourseTimeline.module.css` | 0 | 1 | "the one @container entry is 600px in CourseTimeline.module.css" |
+| `@container (min-width: calc(600px))` | same | 0 | 1 | the same |
+| a second element with `style={{ height: 13 }}` | `PlannerWeek.tsx` | 0 | 1 | A5, "each is a key its file sets today, once, read back by exactly one line of its test" |
+| two more `style={{ marginLeft: … }}` | `CourseClasswork.tsx` | 0 | 1 | the same A5 case |
+
+Every "after" failure is one case of 89, and the other 88 pass. The copy's control run, with nothing
+appended, gave 89 passed.
+
 ## Pinned or mirrored declarations found beyond the nine the brief names
 
 **None was added as an A3 entry.** The search read every test and spec that names a stylesheet (twelve files
@@ -236,10 +334,12 @@ Defaults taken where the brief leaves room:
 * **A3 names declarations of top-level rules only.** The same declaration inside an at-rule is not the
   entry's and still counts. Each entry must match exactly one live declaration.
 * **A5 entries carry a source backing too**: the test line that reads the key back. The test also checks
-  that each key is still set in its file.
-* **A1 reads plain width conditions**: `min-width`, `max-width`, `width`, `inline-size` and the range
-  syntax. A height condition is not governed. A `calc()` inside a condition is not read. The container case
-  asks that every live `@container` width is the named entry and that at least one exists.
+  that its file sets the key exactly once (CR-2; before the checker round it asked for at least once).
+* **A1 reads width conditions**: `min-width`, `max-width`, `width`, `inline-size` and the range syntax, at
+  any depth of a grouped condition. A height condition is not governed. A width condition that holds a
+  function or a group of its own, such as `calc()`, `min()` or `var()`, fails whatever its value (CR-1;
+  before the checker round it was not read). The container case asks that every live `@container` width is
+  the named entry and that at least one exists.
 * **A TypeScript string that is a colour includes the named colours**, so `fill="white"` counts. `main` has
   no such string. A JSX attribute string is a string literal. A template literal counts when it is a colour
   function, such as `` `rgba(0, 0, 0, ${a})` ``.
@@ -253,8 +353,9 @@ Defaults taken where the brief leaves room:
 * **The cluster test fails for any scanned file with no cluster**, the brief's wording. That covers the
   narrower "a file with a non-zero count".
 * **Baselines are lowered by hand.** There is no update switch. The failure prints the number to write.
-* **File size.** The brief fixes three modules, so the scanner holds both readers: 778 lines, under the
-  800-line limit. The test is 673 lines and the allowlist 293.
+* **File size.** The brief fixes three modules, so the scanner holds both readers: 797 lines after the
+  checker round (778 at task 2), under the 800-line limit with three lines to spare. The next change that
+  adds to the scanner has to split it. The test is 714 lines (673 at task 2) and the allowlist 293.
 
 ## For the workers who come after
 
@@ -264,3 +365,7 @@ Defaults taken where the brief leaves room:
 * A new file needs no baseline while it counts 0. It does need a cluster: a path under no prefix fails.
 * `web/test/token-audit.allowlist.ts` is frozen. A literal it does not let through is removed or becomes a
   token.
+* A breakpoint is written plain: `@media (max-width: 720px)`. A `calc()`, a `min()` or a `var()` in a width
+  condition fails, even around an allowed value.
+* An A5 key is one key. A second inline `height` in `PlannerWeek.tsx`, or a second `marginLeft` in
+  `CourseClasswork.tsx`, fails the A5 case although the scanner counts it 0.
