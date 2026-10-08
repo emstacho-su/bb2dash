@@ -424,6 +424,65 @@ runTest('--url: nothing is built or served, that host is signed in to and walked
   assert.equal(called(build.calls, 'node e2e/login.mjs')[0], `node e2e/login.mjs WALK_BASE_URL=${LOCAL} share=none`);
 });
 
+/* ---------------------------------------------------------------------------------------------
+ * The sign-in: nothing login.mjs prints is passed on
+ * ------------------------------------------------------------------------------------------ */
+
+// When a step of the sign-in fails, Playwright's message carries the value that was being typed
+// (`fill("…")` in its call log) or the whole address, share token included. login.mjs prints that
+// message. The stand-in prints the same shapes with a sentinel in them.
+const FAILED_SIGN_INS = Object.freeze([
+  { what: 'a field that cannot be filled', env: { STUB_LOGIN: 'fill', STUB_TYPED: SECRET.password }, step: 'locator.fill on #password (timed out)' },
+  {
+    what: 'a page that cannot be opened',
+    env: { STUB_LOGIN: 'goto', STUB_TYPED: SECRET.share, WALK_BOX_MODE: 'url', WALK_BASE_URL: 'https://bb2dash.example', WALK_VERCEL_SHARE: SECRET.share },
+    step: 'page.goto',
+  },
+  { what: 'an error of another shape', env: { STUB_LOGIN: 'other', STUB_TYPED: SECRET.email }, step: 'a step login.mjs does not name' },
+]);
+
+runTest('a failed sign-in ends with 75 and prints nothing login.mjs printed: not the value typed, not the address with the share token', async () => {
+  await each(FAILED_SIGN_INS, async ({ what, env }) => {
+    const box = makeBox();
+    const { status, out, calls } = await runEntry(box, ['all', SPEC, '--'], env);
+    assert.equal(status, 75, `${what}: ${out}`);
+    assertNoSecret(out, what);
+    assert.doesNotMatch(out, /Call log|fill\("|_vercel_share=|login\.mjs failed: |TypeError/, `${what}: login.mjs's own words were passed on`);
+    assert.equal(called(calls, 'npx playwright').length, 0, `${what}: the walk still ran`);
+  });
+});
+
+runTest('a failed sign-in is told in fixed words: the call that failed, by Playwright\'s name for it', async () => {
+  await each(FAILED_SIGN_INS, async ({ what, env, step }) => {
+    const box = makeBox();
+    const { out } = await runEntry(box, ['all', SPEC, '--'], env);
+    assert.ok(out.includes(`[walk-box] login.mjs ended with exit code 1 at: ${step}\n`), `${what}: ${out}`);
+    assert.match(out, /what login\.mjs printed is not shown/);
+  });
+});
+
+runTest('a sign-in that lands prints nothing login.mjs printed either', async () => {
+  const box = makeBox();
+  const { status, out } = await runEntry(box, ['all', SPEC, '--']);
+  assert.equal(status, 0, out);
+  assert.doesNotMatch(out, /Session saved|Signing in at/);
+});
+
+test('entry.sh runs login.mjs in one place, with all it prints caught, and never prints what it caught', () => {
+  const runs = CODE.split('\n').filter((line) => /login\.mjs/.test(line) && /\bnode\b/.test(line));
+  assert.equal(runs.length, 1, 'login.mjs is run in exactly one line');
+  assert.match(runs[0], /^\s*said="\$\(cd "\$WORK_WEB" && [^\n]*\bnode e2e\/login\.mjs 2>&1\)" \|\| code=\$\?$/);
+  // Every line that reads what was caught: only a test against a fixed pattern, or the hand-over to
+  // the function that makes those tests.
+  const reads = CODE.split('\n')
+    .filter((line) => /\$\{?said\b/.test(line))
+    .map((line) => line.trim());
+  assert.ok(reads.length > 0);
+  for (const line of reads) {
+    assert.match(line, /^(case "\$said" in( \*"[^$]*"\*\) [a-z]+="[^$]*" ;;)*( esac)?|say "login\.mjs ended with exit code \$code at: \$\(failed_login_step "\$said"\)")$/, line);
+  }
+});
+
 runTest('no value handed in is printed: not the login, not a setting, not the share token', async () => {
   const ways = [
     ['a walk that passes', {}],
