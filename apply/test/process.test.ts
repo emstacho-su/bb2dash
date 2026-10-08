@@ -539,7 +539,7 @@ describe('one pass', () => {
         },
       });
       expect(await runPass(p.deps)).toBe('done');
-      expect(p.calls).toEqual(['claim', 'prepare', 'facts', 'close done']);
+      expect(p.calls).toEqual(['claim', 'close done']);
       expect(p.runs).toEqual([]);
       const result = p.closes[0]!.result;
       expect(result).toMatchObject({ archived: 0, claude: { started: false }, error: null, skip: [4, 5], trigger: 'sync' });
@@ -567,7 +567,7 @@ describe('one pass', () => {
         },
       });
       expect(await runPass(p.deps)).toBe('done');
-      expect(p.calls).toEqual(['claim', 'prepare', 'claude', 'facts', 'close done']);
+      expect(p.calls).toEqual(['claim', 'claude', 'close done']);
       expect(p.runs).toEqual([{ requestId: 1860, itemIds: [4, 5] }]);
       expect(p.closes[0]!.result).toMatchObject({ skip: [], skip_seen: [] });
       expect(p.lines.some((l) => l.includes('held answer'))).toBe(false);
@@ -593,7 +593,7 @@ describe('one pass', () => {
         },
       });
       expect(await runPass(p.deps)).toBe('done');
-      expect(p.calls).toEqual(['claim', 'archive 1', 'facts', 'close done']);
+      expect(p.calls).toEqual(['claim', 'archive 1', 'close done']);
       expect(p.closes[0]!.result).toMatchObject({ lines: ['1 recorded only'], skip: [], skip_seen: [] });
     });
   });

@@ -17,7 +17,7 @@
  * Every step is an injected port, so the pass runs on fakes in loop.test.ts.
  */
 
-import { planBatch, templatedDecision, type Prepared } from './batch.js';
+import { planBatch, skipSet, templatedDecision, type Prepared } from './batch.js';
 import { MAX_RUNS_PER_DAY, POLL_INTERVAL_MS } from './config.js';
 import type { ApplyRpc } from './db.js';
 import { buildReport, type ClaudeOutcome } from './report.js';
@@ -64,6 +64,9 @@ async function runBatch(d: PassDeps, requestId: number, onRun: () => void): Prom
     }
   }
 
+  if (plan.skipped.length > 0) {
+    d.log(`pass: request ${requestId}: ${plan.skipped.length} held ${plan.skipped.length === 1 ? 'answer' : 'answers'} left out (items ${plan.skipped.join(', ')}); a sync does not try them again`);
+  }
   const batchIds = plan.forClaude.map((row) => row.id);
   const capped = batchIds.length > 0 && prepared.runsToday >= (d.maxRunsPerDay ?? MAX_RUNS_PER_DAY);
   let claude: ClaudeOutcome | null = null;
@@ -83,7 +86,8 @@ async function finish(d: PassDeps, requestId: number, run: BatchRun): Promise<'d
   const report = buildReport({
     trigger: run.prepared.trigger,
     batchIds: run.batchIds,
-    priorSkip: run.prepared.skip,
+    priorSkip: skipSet(run.prepared),
+    seen: new Map(run.prepared.queue.map((row) => [row.id, row.resolvedAt])),
     facts,
     claude: run.claude,
     capped: run.capped,
