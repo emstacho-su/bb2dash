@@ -34,7 +34,7 @@ container, its firewall, the wrapper script) is in bb2dash-stack.
 
 | result | what it means | what happens next |
 |---|---|---|
-| **green** | every automated step has a `pass` from the operator, a passed browser test and passing host proofs | it counts as the acceptance: the PM writes the "accepted" record and cleans up, without asking again |
+| **green** | every automated step has a `pass` from the operator, a passed browser test, its evidence files, and a pass from every host proof the pack gives it | it counts as the acceptance: the PM writes the "accepted" record and cleans up, without asking again |
 | **red** | at least one step failed, was unclear, or left no evidence | nothing is accepted; the PM brings the report to Stack |
 | **blocked** | the run could not judge fairly: the Claude plan's limit was reached, a sync or an Inbox apply was waiting or running when the run began, or the planner changed while one ran | nothing is accepted and nothing is wrong; the run is repeated |
 
@@ -48,8 +48,15 @@ container, its firewall, the wrapper script) is in bb2dash-stack.
 - Anything marked `waived`, with the reason written beside it. For Phase 21: the desktop-window half
   of step 2 (the picture from the PM's walk stands) and step 12 (the merge had already happened).
 - Reading the report when the run is red, and deciding what to do about it.
-- One judgement rests on the operator alone: whether an answer "names the file it read" (Phase 21,
-  step 3). Everything else also has a database or container proof.
+- Knowing what rests on the sandbox alone. What the page showed (a badge, a line of text, that it
+  said the service is offline, a picture) is seen only inside the sandbox: the browser tests run
+  there, and their results and pictures are files the sandbox writes. The host cannot check them
+  again. What the host does prove itself, from the database and the Workspace container, is what
+  happened: which model level answered and with which tool, that a stop reached the service, that
+  a question waited and was then answered, that the planner did not change, that the conversations
+  are archived. For Phase 21, step 2 (the page opens) has no host proof at all, and whether an
+  answer "names the file it read" (step 3) is the operator's judgement. The run's report says for
+  each step how many host proofs it has.
 
 A run costs real questions on Stack's Claude plan. Phase 21's run asks about eight, three of them at
 the most expensive level, plus three short operator sessions.
@@ -196,6 +203,13 @@ hand over the id of an old request that looks right. So Phase 21's proofs also c
   the same tier. So from step 4 on, each step's proof also takes `after`: the request of the step
   before it (`carry:<that step>.request_id`), and its own request must be the later one. The ids
   of steps 3 to 9 therefore rise, and no one request can be handed in for two steps.
+- *A stop needs the runner's hand.* `turn-stopped` passes only when the Workspace service had
+  taken the question and its answer is there and ends cancelled. A question cancelled while it
+  still waited has no claim and no answer; the page's own login can make such a row without the
+  service, so it proves no stop.
+- *A question asked while the service is stopped waits.* `turn-waiting` is step 14a's proof. The
+  host reads it straight after the `offline` stage, while the service is still stopped (only the
+  next stage starts it): the question is in the queue, taken by nobody, and has not expired.
 - *The question really waited.* `turn-answered-after` takes `min_wait_s` (15 for step 14b, the
   seconds step 14a's test watches the question wait) and compares two times of the database: when
   the question was asked and when the Workspace service took it. No clock of a sandbox is read.

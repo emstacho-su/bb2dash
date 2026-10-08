@@ -377,7 +377,8 @@ test("the run's own start is always there to carry, it is the only thing under t
   // Every proof that ties a step to this run takes it, and with it in place the pack is whole.
   const { manifest } = loadPack(REPO, '21');
   const sinces = manifest.steps.flatMap((step) => step.proofs ?? []).map((proof) => proof.with?.since);
-  assert.deepEqual(sinces.filter((since) => since !== undefined), Array(9).fill(RUN_START));
+  // Steps 3 to 9, 14a, 14b and 15: ten proofs read rows this run made.
+  assert.deepEqual(sinces.filter((since) => since !== undefined), Array(10).fill(RUN_START));
   assert.deepEqual(
     problemsAfter((pack) => { stepOf(pack.manifest, '3').proofs[0].with.since = 'carry:run.finished_at'; }),
     ['step 3: "carry:run.finished_at": under "run" the host offers started_at and nothing else'],

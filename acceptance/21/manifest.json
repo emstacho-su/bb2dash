@@ -234,7 +234,17 @@
       "text": "With the Workspace stopped the page says the service is offline within three minutes, and a question asked then waits.",
       "stage": "offline",
       "test": "14a offline",
-      "evidence": ["14a-offline.png", "14a-queued.png", "14a.json"]
+      "evidence": ["14a-offline.png", "14a-queued.png", "14a.json"],
+      "proofs": [
+        {
+          "name": "turn-waiting",
+          "with": {
+            "request": "carry:14a.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "fdcf22c80c0f1bbe98dedb149d968bd6"
+          }
+        }
+      ]
     },
     {
       "id": "14b",
