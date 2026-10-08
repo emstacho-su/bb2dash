@@ -153,6 +153,16 @@ installed and reaches nothing.
 - `pw-<slug of the title>.json`, Playwright's own report for that one test. The slug is the title in
   lower case with every run of other characters as one hyphen (`9-reload-mid-answer`).
 
+**The saved session file.** Before each sandbox stage the laptop signs in to the site and saves
+that session to one file, which the stage's tests read as `ACCEPT_STATE` and save back after each
+test. The file holds more than the sign-in: the browser saves the page's stored data with it, and
+the page stores what it last showed, answers included. So it is treated like the answers
+themselves. It lives only in the laptop's private folder for that one stage, outside every
+repository; the stage's container is handed that one file as `/accept/state.json`; and it is
+deleted when the stage ends, after the laptop has signed that one session out. A test refuses to start
+when `ACCEPT_STATE` or `ACCEPT_OUT` is inside the checkout, also by way of a link that leads into
+it, and the sign-in script refuses the same for the file it saves to (`WALK_STATE_PATH`).
+
 **What crosses from one stage to the next** is the carry-over, which the host keeps. After a
 sandbox stage it takes the ids and the times out of each step's facts file and files them under the
 step's id: a field crosses only when its name says what it is (`request_id`, `archived_ids`,

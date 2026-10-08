@@ -14,7 +14,9 @@
  *                     where it is declared and nothing is written anywhere.
  *   ACCEPT_ONLY       the exact title of the one test this call may run.
  *   WALK_BASE_URL     the site under test.
- *   ACCEPT_STATE      the stage's signed-in browser state (a file).
+ *   ACCEPT_STATE      the stage's signed-in browser state (a file), outside
+ *                     every repository: it holds the sign-in and the page's
+ *                     cached data, answers included.
  *   ACCEPT_OUT        the stage's output folder, outside every repository:
  *                     answers quote course material.
  *   ACCEPT_IN         a folder holding `carry.json`, when earlier stages left
@@ -26,7 +28,8 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join } from 'node:path';
+import { isInside } from './inside.mjs';
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
@@ -102,12 +105,6 @@ export interface AcceptSettings {
   reportFile: string | null;
 }
 
-/** Whether `file` is `folder` itself or anything under it. */
-function isInside(folder: string, file: string): boolean {
-  const fromFolder = relative(resolve(folder), resolve(file));
-  return fromFolder !== '..' && !fromFolder.startsWith(`..${sep}`) && !isAbsolute(fromFolder);
-}
-
 function requiredPath(env: Env, name: string): string {
   const value = env[name] ?? '';
   if (value === '' || !isAbsolute(value)) throw new Error(`ACCEPT=1 needs ${name}: an absolute path`);
@@ -137,6 +134,11 @@ export function acceptSettings(env: Env, checkoutRoot: string): AcceptSettings |
   if (!isAsked(env)) return null;
   const baseUrl = siteOf(env);
   const statePath = requiredPath(env, 'ACCEPT_STATE');
+  // Each test saves the session back to this file, and a saved session also holds the page's
+  // cached data, answers included. "Inside" follows links (`inside.mjs`).
+  if (isInside(checkoutRoot, statePath)) {
+    throw new Error('ACCEPT_STATE is inside the checkout: a saved session, and the page data saved with it, goes outside every repository');
+  }
   const outDir = requiredPath(env, 'ACCEPT_OUT');
   if (isInside(checkoutRoot, outDir)) {
     throw new Error('ACCEPT_OUT is inside the checkout: answers quote course material, and it goes outside every repository');

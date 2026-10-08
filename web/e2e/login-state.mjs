@@ -9,20 +9,16 @@
  * The file is a signed-in session, so the path is held to three rules: it is
  * absolute, it ends in `.json`, and it is not inside this checkout unless it is
  * the default file itself. A session written anywhere else in the checkout
- * would be one `git add` away from a public repository.
+ * would be one `git add` away from a public repository. "Inside" is read by
+ * `inside.mjs`, which follows junctions and symlinks, and which the acceptance
+ * run's browser tests use for `ACCEPT_STATE` and `ACCEPT_OUT` too.
  *
  * No side effects on import: `login.mjs` starts a browser, and a test of this
  * rule must not.
  */
 
-import { isAbsolute, relative, resolve, sep } from 'node:path';
-
-/** Whether `file` is `folder` itself or anything under it. */
-function isInside(folder, file) {
-  const fromFolder = relative(folder, file);
-  // Outside is one level up or more, or (on Windows) another drive, which `relative` gives whole.
-  return fromFolder !== '..' && !fromFolder.startsWith(`..${sep}`) && !isAbsolute(fromFolder);
-}
+import { isAbsolute, resolve } from 'node:path';
+import { isInside } from './inside.mjs';
 
 /**
  * The file the session is saved to.
@@ -37,7 +33,7 @@ export function statePathFrom(env, { root, standard }) {
   if (!isAbsolute(asked)) throw new Error('WALK_STATE_PATH must be an absolute path');
   const file = resolve(asked);
   if (!file.endsWith('.json')) throw new Error('WALK_STATE_PATH must end in .json');
-  if (file !== resolve(standard) && isInside(resolve(root), file)) {
+  if (file !== resolve(standard) && isInside(root, file)) {
     throw new Error('WALK_STATE_PATH is inside this checkout: a saved session belongs outside every repository');
   }
   return file;
