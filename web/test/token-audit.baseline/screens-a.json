@@ -11,9 +11,8 @@
   "web/src/components/planner/PlannerEventWizard.module.css": 2,
   "web/src/components/planner/PlannerItemPopover.module.css": 2,
   "web/src/components/planner/PlannerSeriesScopeDialog.module.css": 2,
-  "web/src/components/planner/PlannerWeek.module.css": 41,
-  "web/src/components/planner/PlannerWeek.tsx": 1,
-  "web/src/components/tracker/StatusSelect.module.css": 3,
-  "web/src/components/tracker/UpcomingTracker.module.css": 20,
+  "web/src/components/planner/PlannerWeek.module.css": 35,
+  "web/src/components/tracker/StatusSelect.module.css": 1,
+  "web/src/components/tracker/UpcomingTracker.module.css": 19,
   "web/src/components/tracker/UpcomingTracker.tsx": 1
 }

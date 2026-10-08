@@ -1,5 +1,5 @@
 /**
- * The token audit's scanner (Phase 22, task 1; P-15, R-53).
+ * The token audit's scanner (Phase 22, tasks 1 and 2; P-15, P-16, R-53).
  *
  * Pure: a path and a source string in, facts out. It reads no file and imports
  * nothing. It is written by hand because D-19 rules out stylelint, postcss and
@@ -46,10 +46,23 @@ export interface FileScan {
   declared: readonly string[];
 }
 
-/** What the caller lets through for one file. */
+/** A declaration named by its rule's whole selector, its property and its whole value. */
+export interface DeclarationKey {
+  selector: string;
+  property: string;
+  value: string;
+}
+
+/** What the caller lets through for one file. Each list counts 0 what it names. */
 export interface Allowance {
-  /** Size literals that count 0, sign ignored: `1px` also lets `-1px` through. */
+  /** Size literals, sign ignored: `1px` also lets `-1px` through. */
   sizes?: readonly string[];
+  /** Declarations of top-level rules, each let through whole. */
+  declarations?: readonly DeclarationKey[];
+  /** Colour strings in TypeScript, compared without case. */
+  colours?: readonly string[];
+  /** TSX inline style keys. */
+  styleKeys?: readonly string[];
 }
 
 /** A `var(--name)` that nothing declares. */
@@ -249,6 +262,33 @@ export function parseCss(source: string): ParsedCss {
   return { declarations, atRules };
 }
 
+/**
+ * Whether `declaration` is the one `key` names: a declaration of a top-level
+ * rule with that whole selector, that property and that whole value. The same
+ * line inside an at-rule, or with one length changed, is another declaration.
+ */
+export function sameDeclaration(declaration: CssDeclaration, key: DeclarationKey): boolean {
+  return (
+    declaration.at.length === 0 &&
+    declaration.selector === squash(key.selector) &&
+    declaration.property === key.property &&
+    declaration.value === squash(key.value)
+  );
+}
+
+const WIDTH_FEATURE = /(?<![\w-])(?:min-|max-)?(?:width|inline-size)(?![\w-])/i;
+
+/**
+ * The lengths an at-rule's prelude compares a width with: `(max-width: 720px)`
+ * gives `720px`, and so does `(width <= 720px)`. A height, or a condition with
+ * no length, gives nothing.
+ */
+export function widthLengths(prelude: string): string[] {
+  return [...prelude.matchAll(/\(([^()]*)\)/g)]
+    .filter(([, condition]) => WIDTH_FEATURE.test(condition))
+    .flatMap(([, condition]) => condition.match(/(?<![\w.-])\d*\.?\d+[a-z%]*/gi) ?? []);
+}
+
 /* ---------------------------------------------------------------------------
  * CSS: what a value holds
  * ------------------------------------------------------------------------ */
@@ -310,10 +350,13 @@ function scanCss(source: string, allow: Allowance): FileScan {
   const references: Located<Reference>[] = [];
   const declared = new Set<string>();
 
-  for (const { property, rawValue, valueOffset } of parseCss(source).declarations) {
+  for (const declaration of parseCss(source).declarations) {
+    const { property, rawValue, valueOffset } = declaration;
     if (property.startsWith('--')) declared.add(property);
     const value = withoutStrings(rawValue);
-    for (const { offset, item } of [...colourLiterals(property, value), ...sizeLiterals(value, allow)]) {
+    const letThrough = (allow.declarations ?? []).some((key) => sameDeclaration(declaration, key));
+    const literals = letThrough ? [] : [...colourLiterals(property, value), ...sizeLiterals(value, allow)];
+    for (const { offset, item } of literals) {
       const at = valueOffset + offset;
       findings.push({ offset: at, item: { ...item, line: lineOf(source, at) } });
     }
@@ -671,18 +714,21 @@ function styleSite(tokens: readonly Token[], index: number): StyleKey[] | null |
   return close === -1 ? null : styleKeys(tokens, index + 2, close);
 }
 
-function scanScript(source: string, jsx: boolean): FileScan {
+function scanScript(source: string, jsx: boolean, allow: Allowance): FileScan {
   const tokens = lexScript(source, jsx);
   const findings: Located<Finding>[] = [];
   const references: Located<Reference>[] = [];
   const declared = new Set<string>();
+  const allowedColours = new Set((allow.colours ?? []).map((colour) => colour.trim().toLowerCase()));
+  const allowedKeys = new Set(allow.styleKeys ?? []);
   const find = (rule: FindingRule, text: string, offset: number): void => {
     findings.push({ offset, item: { rule, text, line: lineOf(source, offset) } });
   };
 
   tokens.forEach((token, index) => {
     if (token.kind === 'string' || token.kind === 'template') {
-      if (isColourText(token.text)) find('colour', token.text, token.start);
+      const colour = isColourText(token.text) && !allowedColours.has(token.text.trim().toLowerCase());
+      if (colour) find('colour', token.text, token.start);
       for (const match of token.text.matchAll(COLOR_MIX)) find('color-mix', callText(token.text, match.index), token.start);
       for (const match of token.text.matchAll(VAR_REFERENCE)) {
         references.push({ offset: token.start, item: { name: match[1], line: lineOf(source, token.start) } });
@@ -692,7 +738,7 @@ function scanScript(source: string, jsx: boolean): FileScan {
     if (keys === null) find('style-key', 'style={…}', token.start);
     for (const key of keys ?? []) {
       if (key.custom) declared.add(key.key);
-      else find('style-key', key.key, key.start);
+      else if (!allowedKeys.has(key.key)) find('style-key', key.key, key.start);
     }
   });
 
@@ -706,7 +752,7 @@ function scanScript(source: string, jsx: boolean): FileScan {
 /** What one file holds. The path decides how it is read: `.css`, `.tsx`, or anything else as TypeScript. */
 export function scanSource(path: string, source: string, allow: Allowance = {}): FileScan {
   if (path.endsWith('.css')) return scanCss(source, allow);
-  return scanScript(source, path.endsWith('.tsx'));
+  return scanScript(source, path.endsWith('.tsx'), allow);
 }
 
 /**

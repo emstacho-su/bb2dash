@@ -1,5 +1,5 @@
 /**
- * The token audit (Phase 22, task 1; P-15, R-53; brief 103, "Token audit").
+ * The token audit (Phase 22, tasks 1 and 2; P-15, P-16, R-53; brief 103, "Token audit").
  *
  * R-53's definition of done is "no hard-coded colours or sizes outside
  * `globals.css`". Nothing checked that, so this file does. It scans every
@@ -22,6 +22,14 @@
  * JSON in the commit that removes the literals and the record never goes stale.
  * A file that is not in a JSON has a baseline of 0.
  *
+ * THE ALLOWLIST. What counts 0 on purpose is in `token-audit.allowlist.ts`,
+ * frozen at task 2 (P-16): the breakpoints (A1), 1px and 2px (A2), the
+ * declarations a test pins or a TypeScript constant mirrors (A3), the theme's
+ * page backgrounds in `theme-preference.ts` (A4) and two inline style keys
+ * (A5). This file checks every entry against the live tree, so an entry that
+ * went stale fails here. A literal that is not let through is removed or
+ * becomes a token; the allowlist is not edited.
+ *
  * NOT IN SCOPE. Imperative style writes (`element.style.height = …`, today
  * only `InboxCard.tsx`, a measured height) are not counted, and comments are
  * never read, in CSS or in TypeScript.
@@ -32,9 +40,23 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import * as plannerRows from '@/lib/planner-rows';
 import {
+  CONTAINER_WIDTHS,
+  HAIRLINE_SIZES,
+  INLINE_STYLE_KEYS,
+  MEDIA_WIDTHS,
+  PINNED_DECLARATIONS,
+  THEME_BACKGROUNDS,
+  type PinnedDeclaration,
+  type SourceBacking,
+} from './token-audit.allowlist';
+import {
+  parseCss,
+  sameDeclaration,
   scanSource,
   unresolvedReferences,
+  widthLengths,
   type Allowance,
   type FileScan,
   type FindingRule,
@@ -48,8 +70,13 @@ const BASELINE_DIR = join(WEB, 'test', 'token-audit.baseline');
 /** The token file. It is where literals belong, so its count is never taken. */
 const GLOBALS = 'web/src/app/globals.css';
 
-/** 1px and 2px are hairlines, outlines and nudges, with or without a minus. */
-const HAIRLINES: Allowance = { sizes: ['1px', '2px'] };
+/** What a fixture is let through unless it says otherwise: A2 alone. */
+const HAIRLINES: Allowance = { sizes: HAIRLINE_SIZES };
+
+/** The modules a constant-backed A3 entry may name, as imported here. */
+const CONSTANT_MODULES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
+  'web/src/lib/planner-rows.ts': plannerRows,
+};
 
 /* ---------------------------------------------------------------------------
  * The cluster map
@@ -145,9 +172,37 @@ const SOURCES: ReadonlyMap<string, string> = new Map(
     .sort(([a], [b]) => (a < b ? -1 : 1)),
 );
 
-/** What this file lets through in `path`. */
-function allowanceFor(_path: string): Allowance {
-  return HAIRLINES;
+/** A file named from the repository root: a source file, or the test that pins one. */
+function readRepo(path: string): string {
+  return readFileSync(join(WEB, '..', path), 'utf8');
+}
+
+/** A selector with its whitespace collapsed and one kind of quote, so both spellings of an attribute compare equal. */
+const plainSelector = (selector: string): string => selector.trim().replace(/\s+/g, ' ').replace(/"/g, "'");
+
+/** A4's values: `--color-bg` in each theme block the token file holds today. */
+function themeBackgrounds(tokens: string): string[] {
+  const blocks = THEME_BACKGROUNDS.blocks.map(plainSelector);
+  return parseCss(tokens)
+    .declarations.filter(({ at, property }) => at.length === 0 && property === THEME_BACKGROUNDS.token)
+    .filter(({ selector }) => blocks.includes(plainSelector(selector)))
+    .map(({ value }) => value);
+}
+
+/** What the allowlist lets through in `path`. `tokens` is the token file's text, for A4. */
+function allowanceFor(path: string, tokens: string = SOURCES.get(THEME_BACKGROUNDS.tokens) ?? ''): Allowance {
+  return {
+    sizes: HAIRLINE_SIZES,
+    declarations: PINNED_DECLARATIONS.filter((entry) => entry.file === path),
+    colours: path === THEME_BACKGROUNDS.file ? themeBackgrounds(tokens) : [],
+    styleKeys: INLINE_STYLE_KEYS.filter((entry) => entry.file === path).map((entry) => entry.key),
+  };
+}
+
+/** How many places in its file a source backing's pattern matches. Exactly one is a live pin. */
+function placesMatching({ file, pattern }: SourceBacking): number {
+  const everywhere = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+  return [...readRepo(file).matchAll(everywhere)].length;
 }
 
 const SCANS: ReadonlyMap<string, FileScan> = new Map(
@@ -168,8 +223,8 @@ function readBaseline(cluster: Cluster): Record<string, number> {
  * ------------------------------------------------------------------------ */
 
 /** The rules a fixture's findings fall under, in source order. */
-function rules(path: string, source: string): FindingRule[] {
-  return scanSource(path, source, HAIRLINES).findings.map((finding) => finding.rule);
+function rules(path: string, source: string, allow: Allowance = HAIRLINES): FindingRule[] {
+  return scanSource(path, source, allow).findings.map((finding) => finding.rule);
 }
 
 const TS_JSDOC = [
@@ -383,6 +438,200 @@ describe('the cluster map', () => {
 });
 
 /* ---------------------------------------------------------------------------
+ * The allowlist, entry by entry (task 2, P-16)
+ * ------------------------------------------------------------------------ */
+
+/** Every at-rule of that name in a stylesheet under `web/src`, with its file. */
+function atRulesNamed(name: string): { path: string; prelude: string }[] {
+  return [...SOURCES]
+    .filter(([path]) => path.endsWith('.css'))
+    .flatMap(([path, source]) =>
+      parseCss(source)
+        .atRules.filter((rule) => rule.name === name)
+        .map(({ prelude }) => ({ path, prelude })),
+    );
+}
+
+describe('A1: breakpoints', () => {
+  it('reads the widths a condition compares with, and no other length', () => {
+    expect(widthLengths('(max-width: 720px)')).toEqual(['720px']);
+    expect(widthLengths('screen and (min-width: 481px) and (max-width: 1023.98px)')).toEqual(['481px', '1023.98px']);
+    expect(widthLengths('(width <= 45em)')).toEqual(['45em']);
+    expect(widthLengths('(600px <= width <= 900px)')).toEqual(['600px', '900px']);
+    expect(widthLengths('sidebar (max-inline-size: 600px)')).toEqual(['600px']);
+    expect(widthLengths('(prefers-reduced-motion: reduce)')).toEqual([]);
+    expect(widthLengths('(max-height: 500px) and (max-device-width: 400px)')).toEqual([]);
+  });
+
+  it('breakpoint set equals {480, 620, 640, 720, 760, 820, 900, 1023.98}', () => {
+    expect(MEDIA_WIDTHS).toEqual(['480px', '620px', '640px', '720px', '760px', '820px', '900px', '1023.98px']);
+
+    const queries = atRulesNamed('media').filter(({ prelude }) => widthLengths(prelude).length > 0);
+    const strays = queries
+      .filter(({ prelude }) => widthLengths(prelude).some((width) => !MEDIA_WIDTHS.includes(width)))
+      .map(({ path, prelude }) => `${path}: @media ${prelude}`);
+    expect(queries.length).toBeGreaterThan(0);
+    expect(strays).toEqual([]);
+  });
+
+  it('the one @container entry is 600px in CourseTimeline.module.css', () => {
+    expect(CONTAINER_WIDTHS).toEqual([
+      { file: 'web/src/components/course/CourseTimeline.module.css', width: '600px' },
+    ]);
+
+    const live = atRulesNamed('container').flatMap(({ path, prelude }) =>
+      widthLengths(prelude).map((width) => ({ file: path, width })),
+    );
+    const allowed = ({ file, width }: { file: string; width: string }): boolean =>
+      CONTAINER_WIDTHS.some((entry) => entry.file === file && entry.width === width);
+    expect(live.length).toBeGreaterThan(0);
+    expect(live.filter((found) => !allowed(found)).map(({ file, width }) => `${file}: @container ${width}`)).toEqual([]);
+  });
+});
+
+describe('A2: hairlines', () => {
+  it('lets 1px and 2px through and nothing else', () => {
+    expect(HAIRLINE_SIZES).toEqual(['1px', '2px']);
+    expect(rules('a.module.css', '.a { inset: 1px -1px 2px -2px; gap: 3px; }', { sizes: HAIRLINE_SIZES })).toEqual(['size']);
+  });
+});
+
+describe('A3: declarations a test pins or a TypeScript constant mirrors', () => {
+  const named = ({ file, selector, property, value }: PinnedDeclaration): string =>
+    `${file} ${selector} { ${property}: ${value} }`;
+
+  const block: Allowance = {
+    sizes: HAIRLINE_SIZES,
+    declarations: [{ selector: '.block', property: 'padding', value: '3px 5px' }],
+  };
+  const twoSizes: FindingRule[] = ['size', 'size'];
+
+  it('counts a named declaration 0 whole, and the same value under another selector as before', () => {
+    expect(rules('a.module.css', '.block {\n  padding:  3px\n    5px;\n}', block)).toEqual([]);
+    expect(rules('a.module.css', '.block { padding: 3px 5px; }\n.other { padding: 3px 5px; }', block)).toEqual(twoSizes);
+    expect(rules('a.module.css', '.block, .other { padding: 3px 5px; }', block)).toEqual(twoSizes);
+  });
+
+  it('counts the declaration again once its value changes, or once it sits inside an at-rule', () => {
+    const inMedia = '@media (max-width: 720px) { .block { padding: 3px 5px; } }';
+    expect(rules('a.module.css', '.block { padding: 3px 6px; }', block)).toEqual(twoSizes);
+    expect(rules('a.module.css', inMedia, block)).toEqual(twoSizes);
+  });
+
+  it('holds nine entries, no declaration twice, each with a reason', () => {
+    const keys = PINNED_DECLARATIONS.map(({ file, selector, property }) => `${file} ${selector} ${property}`);
+    expect(keys).toHaveLength(9);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(PINNED_DECLARATIONS.filter(({ reason }) => reason.trim().length < 20).map(named)).toEqual([]);
+  });
+
+  it('every A3 entry matches a live declaration', () => {
+    const stale = PINNED_DECLARATIONS.filter((entry) => {
+      const live = parseCss(SOURCES.get(entry.file) ?? '').declarations;
+      return live.filter((declaration) => sameDeclaration(declaration, entry)).length !== 1;
+    });
+    expect(stale.map(named)).toEqual([]);
+  });
+
+  it('a constant-backed entry equals its imported constant', () => {
+    const mirrored = PINNED_DECLARATIONS.flatMap((entry) =>
+      entry.backing.kind === 'constant' ? [{ entry, backing: entry.backing }] : [],
+    );
+    expect(mirrored).toHaveLength(3);
+    for (const { entry, backing } of mirrored) {
+      const constant = CONSTANT_MODULES[backing.module]?.[backing.name];
+      const pixels = backing.pixels.exec(entry.value);
+      expect(typeof constant, `${backing.module} exports ${backing.name}`).toBe('number');
+      expect(pixels, `${named(entry)} holds no pixel count`).not.toBeNull();
+      expect(Number(pixels?.[1]) * backing.times, `${named(entry)} against ${backing.name}`).toBe(constant);
+    }
+  });
+
+  it("a source-backed entry's regex matches its named line", () => {
+    const sourced = PINNED_DECLARATIONS.flatMap((entry) =>
+      entry.backing.kind === 'source' ? [{ entry, backing: entry.backing }] : [],
+    );
+    expect(sourced).toHaveLength(6);
+    const lost = sourced
+      .map(({ entry, backing }) => ({ entry, backing, places: placesMatching(backing) }))
+      .filter(({ places }) => places !== 1)
+      .map(({ entry, backing, places }) => `${named(entry)}: ${backing.file} matches ${backing.pattern} ${places} times`);
+    expect(lost).toEqual([]);
+  });
+});
+
+describe('A4: the theme backgrounds in theme-preference.ts', () => {
+  const tokens = [
+    ':root {',
+    '  --color-bg: #161826;',
+    '  --color-surface: #232532;',
+    '}',
+    ':root[data-theme="light"] { --color-bg: #F6F5FB; }',
+  ].join('\n');
+  const themeFile = "export const THEME_BG = { dark: '#161826', light: '#f6f5fb' } as const;";
+  const elsewhere = 'web/src/lib/other.ts';
+
+  it('is a rule over one file, the token file, the two theme blocks and --color-bg', () => {
+    expect(THEME_BACKGROUNDS).toEqual({
+      file: 'web/src/lib/theme-preference.ts',
+      tokens: 'web/src/app/globals.css',
+      blocks: [':root', ":root[data-theme='light']"],
+      token: '--color-bg',
+    });
+    expect(clusterOf(THEME_BACKGROUNDS.file)).toBe('foundation');
+  });
+
+  it("reads each block's --color-bg from the token file, and no other block's or token's", () => {
+    expect(themeBackgrounds(tokens)).toEqual(['#161826', '#F6F5FB']);
+    expect(themeBackgrounds('.card { --color-bg: #000000; }\n@media print { :root { --color-bg: #ffffff; } }')).toEqual([]);
+  });
+
+  it('lets a hex equal to either one through in that file, whatever its case', () => {
+    expect(rules(THEME_BACKGROUNDS.file, themeFile, allowanceFor(THEME_BACKGROUNDS.file, tokens))).toEqual([]);
+  });
+
+  it('still counts any other hex there, and the same hexes in any other file', () => {
+    const other = "export const THEME_BG = { dark: '#161826', light: '#ffffff' } as const;";
+    expect(rules(THEME_BACKGROUNDS.file, other, allowanceFor(THEME_BACKGROUNDS.file, tokens))).toEqual(['colour']);
+    expect(rules(elsewhere, themeFile, allowanceFor(elsewhere, tokens))).toEqual(['colour', 'colour']);
+  });
+
+  it('holds on the live tree before the light block and the file exist, with nothing to edit when they arrive', () => {
+    const live = themeBackgrounds(SOURCES.get(GLOBALS) ?? '');
+    expect(live.length).toBeGreaterThanOrEqual(1);
+    expect(live.length).toBeLessThanOrEqual(2);
+    expect(live.filter((value) => !/^#[0-9a-f]{6}$/i.test(value))).toEqual([]);
+    expect(allowanceFor(THEME_BACKGROUNDS.file).colours).toEqual(live);
+    expect(allowanceFor(GLOBALS).colours).toEqual([]);
+  });
+});
+
+describe('A5: inline style keys a pre-existing test asserts on', () => {
+  it('A5 holds exactly two keys', () => {
+    expect(INLINE_STYLE_KEYS.map(({ file, key }) => `${file}: ${key}`)).toEqual([
+      'web/src/components/planner/PlannerWeek.tsx: height',
+      'web/src/app/(app)/course/[id]/classwork/CourseClasswork.tsx: marginLeft',
+    ]);
+  });
+
+  it('each is a key its file sets today, read back by exactly one line of its test', () => {
+    const dead = INLINE_STYLE_KEYS.filter(({ file, key, backing }) => {
+      const keys = scanSource(file, SOURCES.get(file) ?? '').findings.filter((finding) => finding.rule === 'style-key');
+      return !keys.some((finding) => finding.text === key) || placesMatching(backing) !== 1;
+    });
+    expect(dead.map(({ file, key }) => `${file}: ${key}`)).toEqual([]);
+  });
+
+  it('counts the key 0 in its own file, and any other key or file as before', () => {
+    const [{ file }] = INLINE_STYLE_KEYS;
+    const neighbour = 'web/src/components/planner/Other.tsx';
+    const source = 'const a = <i style={{ height: h, width: w }} />;';
+    expect(rules(file, source, allowanceFor(file))).toEqual(['style-key']);
+    expect(rules(neighbour, source, allowanceFor(neighbour))).toEqual(['style-key', 'style-key']);
+  });
+});
+
+/* ---------------------------------------------------------------------------
  * The ratchet
  * ------------------------------------------------------------------------ */
 
@@ -409,9 +658,14 @@ describe('the ratchet', () => {
     }
 
     for (const [path, allowed] of Object.entries(baseline)) {
-      if (path === GLOBALS) problems.push(`${path} is the token file and has no baseline.`);
-      else if (clusterOf(path) !== cluster) problems.push(`${path} is listed in ${cluster}.json but belongs to "${clusterOf(path)}".`);
-      else if (!SCANS.has(path) && allowed !== 0) problems.push(`${path} has a baseline of ${allowed} and no longer exists. Remove it from ${cluster}.json.`);
+      const owner = clusterOf(path);
+      if (path === GLOBALS) {
+        problems.push(`${path} is the token file and has no baseline.`);
+      } else if (owner !== cluster) {
+        problems.push(`${path} is listed in ${cluster}.json but belongs to "${owner}".`);
+      } else if (!SCANS.has(path) && allowed !== 0) {
+        problems.push(`${path} has a baseline of ${allowed} and no longer exists. Remove it from ${cluster}.json.`);
+      }
     }
 
     expect(problems).toEqual([]);
