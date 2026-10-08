@@ -7,18 +7,20 @@
  * What is held here: a shot is written only when `WALK_SHOTS=1`, under `WALK_SHOT_DIR`, by a bare
  * name, and never into a git checkout; every RPC the app calls is a write unless it is on the read
  * list, and `mark_announcements_seen` is answered without reaching the database; a file write to
- * Storage and a sign-out are stopped too; and `quietSync` pins the Sync button's label by handing
- * the app rows that its own `syncPhase()` reads as the phase asked for.
+ * Storage and a sign-out are stopped too; the lib's own `test` puts that guard on every test and
+ * fails the one that tried to write; every e2e file from Phase 22 on takes that `test` and never
+ * the old guard; and `quietSync` pins the Sync button's label by handing the app rows that its own
+ * `syncPhase()` reads as the phase asked for.
  *
  * The route handlers are driven through a stand-in for Playwright's context that runs them the way
  * Playwright does: the handler registered last sees a request first, and one that falls back hands
  * it to the one before.
  */
 
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import type { BrowserContext } from '@playwright/test';
+import { join, resolve, sep } from 'node:path';
+import { expect as playwrightExpect, test as playwrightTest, type BrowserContext } from '@playwright/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PHASE_LABEL, syncPhase, type PhaseRequest, type PhaseRun } from '@/lib/sync-request-phase';
 import {
@@ -28,6 +30,7 @@ import {
   READ_RPCS,
   SYNC_LABEL_22,
   SYNC_PHASES_22,
+  expect as expect22,
   guardVerdict,
   guardWrites22,
   quietSync,
@@ -38,6 +41,8 @@ import {
   shotPathFrom,
   shotsAsked,
   shotsAsked22,
+  test as test22,
+  withWriteGuard22,
   type SyncPhase22,
 } from '../e2e/walk22.lib';
 
@@ -361,6 +366,216 @@ describe('guardWrites22 on a context', () => {
     await first.send('POST', `${REST}/rpc/workspace_ask`);
     expect(firstWrites).toHaveLength(1);
     expect(secondWrites).toEqual([]);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * The write guard: on every test, without being asked for
+ * ------------------------------------------------------------------------ */
+
+describe('the guarded test', () => {
+  it('puts the guard on before the test runs, and hands the test the record', async () => {
+    const { context, send } = fakeContext();
+    let seenInTest: Outcome | null = null;
+    let handed: string[] | null = null;
+    await withWriteGuard22(context, async (writes) => {
+      handed = writes;
+      // What the old guard lets through: stamping every unseen announcement as read.
+      seenInTest = await send('POST', `${REST}/rpc/mark_announcements_seen`);
+    });
+    expect(seenInTest).toEqual({ kind: 'answer', status: 200, contentType: 'application/json; charset=utf-8', body: '0' });
+    expect(handed).toBe(await guardWrites22(context));
+  });
+
+  it('fails the test that tried to write, after it ran', async () => {
+    const { context, send } = fakeContext();
+    const ran: string[] = [];
+    const guarded = withWriteGuard22(context, async () => {
+      expect(await send('POST', `${REST}/rpc/workspace_ask`)).toEqual(ABORTED);
+      ran.push('to the end');
+    });
+    await expect(guarded).rejects.toThrow(/a walk spec tried to write/);
+    expect(ran).toEqual(['to the end']);
+  });
+
+  it('passes a test that only read', async () => {
+    const { context, send } = fakeContext();
+    await expect(
+      withWriteGuard22(context, async () => {
+        expect(await send('GET', `${REST}/assignments?select=id`)).toEqual(NETWORK);
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('is Playwright\'s test with that guard as an automatic fixture, and expect beside it', () => {
+    expect(typeof test22).toBe('function');
+    expect(typeof test22.extend).toBe('function');
+    expect(test22).not.toBe(playwrightTest);
+    expect(expect22).toBe(playwrightExpect);
+    // `auto: true`: the fixture runs for every test, whether the test names it or not.
+    expect(LIB_SOURCE).toMatch(/writes22: \[[^\]]*withWriteGuard22\(context, use\), \{ auto: true \}\]/);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Every e2e file from Phase 22 on uses that test, and never the old guard
+ * ------------------------------------------------------------------------ */
+
+const E2E_DIR = resolve(__dirname, '..', 'e2e');
+const LIB_FILE = 'walk22.lib.ts';
+const LIB_SOURCE = readFileSync(join(E2E_DIR, LIB_FILE), 'utf8');
+
+/**
+ * web/e2e as Phase 21 left it (main at a58be34). These files keep the guard they were written
+ * with. Every other `.ts` file under web/e2e is held to `problemsOf`, whoever adds it.
+ */
+const BEFORE_PHASE_22: ReadonlySet<string> = new Set([
+  'accept.config.ts',
+  'accept.env.ts',
+  'accept.lib.ts',
+  'accept21.spec.ts',
+  'harness.spec.ts',
+  'item-popout.spec.ts',
+  'playwright.config.ts',
+  'sitting26.spec.ts',
+  'walk.ts',
+  'walk17.spec.ts',
+  'walk19.spec.ts',
+  'walk21.desktop.ts',
+  'walk21.first.ts',
+  'walk21.lib.ts',
+  'walk21.retake.spec.ts',
+  'walk21.spec.ts',
+  'walk21.window.ts',
+  'workspace-acceptance-helpers.spec.ts',
+  'workspace-layout.spec.ts',
+]);
+
+/** `import { a, type B, c as d } from '<module>'`, and what it names. */
+function namedImports(source: string, module: RegExp): string[] {
+  const names: string[] = [];
+  for (const match of source.matchAll(/import\s+(type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    const [, wholeIsType, list, from] = match;
+    if (!module.test(from ?? '')) continue;
+    for (const part of (list ?? '').split(',')) {
+      const words = part.trim().split(/\s+/);
+      const isType = wholeIsType !== undefined || words[0] === 'type';
+      const name = words[0] === 'type' ? words[1] : words[0];
+      if (name && !isType) names.push(name);
+    }
+  }
+  return names;
+}
+
+/** Whether the file takes the module whole: `import * as x`, a default import, `require` or `import()`. */
+function takesWhole(source: string, module: string): boolean {
+  const asName = new RegExp(`import\\s+(\\*\\s+as\\s+)?[A-Za-z_$][\\w$]*\\s*(,\\s*\\{[^}]*\\}\\s*)?from\\s*['"]${module}['"]`);
+  const asCall = new RegExp(`(require|import)\\(\\s*['"]${module}['"]\\s*\\)`);
+  return asName.test(source) || asCall.test(source);
+}
+
+const OLD_GUARD_MODULE = /^(\.{1,2}\/)+walk(\.ts)?$/;
+const OLD_GUARD_PATH = '(\\.{1,2}\\/)+walk(\\.ts)?';
+const LIB_MODULE = /^(\.{1,2}\/)+walk22\.lib(\.ts)?$/;
+const PLAYWRIGHT_MODULE = /^@playwright\/test$/;
+const countOf = (source: string, pattern: RegExp): number => source.match(pattern)?.length ?? 0;
+
+/**
+ * What is wrong with an e2e file written from Phase 22 on, as sentences; none when it is in order.
+ *
+ * * The old guard (`guardWrites` from `./walk`) lets every RPC through, so it is not taken.
+ * * `test` comes from `./walk22.lib`, whose automatic fixture guards every test; never from
+ *   Playwright itself, and in a spec it must be there.
+ * * A context the file opens itself has no fixture: each `newContext(` needs its own
+ *   `guardWrites22(`, and `browser.newPage(` (a context nobody can guard first) is not used.
+ */
+function problemsOf(name: string, source: string): string[] {
+  const problems: string[] = [];
+  if (namedImports(source, OLD_GUARD_MODULE).includes('guardWrites') || takesWhole(source, OLD_GUARD_PATH)) {
+    problems.push('takes guardWrites from ./walk: that guard lets every RPC through; the lib\'s test guards every test');
+  }
+  if (namedImports(source, PLAYWRIGHT_MODULE).includes('test') || takesWhole(source, '@playwright\\/test')) {
+    problems.push('takes test from @playwright/test: take it from ./walk22.lib, so every test is guarded');
+  }
+  if (name.endsWith('.spec.ts') && !namedImports(source, LIB_MODULE).includes('test')) {
+    problems.push('is a spec that does not take test from ./walk22.lib');
+  }
+  if (/\bbrowser\s*\.\s*newPage\(|\blaunchPersistentContext\(/.test(source)) {
+    problems.push('opens a page in a context nobody guarded: use newContext() and guardWrites22(context) first');
+  }
+  if (countOf(source, /\bnewContext\(/g) > countOf(source, /\bguardWrites22\(/g)) {
+    problems.push('opens a context of its own without guardWrites22(context) on it');
+  }
+  return problems;
+}
+
+const GOOD_SPEC = `
+import { type Page } from '@playwright/test';
+import { collectConsole, openSignedIn } from './walk';
+import { expect, quietSync, shotPath22, shotsAsked22, test } from './walk22.lib';
+
+test('home, dark', async ({ page, context }) => {
+  await quietSync(context);
+  await openSignedIn(page, '/');
+  await expect(page.getByTestId('sync-button')).toBeVisible();
+});
+`;
+
+describe('an e2e file from Phase 22 on', () => {
+  it('is in order when it takes test from the lib and nothing of the old guard', () => {
+    expect(problemsOf('theme-walk.spec.ts', GOOD_SPEC)).toEqual([]);
+    // A helper beside the specs needs no test of its own.
+    expect(problemsOf('theme-walk.surfaces.ts', "import { type Page } from '@playwright/test';\nimport { openSignedIn } from './walk';\n")).toEqual([]);
+    // One folder down, the same two files are one step further away.
+    expect(problemsOf('theme/rows.spec.ts', GOOD_SPEC.replaceAll("'./walk", "'../walk"))).toEqual([]);
+  });
+
+  it('is refused when it is a copy of a spec from before: the old guard and Playwright\'s own test', () => {
+    // The finding's own case: harness.spec.ts as it is, saved under a new name.
+    const copied = readFileSync(join(E2E_DIR, 'harness.spec.ts'), 'utf8');
+    expect(problemsOf('phone-width.spec.ts', copied)).toEqual([
+      expect.stringMatching(/guardWrites from \.\/walk/),
+      expect.stringMatching(/test from @playwright\/test/),
+      expect.stringMatching(/does not take test from \.\/walk22\.lib/),
+    ]);
+  });
+
+  it('is refused for each way of reaching the old guard or an unguarded test', () => {
+    const fromLib = "import { expect, test } from './walk22.lib';\n";
+    const bad: [string, string, RegExp][] = [
+      ['the old guard by name', `${fromLib}import { assertNoWrites, guardWrites } from './walk';\n`, /guardWrites from \.\/walk/],
+      ['the old guard under another name', `${fromLib}import { guardWrites as guard } from './walk';\n`, /guardWrites from \.\/walk/],
+      ['the old guard from a folder down', `${fromLib}import {\n  guardWrites,\n} from '../walk';\n`, /guardWrites from \.\/walk/],
+      ['walk.ts whole', `${fromLib}import * as walk from './walk';\n`, /guardWrites from \.\/walk/],
+      ['walk.ts by require', `${fromLib}const walk = require('./walk');\n`, /guardWrites from \.\/walk/],
+      ['Playwright\'s test beside the lib\'s', `${fromLib}import { test as bare } from '@playwright/test';\n`, /test from @playwright\/test/],
+      ['Playwright whole', `${fromLib}import * as pw from '@playwright/test';\n`, /test from @playwright\/test/],
+      ['a spec with no test from the lib', "import { expect } from './walk22.lib';\n", /does not take test from/],
+      ['a page of the browser\'s own', `${fromLib}const page = await browser.newPage();\n`, /nobody guarded/],
+      ['a context of its own, unguarded', `${fromLib}const other = await browser.newContext();\n`, /without guardWrites22/],
+    ];
+    for (const [what, source, problem] of bad) {
+      expect(problemsOf('new.spec.ts', source), what).toEqual([expect.stringMatching(problem)]);
+    }
+    // A context of its own is in order once the guard is put on it.
+    const guarded = "import { expect, guardWrites22, test } from './walk22.lib';\nconst other = await browser.newContext();\nawait guardWrites22(other);\n";
+    expect(problemsOf('new.spec.ts', guarded)).toEqual([]);
+  });
+
+  it('holds for every file under web/e2e that Phase 21 did not leave there', () => {
+    const files = (readdirSync(E2E_DIR, { recursive: true }) as string[])
+      .map((file) => file.split(sep).join('/'))
+      .filter((file) => file.endsWith('.ts') && !file.endsWith('.d.ts') && !/(^|\/)(\.auth|\.results|node_modules)\//.test(file));
+    expect(files).toContain(LIB_FILE);
+    expect(files).toContain('harness.spec.ts');
+    const fromPhase22On = files.filter((file) => !BEFORE_PHASE_22.has(file) && file !== LIB_FILE);
+    for (const file of fromPhase22On) {
+      expect(problemsOf(file, readFileSync(join(E2E_DIR, file), 'utf8')), `web/e2e/${file}`).toEqual([]);
+    }
+  });
+
+  it('leaves the lib as the one place the old guard is taken, to build the new one on', () => {
+    expect(namedImports(LIB_SOURCE, OLD_GUARD_MODULE).sort()).toEqual(['assertNoWrites', 'guardWrites']);
   });
 });
 
