@@ -1,0 +1,12 @@
+{
+  "web/src/app/(app)/course/[id]/CourseSubBar.module.css": 3,
+  "web/src/app/(app)/course/[id]/assignment/[...assignmentId]/CourseAssignment.module.css": 1,
+  "web/src/app/(app)/course/[id]/classwork/CourseClasswork.module.css": 6,
+  "web/src/app/(app)/course/[id]/info/CourseInfo.module.css": 2,
+  "web/src/app/(app)/materials/Materials.module.css": 8,
+  "web/src/app/(app)/workspace/Workspace.module.css": 2,
+  "web/src/components/course/CourseTimeline.module.css": 46,
+  "web/src/components/grades/GradeModel.module.css": 1,
+  "web/src/components/grades/GradebookTable.module.css": 1,
+  "web/src/components/grades/ReportCardStrip.module.css": 2
+}
