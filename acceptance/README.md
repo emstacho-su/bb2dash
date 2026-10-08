@@ -109,7 +109,8 @@ installed and reaches nothing.
 - Every `auto` step names a sandbox stage, a test of that stage, and a title the browser-test file
   really holds; its evidence is exactly its facts file and the pictures its test declares.
 - Every test of a stage belongs to exactly one step, and the browser-test file holds no test that no
-  stage runs.
+  stage runs. A title is listed once over all the stages: listed twice, its test would be run twice
+  and ask its question twice.
 - Every proof a step or a host action names is in `proofs.json`, with the same parameter names and
   values of the stated types; and for every proof a `host` step lists, the step's own stage runs
   that proof with the same values.

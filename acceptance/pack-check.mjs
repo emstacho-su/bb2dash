@@ -188,9 +188,21 @@ function autoStepProblems({ phase, manifest, specText }) {
   return problems;
 }
 
-/** Each test of each sandbox stage belongs to exactly one step, and the file holds no test that no stage runs. */
+/** A title is listed once over all sandbox stages: listed twice, its test would be run twice. */
+function listedOnceProblems(manifest) {
+  const listed = stagesOfKind(manifest, 'sandbox').flatMap((stage) => stage.tests.map((title) => ({ title, stage: stage.id })));
+  return duplicates(listed.map((entry) => entry.title)).map((title) => {
+    const where = listed.filter((entry) => entry.title === title).map((entry) => `stage ${entry.stage}`);
+    return `manifest.json: the test "${title}" is listed ${where.length} times (${where.join(', ')}), and a test is run once`;
+  });
+}
+
+/**
+ * Each test of each sandbox stage is listed once and belongs to exactly one step, and the file
+ * holds no test that no stage runs.
+ */
 function testCoverageProblems({ phase, manifest, specText }) {
-  const problems = [];
+  const problems = listedOnceProblems(manifest);
   const staged = new Set();
   for (const stage of stagesOfKind(manifest, 'sandbox')) {
     for (const title of stage.tests) {
