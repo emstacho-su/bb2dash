@@ -12,7 +12,9 @@
 //   --url <https origin>   no build and no server: that host is walked (WALK_VERCEL_SHARE is passed
 //                          on, by name, when it is set)
 //   --keep                 the container is left running and its name is printed
-//   --exec <container> <spec>…   more specs in a kept container, read from the worktree as it is now
+//   --exec <container> <spec>…   more specs in a kept container. web/e2e is read from the worktree
+//                          as it is now; the app is the one the box built, so a change under
+//                          web/src needs a new box
 //   --rm <container>       remove a kept container
 //
 // Output: <home>/.bb2dash-walk/22/<run id>/ (WALK_BOX_OUT names another base folder), holding
