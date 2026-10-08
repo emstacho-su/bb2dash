@@ -25,6 +25,7 @@
 # Exit: Playwright's own code (0 passed, 1 tests failed), or one of these when the box itself broke,
 # so a walk that found something is never mistaken for a box that did not start:
 #   70 called wrongly   71 copy   72 npm ci   73 build   74 server   75 sign-in   76 results
+#   77 the walk ran past its time limit and was stopped
 set -euo pipefail
 
 readonly SRC_WEB=/src/web
@@ -35,18 +36,24 @@ readonly NPM_CACHE=/npm-cache
 readonly BOX_OUT=/out
 readonly PORT=3000
 readonly READY_LIMIT_S=120
-# A box whose host script was killed is watched by nobody: these two steps wait on the network and
-# on the compiler, so each has a limit, and the box ends and removes itself either way. Sign-in and
-# every test have limits of their own (login.mjs, playwright.config.ts).
+# A box whose host script was killed is watched by nobody, so every step that waits on something
+# has a limit of its own, and the box ends and removes itself either way: npm ci (the network),
+# the build (the compiler), the server (READY_LIMIT_S), the sign-in and the walk (a browser). A
+# step that runs past its limit is sent TERM, and KILL after KILL_AFTER_S more. Added up, a box
+# ends within two hours whatever happens inside it.
 readonly INSTALL_LIMIT_S=900
 readonly BUILD_LIMIT_S=900
+readonly SIGN_IN_LIMIT_S=300
+readonly WALK_LIMIT_S=3600
 readonly KILL_AFTER_S=30
+# What `timeout` ends with when it stopped the command: 124 after TERM, 137 after KILL.
+readonly TIMED_OUT=124 KILLED=137
 readonly PROBE_TIMEOUT_MS=5000
 readonly LOG_TAIL_LINES=40
 readonly SERVER_LOG="$BOX_OUT/next.log"
 readonly SERVER_PID_FILE="$WORK/next.pid"
 
-readonly E_USAGE=70 E_COPY=71 E_INSTALL=72 E_BUILD=73 E_SERVER=74 E_LOGIN=75 E_RESULTS=76
+readonly E_USAGE=70 E_COPY=71 E_INSTALL=72 E_BUILD=73 E_SERVER=74 E_LOGIN=75 E_RESULTS=76 E_LIMIT=77
 
 # Playwright's own names for the calls web/e2e/login.mjs makes, in the order it makes them. A
 # failed sign-in is told by one of these names and by nothing login.mjs printed (sign_in).
@@ -219,9 +226,13 @@ failed_login_step() {
 sign_in() {
   if [ "$MODE" != url ]; then unset WALK_VERCEL_SHARE; fi
   local said code=0
-  said="$(cd "$WORK_WEB" && WALK_BASE_URL="$BASE_URL" node e2e/login.mjs 2>&1)" || code=$?
+  said="$(cd "$WORK_WEB" && WALK_BASE_URL="$BASE_URL" timeout --kill-after="$KILL_AFTER_S" "$SIGN_IN_LIMIT_S" node e2e/login.mjs 2>&1)" || code=$?
   if [ "$code" -eq 0 ]; then return 0; fi
-  say "login.mjs ended with exit code $code at: $(failed_login_step "$said")"
+  if [ "$code" -eq "$TIMED_OUT" ] || [ "$code" -eq "$KILLED" ]; then
+    say "the sign-in ran past its limit of ${SIGN_IN_LIMIT_S}s and was stopped"
+  else
+    say "login.mjs ended with exit code $code at: $(failed_login_step "$said")"
+  fi
   say "what login.mjs printed is not shown: a failed step's message can carry the login or the share token"
   if answers_200 "$BASE_URL/login"; then
     say "$BASE_URL/login answers 200, so the form was served and the sign-in did not land"
@@ -232,11 +243,13 @@ sign_in() {
   return 1
 }
 
+# The whole walk has one limit, whatever the number of specs: every test has its own
+# (playwright.config.ts), and their sum has none.
 run_specs() {
   (
     cd "$WORK_WEB" &&
       WALK_BASE_URL="$BASE_URL" WALK_SHOT_DIR="$OUT/shots" WALK_SHOTS="${WALK_SHOTS:-0}" \
-        npx playwright test -c e2e/playwright.config.ts "${SPECS[@]}" "${EXTRA[@]}"
+        timeout --kill-after="$KILL_AFTER_S" "$WALK_LIMIT_S" npx playwright test -c e2e/playwright.config.ts "${SPECS[@]}" "${EXTRA[@]}"
   )
 }
 
@@ -265,8 +278,13 @@ walk() {
   step "$E_LOGIN" "signing in at $BASE_URL" sign_in
 
   say "playwright test ${SPECS[*]} ${EXTRA[*]}"
-  local code=0
+  local code=0 began="$SECONDS"
   run_specs || code=$?
+  # 137 is also what a process killed for memory ends with: it is the limit only when the time is up.
+  if [ "$code" -eq "$TIMED_OUT" ] || { [ "$code" -eq "$KILLED" ] && [ "$((SECONDS - began))" -ge "$WALK_LIMIT_S" ]; }; then
+    say "the walk ran past its limit of ${WALK_LIMIT_S}s and was stopped"
+    code="$E_LIMIT"
+  fi
   if ! keep_results; then
     say "Playwright's output folder could not be copied to $OUT/results"
     if [ "$code" -eq 0 ]; then code="$E_RESULTS"; fi

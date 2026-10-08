@@ -11,7 +11,8 @@
 //
 //   --url <https origin>   no build and no server: that host is walked (WALK_VERCEL_SHARE is passed
 //                          on, by name, when it is set)
-//   --keep                 the container is left running and its name is printed
+//   --keep                 the container is left running and its name is printed. Nobody has to
+//                          come back for it: it ends and removes itself after four hours
 //   --exec <container> <spec>…   more specs in a kept container. web/e2e is read from the worktree
 //                          as it is now; the app is the one the box built, so a change under
 //                          web/src needs a new box
@@ -32,13 +33,21 @@
 // one volume of its own (the npm cache). No other container, network or volume is ever named.
 //
 // Exit: 0 passed, 1 tests failed (Playwright), 64 refused before any container started,
-// 65 docker could not be started, 67 --exec named a box that is not running, 70 to 76 the box
-// broke (docker/walk/entry.sh lists them), 125 and above docker's own.
+// 65 docker could not be started, 67 --exec named a box that is not running, 70 to 77 the box
+// broke (docker/walk/entry.sh lists them; 77 is a walk that ran past its time limit), 125 to 127
+// docker's own, 129, 130 and 143 the run was stopped by a signal.
 //
-// When this script is killed (a tool's time limit, a closed terminal) the container is not: a
-// plain run goes on to its end and removes itself, and run.json stays at "running". What the walk
-// found is then in results/.last-run.json, which Playwright writes itself. Start a walk with a
-// time limit of ten minutes or more, or in the background, and read run.json.
+// When this script is stopped, its box does not outlive it:
+//   * Ctrl-C, a plain kill or a closed terminal (SIGINT, SIGTERM, SIGHUP): the box this run started
+//     is removed with `docker rm -f`, the docker client is ended, and run.json says "interrupted".
+//     The same is done when a docker call itself ends with a signal's exit code. An --exec run
+//     never removes the kept box: another run started it.
+//   * A hard kill, which no script can catch (a tool's time limit on Windows, the task manager):
+//     run.json stays at "running". The box ends by itself, because every step inside it has a
+//     time limit (docker/walk/entry.sh; under two hours in all), and removes itself, because every
+//     box is started with --rm. What the walk found is then in results/.last-run.json, which
+//     Playwright writes itself. Start a walk with a time limit of ten minutes or more, or in the
+//     background, and read run.json.
 //
 // Importing this module has no side effects.
 
@@ -79,6 +88,14 @@ const SHARE_VARIABLE = 'WALK_VERCEL_SHARE';
 const SHM_SIZE = '1g';
 const RECORD_SCHEMA = 1;
 
+const HOUR_S = 60 * 60;
+/**
+ * How long a kept box lives when nobody removes it: it is started with --rm and a sleep of this
+ * length, so one that is forgotten ends and removes itself. Long enough for a sitting of --exec
+ * runs; entry.sh's own limits add up to under two hours.
+ */
+export const KEPT_BOX_LIFE_S = 4 * HOUR_S;
+
 /** What entry.sh's own exit codes mean (its header lists them). */
 const BOX_FAILURES = Object.freeze({
   70: 'entry.sh was called wrongly',
@@ -88,8 +105,23 @@ const BOX_FAILURES = Object.freeze({
   74: 'server',
   75: 'sign-in',
   76: 'results',
+  77: 'the walk ran past its time limit',
 });
 const DOCKER_OWN_EXITS = Object.freeze([125, 126, 127]);
+
+/** The signals that ask this script to stop: Ctrl-C, a plain kill, a closed terminal. */
+const INTERRUPTS = Object.freeze(['SIGINT', 'SIGTERM', 'SIGHUP']);
+const SIGNAL_EXIT_BASE = 128;
+/** What a process ended by a signal exits with, by the shell's rule (128 + the signal's number). */
+const exitOfSignal = (name) => SIGNAL_EXIT_BASE + (os.constants.signals[name] ?? 0);
+/**
+ * A docker call that ends with one of these was stopped by a signal: its client, or the box's
+ * first process. The client can be gone while the box is still up.
+ */
+const SIGNAL_EXITS = Object.freeze(Object.fromEntries([...INTERRUPTS, 'SIGKILL'].map((name) => [exitOfSignal(name), name])));
+/** How long `docker rm -f` of this run's own box may take, and how long its client may take to end. */
+const REMOVE_LIMIT_MS = 60_000;
+const CLIENT_END_LIMIT_MS = 10_000;
 
 /** A refusal: said in one line, before any container starts. */
 export class WalkBoxError extends Error {
@@ -322,10 +354,13 @@ function entryCall(phase, specs, extra) {
   return ['bash', BOX.entry, phase, ...specs.map((spec) => spec.box), '--', ...extra];
 }
 
-/** `docker run …` up to and including the image: the container's name, settings and mounts. */
+/**
+ * `docker run …` up to and including the image: the container's name, settings and mounts. Every
+ * box is started with --rm, so one that ends, however it ends, removes itself.
+ */
 function createCall({ detached, container, mode, baseUrl, settings, root, outDir, image }) {
   return [
-    'run', detached ? '-d' : '--rm', '--init', '--name', container, '--shm-size', SHM_SIZE,
+    'run', ...(detached ? ['-d'] : []), '--rm', '--init', '--name', container, '--shm-size', SHM_SIZE,
     ...(mode === 'build' ? ['--env-file', posix(settings.webEnv)] : []),
     '-e', `WALK_BOX_MODE=${mode}`, '-e', `WALK_BASE_URL=${baseUrl}`,
     ...walkEnv(BOX.out, settings.shots),
@@ -355,7 +390,7 @@ export function planRun(args, ctx) {
   const create = createCall({ detached: args.keep, container, mode, baseUrl, settings, root: ctx.root, outDir, image });
   const walk = entryCall('all', specs, args.extra);
   const calls = args.keep
-    ? [[...create, 'sleep', 'infinity'], ['exec', ...walkEnv(BOX.out, settings.shots), container, ...walk]]
+    ? [[...create, 'sleep', String(KEPT_BOX_LIFE_S)], ['exec', ...walkEnv(BOX.out, settings.shots), container, ...walk]]
     : [[...create, ...walk]];
   const record = {
     schema: RECORD_SCHEMA,
@@ -371,7 +406,8 @@ export function planRun(args, ctx) {
     args: [...args.extra],
     shots: settings.shots,
   };
-  return { runId, container, outDir, calls, record };
+  // ownsBox: this run starts the container, so this run removes it when it is stopped.
+  return { runId, container, outDir, calls, record, ownsBox: true };
 }
 
 /**
@@ -409,7 +445,8 @@ export function planExec(args, ctx) {
     shots: settings.shots,
   };
   const precheck = ['exec', args.container, 'true'];
-  return { runId, container: args.container, outDir: path.join(boxDir, folder), precheck, calls: [call], record };
+  // ownsBox: another run started the container and was asked to keep it; this run never removes it.
+  return { runId, container: args.container, outDir: path.join(boxDir, folder), precheck, calls: [call], record, ownsBox: false };
 }
 
 /** Remove a kept box: `docker rm -f` of that one container. */
@@ -456,21 +493,100 @@ function writeRecord(outDir, record) {
 
 /**
  * Each call in turn, stopping at the first that does not end with 0. Returns the exit code and
- * how many calls ended with 0.
+ * how many calls ended with 0. `stop` ends the docker client of the call in hand; the code is then
+ * null, and no further call is made.
  */
-async function runCalls(calls, logFile, deps) {
+async function runCalls(calls, logFile, deps, stop = null) {
   let done = 0;
   try {
     for (const argv of calls) {
-      const code = await deps.docker(argv, { logFile });
+      if (stop?.aborted) return { code: null, done };
+      const code = await deps.docker(argv, { logFile, signal: stop ?? undefined });
       if (code !== EXIT.passed) return { code, done };
       done += 1;
     }
     return { code: EXIT.passed, done };
   } catch (error) {
+    if (stop?.aborted) return { code: null, done };
     deps.err(`walk-box: docker could not be started: ${error?.message}`);
     return { code: EXIT.docker, done };
   }
+}
+
+/** Waits for `promise`, for `ms` at most. Returns what it resolved with, or null when the time ran out first. */
+async function within(ms, promise) {
+  let timer;
+  const limit = new Promise((resolve) => {
+    timer = setTimeout(resolve, ms, null);
+  });
+  try {
+    return await Promise.race([promise, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Waits for the first signal that asks this script to stop. `interrupted` resolves with the
+ * signal's name. While the watch is on, a signal does not end the process: the box is removed and
+ * run.json finished first, and a second signal in that time changes nothing. `stop()` ends the
+ * watch.
+ */
+export function watchSignals(emitter = process) {
+  let tell;
+  const interrupted = new Promise((resolve) => {
+    tell = (name) => resolve(name);
+  });
+  for (const name of INTERRUPTS) emitter.on(name, tell);
+  return {
+    interrupted,
+    stop: () => {
+      for (const name of INTERRUPTS) emitter.off(name, tell);
+    },
+  };
+}
+
+/** `docker rm -f` of the box this run started. Returns whether docker said it is removed. */
+async function removeBox(container, deps) {
+  let code;
+  try {
+    code = await deps.docker(['rm', '-f', container], { logFile: null, signal: AbortSignal.timeout(REMOVE_LIMIT_MS) });
+  } catch (error) {
+    deps.err(`walk-box: docker rm -f ${container} could not be run: ${error?.message}`);
+    return false;
+  }
+  if (code === EXIT.passed) return true;
+  deps.err(`walk-box: docker rm -f ${container} ended with ${code}: look with docker ps -a --filter name=${container}`);
+  return false;
+}
+
+/**
+ * The plan's calls, watched. Two things mean the docker client is gone while the box may not be:
+ * a signal to this script, and a call that ends with a signal's exit code. On either, the box this
+ * run started is removed (a kept box that another run started is left), the client is ended, and
+ * the run is told as interrupted. So run.json never says a run ended while its own box is up.
+ */
+async function runWatched(plan, logFile, deps) {
+  const watch = deps.watch();
+  const client = new AbortController();
+  const calls = runCalls(plan.calls, logFile, deps, client.signal);
+  try {
+    const first = await Promise.race([calls, watch.interrupted.then((signal) => ({ signal }))]);
+    const signal = first.signal ?? SIGNAL_EXITS[first.code] ?? null;
+    if (signal === null) return { code: first.code, done: first.done, interrupted: null };
+    const removed = plan.ownsBox ? await removeBox(plan.container, deps) : false;
+    client.abort();
+    await within(CLIENT_END_LIMIT_MS, calls);
+    return { code: first.code ?? exitOfSignal(signal), done: 0, interrupted: { signal, removed } };
+  } finally {
+    watch.stop();
+  }
+}
+
+/** An interrupted run, in words, for run.json. */
+function interruptedResult(plan, { signal, removed }) {
+  if (!plan.ownsBox) return `interrupted (${signal}), kept box left running`;
+  return `interrupted (${signal}), box ${removed ? 'removed' : 'not removed'}`;
 }
 
 /** Whether the box a plan needs is running: 0 when it is, or when the plan needs none. */
@@ -490,8 +606,14 @@ function announce(plan, log) {
 /** Said only for a kept box whose container did start: a name that was never taken is not handed on. */
 function sayKept(plan, started, log) {
   if (plan.record.kept !== true || !started) return;
-  log(`walk-box: ${plan.container} is left running. More specs, then remove it:`);
+  log(`walk-box: ${plan.container} is left running, for ${KEPT_BOX_LIFE_S / HOUR_S} hours at most. More specs, then remove it:`);
   log(`  node scripts/walk-box.mjs --exec ${plan.container} <spec under web/e2e>…`);
+  log(`  node scripts/walk-box.mjs --rm ${plan.container}`);
+}
+
+/** Said when an --exec run is stopped: the kept box is another run's, and the walk in it was not ended. */
+function sayLeft(plan, log) {
+  log(`walk-box: ${plan.container} is a kept box and is left running; the walk inside it may go on to its own limit. Remove it with:`);
   log(`  node scripts/walk-box.mjs --rm ${plan.container}`);
 }
 
@@ -514,9 +636,9 @@ async function walk(args, deps) {
   writeRecord(plan.outDir, started);
   announce(plan, deps.log);
 
-  const { code, done } = await runCalls(plan.calls, path.join(plan.outDir, 'stdout.log'), deps);
+  const { code, done, interrupted } = await runWatched(plan, path.join(plan.outDir, 'stdout.log'), deps);
   const finishedAt = deps.now();
-  const result = resultOf(code);
+  const result = interrupted === null ? resultOf(code) : interruptedResult(plan, interrupted);
   writeRecord(plan.outDir, {
     ...started,
     finished_at: finishedAt.toISOString(),
@@ -525,7 +647,8 @@ async function walk(args, deps) {
     result,
   });
   deps.log(`walk-box: ${result} (exit ${code}); run.json and stdout.log are in ${posix(plan.outDir)}`);
-  sayKept(plan, done > 0, deps.log);
+  if (interrupted === null) sayKept(plan, done > 0, deps.log);
+  else if (!plan.ownsBox) sayLeft(plan, deps.log);
   return code;
 }
 
@@ -541,9 +664,10 @@ export const DOCKER_CLIENT = Object.freeze(['docker']);
 
 /**
  * Start docker with these arguments and no shell; what it prints goes to the console and to the
- * log file. Resolves with its exit code, and rejects when it cannot be started.
+ * log file. Resolves with its exit code (128 + the signal's number when a signal ended it), and
+ * rejects when it cannot be started or when `signal` ends it.
  */
-export function runDocker(argv, { logFile = null, client = DOCKER_CLIENT, out = process.stdout, err = process.stderr } = {}) {
+export function runDocker(argv, { logFile = null, client = DOCKER_CLIENT, out = process.stdout, err = process.stderr, signal } = {}) {
   return new Promise((resolve, reject) => {
     const log = logFile === null ? null : fs.createWriteStream(logFile, { flags: 'a' });
     let settled = false;
@@ -553,17 +677,17 @@ export function runDocker(argv, { logFile = null, client = DOCKER_CLIENT, out = 
       if (log === null) finish();
       else log.end(finish);
     };
-    log?.once('error', (error) => settle(() => reject(error)));
-    const child = spawn(client[0], [...client.slice(1), ...argv], { stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true });
+    log?.on('error', (error) => settle(() => reject(error)));
+    const child = spawn(client[0], [...client.slice(1), ...argv], { stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true, signal });
     const tee = (from, to) =>
       from.on('data', (chunk) => {
         to.write(chunk);
-        log?.write(chunk);
+        if (!settled) log?.write(chunk);
       });
     tee(child.stdout, out);
     tee(child.stderr, err);
     child.once('error', (error) => settle(() => reject(error)));
-    child.once('close', (code) => settle(() => resolve(code ?? EXIT.docker)));
+    child.once('close', (code, killedBy) => settle(() => resolve(code ?? (killedBy === null ? EXIT.docker : exitOfSignal(killedBy)))));
   });
 }
 
@@ -577,6 +701,7 @@ function dependencies(deps) {
     now: () => new Date(),
     git: (args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
     docker: runDocker,
+    watch: () => watchSignals(process),
     log: (line) => process.stdout.write(`${line}\n`),
     err: (line) => process.stderr.write(`${line}\n`),
     ...deps,
