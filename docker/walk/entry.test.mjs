@@ -270,7 +270,10 @@ function makeBox({ constants = {}, login = true } = {}) {
   return { dir, bashDir };
 }
 
-const RUN_LIMIT_MS = 60_000;
+// A run takes four to ten seconds on an idle laptop, and over a minute when five of these suites
+// run side by side (measured: several workers run their gates at once). The limit is only there
+// to end a bash that hangs, so it is far above both: a loaded machine makes these tests slow, not red.
+const RUN_LIMIT_MS = 300_000;
 const SPEC = 'e2e/harness.spec.ts';
 const LOCAL = 'http://localhost:3000';
 

@@ -527,7 +527,8 @@ test('watchSignals: the first of SIGINT, SIGTERM and SIGHUP is told by name, and
 });
 
 const LOOK_EVERY_MS = 20;
-const STARTED_WITHIN_MS = 15_000;
+/** Far more than node needs to start, on a loaded machine too: it only ends a wait that cannot end. */
+const STARTED_WITHIN_MS = 60_000;
 
 /** Waits until `check()` holds, for `limitMs` at most: a wait that cannot end fails the test, it does not hang it. */
 async function until(check, limitMs, what) {
