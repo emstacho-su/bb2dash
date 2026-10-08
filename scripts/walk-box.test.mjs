@@ -42,6 +42,11 @@ import { CONTAINER, LATER, LATER_RUN_ID, NOW, REPO_ROOT, RUN_ID, SECRET_SHARE, f
 import './walk-box-main.test.mjs';
 import '../docker/walk/entry.test.mjs';
 
+/** The host script as it is written: its own file and the two parts under scripts/lib, as one text. */
+const SCRIPT_SOURCE = ['scripts/walk-box.mjs', 'scripts/lib/walk-box-inputs.mjs', 'scripts/lib/walk-box-client.mjs']
+  .map((file) => fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'))
+  .join('\n');
+
 /* ---------------------------------------------------------------------------------------------
  * The command line
  * ------------------------------------------------------------------------------------------ */
@@ -324,8 +329,7 @@ test('no call names compose, a network, a port, another volume or another contai
     const names = call.filter((word) => word.startsWith('bb2dash-'));
     assert.deepEqual(names, [CONTAINER]);
   }
-  const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'walk-box.mjs'), 'utf8');
-  assert.doesNotMatch(source.replace(/^\s*(\/\/|\*|\/\*).*$/gm, ''), /compose/i);
+  assert.doesNotMatch(SCRIPT_SOURCE.replace(/^\s*(\/\/|\*|\/\*).*$/gm, ''), /compose/i);
 });
 
 /* ---------------------------------------------------------------------------------------------
@@ -452,9 +456,10 @@ test('a path docker would read as two mount fields is refused', () => {
  * ------------------------------------------------------------------------------------------ */
 
 test('the script reads neither env file: it only asks whether each is there', () => {
-  const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'walk-box.mjs'), 'utf8');
   // The one file it reads is web/package.json, for the Playwright version.
-  const reads = source.match(/readFileSync\([^)]*\)/g) ?? [];
+  const reads = SCRIPT_SOURCE.match(/readFileSync\([^)]*\)/g) ?? [];
   assert.deepEqual(reads, ["readFileSync(webPackageFile, 'utf8')"]);
-  assert.match(source, /const webPackageFile = path\.join\(root, 'web', 'package\.json'\);/);
+  assert.match(SCRIPT_SOURCE, /const webPackageFile = path\.join\(root, 'web', 'package\.json'\);/);
+  // And nothing opens a file for reading any other way.
+  assert.doesNotMatch(SCRIPT_SOURCE, /\b(createReadStream|openSync|readFile|readSync|readlinkSync)\(/);
 });

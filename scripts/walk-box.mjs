@@ -49,13 +49,23 @@
 //     Playwright writes itself. Start a walk with a time limit of ten minutes or more, or in the
 //     background, and read run.json.
 //
+// Two parts are in files of their own: scripts/lib/walk-box-inputs.mjs (what the box is handed,
+// and the rule each thing is held to) and scripts/lib/walk-box-client.mjs (the docker client and
+// the signals).
+//
 // Importing this module has no side effects.
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { SIGNAL_EXITS, exitOfSignal, runDocker, watchSignals, within } from './lib/walk-box-client.mjs';
+import { assertOutBase, fileSetting, mountSource, originOf, posix, realPathOf, refused, requireFile, specPaths, WalkBoxError } from './lib/walk-box-inputs.mjs';
+
+export { DOCKER_CLIENT, runDocker, watchSignals } from './lib/walk-box-client.mjs';
+export { WalkBoxError, assertOutBase, specPaths } from './lib/walk-box-inputs.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -109,30 +119,9 @@ const BOX_FAILURES = Object.freeze({
 });
 const DOCKER_OWN_EXITS = Object.freeze([125, 126, 127]);
 
-/** The signals that ask this script to stop: Ctrl-C, a plain kill, a closed terminal. */
-const INTERRUPTS = Object.freeze(['SIGINT', 'SIGTERM', 'SIGHUP']);
-const SIGNAL_EXIT_BASE = 128;
-/** What a process ended by a signal exits with, by the shell's rule (128 + the signal's number). */
-const exitOfSignal = (name) => SIGNAL_EXIT_BASE + (os.constants.signals[name] ?? 0);
-/**
- * A docker call that ends with one of these was stopped by a signal: its client, or the box's
- * first process. The client can be gone while the box is still up.
- */
-const SIGNAL_EXITS = Object.freeze(Object.fromEntries([...INTERRUPTS, 'SIGKILL'].map((name) => [exitOfSignal(name), name])));
 /** How long `docker rm -f` of this run's own box may take, and how long its client may take to end. */
 const REMOVE_LIMIT_MS = 60_000;
 const CLIENT_END_LIMIT_MS = 10_000;
-
-/** A refusal: said in one line, before any container starts. */
-export class WalkBoxError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'WalkBoxError';
-  }
-}
-const refused = (message) => new WalkBoxError(message);
-
-const posix = (file) => path.resolve(file).split(path.sep).join('/');
 
 /* ---------------------------------------------------------------------------------------------
  * The command line
@@ -233,72 +222,8 @@ export function imageFor(root) {
 }
 
 /* ---------------------------------------------------------------------------------------------
- * Paths: the output folder, the specs, the two files handed in
+ * What the environment says
  * ------------------------------------------------------------------------------------------ */
-
-/** The path with every link followed, as far as the path exists; what is not there yet is kept as written. */
-function realPathOf(file) {
-  try {
-    return fs.realpathSync.native(file);
-  } catch (error) {
-    if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
-    const parent = path.dirname(file);
-    return parent === file ? file : path.join(realPathOf(parent), path.basename(file));
-  }
-}
-
-/** Whether one absolute path is under another, read as written. The folder itself is not under itself. */
-function isUnder(folder, file) {
-  const fromFolder = path.relative(folder, file);
-  return fromFolder !== '' && fromFolder !== '..' && !fromFolder.startsWith(`..${path.sep}`) && !path.isAbsolute(fromFolder);
-}
-
-/** The git checkout a folder is in (a repository has a `.git` folder, a worktree a `.git` file), or null. */
-function checkoutAbove(folder) {
-  for (let dir = folder; ; dir = path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, '.git'))) return dir;
-    if (path.dirname(dir) === dir) return null;
-  }
-}
-
-/** The base output folder, refused unless it is absolute and outside every git checkout, links followed. */
-export function assertOutBase(dir) {
-  if (typeof dir !== 'string' || !path.isAbsolute(dir)) {
-    throw refused('the output folder must be an absolute path (WALK_BOX_OUT)');
-  }
-  const folder = path.resolve(dir);
-  const checkout = checkoutAbove(folder) ?? checkoutAbove(realPathOf(folder));
-  if (checkout !== null) {
-    throw refused(`the output folder is inside a git checkout (${posix(checkout)}): a walk's output belongs outside every repository`);
-  }
-  return folder;
-}
-
-const SPEC_SUFFIX = '.spec.ts';
-const BOX_PATH = /^[A-Za-z0-9._/-]+$/;
-
-/** Each spec as the repository has it and as the container runs it. Refuses anything not a spec file under web/e2e. */
-export function specPaths(root, cwd, specs) {
-  const e2e = path.join(root, 'web', 'e2e');
-  return specs.map((spec) => {
-    const file = path.resolve(cwd, spec);
-    if (!isUnder(e2e, file) || !isUnder(realPathOf(e2e), realPathOf(file))) {
-      throw refused(`"${spec}" is not under web/e2e of this worktree (${posix(root)}): start the script from the worktree under test`);
-    }
-    if (!file.endsWith(SPEC_SUFFIX)) throw refused(`"${spec}" is not a spec: a spec file's name ends in ${SPEC_SUFFIX}`);
-    if (!fs.statSync(file, { throwIfNoEntry: false })?.isFile()) throw refused(`"${spec}" is not a file`);
-    const inE2e = path.relative(e2e, file).split(path.sep).join('/');
-    if (!BOX_PATH.test(inE2e)) throw refused(`"${spec}" has a character in its path the walk box does not pass on`);
-    return { repo: `web/e2e/${inE2e}`, box: `e2e/${inE2e}` };
-  });
-}
-
-/** A file named by an override or by its default place. An override is an absolute path. */
-function fileSetting(asked, standard, variable) {
-  if (asked === undefined || asked === '') return standard;
-  if (!path.isAbsolute(asked)) throw refused(`${variable} must be an absolute path`);
-  return path.resolve(asked);
-}
 
 /** What the environment says, by name and by path. No file is opened and no value is kept. */
 function settingsFrom({ env, home }) {
@@ -311,34 +236,6 @@ function settingsFrom({ env, home }) {
     shots: env.WALK_SHOTS === '1',
     share: (env[SHARE_VARIABLE] ?? '') !== '',
   };
-}
-
-function requireFile(file, what, variable) {
-  if (!fs.statSync(file, { throwIfNoEntry: false })?.isFile()) {
-    throw refused(`the ${what} is not there: ${posix(file)} (${variable} names another)`);
-  }
-}
-
-/** A host path as one field of docker's --mount, which splits its value at commas. */
-function mountSource(file) {
-  const source = posix(file);
-  if (source.includes(',')) throw refused(`${source} has a comma in its path, which docker reads as the end of a mount field`);
-  return source;
-}
-
-const HTTPS_ORIGIN = '--url takes an https origin, as in https://host.example: no path, no query, no sign-in';
-
-function originOf(value) {
-  let url;
-  try {
-    url = new URL(value);
-  } catch {
-    throw refused(HTTPS_ORIGIN);
-  }
-  const plain =
-    url.protocol === 'https:' && url.username === '' && url.password === '' && url.pathname === '/' && url.search === '' && url.hash === '';
-  if (!plain) throw refused(HTTPS_ORIGIN);
-  return url.origin;
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -513,39 +410,6 @@ async function runCalls(calls, logFile, deps, stop = null) {
   }
 }
 
-/** Waits for `promise`, for `ms` at most. Returns what it resolved with, or null when the time ran out first. */
-async function within(ms, promise) {
-  let timer;
-  const limit = new Promise((resolve) => {
-    timer = setTimeout(resolve, ms, null);
-  });
-  try {
-    return await Promise.race([promise, limit]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
- * Waits for the first signal that asks this script to stop. `interrupted` resolves with the
- * signal's name. While the watch is on, a signal does not end the process: the box is removed and
- * run.json finished first, and a second signal in that time changes nothing. `stop()` ends the
- * watch.
- */
-export function watchSignals(emitter = process) {
-  let tell;
-  const interrupted = new Promise((resolve) => {
-    tell = (name) => resolve(name);
-  });
-  for (const name of INTERRUPTS) emitter.on(name, tell);
-  return {
-    interrupted,
-    stop: () => {
-      for (const name of INTERRUPTS) emitter.off(name, tell);
-    },
-  };
-}
-
 /** `docker rm -f` of the box this run started. Returns whether docker said it is removed. */
 async function removeBox(container, deps) {
   let code;
@@ -657,38 +521,6 @@ async function remove(args, deps) {
   const { code } = await runCalls(plan.calls, null, deps);
   deps.log(code === EXIT.passed ? `walk-box: ${plan.container} is removed` : `walk-box: docker rm ended with ${code}`);
   return code;
-}
-
-/** The docker client: found on PATH by this name. A test names a stand-in instead; nothing else does. */
-export const DOCKER_CLIENT = Object.freeze(['docker']);
-
-/**
- * Start docker with these arguments and no shell; what it prints goes to the console and to the
- * log file. Resolves with its exit code (128 + the signal's number when a signal ended it), and
- * rejects when it cannot be started or when `signal` ends it.
- */
-export function runDocker(argv, { logFile = null, client = DOCKER_CLIENT, out = process.stdout, err = process.stderr, signal } = {}) {
-  return new Promise((resolve, reject) => {
-    const log = logFile === null ? null : fs.createWriteStream(logFile, { flags: 'a' });
-    let settled = false;
-    const settle = (finish) => {
-      if (settled) return;
-      settled = true;
-      if (log === null) finish();
-      else log.end(finish);
-    };
-    log?.on('error', (error) => settle(() => reject(error)));
-    const child = spawn(client[0], [...client.slice(1), ...argv], { stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true, signal });
-    const tee = (from, to) =>
-      from.on('data', (chunk) => {
-        to.write(chunk);
-        if (!settled) log?.write(chunk);
-      });
-    tee(child.stdout, out);
-    tee(child.stderr, err);
-    child.once('error', (error) => settle(() => reject(error)));
-    child.once('close', (code, killedBy) => settle(() => resolve(code ?? (killedBy === null ? EXIT.docker : exitOfSignal(killedBy)))));
-  });
 }
 
 function dependencies(deps) {
