@@ -10,7 +10,9 @@
 //
 //   begin; set transaction read only; set local statement_timeout = '15s'; …; rollback
 //
-// through `openClient()` of scripts/db-test.mjs (the test login, BB2DASH_TEST_DB_URL). It prints
+// each of the five sent by the extended protocol, so the server takes one statement at a time and
+// refuses a text that holds a second. It connects through `openClient()` of scripts/db-test.mjs
+// (the test login, BB2DASH_TEST_DB_URL). It prints
 // exactly one line on stdout:
 //
 //   {"name": "turn", "pass": true, "detail": {…}}        and "blocked": true when the proof says so
@@ -317,18 +319,27 @@ export function decide(result) {
  * ------------------------------------------------------------------------------------------ */
 
 /**
- * Run one statement read-only, and roll back whatever happened. A rollback that fails is told
- * to `onRollbackError` and does not replace the statement's own result or error.
+ * One statement and no more. By the extended protocol the server itself refuses a text that holds
+ * a second statement; by the simple protocol, which node-postgres uses for a text with no values,
+ * it would run them all, and a `commit` among them would end the read-only transaction.
+ * apply/src/mcp-sql/server.ts sends its statements the same way.
+ */
+const single = (text, values = []) => ({ text, values, queryMode: 'extended' });
+
+/**
+ * Run one statement read-only, and roll back whatever happened. Every statement, the proof's and
+ * the four around it, goes by the extended protocol. A rollback that fails is told to
+ * `onRollbackError` and does not replace the statement's own result or error.
  */
 export async function runReadOnly(client, sql, values, onRollbackError) {
   try {
-    await client.query('begin');
-    await client.query('set transaction read only');
-    await client.query(`set local statement_timeout = '${STATEMENT_TIMEOUT}'`);
-    return await client.query(sql, values);
+    await client.query(single('begin'));
+    await client.query(single('set transaction read only'));
+    await client.query(single(`set local statement_timeout = '${STATEMENT_TIMEOUT}'`));
+    return await client.query(single(sql, values));
   } finally {
     try {
-      await client.query('rollback');
+      await client.query(single('rollback'));
     } catch (error) {
       onRollbackError(error);
     }

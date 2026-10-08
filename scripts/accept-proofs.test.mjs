@@ -346,6 +346,13 @@ test('every statement goes by the extended protocol, with parameters and without
   assert.deepEqual(without.clients[0].queries[3].values, []);
 });
 
+test('node-postgres sends a text marked extended by the extended protocol, and an unmarked text with no values by the simple one', async () => {
+  // The driver's own rule, pinned: a later version that dropped the mark would reopen the simple protocol unseen.
+  const { default: pg } = await import('pg');
+  assert.equal(new pg.Query({ text: 'select 1', values: [], queryMode: 'extended' }).requiresPreparation(), true);
+  assert.equal(new pg.Query({ text: 'select 1', values: [] }).requiresPreparation(), false);
+});
+
 test('it is rolled back when the statement throws, and the error is a code, never a verdict', async () => {
   const failure = Object.assign(new Error('column r.stat does not exist'), { code: '42703' });
   const { code, clients, line, err } = await runWith({
