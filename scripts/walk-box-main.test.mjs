@@ -528,7 +528,8 @@ test('watchSignals: the first of SIGINT, SIGTERM and SIGHUP is told by name, and
 
 test('runDocker: a client that is still running is ended when its signal is aborted', async () => {
   const dir = scratch('walkbox-waits-');
-  const script = write(dir, 'waits.mjs', "process.stdout.write('started\\n');\nsetTimeout(() => {}, 600000);\n");
+  // A minute, far longer than the test: a client that is not ended holds this process open that long, no longer.
+  const script = write(dir, 'waits.mjs', "process.stdout.write('started\\n');\nsetTimeout(() => {}, 60000);\n");
   const out = sink();
   const stop = new AbortController();
   const ending = runDocker(['run'], { logFile: null, client: [process.execPath, script], out: out.stream, err: sink().stream, signal: stop.signal });
