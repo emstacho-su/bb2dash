@@ -340,6 +340,125 @@
       "--color-hover",
       "--color-surface",
       "an exam bar on a hovered day"
+    ],
+    [
+      3,
+      "--color-scrollbar",
+      "--color-bg",
+      null,
+      "the scrollbar thumb on the ground"
+    ],
+    [
+      3,
+      "--color-scrollbar",
+      "--color-surface",
+      null,
+      "the scrollbar thumb on the card"
+    ],
+    [
+      3,
+      "--color-scrollbar",
+      "--color-panel",
+      null,
+      "the scrollbar thumb on the panel"
+    ],
+    [
+      3,
+      "--color-neutral-500",
+      "--color-surface",
+      null,
+      "the edge of a card under the pointer, dark (--shadow-hover)"
+    ],
+    [
+      3,
+      "--color-neutral-600",
+      "--color-surface",
+      null,
+      "the edge of a card under the pointer, light (--shadow-hover)"
+    ],
+    [
+      3,
+      "--color-neutral-700",
+      "--color-surface",
+      null,
+      "the grey underline under a top bar link the pointer is on"
+    ],
+    [
+      4.5,
+      "--color-text",
+      "--color-active",
+      "--color-surface",
+      "words on a pressed row or icon button"
+    ],
+    [
+      4.5,
+      "--color-text",
+      "--color-surface-press",
+      null,
+      "words on a course card while it is held"
+    ],
+    [
+      4.5,
+      "--color-neutral-600",
+      "--color-neutral-900",
+      null,
+      "a switched-off field: its words on its fill (readable; a disabled control is exempt)"
+    ],
+    [
+      4.5,
+      "--color-neutral-300",
+      "--color-bg",
+      null,
+      "a line of the Activity list in its well"
+    ],
+    [
+      4.5,
+      "--color-neutral-600",
+      "--color-bg",
+      null,
+      "the time on an Activity line"
+    ],
+    [
+      3,
+      "--color-accent",
+      "--color-surface",
+      null,
+      "the tick of the picked theme in the account menu"
+    ],
+    [
+      4.5,
+      "--color-neutral-300",
+      "--color-surface",
+      null,
+      "a line of a toast"
+    ],
+    [
+      4.5,
+      "--color-neutral-500",
+      "--color-surface",
+      null,
+      "Dismiss on a toast, at rest"
+    ],
+    [
+      3,
+      "--color-accent-700",
+      "--color-surface",
+      null,
+      "the proposed week strip: a meeting day filled and a plain day outlined, in one tone"
+    ],
+    [
+      3,
+      "--color-neutral-300",
+      "--color-neutral-900",
+      null,
+      "the three window buttons on the sample Windows bar"
+    ],
+    [
+      3,
+      "--color-neutral-300",
+      "--color-surface",
+      null,
+      "the three window buttons on the app bar as title bar"
     ]
   ],
   "dark": {
@@ -449,7 +568,25 @@
     "--size-underline": "1px",
     "--size-underline-mark": "2px",
     "--size-underline-offset": "3px",
-    "--size-notice-bar": "3px"
+    "--size-notice-bar": "3px",
+    "--motion-press": "80ms",
+    "--motion-state": "120ms",
+    "--motion-enter": "180ms",
+    "--motion-enter-lg": "240ms",
+    "--motion-delay": "240ms",
+    "--motion-shift": "6px",
+    "--motion-spin": "900ms",
+    "--ease-out": "cubic-bezier(0.2, 0, 0, 1)",
+    "--ease-linear": "linear",
+    "--motion-control": "background-color var(--motion-state) var(--ease-out), border-color var(--motion-state) var(--ease-out), color var(--motion-state) var(--ease-out), box-shadow var(--motion-state) var(--ease-out), text-decoration-color var(--motion-state) var(--ease-out), opacity var(--motion-state) var(--ease-out), transform var(--motion-press) var(--ease-out)",
+    "--color-scrollbar": "var(--color-neutral-600)",
+    "--color-scrollbar-hover": "var(--color-neutral-400)",
+    "--color-surface-press": "color-mix(in srgb, var(--color-text) 8%, var(--color-surface))",
+    "--shadow-hover": "0 0 0 1px var(--color-neutral-500)",
+    "--size-focus": "2px",
+    "--size-focus-gap": "2px",
+    "--size-scrollbar": "10px",
+    "--size-check": "13px"
   },
   "light": {
     "--color-bg": "#f4f4f4",
@@ -524,6 +661,50 @@
     "--planner-appointment-edge": "var(--color-neutral-300)",
     "--color-panel": "#e9e9e9",
     "--color-on-accent": "#000000",
-    "--shadow-mark": "none"
+    "--shadow-mark": "none",
+    "--color-scrollbar": "var(--color-neutral-600)",
+    "--color-scrollbar-hover": "var(--color-neutral-400)",
+    "--color-surface-press": "color-mix(in srgb, var(--color-text) 8%, var(--color-surface))",
+    "--shadow-hover": "0 0 0 1px var(--color-neutral-600)"
+  },
+  "tileOnly": {
+    "dark": {
+      "--motion-exit": "120ms",
+      "--motion-exit-lg": "160ms",
+      "--ease-in": "cubic-bezier(0.4, 0, 1, 1)"
+    }
+  },
+  "refinement": {
+    "date": "2026-10-08",
+    "newFamilies": [
+      "--motion-*",
+      "--ease-*"
+    ],
+    "newNames": [
+      "--motion-press",
+      "--motion-state",
+      "--motion-enter",
+      "--motion-enter-lg",
+      "--motion-delay",
+      "--motion-shift",
+      "--motion-spin",
+      "--ease-out",
+      "--ease-linear",
+      "--motion-control",
+      "--color-scrollbar",
+      "--color-scrollbar-hover",
+      "--color-surface-press",
+      "--shadow-hover",
+      "--size-focus",
+      "--size-focus-gap",
+      "--size-scrollbar",
+      "--size-check"
+    ],
+    "heldUntilPanelsLeave": [
+      "--motion-exit",
+      "--motion-exit-lg",
+      "--ease-in"
+    ],
+    "wording": "The refinement pass adds 21 names. The default build declares 18 of them (they are in the dark map): 10 in the two new families (times, one distance, easings and the one transition list) and --color-scrollbar, --color-scrollbar-hover, --color-surface-press, --shadow-hover, --size-focus, --size-focus-gap, --size-scrollbar and --size-check. 3 are held back and are in tileOnly, not in the dark map: only the leave rules use them, and leaving waits for a word. Light redeclares the three colours and the shadow. No name of globals.css moves and none of the 18 layout tokens changes."
   }
 }

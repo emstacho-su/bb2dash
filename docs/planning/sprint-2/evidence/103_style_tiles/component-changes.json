@@ -328,5 +328,362 @@
     "file": "app/globals.css --shadow-lg (a token value; no rule changes)",
     "what": "NO EDIT in the modules. --shadow-sm and --shadow-md carry the card's 1px ring; --shadow-lg is the drop shadow alone, because all seven module rules that use it (Popout .panel, PlannerItemPopover and PlannerSeriesScopeDialog with a divider border; InboxApplyButton, NavSearch, SyncButton and TopNav menus with 0 0 0 1px var(--color-divider)) already draw a divider edge. A ring inside the token would double it.",
     "drawnOnTile": true
+  },
+  {
+    "id": "scrollbars-themed",
+    "owner": "W-67, task 8",
+    "file": "app/globals.css (one block; three new tokens: --color-scrollbar, --color-scrollbar-hover, --size-scrollbar)",
+    "what": "Every box that scrolls, and the page, draws a scrollbar in the theme: 10px, no arrow buttons, a round thumb in --color-scrollbar (neutral 600: 5.7:1 on a dark card, 4.5:1 on the light panel, the tone the Upcoming strip's thumb already has) that goes to neutral 400 under the pointer, on a clear track. Written with ::-webkit-scrollbar, which the desktop shell and Chrome read; scrollbar-width and scrollbar-color are the fallback for an engine without it, inside @supports not selector(::-webkit-scrollbar), because a box that sets them makes Chromium ignore the first form. The whole block sits in @media (hover: hover) and (pointer: fine), so a touch browser keeps its overlay bar and the phone caps that use 100vw are not narrowed by a fixed 10px one. Today the page, all seven vertical scroll boxes and two sideways ones use the default bar with arrow buttons (STATUS, Known issues: it cuts the rounded corners of the Workspace column). No automated proof: the walk box's headless browser draws no scrollbar, so the proof is the PM's look at the real window in both themes (acceptance step 5). The Upcoming strip keeps its own rule, which upcoming-tracker-css.test.ts pins: it stays a thinner, squarer bar with arrows (the entry tracker-scrollbar).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "select-as-field",
+    "owner": "W-67 (.input, task 16); W-68 (Popout .control, SearchPanel .courseSelect, task 17); W-69 (StatusSelect, PlannerItemPopover .control, task 18)",
+    "file": "components/tracker/StatusSelect.module.css .statusSelect; components/popout/Popout.module.css .control and the .control of PlannerItemPopover; components/shell/SearchPanel.module.css .courseSelect; styles/tokens.module.css .input (seven selects use it, GradeModel .select among them)",
+    "what": "The 12 selects read as the text field does: the same edge (--color-neutral-600), the same hover edge (--color-neutral-400), the 2px ring, cursor: pointer. Four different rules style them today (the input class, a .control class, .courseSelect and .statusSelect), with three fills, two corners and two ways of showing focus. The corner stays each rule's own; the fill, the edge and the ring become the field's. The list a select opens stays Windows' own until the entry select-list-drawn is a yes.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "checkbox-drawn",
+    "owner": "W-67, task 8 (the one rule); W-69, task 18 (.eventDone loses accent-color)",
+    "file": "app/globals.css (one rule on :where(input[type=\"checkbox\"]), one new token --size-check); components/planner/PlannerWeek.module.css the done box (accent-color today)",
+    "what": "A checkbox is drawn by the app: appearance: none, a 1px edge in the text colour, corner var(--radius-xs); ticked, it fills with the text colour and a tick in the ground colour scales in over 80ms. One rule in globals.css reaches all six, with no TSX and no composes: five of them are bare inputs inside a label (PlannerEventForm.tsx:164 and :174, PlannerEventWizard.tsx:155 and :167, ConversationList.tsx:152), where a composed class could not reach. The selector is wrapped in :where(), so it weighs nothing and a module's own class still wins: the planner's done box keeps its 12px and its own tick colour. The other five take --size-check, 13px, the size the browser's own box has, so nothing moves. Five of the six checkboxes are the browser's blue-grey default today.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "chrome-no-select",
+    "owner": "W-68 (TopNav, SyncButton, CourseSidebar, SearchPanel, Popout .close, task 17); W-67 (tokens.module.css, task 16); W-69 (Today .courseCard, UpcomingTracker, Inbox tabs, task 18); W-70 (CourseSubBar tabs, GradebookTable head, task 19)",
+    "file": "components/shell/TopNav.module.css .brand, .link, .linkActive, .ic, .icOpen, .icToggle, .ddHead, .ddRow; components/shell/SyncButton.module.css .button, .toastActions; components/shell/CourseSidebar.module.css .head, .row; styles/tokens.module.css .btn, .kicker, .glyph; the tab and mode groups; the legend and the day columns of UpcomingTracker; table heads; components/popout/Popout.module.css .close; app/(app)/Today.module.css .courseCard (the drag line only)",
+    "what": "user-select: none on the controls of the chrome, never on a container: the brand, the top bar links and icons, Sync, menu rows and menu heads, buttons, tab and mode groups, the side panel's head and rows, small capital labels, the legend, table heads, day columns. Dragging across the bar no longer selects its words. It is not written on .bar or .dd: search results, announcements, the Activity lines and the Sync toast with its error are all children of the bar (TopNav.tsx:107-176, no portal), and a child takes none from its parent, so a sync error or a search snippet could no longer be copied. Everything a person would copy stays selectable: titles, dates, scores, notes, messages, tags, chips, a toast's words. Beside it on the same rules, and on the course cards, -webkit-user-drag: none: every link in the bar, each side panel row and each course card is an anchor, and today a press and a pull lifts a ghost of the link, which no application does. Today no rule sets either (the two user-select: all lines are the copyable commands and stay).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "focus-ring-one",
+    "owner": "W-67 (globals.css, tokens.module.css); W-68, W-69, W-70 each in their own modules (tasks 16 to 19)",
+    "file": "app/globals.css :focus-visible and the 26 rules in 16 modules that repeat it; the three that draw focus as a 1px edge with outline: none: components/tracker/StatusSelect.module.css .statusSelect:focus-visible, components/popout/Popout.module.css .control:focus-visible, components/shell/NavSearch.module.css .field:focus with .rootOpen:focus-within; and the two fields that keep the ring at a gap of 0: styles/tokens.module.css .input:focus-visible, components/shell/SearchPanel.module.css .courseSelect:focus-visible",
+    "what": "One ring: var(--size-focus) solid var(--color-accent), which is 2px of the ink. Its gap is var(--size-focus-gap) outside a control, the same amount inset on a row or a cell that sits flush in a clipped box, and back by the hairline, calc(var(--size-underline) * -1), on a field, so the ring sits on the field's own 1px edge and a focused field shows 2px of the ink (it showed 3: its edge and the ring beside it). The three rules that swap the ring for a 1px edge colour (outline: none) get the ring back: a 1px colour change is under the 2px the skill and WCAG 2.2 ask of a focus mark. Today the 26 repeats use four gaps (2px twelve times, -2px eleven, 1px twice, 0 once). The ring does not ease: a keyboard needs it at once.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "hover-grammar",
+    "owner": "W-68 (TopNav .link, SearchPanel .modeBtn, task 17); W-69 (Today .courseCard, UpcomingTracker .day, PlannerWeek the event block, task 18); the token --shadow-hover from W-67, task 8",
+    "file": "components/shell/TopNav.module.css .link; app/(app)/Today.module.css .courseCard:hover; components/tracker/UpcomingTracker.module.css .day:hover; components/shell/SearchPanel.module.css .modeBtn:hover; components/planner/PlannerWeek.module.css the event block",
+    "what": "Hover says one thing in one way. A row, an icon, a day column and a mode button take the --color-hover wash (the day column names the token now, in place of its own 6% mix, which takes one color-mix out of UpcomingTracker.module.css). A top bar link that is not the current page shows a grey underline where the red one would be, as thick as the red one by the same token: box-shadow: inset 0 calc(var(--size-underline-mark) * -1) 0 var(--color-neutral-700). A card under the pointer keeps its place and its edge goes one step stronger: box-shadow: var(--shadow-hover), a new token, in place of --shadow-md. A drop shadow stays the mark of a thing that floats. A planner event shows a hairline outline in its own edge colour under the pointer: its box-shadow is the block's own edge as the sweep writes it, then inset 0 0 0 var(--size-underline) var(--planner-kind-edge). No mix and no new literal, so the token audit's count for PlannerWeek.module.css does not rise: the rule names the size token the sweep gives the edge. A box-shadow and not an outline, because a working-location block and an appointment slot already use their outline to say what kind they are.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "disabled-one-look",
+    "owner": "W-67 (.btn:disabled, task 16); W-68 (SyncButton, Popout .control, TopNav .icDisabled, task 17); W-69 (StatusSelect, PlannerWeek the pending block, PlannerItemPopover .control, InboxApplyButton, task 18)",
+    "file": "styles/tokens.module.css .btn:disabled; components/shell/SyncButton.module.css .button:disabled; components/tracker/StatusSelect.module.css .statusSelect:disabled; components/popout/Popout.module.css .control:disabled; components/planner/PlannerWeek.module.css the pending event block and chip; components/planner/PlannerItemPopover.module.css .control:disabled; components/inbox/InboxApplyButton.module.css .button:disabled; components/shell/TopNav.module.css .icDisabled",
+    "what": "A control that cannot be used is at one strength: opacity 0.5, in place of 0.45, 0.55 and 0.6 in seven rules. Each rule keeps the pointer it has. That matters: four of them belong to things that are disabled only while they work, and say so with cursor: progress today (Sync while the request is in flight, SyncButton.tsx:186, its label reads \"requesting…\"; a status select while it saves, StatusSelect.tsx:77; the popout's controls; a planner block that is pending), and they keep it. The top bar's one truly switched-off icon (.icDisabled) takes cursor: not-allowed in place of default. This entry is smaller than it was first written. It first gave the switched-off look, a flat grey box with a pointer that says no, to every disabled field and select. That is withdrawn: of the app's 43 disabled sites, 15 are disabled on \"pending\", 6 on \"controlsDisabled\" and 3 on \"busy\", fields among them (LoginForm, InboxCard, CourseInfo, the popout's planner block), so nearly every disabled control in this app is a busy one, and each save would have flashed a grey box. Telling off from busy needs the busy ones to say so: the entry busy-says-busy, where the off look for a field now lives.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "motion-tokens",
+    "owner": "W-67, task 8",
+    "file": "app/globals.css (:root, and one prefers-reduced-motion block, which the app does not have today)",
+    "what": "NEW TOKENS in two new families, --motion-* and --ease-*. Durations: --motion-press 80ms, --motion-state 120ms, --motion-enter 180ms, --motion-enter-lg 240ms, --motion-delay 240ms, and --motion-spin 900ms, one turn of a progress mark. One distance: --motion-shift 6px, how far a panel travels as it arrives. Easings: --ease-out cubic-bezier(0.2, 0, 0, 1) for what arrives and for every state change, and --ease-linear for a progress mark. --motion-control holds the one transition list a control uses (fill, edge, text colour, shadow, underline colour and opacity over --motion-state; transform over --motion-press). Three more names are held back and not declared by the default build, because only the leave rules use them and brief 103 forbids a name no rule uses: --motion-exit 120ms, --motion-exit-lg 160ms and --ease-in cubic-bezier(0.4, 0, 1, 1). They are declared when the entry menus-leave is a yes; the tile declares them because it shows the leaving. No rule outside globals.css writes a time or a curve of its own (the Time check, REFINEMENT.md section 11). globals.css also gains one block: under prefers-reduced-motion every transition and animation is off, with one thing kept, the wait before a loading line. That block stops the search spinner for a reader who asked for less motion (it turns once in 2s for them today, NavSearch.module.css:94-96; the word \"Searching…\" stays), so the two lines of NavSearch's own reduce rule that set .spinner are deleted, and nobody restores them. If he wants the slow turn kept, drop !important from the animation line of the block.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "state-transitions",
+    "owner": "W-67 (globals.css a; tokens.module.css .btn, .input, tasks 8 and 16); W-68 (shell and popout, task 17); W-69 (tracker, Today, planner, Inbox tabs, task 18); W-70 (CourseSubBar tabs, task 19)",
+    "file": "app/globals.css a; styles/tokens.module.css .btn, .input; components/shell/TopNav.module.css .link, .ic, .ddRow; components/shell/SyncButton.module.css .button, .toastDismiss; components/shell/CourseSidebar.module.css .row; components/shell/SearchPanel.module.css .modeBtn, .courseSelect; components/tracker/UpcomingTracker.module.css .day; components/tracker/StatusSelect.module.css .statusSelect; components/popout/Popout.module.css .close, .control; app/(app)/Today.module.css .courseCard; components/planner/PlannerWeek.module.css the event block and its title; the tab rules of CourseSubBar and Inbox",
+    "what": "Each rule gets one line, transition: var(--motion-control). A state no longer snaps: fill, edge and text colour ease over 120ms and nothing is laid out. Today 47 modules hold 53 :hover rules and one file with a transition. The line is written in each module, not composed: a rule that opens with all: unset would drop a composed one, and NavSearch.css.test.ts allows no chained composes.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "press-states",
+    "owner": "W-67 (.btn, .btnGhost, task 16; the token --color-surface-press, task 8); W-68 (TopNav, SyncButton, CourseSidebar, SearchPanel, Popout, Bell .seeAll, task 17); W-69 (UpcomingTracker .day, Today .courseCard, InboxCard .sourceLink, PlannerWeek .todayLink and the event title, task 18); W-70 (.openLink, .itemLink, .bbLink, .emptyLink, task 19)",
+    "file": "styles/tokens.module.css .btn, .btnGhost; components/shell/TopNav.module.css .ic, .ddRow, .brand; components/shell/SyncButton.module.css .button, .toastLink; components/shell/CourseSidebar.module.css .row; components/shell/SearchPanel.module.css .modeBtn; components/tracker/UpcomingTracker.module.css .day; components/popout/Popout.module.css .close; app/(app)/Today.module.css .courseCard; the text links by name: .openLink (CourseGradeCard), .itemLink (GradebookTable), .sourceLink (InboxCard), .bbLink (CourseClasswork, Materials), .seeAll (Bell), .todayLink and the event title (PlannerWeek), .emptyLink (MessageList)",
+    "what": "Every control answers a press. A pill (.btn, Sync) scales to 0.98 over 80ms, which moves no neighbour. A row, an icon button, a day column, the close button and the quiet button take the --color-active wash. A course card goes one step past its hover fill, var(--color-surface-press), a new token, so no module writes a mix (the token audit counts every color-mix in a module and fails when a count rises). A text link dims to 0.7 while it is held, written on the text-link classes by name. There is no rule on bare a: the app's TSX has 48 anchors, and pills, top bar links, side panel rows and tabs are anchors too, so a bare rule would dim each of them and an anchor pill would scale and dim at once. Today :active exists in tokens.module.css alone (two rules); the top bar, the tabs, the rows and the day columns have no pressed state.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "panels-arrive",
+    "owner": "W-68 (TopNav .dd, NavSearch .popover, SyncButton .toast, Bell, Popout, the phone Menu, task 17); W-69 (PlannerItemPopover, InboxApplyButton, task 18); the two walk specs: W-68 (phone-width.spec.ts) and W-67 (theme-walk.spec.ts)",
+    "file": "components/shell/TopNav.module.css .dd; components/shell/NavSearch.module.css .popover; components/shell/SyncButton.module.css .toast; components/shell/Bell.module.css the pop-down; components/planner/PlannerItemPopover.module.css; components/inbox/InboxApplyButton.module.css; components/popout/Popout.module.css .backdrop, .panel; the phone Menu panel (task 12); web/e2e/phone-width.spec.ts and web/e2e/theme-walk.spec.ts (both new in this phase)",
+    "what": "A floating panel arrives from its trigger. A menu and a popover fade in and grow from 0.97 at the corner nearest the button that opened them (transform-origin), over --motion-enter with --ease-out. A toast fades in and drops by --motion-shift from under its control. The popout fades in and rises by --motion-shift over --motion-enter-lg while its backdrop fades in. Written with @starting-style on the rule, so it works with panels that are mounted when they open, as all of them are: no script and no markup change. When a toast leaves is not touched: the app's own timer stays (TOAST_MS, 15s), and a toast that asks for something stays until dismissed. Leaving is the entry menus-leave. The walk specs must be told, or the motion weakens the phase's own proofs: a panel now mounts see-through and scaled, a 360px panel anchored right reads left 40.8 at mount and 30 at rest, and toBeVisible passes at opacity 0. So both new specs open with test.use({ reducedMotion: 'reduce' }) (the config stays unedited; with the reduce block the rect is at rest on the first frame), and theme-walk.spec.ts gains one case with motion on that finds the account menu's opacity under 1 on its first frame, so the motion itself has a proof. The desktop shell runs with the GPU off (index.ts:401): if the popout stutters in the real window, --motion-enter-lg: 0ms makes it simply there, one token and no rule change (acceptance step 5).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "titles-balance",
+    "owner": "W-67 (globals.css h1 to h4, task 8); W-68 (Popout .title, task 17); W-69 (InboxCard .title, task 18)",
+    "file": "app/globals.css h1 to h4; components/inbox/InboxCard.module.css .title; components/popout/Popout.module.css .title",
+    "what": "text-wrap: balance on headings and on the Inbox and popout titles, so a two-line title does not leave one word alone. No size changes. The first writing of this entry also asked for font-variant-numeric: tabular-nums on body. That half is struck: Source Sans 3 and Source Serif 4 as served already set figures on one width (1111 and 0000 measure the same with the property and without it), so the line changed nothing, and on body it would also have reached the planner's block text, whose lines are budgeted by character count (nested-fit.ts:32-35).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "loading-never-flashes",
+    "owner": "W-69, task 18",
+    "file": "app/(app)/Today.module.css .muted, with its own one-line @keyframes in the same module (a module's animation name is local to it)",
+    "what": "The line that says Home's courses are loading waits --motion-delay (240ms) and then fades in over --motion-enter, once: animation: arrives var(--motion-enter) var(--ease-out) var(--motion-delay) backwards, with one keyframe, from opacity 0. An answer that comes back inside a quarter of a second never shows the words at all, so Home stops flashing them at each open. .muted dresses that one line and nothing else (Today.tsx:268), which is why this much is CSS alone. As first written the entry composed a shared class into .state, .missing and .loading. That is wrong and is withdrawn: those classes also dress empty, not-found and error lines (CourseInfo.tsx uses .state 14 times, one of them loading and one role=alert; QueryState puts its error on the same className), so every error and every empty line would have been invisible for 240ms and then faded in together. The other loading lines need one attribute in TSX: the entry loading-attribute. Under reduced motion the wait is kept and the fade is dropped.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "theme-switch-instant",
+    "owner": "W-67 (globals.css, task 8; theme-preference.ts, task 9; ThemeMenu.tsx and one case in ThemeMenu.test.tsx, task 10)",
+    "file": "app/globals.css (one rule); lib/theme-preference.ts and components/shell/ThemeMenu.tsx (new in brief 103, tasks 9 and 10); web/test/ThemeMenu.test.tsx (one case)",
+    "what": "FOR THE PM TO RULE (it is script, so by this pass's own reading it is not plain CSS; it rides tasks 9 and 10). The theme switch has no motion. Because every control now eases its colours, a switch would ease all of them at once for 120ms while the page behind them flips. So the root carries data-theme-switching for two frames around a switch, and one rule turns every transition off while it is there. It is set by ThemeMenu on a pick and by the boot script's system-change listener, never by the boot stamp (nothing is on screen to ease at boot). No stored value, no new export. One case in ThemeMenu.test.tsx: a pick sets the attribute and it is gone two frames later. Without this entry the other motion entries still work, and a theme switch shows 120ms of easing on every control.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "decoration-out",
+    "owner": "W-67 (tokens.module.css .rule, task 16); W-68 (Popout .backdrop, task 17)",
+    "file": "styles/tokens.module.css .rule; components/popout/Popout.module.css .backdrop",
+    "what": "The last two effects go. .rule is a plain line in --color-divider, var(--size-underline) thick (today it fades to nothing at both ends through a gradient, the old skin's signature; Materials is its one user). The popout's backdrop is the scrim alone: backdrop-filter: blur(2px) is dropped and the 72% ground mix stays. The two glows are already entries (brand-mark, red-where-you-are). The hatch of an out-of-office block stays: it tells a kind apart without colour.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "scroll-chaining",
+    "owner": "W-68 (Bell, TopNav .dd, SearchPanel, Popout, task 17); W-69 (PlannerSeriesScopeDialog, task 18)",
+    "file": "the five scroll boxes that float over the page: components/shell/Bell.module.css:35, components/shell/TopNav.module.css:140 (the Activity list), components/shell/SearchPanel.module.css:63, components/popout/Popout.module.css:15, components/planner/PlannerSeriesScopeDialog.module.css:16",
+    "what": "overscroll-behavior: contain, one declaration on each rule. When the bell, Activity, the search results or the popout reaches its end, the page behind no longer starts to scroll. Not on the side panel (CourseSidebar.module.css:56): measured in Chromium 153, a box with this declaration and no overflow of its own swallows the wheel, so a short course list would stop the page scrolling while the pointer rests on it. Not on the message column, whose page does not scroll. No rule sets it today except the Upcoming strip, sideways.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "focus-not-under-bar",
+    "owner": "W-67, task 8",
+    "file": "app/globals.css html",
+    "what": "html { scroll-padding-top: var(--nav-height) }. One line that moves no box. A control the keyboard reaches by scrolling up is no longer left under the sticky top bar (WCAG 2.2, focus not obscured); no rule sets it today. It also changes where a hash link and scrollIntoView land, by the bar's height, so the walk shots are its proof. It was inside the entry keyboard-in-the-shell with markup work and is split out, because it is CSS alone. It goes again if the frame with panes is built: then the bar is not over the scrolling pane.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "time-tokens-shell",
+    "owner": "W-68, task 17",
+    "file": "the six lines outside globals.css that hold a time or an easing today: components/shell/CourseSidebar.module.css:31 and :163, components/shell/NavSearch.module.css:55, :82 and :95, components/shell/SyncButton.module.css:45",
+    "what": "The six lines read the tokens, so the Time check prints nothing. The side panel's width and its scrim's opacity: var(--motion-enter) var(--ease-out), in place of 180ms ease. The search field's grow: var(--motion-enter) var(--ease-out), in place of 160ms ease-out. The two progress marks: var(--motion-spin) var(--ease-linear) infinite, one turn in 900ms for both, in place of 0.7s for search and 1.1s for Sync. The 2s line under reduced motion is deleted with the entry motion-tokens. What the two width animations animate does not change here: that is the entry width-animations, which waits.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "desktop-title-bar",
+    "owner": "a desktop task of its own, after his word (desktop/src/main/ is W-67's only for window.ts and the background)",
+    "file": "desktop/src/main/window.ts (the BrowserWindow options, lines 251 to 264, and two listeners in createWindow); components/shell/TopNav.module.css .bar; app/globals.css (a drag strip for the pages with no bar); a new test beside window-background.test.ts",
+    "what": "NEEDS HIS WORD (the desktop shell; decision 1; drawn on the tile, The window). The app's top bar becomes the window's title bar. titleBarStyle: 'hidden' with titleBarOverlay { color, symbolColor, height: 52 } keeps Windows' own minimise, maximise and close buttons and draws them in the app's colours; the bar gets app-region: drag, its controls app-region: no-drag, and its right padding clears the three buttons through env(titlebar-area-width, 100vw), which falls back in a browser, so no data-desktop hook is needed. Possible on Windows with Electron 44.4.1. shell.spec.ts:80-89 stays green if autoHideMenuBar stays in the options, and window.test.ts and deeplink.test.ts need no edit if nothing new runs at import. Four things would each be seen if left out, so they are part of the task. (a) Light theme: the overlay's colours are fixed when the window is built, and preload.test.ts:41-44 allows the page one IPC call, so a dark block of three buttons would sit on a white bar. Main listens to webContents 'did-change-theme-color' and calls window.setTitleBarOverlay; brief 103's stamp already rewrites the theme-color meta on every pick. The two THEME_BG values map to the bar's colours (the bar is --color-surface, not --color-bg), and a test pins the map, as window-background.test.ts pins DARK. (b) The page scrollbar runs the full height of the window, so its top 52px would lie under the three buttons: the frame with panes (app-frame-panes) is built before or with this, not after. (c) /login, /privacy, /terms, not-found and a failed load have no top bar, so the window could not be dragged there: a fixed drag strip in globals.css for the pages without the bar, and the failed-load page of desktop-shell-details. (d) Page zoom is still on the installed menu's keys; zoomed, the bar is no longer 52 window pixels and the buttons stop matching it: reset the overlay height on zoom, or leave the zoom keys out of the app's own menu. The size is medium only once (b) is settled. There is no smaller step worth taking: nativeTheme.themeSource = 'dark' would make prefers-color-scheme answer dark in every page of the shell, so brief 103's Auto would be dark for good in the desktop app and its system-change listener would never fire.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "desktop-shell-details",
+    "owner": "the same desktop task (window.ts createWindow; desktop/src/main/index.ts is in no worker's set today)",
+    "file": "desktop/src/main/window.ts (a context-menu listener in createWindow; the page a failed load shows), desktop/src/main/index.ts (the application menu); desktop/src/main/update-prompt.ts (its page)",
+    "what": "NEEDS HIS WORD (the desktop shell; decision 1). Four small things, one task with the title bar. A right click does nothing today, in a text field too: Electron draws no context menu unless asked. Add the native one on webContents 'context-menu', built from role items: Cut, Copy, Paste and Select all in a field, Copy on a selection, nothing elsewhere. The default Electron menu (File, Edit, View, Window, Help) is replaced by the few items the app needs, with Menu.setApplicationMenu and a built menu, never null, and autoHideMenuBar stays: shell.spec.ts:80-89 asserts both, and Reload, the developer tools and zoom keep their keys through it. If the title bar is a yes the visible menu is moot, because a hidden title bar shows no menu bar on Windows (to confirm in the real window). A load that fails shows a page in direction D with one Retry button: today the shell retries on a backoff and then leaves a blank window (window.ts:172-176 and 211-213, whose own comment calls it that). The update prompt is drawn in direction D: its main button is blue (#4f6bed) and it would be the one blue thing left; brief 103 line 774 forbids editing update-prompt.ts by a DECISIONS row of 2026-10-08, so this part is his to reopen.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "app-frame-panes",
+    "owner": "its own task, with or before the title bar (Shell.module.css, TopNav and CourseSidebar are W-68's files)",
+    "file": "app/(app)/Shell.module.css .shell, .body, .main; components/shell/TopNav.module.css .bar; components/shell/CourseSidebar.module.css .rail",
+    "what": "NEEDS HIS WORD (layout and behaviour; large; decision 1; drawn on the tile, The window). The window is a frame and the panes scroll inside it. .shell is exactly the window's height, the top bar stops being sticky, and .main scrolls by itself with scrollbar-gutter: stable and overscroll-behavior: contain, so the scrollbar starts under the bar and belongs to the content, and the side panel scrolls alone. Today the whole document scrolls (the Inbox is 4,783px tall, Grades 4,303px), the scrollbar runs the full height of the window beside the top bar, and the shell is 1px taller than its window on every screen (STATUS, Known issues), which this removes. The cost is real: the browser restores the scroll position of a document on Back, not of a pane, so that has to be done by hand, and every layout test and walk has to be run again. With it built, scroll-padding-top (focus-not-under-bar) and the page gutter (page-gutter-stable) are no longer needed.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "icons-bar-one-weight",
+    "owner": "W-68 (icons.tsx, SyncButton.tsx), after his word",
+    "file": "components/shell/icons.tsx (BellIcon); components/shell/SyncButton.tsx (SyncIcon)",
+    "what": "NEEDS HIS WORD (markup: two inline paths in two files; decision 3; drawn on the tile, Proposed). The bar is on every screen and its icons do not match: four outlined on a 256 grid, a filled bell, and a heavier Sync arrow on a 24 grid from another set. The bell goes to the regular weight and Sync is redrawn as the same family's two circling arrows on the 256 grid. No package: the paths are inline, as the bar's are today. The skill names the same two icons at the regular weight (icons#33, icons#94); its import line, a package, is not used. Sync's icon is the one that turns while a sync runs, so the new path must turn about its centre as the old one does.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "app-mark",
+    "owner": "the PM, with his word (image files; no worker's set holds them)",
+    "file": "desktop/build/icon.png, icon.ico and tray-16.png; web/src/app/favicon.ico and apple-icon.png (brief 103 leaves the two web files untouched by name)",
+    "what": "NEEDS HIS WORD (image files; decision 6). The app's own mark stays in the old colours: a lavender ring on navy. After direction D the taskbar, the window's corner and the tray carry the one hue the direction removed, and the ring does not match the square mark in the top bar. Redrawn in D it is the bar's mark: a square in the ink on the ground colour, with no second hue. The files are binary and outside the token audit; nothing in Phase 22 touches them.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "labels-in-the-body-face",
+    "owner": "W-68 (CourseSidebar, SearchPanel, SubmissionBlock), W-69 (PlannerItemPopover, InboxCard), W-70 (GradebookTable, GradeModel), after his word",
+    "file": "components/grades/GradebookTable.module.css (the table head), components/grades/GradeModel.module.css:216, components/shell/CourseSidebar.module.css .head, components/shell/SearchPanel.module.css (the mode buttons), components/planner/PlannerItemPopover.module.css:46, components/popout/SubmissionBlock.module.css:70; and for dates and times, components/inbox/InboxCard.module.css .value and the Seen cell of GradebookTable",
+    "what": "NEEDS HIS WORD (a taste call on type; decision 2; not applied, and the faces stay the ones he picked; drawn on the tile, Proposed). Against the four reference screenshots this is the largest difference at rest. Two halves. First, the serif is for titles: six of the 28 rules that use the heading face set small things in it, table heads and the side panel's head in 10px capitals, the search modes and two labels at 12.5px. At those sizes a serif at weight 600 reads soft and bookish, the opposite of the sleek, modern look he asked for; the same six in Source Sans 3 (weight 600 for the mode buttons, 500 for the capitals) read as controls and labels. The rule would be: --font-heading from 15px up, --font-body under it. Second, dates and times leave the code face: the two date panes of an Inbox card and the Seen column set a date in Source Code Pro, which reads as a terminal. The code face is kept for course codes; whether scores stay in it is his call, and the default is that they do.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "type-floor",
+    "owner": "all four workers in their own modules, after his word",
+    "file": "the 38 font-size declarations at 9px and 10px in the modules (25 at 10px, 13 at 9px)",
+    "what": "NEEDS HIS WORD (type size; decision 2; drawn on the tile, Proposed). A floor under small type: nothing below --text-xs (11px), with the unread count the one exception. Today 38 rules sit at 9 or 10px: small capital labels over almost every figure, the day letters of the week strip, the dates under the tracker. The skill counts body text under 12px as a fault and asks for one size scale (ux#74); a dense dashboard can go to 11 for labels and no lower. The 18 layout tokens do not move, but these are size literals, a label one pixel taller moves the box under it, and the phase forbids a type-size change.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "fonts-with-the-app",
+    "owner": "W-67 (layout.tsx, globals.css), after his word",
+    "file": "app/layout.tsx and app/globals.css line 18",
+    "what": "NEEDS HIS WORD (brief 103 rules it out by name; decision 2). The three faces load with the app through next/font, which is part of Next and no new package: the files are served by the app, so there is no second host to wait for, no swap from Georgia and Segoe UI after the first paint each time the window opens, and the desktop shell has its faces with no network. The skill's Next.js rule says the same (use next/font, no external font link). Default taken: the one Google Fonts @import stays, as the brief says.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "icons-text-characters",
+    "owner": "W-68 (icons.tsx) and each worker in its own TSX, after his word",
+    "file": "components/shell/icons.tsx (five new marks); the 20 files that write a text character as a mark",
+    "what": "NEEDS HIS WORD (markup; decision 3). The fold marks, the pagers, the close button and the outbound marks are text characters set in whatever face has them: 41 of them, in 20 files (Today.tsx:326, PlannerWeek.tsx:114, CourseGradeCard.tsx:136). Five inline SVGs join icons.tsx (caret right, caret down, caret left, close, arrow up right) at the regular weight and take the place of the characters. No package. This was one entry with the bar's two icons; it is split because the bar is two files and is seen on every screen, and this is 20 files.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "loading-attribute",
+    "owner": "W-67 (the rule and the keyframe in globals.css, task 8); W-68 (QueryState.tsx); W-69 (Today.tsx:268); W-70 (MaterialsBrowser.tsx:491, CourseSubBar.tsx:76, CourseClasswork.tsx:225, CourseInfo.tsx:232, CourseStream.tsx:310, CourseAssignment.tsx:45 and :63)",
+    "file": "app/globals.css (one rule and one keyframe); components/shared/QueryState.tsx (its loading branch); the eight literal loading lines",
+    "what": "FOR THE PM TO RULE (one attribute in TSX; no word from Stack needed). Every loading line waits before it shows, not Home's alone. QueryState sets data-loading on its loading branch only, never on its error, and the eight literal loading lines get the same attribute. One rule in globals.css does the rest: [data-loading] { animation: arrives var(--motion-enter) var(--ease-out) var(--motion-delay) backwards; }, with the keyframe beside it and, in the reduce block, the wait kept and the fade dropped. No composes and no shared class, so no error and no empty line is touched. If this is a yes, Home's line takes the attribute too and the module rule of loading-never-flashes goes. A word that answers a press, such as \"queued\" in the Workspace, never takes it: it shows at once.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "states-loading-skeleton",
+    "owner": "W-68 (QueryState.tsx); W-69 and W-70 (a loading.tsx per route of theirs); needs his word first",
+    "file": "components/shared/QueryState.tsx and its 20 or so callers; a loading.tsx beside each page.tsx under app/(app)/ (none exists today)",
+    "what": "NEEDS HIS WORD (markup, and a new file per route). The loading line gains still rows that hold the height of what is coming, so the screen does not jump when the answer lands: bars in --color-neutral-800, 9px tall, round ends, on the row rhythm of the list they stand for, hidden from a screen reader, with the words kept beside them and aria-busy on the block. No shimmer and no pulse. A route change shows the same block at once through loading.tsx; today the old screen stays until the new one answers. The honest-wording rule holds: a bar claims nothing.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "states-empty",
+    "owner": "W-67 (a shared .emptyState in tokens.module.css); W-69 and W-70 (their screens); needs his word first",
+    "file": "the five empty rules: app/(app)/inbox/Inbox.module.css .empty, app/(app)/NeedsAttention.module.css .empty, components/grades/GradebookTable.module.css .empty, components/workspace/ConversationList.module.css .empty, components/workspace/MessageList.module.css .empty, and the screens that write a bare muted sentence; a shared .emptyState in styles/tokens.module.css",
+    "what": "NEEDS HIS WORD (markup, spacing and a few new words). An empty place gets a form in place of one muted sentence: a title in the body face at weight 600 that says what is empty, one muted sentence that says what will fill it, and one secondary button when there is something to do, left aligned on the card's own fill. No edge of its own: a dashed outline reads as a wireframe placeholder or a drop zone, and the planner already uses a dashed edge to mean a working-location block. No drawing. The words on each screen are his to approve.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "select-list-drawn",
+    "owner": "W-67 (one block in globals.css), after his word",
+    "file": "app/globals.css (one block inside @supports (appearance: base-select)), read by the 12 selects",
+    "what": "NEEDS HIS WORD (it is CSS alone, and it is new ground; decision 4). Where the engine can do it, the list a select opens is drawn by the app, not by Windows: appearance: base-select on the select and on ::picker(select). The list is a floating panel in direction D (card fill, --radius-lg, the large shadow with a divider edge), rows take the hover wash, the picked row has a tick, the arrow is a drawn chevron at the end of the field that turns when the list is open, and the list arrives the way a menu does. position-try-order: normal keeps the list under its select whenever it fits there (without it the engine opened it upward from the middle of the window down, over what is above), and the arrow takes margin-inline-start: auto so it sits at the end of a wide select. The reduce block cannot reach ::picker(select) or ::picker-icon through *, so the block carries its own reduced-motion rule; kept separate, because an engine without ::picker() would drop a whole selector list that named it. Keyboard and screen reader behaviour stay the browser's. An engine without it shows today's select. Electron 44 should carry Chromium 152 or so, and the feature is older (135); the build logs process.versions.chrome once in the real window before it relies on it. Shown on the tile's search panel.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "textarea-grows",
+    "owner": "W-68 (Popout .textArea), W-69 (InboxCard, PlannerEventForm), W-70 (Composer), after his word",
+    "file": "components/workspace/Composer.module.css .box; components/inbox/InboxCard.module.css, components/planner/PlannerEventForm.module.css, components/popout/Popout.module.css .textArea",
+    "what": "NEEDS HIS WORD (behaviour; decision 4). The four text areas lose the browser's corner grip: field-sizing: content lets a box grow with what is typed, up to a max-height, and resize: none removes the grip. CSS alone, behind @supports (field-sizing: content); an engine without it keeps the grip.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "menus-leave",
+    "owner": "W-68 (the shell's panels, PopoutShell, usePopover), after his word",
+    "file": "components/shell/TopNav.tsx, Bell.tsx, ActivityMenu.tsx, NavSearch.tsx, SyncButton.tsx, components/popout/PopoutShell.tsx; components/shell/usePopover.ts; app/globals.css (three tokens)",
+    "what": "NEEDS HIS WORD (behaviour; decision 3). A panel also leaves: it fades and shrinks back toward its trigger over --motion-exit (120ms, two thirds of the way in), the popout over --motion-exit-lg. Today a panel is taken out of the page the moment it closes, so there is nothing left to animate. Two ways: keep the panel in the page with the hidden attribute and let transition-behavior: allow-discrete carry display (no script), or unmount it one exit later. Either one changes brief 103's line \"the panel and its links are in the DOM only while Menu is open\", which TopNav.search.test.tsx (one \"Materials\" link) and TopNav.workspace.test.tsx (exactly six links) hold. With a yes, the three held tokens are declared: --motion-exit, --motion-exit-lg and --ease-in. The tile shows the leaving. Default for the build: arriving only (the entry panels-arrive).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tooltips-drawn",
+    "owner": "W-68, after his word",
+    "file": "components/shell/TopNav.tsx, NavSearch.tsx, SyncButton.tsx, Bell.tsx, ActivityMenu.tsx (the six controls of the bar first); a shared rule in styles/tokens.module.css",
+    "what": "NEEDS HIS WORD (markup). The icon buttons of the top bar name themselves with the app's own small label, not the Windows tooltip: a ::after that reads the name from an attribute, shown under the button after half a second of hover and at once on keyboard focus, in the floating panel's colours at --text-xs. The title attribute goes from those six so the two do not double; the accessible name stays the sr-only text. The other title attributes are left (49 elements carry one in all): most hold a whole sentence.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "keyboard-in-the-shell",
+    "owner": "W-67 (layout.tsx, globals.css), W-68 (usePopover.ts and the menus), after his word",
+    "file": "app/(app)/layout.tsx and app/globals.css (a skip link); components/shell/usePopover.ts, TopNav.tsx, Bell.tsx, ActivityMenu.tsx, SyncButton.tsx",
+    "what": "NEEDS HIS WORD (markup and behaviour). A \"Skip to content\" link is the first Tab stop and shows only on focus; today a keyboard walks the brand, six links and six controls on every page first. The account menu says role=\"menu\" and does not act like one: opening it moves focus to its first row, the arrow keys move between rows, Home and End jump, and closing it puts focus back on its button. Today Escape closes a menu and focus is left where it was: usePopover returns no focus, and the brief says the hook is not reshaped. Dismiss on a toast takes the toast out of the page with focus on it, so focus falls to the page body: it goes back to Sync. The phone Menu of task 12 keeps the Tab order brief 103 wrote for it. The one line of CSS that was here, scroll-padding-top, is split out as focus-not-under-bar and is in the default build.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "toast-waits",
+    "owner": "W-68 (SyncButton.tsx), after his word",
+    "file": "components/shell/SyncButton.tsx (the effect that holds TOAST_MS)",
+    "what": "NEEDS HIS WORD (script). A toast's timer does not stop while the pointer rests on it or focus is inside it. The app holds a plain toast for 15 seconds (TOAST_MS), and one kind carries a command to copy; a reader part-way through it loses it. Pause the timer on pointerenter and focusin, start it again on leave. The skill asks for 3 to 5 seconds (ux#82); this pass does not shorten the app's 15, because of that command.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "busy-says-busy",
+    "owner": "W-67 (the two rules in tokens.module.css, and LoginForm.tsx); W-68 (SyncButton.tsx:186, AssignmentPlannerBlock.tsx:194-261); W-69 (StatusSelect.tsx:77, PlannerItemPopover.tsx:278, InboxCard.tsx, PlannerSeriesScopeDialog.tsx); W-70 (LinkColumnControl.tsx:67 and :84, CourseInfo.tsx:167); after the PM's ruling",
+    "file": "the TSX sites where a control is disabled only while it works (about 24 of the 43 disabled sites); styles/tokens.module.css .input:disabled, and the select rules of the entry select-as-field",
+    "what": "FOR THE PM TO RULE (one attribute in TSX at each site; no word from Stack needed). A control that is disabled only while it works carries aria-busy beside the disabled it already has, so a screen reader hears busy and not unavailable. Only the update row sets it today (TopNav.tsx:166). With that in the markup the stylesheet can tell off from busy, and switched off gets its one look: :disabled:not([aria-busy=\"true\"]) on a field or a select is a flat grey box (fill --color-neutral-900, edge --color-neutral-800, words --color-neutral-600: 5.1:1 dark, 4.8:1 light, so still readable) with cursor: not-allowed, and a busy control is at half strength with cursor: progress and words that say what it is doing. Without this ruling the default build makes only the strength one value (disabled-one-look). The tile draws both: the switched-off field and select, and a busy Sync reading \"requesting…\".",
+    "drawnOnTile": true
+  },
+  {
+    "id": "copy-captions",
+    "owner": "W-69 (Today.tsx, UpcomingTracker.tsx, PlannerWeek.tsx), W-70 (GradebookTable.tsx), W-68 (SubmissionBlock.tsx), after his word",
+    "file": "app/(app)/Today.tsx:252; components/tracker/UpcomingTracker.tsx:498 and :510; components/planner/PlannerWeek.tsx:254; components/grades/GradebookTable.tsx:238; components/popout/SubmissionBlock.tsx:175",
+    "what": "NEEDS HIS WORD (copy and markup; decision 6). The screens caption themselves like a developer's notes. Legends and how-to lines are set as product copy: what a strip and a dot mean, that a line is Monday, that a status is click-to-edit, that times are as recorded and the grid shows New York time. And Blackboard's status code is printed as it comes, in capitals with underscores, after \"last attempt:\". A finished product does not explain its own widgets in the margin: the legends move into a tooltip or go, and the status code is put into words. The words are his.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "pointer-targets",
+    "owner": "W-68 (Popout .close, TopNav .brand), W-69 (the planner's done box and title), after his word",
+    "file": "components/popout/Popout.module.css .close; components/shell/TopNav.module.css .brand at 480px and under; components/planner/PlannerWeek.module.css the done box and the event title",
+    "what": "NEEDS HIS WORD (spacing; the planner's geometry is pinned; decision 6). Four pointer targets are under the 24px WCAG 2.2 asks (ux#104), measured on the tile. The popout's close button is 28 by 23px. At phone width the brand link is the 9px mark alone, once its word is hidden: it needs a 24px box. In a planner block the done box is 12px and the title button 14px tall. Two of the four can be met with CSS alone and no box moved: a ::after hit area on the close button (inset: -1px 0) and on the done box (inset: -6px). The done box's larger area would lie over the first pixels of the title beside it and could catch a press meant for the title, and a done box is a write, so it waits for a look in the real planner. The two text links that stand alone (Open course, Open the assignment) are 19px tall and pass by the spacing exception.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "width-animations",
+    "owner": "W-68, after his word",
+    "file": "components/shell/CourseSidebar.module.css .rail (a transition on width); components/shell/NavSearch.module.css @keyframes nav-search-grow (width)",
+    "what": "NEEDS HIS WORD (the side panel's mechanics are out of scope, and the search field's slide is a look he approved on 2026-09-30; decision 3). The only two motions the app has today both animate width, which lays the page out again on every frame, and they are the two motions he meets most. They are the two exceptions to this pass's rule that what moves, moves by transform and opacity. The lead's remedy, if \"minimal motion\" is to hold everywhere: under 1024px the drawer slides in by transform over --motion-enter-lg and its scrim fades; from 1024px up the side panel switches with no motion; the search field fades in and moves 8px, and Sync steps aside at once. Default taken: both stay as they are, and only their times and curves read the new tokens (the entry time-tokens-shell, which is in the default build).",
+    "drawnOnTile": false
+  },
+  {
+    "id": "week-strip-shape",
+    "owner": "W-69 (Today.module.css the strip), after his word",
+    "file": "app/(app)/Today.module.css the week strip of a course card (.stripBar and its meeting-day rule)",
+    "what": "NEEDS HIS WORD (a taste call on direction D; decision 6; drawn on the tile, Proposed). In a course card's week strip a meeting day and a plain day differ by tone alone: 2.13:1 in dark and 2.57:1 in light, the two rows the tile's checker has always printed as \"would fail\". Proposed: one tone, filled for a meeting day and a hairline outline for a plain one, so the difference is a shape (the skill's rule on colour alone, ux#37). CSS alone on rules that exist. It changes a look he was shown, so it is his.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tracker-scrollbar",
+    "owner": "W-69 (UpcomingTracker.module.css and its test), after the PM's ruling",
+    "file": "components/tracker/UpcomingTracker.module.css .tracker; web/test/upcoming-tracker-css.test.ts:30-33",
+    "what": "FOR THE PM TO RULE (a test binds; decision 6). One scrollbar keeps its arrow buttons after the build: the Upcoming strip, the block he named. Its pinned rule (scrollbar-width: thin with scrollbar-color) makes Chromium draw the standard thin bar with two arrows and a grey track, and its own three ::-webkit-scrollbar rules are dead for the same reason. To make it the app's bar: drop scrollbar-width and scrollbar-color from .tracker, so those three rules come alive (they can keep the visible track R3-1 asks for), and change the two assertions of the test. Default until he rules: leave it. The tile says under the strip that this one bar is the old kind.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "page-gutter-stable",
+    "owner": "W-67 (globals.css), after the PM's ruling",
+    "file": "app/globals.css html",
+    "what": "FOR THE PM TO RULE (one line, and it moves boxes; decision 6). The page shifts sideways by the scrollbar's width between a page that scrolls and one that does not: the Workspace document equals the window (workspace-layout.spec.ts:102), and so does /login. html { scrollbar-gutter: stable } ends the shift and takes 10px from every page that does not scroll, so the walks and the 390px caps must be run again. Not needed if the frame with panes is built.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "tile-window-fragment",
+    "owner": "tile",
+    "file": "tile",
+    "what": "One new fragment, The window, first on the page: the desktop window drawn twice, side by side, each a picture of a 1280 by 800 window with sample data. First as the default build leaves it: Windows' own bar above the app's top bar, and the page scrollbar running the full height beside the bar. Second as the desktop task and the frame with panes would make it (the entries desktop-title-bar and app-frame-panes): the top bar is the title bar with Windows' three buttons at its end, the side panel stays put, and one pane scrolls under the bar with the themed scrollbar. Every size in a drawing is in window pixels, so it is true at any width. Until this fragment the tile showed no window, and he would have ruled on the window from a paragraph.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-marks",
+    "owner": "tile",
+    "file": "tile",
+    "what": "The tile says on the page which drawn things are not in the default build: a small outlined mark, \"needs your word\", on the window, the proposals, the Loading and Empty cards and the search panel's course list. Two notes join it: the Upcoming strip's scrollbar is the one bar left as it was, and the busy control beside the switched-off ones. And the box the four course cards scroll in gets room for the focus ring, which it cut off at the top and the right (tile only: the app's grid does not clip).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-states-fragment",
+    "owner": "tile",
+    "file": "tile",
+    "what": "One new fragment, States, after Buttons: a loading block (a still skeleton that holds the space, with the words beside it), an empty state, switched-off controls with one busy control beside them, and a list that scrolls so the themed scrollbar shows at any width. The Loading and Empty cards carry the mark \"needs your word\". The other fragments keep their markup and layout.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-scroll-list",
+    "owner": "tile",
+    "file": "tile (the rows are components/shell/TopNav.module.css .ddActivityRow, .ddDot, .ddDotUnseen, .ddActivityLine, .ddActivityWhen, as the app has them; the unread dot is #ff0000 by the red-unread entry)",
+    "what": "The Activity lines, in a short well so they scroll on the tile.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-live-menus",
+    "owner": "tile",
+    "file": "tile (the rules are components/shell/TopNav.module.css .dd, .ddUser, .ddHead, .ddRow, .ddIdentity, .ddEmail and SyncButton.module.css .wrap, .stack (toastStack on the tile, where .stack is taken), .toast, .toastLine, .toastActions, .toastDismiss, as the app has them, in direction D's tokens)",
+    "what": "The tile's own controls are live, so the motion can be felt. Account in the desktop bar opens the account menu with the three theme rows of brief 103 (Dark, Light, Auto), which work. Menu in the phone bar opens the six pages. Sync in the desktop bar raises a toast under itself. The sample toast has Dismiss, so like the app's own toast of that kind it has no timer: it stays until Dismiss or a second press of Sync, and Dismiss gives focus back to Sync. (As first built it left after four seconds, which is not the app's time, and it dropped keyboard focus on the page body.) Escape closes a menu and puts focus back on its button; a press outside closes it; one is open at a time. Nothing shows until a control is used. The box the desktop bar sits in stops clipping from 980px up, so a menu can hang below the bar; under that width the desktop sample scrolls sideways as before and its two panels are off.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-live-popout",
+    "owner": "tile",
+    "file": "tile",
+    "what": "The popout header can be closed and shown again, so its way in and out can be felt. The close button fades it down and out; a button in its place brings it back. The space it takes is kept, so nothing under it moves.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-try-line",
+    "owner": "tile",
+    "file": "tile",
+    "what": "Two lines under the tile's opening words: what to try on this copy, and which of the things it shows are not in the default build.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-proposals-fragment",
+    "owner": "tile",
+    "file": "tile",
+    "what": "One new fragment, Proposed, not applied, above the swatches: five rows, each a thing as the build will leave it beside what the pass proposes. Three for type (small labels and controls in the body face; dates and times in the body face; nothing under 11px), one for the bar's icons at one weight, one for the week strip's plain day as an outline. The fragment carries the mark \"needs your word\". The type call had no picture before, and against the four reference screenshots it is the largest difference at rest.",
+    "drawnOnTile": true
   }
 ]
