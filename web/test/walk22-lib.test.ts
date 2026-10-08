@@ -203,6 +203,9 @@ describe('what the guard does with a request', () => {
     // Aborting a preflight would stop the write and leave no record of it.
     expect(guardVerdict('OPTIONS', `${REST}/rpc/workspace_ask`)).toBe('pass');
     expect(guardVerdict('OPTIONS', `${REST}/rpc/mark_announcements_seen`)).toBe('pass');
+    // An address under rpc/ that names no one function is not let through as "not an RPC".
+    expect(guardVerdict('POST', `${REST}/rpc/`)).toBe('abort');
+    expect(guardVerdict('POST', `${REST}/rpc/a/b`)).toBe('abort');
   });
 
   it('stops a file write to Storage, and passes a read and a signed link for one', () => {
