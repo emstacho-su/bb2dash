@@ -106,7 +106,7 @@ One line each: what the brief said, what `main` shows, what the freeze did.
 | C-28 | `PlannerWeek.module.css` lines 99 and 830 | 107 and 844 | Corrected |
 | C-29 | `planner-css.test.ts:111` | `:128` | Corrected |
 | C-32 | `PlannerBoard.tsx` line numbers | Sites at 96, 252, 275, 318, 399, 401, 418, 420; consts at 377 and 389 | Corrected |
-| C-34 | (unverifiable) At 390 px only the gradebook and the planner need a scroll container | Read from the stylesheets only; nowrap text could widen other pages | Task 5's RED run shows which routes fail |
+| C-34 | (unverifiable) At 390 px only the gradebook and the planner need a scroll container | Read from the stylesheets only; nowrap text could widen other pages (`CourseSubBar.module.css:54`, `:75`; `Materials.module.css:34`, `:191`, `:213`; `InboxCard.module.css:208` `width: max-content`) | Task 5's RED run lists every failing route with its width. Each goes to its inventory row's Sweep worker, and tasks 13–16 give every one of the 54 cases a worker-level green run (review, COV-01 and E-06) |
 | C-35 | Nothing else pins the Workspace modules | `Workspace.layout.test.tsx` (five modules) and `e2e/workspace-layout.spec.ts` | F-8 |
 | C-37 | R-36's rule line would live in `lib/grade-model/labels.ts` | It shipped in `GradedSoFarFigure.tsx` and `lib/graded-so-far.ts` | Corrected |
 
@@ -243,8 +243,56 @@ The writer of the freeze re-ran these in `bb2dash-wt-22` before carrying a value
   against production.
 * **The Activity panel's `.ddNote`.** The class has no rule on `main`, so three lines are unstyled. A fix is a
   visible change, not a token swap. It is listed as known and left.
+* **The 900 px sentence.** Item 3 says the unfolded bar is never wider than the desktop window's 900 px minimum.
+  The one case that holds it runs with search collapsed, on a page 900 px wide. Two things follow. With the
+  search field open the bar is wider (about 923 px at the field's 72 px floor and about 1,091 px at its 240 px,
+  counted from the measured 851 px; the shell reader's estimate was about 1,120 px). And 900 px is the window's
+  outer size, so the page inside is narrower (the shell verifier's note on B-17). The ruling fixes 54 cases, so no
+  case was added. The brief and the two DECISIONS rows now say "with search collapsed", the search-open width is
+  named out of scope, and the PM looks at the real window at its minimum width in acceptance step 5.
+* **The folded bar between 481 and 720 px.** The shell verifier estimated it too wide up to about 560 px while a
+  sync runs and up to about 673 px with search open, because the brand word stays there and the rule that hides
+  three icons exists only at ≤480 px. No case runs between 391 and 720 px, and the ruling fixes 54. The label
+  cap, which also applies there, shortens the first figure. The band is named out of scope and not fixed.
+* **`.chip`'s padding in A3.** F-5 lists it, but no test pins it and no constant mirrors it. The ruling stands:
+  the entry is source-backed against `.block`'s padding in the same file (`PlannerWeek.module.css:312`), which it
+  repeats. The PM may instead drop it, in which case W-69 turns it into tokens at task 18; that must be said
+  before task 2 freezes the file.
 
-## 8. Where the full evidence is
+## 8. The freeze review, 2026-10-08
+
+Three independent checkers read the frozen brief, this record and the day's DECISIONS rows: one for coverage
+(every audit item and every ruling traced into the brief), one for internal consistency, one for whether the
+tasks can be run as written. They returned 24 findings. Each was checked in the files and the repository. All
+24 were right and were applied; none was rejected. Where a finding offered two fixes and a ruling fixed one side,
+the ruling's side was taken.
+
+| Id | What was wrong | What changed |
+|---|---|---|
+| COV-01 | No task owned a route that scrolls sideways for a reason other than the gradebook, the planner or the bar | Task 5 pastes every failing route; a failing route goes to its row's Sweep worker (brief, "Panels and wide content") |
+| COV-02, E-07, IC-05 | `.chip`'s A3 entry had no backing; A3's unit was unclear; found entries were only "listed" | The unit is the whole declaration; `.chip` is source-backed against `.block`'s padding (F-5 lists it, so it stays); W-67 adds what it finds as entries in the task-2 commit |
+| COV-03, IC-09 | "Never wider than the 900 px minimum" was said without "search collapsed", and 900 px is the outer window | Qualified in the brief and in two DECISIONS rows; acceptance step 5 looks at the real window; the search-open width is out of scope. 54 cases kept (F-4) |
+| COV-04 | No case waited for the web font, so a width could be read in the fallback font | Both specs await `document.fonts.ready` and assert the body family is loaded before a width or a shot |
+| COV-05 | The folded bar between 481 and 720 px was lost | Named out of scope with the estimates. No 55th case (F-4) |
+| IC-01, E-05 | Tasks 12–15 add size literals before any token exists, and a baseline could only go down | In tasks 12–15 a Contract rule may add literals; the worker's baseline follows in the same commit; each of those tasks ends with the audit green |
+| IC-02, E-02 | Two spawns and no message to a running worker, yet the merge chain needed hand-offs inside a spawn | A start table: each spawn starts only once what it needs is merged. A worker never waits; it stops and is resumed. Task 16's theme-walk run is owed on resume |
+| IC-03 | The B-6 amendment row said "the rest of the B-6 row stands", but the row above amends who ticks each screen | The row names that sentence; the brief quotes the B-6 and B-23 rows in full |
+| IC-04 | The Session F prompt in ORCHESTRATOR predates the freeze until task 24 | The brief says so and says it wins; no session or worker starts from that prompt. ORCHESTRATOR itself was not edited here |
+| IC-06 | A4 named hexes that do not exist until tasks 8 and 9, in a file frozen at task 2 | A4 is written as a rule that reads `globals.css` when the test runs |
+| IC-07 | `ThemeMenu.*` sits under W-68's prefix but is W-67's; `(app)/` holds two clusters' files | The cluster map is longest match, with a `ThemeMenu.` entry and eight exact-file entries |
+| IC-08 | `guardWrites22` and `quietSync` both claimed the Sync press | As built: `quietSync` is called after the guard and throws otherwise; what it fulfils is not a recorded write. Open state 5 is opened under it |
+| E-01 | Task 8 could not read the three token tables: nothing merged them first, and the check sat inside a vitest list | The first-spawn branches are merged before W-67's second spawn; the check is the named command "Token names" |
+| E-03 | A walk outlives a tool call; a killed host script leaves no exit code | Every harness run is started in the background and read from `run.json`; "running" does not count |
+| E-04 | Adding the root layout to the raw-HTML list alone cannot pass: the test compares every file with one string | Task 9 may edit the header sentence, the constants and the two cases that read them |
+| E-06 | 26 route cases and both popout cases had no worker-level green run | The `-g` patterns of tasks 13–16 now cover all 54: 22, 16, 8 and 8. W-67's eight run at task 16, in its second spawn, because the spec and the fold do not exist during its first |
+| E-08 | The first `/code-review` had no tree that held the four sweeps | A scratch branch, a local merge of the four worker branches, never pushed |
+| E-09 | The gradebook's scroll box had no hook the spec could read | `data-scroll-box="gradebook"`, added by W-70 at task 14; the planner's hook exists |
+| E-10 | A sweep worker that lacks a token name could not finish | It stops with the check owed; the stopped W-67 adds the names; the sweep worker is resumed |
+
+Three notes of the shell verifier that the first freeze dropped are now in the brief: 900 px is the outer window
+(COV-03), the measured width moves with the font (COV-04), and the 481 to 720 px band (COV-05).
+
+## 9. Where the full evidence is
 
 The workflow journal holds every agent's full return value: each claim with its quote, its evidence and the
 command that produced it, each verifier's verdict, and the critic's seventeen gaps:
