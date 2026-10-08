@@ -10,9 +10,6 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-
 import {
   DETAIL_STRING_MAX,
   EXIT,
@@ -27,16 +24,17 @@ import {
   run,
   validatePack,
 } from './accept-proofs.mjs';
+import { PACK_21, SHA, argvFor, columnsOf } from './accept-proofs-kit.mjs';
 
-const REPO = path.resolve(import.meta.dirname, '..');
-const PACK_21 = JSON.parse(fs.readFileSync(path.join(REPO, 'acceptance', '21', 'proofs.json'), 'utf8'));
-const SHA = '4ed9eee0c1a2b3c4d5e6f708192a3b4c5d6e7f80';
 const UUID_A = '0b6f7c1e-2d3a-4b5c-8d9e-0f1a2b3c4d5e';
 const UUID_B = '9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d';
 const TIME = '2026-10-07T18:00:00.000000Z';
 const FINGERPRINT = `ap=2026-10-06T21:15:02.118355Z,rp=none,n=143,at=${TIME}`;
 
-/** A fake pg.Client: records every query; `onQuery(text, values)` returns a result or an Error to throw. */
+/**
+ * A fake pg.Client: records every query, in either form node-postgres takes (a text with values,
+ * or one object); `onQuery(text, values)` returns a result or an Error to throw.
+ */
 function fakeClient(onQuery = () => ({ rows: [] })) {
   return {
     queries: [],
@@ -45,8 +43,10 @@ function fakeClient(onQuery = () => ({ rows: [] })) {
     async connect() {
       this.connected = true;
     },
-    async query(text, values) {
-      this.queries.push({ text, values });
+    async query(first, second) {
+      const asked = typeof first === 'string' ? { text: first, values: second } : first;
+      const { text, values, queryMode } = asked;
+      this.queries.push({ text, values, queryMode });
       const result = onQuery(text, values);
       if (result instanceof Error) throw result;
       return result ?? { rows: [] };
@@ -76,8 +76,6 @@ async function runWith({ argv, rows, onQuery, pack = PACK_21, connectError = nul
   });
   return { code, out, err, clients, line: out.length === 1 ? JSON.parse(out[0]) : null };
 }
-
-const argvFor = (name, params = {}) => ['21', name, '--sha', SHA, ...Object.entries(params).flatMap(([key, value]) => ['--param', `${key}=${value}`])];
 
 /** What each of the seven proofs is given on the command line. */
 const GIVEN = {
@@ -337,6 +335,17 @@ test('the statement runs in a read-only transaction with a 15 s limit, and is ro
   assert.deepEqual(line, { name: 'turn', pass: true, detail: { request_id: '412' } });
 });
 
+test('every statement goes by the extended protocol, with parameters and without, so the server takes one statement', async () => {
+  const withParams = await runWith({ argv: argvFor('turn', GIVEN.turn), rows: [{ ok: true, request_id: '412' }] });
+  const without = await runWith({ argv: argvFor('spike-archived'), rows: [{ ok: true, archived: 1, listed: 0 }] });
+  for (const { clients } of [withParams, without]) {
+    assert.equal(clients[0].queries.length, 5);
+    // The proof's own statement, and the four around it: none is left to the simple protocol, where a text may hold several.
+    for (const query of clients[0].queries) assert.equal(query.queryMode, 'extended', query.text);
+  }
+  assert.deepEqual(without.clients[0].queries[3].values, []);
+});
+
 test('it is rolled back when the statement throws, and the error is a code, never a verdict', async () => {
   const failure = Object.assign(new Error('column r.stat does not exist'), { code: '42703' });
   const { code, clients, line, err } = await runWith({
@@ -495,26 +504,8 @@ test('the uuid list reaches the statement as one array value', async () => {
  * The statements against the migrations: every table and every column they name exists
  * ------------------------------------------------------------------------------------------ */
 
-const MIGRATIONS = path.join(REPO, 'db', 'migrations');
-const NOT_A_COLUMN = new Set(['constraint', 'check', 'unique', 'primary', 'foreign', 'references', 'exclude', 'like']);
 /** What follows a table that has no alias: a word of the statement, not a name for the table. */
 const SQL_WORDS = new Set(['where', 'on', 'left', 'right', 'inner', 'cross', 'join', 'order', 'group', 'limit', 'union', 'as']);
-
-/** The columns the migrations give a table: its `create table` block, and every later `add column`. */
-function columnsOf(table) {
-  const columns = new Set();
-  for (const file of fs.readdirSync(MIGRATIONS).filter((name) => name.endsWith('.sql')).sort()) {
-    const sql = fs.readFileSync(path.join(MIGRATIONS, file), 'utf8');
-    const created = new RegExp(`^create table (?:if not exists )?(?:public\\.)?${table} \\(\\r?\\n([\\s\\S]*?)^\\);`, 'm').exec(sql);
-    for (const line of created ? created[1].split(/\r?\n/) : []) {
-      const word = /^\s+([a-z_][a-z0-9_]*)\s/.exec(line)?.[1];
-      if (word && !NOT_A_COLUMN.has(word)) columns.add(word);
-    }
-    const added = new RegExp(`alter table (?:public\\.)?${table}\\s+add column (?:if not exists )?([a-z_][a-z0-9_]*)`, 'g');
-    for (const match of sql.matchAll(added)) columns.add(match[1]);
-  }
-  return columns;
-}
 
 test('the column reader finds what the migrations declare', () => {
   assert.ok(columnsOf('workspace_requests').has('claimed_at'));
