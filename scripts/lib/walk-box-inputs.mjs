@@ -112,7 +112,7 @@ export function mountSource(file) {
 
 const HTTPS_ORIGIN = '--url takes an https origin, as in https://host.example: no path, no query, no sign-in';
 
-export function originOf(value) {
+function originOf(value) {
   let url;
   try {
     url = new URL(value);
@@ -123,4 +123,37 @@ export function originOf(value) {
     url.protocol === 'https:' && url.username === '' && url.password === '' && url.pathname === '/' && url.search === '' && url.hash === '';
   if (!plain) throw refused(HTTPS_ORIGIN);
   return url.origin;
+}
+
+/**
+ * Production: the desktop app's own `appUrl` (desktop/src/core/config.ts). Copied, not read from
+ * there; a test holds the two equal.
+ */
+export const PRODUCTION_ORIGIN = 'https://web-xi-ten-uy9xk6c6p0.vercel.app';
+/**
+ * A branch preview of the Vercel project `web` in this team's scope: web-git-<branch>-<scope>.
+ * The pattern stops a slip of the hand. It does not prove who holds a host: a name under
+ * vercel.app is anyone's to take until this project has taken it.
+ */
+const PREVIEW_HOST = /^web-git-[a-z0-9]+(?:-[a-z0-9]+)*-emstacho-sus-projects\.vercel\.app$/;
+const PREVIEW_SHAPE = 'https://web-git-<branch>-emstacho-sus-projects.vercel.app';
+/** Names one more host, exactly as the address has it (`host` or `host:port`). */
+const ALLOW_HOST_VARIABLE = 'WALK_BOX_ALLOW_HOST';
+
+/**
+ * The origin --url names. The box types the owner's test login into <origin>/login, so the host
+ * must be this project's: production, or a branch preview. Any other host is refused unless
+ * WALK_BOX_ALLOW_HOST names that same host, so a mistyped or made-up address is never handed the
+ * login by one slip.
+ */
+export function walkOriginOf(value, env) {
+  const origin = originOf(value);
+  const { host, hostname, port } = new URL(origin);
+  const ours = port === '' && (origin === PRODUCTION_ORIGIN || PREVIEW_HOST.test(hostname));
+  if (ours || host === env[ALLOW_HOST_VARIABLE]) return origin;
+  throw refused(
+    `--url names ${host}, which is not a host of this project: the box types the test login into that host. ` +
+      `Production is ${PRODUCTION_ORIGIN} and a branch preview is ${PREVIEW_SHAPE}. ` +
+      `For any other host, name it once more: ${ALLOW_HOST_VARIABLE}=${host}`,
+  );
 }

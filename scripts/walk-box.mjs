@@ -10,7 +10,9 @@
 // file, and runs the named specs. The script ends with Playwright's exit code.
 //
 //   --url <https origin>   no build and no server: that host is walked (WALK_VERCEL_SHARE is passed
-//                          on, by name, when it is set)
+//                          on, by name, when it is set). The box types the test login into that
+//                          host, so it must be this project's: production or a branch preview.
+//                          Any other host is refused unless WALK_BOX_ALLOW_HOST names it too
 //   --keep                 the container is left running and its name is printed. Nobody has to
 //                          come back for it: it ends and removes itself after four hours
 //   --exec <container> <spec>…   more specs in a kept container. web/e2e is read from the worktree
@@ -62,10 +64,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SIGNAL_EXITS, exitOfSignal, runDocker, watchSignals, within } from './lib/walk-box-client.mjs';
-import { assertOutBase, fileSetting, mountSource, originOf, posix, realPathOf, refused, requireFile, specPaths, WalkBoxError } from './lib/walk-box-inputs.mjs';
+import { assertOutBase, fileSetting, mountSource, posix, realPathOf, refused, requireFile, specPaths, walkOriginOf, WalkBoxError } from './lib/walk-box-inputs.mjs';
 
 export { DOCKER_CLIENT, runDocker, watchSignals } from './lib/walk-box-client.mjs';
-export { WalkBoxError, assertOutBase, specPaths } from './lib/walk-box-inputs.mjs';
+export { PRODUCTION_ORIGIN, WalkBoxError, assertOutBase, specPaths } from './lib/walk-box-inputs.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -277,7 +279,7 @@ export function planRun(args, ctx) {
   const image = imageFor(ctx.root);
   const specs = specPaths(ctx.root, ctx.cwd, args.specs);
   const mode = args.url === null ? 'build' : 'url';
-  const baseUrl = args.url === null ? LOCAL_BASE_URL : originOf(args.url);
+  const baseUrl = args.url === null ? LOCAL_BASE_URL : walkOriginOf(args.url, ctx.env);
   if (mode === 'build') requireFile(settings.webEnv, 'web env file', 'WALK_BOX_WEB_ENV');
   requireFile(settings.loginEnv, 'test login file', 'WALK_BOX_LOGIN_ENV');
 
