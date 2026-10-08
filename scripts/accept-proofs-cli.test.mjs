@@ -65,7 +65,8 @@ test('whether the file is what node was started with is asked by real path where
   const { holder, link } = linkToScripts();
   try {
     const moduleUrl = pathToFileURL(SCRIPT).href;
-    const asked = (argv1, main = undefined) => proofs.isEntryPoint({ main, argv1, moduleUrl });
+    // `main: null` is a node that does not say (before 22.18 and 24.2 there is no `import.meta.main`).
+    const asked = (argv1, main = null) => proofs.isEntryPoint({ main, argv1, moduleUrl });
     assert.equal(asked(SCRIPT), true);
     assert.equal(asked(path.join(link, 'accept-proofs.mjs')), true);
     assert.equal(asked(path.join(REPO, 'scripts', 'db-test.mjs')), false);

@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test db-test.test.mjs google-consent.test.mjs sync-on-sonnet.test.mjs inbox-decision-render.test.mjs inbox-decisions-export.test.mjs inbox-decisions-pr.test.mjs accept-proofs.test.mjs accept-proofs-db.test.mjs",
+    "test": "node --test db-test.test.mjs google-consent.test.mjs sync-on-sonnet.test.mjs inbox-decision-render.test.mjs inbox-decisions-export.test.mjs inbox-decisions-pr.test.mjs accept-proofs.test.mjs accept-proofs-cli.test.mjs accept-proofs-db.test.mjs",
     "db-test": "node db-test.mjs"
   },
   "dependencies": {

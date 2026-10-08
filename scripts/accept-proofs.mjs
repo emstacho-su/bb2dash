@@ -12,8 +12,8 @@
 //
 // each of the five sent by the extended protocol, so the server takes one statement at a time and
 // refuses a text that holds a second. It connects through `openClient()` of scripts/db-test.mjs
-// (the test login, BB2DASH_TEST_DB_URL). It prints
-// exactly one line on stdout:
+// (the test login, BB2DASH_TEST_DB_URL). It ALWAYS prints exactly one line on stdout, by whatever
+// path it was started and however it ends, and never ends with exit 0 without a verdict:
 //
 //   {"name": "turn", "pass": true, "detail": {…}}        and "blocked": true when the proof says so
 //
@@ -27,8 +27,9 @@
 // connection or statement error. Importing this module has no side effects.
 
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 import { firstLine, loadDsn, openClient, redact } from './db-test.mjs';
 import { decide } from './lib/accept-proofs-detail.mjs';
@@ -205,7 +206,19 @@ export function validatePack(pack) {
  * ------------------------------------------------------------------------------------------ */
 
 function gitShowAt(sha, file) {
-  return execFileSync('git', ['show', `${sha}:${file}`], { cwd: REPO_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  // LC_ALL=C: git says why in the same words on every machine.
+  return execFileSync('git', ['show', `${sha}:${file}`], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, LC_ALL: 'C' },
+  });
+}
+
+/** Why a `git show` failed: git's own first line when it wrote one, else the first line of the error (no git at all). */
+function gitCause(error) {
+  const said = firstLine(error?.stderr);
+  return said === '' ? firstLine(error?.message) : `git said "${said}"`;
 }
 
 /** acceptance/<phase>/proofs.json as the commit has it. `gitShow` is injected by the tests. */
@@ -214,8 +227,10 @@ export function readPackAt({ phase, sha, gitShow = gitShowAt }) {
   let text;
   try {
     text = gitShow(sha, file);
-  } catch {
-    throw new ProofError('bad_pack', `no ${file} at ${sha}`);
+  } catch (error) {
+    // A commit that was never fetched, a folder that is no checkout and a pack that is not there
+    // are three different things to put right.
+    throw new ProofError('bad_pack', `${file} at ${sha} could not be read: ${gitCause(error)}`);
   }
   try {
     return JSON.parse(text);
@@ -295,53 +310,98 @@ async function readProof(proof, values, deps, say) {
   }
 }
 
+/** The one line a call prints: `blocked` is there only when the proof says so. */
+function lineOf(name, { pass, blocked, detail }) {
+  return JSON.stringify(blocked ? { name, pass, blocked: true, detail } : { name, pass, detail });
+}
+
+function exitOf(decision) {
+  if (decision.blocked) return EXIT.blocked;
+  return decision.pass ? EXIT.pass : EXIT.fail;
+}
+
 /**
  * Run the CLI. Returns the exit code; it never calls process.exit, so tests can drive it.
- * `deps.readPack` and `deps.clientFactory` are injected by the tests: with them nothing reads
- * git, a credential or a database.
+ * Whatever happens it prints exactly one line, in one place, at the end. `deps.readPack` and
+ * `deps.clientFactory` are injected by the tests: with them nothing reads git, a credential or a
+ * database.
  */
 export async function run(argv, deps = {}) {
   const out = deps.out ?? ((line) => process.stdout.write(`${line}\n`));
   const err = deps.err ?? ((line) => process.stderr.write(`${line}\n`));
-  const print = (name, decision) => {
-    const { pass, blocked, detail } = decision;
-    out(JSON.stringify(blocked ? { name, pass, blocked: true, detail } : { name, pass, detail }));
-  };
   let name = null;
+  let decision;
+  let exit;
   try {
     const args = parseArgs(argv);
     name = args.name;
     const pack = validatePack(deps.readPack ? deps.readPack(args) : readPackAt(args));
     if (!Object.hasOwn(pack, name)) throw new ProofError('unknown_proof', `acceptance/${args.phase}/proofs.json holds no proof named "${name}"`);
     const values = bindParams(pack[name], args.given);
-    const decision = await readProof(pack[name], values, deps, err);
-    print(name, decision);
-    if (decision.blocked) return EXIT.blocked;
-    return decision.pass ? EXIT.pass : EXIT.fail;
+    decision = await readProof(pack[name], values, deps, err);
+    exit = exitOf(decision);
   } catch (error) {
     const code = error instanceof ProofError ? error.code : 'internal_error';
     err(`accept-proofs: ${firstLine(error?.message)}`);
-    const detail = error?.sqlstate ? { error: code, sqlstate: error.sqlstate } : { error: code };
-    print(name, { pass: false, blocked: false, detail });
-    return EXIT.error;
+    decision = { pass: false, blocked: false, detail: error?.sqlstate ? { error: code, sqlstate: error.sqlstate } : { error: code } };
+    exit = EXIT.error;
   }
+  out(lineOf(name, decision));
+  return exit;
 }
 
 /* ---------------------------------------------------------------------------------------------
  * CLI entry point (nothing above this line runs on import)
  * ------------------------------------------------------------------------------------------ */
 
-const invokedDirectly = Boolean(process.argv[1]) && pathToFileURL(process.argv[1]).href === import.meta.url;
+/** The line for an end nobody decided: the process is ending and no verdict was printed. */
+const NO_VERDICT_LINE = lineOf(null, { pass: false, blocked: false, detail: { error: 'internal_error' } });
 
-if (invokedDirectly) {
-  run(process.argv.slice(2)).then(
+/**
+ * Whether this file is what node was started with, by whatever path: its own, a junction's or a
+ * symlink's, or another spelling of the drive. Node says so itself where it can
+ * (`import.meta.main`, from 22.18 and 24.2). Where it cannot, the two real paths are compared:
+ * the command line keeps the path it was given, and a module is known by its real one, so the two
+ * as written differ through a link, and the script would end with exit 0 having done nothing.
+ */
+export function isEntryPoint({ main = import.meta.main, argv1 = process.argv[1], moduleUrl = import.meta.url } = {}) {
+  if (typeof main === 'boolean') return main;
+  if (!argv1) return false;
+  try {
+    return path.relative(fs.realpathSync.native(argv1), fs.realpathSync.native(fileURLToPath(moduleUrl))) === '';
+  } catch {
+    // A path that is not there is not this file.
+    return false;
+  }
+}
+
+/**
+ * Run as the CLI of this process. The exit code is "no verdict" from the first moment, and is the
+ * run's own only once its line is out; a process that ends with no line printed (a run that never
+ * came back, so node simply ran out of work) prints one as it goes. A caller never sees a silent
+ * exit 0. `writeNow` writes without waiting, as the last act of a process must.
+ */
+export function startCli(argv, { proc = process, runCli = run, writeNow = (text) => fs.writeSync(1, text) } = {}) {
+  let printed = false;
+  const out = (line) => {
+    if (printed) return;
+    printed = true;
+    proc.stdout.write(`${line}\n`);
+  };
+  proc.exitCode = EXIT.error;
+  proc.once('exit', () => {
+    if (!printed) writeNow(`${NO_VERDICT_LINE}\n`);
+  });
+  return runCli(argv, { out }).then(
     (code) => {
-      process.exitCode = code;
+      proc.exitCode = printed ? code : EXIT.error;
     },
     (error) => {
-      process.stderr.write(`accept-proofs: ${firstLine(error?.message)}\n`);
-      process.stdout.write(`${JSON.stringify({ name: null, pass: false, detail: { error: 'internal_error' } })}\n`);
-      process.exitCode = EXIT.error;
+      proc.stderr.write(`accept-proofs: ${firstLine(error?.message)}\n`);
+      out(NO_VERDICT_LINE);
+      proc.exitCode = EXIT.error;
     },
   );
 }
+
+if (isEntryPoint()) startCli(process.argv.slice(2));

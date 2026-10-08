@@ -202,7 +202,10 @@ e2e/accept.config.ts` lists every test as skipped and writes nothing.
 reads `proofs.json` at that commit, runs the one statement in a read-only transaction that is always
 rolled back, and prints one line: `{"name", "pass", "detail"}`, with `"blocked": true` when the proof
 says the run must be repeated. It exits 0 for a pass, 1 for a fail, 3 for blocked, and 2 when it
-could give no verdict.
+could give no verdict. It always prints that one line, by whatever path it was started (a link to
+the folder too), and it never ends with exit 0 without a verdict. When it cannot read the pack it
+says why on stderr in git's own words: a commit that was never fetched and a pack that is not there
+are different things to put right.
 
 The database is the first lock, the check of the statement's text the second. Every statement is
 sent in the way that lets the database take one statement at a time (the extended protocol), so a
