@@ -16,8 +16,10 @@
 //   --keep                 the container is left running and its name is printed. Nobody has to
 //                          come back for it: it ends and removes itself after four hours
 //   --exec <container> <spec>…   more specs in a kept container. web/e2e is read from the worktree
-//                          as it is now; the app is the one the box built, so a change under
-//                          web/src needs a new box
+//                          as it is now; the app is the one the box built. The box must be this
+//                          worktree's, and a file under web/ outside web/e2e that is not as the
+//                          box built it is refused: that needs a new box. run.json names the
+//                          commit the box built (built_commit) beside the commit now
 //   --rm <container>       remove a kept container
 //
 // Output: <home>/.bb2dash-walk/22/<run id>/ (WALK_BOX_OUT names another base folder), holding
@@ -309,10 +311,49 @@ export function planRun(args, ctx) {
   return { runId, container, outDir, calls, record, ownsBox: true };
 }
 
+/** A commit as git names it in full. The box's is handed to git as an argument, so nothing else is taken. */
+const COMMIT_ID = /^[0-9a-f]{40,64}$/;
+const MODES = Object.freeze(['build', 'url']);
+
+/**
+ * What the run that started a kept box put on record, from the run.json this script wrote in the
+ * box's folder: the worktree it was started from, the commit, whether the worktree differed from
+ * it, and what the box walks. Refused when that record is not there or is not that run's.
+ */
+function boxRecordOf(boxDir, container) {
+  const boxRecordFile = path.join(boxDir, 'run.json');
+  let record;
+  try {
+    record = JSON.parse(fs.readFileSync(boxRecordFile, 'utf8'));
+  } catch (error) {
+    throw refused(`the run.json of ${container} could not be read (${posix(boxRecordFile)}): ${String(error?.message).split('\n')[0]}`);
+  }
+  const isThatRuns =
+    record?.command === 'run' &&
+    record.container === container &&
+    typeof record.worktree === 'string' &&
+    typeof record.commit === 'string' &&
+    COMMIT_ID.test(record.commit) &&
+    typeof record.dirty === 'boolean' &&
+    MODES.includes(record.mode) &&
+    typeof record.base_url === 'string';
+  if (!isThatRuns) throw refused(`${posix(boxRecordFile)} is not the run.json of the run that started ${container}`);
+  return record;
+}
+
+/** Whether two paths name one folder, links followed. Windows does not tell upper case from lower. */
+function isSameFolder(one, other) {
+  const [a, b] = [one, other].map((folder) => realPathOf(path.resolve(folder)));
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
 /**
  * More specs in a kept box: one `docker exec`, with a folder of its own inside the box's.
  * `precheck` is asked first: docker exec ends with 1 for a container that is gone or stopped,
  * and 1 is also Playwright's code for a failed test.
+ *
+ * What the box holds is read from the box's own record, never taken from whoever calls: the box
+ * must be this worktree's, and the commit it built goes on this run's record as built_commit.
  */
 export function planExec(args, ctx) {
   const settings = settingsFrom(ctx);
@@ -322,6 +363,14 @@ export function planExec(args, ctx) {
   if (!fs.statSync(boxDir, { throwIfNoEntry: false })?.isDirectory()) {
     throw refused(`no run folder for ${args.container} under ${posix(settings.outBase)}: it was started with another WALK_BOX_OUT, or not by this script`);
   }
+  const box = boxRecordOf(boxDir, args.container);
+  if (!isSameFolder(box.worktree, ctx.root)) {
+    throw refused(
+      `${args.container} was started from another worktree (${box.worktree}), not this one (${posix(ctx.root)}): ` +
+        "--exec would run this worktree's specs against that worktree's build. Run it from there, or start a box here.",
+    );
+  }
+  const built = box.mode === 'build';
   const runId = runIdOf(ctx.now);
   const folder = `exec-${runId}`;
   const call = [
@@ -338,7 +387,14 @@ export function planExec(args, ctx) {
     command: 'exec',
     container: args.container,
     box_run_id: boxRunId,
+    mode: box.mode,
+    base_url: box.base_url,
     worktree: posix(ctx.root),
+    // The app in the box: the commit its own run built, and whether that worktree differed from
+    // it. A --url box built nothing. `commit` and `dirty`, added when the walk starts, are where
+    // web/e2e is read now.
+    built_commit: built ? box.commit : null,
+    built_dirty: built ? box.dirty : null,
     specs: specs.map((spec) => spec.repo),
     args: [...args.extra],
     shots: settings.shots,
@@ -374,6 +430,51 @@ function checkoutState(git) {
   } catch (error) {
     throw refused(`git could not read this worktree: ${String(error?.message).split('\n')[0]}`);
   }
+}
+
+const linesOf = (text) => text.split(/\r?\n/).filter(Boolean);
+/** Everything under web/ but the specs: what a box builds, and what --exec does not take again. */
+const OUTSIDE_SPECS = Object.freeze(['--', 'web', ':(exclude)web/e2e']);
+const NAMED_AT_MOST = 3;
+
+/**
+ * The files under web/ outside web/e2e that are not as a commit has them: changed since (committed
+ * or not), or new and not committed. Throws what git throws.
+ */
+export function changedSinceBuild(git, builtCommit) {
+  return [
+    ...linesOf(git(['diff', '--name-only', builtCommit, ...OUTSIDE_SPECS])),
+    ...linesOf(git(['ls-files', '--others', '--exclude-standard', ...OUTSIDE_SPECS])),
+  ];
+}
+
+/**
+ * --exec takes web/e2e from the worktree as it is now and leaves the app as the box built it. So
+ * every other file under web/ must still be as it was built, or the walk would go on record
+ * against an app that is not this tree's: refused, and a new box is the answer. A box built from a
+ * worktree that differed from its commit cannot be compared: that is on the record (built_dirty)
+ * and said, not refused. A --url box built nothing.
+ */
+function assertBuildIsCurrent(plan, deps) {
+  const { built_commit: builtCommit, built_dirty: builtDirty } = plan.record;
+  if (builtCommit === null) return;
+  if (builtDirty) {
+    deps.log(`walk-box: the worktree had uncommitted changes when ${plan.container} was built, so the app in it cannot be compared with this tree`);
+    return;
+  }
+  let changed;
+  try {
+    changed = changedSinceBuild(deps.git, builtCommit);
+  } catch (error) {
+    throw refused(`git could not compare this worktree with ${builtCommit}, the commit ${plan.container} built: ${String(error?.message).split('\n')[0]}`);
+  }
+  if (changed.length === 0) return;
+  const named = changed.slice(0, NAMED_AT_MOST).join(', ');
+  const more = changed.length > NAMED_AT_MOST ? ` and ${changed.length - NAMED_AT_MOST} more` : '';
+  throw refused(
+    `${plan.container} built ${builtCommit.slice(0, 7)}, and under web/ outside web/e2e this tree is not as it was built: ${named}${more}. ` +
+      '--exec does not rebuild the app: start a new box.',
+  );
 }
 
 function makeRunFolder(outDir) {
@@ -496,6 +597,7 @@ async function walk(args, deps) {
     exit_code: null,
     result: 'running',
   };
+  if (args.command === 'exec') assertBuildIsCurrent(plan, deps);
   const box = await askBox(plan, deps);
   if (box !== EXIT.passed) return box;
   makeRunFolder(plan.outDir);
