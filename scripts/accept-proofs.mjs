@@ -17,9 +17,11 @@
 //
 //   {"name": "turn", "pass": true, "detail": {…}}        and "blocked": true when the proof says so
 //
-// `detail` is the row the statement returned: ids, counts, codes and times. Message text never
-// leaves the database: a statement that names such a column is refused, a row that carries one
-// fails, and any long string is withheld. Why something went wrong is said on stderr.
+// `detail` is what the statement's row held beside its verdict: ids, counts, codes and times.
+// Text never leaves the database: a statement that names a text column is refused
+// (lib/accept-proofs-lint.mjs), a row that carries one as a key at any depth fails, and a value
+// that is not of an allowed shape is replaced by the word `withheld` (lib/accept-proofs-detail.mjs).
+// Why something went wrong is said on stderr.
 //
 // Exit 0 pass, 1 not passed, 3 blocked (repeat the run), 2 no verdict: a usage, pack, parameter,
 // connection or statement error. Importing this module has no side effects.
@@ -28,16 +30,18 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { firstLine, loadDsn, openClient, redact, stripSql } from './db-test.mjs';
+import { firstLine, loadDsn, openClient, redact } from './db-test.mjs';
+import { decide } from './lib/accept-proofs-detail.mjs';
+import { lintProofSql } from './lib/accept-proofs-lint.mjs';
+import { FINGERPRINT, UUID, isTime } from './lib/accept-proofs-shapes.mjs';
+
+export { decide, lintProofSql };
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 const USAGE = 'usage: node scripts/accept-proofs.mjs <phase> <proof> --sha <commit> [--param key=value]…';
 
 /** The four ways a call ends. */
 export const EXIT = Object.freeze({ pass: 0, fail: 1, error: 2, blocked: 3 });
-
-/** A string in `detail` longer than this is withheld: an id, a code or a time is never this long. */
-export const DETAIL_STRING_MAX = 200;
 
 const STATEMENT_TIMEOUT = '15s';
 const UUIDS_MAX = 50;
@@ -99,18 +103,11 @@ export function parseArgs(argv) {
  * Parameter types
  * ------------------------------------------------------------------------------------------ */
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
-/** The time form the fingerprint is written in: UTC, to the microsecond. */
-const STAMP = String.raw`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z`;
-const FINGERPRINT = new RegExp(`^ap=(none|${STAMP}),rp=(none|${STAMP}),n=\\d{1,9},at=${STAMP}$`);
 /** A plain name: letters and digits, joined by single `_`, `.` or `-`. No quote, space, bracket or `--`. */
 const PLAIN_TEXT = /^[A-Za-z0-9]+(?:[_.-][A-Za-z0-9]+)*$/;
 const ENUM_CHOICE = /^[a-z0-9_-]+$/;
 
-const isTime = (raw) => ISO_TIME.test(raw) && !Number.isNaN(Date.parse(raw));
-
-/** type → [what a value must be, how it reaches the statement]. */
+/** type → [what a value must be, how it reaches the statement]. The shapes are lib/accept-proofs-shapes.mjs's. */
 const TYPES = {
   integer: ['a whole number', (raw) => (/^(0|[1-9][0-9]{0,17})$/.test(raw) ? raw : null)],
   uuid: ['a lower-case uuid', (raw) => (UUID.test(raw) ? raw : null)],
@@ -173,59 +170,8 @@ export function bindParams(proof, given) {
 }
 
 /* ---------------------------------------------------------------------------------------------
- * The statement: one plain read
+ * The pack: every proof whole, and every statement one plain read (lib/accept-proofs-lint.mjs)
  * ------------------------------------------------------------------------------------------ */
-
-/** Words a read never needs. Each is matched whole, so `updated_at` is not `update`. */
-const WRITE_WORDS = [
-  'insert', 'update', 'delete', 'merge', 'truncate', 'alter', 'drop', 'create', 'grant', 'revoke', 'copy', 'call', 'do',
-  'set', 'reset', 'commit', 'begin', 'start', 'rollback', 'savepoint', 'release', 'prepare', 'execute', 'deallocate',
-  'listen', 'notify', 'unlisten', 'vacuum', 'analyze', 'cluster', 'reindex', 'refresh', 'lock', 'comment', 'security',
-  'load', 'discard', 'into', 'share',
-];
-/** Functions that act: settings, sequences, the server's own controls, large objects, other servers. */
-const ACTING_FUNCTION = /\b(set_config|nextval|setval|currval|pg_[a-z0-9_]*|lo_[a-z0-9_]*|dblink[a-z0-9_]*)\b/i;
-/** Schemas a proof has no business in: the network, the secrets, the logins, the scheduler. */
-const OTHER_SCHEMA = /\b(net|vault|auth|storage|realtime|cron|pgsodium|extensions|supabase_functions|graphql|pg_catalog|information_schema)\s*\./i;
-/** Columns and keys that hold what someone typed or what a model answered. Read in the raw text: a json key is a literal. */
-const TEXT_WORDS = ['content', 'prompt', 'history', 'query', 'note', 'params', 'result'];
-
-const wordIn = (words, text) => words.find((word) => new RegExp(`\\b${word}\\b`, 'i').test(text)) ?? null;
-
-function placeholderRule(code, paramCount) {
-  const used = new Set([...code.matchAll(/\$(\d+)/g)].map((match) => Number(match[1])));
-  const beyond = [...used].find((n) => n < 1 || n > paramCount);
-  if (beyond !== undefined) return `the statement uses $${beyond}, and the proof declares ${paramCount} parameter(s)`;
-  for (let n = 1; n <= paramCount; n += 1) {
-    if (!used.has(n)) return `the statement does not use $${n}: every declared parameter is bound`;
-  }
-  return null;
-}
-
-/**
- * Lint one proof statement. Returns null when it is one plain read, or the rule it broke.
- *
- * The read-only transaction is what stops a write; this is the second lock, and the one that
- * reads the statement the way a reviewer would. It also covers what a read-only transaction
- * allows: a setting changed, a backend signalled, an advisory lock taken.
- */
-export function lintProofSql(sql, paramCount) {
-  const raw = String(sql ?? '');
-  const code = stripSql(raw);
-  const statements = code.split(';').map((part) => part.trim()).filter((part) => part.length > 0);
-  if (statements.length === 0) return 'no statement found';
-  if (statements.length > 1) return `a proof is one statement, and this is ${statements.length}`;
-  if (!/^(select|with)\b/i.test(statements[0])) return 'a proof must start with select or with';
-  const write = wordIn(WRITE_WORDS, code);
-  if (write !== null) return `a proof only reads: the word "${write}" is not allowed`;
-  const acting = ACTING_FUNCTION.exec(code);
-  if (acting !== null) return `a proof calls no function that acts: ${acting[1]} (pg_*, lo_*, dblink*, set_config and the sequence functions are refused)`;
-  const schema = OTHER_SCHEMA.exec(code);
-  if (schema !== null) return `a proof reads schema public only, not schema "${schema[1].toLowerCase()}"`;
-  const text = wordIn(TEXT_WORDS, raw);
-  if (text !== null) return `a proof never reads message text: the word "${text}" is not allowed`;
-  return placeholderRule(code, paramCount);
-}
 
 /** Refuse a pack that is not whole, before anything runs. The message starts with the proof's name. */
 export function validatePack(pack) {
@@ -275,43 +221,6 @@ export function readPackAt({ phase, sha, gitShow = gitShowAt }) {
   } catch {
     throw new ProofError('bad_pack', `${file} at ${sha} is not valid JSON`);
   }
-}
-
-/* ---------------------------------------------------------------------------------------------
- * The decision
- * ------------------------------------------------------------------------------------------ */
-
-/** A row that carries one of these fails its proof: they hold what was typed or answered. */
-const FORBIDDEN_COLUMNS = ['content', 'prompt', 'title', 'query', 'note', 'history', 'params', 'result'];
-
-/** One value of `detail`: times as ISO text, long strings withheld, lists and objects walked. */
-function plain(value) {
-  if (value === null || value === undefined) return null;
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'string') return value.length > DETAIL_STRING_MAX ? { withheld_chars: value.length } : value;
-  if (Array.isArray(value)) return value.map(plain);
-  if (typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, plain(inner)]));
-  return value;
-}
-
-/**
- * What a statement's result says. One row whose `ok` is true passes. `blocked` true outranks
- * both pass and fail: the proof could not be read fairly, and the run is repeated.
- */
-export function decide(result) {
-  const failed = (detail) => ({ pass: false, blocked: false, detail });
-  if (Array.isArray(result)) return failed({ error: 'expected_one_result', results: result.length });
-  const rows = result?.rows ?? [];
-  if (rows.length !== 1) return failed({ error: 'expected_one_row', rows: rows.length });
-  const [row] = rows;
-  const leaked = FORBIDDEN_COLUMNS.find((column) => Object.hasOwn(row, column));
-  if (leaked !== undefined) return failed({ error: 'forbidden_column', column: leaked });
-  if (!Object.hasOwn(row, 'ok')) return failed({ error: 'no_ok_column' });
-  const { ok, blocked, ...rest } = row;
-  const detail = plain(rest);
-  if (blocked === true) return { pass: false, blocked: true, detail };
-  return { pass: ok === true, blocked: false, detail };
 }
 
 /* ---------------------------------------------------------------------------------------------

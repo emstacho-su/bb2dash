@@ -360,7 +360,8 @@ test('detail keeps a value only when it is of an allowed shape, at every depth; 
     fingerprint: FINGERPRINT,
     state: 'done',
     model: 'claude-haiku-4-5-20251001',
-    used: 'search_context · bb2dash-inbox-decisions',
+    scope: 'bb2dash-inbox-decisions',
+    course: 'IST.323',
     request_id: '412',
     empty: '',
     ids: [UUID_A, UUID_B],
@@ -372,6 +373,8 @@ test('detail keeps a value only when it is of an allowed shape, at every depth; 
   // Withheld: a sentence under a name no rule knows (review B-4: `c.title as t`), however short.
   assert.deepEqual(detailOf({ t: 'What does the syllabus say about late work?' }), { t: 'withheld' });
   assert.deepEqual(detailOf({ t: 'Late work, and what it costs' }), { t: 'withheld' });
+  // A token holds no blank: plain words with nothing but letters between them are still a sentence.
+  assert.deepEqual(detailOf({ t: 'Late work loses ten percent a day' }), { t: 'withheld' });
   assert.deepEqual(detailOf({ t: 'two\nlines' }), { t: 'withheld' });
   assert.deepEqual(detailOf({ t: 'x'.repeat(65) }), { t: 'withheld' });
   // An array of 200-character chunks used to pass the one length limit, chunk by chunk.

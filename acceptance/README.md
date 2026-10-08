@@ -115,7 +115,11 @@ installed and reaches nothing.
   saved earlier. A host action reads what the stages before its own left; an `auto` step's proofs
   may also carry from a step of the step's own stage.
 - Every statement in `proofs.json` is one read: it starts with `select` or `with`, reads schema
-  `public` only, never names a column that holds message text, and uses exactly its own parameters.
+  `public` only, and uses exactly its own parameters. It holds no double-quoted name, no comment,
+  no backslash and no `$` but a parameter, so the check reads the same text the database does.
+- A statement never reads text out. It may name a column that holds text in two ways only:
+  `md5(<alias>.content)`, to hold a question against the md5 it was given, and
+  `<alias>.title = '<a literal>'`.
 - Every sandbox stage has its `## Stage:` section in the playbook, and the section names each of
   the stage's tests.
 - **No course text.** The playbook and the manifest quote no answer: no block quote, and no quoted
@@ -166,8 +170,20 @@ e2e/accept.config.ts` lists every test as skipped and writes nothing.
 **The proofs script.** `node scripts/accept-proofs.mjs <phase> <proof> --sha <commit> --param k=v …`
 reads `proofs.json` at that commit, runs the one statement in a read-only transaction that is always
 rolled back, and prints one line: `{"name", "pass", "detail"}`, with `"blocked": true` when the proof
-says the run must be repeated. `detail` holds ids, counts, codes and times, never message text. It
-exits 0 for a pass, 1 for a fail, 3 for blocked, and 2 when it could give no verdict.
+says the run must be repeated. It exits 0 for a pass, 1 for a fail, 3 for blocked, and 2 when it
+could give no verdict.
+
+The database is the first lock, the check of the statement's text the second. Every statement is
+sent in the way that lets the database take one statement at a time (the extended protocol), so a
+text that holds a second statement is refused by the database itself; and the transaction is
+read-only, so a write is refused too.
+
+`detail` holds ids, counts, codes and times, and never text. It keeps a value only when the value
+is of a known shape: a number, true, false, null, or a text that is a uuid, an ISO time, a planner
+fingerprint or a short token with no blank in it (a state, a tool's name). Anything else shows as
+the word `withheld`. A row that carries a key named like a text column (`content`, `prompt`,
+`title`, `query`, `note`, `history`, `params`, `result`, `description`, `answer`), at any depth,
+fails its proof.
 
 Parameter types: `integer`, `uuid`, `time` (ISO, with its zone), `uuids` (uuids joined by commas),
 `text` (a plain name: letters, digits and single `_`, `.` or `-`), `fingerprint` (what
