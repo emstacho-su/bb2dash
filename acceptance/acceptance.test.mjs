@@ -432,6 +432,37 @@ test('a pack quotes no answer: no block quote, and no long quoted passage but th
   assert.deepEqual(problemsAfter((pack) => ({ ...pack, playbook: `${pack.playbook}\nIt asks "${question}"\n` })), []);
 });
 
+test('a quoted answer is caught when it wraps over two lines, and in single quotes or code marks too', () => {
+  const withLines = (...lines) => problemsAfter((pack) => ({ ...pack, playbook: `${pack.playbook}\n${lines.join('\n')}\n` }));
+  const first = "Late work loses ten percent a day and isn't taken";
+  const second = 'after the third day, as the policy page of the syllabus has it.';
+  const passage = `${first} ${second}`;
+  const reported = [`playbook.md: quotes a passage of ${passage.length} characters that is not one of the five questions and not a text of the app's own`];
+  // The review's case: a playbook wraps at 100 columns, so no one line held both quote marks and the passage went unread.
+  assert.deepEqual(withLines(`The answer was "${first}`, `${second}"`), reported);
+  assert.deepEqual(withLines(`The answer was “${first}`, `${second}”`), reported);
+  // In single quotes, with an apostrophe inside a word; and in code marks.
+  assert.deepEqual(withLines(`The answer was '${first}`, `${second}'`), reported);
+  assert.deepEqual(withLines(`The answer was \`${first}`, `${second}\``), reported);
+  // In the manifest too.
+  const inManifest = problemsAfter((pack) => { stepOf(pack.manifest, '3').text = `It answered '${passage}'`; });
+  assert.ok(inManifest.some((line) => line.startsWith('manifest.json: quotes a passage of')));
+
+  // What stays allowed. A short text in any of the marks, however it wraps:
+  assert.deepEqual(withLines("A row titled 'spike' and a line that reads `Waiting for the", 'Workspace service` are fine.'), []);
+  // a question, in any of the marks, wrapped or not:
+  const question = questionsOf(REPO).find((asked) => asked.split(' ').length > 12);
+  assert.ok(question, 'one of the five questions is longer than twelve words');
+  const [head, tail] = [question.slice(0, question.indexOf(' ', 40)), question.slice(question.indexOf(' ', 40) + 1)];
+  assert.deepEqual(withLines(`It asks '${head}`, `${tail}' and then \`${question}\`.`), []);
+  // a long text that is the app's own, as a whole quoted string of its labels:
+  const ownLong = "The Workspace's Claude sign-in has expired. Run claude setup-token again and store the new token.";
+  assert.ok(readText('web/src/lib/workspace-labels.ts').includes(`"${ownLong}"`));
+  assert.deepEqual(withLines(`The line may hold \`${ownLong}\`.`), []);
+  // and prose with apostrophes in it, which holds no quotation at all:
+  assert.deepEqual(withLines("The answer's text, the step's question and the owner's own decisions are each the page's, and none of the steps' pictures is anyone's quotation of them."), []);
+});
+
 test("a text the playbook gives as the page's own is one of the app's strings, and the word reads is kept for such a text", () => {
   const withLine = (line) => problemsAfter((pack) => ({ ...pack, playbook: `${pack.playbook}\n${line}\n` }));
   // The sentence the first proof run (2026-10-07) was failed on, word for word: a label in no code marks.
