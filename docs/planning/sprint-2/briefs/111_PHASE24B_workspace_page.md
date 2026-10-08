@@ -3,12 +3,14 @@
 Date 2026-10-08 · PM: the Fable session · Product manager: Stack · Requirements: Stack's ask of
 2026-10-08 (the tag the PM assigns to brief 109) · Answers on record:
 `109a_PHASE24_open_questions.md` · **Gate: Phase 22 and Phase 24a are both on `main`** · Branch
-`feat/workspace-page-24b` · Worktree `bb2dash-wt-24b` · Neither is cut yet · Workers W-81 to W-83
-(24a ends at W-80) · No migration: the page uses 24a's objects, and 198 and 199 stay slack · One PR
-in bb2dash · Verification file `docs/planning/sprint-2/verification/111a_PHASE24B_VERIFICATION.md`,
-called 111a below · Status: **drafted with brief 109 on Stack's answers of 2026-10-08.** It is frozen
-at its gate, after a re-read against Phase 22 as merged: every token name, class name and line number
-of Phase 22 below is read again then.
+`feat/workspace-page-24b` · Worktree `bb2dash-wt-24b` · Neither is cut yet · Workers W-86 to W-88
+(24a uses W-76 to W-79 and W-85; W-80 to W-84 are the Phase 23 follow-ups', brief 110 at d558994,
+line 13; the PM confirms the one numbering at the freeze) · No migration: the page uses 24a's
+objects, and 198 and 199 stay slack · One PR in bb2dash · Verification file
+`docs/planning/sprint-2/verification/111a_PHASE24B_VERIFICATION.md`, called 111a below · Status:
+**drafted with brief 109 on Stack's answers of 2026-10-08, and through the challenge round of the
+same day** (brief 109, Appendix 2). It is frozen at its gate, after a re-read against Phase 22 as
+merged: every token name, class name and line number of Phase 22 below is read again then.
 
 **The design is carried out with the `ui-ux-pro-max` skill, in Phase 22's design language.** Dark by
 default with a light version; black, grey and white with `#ff0000` as the one accent; pill buttons;
@@ -36,6 +38,17 @@ where a token exists.
 * The reference screenshots were opened for this brief: `Replit Web 24.png`, `Replit Web 26.png` and
   the three in `Replit Web Adding a skill/`, all in his Downloads folder. They are pictures of another
   product. Their layout and features are the model. No name and no wording is copied from them.
+* The two numbered pictures were opened again in the challenge round. The second shows a side panel
+  with three tabs, a search field, a row of filter pills and a toggle at the top right that folds
+  the panel away. The first shows a greeting that holds a person's name.
+* The acceptance suite uses pack 21 as its fixture (`acceptance/acceptance.test.mjs:38, 222,
+  364-667`). `acceptance/pack-check.mjs:96-99` reads the five questions from
+  `web/e2e/walk21.lib.ts`. `web/e2e/accept.lib.ts:73-74`, which every pack's browser tests use,
+  imports `walk21.lib` and `walk21.window`. `scripts/accept-proofs.test.mjs:631` reads
+  `acceptance/21/proofs.json`. `accept.lib.ts:325, 426, 477, 514-515` read `data-used` and
+  `data-column-empty`.
+* The web app holds no name of his: a grep of `web/src` for `user_metadata`, `display_name`,
+  `full_name`, `first_name` and `given_name` gives 0 hits outside the generated types file.
 
 ## Why
 
@@ -71,16 +84,21 @@ Each line is a check that fails on `main` after 24a.
 6. A label in an answer is a numbered chip only when that request has the source row. Otherwise it is
    plain text.
 7. The Sources tab lists an answer's sources; the Files tab lists his uploads with their state; the
-   Memory tab lists what is remembered, deletes any item in two steps, and edits the About me note.
+   Memory tab lists what is remembered, deletes any item on a second press, and edits the About me
+   note.
 8. A file from his device is picked or dropped, checked, stored, registered and shown with its state
-   until it reads "indexed".
+   until it reads "indexed". Deleting one cuts it from search at once, and a delete that did not
+   finish stays listed with Try again until the file is gone from the bucket.
 9. Up to three example prompts are built from his real upcoming work, by title and date. With no such
    row, the example row is absent.
 10. After the page marks a turn stopped, a later piece of text for that request changes nothing.
 11. At 390 px: one column, no sideways page scroll, the composer docked, and a wide table scrolls
     inside its own box.
-12. With memory jobs on, a conversation quiet for 15 minutes shows one item in the Memory tab, and
-    deleting it leaves nothing for search.
+12. With memory jobs on, a conversation that was answered after the switch and has been quiet for 15
+    minutes shows one item in the Memory tab, and deleting it leaves nothing for search. A
+    conversation from before the switch, or an archived one, shows none.
+13. The side panel folds away and comes back by one button, and a filter field on the Files tab and
+    on the Memory tab narrows the rows by title as he types, with no request sent.
 
 ## Contract
 
@@ -93,10 +111,11 @@ opens the side panel on a tab (`web/src/components/workspace/route.ts`).
 |---|---|
 | Lobby | each block loading; ready; no upcoming work (the example row is absent); no conversations (one line); service offline (the line shows, Ask still queues) |
 | Composer | empty; chips set; a routine needs a file (Ask off, one line); an upload is not read yet (Ask off); refused (the two frozen sentences); a request is open (the button reads Stop and Enter sends nothing, as `Composer.tsx:85-93`) |
-| Turn | queued; searching (new line, from claimed until the `sources` event or the first text); streaming; done; done with nothing matched (fixed line); done with a failed search (fixed line); failed; stopped; joined late |
+| Turn | queued; searching (new line, from claimed until the `sources` event or the first text); streaming; done; done with nothing matched (fixed line, only for `empty`); done from an attached file alone (`attached_only`, no fixed line); done with a failed search (fixed line); failed; stopped; joined late |
+| Side panel | open on a tab; folded away (the conversation takes its width); under 1024 px a sheet |
 | Sources tab | no answer picked; loading; rows, cited first; nothing matched; the read failed |
-| Files tab | no uploads; uploading; waiting; reading; ready; failed with its reason and Try again; one index status line |
-| Memory tab | About me: empty, editing, saved, failed. The list: empty, rows, the two-step Delete, failed |
+| Files tab | no uploads; uploading; waiting; reading; ready; failed with its reason and Try again; removing (a delete that did not finish, with Try again); filtered; none match the filter; one index status line |
+| Memory tab | About me: empty, editing, saved, failed. The list: empty, rows, filtered, none match the filter, Delete and its second press, failed |
 | Material picker | loading; by course; filtered; none found; the limit of five reached |
 
 **The shell.** `Workspace.tsx` keeps reading the rows and holding the one channel
@@ -105,8 +124,20 @@ conversations, a column capped at 80ch, and the panel. Under 1024 px the panel i
 720 px, today's step, the rail is one too. Sheets and the picker reuse `PopoutShell` (focus moved in,
 Esc, focus handed back: `web/src/components/popout/PopoutShell.tsx:31-37`).
 
+**The side panel** (NEW `SidePanel.tsx`). Three tabs. One button at its top right folds it away and
+brings it back, as the second picture's toggle does; folded is the route with no `panel` parameter,
+so it survives a reload. The Files tab and the Memory tab each have a filter field at the top: it
+narrows the rows already on the page by title, as he types, and sends nothing. The Sources tab has
+none: it lists one answer's rows, 40 at most. The picture's row of filter pills is not built (Out of
+scope).
+
 **The lobby.** A greeting with no name in it, one large composer, the six routines as shortcuts, up to
-three example prompts with a refresh, and recent conversations with a link to all of them.
+three example prompts with a refresh, and recent conversations with a link to all of them. **Why no
+name, though the picture has one and he asked for a personalised assistant:** the app holds no name
+of his anywhere (Facts), a name typed into the code would be a literal about a person in a public
+repository, and a place to keep one is a database column, which in this phase would be a migration
+in 198 or 199 and a ruling first. It is 109a's item 21, his to object to: the cheap moment for a
+`display_name` on `workspace_profile` is before 24a's migration 195 is frozen.
 
 **The composer** (`Composer.tsx`, rewritten). A text box; a row of chips; NEW `PlusMenu.tsx` with
 three entries (attach from materials, upload from device, use a routine, the last opening a list with
@@ -133,13 +164,25 @@ with a filter field. A pick becomes a chip.
 
 **Uploading from his device.** A file input and a drop target. NEW
 `web/src/lib/workspace-upload-rules.ts` checks the type and the size before anything is sent: six
-types (pdf, docx, pptx, xlsx, plain text, Markdown) and 20,971,520 bytes, 24a's limits. Then the
-order 24a fixes: the object into the bucket `workspace-uploads`, a signed URL of 7 days,
-`workspace_upload_register`. The chip and the Files row read `workspace_documents` again every 5 s
-while a row is not `indexed` or `failed` (the pattern of `web/src/lib/workspace-poll.ts`). A failed
-row keeps Remove and Try again; Try again signs a new URL and calls `workspace_upload_retry`. Delete
-calls `workspace_document_delete`, then removes the object with the key it returns. He may tag an
-upload with a course (an update of `course_id`).
+types (pdf, docx, pptx, xlsx, plain text, Markdown) and 20,971,520 bytes, 24a's limits. The type is
+decided from the file's extension, and the page sets the stored content type itself, because a
+browser may report none for a Markdown file. The page also makes the object's key, from lower-case
+letters, digits, `/`, `.`, `_` and `-` only, never from the file's own name: 24a's table refuses any
+other key, and the file's name is kept as the upload's title. Then the order 24a fixes: the object
+into the bucket `workspace-uploads`, a signed URL of 7 days, `workspace_upload_register`. The chip
+and the Files row read `workspace_documents` again every 5 s while a row is not `indexed` or
+`failed` (the pattern of `web/src/lib/workspace-poll.ts`). A failed row keeps Remove and Try again;
+Try again signs a new URL and calls `workspace_upload_retry`. He may tag an upload with a course (an
+update of `course_id`).
+
+**Deleting an upload, in 24a's two steps.** Delete calls `workspace_document_delete(id, false)`: the
+file leaves search at once and its row reads "removing". The page then removes the object with the
+key the call returned, and calls `workspace_document_delete(id, true)`, which drops the row. If the
+tab closes or a call fails in between, the row stays in the Files tab as "removing" with Try again,
+which runs the same two steps; the first is safe to repeat. The line under the Delete button says
+two things in plain words: the file will no longer be searched or attached, and answers already
+written keep what they quoted from it. 24a gives the browser no way to change a stored answer
+(`140:196`), so the page must not promise more.
 
 **Formatted answers, with no new dependency.**
 
@@ -157,9 +200,12 @@ upload with a course (an update of `course_id`).
 
 **Sources.** 24a's labels carry ids: `[M<id>]`, `[U<id>]`, `[R<id>]` and `[P]`. NEW pure
 `web/src/lib/workspace-citations.ts` turns a label into a numbered chip only when the request's
-`workspace_sources` holds that row; the number is the row's `ord`. Anything else stays text. A chip is
-a button, never a link: it opens the panel at its row. A row shows its kind, its course, its title,
-its page, slide or sheet, and Open:
+`workspace_sources` holds that row; the number is the row's `ord`. Anything else stays text. That
+case is real and not only a guard: a passage the model found with its own search and did not open
+has no source row (brief 109, step 12). 24a's format rule tells the model to name such a file in
+words and not by label, so a bare bracket code should be rare; when one appears it is shown as the
+text it is, never as a chip. A chip is a button, never a link: it opens the panel at its row. A row
+shows its kind, its course, its title, its page, slide or sheet, and Open:
 
 * a course file through `FileOpenAction` (`web/src/components/materials/FileOpenAction.tsx:70-76`):
   the file opens and the row names the page. It lands on the page itself only if probe Q-2 passes;
@@ -171,7 +217,10 @@ The row shows no passage text: 24a stores none. The line of tool names under an 
 
 **The fixed lines.** Nothing matched, and the search failed, are read from
 `workspace_turns.retrieval_state` and worded in `web/src/lib/workspace-labels.ts`. A test holds each
-equal to the runner's sentence in `workspace/src/lines.ts`, so the two cannot drift.
+equal to the runner's sentence in `workspace/src/lines.ts`, so the two cannot drift. The nothing
+matched line shows for `empty` only. `attached_only` (an attached file was read and no passage
+matched) shows no line. The sentence is 24a's: it speaks of his course files and uploads and never
+says that nothing of his was used, so it is true under a planner answer too.
 
 **The index status line** on the Files tab reads `v_workspace_index_status`: how many course units,
 uploads and remembered items wait or failed, and when a course file was last indexed. No number is
@@ -182,6 +231,18 @@ shown that the row does not hold.
 
 **Memory, switched on.** This PR changes one line outside `web/`: the compose default of
 `WORKSPACE_MEMORY_JOBS` becomes `on`, because the list and the delete control now exist (answer 1).
+
+* **A restart does not bring the value.** `docker compose restart workspace` keeps the container and
+  its old environment. The value arrives only when the container is made again: from bb2dash-stack,
+  `docker compose up -d workspace`, alone, with no question open (the root guide names the two
+  commands apart). The check reads the value inside the container, not in the file.
+* **What the switch summarises.** Nothing from before it. 24a's `workspace_job_claim` stamps
+  `workspace_profile.memory_since` the first time a runner asks for memory jobs and hands out only
+  conversations answered after that, not archived and not opted out (brief 109, Memory). His
+  existing conversations, most of them made by test scripts, are never summarised.
+* **The acceptance run stays out of his memory.** Each step archives the conversation it opened in
+  the last step that uses it. The one step that waits for a remembered item deletes the item and
+  then archives its conversation.
 
 **Wording.** Every string stays in `web/src/lib/workspace-labels.ts` and its test, because the pack
 check reads the page's texts from that file (`acceptance/README.md:145-149`). It is PM wording, frozen
@@ -209,12 +270,17 @@ an RPC**, so Phase 22's walk guard needs only new names on its read list.
   `workspace_profile`, `v_workspace_index_status`.
 * **Writes:** `workspace_ask_with`, `workspace_cancel`; the title and archived columns of a
   conversation (`140`, its column grants); `workspace_upload_register`, `workspace_upload_retry`,
-  `workspace_document_delete`; the storage upload, signed URL and remove on `workspace-uploads`; an
-  update of an upload's title and course; an update of `workspace_profile.about_me`.
+  `workspace_document_delete` (called twice for an upload, once for a remembered item); the storage
+  upload, signed URL and remove on `workspace-uploads`; an update of an upload's title and course;
+  an update of `workspace_profile.about_me`. These three column updates are the only direct writes
+  24a grants on its tables. Everything else goes through its four functions, which refuse anyone
+  but the owner, and a direct insert, update or delete raises 42501.
 * **Realtime:** `workspace:<conversation>` with `delta`, `done` and 24a's `sources`.
   `workspace:lobby` is held with no event, as today.
 * **Refusals:** 22023 (the text's length) and 23505 (a second open request) keep today's two
-  sentences. 23503 and 23514 from `workspace_ask_with` get one sentence each.
+  sentences. 23503 and 23514 from `workspace_ask_with` get one sentence each. 42501 from any of the
+  four functions means the session is not the owner's; it gets one sentence too, and the page sends
+  nothing again by itself.
 
 ### Files rewritten, kept and new
 
@@ -231,7 +297,10 @@ an RPC**, so Phase 22's walk guard needs only new names on its read list.
 * **New, `web/src/components/workspace/`:** `Lobby`, `ExamplePrompts`, `Thread`, `AnswerBody`,
   `PlusMenu`, `DepthMenu`, `MaterialPicker`, `SidePanel` and its three tabs, each with its module.
 * **Changed elsewhere:** `web/src/lib/use-workspace-stream.ts` (the `sources` event, the stop guard);
-  `web/src/lib/workspace-labels.ts` and its test; `compose.yaml` (one value).
+  `web/src/lib/workspace-labels.ts` and its test; `compose.yaml` (one value); `web/e2e/accept.lib.ts`,
+  `web/e2e/walk21.lib.ts` and `web/e2e/walk21.window.ts` (the lines that read `data-used` and
+  `data-column-empty="start"`); `acceptance/README.md` (one line: pack 21 is the suite's fixture and
+  is not run).
 
 ### Tests, and what replaces the two layout checks
 
@@ -254,9 +323,27 @@ after.
   The PM extends the fixture with the new reads and keeps its counts green, or records the new count.
   The token audit stays at zero for the two Workspace folders.
 * **The acceptance pack.** `acceptance/24/` and `web/e2e/accept24.spec.ts` are extended with the page's
-  steps. Pack 21 and `web/e2e/accept21.spec.ts` are retired in this PR: two attributes they read
-  change, and the phase they accepted stays accepted (DECISIONS 2026-10-08). The `walk21*` files under
-  `web/e2e/` are read at the cut; any that cannot run against the new page goes with them.
+  steps.
+* **Pack 21 is no longer run, and it is not removed.** The first draft retired its files. That
+  cannot pass: the acceptance suite uses pack 21 as its fixture and asserts that it is there, the
+  pack check reads the five questions from `walk21.lib.ts`, the shared library `accept.lib.ts`
+  imports `walk21.lib` and `walk21.window`, and the proofs test reads `acceptance/21/proofs.json`
+  (Facts). So in this PR:
+  * `acceptance/21/` (three files), `web/e2e/accept21.spec.ts`, `web/e2e/walk21.lib.ts` and
+    `web/e2e/walk21.window.ts` stay in place. `just accept 21` is not run again, and
+    `acceptance/README.md` says so in one line. Phase 21 stays accepted (DECISIONS 2026-10-08).
+  * `accept.lib.ts`, `walk21.lib.ts` and `walk21.window.ts` are edited only where they read the two
+    attributes that change (`data-used` at `accept.lib.ts:325, 477, 514-515`, `walk21.lib.ts:290`
+    and `walk21.window.ts:206, 304`; `data-column-empty="start"`), so the helpers pack 24 shares read
+    the new names.
+  * The pack check holds a playbook to the page's own strings (`pack-check.mjs:461-472`), and it
+    runs for every pack in the tree. If this phase's wording drops a string that pack 21's playbook
+    gives after "reads", "says" or "shows", that sentence is taken out of pack 21's playbook, and
+    each such edit is named in 111a. Nothing else in pack 21 changes.
+  * The other `walk21*` files (`walk21.spec.ts`, `walk21.first.ts`, `walk21.desktop.ts`,
+    `walk21.retake.spec.ts`) and `workspace-acceptance-helpers.spec.ts` are read at the cut. One
+    that nothing imports and that cannot run against the new page may go; one that is imported
+    stays.
 
 ## MVP (in plain words)
 
@@ -287,7 +374,9 @@ It draws no image and follows no link. It works by keyboard and on a phone, dark
 
 **Contract**
 
-- [ ] Each of the 12 checks under "What 24b delivers" has a named test or proof, green.
+- [ ] Each of the 13 checks under "What 24b delivers" has a named test or proof, green.
+- [ ] `node --test acceptance/acceptance.test.mjs scripts/accept-proofs.test.mjs` passes with pack 21
+      still in the tree: `ls acceptance` shows `21` and `24`.
 - [ ] Both layout checks pass as rewritten.
 
 **Live**
@@ -295,8 +384,10 @@ It draws no image and follows no link. It works by keyboard and on a phone, dark
 - [ ] The PM's walk in a real browser, both themes, at 390 px and at desktop width, and in the desktop
       window, with one runner on the queue. No screenshot is committed.
 - [ ] Stack has seen the preview and said OK. This phase is visual.
-- [ ] After his merge word, with the Workspace restarted alone so memory jobs are on:
-      `just accept 24` is green.
+- [ ] After his merge word, with the Workspace container made again, alone, so memory jobs are on
+      (from bb2dash-stack, `docker compose up -d workspace`, no question open; a plain restart keeps
+      the old value): `docker compose exec workspace printenv WORKSPACE_MEMORY_JOBS` prints `on`.
+      Then `just accept 24` is green.
 
 **Docs, same PR**
 
@@ -310,21 +401,21 @@ to 16.
 | # | task | owner | deterministic check |
 |---|---|---|---|
 | 1 | Gate: Phase 22 and 24a are on `main`; this brief re-read against both and frozen; the branch cut | PM | `git merge-base --is-ancestor <Phase 22's merge commit> HEAD; echo $?` and the same for 24a's each print 0 |
-| 2 | Probes Q-1 to Q-5 (below) | PM + W-81 | one pass or fail line each in 111a |
-| 3 | Wording frozen in `workspace-labels.ts` and its test, before worker branches are cut | PM | `cd web && npx vitest run test/workspace-labels.test.ts` passes, and its case comparing the two fixed sentences with `workspace/src/lines.ts` passes |
-| 4 | `answer-format.ts` and `AnswerBody.tsx` | W-81 | `npx vitest run test/answer-format.test.ts test/AnswerBody.test.tsx`: for generated strings the tree holds no `img`, `a`, `iframe`, `script` or `style` and no `href` or `src`; an unclosed form is text; the parser throws for no input |
-| 5 | The query modules, citations, examples, upload rules | W-81 | `npx vitest run test/queries.workspace-ask.test.ts test/workspace-citations.test.ts test/workspace-examples.test.ts test/workspace-upload-rules.test.ts`: a label with no row stays text; no rows give no example; a file of 20,971,521 bytes is refused before any request |
-| 6 | The stream: the `sources` event and the stop guard | W-81 | `npx vitest run test/use-workspace-stream.stop.test.tsx`: a delta after the stopped mark changes nothing; an unknown event changes nothing |
-| 7 | Composer, plus menu, depth menu, material picker | W-82 | `npx vitest run test/Composer.chips.test.tsx`: Ask sends the options; Deep returns to Auto after one question; a file routine with no file keeps Ask off; Backspace in an empty box removes the last chip |
-| 8 | The lobby and example prompts | W-82 | `npx vitest run test/Workspace.lobby.test.tsx`: no upcoming rows, no example row; a press fills the box and calls nothing |
-| 9 | The thread, the answer body in place, source chips, the searching line | W-83 | `npx vitest run test/Workspace.sources.test.tsx`: a chip is a button and never a link; `empty` shows the fixed line; a `plain` answer renders as plain text |
-| 10 | The panel: Sources, Files with upload states, Memory with delete and About me | W-83 | `npx vitest run test/SidePanel.test.tsx`: each state of the table renders; Delete needs two presses; a failed upload shows its reason and Try again |
-| 11 | Layout and phone: both checks rewritten | W-83 | `npx vitest run test/Workspace.layout.test.tsx`; `node scripts/walk-box.mjs web/e2e/workspace-layout.spec.ts` exits 0 |
+| 2 | Probes Q-1 to Q-5 (below) | PM + W-86 | one pass or fail line each in 111a |
+| 3 | Wording frozen in `workspace-labels.ts` and its test, before worker branches are cut | PM | `cd web && npx vitest run test/workspace-labels.test.ts` passes, and its case comparing the two fixed sentences with `workspace/src/lines.ts` passes; the line under Delete for an upload says that answers already written keep what they quoted |
+| 4 | `answer-format.ts` and `AnswerBody.tsx` | W-86 | `npx vitest run test/answer-format.test.ts test/AnswerBody.test.tsx`: for generated strings the tree holds no `img`, `a`, `iframe`, `script` or `style` and no `href` or `src`; an unclosed form is text; the parser throws for no input |
+| 5 | The query modules, citations, examples, upload rules | W-86 | `npx vitest run test/queries.workspace-ask.test.ts test/queries.workspace-files.test.ts test/workspace-citations.test.ts test/workspace-examples.test.ts test/workspace-upload-rules.test.ts`: a label with no row stays text; no rows give no example; a file of 20,971,521 bytes is refused before any request; a Markdown file with no reported type is taken by its extension and stored with the Markdown content type; the object's key holds only the allowed characters whatever the file's name; a delete makes the first call, then the storage remove, then the second call, and a failed remove makes no second call |
+| 6 | The stream: the `sources` event and the stop guard | W-86 | `npx vitest run test/use-workspace-stream.stop.test.tsx`: a delta after the stopped mark changes nothing; an unknown event changes nothing |
+| 7 | Composer, plus menu, depth menu, material picker | W-87 | `npx vitest run test/Composer.chips.test.tsx`: Ask sends the options; Deep returns to Auto after one question; a file routine with no file keeps Ask off; Backspace in an empty box removes the last chip |
+| 8 | The lobby and example prompts | W-87 | `npx vitest run test/Workspace.lobby.test.tsx`: no upcoming rows, no example row; a press fills the box and calls nothing; the greeting holds no name |
+| 9 | The thread, the answer body in place, source chips, the searching line | W-88 | `npx vitest run test/Workspace.sources.test.tsx`: a chip is a button and never a link; a label with no source row is text; `empty` shows the fixed line and `attached_only` shows none; a `plain` answer renders as plain text |
+| 10 | The panel: Sources, Files with upload states, Memory with delete and About me, the filter fields, the fold button | W-88 | `npx vitest run test/SidePanel.test.tsx`: each state of the table renders; Delete needs two presses; a failed upload shows its reason and Try again; a row in `deleting` reads "removing" and has Try again; typing in the filter field of Files, and of Memory, narrows the rows and makes no request; the fold button removes the `panel` parameter and the same button brings the tab back |
+| 11 | Layout and phone: both checks rewritten | W-88 | `npx vitest run test/Workspace.layout.test.tsx`; `node scripts/walk-box.mjs web/e2e/workspace-layout.spec.ts` exits 0 |
 | 12 | Audits and Phase 22's fixture | PM | `npx vitest run test/raw-html.audit.test.ts test/audits.test.ts` and Phase 22's token audit pass; its walk's counts are green or the new count is in 111a |
 | 13 | Memory on: the compose value and its test | PM | `grep -c "WORKSPACE_MEMORY_JOBS" compose.yaml` gives 1 and the line reads `on`; `node --test docker/workspace/init-firewall.test.mjs docker/grep-clean.test.mjs` passes |
-| 14 | The pack extended; pack 21 retired | PM | `node --test acceptance/acceptance.test.mjs` passes; `ls acceptance` shows no `21` |
+| 14 | The pack extended, each step archiving its conversation; pack 21 no longer run and kept in the tree; the three shared library files (`accept.lib.ts`, `walk21.lib.ts`, `walk21.window.ts`) edited where they read the two changed attributes | PM | `node --test acceptance/acceptance.test.mjs scripts/accept-proofs.test.mjs` passes; `ls acceptance` shows `21` and `24`; `cd web && npx playwright test -c e2e/accept.config.ts --list` lists pack 24's titles and exits 0, which shows `accept.lib.ts` still compiles; `git diff origin/main...HEAD -- acceptance/README.md \| grep -c "^+.*21"` gives at least 1 (the line that pack 21 is the suite's fixture and is not run) |
 | 15 | Integrate, reviews, the preview for Stack, the PR. Stop at "ready when you say so" | PM | the SOP gates; `gh pr view --json state -q .state` prints `OPEN` |
-| 16 | After his merge word: the Workspace restarted alone with no question open, then `just accept 24` | PM | the run's `REPORT.md` reads green |
+| 16 | After his merge word: the Workspace container made again, alone, with no question open (from bb2dash-stack, `docker compose up -d workspace`; not `restart`), then `just accept 24` | PM | `docker compose exec workspace printenv WORKSPACE_MEMORY_JOBS` prints `on`; `select memory_since is not null from workspace_profile` gives true after the runner's first idle poll; the run's `REPORT.md` reads green |
 
 **Probes, before anything is built on them.**
 
@@ -340,18 +431,22 @@ to 16.
 ## Workers
 
 Workers are Opus, commit and push per task, never touch `project-state/`, and hand the PM a
-verification section with each task's red run and green run (`111_W81_VERIFICATION.md` to
-`111_W83_VERIFICATION.md`, beside 111a). A worker with an unclear point states its default and takes
+verification section with each task's red run and green run (`111_W86_VERIFICATION.md` to
+`111_W88_VERIFICATION.md`, beside 111a). A worker with an unclear point states its default and takes
 it. Nobody answers a running worker by message (ruling W-S).
 
 | worker | stream | branch | worktree | owns (disjoint) | tasks |
 |---|---|---|---|---|---|
-| W-81 | data layer | `feat/workspace-page-24b-data` | `bb2dash-wt-24b-data` | the nine new files under `web/src/lib/` and their tests; `use-workspace-stream.ts` and its three tests; `AnswerBody.tsx`, its module and its test | 2, 4 to 6 |
-| W-82 | composer and lobby | `feat/workspace-page-24b-composer` | `bb2dash-wt-24b-composer` | `Composer`, `PlusMenu`, `DepthMenu`, `MaterialPicker`, `Lobby`, `ExamplePrompts`, their modules and tests; `Workspace.empty.test.tsx` | 7, 8 |
-| W-83 | thread and panel | `feat/workspace-page-24b-thread` | `bb2dash-wt-24b-thread` | `page.tsx`, `Workspace.tsx`, `Workspace.module.css`, `Thread`, `MessageList`, `ConversationList`, `TierBadge`, `ServiceStatus`, `SidePanel` and its tabs, `thread.ts`, `route.ts`, their modules; both layout checks; `Workspace.test.tsx`, `Workspace.thread.test.ts`, `Workspace.failures.test.tsx`, `Workspace.rereads.test.tsx`, `Workspace.service.test.tsx`, `workspace-harness.tsx` | 9 to 11 |
-| PM | integration | `feat/workspace-page-24b` | `bb2dash-wt-24b` | `workspace-labels.ts` and its test; the pack and `accept24.spec.ts`; pack 21, `accept21.spec.ts`, `workspace-acceptance-helpers.spec.ts` and the `walk21*` files; Phase 22's fixture and phone cases; the token baseline if a count moves; `compose.yaml`'s one value; state docs; 111a | 1 to 3, 12 to 16 |
+| W-86 | data layer | `feat/workspace-page-24b-data` | `bb2dash-wt-24b-data` | the nine new files under `web/src/lib/` and their tests; `use-workspace-stream.ts` and its three tests; `AnswerBody.tsx`, its module and its test | 2, 4 to 6 |
+| W-87 | composer and lobby | `feat/workspace-page-24b-composer` | `bb2dash-wt-24b-composer` | `Composer`, `PlusMenu`, `DepthMenu`, `MaterialPicker`, `Lobby`, `ExamplePrompts`, their modules and tests; `Workspace.empty.test.tsx` | 7, 8 |
+| W-88 | thread and panel | `feat/workspace-page-24b-thread` | `bb2dash-wt-24b-thread` | `page.tsx`, `Workspace.tsx`, `Workspace.module.css`, `Thread`, `MessageList`, `ConversationList`, `TierBadge`, `ServiceStatus`, `SidePanel` and its tabs, `thread.ts`, `route.ts`, their modules; both layout checks; `Workspace.test.tsx`, `Workspace.thread.test.ts`, `Workspace.failures.test.tsx`, `Workspace.rereads.test.tsx`, `Workspace.service.test.tsx`, `workspace-harness.tsx` | 9 to 11 |
+| PM | integration | `feat/workspace-page-24b` | `bb2dash-wt-24b` | `workspace-labels.ts` and its test; the pack and `accept24.spec.ts`; **the acceptance files pack 21 shares:** `web/e2e/accept.lib.ts`, `web/e2e/walk21.lib.ts` and `walk21.window.ts` (the lines that read the two changed attributes), `acceptance/21/playbook.md` (only a sentence the pack check would otherwise fail), `acceptance/README.md` (one line), and the other `walk21*` files with `accept21.spec.ts` and `workspace-acceptance-helpers.spec.ts` as read at the cut; Phase 22's fixture and phone cases; the token baseline if a count moves; `compose.yaml`'s one value; state docs; 111a | 1 to 3, 12 to 16 |
 
-W-82 and W-83 type against W-81's modules from this Contract until they are on the phase branch.
+Not edited by anyone in this phase: `acceptance/acceptance.test.mjs`, `acceptance/pack-check.mjs`,
+`acceptance/21/manifest.json`, `acceptance/21/proofs.json` and `scripts/accept-proofs.test.mjs`. They
+hold pack 21 as their fixture, and that is why pack 21 stays.
+
+W-87 and W-88 type against W-86's modules from this Contract until they are on the phase branch.
 
 ## Seams
 
@@ -360,16 +455,26 @@ W-82 and W-83 type against W-81's modules from this Contract until they are on t
 | Phase 22 | it sweeps the two Workspace folders and freezes the tokens | 24b is cut only after Phase 22 is on `main`. It is written on Phase 22's tokens alone and adds no literal. Its fixture, its phone cases and its token baseline are the PM's to extend |
 | Phase 24a | the objects, the labels, the `format` option, the upload order, the error codes, `lines.ts` | none edited. If the page needs a database change, it is a new migration in 198 or 199 and a ruling first |
 | The live Workspace | one queue | one runner on the queue at a time during the walk, on Stack's word, as in 24a |
-| The acceptance run | pack 24 grows; pack 21 goes | the host actions it needs are the ones 24a added to bb2dash-stack. A step that waits for a memory item uses the action that reads a proof again until it passes |
+| The acceptance run | pack 24 grows; pack 21 is no longer run and stays in the tree as the acceptance suite's fixture | the host actions it needs are the ones 24a added to bb2dash-stack. A step that waits for a memory item uses the action that reads a proof again until it passes. Each step archives the conversation it opened, so a run leaves nothing in his memory or his list. The cut-over makes the Workspace container again; it does not restart it |
+| The Phase 23 follow-ups (brief 110) | its pack 23 and its W-84 edit `acceptance/pack-check.mjs` and `OPERATOR.md` where they name the Workspace alone; its workers are W-80 to W-84 | this phase edits neither file. Its workers are W-86 to W-88. If the follow-ups' pack reads a Workspace string this phase removes, the pack check says so at integration and the PM keeps the string or edits that sentence, named in 111a |
 | The desktop shell | the page runs in its window | the walk includes it: the file dialog, a drop, an opened source (Q-2, Q-3) |
 
 ## Out of scope
 
-A plan-first toggle. Voice input. The reference's start cards and bottom mode bar. A name in the
-greeting. A Content-Security-Policy header. Maths typesetting and code colouring. Passage text beside
-a source. Deleting a conversation. Upload progress in percent. A switch that turns memory off.
-Asking again at another depth. Any change under `db/`, `workspace/`, `mcp-server/`, `supabase/`,
-`sync/`, `apply/` or `desktop/`.
+A plan-first toggle. Voice input. The reference's start cards and bottom mode bar. A
+Content-Security-Policy header. Maths typesetting and code colouring. Passage text beside a source.
+Deleting a conversation. Upload progress in percent. A switch that turns memory off. Asking again at
+another depth. Removing pack 21 from the tree. Any change under `db/`, `workspace/`, `mcp-server/`,
+`supabase/`, `sync/`, `apply/` or `desktop/`.
+
+Three things the pictures show and this phase leaves out, each with its reason:
+
+* **A name in the greeting.** The app holds no name of his, and a place to keep one is a database
+  column (The lobby; 109a, item 21).
+* **The panel's row of filter pills.** The pills in the picture sort a gallery of many kinds. The
+  Files tab has one kind of row and shows each row's state on the row; the course is already a chip
+  in the composer. The filter field covers finding a file by name.
+* **A search field on the Sources tab.** It lists one answer's rows, 40 at most.
 
 ## Risks
 
@@ -378,10 +483,17 @@ Asking again at another depth. Any change under `db/`, `workspace/`, `mcp-server
 * **A leak through formatting.** The element list and the property test of task 4 hold it. No CSP
   header backs it up, so the renderer is the only guard.
 * **Size.** The cut order: the example refresh, renaming a conversation, the routine search field,
-  the drop target. Never cut: chips, sources, upload states, the memory delete, the About me note.
-* **Pack 21 goes stale.** It is retired here, and the report says so.
+  the drop target, the panel's two filter fields. Never cut: chips, sources, upload states, the two
+  steps of an upload's delete, the memory delete, the About me note.
+* **Pack 21 goes stale.** It is no longer run, and the README says so. It stays in the tree because
+  four files hold it as their fixture; a later phase that wants it gone first moves that role to
+  another pack.
 * **Private text.** Fixtures are synthetic and no screenshot is committed.
-* **Memory turns on at this cut-over.** From then a quiet conversation is summarised. He can delete
-  any item, and a conversation whose item he deleted is not summarised again.
+* **Memory turns on at this cut-over.** From then a conversation answered after the switch and
+  quiet for 15 minutes is summarised; nothing older is. He can delete any item, and a conversation
+  whose item he deleted is not summarised again. If the container is restarted and not made again,
+  memory stays off and check 12 fails: task 16 reads the value inside the container.
+* **A delete he believes went further than it did.** Deleting an upload does not change answers
+  already written. The line under the button says so.
 * **Not checked:** whether an opened PDF can land on a page (Q-2); the upload and the file dialog in
   the desktop window (Q-1, Q-3); the renderer's cost while streaming (Q-4).

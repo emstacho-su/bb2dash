@@ -140,22 +140,29 @@ The store is the separate Supabase project `harness-memory`.
 ## Still open, with the default taken
 
 The design needed these and he was not asked. Each default is built unless he says otherwise. None
-blocks the freeze.
+blocks the freeze. Items 19 to 22 were added by the challenge round of 2026-10-08 (brief 109,
+Appendix 2), which also changed the wording of items 2, 3, 6, 10, 11, 14 and 15. Items 19 and 20 are
+the two a reviewer asked to have put to him by name.
 
 1. **Deep after one question.** Default: Deep applies to that question, then the menu returns to Auto
    (PM ruling W-9). Quick and Standard stay until he changes them.
 2. **Memory before he can see it.** The list and the delete control are on the new page, which is
    24b. Default: the path is built and tested in 24a, and no memory item is written until 24b turns
    it on. The rolling summary that keeps a long conversation in context is not a memory item and is
-   on from 24a.
-3. **Deleting a remembered item.** Default: that conversation is not summarised again.
+   on from 24a. When 24b turns memory on, nothing said before the switch is summarised: only a
+   conversation answered after it. Most of the conversations there today were made by test scripts.
+3. **Deleting a remembered item.** Default: that conversation is not summarised again. Deleting an
+   uploaded file takes it out of search at once; an answer already written keeps what it quoted.
 4. **The quiet wait before a conversation is summarised.** Default: 15 minutes after its last answer.
 5. **Limits.** Defaults: the About me note is 2,000 characters; an upload is 20 MB at most and one of
    pdf, docx, pptx, xlsx, plain text or Markdown; five attachments a question; a remembered item is
    1,000 characters.
 6. **The planner: fed or indexed.** He offered both forms. Default: an explicit data feed read on
    every answer (PM ruling W-6), because dates and statuses change and a structured read is exact.
-   Nothing of the planner is embedded.
+   The feed is never indexed. A remembered summary is, and it is written from conversations that may
+   have quoted a due date or a score, so the summary's instructions forbid due dates, statuses and
+   scores, a remembered item carries its date, and the assistant is told the feed is the current
+   figure. That lowers the chance of a stale date coming back and does not remove it.
 7. **The "graded so far" figure.** Default: the feed carries posted scores, and the assistant points
    to the Grades screen for the figure. The figure is computed in the web app and cannot be run by the
    runner as the same computation (brief 109, The planner and grades feed).
@@ -166,22 +173,61 @@ blocks the freeze.
    about a past Inbox decision is then answered only from what the planner and grades show.
 10. **The answering model's own second search.** Default: it may search course materials up to three
     more times and open ten units. Uploads and memory reach an answer through the runner's search and
-    through attachments, not through a second search by the model.
+    through attachments, not through a second search by the model. A passage it finds that way and
+    does not open is named in words and is not listed as a source. A long uploaded file is read as
+    far as the question's budget allows, and the answer says when it was read in part.
 11. **Today's page between the two PRs.** Default: answers stay plain text with no bracket labels
     until 24b, and the sentence for "nothing of his matched" is written by the runner as the answer's
-    first line.
+    first line. **What that sentence says.** His answer 8 asks that it say plainly that it found
+    nothing of his. The planner is read on every answer and a follow-up rests on the conversation,
+    so on a planner question those words would be false. Default: the sentence says that no passage
+    of his course files or uploads matched, and it is not written at all when an attached file was
+    read. His to reword.
 12. **The old transcript volume.** Default: left in place and unused after 24a. Removing it is a step
     on his word.
 13. **More PRs than two.** 24a also needs a companion PR in bb2dash-stack (the secret's name, the
     doctor, two acceptance-run actions) and one test-only PR to `main` the day two migrations are
     applied. Default: both, as Phases 21 and 23 had.
 14. **Order with the Phase 23 follow-ups.** Default: the follow-ups merge first, and 24a re-does the
-    apply image's checks after merging `main`.
-15. **Phase 21's acceptance pack.** Default: not run again after 24a's cut-over, and removed in 24b.
-    Phase 21 stays accepted.
+    apply image's checks after merging `main`. The follow-ups' brief (110) took worker numbers W-80
+    to W-84 the same afternoon, so this phase's umbrella worker is W-85 and the page's three are
+    W-86 to W-88. That brief also says neither phase edits a file under `docker/apply/`; 24a edits
+    four there, and the PM corrects the sentence in brief 110.
+15. **Phase 21's acceptance pack.** Default: not run again after 24a's cut-over. It is not removed,
+    in 24a or in 24b: the acceptance suite uses pack 21 as its fixture, so its files stay in the
+    tree. Phase 21 stays accepted.
 16. **Drafting help and course rules.** The assistant applies no course AI-use rule (DECISIONS
     2026-10-05, scope calls). Default: unchanged; the routine is his decision.
 17. **The Inbox exporter's schedule.** The draft batch would have scheduled it. With notes out it is
     not part of this phase. It stays Phase 23's open item.
 18. **A known gap, not fixed here.** The `search` function answers any signed caller with the service
     role. Uploads and memory never pass through it. Fixing it is put to him separately.
+19. **Quick, and Auto on short lookups: no model plans the search.** His words in answer 2 ask for "a
+    cheap model to orchestrate those retrievals, while a higher level model then takes the context".
+    That is what Standard and Deep do. On Quick, and on Auto whenever the router sends a question to
+    its low tier, no model plans: the runner searches with his own words and the cheap model writes
+    the answer. Auto is the only depth today's page can send, and a reviewer read 20 of 38 stored
+    answers at the low tier on 2026-10-08 (4 mid, 14 high; most were test questions). Default: as
+    built, because a lookup then costs one turn and not two. If he objects, the cheapest change is a
+    planning turn on the low tier as well: one more cheap turn of at most 0.05, inside the same
+    ceiling.
+20. **The service that reads his uploads, and what a hostile file could do to it.** A file from his
+    device is opened by a parser, and for a PDF that parser is a C++ program. In 24a it runs in its
+    own container with no model, no Claude sign-in and no service key, as its own user with no
+    secret and no network, with a memory limit and a process limit. A file that took over the parser
+    could return wrong text for files and nothing else. A file that got past that to the worker
+    beside it could read his other waiting uploads and send them out by three ways the Phase 21
+    review recorded and he left open "for now" for the Workspace (2026-10-07): another site on a
+    shared Cloudflare address, name lookups, and the database's own web requests. There, nothing
+    runs code he did not write; here a parser reads files nobody vetted. Default: built as described,
+    with those three ways still open. Closing them is a name-checking proxy, a later phase. His to
+    object to, or to limit uploads to plain text and Markdown, which no parser reads.
+21. **His name in the greeting.** The reference picture greets its user by name. The app holds no name
+    of his anywhere, and a name typed into the code would sit in a public repository. Default: a
+    greeting with no name. If he wants one, the cheap moment is before 24a's migration 195 is
+    frozen: one column on the About me row, which he fills in himself.
+22. **One step that is his own.** The upload service signs in to the database as a new login,
+    `workspace_ingest_runner`. Its password is his to set, as on 2026-10-05 for `workspace_runner`: a
+    snippet on his laptop makes it, he runs one line in the SQL editor, and the snippet stores the
+    connection string in his secrets folder. It never passes through a chat, a repo file or a
+    migration. It is needed before the PM's walk and before the cut-over (brief 109, task 48).
