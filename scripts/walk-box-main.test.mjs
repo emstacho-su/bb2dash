@@ -526,6 +526,18 @@ test('watchSignals: the first of SIGINT, SIGTERM and SIGHUP is told by name, and
   }
 });
 
+const LOOK_EVERY_MS = 20;
+const STARTED_WITHIN_MS = 15_000;
+
+/** Waits until `check()` holds, for `limitMs` at most: a wait that cannot end fails the test, it does not hang it. */
+async function until(check, limitMs, what) {
+  const deadline = Date.now() + limitMs;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error(`${what}: not within ${limitMs} ms`);
+    await new Promise((resolve) => setTimeout(resolve, LOOK_EVERY_MS));
+  }
+}
+
 test('runDocker: a client that is still running is ended when its signal is aborted', async () => {
   const dir = scratch('walkbox-waits-');
   // A minute, far longer than the test: a client that is not ended holds this process open that long, no longer.
@@ -533,9 +545,19 @@ test('runDocker: a client that is still running is ended when its signal is abor
   const out = sink();
   const stop = new AbortController();
   const ending = runDocker(['run'], { logFile: null, client: [process.execPath, script], out: out.stream, err: sink().stream, signal: stop.signal });
-  while (!out.text().includes('started')) await new Promise((resolve) => setTimeout(resolve, 20));
-  stop.abort();
-  await assert.rejects(ending, { name: 'AbortError' });
+  // Whatever the wait below does, the client is ended and its answer is looked at once.
+  const answer = ending.then(
+    (code) => ({ code }),
+    (error) => ({ error }),
+  );
+  try {
+    await until(() => out.text().includes('started'), STARTED_WITHIN_MS, 'the stand-in client said it started');
+  } finally {
+    stop.abort();
+  }
+  const { code, error } = await answer;
+  assert.equal(code, undefined, 'the client was ended, it did not end by itself');
+  assert.equal(error?.name, 'AbortError');
 });
 
 /* ---------------------------------------------------------------------------------------------
