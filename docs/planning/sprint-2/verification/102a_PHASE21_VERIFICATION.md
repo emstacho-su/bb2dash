@@ -2451,3 +2451,87 @@ on, and until step 13 starts the Workspace from bb2dash-stack its questions are 
 test container (`bb2dash-wt21`, image `sha256:a2ef9b28…`, healthy, the 1.00 cap), which stays up.
 The merge commits and the acceptance go into the docs-only PR that follows acceptance step 15
 (PR #76's precedent).
+
+## Acceptance: the run of 2026-10-08 (`just accept 21`, green, counts)
+
+Stack did not walk the fifteen steps by hand. On 2026-10-07 he asked for the walk to be done by
+machine ("automate the acceptance walk testing by spinning up a claude session within a newly spun
+up testing container") and answered that a fully green run accepts the phase (DECISIONS
+2026-10-07, "Acceptance run"). The run was built, reviewed and proved twice (STATUS, "Acceptance
+run"), and on 2026-10-08 he said "merge." for its two PRs.
+
+**The merge commits.** Phase 21: bb2dash #78 `4ed9eee` (2026-10-07 20:27 UTC), then bb2dash-stack
+#3 `45444a4`. The acceptance run: bb2dash #82 `8269fac`, then bb2dash-stack #5 `c4a54f8`
+(2026-10-08 04:16 UTC).
+
+**The run.**
+
+|  |  |
+|---|---|
+| run | `20261008T041753Z`, 04:17:53 to 04:26:27 UTC |
+| command | `just accept 21`'s own (`node scripts/accept.mjs 21`), from bb2dash-stack's `main`, no flag |
+| site | production, `https://web-xi-ten-uy9xk6c6p0.vercel.app` |
+| commits | bb2dash `8269fac` (origin/main), bb2dash-stack `c4a54f8`, agentic-harness `57ee51f` |
+| sandbox | image `sha256:5e40ca1d…`, Claude Code 2.1.293, the stage script's own model, budget and time limit |
+| verdict | **green, exit 0, "This run counts as acceptance."** `verdict.json` sha256 `d9b3386af389792d555010f4c29e0074febdf1023c08f57e338f3c433bb0c90d` |
+| before it | no sync or Inbox apply open (`agent_requests`: none queued or claimed); `--check` passed |
+
+**The steps.** "Sandbox" means the Claude session in the throwaway container ran the step's browser
+test and read its screenshots; "host proof" is a fact the laptop read itself, read-only.
+
+| step | done by | result | what it rests on |
+|---|---|---|---|
+| 1 Usage credits off, `/usage` | Stack | not checked by the run | his to read; still owed |
+| 2 open the Workspace | sandbox | pass | the sandbox's record alone (no host proof) |
+| 2, the desktop window | nobody | waived | stands on `walks/walk-21/08-desktop.png` (the PM's walk, 2026-10-07) |
+| 3 syllabus lookup | sandbox | pass | host proof `turn`: Haiku, `search_materials` |
+| 4 an earlier decision | sandbox | pass | host proof `turn`: Haiku, `search_context` on `bb2dash-inbox-decisions` |
+| 5 a whole document | sandbox | pass | host proof `turn`: Haiku, `get_material_text` |
+| 6 a comparison | sandbox | pass | host proof `turn`: Sonnet |
+| 7 a study plan | sandbox | pass | host proof `turn`: Opus |
+| 8 Stop | sandbox | pass | host proof `turn-stopped`: stored as stopped, after the runner had taken the question |
+| 9 reload in the middle of an answer | sandbox | pass | host proof `turn`: the answer finished as done |
+| 10 no API key | host | pass | `ANTHROPIC_API_KEY` is not set in the container; the runner's log for request 422 reads `credential_source=none` |
+| 11 planner unchanged | host | pass | the fingerprint read the same before go-live and after the walk (`n=100,apn=85,rpn=76` both times; no request open in between) |
+| 12 "merge" | nobody | waived | overtaken by the merge of 2026-10-07 |
+| 13 go-live | host | pass | `bb2dash-wt21-workspace-1` stopped; `COMPOSE_PROFILES=workspace` added to `.env` as one line; `docker compose up -d --build workspace`; healthy 5 s after its start; the doctor's `workspace` row running, healthy |
+| 14a offline | sandbox | pass | host proof `turn-waiting`: the question asked with the service stopped was stored and waited; the sandbox saw the offline line 52 s before the three-minute deadline |
+| 14b back | sandbox | pass | host proof `turn-answered-after`: once the service was started, that question was answered |
+| 15 archive | sandbox | pass | host proofs `spike-archived` and `conversations-archived`: both archived through the page |
+
+**What the host did, in order** (`host.log`): fetched and checked both checkouts; read the sync
+container's id and start time; built the sandbox images; fetched bb2dash `8269fac` into the run's
+volume; read the planner; stopped the test runner (04:18:21); started the Workspace alone
+(04:18:39); signed in and ran stage `walk` (to 04:22:46); read its seven proofs, the API key and
+the planner; stopped the Workspace (04:22:55); ran stage `offline`; started the Workspace without
+a build (04:25:33); ran stage `back`; read its three proofs; removed the run's volume; read the
+sync container again: the same id and start time. Each stage's app session was signed out with
+the host's own copy of its token. No command named `sync` or `harness-jobs` except those two
+reads.
+
+**What the operator noted** (the sandbox's words; the host did not check them, and none changed a
+verdict):
+
+* After Stop, the stopped answer held more text when the page was reloaded for step 9 than it
+  showed at the moment the stopped line appeared. Step 8 is proved by what was stored (stopped,
+  after a claim), so it stands; whether text may still arrive after the stopped line shows is for
+  a later phase to look at.
+* Step 2's browser log held one refused request (401) to the scheduler heartbeat view. Steps 3 to
+  9 had none.
+* The answer after a stop opened by saying the earlier reply was blank (known since the proof
+  runs).
+* While a question waits for a stopped service, the button reads Stop.
+* Step 14b's pictures were taken with the answer already on the page, so they do not show the
+  waiting; the wait is what `turn-answered-after` proves.
+
+**After the run.** The Workspace is `bb2dash-workspace-1`, compose project `bb2dash`, started from
+bb2dash-stack, healthy. No conversation is listed. The test container is stopped and still there:
+removing it, the network `bb2dash-wt21_workspace-net` and the volume
+`bb2dash-wt21_workspace-claude-home` was refused by the PM session's safety check on 2026-10-08
+and waits for Stack to run or allow. The run's report, screenshots and captured answers stay on
+the laptop (`C:/Users/stack/.bb2dash-accept/21/20261008T041753Z/`): answers quote course text, and
+this repository is public.
+
+**Still open after acceptance.** Step 1 (Stack's). The test project's removal, the phase's
+worktrees and branches in both repos, and task 9's raw recordings. `npm ci` in the harness
+checkout's `mcp-server`, and which session takes the three prod-data SQL units, as before.
