@@ -348,7 +348,7 @@ begin
     end if;
   end loop;
   if (select decision_filed_at from attention_items where id = v_o5) is not null
-     or (select decision_filed->'log_path' from attention_items where id = v_o2) is not null then
+     or (select coalesce(jsonb_typeof(decision_filed->'log_path'), 'null') from attention_items where id = v_o2) <> 'null' then
     raise exception 'FAIL 4: a refused call changed a row';
   end if;
 end $$;
