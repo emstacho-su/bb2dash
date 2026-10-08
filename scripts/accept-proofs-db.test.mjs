@@ -12,11 +12,12 @@
 
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { PGlite } from '@electric-sql/pglite';
 
-import { runReadOnly } from './accept-proofs.mjs';
-import { columnsOf } from './accept-proofs-kit.mjs';
+import { EXIT, run, runReadOnly } from './accept-proofs.mjs';
+import { PACK_21, argvFor, columnsOf } from './accept-proofs-kit.mjs';
 
 /** table -> column -> its type here. The names are the migrations'; the types are the plain ones a statement needs. */
 const TABLES = {
@@ -142,4 +143,295 @@ test('the server refuses a write inside the one statement: the transaction is re
   const write = 'with gone as (delete from public.assignments returning id) select count(*) from gone';
   await assert.rejects(runReadOnly(clientOn(db), write, [], unexpectedRollbackError), (error) => error.code === READ_ONLY_TRANSACTION);
   assert.equal(await countOf('assignments'), 3);
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * Phase 21's seven proofs, each on rows made for the case
+ * ------------------------------------------------------------------------------------------ */
+
+/** The run's start as the host hands it over, and three moments around it. */
+const SINCE = '2026-10-07T18:00:00.000Z';
+const IN_RUN = '2026-10-07T18:05:00Z';
+/** Half a minute before the start: inside the 60 seconds a proof allows for a host clock that runs ahead. */
+const JUST_BEFORE = '2026-10-07T17:59:30Z';
+/** Two minutes before: an earlier run's. */
+const BEFORE_RUN = '2026-10-07T17:58:00Z';
+
+const QUESTION = 'What is due this week, and for which course?';
+const OTHER_QUESTION = 'What was due last week, and for which course?';
+const ANSWER = 'The reading response is due on Friday; the handbook has the rule.';
+const SEEDED_TEXT = /due this week|due last week|reading response|handbook/;
+
+const md5 = (text) => createHash('md5').update(text, 'utf8').digest('hex');
+
+/** Runs one proof of the working tree's Phase 21 pack against the in-process database: its exit code and its one line. */
+async function prove(name, params = {}) {
+  const out = [];
+  const err = [];
+  const code = await run(argvFor(name, params), {
+    out: (line) => out.push(line),
+    err: (line) => err.push(line),
+    readPack: () => PACK_21,
+    clientFactory: async () => clientOn(db),
+  });
+  assert.equal(out.length, 1, 'one line is printed');
+  // Whatever a proof decides, what was typed and answered stays in the database.
+  assert.doesNotMatch(out[0], SEEDED_TEXT);
+  const line = JSON.parse(out[0]);
+  return { code, line, detail: line.detail, why: err.join('\n') };
+}
+
+async function seedConversation({ id = randomUUID(), title = 'A conversation', createdAt = IN_RUN, archived = false } = {}) {
+  await db.query('insert into public.workspace_conversations (id, created_at, title, archived) values ($1, $2, $3, $4)', [id, createdAt, title, archived]);
+  return id;
+}
+
+/**
+ * One question as the app stores it: the user's message, its request, and the answer unless
+ * `answer` is null. `claimedAfterS` is how long the request waited before the runner took it.
+ */
+async function seedTurn({ request, question = QUESTION, createdAt = IN_RUN, claimedAfterS = 2, state = 'done', errorCode = null, answer = {} }) {
+  const conversation = await seedConversation({ createdAt });
+  const userMessage = randomUUID();
+  await db.query("insert into public.workspace_messages (id, conversation_id, role, content, finished) values ($1, $2, 'user', $3, true)", [userMessage, conversation, question]);
+  await db.query(
+    `insert into public.workspace_requests (id, created_at, conversation_id, user_message_id, state, claimed_at, finished_at, error_code)
+     values ($1, $2::timestamptz, $3, $4, $5, $2::timestamptz + make_interval(secs => $6::integer), $2::timestamptz + interval '90 seconds', $7)`,
+    [request, createdAt, conversation, userMessage, state, claimedAfterS, errorCode],
+  );
+  if (answer === null) return conversation;
+  const { tier = 'low', finished = true, errorCode: answerError = null, toolCalls = [] } = answer;
+  await db.query(
+    `insert into public.workspace_messages (id, conversation_id, role, request_id, tier, provider, model, content, tool_calls, finished, error_code)
+     values ($1, $2, 'assistant', $3, $4, 'claude-cli', 'claude-haiku-4-5', $5, $6::jsonb, $7, $8)`,
+    [randomUUID(), conversation, request, tier, ANSWER, JSON.stringify(toolCalls), finished, answerError],
+  );
+  return conversation;
+}
+
+const USED_SEARCH = [{ tool: 'search_materials', scope: 'IST.323', ok: true }];
+const turnOf = (request, more = {}) => ({ request: String(request), tier: 'low', since: SINCE, question_md5: md5(QUESTION), ...more });
+
+test("turn: this run's request, asking the step's question, answered at the tier with the tool, passes", async () => {
+  await seedTurn({ request: 412, answer: { toolCalls: USED_SEARCH } });
+  const passed = await prove('turn', turnOf(412, { tool: 'search_materials' }));
+  assert.equal(passed.code, EXIT.pass, passed.why);
+  assert.deepEqual(
+    { ...passed.detail, conversation_id: null, message_id: null },
+    {
+      request_id: 412,
+      request_state: 'done',
+      request_error_code: null,
+      conversation_id: null,
+      created_at: '2026-10-07T18:05:00.000Z',
+      claimed_at: '2026-10-07T18:05:02.000Z',
+      finished_at: '2026-10-07T18:06:30.000Z',
+      run_started_at: SINCE,
+      asked_in_this_run: true,
+      question_matches: true,
+      message_id: null,
+      tier: 'low',
+      provider: 'claude-cli',
+      model: 'claude-haiku-4-5',
+      finished: true,
+      message_error_code: null,
+      tools: USED_SEARCH,
+    },
+  );
+  assert.equal((await prove('turn', turnOf(412, { tool: 'search_materials', scope: 'IST.323' }))).code, EXIT.pass);
+  assert.equal((await prove('turn', turnOf(412))).code, EXIT.pass);
+  // The tier, the tool and the scope are each held.
+  assert.equal((await prove('turn', turnOf(412, { tier: 'mid' }))).code, EXIT.fail);
+  assert.equal((await prove('turn', turnOf(412, { tool: 'get_material_text' }))).code, EXIT.fail);
+  assert.equal((await prove('turn', turnOf(412, { tool: 'search_materials', scope: 'ECN.304' }))).code, EXIT.fail);
+  // And a request that is not there is no row, which is no pass.
+  assert.deepEqual((await prove('turn', turnOf(999))).detail, { error: 'expected_one_row', rows: 0 });
+});
+
+test("turn: a request from before the run fails, however right it is; the 60 seconds are for the host's clock", async () => {
+  await seedTurn({ request: 300, createdAt: BEFORE_RUN });
+  const old = await prove('turn', turnOf(300));
+  assert.equal(old.code, EXIT.fail);
+  assert.deepEqual([old.detail.asked_in_this_run, old.detail.question_matches], [false, true]);
+
+  await seedTurn({ request: 301, createdAt: JUST_BEFORE });
+  assert.equal((await prove('turn', turnOf(301))).code, EXIT.pass);
+});
+
+test('turn: a request whose user message is another question fails', async () => {
+  await seedTurn({ request: 413, question: OTHER_QUESTION });
+  const other = await prove('turn', turnOf(413));
+  assert.equal(other.code, EXIT.fail);
+  assert.deepEqual([other.detail.asked_in_this_run, other.detail.question_matches], [true, false]);
+  // The same request passes when the step's question is that one.
+  assert.equal((await prove('turn', turnOf(413, { question_md5: md5(OTHER_QUESTION) }))).code, EXIT.pass);
+});
+
+test('turn: a request that failed, and an answer that is not finished, fail', async () => {
+  await seedTurn({ request: 414, state: 'failed', errorCode: 'cli_error', answer: { errorCode: 'cli_error' } });
+  await seedTurn({ request: 415, answer: { finished: false } });
+  await seedTurn({ request: 416, answer: null });
+  for (const request of [414, 415, 416]) assert.equal((await prove('turn', turnOf(request))).code, EXIT.fail, String(request));
+});
+
+const stoppedOf = (request, more = {}) => ({ request: String(request), since: SINCE, question_md5: md5(QUESTION), ...more });
+const STOPPED = { state: 'cancelled', errorCode: 'cancelled' };
+
+test('turn-stopped: cancelled, with no answer begun or an answer that ends cancelled, passes', async () => {
+  await seedTurn({ request: 417, ...STOPPED, answer: null });
+  await seedTurn({ request: 418, ...STOPPED, answer: { tier: 'high', errorCode: 'cancelled' } });
+  for (const request of [417, 418]) assert.equal((await prove('turn-stopped', stoppedOf(request))).code, EXIT.pass, String(request));
+  // Done is not stopped, and neither is an answer that ended some other way.
+  await seedTurn({ request: 419 });
+  await seedTurn({ request: 420, ...STOPPED, answer: { tier: 'high', errorCode: null } });
+  for (const request of [419, 420]) assert.equal((await prove('turn-stopped', stoppedOf(request))).code, EXIT.fail, String(request));
+});
+
+test('turn-stopped: a stop from before the run fails, and so does a stop of another question', async () => {
+  await seedTurn({ request: 302, ...STOPPED, answer: null, createdAt: BEFORE_RUN });
+  const old = await prove('turn-stopped', stoppedOf(302));
+  assert.equal(old.code, EXIT.fail);
+  assert.deepEqual([old.detail.asked_in_this_run, old.detail.question_matches], [false, true]);
+
+  await seedTurn({ request: 421, ...STOPPED, answer: null, question: OTHER_QUESTION });
+  const other = await prove('turn-stopped', stoppedOf(421));
+  assert.equal(other.code, EXIT.fail);
+  assert.deepEqual([other.detail.asked_in_this_run, other.detail.question_matches], [true, false]);
+});
+
+const waitedOf = (request, more = {}) => ({ request: String(request), since: SINCE, min_wait_s: '15', ...more });
+
+test('turn-answered-after: a request claimed at once fails, and one that waited passes', async () => {
+  await seedTurn({ request: 430, claimedAfterS: 1 });
+  const atOnce = await prove('turn-answered-after', waitedOf(430));
+  assert.equal(atOnce.code, EXIT.fail);
+  assert.deepEqual([atOnce.detail.min_wait_s, atOnce.detail.waited_s], [15, 1]);
+
+  await seedTurn({ request: 431, claimedAfterS: 14 });
+  assert.equal((await prove('turn-answered-after', waitedOf(431))).code, EXIT.fail);
+
+  await seedTurn({ request: 432, claimedAfterS: 15 });
+  await seedTurn({ request: 433, claimedAfterS: 212 });
+  for (const request of [432, 433]) assert.equal((await prove('turn-answered-after', waitedOf(request))).code, EXIT.pass, String(request));
+  assert.equal((await prove('turn-answered-after', waitedOf(433))).detail.waited_s, 212);
+});
+
+test('turn-answered-after: a wait from before the run fails, and so does a question that waited and was not answered', async () => {
+  await seedTurn({ request: 303, claimedAfterS: 212, createdAt: BEFORE_RUN });
+  const old = await prove('turn-answered-after', waitedOf(303));
+  assert.equal(old.code, EXIT.fail);
+  assert.equal(old.detail.asked_in_this_run, false);
+
+  await seedTurn({ request: 434, claimedAfterS: 212, state: 'failed', errorCode: 'timeout', answer: { errorCode: 'timeout' } });
+  await seedTurn({ request: 435, claimedAfterS: 212, answer: null });
+  for (const request of [434, 435]) assert.equal((await prove('turn-answered-after', waitedOf(request))).code, EXIT.fail, String(request));
+});
+
+/** Three assignments with a progress row each, and two reading rows, changed on three days. */
+async function seedPlanner() {
+  await db.exec(`
+    insert into public.assignments (id) values ('a'), ('b'), ('c');
+    insert into public.assignment_progress (assignment_id, updated_at)
+      values ('a', '2026-10-01T12:00:00Z'), ('b', '2026-10-02T12:00:00Z'), ('c', '2026-10-03T12:00:00Z');
+    insert into public.reading_progress (reading_id, updated_at) values (1, '2026-10-01T09:00:00Z'), (2, '2026-10-02T09:00:00Z');
+  `);
+}
+
+const PLANNER = 'ap=2026-10-03T12:00:00.000000Z,rp=2026-10-02T09:00:00.000000Z,n=3,apn=3,rpn=2';
+
+test('planner: the fingerprint counts the progress rows, so deleting a row that is not the newest changes it', async () => {
+  await seedPlanner();
+  const first = await prove('planner-fingerprint');
+  assert.equal(first.code, EXIT.pass, first.why);
+  const before = first.detail.fingerprint;
+  assert.ok(before.startsWith(`${PLANNER},at=`), before);
+  assert.equal((await prove('planner-unchanged', { before })).code, EXIT.pass);
+
+  // Not the newest row: the two newest-change times stand, and only the count tells.
+  await db.exec("delete from public.assignment_progress where assignment_id = 'a'");
+  const changed = await prove('planner-unchanged', { before });
+  assert.equal(changed.code, EXIT.fail);
+  assert.equal('blocked' in changed.line, false);
+  assert.equal(changed.detail.planner_before, before);
+  assert.ok(changed.detail.planner_now.startsWith(`${PLANNER.replace('apn=3', 'apn=2')},at=`), changed.detail.planner_now);
+
+  // The same for a reading row.
+  const second = (await prove('planner-fingerprint')).detail.fingerprint;
+  await db.exec('delete from public.reading_progress where reading_id = 1');
+  const third = await prove('planner-unchanged', { before: second });
+  assert.equal(third.code, EXIT.fail);
+  assert.ok(third.detail.planner_now.includes(',apn=2,rpn=1,at='), third.detail.planner_now);
+});
+
+test('planner-unchanged: blocked when a request moved since the fingerprint, and when one is claimed now', async () => {
+  await seedPlanner();
+  // A sync that ran and ended long before: no reason to block.
+  await db.exec("insert into public.agent_requests (created_at, kind, state, claimed_at, finished_at) values ('2026-09-01T10:00:00Z', 'sync', 'done', '2026-09-01T10:00:05Z', '2026-09-01T10:20:00Z')");
+  const before = (await prove('planner-fingerprint')).detail.fingerprint;
+  const quiet = await prove('planner-unchanged', { before });
+  assert.equal(quiet.code, EXIT.pass, quiet.why);
+  assert.deepEqual([quiet.detail.requests_in_window, quiet.detail.requests_claimed_now], [0, 0]);
+
+  // Claimed before the fingerprint and not finished: a sync is running now, and may write at any moment.
+  await db.exec("insert into public.agent_requests (created_at, kind, state, claimed_at) values ('2026-09-02T10:00:00Z', 'sync', 'claimed', '2026-09-02T10:00:05Z')");
+  const running = await prove('planner-unchanged', { before });
+  assert.equal(running.code, EXIT.blocked);
+  assert.deepEqual([running.line.pass, running.line.blocked], [false, true]);
+  assert.deepEqual([running.detail.requests_in_window, running.detail.requests_claimed_now, running.detail.first_claimed_request_id], [0, 1, 2]);
+
+  // It ends (the times are old, so it is outside the window): not blocked.
+  await db.exec("update public.agent_requests set state = 'done', finished_at = '2026-09-02T10:20:00Z' where id = 2");
+  assert.equal((await prove('planner-unchanged', { before })).code, EXIT.pass);
+
+  // One created, one claimed and one finished after the fingerprint was read: each blocks.
+  for (const moved of ["insert into public.agent_requests (kind) values ('sync')", 'update public.agent_requests set claimed_at = now() where id = 1', 'update public.agent_requests set finished_at = now() where id = 1']) {
+    await db.exec(moved);
+    const blocked = await prove('planner-unchanged', { before });
+    assert.equal(blocked.code, EXIT.blocked, moved);
+    assert.ok(blocked.detail.requests_in_window >= 1, moved);
+    await db.exec("delete from public.agent_requests where id = 3; update public.agent_requests set claimed_at = '2026-09-01T10:00:05Z', finished_at = '2026-09-01T10:20:00Z' where id = 1");
+  }
+});
+
+test("spike-archived: exactly one conversation titled 'spike' is archived, and none is listed", async () => {
+  assert.equal((await prove('spike-archived')).code, EXIT.fail);
+  const spike = await seedConversation({ title: 'spike', createdAt: '2026-10-01T10:00:00Z' });
+  await seedConversation({ title: 'spike of another kind' });
+  const listed = await prove('spike-archived');
+  assert.equal(listed.code, EXIT.fail);
+  assert.deepEqual(listed.detail, { archived: 0, listed: 1 });
+
+  await db.query('update public.workspace_conversations set archived = true where id = $1', [spike]);
+  const archived = await prove('spike-archived');
+  assert.equal(archived.code, EXIT.pass, archived.why);
+  assert.deepEqual(archived.detail, { archived: 1, listed: 0 });
+
+  await seedConversation({ title: 'spike', archived: true });
+  assert.equal((await prove('spike-archived')).code, EXIT.fail);
+});
+
+test("conversations-archived: every one named is there, archived, and this run's", async () => {
+  const own = await seedConversation({ archived: true });
+  const second = await seedConversation({ archived: true, createdAt: JUST_BEFORE });
+  const passed = await prove('conversations-archived', { ids: `${own},${second}`, since: SINCE });
+  assert.equal(passed.code, EXIT.pass, passed.why);
+  assert.deepEqual(passed.detail, { asked_for: 2, found: 2, archived: 2, made_in_this_run: 2, not_archived: [] });
+
+  // An archived conversation of an earlier run proves nothing about this one.
+  const earlier = await seedConversation({ archived: true, createdAt: BEFORE_RUN });
+  const old = await prove('conversations-archived', { ids: `${own},${earlier}`, since: SINCE });
+  assert.equal(old.code, EXIT.fail);
+  assert.deepEqual(old.detail, { asked_for: 2, found: 2, archived: 2, made_in_this_run: 1, not_archived: [] });
+
+  const listed = await seedConversation();
+  const missing = randomUUID();
+  const notYet = await prove('conversations-archived', { ids: `${own},${listed},${missing}`, since: SINCE });
+  assert.equal(notYet.code, EXIT.fail);
+  assert.deepEqual({ ...notYet.detail, not_archived: [...notYet.detail.not_archived].sort() }, {
+    asked_for: 3,
+    found: 2,
+    archived: 1,
+    made_in_this_run: 2,
+    not_archived: [listed, missing].sort(),
+  });
 });

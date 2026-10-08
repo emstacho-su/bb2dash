@@ -28,7 +28,10 @@ import { PACK_21, SHA, argvFor, columnsOf } from './accept-proofs-kit.mjs';
 const UUID_A = '0b6f7c1e-2d3a-4b5c-8d9e-0f1a2b3c4d5e';
 const UUID_B = '9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d';
 const TIME = '2026-10-07T18:00:00.000000Z';
-const FINGERPRINT = `ap=2026-10-06T21:15:02.118355Z,rp=none,n=143,at=${TIME}`;
+/** The run's own start, as the host hands it over: its clock, milliseconds, Z. */
+const SINCE = '2026-10-07T17:55:00.000Z';
+const QUESTION_MD5 = '3f2a9c0b1d4e5f60718293a4b5c6d7e8';
+const FINGERPRINT = `ap=2026-10-06T21:15:02.118355Z,rp=none,n=143,apn=61,rpn=0,at=${TIME}`;
 
 /**
  * A fake pg.Client: records every query, in either form node-postgres takes (a text with values,
@@ -80,11 +83,11 @@ async function runWith({ argv, rows, onQuery, pack = PACK_21, connectError = nul
 const GIVEN = {
   'planner-fingerprint': {},
   'planner-unchanged': { before: FINGERPRINT },
-  turn: { request: '412', tier: 'low', tool: 'search_materials' },
-  'turn-stopped': { request: '417' },
-  'turn-answered-after': { request: '419', after: TIME },
+  turn: { request: '412', tier: 'low', since: SINCE, question_md5: QUESTION_MD5, tool: 'search_materials' },
+  'turn-stopped': { request: '417', since: SINCE, question_md5: QUESTION_MD5 },
+  'turn-answered-after': { request: '419', since: SINCE, min_wait_s: '15' },
   'spike-archived': {},
-  'conversations-archived': { ids: `${UUID_A},${UUID_B}` },
+  'conversations-archived': { ids: `${UUID_A},${UUID_B}`, since: SINCE },
 };
 
 /* ---------------------------------------------------------------------------------------------
@@ -135,11 +138,11 @@ test('the pack is read from the commit it is given, never from the working tree'
  * Parameters
  * ------------------------------------------------------------------------------------------ */
 
-test('a parameter type is one of the seven, with "?" for one that may be left out', () => {
+test('a parameter type is one of the eight, with "?" for one that may be left out', () => {
   assert.deepEqual(parseParamSpec('integer'), { type: 'integer', optional: false, choices: null });
   assert.deepEqual(parseParamSpec('text?'), { type: 'text', optional: true, choices: null });
   assert.deepEqual(parseParamSpec('enum:low|mid|high'), { type: 'enum', optional: false, choices: ['low', 'mid', 'high'] });
-  for (const known of ['uuid', 'time', 'uuids', 'fingerprint']) assert.equal(parseParamSpec(known).type, known);
+  for (const known of ['uuid', 'time', 'uuids', 'fingerprint', 'hex32']) assert.equal(parseParamSpec(known).type, known);
   for (const unknown of ['number', 'string', 'json', 'enum:', 'enum:a|b c', 'integer??', '']) {
     assert.throws(() => parseParamSpec(unknown), ProofError, unknown);
   }
@@ -170,6 +173,15 @@ test('a value is refused unless it is of its type', () => {
   assert.equal(taken('fingerprint', FINGERPRINT), FINGERPRINT);
   for (const bad of ['', 'ap=none', FINGERPRINT.replace('n=143', 'n=many'), `${FINGERPRINT};`, FINGERPRINT.replace(',at=', ',at=now()')]) {
     refused('fingerprint', bad);
+  }
+  // A fingerprint without its two row counts is the form of before the review round, and is not taken.
+  refused('fingerprint', FINGERPRINT.replace(',apn=61,rpn=0', ''));
+  refused('fingerprint', FINGERPRINT.replace(',rpn=0', ''));
+
+  // hex32: an md5 as Postgres writes one. Exactly 32 characters, lower case.
+  assert.equal(taken('hex32', QUESTION_MD5), QUESTION_MD5);
+  for (const bad of ['', QUESTION_MD5.toUpperCase(), QUESTION_MD5.slice(1), `${QUESTION_MD5}0`, `${QUESTION_MD5.slice(0, 31)}g`, `${QUESTION_MD5.slice(0, 30)}';`]) {
+    refused('hex32', bad);
   }
 });
 
@@ -202,12 +214,20 @@ test('a text parameter is a plain name: SQL metacharacters are refused', () => {
 
 test('parameters are bound in the order the proof declares them, and an absent optional one is null', () => {
   const turn = PACK_21.turn;
-  assert.deepEqual(Object.keys(turn.params), ['request', 'tier', 'tool', 'scope']);
-  assert.deepEqual(bindParams(turn, { tier: 'low', request: '412', tool: 'search_materials' }), ['412', 'low', 'search_materials', null]);
-  assert.deepEqual(bindParams(turn, { request: '412', tier: 'mid' }), ['412', 'mid', null, null]);
-  assert.throws(() => bindParams(turn, { request: '412' }), /parameter "tier" is required/);
-  assert.throws(() => bindParams(turn, { request: '412', tier: 'low', model: 'haiku' }), /has no parameter "model"/);
-  assert.throws(() => bindParams(turn, { request: 'abc', tier: 'low' }), /parameter "request"/);
+  const run = { since: SINCE, question_md5: QUESTION_MD5 };
+  assert.deepEqual(Object.keys(turn.params), ['request', 'tier', 'since', 'question_md5', 'tool', 'scope']);
+  assert.deepEqual(bindParams(turn, { tier: 'low', ...run, request: '412', tool: 'search_materials' }), ['412', 'low', SINCE, QUESTION_MD5, 'search_materials', null]);
+  assert.deepEqual(bindParams(turn, { request: '412', tier: 'mid', ...run }), ['412', 'mid', SINCE, QUESTION_MD5, null, null]);
+  assert.throws(() => bindParams(turn, { request: '412', ...run }), /parameter "tier" is required/);
+  // A turn is never read without the run's start and its question: neither may be left out.
+  assert.throws(() => bindParams(turn, { request: '412', tier: 'low', question_md5: QUESTION_MD5 }), /parameter "since" is required/);
+  assert.throws(() => bindParams(turn, { request: '412', tier: 'low', since: SINCE }), /parameter "question_md5" is required/);
+  assert.throws(() => bindParams(turn, { request: '412', tier: 'low', ...run, model: 'haiku' }), /has no parameter "model"/);
+  assert.throws(() => bindParams(turn, { request: 'abc', tier: 'low', ...run }), /parameter "request"/);
+  assert.deepEqual(Object.keys(PACK_21['turn-stopped'].params), ['request', 'since', 'question_md5']);
+  assert.deepEqual(Object.keys(PACK_21['turn-answered-after'].params), ['request', 'since', 'min_wait_s']);
+  assert.deepEqual(Object.keys(PACK_21['conversations-archived'].params), ['ids', 'since']);
+  assert.deepEqual(PACK_21['planner-unchanged'].params, { before: 'fingerprint' });
   assert.deepEqual(bindParams(PACK_21['spike-archived'], {}), []);
 });
 
@@ -416,7 +436,7 @@ test('the statement runs in a read-only transaction with a 15 s limit, and is ro
     client.queries.map((query) => query.text),
     ['begin', 'set transaction read only', "set local statement_timeout = '15s'", PACK_21.turn.sql, 'rollback'],
   );
-  assert.deepEqual(client.queries[3].values, ['412', 'low', 'search_materials', null]);
+  assert.deepEqual(client.queries[3].values, ['412', 'low', SINCE, QUESTION_MD5, 'search_materials', null]);
   assert.equal(client.connected && client.ended, true);
   assert.deepEqual(line, { name: 'turn', pass: true, detail: { request_id: '412' } });
 });
@@ -535,29 +555,29 @@ const ROWS = {
     pass: { ok: true, fingerprint: FINGERPRINT, newest_request_id: '866', newest_request_kind: 'sync', newest_request_state: 'done' },
   },
   'planner-unchanged': {
-    pass: { ok: true, blocked: false, requests_in_window: 0 },
-    fail: { ok: false, blocked: false, requests_in_window: 0 },
-    blocked: { ok: false, blocked: true, requests_in_window: 1, first_request_id: '867', last_request_id: '867' },
+    pass: { ok: true, blocked: false, planner_before: FINGERPRINT, planner_now: FINGERPRINT, requests_in_window: 0, requests_claimed_now: 0 },
+    fail: { ok: false, blocked: false, requests_in_window: 0, requests_claimed_now: 0 },
+    blocked: { ok: false, blocked: true, requests_in_window: 1, first_request_id: '867', last_request_id: '867', requests_claimed_now: 1 },
   },
   turn: {
-    pass: { ok: true, request_id: '412', request_state: 'done', tier: 'low', provider: 'claude-cli', finished: true },
-    fail: { ok: false, request_id: '412', request_state: 'done', tier: 'mid', provider: 'claude-cli', finished: true },
+    pass: { ok: true, request_id: '412', request_state: 'done', asked_in_this_run: true, question_matches: true, tier: 'low', provider: 'claude-cli', finished: true },
+    fail: { ok: false, request_id: '412', request_state: 'done', asked_in_this_run: true, question_matches: false, tier: 'low', provider: 'claude-cli', finished: true },
   },
   'turn-stopped': {
-    pass: { ok: true, request_id: '417', request_state: 'cancelled', message_error_code: 'cancelled' },
-    fail: { ok: false, request_id: '417', request_state: 'done', message_error_code: null },
+    pass: { ok: true, request_id: '417', request_state: 'cancelled', asked_in_this_run: true, question_matches: true, message_error_code: 'cancelled' },
+    fail: { ok: false, request_id: '417', request_state: 'done', asked_in_this_run: true, question_matches: true, message_error_code: null },
   },
   'turn-answered-after': {
-    pass: { ok: true, request_id: '419', request_state: 'done', claimed_at: new Date('2026-10-07T18:05:00Z') },
-    fail: { ok: false, request_id: '419', request_state: 'queued', claimed_at: null },
+    pass: { ok: true, request_id: '419', request_state: 'done', asked_in_this_run: true, min_wait_s: 15, waited_s: 212, claimed_at: new Date('2026-10-07T18:05:00Z') },
+    fail: { ok: false, request_id: '419', request_state: 'done', asked_in_this_run: true, min_wait_s: 15, waited_s: 1, claimed_at: new Date('2026-10-07T18:01:29Z') },
   },
   'spike-archived': {
     pass: { ok: true, archived: 1, listed: 0 },
     fail: { ok: false, archived: 0, listed: 1 },
   },
   'conversations-archived': {
-    pass: { ok: true, wanted: 2, found: 2, archived: 2, not_archived: [] },
-    fail: { ok: false, wanted: 2, found: 2, archived: 1, not_archived: [UUID_B] },
+    pass: { ok: true, asked_for: 2, found: 2, archived: 2, made_in_this_run: 2, not_archived: [] },
+    fail: { ok: false, asked_for: 2, found: 2, archived: 2, made_in_this_run: 1, not_archived: [] },
   },
 };
 
@@ -599,7 +619,7 @@ test('the fingerprint that planner-fingerprint returns is one that planner-uncha
 
 test('the uuid list reaches the statement as one array value', async () => {
   const { clients } = await runWith({ argv: argvFor('conversations-archived', GIVEN['conversations-archived']), rows: [ROWS['conversations-archived'].pass] });
-  assert.deepEqual(clients[0].queries[3].values, [`{${UUID_A},${UUID_B}}`]);
+  assert.deepEqual(clients[0].queries[3].values, [`{${UUID_A},${UUID_B}}`, SINCE]);
 });
 
 /* ---------------------------------------------------------------------------------------------

@@ -11,12 +11,13 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { validate } from './schema-lite.mjs';
-import { QUOTE_MAX_CHARS, listPacks, loadPack, packProblems, questionsOf, specTitles } from './pack-check.mjs';
+import { QUOTE_MAX_CHARS, listPacks, loadPack, packProblems, questionsByName, questionsOf, specTitles } from './pack-check.mjs';
 import { statePathFrom } from '../web/e2e/login-state.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,11 @@ function problemsAfter(change) {
 
 const stageOf = (manifest, id) => manifest.stages.find((stage) => stage.id === id);
 const stepOf = (manifest, id) => manifest.steps.find((step) => step.id === id);
+/** md5 as Postgres computes it: of the text's UTF-8 bytes, in lower-case hex. */
+const md5 = (text) => createHash('md5').update(text, 'utf8').digest('hex');
+
+/** What the host offers every run under its own name: the time the run started, on the host's clock. */
+const RUN_START = 'carry:run.started_at';
 
 /* ---------------------------------------------------------------------------------------------
  * The validator
@@ -324,6 +330,31 @@ test('a carried value must come from a step that has already run or from a proof
   assert.ok(unsaved.includes('stage walk-proofs: "carry:planner_start.fingerprint" names no earlier step and no saved proof'));
 });
 
+test("the run's own start is always there to carry, it is the only thing under that name, and no proof is saved under it", () => {
+  // Every proof that ties a step to this run takes it, and with it in place the pack is whole.
+  const { manifest } = loadPack(REPO, '21');
+  const sinces = manifest.steps.flatMap((step) => step.proofs ?? []).map((proof) => proof.with?.since);
+  assert.deepEqual(sinces.filter((since) => since !== undefined), Array(9).fill(RUN_START));
+  assert.deepEqual(
+    problemsAfter((pack) => { stepOf(pack.manifest, '3').proofs[0].with.since = 'carry:run.finished_at'; }),
+    ['step 3: "carry:run.finished_at": under "run" the host offers started_at and nothing else'],
+  );
+  const savedOver = problemsAfter((pack) => { stageOf(pack.manifest, 'go-live').actions[1].with.save = 'run'; });
+  assert.ok(savedOver.includes('stage go-live: "run" is the host\'s own name, and no proof is saved under it'));
+});
+
+test("a time a proof is given is the host's, never one a sandbox wrote down", () => {
+  // The form of before the review round: the time step 14a's own test noted. A test in the sandbox could note any time.
+  const fromSandbox = problemsAfter((pack) => { stepOf(pack.manifest, '14b').proofs[0].with.since = 'carry:14a.still_queued_at'; });
+  assert.deepEqual(fromSandbox, [
+    'step 14b: proof "turn-answered-after", parameter "since": a time is never carried from a step (carry:14a.still_queued_at), because a sandbox wrote it',
+  ]);
+  const fromWalk = problemsAfter((pack) => { stepOf(pack.manifest, '9').proofs[0].with.since = 'carry:3.asked_at'; });
+  assert.deepEqual(fromWalk, [
+    'step 9: proof "turn", parameter "since": a time is never carried from a step (carry:3.asked_at), because a sandbox wrote it',
+  ]);
+});
+
 test("a stage's deadline counts from an action of the host stage just before it", () => {
   assert.ok(
     problemsAfter((pack) => { stageOf(pack.manifest, 'offline').deadline.after = 'workspace.start'; }).includes(
@@ -469,24 +500,70 @@ test("Phase 21: the steps are the acceptance script's fifteen, and each is done 
   assert.match(stepOf(manifest, '12').text, /overtaken by the merge of 2026-10-07/);
   assert.equal(stepOf(manifest, '2-desktop').stands_on, 'docs/planning/sprint-2/walks/walk-21/08-desktop.png');
   // Steps 3 to 7 and 9: the tier each question must be answered at, and the tool the brief names for it.
+  // Each is tied to this run (the host's own start time) and to its question (a literal md5, held by the test below).
   const turn = (id) => stepOf(manifest, id).proofs.find((proof) => proof.name === 'turn').with;
-  assert.deepEqual(turn('3'), { request: 'carry:3.request_id', tier: 'low', tool: 'search_materials' });
-  assert.deepEqual(turn('4'), { request: 'carry:4.request_id', tier: 'low', tool: 'search_context', scope: 'bb2dash-inbox-decisions' });
-  assert.deepEqual(turn('5'), { request: 'carry:5.request_id', tier: 'low', tool: 'get_material_text' });
-  assert.deepEqual(turn('6'), { request: 'carry:6.request_id', tier: 'mid' });
-  assert.deepEqual(turn('7'), { request: 'carry:7.request_id', tier: 'high' });
-  assert.deepEqual(turn('9'), { request: 'carry:9.request_id', tier: 'high' });
-  assert.deepEqual(stepOf(manifest, '8').proofs, [{ name: 'turn-stopped', with: { request: 'carry:8.request_id' } }]);
+  const asked = (id) => stepOf(manifest, id).proofs[0].with.question_md5;
+  const tied = (id) => ({ since: RUN_START, question_md5: asked(id) });
+  for (const id of ['3', '4', '5', '6', '7', '8', '9']) assert.match(String(asked(id)), /^[0-9a-f]{32}$/, `step ${id}`);
+  assert.equal(new Set(['3', '4', '5', '6', '7'].map(asked)).size, 5, 'five questions');
+  assert.deepEqual([asked('8'), asked('9')], [asked('7'), asked('7')], 'steps 8 and 9 ask the question of step 7');
+  assert.deepEqual(turn('3'), { request: 'carry:3.request_id', tier: 'low', ...tied('3'), tool: 'search_materials' });
+  assert.deepEqual(turn('4'), { request: 'carry:4.request_id', tier: 'low', ...tied('4'), tool: 'search_context', scope: 'bb2dash-inbox-decisions' });
+  assert.deepEqual(turn('5'), { request: 'carry:5.request_id', tier: 'low', ...tied('5'), tool: 'get_material_text' });
+  assert.deepEqual(turn('6'), { request: 'carry:6.request_id', tier: 'mid', ...tied('6') });
+  assert.deepEqual(turn('7'), { request: 'carry:7.request_id', tier: 'high', ...tied('7') });
+  assert.deepEqual(turn('9'), { request: 'carry:9.request_id', tier: 'high', ...tied('9') });
+  assert.deepEqual(stepOf(manifest, '8').proofs, [{ name: 'turn-stopped', with: { request: 'carry:8.request_id', ...tied('8') } }]);
   assert.equal(stepOf(manifest, '10').stage, 'walk-proofs');
   assert.deepEqual(stepOf(manifest, '10').actions, ['workspace.noApiKey', 'workspace.credentialSource']);
   assert.equal(stepOf(manifest, '11').stage, 'walk-proofs');
   assert.deepEqual(stepOf(manifest, '11').proofs, [{ name: 'planner-unchanged', with: { before: 'carry:planner_before.fingerprint' } }]);
   assert.equal(stepOf(manifest, '13').stage, 'go-live');
   assert.deepEqual(stepOf(manifest, '13').actions, ['workspace.stopTestRunner', 'workspace.ensureProfile', 'workspace.start', 'workspace.doctorRow']);
+  // Step 14b: the question waited at least the 15 seconds step 14a's test watched it wait. No time of a sandbox is a parameter.
   assert.deepEqual(stepOf(manifest, '14b').proofs, [
-    { name: 'turn-answered-after', with: { request: 'carry:14a.request_id', after: 'carry:14a.still_queued_at' } },
+    { name: 'turn-answered-after', with: { request: 'carry:14a.request_id', since: RUN_START, min_wait_s: 15 } },
   ]);
-  assert.deepEqual(stepOf(manifest, '15').proofs, [{ name: 'spike-archived' }, { name: 'conversations-archived', with: { ids: 'carry:3.conversation_id' } }]);
+  assert.match(readText('web/e2e/accept21.spec.ts'), /const QUEUED_HOLD_MS = 15_000;/);
+  assert.deepEqual(stepOf(manifest, '15').proofs, [
+    { name: 'spike-archived' },
+    { name: 'conversations-archived', with: { ids: 'carry:3.conversation_id', since: RUN_START } },
+  ]);
+});
+
+/** The body of one test of a browser-test file: from its `acceptStep('<title>'` to the next one, or the file's end. */
+function testBody(specText, title) {
+  const start = specText.indexOf(`acceptStep('${title}'`);
+  assert.notEqual(start, -1, `the browser-test file declares "${title}"`);
+  const next = specText.indexOf('acceptStep(', start + 1);
+  return specText.slice(start, next === -1 ? undefined : next);
+}
+
+/** The md5 of the one question a test types: the question's name from the test's own body, its words from where it is defined. */
+function md5OfQuestionAskedBy(specText, title) {
+  const named = [...new Set(testBody(specText, title).match(/\bQUESTION_[A-Z]+\b/g) ?? [])];
+  assert.equal(named.length, 1, `the test "${title}" names one question (it names: ${named.join(', ') || 'none'})`);
+  const question = questionsByName(REPO).get(named[0]);
+  assert.equal(typeof question, 'string', `${named[0]} is defined in web/e2e/walk21.lib.ts`);
+  return md5(question);
+}
+
+test("Phase 21: each proof's question_md5 is the md5 of the question the step's own test types", () => {
+  const { manifest, specText } = loadPack(REPO, '21');
+  const tied = manifest.steps.filter((step) => (step.proofs ?? []).some((proof) => proof.with?.question_md5 !== undefined));
+  // The five questions, the stop and the reload: every step whose proof reads a turn or a stop.
+  assert.deepEqual(tied.map((step) => step.id), ['3', '4', '5', '6', '7', '8', '9']);
+  for (const step of tied) {
+    for (const proof of step.proofs.filter((candidate) => candidate.with?.question_md5 !== undefined)) {
+      assert.equal(proof.with.question_md5, md5OfQuestionAskedBy(specText, step.test), `step ${step.id}, proof ${proof.name}`);
+    }
+  }
+  assert.equal(md5('abc'), '900150983cd24fb0d6963f7d28e17f72');
+  // The reading tells one question from another: were step 8's test to type step 6's question, step 8's literal would no longer hold.
+  const body = testBody(specText, '8 stopped');
+  const asksAnother = specText.replace(body, body.replaceAll('QUESTION_DEEP', 'QUESTION_STANDARD'));
+  assert.equal(md5OfQuestionAskedBy(asksAnother, '8 stopped'), stepOf(manifest, '6').proofs[0].with.question_md5);
+  assert.notEqual(md5OfQuestionAskedBy(asksAnother, '8 stopped'), stepOf(manifest, '8').proofs[0].with.question_md5);
 });
 
 test('Phase 21: each proof is read once: no host stage runs a proof that an automated step lists', () => {

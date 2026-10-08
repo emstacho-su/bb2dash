@@ -26,7 +26,7 @@ const CARRY = /^carry:([a-z0-9][a-z0-9_-]*)\.([a-z][a-z0-9_]*)$/;
 const SAVE_NAME = /^[a-z][a-z0-9_]*$/;
 /** How the browser-test file declares a test: its title, then the shots it takes. */
 const DECLARED_TEST = /acceptStep\(\s*'([^']+)',\s*\{\s*shots:\s*\[([^\]]*)\]/g;
-const QUESTION = /export const QUESTION_(?:LOOKUP|DECISION|DOCUMENT|STANDARD|DEEP)\s*=\s*(['"])((?:(?!\1).)+)\1;/gs;
+const QUESTION = /export const (QUESTION_(?:LOOKUP|DECISION|DOCUMENT|STANDARD|DEEP))\s*=\s*(['"])((?:(?!\2).)+)\2;/gs;
 const QUOTED = /"([^"\n]+)"|“([^”\n]+)”/g;
 
 /** The file in which the app spells what the Workspace page shows. */
@@ -79,11 +79,14 @@ export function specTests(specText) {
 
 export const specTitles = (specText) => specTests(specText).map((declared) => declared.title);
 
-/** The acceptance script's five questions, as the browser tests ask them (`web/e2e/walk21.lib.ts`). */
-export function questionsOf(repo) {
+/** The acceptance script's five questions by the name a browser test uses for each (`web/e2e/walk21.lib.ts`). */
+export function questionsByName(repo) {
   const text = fs.readFileSync(path.join(repo, 'web', 'e2e', 'walk21.lib.ts'), 'utf8');
-  return [...text.matchAll(QUESTION)].map((match) => match[2]);
+  return new Map([...text.matchAll(QUESTION)].map((match) => [match[1], match[3]]));
 }
+
+/** The five questions, as the browser tests type them. */
+export const questionsOf = (repo) => [...questionsByName(repo).values()];
 
 /* ---------------------------------------------------------------------------------------------
  * What the rules read from a manifest
