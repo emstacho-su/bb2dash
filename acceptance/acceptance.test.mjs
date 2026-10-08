@@ -277,6 +277,19 @@ test("a test title starts with its step's id, a stage test belongs to one step, 
   );
 });
 
+test('a test title is listed once: twice in one stage, or in two stages, is a problem', () => {
+  // Listed twice, a test is run twice: a second live question, and its files replace the first run's.
+  const twiceInOne = problemsAfter((pack) => { stageOf(pack.manifest, 'walk').tests.push('3 lookup haiku'); });
+  assert.deepEqual(twiceInOne, ['manifest.json: the test "3 lookup haiku" is listed 2 times (stage walk, stage walk), and a test is run once']);
+  const inTwo = problemsAfter((pack) => { stageOf(pack.manifest, 'back').tests.push('3 lookup haiku'); });
+  assert.ok(inTwo.includes('manifest.json: the test "3 lookup haiku" is listed 2 times (stage walk, stage back), and a test is run once'));
+  const thrice = problemsAfter((pack) => {
+    stageOf(pack.manifest, 'walk').tests.push('8 stopped');
+    stageOf(pack.manifest, 'offline').tests.push('8 stopped');
+  });
+  assert.ok(thrice.includes('manifest.json: the test "8 stopped" is listed 3 times (stage walk, stage walk, stage offline), and a test is run once'));
+});
+
 test("a proof must exist in proofs.json with the same parameter names and a value of the stated type, and a host step's proof is run by its own stage", () => {
   assert.ok(
     problemsAfter((pack) => { stepOf(pack.manifest, '3').proofs[0].name = 'turn-fast'; }).some((line) =>
