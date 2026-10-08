@@ -11,7 +11,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DETAIL_STRING_MAX,
   EXIT,
   ProofError,
   bindParams,
@@ -239,7 +238,7 @@ test('a statement that is not one plain read is refused, with the rule it broke'
   broke("select net.http_post('https://example.com')", /schema "net"/);
   broke('select 1 from vault.decrypted_secrets', /schema "vault"/);
   broke('select 1 from auth.users', /schema "auth"/);
-  broke("select 1 /* hidden */ ; drop table public.assignments -- '", /one statement/);
+  broke("select 1 /* hidden */ ; drop table public.assignments -- '", /no comment/);
   // Message text is never read: not the column, not a question, not a tool call's query.
   broke('select m.content from public.workspace_messages m', /"content"/);
   broke("select e->>'query' from public.workspace_messages m, jsonb_array_elements(m.tool_calls) e", /"query"/);
@@ -250,6 +249,45 @@ test('a statement that is not one plain read is refused, with the rule it broke'
   broke('select 1', /does not use \$1/, 1);
   // An updated_at column is not the word "update".
   assert.equal(lintProofSql('select max(p.updated_at) from public.assignment_progress p', 0), null);
+});
+
+test('the lint refuses what it could not read the way the server does: a quoted name, a comment, a backslash, a "$" that is no parameter', () => {
+  const broke = (sql, pattern, params = 0) => assert.match(lintProofSql(sql, params) ?? 'accepted', pattern, sql);
+  // A double-quoted name hid the name from every rule about words (review B-3).
+  broke('select true as ok, "pg_terminate_backend"(1) as gone', /no double-quoted name/);
+  broke('select true as ok, s.decrypted_secret as k from "vault"."decrypted_secrets" s', /no double-quoted name/);
+  broke(`select true as ok, "net"."http_get"('https://example.com') as sent`, /no double-quoted name/);
+  broke('select true as ok, U&"pg_sleep"(1) as slept', /no double-quoted name/);
+  // The same three, written plain, are still what the word rules refuse.
+  broke('select true as ok, pg_terminate_backend(1) as gone', /pg_/);
+  broke('select true as ok, s.decrypted_secret as k from vault.decrypted_secrets s', /schema "vault"/);
+  broke("select true as ok, net.http_get('https://example.com') as sent", /schema "net"/);
+  // `x$y$` is a name to the server and the start of a quoted body to a scanner (review B-1's text).
+  broke('select true as ok, 1 as x$y$ ; commit; delete from public.assignments; select 1 as z$y$', /"\$" is only ever a parameter/);
+  broke('select true as ok, 1 as x$y$, pg_terminate_backend(1) as z$y$', /"\$" is only ever a parameter/);
+  broke('select $body$ one $body$ as ok', /"\$" is only ever a parameter/);
+  broke('select 1 as ok where 1 = $1abc', /"\$" is only ever a parameter/, 1);
+  // A comment ends for the server at a lone carriage return, and for a scanner at the line's end.
+  broke('select true as ok -- a note\r, pg_terminate_backend(1) as gone', /no comment/);
+  broke('select true as ok /* a note */', /no comment/);
+  // Inside an E literal a backslash hides the closing quote.
+  broke("select E'\\'' as ok, pg_terminate_backend(1) as gone, '' as rest", /no backslash/);
+  broke("select 'never closed as ok", /never closed/);
+  // What a literal holds is not read as words: a quote mark in a time format, a `$` in a pattern, a doubled quote.
+  assert.equal(lintProofSql(`select to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS') as stamp, 'it''s; fine' as word, substring($1::text from ',at=(.*)$') as tail`, 1), null);
+});
+
+test('a statement names a text column in two ways only: the md5 of a message, and a title held against a literal', () => {
+  const broke = (sql, pattern, params = 0) => assert.match(lintProofSql(sql, params) ?? 'accepted', pattern, sql);
+  // Renamed, a title's text would reach `detail` under a name no rule knows (review B-4).
+  broke('select true as ok, c.title as t from public.workspace_conversations c', /"title"/);
+  broke("select true as ok, left(c.title, 40) = 'spike' as short from public.workspace_conversations c", /"title"/);
+  broke('select true as ok, a.description as d from public.assignments a', /"description"/);
+  broke("select true as ok, e->>'answer' as a from public.workspace_messages m, jsonb_array_elements(m.tool_calls) e", /"answer"/);
+  broke('select true as ok, left(m.content, 20) as head from public.workspace_messages m', /"content"/);
+  broke('select true as ok, md5(left(m.content, 1)) as first from public.workspace_messages m', /"content"/);
+  assert.equal(lintProofSql("select (count(*) = 1) as ok from public.workspace_conversations c where c.title = 'spike'", 0), null);
+  assert.equal(lintProofSql('select (md5(m.content) = $1::text) as ok from public.workspace_messages m', 1), null);
 });
 
 test('a pack is refused before anything runs when a proof is not whole', () => {
@@ -306,15 +344,60 @@ test('detail holds ids, counts, codes and times, and never message text', () => 
     n: 3,
     none: null,
   });
-  // A column that can hold message text fails the proof and is not copied, whatever else the row says.
-  for (const column of ['content', 'prompt', 'title', 'query', 'note', 'history']) {
-    const leaked = decide({ rows: [{ ok: true, request_id: '412', [column]: 'Late work loses ten percent a day.' }] });
-    assert.deepEqual(leaked, { pass: false, blocked: false, detail: { error: 'forbidden_column', column } }, column);
+});
+
+test('detail keeps a value only when it is of an allowed shape, at every depth; anything else is the word withheld', () => {
+  const detailOf = (row) => decide({ rows: [{ ok: true, ...row }] }).detail;
+  // Kept: numbers, true and false, null, and a text that is a uuid, an ISO time, a fingerprint or a short token.
+  const kept = {
+    n: 3,
+    ratio: 0.5,
+    yes: true,
+    no: false,
+    none: null,
+    id: UUID_A,
+    at: '2026-10-07T14:00:00.250-04:00',
+    fingerprint: FINGERPRINT,
+    state: 'done',
+    model: 'claude-haiku-4-5-20251001',
+    used: 'search_context · bb2dash-inbox-decisions',
+    request_id: '412',
+    empty: '',
+    ids: [UUID_A, UUID_B],
+    nested: { tools: [{ tool: 'search_materials', ok: true }] },
+  };
+  assert.deepEqual(detailOf(kept), kept);
+  assert.deepEqual(detailOf({ big: 412n, when: new Date('2026-10-07T18:00:01.000Z') }), { big: '412', when: '2026-10-07T18:00:01.000Z' });
+
+  // Withheld: a sentence under a name no rule knows (review B-4: `c.title as t`), however short.
+  assert.deepEqual(detailOf({ t: 'What does the syllabus say about late work?' }), { t: 'withheld' });
+  assert.deepEqual(detailOf({ t: 'Late work, and what it costs' }), { t: 'withheld' });
+  assert.deepEqual(detailOf({ t: 'two\nlines' }), { t: 'withheld' });
+  assert.deepEqual(detailOf({ t: 'x'.repeat(65) }), { t: 'withheld' });
+  // An array of 200-character chunks used to pass the one length limit, chunk by chunk.
+  const chunks = Array.from({ length: 5 }, (_, index) => `${index}`.repeat(200));
+  assert.deepEqual(detailOf({ chunks }), { chunks: ['withheld', 'withheld', 'withheld', 'withheld', 'withheld'] });
+  assert.deepEqual(detailOf({ deep: [{ list: [{ words: 'It is not taken after the third day.' }] }] }), { deep: [{ list: [{ words: 'withheld' }] }] });
+  // A key is text too; and a number that is none, a bad date, bytes and a made thing are not shapes of the list.
+  assert.deepEqual(detailOf({ keyed: { 'Late work loses ten percent a day.': 1 } }), { keyed: 'withheld' });
+  assert.deepEqual(detailOf({ nan: Number.NaN, when: new Date('never'), bytes: Buffer.from('late work'), made: new (class Interval {})() }), {
+    nan: 'withheld',
+    when: 'withheld',
+    bytes: 'withheld',
+    made: 'withheld',
+  });
+});
+
+test('a key named like a text column fails the proof, at any depth, whatever else the row says', () => {
+  const said = 'Late work loses ten percent a day.';
+  for (const key of ['content', 'prompt', 'title', 'query', 'note', 'history', 'params', 'result', 'description', 'answer']) {
+    const refused = { pass: false, blocked: false, detail: { error: 'forbidden_key', key } };
+    assert.deepEqual(decide({ rows: [{ ok: true, request_id: '412', [key]: said }] }), refused, key);
+    // Wrapped in json (review B-4: `to_jsonb(m) as m`), and inside a list of objects.
+    assert.deepEqual(decide({ rows: [{ ok: true, m: { id: UUID_A, role: 'assistant', [key]: said } }] }), refused, `nested ${key}`);
+    assert.deepEqual(decide({ rows: [{ ok: true, tools: [{ tool: 'search_materials' }, { deeper: [{ [key]: said }] }] }] }), refused, `listed ${key}`);
+    assert.deepEqual(decide({ rows: [{ ok: true, blocked: true, m: { [key.toUpperCase()]: said } }] }), refused, `upper-case ${key}`);
   }
-  // Nor does a long string under any other name get out, at any depth.
-  const long = 'x'.repeat(DETAIL_STRING_MAX + 1);
-  const withheld = decide({ rows: [{ ok: true, model: long, tools: [{ tool: long }] }] });
-  assert.deepEqual(withheld.detail, { model: { withheld_chars: long.length }, tools: [{ tool: { withheld_chars: long.length } }] });
 });
 
 /* ---------------------------------------------------------------------------------------------
@@ -427,7 +510,16 @@ test('message text in a row never reaches the one line that is printed', async (
   assert.equal(code, EXIT.fail);
   assert.equal(out.length, 1);
   assert.doesNotMatch(out[0], /Late work/);
-  assert.deepEqual(line, { name: 'turn', pass: false, detail: { error: 'forbidden_column', column: 'content' } });
+  assert.deepEqual(line, { name: 'turn', pass: false, detail: { error: 'forbidden_key', key: 'content' } });
+
+  // The same text wrapped in json, and cut into pieces under names no rule knows.
+  const wrapped = await runWith({ argv: argvFor('turn', GIVEN.turn), rows: [{ ok: true, request_id: '412', m: { role: 'assistant', content: answer } }] });
+  assert.equal(wrapped.code, EXIT.fail);
+  assert.doesNotMatch(wrapped.out[0], /Late work/);
+  const cut = await runWith({ argv: argvFor('turn', GIVEN.turn), rows: [{ ok: true, request_id: '412', a: answer.slice(0, 36), b: [answer.slice(36)] }] });
+  assert.equal(cut.code, EXIT.pass);
+  assert.doesNotMatch(cut.out[0], /Late work|third day/);
+  assert.deepEqual(cut.line.detail, { request_id: '412', a: 'withheld', b: ['withheld'] });
 });
 
 /* ---------------------------------------------------------------------------------------------
