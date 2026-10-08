@@ -49,6 +49,7 @@ import {
   PINNED_DECLARATIONS,
   THEME_BACKGROUNDS,
   type PinnedDeclaration,
+  type PinnedStyleKey,
   type SourceBacking,
 } from './token-audit.allowlist';
 import {
@@ -618,6 +619,17 @@ describe('A4: the theme backgrounds in theme-preference.ts', () => {
 });
 
 describe('A5: inline style keys a pre-existing test asserts on', () => {
+  /**
+   * Whether `source` sets the entry's key in exactly one `style=`, read with
+   * nothing let through. The entry is the one key its test reads back. The
+   * scanner lets the name through anywhere in the file, so this is what stops
+   * a second key of that name from counting 0.
+   */
+  function setsItsKeyOnce({ file, key }: PinnedStyleKey, source: string): boolean {
+    const { findings } = scanSource(file, source);
+    return findings.filter((finding) => finding.rule === 'style-key' && finding.text === key).length === 1;
+  }
+
   it('A5 holds exactly two keys', () => {
     expect(INLINE_STYLE_KEYS.map(({ file, key }) => `${file}: ${key}`)).toEqual([
       'web/src/components/planner/PlannerWeek.tsx: height',
@@ -625,11 +637,20 @@ describe('A5: inline style keys a pre-existing test asserts on', () => {
     ]);
   });
 
-  it('each is a key its file sets today, read back by exactly one line of its test', () => {
-    const dead = INLINE_STYLE_KEYS.filter(({ file, key, backing }) => {
-      const keys = scanSource(file, SOURCES.get(file) ?? '').findings.filter((finding) => finding.rule === 'style-key');
-      return !keys.some((finding) => finding.text === key) || placesMatching(backing) !== 1;
-    });
+  it('an entry names one key: a second key of that name in its file fails it', () => {
+    const [height, marginLeft] = INLINE_STYLE_KEYS;
+    const reserve = 'const reserve = <div style={{ height: h }} />;';
+    const indents = ['a', 'b', 'c'].map((depth) => `<li style={{ marginLeft: ${depth} }} />`).join('');
+    expect(setsItsKeyOnce(height, reserve)).toBe(true);
+    expect(setsItsKeyOnce(height, `${reserve}\nconst second = <div style={{ height: 13 }} />;`)).toBe(false);
+    expect(setsItsKeyOnce(height, 'const reserve = <div style={{ width: w }} />;')).toBe(false);
+    expect(setsItsKeyOnce(marginLeft, `const tree = <ul>${indents}</ul>;`)).toBe(false);
+  });
+
+  it('each is a key its file sets today, once, read back by exactly one line of its test', () => {
+    const dead = INLINE_STYLE_KEYS.filter(
+      (entry) => !setsItsKeyOnce(entry, SOURCES.get(entry.file) ?? '') || placesMatching(entry.backing) !== 1,
+    );
     expect(dead.map(({ file, key }) => `${file}: ${key}`)).toEqual([]);
   });
 
