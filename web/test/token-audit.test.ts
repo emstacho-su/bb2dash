@@ -464,12 +464,21 @@ describe('A1: breakpoints', () => {
     expect(widthLengths('(max-height: 500px) and (max-device-width: 400px)')).toEqual([]);
   });
 
-  it('reads a width through calc() and nested parentheses, however deep, so wrapping a value hides nothing', () => {
-    expect(widthLengths('(max-width: calc(700px))')).toEqual(['700px']);
-    expect(widthLengths('(max-width: calc(720px + 1px))')).toEqual(['720px', '1px']);
-    expect(widthLengths('(max-width: calc((700px)))')).toEqual(['700px']);
-    expect(widthLengths('(min-width: calc(100vw - (2 * 10px)))')).toEqual(['100vw', '2', '10px']);
-    expect(widthLengths('sidebar (min-width: min(650px, 50%))')).toEqual(['650px', '50%']);
+  it('gives a width condition that holds a function or a group back whole, so wrapping a value hides nothing', () => {
+    expect(widthLengths('(max-width: calc(700px))')).toEqual(['max-width: calc(700px)']);
+    expect(widthLengths('(max-width: calc((700px)))')).toEqual(['max-width: calc((700px))']);
+    expect(widthLengths('(min-width: calc(100vw - (2 * 10px)))')).toEqual(['min-width: calc(100vw - (2 * 10px))']);
+    expect(widthLengths('sidebar (min-width: min(600px, 50%))')).toEqual(['min-width: min(600px, 50%)']);
+    expect(widthLengths('(max-width: var(--breakpoint))')).toEqual(['max-width: var(--breakpoint)']);
+    expect(widthLengths('(600px <= width <= calc(900px))')).toEqual(['600px <= width <= calc(900px)']);
+
+    // Arithmetic on allowed values is another width: 720px + 720px is 1440px, and it is not let through.
+    const wrapped = ['(max-width: calc(720px))', '(max-width: calc(720px + 720px))', '(min-width: max(640px, 720px))'];
+    expect(wrapped.flatMap(widthLengths)).toHaveLength(3);
+    expect(wrapped.flatMap(widthLengths).filter((width) => MEDIA_WIDTHS.includes(width))).toEqual([]);
+  });
+
+  it('reads each width condition of a grouped condition, and not the height beside it', () => {
     expect(widthLengths('((max-height: 500px) or (min-width: 600px))')).toEqual(['600px']);
     expect(widthLengths('((max-height: calc(500px)) or (min-width: 600px))')).toEqual(['600px']);
     expect(widthLengths('(not (max-width: 700px)) and (max-height: calc(400px))')).toEqual(['700px']);
