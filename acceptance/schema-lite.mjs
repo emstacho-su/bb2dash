@@ -5,11 +5,15 @@
 // the place in the value (`$.stages[2].kind: …`); an empty list means the value is valid.
 //
 // It refuses a keyword it does not check: a schema that leaned on one would pass every value
-// silently, and the schema would promise more than this file holds.
+// silently, and the schema would promise more than this file holds. For the same reason `$ref`
+// stands alone: a keyword beside it would be skipped, so a schema that has one is refused.
 //
 // Checked: type, const, enum, pattern, minLength, maxLength, minimum, maximum, required,
 // properties, additionalProperties (false, or a schema), items, minItems, maxItems, oneOf, and
 // $ref to `#/$defs/<name>` of the schema it was given.
+//
+// A value's keys and a schema's keywords are read as the object's own (`Object.hasOwn`), never
+// with `in`: every object answers to "constructor" and "toString" without holding them.
 
 /** Keywords that say something about a schema and nothing about a value. */
 const ANNOTATIONS = new Set(['$schema', '$id', '$defs', '$comment', 'title', 'description', 'examples']);
@@ -65,12 +69,12 @@ const CHECKS = {
   },
   required(names, value, at) {
     if (typeOf(value) !== 'object') return [];
-    return names.filter((name) => !(name in value)).map((name) => `${at}.${name}: missing`);
+    return names.filter((name) => !Object.hasOwn(value, name)).map((name) => `${at}.${name}: missing`);
   },
   properties(schemas, value, at, context) {
     if (typeOf(value) !== 'object') return [];
     return Object.entries(schemas)
-      .filter(([name]) => name in value)
+      .filter(([name]) => Object.hasOwn(value, name))
       .flatMap(([name, schema]) => check(schema, value[name], `${at}.${name}`, context));
   },
   additionalProperties(rule, value, at, context) {
@@ -97,17 +101,27 @@ const CHECKS = {
 
 function resolveRef(ref, root) {
   if (!ref.startsWith(REF_PREFIX)) throw new Error(`schema-lite follows only ${REF_PREFIX}<name>, not "${ref}"`);
-  const target = root.$defs?.[ref.slice(REF_PREFIX.length)];
-  if (target === undefined) throw new Error(`schema-lite: no such definition: ${ref}`);
-  return target;
+  const name = ref.slice(REF_PREFIX.length);
+  const definitions = root.$defs ?? {};
+  if (!Object.hasOwn(definitions, name)) throw new Error(`schema-lite: no such definition: ${ref}`);
+  return definitions[name];
+}
+
+/** Follows a `$ref`, which must be the schema object's only keyword: whatever stood beside it would not be checked. */
+function followRef(schema, value, at, context) {
+  const beside = Object.keys(schema).filter((keyword) => keyword !== '$ref');
+  if (beside.length > 0) {
+    throw new Error(`schema-lite: "$ref" stands alone, and here it is beside "${beside.join('", "')}" (at ${at})`);
+  }
+  return check(resolveRef(schema.$ref, context.root), value, at, context);
 }
 
 /** The problems of one value against one schema. `context.root` is the schema `$ref` reads its definitions from. */
 function check(schema, value, at, context) {
   if (typeOf(schema) !== 'object') throw new Error(`schema-lite: a schema is an object, not ${typeOf(schema)} (at ${at})`);
-  if ('$ref' in schema) return check(resolveRef(schema.$ref, context.root), value, at, context);
+  if (Object.hasOwn(schema, '$ref')) return followRef(schema, value, at, context);
   for (const keyword of Object.keys(schema)) {
-    if (!ANNOTATIONS.has(keyword) && !(keyword in CHECKS)) {
+    if (!ANNOTATIONS.has(keyword) && !Object.hasOwn(CHECKS, keyword)) {
       throw new Error(`schema-lite does not check the keyword "${keyword}" (at ${at})`);
     }
   }
@@ -115,7 +129,7 @@ function check(schema, value, at, context) {
   // always reports the same lines.
   const own = { ...context, schema };
   return Object.keys(CHECKS)
-    .filter((keyword) => keyword in schema)
+    .filter((keyword) => Object.hasOwn(schema, keyword))
     .flatMap((keyword) => CHECKS[keyword](schema[keyword], value, at, own));
 }
 

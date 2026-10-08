@@ -3,7 +3,7 @@
   "$id": "https://github.com/emstacho-su/bb2dash/blob/main/acceptance/manifest.schema.json",
   "title": "An acceptance pack's manifest: acceptance/<NN>/manifest.json",
   "description": "The stages of one phase's acceptance run, in the order the host runs them, and the steps of the phase's acceptance script with who does each. acceptance/README.md says it in plain words; acceptance/acceptance.test.mjs holds every pack to this schema and to the rules a schema cannot say.",
-  "$comment": "Only the keywords acceptance/schema-lite.mjs checks are used here: type, const, enum, pattern, minLength, maxLength, minimum, maximum, required, properties, additionalProperties, items, minItems, maxItems, oneOf and $ref to #/$defs.",
+  "$comment": "Only the keywords acceptance/schema-lite.mjs checks are used here: type, const, enum, pattern, minLength, maxLength, minimum, maximum, required, properties, additionalProperties, items, minItems, maxItems, oneOf and $ref to #/$defs. A $ref is its object's only keyword: schema-lite refuses one that has anything beside it.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "phase", "base_url", "stages", "steps"],
