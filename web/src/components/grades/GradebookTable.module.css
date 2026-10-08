@@ -1,9 +1,15 @@
 /* Gradebook table (Phase 10a). Tokens only — see tokens.module.css. */
 
+/* The one horizontal scroll box around both tables (Phase 22, task 14): at phone
+   width the table slides inside it and the page does not move. min-width: 0 lets
+   it shrink inside a grid or flex parent instead of widening it. Nothing goes on
+   th / td: a cell stays a cell (GradesTables.layout.test.tsx). */
 .wrap {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .table {
