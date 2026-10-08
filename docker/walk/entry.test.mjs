@@ -77,6 +77,12 @@ test('entry.sh has no command that prints the environment or traces itself, anyw
   for (const pattern of printsTheEnvironment) assert.doesNotMatch(CODE, pattern);
 });
 
+test("entry.sh never reads Playwright's exit code through a pipe", () => {
+  assert.match(CODE, /^\s*run_specs \|\| code=\$\?$/m);
+  // A single | after either name: a pipe. (|| is what the line above has.)
+  assert.doesNotMatch(CODE, /\b(run_specs|playwright test)\b[^\n|]*\|(?!\|)/);
+});
+
 test('entry.sh gives npm ci and the build a time limit: a box nobody is watching still ends', () => {
   assert.match(CODE, /^readonly INSTALL_LIMIT_S=[0-9]+$/m);
   assert.match(CODE, /^readonly BUILD_LIMIT_S=[0-9]+$/m);

@@ -294,8 +294,8 @@ function standInClient() {
     'client.mjs',
     [
       'const argv = process.argv.slice(2);',
-      'process.stdout.write(`${JSON.stringify(argv)}\n`);',
-      "process.stderr.write('said on stderr\n');",
+      'process.stdout.write(`${JSON.stringify(argv)}\\n`);',
+      "process.stderr.write('said on stderr\\n');",
       "process.exitCode = Number(argv.at(-1).split('=')[1]);",
     ].join('\n'),
   );

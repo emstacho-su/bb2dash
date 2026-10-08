@@ -536,8 +536,14 @@ async function remove(args, deps) {
   return code;
 }
 
-/** Start docker with these arguments and no shell; what it prints goes to the console and to the log file. */
-function runDocker(argv, { logFile }) {
+/** The docker client: found on PATH by this name. A test names a stand-in instead; nothing else does. */
+export const DOCKER_CLIENT = Object.freeze(['docker']);
+
+/**
+ * Start docker with these arguments and no shell; what it prints goes to the console and to the
+ * log file. Resolves with its exit code, and rejects when it cannot be started.
+ */
+export function runDocker(argv, { logFile = null, client = DOCKER_CLIENT, out = process.stdout, err = process.stderr } = {}) {
   return new Promise((resolve, reject) => {
     const log = logFile === null ? null : fs.createWriteStream(logFile, { flags: 'a' });
     let settled = false;
@@ -548,14 +554,14 @@ function runDocker(argv, { logFile }) {
       else log.end(finish);
     };
     log?.once('error', (error) => settle(() => reject(error)));
-    const child = spawn('docker', argv, { stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true });
+    const child = spawn(client[0], [...client.slice(1), ...argv], { stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true });
     const tee = (from, to) =>
       from.on('data', (chunk) => {
         to.write(chunk);
         log?.write(chunk);
       });
-    tee(child.stdout, process.stdout);
-    tee(child.stderr, process.stderr);
+    tee(child.stdout, out);
+    tee(child.stderr, err);
     child.once('error', (error) => settle(() => reject(error)));
     child.once('close', (code) => settle(() => resolve(code ?? EXIT.docker)));
   });
