@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/emstacho-su/bb2dash/blob/main/acceptance/manifest.schema.json",
+  "title": "An acceptance pack's manifest: acceptance/<NN>/manifest.json",
+  "description": "The stages of one phase's acceptance run, in the order the host runs them, and the steps of the phase's acceptance script with who does each. acceptance/README.md says it in plain words; acceptance/acceptance.test.mjs holds every pack to this schema and to the rules a schema cannot say.",
+  "$comment": "Only the keywords acceptance/schema-lite.mjs checks are used here: type, const, enum, pattern, minLength, maxLength, minimum, maximum, required, properties, additionalProperties, items, minItems, maxItems, oneOf and $ref to #/$defs. A $ref is its object's only keyword: schema-lite refuses one that has anything beside it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "phase", "base_url", "stages", "steps"],
+  "properties": {
+    "schema": { "const": 1 },
+    "phase": { "$ref": "#/$defs/phase" },
+    "base_url": {
+      "description": "The site under test: https, a host and nothing after it.",
+      "type": "string",
+      "pattern": "^https://[a-z0-9][a-z0-9.-]*[a-z0-9]$",
+      "maxLength": 120
+    },
+    "stages": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/stage" } },
+    "steps": { "type": "array", "minItems": 1, "maxItems": 60, "items": { "$ref": "#/$defs/step" } }
+  },
+  "$defs": {
+    "phase": {
+      "description": "The phase, as its folder is named: acceptance/21/, acceptance/12b/.",
+      "type": "string",
+      "pattern": "^[0-9]{1,2}[a-z]?$"
+    },
+    "stageId": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+    "stepId": {
+      "description": "A step of the acceptance script: its number, a letter when one step is two tests (14a), a suffix when half of it is done another way (2-desktop).",
+      "type": "string",
+      "pattern": "^[0-9]{1,2}[a-z]?(-[a-z0-9]+)?$"
+    },
+    "text": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "testTitle": {
+      "description": "A test's exact title in web/e2e/accept<NN>.spec.ts. It starts with its step's id.",
+      "type": "string",
+      "pattern": "^[0-9]{1,2}[a-z]? [a-z0-9][a-z0-9 -]{0,60}$"
+    },
+    "evidenceFile": {
+      "description": "A file the step's test writes into the stage's output folder, by bare name.",
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z.-]{0,60}\\.(png|json)$"
+    },
+    "repoPath": {
+      "description": "A file of this repository, from its root.",
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$"
+    },
+    "proofName": {
+      "description": "A proof of this pack's proofs.json.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,47}$"
+    },
+    "actionName": {
+      "description": "A host action. The list is bb2dash-stack's (scripts/lib/accept-actions.mjs): a pack can name one, never supply a command.",
+      "enum": [
+        "runner.record",
+        "workspace.stopTestRunner",
+        "workspace.ensureProfile",
+        "workspace.start",
+        "workspace.startNoBuild",
+        "workspace.stop",
+        "workspace.doctorRow",
+        "workspace.noApiKey",
+        "workspace.credentialSource",
+        "db.proof"
+      ]
+    },
+    "value": {
+      "description": "A literal, or carry:<step or saved name>.<field>: a value the host read earlier in the run.",
+      "type": ["string", "integer"],
+      "maxLength": 200
+    },
+    "with": { "type": "object", "additionalProperties": { "$ref": "#/$defs/value" } },
+    "hostAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": { "$ref": "#/$defs/actionName" },
+        "with": { "$ref": "#/$defs/with" }
+      }
+    },
+    "proofRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "$ref": "#/$defs/proofName" },
+        "with": { "$ref": "#/$defs/with" }
+      }
+    },
+    "stage": {
+      "oneOf": [
+        {
+          "description": "The host fetches the pinned commit into a throwaway volume and installs the browser-test dependencies.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind"],
+          "properties": {
+            "id": { "$ref": "#/$defs/stageId" },
+            "kind": { "const": "prepare" }
+          }
+        },
+        {
+          "description": "The host runs these actions itself, in this order, and stops at the first that fails.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "actions"],
+          "properties": {
+            "id": { "$ref": "#/$defs/stageId" },
+            "kind": { "const": "host" },
+            "actions": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/$defs/hostAction" } }
+          }
+        },
+        {
+          "description": "A fresh sandbox container in which the Claude operator runs these tests, one at a time, in this order.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "tests"],
+          "properties": {
+            "id": { "$ref": "#/$defs/stageId" },
+            "kind": { "const": "sandbox" },
+            "tests": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/testTitle" } },
+            "deadline": {
+              "description": "The stage has a time limit: this many seconds after the named action of the host stage just before it. The host hands it to the tests as ACCEPT_DEADLINE.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["after", "seconds"],
+              "properties": {
+                "after": { "$ref": "#/$defs/actionName" },
+                "seconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "step": {
+      "oneOf": [
+        {
+          "description": "A person does it. The run says so in its record and does not check it.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "text"],
+          "properties": {
+            "id": { "$ref": "#/$defs/stepId" },
+            "kind": { "const": "human" },
+            "text": { "$ref": "#/$defs/text" }
+          }
+        },
+        {
+          "description": "Not run, and the text says why. stands_on names the evidence that stands in its place, when there is some.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "text"],
+          "properties": {
+            "id": { "$ref": "#/$defs/stepId" },
+            "kind": { "const": "waived" },
+            "text": { "$ref": "#/$defs/text" },
+            "stands_on": { "$ref": "#/$defs/repoPath" }
+          }
+        },
+        {
+          "description": "The operator runs one browser test in a sandbox stage and judges what it shows; the host then reads each listed proof itself. Green needs both.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "stage", "test", "evidence"],
+          "properties": {
+            "id": { "$ref": "#/$defs/stepId" },
+            "kind": { "const": "auto" },
+            "text": { "$ref": "#/$defs/text" },
+            "stage": { "$ref": "#/$defs/stageId" },
+            "test": { "$ref": "#/$defs/testTitle" },
+            "evidence": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "$ref": "#/$defs/evidenceFile" } },
+            "proofs": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/proofRef" } }
+          }
+        },
+        {
+          "description": "The host does it alone: the named actions of one host stage, and the proofs that stage runs. No sandbox takes part.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "text", "stage"],
+          "properties": {
+            "id": { "$ref": "#/$defs/stepId" },
+            "kind": { "const": "host" },
+            "text": { "$ref": "#/$defs/text" },
+            "stage": { "$ref": "#/$defs/stageId" },
+            "actions": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "$ref": "#/$defs/actionName" } },
+            "proofs": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/proofRef" } }
+          }
+        }
+      ]
+    }
+  }
+}

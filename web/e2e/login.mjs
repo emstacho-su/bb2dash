@@ -23,16 +23,22 @@
  *
  * The saved cookie belongs to that host only; a run against another host
  * signs in again with that host's `WALK_BASE_URL`.
+ *
+ * `WALK_STATE_PATH` (optional) saves the session to another file: an absolute
+ * `.json` path outside this checkout. The acceptance run's host wrapper uses
+ * it to give each sandbox stage a session of its own (`login-state.mjs`).
+ * Without it the file is `e2e/.auth/state.json`, as before.
  */
 
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { statePathFrom } from './login-state.mjs';
 
 const BASE_URL = process.env.WALK_BASE_URL ?? 'http://localhost:3000';
-const STATE_PATH = fileURLToPath(new URL('./.auth/state.json', import.meta.url));
 const CHECKOUT_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const STANDARD_STATE_PATH = fileURLToPath(new URL('./.auth/state.json', import.meta.url));
 const TEST_ENV_FILE = join(CHECKOUT_ROOT, '.env.testing');
 
 /** Long enough to type a password; short enough that a forgotten window ends. */
@@ -59,6 +65,8 @@ function testLogin() {
 }
 
 async function main() {
+  // Before any browser starts: a path that is refused costs no sign-in.
+  const statePath = statePathFrom(process.env, { root: CHECKOUT_ROOT, standard: STANDARD_STATE_PATH });
   const login = testLogin();
   const headed = !login || process.env.WALK_HEADED === '1';
   const loginUrl = new URL('/login', BASE_URL).toString();
@@ -92,9 +100,9 @@ async function main() {
     // Not 'networkidle': the app polls (query refetch, heartbeat), so the network never goes quiet.
     await page.waitForLoadState('load');
 
-    mkdirSync(dirname(STATE_PATH), { recursive: true });
-    await context.storageState({ path: STATE_PATH });
-    console.log(`Session saved to ${STATE_PATH} for ${appHost}.`);
+    mkdirSync(dirname(statePath), { recursive: true });
+    await context.storageState({ path: statePath });
+    console.log(`Session saved to ${statePath} for ${appHost}.`);
   } finally {
     await browser.close();
   }

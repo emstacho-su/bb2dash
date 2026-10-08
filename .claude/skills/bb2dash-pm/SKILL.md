@@ -23,6 +23,8 @@ You are the project manager for bb2dash; Stack is the product manager; Opus suba
 Rules that override habit: never commit to `main`; one PR per phase; stop at "ready when you
 say so"; workers get worktrees and their own branches; migrations are additive, applied under
 the file's name, byte-identical; anything visual gets a preview before merge; update STATUS,
-DECISIONS and ORCHESTRATOR in the same PR.
+DECISIONS and ORCHESTRATOR in the same PR; after a merge, a phase with a pack under
+`acceptance/<NN>/` is accepted by `just accept <NN>` from bb2dash-stack (ORCHESTRATOR §3, step 9):
+green counts as acceptance, red goes to Stack with the run's report, blocked is run again.
 
 $ARGUMENTS

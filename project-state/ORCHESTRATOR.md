@@ -146,6 +146,16 @@ before Nov 30. `docs/planning/sprint-2/106_SPRINT2_EXECUTION_PLAN.md`'s header l
    create`; anything visual gets a Vercel preview for Stack. **Stop at "ready when you say so."**
 8. **After the merge** (only on Stack's word): switch the checkout to `main`, remove the phase's
    worktrees and branches, update memory.
+9. **Acceptance run** (after the merge, for a phase with a pack under `acceptance/<NN>/`): from
+   bb2dash-stack's `main`, `just accept <NN>`. A throwaway container with a Claude session walks the
+   phase's acceptance script on the live site, and the laptop reads the hard facts itself, read-only
+   (`acceptance/README.md`). **Green counts as acceptance** (Stack's answer, 2026-10-07): write the
+   "accepted" record and the `**Phase <n> accepted` DECISIONS row, merge that docs-only PR and clean
+   up, without asking again; every other merge still waits for his word. **Red:** nothing is
+   accepted; bring the run's `REPORT.md` (`C:/Users/stack/.bb2dash-accept/<NN>/<run>/`) to Stack.
+   **Blocked** (the Claude plan's limit, or a sync ran while the planner was being compared): repeat
+   the run. A step the manifest marks `human` stays Stack's, and the record names it. The pack is
+   written with the phase, in the phase's own PR: three files and one browser-test file.
 
 **Two PM sessions at once (learned 2026-09-15):** when another phase's PM session owns the main
 checkout (`C:/Users/stack/projects/bb2dash`), cut the phase branch as its own worktree
