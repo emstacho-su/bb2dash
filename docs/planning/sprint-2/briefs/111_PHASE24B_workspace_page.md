@@ -87,8 +87,9 @@ Each line is a check that fails on `main` after 24a.
    Memory tab lists what is remembered, deletes any item on a second press, and edits the About me
    note.
 8. A file from his device is picked or dropped, checked, stored, registered and shown with its state
-   until it reads "indexed". Deleting one cuts it from search at once, and a delete that did not
-   finish stays listed with Try again until the file is gone from the bucket.
+   until it reads "indexed". The same file sent again uploads nothing and shows the row it already
+   has. Deleting one cuts it from search at once, and a delete that did not finish stays listed with
+   Try again until the file is gone from the bucket.
 9. Up to three example prompts are built from his real upcoming work, by title and date. With no such
    row, the example row is absent.
 10. After the page marks a turn stopped, a later piece of text for that request changes nothing.
@@ -166,11 +167,16 @@ with a filter field. A pick becomes a chip.
 `web/src/lib/workspace-upload-rules.ts` checks the type and the size before anything is sent: six
 types (pdf, docx, pptx, xlsx, plain text, Markdown) and 20,971,520 bytes, 24a's limits. The type is
 decided from the file's extension, and the page sets the stored content type itself, because a
-browser may report none for a Markdown file. The page also makes the object's key, from lower-case
-letters, digits, `/`, `.`, `_` and `-` only, never from the file's own name: 24a's table refuses any
-other key, and the file's name is kept as the upload's title. Then the order 24a fixes: the object
-into the bucket `workspace-uploads`, a signed URL of 7 days, `workspace_upload_register`. The chip
-and the Files row read `workspace_documents` again every 5 s while a row is not `indexed` or
+browser may report none for a Markdown file. The page then takes the file's SHA-256, because 24a
+knows an upload by that hash (brief 109, The pgvector store, point 4; answer 17). When a row of
+`workspace_documents` already holds the hash, the page uploads nothing and shows that row in the
+state it is in, as it shows any upload: a chip, with Try again when the row is `failed` or
+`deleting`. Otherwise the page makes the object's key from the hash, `u/` followed by it, never from
+the file's own name: 24a's table refuses any other key, and the file's name is kept as the upload's
+title. Then the order 24a fixes: the object into the bucket `workspace-uploads` (an object that is
+already there under that key is the same bytes and is not an error), a signed URL of 7 days,
+`workspace_upload_register` with the hash. The call returns the row that holds the content and says
+whether it made it. The chip and the Files row read `workspace_documents` again every 5 s while a row is not `indexed` or
 `failed` (the pattern of `web/src/lib/workspace-poll.ts`). A failed row keeps Remove and Try again;
 Try again signs a new URL and calls `workspace_upload_retry`. He may tag an upload with a course (an
 update of `course_id`).
@@ -222,9 +228,11 @@ matched line shows for `empty` only. `attached_only` (an attached file was read 
 matched) shows no line. The sentence is 24a's: it speaks of his course files and uploads and never
 says that nothing of his was used, so it is true under a planner answer too.
 
-**The index status line** on the Files tab reads `v_workspace_index_status`: how many course units,
-uploads and remembered items wait or failed, and when a course file was last indexed. No number is
-shown that the row does not hold.
+**The index status line** on the Files tab reads `v_workspace_index_status`: for course units, for
+uploads and for remembered items, how many are indexed, how many wait and how many failed, and when
+a course file was last indexed. The row holds the three `indexed` counts and `memory_failed` since
+answer 17 (brief 109, Indexing and status). A course unit has no failed count: one that could not
+be indexed still waits. No number is shown that the row does not hold.
 
 **Stop.** After the page marks a turn stopped, a later `delta` for that request changes nothing
 (`web/src/lib/use-workspace-stream.ts`, `thread.ts`).
@@ -404,7 +412,7 @@ to 16.
 | 2 | Probes Q-1 to Q-5 (below) | PM + W-86 | one pass or fail line each in 111a |
 | 3 | Wording frozen in `workspace-labels.ts` and its test, before worker branches are cut | PM | `cd web && npx vitest run test/workspace-labels.test.ts` passes, and its case comparing the two fixed sentences with `workspace/src/lines.ts` passes; the line under Delete for an upload says that answers already written keep what they quoted |
 | 4 | `answer-format.ts` and `AnswerBody.tsx` | W-86 | `npx vitest run test/answer-format.test.ts test/AnswerBody.test.tsx`: for generated strings the tree holds no `img`, `a`, `iframe`, `script` or `style` and no `href` or `src`; an unclosed form is text; the parser throws for no input |
-| 5 | The query modules, citations, examples, upload rules | W-86 | `npx vitest run test/queries.workspace-ask.test.ts test/queries.workspace-files.test.ts test/workspace-citations.test.ts test/workspace-examples.test.ts test/workspace-upload-rules.test.ts`: a label with no row stays text; no rows give no example; a file of 20,971,521 bytes is refused before any request; a Markdown file with no reported type is taken by its extension and stored with the Markdown content type; the object's key holds only the allowed characters whatever the file's name; a delete makes the first call, then the storage remove, then the second call, and a failed remove makes no second call |
+| 5 | The query modules, citations, examples, upload rules | W-86 | `npx vitest run test/queries.workspace-ask.test.ts test/queries.workspace-files.test.ts test/workspace-citations.test.ts test/workspace-examples.test.ts test/workspace-upload-rules.test.ts`: a label with no row stays text; no rows give no example; a file of 20,971,521 bytes is refused before any request; a Markdown file with no reported type is taken by its extension and stored with the Markdown content type; the object's key is `u/` followed by the file's SHA-256 whatever the file's name; a file whose hash an upload row already holds is not uploaded and that row is used; the register call carries the hash; a delete makes the first call, then the storage remove, then the second call, and a failed remove makes no second call |
 | 6 | The stream: the `sources` event and the stop guard | W-86 | `npx vitest run test/use-workspace-stream.stop.test.tsx`: a delta after the stopped mark changes nothing; an unknown event changes nothing |
 | 7 | Composer, plus menu, depth menu, material picker | W-87 | `npx vitest run test/Composer.chips.test.tsx`: Ask sends the options; Deep returns to Auto after one question; a file routine with no file keeps Ask off; Backspace in an empty box removes the last chip |
 | 8 | The lobby and example prompts | W-87 | `npx vitest run test/Workspace.lobby.test.tsx`: no upcoming rows, no example row; a press fills the box and calls nothing; the greeting holds no name |

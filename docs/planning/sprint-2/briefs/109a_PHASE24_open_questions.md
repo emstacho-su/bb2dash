@@ -1,14 +1,15 @@
-# Phase 24: Workspace assistant. Stack's sixteen answers, on record
+# Phase 24: Workspace assistant. Stack's seventeen answers, on record
 
-2026-10-08 · one batch · answered the same day · this file replaces the draft batch of ten questions
-that stood here at 4bf223e.
+2026-10-08 · one batch of sixteen, answered the same day, and one sentence of his own after it
+(answer 17) · this file replaces the draft batch of ten questions that stood here at 4bf223e.
 
 Briefs `109_PHASE24_workspace_assistant.md` (Phase 24a) and `111_PHASE24B_workspace_page.md` (Phase
 24b) are drawn to these answers. Where a PM ruling and his words differ, his words win.
 
 **How to read it.** His own words are in quotes. Where he picked an option, the option is given as it
 was put to the PM's planning run. Answers 1 to 11 are his. Answers 12 to 16 were listed to him as
-taken, and he did not object.
+taken, and he did not object. Answer 17 is his own sentence, written after the batch; no question
+was put for it.
 
 **What this record could not check.** The exact wording of each question as shown to him is not in a
 file this record was built from. The options under "options" are the draft batch's (this file at
@@ -137,12 +138,44 @@ The store is the separate Supabase project `harness-memory`.
 * **Taken, 2026-10-08:** the assistant writes nothing except its own memory, each answer's source
   list and the index of his uploads.
 
+### 17. The retrieval store
+
+* **Options.** Not on file: no question was put. It is his own sentence, after the batch. It
+  follows the last sentence of answer 2.
+* **He wrote, 2026-10-08:** "for phase 24 ensure that a pgvectors rag db is actually put in place,
+  scoped specifically to the bb2dash app for future scalability."
+* **What is there today** (read on the live database, 2026-10-08, names and counts only). pgvector
+  is installed, version 0.8.2. It serves course-file text only: one vector column,
+  `bb_text_embeddings.embedding`, 384 numbers a row, with one HNSW index, `bb_text_embeddings_hnsw`.
+  It holds 2,011 vectors over 982 pieces of course text, all made by the same model, `gte-small`.
+  His uploads and the assistant's memory have no vector home yet.
+* **What it decides.** Brief 109 holds the store as a contract clause of its own, "The pgvector
+  store, scoped to bb2dash", with its proof in task 49. In five points:
+  1. One pgvector store, scoped to bb2dash. Everything 24a builds reads and writes it through named
+     functions, and nothing in it reads the vault's separate store or any other project.
+  2. It holds three kinds of content: course files, his uploads and the assistant's memory. One
+     search covers all three and names the kind on every hit.
+  3. Every vector column has an HNSW index, and every vector row records the model that made it, so
+     the content can be embedded again with another model of the same size by adding rows, with no
+     change to a table.
+  4. Ingestion is a queue with one status row he can read: for each kind, how many are in, how many
+     wait and how many failed. The same content sent twice leaves one row.
+  5. Nine proofs in the task list show it is there once 24a is applied, each a statement a worker
+     runs as written with its expected result.
+* **The default the PM took.** The store is inside the existing bb2dash Supabase project, not a
+  second project, and in the schema the app already uses. It is laid out so it could be lifted into
+  its own project later, and the brief names the one thing in its design that a move would have to
+  change: the course half reads the app's list of files inside its search. His to object to.
+* **What it does not do now.** No second project. No change of the embedding model. Items 23 to 25
+  below are the three defaults that came with it.
+
 ## Still open, with the default taken
 
 The design needed these and he was not asked. Each default is built unless he says otherwise. None
 blocks the freeze. Items 19 to 22 were added by the challenge round of 2026-10-08 (brief 109,
 Appendix 2), which also changed the wording of items 2, 3, 6, 10, 11, 14 and 15. Items 19 and 20 are
-the two a reviewer asked to have put to him by name.
+the two a reviewer asked to have put to him by name. Items 23 to 25 came with answer 17 (brief 109,
+Appendix 3). Item 23 corrects one thing he was told, so it is put to him by name too.
 
 1. **Deep after one question.** Default: Deep applies to that question, then the menu returns to Auto
    (PM ruling W-9). Quick and Standard stay until he changes them.
@@ -231,3 +264,30 @@ the two a reviewer asked to have put to him by name.
     snippet on his laptop makes it, he runs one line in the SQL editor, and the snippet stores the
     connection string in his secrets folder. It never passes through a chat, a repo file or a
     migration. It is needed before the PM's walk and before the cut-over (brief 109, task 48).
+23. **The index is in place before the search needs it.** He was told that a proof would show the
+    search's query plan using the index. That is true of the plain nearest-neighbour search and not
+    of the search the assistant uses. The assistant's search compares the question against every
+    vector and keeps the best piece of each page or slide. At 2,011 vectors that is exact, it
+    misses nothing, and it is the ranking Phase 18 timed. An index answers a different shape of
+    question, the nearest few first, and it starts to pay when there are many times more vectors.
+    Default: the ranking is left as it is; every vector column gets its index now; and the proof
+    shows the index is valid and that the nearest-neighbour query can use it on both tables. Moving
+    the assistant's search onto the index later changes two functions and no table. The moment for
+    it is when the search's timed median passes 60 ms. If he wants it now, it is its own piece of
+    work with its own measurement, because it changes which passages come back.
+24. **Four older paths still touch a course-text table without going through a function, and one
+    of them is a door nothing uses.** The rule "only through named functions" holds for everything
+    24a builds. It was not true of the course half before, and three of the four stay as they are:
+    the sync inserts course text with the public key under an insert-only rule; the assistant's
+    read of one whole page goes straight to the table with the service key; and his own signed-in
+    session may read both course tables, though no page does. The fourth is a rule from September
+    that lets a holder of the public key insert a row into the course vectors. No code uses it.
+    Default: all four are listed in the brief and none is changed in 24a, because the phase alters
+    no table it did not make. Closing the unused one is one line in a spare migration (198), and
+    the brief says where it would go. His to say; the PM has not ruled on it.
+25. **The same file sent twice is one file.** An upload is known by the SHA-256 of its bytes. The
+    page works it out before it sends anything, the file is stored under a name made from it, and
+    the upload service checks it against the bytes it downloaded. Default: sending a file that is
+    already there uploads nothing and gives him the copy he has, with the title and the course it
+    already carries. If he would rather have two entries for one file, that is a change to make
+    before migration 190 is frozen.
