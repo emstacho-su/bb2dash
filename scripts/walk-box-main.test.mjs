@@ -10,13 +10,13 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 
-import { DOCKER_CLIENT, EXIT, PRODUCTION_ORIGIN, WALK_IMAGE, main, runDocker, watchSignals } from './walk-box.mjs';
+import { DOCKER_CLIENT, EXIT, PRODUCTION_ORIGIN, WALK_IMAGE, changedSinceBuild, main, runDocker, watchSignals } from './walk-box.mjs';
 import {
   COMMIT,
   CONTAINER,
@@ -38,11 +38,16 @@ import {
  * main(): the run folder, run.json, the exit code
  * ------------------------------------------------------------------------------------------ */
 
-/** main()'s dependencies, with docker and git recorded instead of run. */
-function harness(f, { exits = [0], dirty = false, times = [NOW, LATER] } = {}) {
-  const seen = { docker: [], logged: [], errors: [], records: [], watchStops: 0 };
+/**
+ * main()'s dependencies, with docker and git recorded instead of run. `head` is the commit git
+ * names; `changed` and `untracked` are what it lists under web/ outside web/e2e, against the
+ * commit a kept box built.
+ */
+function harness(f, { exits = [0], dirty = false, times = [NOW, LATER], head = COMMIT, changed = [], untracked = [] } = {}) {
+  const seen = { docker: [], git: [], logged: [], errors: [], records: [], watchStops: 0 };
   let call = 0;
   let tick = 0;
+  const listed = (files) => files.map((file) => `${file}\n`).join('');
   const deps = {
     root: f.root,
     cwd: f.cwd,
@@ -50,8 +55,11 @@ function harness(f, { exits = [0], dirty = false, times = [NOW, LATER] } = {}) {
     home: f.home,
     now: () => times[Math.min(tick++, times.length - 1)],
     git: (args) => {
-      if (args[0] === 'rev-parse') return `${COMMIT}\n`;
+      seen.git.push(args);
+      if (args[0] === 'rev-parse') return `${head}\n`;
       if (args[0] === 'status') return dirty ? ' M web/e2e/harness.spec.ts\n' : '';
+      if (args[0] === 'diff') return listed(changed);
+      if (args[0] === 'ls-files') return listed(untracked);
       throw new Error(`unexpected git ${args.join(' ')}`);
     },
     docker: async (argv, options) => {
@@ -221,6 +229,119 @@ test('main --exec: a box that is not running is said so, with a code of its own,
   assert.equal(second.seen.docker.length, 1);
   assert.match(second.seen.errors.join('\n'), /not running/);
   assert.equal(fs.existsSync(path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`)), false);
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * --exec: the record names what the box built, and a tree that has moved on is refused
+ * ------------------------------------------------------------------------------------------ */
+
+const HEAD_NOW = 'beefcafebeefcafebeefcafebeefcafebeefcafe';
+const OUTSIDE_SPECS = ['--', 'web', ':(exclude)web/e2e'];
+
+/** A kept box started through main() at COMMIT, then what an --exec in it is given. */
+async function keptThenExec(f, { keep = {}, exec = {} } = {}) {
+  const first = harness(f, { times: [NOW], ...keep });
+  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], first.deps), 0);
+  const second = harness(f, { times: [LATER], exits: [0, 0], ...exec });
+  const code = await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], second.deps);
+  return { code, seen: second.seen, execDir: path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`) };
+}
+
+test('main --exec: the record names the commit the box built beside the commit the specs are read at', async () => {
+  const f = fixture();
+  const { code, seen, execDir } = await keptThenExec(f, { exec: { head: HEAD_NOW } });
+  assert.equal(code, 0);
+  const record = JSON.parse(fs.readFileSync(path.join(execDir, 'run.json'), 'utf8'));
+  assert.equal(record.commit, HEAD_NOW);
+  assert.equal(record.built_commit, COMMIT);
+  assert.equal(record.built_dirty, false);
+  assert.equal(record.worktree, posix(f.root));
+  // What changed since the build is asked of git against the box's commit, not HEAD, and outside web/e2e only.
+  assert.deepEqual(seen.git.filter((args) => args[0] === 'diff'), [['diff', '--name-only', COMMIT, ...OUTSIDE_SPECS]]);
+  assert.deepEqual(seen.git.filter((args) => args[0] === 'ls-files'), [['ls-files', '--others', '--exclude-standard', ...OUTSIDE_SPECS]]);
+});
+
+test('main --exec: a file under web/ outside web/e2e that is not as the box built it is refused, and nothing is walked', async () => {
+  const moved = [
+    ['changed since the box\'s commit', { changed: ['web/src/app/globals.css', 'web/package.json'] }, /web\/src\/app\/globals\.css/],
+    ['new and not committed', { untracked: ['web/src/components/shell/Menu.module.css'] }, /Menu\.module\.css/],
+  ];
+  for (const [what, exec, names] of moved) {
+    const f = fixture();
+    const { code, seen, execDir } = await keptThenExec(f, { exec: { head: HEAD_NOW, ...exec } });
+    assert.equal(code, EXIT.refused, what);
+    assert.equal(seen.docker.length, 0, `${what}: docker was called`);
+    assert.equal(fs.existsSync(execDir), false);
+    const said = seen.errors.join('\n');
+    assert.match(said, names);
+    assert.match(said, /start a new box/);
+    assert.match(said, new RegExp(COMMIT.slice(0, 7)));
+  }
+});
+
+test('main --exec: a box built from a worktree that differed from its commit cannot be compared: on record and said, not refused', async () => {
+  const f = fixture();
+  const { code, seen, execDir } = await keptThenExec(f, { keep: { dirty: true }, exec: { changed: ['web/src/app/globals.css'] } });
+  assert.equal(code, 0);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(execDir, 'run.json'), 'utf8')).built_dirty, true);
+  assert.deepEqual(seen.git.filter((args) => args[0] === 'diff'), []);
+  assert.match(seen.logged.join('\n'), /uncommitted changes when .* was built/);
+});
+
+test('main --exec in a --url box: nothing was built there, so nothing is compared', async () => {
+  const f = fixture();
+  const first = harness(f, { times: [NOW] });
+  assert.equal(await main(['--keep', '--url', PRODUCTION_ORIGIN, 'web/e2e/harness.spec.ts'], first.deps), 0);
+  const second = harness(f, { times: [LATER], exits: [0, 0], changed: ['web/src/app/globals.css'] });
+  assert.equal(await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], second.deps), 0);
+  const record = JSON.parse(fs.readFileSync(path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`, 'run.json'), 'utf8'));
+  assert.equal(record.mode, 'url');
+  assert.equal(record.base_url, PRODUCTION_ORIGIN);
+  assert.equal(record.built_commit, null);
+  assert.deepEqual(second.seen.git.filter((args) => args[0] === 'diff'), []);
+});
+
+test('main --exec: a commit git cannot compare with is refused, not passed over', async () => {
+  const f = fixture();
+  const first = harness(f, { times: [NOW] });
+  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], first.deps), 0);
+  const second = harness(f, { times: [LATER] });
+  const git = second.deps.git;
+  second.deps.git = (args) => {
+    if (args[0] === 'diff') throw new Error(`fatal: bad object ${COMMIT}`);
+    return git(args);
+  };
+  assert.equal(await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], second.deps), EXIT.refused);
+  assert.equal(second.seen.docker.length, 0);
+  assert.match(second.seen.errors.join('\n'), /could not compare/);
+});
+
+test('changedSinceBuild, against a real git: a change under web/e2e is not listed, every other change under web/ is', () => {
+  const repo = scratch('walkbox-git-');
+  const git = (args) => execFileSync('git', ['-C', repo, '-c', 'user.name=walk box test', '-c', 'user.email=walkbox@test.example', '-c', 'core.autocrlf=false', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  git(['init', '--quiet']);
+  for (const file of ['web/src/app/page.tsx', 'web/e2e/harness.spec.ts', 'web/package.json', 'docs/note.md', '.gitignore']) {
+    write(repo, file, file === '.gitignore' ? 'web/.next/\n' : 'first\n');
+  }
+  git(['add', '--all']);
+  git(['commit', '--quiet', '-m', 'the commit the box built']);
+  const built = git(['rev-parse', 'HEAD']).trim();
+  assert.deepEqual(changedSinceBuild(git, built), []);
+
+  // What --exec is for, and what does not reach the build: none of it is listed.
+  write(repo, 'web/e2e/harness.spec.ts', 'second\n');
+  write(repo, 'web/e2e/theme-walk.spec.ts', 'new\n');
+  write(repo, 'docs/note.md', 'second\n');
+  write(repo, 'web/.next/BUILD_ID', 'ignored\n');
+  assert.deepEqual(changedSinceBuild(git, built), []);
+
+  // The app moves on, in each of the three ways: edited and not committed, committed, new and not added.
+  write(repo, 'web/src/app/page.tsx', 'second\n');
+  assert.deepEqual(changedSinceBuild(git, built), ['web/src/app/page.tsx']);
+  git(['commit', '--quiet', '--all', '-m', 'the app moves on']);
+  assert.deepEqual(changedSinceBuild(git, built), ['web/src/app/page.tsx']);
+  write(repo, 'web/src/components/Menu.module.css', 'new\n');
+  assert.deepEqual(changedSinceBuild(git, built), ['web/src/app/page.tsx', 'web/src/components/Menu.module.css']);
 });
 
 test('main --rm: one docker rm -f, no folder, docker\'s exit code', async () => {

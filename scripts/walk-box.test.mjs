@@ -37,7 +37,7 @@ import {
   runIdOfContainer,
   specPaths,
 } from './walk-box.mjs';
-import { CONTAINER, LATER, LATER_RUN_ID, NOW, REPO_ROOT, RUN_ID, SECRET_SHARE, fixture, posix, refusal, run, scratch, write } from './walk-box-kit.mjs';
+import { COMMIT, CONTAINER, LATER, LATER_RUN_ID, NOW, REPO_ROOT, RUN_ID, SECRET_SHARE, fixture, keptBox, posix, refusal, run, scratch, write } from './walk-box-kit.mjs';
 
 // The other two parts: read in here, so that the one command above runs every test.
 import './walk-box-main.test.mjs';
@@ -330,7 +330,7 @@ test('a kept box lives for hours, not for good, and every box is started with --
 
 test('--exec: more specs in a kept container, with a folder of their own under the box\'s', () => {
   const f = fixture({ env: { WALK_SHOTS: '1' } });
-  fs.mkdirSync(path.join(f.outBase, RUN_ID), { recursive: true });
+  keptBox(f);
   const plan = planExec(
     { command: 'exec', url: null, keep: false, container: CONTAINER, specs: ['web/e2e/harness.spec.ts'], extra: ['-g', 'signed in'] },
     { ...f, now: LATER },
@@ -351,7 +351,7 @@ test('--exec: more specs in a kept container, with a folder of their own under t
 
 test('--exec passes a share token by name when one is set (the walk signs in again)', () => {
   const f = fixture({ env: { WALK_VERCEL_SHARE: SECRET_SHARE } });
-  fs.mkdirSync(path.join(f.outBase, RUN_ID), { recursive: true });
+  keptBox(f);
   const plan = planExec({ command: 'exec', url: null, keep: false, container: CONTAINER, specs: ['web/e2e/harness.spec.ts'], extra: [] }, f);
   assert.deepEqual(plan.calls[0].slice(0, 7), ['exec', '-e', `WALK_OUT=/out/exec-${RUN_ID}`, '-e', 'WALK_SHOTS=0', '-e', 'WALK_VERCEL_SHARE']);
 });
@@ -364,6 +364,66 @@ test('--exec refuses a container whose run folder is not under the output folder
   );
 });
 
+/* ---------------------------------------------------------------------------------------------
+ * --exec: what the box holds is read from the box's own record, not taken from whoever calls
+ * ------------------------------------------------------------------------------------------ */
+
+const EXEC = Object.freeze({ command: 'exec', url: null, keep: false, container: CONTAINER, specs: ['web/e2e/harness.spec.ts'], extra: [] });
+const BUILT = 'feedfacefeedfacefeedfacefeedfacefeedface';
+
+test('--exec: the box\'s commit, mode and host are on the exec record as the box\'s own record has them', () => {
+  const f = fixture();
+  keptBox(f, { commit: BUILT, dirty: true });
+  const built = planExec(EXEC, { ...f, now: LATER }).record;
+  assert.equal(built.built_commit, BUILT);
+  assert.equal(built.built_dirty, true);
+  assert.equal(built.mode, 'build');
+  assert.equal(built.base_url, 'http://localhost:3000');
+
+  // A --url box built nothing: there is no commit of an app to name.
+  const g = fixture();
+  keptBox(g, { mode: 'url', base_url: PRODUCTION_ORIGIN, commit: BUILT });
+  const walked = planExec(EXEC, { ...g, now: LATER }).record;
+  assert.equal(walked.built_commit, null);
+  assert.equal(walked.built_dirty, null);
+  assert.equal(walked.mode, 'url');
+  assert.equal(walked.base_url, PRODUCTION_ORIGIN);
+});
+
+test('--exec refuses a box that another worktree started: its specs would run against that worktree\'s build', () => {
+  const f = fixture();
+  const other = fixture();
+  keptBox(f, { worktree: posix(other.root) });
+  refusal(() => planExec(EXEC, f), /another worktree/);
+  // The same worktree written another way is the same worktree.
+  keptBox(f, { worktree: `${posix(f.root)}/` });
+  assert.equal(planExec(EXEC, f).record.built_commit, COMMIT);
+});
+
+test('--exec refuses a run folder without the record of the run that started that box', () => {
+  const notTheRecord = [
+    null,
+    { command: 'exec' },
+    { container: 'bb2dash-walk22-20260101t000000z' },
+    { worktree: 7 },
+    // The commit goes to git as an argument: only a commit id is taken.
+    { commit: '--output=/tmp/x' },
+    { commit: 'HEAD' },
+    { dirty: 'no' },
+    { mode: 'sideways' },
+    { base_url: null },
+  ];
+  for (const more of notTheRecord) {
+    const f = fixture();
+    keptBox(f, more);
+    refusal(() => planExec(EXEC, f), /run\.json/);
+  }
+  const f = fixture();
+  keptBox(f, null);
+  write(f.outBase, `${RUN_ID}/run.json`, '{ not json');
+  refusal(() => planExec(EXEC, f), /run\.json/);
+});
+
 test('--rm: docker rm -f of that one container', () => {
   assert.deepEqual(planRm({ command: 'rm', container: CONTAINER }).calls, [['rm', '-f', CONTAINER]]);
   refusal(() => planRm({ command: 'rm', container: 'sync' }), /not a walk box/);
@@ -371,7 +431,7 @@ test('--rm: docker rm -f of that one container', () => {
 
 test('no call names compose, a network, a port, another volume or another container', () => {
   const f = fixture({ env: { WALK_SHOTS: '1', WALK_VERCEL_SHARE: SECRET_SHARE } });
-  fs.mkdirSync(path.join(f.outBase, RUN_ID), { recursive: true });
+  keptBox(f);
   const exec = { command: 'exec', url: null, keep: false, container: CONTAINER, specs: ['web/e2e/harness.spec.ts'], extra: [] };
   const calls = [
     ...planRun(run(['web/e2e/harness.spec.ts']), f).calls,
@@ -517,10 +577,12 @@ test('a path docker would read as two mount fields is refused', () => {
  * ------------------------------------------------------------------------------------------ */
 
 test('the script reads neither env file: it only asks whether each is there', () => {
-  // The one file it reads is web/package.json, for the Playwright version.
+  // The two files it reads: web/package.json, for the Playwright version, and for --exec the
+  // run.json this script wrote itself when it started the box.
   const reads = SCRIPT_SOURCE.match(/readFileSync\([^)]*\)/g) ?? [];
-  assert.deepEqual(reads, ["readFileSync(webPackageFile, 'utf8')"]);
+  assert.deepEqual(reads, ["readFileSync(webPackageFile, 'utf8')", "readFileSync(boxRecordFile, 'utf8')"]);
   assert.match(SCRIPT_SOURCE, /const webPackageFile = path\.join\(root, 'web', 'package\.json'\);/);
+  assert.match(SCRIPT_SOURCE, /const boxRecordFile = path\.join\(boxDir, 'run\.json'\);/);
   // And nothing opens a file for reading any other way.
   assert.doesNotMatch(SCRIPT_SOURCE, /\b(createReadStream|openSync|readFile|readSync|readlinkSync)\(/);
 });

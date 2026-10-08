@@ -62,6 +62,31 @@ export function fixture({ env = {} } = {}) {
   return { root, home, cwd: root, env, now: NOW, webEnv, loginEnv, outBase };
 }
 
+/**
+ * The run.json a `--keep` run leaves in its box's folder, with anything else laid over it. `null`
+ * leaves the folder without a record.
+ */
+export function keptBox(f, more = {}) {
+  const dir = path.join(f.outBase, RUN_ID);
+  fs.mkdirSync(dir, { recursive: true });
+  if (more === null) return null;
+  const record = {
+    schema: 1,
+    run_id: RUN_ID,
+    command: 'run',
+    container: CONTAINER,
+    kept: true,
+    mode: 'build',
+    base_url: 'http://localhost:3000',
+    worktree: posix(f.root),
+    commit: COMMIT,
+    dirty: false,
+    ...more,
+  };
+  fs.writeFileSync(path.join(dir, 'run.json'), `${JSON.stringify(record, null, 2)}\n`);
+  return record;
+}
+
 /** What parseArgs gives for a plain run of these specs, with anything else laid over it. */
 export const run = (specs, more = {}) => ({ command: 'run', url: null, keep: false, container: null, specs, extra: [], ...more });
 
