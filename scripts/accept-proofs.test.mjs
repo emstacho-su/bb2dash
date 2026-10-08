@@ -5,7 +5,7 @@
 //
 // What is held: a parameter is refused unless it is of its stated type; a statement is refused
 // unless it is one read; the transaction is read-only and always rolled back; one JSON line comes
-// out, with ids, counts, codes and times and never message text; and each of Phase 21's seven
+// out, with ids, counts, codes and times and never message text; and each of Phase 21's eight
 // proofs decides pass, fail or blocked from the row it is given.
 
 import { test } from 'node:test';
@@ -81,12 +81,13 @@ async function runWith({ argv, rows, onQuery, pack = PACK_21, connectError = nul
   return { code, out, err, clients, line: out.length === 1 ? JSON.parse(out[0]) : null };
 }
 
-/** What each of the seven proofs is given on the command line. */
+/** What each of the eight proofs is given on the command line. */
 const GIVEN = {
   'planner-fingerprint': {},
   'planner-unchanged': { before: FINGERPRINT },
   turn: { request: '412', tier: 'low', since: SINCE, question_md5: QUESTION_MD5, tool: 'search_materials' },
   'turn-stopped': { request: '417', since: SINCE, question_md5: QUESTION_MD5 },
+  'turn-waiting': { request: '418', since: SINCE, question_md5: QUESTION_MD5 },
   'turn-answered-after': { request: '419', since: SINCE, min_wait_s: '15', question_md5: QUESTION_MD5 },
   'spike-archived': {},
   'conversations-archived': { ids: `${UUID_A},${UUID_B}`, since: SINCE },
@@ -264,6 +265,7 @@ test('parameters are bound in the order the proof declares them, and an absent o
   // The question that waited is held to its words too: any other request of the run that happened to wait proves nothing.
   assert.deepEqual(Object.keys(PACK_21['turn-answered-after'].params), ['request', 'since', 'min_wait_s', 'question_md5']);
   assert.throws(() => bindParams(PACK_21['turn-answered-after'], { request: '419', since: SINCE, min_wait_s: '15' }), /parameter "question_md5" is required/);
+  assert.deepEqual(Object.keys(PACK_21['turn-waiting'].params), ['request', 'since', 'question_md5']);
   assert.deepEqual(Object.keys(PACK_21['conversations-archived'].params), ['ids', 'since']);
   assert.deepEqual(PACK_21['planner-unchanged'].params, { before: 'fingerprint' });
   assert.deepEqual(bindParams(PACK_21['spike-archived'], {}), []);
@@ -273,7 +275,8 @@ test('parameters are bound in the order the proof declares them, and an absent o
  * The statement
  * ------------------------------------------------------------------------------------------ */
 
-test('each of the seven statements is one read with exactly its own placeholders', () => {
+test('each of the eight statements is one read with exactly its own placeholders', () => {
+  assert.equal(Object.keys(PACK_21).length, 8);
   for (const [name, proof] of Object.entries(PACK_21)) {
     assert.equal(lintProofSql(proof.sql, Object.keys(proof.params).length), null, name);
   }
@@ -584,7 +587,7 @@ test('message text in a row never reaches the one line that is printed', async (
 });
 
 /* ---------------------------------------------------------------------------------------------
- * Phase 21's seven proofs: pass, fail and blocked from canned rows
+ * Phase 21's eight proofs: pass, fail and blocked from canned rows
  * ------------------------------------------------------------------------------------------ */
 
 /** A passing row, and a failing one, in the columns each statement returns. */
@@ -602,8 +605,12 @@ const ROWS = {
     fail: { ok: false, request_id: '412', request_state: 'done', asked_in_this_run: true, question_matches: false, tier: 'low', provider: 'claude-cli', finished: true },
   },
   'turn-stopped': {
-    pass: { ok: true, request_id: '417', request_state: 'cancelled', asked_in_this_run: true, question_matches: true, message_error_code: 'cancelled' },
-    fail: { ok: false, request_id: '417', request_state: 'done', asked_in_this_run: true, question_matches: true, message_error_code: null },
+    pass: { ok: true, request_id: '417', request_state: 'cancelled', asked_in_this_run: true, question_matches: true, runner_took_it: true, message_error_code: 'cancelled' },
+    fail: { ok: false, request_id: '417', request_state: 'done', asked_in_this_run: true, question_matches: true, runner_took_it: true, message_error_code: null },
+  },
+  'turn-waiting': {
+    pass: { ok: true, request_id: '418', request_state: 'queued', asked_in_this_run: true, question_matches: true, claimed_at: null, waited_s: 31 },
+    fail: { ok: false, request_id: '418', request_state: 'done', asked_in_this_run: true, question_matches: true, claimed_at: new Date('2026-10-07T18:01:29Z'), waited_s: 31 },
   },
   'turn-answered-after': {
     pass: { ok: true, request_id: '419', request_state: 'done', asked_in_this_run: true, min_wait_s: 15, waited_s: 212, claimed_at: new Date('2026-10-07T18:05:00Z') },

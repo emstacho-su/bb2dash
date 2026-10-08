@@ -188,16 +188,17 @@ async function seedConversation({ id = randomUUID(), title = 'A conversation', c
 
 /**
  * One question as the app stores it: the user's message, its request, and the answer unless
- * `answer` is null. `claimedAfterS` is how long the request waited before the runner took it.
+ * `answer` is null. `claimedAfterS` is how long the request waited before the runner took it
+ * (null: nobody took it); `ended` false leaves it with no end time.
  */
-async function seedTurn({ request, question = QUESTION, createdAt = IN_RUN, claimedAfterS = 2, state = 'done', errorCode = null, answer = {} }) {
+async function seedTurn({ request, question = QUESTION, createdAt = IN_RUN, claimedAfterS = 2, state = 'done', errorCode = null, answer = {}, ended = true }) {
   const conversation = await seedConversation({ createdAt });
   const userMessage = randomUUID();
   await db.query("insert into public.workspace_messages (id, conversation_id, role, content, finished) values ($1, $2, 'user', $3, true)", [userMessage, conversation, question]);
   await db.query(
     `insert into public.workspace_requests (id, created_at, conversation_id, user_message_id, state, claimed_at, finished_at, error_code)
-     values ($1, $2::timestamptz, $3, $4, $5, $2::timestamptz + make_interval(secs => $6::integer), $2::timestamptz + interval '90 seconds', $7)`,
-    [request, createdAt, conversation, userMessage, state, claimedAfterS, errorCode],
+     values ($1, $2::timestamptz, $3, $4, $5, $2::timestamptz + make_interval(secs => $6::integer), case when $8::boolean then $2::timestamptz + interval '90 seconds' end, $7)`,
+    [request, createdAt, conversation, userMessage, state, claimedAfterS, errorCode, ended],
   );
   if (answer === null) return conversation;
   const { tier = 'low', finished = true, errorCode: answerError = null, toolCalls = [] } = answer;
@@ -290,10 +291,17 @@ test('turn: one request cannot stand for two steps: a step that names the one be
 const stoppedOf = (request, more = {}) => ({ request: String(request), since: SINCE, question_md5: md5(QUESTION), ...more });
 const STOPPED = { state: 'cancelled', errorCode: 'cancelled' };
 
-test('turn-stopped: cancelled, with no answer begun or an answer that ends cancelled, passes', async () => {
-  await seedTurn({ request: 417, ...STOPPED, answer: null });
+test('turn-stopped: stopped part-way: the runner had taken it, and its answer ends cancelled', async () => {
   await seedTurn({ request: 418, ...STOPPED, answer: { tier: 'high', errorCode: 'cancelled' } });
-  for (const request of [417, 418]) assert.equal((await prove('turn-stopped', stoppedOf(request))).code, EXIT.pass, String(request));
+  const stopped = await prove('turn-stopped', stoppedOf(418));
+  assert.equal(stopped.code, EXIT.pass, stopped.why);
+  assert.equal(stopped.detail.runner_took_it, true);
+  // A question cancelled while it still waited is a row the page's own login can make: no runner, no answer, no proof of a stop.
+  await seedTurn({ request: 417, ...STOPPED, answer: null, claimedAfterS: null });
+  await seedTurn({ request: 422, ...STOPPED, answer: null });
+  await seedTurn({ request: 423, ...STOPPED, answer: { tier: 'high', errorCode: 'cancelled' }, claimedAfterS: null });
+  for (const request of [417, 422, 423]) assert.equal((await prove('turn-stopped', stoppedOf(request))).code, EXIT.fail, String(request));
+  assert.equal((await prove('turn-stopped', stoppedOf(417))).detail.runner_took_it, false);
   // Done is not stopped, and neither is an answer that ended some other way.
   await seedTurn({ request: 419 });
   await seedTurn({ request: 420, ...STOPPED, answer: { tier: 'high', errorCode: null } });
@@ -301,12 +309,12 @@ test('turn-stopped: cancelled, with no answer begun or an answer that ends cance
 });
 
 test('turn-stopped: a stop from before the run fails, and so does a stop of another question', async () => {
-  await seedTurn({ request: 302, ...STOPPED, answer: null, createdAt: BEFORE_RUN });
+  await seedTurn({ request: 302, ...STOPPED, answer: { tier: 'high', errorCode: 'cancelled' }, createdAt: BEFORE_RUN });
   const old = await prove('turn-stopped', stoppedOf(302));
   assert.equal(old.code, EXIT.fail);
   assert.deepEqual([old.detail.asked_in_this_run, old.detail.question_matches], [false, true]);
 
-  await seedTurn({ request: 421, ...STOPPED, answer: null, question: OTHER_QUESTION });
+  await seedTurn({ request: 421, ...STOPPED, answer: { tier: 'high', errorCode: 'cancelled' }, question: OTHER_QUESTION });
   const other = await prove('turn-stopped', stoppedOf(421));
   assert.equal(other.code, EXIT.fail);
   assert.deepEqual([other.detail.asked_in_this_run, other.detail.question_matches], [true, false]);
@@ -314,7 +322,7 @@ test('turn-stopped: a stop from before the run fails, and so does a stop of anot
 
 test('turn-stopped: a stop that names the step before it must be the later request', async () => {
   await seedTurn({ request: 442 });
-  await seedTurn({ request: 443, ...STOPPED, answer: null });
+  await seedTurn({ request: 443, ...STOPPED, answer: { tier: 'high', errorCode: 'cancelled' } });
   assert.equal((await prove('turn-stopped', stoppedOf(443, { after: '442' }))).code, EXIT.pass);
   const earlier = await prove('turn-stopped', stoppedOf(443, { after: '443' }));
   assert.equal(earlier.code, EXIT.fail);
@@ -329,6 +337,22 @@ test('turn-answered-after: a request that waited but asks another question fails
   assert.equal(other.code, EXIT.fail);
   assert.deepEqual([other.detail.asked_in_this_run, other.detail.question_matches, other.detail.waited_s], [true, false, 212]);
   assert.equal((await prove('turn-answered-after', waitedOf(436, { question_md5: md5(OTHER_QUESTION) }))).code, EXIT.pass);
+});
+
+const waitingOf = (request, more = {}) => ({ request: String(request), since: SINCE, question_md5: md5(QUESTION), ...more });
+
+test('turn-waiting: asked in this run, the step\'s question, in the queue and taken by nobody', async () => {
+  await seedTurn({ request: 450, state: 'queued', answer: null, claimedAfterS: null, ended: false });
+  const waiting = await prove('turn-waiting', waitingOf(450));
+  assert.equal(waiting.code, EXIT.pass, waiting.why);
+  assert.deepEqual([waiting.detail.request_state, waiting.detail.claimed_at, waiting.detail.asked_in_this_run, waiting.detail.question_matches], ['queued', null, true, true]);
+  // Taken, answered, cancelled, another question, or a question of an earlier run: none of them is this question waiting.
+  await seedTurn({ request: 451, state: 'claimed', answer: null, ended: false });
+  await seedTurn({ request: 452 });
+  await seedTurn({ request: 453, ...STOPPED, answer: null, claimedAfterS: null });
+  await seedTurn({ request: 454, state: 'queued', answer: null, claimedAfterS: null, ended: false, question: OTHER_QUESTION });
+  await seedTurn({ request: 304, state: 'queued', answer: null, claimedAfterS: null, ended: false, createdAt: BEFORE_RUN });
+  for (const request of [451, 452, 453, 454, 304]) assert.equal((await prove('turn-waiting', waitingOf(request))).code, EXIT.fail, String(request));
 });
 
 test('turn-answered-after: a request claimed at once fails, and one that waited passes', async () => {

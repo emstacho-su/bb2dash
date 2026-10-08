@@ -597,6 +597,9 @@ test("Phase 21: the steps are the acceptance script's fifteen, and each is done 
   assert.deepEqual(stepOf(manifest, '11').proofs, [{ name: 'planner-unchanged', with: { before: 'carry:planner_before.fingerprint' } }]);
   assert.equal(stepOf(manifest, '13').stage, 'go-live');
   assert.deepEqual(stepOf(manifest, '13').actions, ['workspace.stopTestRunner', 'workspace.ensureProfile', 'workspace.start', 'workspace.doctorRow']);
+  // Step 14a: read while the service is still stopped (the host starts it only in the next stage): the question is in the queue, taken by nobody.
+  assert.deepEqual(stepOf(manifest, '14a').proofs, [{ name: 'turn-waiting', with: { request: 'carry:14a.request_id', since: RUN_START, question_md5: asked('3') } }]);
+  assert.deepEqual(manifest.stages.map((stage) => stage.id).slice(-3), ['offline', 'start', 'back'], 'nothing starts the service between the offline stage and its proof');
   // Step 14b: the question waited at least the 15 seconds step 14a's test watched it wait. No time of a sandbox is a parameter.
   assert.deepEqual(stepOf(manifest, '14b').proofs, [
     { name: 'turn-answered-after', with: { request: 'carry:14a.request_id', since: RUN_START, min_wait_s: 15, question_md5: asked('3') } },
@@ -630,7 +633,7 @@ test("Phase 21: each proof's question_md5 is the md5 of the question the step's 
   const tied = manifest.steps.filter((step) => (step.proofs ?? []).some((proof) => proof.with?.question_md5 !== undefined));
   // The five questions, the stop, the reload and the question that waited: every step whose proof reads a turn or a stop.
   // Step 14b's test types nothing: it names the question it looks for, the one step 14a's test typed.
-  assert.deepEqual(tied.map((step) => step.id), ['3', '4', '5', '6', '7', '8', '9', '14b']);
+  assert.deepEqual(tied.map((step) => step.id), ['3', '4', '5', '6', '7', '8', '9', '14a', '14b']);
   assert.equal(md5OfQuestionAskedBy(specText, '14a offline'), md5OfQuestionAskedBy(specText, '14b back'));
   for (const step of tied) {
     for (const proof of step.proofs.filter((candidate) => candidate.with?.question_md5 !== undefined)) {
@@ -651,7 +654,7 @@ test('Phase 21: each proof is read once: no host stage runs a proof that an auto
   // The two the host reads as actions: the planner before the walk (a reading, saved) and step 11's comparison.
   assert.deepEqual(hostRuns, ['planner-fingerprint', 'planner-unchanged']);
   const stepLists = manifest.steps.filter((step) => step.kind === 'auto').flatMap((step) => (step.proofs ?? []).map((proof) => proof.name));
-  assert.deepEqual(stepLists, ['turn', 'turn', 'turn', 'turn', 'turn', 'turn-stopped', 'turn', 'turn-answered-after', 'spike-archived', 'conversations-archived']);
+  assert.deepEqual(stepLists, ['turn', 'turn', 'turn', 'turn', 'turn', 'turn-stopped', 'turn', 'turn-waiting', 'turn-answered-after', 'spike-archived', 'conversations-archived']);
   assert.deepEqual(hostRuns.filter((name) => stepLists.includes(name)), []);
 });
 
@@ -659,7 +662,7 @@ test('Phase 21: the browser-test file holds the eleven titles of the interface s
   assert.deepEqual(specTitles(readText('web/e2e/accept21.spec.ts')), [...WALK_TESTS, '14a offline', '14b back', '15 archive']);
 });
 
-test('Phase 21: the seven proofs of the interface spec, by name', () => {
+test('Phase 21: the eight proofs, by name', () => {
   assert.deepEqual(Object.keys(loadPack(REPO, '21').proofs).sort(), [
     'conversations-archived',
     'planner-fingerprint',
@@ -668,6 +671,7 @@ test('Phase 21: the seven proofs of the interface spec, by name', () => {
     'turn',
     'turn-answered-after',
     'turn-stopped',
+    'turn-waiting',
   ]);
 });
 
