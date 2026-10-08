@@ -1658,6 +1658,18 @@ Paths are from the bb2dash root unless a row says bb2dash-stack. "Runner on `<fi
 may rename one and says so in its verification section. Probes run the pinned CLI or the image with
 another command, so the firewall is up and no runner loop starts; filler and questions are synthetic.
 
+**What a docker command needs from a worktree.** Compose's defaults for the secrets folder and the
+harness folder point inside the worktree, where neither exists. The form that worked for Phase 21
+(`docs/planning/sprint-2/verification/102a_PHASE21_VERIFICATION.md`, line 109) sets three things in
+front of the command: `SECRETS_DIR=C:/Users/stack/.bb2dash-secrets`,
+`HARNESS_DIR=C:/Users/stack/agentic-harness` and `MSYS_NO_PATHCONV=1`. A probe runs the image as
+it stands with a command of its own, for example `docker compose -p <a throwaway project name>
+--profile workspace run --rm --no-deps workspace <command>` (not run in the planning session: the
+PM checks the form on the first probe), with no `build` and never `up`: `up` would start a second
+runner on the one queue. The project name `bb2dash-wt24` is kept for the walk window, so a probe
+uses another. Secret files are mounted and never printed. A probe that ends on a usage limit of the
+Claude plan is blocked, not failed: three sessions share the plan, and the probe is run again.
+
 **Order.** The first draft put probes 1 to 11 before the freeze and gave them to workers whose
 branches are cut at the freeze. Six of them needed things built, applied or deployed later. The
 order now:
