@@ -15,8 +15,8 @@ Date: 2026-10-08. Every command below was run by itself and its exit code read d
 | Check | Result |
 |---|---|
 | `node --test scripts/walk-box.test.mjs` gives 0 failures | 49 tests, 49 pass, 0 fail, exit 0 |
-| A real run of `web/e2e/harness.spec.ts` on this branch's build ends with 0 | run `20261008T152840Z`, exit 0, 74 s |
-| `run.json` is present | yes, in `C:/Users/stack/.bb2dash-walk/22/20261008T152840Z/` |
+| A real run of `web/e2e/harness.spec.ts` on this branch's build ends with 0 | run `20261008T152840Z` at 74eaa9a, exit 0, 74 s; again as run `20261008T154823Z` at 5edf03d, exit 0, 61 s |
+| `run.json` is present | yes, in `C:/Users/stack/.bb2dash-walk/22/<run id>/` for both |
 | No container is left (`docker ps -a --filter name=bb2dash-walk22`) | no line printed, after every run below |
 
 ## How the work was found
@@ -109,6 +109,10 @@ All from `C:/Users/stack/projects/bb2dash-wt-22-walkbox`. Output is under
 | none | `--exec` on the box just removed | | not timed | 67 | "is not running", no folder made |
 | `20261008T154207Z` | `node scripts/walk-box.mjs --url https://web-xi-ten-uy9xk6c6p0.vercel.app web/e2e/harness.spec.ts -- -g "signed in"` | 5bd8237, clean | 35 s | 0 | passed, 1 test |
 | `20261008T154258Z` | `node scripts/walk-box.mjs web/e2e/harness.spec.ts -- -g "no test has this title w75"` | 5bd8237, clean | 47 s | 1 | tests failed (no test found) |
+| `20261008T154823Z` | `node scripts/walk-box.mjs web/e2e/harness.spec.ts` | 5edf03d, clean | 61 s | 0 | passed, 2 tests |
+
+The last line is the same plain run again, on the branch as pushed with this note in it. Between
+5bd8237 and 5edf03d only a comment in the script and this note changed.
 
 A plain run took 47 to 74 seconds with npm's cache filled. In the 74-second run `npm ci` reported
 21 s and the build's two timed steps 4.8 s and 9.1 s; the rest is the copy, the other build steps,
