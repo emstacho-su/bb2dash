@@ -363,34 +363,94 @@ test('planner: the fingerprint counts the progress rows, so deleting a row that 
   assert.ok(third.detail.planner_now.includes(',apn=2,rpn=1,at='), third.detail.planner_now);
 });
 
-test('planner-unchanged: blocked when a request moved since the fingerprint, and when one is claimed now', async () => {
+/** A sync that ran and ended long before: request 1 of every case below. */
+const OLD_SYNC = "insert into public.agent_requests (created_at, kind, state, claimed_at, finished_at) values ('2026-09-01T10:00:00Z', 'sync', 'done', '2026-09-01T10:00:05Z', '2026-09-01T10:20:00Z')";
+const CLAIMED_JUST_NOW = "insert into public.agent_requests (created_at, kind, state, claimed_at) values (now() - interval '10 minutes', 'sync', 'claimed', now() - interval '9 minutes')";
+/** The three ways a request moves after the fingerprint was read: it is filed, it is taken, it ends. */
+const MOVES = ["insert into public.agent_requests (kind) values ('sync')", 'update public.agent_requests set claimed_at = now() where id = 1', 'update public.agent_requests set finished_at = now() where id = 1'];
+const UNDO_MOVE = "delete from public.agent_requests where id > 1; update public.agent_requests set claimed_at = '2026-09-01T10:00:05Z', finished_at = '2026-09-01T10:20:00Z' where id = 1";
+/** A planner change that is not the newest row's: only the count tells. */
+const CHANGE_PLANNER = "delete from public.assignment_progress where assignment_id = 'a'";
+
+test('planner-unchanged: a planner that reads the same passes, also when a sync ran in between or is running', async () => {
   await seedPlanner();
-  // A sync that ran and ended long before: no reason to block.
-  await db.exec("insert into public.agent_requests (created_at, kind, state, claimed_at, finished_at) values ('2026-09-01T10:00:00Z', 'sync', 'done', '2026-09-01T10:00:05Z', '2026-09-01T10:20:00Z')");
+  await db.exec(OLD_SYNC);
   const before = (await prove('planner-fingerprint')).detail.fingerprint;
   const quiet = await prove('planner-unchanged', { before });
   assert.equal(quiet.code, EXIT.pass, quiet.why);
   assert.deepEqual([quiet.detail.requests_in_window, quiet.detail.requests_claimed_now], [0, 0]);
 
-  // Claimed before the fingerprint and not finished: a sync is running now, and may write at any moment.
-  await db.exec("insert into public.agent_requests (created_at, kind, state, claimed_at) values ('2026-09-02T10:00:00Z', 'sync', 'claimed', '2026-09-02T10:00:05Z')");
+  // What did not change was not changed by anyone: a sync beside the walk takes nothing from that.
+  for (const moved of MOVES) {
+    await db.exec(moved);
+    const same = await prove('planner-unchanged', { before });
+    assert.equal(same.code, EXIT.pass, moved);
+    assert.equal('blocked' in same.line, false, moved);
+    assert.ok(same.detail.requests_in_window >= 1, moved);
+    await db.exec(UNDO_MOVE);
+  }
+  await db.exec(CLAIMED_JUST_NOW);
   const running = await prove('planner-unchanged', { before });
-  assert.equal(running.code, EXIT.blocked);
-  assert.deepEqual([running.line.pass, running.line.blocked], [false, true]);
-  assert.deepEqual([running.detail.requests_in_window, running.detail.requests_claimed_now, running.detail.first_claimed_request_id], [0, 1, 2]);
+  assert.equal(running.code, EXIT.pass);
+  assert.deepEqual([running.detail.requests_claimed_now, running.detail.first_claimed_request_id], [1, 5]);
+});
 
-  // It ends (the times are old, so it is outside the window): not blocked.
-  await db.exec("update public.agent_requests set state = 'done', finished_at = '2026-09-02T10:20:00Z' where id = 2");
-  assert.equal((await prove('planner-unchanged', { before })).code, EXIT.pass);
+test('planner-unchanged: a planner that changed is blocked when a sync could have changed it, and fails when none could', async () => {
+  await seedPlanner();
+  await db.exec(OLD_SYNC);
+  const before = (await prove('planner-fingerprint')).detail.fingerprint;
+  await db.exec(CHANGE_PLANNER);
+  assert.equal((await prove('planner-unchanged', { before })).code, EXIT.fail);
 
-  // One created, one claimed and one finished after the fingerprint was read: each blocks.
-  for (const moved of ["insert into public.agent_requests (kind) values ('sync')", 'update public.agent_requests set claimed_at = now() where id = 1', 'update public.agent_requests set finished_at = now() where id = 1']) {
+  // One filed, one taken and one ended after the fingerprint was read: each may be what changed it.
+  for (const moved of MOVES) {
     await db.exec(moved);
     const blocked = await prove('planner-unchanged', { before });
     assert.equal(blocked.code, EXIT.blocked, moved);
+    assert.deepEqual([blocked.line.pass, blocked.line.blocked], [false, true], moved);
     assert.ok(blocked.detail.requests_in_window >= 1, moved);
-    await db.exec("delete from public.agent_requests where id = 3; update public.agent_requests set claimed_at = '2026-09-01T10:00:05Z', finished_at = '2026-09-01T10:20:00Z' where id = 1");
+    await db.exec(UNDO_MOVE);
   }
+
+  // Taken before the fingerprint and not ended: a sync is running now.
+  await db.exec(CLAIMED_JUST_NOW);
+  const running = await prove('planner-unchanged', { before });
+  assert.equal(running.code, EXIT.blocked);
+  assert.deepEqual([running.detail.requests_in_window, running.detail.requests_claimed_now], [0, 1]);
+
+  // A claim nobody ended, days old, is not a running sync: it must not turn a failure into "repeat the run" for ever.
+  await db.exec("update public.agent_requests set created_at = now() - interval '5 days', claimed_at = now() - interval '5 days' where state = 'claimed'");
+  const stale = await prove('planner-unchanged', { before });
+  assert.equal(stale.code, EXIT.fail);
+  assert.deepEqual([stale.detail.requests_claimed_now, stale.detail.stale_claims], [0, 1]);
+});
+
+test('planner-fingerprint: blocked while a sync or an Inbox apply is waiting or running, so a run stops before it spends anything', async () => {
+  await seedPlanner();
+  await db.exec(OLD_SYNC);
+  const quiet = await prove('planner-fingerprint');
+  assert.equal(quiet.code, EXIT.pass, quiet.why);
+  assert.deepEqual([quiet.detail.requests_open_now, quiet.detail.first_open_request_id, quiet.detail.stale_claims], [0, null, 0]);
+
+  await db.exec("insert into public.agent_requests (kind) values ('inbox_feedback')");
+  const waiting = await prove('planner-fingerprint');
+  assert.equal(waiting.code, EXIT.blocked);
+  assert.deepEqual([waiting.line.pass, waiting.line.blocked], [false, true]);
+  assert.deepEqual([waiting.detail.requests_open_now, waiting.detail.first_open_request_id], [1, 2]);
+
+  await db.exec("update public.agent_requests set state = 'claimed', claimed_at = now() where id = 2");
+  assert.equal((await prove('planner-fingerprint')).code, EXIT.blocked);
+
+  // It ends: a run may start.
+  await db.exec("update public.agent_requests set state = 'done', finished_at = now() where id = 2");
+  assert.equal((await prove('planner-fingerprint')).code, EXIT.pass);
+
+  // A request nobody took or ended, days old, stops no run; it is counted so that someone closes it.
+  await db.exec("insert into public.agent_requests (created_at, kind) values (now() - interval '5 days', 'sync')");
+  await db.exec("insert into public.agent_requests (created_at, kind, state, claimed_at) values (now() - interval '5 days', 'sync', 'claimed', now() - interval '5 days')");
+  const stale = await prove('planner-fingerprint');
+  assert.equal(stale.code, EXIT.pass, stale.why);
+  assert.deepEqual([stale.detail.requests_open_now, stale.detail.stale_claims], [0, 2]);
 });
 
 test("spike-archived: exactly one conversation titled 'spike' is archived, and none is listed", async () => {
