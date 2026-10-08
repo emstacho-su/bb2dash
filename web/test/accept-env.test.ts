@@ -10,7 +10,7 @@
  * over from an earlier stage is an id or a time, or it is refused.
  */
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -123,6 +123,35 @@ describe('the settings of a run', () => {
     expect(() => acceptSettings({ ...ASKED, ACCEPT_OUT: CHECKOUT }, CHECKOUT)).toThrow(/inside the checkout/);
     // A sibling whose name only starts the same way is not inside.
     expect(acceptSettings({ ...ASKED, ACCEPT_OUT: `${CHECKOUT}-out` }, CHECKOUT)?.outDir).toBe(`${CHECKOUT}-out`);
+  });
+
+  it('refuse a session file inside the checkout: it holds the sign-in and the page data saved with it', () => {
+    // The walk harness's own gitignored file is no exception here: an acceptance run never uses it.
+    for (const inside of [join(CHECKOUT, 'web', 'e2e', '.auth', 'state.json'), join(CHECKOUT, 'state.json'), join(CHECKOUT, 'docs', 'accept', 'state.json')]) {
+      expect(() => acceptSettings({ ...ASKED, ACCEPT_STATE: inside }, CHECKOUT), inside).toThrow(/ACCEPT_STATE is inside the checkout/);
+    }
+    expect(acceptSettings({ ...ASKED, ACCEPT_STATE: `${CHECKOUT}-state.json` }, CHECKOUT)?.statePath).toBe(`${CHECKOUT}-state.json`);
+  });
+
+  it('follow a link: a path that leads into the checkout is inside it, whatever folder it is written under', () => {
+    const root = scratch();
+    const checkout = join(root, 'checkout');
+    const elsewhere = join(root, 'elsewhere');
+    mkdirSync(join(checkout, 'kept'), { recursive: true });
+    mkdirSync(elsewhere, { recursive: true });
+    // A junction on Windows, a symlink elsewhere: written outside the checkout, it leads into it.
+    const link = join(elsewhere, 'way-in');
+    symlinkSync(join(checkout, 'kept'), link, 'junction');
+    const outside = { ...ASKED, ACCEPT_STATE: join(elsewhere, 'state.json'), ACCEPT_OUT: join(elsewhere, 'out') };
+    expect(acceptSettings(outside, checkout)).toMatchObject({ statePath: outside.ACCEPT_STATE, outDir: outside.ACCEPT_OUT });
+
+    // The file need not exist yet: the folders it is written under are followed as far as they do.
+    expect(() => acceptSettings({ ...outside, ACCEPT_STATE: join(link, 'state.json') }, checkout)).toThrow(/ACCEPT_STATE is inside the checkout/);
+    expect(() => acceptSettings({ ...outside, ACCEPT_OUT: join(link, 'not-made-yet', 'walk') }, checkout)).toThrow(/ACCEPT_OUT is inside the checkout/);
+    // And the checkout may itself be named through a link.
+    const checkoutByLink = join(elsewhere, 'the-checkout');
+    symlinkSync(checkout, checkoutByLink, 'junction');
+    expect(() => acceptSettings({ ...outside, ACCEPT_STATE: join(checkout, 'state.json') }, checkoutByLink)).toThrow(/ACCEPT_STATE is inside the checkout/);
   });
 });
 

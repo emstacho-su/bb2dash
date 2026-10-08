@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -716,4 +717,29 @@ test('login.mjs saves to its own gitignored file unless WALK_STATE_PATH names an
   );
   assert.throws(() => statePathFrom({ WALK_STATE_PATH: path.join(path.dirname(outside), 'walk.txt') }, { root, standard }), /must end in \.json/);
   assert.match(readText('web/e2e/login.mjs'), /statePathFrom\(process\.env/);
+});
+
+test('WALK_STATE_PATH is followed through a link, by the one reading of "inside" the browser tests use too', () => {
+  const holder = fs.mkdtempSync(path.join(os.tmpdir(), 'bb2dash-login-state-'));
+  try {
+    const root = path.join(holder, 'checkout');
+    const standard = path.join(root, 'web', 'e2e', '.auth', 'state.json');
+    fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
+    // A junction on Windows, a symlink elsewhere: written outside the checkout, it leads into it.
+    const link = path.join(holder, 'way-in');
+    fs.symlinkSync(path.join(root, 'docs'), link, 'junction');
+    assert.equal(statePathFrom({ WALK_STATE_PATH: path.join(holder, 'walk.json') }, { root, standard }), path.join(holder, 'walk.json'));
+    assert.throws(() => statePathFrom({ WALK_STATE_PATH: path.join(link, 'walk.json') }, { root, standard }), /WALK_STATE_PATH is inside this checkout/);
+  } finally {
+    fs.rmSync(holder, { recursive: true, force: true });
+  }
+  for (const file of ['web/e2e/login-state.mjs', 'web/e2e/accept.env.ts']) {
+    assert.match(readText(file), /import \{ isInside \} from '\.\/inside\.mjs';/, `${file} uses the shared reading`);
+    assert.doesNotMatch(readText(file), /function isInside/, `${file} keeps no reading of its own`);
+  }
+});
+
+test('README.md says what the saved session file holds, where it lives and when it is deleted', () => {
+  const readme = readText('acceptance/README.md').replace(/\s+/g, ' ');
+  for (const said of ['`ACCEPT_STATE`', 'answers included', 'private folder', 'deleted when the stage ends']) assert.ok(readme.includes(said), said);
 });
