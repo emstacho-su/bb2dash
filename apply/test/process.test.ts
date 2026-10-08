@@ -397,7 +397,7 @@ const NO_FACTS: RunFacts = { archivedIds: [], changedIds: [], unarchivedWrites: 
 const FINISHED: ClaudeOutcome = { exitCode: 0, timedOut: false, costUsd: 0.5, error: null, detail: null };
 
 function queueRow(id: number, over: Record<string, unknown> = {}) {
-  return { id, kind: 'stack_must_confirm', courseId: 'IST.352', entity: 'assignment', ref: `r${id}`, question: `q${id}`, state: 'resolved', accept: null, hasNote: false, wasApplied: false, appliedAt: null, sessionLink: null, ...over };
+  return { id, kind: 'stack_must_confirm', courseId: 'IST.352', entity: 'assignment', ref: `r${id}`, question: `q${id}`, state: 'resolved', accept: null, hasNote: false, wasApplied: false, appliedAt: null, resolvedAt: `2026-10-08T03:12:4${id % 10}.123456+00:00`, sessionLink: null, ...over };
 }
 
 function passDeps(over: { rpc?: Partial<ApplyRpc>; claude?: ClaudeOutcome | (() => Promise<ClaudeOutcome>); maxRunsPerDay?: number } = {}) {
@@ -526,6 +526,76 @@ describe('one pass', () => {
     const p = passDeps({ rpc: { prepare: async () => { throw new Error('boom'); }, close: async () => { throw new Error('database is gone'); } } });
     expect(await runPass(p.deps)).toBe('failed');
     expect(p.lines.some((l) => l.includes('could not be closed (database is gone); the next claim releases it'))).toBe(true);
+  });
+
+  describe('held answers', () => {
+    const resolved = (id: number): string => `2026-10-08T03:12:4${id % 10}.123456+00:00`;
+
+    it('case 4: held answers alone, on a request a sync filed, start no run and close done', async () => {
+      const p = passDeps({
+        rpc: {
+          prepare: async () => ({ queue: [queueRow(4), queueRow(5, { hasNote: true })], runsToday: 0, skip: [], held: [4, 5], trigger: 'sync' }),
+          runFacts: async () => ({ ...NO_FACTS, leftIds: [4, 5] }),
+        },
+      });
+      expect(await runPass(p.deps)).toBe('done');
+      expect(p.calls).toEqual(['claim', 'prepare', 'facts', 'close done']);
+      expect(p.runs).toEqual([]);
+      const result = p.closes[0]!.result;
+      expect(result).toMatchObject({ archived: 0, claude: { started: false }, error: null, skip: [4, 5], trigger: 'sync' });
+      expect((result.lines as string[])[0]).toBe('Nothing new was applied; 2 answers wait.');
+      expect(result.skip_seen).toEqual([{ id: 4, resolved_at: resolved(4) }, { id: 5, resolved_at: resolved(5) }]);
+      expect(p.lines).toContain('pass: request 1860: 2 held answers left out (items 4, 5); a sync does not try them again');
+    });
+
+    it('a follow-up is treated like a sync: the same pass over held answers alone', async () => {
+      const p = passDeps({
+        rpc: {
+          prepare: async () => ({ queue: [queueRow(4)], runsToday: 0, skip: [], held: [4], trigger: 'followup' }),
+          runFacts: async () => ({ ...NO_FACTS, leftIds: [4] }),
+        },
+      });
+      expect(await runPass(p.deps)).toBe('done');
+      expect(p.runs).toEqual([]);
+    });
+
+    it('case 5: an empty held (a press of Apply answers) sends the same answers to Claude', async () => {
+      const p = passDeps({
+        rpc: {
+          prepare: async () => ({ queue: [queueRow(4), queueRow(5, { hasNote: true })], runsToday: 0, skip: [], held: [], trigger: null }),
+          runFacts: async () => ({ ...NO_FACTS, archivedIds: [4, 5], changedIds: [4, 5] }),
+        },
+      });
+      expect(await runPass(p.deps)).toBe('done');
+      expect(p.calls).toEqual(['claim', 'prepare', 'claude', 'facts', 'close done']);
+      expect(p.runs).toEqual([{ requestId: 1860, itemIds: [4, 5] }]);
+      expect(p.closes[0]!.result).toMatchObject({ skip: [], skip_seen: [] });
+      expect(p.lines.some((l) => l.includes('held answer'))).toBe(false);
+    });
+
+    it('case 3 (whole pass): a held row Claude was not given and one it failed on both come back in skip_seen with the times prepare gave', async () => {
+      const p = passDeps({
+        rpc: {
+          prepare: async () => ({ queue: [queueRow(2), queueRow(3), queueRow(4)], runsToday: 0, skip: [], held: [4], trigger: 'sync' }),
+          runFacts: async () => ({ ...NO_FACTS, archivedIds: [2], changedIds: [2], leftIds: [3, 4] }),
+        },
+      });
+      expect(await runPass(p.deps)).toBe('failed');
+      expect(p.runs).toEqual([{ requestId: 1860, itemIds: [2, 3] }]);
+      expect(p.closes[0]!.result).toMatchObject({ error: 'not_applied', skip: [3, 4], skip_seen: [{ id: 3, resolved_at: resolved(3) }, { id: 4, resolved_at: resolved(4) }] });
+    });
+
+    it('case 2 (whole pass): a held row the worker can record itself is archived, and is not skipped', async () => {
+      const p = passDeps({
+        rpc: {
+          prepare: async () => ({ queue: [queueRow(1, { state: 'dismissed' })], runsToday: 0, skip: [], held: [1], trigger: 'sync' }),
+          runFacts: async () => ({ ...NO_FACTS, archivedIds: [1] }),
+        },
+      });
+      expect(await runPass(p.deps)).toBe('done');
+      expect(p.calls).toEqual(['claim', 'archive 1', 'facts', 'close done']);
+      expect(p.closes[0]!.result).toMatchObject({ lines: ['1 recorded only'], skip: [], skip_seen: [] });
+    });
   });
 
   it('logs the follow-up the close filed', async () => {
