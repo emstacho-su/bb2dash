@@ -674,7 +674,8 @@ test('the script reads neither env file: it only asks whether each is there', ()
   const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'walk-box.mjs'), 'utf8');
   // The one file it reads is web/package.json, for the Playwright version.
   const reads = source.match(/readFileSync\([^)]*\)/g) ?? [];
-  assert.deepEqual(reads, ["readFileSync(path.join(root, 'web', 'package.json'), 'utf8')"]);
+  assert.deepEqual(reads, ["readFileSync(webPackageFile, 'utf8')"]);
+  assert.match(source, /const webPackageFile = path\.join\(root, 'web', 'package\.json'\);/);
 });
 
 /* ---------------------------------------------------------------------------------------------
