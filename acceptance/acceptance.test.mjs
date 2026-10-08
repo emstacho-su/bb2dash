@@ -101,6 +101,34 @@ test('the validator refuses a schema keyword it does not check', () => {
   assert.throws(() => validate({ $ref: '#/$defs/missing' }, 'x'), /no such definition/);
 });
 
+test('the validator refuses $ref beside another keyword: what stood beside it was skipped without a word', () => {
+  const $defs = { short: { type: 'string', maxLength: 3 } };
+  const idIs = (schema) => ({ type: 'object', properties: { id: schema }, $defs });
+  // This property promised a short text AND lower-case letters; only the first was ever checked.
+  assert.throws(() => validate(idIs({ $ref: '#/$defs/short', pattern: '^[a-z]+$' }), { id: 'A1' }), /"\$ref" stands alone, and here it is beside "pattern" \(at \$\.id\)/);
+  assert.throws(() => validate(idIs({ type: 'integer', $ref: '#/$defs/short' }), { id: 'abc' }), /"\$ref" stands alone, and here it is beside "type" \(at \$\.id\)/);
+  // A description beside it is refused too: the rule is one sentence, with no list of exceptions to keep.
+  assert.throws(() => validate(idIs({ $ref: '#/$defs/short', description: 'a short id' }), { id: 'abc' }), /"\$ref" stands alone, and here it is beside "description"/);
+  // It is thrown when the schema is used, as an unknown keyword is: a value that never reaches the place does not trip it.
+  assert.deepEqual(validate(idIs({ $ref: '#/$defs/short', pattern: '^[a-z]+$' }), {}), []);
+  // Alone, it is followed.
+  assert.deepEqual(validate(idIs({ $ref: '#/$defs/short' }), { id: 'abcd' }), ['$.id: longer than 3 character(s)']);
+});
+
+test("the validator reads a value's own keys and a schema's own keywords, not what every object inherits", () => {
+  const schema = { type: 'object', required: ['constructor', 'toString', 'id'], properties: { id: { type: 'string' } } };
+  // Every object answers to "constructor" and "toString": a value that holds neither key is missing both.
+  assert.deepEqual(validate(schema, { id: 'walk' }), ['$.constructor: missing', '$.toString: missing']);
+  assert.deepEqual(validate(schema, { id: 'walk', constructor: 1, toString: 2 }), []);
+  // A schema for a key of that name is not applied to what the value merely inherits.
+  assert.deepEqual(validate({ type: 'object', properties: { constructor: { type: 'string' } } }, {}), []);
+  assert.deepEqual(validate({ type: 'object', properties: { constructor: { type: 'string' } } }, { constructor: 7 }), ['$.constructor: expected string, got integer']);
+  // And a keyword of that name is still a keyword this file does not check.
+  assert.throws(() => validate({ type: 'string', constructor: 1 }, 'x'), /does not check the keyword "constructor"/);
+  assert.throws(() => validate({ type: 'string', hasOwnProperty: true }, 'x'), /does not check the keyword "hasOwnProperty"/);
+  assert.throws(() => validate({ $ref: '#/$defs/toString', $defs: {} }, 'x'), /stands alone|no such definition/);
+});
+
 /* ---------------------------------------------------------------------------------------------
  * The two schemas
  * ------------------------------------------------------------------------------------------ */
