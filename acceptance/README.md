@@ -159,9 +159,9 @@ test. The file holds more than the sign-in: the browser saves the page's stored 
 the page stores what it last showed, answers included. So it is treated like the answers
 themselves. It lives only in the laptop's private folder for that one stage, outside every
 repository; the stage's container is handed that one file as `/accept/state.json`; and it is
-deleted when the stage ends, after the laptop has signed that one session out. A test refuses to start
-when `ACCEPT_STATE` or `ACCEPT_OUT` is inside the checkout, also by way of a link that leads into
-it, and the sign-in script refuses the same for the file it saves to (`WALK_STATE_PATH`).
+deleted when the stage ends, after the laptop has signed that one session out. A test refuses to
+start when `ACCEPT_STATE` or `ACCEPT_OUT` is inside the checkout, also by way of a link that leads
+into it, and the sign-in script refuses the same for the file it saves to (`WALK_STATE_PATH`).
 
 **What crosses from one stage to the next** is the carry-over, which the host keeps. After a
 sandbox stage it takes the ids and the times out of each step's facts file and files them under the
@@ -170,6 +170,11 @@ step's id: a field crosses only when its name says what it is (`request_id`, `ar
 host proof with `"save": "planner_before"` leaves its detail under that name, read back as
 `carry:planner_before.fingerprint`. The host adds one value of its own, `carry:run.started_at`:
 the time the run started, on the laptop's clock.
+
+The next sandbox stage gets the ids and times, and nothing else, as `carry.json` in the folder the
+host hands in (`ACCEPT_IN`): for example `{"3": {"request_id": 412, "conversation_id": "…"}}`. A
+test reads an earlier step of its own stage from that step's facts file, and an earlier stage's
+from `carry.json`. Phase 21's tests need `3.conversation_id` and `14a.request_id` there.
 
 An id from a step tells a proof which row to read. It is never enough to pass: the proof reads the
 row itself and decides. A time from a step is not given to a proof at all. Step 14a's facts still
@@ -194,11 +199,6 @@ hand over the id of an old request that looks right. So Phase 21's proofs also c
   not the newest also shows. `planner-unchanged` is `blocked` when a sync or an Inbox apply was
   queued, taken or finished since the fingerprint was read, and also when one is running now.
 
-The next sandbox stage gets the ids and times, and nothing else, as `carry.json` in the folder the
-host hands in (`ACCEPT_IN`): for example `{"3": {"request_id": 412, "conversation_id": "…"}}`. A
-test reads an earlier step of its own stage from that step's facts file, and an earlier stage's
-from `carry.json`. Phase 21's tests need `3.conversation_id` and `14a.request_id` there.
-
 **Each proof is read once.** An `auto` step's proofs are read by the host straight after the
 step's sandbox stage, and only when the operator's verdict, the browser test and the evidence files
 all stand. No host stage lists them. A `host` step's proofs are `db.proof` actions of the step's
@@ -220,6 +220,12 @@ could give no verdict. It always prints that one line, by whatever path it was s
 the folder too), and it never ends with exit 0 without a verdict. When it cannot read the pack it
 says why on stderr in git's own words: a commit that was never fetched and a pack that is not there
 are different things to put right.
+
+Its tests are three files in `scripts/`: `accept-proofs.test.mjs` (the rules, with a stand-in for
+the database), `accept-proofs-cli.test.mjs` (the script as a process) and
+`accept-proofs-db.test.mjs`, which runs each of a pack's statements on rows made for the case, in
+a Postgres that lives inside the test (PGlite). That last one needs `npm ci` in `scripts/` first.
+None of them reaches the real database.
 
 The database is the first lock, the check of the statement's text the second. Every statement is
 sent in the way that lets the database take one statement at a time (the extended protocol), so a
