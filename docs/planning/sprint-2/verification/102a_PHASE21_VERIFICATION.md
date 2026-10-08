@@ -2481,7 +2481,7 @@ test and read its screenshots; "host proof" is a fact the laptop read itself, re
 
 | step | done by | result | what it rests on |
 |---|---|---|---|
-| 1 Usage credits off, `/usage` | Stack | not checked by the run | his to read; still owed |
+| 1 Usage credits off, `/usage` | Stack | not checked by the run; answered by him later the same day | his word: "usage credits are off." No `/usage` percentages were given |
 | 2 open the Workspace | sandbox | pass | the sandbox's record alone (no host proof) |
 | 2, the desktop window | nobody | waived | stands on `walks/walk-21/08-desktop.png` (the PM's walk, 2026-10-07) |
 | 3 syllabus lookup | sandbox | pass | host proof `turn`: Haiku, `search_materials` |
@@ -2535,3 +2535,24 @@ this repository is public.
 **Still open after acceptance.** Step 1 (Stack's). The test project's removal, the phase's
 worktrees and branches in both repos, and task 9's raw recordings. `npm ci` in the harness
 checkout's `mcp-server`, and which session takes the three prod-data SQL units, as before.
+
+**Later on 2026-10-08: what closed.** The two paragraphs above are the state right after the run.
+Since then:
+
+* The record PR merged on Stack's word ("merge 83"): bb2dash #83, `a58be34`.
+* **Step 1.** Stack: "usage credits are off." He gave no `/usage` percentages, so none is written
+  here, and nothing waits on them. With that, each of the fifteen steps is walked and proved,
+  waived, or answered by him.
+* **The test project is removed**, on his word ("clean up the last remaining old test
+  container."): `docker rm bb2dash-wt21-workspace-1`, `docker network rm
+  bb2dash-wt21_workspace-net`, `docker volume rm bb2dash-wt21_workspace-claude-home`, about 15:20
+  UTC. Nothing named `bb2dash-wt21` is left in Docker. The sync container read the same id and
+  start time before and after, and the Workspace, apply, sync and harness containers stayed up
+  and healthy.
+* **Worktrees and branches.** Every Phase 21 and acceptance-run worktree and branch is removed in
+  both repos, local and remote. On his word ("run it.") the same sweep took the other stale
+  worktrees on the laptop: fourteen in bb2dash, bb2dash-stack and agentic-harness, each clean,
+  pushed and merged, and four empty leftover folders. Kept: `bb2dash-build` (the desktop's logon
+  build) and `bb2dash-wt-vm-test` (not merged).
+* **Left:** task 9's raw recordings, deleted only on his word; `npm ci` in the harness checkout's
+  `mcp-server`; which session takes the three prod-data SQL units.
