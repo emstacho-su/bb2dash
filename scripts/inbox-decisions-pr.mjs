@@ -12,8 +12,11 @@
 // changed commits it, pushes, and opens the PR if none is open. A push that failed last time is
 // picked up by the next run: whatever is uncommitted or unpushed in the worktree goes with it.
 //
-// The scheduled task and /inbox-apply's session mode both call this, so there is one way a
-// decision becomes a note and a log entry. SECRETS_DIR and HARNESS_DIR are the exporter's.
+// This is the manual step (bb2dash-stack's `just file-decisions`) and /inbox-apply's session mode.
+// No scheduled task calls it: the schedule (`exports-run.mjs`) runs the exporter with
+// `--notes-only`, which files the private vault notes and writes no day file; the next run of this
+// script then writes the day-file entries for those rows (the exporter's unlogged pass) and opens
+// the pull request. SECRETS_DIR and HARNESS_DIR are the exporter's.
 //
 // Exit codes are the exporter's (0, 1, 2); a git or gh failure is 1.
 
@@ -58,6 +61,8 @@ export function parseArgs(argv, repoRoot = REPO_ROOT) {
       i += 1;
     } else if (argv[i] === '--log-dir') {
       throw new StepError('--log-dir is set by this script: the day files go to the log worktree');
+    } else if (argv[i] === '--notes-only') {
+      throw new StepError('--notes-only is the schedule mode: this step writes the day files');
     } else rest.push(argv[i]);
   }
   return { worktree, exporterArgs: rest };

@@ -243,9 +243,10 @@ test('files each decision: the note, the day file, one ingest, then the mark', a
     '--only', 'projects/bb2dash/decisions/inbox-3104.md',
     '--only', 'projects/bb2dash/decisions/inbox-3110.md',
   ]);
-  assert.deepEqual(d.rpc.calls[0], ['unfiled', DEFAULT_LIMIT]);
-  assert.deepEqual(d.rpc.calls[1], ['filed', 3101, { note_path: 'projects/bb2dash/decisions/inbox-3101.md', log_path: 'docs/inbox-decisions/2026-10-07.md', ingested: true }]);
-  assert.deepEqual(d.rpc.calls[3][2].log_path, 'docs/inbox-decisions/2026-10-08.md');
+  const marks = d.rpc.calls.filter((c) => c[0] === 'filed');
+  assert.deepEqual(d.rpc.calls.slice(0, 2), [['unfiled', DEFAULT_LIMIT], ['unlogged', DEFAULT_LIMIT]]);
+  assert.deepEqual(marks[0], ['filed', 3101, { note_path: 'projects/bb2dash/decisions/inbox-3101.md', log_path: 'docs/inbox-decisions/2026-10-07.md', ingested: true }]);
+  assert.deepEqual(marks[2][2].log_path, 'docs/inbox-decisions/2026-10-08.md');
   assert.ok(lines.includes('filed item 3101: projects/bb2dash/decisions/inbox-3101.md, docs/inbox-decisions/2026-10-07.md'));
   // No temporary file is left beside a note or a day file.
   assert.deepEqual(fs.readdirSync(dirs.logDir).sort(), ['2026-10-07.md', '2026-10-08.md']);
@@ -271,13 +272,13 @@ test('--dry-run names what it would file and writes nothing', async (t) => {
 test('a failed ingest still files the rows, marked ingested false; --no-ingest runs none', async (t) => {
   const failing = deps(t, [row(3101)], { ingestStatus: 1 });
   assert.deepEqual((await exportDecisions(failing.deps)).filed, [3101]);
-  assert.equal(failing.deps.rpc.calls[1][2].ingested, false);
+  assert.equal(failing.deps.rpc.calls.find((c) => c[0] === 'filed')[2].ingested, false);
   assert.ok(failing.lines.some((l) => l.startsWith('ingest: failed (exit 1)')));
 
   const off = deps(t, [row(3102)], { options: { ingest: false } });
   assert.deepEqual((await exportDecisions(off.deps)).filed, [3102]);
   assert.equal(off.runs.length, 0);
-  assert.equal(off.deps.rpc.calls[1][2].ingested, false);
+  assert.equal(off.deps.rpc.calls.find((c) => c[0] === 'filed')[2].ingested, false);
 
   const noProject = deps(t, [row(3103)], { ingestProject: '' });
   noProject.deps.ingestProject = '';
