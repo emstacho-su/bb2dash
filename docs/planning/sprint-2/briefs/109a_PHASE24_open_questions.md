@@ -290,6 +290,16 @@ a question put to him before the freeze, and the freeze waits for his answer.
     * **Before it goes to him** the PM reads on the live database which plan the plain search
       gets today with nothing forced, and writes it here: the index, or a scan of all 2,011
       rows. Either is a fair plan at this size, and he should see which it is.
+    * **Read on the live database, 2026-10-08** (the planning session; read-only, `explain
+      (analyze)` with a stored vector standing in for the question and no course filter). The
+      plain search, the statement of `match_file_text` with nothing forced, gets the index:
+      `Index Scan using bb_text_embeddings_hnsw`, 1.0 ms once the index was in memory (195 ms on
+      the session's first call). The assistant's search, `hybrid_search_file_text`, called seven
+      times in one statement with seven made-up questions: 16.8 to 167.7 ms, median 30.0 ms.
+      That is half of the 60 ms line in (a).
+    * **Put to him** in the terminal the same evening, with those figures and with the
+      correction of what he had been told. If no line beginning `His answer to item 23` stands
+      below, he had not answered when that session ended: ask him again before the freeze.
     * **His answer** is then written under this item on a line of its own, indented four spaces,
       that begins with the bold words `His answer to item 23` and carries its date. Brief 109's
       task 12 looks for that line, and the freeze waits for it.

@@ -2338,8 +2338,9 @@ Each has its DECISIONS row dated 2026-10-08. The earlier rows are quoted as writ
   migration 198 drops that policy, and the page adds two. "the brief names the one thing in its
   design a later move would change". Now: that join, and five objects that span both sides.
   And "Defaults taken, his to object to (109a, answer 17 and items 23 to 25)". Now: item 23 is a
-  question put to him before the freeze. **This one has no DECISIONS row yet.** The review round
-  edited the two briefs and 109a and left `project-state/` to the PM, who writes the row.
+  question put to him before the freeze. The review round edited the two briefs and 109a and left
+  `project-state/` to the PM, who wrote the row the same evening ("answer 17's row, four sentences
+  corrected"); the same row records the plan of the plain search as read on prod.
 * **2026-09-09:** "one PR per phase". Amended for this phase: two PRs, 24a and 24b (answer 11).
 * **Root `CLAUDE.md`**, rewritten in 24a's PR: "A container runner answers each question with one
   `claude -p` turn"; "four read tools over the materials and the two bb2dash notes collections pass a
@@ -2618,3 +2619,11 @@ Slack is 199 alone, and brief 111 says so. Proof 7b and the fourth grep are in t
 and the owner sets stay disjoint. Not edited: `project-state/DECISIONS.md`. Four sentences of
 answer 17's row there no longer match this brief (Decisions this brief amends, the entry on
 answer 17's own row), and the amending row is the PM's.
+
+## Session prompt
+
+Written by the planning session of 2026-10-08, in Stack's voice, for a fresh session started in the
+shared checkout. It is his to edit before he pastes it. `project-state/ORCHESTRATOR.md` on `main` has
+no prompt for this phase; the PM adds one in this phase's PR.
+
+> `/bb2dash-pm` Start Phase 24a, the Workspace assistant behind the page. `main`'s STATUS and ORCHESTRATOR do not know this phase: the brief on its branch is the truth, and it is newer than the memories. Read `C:/Users/stack/projects/bb2dash-wt-24/docs/planning/sprint-2/briefs/109_PHASE24_workspace_assistant.md` in full and `109a_PHASE24_open_questions.md` beside it (branch `feat/workspace-24`; not on `main`), then memory `phase24-state`. Of the skill's long reading list, take 91, 93, 94, 105 and 106 by their headings only: none covers this work. My seventeen answers are on record there, the pgvector store scoped to bb2dash among them; the list "still open, with the default taken" stands unless I say otherwise, except item 23, which is a question to me: if my answer is not written under it, put it to me before the freeze with the timings recorded there. Follow the brief's own order: first the probes it puts before the freeze (P-1 to P-6 and P-10) on today's image, spending whatever turns they need on my Claude plan (I am not limiting plan usage right now); then freeze, cut the worker worktrees and spawn W-76 to W-79 and W-85 (Opus) as its start order says, with the companion PR in bb2dash-stack and the test-only port PR it describes. Where a worker needs the SQL runner, copy `.env.local` into its worktree from the shared checkout without opening it and run `npm --prefix scripts ci`. Migrations 190 to 198 (199 is slack): apply to prod only as the brief's own apply rows say, dry run first, and stop for my word wherever a row asks for it. Touch no file under `web/src/app/(app)/workspace/` or `web/src/components/workspace/`, no CSS module and neither layout check: the Phase 22 session is sweeping them. Only one runner may answer the Workspace queue: plan any test-runner window with me first. The Phase 23 follow-ups run beside you, merge first and also rebuild `apply`: follow the seam, and a test build must never take a live tag (`bb2dash-apply:local`, `bb2dash-workspace:local`). Never rebuild or restart a live container while a sync is open, and never through a whole-project `up`. Whatever the brief marks as mine (the new login's password and its secret file) comes to me as one command. Memory summaries stay off until 24b. Run `/code-review` and `/security-review`, write the acceptance pack, merge `origin/main` into the branch before opening the PRs, open them and stop at "ready when you say so".
