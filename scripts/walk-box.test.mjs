@@ -304,6 +304,9 @@ test('--exec: more specs in a kept container, with a folder of their own under t
   );
   assert.equal(plan.runId, LATER_RUN_ID);
   assert.equal(plan.outDir, path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`));
+  // Asked first, and by itself: docker exec ends with 1 for a container that is gone, which is
+  // also Playwright's code for a failed test.
+  assert.deepEqual(plan.precheck, ['exec', CONTAINER, 'true']);
   assert.deepEqual(plan.calls, [
     [
       'exec', '-e', `WALK_OUT=/out/exec-${LATER_RUN_ID}`, '-e', 'WALK_SHOTS=1', CONTAINER,
@@ -341,6 +344,7 @@ test('no call names compose, a network, a port, another volume or another contai
     ...planRun(run(['web/e2e/harness.spec.ts']), f).calls,
     ...planRun(run(['web/e2e/harness.spec.ts'], { keep: true }), f).calls,
     ...planRun(run(['web/e2e/harness.spec.ts'], { url: 'https://x.example' }), f).calls,
+    planExec(exec, f).precheck,
     ...planExec(exec, f).calls,
     ...planRm({ command: 'rm', container: CONTAINER }).calls,
   ];
@@ -586,26 +590,53 @@ test('main --keep: two docker calls, the container is named with the two command
   assert.match(said, new RegExp(`--rm ${CONTAINER}`));
 });
 
-test('main --keep: a container that did not start is not walked', async () => {
+test('main --keep: a container that did not start is not walked, and is not said to be left running', async () => {
   const f = fixture();
   const { deps, seen } = harness(f, { exits: [125] });
   assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], deps), 125);
   assert.equal(seen.docker.length, 1);
+  assert.doesNotMatch(seen.logged.join('\n'), /left running|--exec|--rm/);
 });
 
-test('main --exec: its own folder and run.json under the box\'s folder', async () => {
+test('main --keep: a walk that failed in a box that started still names the box', async () => {
+  const f = fixture();
+  const { deps, seen } = harness(f, { exits: [0, 73] });
+  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], deps), 73);
+  assert.match(seen.logged.join('\n'), new RegExp(`--rm ${CONTAINER}`));
+});
+
+test('main --exec: the box is asked first, then the walk has its own folder and run.json under the box\'s', async () => {
   const f = fixture();
   const first = harness(f, { times: [NOW] });
   assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], first.deps), 0);
-  const second = harness(f, { times: [LATER], exits: [1] });
+  const second = harness(f, { times: [LATER], exits: [0, 1] });
   assert.equal(await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], second.deps), 1);
   const outDir = path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`);
-  assert.equal(second.seen.docker[0].options.logFile, path.join(outDir, 'stdout.log'));
+  assert.deepEqual(second.seen.docker.map((call) => call.argv.slice(0, 3)), [
+    ['exec', CONTAINER, 'true'],
+    ['exec', '-e', `WALK_OUT=/out/exec-${LATER_RUN_ID}`],
+  ]);
+  assert.equal(second.seen.docker[0].options.logFile, null);
+  assert.equal(second.seen.docker[1].options.logFile, path.join(outDir, 'stdout.log'));
   const record = JSON.parse(fs.readFileSync(path.join(outDir, 'run.json'), 'utf8'));
   assert.equal(record.command, 'exec');
   assert.equal(record.run_id, LATER_RUN_ID);
   assert.equal(record.box_run_id, RUN_ID);
   assert.equal(record.exit_code, 1);
+  assert.equal(record.result, 'tests failed');
+});
+
+test('main --exec: a box that is not running is said so, with a code of its own, and nothing is walked', async () => {
+  const f = fixture();
+  const first = harness(f, { times: [NOW] });
+  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], first.deps), 0);
+  // docker exec's own answer for a container that is gone: 1, Playwright's code for a failed test.
+  const second = harness(f, { times: [LATER], exits: [1] });
+  assert.equal(await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], second.deps), EXIT.noBox);
+  assert.notEqual(EXIT.noBox, 1);
+  assert.equal(second.seen.docker.length, 1);
+  assert.match(second.seen.errors.join('\n'), /not running/);
+  assert.equal(fs.existsSync(path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`)), false);
 });
 
 test('main --rm: one docker rm -f, no folder, docker\'s exit code', async () => {
@@ -663,6 +694,7 @@ test('no env value appears in a docker call, in what is logged, or in run.json',
       ...seen.logged,
       ...seen.errors,
       ...exec.seen.logged,
+      ...exec.seen.errors,
       fs.readFileSync(path.join(outDir, 'run.json'), 'utf8'),
       fs.readFileSync(path.join(outDir, `exec-${LATER_RUN_ID}`, 'run.json'), 'utf8'),
     ].join('\n');
@@ -698,4 +730,13 @@ test('entry.sh copies web/ without what a build must not inherit, and never copi
   const code = text.replace(/^\s*#.*$/gm, '');
   assert.doesNotMatch(code, /\b(cp|cat|mv|tar)\b[^\n]*\.env\.testing/);
   assert.doesNotMatch(code, /\b(env|printenv|set -x)\b\s*$/m);
+});
+
+test('entry.sh gives npm ci and the build a time limit: a box nobody is watching still ends', () => {
+  const text = fs.readFileSync(path.join(REPO_ROOT, 'docker', 'walk', 'entry.sh'), 'utf8');
+  const code = text.replace(/^\s*#.*$/gm, '');
+  assert.match(code, /^readonly INSTALL_LIMIT_S=[0-9]+$/m);
+  assert.match(code, /^readonly BUILD_LIMIT_S=[0-9]+$/m);
+  assert.match(code, /timeout [^\n]*"\$INSTALL_LIMIT_S" npm ci\b/);
+  assert.match(code, /timeout [^\n]*"\$BUILD_LIMIT_S" npm run build\b/);
 });
