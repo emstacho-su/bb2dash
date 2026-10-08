@@ -340,7 +340,7 @@ export function GradebookTable({
   }
 
   return (
-    <div className={styles.wrap}>
+    <div className={styles.wrap} data-scroll-box="gradebook">
       {items.length > 0 ? (
         <Table rows={items} caption={caption} extras={extras} />
       ) : (
