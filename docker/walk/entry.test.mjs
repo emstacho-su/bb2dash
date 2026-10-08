@@ -19,7 +19,7 @@
 //
 //   node --test scripts/walk-box.test.mjs
 
-import { after, test } from 'node:test';
+import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -154,8 +154,14 @@ function whyNoRun() {
 }
 
 const NO_RUN = whyNoRun();
-/** A test that runs the script; skipped, with the reason said, where it cannot run. */
-const runTest = (name, fn) => test(name, { skip: NO_RUN ?? false }, fn);
+/**
+ * The tests that run the script. They are kept in this list and started together at the end of
+ * the file, a few at a time: a run is slow on Windows, where every process costs, and each has a
+ * scratch box of its own. Where the script cannot run they are skipped, with the reason said.
+ */
+const RUNS = [];
+const RUNS_AT_ONCE = 4;
+const runTest = (name, fn) => RUNS.push([name, fn]);
 
 /* ---------------------------------------------------------------------------------------------
  * A scratch box: the worktree, the login file, the stand-ins, the redirected script
@@ -529,4 +535,8 @@ runTest('no value handed in is printed: not the login, not a setting, not the sh
     assertNoSecret(out, what);
     assertNoSecret(fs.readFileSync(path.join(box.dir, 'out', 'next.log'), { encoding: 'utf8', flag: 'a+' }), `${what}, next.log`);
   });
+});
+
+describe('docker/walk/entry.sh, run under a real bash', { concurrency: RUNS_AT_ONCE, skip: NO_RUN ?? false }, () => {
+  for (const [name, fn] of RUNS) test(name, fn);
 });
