@@ -33,7 +33,7 @@ import { pathToFileURL } from 'node:url';
 import { firstLine, loadDsn, openClient, redact } from './db-test.mjs';
 import { decide } from './lib/accept-proofs-detail.mjs';
 import { lintProofSql } from './lib/accept-proofs-lint.mjs';
-import { FINGERPRINT, UUID, isTime } from './lib/accept-proofs-shapes.mjs';
+import { FINGERPRINT, HEX32, UUID, isTime } from './lib/accept-proofs-shapes.mjs';
 
 export { decide, lintProofSql };
 
@@ -121,6 +121,7 @@ const TYPES = {
   ],
   text: [`a plain name of at most ${TEXT_MAX} characters`, (raw) => (raw.length <= TEXT_MAX && PLAIN_TEXT.test(raw) ? raw : null)],
   fingerprint: ["a planner fingerprint, as planner-fingerprint's detail gives it", (raw) => (FINGERPRINT.test(raw) ? raw : null)],
+  hex32: ['an md5: 32 lower-case hex characters', (raw) => (HEX32.test(raw) ? raw : null)],
 };
 
 /** Read a declared type: `integer`, `text?`, `enum:low|mid|high`. */

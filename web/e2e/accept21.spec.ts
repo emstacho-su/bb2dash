@@ -102,7 +102,11 @@ const FINISHED_BEFORE_RELOAD = 'inconclusive: the answer finished before the rel
 const FINISHED_WHILE_RECORDED = 'inconclusive: the answer finished while the reloaded page was being recorded';
 /** The stored row follows a closed request within one read; a minute covers a missed broadcast and a poll. */
 const STORED_ROW_TIMEOUT_MS = MINUTE_MS;
-/** How long a question asked into a stopped service is watched: three reads of its rows. */
+/**
+ * How long a question asked into a stopped service is watched: three reads of its rows. The
+ * manifest's `min_wait_s` for step 14b is these 15 seconds: the host's proof asks that the
+ * service took the question no sooner than that after it was asked.
+ */
 const QUEUED_HOLD_MS = 15_000;
 
 const iso = (ms: number): string => new Date(ms).toISOString();
@@ -279,7 +283,8 @@ acceptStep('14a offline', { shots: ['offline', 'queued'] }, async ({ page }, rec
   await page.waitForTimeout(QUEUED_HOLD_MS);
   const lookedAt = utcNow();
   const held = await readTurn(turn);
-  // The time is carried to the host only when the question was seen waiting at it.
+  // Noted only when the question was seen waiting at it. A reading for whoever judges the step: the
+  // host's proof of the wait takes no time from here, and compares two times of the database.
   rec.note({ ...turnFacts(held), ...(held.state === 'queued' ? { still_queued_at: lookedAt } : {}) });
   await rec.shot(page, 'queued');
   expect(held.state, 'the question is still waiting').toBe('queued');

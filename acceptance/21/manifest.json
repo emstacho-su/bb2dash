@@ -71,7 +71,18 @@
       "stage": "walk",
       "test": "3 lookup haiku",
       "evidence": ["3-start.png", "3-end.png", "3.json"],
-      "proofs": [{ "name": "turn", "with": { "request": "carry:3.request_id", "tier": "low", "tool": "search_materials" } }]
+      "proofs": [
+        {
+          "name": "turn",
+          "with": {
+            "request": "carry:3.request_id",
+            "tier": "low",
+            "since": "carry:run.started_at",
+            "question_md5": "fdcf22c80c0f1bbe98dedb149d968bd6",
+            "tool": "search_materials"
+          }
+        }
+      ]
     },
     {
       "id": "4",
@@ -81,7 +92,17 @@
       "test": "4 decision haiku",
       "evidence": ["4-start.png", "4-end.png", "4.json"],
       "proofs": [
-        { "name": "turn", "with": { "request": "carry:4.request_id", "tier": "low", "tool": "search_context", "scope": "bb2dash-inbox-decisions" } }
+        {
+          "name": "turn",
+          "with": {
+            "request": "carry:4.request_id",
+            "tier": "low",
+            "since": "carry:run.started_at",
+            "question_md5": "48ada2c5a1720b0b834f212397ef5753",
+            "tool": "search_context",
+            "scope": "bb2dash-inbox-decisions"
+          }
+        }
       ]
     },
     {
@@ -91,7 +112,18 @@
       "stage": "walk",
       "test": "5 document haiku",
       "evidence": ["5-start.png", "5-end.png", "5.json"],
-      "proofs": [{ "name": "turn", "with": { "request": "carry:5.request_id", "tier": "low", "tool": "get_material_text" } }]
+      "proofs": [
+        {
+          "name": "turn",
+          "with": {
+            "request": "carry:5.request_id",
+            "tier": "low",
+            "since": "carry:run.started_at",
+            "question_md5": "29d2ec32a4d75ea731d789d95dd37bc4",
+            "tool": "get_material_text"
+          }
+        }
+      ]
     },
     {
       "id": "6",
@@ -100,7 +132,17 @@
       "stage": "walk",
       "test": "6 standard sonnet",
       "evidence": ["6-start.png", "6-end.png", "6.json"],
-      "proofs": [{ "name": "turn", "with": { "request": "carry:6.request_id", "tier": "mid" } }]
+      "proofs": [
+        {
+          "name": "turn",
+          "with": {
+            "request": "carry:6.request_id",
+            "tier": "mid",
+            "since": "carry:run.started_at",
+            "question_md5": "0bf4dfbbee378a2cbdc562eb337a8f49"
+          }
+        }
+      ]
     },
     {
       "id": "7",
@@ -109,7 +151,17 @@
       "stage": "walk",
       "test": "7 deep opus",
       "evidence": ["7-start.png", "7-end.png", "7.json"],
-      "proofs": [{ "name": "turn", "with": { "request": "carry:7.request_id", "tier": "high" } }]
+      "proofs": [
+        {
+          "name": "turn",
+          "with": {
+            "request": "carry:7.request_id",
+            "tier": "high",
+            "since": "carry:run.started_at",
+            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b"
+          }
+        }
+      ]
     },
     {
       "id": "8",
@@ -118,7 +170,16 @@
       "stage": "walk",
       "test": "8 stopped",
       "evidence": ["8-stopped.png", "8.json"],
-      "proofs": [{ "name": "turn-stopped", "with": { "request": "carry:8.request_id" } }]
+      "proofs": [
+        {
+          "name": "turn-stopped",
+          "with": {
+            "request": "carry:8.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b"
+          }
+        }
+      ]
     },
     {
       "id": "9",
@@ -127,7 +188,17 @@
       "stage": "walk",
       "test": "9 reload mid-answer",
       "evidence": ["9-reloaded.png", "9-end.png", "9.json"],
-      "proofs": [{ "name": "turn", "with": { "request": "carry:9.request_id", "tier": "high" } }]
+      "proofs": [
+        {
+          "name": "turn",
+          "with": {
+            "request": "carry:9.request_id",
+            "tier": "high",
+            "since": "carry:run.started_at",
+            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b"
+          }
+        }
+      ]
     },
     {
       "id": "10",
@@ -166,7 +237,12 @@
       "stage": "back",
       "test": "14b back",
       "evidence": ["14b-start.png", "14b-end.png", "14b.json"],
-      "proofs": [{ "name": "turn-answered-after", "with": { "request": "carry:14a.request_id", "after": "carry:14a.still_queued_at" } }]
+      "proofs": [
+        {
+          "name": "turn-answered-after",
+          "with": { "request": "carry:14a.request_id", "since": "carry:run.started_at", "min_wait_s": 15 }
+        }
+      ]
     },
     {
       "id": "15",
@@ -177,7 +253,7 @@
       "evidence": ["15-before.png", "15-after.png", "15-archived.png", "15.json"],
       "proofs": [
         { "name": "spike-archived" },
-        { "name": "conversations-archived", "with": { "ids": "carry:3.conversation_id" } }
+        { "name": "conversations-archived", "with": { "ids": "carry:3.conversation_id", "since": "carry:run.started_at" } }
       ]
     }
   ]

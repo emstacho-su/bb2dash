@@ -15,8 +15,16 @@ export const isTime = (raw) => ISO_TIME.test(raw) && !Number.isNaN(Date.parse(ra
 /** The time form the fingerprint is written in: UTC, to the microsecond. */
 const STAMP = String.raw`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z`;
 
-/** The planner fingerprint, as the proof `planner-fingerprint` returns it and `planner-unchanged` takes it. */
-export const FINGERPRINT = new RegExp(`^ap=(none|${STAMP}),rp=(none|${STAMP}),n=\\d{1,9},at=${STAMP}$`);
+/**
+ * The planner fingerprint, as the proof `planner-fingerprint` returns it and `planner-unchanged`
+ * takes it: the newest change of assignment_progress (ap) and of reading_progress (rp), the count
+ * of assignments (n), the row counts of the two progress tables (apn, rpn), and when it was read.
+ * The counts are what tells that a row which was not the newest was deleted.
+ */
+export const FINGERPRINT = new RegExp(`^ap=(none|${STAMP}),rp=(none|${STAMP}),n=\\d{1,9},apn=\\d{1,9},rpn=\\d{1,9},at=${STAMP}$`);
+
+/** An md5 as Postgres writes one: exactly 32 lower-case hex characters. */
+export const HEX32 = /^[0-9a-f]{32}$/;
 
 /**
  * Names that hold what someone typed or what a model answered: columns, and keys of a json value.

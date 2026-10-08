@@ -83,7 +83,9 @@ and `web/e2e/accept.lib.ts` (how a test records what it saw).
    files its test leaves as evidence, and the proofs that must also pass. The host reads those
    proofs itself after the step's stage, so they are not listed a second time as host actions.
 4. **`acceptance/<NN>/proofs.json`.** One entry per fact the laptop must read for itself: its typed
-   parameters, one `select`, and a sentence saying what the row must show.
+   parameters, one `select`, and a sentence saying what the row must show. A proof that reads a
+   row the sandbox pointed at (by an id) also checks that the row is this run's
+   (`since`, given `carry:run.started_at`) and is what the step did (for a question, its md5).
 5. **`acceptance/<NN>/playbook.md`.** One `## Stage: <id>` section per sandbox stage. For each step:
    what it does, and what must be true in the pictures and in the facts file for a pass. Say what is
    *not* the product's fault too, so the operator can tell `blocked` from `fail`. The operator gets
@@ -114,6 +116,11 @@ installed and reaches nothing.
 - A carried value (`carry:<step>.<field>`) comes from a step that has already run, or from a proof
   saved earlier. A host action reads what the stages before its own left; an `auto` step's proofs
   may also carry from a step of the step's own stage.
+- `carry:run.started_at` is the host's own: the time the run started, on the laptop's clock. It is
+  there in every run. Nothing else is offered under `run`, and no proof is saved under that name.
+- A proof never takes a time from a step. A step's facts are written inside the sandbox, so a time
+  among them is the sandbox's word; a proof compares with `carry:run.started_at` or with the
+  database's own times.
 - Every statement in `proofs.json` is one read: it starts with `select` or `with`, reads schema
   `public` only, and uses exactly its own parameters. It holds no double-quoted name, no comment,
   no backslash and no `$` but a parameter, so the check reads the same text the database does.
@@ -147,7 +154,31 @@ sandbox stage it takes the ids and the times out of each step's facts file and f
 step's id: a field crosses only when its name says what it is (`request_id`, `archived_ids`,
 `still_queued_at`) and its value is one. A manifest value `carry:3.request_id` reads one back. A
 host proof with `"save": "planner_before"` leaves its detail under that name, read back as
-`carry:planner_before.fingerprint`.
+`carry:planner_before.fingerprint`. The host adds one value of its own, `carry:run.started_at`:
+the time the run started, on the laptop's clock.
+
+An id from a step tells a proof which row to read. It is never enough to pass: the proof reads the
+row itself and decides. A time from a step is not given to a proof at all. Step 14a's facts still
+hold `still_queued_at`, for whoever reads them; no proof takes it.
+
+**A proof is tied to this run and to its question.** A green run counts as the acceptance, so
+nothing the sandbox says or writes may be enough, by itself, to make a step green. A sandbox could
+hand over the id of an old request that looks right. So Phase 21's proofs also check:
+
+- *It happened in this run.* Each takes `since`, always `carry:run.started_at`, and the row must
+  have been made no earlier than 60 seconds before it. The 60 seconds are for a laptop clock that
+  runs ahead of the database's.
+- *It is the step's question.* `turn` and `turn-stopped` take `question_md5`: the md5 of the
+  question the step's browser test types, written out in the manifest. The statement compares it
+  with the md5 of the stored question and never returns the question. A test computes each md5
+  from the browser-test file, so the manifest cannot drift from what is typed.
+- *The question really waited.* `turn-answered-after` takes `min_wait_s` (15 for step 14b, the
+  seconds step 14a's test watches the question wait) and compares two times of the database: when
+  the question was asked and when the Workspace service took it. No clock of a sandbox is read.
+- *The planner is as it was.* The fingerprint holds the newest change of each progress table, the
+  count of assignments, and the number of rows in each progress table, so a deleted row that was
+  not the newest also shows. `planner-unchanged` is `blocked` when a sync or an Inbox apply was
+  queued, taken or finished since the fingerprint was read, and also when one is running now.
 
 The next sandbox stage gets the ids and times, and nothing else, as `carry.json` in the folder the
 host hands in (`ACCEPT_IN`): for example `{"3": {"request_id": 412, "conversation_id": "…"}}`. A
@@ -187,7 +218,8 @@ fails its proof.
 
 Parameter types: `integer`, `uuid`, `time` (ISO, with its zone), `uuids` (uuids joined by commas),
 `text` (a plain name: letters, digits and single `_`, `.` or `-`), `fingerprint` (what
-`planner-fingerprint` returns), and `enum:a|b|c`. A `?` after a type makes the parameter optional.
+`planner-fingerprint` returns), `hex32` (an md5: 32 lower-case hex characters), and `enum:a|b|c`.
+A `?` after a type makes the parameter optional.
 `$1` in the statement is the first parameter the proof declares, `$2` the second.
 
 **A statement's verdict** is in the one row it returns: `ok` true passes, anything else does not,

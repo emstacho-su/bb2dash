@@ -286,7 +286,8 @@ test("a proof must exist in proofs.json with the same parameter names and a valu
 test("an automated step's proofs are the host's to read after the step's stage: no host stage has to list them", () => {
   // Each proof is read once (the PM's ruling of 2026-10-07): a step that lists a proof no host stage runs is whole.
   const moved = problemsAfter((pack) => {
-    stepOf(pack.manifest, '14b').proofs.push({ name: 'turn', with: { request: 'carry:14a.request_id', tier: 'low' } });
+    const asked = stepOf(pack.manifest, '3').proofs[0].with.question_md5;
+    stepOf(pack.manifest, '14b').proofs.push({ name: 'turn', with: { request: 'carry:14a.request_id', tier: 'low', since: RUN_START, question_md5: asked } });
   });
   assert.deepEqual(moved, []);
 });

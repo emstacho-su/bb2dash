@@ -176,7 +176,9 @@ Pass when all of this is true:
 
 - In `14a.json`: `offline_line` reads `The Workspace service is offline.`, `offline_seen_at` is not
   later than `deadline`, `state` is `queued`, `line` reads `Waiting for the Workspace service`, and
-  `still_queued_at` holds a time.
+  `still_queued_at` holds a time. The test writes `still_queued_at` only when the question was
+  waiting at the end of the 15 seconds, so a `14a.json` without `still_queued_at` means the
+  question did not wait.
 - `14a-offline.png` shows, under the question box, a line that reads
   `The Workspace service is offline.`
 - `14a-queued.png` shows the question this test asked as the last question in the message column,
@@ -213,7 +215,9 @@ page's own buttons.
 
 The test opens the conversation that step 14a asked its question into, finds that question and
 waits for its answer. It asks no question. The answer may be on the page already when the page
-opens.
+opens. How long the question waited is not yours to judge in this step: the host checks in the
+database that the Workspace service took the question 15 seconds or more after the question was
+asked. You judge that the page holds the answer.
 
 Pass when all of this is true:
 

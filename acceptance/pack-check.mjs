@@ -24,6 +24,11 @@ const PHASE_DIR = /^[0-9]{1,2}[a-z]?$/;
 /** `carry:<step or saved name>.<field>`: a value the host read earlier in the run. */
 const CARRY = /^carry:([a-z0-9][a-z0-9_-]*)\.([a-z][a-z0-9_]*)$/;
 const SAVE_NAME = /^[a-z][a-z0-9_]*$/;
+/** A step's id begins with a digit and a saved name with a letter, so a carried value says where it is from. */
+const FROM_A_STEP = /^[0-9]/;
+/** The one name the host keeps for itself, there in every run with no stage behind it, and what it offers under it. */
+const RUN_SOURCE = 'run';
+const RUN_FIELDS = ['started_at'];
 /** How the browser-test file declares a test: its title, then the shots it takes. */
 const DECLARED_TEST = /acceptStep\(\s*'([^']+)',\s*\{\s*shots:\s*\[([^\]]*)\]/g;
 const QUESTION = /export const (QUESTION_(?:LOOKUP|DECISION|DOCUMENT|STANDARD|DEEP))\s*=\s*(['"])((?:(?!\2).)+)\2;/gs;
@@ -211,7 +216,15 @@ function proofUseProblems(label, name, values, proofs) {
       if (!spec.optional) problems.push(`${label}: proof "${name}" is not given "${key}"`);
       continue;
     }
-    if (CARRY.test(String(values[key]))) continue;
+    const carriedFrom = CARRY.exec(String(values[key]))?.[1];
+    if (carriedFrom !== undefined) {
+      // A step's facts are written by a test inside the sandbox, and a test there could note any
+      // time. A time a proof compares with is the host's own (carry:run.started_at) or the database's.
+      if (spec.type === 'time' && FROM_A_STEP.test(carriedFrom)) {
+        problems.push(`${label}: proof "${name}", parameter "${key}": a time is never carried from a step (${values[key]}), because a sandbox wrote it`);
+      }
+      continue;
+    }
     try {
       coerceParam(spec, String(values[key]));
     } catch (error) {
@@ -228,6 +241,7 @@ function proofProblems({ manifest, proofs }) {
     for (const action of stage.actions.filter((entry) => entry.action === 'db.proof')) {
       const run = proofOfAction(action);
       if (run.save !== undefined && !SAVE_NAME.test(String(run.save))) problems.push(`stage ${stage.id}: "${run.save}" is not a name to save under`);
+      if (run.save === RUN_SOURCE) problems.push(`stage ${stage.id}: "${RUN_SOURCE}" is the host's own name, and no proof is saved under it`);
       problems.push(...proofUseProblems(`stage ${stage.id}`, run.name, run.values, proofs));
     }
   }
@@ -263,9 +277,10 @@ function hostStepProblems({ manifest }) {
 }
 
 /**
- * A carried value comes from a step that has already run, or from a proof saved earlier. A host
- * action reads what the stages before its own left. An automated step's proofs are read straight
- * after the step's own stage, so they may carry from a step of that stage too.
+ * A carried value comes from a step that has already run, from a proof saved earlier, or from the
+ * host itself: `carry:run.started_at`, the time the run started on the host's clock, is there in
+ * every run. A host action reads what the stages before its own left. An automated step's proofs
+ * are read straight after the step's own stage, so they may carry from a step of that stage too.
  */
 function carryProblems({ manifest }) {
   const problems = [];
@@ -276,7 +291,10 @@ function carryProblems({ manifest }) {
   const problemOf = (value, index, ownStage) => {
     const reference = CARRY.exec(String(value));
     if (reference === null) return null;
-    const [, source] = reference;
+    const [, source, field] = reference;
+    if (source === RUN_SOURCE) {
+      return RUN_FIELDS.includes(field) ? null : `"${value}": under "${RUN_SOURCE}" the host offers ${RUN_FIELDS.join(', ')} and nothing else`;
+    }
     if (saved.has(source)) return null;
     if (!stageOfStep.has(source)) return `"${value}" names no earlier step and no saved proof`;
     const from = stageOfStep.get(source);
