@@ -5,10 +5,15 @@ the code and wrote this file and one DECISIONS row. It ran no test, no build and
 and made no database write. A challenge round the same day applied twelve findings to it (F1 to F11
 and F13; one line each under "Challenge round" at the end). That round read code and the two Phase 24
 briefs and ran a few `grep -c` counts. It ran no test, no build and no docker command, and made no
-database read.
+database read. A third pass the same day, for the PM, changed this file only: the workers are W-80 to
+W-84 by the PM's ruling, Stack's answers are recorded as confirmed, the Phase 24 seam is re-read at
+7fe7030, and the session prompt is added at the end. It read the two Phase 24 briefs and ran no test,
+no build and no docker command, and made no database read.
 
-**Not frozen.** Stack's seven labels reached the planner and the challenge round only through
-script-written task text. The brief waits for his word that they are his (open item O-6).
+**Ready to freeze. Not frozen yet.** The seven answers under "Stack's answers" are his. The PM asked
+him these questions directly in the terminal on 2026-10-08 and he chose every label himself. Open
+item O-6 is closed on the PM's confirmation. The brief is frozen when its build session starts
+("Session prompt" at the end).
 
 Date 2026-10-08 · PM: the Fable session · Product manager: Stack · Requirements: none in
 `91_REQUIREMENTS_v3.md` (Phase 23 has no brief; its record is STATUS "Phase 23" and the DECISIONS rows
@@ -16,8 +21,9 @@ of 2026-10-07). This brief closes STATUS's open items 3, 3a, 3b and 5 (`project-
 and the cut-over list's items 6 and 7 (`STATUS.md:1433-1436`) ·
 **bb2dash:** branch `fix/phase23-followups`, worktree `bb2dash-wt-23f` (cut from `main` at a58be34) ·
 **bb2dash-stack:** branch `fix/phase23-followups`, worktree `bb2dash-stack-wt-23f` (to be cut from its
-`main` at c4a54f8) · Workers W-84 to W-88 · Test compose project `bb2dash-wt23f` (build and image
-tests only, see Seams) · **Migrations 187 and 188; 189 is held back** · One PR per repository, as
+`main` at c4a54f8) · Workers W-80 to W-84 (the PM's ruling of 2026-10-08, see Workers) · Test
+compose project `bb2dash-wt23f` (build and image tests only, see Seams) · **Migrations 187 and 188;
+189 is held back** · One PR per repository, as
 Phase 23 itself shipped (bb2dash #79, bb2dash-stack #4), merged bb2dash first · Verification record:
 `docs/planning/sprint-2/verification/110a_PHASE23_FOLLOWUPS_VERIFICATION.md` ("110a" below).
 
@@ -31,8 +37,8 @@ stays unused.
 **What a review finding costs.** 187 and 188 are reviewed before either is applied (task 4). Until a
 file is applied it is not frozen, so a finding of that review is an edit to the file and costs no
 number. Once 187 is on prod it is frozen and a finding costs 189. If a later round then needs a second
-number, none is free: 190 to 199 are Phase 24a's (brief 109 on `feat/workspace-24` at 10f48f1, lines
-7-8). The PM stops and asks Stack for a number. No applied file is edited and nothing is taken from
+number, none is free: 190 to 199 are Phase 24a's (brief 109 on `feat/workspace-24` at 7fe7030, lines
+8-9). The PM stops and asks Stack for a number. No applied file is edited and nothing is taken from
 Phase 24's block.
 
 **Facts re-read for this brief, 2026-10-08, read-only.**
@@ -51,13 +57,16 @@ Phase 24's block.
 * `Get-ScheduledTask` on the laptop: three tasks exist, `Bb2dash-LogonBuild` (logon trigger),
   `Bb2dash-App` (no trigger) and `AgenticHarness-CheckpointCollect` (logon trigger). None runs an
   exporter.
-* Phase 24 is two briefs on `feat/workspace-24` at 10f48f1. That commit is dated 2026-10-08 15:42:51
-  -0400, four minutes after this brief's first commit (d558994, 15:39:02), which was written against
-  the draft at 4bf223e. Re-read in the challenge round, with no fetch:
+* Phase 24 is two briefs on `feat/workspace-24`, at 7fe7030 (2026-10-08 17:11:25 -0400) when they
+  were last read for this brief. This brief's first commit (d558994, 15:39:02) was written against
+  the draft at 4bf223e. The challenge round re-read them at 10f48f1 (15:42:51), and the third pass
+  read them again at 7fe7030, from the worktree `bb2dash-wt-24`, with no fetch. Every line of theirs
+  cited in this brief is a line at 7fe7030:
   `docs/planning/sprint-2/briefs/109_PHASE24_workspace_assistant.md` is Phase 24a (workers W-76 to
-  W-80, its line 6; migrations 190 to 199, its lines 7-8), and `111_PHASE24B_workspace_page.md` is
-  Phase 24b (workers W-81 to W-83, no migration, its lines 6-7). Phase 22's brief is frozen on
-  `feat/styling-22` at 3d02033, with worker commits on two more branches.
+  W-79 and W-85, its line 6; migrations 190 to 199, its lines 8-9), and
+  `111_PHASE24B_workspace_page.md` is Phase 24b (workers W-86 to W-88, its line 6; no migration, its
+  line 8). Phase 22's brief is frozen on `feat/styling-22` at 3d02033, with worker commits on two
+  more branches.
 
 ## Why
 
@@ -78,9 +87,10 @@ Stack chose all four, and chose an automated acceptance run for the phase.
 
 ## Stack's answers (2026-10-08)
 
-These reached the planner through the PM session's task text. The planner did not hear them first
-hand, and neither did the challenge round. Open item O-6 asks him to confirm them before anything
-merges. The labels in quotes are his picks; the second column is the option's own wording as relayed.
+These are his. The PM asked him these questions directly in the terminal on 2026-10-08 and he chose
+every label himself. The planner and the challenge round had them from the PM session's task text,
+not first hand; the PM has since confirmed them, which closes open item O-6. The labels in quotes
+are his picks; the second column is the option's own wording as relayed.
 
 | his pick | what the option said |
 |---|---|
@@ -412,9 +422,9 @@ checked: what a fold would wait on if one did. Until the cut-over the unit run b
 | State | `~/.bb2dash-exports/state.json` and a log that rolls, both outside every repository. The file is written at the end of every run, exit 2 included. Its keys are fixed here, because one worker writes the file and another reads it from a different repository: `schema` (1), `started_at`, `ended_at` (ISO times), `exit_code` (0, 1 or 2), `reason` (null, or one of `not_main`, `config`, `error`), and `exporters`, an object with one key today, `inbox-decisions`, holding `exit_code`, `filed`, `skipped` and `not_filed` (counts). No path, no text of a decision and no error message is stored |
 | A failure is seen | **only on the doctor.** bb2dash-stack's new `exports` row is a problem when there is no state file, the last run ended non-zero, a decision was not filed, or the last run is older than 36 hours (the limit the harness jobs already use, `doctor/lib/constants.mjs:34-35`). Nothing raises an Inbox item, a toast or a message. A schedule that fails shows when someone runs `just doctor`, and not before. The log and the task's last result are there for whoever looks after that |
 
-Phase 24's first draft (4bf223e) proposed the same task and script for two exporters. Brief 24a at
-10f48f1 left the exporter out (its lines 896, 1029 and 1043). So this phase owns the task, the runner
-and the registration script alone (see Seams).
+Phase 24's first draft (4bf223e) proposed the same task and script for two exporters. Brief 24a has
+left the exporter out since 10f48f1 and still does at 7fe7030 (its lines 1842, 2056 and 2070). So
+this phase owns the task, the runner and the registration script alone (see Seams).
 
 Where the notes go: the vault's `projects` realm, whose remote is private (checked today). The
 harness's nightly job ingests the vault again and syncs the realm (agentic-harness
@@ -436,7 +446,7 @@ step.
 `scripts/inbox-decisions-pr.mjs` (comment) and its test; new `scripts/exports-run.mjs`, its test, and
 `scripts/register-exports.ps1`; `skills/inbox-apply/SKILL.md` step 5 (lines 156-171: what the
 scheduled run files, what the manual step is, and no more "the host runs the same script on a
-schedule"), which W-85 rewrites with the rest of the skill text (task 9); bb2dash-stack:
+schedule"), which W-81 rewrites with the rest of the skill text (task 9); bb2dash-stack:
 `doctor/lib/*`, `justfile`, `README.md`. The standing
 unit `db/tests/phase23_182_inbox_decision_filing.sql` is not edited: its five refusals (lines 134-141:
 null, an array, no note path, a blank log path, a numeric path) all still hold under the new rule.
@@ -508,7 +518,7 @@ Phase 23 plan's seven steps, with two more for these follow-ups.
 
 **Test questions.** The run cannot answer Stack's own Inbox questions for him. So step 1 raises four
 questions of its own through the owner's session, by a new function. Its contract is fixed here,
-because one worker writes it (W-84) and another calls it (W-88).
+because one worker writes it (W-80) and another calls it (W-84).
 
 * `inbox_accept_question(p_run text, p_label text)` returns the new item's id. It is SECURITY DEFINER
   and executable by `authenticated` alone. **Its first act is the owner check:** it refuses unless
@@ -682,27 +692,27 @@ it. So the database worker's branch gets `/code-review` and `/security-review` f
 
 ## Files by owner
 
-* **W-84, database:** `db/migrations/187_*.sql`, `188_*.sql`; `db/tests/phase23_187_held_answers.sql`,
+* **W-80, database:** `db/migrations/187_*.sql`, `188_*.sql`; `db/tests/phase23_187_held_answers.sql`,
   `phase23_187_decision_filing.sql`, `phase23_187_accept_objects.sql`, `phase23_188_archived_answers.sql`;
   `DATA_SYNTAX.md`. A standing unit is edited only where it pins a sentence or a rule that 187
   changes, and each such edit is named in 110a (none is expected: the planner read `phase23_182`'s
   refusals and the two source pins, not every case of every unit).
-* **W-85, the worker and the skills:** `apply/src/batch.ts`, `report.ts`, `loop.ts`; `apply/test/*`;
+* **W-81, the worker and the skills:** `apply/src/batch.ts`, `report.ts`, `loop.ts`; `apply/test/*`;
   `skills/inbox-apply/SKILL.md` (the held answer, the two transform paragraphs, and step 5 at lines
   156-171), `writer.md`; `skills/bb-sync/SKILL.md` (step 5b).
-* **W-86, the exporter and its schedule:** `scripts/inbox-decisions-export.mjs`,
+* **W-82, the exporter and its schedule:** `scripts/inbox-decisions-export.mjs`,
   `scripts/inbox-decisions-pr.mjs`, their tests; new `scripts/exports-run.mjs`,
   `scripts/exports-run.test.mjs`, `scripts/register-exports.ps1`.
-* **W-87, bb2dash-stack:** `doctor/`, `justfile`, `README.md`, `.env.example`, `compose.yaml`
+* **W-83, bb2dash-stack:** `doctor/`, `justfile`, `README.md`, `.env.example`, `compose.yaml`
   (comments), `scripts/lib/accept-actions.mjs` and the files beside it that track a service. Phase
-  24a's W-80 edits several of these too (see Seams).
-* **W-88, the pack:** `acceptance/23/` (three files), `web/e2e/accept23.spec.ts`,
+  24a's W-85 edits several of these too (see Seams).
+* **W-84, the pack:** `acceptance/23/` (three files), `web/e2e/accept23.spec.ts`,
   `acceptance/manifest.schema.json` (the action list), `acceptance/pack-check.mjs` and
   `acceptance/OPERATOR.md` only where they name the Workspace alone (`pack-check.mjs:47`), a case per
   new proof in `scripts/accept-proofs-db.test.mjs`, and `scripts/accept-proofs-kit.mjs`. The kit
   loads pack 21 by name (its line 9) and knows a table's columns from `create table` blocks only (its
   lines 24-29), so it cannot hold a proof to the columns of the view `v_inbox_apply_runs` as it
-  stands. W-88 adds pack 23 beside pack 21 and teaches `columnsOf` the view. Pack 21's cases are not
+  stands. W-84 adds pack 23 beside pack 21 and teaches `columnsOf` the view. Pack 21's cases are not
   changed.
 * **PM:** `web/src/lib/supabase/database.types.ts` (regenerated at integration), `project-state/`,
   root `CLAUDE.md`, 110a, both PRs, the reviews, every prod apply and every rolled-back dry run, the
@@ -710,21 +720,21 @@ it. So the database worker's branch gets `/code-review` and `/security-review` f
 * **Nobody:** `db/migrations/180` to `186`; `sync/src`; `web/src` but for the generated types;
   `web/test`; `web/e2e/accept.config.ts` and `web/e2e/accept.lib.ts` (pack 21 runs on both);
   `workspace/`; `mcp-server/`; `desktop/`; `docker/apply/` (this phase changes none of the image's
-  files and rebuilds the image; Phase 24a edits three of them, see Seams); bb2dash-stack's `.env`,
-  `machine.env` and anything under a secrets folder.
+  files and rebuilds the image; Phase 24a edits three of them and adds a fourth, see Seams);
+  bb2dash-stack's `.env`, `machine.env` and anything under a secrets folder.
 
 ## Seams
 
 | with | seam | rule here |
 |---|---|---|
-| **Phase 24a** (brief 109 on `feat/workspace-24` at 10f48f1; W-76 to W-80; "ready to freeze", so it may still move). Every "its line" in these rows is a line of that brief at that commit | **The apply image.** Its bundle copies `apply/src` and `workspace/src` (`docker/apply/Dockerfile:39`) and the skill folder (`:108`). 24a changes `workspace/` (its W-77, lines 674-680) and `mcp-server/` (its W-78, line 682), which the image copies, and three files under `docker/apply/`: `fork-firewall.mjs`, the generated `init-firewall.sh` and `image.test.mjs` (its W-79, lines 689-690). This phase changes `apply/src` and the skill, and no file under `docker/apply/` | **This phase merges first.** 24a's own row says the same (its line 877). 24a then merges `origin/main` and re-does its list: `node docker/apply/fork-firewall.mjs --write` and `--check`; `cd apply && npm run typecheck && npm run build && npx vitest run`; the apply image build; `docker/apply/image.test.mjs`; the types file. If 24a merges first, this branch re-does the same list before its PR. Either way `apply` is rebuilt alone at the second cut-over, with no apply request open |
-| Phase 24a | **Migration numbers.** This phase: 187, 188, with 189 held. 24a: 190 to 199 (its lines 7-8). 24b: none (brief 111, line 7) | no overlap. Neither re-creates a function of the other's. No number is borrowed (see "What a review finding costs") |
-| Phase 24a | **The scheduled task.** The first draft (4bf223e) registered `Bb2dash-Exports` for two exporters. Brief 24a left the exporter out: "Scheduling the Inbox exporter (Phase 23's open item, untouched)" (its line 896; also 1029 and 1043) | this phase owns `scripts/register-exports.ps1`, `scripts/exports-run.mjs` and the task alone. The runner's list holds one exporter, and nothing in Phase 24 adds to it |
-| Phase 24a | **bb2dash-stack.** 24a's W-80 edits `compose.yaml`, `doctor/lib/constants.mjs`, `doctor/doctor.mjs`, the doctor tests, `README.md`, `.env.example`, the secrets helper's allow-list, and `scripts/lib/accept-actions.mjs` with its test (its lines 694-697). This phase's W-87 edits `doctor/lib/*`, a new doctor test, `justfile`, `README.md`, `.env.example`, `compose.yaml` (comments) and `scripts/lib/accept-actions.mjs` | each phase adds, and removes nothing of the other's. The second to merge merges bb2dash-stack's `origin/main`, keeps both sets of doctor rows, README sections, `.env.example` lines and host actions, and runs `node --test doctor/ scripts/` again |
-| Phase 24a and 24b | **Shared acceptance files in bb2dash:** `acceptance/manifest.schema.json` (the action list; the PM's file in 24a, its lines 698-699) and the generated types. 24b retires `acceptance/21/` and `accept21.spec.ts` (brief 109, line 879), and `scripts/accept-proofs-kit.mjs` loads pack 21 by name (its line 9) | each phase adds its action names; the second to merge keeps both sets and regenerates the types. W-88 adds pack 23 to the kit beside pack 21 and keeps pack 23's cases free of pack 21's data, so 24b can retire 21 without touching 23's |
+| **Phase 24a** (brief 109 on `feat/workspace-24` at 7fe7030; W-76 to W-79 and W-85; "ready to freeze", so it may still move). Every "its line" in these rows is a line of that brief at that commit | **The apply image.** Its bundle copies `apply/src` and `workspace/src` (`docker/apply/Dockerfile:39`) and the skill folder (`:108`). 24a changes `workspace/` (its W-77, lines 1312-1322) and `mcp-server/` (its W-78, lines 1323-1326), which the image copies, and four files under `docker/apply/`: `fork-firewall.mjs`, the generated `init-firewall.sh`, `image.test.mjs` and a new `gate-built.test.mjs` (its W-79, lines 1331-1333). This phase changes `apply/src` and the skill, and no file under `docker/apply/` | **This phase merges first.** 24a's own row says the same (its line 1823). 24a then merges `origin/main` and re-does its list: `node docker/apply/fork-firewall.mjs --write` and `--check`; `cd apply && npm run typecheck && npm run build && npx vitest run`; `node --test docker/apply/image.test.mjs docker/apply/gate-built.test.mjs`; the apply image build; the types file. If 24a merges first, this branch merges `main` and re-does the same list before its PR; 24a's row names the first step: `--write`, then `git diff --exit-code docker/apply`, which must print nothing (this brief's own `docker/` gate). Either way `apply` is rebuilt alone at the second cut-over, with no apply request open |
+| Phase 24a | **Migration numbers.** This phase: 187, 188, with 189 held. 24a: 190 to 199 (its lines 8-9; 190 to 197 are written there, 198 and 199 are slack). 24b: none (brief 111, line 8) | no overlap. Neither re-creates a function of the other's. No number is borrowed (see "What a review finding costs") |
+| Phase 24a | **The scheduled task.** The first draft (4bf223e) registered `Bb2dash-Exports` for two exporters. Brief 24a left the exporter out: "Scheduling the Inbox exporter (Phase 23's open item, untouched)" (its line 1842; also 2056 and 2070) | this phase owns `scripts/register-exports.ps1`, `scripts/exports-run.mjs` and the task alone. The runner's list holds one exporter, and nothing in Phase 24 adds to it |
+| Phase 24a | **bb2dash-stack.** 24a's W-85 edits `compose.yaml`, a new empty file `secrets.example/workspace_ingest_db_url`, `doctor/lib/constants.mjs`, `doctor/doctor.mjs`, the doctor tests, `README.md`, `.env.example`, and `scripts/lib/accept-actions.mjs` with its test (its lines 1337-1343). The secrets helper's allow-list is no longer that worker's: it is 24a's PM's, outside every repository (its lines 1348-1350). This phase's W-83 edits `doctor/lib/*`, a new doctor test, `justfile`, `README.md`, `.env.example`, `compose.yaml` (comments) and `scripts/lib/accept-actions.mjs` | each phase adds, and removes nothing of the other's. The second to merge merges bb2dash-stack's `origin/main`, keeps both sets of doctor rows, README sections, `.env.example` lines and host actions, and runs `node --test doctor/ scripts/` again. 24a's own row has this phase's PR there merge first, and W-85 then merges that `main` (its line 1829) |
+| Phase 24a and 24b | **Shared files in bb2dash:** `acceptance/manifest.schema.json` (the action list; the PM's file in 24a, its lines 1344-1346), `DATA_SYNTAX.md` (this phase adds the hold table; 24a's W-76 has the Workspace section and one pointer line, its lines 1309-1310) and the generated types. 24a's own row names the same three, and with them `acceptance/pack-check.mjs` and `acceptance/OPERATOR.md`, which this phase edits only where they name the Workspace alone and which no 24a owner lists (its line 1823, and its lines 1305-1357). Pack 21 is no longer retired: 24a edits none of it, and 24b stops running it and keeps its files in the tree (brief 109, line 1825; brief 111, lines 335-342). `scripts/accept-proofs-kit.mjs` loads pack 21 by name (the kit's line 9) | each phase adds its action names and its own part of `DATA_SYNTAX.md`; the second to merge keeps both sets and regenerates the types. W-84 adds pack 23 to the kit beside pack 21 and keeps pack 23's cases free of pack 21's data, so nothing 24b does to pack 21 touches pack 23's |
 | Phase 24a | **Who merges first** | this phase: it is small, waits for nothing and fixes a live service. Order of merging: bb2dash `fix/phase23-followups`, then bb2dash-stack's, then 24a merges `origin/main` in both repositories. 24b is cut only after Phase 22 and 24a are on `main` (brief 111, line 5) |
-| Phase 24a | **The sync.** 24a's W-79 changes `sync/src/files.ts`, `report.ts` and `loop.ts` (its line 693) and rebuilds `sync` once, at its own cut-over (its line 882). `loop.ts` is the caller of a function 187 re-creates (`sync/src/loop.ts:93`, `:102-107`, through `sync/src/db.ts:191-193`) | this phase changes nothing under `sync/src` and rebuilds nothing but `apply`. 187 keeps the name, the argument and the return of `sync_request_inbox_apply(bigint)`: an id, or null when nothing was filed. Null becomes more frequent, because held answers alone file nothing. 24a's `loop.ts` must go on reading null as "nothing to apply", as `main`'s does |
-| **Phase 24b** (brief 111 at 10f48f1; W-81 to W-83; not cut) | page files under `web/` only, after Phase 22 and 24a are on `main` | no file seam with this phase. Its worker names are why this phase's start at W-84 |
+| Phase 24a | **The sync.** 24a's W-79 changes `sync/src/files.ts`, `report.ts` and `loop.ts` (its lines 1335-1336) and rebuilds `sync` once, at its own cut-over (its line 1828). `loop.ts` is the caller of a function 187 re-creates (`sync/src/loop.ts:93`, `:102-107`, through `sync/src/db.ts:191-193`) | this phase changes nothing under `sync/src` and rebuilds nothing but `apply`. 187 keeps the name, the argument and the return of `sync_request_inbox_apply(bigint)`: an id, or null when nothing was filed. Null becomes more frequent, because held answers alone file nothing. 24a's `loop.ts` must go on reading null as "nothing to apply", as `main`'s does |
+| **Phase 24b** (brief 111 at 7fe7030; W-86 to W-88; not cut) | the page's files under `web/`, and beside them one `compose.yaml` value, one line of `acceptance/README.md`, pack 24, and the lines of `web/e2e/accept.lib.ts`, `walk21.lib.ts` and `walk21.window.ts` that read two changed attributes (its lines 307-311 and 333-346). Cut after Phase 22 and 24a are on `main` (its line 5) | no file is edited by both phases: 24b's own row says it edits neither `acceptance/pack-check.mjs` nor `OPERATOR.md` (its line 467), and `web/e2e/accept.lib.ts` is in this phase's "Nobody" list. One reading seam: `accept23.spec.ts` runs on `accept.lib.ts`, which 24b edits. 24b's row gives its side: if pack 23 reads a Workspace string 24b removes, the pack check says so at 24b's integration and its PM keeps the string or edits the sentence (its line 467). Its workers are W-86 to W-88, above this phase's W-80 to W-84 |
 | **Phase 22 (executing)** | Checked: `git diff --stat main...<branch>` for `feat/styling-22`, `-foundation` and `-walkbox` shows docs, `web/test/token-audit.*`, `web/test/walk22-lib.test.ts`, `web/e2e/walk22.lib.ts`, `scripts/walk-box*`, `scripts/lib/walk-box-*` and `docker/walk/`. Its brief plans styles and components under `web/src`, two new specs under `web/e2e`, and one desktop file (brief 103 on `feat/styling-22`, lines 744-773) | **No file seam.** This phase touches none of those paths; under `web/` it adds one new spec and regenerates the types. One reading seam: W-69 restyles the Inbox that `accept23.spec.ts` reads, so the spec finds things by role and visible text, and the PM re-runs `just accept 23 --check` after Phase 22 merges. An acceptance run of this phase is not started inside a Phase 22 walk window: that walk treats a sync or an Inbox apply inside its window as blocked (brief 103, line 1065) |
 | The live `apply` | One worker on the queue at a time: two containers on the role's login fail each other's run (DECISIONS 2026-10-07, review round 1, on 184) | the test project `bb2dash-wt23f` is built and its image tests run. No container of it is started against the queue. The new image's first live run is at the cut-over |
 | The `sync` container | it holds the Blackboard login | not rebuilt, not restarted. `sync_request_inbox_apply` changes in SQL only. Every `apply` command names the one service and runs with no sync open |
@@ -805,7 +815,7 @@ it. So the database worker's branch gets `/code-review` and `/security-review` f
 
 Paths are from the bb2dash root unless the row says bb2dash-stack. "Runner on `<file>`" means
 `node scripts/db-test.mjs --only <file>` and its PASS line. There are 21 tasks. Order: 1 first. Then
-the workers side by side: W-84's 2 and 3, W-85's 7 to 9, W-86's 10 and 11, W-87's 12 to 14. The PM's
+the workers side by side: W-80's 2 and 3, W-81's 7 to 9, W-82's 10 and 11, W-83's 12 to 14. The PM's
 4, 5 and 6 follow tasks 2 and 3, in that order. Task 15 starts once task 2's file is written and
 takes the view's final columns after task 4. Then 16 to 21.
 
@@ -816,20 +826,20 @@ and 6).
 | # | task | owner | deterministic check |
 |---|---|---|---|
 | 1 | Reads at the cut, read-only, written into 110a: how many `supersede/` items exist; how many session answers the backfill would stamp; the durations of the last five container syncs; the controls the Inbox card shows for a `stack_must_confirm` on `agent_request`; whether a standing `phase18_*` unit pins the source of either transform function. And one run of `node scripts/inbox-decisions-export.mjs --dry-run`, with `SECRETS_DIR` and `HARNESS_DIR` set on the command: it writes nothing (`scripts/inbox-decisions-export.mjs:221-224`) | PM | `grep -c "^## Reads at the cut$" docs/planning/sprint-2/verification/110a_PHASE23_FOLLOWUPS_VERIFICATION.md` gives 1, with six answered lines under it; the sixth holds the dry run's exit code and how many rows it would file. An exit code other than 0 stops Item 3's build until it is understood |
-| 2 | Migration 187 and its three units, units first | W-84 | Runner on each `phase23_187_*.sql` fails with "migration 187 is not applied". That is the worker's whole check. The file and the units are pushed |
-| 3 | Migration 188 and its unit, unit first | W-84 | Runner on `phase23_188_archived_answers.sql` reads "migration 188 is not applied". The file and the unit are pushed |
+| 2 | Migration 187 and its three units, units first | W-80 | Runner on each `phase23_187_*.sql` fails with "migration 187 is not applied". That is the worker's whole check. The file and the units are pushed |
+| 3 | Migration 188 and its unit, unit first | W-80 | Runner on `phase23_188_archived_answers.sql` reads "migration 188 is not applied". The file and the unit are pushed |
 | 4 | Review of the database branch, before anything is applied: `/code-review` and `/security-review` on `fix/phase23-followups-db` | PM | both commands' findings are in 110a; each CRITICAL and HIGH is fixed in 187 or 188 itself, unit first; no migration number is spent |
 | 5 | 187 on prod, on Stack's word, with no sync and no apply request open, after its rolled-back dry run. Then its units through the runner | PM | the dry run's output and the file's md5 against the recorded migration are in 110a; Runner gives PASS on the three `phase23_187_*` units and on `phase23_180`, `_181`, `_182`, `_183`, `_185`, `_186`, `phase14_091_queue`, `phase14_093_review_fixes`, `phase14_095_storage_key`; one read shows 3782 marked `skipped` and absent from the unfiled ids |
 | 6 | 188's rolled-back dry run, with no sync and no apply request open | PM | the migration and its unit in one rolled-back transaction print PASS (pasted in 110a); the five `phase18_*` units in that transaction print the lines they print on `main`; Runner on `phase23_188_archived_answers.sql` still reads "migration 188 is not applied" until task 20 |
-| 7 | The worker holds: `held` as the skip set, its own free record tried first, `skip_seen` handed back, the report's lines | W-85 | `cd apply && npx vitest run` gives 0 failures and holds the five cases named under Item 1's proof (a held row for Claude is never in the batch; a held row the worker can record is recorded; `skip_seen` carries the times `prepare` gave; held answers alone start no run and close done; an empty `held` sends them to Claude) |
-| 8 | The worker records a stamped session answer under the right function | W-85 | the same run holds the case: a session answer with `was_applied` true has `link_file_sessions` in its rule and no `apply_resolutions` |
-| 9 | Skill text: held answers, the two transform paragraphs, step 5 of `skills/inbox-apply/SKILL.md` (the exporter and its schedule, lines 156-171), bb-sync step 5b | W-85 | `grep -c "sent again at the next one" skills/inbox-apply/writer.md` gives 0; `grep -c "has a known gap" skills/inbox-apply/SKILL.md` gives 0 (1 on `main`); `grep -c "runs the same script on a schedule" skills/inbox-apply/SKILL.md` gives 0 (1 on `main`); `grep -c "inbox_apply_held_items" skills/bb-sync/SKILL.md` gives 1; `node --test scripts/install-skills.test.mjs docker/apply/image.test.mjs docker/grep-clean.test.mjs` passes |
-| 10 | The exporter: `--notes-only`, the unlogged pass, the test-question rule in both modes | W-86 | `node --test scripts/inbox-decisions-export.test.mjs scripts/inbox-decisions-pr.test.mjs scripts/inbox-decision-render.test.mjs` gives 0 failures with the cases named under Item 3's proof |
-| 11 | The runner and the registration script | W-86 | `node --test scripts/exports-run.test.mjs` gives 0 failures with the cases named under Item 3's proof (the fixed keys, exit 2, the list of commands); after task 20, `(Get-ScheduledTask -TaskName 'Bb2dash-Exports').Triggers.Count` gives 2 |
-| 12 | bb2dash-stack: the doctor's `apply` and `exports` rows | W-87 | `node --test doctor/` gives 0 failures; `git diff --stat origin/main...HEAD -- doctor/workspace.test.mjs` prints nothing |
-| 13 | bb2dash-stack: the verb `file-decisions`, the README, `.env.example`, the compose header | W-87 | `just --list` holds `file-decisions`; `grep -c "Not in the doctor yet" README.md` gives 0 (1 on `main`) |
-| 14 | bb2dash-stack: the five host actions, and the bookkeeping that puts a stopped service back, for a named service | W-87 | `node --test scripts/` gives 0 failures, with a case that `exports.runNow` fails on Windows when no task is registered; the action names equal the enum of bb2dash's `acceptance/manifest.schema.json` (the test that compares them is named in 110a) |
-| 15 | The pack, its browser test, and the proofs kit | W-88 | `node --test acceptance/acceptance.test.mjs` gives 0 failures (every step id fits the schema's pattern); `node --test scripts/accept-proofs.test.mjs scripts/accept-proofs-cli.test.mjs scripts/accept-proofs-db.test.mjs` gives 0 failures with one case per new proof, twelve in all, and pack 21's cases unchanged; `cd web && npx playwright test -c e2e/accept.config.ts --list` lists seven new titles |
+| 7 | The worker holds: `held` as the skip set, its own free record tried first, `skip_seen` handed back, the report's lines | W-81 | `cd apply && npx vitest run` gives 0 failures and holds the five cases named under Item 1's proof (a held row for Claude is never in the batch; a held row the worker can record is recorded; `skip_seen` carries the times `prepare` gave; held answers alone start no run and close done; an empty `held` sends them to Claude) |
+| 8 | The worker records a stamped session answer under the right function | W-81 | the same run holds the case: a session answer with `was_applied` true has `link_file_sessions` in its rule and no `apply_resolutions` |
+| 9 | Skill text: held answers, the two transform paragraphs, step 5 of `skills/inbox-apply/SKILL.md` (the exporter and its schedule, lines 156-171), bb-sync step 5b | W-81 | `grep -c "sent again at the next one" skills/inbox-apply/writer.md` gives 0; `grep -c "has a known gap" skills/inbox-apply/SKILL.md` gives 0 (1 on `main`); `grep -c "runs the same script on a schedule" skills/inbox-apply/SKILL.md` gives 0 (1 on `main`); `grep -c "inbox_apply_held_items" skills/bb-sync/SKILL.md` gives 1; `node --test scripts/install-skills.test.mjs docker/apply/image.test.mjs docker/grep-clean.test.mjs` passes |
+| 10 | The exporter: `--notes-only`, the unlogged pass, the test-question rule in both modes | W-82 | `node --test scripts/inbox-decisions-export.test.mjs scripts/inbox-decisions-pr.test.mjs scripts/inbox-decision-render.test.mjs` gives 0 failures with the cases named under Item 3's proof |
+| 11 | The runner and the registration script | W-82 | `node --test scripts/exports-run.test.mjs` gives 0 failures with the cases named under Item 3's proof (the fixed keys, exit 2, the list of commands); after task 20, `(Get-ScheduledTask -TaskName 'Bb2dash-Exports').Triggers.Count` gives 2 |
+| 12 | bb2dash-stack: the doctor's `apply` and `exports` rows | W-83 | `node --test doctor/` gives 0 failures; `git diff --stat origin/main...HEAD -- doctor/workspace.test.mjs` prints nothing |
+| 13 | bb2dash-stack: the verb `file-decisions`, the README, `.env.example`, the compose header | W-83 | `just --list` holds `file-decisions`; `grep -c "Not in the doctor yet" README.md` gives 0 (1 on `main`) |
+| 14 | bb2dash-stack: the five host actions, and the bookkeeping that puts a stopped service back, for a named service | W-83 | `node --test scripts/` gives 0 failures, with a case that `exports.runNow` fails on Windows when no task is registered; the action names equal the enum of bb2dash's `acceptance/manifest.schema.json` (the test that compares them is named in 110a) |
+| 15 | The pack, its browser test, and the proofs kit | W-84 | `node --test acceptance/acceptance.test.mjs` gives 0 failures (every step id fits the schema's pattern); `node --test scripts/accept-proofs.test.mjs scripts/accept-proofs-cli.test.mjs scripts/accept-proofs-db.test.mjs` gives 0 failures with one case per new proof, twelve in all, and pack 21's cases unchanged; `cd web && npx playwright test -c e2e/accept.config.ts --list` lists seven new titles |
 | 16 | Integrate: worker branches merged, types regenerated, the SOP gates | PM | every box under "SOP gates" but the reviews |
 | 17 | The image, as a test project, never against the queue | PM | run in `C:/Users/stack/projects/bb2dash-wt-23f` with `HARNESS_DIR` set to `C:/Users/stack/agentic-harness` (the build takes the pinned CA from there, `compose.yaml:109`, and the default finds no folder): `docker compose -p bb2dash-wt23f --profile apply build apply` exits 0; `docker ps --filter name=bb2dash-wt23f -q` prints nothing |
 | 18 | Reviews, both repositories, and the fix round's second look | PM | both commands run on both PRs; findings, fixes and the second look are in 110a |
@@ -847,20 +857,22 @@ anything to prod, none runs a migration there inside a rolled-back transaction e
 
 | worker | stream | branch | worktree | tasks |
 |---|---|---|---|---|
-| W-84 | database | `fix/phase23-followups-db` | `bb2dash-wt-23f-db` | 2, 3 |
-| W-85 | worker and skills | `fix/phase23-followups-apply` | `bb2dash-wt-23f-apply` | 7, 8, 9 |
-| W-86 | exporter and schedule | `fix/phase23-followups-exports` | `bb2dash-wt-23f-exports` | 10, 11 |
-| W-87 | bb2dash-stack | `fix/phase23-followups` in bb2dash-stack | `bb2dash-stack-wt-23f` | 12, 13, 14 |
-| W-88 | acceptance pack | `fix/phase23-followups-accept` | `bb2dash-wt-23f-accept` | 15 |
+| W-80 | database | `fix/phase23-followups-db` | `bb2dash-wt-23f-db` | 2, 3 |
+| W-81 | worker and skills | `fix/phase23-followups-apply` | `bb2dash-wt-23f-apply` | 7, 8, 9 |
+| W-82 | exporter and schedule | `fix/phase23-followups-exports` | `bb2dash-wt-23f-exports` | 10, 11 |
+| W-83 | bb2dash-stack | `fix/phase23-followups` in bb2dash-stack | `bb2dash-stack-wt-23f` | 12, 13, 14 |
+| W-84 | acceptance pack | `fix/phase23-followups-accept` | `bb2dash-wt-23f-accept` | 15 |
 | PM | integration | `fix/phase23-followups` | `bb2dash-wt-23f` | 1, 4 to 6, 16 to 21 |
 
-The names start at W-84 because the ones below it are taken: W-76 to W-80 are Phase 24a's (brief 109
-at 10f48f1, line 6), W-81 to W-83 are Phase 24b's (brief 111, line 6), W-67 to W-70 and W-75 are
-Phase 22's and W-71 to W-74 are used. The first draft of this brief used W-80 to W-84, four of which
-Phase 24 holds. W-88 starts once W-84's 187 is written (its proofs read the view), takes the view's
-final columns after task 4, and reads W-87's action names from its branch. W-88's proof tests run on
-a Postgres inside the test process (`scripts/accept-proofs-db.test.mjs:2-4`), so they do not wait for
-187 on prod.
+The names are W-80 to W-84 by the PM's ruling of 2026-10-08. Two planning runs numbered their workers
+the same afternoon and met at W-80. The ruling: this phase has W-80 to W-84; Phase 24a has W-76 to
+W-79 and W-85, the last being its bb2dash-stack worker (brief 109 at 7fe7030, line 6); Phase 24b has
+W-86 to W-88 (brief 111 at 7fe7030, line 6). W-67 to W-70 and W-75 are Phase 22's and W-71 to W-74
+are used. The first draft of this brief used W-80 to W-84 and the challenge round moved them up; the
+ruling put them back, and both Phase 24 briefs already name this phase's five by these numbers. W-84
+starts once W-80's 187 is written (its proofs read the view), takes the view's final columns after
+task 4, and reads W-83's action names from its branch. W-84's proof tests run on a Postgres inside
+the test process (`scripts/accept-proofs-db.test.mjs:2-4`), so they do not wait for 187 on prod.
 
 ## Out of scope
 
@@ -881,8 +893,8 @@ a Postgres inside the test process (`scripts/accept-proofs-db.test.mjs:2-4`), so
 
 ## Open items for Stack
 
-Six. Each has the default this brief took. "Defaults" is an answer for O-1 to O-5. O-6 needs his
-own word.
+Six, of which five are open. O-1 to O-5 each have the default this brief took, and "Defaults" is an
+answer for them. O-6 is closed.
 
 | # | question | default taken |
 |---|---|---|
@@ -891,18 +903,17 @@ own word.
 | O-3 | May the acceptance run press Sync, which is one real Blackboard sync per run? | Yes. Otherwise steps 2 and 3 become his |
 | O-4 | A tenth `just` verb, `file-decisions`, for the day files and their pull request? | Yes, with the Phase 23 plan's name |
 | O-5 | 187 goes on prod during the build, after the database branch's own review, and 188 at the cut-over, each on his word? | Yes. The other way: 187 waits for the cut-over too, proved before by a rolled-back dry run as 188 is. That keeps prod untouched until his merge word, and costs the green runs of 187's units through the runner until then |
-| O-6 | Are the seven labels under "Stack's answers" his? They reached the planner and the challenge round only through script-written task text | Taken as his for the draft. The brief is not frozen and nothing merges until he says so |
+| O-6 | Are the seven labels under "Stack's answers" his? | **Closed, 2026-10-08. Yes, they are his.** The PM asked him these questions directly in the terminal that day and he chose every label himself. The planner and the challenge round had them only from the PM session's task text, which is why the item was raised; it is closed on the PM's confirmation. The brief is ready to freeze when its build session starts |
 
 ## What stays Stack's
 
 From this brief:
 
 * The one line in bb2dash-stack's `.env`: `COMPOSE_PROFILES=workspace,apply`.
-* His word that the seven labels are his (O-6), before the brief is frozen.
 * His word for each prod apply (187, 188), the two merges, and the registration of the task.
 * The three `human` rows of the pack: one real answer of his applied, one note read, and the day
   files' pull request when he wants it.
-* The six open items above.
+* The five open items above, O-1 to O-5. O-6 is closed: the seven labels are his.
 * `just doctor`, now and then: it is the only place a failed scheduled export shows.
 
 Not part of this brief, still open:
@@ -922,31 +933,31 @@ Not part of this brief, still open:
   session answers and the unfiled count), and how many rows the backfill would stamp beyond two.
 * How long a container sync takes. Step 3's nine-minute watch and its one second run rest on task 1.
 * The function that raises `sync-login-required`, beyond the one line that names the ref
-  (`db/migrations/091_sync_runner_role.sql:268`, found in the challenge round). W-88 reads the
+  (`db/migrations/091_sync_runner_role.sql:268`, found in the challenge round). W-84 reads the
   function before `apply-quiet` relies on it.
 * The Inbox card's controls for a test question, and whether `authenticated` can insert into
   `attention_items` directly (the brief does not rely on it: the function is the path).
 * 042's scan in full (`apply_resolutions`), whether a `phase18_*` unit pins the source text of the
   two transform functions, and the cases of the standing `phase23_*` units beyond `phase23_182`'s
   refusals and the two source pins.
-* Stack's answers themselves: they are quoted from the PM session's task text (open item O-6).
 * What compose does with a running container whose profile is off under `just up` and `just logs`.
   Task 12 confirms with `docker compose config --services`, which starts nothing.
 * Whether the host's `uv run ingest` works on this laptop. The exporter treats a failed ingest as "the
   nightly takes it" (`scripts/inbox-decisions-export.mjs:197-208`).
 * bb2dash-stack's `scripts/lib/accept-*.mjs` beyond the action list, the profile helper and the carry
   rule: how much of the stop-and-put-back bookkeeping is written for the Workspace alone.
-* Phase 24's two briefs beyond the lines this brief cites. They were read at 10f48f1 from the local
-  ref, with no fetch. Brief 109 is "ready to freeze" and brief 111 is a draft, so both may move again;
-  the PM re-reads the Seams rows against them at this brief's freeze.
+* Phase 24's two briefs beyond the lines this brief cites. They were read at 10f48f1 in the challenge
+  round and again at 7fe7030 in the third pass, from the worktree `bb2dash-wt-24`, with no fetch; the
+  cited lines are 7fe7030's. Brief 109 is "ready to freeze" and brief 111 is a draft, so both may
+  move again; the PM re-reads the Seams rows against them at this brief's freeze.
 * Anything in the database for the challenge round: it made no read. So prod's grants and default
   privileges on a new table, and whether a row with no resolution can sit in `v_inbox_queue` today,
   are not checked. 187 revokes by name and its guard reads the result.
 * Whether a fold would wait on anything while 188's rolled-back dry run is open. The rule is no sync
   open during it.
 * Whether `acceptStep()` in `web/e2e/accept.lib.ts` lets a test set its own time limit. If it does
-  not, W-88 says so and the PM decides before that shared file is edited.
-* How the sandbox's facts carry a question's item id to the host (which field names cross). W-88
+  not, W-84 says so and the PM decides before that shared file is edited.
+* How the sandbox's facts carry a question's item id to the host (which field names cross). W-84
   reads bb2dash-stack's carry rule first.
 * Whether Stack's `.env` sets `HARNESS_DIR` (the manual verb needs it). The file was not opened.
 * The registration script has no unit. Its refusal is tried once by hand at the cut-over.
@@ -964,15 +975,19 @@ on a point his words leave open was changed and is put to him (O-1).
 | F2 | The hold was read from `agent_requests`, which other logins can write | The hold is the table `inbox_apply_holds`, written by `inbox_apply_close` alone. Unit cases 7, 10 and 11, and 187's guard |
 | F3 | The hold compared the request's `finished_at` with the answer's `resolved_at`, so an answer given again during a run was held untried | The hold stores the `resolved_at` the run was handed and is compared for equality. Unit case 5. The two-clock corner is gone |
 | F4 | The worker dropped a held row before it tried its own free record | The free record is tried first. A row with `applied_at` and no note is never held. Unit case 6 and one worker case |
-| F5 | The brief was written against Phase 24's draft at 4bf223e, which moved to 10f48f1 four minutes later | Workers renumbered W-84 to W-88. The Phase 24 seam rows are rewritten: three `docker/apply/` files, bb2dash-stack's shared files, `sync/src/loop.ts`, the exporter that left 24a, and the redo list from 24a's own row |
+| F5 | The brief was written against Phase 24's draft at 4bf223e, which moved to 10f48f1 four minutes later | The workers were renumbered in that round to start above Phase 24's. The PM's ruling of the same day undid that: this phase is W-80 to W-84, Phase 24a W-76 to W-79 and W-85, Phase 24b W-86 to W-88 (see Workers). The Phase 24 seam rows were rewritten: the `docker/apply/` files (three at 10f48f1, four at 7fe7030), bb2dash-stack's shared files, `sync/src/loop.ts`, the exporter that left 24a, and the redo list from 24a's own row. The third pass read those rows again at 7fe7030 and corrected their line numbers |
 | F6 | 187 went on prod before any review, with one spare number | Task 4 reviews the database branch first. What a later finding costs is stated. O-5 carries the other option |
 | F7 | `inbox_accept_question` had no owner check, no fixed arguments and no clean-up, and the `accept/` skip held for one exporter mode only | The contract is written out: the owner check, two patterned arguments, the ref and the label, the clean-up, the three-part rule in both modes, the refusal case. Step 0 does not count an earlier run's test rows, because step 1 closes them only afterwards |
 | F8 | A green run would not have proved three things | Step 9 returns its counts and a zero reads "not exercised". Rows `9-supersede` and `10-held` are waived, each with its unit. `exports.runNow` fails on Windows with no registered task. The accepted record names what was not exercised |
 | F9 | The stop could kill a real run, and a capped run read red | Stage `stop` starts with the proof `apply-idle`. `daily_cap` and `usage_limit` are blocked in the proofs of steps 3 and 6 |
 | F10 | The schedule did not say where its two folders come from, rested on an exporter never run here, and left its limits to prose | The registration takes both folders and has no default. Task 1 has the dry run. The guard reads `.git/HEAD`, and the tests hold the lists of commands. The state file's keys are fixed and it is written on exit 2. The doctor is named as the only place a failure shows |
-| F11 | Six checks or file sets did not work as written | `10-held`; the grep is `has a known gap`; tasks 2 and 3 end at "not applied" and the PM has tasks 5 and 6; the kit joins W-88 and the spec sets its own limits; SKILL.md step 5 joins task 9; task 17 names the worktree and `HARNESS_DIR` |
-| F13 | The DECISIONS row said "all four are built" and named workers Phase 24 holds | The row reads "to be built", names W-84 to W-88, lists the defaults as they now stand, and says it waits for his word |
+| F11 | Six checks or file sets did not work as written | `10-held`; the grep is `has a known gap`; tasks 2 and 3 end at "not applied" and the PM has tasks 5 and 6; the kit joins W-84 (the pack's worker) and the spec sets its own limits; SKILL.md step 5 joins task 9; task 17 names the worktree and `HARNESS_DIR` |
+| F13 | The DECISIONS row said "all four are built" and named workers Phase 24 held at the time | The row reads "to be built", names the workers by that round's numbers, lists the defaults as they now stand, and says it waits for his word. The row is history and the third pass did not edit it. Two things in it no longer hold and this brief is what holds: the workers are W-80 to W-84 (the PM's ruling, see Workers), and the answers are confirmed as his (O-6, closed) |
 
 One reason in a finding was not taken over as written. F11 says 188's dry run "locks the two
 transform functions". That was not checked, so the brief gives the rule (no sync open) and marks the
 mechanism as not checked.
+
+## Session prompt
+
+> `/bb2dash-pm` Start the Phase 23 follow-ups. Read `C:/Users/stack/projects/bb2dash-wt-23f/docs/planning/sprint-2/briefs/110_PHASE23_followups.md` in full (branch `fix/phase23-followups`; it is not on `main`), then memories `phase23-state` and `phase24-state`. The seven answers in it are mine, given in the terminal on 2026-10-08: all four follow-ups; the scheduled exporter files the private vault notes only; test item 3782 is marked filed with no note; acceptance by an automated run. Freeze the brief on that, then cut `bb2dash-stack-wt-23f` and the worker worktrees and spawn its workers (Opus) on their disjoint files. Migrations stay inside 187 to 189; apply to prod only as the brief's own apply rows say, dry run first. Two PRs, bb2dash first. Phase 24a runs beside you in its own session and also changes what the `apply` image is built from: follow the brief's seam, never rebuild `sync`, `apply` or `workspace` while a sync is open, and never through a whole-project `up`. Anything the brief marks as mine (the one `.env` line, registering the scheduled task, a password) comes to me as one command each. Run `/code-review` and `/security-review`, update STATUS, DECISIONS and ORCHESTRATOR, open both PRs and stop at "ready when you say so". After my merge: `just accept 23` from `main`; a green run counts.
