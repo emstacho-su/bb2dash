@@ -189,7 +189,11 @@ export function SyncButton() {
         data-live={isLivePhase(phase) ? '' : undefined}
       >
         <SyncIcon />
-        {label}
+        {/* The label's own span: icon only at ≤480px, capped with an ellipsis at ≤1023.98px.
+            Its title is the full label; the button's own title stays the phase sentence. */}
+        <span className={styles.label} title={label}>
+          {label}
+        </span>
       </button>
 
       {(alert !== null || toast !== null) && (

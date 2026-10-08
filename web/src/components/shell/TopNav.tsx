@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getDesktopUpdater } from '@/lib/desktop-bridge';
 import { clearPersistedQueryCache } from '@/lib/query-provider';
 import { SIDEBAR_ID } from '@/lib/sidebar-preference';
@@ -53,11 +53,17 @@ const NAV_LINKS = [
   { href: '/workspace', label: 'Workspace' },
 ] as const;
 
+/** The phone-width menu's panel: what the Menu button controls. */
+const NAV_MENU_ID = 'primary-nav-menu';
+
 export function TopNav({ userEmail }: { userEmail: string | null }) {
   const pathname = usePathname();
   const router = useRouter();
 
   const [user, userAnchor] = usePopover<HTMLSpanElement>();
+  // The phone-width menu (≤720px): the same six pages in a panel under the bar.
+  const [menu, menuAnchor] = usePopover<HTMLSpanElement>();
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const desktopUpdate = useDesktopUpdate();
   // Read only while the menu is open, which is always after hydration.
   const showDesktopUpdate = user.open && getDesktopUpdater() !== null;
@@ -65,11 +71,22 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
   // prop, and the React Compiler would otherwise treat the whole object as a ref.
   const { open: sidebarOpen, toggle: toggleSidebar, toggleRef: sidebarToggleRef } = useSidebar();
 
-  // Close the user menu on navigation.
+  // Close the user menu and the phone menu on navigation.
   useEffect(() => {
     user.close();
+    menu.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
+
+  // usePopover closes on Escape and returns no focus; Menu returns it to its own button.
+  useEffect(() => {
+    if (!menu.open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') menuButtonRef.current?.focus();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [menu.open]);
 
   function isActive(href: string): boolean {
     if (href === '/') return pathname === '/';
@@ -104,6 +121,40 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         ))}
       </span>
 
+      {/* Menu — at ≤720px the links give way to this button and its panel (R-46). The panel
+          and its links are in the DOM only while it is open. */}
+      <span ref={menuAnchor} className={styles.menuWrap}>
+        <button
+          type="button"
+          ref={menuButtonRef}
+          className={menu.open ? styles.menuOpen : styles.menu}
+          onClick={() => {
+            user.close();
+            menu.toggle();
+          }}
+          aria-expanded={menu.open}
+          aria-controls={NAV_MENU_ID}
+        >
+          Menu
+        </button>
+
+        {menu.open && (
+          <div id={NAV_MENU_ID} className={styles.navMenu}>
+            {NAV_LINKS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={isActive(item.href) ? styles.navMenuLinkActive : styles.navMenuLink}
+                aria-current={isActive(item.href) ? 'page' : undefined}
+                onClick={menu.close}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        )}
+      </span>
+
       <span className={styles.right}>
         <SyncButton />
 
@@ -118,6 +169,7 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
           className={styles.icToggle}
           onClick={() => {
             user.close();
+            menu.close();
             toggleSidebar();
           }}
           aria-expanded={sidebarOpen}
@@ -139,7 +191,10 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
           <button
             type="button"
             className={user.open ? styles.icOpen : styles.ic}
-            onClick={() => user.toggle()}
+            onClick={() => {
+              menu.close();
+              user.toggle();
+            }}
             aria-expanded={user.open}
             aria-haspopup="menu"
             title="Account"

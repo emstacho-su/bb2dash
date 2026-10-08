@@ -136,6 +136,38 @@
   font-size: var(--text-sm);
 }
 
+/* The label's own span. Above 1023.98px it is as wide as its words. */
+.label {
+  min-width: 0;
+}
+
+/* The unfolded bar, search collapsed, must fit the desktop window's 900px minimum with the
+   longest label (brief 103, "The fold"): the label gives way with an ellipsis. Its title holds
+   the full label. */
+@media (max-width: 1023.98px) {
+  .label {
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* At 480px and below the button shows its icon only. The label stays in the DOM for the
+   accessible name: these are .sr-only's declarations (globals.css), copied. */
+@media (max-width: 480px) {
+  .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
 @media (max-width: 720px) {
   .stack {
     width: min(320px, calc(100vw - 28px));
