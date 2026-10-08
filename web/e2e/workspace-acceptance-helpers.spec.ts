@@ -131,6 +131,8 @@ const badge = `<span data-tier="high">${BADGE_HIGH}</span>`;
 const waiting = `<p data-turn-line>${QUEUED_LINE}</p>`;
 const answering = `${badge}<p data-turn-line>${LATE_STREAM_LINE}</p>`;
 const text = (words: string) => `${badge}<p data-answer-text>${words}</p>`;
+/** Answer text with a line under it: what a turn must never show while its answer is being written. */
+const textBesideLine = (words: string, line: string) => `${text(words)}<p data-turn-line>${line}</p>`;
 
 let outDir = '';
 
@@ -205,7 +207,7 @@ test('streaming is seen once enough text is being written, and not when the turn
   expect(await waitStreaming(page, turn)).toBe(false);
 });
 
-test('a reloaded page is watched until the answer is finished: the line stands, and half-written text fails at once', async ({ page }) => {
+test('a reloaded page is watched until the answer is finished: the line stands, and half-written text beside it fails at once', async ({ page }) => {
   await openStill(page);
   const turn = lastTurn(page);
   await later(page, 0, 'streaming', answering);
@@ -213,13 +215,46 @@ test('a reloaded page is watched until the answer is finished: the line stands, 
   await expect(turn).toHaveAttribute('data-turn', 'streaming');
   const watch = await watchAnswering(page, turn);
   expect(watch.endedAs).toBe('done');
+  expect(watch.landed).toBeNull();
   expect(watch.looks).toBeGreaterThanOrEqual(2);
   expect((await readTurn(turn)).answer).toBe('The finished answer.');
 
+  // Half-written text shown beside the line: the fault the step exists to catch.
   await later(page, 0, 'streaming', answering);
-  await later(page, 600, 'streaming', text('half of an ans'));
+  await later(page, 600, 'streaming', textBesideLine('half of an ans', LATE_STREAM_LINE));
   await expect(turn.locator('[data-turn-line]')).toHaveText(LATE_STREAM_LINE);
-  await expect(watchAnswering(page, turn)).rejects.toThrow(/says so|no half-written text/);
+  await expect(watchAnswering(page, turn)).rejects.toThrow(/no half-written text/);
+
+  // Text beside any other line is no better, and neither is a turn being written that shows nothing at all.
+  await later(page, 0, 'streaming', answering);
+  await later(page, 600, 'streaming', textBesideLine('half of an ans', QUEUED_LINE));
+  await expect(turn.locator('[data-turn-line]')).toHaveText(LATE_STREAM_LINE);
+  await expect(watchAnswering(page, turn)).rejects.toThrow(/says so/);
+
+  await later(page, 0, 'streaming', answering);
+  await later(page, 600, 'streaming', badge);
+  await expect(turn.locator('[data-turn-line]')).toHaveText(LATE_STREAM_LINE);
+  await expect(watchAnswering(page, turn)).rejects.toThrow(/says so/);
+});
+
+test('the stored answer may reach the page a moment before the turn is marked done: that ends the watching, and is no failure', async ({ page }) => {
+  await openStill(page);
+  const turn = lastTurn(page);
+  // The change is not atomic. The stored message row arrives first (the whole answer, and no line),
+  // while the request row still says the answer is being written; then the request row says done.
+  await later(page, 0, 'streaming', answering);
+  await later(page, 700, 'streaming', text('The finished answer.'));
+  await later(page, 1900, 'done', text('The finished answer.'));
+  await expect(turn.locator('[data-turn-line]')).toHaveText(LATE_STREAM_LINE);
+
+  const watch = await watchAnswering(page, turn);
+  expect(watch.endedAs).toBe('streaming');
+  expect(watch.landed).toBe('The finished answer.');
+  expect(watch.looks).toBeGreaterThanOrEqual(1);
+  // The test that called it then waits for done, as it does for every answer, and holds the text
+  // that landed against the finished answer: what landed was the whole of it.
+  await expect(turn).toHaveAttribute('data-turn', 'done');
+  expect((await readTurn(turn)).answer).toBe(watch.landed);
 });
 
 test("a row of the list is found by its conversation, or by its exact title", async ({ page }) => {
