@@ -30,8 +30,15 @@
 // one volume of its own (the npm cache). No other container, network or volume is ever named.
 //
 // Exit: 0 passed, 1 tests failed (Playwright), 64 refused before any container started,
-// 65 docker could not be started, 70 to 76 the box broke (docker/walk/entry.sh lists them),
-// 125 and above docker's own. Importing this module has no side effects.
+// 65 docker could not be started, 67 --exec named a box that is not running, 70 to 76 the box
+// broke (docker/walk/entry.sh lists them), 125 and above docker's own.
+//
+// When this script is killed (a tool's time limit, a closed terminal) the container is not: a
+// plain run goes on to its end and removes itself, and run.json stays at "running". What the walk
+// found is then in results/.last-run.json, which Playwright writes itself. Start a walk with a
+// time limit of ten minutes or more, or in the background, and read run.json.
+//
+// Importing this module has no side effects.
 
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -48,7 +55,7 @@ const USAGE = [
 ].join('\n');
 
 /** How a call ends when no walk decided it. */
-export const EXIT = Object.freeze({ passed: 0, testsFailed: 1, refused: 64, docker: 65, internal: 66 });
+export const EXIT = Object.freeze({ passed: 0, testsFailed: 1, refused: 64, docker: 65, internal: 66, noBox: 67 });
 
 /** The stock image. Its tag is web/package.json's @playwright/test version (`imageFor`). */
 const IMAGE_REPOSITORY = 'mcr.microsoft.com/playwright';
@@ -365,7 +372,11 @@ export function planRun(args, ctx) {
   return { runId, container, outDir, calls, record };
 }
 
-/** More specs in a kept box: one `docker exec`, with a folder of its own inside the box's. */
+/**
+ * More specs in a kept box: one `docker exec`, with a folder of its own inside the box's.
+ * `precheck` is asked first: docker exec ends with 1 for a container that is gone or stopped,
+ * and 1 is also Playwright's code for a failed test.
+ */
 export function planExec(args, ctx) {
   const settings = settingsFrom(ctx);
   const boxRunId = runIdOfContainer(args.container);
@@ -395,7 +406,8 @@ export function planExec(args, ctx) {
     args: [...args.extra],
     shots: settings.shots,
   };
-  return { runId, container: args.container, outDir: path.join(boxDir, folder), calls: [call], record };
+  const precheck = ['exec', args.container, 'true'];
+  return { runId, container: args.container, outDir: path.join(boxDir, folder), precheck, calls: [call], record };
 }
 
 /** Remove a kept box: `docker rm -f` of that one container. */
@@ -440,18 +452,32 @@ function writeRecord(outDir, record) {
   fs.writeFileSync(path.join(outDir, 'run.json'), `${JSON.stringify(record, null, 2)}\n`);
 }
 
-/** Each call in turn, stopping at the first that does not end with 0. Returns the exit code. */
+/**
+ * Each call in turn, stopping at the first that does not end with 0. Returns the exit code and
+ * how many calls ended with 0.
+ */
 async function runCalls(calls, logFile, deps) {
+  let done = 0;
   try {
     for (const argv of calls) {
       const code = await deps.docker(argv, { logFile });
-      if (code !== EXIT.passed) return code;
+      if (code !== EXIT.passed) return { code, done };
+      done += 1;
     }
-    return EXIT.passed;
+    return { code: EXIT.passed, done };
   } catch (error) {
     deps.err(`walk-box: docker could not be started: ${error?.message}`);
-    return EXIT.docker;
+    return { code: EXIT.docker, done };
   }
+}
+
+/** Whether the box a plan needs is running: 0 when it is, or when the plan needs none. */
+async function askBox(plan, deps) {
+  if (plan.precheck === undefined) return EXIT.passed;
+  const { code } = await runCalls([plan.precheck], null, deps);
+  if (code === EXIT.passed || code === EXIT.docker) return code;
+  deps.err(`walk-box: ${plan.container} is not running (docker exec ended with ${code}): start a new box with --keep`);
+  return EXIT.noBox;
 }
 
 function announce(plan, log) {
@@ -459,8 +485,9 @@ function announce(plan, log) {
   log(`walk-box: output ${posix(plan.outDir)}`);
 }
 
-function sayKept(plan, log) {
-  if (plan.record.kept !== true) return;
+/** Said only for a kept box whose container did start: a name that was never taken is not handed on. */
+function sayKept(plan, started, log) {
+  if (plan.record.kept !== true || !started) return;
   log(`walk-box: ${plan.container} is left running. More specs, then remove it:`);
   log(`  node scripts/walk-box.mjs --exec ${plan.container} <spec under web/e2e>…`);
   log(`  node scripts/walk-box.mjs --rm ${plan.container}`);
@@ -479,11 +506,13 @@ async function walk(args, deps) {
     exit_code: null,
     result: 'running',
   };
+  const box = await askBox(plan, deps);
+  if (box !== EXIT.passed) return box;
   makeRunFolder(plan.outDir);
   writeRecord(plan.outDir, started);
   announce(plan, deps.log);
 
-  const code = await runCalls(plan.calls, path.join(plan.outDir, 'stdout.log'), deps);
+  const { code, done } = await runCalls(plan.calls, path.join(plan.outDir, 'stdout.log'), deps);
   const finishedAt = deps.now();
   const result = resultOf(code);
   writeRecord(plan.outDir, {
@@ -494,13 +523,13 @@ async function walk(args, deps) {
     result,
   });
   deps.log(`walk-box: ${result} (exit ${code}); run.json and stdout.log are in ${posix(plan.outDir)}`);
-  sayKept(plan, deps.log);
+  sayKept(plan, done > 0, deps.log);
   return code;
 }
 
 async function remove(args, deps) {
   const plan = planRm(args);
-  const code = await runCalls(plan.calls, null, deps);
+  const { code } = await runCalls(plan.calls, null, deps);
   deps.log(code === EXIT.passed ? `walk-box: ${plan.container} is removed` : `walk-box: docker rm ended with ${code}`);
   return code;
 }

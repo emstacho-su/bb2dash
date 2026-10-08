@@ -32,6 +32,12 @@ readonly NPM_CACHE=/npm-cache
 readonly BOX_OUT=/out
 readonly PORT=3000
 readonly READY_LIMIT_S=120
+# A box whose host script was killed is watched by nobody: these two steps wait on the network and
+# on the compiler, so each has a limit, and the box ends and removes itself either way. Sign-in and
+# every test have limits of their own (login.mjs, playwright.config.ts).
+readonly INSTALL_LIMIT_S=900
+readonly BUILD_LIMIT_S=900
+readonly KILL_AFTER_S=30
 readonly PROBE_TIMEOUT_MS=5000
 readonly LOG_TAIL_LINES=40
 readonly SERVER_LOG="$BOX_OUT/next.log"
@@ -92,7 +98,10 @@ refresh_e2e() {
 }
 
 install_packages() {
-  (cd "$WORK_WEB" && npm ci --cache "$NPM_CACHE" --prefer-offline --no-audit --no-fund)
+  (
+    cd "$WORK_WEB" &&
+      timeout --kill-after="$KILL_AFTER_S" "$INSTALL_LIMIT_S" npm ci --cache "$NPM_CACHE" --prefer-offline --no-audit --no-fund
+  )
 }
 
 # Names only: a value is never printed. docker's --env-file takes each line as written, so a value
@@ -115,7 +124,10 @@ check_settings() {
 }
 
 build_app() {
-  (cd "$WORK_WEB" && NEXT_TELEMETRY_DISABLED=1 npm run build)
+  (
+    cd "$WORK_WEB" &&
+      NEXT_TELEMETRY_DISABLED=1 timeout --kill-after="$KILL_AFTER_S" "$BUILD_LIMIT_S" npm run build
+  )
 }
 
 # In the background, with nothing of this call's own held open: in a kept box the server outlives
