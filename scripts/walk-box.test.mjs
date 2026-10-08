@@ -1,30 +1,32 @@
 // bb2dash :: scripts/walk-box.test.mjs
 // The walk box (brief 103, task 0): one throwaway container that builds this worktree's web app,
-// signs in with the test login and runs the named Playwright specs against it. These tests hold the
-// part that runs on the host: how the command line is read, the exact docker call for each way of
-// running, what is refused before any container starts, and that no value of an env file or of the
-// environment reaches the docker call, the log or run.json. Docker is injected: nothing here starts
-// a container, and nothing reads the real env files.
+// signs in with the test login and runs the named Playwright specs against it. This is the one
+// command for all of its host tests:
 //
 //   node --test scripts/walk-box.test.mjs
+//
+// The tests are in three files, and this one reads the other two in (at the end):
+//
+//   scripts/walk-box.test.mjs        how the command line is read, the exact docker call for each
+//                                    way of running, and what is refused before any container starts
+//   scripts/walk-box-main.test.mjs   main(): the run folder, run.json, the exit code; and that no
+//                                    value of an env file or of the environment is passed on
+//   docker/walk/entry.test.mjs       the script that runs inside the container
+//
+// Docker is injected: nothing here starts a container, and nothing reads the real env files.
 
-import { after, test } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   CONTAINER_PREFIX,
-  EXIT,
   NPM_CACHE_VOLUME,
   WALK_IMAGE,
-  WalkBoxError,
   assertOutBase,
   containerNameOf,
   imageFor,
-  main,
   parseArgs,
   planExec,
   planRm,
@@ -33,64 +35,11 @@ import {
   runIdOfContainer,
   specPaths,
 } from './walk-box.mjs';
+import { CONTAINER, LATER, LATER_RUN_ID, NOW, REPO_ROOT, RUN_ID, SECRET_SHARE, fixture, posix, refusal, run, scratch, write } from './walk-box-kit.mjs';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const NOW = new Date('2026-10-08T05:15:00.000Z');
-const RUN_ID = '20261008T051500Z';
-const CONTAINER = 'bb2dash-walk22-20261008t051500z';
-const LATER = new Date('2026-10-08T05:22:30.000Z');
-const LATER_RUN_ID = '20261008T052230Z';
-
-/** Values that must never leave the files or the environment they are in. */
-const SECRET_KEY = 'sentinel-anon-key-7f3a';
-const SECRET_PASSWORD = 'sentinel-password-91bc';
-const SECRET_SHARE = 'sentinel-share-token-55de';
-
-const posix = (file) => file.split(path.sep).join('/');
-
-const made = [];
-function scratch(prefix) {
-  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
-  made.push(dir);
-  return dir;
-}
-after(() => {
-  for (const dir of made) fs.rmSync(dir, { recursive: true, force: true });
-});
-
-function write(root, relative, text = '') {
-  const file = path.join(root, relative);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, text);
-  return file;
-}
-
-/** A worktree and a home folder, both made for the test: a checkout, its specs, the two input files. */
-function fixture({ env = {} } = {}) {
-  const root = scratch('walkbox-root-');
-  write(root, '.git', 'gitdir: somewhere/else\n');
-  write(root, 'web/package.json', JSON.stringify({ devDependencies: { '@playwright/test': '1.63.0' } }));
-  write(root, 'web/e2e/harness.spec.ts');
-  write(root, 'web/e2e/theme/walk22.spec.ts');
-  write(root, 'web/e2e/walk.ts');
-  write(root, 'web/src/elsewhere.spec.ts');
-  write(root, 'docker/walk/entry.sh');
-  const home = scratch('walkbox-home-');
-  const webEnv = write(home, '.bb2dash-walk/web.env', `NEXT_PUBLIC_SUPABASE_ANON_KEY=${SECRET_KEY}\n`);
-  const loginEnv = write(home, 'projects/bb2dash/.env.testing', `TEST_USER_PW=${SECRET_PASSWORD}\n`);
-  const outBase = path.join(home, '.bb2dash-walk', '22');
-  return { root, home, cwd: root, env, now: NOW, webEnv, loginEnv, outBase };
-}
-
-const run = (specs, more = {}) => ({ command: 'run', url: null, keep: false, container: null, specs, extra: [], ...more });
-
-function refusal(fn, pattern) {
-  assert.throws(fn, (error) => {
-    assert.ok(error instanceof WalkBoxError, `a WalkBoxError, not ${error?.name}: ${error?.message}`);
-    assert.match(error.message, pattern);
-    return true;
-  });
-}
+// The other two parts: read in here, so that the one command above runs every test.
+import './walk-box-main.test.mjs';
+import '../docker/walk/entry.test.mjs';
 
 /* ---------------------------------------------------------------------------------------------
  * The command line
@@ -467,240 +416,8 @@ test('a path docker would read as two mount fields is refused', () => {
 });
 
 /* ---------------------------------------------------------------------------------------------
- * main(): the run folder, run.json, the exit code
+ * No env file is opened
  * ------------------------------------------------------------------------------------------ */
-
-const COMMIT = '0123456789abcdef0123456789abcdef01234567';
-
-/** main()'s dependencies, with docker and git recorded instead of run. */
-function harness(f, { exits = [0], dirty = false, times = [NOW, LATER] } = {}) {
-  const seen = { docker: [], logged: [], errors: [], records: [] };
-  let call = 0;
-  let tick = 0;
-  const deps = {
-    root: f.root,
-    cwd: f.cwd,
-    env: f.env,
-    home: f.home,
-    now: () => times[Math.min(tick++, times.length - 1)],
-    git: (args) => {
-      if (args[0] === 'rev-parse') return `${COMMIT}\n`;
-      if (args[0] === 'status') return dirty ? ' M web/e2e/harness.spec.ts\n' : '';
-      throw new Error(`unexpected git ${args.join(' ')}`);
-    },
-    docker: async (argv, options) => {
-      const runJson = options.logFile ? path.join(path.dirname(options.logFile), 'run.json') : null;
-      seen.docker.push({ argv, options });
-      if (runJson) seen.records.push(JSON.parse(fs.readFileSync(runJson, 'utf8')));
-      return exits[Math.min(call++, exits.length - 1)];
-    },
-    log: (line) => seen.logged.push(line),
-    err: (line) => seen.errors.push(line),
-  };
-  return { deps, seen };
-}
-
-test('main: a run makes its folder, writes run.json before and after, and ends with docker\'s exit code', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f);
-  const code = await main(['web/e2e/harness.spec.ts', '--', '-g', 'signed in'], deps);
-  const outDir = path.join(f.outBase, RUN_ID);
-  assert.equal(code, 0);
-  assert.equal(seen.docker.length, 1);
-  assert.equal(seen.docker[0].options.logFile, path.join(outDir, 'stdout.log'));
-  // What docker saw while it ran: the run is on record before the container starts.
-  assert.deepEqual(seen.records[0], {
-    schema: 1,
-    run_id: RUN_ID,
-    command: 'run',
-    container: CONTAINER,
-    kept: false,
-    mode: 'build',
-    base_url: 'http://localhost:3000',
-    image: WALK_IMAGE,
-    worktree: posix(f.root),
-    commit: COMMIT,
-    dirty: false,
-    specs: ['web/e2e/harness.spec.ts'],
-    args: ['-g', 'signed in'],
-    shots: false,
-    started_at: '2026-10-08T05:15:00.000Z',
-    finished_at: null,
-    duration_s: null,
-    exit_code: null,
-    result: 'running',
-  });
-  const after = JSON.parse(fs.readFileSync(path.join(outDir, 'run.json'), 'utf8'));
-  assert.deepEqual(after, {
-    ...seen.records[0],
-    finished_at: '2026-10-08T05:22:30.000Z',
-    duration_s: 450,
-    exit_code: 0,
-    result: 'passed',
-  });
-  assert.match(seen.logged.join('\n'), new RegExp(RUN_ID));
-});
-
-test('main: a failing walk ends with Playwright\'s code, and run.json says the tests failed', async () => {
-  const f = fixture();
-  const { deps } = harness(f, { exits: [1], dirty: true });
-  assert.equal(await main(['web/e2e/harness.spec.ts'], deps), 1);
-  const record = JSON.parse(fs.readFileSync(path.join(f.outBase, RUN_ID, 'run.json'), 'utf8'));
-  assert.equal(record.exit_code, 1);
-  assert.equal(record.result, 'tests failed');
-  assert.equal(record.dirty, true);
-});
-
-test('main: a box that broke is told from a walk that found something', async () => {
-  for (const [exit, result] of [[72, 'box failed: npm ci'], [73, 'box failed: build'], [74, 'box failed: server'], [75, 'box failed: sign-in'], [125, 'docker failed (125)']]) {
-    const f = fixture();
-    const { deps } = harness(f, { exits: [exit] });
-    assert.equal(await main(['web/e2e/harness.spec.ts'], deps), exit);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(f.outBase, RUN_ID, 'run.json'), 'utf8')).result, result);
-  }
-});
-
-test('main: a refusal starts no container, writes no folder and exits 64', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f);
-  assert.equal(await main(['web/src/elsewhere.spec.ts'], deps), EXIT.refused);
-  assert.equal(await main([], deps), EXIT.refused);
-  assert.equal(await main(['--rm', 'sync'], deps), EXIT.refused);
-  assert.equal(seen.docker.length, 0);
-  assert.equal(fs.existsSync(f.outBase), false);
-  assert.equal(seen.errors.length, 3);
-});
-
-test('main: a run folder is never used twice', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f, { times: [NOW] });
-  assert.equal(await main(['web/e2e/harness.spec.ts'], deps), 0);
-  assert.equal(await main(['web/e2e/harness.spec.ts'], deps), EXIT.refused);
-  assert.equal(seen.docker.length, 1);
-  assert.match(seen.errors.join('\n'), /already there/);
-});
-
-test('main --keep: two docker calls, the container is named with the two commands that follow', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f);
-  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], deps), 0);
-  assert.deepEqual(seen.docker.map((call) => call.argv[0]), ['run', 'exec']);
-  const said = seen.logged.join('\n');
-  assert.match(said, new RegExp(`--exec ${CONTAINER}`));
-  assert.match(said, new RegExp(`--rm ${CONTAINER}`));
-});
-
-test('main --keep: a container that did not start is not walked, and is not said to be left running', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f, { exits: [125] });
-  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], deps), 125);
-  assert.equal(seen.docker.length, 1);
-  assert.doesNotMatch(seen.logged.join('\n'), /left running|--exec|--rm/);
-});
-
-test('main --keep: a walk that failed in a box that started still names the box', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f, { exits: [0, 73] });
-  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], deps), 73);
-  assert.match(seen.logged.join('\n'), new RegExp(`--rm ${CONTAINER}`));
-});
-
-test('main --exec: the box is asked first, then the walk has its own folder and run.json under the box\'s', async () => {
-  const f = fixture();
-  const first = harness(f, { times: [NOW] });
-  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], first.deps), 0);
-  const second = harness(f, { times: [LATER], exits: [0, 1] });
-  assert.equal(await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], second.deps), 1);
-  const outDir = path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`);
-  assert.deepEqual(second.seen.docker.map((call) => call.argv.slice(0, 3)), [
-    ['exec', CONTAINER, 'true'],
-    ['exec', '-e', `WALK_OUT=/out/exec-${LATER_RUN_ID}`],
-  ]);
-  assert.equal(second.seen.docker[0].options.logFile, null);
-  assert.equal(second.seen.docker[1].options.logFile, path.join(outDir, 'stdout.log'));
-  const record = JSON.parse(fs.readFileSync(path.join(outDir, 'run.json'), 'utf8'));
-  assert.equal(record.command, 'exec');
-  assert.equal(record.run_id, LATER_RUN_ID);
-  assert.equal(record.box_run_id, RUN_ID);
-  assert.equal(record.exit_code, 1);
-  assert.equal(record.result, 'tests failed');
-});
-
-test('main --exec: a box that is not running is said so, with a code of its own, and nothing is walked', async () => {
-  const f = fixture();
-  const first = harness(f, { times: [NOW] });
-  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], first.deps), 0);
-  // docker exec's own answer for a container that is gone: 1, Playwright's code for a failed test.
-  const second = harness(f, { times: [LATER], exits: [1] });
-  assert.equal(await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], second.deps), EXIT.noBox);
-  assert.notEqual(EXIT.noBox, 1);
-  assert.equal(second.seen.docker.length, 1);
-  assert.match(second.seen.errors.join('\n'), /not running/);
-  assert.equal(fs.existsSync(path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`)), false);
-});
-
-test('main --rm: one docker rm -f, no folder, docker\'s exit code', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f);
-  assert.equal(await main(['--rm', CONTAINER], deps), 0);
-  assert.deepEqual(seen.docker.map((call) => call.argv), [['rm', '-f', CONTAINER]]);
-  assert.equal(seen.docker[0].options.logFile, null);
-  assert.equal(fs.existsSync(f.outBase), false);
-});
-
-test('main: docker that cannot be started is an error of its own, on record', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f);
-  deps.docker = async () => {
-    throw new Error('spawn docker ENOENT');
-  };
-  assert.equal(await main(['web/e2e/harness.spec.ts'], deps), EXIT.docker);
-  assert.match(seen.errors.join('\n'), /ENOENT/);
-  const record = JSON.parse(fs.readFileSync(path.join(f.outBase, RUN_ID, 'run.json'), 'utf8'));
-  assert.equal(record.exit_code, EXIT.docker);
-});
-
-test('main: a checkout git cannot read is refused before any container starts', async () => {
-  const f = fixture();
-  const { deps, seen } = harness(f);
-  deps.git = () => {
-    throw new Error('fatal: not a git repository');
-  };
-  assert.equal(await main(['web/e2e/harness.spec.ts'], deps), EXIT.refused);
-  assert.equal(seen.docker.length, 0);
-});
-
-/* ---------------------------------------------------------------------------------------------
- * No value of an env file or of the environment is ever passed, logged or recorded
- * ------------------------------------------------------------------------------------------ */
-
-test('no env value appears in a docker call, in what is logged, or in run.json', async () => {
-  const secrets = [SECRET_KEY, SECRET_PASSWORD, SECRET_SHARE];
-  const ways = [
-    ['web/e2e/harness.spec.ts'],
-    ['--keep', 'web/e2e/harness.spec.ts'],
-    ['--url', 'https://x.example', 'web/e2e/harness.spec.ts'],
-  ];
-  for (const argv of ways) {
-    const f = fixture({ env: { WALK_VERCEL_SHARE: SECRET_SHARE, WALK_SHOTS: '1' } });
-    const { deps, seen } = harness(f, { exits: [0] });
-    assert.equal(await main(argv, deps), 0);
-    const exec = harness(f, { times: [LATER] });
-    assert.equal(await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], exec.deps), 0);
-    const outDir = path.join(f.outBase, RUN_ID);
-    const told = [
-      ...seen.docker.flatMap((call) => call.argv),
-      ...exec.seen.docker.flatMap((call) => call.argv),
-      ...seen.logged,
-      ...seen.errors,
-      ...exec.seen.logged,
-      ...exec.seen.errors,
-      fs.readFileSync(path.join(outDir, 'run.json'), 'utf8'),
-      fs.readFileSync(path.join(outDir, `exec-${LATER_RUN_ID}`, 'run.json'), 'utf8'),
-    ].join('\n');
-    for (const secret of secrets) assert.ok(!told.includes(secret), `a value leaked by ${argv.join(' ')}`);
-  }
-});
 
 test('the script reads neither env file: it only asks whether each is there', () => {
   const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'walk-box.mjs'), 'utf8');
@@ -708,35 +425,4 @@ test('the script reads neither env file: it only asks whether each is there', ()
   const reads = source.match(/readFileSync\([^)]*\)/g) ?? [];
   assert.deepEqual(reads, ["readFileSync(webPackageFile, 'utf8')"]);
   assert.match(source, /const webPackageFile = path\.join\(root, 'web', 'package\.json'\);/);
-});
-
-/* ---------------------------------------------------------------------------------------------
- * The script that runs inside the container
- * ------------------------------------------------------------------------------------------ */
-
-test('docker/walk/entry.sh is a bash script with LF line ends that stops at the first failure', () => {
-  const entry = fs.readFileSync(path.join(REPO_ROOT, 'docker', 'walk', 'entry.sh'));
-  assert.equal(entry.includes(0x0d), false, 'a CR in a shell script stops it from running');
-  const text = entry.toString('utf8');
-  assert.ok(text.startsWith('#!/usr/bin/env bash\n'));
-  assert.match(text, /^set -euo pipefail$/m);
-});
-
-test('entry.sh copies web/ without what a build must not inherit, and never copies the login file', () => {
-  const text = fs.readFileSync(path.join(REPO_ROOT, 'docker', 'walk', 'entry.sh'), 'utf8');
-  for (const left of ['./node_modules', './.next', './e2e/.auth', './e2e/.results', "'./.env*'"]) {
-    assert.ok(text.includes(`--exclude=${left}`), `--exclude=${left}`);
-  }
-  const code = text.replace(/^\s*#.*$/gm, '');
-  assert.doesNotMatch(code, /\b(cp|cat|mv|tar)\b[^\n]*\.env\.testing/);
-  assert.doesNotMatch(code, /\b(env|printenv|set -x)\b\s*$/m);
-});
-
-test('entry.sh gives npm ci and the build a time limit: a box nobody is watching still ends', () => {
-  const text = fs.readFileSync(path.join(REPO_ROOT, 'docker', 'walk', 'entry.sh'), 'utf8');
-  const code = text.replace(/^\s*#.*$/gm, '');
-  assert.match(code, /^readonly INSTALL_LIMIT_S=[0-9]+$/m);
-  assert.match(code, /^readonly BUILD_LIMIT_S=[0-9]+$/m);
-  assert.match(code, /timeout [^\n]*"\$INSTALL_LIMIT_S" npm ci\b/);
-  assert.match(code, /timeout [^\n]*"\$BUILD_LIMIT_S" npm run build\b/);
 });
