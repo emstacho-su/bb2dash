@@ -55,3 +55,35 @@ and the last sync (request 2519, 22:58Z) had closed done.
 
 Also read, for the pack's worker: 6 rows on prod have entity `agent_request`, all
 `stack_must_confirm` and archived (the notices), and no row's ref starts `accept/`.
+
+## Rulings at the spawn (2026-10-08)
+
+W-80 to W-83 were spawned together after the freeze and task 1, each in its own worktree
+(`bb2dash-wt-23f-db`, `-apply`, `-exports`, and `bb2dash-stack-wt-23f` cut from bb2dash-stack's
+`origin/main` at c4a54f8). They are Sonnet 5.5 (brief 110, "The freeze"). W-84 waits for 187.
+
+**R1** is brief 110's "Round 1": a test question the run dismisses is a `data_gap`.
+
+**R2, the shapes two workers share.** The brief names these values and leaves their form open. W-80
+writes the SQL side and W-81 the worker's, at the same time, so the PM fixed the form in both
+prompts:
+
+* `inbox_apply_prepare` returns `held` at the top level of its answer, beside `params`, `queue` and
+  `runs_today`: a JSON array of item ids (numbers), empty for a request with no `trigger`.
+* The worker's close hands back `skip_seen` inside the result: a JSON array of
+  `{"id": <number>, "resolved_at": <string or null>}`. The string is the queue row's `resolved_at`
+  exactly as `prepare` handed it (`185:81` already sends it). The worker never passes it through a
+  JavaScript date, which would drop the microseconds; the close casts it to `timestamptz` and
+  compares with `is not distinct from`. A malformed `skip_seen` is refused (22023), as a malformed
+  `skip` is.
+* `v_inbox_apply_runs` has these columns in this order: `id`, `state`, `filed_by` (the params'
+  `trigger`, and `button` when there is none), `after_request`, `claimed_by`, `created_at`,
+  `claimed_at`, `finished_at`, `claude_started`, `error_code`, `archived_count`, `skip_ids`. W-80
+  says in its own record where the code made it take a nearer form; W-84 builds on what W-80 hands in.
+* The exporter's four filing functions keep 182's argument naming; W-82 writes down the names it
+  sends and the PM holds W-80's file to them at integration.
+
+**What each worker may not do** was written into every prompt: no Supabase tool and no change to
+prod, no migration run on prod even rolled back, no `docker` command, no scheduled task, no `.env`,
+no secrets folder, no `git add -A`, no file outside its list, and no answer expected mid-run. W-80's
+only path to the database is the read-only runner, one process at a time.
