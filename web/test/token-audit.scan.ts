@@ -277,16 +277,32 @@ export function sameDeclaration(declaration: CssDeclaration, key: DeclarationKey
 }
 
 const WIDTH_FEATURE = /(?<![\w-])(?:min-|max-)?(?:width|inline-size)(?![\w-])/i;
+/** A pair of parentheses with no pair inside it. */
+const INNERMOST_PAIR = /\(([^()]*)\)/g;
+
+/**
+ * The prelude with every pair of parentheses that names no width turned into
+ * brackets, innermost first, until nothing changes. The pairs left are the
+ * width conditions, each whole: a `calc()` or a group nested inside one, however
+ * deep, no longer ends it early, and a height beside it is not read with it.
+ */
+function widthConditionsOnly(prelude: string): string {
+  const next = prelude.replace(INNERMOST_PAIR, (pair: string, inside: string) =>
+    WIDTH_FEATURE.test(inside) ? pair : `[${inside}]`,
+  );
+  return next === prelude ? prelude : widthConditionsOnly(next);
+}
 
 /**
  * The lengths an at-rule's prelude compares a width with: `(max-width: 720px)`
- * gives `720px`, and so does `(width <= 720px)`. A height, or a condition with
- * no length, gives nothing.
+ * gives `720px`, and so does `(width <= 720px)`. A number inside `calc()` is
+ * read too, so `(max-width: calc(700px + 1px))` gives both. A height, or a
+ * condition with no length, gives nothing.
  */
 export function widthLengths(prelude: string): string[] {
-  return [...prelude.matchAll(/\(([^()]*)\)/g)]
-    .filter(([, condition]) => WIDTH_FEATURE.test(condition))
-    .flatMap(([, condition]) => condition.match(/(?<![\w.-])\d*\.?\d+[a-z%]*/gi) ?? []);
+  return [...widthConditionsOnly(prelude).matchAll(INNERMOST_PAIR)].flatMap(
+    ([, condition]) => condition.match(/(?<![\w.-])\d*\.?\d+[a-z%]*/gi) ?? [],
+  );
 }
 
 /* ---------------------------------------------------------------------------

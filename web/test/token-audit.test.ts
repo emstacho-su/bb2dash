@@ -463,6 +463,17 @@ describe('A1: breakpoints', () => {
     expect(widthLengths('(max-height: 500px) and (max-device-width: 400px)')).toEqual([]);
   });
 
+  it('reads a width through calc() and nested parentheses, however deep, so wrapping a value hides nothing', () => {
+    expect(widthLengths('(max-width: calc(700px))')).toEqual(['700px']);
+    expect(widthLengths('(max-width: calc(720px + 1px))')).toEqual(['720px', '1px']);
+    expect(widthLengths('(max-width: calc((700px)))')).toEqual(['700px']);
+    expect(widthLengths('(min-width: calc(100vw - (2 * 10px)))')).toEqual(['100vw', '2', '10px']);
+    expect(widthLengths('sidebar (min-width: min(650px, 50%))')).toEqual(['650px', '50%']);
+    expect(widthLengths('((max-height: 500px) or (min-width: 600px))')).toEqual(['600px']);
+    expect(widthLengths('((max-height: calc(500px)) or (min-width: 600px))')).toEqual(['600px']);
+    expect(widthLengths('(not (max-width: 700px)) and (max-height: calc(400px))')).toEqual(['700px']);
+  });
+
   it('breakpoint set equals {480, 620, 640, 720, 760, 820, 900, 1023.98}', () => {
     expect(MEDIA_WIDTHS).toEqual(['480px', '620px', '640px', '720px', '760px', '820px', '900px', '1023.98px']);
 
