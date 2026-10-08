@@ -472,15 +472,16 @@ test('entry.sh runs login.mjs in one place, with all it prints caught, and never
   const runs = CODE.split('\n').filter((line) => /login\.mjs/.test(line) && /\bnode\b/.test(line));
   assert.equal(runs.length, 1, 'login.mjs is run in exactly one line');
   assert.match(runs[0], /^\s*said="\$\(cd "\$WORK_WEB" && [^\n]*\bnode e2e\/login\.mjs 2>&1\)" \|\| code=\$\?$/);
-  // Every line that reads what was caught: only a test against a fixed pattern, or the hand-over to
-  // the function that makes those tests.
+  // Every line that reads what was caught is one of two things: a test of it against a pattern,
+  // which at most sets one of two fixed phrases; or the hand-over to the function that makes
+  // those tests.
+  const aTest = /^case "\$said" in( \*"[^"]*"\*\) (where|how)="[^"$]*" ;; esac)?$/;
+  const theHandOver = 'say "login.mjs ended with exit code $code at: $(failed_login_step "$said")"';
   const reads = CODE.split('\n')
     .filter((line) => /\$\{?said\b/.test(line))
     .map((line) => line.trim());
-  assert.ok(reads.length > 0);
-  for (const line of reads) {
-    assert.match(line, /^(case "\$said" in( \*"[^$]*"\*\) [a-z]+="[^$]*" ;;)*( esac)?|say "login\.mjs ended with exit code \$code at: \$\(failed_login_step "\$said"\)")$/, line);
-  }
+  assert.ok(reads.includes(theHandOver));
+  for (const line of reads) assert.ok(line === theHandOver || aTest.test(line), line);
 });
 
 runTest('no value handed in is printed: not the login, not a setting, not the share token', async () => {

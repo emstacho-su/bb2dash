@@ -9,6 +9,9 @@
 # /work/.env.testing (read-only; login.mjs reads it with its own parser and it is never copied or
 # printed), the run's output folder at /out, and npm's download cache at /npm-cache.
 #
+# Nothing login.mjs prints is passed on. A step of the sign-in that fails prints Playwright's
+# message, which carries the value being typed or the address with the share token (sign_in).
+#
 # What the environment says: WALK_BOX_MODE (build: this worktree's web app is built and served
 # here; url: the host in WALK_BASE_URL is walked and nothing is built), WALK_BASE_URL, WALK_OUT
 # (this call's folder under /out), WALK_SHOTS (1: specs may shoot, into $WALK_OUT/shots), and for a
@@ -44,6 +47,20 @@ readonly SERVER_LOG="$BOX_OUT/next.log"
 readonly SERVER_PID_FILE="$WORK/next.pid"
 
 readonly E_USAGE=70 E_COPY=71 E_INSTALL=72 E_BUILD=73 E_SERVER=74 E_LOGIN=75 E_RESULTS=76
+
+# Playwright's own names for the calls web/e2e/login.mjs makes, in the order it makes them. A
+# failed sign-in is told by one of these names and by nothing login.mjs printed (sign_in).
+readonly LOGIN_CALLS=(
+  browserType.launch
+  browser.newContext
+  browserContext.newPage
+  page.goto
+  locator.fill
+  locator.click
+  page.waitForURL
+  page.waitForLoadState
+  browserContext.storageState
+)
 
 readonly MODE="${WALK_BOX_MODE:-build}"
 readonly BASE_URL="${WALK_BASE_URL:-http://localhost:$PORT}"
@@ -174,11 +191,38 @@ wait_ready() {
   done
 }
 
-# login.mjs types the test login into the form and prints neither value. When it fails, what the
-# page was doing is told from the outside: whether /login still answers, and the server's log.
+# Which call of login.mjs failed, in fixed words: one of Playwright's own names from LOGIN_CALLS,
+# the field when it was one of the two, and whether it timed out. $1 is what login.mjs printed.
+# It is only tested against fixed patterns here, and no part of it is printed.
+failed_login_step() {
+  local said="$1" call where="" how=""
+  for call in "${LOGIN_CALLS[@]}"; do
+    case "$said" in
+      *"login.mjs failed: $call: "*)
+        case "$said" in *"locator('#email')"*) where=" on #email" ;; esac
+        case "$said" in *"locator('#password')"*) where=" on #password" ;; esac
+        case "$said" in *"login.mjs failed: $call: Timeout "*) how=" (timed out)" ;; esac
+        printf '%s%s%s' "$call" "$where" "$how"
+        return 0
+        ;;
+    esac
+  done
+  printf 'a step login.mjs does not name'
+}
+
+# login.mjs types the test login into the form. Nothing it prints is passed on, on any path: when
+# a step fails it prints Playwright's message, and that message carries the value that was being
+# typed (`fill("...")` in its call log) or the whole address that was being opened, share token
+# included. So all it prints is caught in a variable that lives for this function only. A failed
+# sign-in is told by the name of the call that failed, and from the outside: whether /login still
+# answers, and the server's log.
 sign_in() {
   if [ "$MODE" != url ]; then unset WALK_VERCEL_SHARE; fi
-  if (cd "$WORK_WEB" && WALK_BASE_URL="$BASE_URL" node e2e/login.mjs); then return 0; fi
+  local said code=0
+  said="$(cd "$WORK_WEB" && WALK_BASE_URL="$BASE_URL" node e2e/login.mjs 2>&1)" || code=$?
+  if [ "$code" -eq 0 ]; then return 0; fi
+  say "login.mjs ended with exit code $code at: $(failed_login_step "$said")"
+  say "what login.mjs printed is not shown: a failed step's message can carry the login or the share token"
   if answers_200 "$BASE_URL/login"; then
     say "$BASE_URL/login answers 200, so the form was served and the sign-in did not land"
   else
