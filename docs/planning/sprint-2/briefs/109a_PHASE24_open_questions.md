@@ -151,8 +151,10 @@ The store is the separate Supabase project `harness-memory`.
   His uploads and the assistant's memory have no vector home yet.
 * **What it decides.** Brief 109 holds the store as a contract clause of its own, "The pgvector
   store, scoped to bb2dash", with its proof in task 49. In five points:
-  1. One pgvector store, scoped to bb2dash. Everything 24a builds reads and writes it through named
-     functions, and nothing in it reads the vault's separate store or any other project.
+  1. One pgvector store, scoped to bb2dash. Every service 24a builds reads and writes its text and
+     its vectors through named functions, and nothing in it reads the vault's separate store or
+     any other project. The page has two narrow rights of its own on the store's tables; item 24
+     below lists them.
   2. It holds three kinds of content: course files, his uploads and the assistant's memory. One
      search covers all three and names the kind on every hit.
   3. Every vector column has an HNSW index, and every vector row records the model that made it, so
@@ -161,21 +163,24 @@ The store is the separate Supabase project `harness-memory`.
   4. Ingestion is a queue with one status row he can read: for each kind, how many are in, how many
      wait and how many failed. The same content sent twice leaves one row.
   5. Nine proofs in the task list show it is there once 24a is applied, each a statement a worker
-     runs as written with its expected result.
+     runs as written with its expected result. One of the nine has two parts.
 * **The default the PM took.** The store is inside the existing bb2dash Supabase project, not a
   second project, and in the schema the app already uses. It is laid out so it could be lifted into
-  its own project later, and the brief names the one thing in its design that a move would have to
-  change: the course half reads the app's list of files inside its search. His to object to.
+  its own project later, and the brief names what a move would have to change. The largest piece
+  is that the course half reads the app's list of files inside its search. Five smaller objects
+  also stand on both sides, and the brief lists them. His to object to.
 * **What it does not do now.** No second project. No change of the embedding model. Items 23 to 25
-  below are the three defaults that came with it.
+  below came with it. Item 23 is a question for him. Items 24 and 25 are defaults.
 
 ## Still open, with the default taken
 
 The design needed these and he was not asked. Each default is built unless he says otherwise. None
-blocks the freeze. Items 19 to 22 were added by the challenge round of 2026-10-08 (brief 109,
-Appendix 2), which also changed the wording of items 2, 3, 6, 10, 11, 14 and 15. Items 19 and 20 are
-the two a reviewer asked to have put to him by name. Items 23 to 25 came with answer 17 (brief 109,
-Appendix 3). Item 23 corrects one thing he was told, so it is put to him by name too.
+blocks the freeze but item 23. Items 19 to 22 were added by the challenge round of 2026-10-08
+(brief 109, Appendix 2), which also changed the wording of items 2, 3, 6, 10, 11, 14 and 15. Items
+19 and 20 are the two a reviewer asked to have put to him by name. Items 23 to 25 came with answer
+17 (brief 109, Appendix 3), and the review round of the store's clause changed items 23 and 24
+(brief 109, Appendix 4). **Item 23 is not a default.** It corrects one thing he was told, so it is
+a question put to him before the freeze, and the freeze waits for his answer.
 
 1. **Deep after one question.** Default: Deep applies to that question, then the menu returns to Auto
    (PM ruling W-9). Quick and Standard stay until he changes them.
@@ -264,27 +269,55 @@ Appendix 3). Item 23 corrects one thing he was told, so it is put to him by name
     snippet on his laptop makes it, he runs one line in the SQL editor, and the snippet stores the
     connection string in his secrets folder. It never passes through a chat, a repo file or a
     migration. It is needed before the PM's walk and before the cut-over (brief 109, task 48).
-23. **The index is in place before the search needs it.** He was told that a proof would show the
-    search's query plan using the index. That is true of the plain nearest-neighbour search and not
-    of the search the assistant uses. The assistant's search compares the question against every
-    vector and keeps the best piece of each page or slide. At 2,011 vectors that is exact, it
-    misses nothing, and it is the ranking Phase 18 timed. An index answers a different shape of
-    question, the nearest few first, and it starts to pay when there are many times more vectors.
-    Default: the ranking is left as it is; every vector column gets its index now; and the proof
-    shows the index is valid and that the nearest-neighbour query can use it on both tables. Moving
-    the assistant's search onto the index later changes two functions and no table. The moment for
-    it is when the search's timed median passes 60 ms. If he wants it now, it is its own piece of
-    work with its own measurement, because it changes which passages come back.
-24. **Four older paths still touch a course-text table without going through a function, and one
-    of them is a door nothing uses.** The rule "only through named functions" holds for everything
-    24a builds. It was not true of the course half before, and three of the four stay as they are:
-    the sync inserts course text with the public key under an insert-only rule; the assistant's
-    read of one whole page goes straight to the table with the service key; and his own signed-in
-    session may read both course tables, though no page does. The fourth is a rule from September
-    that lets a holder of the public key insert a row into the course vectors. No code uses it.
-    Default: all four are listed in the brief and none is changed in 24a, because the phase alters
-    no table it did not make. Closing the unused one is one line in a spare migration (198), and
-    the brief says where it would go. His to say; the PM has not ruled on it.
+23. **A question for him, before the freeze: what the proof of the index shows.** He was told
+    that a proof would show the search's query plan using the index. That is true of one of the
+    app's searches and not of the one the assistant uses.
+    * **Where it is true.** The app has a plain nearest-neighbour search over course files, the
+      "vector" mode of its search. The proof reads the plan of that search's own statement, and
+      the plan must name the index.
+    * **Where it is not.** The assistant's search compares the question against every vector and
+      keeps the best piece of each page or slide. At 2,011 vectors that is exact, it misses
+      nothing, and it is the ranking Phase 18 timed. It uses no index. For his uploads and the
+      assistant's memory there is no nearest-neighbour search yet, so the proof there shows only
+      that the index is valid and could serve one.
+    * **What he is asked.** (a) Leave the assistant's ranking as it is. Every vector column gets
+      its index now, and the assistant's search moves onto the index later, when its timed median
+      passes 60 ms. That later move changes two functions and no table. Or (b) move the
+      assistant's search onto the index in this phase. That is its own piece of work with its own
+      measurement, because it changes which passages come back, and the freeze moves for it.
+    * **What the PM would pick:** (a). An index answers "the nearest few first" and starts to
+      pay when there are many times more vectors than today.
+    * **Before it goes to him** the PM reads on the live database which plan the plain search
+      gets today with nothing forced, and writes it here: the index, or a scan of all 2,011
+      rows. Either is a fair plan at this size, and he should see which it is.
+    * **His answer** is then written under this item on a line of its own, indented four spaces,
+      that begins with the bold words `His answer to item 23` and carries its date. Brief 109's
+      task 12 looks for that line, and the freeze waits for it.
+24. **Direct paths to the store's tables: one is closed, three older ones stay, and the page has
+    two of its own.** The rule "only through named functions" holds for every service 24a builds,
+    for text and for vectors. It was not true of the course half before.
+    * **Closed in 24a.** A rule from September lets a holder of the app's public key insert a row
+      into the course vectors. No code uses it. The first pass listed it and left it. The review
+      round ruled it in, because a store that a stranger can write into is not scoped to
+      bb2dash. One migration (198) removes the rule and nothing else. Default: closed. His to
+      object to, before 198 is applied.
+    * **Three older ones stay as they are.** The sync inserts course text with the public key
+      under an insert-only rule. The assistant's read of one whole page goes straight to the
+      table with the service key. And his own signed-in session may read and write both course
+      tables, though no page does.
+    * **What the first of those means.** The insert-only rule is open to anyone who holds the
+      public key, not to the sync alone, and that key is in the web app by design. Such a person
+      could add a piece of text to a course file. They could not read, change or remove
+      anything. Added text would be indexed at the next sync and could come back in an answer,
+      marked as a course passage. Closing it means moving the sync's insert behind a function.
+      That is a change to the sync, and it is not in this phase. His to say whether it becomes
+      its own piece of work.
+    * **Two new ones are the page's.** His signed-in session reads the list of his uploads and
+      changes an upload's title and course directly. It reads what the assistant remembers
+      through a view. The right behind that view would also let his own session read the text
+      of his own uploads, which no page does. He was told "never through a table a caller
+      touches directly"; for these two that is not so. Default: as built, because the page's
+      reads are plain reads by design (brief 111). His to object to.
 25. **The same file sent twice is one file.** An upload is known by the SHA-256 of its bytes. The
     page works it out before it sends anything, the file is stored under a name made from it, and
     the upload service checks it against the bytes it downloaded. Default: sending a file that is

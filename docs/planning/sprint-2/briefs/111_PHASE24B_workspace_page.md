@@ -6,7 +6,8 @@ Date 2026-10-08 · PM: the Fable session · Product manager: Stack · Requiremen
 `feat/workspace-page-24b` · Worktree `bb2dash-wt-24b` · Neither is cut yet · Workers W-86 to W-88
 (24a uses W-76 to W-79 and W-85; W-80 to W-84 are the Phase 23 follow-ups', brief 110 at d558994,
 line 13; the PM confirms the one numbering at the freeze) · No migration: the page uses 24a's
-objects, and 198 and 199 stay slack · One PR in bb2dash · Verification file
+objects, and 199 stays slack (24a took 198 in the review round of its store clause) · One PR in
+bb2dash · Verification file
 `docs/planning/sprint-2/verification/111a_PHASE24B_VERIFICATION.md`, called 111a below · Status:
 **drafted with brief 109 on Stack's answers of 2026-10-08, and through the challenge round of the
 same day** (brief 109, Appendix 2). It is frozen at its gate, after a re-read against Phase 22 as
@@ -136,8 +137,8 @@ scope).
 three example prompts with a refresh, and recent conversations with a link to all of them. **Why no
 name, though the picture has one and he asked for a personalised assistant:** the app holds no name
 of his anywhere (Facts), a name typed into the code would be a literal about a person in a public
-repository, and a place to keep one is a database column, which in this phase would be a migration
-in 198 or 199 and a ruling first. It is 109a's item 21, his to object to: the cheap moment for a
+repository, and a place to keep one is a database column, which in this phase would be migration
+199 and a ruling first. It is 109a's item 21, his to object to: the cheap moment for a
 `display_name` on `workspace_profile` is before 24a's migration 195 is frozen.
 
 **The composer** (`Composer.tsx`, rewritten). A text box; a row of chips; NEW `PlusMenu.tsx` with
@@ -270,6 +271,14 @@ lines 386-389). A status is never told by red alone.
 
 The page writes through functions and reads through tables and views. **Every read is a select, never
 an RPC**, so Phase 22's walk guard needs only new names on its read list.
+
+**The page reads no unit and no vector by table.** Of the store's content tables it names
+`workspace_documents` alone: the catalog rows, with an upload's title, course, state and hash. A
+remembered summary comes through the view `v_workspace_memory`. No page code names
+`workspace_document_text` or `workspace_text_embeddings`. The owner's session does hold select on
+the first of those two, because that view is security invoker and needs it, and it holds nothing
+on the second (brief 109, The pgvector store, direct touches 5 and 6). Task 5 holds the rule with
+a grep.
 
 * **Reads:** `workspace_conversations`, `workspace_messages`, `workspace_requests`,
   `v_workspace_status` (Phase 21); `v_work_items`, `v_course_display`, `v_bb_files_current`;
@@ -412,7 +421,7 @@ to 16.
 | 2 | Probes Q-1 to Q-5 (below) | PM + W-86 | one pass or fail line each in 111a |
 | 3 | Wording frozen in `workspace-labels.ts` and its test, before worker branches are cut | PM | `cd web && npx vitest run test/workspace-labels.test.ts` passes, and its case comparing the two fixed sentences with `workspace/src/lines.ts` passes; the line under Delete for an upload says that answers already written keep what they quoted |
 | 4 | `answer-format.ts` and `AnswerBody.tsx` | W-86 | `npx vitest run test/answer-format.test.ts test/AnswerBody.test.tsx`: for generated strings the tree holds no `img`, `a`, `iframe`, `script` or `style` and no `href` or `src`; an unclosed form is text; the parser throws for no input |
-| 5 | The query modules, citations, examples, upload rules | W-86 | `npx vitest run test/queries.workspace-ask.test.ts test/queries.workspace-files.test.ts test/workspace-citations.test.ts test/workspace-examples.test.ts test/workspace-upload-rules.test.ts`: a label with no row stays text; no rows give no example; a file of 20,971,521 bytes is refused before any request; a Markdown file with no reported type is taken by its extension and stored with the Markdown content type; the object's key is `u/` followed by the file's SHA-256 whatever the file's name; a file whose hash an upload row already holds is not uploaded and that row is used; the register call carries the hash; a delete makes the first call, then the storage remove, then the second call, and a failed remove makes no second call |
+| 5 | The query modules, citations, examples, upload rules | W-86 | `npx vitest run test/queries.workspace-ask.test.ts test/queries.workspace-files.test.ts test/workspace-citations.test.ts test/workspace-examples.test.ts test/workspace-upload-rules.test.ts`: a label with no row stays text; no rows give no example; a file of 20,971,521 bytes is refused before any request; a Markdown file with no reported type is taken by its extension and stored with the Markdown content type; the object's key is `u/` followed by the file's SHA-256 whatever the file's name; a file whose hash an upload row already holds is not uploaded and that row is used; the register call carries the hash; a delete makes the first call, then the storage remove, then the second call, and a failed remove makes no second call. And from the bb2dash root, `git grep -n -e "\.from(.workspace_document_text.)" -e "\.from(.workspace_text_embeddings.)" -- web/src` gives no line: the page names neither the unit table nor the vector table (brief 109, direct touches 5 and 6). On `main` today it gives no line, and the same form finds the tables the page does read |
 | 6 | The stream: the `sources` event and the stop guard | W-86 | `npx vitest run test/use-workspace-stream.stop.test.tsx`: a delta after the stopped mark changes nothing; an unknown event changes nothing |
 | 7 | Composer, plus menu, depth menu, material picker | W-87 | `npx vitest run test/Composer.chips.test.tsx`: Ask sends the options; Deep returns to Auto after one question; a file routine with no file keeps Ask off; Backspace in an empty box removes the last chip |
 | 8 | The lobby and example prompts | W-87 | `npx vitest run test/Workspace.lobby.test.tsx`: no upcoming rows, no example row; a press fills the box and calls nothing; the greeting holds no name |
@@ -461,7 +470,7 @@ W-87 and W-88 type against W-86's modules from this Contract until they are on t
 | with | seam | rule here |
 |---|---|---|
 | Phase 22 | it sweeps the two Workspace folders and freezes the tokens | 24b is cut only after Phase 22 is on `main`. It is written on Phase 22's tokens alone and adds no literal. Its fixture, its phone cases and its token baseline are the PM's to extend |
-| Phase 24a | the objects, the labels, the `format` option, the upload order, the error codes, `lines.ts` | none edited. If the page needs a database change, it is a new migration in 198 or 199 and a ruling first |
+| Phase 24a | the objects, the labels, the `format` option, the upload order, the error codes, `lines.ts` | none edited. If the page needs a database change, it is migration 199, the one slack number left, and a ruling first |
 | The live Workspace | one queue | one runner on the queue at a time during the walk, on Stack's word, as in 24a |
 | The acceptance run | pack 24 grows; pack 21 is no longer run and stays in the tree as the acceptance suite's fixture | the host actions it needs are the ones 24a added to bb2dash-stack. A step that waits for a memory item uses the action that reads a proof again until it passes. Each step archives the conversation it opened, so a run leaves nothing in his memory or his list. The cut-over makes the Workspace container again; it does not restart it |
 | The Phase 23 follow-ups (brief 110) | its pack 23 and its W-84 edit `acceptance/pack-check.mjs` and `OPERATOR.md` where they name the Workspace alone; its workers are W-80 to W-84 | this phase edits neither file. Its workers are W-86 to W-88. If the follow-ups' pack reads a Workspace string this phase removes, the pack check says so at integration and the PM keeps the string or edits that sentence, named in 111a |

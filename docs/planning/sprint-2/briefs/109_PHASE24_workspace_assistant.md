@@ -6,12 +6,14 @@ freeze) · Answers on record: `109a_PHASE24_open_questions.md` · Branch `feat/w
 `bb2dash-wt-24` · Workers W-76 to W-79 and W-85 (W-80 to W-84 are the Phase 23 follow-ups', brief 110
 on `fix/phase23-followups` at d558994, line 13; W-67 to W-70 and W-75 are Phase 22's, W-71 to W-74 are
 used; brief 103 on `feat/styling-22` at 3d02033, line 129) · Migration range **190 to 199** (190 to
-197 are written here, 198 and 199 are slack) · Test compose project `bb2dash-wt24` · Verification file
+198 are written here, 199 is slack) · Test compose project `bb2dash-wt24` · Verification file
 `docs/planning/sprint-2/verification/109c_PHASE24_VERIFICATION.md`, called 109c below · Status: **ready
 to freeze on Stack's answers of 2026-10-08, after the challenge round of the same day** (27 findings,
 each placed in the second appendix), and with his answer 17 of the same day, the pgvector store,
-held as a clause of its own (The pgvector store, scoped to bb2dash; the third appendix). Four things
-stay provisional until their probe passes: the planning turn (P-4), a turn with no MCP server (P-1),
+held as a clause of its own (The pgvector store, scoped to bb2dash; the third appendix). That clause
+had a review round of its own the same day (8 findings, each placed in the fourth appendix). **One
+question goes to him before the freeze:** 109a, item 23, on what the proof of the index shows. Four
+things stay provisional until their probe passes: the planning turn (P-4), a turn with no MCP server (P-1),
 a turn that stores no session (P-2) and the parser's own user in the ingest container (P-10).
 
 **Worker numbers.** Ruling W-14 starts this phase at W-76. Brief 110 was written the same afternoon
@@ -113,6 +115,32 @@ them) and one test-only port PR to `main`, as Phases 21 and 23 had.
 * `mcp-server/src/config.ts:112-117` refuses a project URL that names the vault's project.
   `ingest/pull_files.mjs:289` exports `sha256Hex`. `ingest/embed_corpus.mjs:4, 19` has a `--check`
   mode that prints `missing_parts_before=<n>`.
+* **Who holds a right on the two course text tables, read on prod 2026-10-08 for the review round
+  of the store's clause: one SELECT, catalog rows and counts only, no text.** Row security is on
+  for `bb_file_text` and `bb_text_embeddings` and is not forced. Each has two policies:
+  `<table>_owner_all` (`authenticated`, every command, the owner check) and `<table>_anon_insert`
+  (anon, insert, check `true`). anon and `authenticated` each hold the project's default table
+  grant on both: select, insert, update, delete, references, trigger and maintain, no truncate. So
+  the policy is what narrows anon to insert, and that insert is open on both tables, the vectors
+  included. `db_test_runner` holds select on both and bypasses row security
+  (`db/migrations/100_db_test_runner_role.sql:34, 61-62`). `workspace_runner`, `sync_runner` and
+  `inbox_apply_runner` hold no privilege on either, and `workspace_ingest_runner` does not exist
+  yet. A table that a migration makes in `public` gets the same default: those commands for anon
+  and `authenticated`, select for `db_test_runner`. Neither table has a column grant or a
+  trigger. The only functions in `public` whose body names either table are the three search
+  functions, and the only view is `v_embedding_status`. `bb_file_text` holds 982 units, none with
+  empty text.
+* `ingest/extract_text.py:9, 10-15, 28, 36`: a PDF, a pptx and an xlsx give a unit only where
+  there is text; a docx always gives one unit, with empty text when it holds none.
+  `supabase/functions/embed-corpus/index.ts:105, 209-212`: empty text gives no part, and a unit
+  with no part is reported as failed.
+* No unit in `db/tests` names `bb_text_embeddings_anon_insert`
+  (`git grep -c "bb_text_embeddings_anon_insert" -- db/tests` prints nothing).
+  `db/tests/phase10a_stage_attempts.sql:346-347` pins another table's policy, `bb_files_anon_insert`.
+* `acceptance/README.md:39`: a blocked acceptance run is repeated. `acceptance/README.md:127-128`:
+  `run.started_at` is the only value of the run a proof is offered.
+  `scripts/accept-proofs.mjs:108, 123`: a proof's `text` parameter is a plain name of at most 100
+  characters.
 
 Every other file and line cited below was read for this brief unless a sentence says "not checked".
 The PM re-reads each at the cut before the freeze. No docker command was run and nothing was written
@@ -270,8 +298,9 @@ Checks 22 to 25 are answer 17's, the pgvector store. Task 49 holds their stateme
 
 22. The `vector` extension is installed, and exactly two columns are of its type:
     `bb_text_embeddings.embedding` and `workspace_text_embeddings.embedding`, each `vector(384)` and
-    not null, each with a valid HNSW cosine index, and the plan of a nearest-neighbour query with a
-    limit names that index on each table. Today there is one such column and one index
+    not null, each with a valid HNSW cosine index. The plan of `match_file_text`'s own statement
+    names the course index, and the plan of a statement of the same shape names the new table's.
+    Today there is one such column and one index
     (`011_gte_small.sql:25-27, 47-48`), so uploads and memory have no vector home.
 23. One call of `workspace_search` returns hits of all three kinds and every hit names its kind. A
     vector stored under another model name is not ranked. Today the three search functions read
@@ -279,10 +308,13 @@ Checks 22 to 25 are answer 17's, the pgvector store. Task 49 holds their stateme
 24. The same file registered twice, the same units put twice, the same part stored twice and the
     same summary written twice each leave every count as it was. Today no upload path and no memory
     path exists.
-25. No function of the store reads another project, and nothing 24a builds reads or writes a store
-    table except through a named function. Today the Workspace container holds the vault store's
-    connection string (`compose.yaml:226`) and its firewall lists that secret
-    (`docker/workspace/init-firewall.sh:100-103`).
+25. No function of the store reads another project. No service 24a builds reads or writes a unit
+    or a vector except through a named function, and the rights the page holds on a store table
+    are the two that are listed (The pgvector store, direct touches 5 and 6). A holder of the
+    public key can no longer insert a vector. Today the Workspace container holds the vault
+    store's connection string (`compose.yaml:226`), its firewall lists that secret
+    (`docker/workspace/init-firewall.sh:100-103`), and the policy `bb_text_embeddings_anon_insert`
+    lets the public key insert a vector row (`db/migrations/010_search_layer.sql:62-63`).
 
 ## Contract
 
@@ -590,7 +622,9 @@ with `gte-small` at 384 dimensions, so cosine similarity orders hits across kind
 `harness-memory`. What must be true of the store as a whole is the next clause (The pgvector store,
 scoped to bb2dash, answer 17); this one lists its objects.
 
-All objects are NEW and additive. `workspace_requests` and migrations 140 to 143 are not altered, so
+All objects are NEW and additive. One older object goes: the policy
+`bb_text_embeddings_anon_insert`, dropped by 198 (The security boundary).
+`workspace_requests` and migrations 140 to 143 are not altered, so
 `db/tests/phase21_140_workspace_tables.sql` stays green on both sides of every apply. No table has a
 foreign key to `bb_files` or `bb_file_text`: later strip migrations delete those rows
 (`119`, `150`). `courses.id` is text and `bb_files.id` is bigint.
@@ -638,7 +672,7 @@ stays readable after its upload is deleted.
 | `workspace_document_delete(bigint, boolean)` | definer | authenticated | the owner check, first. A memory item: the row, its unit and its vector go in one transaction and `memory_opt_out` is set. An upload: two steps, see Delete under Uploads and extraction |
 | `workspace_search(p_q, p_query_embedding, p_kinds, p_courses, p_limit, p_min_similarity, p_model)` | invoker | service_role | unions `hybrid_search_file_text` (`129_search_notes_label_materialize.sql:17-24`), once per course of the scope, with its NEW twin over the new tables, `hybrid_search_workspace_text` (same grant, same ranking: every part in scope is measured and the best part of each unit is kept, `129:46-61`). `p_model` defaults to `gte-small`, as `129:20`, and is handed to both, so only vectors of that model are ranked. Each row: kind (`material`, `upload` or `memory`, never null), the unit's id, file_id or document_id, course_id, title, unit, part, similarity, score, a passage of at most 2,000 characters from the matched part, and whether it holds the `[notes]` marker. With a scope, course materials and course-tagged uploads are filtered; untagged uploads and memory are always searched. A document in state `deleting` or `failed` is never returned. `authenticated` is not granted: the page never searches (brief 111, Reads), and the browser has no right on `workspace_text_embeddings`, so an invoker call would fail there |
 | `workspace_attachment_read(p_kind, p_id, p_max_chars)` | invoker | service_role | an attached file's units in order, cut on the server, with the bytes read and the total |
-| `workspace_ingest_claim(p_runner)`, `workspace_ingest_put_text(p_runner, ...)`, `workspace_ingest_finish(p_runner, ...)`, `workspace_ingest_heartbeat(p_runner)` | definer | `workspace_ingest_runner` | see Uploads and extraction. A runner holds one document at a time, and `put_text` and `finish` refuse (22023) a document that runner does not hold. `claim` hands over the row's `sha256` with its signed URL. `put_text` replaces the document's units in one transaction: the units it had and their vectors go and the new ones come, so a put that is sent twice leaves one set |
+| `workspace_ingest_claim(p_runner)`, `workspace_ingest_put_text(p_runner, ...)`, `workspace_ingest_finish(p_runner, ...)`, `workspace_ingest_heartbeat(p_runner)` | definer | `workspace_ingest_runner` | see Uploads and extraction. A runner holds one document at a time, and `put_text` and `finish` refuse (22023) a document that runner does not hold. `claim` hands over the row's `sha256` with its signed URL. It also hands over a remembered item, which waits in `text_ready` and has neither a link nor a hash, because it has no bytes (Memory). `put_text` replaces the document's units in one transaction: the units it had and their vectors go and the new ones come, so a put that is sent twice leaves one set. `finish` accepts `indexed` only for a document that has at least one unit, each with its `embedded_at` |
 | `workspace_claim_v2`, `workspace_turn_context`, `workspace_turn_put`, `workspace_planner_feed`, `workspace_job_claim`, `workspace_job_finish` | definer | `workspace_runner` | the runner's six new functions. After 196 the role executes eleven SECURITY DEFINER functions and still holds no table, view or sequence grant |
 
 **The owner check of the four browser functions.** Each is `security definer` with
@@ -690,9 +724,16 @@ inside the app.
 * **A part that is already stored is not an error.** Every vector row is written with `model`
   `gte-small`, the name `embed-corpus` writes (`embed-corpus/index.ts:35, 295`). An insert that
   meets the unique key `(text_id, model, part_no)` is counted as stored and the function goes on,
-  as `embed-corpus` does (`index.ts:298-301`). A unit's `embedded_at` is set when no part of it is
-  missing, whether this call stored the last part or found it there. So a call that is repeated, or
-  two calls at once, leave one row a part.
+  as `embed-corpus` does (`index.ts:298-301`). A unit's `embedded_at` is set when it has at least
+  one part and none is missing, whether this call stored the last part or found it there. So a
+  call that is repeated, or two calls at once, leave one row a part.
+* **A unit with no text is never marked.** Empty text gives no part (`index.ts:105`). Such a unit
+  is reported in `failed` with its id, as `embed-corpus` reports it (`index.ts:209-212`), and its
+  `embedded_at` stays null. "No part is missing" is true of a unit with no part at all, so
+  without this rule a document could end `indexed` with a unit that has no vector, and the
+  store's own count would be wrong (task 49, proof 6). The ingest worker keeps such a unit out
+  in the first place and ends the file `no_text` (Uploads and extraction, step 6). This rule is
+  the store's guard behind it, for a remembered item and for any later writer.
 * **One document a call.** `workspace-embed` requires `document_id` in its body and touches units of
   that document only, never a document in state `failed` or `deleting`. The rest of the body and
   the answer are `embed-corpus`'s, because the worker drives it with `runEmbedLoop` unchanged
@@ -701,7 +742,8 @@ inside the app.
   unit. If the function picked units across documents, one bad upload would block every later upload
   and every memory item.
 
-**Migrations.** Additive and numbered. 190 to 197 are frozen once applied; a fix is 198 or 199.
+**Migrations.** Numbered, and additive but for 198, which removes one policy and adds nothing.
+190 to 198 are frozen once applied; a fix is 199.
 
 | no. | file | holds |
 |---|---|---|
@@ -713,13 +755,16 @@ inside the app.
 | 195 | `195_workspace_turn_state.sql` | `workspace_profile` (with `memory_since`), `workspace_conversation_state`, `workspace_turns`, `workspace_sources` |
 | 196 | `196_workspace_runner_v2.sql` | the runner's six new functions, their grants, a guard that the role's list is the eleven |
 | 197 | `197_workspace_index_status.sql` | `v_workspace_index_status`, with the indexed, waiting and failed counts of each kind (Indexing and status). It reads no storage table |
-| 198, 199 | | slack |
+| 198 | `198_text_embeddings_anon_insert_drop.sql` | drops the policy `bb_text_embeddings_anon_insert` (`010_search_layer.sql:62-63`) and nothing else: no table, column, grant, index or function moves. `049_bb_files_submissions.sql:65` is the precedent for dropping a policy in a numbered migration. Ruled in by the review round of the store's clause (The security boundary; 109a, item 24) |
+| 199 | | slack |
 
 Two applies move a fact that a unit on `main` pins against prod (`db/tests/README.md:3`): 193 adds a
 member to `db_test_runner` (`db/tests/phase15_100_db_test_runner_role.sql:76`), and 196 changes the
 runner's function list (`phase21_142_workspace_runner.sql:151-158`,
 `phase21_143_review_round.sql:152-159`). Both are applied on one day, with one test-only port PR to
-`main` that day, as PR #65 and PR #77 did.
+`main` that day, as PR #65 and PR #77 did. 198 moves no pinned fact: no unit names the policy it
+drops and no code writes through it (Facts). It has no order against the other eight and is
+applied when its unit passes.
 
 ### The pgvector store, scoped to bb2dash
 
@@ -762,49 +807,71 @@ memory have no vector home. 24a gives them one and holds the three as one store.
 | NEW `workspace_upload_register`, `workspace_upload_retry`, `workspace_document_delete` | functions | 190 | the owner's writes: an upload comes in, is tried again, or goes |
 | NEW `workspace_search`, `hybrid_search_workspace_text`, `workspace_attachment_read` | functions | 192 | the one search over all three kinds; its arm over the new tables; an attached file's units |
 | NEW `workspace_ingest_claim`, `workspace_ingest_put_text`, `workspace_ingest_finish`, `workspace_ingest_heartbeat` | functions | 193 | the ingest queue |
+| NEW `workspace_ingest_heartbeat` | table | 193 | the ingest worker's one liveness row, written by the function of that name and read by the status view. It holds no text |
 | NEW `workspace_job_finish` | function | 196 | writes a remembered item |
 | NEW `v_workspace_index_status` | view | 197 | the one status row |
 | NEW `workspace-embed`, `workspace-search` | edge functions | `supabase/functions/` | the embedder of uploads and memory; the search over all three kinds |
 
+  Five of these are **the content tables**: `bb_file_text`, `bb_text_embeddings`,
+  `workspace_documents`, `workspace_document_text` and `workspace_text_embeddings`. The proofs
+  name those five. `workspace_ingest_heartbeat` is the store's sixth table and holds no content.
+
   Not part of the store, though it reads them or they read it: `bb_files` (the app's file catalog;
-  see the last paragraph of this clause), `courses`, the conversation tables, `workspace_sources`
+  see the last paragraphs of this clause), `courses`, the conversation tables, `workspace_sources`
   (the ids of what an answer used, never text) and the bucket `workspace-uploads` (an upload's
   bytes, not its retrieval text). The planner feed is never embedded (The planner and grades feed).
-* **Every read and write of retrieval text that 24a builds goes through a named function.** No new
-  caller selects from or writes to a store table.
+* **Every read and write of a unit or a vector by a service 24a builds goes through a named
+  function.** No new service selects from or writes to a store table. The page is the one new
+  caller with rights of its own on a store table, and they are narrow: it reads remembered
+  summaries through one named view, it reads the catalog rows of `workspace_documents`, and it
+  updates two columns there (direct touches 5 and 6 below). No page code names
+  `workspace_document_text` or `workspace_text_embeddings` (brief 111, task 5). Among the
+  services only the two embedders write a vector, and only the search functions read one.
 
 | caller | reads through | writes through | right on a store table |
 |---|---|---|---|
-| the runner (`workspace_runner`) | nothing of the store: passages reach it from the batch child as data | `workspace_job_finish`, a remembered item | none |
+| the runner (`workspace_runner`) | `workspace_turn_context`, which hands it an attached upload's title and state. No unit and no vector: passages reach it from the batch child as data | `workspace_job_finish`, a remembered item | none |
 | the batch child of the materials package (service key) | `workspace-search`, which calls `workspace_search`; `workspace_attachment_read` | nothing | none used by the new code |
 | the ingest worker (`workspace_ingest_runner`) | `workspace_ingest_claim` | `workspace_ingest_put_text`, `workspace_ingest_finish`; `workspace-embed` for the vectors | none |
-| the page, in 24b (the owner's session) | `v_workspace_memory`, `v_workspace_index_status`, and the catalog rows of `workspace_documents` | `workspace_upload_register`, `workspace_upload_retry`, `workspace_document_delete`; an upload's title and course | select under the owner policy; nothing on `workspace_text_embeddings` |
+| the page, in 24b (the owner's session) | `v_workspace_memory`, `v_workspace_index_status`, and the catalog rows of `workspace_documents` | `workspace_upload_register`, `workspace_upload_retry`, `workspace_document_delete`; an upload's title and course, as two column updates | select on `workspace_documents` and on `workspace_document_text` under the owner policy; update of `title` and `course_id` on `workspace_documents`; nothing on `workspace_text_embeddings` |
 | the answering model | `search_materials`, which calls the `search` function; `get_material_text`, which is direct touch 2 below | nothing | none |
 
   The two embedders are inside the store, not callers of it. `embed-corpus` and `workspace-embed`
   run in the project with the service role and write the vector tables themselves
   (`embed-corpus/index.ts:155-159, 291-297`). A store that moved would take them with it.
-* **Four direct touches stand, each older than this phase, and 24a adds one, a named view.** They
-  are listed so the sentence above is not read as wider than it is, and so a later move knows its
-  work.
+* **Three direct touches stand that are older than this phase, a fourth is closed by it, and 24a
+  adds two, both the page's.** They are listed so the sentence above is not read as wider than it
+  is, and so a later move knows its work. Proof 7b is the same list as the catalog holds it.
   1. The sync inserts a course file's units into `bb_file_text` over REST with the publishable key,
      under an insert-only policy (`sync/src/files.ts:269`; `007_text_anon_insert.sql:4`). The
      Windows fallback does the same (`ingest/pull_files.mjs:566, 657`). `ingest/` is not edited in
-     this phase, so the path stays.
+     this phase, so the path stays. The policy is open to any holder of that key, not to the sync
+     alone (What "scoped to bb2dash" means, item 3).
   2. `get_material_text` reads one course unit from `bb_file_text` over REST with the service key
      (`mcp-server/src/client.ts:240`).
-  3. The owner's session holds the owner policy on both course tables
+  3. The owner's session holds the owner policy on both course tables, for every command
      (`020_rls_owner_scoped.sql:67-69, 79-81`). No page code uses it: the web app reaches retrieval
      only through the `search` function (`web/src/lib/queries.search.ts:291`).
-  4. `bb_text_embeddings_anon_insert` (`010_search_layer.sql:62-63`) is still on prod (Facts): a
-     holder of the publishable key may insert a vector row. No code in the repository uses it;
-     `embed-corpus` writes with the service role. Recorded, not changed here (The security boundary;
-     109a, item 24).
+  4. **Closed by 198.** `bb_text_embeddings_anon_insert` (`010_search_layer.sql:62-63`) is on prod
+     (Facts): a holder of the publishable key may insert a vector row. No code in the repository
+     uses it; `embed-corpus` writes with the service role. Migration 198 drops it (The security
+     boundary; 109a, item 24).
   5. NEW: the page reads remembered summaries through the view `v_workspace_memory`. The view is
      security invoker, so `authenticated` holds select on `workspace_document_text` under the owner
-     policy. It stays a view and not a function because brief 111 keeps every page read a select.
+     policy. That grant is wider than the view: it also lets the owner's session read the units
+     of his own uploads. No page code does (brief 111, task 5), and the owner can already fetch
+     the uploaded file itself from the bucket. It stays a view and not a function because brief
+     111 keeps every page read a select.
+  6. NEW: the page selects the catalog rows of `workspace_documents` (an upload's title, course,
+     state and hash; brief 111, Uploading from his device) and updates two of its columns,
+     `title` and `course_id`, under an owner policy and a column grant (The stores). Every other
+     write of that table goes through the three functions of 190.
 
-  24a adds no sixth (task 49, proof 8).
+  24a adds no seventh (task 49, proofs 7b and 8). Two logins that are not services reach the
+  tables too, and neither is new: the test login `db_test_runner`, which runs the units and the
+  pack's proofs (`scripts/accept-proofs.mjs:15`), and the database's owner in the SQL editor,
+  as when the Windows fallback's re-pull has the owner delete a replaced file's units
+  (`ingest/pull_files.mjs:333, 402`).
 * **It reads no other project.** No foreign server and no foreign table exist, and `dblink`,
   `postgres_fdw` and `wrappers` are not installed (Facts). `pg_net` is installed and stays
   (`calendar_push_tick()` and `ical_poll()` use it), so the rule is on function bodies: no function
@@ -851,21 +918,35 @@ model.**
   timed and pinned (`129:5-7`; `db/tests/phase18_121_search_contract.sql`,
   `phase18_129_search_materialize.sql`). NEW `hybrid_search_workspace_text` ranks the same way, so a
   similarity means the same thing in all three kinds. **So in 24a the index is in place on both
-  tables and is proved able to serve the nearest-neighbour shape (proof 4), and the hybrid search
-  does not use it yet.** Moving the hybrid search onto it later is a change to two function bodies
-  in a new migration: no table, column, index or caller changes. It is not made here for two
-  reasons. It would change a ranking that is measured. And an HNSW scan hands back at most
-  `hnsw.ef_search` rows, 40 on prod, before any filter by model, course or kind is applied, with
-  `hnsw.iterative_scan` off (Facts), so the change needs a measurement of its own. The moment for
-  it is when the hybrid search's timed median passes the 60 ms ceiling of Phase 15
-  (`101_search_path_pin.sql:31`). This is a default he was not asked about: 109a, item 23.
+  tables, and the hybrid search does not use it yet.** What proof 4 shows is this. On the course
+  table it reads the plan of `match_file_text`'s own statement, and that is a search the app
+  runs: mode `vector` of the `search` function (`supabase/functions/search/index.ts:180-182`),
+  which the materials server offers the model (`mcp-server/src/config.ts:28`). On the new table
+  no function orders by distance with a limit yet, so the proof there is of a statement of that
+  shape and shows only that the index can serve it. Moving the hybrid search onto the index
+  later is a change to two function bodies in a new migration: no table, column, index or caller
+  changes. It is not made here for two reasons. It would change a ranking that is measured. And
+  an HNSW scan hands back at most `hnsw.ef_search` rows, 40 on prod, before any filter by model,
+  course or kind is applied, with `hnsw.iterative_scan` off (Facts), so the change needs a
+  measurement of its own. The moment for it is when the hybrid search's timed median passes the
+  60 ms ceiling of Phase 15 (`101_search_path_pin.sql:31`). **He was told the search's plan uses
+  the index. That is true of one search the app runs and not of the one the assistant's
+  retrieval uses. So it goes to him as a question before the freeze, not as a default taken:
+  109a, item 23.**
 
 **4. Ingestion is a queue with a status he can read, and the same content twice leaves one row.**
 
-* **The queue.** An upload or a remembered item is a row in `workspace_documents` whose `state`
-  moves through `stored`, `reading`, `text_ready` and `indexed`, or ends `failed`.
+* **The queue.** An upload or a remembered item is a row in `workspace_documents`. An upload's
+  `state` moves through `stored`, `reading`, `text_ready` and `indexed`, or ends `failed`. A
+  remembered item has no bytes to read, so it never passes through `stored` or `reading`:
+  `workspace_job_finish` leaves it in `text_ready` with attempts 0, on a first write and again
+  on every new summary, and from there it moves to `indexed` or ends `failed`. `text_ready` is
+  the state the claim takes for it, so a re-summarised item is embedded again and is never left
+  `indexed` with no vector.
   `workspace_ingest_claim` hands out one row at a time with `skip locked` and a 10-minute lease, and
-  a step is tried 3 times (Uploads and extraction). A course file's queue is the sync's files pass
+  a step is tried 3 times (Uploads and extraction). No unit counts as embedded without a vector:
+  a unit with no text is kept out by the worker and is never marked by the embedder (Edge
+  functions). A course file's queue is the sync's files pass
   and `embed-corpus`, which resumes part by part (`embed-corpus/index.ts:161-177`).
 * **The status.** `v_workspace_index_status` is one row. For each kind it says how many are in the
   store, how many wait and how many failed (Indexing and status). In the PM's words to him: added,
@@ -878,7 +959,7 @@ model.**
 | the same file from his device | the SHA-256 of its bytes: the unique index on an upload's `sha256` | nothing: `workspace_upload_register` returns the row that already holds the hash |
 | the units of one document | `(document_id, unit_kind, unit_no)` | `workspace_ingest_put_text` replaces the document's units in one transaction, so one set stands |
 | a part of an upload's or a remembered item's unit | `(text_id, model, part_no)` | nothing: `workspace-embed` takes a duplicate insert as stored |
-| a conversation's remembered item | one memory row for each conversation | the same summary writes nothing; a new one replaces the unit's text and removes its old vectors in the same transaction |
+| a conversation's remembered item | one memory row for each conversation | the same summary writes nothing and moves no state; a new one replaces the unit's text, removes its old vectors, clears `embedded_at` and puts the document back in `text_ready` with attempts 0, all in the same transaction |
 
   The hash is an upload's identity, so it is not taken on the browser's word alone: the worker
   hashes the bytes it downloaded and refuses a difference (Uploads and extraction, step 3).
@@ -888,12 +969,35 @@ model.**
 1. The store's tables, indexes and functions are in the bb2dash project and hold bb2dash content
    only: his course files, his uploads and the assistant's memory.
 2. It reads no other project, the vault's `harness-memory` least of all (point 1; proof 7).
-3. It is reached only by bb2dash's own services with bb2dash's own credentials: the service key
-   file, the two login roles and the owner's session.
-4. Its objects are the closed list above, and a caller knows them by function name.
+3. It is reached by bb2dash's own services with bb2dash's own credentials: the service key file,
+   the two login roles (`workspace_runner`, `workspace_ingest_runner`), the owner's session, and
+   the test login `db_test_runner`, which reads every table in `public` with row security
+   bypassed (`100_db_test_runner_role.sql:34, 61-62`) and runs the units and the pack's proofs.
+   **Two exceptions stand, and both come through the project's public keys**, which ship in the
+   browser by design (root `CLAUDE.md`, Secrets). "Only bb2dash's own credentials" is not true
+   without them, so they are named here.
+   * **The publishable key may insert into `bb_file_text`** (`007_text_anon_insert.sql:4`, check
+     `true`). It is the sync's write path (direct touch 1), and the policy is open to any holder
+     of the key. It allows a new unit on a file that exists. It allows no read, no change and no
+     delete, and the key `(file_id, unit_kind, unit_no)` refuses a second copy of a unit. A unit
+     written that way would be embedded by the next pass and could reach a prompt as a fenced
+     passage of kind `material` (The fence). Not closed here: closing it moves the sync's insert
+     behind a function (Out of scope; 109a, item 24).
+   * **Any valid JWT, the public anon JWT included, reads course passages through `search`**
+     (`search/index.ts:75-79`; 109a, item 18). Such a caller may also start the two embedders,
+     which write only vectors of text that is already stored (`ingest/embed_corpus.mjs:14-17`;
+     Uploads and extraction, the ingest service's two secrets). Uploads and memory never pass
+     through `search`.
+
+   A third stood until this phase and is closed by it: the publishable key could insert a row
+   into `bb_text_embeddings` (`010_search_layer.sql:62-63`), a vector into the store through no
+   function. Migration 198 drops that policy (direct touch 4).
+4. Its objects are the closed list above. A service knows them by function name. The page also
+   names one table and two views: `workspace_documents`, `v_workspace_memory` and
+   `v_workspace_index_status`.
 
 It does **not** mean a second Supabase project, and it does not mean a schema of its own. Neither
-is made now. Both stay possible, and the last paragraph of this clause says what a move would take.
+is made now. Both stay possible, and the last paragraphs of this clause say what a move would take.
 
 **What "for future scalability" means here.**
 
@@ -902,37 +1006,57 @@ is made now. Both stay possible, and the last paragraph of this clause says what
 2. **More workers.** The ingest queue hands out rows with a lease, and every write is an upsert, so
    a retry or a second worker cannot double a row. Every turn rebuilds its context from the
    database (Sessions), so a second runner needs only its heartbeat row.
-3. **A move.** Callers hold function names and an address, not table names.
+3. **A move.** A service holds function names and an address, not table names. The page holds
+   three relation names besides, one table and two views (item 4 above). What a move would take
+   is in the last paragraphs of this clause.
 
 It does **not** mean, in this phase: a change of embedding model or of its 384 dimensions
 (`gte-small` stays, DECISIONS 2026-09-09); tuning of the index or of `hnsw.ef_search`; a hybrid
-search that goes to the index first; a second runner or a second ingest worker running; a timed
-embed catch-up for course files.
+search that goes to the index first, unless his answer to 109a's item 23 asks for it; a second
+runner or a second ingest worker running; a timed embed catch-up for course files.
 
-**What would have to change to lift it into its own project later.** One thing in how it is built,
-named here so nobody finds it late: **the course half reads the app's file catalog inside its
-search.** `hybrid_search_file_text`, `match_file_text` and `search_file_text` join `bb_files` for a
-unit's course, its bucket, its file name and whether the file was replaced
-(`129:37-41, 52-57, 85, 92-93, 233-237`; `021:83-88`), and `bb_file_text.file_id` is a foreign key
-to it (`005_file_corpus.sql:34`). `bb_files` is written by the sync's fold and read by the
+**What would have to change to lift it into its own project later.** Named here so nobody finds
+it late. The largest piece is in how the course half is built: **it reads the app's file catalog
+inside its search.** `hybrid_search_file_text`, `match_file_text` and `search_file_text` join
+`bb_files` for a unit's course, its bucket, its file name and whether the file was replaced
+(`129:37-41, 52-57, 85, 92-93, 233-237`; `021:83-88`). `v_embedding_status` joins it for a unit's
+course (`010:84-93`). And `bb_file_text.file_id` is a foreign key to it
+(`005_file_corpus.sql:34`). `bb_files` is written by the sync's fold and read by the
 Materials pages, so it would stay behind. A store in its own project would need those four values
 on its own side, kept current by the sync: one migration and one change to the fold. The upload
 and memory half has no such join: `workspace_documents` carries its own title, course and state.
 
-The rest is addresses, not design. Each caller reads the project's URL, a key or a connection
-string from its config or from a secret file (`workspace/src/mcp-config.ts:33-36`; the `secrets`
-entries of `compose.yaml`). The two embedders move with the store. The direct touches listed under
-point 1 are re-pointed. The foreign keys from an app row to a store row (an attachment's and a
-source's `document_id`) become plain ids. None of that is done in this phase.
+**Five NEW objects also span both sides.** Each reads or writes a store table and an app table in
+one body. A move splits each one, or leaves it calling across.
+
+| object | its store side | its app side |
+|---|---|---|
+| `workspace_document_delete` | removes a remembered item, its unit and its vectors | sets `memory_opt_out` in `workspace_conversation_state`, in the same transaction |
+| `workspace_job_finish` | writes a remembered item and its unit, which is why it is on the store's list | it is a job function too: it writes the job's columns in `workspace_conversation_state` |
+| `workspace_turn_context` | reads an attached upload's title and state from `workspace_documents` | the runner's read of a request: its options, its messages, the course list |
+| `workspace_ask_with` | checks that an attached upload's id exists in `workspace_documents` (23503) | stores the request's options and attachments |
+| `v_workspace_index_status` | counts the store's rows and reads `workspace_ingest_heartbeat` | reads `bb_files.text_status` for `course_files_text_pending` |
+
+`workspace_documents` also carries two ids of app rows, `conversation_id` and `course_id`. In a
+move they are plain ids, as are the foreign keys from an app row to a store row (an attachment's
+and a source's `document_id`).
+
+Beyond those the rest is addresses, not design. Each caller reads the project's URL, a key or a
+connection string from its config or from a secret file (`workspace/src/mcp-config.ts:33-36`; the
+`secrets` entries of `compose.yaml`). The two embedders move with the store. The direct touches
+listed under point 1 are re-pointed, the page's two among them. The units and the pack's proofs
+that read a store table as the test login move with it. None of that is done in this phase.
 
 **Proof that it is there.** Task 49 holds nine proofs, written out under the task table, each a
-statement a worker can run as written with its expected result. Proofs 1 to 7 are one read-only
-unit, run against prod after the eighth apply. In short: the extension is present; exactly two
-columns are vectors, each `vector(384)`; each has its valid HNSW cosine index; the plan of a
-nearest-neighbour query with a limit names that index on each table; every vector row names one
-model; the counts by kind agree with a direct count; no function of the store calls out and no
-foreign server exists; nothing 24a builds touches a store table directly; and a second upsert of
-the same item changes no count.
+statement a worker can run as written with its expected result. Proofs 1 to 7, with proof 7's
+second part 7b, are one read-only unit, run against prod after the ninth apply. In short: the
+extension is present; exactly two columns are vectors, each `vector(384)`; each has its valid
+HNSW cosine index; the plan of `match_file_text`'s own statement names the course index, and the
+plan of a statement of the same shape names the new table's; every vector row names one model;
+the counts by kind agree with a direct count; no function of the store calls out and no foreign
+server exists; the rights held on the five content tables are the listed ones and no other (7b);
+no service 24a builds names a store table; and a second upsert of the same item changes no
+count.
 
 ### Uploads and extraction
 
@@ -1019,12 +1143,20 @@ the same item changes no count.
      any file under 1,000 bytes (`pull_files.mjs:89, 175-179`). The worker's own rule is: valid
      UTF-8, no NUL byte, at least one character that is not white space. The file is then one unit
      of kind `doc`, number 1. A failed rule is `bad_bytes`, or `no_text` for white space alone.
-  6. Either way, more than 1,000 units or 1.5 million characters is refused, and the units go in
-     through `workspace_ingest_put_text` (state `text_ready`).
+  6. Either way, a unit that holds no character that is not white space is not put, and a file
+     that leaves no unit ends `no_text`, whatever its type. Two parsed cases reach this rule: a
+     PDF, pptx or xlsx with no text gives no unit at all (`extract_text.py:9, 28, 36`), and a
+     docx with no text gives one unit of empty text (`extract_text.py:10-15`). A parsed file the
+     reader choked on also gives no unit and no error: `extract_text.py:42-47` catches it, and
+     `extractUnits` hands back the units alone (`pull_files.mjs:233-237, 493-497`). `ingest/` is
+     not edited, so the worker cannot tell the two apart and both end `no_text`, which is true as
+     worded: no text was read. Then more than 1,000 units or 1.5 million characters is refused,
+     and the units go in through `workspace_ingest_put_text` (state `text_ready`).
   7. The worker runs `runEmbedLoop` (`ingest/embed_corpus.mjs:74`) against `workspace-embed` with the
-     document's id, then calls `workspace_ingest_finish`, which accepts `indexed` only when every
-     unit of the document has its `embedded_at`. `finish` clears the signed URL on `indexed` and on
-     `failed` alike. The same loop embeds a memory item's unit.
+     document's id, then calls `workspace_ingest_finish`, which accepts `indexed` only when the
+     document has at least one unit and every unit has its `embedded_at`. `finish` clears the
+     signed URL on `indexed` and on `failed` alike. The same loop embeds a memory item's unit: a
+     remembered item is claimed in `text_ready`, has no bytes, and starts at this step.
   8. A download, an extraction or an embed is tried 3 times before the row is `failed`.
 * **Error codes of a failed upload**, fixed here so 24b can word them: `too_large`, `bad_type`,
   `bad_bytes`, `no_text`, `extract_timeout`, `extract_failed`, `too_many_units`, `link_expired`,
@@ -1163,7 +1295,11 @@ remove it, which is why a remembered item also carries its date in the prompt.
   ingest worker embeds it on its next poll. The write is an upsert on the conversation: a summary
   equal to the stored one writes nothing, and a new one replaces the unit's text, removes the
   unit's vectors and clears its `embedded_at` in the same transaction, so search never ranks an old
-  vector against new text (The pgvector store, point 4).
+  vector against new text (The pgvector store, point 4). **Either write leaves the document in
+  state `text_ready` with attempts 0**, whatever state it was in before, `indexed` and `failed`
+  included. That is the state the ingest claim takes for a remembered item. Without it a
+  re-summarised item would stay `indexed` with no vector and would never be embedded again.
+  Until its new vector is stored the item is counted in `memory_waiting`.
 * **Jobs.** `workspace_job_claim(p_runner, p_kinds)` returns at most one job (`rolling` or `memory`)
   with a 5-minute lease, and returns nothing while any request is queued or claimed. During a job the
   loop keeps asking for a claim every 2 s (`runner.ts:151-156`); a claim kills the job within the kill
@@ -1274,10 +1410,10 @@ and the chip are 24b's.
 | A new role | none | `workspace_ingest_runner`: four functions, no table grant, one document held at a time. Its password is Stack's to set, never in a file or a chat (task 48) |
 | A link at rest | none | one signed URL per waiting upload, up to 7 days, readable by the owner and the ingest role, held to this bucket and this row's key by a CHECK, checked again by the worker, cleared at finish whether the row ends `indexed` or `failed` |
 | Storage | bucket `bb-files` | plus the private bucket `workspace-uploads`, owner policies |
-| The browser | `workspace_ask`, `workspace_cancel` | plus four SECURITY DEFINER functions, each refusing anyone but the owner as its first statement; select on the new tables; three direct column updates (an upload's title and course, the About me note). No other direct write passes |
+| The browser | `workspace_ask`, `workspace_cancel` | plus four SECURITY DEFINER functions, each refusing anyone but the owner as its first statement; select on the new tables but `workspace_text_embeddings`; three direct column updates (an upload's title and course, the About me note). No other direct write passes |
 | The sync | embeds after new units | embeds on every pass. Still no model; its image is rebuilt once, at the cut-over |
 | Memory | none | model-written summaries inside the bb2dash store, off until 24b |
-| The pgvector store | one vector column and one HNSW index, course files only (`011:25-27, 47-48`); the Workspace also searched the vault's store in another project | two vector columns, each with its HNSW index and each row with its model; course files, uploads and memory behind one search; no function of the store calls out and no foreign server exists (task 49). The browser holds no privilege on `workspace_text_embeddings` |
+| The pgvector store | one vector column and one HNSW index, course files only (`011:25-27, 47-48`); the Workspace also searched the vault's store in another project; a holder of the public key could insert a vector row (`010:62-63`) | two vector columns, each with its HNSW index and each row with its model; course files, uploads and memory behind one search; no function of the store calls out and no foreign server exists (task 49). The public key can no longer insert a vector (198). It can still insert a course unit, which is the sync's path and is not closed here. The browser holds no privilege on `workspace_text_embeddings`; under the owner policy it reads `workspace_documents` and `workspace_document_text` and updates two columns of the first (task 49, proof 7b) |
 | Outward flow | none | none. Nothing leaves the bb2dash project |
 
 The sync still holds no model. No Claude process shares a network or a volume with the Blackboard
@@ -1289,22 +1425,30 @@ bucket and a file parser.
 to Stack. `/run/workspace` is writable by the runtime user, so the per-request MCP config is in the
 same class as today's `mcp.json` (STATUS, deferred hardening).
 
-**Recorded with answer 17, not fixed here.** The policy `bb_text_embeddings_anon_insert`
-(`010_search_layer.sql:62-63`) is on prod (Facts). It lets a holder of the publishable key insert a
-row into the course vectors, which is a write into the store that goes through no function. It
-dates from the plan to embed with the publishable key (`010:61`). Nothing uses it:
-`embed-corpus` writes with the service role (`embed-corpus/index.ts:155-159, 291-297`), and the
-tree holds no other insert into that table. Closing it is one `drop policy` on a table this phase
-does not otherwise alter, so it is the PM's call, put to Stack (109a, item 24). If the PM rules it
-in before the freeze it is migration 198, W-76's, with one line in task 49's unit: anon holds no
-policy on `bb_text_embeddings`. The sync's insert of course units into `bb_file_text` under
-`bb_file_text_anon_insert` is the live write path and stays.
+**Closed in this phase, by the review round of the store's clause.** The policy
+`bb_text_embeddings_anon_insert` (`010_search_layer.sql:62-63`) is on prod, and anon holds the
+insert grant it needs (Facts). It lets a holder of the publishable key insert a row into the
+course vectors, which is a write into the store that goes through no function. It dates from the
+plan to embed with the publishable key (`010:61`). Nothing uses it: `embed-corpus` writes with
+the service role (`embed-corpus/index.ts:155-159, 291-297`), and the tree holds no other insert
+into that table. The first pass recorded it and left it to a ruling. The review round ruled it
+in, because "scoped to bb2dash" is not true of a table that a stranger with the public key can
+write: **migration 198 drops the policy** (W-76, task 50). Its unit shows the insert refused
+for anon and the service role not subject to row security, and proof 7b then shows no right for
+anon on `bb_text_embeddings`. 109a's item 24 said this door would be listed and left. It now
+says the door is closed by default, his to object to before 198 is applied.
+
+**Recorded, not closed here.** The sync's insert of course units into `bb_file_text` under
+`bb_file_text_anon_insert` (`007_text_anon_insert.sql:4`) is the live write path and stays. The
+same policy is open to any holder of the public key (The pgvector store, What "scoped to
+bb2dash" means, item 3). Closing it is a change to the sync and to the Windows fallback, which
+this phase does not make (Out of scope; 109a, item 24).
 
 ### Files by owner
 
 The sets are disjoint. A file not listed has no owner in this phase and is not edited.
 
-* **W-76, db:** `db/migrations/190_*.sql` to `197_*.sql`; `db/tests/phase24_*.sql`; the name-list
+* **W-76, db:** `db/migrations/190_*.sql` to `198_*.sql`; `db/tests/phase24_*.sql`; the name-list
   lines of `db/tests/phase21_142_workspace_runner.sql`, `phase21_143_review_round.sql` and
   `phase15_100_db_test_runner_role.sql`; the Workspace section of `DATA_SYNTAX.md`, and one pointer
   line at the end of its Search layer section (task 49). `db/tests/phase24_store_proof.sql` is one
@@ -1388,7 +1532,8 @@ who meet at a call must find its shape already fixed, or each takes its own defa
   (the two block lines) and `lines.txt` (the fixed sentences of `lines.ts`).
 * **Three shapes moved with answer 17**, for the PM's hand at task 12. The count of files stays
   nineteen. `workspace_search`'s signature in the folder's `README.md` gains `p_model`, and
-  `search-row.json` keeps `kind` on its row. `ingest-claim.json` gains the row's `sha256`. And the
+  `search-row.json` keeps `kind` on its row. `ingest-claim.json` gains the row's `sha256`, and
+  the link and the hash may both be null in it: a remembered item is claimed with neither. And the
   `README.md` holds `workspace_upload_register`'s full signature with `p_sha256`, and what it
   returns: the row's id, its state and `existing`. Brief 111 and the pack call that function, so it
   is frozen with the rest though it has no JSON file.
@@ -1455,13 +1600,16 @@ awake with Docker running. Course files are indexed when a sync runs.
 **Contract**
 
 - [ ] Each of the 25 checks under "What functions properly means" has a named test or proof, green.
-- [ ] **The pgvector store is in place and proved (answer 17).** After the eighth apply,
+- [ ] **The pgvector store is in place and proved (answer 17).** After the ninth apply,
       `node scripts/db-test.mjs --only phase24_store_proof.sql` prints `PASS` against prod: the
       extension, the two `vector(384)` columns, the two valid HNSW cosine indexes, the plan that
-      names each index, one model name on every vector row, the counts by kind, and no function of
-      the store calling out (task 49, proofs 1 to 7). The plain plan of proof 4 is in 109c.
-- [ ] Proof 8's three greps give their expected lines: two lines, no line, and the one bb2dash
-      host. `node ingest/embed_corpus.mjs --check` prints `missing_parts_before=0` (proof 9).
+      names each index, one model name on every vector row, the counts by kind, no function of
+      the store calling out, and the rights held on the five content tables (task 49, proofs 1
+      to 7 and 7b). The plain plan of proof 4's course half is in 109c.
+- [ ] Proof 8's four greps give their expected lines: two lines, no line, no line, and the one
+      bb2dash host. `node ingest/embed_corpus.mjs --check` prints `missing_parts_before=0`
+      (proof 9).
+- [ ] 109a's item 23 holds Stack's answer, given before the freeze (task 12).
 - [ ] `git diff --name-only origin/main...HEAD -- "web/src/app/(app)/workspace"
       web/src/components/workspace "*.module.css" web/test/Workspace.layout.test.tsx
       web/e2e/workspace-layout.spec.ts` prints nothing.
@@ -1504,12 +1652,12 @@ order now:
    committed is each probe's scrubbed recording, under `workspace/test/fixtures/contract24/probes/`,
    and `workspace/test/probe24-fixtures.test.ts`, both the PM's.
 2. **Task 12, the freeze.** Worker branches are cut.
-3. **The streams, side by side:** 13 to 20 and 49 (W-76), 23 to 26 (W-78), 28 to 35 (W-77), 36 to
-   39 (W-79), 40 (W-85). Task 49 is written with task 20 and is the last row of the table, so no
-   task was renumbered.
+3. **The streams, side by side:** 13 to 20, 49 and 50 (W-76), 23 to 26 (W-78), 28 to 35 (W-77), 36
+   to 39 (W-79), 40 (W-85). Tasks 49 and 50 are the last rows of the table, so no task was
+   renumbered. Task 49 is written with task 20. Task 50 stands alone and may go first.
 4. **Gates inside the build:** probes 7, 8, 9 and 11. Each runs right after the task it needs, and
    the task named in its row waits for its line in 109c.
-5. 21, 22, 27 and 48 as their inputs land. Task 49's unit goes green on prod with the eighth apply
+5. 21, 22, 27 and 48 as their inputs land. Task 49's unit goes green on prod with the ninth apply
    of task 21. Then 41 to 47.
 
 **Probe rows on prod.** P-7, P-8 and P-9 need one synthetic object in the new bucket and one
@@ -1535,18 +1683,18 @@ that hash.
 | 9 | P-9: the service key forwarded by `workspace-search` reaches the database as `service_role`; an anon bearer is refused. **Runs inside task 27, after P-8 and after 192 is on prod; task 43 waits on it** | PM + W-78 | with the key: at least one row of kind `upload`, and a count for each kind; nothing but counts and kinds is printed or kept. With the anon JWT: an error and zero rows. The three kinds together are task 15's unit, on synthetic rows in a rolled-back transaction |
 | 10 | P-10: the parser's own user. In a throwaway compose project with a dummy secret file and today's image: (a) a secret mounted with mode 0400 for the worker's user cannot be read by a second user; (b) a firewall rule with an owner match loads and drops that user's packets; (c) the root entrypoint starts one process as each user and both stay up. Before the freeze. (The first draft's P-10 counted the bucket's objects; `uploads_deleting` made it unnecessary) | PM | three pass or fail lines in 109c. A fail of any: the parser moves to the service `workspace-extract` (Uploads and extraction) and the PM rules that before the freeze |
 | 11 | P-11: a 20 MB synthetic file of each parsed type extracts inside 300 s and inside the memory limit, in the ingest image. **Runs after task 37; task 43 waits on it** | PM + W-79 | four times and four peak memory figures in 109c, each under 300 s and under 1 GiB. A fail: the PM moves the limit or the size, and says which, before task 43 |
-| 12 | Freeze: the brief; the nineteen JSON files and three text files of Seam inside the phase; the routine wording; worker branches cut | PM | `ls workspace/test/fixtures/contract24/*.json \| wc -l` gives 19 and `node -e` parses each; `git worktree list \| grep -c "feat/workspace-24"` gives 5 in bb2dash |
-| 13 | Migration 190 and its unit | W-76 | Runner on `phase24_190_store.sql`: as the owner each of the three functions succeeds; as another signed-in uid each raises 42501 and writes nothing; as `authenticated` a direct insert into `workspace_documents` and a direct update of its `signed_url` or of its `state` each raise 42501; a signed URL on another host, under another bucket or ending in another key raises 23514; the first delete call leaves the row in `deleting` with 0 units and 0 vectors and returns the key, a second such call returns the same key, and the call with `true` drops the row and is refused for a row not in `deleting`; a second memory row for one conversation raises 23505; anon and PUBLIC hold nothing. **The store (answer 17):** `workspace_text_embeddings.embedding` is `vector(384)` and not null, `model` is not null, the table's unique key is `(text_id, model, part_no)`, and its index `workspace_text_embeddings_hnsw` is method `hnsw` with operator class `vector_cosine_ops`; a second insert of one `(text_id, model, part_no)` raises 23505 and a second unit with one `(document_id, unit_kind, unit_no)` raises 23505; `authenticated` and anon hold no privilege on `workspace_text_embeddings`; a second `workspace_upload_register` with the same `sha256` returns the first id with `existing` true and leaves `count(*)` of `workspace_documents` as it was; an upload whose `sha256` is not 64 lower-case hex characters, or whose `storage_key` is not `u/` followed by its `sha256`, raises 23514 |
+| 12 | Freeze: the brief; the nineteen JSON files and three text files of Seam inside the phase; the routine wording; Stack's answer to 109a's item 23, put to him with the plan of proof 4's course half as read on prod with nothing forced; worker branches cut | PM | `ls workspace/test/fixtures/contract24/*.json \| wc -l` gives 19 and `node -e` parses each; `grep -c "^    \*\*His answer to item 23" docs/planning/sprint-2/briefs/109a_PHASE24_open_questions.md` gives 1; `git worktree list \| grep -c "feat/workspace-24"` gives 5 in bb2dash |
+| 13 | Migration 190 and its unit | W-76 | Runner on `phase24_190_store.sql`: as the owner each of the three functions succeeds; as another signed-in uid each raises 42501 and writes nothing; as `authenticated` a direct insert into `workspace_documents` and a direct update of its `signed_url` or of its `state` each raise 42501; a signed URL on another host, under another bucket or ending in another key raises 23514; the first delete call leaves the row in `deleting` with 0 units and 0 vectors and returns the key, a second such call returns the same key, and the call with `true` drops the row and is refused for a row not in `deleting`; a second memory row for one conversation raises 23505; anon and PUBLIC hold nothing. **The store (answer 17):** `workspace_text_embeddings.embedding` is `vector(384)` and not null, `model` is not null, the table's unique key is `(text_id, model, part_no)`, and its index `workspace_text_embeddings_hnsw` is method `hnsw` with operator class `vector_cosine_ops`; a second insert of one `(text_id, model, part_no)` raises 23505 and a second unit with one `(document_id, unit_kind, unit_no)` raises 23505; `authenticated` and anon hold no privilege on `workspace_text_embeddings`; `authenticated` holds select and no other table privilege on `workspace_documents` and `workspace_document_text`, and update on exactly the columns `title` and `course_id` of the first; anon, `workspace_runner`, `sync_runner` and `inbox_apply_runner` hold no privilege on any of the three, on the table or on a column (a new table in `public` starts with every command granted to anon and `authenticated`, Facts, so 190 revokes first, as `140_workspace_tables.sql:331-355` does); a second `workspace_upload_register` with the same `sha256` returns the first id with `existing` true and leaves `count(*)` of `workspace_documents` as it was; an upload whose `sha256` is not 64 lower-case hex characters, or whose `storage_key` is not `u/` followed by its `sha256`, raises 23514 |
 | 14 | Migration 191 and its unit | W-76 | Runner on `phase24_191_bucket.sql`: the bucket row is private, 20971520 bytes, six types; four policies, all owner-scoped |
 | 15 | Migration 192 and its unit | W-76 | Runner on `phase24_192_search.sql`: three kinds from synthetic rows; 0 rows for a document in `deleting` or `failed`; a scope leaves out another course's unit and keeps an untagged upload; 42501 as anon and as `authenticated`; no passage over 2,000 characters. **The store (answer 17):** every row's `kind` is one of `material`, `upload`, `memory` and none is null; with 2 upload units and 1 memory unit of synthetic text put in, each holding a token no other text holds, a search for that token returns exactly 3 rows, 2 of kind `upload` and 1 of kind `memory`, so the counts by kind equal what was put in; a unit whose only vector is stored under another model name comes back with no similarity under the default `p_model` and with one when `p_model` is that name; `pg_get_functiondef` of `hybrid_search_workspace_text` holds `operator(extensions.<=>)`, the operator both indexes are built for |
-| 16 | Migration 193 and its unit; the `phase15_100` line | W-76 | Runner on `phase24_193_ingest_role.sql`: the role executes exactly its four functions and holds no table grant; a second claim by a runner that holds a document returns nothing; `put_text` and `finish` raise 22023 for a document the caller does not hold; `finish` refuses `indexed` while a unit has no `embedded_at` and clears `signed_url` on `failed` as on `indexed`; **the store (answer 17):** `claim` hands over the row's `sha256`, and `put_text` called twice with the same units leaves the document's unit count as it was after the first call, with no vector of a replaced unit left. And in `db/migrations/193_workspace_ingest_role.sql`: `grep -ciE "password +'"` gives 0 and `grep -c "CARRIES NO PASSWORD"` gives 1 |
+| 16 | Migration 193 and its unit; the `phase15_100` line | W-76 | Runner on `phase24_193_ingest_role.sql`: the role executes exactly its four functions and holds no table grant; a second claim by a runner that holds a document returns nothing; `put_text` and `finish` raise 22023 for a document the caller does not hold; `finish` refuses `indexed` while a unit has no `embedded_at` and clears `signed_url` on `failed` as on `indexed`; **the store (answer 17):** `claim` hands over the row's `sha256`, and `put_text` called twice with the same units leaves the document's unit count as it was after the first call, with no vector of a replaced unit left; a memory document in `text_ready` is claimed and handed over with no link and no hash; `finish` refuses `indexed` for a document with no unit. And in `db/migrations/193_workspace_ingest_role.sql`: `grep -ciE "password +'"` gives 0 and `grep -c "CARRIES NO PASSWORD"` gives 1 |
 | 17 | Migration 194 and its unit | W-76 | Runner on `phase24_194_ask_options.sql`: as the owner, options and five attachments are stored; a sixth raises 23514; an unknown routine 23503; `explain-file` with no file 23514; as another signed-in uid `workspace_ask_with` raises 42501 and writes nothing; as `authenticated` a direct insert into `workspace_request_options` or `workspace_request_attachments` raises 42501; every policy on the three tables names `app_owner()`; `workspace_ask(uuid, text)` returns three ids; Runner on `phase21_140_workspace_tables.sql` PASS, unedited |
 | 18 | Migration 195 and its unit | W-76 | Runner on `phase24_195_turn_state.sql`: an About me of 2,001 characters raises 23514; `memory_since` is null and an update of it as `authenticated` raises 42501; anon holds nothing; no column of `workspace_sources` or `workspace_turns` is named text, passage, content or snippet |
-| 19 | Migration 196 and its unit; the two "five" lists become the eleven | W-76 | Runner on `phase24_196_runner_v2.sql`: the role's list is the eleven; the feed, the context and the put each raise 22023 for a request not claimed by the caller; the context's jsonb and the feed's jsonb each hold exactly the keys of `turn-context.json` and `planner-feed.json`; a window of 400 days is clamped to 180 inside the feed; a request with a scope gets no row of another course; a gradebook column with no score posted is absent; a 41st source row is cut, not refused; a source row with an id that does not exist is dropped; `claim_v2` returns nothing while a request is claimed and closes the caller's own stale claim; the first job claim that asks for `memory` stamps `memory_since` and a later one does not move it; no memory job is handed out for a conversation whose last answer is older than the stamp, or that is archived, or opted out; as `workspace_runner` a select on `assignment_progress` raises 42501. **The store (answer 17):** `workspace_job_finish` called twice with the same summary leaves one memory document and one unit and does not move the unit's `embedded_at`; with a new summary the unit's text is the new one, its vectors are gone and its `embedded_at` is null |
-| 20 | Migration 197 and its unit | W-76 | Runner on `phase24_197_index_status.sql`: exactly one row; `course_units_waiting` equals the units with no part; `uploads_deleting` counts a row in `deleting`; the view's definition names no table of the `storage` schema. **The store (answer 17):** `course_units_indexed` plus `course_units_waiting` equals `count(*)` of `bb_file_text`; `uploads_indexed` and `memory_indexed` each equal a direct count of `workspace_documents` of that kind in state `indexed`; a memory document in state `failed` is counted in `memory_failed` and in no other column |
-| 21 | Prod applies, each on Stack's word after a `begin; ... rollback;` dry run, under the file's name, byte-identical, advisors read after: 190 to 192, 194, 195, 197 as they pass; 193 and 196 on one day | PM | `select name from supabase_migrations.schema_migrations where name ~ '^19[0-7]_'` lists eight names; each file's md5 equals the stored one, in 109c. After the eighth apply, Runner on `phase24_store_proof.sql` prints PASS against prod, and the plain plan of proof 4 is copied into 109c (task 49) |
+| 19 | Migration 196 and its unit; the two "five" lists become the eleven | W-76 | Runner on `phase24_196_runner_v2.sql`: the role's list is the eleven; the feed, the context and the put each raise 22023 for a request not claimed by the caller; the context's jsonb and the feed's jsonb each hold exactly the keys of `turn-context.json` and `planner-feed.json`; a window of 400 days is clamped to 180 inside the feed; a request with a scope gets no row of another course; a gradebook column with no score posted is absent; a 41st source row is cut, not refused; a source row with an id that does not exist is dropped; `claim_v2` returns nothing while a request is claimed and closes the caller's own stale claim; the first job claim that asks for `memory` stamps `memory_since` and a later one does not move it; no memory job is handed out for a conversation whose last answer is older than the stamp, or that is archived, or opted out; as `workspace_runner` a select on `assignment_progress` raises 42501. **The store (answer 17):** a first `workspace_job_finish` leaves the memory document in state `text_ready` with attempts 0; called twice with the same summary it leaves one memory document and one unit and moves neither the unit's `embedded_at` nor the document's state; with a new summary the unit's text is the new one, its vectors are gone, its `embedded_at` is null and the document's state is `text_ready` with attempts 0, from `indexed` and from `failed` alike |
+| 20 | Migration 197 and its unit | W-76 | Runner on `phase24_197_index_status.sql`: exactly one row; `course_units_waiting` equals the units with no part; `uploads_deleting` counts a row in `deleting`; the view's definition names no table of the `storage` schema. **The store (answer 17):** `course_units_indexed` plus `course_units_waiting` equals `count(*)` of `bb_file_text`; `uploads_indexed` and `memory_indexed` each equal a direct count of `workspace_documents` of that kind in state `indexed`; a memory document in state `failed` is counted in `memory_failed` and in no other column, and one in state `text_ready` in `memory_waiting` and in no other column |
+| 21 | Prod applies, each on Stack's word after a `begin; ... rollback;` dry run, under the file's name, byte-identical, advisors read after: 190 to 192, 194, 195, 197 and 198 as they pass; 193 and 196 on one day | PM | `select name from supabase_migrations.schema_migrations where name ~ '^19[0-8]_'` lists nine names; each file's md5 equals the stored one, in 109c. After the ninth apply, Runner on `phase24_store_proof.sql` prints PASS against prod, and the plain plan of proof 4's course half is copied into 109c (task 49) |
 | 22 | The port PR to `main` the day 193 and 196 are applied: three name lists, test-only | PM + W-76; Stack's merge word | on `main` after the merge, Runner on `phase21_142_workspace_runner.sql`, `phase21_143_review_round.sql` and `phase15_100_db_test_runner_role.sql` each PASS |
-| 23 | `_shared/chunk.ts` and `workspace-embed` | W-78 | `node --test supabase/functions/_shared/chunk_test.ts`: `findCut` and `chunk` equal `embed-corpus/index.ts`'s text; an astral character does not shift a part range; the function's unit picker, a pure function under `_shared/`, refuses a body with no `document_id` and returns no unit of another document, or of one in `failed` or `deleting`; the answer's keys equal `embed.json`'s. **The store (answer 17):** the function's write step, a pure function under `_shared/` that is handed each insert's outcome, counts an insert refused with 23505 as stored and not as failed, marks a unit embedded when no part of it is missing whether or not this call stored one, and names the model `gte-small` on every row it builds |
+| 23 | `_shared/chunk.ts` and `workspace-embed` | W-78 | `node --test supabase/functions/_shared/chunk_test.ts`: `findCut` and `chunk` equal `embed-corpus/index.ts`'s text; an astral character does not shift a part range; the function's unit picker, a pure function under `_shared/`, refuses a body with no `document_id` and returns no unit of another document, or of one in `failed` or `deleting`; the answer's keys equal `embed.json`'s. **The store (answer 17):** the function's write step, a pure function under `_shared/` that is handed each insert's outcome, counts an insert refused with 23505 as stored and not as failed, marks a unit embedded when it has at least one part and none is missing, whether or not this call stored one, reports a unit whose text gives no part in `failed` and neither marks it nor builds a row for it, and names the model `gte-small` on every row it builds |
 | 24 | `workspace-search` | W-78 | its test: the query is cut to 2,000 characters; the caller's bearer is forwarded and no service key is read from the environment; every row of the answer carries the `kind` the SQL function gave it (answer 17) |
 | 25 | The batch entry, `mcp-server/src/batch.ts` | W-78 | `cd mcp-server && npx vitest run test/batch.test.ts`: the answer matches the PM's fixture; a hit whose passage holds a line shaped like a label or an id field adds no hit; a refused query is `refused`, not an exit; nothing is printed but the one JSON object; every hit in the answer carries its `kind`; with `SUPABASE_URL` naming the vault's project the entry exits non-zero before any request, because it reads its project through `loadConfig` as the server does (`src/config.ts:112-117, 142`) (answer 17) |
 | 26 | Limits and scope in the materials server | W-78 | `npx vitest run test/limits.test.ts`: with no environment value nothing changes; a fourth search is an error result; with a scope a search for another course, or for none, is an error result; the smoke lists three names |
@@ -1559,7 +1707,7 @@ that hash.
 | 33 | `turn.ts` in stages, the new calls in `db.ts`, sources, the fixed lines | W-77 | `npx vitest run test/turn.test.ts test/sources.test.ts`: a Stop during the planning turn stores `cancelled` and spawns no answering process; an opened unit becomes an origin `tool` row from the call's input; **three cases of nothing matched:** a planner question with no passage stores `empty` and its first line is the sentence, which names course files and uploads and not the planner; a question with an attached file that was read and no passage stores `attached_only` and has no such line; a short follow-up is searched with the previous question after it and, when the fake retriever answers that text, stores `found` with no such line. `empty` puts the sentence first on `plain` and not on `rich`; finish carries a null session id |
 | 34 | Jobs in `runner.ts`, `jobs.ts`, `prompts/summary.md`, `prompts/rolling.md` | W-77 | `npx vitest run test/jobs.test.ts`: on a fake clock a claim mid-job kills it and frees the lease; with `WORKSPACE_MEMORY_JOBS` unset only `rolling` is asked for; the summary's input holds messages only; both prompts hold the sentence that forbids due dates, statuses and scores; the loop never asks for a claim while a turn is in flight |
 | 35 | `system.md`, the two format rules, their test | W-77 | `npx vitest run test/system-prompt.test.ts`: the rules on grades, on `[notes]`, on never inventing a number and on nothing matched are present; the line on a remembered item (dated, the feed is the current figure) is present and the decision-note line is gone; the notes rules are gone; both format rules hold the line on citing by label only a passage in the prompt or a unit opened; `format-rich.md` forbids images and links |
-| 36 | The ingest worker and the parser's loop | W-79 | `cd workspace-ingest && npx vitest run`: bad first bytes give `bad_bytes`; a 12-byte plain text file gives one unit of kind `doc`; a text file with a NUL byte gives `bad_bytes`; a docx is written to tmpfs under `.docx` whatever its title; a link on another host, or one that does not end in the row's key, is refused before any request; a redirect is not followed; 1,001 units give `too_many_units`; an expired link gives `link_expired`; three failed tries give `failed`; the embed call carries the document's id; a log line holds ids, states and timings only, and the extractor's stderr is never in one; a file whose bytes do not hash to the row's `sha256` gives `bad_bytes` and no unit is put (answer 17) |
+| 36 | The ingest worker and the parser's loop | W-79 | `cd workspace-ingest && npx vitest run`: bad first bytes give `bad_bytes`; a 12-byte plain text file gives one unit of kind `doc`; a text file with a NUL byte gives `bad_bytes`; a docx is written to tmpfs under `.docx` whatever its title; a link on another host, or one that does not end in the row's key, is refused before any request; a redirect is not followed; 1,001 units give `too_many_units`; an expired link gives `link_expired`; three failed tries give `failed`; the embed call carries the document's id; a log line holds ids, states and timings only, and the extractor's stderr is never in one; a file whose bytes do not hash to the row's `sha256` gives `bad_bytes` and no unit is put (answer 17); a docx whose one unit is empty text gives `no_text` and no unit is put, a parsed file that gives no unit gives `no_text`, and an empty unit among others is left out of the put; a claimed memory document starts at the embed call and no download is tried |
 | 37 | Its image, its firewall fork, its compose service | W-79 | `node --test docker/workspace-ingest/image.test.mjs`: networks are `ingest-net` only; no volume; the secrets are the two names, mounted for the worker's user with mode 0400; `mem_limit` and `pids_limit` hold the brief's values; the image has the two users and the generated firewall holds the owner rule; none of `bb-profile`, `course-files`, `claude_oauth_token`, `bb2dash_mcp_service_key`, `api.anthropic.com` is named; the generated firewall equals what its fork script produces |
 | 38 | The Workspace image and compose block: `rag` out, the tmpfs, one database secret; the apply firewall regenerated; the apply gate tested as built | W-79 | `grep -c harness_database_url compose.yaml` gives 0; `node --test docker/workspace/init-firewall.test.mjs docker/grep-clean.test.mjs docker/apply/image.test.mjs` passes; `node docker/apply/fork-firewall.mjs --check` exits 0; the `workspace` block names no `hostname`; `cd apply && npm run typecheck && npm run build` exits 0; then `node --test docker/apply/gate-built.test.mjs`: `apply/dist/hooks/tool-gate.js` exits 2 for an unknown tool, 0 for a listed materials tool and 2 for input that is not JSON |
 | 39 | Sync: the embed loop on every files pass; the report rule | W-79 | `cd sync && npx vitest run test/files.test.ts test/report.test.ts test/loop.test.ts`: with `unitsPosted` 0 the loop runs once; with `unitsPosted` 0 and an embed exit of 1 the pass closes `done`, the report holds the line and the apply request is filed; with `unitsPosted` above 0 an embed error still fails the sync |
@@ -1568,22 +1716,26 @@ that hash.
 | 42 | Integrate: worker branches merged, types regenerated, full suites, advisors | PM | the SOP gates of the DoD |
 | 43 | Walk windows, on Stack's word, after probes 7, 8, 9 and 11 have their lines and Stack's step of task 48 is done: the live Workspace stopped, the test project the only runner and the only ingest worker, the PM's walk, each walk conversation archived, the live service back | PM | before and after: `docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1` is unchanged; `select count(*) from workspace_requests where state in ('queued','claimed')` gives 0 at the end; `select count(*) from workspace_conversations where id = any(<the walk's conversation ids>) and not archived` gives 0 |
 | 44 | Reviews | PM | both commands run; findings and fixes in 109c |
-| 45 | The acceptance pack: `acceptance/24/` (manifest, playbook, proofs) and `web/e2e/accept24.spec.ts`, on today's page. Each step archives the conversation it opened. **The store (answer 17):** the upload step sends the same synthetic file twice, and the pack's host proofs carry the statements of task 49's proofs 1, 2, 3, 6 and 7, each as one `select` with an `ok` column | PM | `node --test acceptance/acceptance.test.mjs` passes; one proof of the pack counts the run's conversations left unarchived and expects 0; one proof counts the upload rows that hold the synthetic file's `sha256` after the second send and expects 1; one proof reads `uploads_indexed` before the upload, after it is indexed and after its delete, and expects the middle figure one higher than the two others |
+| 45 | The acceptance pack: `acceptance/24/` (manifest, playbook, proofs) and `web/e2e/accept24.spec.ts`, on today's page. Each step archives the conversation it opened. **The store (answer 17):** the synthetic file's bytes hold a value the test draws fresh in each run, so its hash is one no earlier run used; the upload step notes that hash in its facts file and sends the same file twice; and the pack's host proofs carry the statements of task 49's proofs 1, 2, 3, 6 and 7, each as one `select` with an `ok` column | PM | `node --test acceptance/acceptance.test.mjs` passes; one proof of the pack counts the run's conversations left unarchived and expects 0; three reads are keyed on the upload's hash, carried from the step's facts: after the second send one upload row holds it; before the delete one row holds it, is in state `indexed` and was made in this run (`since`, from `carry:run.started_at`); after the delete no row holds it. No proof of the pack compares `uploads_indexed` between two moments of the run: an upload of his own would move that counter, and a row left by a stopped run would keep it still. Proof 6 reads it only against a direct count taken in the same statement |
 | 46 | Docs, the PRs (bb2dash, bb2dash-stack). Stop at "ready when you say so" | PM | `gh pr view --json state -q .state` prints `OPEN` in both |
 | 47 | After his merge word: the cut-over, one service at a time, each alone, with no question, apply request or sync open (`workspace`, `workspace-ingest`, `apply`, then `sync`), then `just accept 24` | PM | the run's `REPORT.md` reads green |
 | 48 | **Stack's own step (MANUAL).** The ingest role's password and its secret file, on the precedent of 2026-10-05 for `workspace_runner`: a snippet on his laptop makes the password, he runs the one `alter role` line in an unsaved SQL editor tab, and the snippet stores the DSN as `workspace_ingest_db_url` in `SECRETS_DIR`. Nothing of it passes through a chat, a repo file or a migration. The PM hands him the snippet, adds the name (not a secret) to the allow-list of `set-secret.ps1` in that folder, and says so at the hand-over. After 193 is on prod, before task 43 | Stack; the PM prepares it | his step is done when `just doctor` in bb2dash-stack shows no missing secret. The login is proved to work later, inside task 43's window: the test ingest worker's first heartbeat row appears (`select count(*) from workspace_ingest_heartbeat` gives 1) |
-| 49 | **The store's proof and its page in the data dictionary (answer 17).** NEW `db/tests/phase24_store_proof.sql`: proofs 1 to 7 below as one read-only unit. And `DATA_SYNTAX.md`: a subsection headed `### The pgvector store, scoped to bb2dash` inside the Workspace section, which names every object of the Contract clause's list, the three kinds, the model rule and its 384-dimension limit, the keys that make each write an upsert, the columns of `v_workspace_index_status`, the four direct touches that stand, and what a lift-out would change; with one pointer line to it at the end of the Search layer section. Written with task 20. The unit is green once 190 to 197 are on prod | W-76; the PM runs the unit on prod in task 21 | Runner on `phase24_store_proof.sql` PASS, with its red run quoted (before 190 is on prod the unit cannot pass: one vector column exists where two are expected); `grep -c "^### The pgvector store, scoped to bb2dash" DATA_SYNTAX.md` gives 1; `grep -c "workspace_text_embeddings_hnsw" DATA_SYNTAX.md` and `grep -c "hybrid_search_workspace_text" DATA_SYNTAX.md` each give at least 1; proof 8's three greps give their expected lines; proof 9's five places are each named with their green run in the verification section |
+| 49 | **The store's proof and its page in the data dictionary (answer 17).** NEW `db/tests/phase24_store_proof.sql`: proofs 1 to 7 and 7b below as one read-only unit. And `DATA_SYNTAX.md`: a subsection headed `### The pgvector store, scoped to bb2dash` inside the Workspace section, which names every object of the Contract clause's list, the three kinds, the model rule and its 384-dimension limit, the keys that make each write an upsert, the columns of `v_workspace_index_status`, the direct touches (the three older ones that stand, the one 198 closes, the page's two), the two exceptions that come through the public keys, and what a lift-out would change, the five objects that span both sides among it; with one pointer line to it at the end of the Search layer section. Written with task 20. The unit is green once 190 to 198 are on prod | W-76; the PM runs the unit on prod in task 21 | Runner on `phase24_store_proof.sql` PASS, with its red run quoted (before 190 is on prod the unit cannot pass: one vector column exists where two are expected); `grep -c "^### The pgvector store, scoped to bb2dash" DATA_SYNTAX.md` gives 1; `grep -c "workspace_text_embeddings_hnsw" DATA_SYNTAX.md` and `grep -c "hybrid_search_workspace_text" DATA_SYNTAX.md` each give at least 1; proof 8's four greps give their expected lines; proof 9's five places are each named with their green run in the verification section |
+| 50 | **Migration 198 and its unit (the review round of the store's clause).** `198_text_embeddings_anon_insert_drop.sql` drops the policy `bb_text_embeddings_anon_insert` and nothing else. It needs none of 190 to 197 | W-76 | Runner on `phase24_198_anon_insert_drop.sql`, with its red run quoted (before 198 the insert below succeeds and is rolled back with the unit): under `set local role anon` an insert of one synthetic vector row into `bb_text_embeddings` raises 42501; `pg_policies` holds exactly three rows for the two course tables, `bb_file_text_anon_insert`, `bb_file_text_owner_all` and `bb_text_embeddings_owner_all`; `select rolbypassrls from pg_roles where rolname = 'service_role'` gives true, so the embedder's write rests on no policy; `count(*)` of `bb_text_embeddings` is the same before and after the unit. And `git grep -c "bb_text_embeddings_anon_insert" -- db/tests ":!db/tests/phase24_*"` prints nothing: no standing unit pins the policy |
 
-**The store's proof, as written (task 49).** Proofs 1 to 7 are the unit
+**The store's proof, as written (task 49).** Proofs 1 to 7, with 7b, are the unit
 `db/tests/phase24_store_proof.sql`: read-only, one transaction, rolled back, every proof run and
 every failure collected into one raise, as `db/tests/phase18_post_embed_checks.sql:25-28` does. Each
 is given here as the statement itself, so the PM can paste it into the SQL editor, and the pack
 carries 1, 2, 3, 6 and 7 as host proofs (task 45). The expected results are for prod after the
-eighth apply, with a boolean shown as psql prints it, `t`. A count that moves with a sync is given
-as a rule, with the figure of 2026-10-08 beside it. **None of the nine was run in this pass**, which
-took one SELECT and no EXPLAIN; the catalog expressions of proofs 1, 2 and 7 are the ones that read
-the Facts. W-76 runs each as its red and green run and says in its verification section if a
-statement had to change.
+ninth apply, with a boolean shown as psql prints it, `t`. A count that moves with a sync is given
+as a rule, with the figure of 2026-10-08 beside it. **No SQL statement of the nine was run**, in
+the pass that wrote them or in the review round: each pass took one SELECT of catalog rows and no
+EXPLAIN. The catalog expressions of proofs 1, 2 and 7 are the ones that read the Facts. The
+expected rows of 7b for the two course tables are worked out from the grants and policies the
+review round read, not from a run of its statement. Proof 8's four greps were run on `main` at
+a58be34 in the review round and gave the lines stated. W-76 runs each as its red and green run
+and says in its verification section if a statement had to change.
 
 1. **The extension is present.**
 
@@ -1633,7 +1785,43 @@ statement had to change.
    vector_cosine_ops | t` and `public.workspace_text_embeddings | workspace_text_embeddings_hnsw |
    hnsw | vector_cosine_ops | t`.
 
-4. **The plan of a nearest-neighbour query with a limit uses the index.**
+4. **A search's plan uses the index.** Two statements, one for each table.
+
+   **The course table: `match_file_text`'s own statement.** It is the body of the function as
+   `021_matched_snippets.sql:80-90` wrote it, with a literal in place of each of its five
+   parameters: the query vector, the model `gte-small`, no course, a limit of 10, and replaced
+   files left out. The three tables are named with their schema and nothing else differs. The
+   app runs this function. It is mode `vector` of the `search` function
+   (`supabase/functions/search/index.ts:180-182`).
+
+   ```sql
+   begin;
+   set local enable_seqscan = off;
+   set local enable_sort = off;
+   explain (costs off)
+   select f.id, t.id, e.part_no, f.course_id, f.bucket, f.file_name, t.unit_kind, t.unit_no,
+          1 - (e.embedding operator(extensions.<=>)
+               (array_fill(0.01::real, array[384])::extensions.vector(384))) as similarity,
+          t.text
+     from public.bb_text_embeddings e
+     join public.bb_file_text t on t.id = e.text_id
+     join public.bb_files f on f.id = t.file_id
+    where e.model = 'gte-small'
+      and (null::text is null or f.course_id = null::text)
+      and (false or f.superseded_by is null)
+    order by e.embedding operator(extensions.<=>)
+             (array_fill(0.01::real, array[384])::extensions.vector(384))
+    limit 10;
+   rollback;
+   ```
+
+   The plan holds the line `Index Scan using bb_text_embeddings_hnsw on bb_text_embeddings e`.
+   An EXPLAIN without ANALYZE runs nothing and prints no row, so no text leaves the database.
+
+   **The new table: a statement of the same shape.** No function over
+   `workspace_text_embeddings` orders by distance with a limit yet.
+   `hybrid_search_workspace_text` measures every part. So this half shows that the index can
+   serve the shape, and no more than that.
 
    ```sql
    begin;
@@ -1650,23 +1838,29 @@ statement had to change.
    ```
 
    The plan holds the line `Index Scan using workspace_text_embeddings_hnsw on
-   workspace_text_embeddings e`. The same statement over `public.bb_text_embeddings` holds `Index
-   Scan using bb_text_embeddings_hnsw on bb_text_embeddings e`. In the unit each runs through
-   `execute ... into` with `format json`, and the plan must name the index.
+   workspace_text_embeddings e`. In the unit each statement runs through `execute ... into` with
+   `format json`, and the plan must name the index.
 
    * **Why the two settings.** They take the sequential scan and the sort out of the planner's
      choice, so the result does not depend on the table's size. The new table is empty on the day
-     it is applied, and a planner is right to scan an empty table. What the proof shows is that the
-     index is valid, is built for the operator the store's functions use, and can serve the
-     nearest-neighbour shape.
-   * **Recorded beside it, not a gate:** the same statement over `bb_text_embeddings` with both
-     settings left on, its plan copied into 109c. At 2,011 rows either a sequential scan or the
-     index is a fair plan, and 109c says which the planner took.
+     it is applied, and a planner is right to scan an empty table.
+   * **What the course half shows that proof 3 does not.** Proof 3 says a valid cosine index
+     exists. This says that a search the app runs is written so the index can answer it: its
+     `order by` is the bare distance on the index's own operator, and its two joins and its
+     filters on model, course and replaced files do not force a sort. A statement that ordered
+     by anything else would show a Sort node here even with both settings off, and would fail.
+   * **Recorded beside it, not a gate:** the course statement with both settings left on, its
+     plan copied into 109c. That is the plan `match_file_text` gets on a real call. At 2,011
+     rows either a sequential scan or the index is a fair plan, and 109c says which the planner
+     took. The table, the index and the function are on prod today, so the PM reads this plan
+     before the freeze and puts what it shows into 109a's item 23 when that goes to Stack
+     (task 12).
    * **What this is not.** It is not a plan of `hybrid_search_file_text` or of
-     `hybrid_search_workspace_text`. Those measure every part in scope and use no index (The
-     pgvector store, point 3). And an EXPLAIN of a call to either shows one function scan and
-     nothing inside it, because a SQL function with a pinned path is not inlined
-     (`101_search_path_pin.sql:29-30`).
+     `hybrid_search_workspace_text`, the searches the assistant's retrieval uses. Those measure
+     every part in scope and use no index (The pgvector store, point 3). And it is the
+     function's statement, not a call of it: an EXPLAIN of a call to any of the three shows one
+     function scan and nothing inside it, because a SQL function with a pinned path is not
+     inlined (`101_search_path_pin.sql:29-30`).
 
 5. **Every vector row names its model, and the model is in the key.**
 
@@ -1714,9 +1908,13 @@ statement had to change.
      from public.v_workspace_index_status s;
    ```
 
-   One row, five `t`. On 2026-10-08 the course side read 982 units, all 982 with a vector. That a
-   known number of ingested units comes back under the right kind is task 15's case on synthetic
-   rows, and the pack's count of `uploads_indexed` around its one upload (task 45).
+   One row, five `t`. On 2026-10-08 the course side read 982 units, all 982 with a vector. The
+   fifth column holds on a live store because of two rules. A remembered item goes back to
+   `text_ready` when its summary changes, so it is not counted `indexed` while it has no vector
+   (Memory). And a unit with no text is never put and never marked embedded (Edge functions;
+   Uploads and extraction, step 6). That a known number of ingested units comes back under the
+   right kind is task 15's case on synthetic rows. On real ingest it is the pack's three reads
+   keyed on its upload's hash (task 45).
 
 7. **No function of the store reads another project.**
 
@@ -1737,7 +1935,96 @@ statement had to change.
    installed, which is why the fourth count reads function bodies. This shows the known ways out
    are absent from the database side of the store. Proof 8 covers the code beside it.
 
-8. **Nothing 24a builds touches a store table directly, and no code names another project.** Three
+   **7b. Who holds a right on the five content tables.** Four statements in the same unit. They
+   are the list of direct touches (The pgvector store, point 1) as the catalog holds it. A right
+   here is a grant and a policy together, because row security is on: anon and `authenticated`
+   hold the project's default grant on both course tables (Facts), so a list of grants alone
+   would show anon with every command where the policy lets it insert and no more.
+
+   ```sql
+   select c.relname as rel, c.relrowsecurity as row_security
+     from pg_class c
+    where c.relnamespace = 'public'::regnamespace
+      and c.relname in ('bb_file_text', 'bb_text_embeddings', 'workspace_documents',
+                        'workspace_document_text', 'workspace_text_embeddings')
+    order by 1;
+   ```
+
+   Five rows, each `t`.
+
+   ```sql
+   with roles(who) as (values ('anon'), ('authenticated'), ('workspace_runner'),
+                              ('workspace_ingest_runner'), ('sync_runner'),
+                              ('inbox_apply_runner')),
+        rels(rel) as (values ('bb_file_text'), ('bb_text_embeddings'), ('workspace_documents'),
+                             ('workspace_document_text'), ('workspace_text_embeddings')),
+        cmds(cmd) as (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'))
+   select r.who, t.rel, string_agg(c.cmd, ', ' order by c.cmd) as may
+     from roles r cross join rels t cross join cmds c
+    where case c.cmd
+            when 'DELETE'
+              then has_table_privilege(r.who::name, ('public.' || t.rel)::regclass, 'DELETE')
+            else has_any_column_privilege(r.who::name, ('public.' || t.rel)::regclass, c.cmd)
+          end
+      and exists (select 1 from pg_policies p
+                   where p.schemaname = 'public' and p.tablename = t.rel
+                     and p.permissive = 'PERMISSIVE'
+                     and p.cmd in (c.cmd, 'ALL')
+                     and (r.who::name = any (p.roles) or 'public'::name = any (p.roles)))
+    group by r.who, t.rel
+    order by 1, 2;
+   ```
+
+   Exactly five rows, and no row for any of the four login roles:
+
+   | who | rel | may |
+   |---|---|---|
+   | `anon` | `bb_file_text` | `INSERT` |
+   | `authenticated` | `bb_file_text` | `DELETE, INSERT, SELECT, UPDATE` |
+   | `authenticated` | `bb_text_embeddings` | `DELETE, INSERT, SELECT, UPDATE` |
+   | `authenticated` | `workspace_document_text` | `SELECT` |
+   | `authenticated` | `workspace_documents` | `SELECT, UPDATE` |
+
+   Row 1 is direct touch 1. Rows 2 and 3 are direct touch 3. Row 4 is direct touch 5. Row 5 is
+   direct touch 6. Direct touch 2 is the service key, which is not on the list of roles (below).
+   Before 190 and 193 the statement raises, because three tables and one role do not exist: that
+   is its red run. From the grants and policies read on 2026-10-08, the two course tables give
+   one row more today, `anon | bb_text_embeddings | INSERT`. That is direct touch 4, and 198
+   removes it.
+
+   ```sql
+   select p.tablename as rel, p.policyname, p.roles::text as roles, p.cmd,
+          (coalesce(p.qual, '') || ' ' || coalesce(p.with_check, '')) like '%app_owner%'
+            as owner_scoped
+     from pg_policies p
+    where p.schemaname = 'public'
+      and p.tablename in ('bb_file_text', 'bb_text_embeddings', 'workspace_documents',
+                          'workspace_document_text', 'workspace_text_embeddings')
+    order by 1, 2;
+   ```
+
+   Every row but one is for `{authenticated}` with `owner_scoped` `t`, so `authenticated` above
+   means the owner and nobody else who is signed in. The one other row is `bb_file_text |
+   bb_file_text_anon_insert | {anon} | INSERT | f`. No row names `bb_text_embeddings_anon_insert`,
+   and `workspace_text_embeddings` has no row at all.
+
+   ```sql
+   select a.attname as col
+     from pg_attribute a
+    where a.attrelid = 'public.workspace_documents'::regclass
+      and a.attnum > 0 and not a.attisdropped
+      and has_column_privilege('authenticated', a.attrelid, a.attnum, 'UPDATE')
+    order by 1;
+   ```
+
+   Two rows, `course_id` and `title`: the `UPDATE` of row 5 is those two columns and no other.
+
+   Two roles are left out on purpose, because both bypass row security and hold every table.
+   `service_role` is the store's own key: the two embedders, the batch child and
+   `get_material_text` use it. `db_test_runner` is the test login
+   (`db/migrations/100_db_test_runner_role.sql:34, 61-62`). Neither is new.
+
+8. **No service 24a builds names a store table, and no code names another project.** Four
    commands, from the repository root.
 
    ```sh
@@ -1756,11 +2043,28 @@ statement had to change.
    not in the list.
 
    ```sh
+   git grep -nEi "(from|into|update|join)[[:space:]]+(public\.)?(bb_file_text|bb_text_embeddings|workspace_documents|workspace_document_text|workspace_text_embeddings)([^a-z_]|$)" -- workspace/src workspace-ingest mcp-server/src sync/src
+   ```
+
+   No line. The two commands above see the REST form only, and two of the services 24a builds
+   talk SQL: the runner (`workspace/src/db.ts:11` imports `pg`) and the ingest worker, which
+   imports the same module (Seams, the apply image). This one reads SQL text, so a `select` from
+   a store table in either would show. A comment that trips it is reworded. On `main` today it
+   gives no line.
+
+   ```sh
    git grep -hoE "https://[a-z0-9]+\.supabase\.co" -- workspace/src workspace-ingest mcp-server/src supabase/functions | sort -u
    ```
 
    One line, `https://goultdzqcavefcgnifdy.supabase.co`, the bb2dash project. On `main` today it
    gives that one line.
+
+   **What these four do not hold, and what does.** A grep reads the code that is there, in the
+   forms it knows. The guard that holds whatever the code says is the list of rights: proof 7b
+   here, task 13 for the three new tables, task 16 for the ingest role, and
+   `db/tests/phase21_142_workspace_runner.sql:172-185` for the runner, which pins no privilege
+   on any table, view or column in `public`. The page is in none of the four paths, because 24a
+   changes no page file. Its own check is brief 111's task 5.
 
 9. **A second upsert of the same item changes no count.** Five places, each a case of a task
    above, and one command.
@@ -1769,7 +2073,9 @@ statement had to change.
    * A vector: the same `(text_id, model, part_no)` twice raises 23505 and leaves one row (task
      13), and the embedder counts that as stored (task 23).
    * A remembered item: the same summary twice gives one document and one unit (task 19).
-   * On real ingest: the pack sends one file twice and counts one row (task 45).
+   * On real ingest: the pack sends one file twice and one row holds its hash (task 45). The
+     file's bytes are new in each run, so a row left by a run that stopped does not turn the
+     next run red.
    * Course files, on the host with the anon JWT in its environment as the sync holds it:
      `node ingest/embed_corpus.mjs --check` prints `missing_parts_before=0` and exits 0, so
      another pass of the embed loop has nothing to add. It sends a dry run and writes nothing
@@ -1782,10 +2088,28 @@ question stores a `feed` source and the planner is as it was; a follow-up is ans
 session id; a question nothing matches stores `empty`; a Stop reaches the runner and the next answer
 is `done`; a synthetic file is uploaded through the page's own session (no control exists before
 24b), indexed, found by a question and deleted in its two steps, leaving no row in `deleting`. Before
-the delete the same file is sent a second time and one row holds its hash (answer 17). Host proofs
-read ids, states and counts from `workspace_turns`, `workspace_sources`, `workspace_documents` and
-`v_workspace_index_status`, never text, and five of them are the store's own (task 49's proofs 1, 2,
-3, 6 and 7: catalog rows and counts). Step 1 stays a person's: Usage credits are off.
+the delete the same file is sent a second time and one row holds its hash (answer 17).
+
+**The synthetic file is new in every run.** An upload's key is the hash of its bytes, over all
+uploads. With fixed bytes, a run that stopped between the upload and the delete would leave its
+row, the next run would find the hash and upload nothing, and its proofs would be red until
+someone cleaned up by hand. Repeating a run is normal: a blocked run is repeated
+(`acceptance/README.md:39`). So the file's bytes hold a value the test draws for that run. No
+value of the run is handed to a step (`acceptance/README.md:127-128` offers a proof
+`run.started_at` and nothing else), so the test draws its own, and notes the file's hash and
+the document's id in the step's facts. The store's three reads of real ingest take that hash as
+a carried value (a proof's `text` parameter is a plain name of at most 100 characters,
+`scripts/accept-proofs.mjs:108, 123`, and 64 hex characters fit): one row after the second
+send; that row in `indexed` and made in this run before the delete; no row after it. None of
+them compares the `uploads_indexed` counter between two moments, which an upload of his own
+would move. A row that a stopped run leaves does not block the next run. It stays a synthetic
+upload in his store, searched like any other, until it is removed. The PM removes it through the
+page's own session, by the id in that run's facts.
+
+Host proofs read ids, states and counts from `workspace_turns`, `workspace_sources`,
+`workspace_documents` and `v_workspace_index_status`, never text, and five of them are the store's
+own (task 49's proofs 1, 2, 3, 6 and 7: catalog rows and counts). Step 1 stays a person's: Usage
+credits are off.
 
 **The pack leaves nothing in his memory or his list.** Each step archives the conversation it opened,
 through the page, in the last step that uses it (Memory, Test traffic stays out), and one host proof
@@ -1805,7 +2129,7 @@ worker runs a probe alone: probes 1 to 6 and 10 are the PM's before the branches
 
 | worker | stream | branch | worktree | owns (disjoint) | tasks |
 |---|---|---|---|---|---|
-| W-76 | db | `feat/workspace-24-db` | `bb2dash-wt-24-db` | migrations 190 to 197, the `phase24_*` units (the store's proof among them), three name lists, `DATA_SYNTAX.md`'s Workspace section and one pointer line under its Search layer section | 13 to 20, 22, 49 |
+| W-76 | db | `feat/workspace-24-db` | `bb2dash-wt-24-db` | migrations 190 to 198, the `phase24_*` units (the store's proof among them), three name lists, `DATA_SYNTAX.md`'s Workspace section and one pointer line under its Search layer section | 13 to 20, 22, 49, 50 |
 | W-77 | runner | `feat/workspace-24-runner` | `bb2dash-wt-24-runner` | `workspace/` except the PM's fixture folder and probe test | 28 to 35 |
 | W-78 | search and embed | `feat/workspace-24-search` | `bb2dash-wt-24-search` | `mcp-server/`; the three new function folders | 23 to 26; its pushed work is what probes 8 and 9 run on |
 | W-79 | ingest, sync and containers | `feat/workspace-24-ingest` | `bb2dash-wt-24-ingest` | `workspace-ingest/`, `docker/workspace-ingest/`, `docker/workspace/`, the four named `docker/apply/` files, `compose.yaml`, the three sync files and their tests | 36 to 39; its pushed work is what probes 7 and 11 run on |
@@ -1823,7 +2147,7 @@ branch. W-79's image work waits for W-77's task 32 and W-78's task 25 on the pha
 | **Phase 23 follow-ups** (brief 110 on `fix/phase23-followups` at d558994, worktree `bb2dash-wt-23f`; workers W-80 to W-84; migrations 187 and 188, 189 held) | **The apply image.** 24a edits `workspace/src` and `mcp-server/src`, which that image copies (`docker/apply/Dockerfile:39, 46-49`), and four files under `docker/apply/`: the fork script, the generated firewall, the image test, and the new test of the gate as built. The follow-ups edit `apply/src`, `apply/test/*` and the skills. **Shared files, by name:** in bb2dash, `acceptance/manifest.schema.json` (each adds actions), `acceptance/pack-check.mjs` and `acceptance/OPERATOR.md` (theirs only where they name the Workspace alone), `DATA_SYNTAX.md` (their Inbox section; this phase's Workspace section and one pointer line under Search layer), the generated types file; in bb2dash-stack, `doctor/`, `README.md`, `.env.example`, `compose.yaml` and `scripts/lib/accept-actions.mjs`. Worker numbers and migration numbers do not overlap | **The follow-ups merge first.** They are small and they fix a live service. 24a then merges `origin/main`, keeps both sets in each shared file, and re-does: `node docker/apply/fork-firewall.mjs --write` and `--check`; `cd apply && npm run typecheck && npm run build && npx vitest run`; `node --test docker/apply/image.test.mjs docker/apply/gate-built.test.mjs`; the apply image build; the types file. **Who owns the files under `docker/apply/`:** this phase's W-79, all four, and nobody in the follow-ups. So brief 110's sentence "Neither phase edits a file under `docker/apply/`" is wrong, and the PM corrects it in brief 110 on its own branch before either phase's workers are cut. **Who regenerates the apply firewall second:** whoever merges second. If that is 24a, the list above. If 24a merges first, the follow-ups branch merges `main` and runs `--write`, then `git diff --exit-code docker/apply` (its own DoD line), which must print nothing. No migration is renumbered. Either way apply is rebuilt alone at the second cut-over, with no apply request open |
 | **The apply image** | `apply/src` imports seven `workspace/src` modules and bundles them with packages left external (`apply/package.json:12`). The seventh, `hooks/gate-rules`, is a file W-77 rewrites, and it is the gate of the one Claude process that can write | The import closure of the seven gains no package. The names apply imports keep their signatures: from `config`, `CLAUDE_BIN`, `CLAUDE_CODE_VERSION`, `ConfigError`, `assertSubscriptionEnv`, `cleanSecret`, `readDbCa`, `readOauthToken`, `readTextOrNull`, `Env`, `ReadFile`; from `errors`, `mapTurnEnd`; from `providers/claude-cli`, `CliExit`, `CliProcess`, `SpawnOptions`, `childEnv`, `spawnClaude`; from `stream-json`, `parseLine`, `readInit`; from `db`, `dsnParts`, `createPgQuery`, `newPgClient`, `redactDsn`, `QueryFn`, `PgClientLike`; from `alive`, `touchAlive`, `isAliveFresh`; from `hooks/gate-rules`, `runGate(stdinText, rule)`, `GateDecision` and `GateOutcome` (an exit code and a line for stderr). `runGate` also keeps its behaviour: exit 2 with a reason for a denial, exit 2 for input it cannot read, exit 0 and nothing printed for an allowed call. A changed signature fails apply's typecheck. A changed behaviour would not, and a broken import makes the apply gate deny every call (`apply/src/hooks/tool-gate.ts:40-41`), which stops the Inbox auto-apply. So the gate is tested as built (`docker/apply/gate-built.test.mjs`, tasks 32 and 38, the DoD). The ingest worker imports `config`, `db` and `alive` the same way, so those three now have two consumers. The DoD builds apply, not only its tests |
 | **The acceptance packs** | Pack 21's proofs want the model's own tool call, one of them the notes tool (`acceptance/21/manifest.json:82, 103-104, 124`). The acceptance suite uses pack 21 as its fixture (`acceptance/acceptance.test.mjs:38, 222, 364-667`), `pack-check.mjs:96-99` reads the questions from `web/e2e/walk21.lib.ts`, `web/e2e/accept.lib.ts:73-74` imports `walk21.lib` and `walk21.window`, and `scripts/accept-proofs.test.mjs:631` reads `acceptance/21/proofs.json` | After 24a's cut-over `just accept 21` is not expected green and is not run again. Phase 21 stays accepted (DECISIONS 2026-10-08). Pack 24 is the Workspace's acceptance from then on. 24a edits none of `acceptance/21/`, `accept21.spec.ts`, `accept.lib.ts` and the `walk21*` files. **Pack 21 is never removed:** 24b stops running it and keeps its files in place, because removing them would fail the acceptance suite and stop the shared library from compiling (brief 111, task 14) |
-| **The live Workspace** | `bb2dash-workspace-1` answers from the one queue, and any runner may take any queued question | **One runner on the queue at a time during tests, and one ingest worker.** The test project `bb2dash-wt24` runs only inside a walk window, with the live service stopped, on Stack's word, the service named in every command. `workspace_claim_v2` does not lift this rule. Migrations 190 to 197 are additive, so the live runner keeps working after each apply |
+| **The live Workspace** | `bb2dash-workspace-1` answers from the one queue, and any runner may take any queued question | **One runner on the queue at a time during tests, and one ingest worker.** The test project `bb2dash-wt24` runs only inside a walk window, with the live service stopped, on Stack's word, the service named in every command. `workspace_claim_v2` does not lift this rule. Migrations 190 to 197 are additive and 198 drops one policy that nothing uses, so the live runner keeps working after each apply |
 | **Phase 21 (frozen)** | migrations 140 to 143, `workspace_ask(uuid, text)`, the ten data attributes its tests read, the router's cases | none edited. New tables, new functions, new files. `workspace_claim(text)` keeps its grant, so the old image works until the cut-over |
 | **The `sync` container** | it holds the Blackboard login; three of its source files change | no model enters the sync. Its image is rebuilt once, at the cut-over, alone, with no sync open. The `bb-profile` volume is never touched |
 | **bb2dash-stack** | it declares the secret names, its doctor pins them and the folder `secrets.example/` against them, and it holds the acceptance run's host actions. The follow-ups' W-83 edits the same doctor, README, `.env.example`, `compose.yaml` and action list | a companion PR, opened with 24a's and merged after it, as Phases 21 and 23 did. PM default, Stack's to object. The follow-ups' PR there merges first; W-85 then merges that `main` and keeps both sets of actions and both doctor rows |
@@ -1859,9 +2183,10 @@ branch. W-79's image work waits for W-77's task 32 and W-78's task 25 on the pha
 * Late text after a Stop (map R4): not diagnosed here; 24b guards the page against it.
 * For the store (answer 17): a second Supabase project, or a schema of its own. A change of
   embedding model or of its 384 dimensions. A hybrid search that goes to the index first, and any
-  tuning of the index, of `hnsw.ef_search` or of `hnsw.iterative_scan` (109a, item 23). Moving the
-  sync's insert of course units, or `get_material_text`'s read of one, behind a function. Dropping
-  `bb_text_embeddings_anon_insert`, unless the PM rules it in (109a, item 24).
+  tuning of the index, of `hnsw.ef_search` or of `hnsw.iterative_scan`, unless Stack's answer to
+  109a's item 23 asks for it. Moving the sync's insert of course units, or `get_material_text`'s
+  read of one, behind a function, and so closing `bb_file_text_anon_insert` (109a, item 24). A
+  function in place of the page's view of remembered summaries.
 
 ## Risks
 
@@ -1870,7 +2195,7 @@ branch. W-79's image work waits for W-77's task 32 and W-78's task 25 on the pha
   Stack is told that no model plans retrieval.
 * **Two CLI starts per question.** Standard and Deep pay two starts. Lookups route to one turn. P-4's
   bound is the guard.
-* **Size.** Eight migrations, five workers, one new service with two users in it. The cut order if it
+* **Size.** Nine migrations, five workers, one new service with two users in it. The cut order if it
   runs long: first the answering turn's own tools (then the server's limits and P-6 fall away); then
   xlsx and pptx uploads; then the list of ids at the end of a cut course file. Never cut: sessions
   from the database, the two turns, the feed, sources, the notes store's removal, the ingest
@@ -1912,15 +2237,28 @@ branch. W-79's image work waits for W-77's task 32 and W-78's task 25 on the pha
   shows as text on today's page.
 * **The index is there before the search needs it.** The hybrid search compares against every
   vector and uses no index, on purpose at 2,011 vectors. Stack was told the search's plan uses the
-  index. What 24a proves is narrower and is said plainly: the index is in place on both tables and
-  the nearest-neighbour query plans onto it (task 49, proof 4). 109a's item 23 puts the difference
-  to him.
-* **Four older paths still touch a course table directly**, one of them a policy nothing uses
-  (The pgvector store, point 1). 24a adds none and proof 8 holds that. 109a's item 24.
+  index. What 24a proves is narrower and is said plainly: the index is in place on both tables;
+  on the course table the plan of `match_file_text`'s own statement names it, and that is a
+  search the app runs; on the new table only a statement of that shape does, because no function
+  there has the shape yet (task 49, proof 4). 109a's item 23 puts the difference to him as a
+  question before the freeze. If he asks for the hybrid search on the index now, that is new
+  work with its own measurement, and the freeze moves for it.
+* **Direct paths to a store table.** Three older ones stand and the page adds two of its own
+  (The pgvector store, point 1). Proofs 7b and 8 hold the list. The fourth older one, a policy
+  nothing uses that let the public key insert a vector, is dropped by 198.
+* **The public key can still insert a course unit.** That is the sync's path, under a policy
+  open to any holder of the key. A unit written that way would be indexed and could reach an
+  answer as a fenced passage. It allows no read, change or delete. Not closed here, and said to
+  Stack (109a, item 24).
+* **198 is the one migration that removes something.** It drops one policy. No code writes
+  through it and no unit pins it (Facts), and the embedder writes as the service role. If Stack
+  objects, 198 is not applied and proof 7b's expected rows gain the one row it would have
+  removed.
 * **The content hash comes from the browser.** A wrong hash would file an upload under the wrong
   identity. The worker hashes the bytes it downloaded and fails the row on a difference (task 36).
-* **The proof's statements were not run.** This pass took one SELECT and no EXPLAIN. W-76's red and
-  green runs are the first time proofs 3 to 6 meet a database.
+* **The proof's SQL statements were not run.** Two passes took one SELECT each and no EXPLAIN.
+  W-76's red and green runs are the first time proofs 3 to 7b meet a database. The one earlier
+  read is the PM's, before the freeze: the plan of proof 4's course half.
 * **Phase 21's hardening list is unchanged**: the firewall's address allowlist on port 443, DNS,
   PUBLIC on pg_net (STATUS, deferred hardening).
 * **The metering plan is still paused, not gone** (brief 102, Why). Two turns per question use more
@@ -1928,9 +2266,9 @@ branch. W-79's image work waits for W-77's task 32 and W-78's task 25 on the pha
 * **Not known:** whether P-2's flag exists on 2.1.289 (the host's CLI is newer); whether the CLI
   starts with its config folder on tmpfs; the planning turn's cost; whether this Docker honours a
   mode and an owner on a file secret and loads the firewall's owner match (P-10); whether Supabase's
-  advisor lists a definer function open to `authenticated`; which plan the planner takes for the
-  nearest-neighbour query over 2,011 rows with its settings left on (task 49, proof 4, recorded and
-  not a gate).
+  advisor lists a definer function open to `authenticated`; which plan the planner takes for
+  `match_file_text`'s statement over 2,011 rows with its settings left on (task 49, proof 4:
+  recorded, not a gate, and read by the PM before the freeze).
 * **Not re-read in the challenge round's edits:** the prod counts it cites (47 of 186 work rows, 66
   and 32 gradebook rows and their byte sizes, 13 of 116 files over 40,000 bytes, 20 of 38 answers at
   tier `low`). They are the reviewers' reads of 2026-10-08. The edits took no database read. The PM
@@ -1992,6 +2330,16 @@ Each has its DECISIONS row dated 2026-10-08. The earlier rows are quoted as writ
 * **2026-09-09:** "Embeddings in their own table keyed `(text_id, model, part_no)`" and "Embedding
   model: **gte-small via Supabase Edge Functions**". Both stand. Answer 17's row holds the new table
   to the same key and the same model, and amends neither.
+* **2026-10-08, answer 17's own row, four sentences**, amended by the review round of the store's
+  clause (Appendix 4). "Everything 24a builds reads and writes the store through named
+  functions." Now: every service 24a builds does, for units and vectors, and the page holds two
+  listed rights of its own. "Four older paths that touch a course table directly stay, one of
+  them the unused policy `bb_text_embeddings_anon_insert`; 24a adds none." Now: three stay,
+  migration 198 drops that policy, and the page adds two. "the brief names the one thing in its
+  design a later move would change". Now: that join, and five objects that span both sides.
+  And "Defaults taken, his to object to (109a, answer 17 and items 23 to 25)". Now: item 23 is a
+  question put to him before the freeze. **This one has no DECISIONS row yet.** The review round
+  edited the two briefs and 109a and left `project-state/` to the PM, who writes the row.
 * **2026-09-09:** "one PR per phase". Amended for this phase: two PRs, 24a and 24b (answer 11).
 * **Root `CLAUDE.md`**, rewritten in 24a's PR: "A container runner answers each question with one
   `claude -p` turn"; "four read tools over the materials and the two bb2dash notes collections pass a
@@ -2162,6 +2510,10 @@ points. This brief at 352bcb5 was read against each point, with the code the sto
 read of prod (Facts). The quoted lines are this brief's own at 352bcb5. The design was not redrawn:
 each gap was closed with the smallest change the migrations and workers already here could carry.
 
+This appendix is the record of that pass. The clause was reviewed afterwards (Appendix 4). Where
+the two differ, the clause and Appendix 4 are current: the count of direct touches, the course
+half of proof 4, the standing of 109a's item 23, proof 7b, migration 198 and task 50.
+
 | # | the PM's point | at 352bcb5 | the line it rested on | what changed |
 |---|---|---|---|---|
 | 1 | one pgvector store inside the bb2dash project, not a second one, reached only through named functions, reading nothing of the vault's store | **in part** | "**One retrieval store, in the bb2dash project** (ruling W-2)" and "Nothing is read from `harness-memory`." (lines 538-541); "the runner's login cannot read `bb_file_text`, an upload's units or a vector" (line 839) | Said outright: no second project and no schema of its own now. Every object named, the search's arm over the new tables among them, which had no name (`hybrid_search_workspace_text`). The rule held to what 24a builds, with the four older direct touches and the one new view listed by file and line, because "never a table" was not true of the course half and cannot be made true without rebuilding the sync's write. Proofs 7 and 8 |
@@ -2177,6 +2529,8 @@ scan and nothing inside (`101_search_path_pin.sql:29-30`). So proof 4 is of the 
 query with a limit, the shape `match_file_text` has, with the two planner settings that make the
 answer independent of the table's size. Making the hybrid search go to the index first would
 change a measured ranking and was not taken as a small change. 109a's item 23 puts it to him.
+Since the review round the course half of proof 4 is `match_file_text`'s own statement, and
+item 23 is a question before the freeze and no longer a default (Appendix 4, F-7).
 
 **Design changes made for this answer, and who carries each.** The unique index on an upload's
 `sha256`, the third CHECK, the upsert in `workspace_upload_register`, the unique keys of
@@ -2189,3 +2543,78 @@ check: W-79, task 36. The same file sent twice, and five host proofs: the pack, 
 page's order of an upload (hash first, key from the hash): brief 111, W-86. No migration number and
 no task number moved, and the owner sets stay disjoint. Task 49 is new, and W-76's set gained one
 pointer line in `DATA_SYNTAX.md`.
+
+## Appendix 4: the review round of the pgvector clause, 2026-10-08
+
+One review read the clause, its proofs, brief 111 and 109a at 7fe7030 against his sentence and the
+PM's five points. Eight findings, numbered F-1 to F-8 in that review. They are not the F-numbers
+of the first appendix. Each was checked against the documents and the code, with one more read of
+prod (Facts: who holds a right on the two course text tables). All eight were right and none was
+rejected. Five were applied with a change, and the change is said. Where a finding and one of the
+five points pulled apart, the point was held.
+
+**Must-fix**
+
+* **F-1.** *Point 1 was stated wider than the design. The page selects `workspace_documents`,
+  holds select on `workspace_document_text` and updates two columns, and nothing checked the
+  page.* Applied with a change. The rule is now held to the services 24a builds and to units and
+  vectors. The page's rights are direct touches 5 and 6, and touch 5 says that its grant also
+  opens upload units to the owner's session. Brief 111 says the page names no unit or vector
+  table, and its task 5 greps for it. The change: the review asked for "two relation names" in
+  what a caller holds for a move. The page names three, one table and two views, so three is
+  written. Point 1 as he was told it says "never through a table a caller touches directly".
+  That is true of every service and of every vector. For the page's read of remembered
+  summaries it is a view over a table the owner's session may read, and 109a's item 24 now
+  tells him so.
+* **F-2.** *"Reached only with bb2dash's own credentials" was false: the public key writes both
+  course tables and reads through `search`.* Applied. Item 3 of What "scoped to bb2dash" means
+  names the two exceptions that stand. The third is closed: migration 198 drops
+  `bb_text_embeddings_anon_insert` (W-76, new task 50; the migration table, Files by owner, the
+  workers table, tasks 21 and 49, the Definition of done). 109a's item 24 turns from "listed and
+  left" to "closed by default, his to object to". Added beyond the finding, from the same read:
+  the test login `db_test_runner` is named among the credentials, and a valid public JWT may
+  also call the two embedders.
+
+**Should-fix**
+
+* **F-3.** *Proof 8 saw the REST form only, and no statement listed who holds a right on the
+  store's tables.* Applied with a change. Proof 7b is in the unit, and proof 8 has a fourth grep
+  for SQL text. The change: 7b lists a right as a grant and a policy together, not as
+  `has_table_privilege` alone. anon and `authenticated` hold the project's default grant on both
+  course tables, so a bare list of grants would have shown anon with every command on a table
+  where it may only insert. Task 13 also pins the grants of the three new tables, because a new
+  table in `public` starts with every command open to anon and `authenticated`.
+* **F-4.** *A new summary cleared the vectors and no rule sent the document back to a state the
+  ingest claim takes.* Applied. `workspace_job_finish` leaves the document in `text_ready` with
+  attempts 0 on a first write and on a new summary (Memory; point 4 and its table; tasks 16, 19,
+  20 and 36). The queue sentence no longer sends a remembered item through `stored` and
+  `reading`.
+* **F-5.** *A unit with no text could be marked embedded.* Applied with a change. The review
+  offered one rule of two. Both halves are written, because each covers a case the other does
+  not. `workspace-embed` never marks a unit with no part and reports it in `failed` (task 23):
+  that is the store's guard, and it covers a remembered item. The worker puts no empty unit and
+  ends a file that leaves none as `no_text` (step 6; task 36): that gives him the right reason
+  for a scanned PDF or an empty docx. And `workspace_ingest_finish` refuses `indexed` for a
+  document with no unit (task 16), the same empty case one level up.
+* **F-6.** *The lift-out list named one thing.* Applied. The five objects that span both sides
+  are in a table, "One thing" is gone, and `workspace_ingest_heartbeat` is on the store's list
+  as its sixth table. Added from the read of prod: `v_embedding_status` joins `bb_files` too,
+  and `workspace_documents` carries two ids of app rows.
+* **F-7.** *Proof 4 explained no function's own statement, and item 23 was a default.* Applied
+  with a change. The course half is `match_file_text`'s own statement with literals. One line
+  says no function over the new table has the shape yet, and that half keeps the statement it
+  had. Item 23 is a question put to him before the freeze (task 12, the Definition of done).
+  The change: the two planner settings stay on the gate, because the plan with nothing forced
+  is not known and a gate must not rest on it. That plan is recorded, and the PM reads it on
+  prod before the freeze so that item 23 reaches him with it.
+* **F-8.** *The pack's two store proofs broke on a second run.* Applied with a change. The
+  synthetic file is new in every run and the reads are keyed on its hash. The change: the
+  review had the file carry the run's id. No value of the run is handed to a step, so the test
+  draws its own value and notes the hash in its facts.
+
+**What moved, and who carries it.** One migration is new, 198, and one task, 50, both W-76's.
+Slack is 199 alone, and brief 111 says so. Proof 7b and the fourth grep are in task 49. Tasks
+12, 13, 16, 19, 20, 21, 23, 36 and 45 each gained a case. No migration or task was renumbered
+and the owner sets stay disjoint. Not edited: `project-state/DECISIONS.md`. Four sentences of
+answer 17's row there no longer match this brief (Decisions this brief amends, the entry on
+answer 17's own row), and the amending row is the PM's.
