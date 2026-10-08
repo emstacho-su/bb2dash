@@ -10,11 +10,28 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { Writable } from 'node:stream';
 
-import { EXIT, WALK_IMAGE, main } from './walk-box.mjs';
-import { COMMIT, CONTAINER, LATER, LATER_RUN_ID, NOW, RUN_ID, SECRET_KEY, SECRET_PASSWORD, SECRET_SHARE, fixture, posix } from './walk-box-kit.mjs';
+import { DOCKER_CLIENT, EXIT, WALK_IMAGE, main, runDocker } from './walk-box.mjs';
+import {
+  COMMIT,
+  CONTAINER,
+  LATER,
+  LATER_RUN_ID,
+  NOW,
+  REPO_ROOT,
+  RUN_ID,
+  SECRET_KEY,
+  SECRET_PASSWORD,
+  SECRET_SHARE,
+  fixture,
+  posix,
+  scratch,
+  write,
+} from './walk-box-kit.mjs';
 
 /* ---------------------------------------------------------------------------------------------
  * main(): the run folder, run.json, the exit code
@@ -247,5 +264,123 @@ test('no env value appears in a docker call, in what is logged, or in run.json',
       fs.readFileSync(path.join(outDir, `exec-${LATER_RUN_ID}`, 'run.json'), 'utf8'),
     ].join('\n');
     for (const secret of secrets) assert.ok(!told.includes(secret), `a value leaked by ${argv.join(' ')}`);
+  }
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * The real docker call: started without a shell, its exit code, its output
+ * ------------------------------------------------------------------------------------------ */
+
+/** A stream that keeps what is written to it. */
+function sink() {
+  const chunks = [];
+  const stream = new Writable({
+    write(chunk, _encoding, done) {
+      chunks.push(Buffer.from(chunk));
+      done();
+    },
+  });
+  return { stream, text: () => Buffer.concat(chunks).toString('utf8') };
+}
+
+/**
+ * A stand-in for the docker client: node, running a script that prints its arguments as JSON on
+ * stdout and a line on stderr, and ends with the code its last argument names (`exit=<n>`).
+ */
+function standInClient() {
+  const dir = scratch('walkbox-client-');
+  const script = write(
+    dir,
+    'client.mjs',
+    [
+      'const argv = process.argv.slice(2);',
+      'process.stdout.write(`${JSON.stringify(argv)}\n`);',
+      "process.stderr.write('said on stderr\n');",
+      "process.exitCode = Number(argv.at(-1).split('=')[1]);",
+    ].join('\n'),
+  );
+  return { dir, client: [process.execPath, script] };
+}
+
+/** runDocker against the stand-in, with the console caught. */
+async function callClient(argv, { logFile = null } = {}) {
+  const { dir, client } = standInClient();
+  const out = sink();
+  const err = sink();
+  const file = logFile === null ? null : path.join(dir, logFile);
+  const code = await runDocker(argv, { logFile: file, client, out: out.stream, err: err.stream });
+  return { code, out: out.text(), err: err.text(), dir, file };
+}
+
+test('the client the script starts is docker, by that name and nothing more', () => {
+  assert.deepEqual([...DOCKER_CLIENT], ['docker']);
+  assert.ok(Object.isFrozen(DOCKER_CLIENT));
+});
+
+test('runDocker: the client gets each argument as it was given, with no shell between', async () => {
+  // What a shell would split, expand, run or strip.
+  const argv = ['run', '--name', 'a b', '$HOME', '%PATH%', 'x; echo injected', 'a&b', '"quoted"', "it's", '*', 'exit=0'];
+  const { code, out } = await callClient(argv);
+  assert.equal(code, 0);
+  assert.deepEqual(JSON.parse(out), argv);
+});
+
+test('runDocker: the answer is the client\'s own exit code', async () => {
+  for (const exit of [0, 1, 64, 75, 125]) {
+    assert.equal((await callClient(['run', `exit=${exit}`])).code, exit);
+  }
+});
+
+test('runDocker: what the client prints goes to the console and, when a log file is named, to it', async () => {
+  const argv = ['run', 'exit=1'];
+  const logged = await callClient(argv, { logFile: 'stdout.log' });
+  assert.equal(logged.out, `${JSON.stringify(argv)}\n`);
+  assert.equal(logged.err, 'said on stderr\n');
+  const log = fs.readFileSync(logged.file, 'utf8');
+  assert.ok(log.includes(`${JSON.stringify(argv)}\n`), 'stdout is in the log');
+  assert.ok(log.includes('said on stderr\n'), 'stderr is in the log');
+
+  const unlogged = await callClient(argv);
+  assert.equal(unlogged.out, `${JSON.stringify(argv)}\n`);
+  assert.deepEqual(fs.readdirSync(unlogged.dir), ['client.mjs'], 'no log file is made');
+});
+
+test('runDocker: a client that cannot be started is an error, never an exit code', async () => {
+  const out = sink();
+  const err = sink();
+  await assert.rejects(
+    runDocker(['run'], { logFile: null, client: [path.join(scratch('walkbox-none-'), 'no-such-client')], out: out.stream, err: err.stream }),
+    /ENOENT/,
+  );
+});
+
+test('main, with the real call: the walk ends with the client\'s code and stdout.log holds what it printed', async () => {
+  const { client } = standInClient();
+  for (const [extra, expected] of [[['exit=0'], 0], [['exit=1'], 1], [['exit=75'], 75]]) {
+    const f = fixture();
+    const { deps } = harness(f);
+    const out = sink();
+    const err = sink();
+    deps.docker = (argv, options) => runDocker(argv, { ...options, client, out: out.stream, err: err.stream });
+    assert.equal(await main(['web/e2e/harness.spec.ts', '--', ...extra], deps), expected);
+    const outDir = path.join(f.outBase, RUN_ID);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(outDir, 'run.json'), 'utf8')).exit_code, expected);
+    const log = fs.readFileSync(path.join(outDir, 'stdout.log'), 'utf8');
+    assert.ok(log.includes(`"e2e/harness.spec.ts","--","${extra[0]}"]`), 'the client\'s stdout is in stdout.log');
+    assert.ok(log.includes('said on stderr\n'));
+  }
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * The command itself
+ * ------------------------------------------------------------------------------------------ */
+
+test('node scripts/walk-box.mjs: a refusal ends the process itself with 64 and starts nothing', () => {
+  const script = path.join(REPO_ROOT, 'scripts', 'walk-box.mjs');
+  for (const [argv, said] of [[[], /usage/], [['--rm', 'sync'], /not a walk box/], [['web/e2e/harness.spec.ts', '-g', 'x'], /after --/]]) {
+    const ended = spawnSync(process.execPath, [script, ...argv], { encoding: 'utf8' });
+    assert.equal(ended.status, EXIT.refused, ended.stderr);
+    assert.match(ended.stderr, said);
+    assert.equal(ended.stdout, '');
   }
 });

@@ -366,6 +366,20 @@ test('a spec outside web/e2e is refused, however the path is written', () => {
   for (const spec of outside) refusal(() => specPaths(f.root, f.cwd, [spec]), /under web\/e2e/);
 });
 
+test('a spec reached through a link is refused, whichever side of web/e2e the link is on', () => {
+  const f = fixture();
+  // Under web/e2e as written, outside it once the link is followed.
+  const outside = scratch('walkbox-linked-');
+  write(outside, 'stray.spec.ts');
+  // A junction on Windows needs no privilege; elsewhere it is a plain symlink.
+  fs.symlinkSync(outside, path.join(f.root, 'web', 'e2e', 'linked'), 'junction');
+  refusal(() => specPaths(f.root, f.cwd, ['web/e2e/linked/stray.spec.ts']), /under web\/e2e/);
+  // Outside web/e2e as written, under it once the link is followed: the container would be handed
+  // a path that climbs out of e2e/.
+  fs.symlinkSync(path.join(f.root, 'web', 'e2e'), path.join(f.root, 'elsewhere'), 'junction');
+  refusal(() => specPaths(f.root, f.cwd, ['elsewhere/harness.spec.ts']), /under web\/e2e/);
+});
+
 test('a spec that is not there, or is not a spec file, is refused', () => {
   const f = fixture();
   refusal(() => specPaths(f.root, f.cwd, ['web/e2e/missing.spec.ts']), /not a file/);
