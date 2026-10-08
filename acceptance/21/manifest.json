@@ -210,7 +210,7 @@
     {
       "id": "11",
       "kind": "host",
-      "text": "The planner is as it was before the walk, and no sync or Inbox apply ran in between (if one did, the run is blocked and is repeated).",
+      "text": "The planner is as it was before the walk. If it changed and a sync or Inbox apply ran in between, the run is blocked and is repeated.",
       "stage": "walk-proofs",
       "proofs": [{ "name": "planner-unchanged", "with": { "before": "carry:planner_before.fingerprint" } }]
     },

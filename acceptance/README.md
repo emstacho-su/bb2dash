@@ -36,7 +36,7 @@ container, its firewall, the wrapper script) is in bb2dash-stack.
 |---|---|---|
 | **green** | every automated step has a `pass` from the operator, a passed browser test and passing host proofs | it counts as the acceptance: the PM writes the "accepted" record and cleans up, without asking again |
 | **red** | at least one step failed, was unclear, or left no evidence | nothing is accepted; the PM brings the report to Stack |
-| **blocked** | the run could not judge fairly: the Claude plan's limit was reached, or a sync ran while the planner was being compared | nothing is accepted and nothing is wrong; the run is repeated |
+| **blocked** | the run could not judge fairly: the Claude plan's limit was reached, a sync or an Inbox apply was waiting or running when the run began, or the planner changed while one ran | nothing is accepted and nothing is wrong; the run is repeated |
 
 "Unsure" is red. A step with no evidence is red. Only a run started the normal way, from a clean
 `main`, can count as acceptance; a trial run with extra flags never does.
@@ -196,8 +196,15 @@ hand over the id of an old request that looks right. So Phase 21's proofs also c
   the question was asked and when the Workspace service took it. No clock of a sandbox is read.
 - *The planner is as it was.* The fingerprint holds the newest change of each progress table, the
   count of assignments, and the number of rows in each progress table, so a deleted row that was
-  not the newest also shows. `planner-unchanged` is `blocked` when a sync or an Inbox apply was
-  queued, taken or finished since the fingerprint was read, and also when one is running now.
+  not the newest also shows. A planner that reads the same passes, whatever else ran: what did not
+  change was changed by nobody. `planner-unchanged` is `blocked` only when the planner differs and
+  a sync or an Inbox apply could be why: one was queued, taken or finished since the fingerprint
+  was read, or one is running now. Then the change cannot be laid at the Workspace.
+- *No sync is open when the run begins.* `planner-fingerprint` is the second thing `go-live` does,
+  before a container is stopped or a question is spent, and it is `blocked` while a sync or an
+  Inbox apply is waiting or running. Start the run again when that request has ended.
+- *A request nobody ended is not a running sync.* One left queued or claimed for more than 6 hours
+  blocks nothing in either proof. Both count them as `stale_claims`, so that someone closes them.
 
 **Each proof is read once.** An `auto` step's proofs are read by the host straight after the
 step's sandbox stage, and only when the operator's verdict, the browser test and the evidence files

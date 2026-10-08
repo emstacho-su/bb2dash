@@ -392,7 +392,8 @@ test('planner-unchanged: a planner that reads the same passes, also when a sync 
   await db.exec(CLAIMED_JUST_NOW);
   const running = await prove('planner-unchanged', { before });
   assert.equal(running.code, EXIT.pass);
-  assert.deepEqual([running.detail.requests_claimed_now, running.detail.first_claimed_request_id], [1, 5]);
+  // Request 2 was the one the loop filed and took away again.
+  assert.deepEqual([running.detail.requests_claimed_now, running.detail.first_claimed_request_id], [1, 3]);
 });
 
 test('planner-unchanged: a planner that changed is blocked when a sync could have changed it, and fails when none could', async () => {
