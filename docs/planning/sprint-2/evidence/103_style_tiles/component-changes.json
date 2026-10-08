@@ -1,0 +1,332 @@
+[
+  {
+    "id": "theme-two-blocks",
+    "file": "app/globals.css (the theme blocks), and the tile",
+    "what": "Dark is the default. Two theme blocks and no system copy: bare :root holds the dark values with color-scheme: dark, and :root[data-theme=\"light\"] holds the light ones with color-scheme: light. There is no @media (prefers-color-scheme) block, so with no data-theme the page is dark under a light system too. (Brief 103 already asks for these two blocks in globals.css.)",
+    "drawnOnTile": true
+  },
+  {
+    "id": "theme-default-is-dark",
+    "file": "lib/theme-preference.ts and components/shell/ThemeMenu.tsx (both new in brief 103, tasks 9 and 10)",
+    "what": "BEHAVIOUR, for the product manager. No stored choice means Dark, not Auto: resolveTheme returns dark when nothing is stored, the boot script stamps dark, and the account menu shows Dark checked on a first visit. Auto stays as a third choice; picking it stores the word auto, and only then does the app follow the system. Brief 103 says the opposite today (\"absent means Auto\"), which opens light on a light system.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "tile-theme-control",
+    "file": "tile",
+    "what": "The tile's control reads Dark, Light, Auto. Dark is pressed on load and the line under it says \"Showing the dark theme.\"",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-theme-script",
+    "file": "tile",
+    "what": "The tile's script: Light sets data-theme=\"light\", Dark removes data-theme, Auto sets or removes it to follow the system. A data-theme the hosting page sets is followed.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "links-thin-underline",
+    "file": "app/globals.css a, a:hover",
+    "what": "A link keeps color: var(--color-accent), which is the ink now, and gets a thin grey underline: text-decoration-color: var(--color-neutral-600), text-decoration-thickness: var(--size-underline). On hover the words stay and the underline turns to the ink (was: a lighter accent for the words).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "focus-ring-is-the-ink",
+    "file": "app/globals.css :focus-visible, the 26 lines in 16 modules that repeat it, and the focus styles drawn another way (InboxCard .card, NavSearch .rootOpen, StatusSelect, Popout .control; the dashed outline of UploadDropZone while a file is dragged over it)",
+    "what": "NO EDIT IN THE APP. Every one of them says var(--color-accent), which is the ink now, so the focus ring is white in dark and black in light: 15:1 or better on every surface, for every kind of colour vision. (On the tile this entry sets the ring back: the shared template draws it with --color-accent-500, which here is #ff0000.)",
+    "drawnOnTile": true
+  },
+  {
+    "id": "field-focus-is-the-ink",
+    "file": "styles/tokens.module.css .input:focus-visible and components/shell/SearchPanel.module.css .courseSelect:focus-visible",
+    "what": "NO EDIT IN THE APP. Both say border-color: var(--color-accent), the ink: a field in focus is framed in white (black in light), never in red, so it cannot be mistaken for an invalid field (GradeModel .whatIfInvalid keeps its --color-danger edge). (On the tile this entry sets the edge back from the --color-accent-500 the shared template draws.)",
+    "drawnOnTile": true
+  },
+  {
+    "id": "select-focus-is-the-ink",
+    "file": "tile",
+    "what": "The second half of the entry above: the focused edge of the search panel course filter is the ink.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-marks-comment",
+    "file": "tile",
+    "what": "A comment only: the shared template says every mark reads --color-accent-500. In direction D that is true of the marks that say where you are and what is unread; the focus ring, the brand mark and the outline of a picked day do not.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-kicker",
+    "file": "tile",
+    "what": "The small line over the tile name is muted.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-theme-switch-shape",
+    "file": "tile",
+    "what": "The theme control is round like the buttons, with the outline every control has.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-theme-switch-pressed",
+    "file": "tile",
+    "what": "The pressed theme is the filled ink pill (white in dark, black in light).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "card-edge",
+    "file": "styles/tokens.module.css .card",
+    "what": "Every card gets a 1px edge: box-shadow: var(--shadow-sm) (a ring, so no size changes). .cardLg composes .card and inherits it. In dark the ring is --color-neutral-700 (#6b6b6b: 3.8:1 against the page, 3.2:1 against the card), in light --color-neutral-800 (#d6d6d6).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "card-edge-lg",
+    "file": "styles/tokens.module.css .cardLg (nothing to do in the app: it composes .card)",
+    "what": "The same edge on the large card; the tile spells .cardLg out, the app does not.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tag-pill",
+    "file": "styles/tokens.module.css .tag",
+    "what": "border-radius: var(--radius-chip) (a pill) in place of calc(var(--radius-md) * 0.75).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tag-accent-is-filled",
+    "file": "styles/tokens.module.css .tagAccent",
+    "what": "The strong tag is the filled ink pill: background: var(--color-accent), color: var(--color-bg) (was accent-800 under accent-100, which would now be the same grey as .tagNeutral).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tag-outline-is-grey",
+    "file": "styles/tokens.module.css .tagOutline",
+    "what": "The outline is --color-neutral-600, the outline every control has (was the accent). The words keep var(--color-accent).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "button-pill-sans",
+    "file": "styles/tokens.module.css .btn",
+    "what": "border-radius: var(--radius-control) (a pill); font-family: var(--font-body) at weight 600 in place of the heading face.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "button-fills",
+    "file": "styles/tokens.module.css .btnPrimary, .btnSecondary, .btnGhost",
+    "what": "Primary is filled with the ink: background and border var(--color-accent), words var(--color-bg) (hover --color-neutral-200, pressed -300). Switched off, it is a flat grey pill, not a faded white one: background and border --color-neutral-800, words --color-neutral-600, opacity 1. Secondary is filled --color-neutral-900 inside a --color-neutral-600 outline; hovered and pressed its fill is --color-neutral-800, and pressed its outline is the ink. Ghost keeps its accent words (the ink) and its hover wash, and gets the thin grey underline a link has. None of the three is red.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "input-well",
+    "file": "styles/tokens.module.css .input",
+    "what": "A text field is a well: background: var(--color-bg) and a --color-neutral-600 edge (hover --color-neutral-400). Its caret and its focused edge keep var(--color-accent), which is the ink: a field in focus is framed in white (black in light), never in red.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "glyph-round",
+    "file": "styles/tokens.module.css .glyph",
+    "what": "The work-type badge is round: border-radius: var(--radius-chip); its letter is weight 700 (black on #ff0000 needs the heavier stroke).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "error-notice-shared",
+    "file": "styles/tokens.module.css .errorNotice (new shared class)",
+    "what": "The error notice gets its form once, as a shared class: the danger tint, the danger words, a bar of the danger colour down the left edge (box-shadow: inset var(--size-notice-bar) 0 0 var(--color-danger), so no size changes) and the word \"Error\" in front (::before, small capitals, weight 600). Nothing else in the app has a tinted box with a bar, and the accent is never red words, so an error cannot be taken for anything else.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "error-notice-composed",
+    "file": "the 13 boxed error rules: .problem in app/(app)/inbox/Inbox.module.css, app/(app)/Today.module.css, app/(app)/materials/Materials.module.css, app/(app)/workspace/Workspace.module.css, app/(app)/course/[id]/assignment/[...assignmentId]/CourseAssignment.module.css, components/inbox/InboxCard.module.css, components/popout/Popout.module.css, components/workspace/ConversationList.module.css, components/workspace/ServiceStatus.module.css; .error in app/login/Login.module.css and components/grades/UploadDropZone.module.css; .serverError in components/planner/PlannerEventForm.module.css; .alert in components/planner/PlannerWeek.module.css",
+    "what": "Each composes errorNotice from styles/tokens.module.css and drops its own background and color lines; padding, radius and type size stay its own. The fourteenth, components/planner/PlannerItemPopover.module.css .problem, is a bare line with no box: it gets the word \"Error\" only (its own ::before), no bar and no tint. The two .dispute labels (CourseSubBar, CourseInfo) and the bare danger lines (GradedSoFarFigure .alert, GradeModel .alert, PlannerEventForm .error, Today .statError) are not error notices and stay as they are.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "brand-mark",
+    "file": "components/shell/TopNav.module.css .mark and app/login/Login.module.css .mark",
+    "what": "The square mark is the ink with no glow: border-radius: var(--radius-xs) in place of 2px, box-shadow: var(--shadow-mark) (none) in place of the accent glow. Its background keeps var(--color-accent). Left alone, the glow would be a white halo. (On the tile this entry sets the fill back from the --color-accent-500 the shared template draws.)",
+    "drawnOnTile": true
+  },
+  {
+    "id": "nav-links",
+    "file": "components/shell/TopNav.module.css .link, .link[aria-current=\"page\"]",
+    "what": "A link that is not the current page is grey: color: var(--color-neutral-400) (hover keeps var(--color-accent), the ink). The current page keeps its ink words and its 2px underline is #ff0000: box-shadow: inset 0 -2px 0 var(--color-accent-500) (the shared template draws it so already; in the app the rule says var(--color-accent) today).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "unread-badge",
+    "file": "components/shell/TopNav.module.css .badge",
+    "what": "The unread count sits on #ff0000: background: var(--color-accent-500), color: var(--color-on-accent) (black, 5.25:1), weight 700, border-radius: var(--radius-chip) in place of 7px.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "sync-pill",
+    "file": "components/shell/SyncButton.module.css .button",
+    "what": "Sync is a pill in the secondary button's colours: border-radius: var(--radius-control), background: var(--color-neutral-900), a --color-neutral-600 outline, words --color-neutral-200. On hover the fill is --color-neutral-800; the hover outline keeps var(--color-accent), the ink.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "side-panel",
+    "file": "components/shell/CourseSidebar.module.css .rail, .rowCurrent, .rowCurrent:hover",
+    "what": "The course side panel is the panel grey: .rail background: var(--color-panel) (was --color-surface). The current course is a row in the card colour with a #ff0000 bar: .rowCurrent and .rowCurrent:hover background: var(--color-surface) (was the hover wash, on which the bar is 2.9:1 in light), box-shadow: inset 2px 0 0 var(--color-accent-500); its words keep var(--color-accent), the ink. (The rules themselves arrive with the all-classes entry below.)",
+    "drawnOnTile": true
+  },
+  {
+    "id": "grade-open-link",
+    "file": "components/grades/CourseGradeCard.module.css .openLink",
+    "what": "Drop color and text-decoration: none (and the hover rule) so the link shows the global link style: ink words, thin grey underline.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "grade-item-link",
+    "file": "components/grades/GradebookTable.module.css .itemLink",
+    "what": "Drop the rule (color: accent, text-decoration: none, underline on hover): the item name shows the global link style.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tracker-day-shape",
+    "file": "components/tracker/UpcomingTracker.module.css .day",
+    "what": "border-radius: var(--radius-day) (8px: the corner of a bar plus the 4px side padding of the column, so the two curves share a centre) in place of var(--radius-md).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tracker-week-rule",
+    "file": "components/tracker/UpcomingTracker.module.css .dayMonday",
+    "what": "Add border-top-left-radius: 0 and border-bottom-left-radius: 0, so the week rule on the left edge of a Monday is a straight line, not a bracket. A picked Monday keeps its round right side.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tracker-picked-day",
+    "file": "components/tracker/UpcomingTracker.module.css .daySelected",
+    "what": "The picked day is a filled grey column inside the outline every control has: box-shadow: inset 0 0 0 1px var(--color-neutral-600) (was the accent, which would be a white ring). Its background keeps var(--color-accent-900), which is --color-neutral-900 now.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tracker-bar-shape",
+    "file": "components/tracker/UpcomingTracker.module.css .seg",
+    "what": "border-radius: var(--radius-bar) in place of the 2px corner.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tracker-today",
+    "file": "components/tracker/UpcomingTracker.module.css .dowToday",
+    "what": "Today keeps its accent words (the ink), at weight 600, over a #ff0000 underline: text-decoration-color: var(--color-accent-500), thickness var(--size-underline-mark), offset var(--size-underline-offset). The same mark the current page has.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tracker-urgency-order",
+    "file": "components/tracker/UpcomingTracker.tsx LEGEND and DayColumn",
+    "what": "BEHAVIOUR, for the product manager with the colour rule. The legend reads most urgent first (exam, project, quiz, assignment, reading), the order Today.tsx's CATEGORY_ORDER already has. DayColumn sorts a day's items by that order before drawing, most urgent on top; today it draws them in data order.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-tracker-wednesday",
+    "file": "tile",
+    "what": "Sample data: Wednesday's bars in urgency order, quiz on top.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-tracker-friday",
+    "file": "tile",
+    "what": "Sample data: Friday's bars in urgency order, project on top.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "inbox-chip",
+    "file": "components/inbox/InboxCard.module.css .chip",
+    "what": "A chip is a filled grey pill: border-radius: var(--radius-chip), background: var(--color-neutral-900), edge --color-neutral-800 (was a hairline box).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "inbox-kind-chip",
+    "file": "components/inbox/InboxCard.module.css .kindChip",
+    "what": "The kind of question is the filled ink pill: color: var(--color-bg), background and border-color var(--color-accent) (was accent-300 words, which would now be the grey every chip has).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "inbox-source-link",
+    "file": "components/inbox/InboxCard.module.css .sourceLink",
+    "what": "Drop color and text-decoration: none (and the hover rule): the global link style shows.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "red-where-you-are",
+    "file": "app/(app)/course/[id]/CourseSubBar.module.css .tabActive; app/(app)/inbox/Inbox.module.css .tab[aria-selected=\"true\"]; components/planner/PlannerWeek.module.css .dayHead[data-today=\"true\"] .dayName and .nowLine; components/course/CourseTimeline.module.css .weekCurrent",
+    "what": "The marks for where you are name --color-accent-500. .tabActive: box-shadow: inset 0 -2px 0 var(--color-accent-500). Inbox .tab[aria-selected]: border-bottom-color: var(--color-accent-500). Today's day name in the planner: the same underline as the tracker's today (ink words, #ff0000 underline). .nowLine: background: var(--color-accent-500) and box-shadow: none in place of the glow. .weekCurrent: background: var(--color-accent-500), color: var(--color-on-accent). The planner's tint on today's column and the tinted callouts (GradeModel .model, MessageList .question) need no edit: they mix var(--color-accent), so they are grey tints now and cannot be taken for the error box.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "red-unread",
+    "file": "components/shell/Bell.module.css .dotUnread; components/announcements/AnnouncementsList.module.css .dotUnread; components/shell/TopNav.module.css .ddDotUnseen",
+    "what": "The unread dots name --color-accent-500: background: var(--color-accent-500). (The unread count is the unread-badge entry.)",
+    "drawnOnTile": false
+  },
+  {
+    "id": "class-block-no-edit",
+    "file": "components/planner/PlannerWeek.module.css .meetingBlock, .chipMeeting",
+    "what": "NO EDIT. The class meeting, the block the planner draws most, takes the strongest fill of the planner family through tokens alone. Its rules mix var(--color-accent-2-800) at 78% over the card, and nothing else in the app reads that step, so direction D sets it by hand (#5c5c5c dark, #ababab light: #4e4e4e and #bebebe as drawn). Its words are var(--color-accent-2-100) and its edge var(--color-accent-2-400), the neutral steps. The six kinds you add yourself sit under it in tone: an event is #3d3d3d with a white edge (#d2d2d2 with a black edge in light).",
+    "drawnOnTile": true
+  },
+  {
+    "id": "home-cards-no-edit",
+    "file": "app/(app)/Today.module.css (the course cards)",
+    "what": "NO EDIT. The Home course cards are drawn from the tokens as they stand: the course code and the grade letter say var(--color-accent) (the ink), a meeting day is var(--color-accent-700) (the neutral step now) and the due dot var(--color-accent). The card's edge comes from the elevSm class it already has.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "weights-as-tokens",
+    "file": "styles/tokens.module.css, components/shell/TopNav.module.css, components/tracker/UpcomingTracker.module.css",
+    "what": "FOR THE PM TO RULE. Direction D sets weight 600 on .btn, .dowToday and .errorNotice::before, and 700 on .glyph and .badge. Brief 103 moves weights into tokens and allows new --font-* names; the tile's rules allow no new --font-* name, so the tile holds the two numbers as literals. In the build they would be two tokens, for example --font-weight-strong: 600 and --font-weight-heavy: 700.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "type-colour-test",
+    "file": "web/test/type-tokens.contrast.test.ts",
+    "what": "The rule that keeps five unrelated hues apart is replaced by the urgency-order rule (direction-d.json \"typeScale\"; check-tile.js checkUrgencyScale). One old assertion cannot hold: every pair dE at least 30. The chroma-spread assertion still passes by the numbers and no longer means anything. See the designer's report for the wording.",
+    "drawnOnTile": false
+  },
+  {
+    "id": "all-classes-css",
+    "file": "app/(app)/Today.module.css and components/shell/CourseSidebar.module.css (existing rules, copied; see home-cards-no-edit and side-panel)",
+    "what": "The rules of the \"all classes\" fragment that the shared template does not already hold: the course grid of Home and its two figure states exactly as Today.module.css has them, and the course side panel as CourseSidebar.module.css has it with the changes of the side-panel entry. No new layout and no new data.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "all-classes-markup",
+    "file": "tile (the markup of Today.tsx's CourseCard and of CourseSidebar.tsx, with sample data)",
+    "what": "One extra fragment after the top bar: four course cards as Home draws them, and the side panel with one course current.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-course-card-moved",
+    "file": "tile",
+    "what": "The single \"Course card on Home\" of the shared template is left out: the same card is drawn four times in the all-classes fragment, with its grade figures. Its rules stay.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "swatch-panel",
+    "file": "tile",
+    "what": "The swatches also show the panel grey.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "swatch-accent-roles",
+    "file": "tile",
+    "what": "The accent swatch says what it is (the ink); the reds get a row of their own.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "swatch-reds-and-types",
+    "file": "tile",
+    "what": "Two more rows: the reds (the mark, the second red, the error words and the error tint), and the five work types in urgency order.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "tile-shape-large",
+    "file": "tile",
+    "what": "The large sample is drawn the way the app's floating panels draw it: the large shadow plus a 1px divider edge of its own.",
+    "drawnOnTile": true
+  },
+  {
+    "id": "shadow-large-no-ring",
+    "file": "app/globals.css --shadow-lg (a token value; no rule changes)",
+    "what": "NO EDIT in the modules. --shadow-sm and --shadow-md carry the card's 1px ring; --shadow-lg is the drop shadow alone, because all seven module rules that use it (Popout .panel, PlannerItemPopover and PlannerSeriesScopeDialog with a divider border; InboxApplyButton, NavSearch, SyncButton and TopNav menus with 0 0 0 1px var(--color-divider)) already draw a divider edge. A ring inside the token would double it.",
+    "drawnOnTile": true
+  }
+]

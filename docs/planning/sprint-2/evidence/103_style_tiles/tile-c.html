@@ -1,0 +1,2195 @@
+<title>Tile C Orange</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&amp;family=Spline+Sans+Mono:wght@400&amp;display=swap">
+<style>
+/* bb2dash style tile (Phase 22). One shared template: the three directions differ only in
+   the token blocks below. Layout: a single column of labelled fragments, paired in two
+   columns where the window allows. Dark is the default; light is the same names again. */
+:root {
+  --color-bg: #08183f;
+  --color-surface: #122654;
+  --color-text: #eef3fc;
+  --color-accent: #fe7b20;
+  --color-accent-2: #90bcfe;
+  --color-divider: color-mix(in srgb, var(--color-text) 16%, transparent);
+  --color-muted: color-mix(in srgb, var(--color-text) 64%, transparent);
+  --color-neutral-100: #f2f6fd;
+  --color-neutral-200: #dfe6f5;
+  --color-neutral-300: #c8d5ed;
+  --color-neutral-400: #afc0e0;
+  --color-neutral-500: #98abd2;
+  --color-neutral-600: #8398c3;
+  --color-neutral-700: #516897;
+  --color-neutral-800: #2d4476;
+  --color-neutral-900: #1d3363;
+  --color-accent-100: #feeddb;
+  --color-accent-200: #fedcbd;
+  --color-accent-300: #ffc597;
+  --color-accent-400: #ffa868;
+  --color-accent-500: #f76900;
+  --color-accent-600: #d65b0f;
+  --color-accent-700: #ad470e;
+  --color-accent-800: #963d0f;
+  --color-accent-900: #393146;
+  --color-accent-2-100: #edf4ff;
+  --color-accent-2-200: #d5e6ff;
+  --color-accent-2-300: #b6d3fe;
+  --color-accent-2-400: #90bcfe;
+  --color-accent-2-500: #62a2ff;
+  --color-accent-2-600: #3d84ea;
+  --color-accent-2-700: #004aa5;
+  --color-accent-2-800: #234485;
+  --color-accent-2-900: #0d3873;
+  --color-danger: #ff839d;
+  --color-danger-bg: color-mix(in srgb, var(--color-danger) 15%, transparent);
+  --color-hover: color-mix(in srgb, var(--color-text) 8%, transparent);
+  --color-active: color-mix(in srgb, var(--color-text) 15%, transparent);
+  --font-heading: 'Nunito', system-ui, sans-serif;
+  --font-heading-weight: 700;
+  --font-body: 'Nunito', system-ui, sans-serif;
+  --font-mono: 'Spline Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-base: 13.5px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --space-1: 2.8px;
+  --space-2: 5.6px;
+  --space-3: 8.4px;
+  --space-4: 11.2px;
+  --space-6: 16.8px;
+  --space-8: 22.4px;
+  --space-12: 33.6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 0 0 1px rgba(168, 190, 255, 0.14);
+  --shadow-md: 0 0 0 1px rgba(168, 190, 255, 0.18), 0 6px 16px rgba(3, 9, 28, 0.42);
+  --shadow-lg: 0 0 0 1px rgba(168, 190, 255, 0.24), 0 16px 36px rgba(3, 9, 28, 0.5);
+  --nav-height: 52px;
+  --content-max: 1240px;
+  --sidebar-side: row-reverse;
+  --sidebar-width: 260px;
+  --type-reading-bg: #4ad6d1;
+  --type-reading-fg: #08183f;
+  --type-assignment-bg: #bd9ffd;
+  --type-assignment-fg: #08183f;
+  --type-quiz-bg: #73c1ff;
+  --type-quiz-fg: #08183f;
+  --type-project-bg: #67e087;
+  --type-project-fg: #08183f;
+  --type-exam-bg: #f489ca;
+  --type-exam-fg: #08183f;
+  --planner-event-bg: var(--color-accent-2-700);
+  --planner-event-fg: var(--color-accent-2-100);
+  --planner-event-edge: var(--color-accent-2-300);
+  --planner-task-bg: var(--color-neutral-800);
+  --planner-task-fg: var(--color-neutral-100);
+  --planner-task-edge: var(--color-neutral-300);
+  --planner-ooo-bg: var(--color-danger-bg);
+  --planner-ooo-fg: var(--color-text);
+  --planner-ooo-edge: var(--color-danger);
+  --planner-ooo-hatch: color-mix(in srgb, var(--color-danger) 16%, transparent);
+  --planner-focus-bg: var(--color-accent-900);
+  --planner-focus-fg: var(--color-accent-200);
+  --planner-focus-edge: var(--color-accent-500);
+  --planner-worklocation-bg: var(--color-neutral-900);
+  --planner-worklocation-fg: var(--color-neutral-200);
+  --planner-worklocation-edge: var(--color-neutral-500);
+  --planner-appointment-bg: color-mix(in srgb, var(--color-accent-2-700) 40%, transparent);
+  --planner-appointment-fg: var(--color-accent-2-100);
+  --planner-appointment-edge: var(--color-accent-2-400);
+  --radius-xs: 3px;
+  --radius-pill: 999px;
+  --shadow-mark: 0 0 0 3px rgba(247, 105, 0, 0.28);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --color-bg: #f2f4f9;
+    --color-surface: #ffffff;
+    --color-text: #0a1d48;
+    --color-accent: #b84702;
+    --color-accent-2: #0b57b8;
+    --color-divider: color-mix(in srgb, var(--color-text) 14%, transparent);
+    --color-muted: color-mix(in srgb, var(--color-text) 72%, transparent);
+    --color-neutral-100: #06163e;
+    --color-neutral-200: #142752;
+    --color-neutral-300: #263a64;
+    --color-neutral-400: #3a4e76;
+    --color-neutral-500: #4c5f85;
+    --color-neutral-600: #5d6f92;
+    --color-neutral-700: #99a6c1;
+    --color-neutral-800: #dae0ec;
+    --color-neutral-900: #ebeff6;
+    --color-accent-100: #5b2001;
+    --color-accent-200: #762c00;
+    --color-accent-300: #913500;
+    --color-accent-400: #a94002;
+    --color-accent-500: #e05a00;
+    --color-accent-600: #ff9044;
+    --color-accent-700: #ffc59a;
+    --color-accent-800: #fedabd;
+    --color-accent-900: #ffefe0;
+    --color-accent-2-100: #002356;
+    --color-accent-2-200: #003478;
+    --color-accent-2-300: #00459a;
+    --color-accent-2-400: #0b57b8;
+    --color-accent-2-500: #2470da;
+    --color-accent-2-600: #679ff1;
+    --color-accent-2-700: #9ec3fb;
+    --color-accent-2-800: #d8e8fe;
+    --color-accent-2-900: #edf4fe;
+    --color-danger: #b60c4e;
+    --color-danger-bg: color-mix(in srgb, var(--color-danger) 9%, transparent);
+    --color-hover: color-mix(in srgb, var(--color-text) 6%, transparent);
+    --color-active: color-mix(in srgb, var(--color-text) 11%, transparent);
+    --shadow-sm: 0 0 0 1px rgba(13, 27, 69, 0.07), 0 1px 2px rgba(13, 27, 69, 0.06), 0 2px 6px rgba(13, 27, 69, 0.05);
+    --shadow-md: 0 0 0 1px rgba(13, 27, 69, 0.06), 0 2px 4px rgba(13, 27, 69, 0.06), 0 10px 24px rgba(13, 27, 69, 0.1);
+    --shadow-lg: 0 0 0 1px rgba(13, 27, 69, 0.06), 0 6px 12px rgba(13, 27, 69, 0.07), 0 22px 48px rgba(13, 27, 69, 0.16);
+    --type-reading-bg: #057d80;
+    --type-reading-fg: #ffffff;
+    --type-assignment-bg: #814ad3;
+    --type-assignment-fg: #ffffff;
+    --type-quiz-bg: #016fc0;
+    --type-quiz-fg: #ffffff;
+    --type-project-bg: #128243;
+    --type-project-fg: #ffffff;
+    --type-exam-bg: #bb348a;
+    --type-exam-fg: #ffffff;
+    --planner-ooo-hatch: color-mix(in srgb, var(--color-danger) 14%, transparent);
+    --shadow-mark: 0 0 0 3px rgba(247, 105, 0, 0.26);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --color-bg: #f2f4f9;
+  --color-surface: #ffffff;
+  --color-text: #0a1d48;
+  --color-accent: #b84702;
+  --color-accent-2: #0b57b8;
+  --color-divider: color-mix(in srgb, var(--color-text) 14%, transparent);
+  --color-muted: color-mix(in srgb, var(--color-text) 72%, transparent);
+  --color-neutral-100: #06163e;
+  --color-neutral-200: #142752;
+  --color-neutral-300: #263a64;
+  --color-neutral-400: #3a4e76;
+  --color-neutral-500: #4c5f85;
+  --color-neutral-600: #5d6f92;
+  --color-neutral-700: #99a6c1;
+  --color-neutral-800: #dae0ec;
+  --color-neutral-900: #ebeff6;
+  --color-accent-100: #5b2001;
+  --color-accent-200: #762c00;
+  --color-accent-300: #913500;
+  --color-accent-400: #a94002;
+  --color-accent-500: #e05a00;
+  --color-accent-600: #ff9044;
+  --color-accent-700: #ffc59a;
+  --color-accent-800: #fedabd;
+  --color-accent-900: #ffefe0;
+  --color-accent-2-100: #002356;
+  --color-accent-2-200: #003478;
+  --color-accent-2-300: #00459a;
+  --color-accent-2-400: #0b57b8;
+  --color-accent-2-500: #2470da;
+  --color-accent-2-600: #679ff1;
+  --color-accent-2-700: #9ec3fb;
+  --color-accent-2-800: #d8e8fe;
+  --color-accent-2-900: #edf4fe;
+  --color-danger: #b60c4e;
+  --color-danger-bg: color-mix(in srgb, var(--color-danger) 9%, transparent);
+  --color-hover: color-mix(in srgb, var(--color-text) 6%, transparent);
+  --color-active: color-mix(in srgb, var(--color-text) 11%, transparent);
+  --shadow-sm: 0 0 0 1px rgba(13, 27, 69, 0.07), 0 1px 2px rgba(13, 27, 69, 0.06), 0 2px 6px rgba(13, 27, 69, 0.05);
+  --shadow-md: 0 0 0 1px rgba(13, 27, 69, 0.06), 0 2px 4px rgba(13, 27, 69, 0.06), 0 10px 24px rgba(13, 27, 69, 0.1);
+  --shadow-lg: 0 0 0 1px rgba(13, 27, 69, 0.06), 0 6px 12px rgba(13, 27, 69, 0.07), 0 22px 48px rgba(13, 27, 69, 0.16);
+  --type-reading-bg: #057d80;
+  --type-reading-fg: #ffffff;
+  --type-assignment-bg: #814ad3;
+  --type-assignment-fg: #ffffff;
+  --type-quiz-bg: #016fc0;
+  --type-quiz-fg: #ffffff;
+  --type-project-bg: #128243;
+  --type-project-fg: #ffffff;
+  --type-exam-bg: #bb348a;
+  --type-exam-fg: #ffffff;
+  --planner-ooo-hatch: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  --shadow-mark: 0 0 0 3px rgba(247, 105, 0, 0.26);
+  color-scheme: light;
+}
+
+/* ---- base: globals.css, rule for rule ------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: 1.55;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+}
+h1 { font-size: var(--text-2xl); }
+h2 { font-size: var(--text-lg); }
+h3 { font-size: var(--text-md); }
+p { margin: 0 0 var(--space-3); }
+a {
+  color: var(--color-accent);
+  text-underline-offset: 3px;
+}
+a:hover { color: var(--color-accent-400); }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+:focus { outline: none; }
+/* A MARK IS NOT A WORD. The focus ring, the brand mark, the underline under the current
+   link and the outline round a picked day or a pressed switch carry no text, so they need
+   3:1 against the ground and not the 4.5:1 a word needs. They read --color-accent-500,
+   the ramp's own step, and leave --color-accent to the words. Where a direction keeps the
+   two equal nothing changes; where its text accent has to be deeper than its brand colour
+   (a bright brand colour on a white card), the marks keep the brand colour. The app paints
+   all of these with --color-accent today: the build notes list each rule. */
+:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+
+/* ---- the tile's own chrome: wrapper, header strip, labels, swatches ------------------ */
+.tile {
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding-inline: clamp(16px, 3vw, var(--space-12));
+  padding-block: var(--space-8) var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.tileHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-6);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--color-divider);
+}
+.tileHeadText {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.tileKicker {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.tileName {
+  margin: 0;
+  text-wrap: balance;
+}
+.tileBlurb {
+  margin: 0;
+  max-width: 62ch;
+}
+.tileSample {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.themePick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.themeSwitch {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.themeBtn {
+  all: unset;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.themeBtn:hover { background: var(--color-hover); }
+.themeBtn:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+.themeBtn[aria-pressed="true"] {
+  color: var(--color-text);
+  background: var(--color-active);
+  box-shadow: inset 0 0 0 1px var(--color-accent-500);
+}
+.themeState {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+.frag {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.fragLabel {
+  margin: 0;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.fragNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+@media (min-width: 960px) {
+  .pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+/* Two fragments, one above the other, in one column of a pair. */
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+.scrollBox {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.fragSub {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  letter-spacing: 0;
+  color: var(--color-muted);
+}
+.swatches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: var(--space-3);
+}
+.swatchesRamp { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
+.swatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  line-height: 1.35;
+}
+.swatchChip {
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-divider);
+}
+.swatchRole {
+  font-size: var(--text-xs);
+  color: var(--color-text);
+}
+.swatchName,
+.swatchValue {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.shapes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-8);
+  max-width: 620px;
+  padding: var(--space-2) var(--space-2) var(--space-6);
+}
+.shape {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  line-height: 1.35;
+}
+.shapeSm {
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+.shapeMd {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.shapeLg {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ---- shared primitives: styles/tokens.module.css ------------------------------------ */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.cardLg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.kicker {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-neutral-400);
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: calc(var(--radius-md) * 0.75);
+  white-space: nowrap;
+  flex: none;
+}
+.tagAccent {
+  background: var(--color-accent-800);
+  color: var(--color-accent-100);
+}
+.tagNeutral {
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-100);
+}
+.tagOutline {
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  border-radius: var(--radius-md);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btnPrimary {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.btnPrimary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.btnPrimary:active:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.btnSecondary { border-color: var(--color-divider); }
+.btnSecondary:hover:not(:disabled) { background: var(--color-hover); }
+.btnSecondary:active:not(:disabled) { background: var(--color-active); }
+.btnGhost {
+  color: var(--color-accent);
+  padding-inline: var(--space-1);
+}
+.btnGhost:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+/* planner/PlannerEventForm.module.css .delete: the secondary button, its words in danger. */
+.btnDanger { color: var(--color-danger); }
+.isFocus {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+.input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+.input::placeholder { color: var(--color-muted); }
+.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:focus-visible {
+  border-color: var(--color-accent-500);
+  outline-offset: 0;
+}
+.glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--type-reading-bg);
+  color: var(--type-reading-fg);
+}
+.glyphAssignment {
+  background: var(--type-assignment-bg);
+  color: var(--type-assignment-fg);
+}
+.glyphQuiz {
+  background: var(--type-quiz-bg);
+  color: var(--type-quiz-fg);
+}
+.glyphProject {
+  background: var(--type-project-bg);
+  color: var(--type-project-fg);
+}
+.glyphExam {
+  background: var(--type-exam-bg);
+  color: var(--type-exam-fg);
+}
+
+/* ---- (b) top bar: shell/TopNav, SyncButton, NavSearch ------------------------------- */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 10px 28px;
+  min-height: var(--nav-height);
+  background: var(--color-surface);
+  box-shadow: inset 0 -1px 0 var(--color-divider);
+  font-size: var(--text-base);
+}
+.barDesktop { min-width: 900px; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-right: 6px;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 16px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+.brand:hover { color: var(--color-text); }
+/* --radius-xs, --shadow-mark and (on .badge) --radius-pill are hooks the app does not read
+   yet: its rules hold the fallback written here as a literal. The build notes list them. */
+.mark {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-xs, 2px);
+  background: var(--color-accent-500);
+  box-shadow: var(--shadow-mark, 0 0 10px var(--color-accent-500));
+}
+.links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.link {
+  color: var(--color-text);
+  text-decoration: none;
+  padding: 6px 2px;
+  white-space: nowrap;
+}
+.link:hover { color: var(--color-accent); }
+.link[aria-current="page"] {
+  color: var(--color-accent);
+  box-shadow: inset 0 -2px 0 var(--color-accent-500);
+}
+.right {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  position: relative;
+}
+.ic {
+  all: unset;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--color-neutral-200);
+  position: relative;
+  cursor: pointer;
+}
+.ic:hover { background: var(--color-hover); }
+.ic:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+.ic svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  display: block;
+}
+.icSearch { margin-left: var(--space-3); }
+.badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill, 7px);
+  background: var(--color-accent-800);
+  color: var(--color-accent-100);
+  line-height: 14px;
+}
+.sync {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  color: var(--color-neutral-300);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sync:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+.sync:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+.sync svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  display: block;
+}
+/* Phone: TopNav.module.css as it is at 480 px and under, both of its steps applied. The
+   word beside the mark is kept for screen readers only. The links stay in the bar as a
+   strip that scrolls sideways with no scrollbar drawn (the 720 px step), and they are what
+   gives way: the right-hand group, Sync with its word included, keeps its full width. */
+.barPhone {
+  max-width: 390px;
+  gap: var(--space-2);
+  padding: 10px var(--space-3);
+}
+.barPhone .brand { margin-right: 0; }
+.barPhone .links {
+  gap: var(--space-4);
+  flex: 0 1 auto;
+  min-width: 3em;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* ---- (c) type specimen (tile chrome around the app's faces and sizes) ---------------- */
+.spec {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4) var(--space-8);
+  align-items: start;
+}
+@media (min-width: 960px) {
+  .spec { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.specCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.specRow {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+}
+.specSample {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.specHeading {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+}
+.specMono { font-family: var(--font-mono); }
+.specMeta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+.t2xl { font-size: var(--text-2xl); }
+.txl { font-size: var(--text-xl); }
+.tlg { font-size: var(--text-lg); }
+.tmd { font-size: var(--text-md); }
+.tbase { font-size: var(--text-base); }
+.tsm { font-size: var(--text-sm); }
+.txs { font-size: var(--text-xs); }
+.w400 { font-weight: 400; }
+.w500 { font-weight: 500; }
+.w600 { font-weight: 600; }
+.specRule {
+  height: 1px;
+  border: 0;
+  margin: var(--space-1) 0;
+  background: var(--color-divider);
+}
+.numerals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-1) var(--space-6);
+  font-size: var(--text-base);
+}
+.numerals .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.numerals .numMono {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+.numerals .numHead {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* ---- (d) buttons (tile chrome: the row and its captions) ---------------------------- */
+.btnCard {
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+.btnRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4) var(--space-6);
+}
+.btnCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.btnCaption {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+/* ---- (e) grades: CourseGradeCard, GradedSoFarFigure, GradebookTable ------------------ */
+.gradeHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.gradeHeadText {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.gradeTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg);
+  color: var(--color-text);
+}
+.gradeSubtitle {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.openLink {
+  margin-inline-start: auto;
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+.openLink:hover,
+.openLink:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+.headline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.percent {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  color: var(--color-text);
+}
+.note {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+.sentence {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  max-width: 62ch;
+}
+.blackboard {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.blackboardScore {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+.gbTable {
+  width: 100%;
+  min-width: 500px;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+.gbTable thead th {
+  text-align: left;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+}
+.gbRow > th,
+.gbRow > td {
+  padding: var(--space-3);
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-divider);
+}
+.nameCell {
+  text-align: left;
+  font-weight: 400;
+}
+.nameStack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.nameLine {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.feedbackMark {
+  font-size: var(--text-xs);
+  line-height: 0;
+  color: var(--color-accent);
+  margin-inline-start: 1px;
+  cursor: help;
+}
+.itemLink {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.itemLink:hover { text-decoration: underline; }
+.submissionStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+}
+.scoreCell,
+.seenCell {
+  white-space: nowrap;
+}
+.score {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+/* ---- (f) tracker: UpcomingTracker ---------------------------------------------------- */
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.sectionH2 {
+  font-size: var(--text-lg);
+  margin: 0;
+}
+.sectionSub {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+.legend {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+  flex-wrap: wrap;
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tracker {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-600) var(--color-divider);
+  padding-bottom: var(--space-2);
+  align-items: flex-end;
+}
+.day {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  width: calc(100% / 7);
+  min-width: 54px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 4px;
+  border-radius: var(--radius-md);
+  border-left: 1px solid transparent;
+}
+.day:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+.day:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: -2px;
+}
+.daySelected,
+.daySelected:hover {
+  background: var(--color-accent-900);
+  box-shadow: inset 0 0 0 1px var(--color-accent-500);
+}
+.dayMonday { border-left: 1px solid var(--color-divider); }
+.dayCount {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-300);
+  height: 14px;
+}
+.barArea {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+  height: 120px;
+  width: 100%;
+  justify-content: flex-start;
+}
+.seg {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-xs, 2px);
+}
+.segReading { background: var(--type-reading-bg); }
+.segAssignment { background: var(--type-assignment-bg); }
+.segQuiz { background: var(--type-quiz-bg); }
+.segProject { background: var(--type-project-bg); }
+.segExam { background: var(--type-exam-bg); }
+.dowLabel {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-300);
+  white-space: nowrap;
+}
+.dowWeekend { color: var(--color-neutral-600); }
+.dowToday { color: var(--color-accent); }
+.dateNum {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-neutral-400);
+}
+
+/* ---- (g) planner blocks: PlannerWeek ------------------------------------------------- */
+.plannerDemo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-divider);
+}
+@media (min-width: 560px) {
+  .plannerDemo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* PlannerWeek.module.css .block, which the class block and the six kinds both compose. */
+.meetingBlock,
+.eventBlock {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 62px;
+  padding: 3px 5px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: 14px;
+}
+/* .meetingBlock: a class meeting, the block the planner draws most. It takes a row of its
+   own here (tile chrome); in the app it is as wide as its day column. */
+.meetingBlock {
+  grid-column: 1 / -1;
+  background: color-mix(in srgb, var(--color-accent-2-800) 78%, transparent);
+  color: var(--color-accent-2-100);
+  box-shadow: inset 2px 0 0 var(--color-accent-2-400);
+}
+.blockCode {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.eventBlock {
+  cursor: pointer;
+  background: var(--planner-kind-bg);
+  color: var(--planner-kind-fg);
+  box-shadow: inset 2px 0 0 var(--planner-kind-edge);
+}
+.eventBlock[data-kind="event"] {
+  --planner-kind-bg: var(--planner-event-bg);
+  --planner-kind-fg: var(--planner-event-fg);
+  --planner-kind-edge: var(--planner-event-edge);
+}
+.eventBlock[data-kind="task"] {
+  --planner-kind-bg: var(--planner-task-bg);
+  --planner-kind-fg: var(--planner-task-fg);
+  --planner-kind-edge: var(--planner-task-edge);
+}
+.eventBlock[data-kind="out_of_office"] {
+  --planner-kind-bg: var(--planner-ooo-bg);
+  --planner-kind-fg: var(--planner-ooo-fg);
+  --planner-kind-edge: var(--planner-ooo-edge);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--planner-ooo-hatch) 0 4px,
+    transparent 4px 9px
+  );
+}
+.eventBlock[data-kind="focus_time"] {
+  --planner-kind-bg: var(--planner-focus-bg);
+  --planner-kind-fg: var(--planner-focus-fg);
+  --planner-kind-edge: var(--planner-focus-edge);
+}
+.eventBlock[data-kind="working_location"] {
+  --planner-kind-bg: var(--planner-worklocation-bg);
+  --planner-kind-fg: var(--planner-worklocation-fg);
+  --planner-kind-edge: var(--planner-worklocation-edge);
+  outline: 1px dashed var(--planner-worklocation-edge);
+  outline-offset: -1px;
+}
+.eventBlock[data-kind="appointment_slot"] {
+  --planner-kind-bg: var(--planner-appointment-bg);
+  --planner-kind-fg: var(--planner-appointment-fg);
+  --planner-kind-edge: var(--planner-appointment-edge);
+  outline: 1px dotted var(--planner-appointment-edge);
+  outline-offset: -1px;
+}
+.blockHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 4px;
+  min-width: 0;
+}
+.eventKind {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+.blockTime {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: inherit;
+  opacity: 0.75;
+  white-space: normal;
+}
+.eventTitle {
+  all: unset;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.eventTitle:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 1px;
+}
+.eventDone {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.eventMeta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.zoneChip {
+  flex: none;
+  align-self: flex-start;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--color-bg) 45%, transparent);
+}
+.blockRoom,
+.blockTopic {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+/* ---- (g2) course card on Home: Today.module.css .courseCard and its week strip -------- */
+.courseCard {
+  flex-direction: row;
+  gap: var(--space-6);
+  padding: var(--space-4);
+  align-items: stretch;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+}
+.courseCard:hover {
+  color: inherit;
+  background: color-mix(in srgb, var(--color-text) 4%, var(--color-surface));
+  box-shadow: var(--shadow-md);
+}
+.courseCard:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+.courseMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.courseCodeRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.courseCode {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  flex: none;
+  white-space: nowrap;
+}
+.courseTitle {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.courseMeet {
+  font-size: var(--text-sm);
+  color: var(--color-neutral-400);
+}
+.courseStats {
+  display: flex;
+  gap: var(--space-8);
+  font-size: var(--text-sm);
+  margin-top: auto;
+  white-space: nowrap;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.statValue {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strip {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+}
+.stripKicker { text-align: center; }
+.stripCells {
+  display: flex;
+  gap: 3px;
+}
+.stripCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+/* The app's own 3 px corner, a literal there and here: no token reaches it. */
+.stripBar {
+  width: 16px;
+  height: 22px;
+  border-radius: 3px;
+  background: var(--color-neutral-800);
+}
+.stripBarMeet { background: var(--color-accent-700); }
+.stripDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: transparent;
+}
+.stripDotDue { background: var(--color-accent); }
+.stripLabel {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--color-neutral-400);
+}
+
+/* ---- (h) Inbox row: InboxCard -------------------------------------------------------- */
+.inboxCard {
+  gap: var(--space-3);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+.chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-divider);
+  color: var(--color-neutral-300);
+  white-space: nowrap;
+}
+.chipMono {
+  font-family: var(--font-mono);
+}
+.kindChip { color: var(--color-accent-300); }
+.age { color: var(--color-neutral-500); }
+.inboxTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-md);
+  max-width: 80ch;
+}
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.field { color: var(--color-neutral-400); }
+.panes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  min-width: 0;
+}
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+.meta {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.sourceLink {
+  color: var(--color-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sourceLink:hover { text-decoration: underline; }
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+.noteField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+.choices {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: 44ch;
+}
+.outcome {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-neutral-400);
+}
+
+/* ---- (i) notices: Inbox.module.css .problem and .empty ------------------------------- */
+.problem {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+.empty {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--color-muted);
+  max-width: 62ch;
+}
+
+/* ---- (i2) search panel: NavSearch.module.css .popover, SearchPanel.module.css --------- */
+.searchPop {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--color-divider);
+}
+.searchControls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--color-divider);
+}
+.modeGroup {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-900);
+}
+.modeBtn,
+.modeBtnActive {
+  cursor: pointer;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  padding: 4px 10px;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  background: transparent;
+}
+.modeBtn:hover { color: var(--color-text); }
+.modeBtnActive {
+  color: var(--color-accent-100);
+  background: var(--color-accent-700);
+}
+.courseLabel { margin-left: auto; }
+.courseSelect {
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: 4px 8px;
+  max-width: 240px;
+}
+.courseSelect:focus-visible { border-color: var(--color-accent-500); }
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+}
+.searchNote {
+  margin: 0;
+  padding: var(--space-4) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--color-muted);
+}
+
+/* ---- (j) popout header: Popout.module.css -------------------------------------------- */
+.panel {
+  position: relative;
+  width: min(760px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-divider);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+.close {
+  all: unset;
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--color-neutral-400);
+}
+.close:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.close:focus-visible { outline: 2px solid var(--color-accent-500); }
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-right: var(--space-8);
+}
+.popTitle {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg);
+  margin: 0;
+}
+.subTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--color-neutral-400);
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  box-shadow: inset 0 1px 0 var(--color-divider), inset 0 -1px 0 var(--color-divider);
+}
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.factValue {
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+}
+.factNote {
+  font-size: var(--text-xs);
+  color: var(--color-neutral-500);
+}
+
+@media (max-width: 620px) {
+  .panel { padding: var(--space-4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+
+<main class="tile" id="tile-top">
+
+  <!-- (a) header strip -->
+  <header class="tileHead" id="frag-header">
+    <div class="tileHeadText">
+      <span class="tileKicker">bb2dash style tile</span>
+      <h1 class="tileName">Orange</h1>
+      <p class="tileBlurb">The school’s own orange and navy: navy carries the page, white and cool grey carry the work, and orange is kept for where you are and what you can press.</p>
+      <p class="tileSample">Every name and number on this page is a sample. The fragments are the app's own components, drawn with this direction's colours, fonts, corners and shadows.</p>
+    </div>
+    <div class="themePick">
+      <div class="themeSwitch" role="group" aria-label="Theme">
+        <button type="button" class="themeBtn" id="theme-auto" data-theme-choice="auto" aria-pressed="true">Auto</button>
+        <button type="button" class="themeBtn" id="theme-light" data-theme-choice="light" aria-pressed="false">Light</button>
+        <button type="button" class="themeBtn" id="theme-dark" data-theme-choice="dark" aria-pressed="false">Dark</button>
+      </div>
+      <p class="themeState" id="theme-state" aria-live="polite">Auto follows your system setting.</p>
+    </div>
+  </header>
+
+  <!-- (b) top bar, twice -->
+  <section class="frag" id="frag-topbar" aria-labelledby="label-topbar">
+    <h2 class="fragLabel" id="label-topbar">Top bar, desktop</h2>
+    <div class="scrollBox">
+      <nav class="bar barDesktop" aria-label="Primary, desktop sample">
+        <a class="brand" href="#frag-topbar">
+          <span class="mark" aria-hidden="true"></span>
+          <span>bb2dash</span>
+        </a>
+        <span class="links">
+          <a class="link" href="#frag-topbar" aria-current="page">Home</a>
+          <a class="link" href="#frag-topbar">Planner</a>
+          <a class="link" href="#frag-topbar">Inbox</a>
+          <a class="link" href="#frag-topbar">Grades</a>
+          <a class="link" href="#frag-topbar">Materials</a>
+          <a class="link" href="#frag-topbar">Workspace</a>
+        </span>
+        <span class="right">
+          <button type="button" class="sync" title="Sync">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7c2.76 0 5 2.24 5 5 0 .85-.21 1.65-.6 2.35l1.47 1.47A6.94 6.94 0 0 0 19 12c0-3.87-3.13-7-7-7zm0 12c-2.76 0-5-2.24-5-5 0-.85.21-1.65.6-2.35L6.13 8.18A6.94 6.94 0 0 0 5 12c0 3.87 3.13 7 7 7v3l4-4-4-4v3z"/></svg>
+            Sync
+          </button>
+          <button type="button" class="ic icSearch" title="Search">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="m229.66 218.34-50.07-50.06a88.11 88.11 0 1 0-11.31 11.31l50.06 50.07a8 8 0 0 0 11.32-11.32ZM40 112a72 72 0 1 1 72 72 72.08 72.08 0 0 1-72-72Z"/></svg>
+            <span class="sr-only">Search</span>
+          </button>
+          <button type="button" class="ic" title="Courses sidebar">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg>
+            <span class="sr-only">Courses sidebar</span>
+          </button>
+          <button type="button" class="ic" title="Activity">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M232 128a8 8 0 0 1-8 8h-42.11l-26.22 60.5a8 8 0 0 1-14.66-.2l-46.4-119.3-22.28 51.4A8 8 0 0 1 65 136H32a8 8 0 0 1 0-16h27.76l30.9-71.28a8 8 0 0 1 14.66.2l46.4 119.3 22.28-51.4A8 8 0 0 1 181.35 112H224a8 8 0 0 1 8 16Z"/></svg>
+            <span class="sr-only">Activity</span>
+          </button>
+          <button type="button" class="ic" title="Announcements">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg>
+            <span class="sr-only">Announcements, 2 unread</span>
+            <span class="badge" aria-hidden="true">2</span>
+          </button>
+          <button type="button" class="ic" title="Account">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg>
+            <span class="sr-only">Account</span>
+          </button>
+        </span>
+      </nav>
+    </div>
+
+    <h2 class="fragLabel" id="label-topbar-phone">Top bar, phone</h2>
+    <nav class="bar barPhone" aria-label="Primary, phone sample">
+      <a class="brand" href="#frag-topbar">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="sr-only">bb2dash</span>
+      </a>
+      <span class="links">
+        <a class="link" href="#frag-topbar" aria-current="page">Home</a>
+        <a class="link" href="#frag-topbar">Planner</a>
+        <a class="link" href="#frag-topbar">Inbox</a>
+        <a class="link" href="#frag-topbar">Grades</a>
+        <a class="link" href="#frag-topbar">Materials</a>
+        <a class="link" href="#frag-topbar">Workspace</a>
+      </span>
+      <span class="right">
+        <button type="button" class="sync" title="Sync">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7c2.76 0 5 2.24 5 5 0 .85-.21 1.65-.6 2.35l1.47 1.47A6.94 6.94 0 0 0 19 12c0-3.87-3.13-7-7-7zm0 12c-2.76 0-5-2.24-5-5 0-.85.21-1.65.6-2.35L6.13 8.18A6.94 6.94 0 0 0 5 12c0 3.87 3.13 7 7 7v3l4-4-4-4v3z"/></svg>
+          Sync
+        </button>
+        <button type="button" class="ic icSearch" title="Search">
+          <svg viewBox="0 0 256 256" aria-hidden="true"><path d="m229.66 218.34-50.07-50.06a88.11 88.11 0 1 0-11.31 11.31l50.06 50.07a8 8 0 0 0 11.32-11.32ZM40 112a72 72 0 1 1 72 72 72.08 72.08 0 0 1-72-72Z"/></svg>
+          <span class="sr-only">Search</span>
+        </button>
+        <button type="button" class="ic" title="Courses sidebar">
+          <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg>
+          <span class="sr-only">Courses sidebar</span>
+        </button>
+        <button type="button" class="ic" title="Activity">
+          <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M232 128a8 8 0 0 1-8 8h-42.11l-26.22 60.5a8 8 0 0 1-14.66-.2l-46.4-119.3-22.28 51.4A8 8 0 0 1 65 136H32a8 8 0 0 1 0-16h27.76l30.9-71.28a8 8 0 0 1 14.66.2l46.4 119.3 22.28-51.4A8 8 0 0 1 181.35 112H224a8 8 0 0 1 8 16Z"/></svg>
+          <span class="sr-only">Activity</span>
+        </button>
+        <button type="button" class="ic" title="Announcements">
+          <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg>
+          <span class="sr-only">Announcements, 2 unread</span>
+          <span class="badge" aria-hidden="true">2</span>
+        </button>
+        <button type="button" class="ic" title="Account">
+          <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg>
+          <span class="sr-only">Account</span>
+        </button>
+      </span>
+    </nav>
+    <p class="fragNote">On a phone the links stay in the bar and slide sideways under your finger. Sync and the five icons keep their places.</p>
+  </section>
+
+  <!-- (c) type specimen -->
+  <section class="frag" id="frag-type" aria-labelledby="label-type">
+    <h2 class="fragLabel" id="label-type">Type</h2>
+    <div class="spec">
+      <div class="specCol">
+        <p class="specRow"><span class="specSample specHeading t2xl" data-font-probe="heading">Thursday, week seven</span><span class="specMeta">heading 28</span></p>
+        <p class="specRow"><span class="specSample specHeading txl">Course A, sample section</span><span class="specMeta">heading 20</span></p>
+        <p class="specRow"><span class="specSample specHeading tlg">Upcoming work</span><span class="specMeta">heading 17</span></p>
+        <p class="specRow"><span class="specSample specHeading tmd">Sample essay 2 moved to Friday</span><span class="specMeta">heading 15</span></p>
+        <hr class="specRule">
+        <p class="specRow tmd">
+          <span class="specSample w400">Regular 400</span>
+          <span class="specSample w500">Medium 500</span>
+          <span class="specSample w600">Semibold 600</span>
+          <span class="specSample specHeading">Heading weight</span>
+          <span class="specMeta">weights</span>
+        </p>
+      </div>
+      <div class="specCol">
+        <p class="specRow"><span class="specSample tmd" data-font-probe="body">Body text at the page size. Two readings and one quiz are due this week.</span><span class="specMeta">body 15</span></p>
+        <p class="specRow"><span class="specSample tbase">Table rows and the top bar links sit at this size.</span><span class="specMeta">body 13.5</span></p>
+        <p class="specRow"><span class="specSample tsm">Notes, toasts and second lines sit at this size.</span><span class="specMeta">body 12.5</span></p>
+        <p class="specRow"><span class="specSample txs">Chips, timestamps and planner blocks sit at this size.</span><span class="specMeta">body 11</span></p>
+        <p class="specRow"><span class="specSample specMono tbase" data-font-probe="mono">18 / 20 &nbsp; 87.5% &nbsp; 09:30</span><span class="specMeta">mono 13.5</span></p>
+        <hr class="specRule">
+        <div class="numerals" role="table" aria-label="Numerals, lined up">
+          <span class="numHead" role="columnheader">Item</span>
+          <span class="numHead num" role="columnheader">Body, tabular</span>
+          <span class="numHead numMono" role="columnheader">Mono</span>
+          <span>Sample quiz 1</span><span class="num">18.00 / 20</span><span class="numMono">18.00 / 20</span>
+          <span>Sample essay 1</span><span class="num">111.50 / 120</span><span class="numMono">111.50 / 120</span>
+          <span>Sample lab 1</span><span class="num">7.25 / 10</span><span class="numMono">7.25 / 10</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- (d) buttons -->
+  <section class="frag" id="frag-buttons" aria-labelledby="label-buttons">
+    <h2 class="fragLabel" id="label-buttons">Buttons</h2>
+    <div class="card btnCard">
+      <div class="btnRow">
+        <span class="btnCell"><button type="button" class="btn btnPrimary">Save</button><span class="btnCaption">primary</span></span>
+        <span class="btnCell"><button type="button" class="btn btnSecondary">Keep mine</button><span class="btnCaption">secondary</span></span>
+        <span class="btnCell"><button type="button" class="btn btnGhost">Undo</button><span class="btnCaption">quiet</span></span>
+        <span class="btnCell"><button type="button" class="btn btnSecondary btnDanger">Delete</button><span class="btnCaption">danger</span></span>
+        <span class="btnCell"><button type="button" class="btn btnPrimary" disabled>Save</button><span class="btnCaption">disabled</span></span>
+        <span class="btnCell"><button type="button" class="btn btnSecondary isFocus">Dismiss</button><span class="btnCaption">focus shown</span></span>
+      </div>
+    </div>
+    <p class="fragNote">Danger is the planner's Delete: the secondary button with its words in the danger colour.</p>
+  </section>
+
+  <div class="pair">
+    <!-- (e) graded so far, and one gradebook row -->
+    <section class="frag" id="frag-grades" aria-labelledby="label-grades">
+      <h2 class="fragLabel" id="label-grades">Graded so far, and a gradebook row</h2>
+      <div class="cardLg">
+        <div class="gradeHead">
+          <div class="gradeHeadText">
+            <h3 class="gradeTitle">Course A</h3>
+            <span class="gradeSubtitle">Sample course</span>
+          </div>
+          <a class="openLink" href="#frag-grades">Open course</a>
+        </div>
+        <div class="figure">
+          <span class="kicker">Graded so far</span>
+          <span class="headline">
+            <span class="percent">87.5%</span>
+            <span class="tag tagOutline">B+</span>
+            <span class="mono">52.5 / 60</span>
+            <span class="note">as of Oct 6, 9:12 AM</span>
+          </span>
+          <p class="sentence">Not counted yet: Sample project, Sample final exam</p>
+          <span class="blackboard">
+            <span class="tag tagNeutral">Blackboard’s own total</span>
+            <span class="blackboardScore">88.1 / 100</span>
+            <span class="note">as of Oct 6, 9:12 AM</span>
+          </span>
+        </div>
+        <div class="scrollBox">
+          <table class="gbTable">
+            <caption class="sr-only">Sample gradebook row</caption>
+            <thead>
+              <tr>
+                <th scope="col">Item</th>
+                <th scope="col">Submission</th>
+                <th scope="col">Score</th>
+                <th scope="col">Seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="gbRow">
+                <th scope="row" class="nameCell">
+                  <div class="nameStack">
+                    <span class="nameLine"><a class="itemLink" href="#frag-grades">Sample quiz 1</a><sup class="feedbackMark" title="The instructor left feedback.">*</sup></span>
+                    <span class="tag tagOutline">counts toward grade</span>
+                  </div>
+                </th>
+                <td>
+                  <div class="submissionStack">
+                    <span class="tag tagNeutral">Graded</span>
+                    <span class="note">last attempt: completed</span>
+                  </div>
+                </td>
+                <td class="scoreCell"><span class="score">18 / 20</span></td>
+                <td class="seenCell"><span class="mono">Oct 6, 9:12 AM</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- (f) the five tracker chips -->
+    <section class="frag" id="frag-tracker" aria-labelledby="label-tracker">
+      <h2 class="fragLabel" id="label-tracker">Tracker chips</h2>
+      <div class="cardLg">
+        <div class="sectionHead">
+          <h3 class="sectionH2">Upcoming work</h3>
+          <span class="sectionSub">sample week</span>
+          <span class="legend">
+            <span class="legendItem"><span class="glyph">R</span>reading</span>
+            <span class="legendItem"><span class="glyph glyphAssignment">A</span>assignment</span>
+            <span class="legendItem"><span class="glyph glyphQuiz">Q</span>quiz</span>
+            <span class="legendItem"><span class="glyph glyphProject">P</span>project</span>
+            <span class="legendItem"><span class="glyph glyphExam">E</span>exam</span>
+          </span>
+        </div>
+        <div class="tracker">
+          <button type="button" class="day dayMonday">
+            <span class="dayCount">2</span>
+            <span class="barArea"><span class="seg segReading" style="height: 28px"></span><span class="seg segAssignment" style="height: 38px"></span></span>
+            <span class="dowLabel">Mon</span><span class="dateNum">12</span>
+          </button>
+          <button type="button" class="day">
+            <span class="dayCount">1</span>
+            <span class="barArea"><span class="seg segReading" style="height: 23px"></span></span>
+            <span class="dowLabel">Tue</span><span class="dateNum">13</span>
+          </button>
+          <button type="button" class="day">
+            <span class="dayCount">3</span>
+            <span class="barArea"><span class="seg segReading" style="height: 20px"></span><span class="seg segQuiz" style="height: 30px"></span><span class="seg segAssignment" style="height: 35px"></span></span>
+            <span class="dowLabel">Wed</span><span class="dateNum">14</span>
+          </button>
+          <button type="button" class="day daySelected" aria-pressed="true">
+            <span class="dayCount">5</span>
+            <span class="barArea"><span class="seg segReading" style="height: 18px"></span><span class="seg segAssignment" style="height: 23px"></span><span class="seg segQuiz" style="height: 20px"></span><span class="seg segProject" style="height: 28px"></span><span class="seg segExam" style="height: 25px"></span></span>
+            <span class="dowLabel dowToday">Thu</span><span class="dateNum">15</span>
+          </button>
+          <button type="button" class="day">
+            <span class="dayCount">2</span>
+            <span class="barArea"><span class="seg segProject" style="height: 45px"></span><span class="seg segQuiz" style="height: 25px"></span></span>
+            <span class="dowLabel">Fri</span><span class="dateNum">16</span>
+          </button>
+          <button type="button" class="day">
+            <span class="dayCount">1</span>
+            <span class="barArea"><span class="seg segExam" style="height: 55px"></span></span>
+            <span class="dowLabel dowWeekend">Sat</span><span class="dateNum">17</span>
+          </button>
+          <button type="button" class="day">
+            <span class="dayCount"></span>
+            <span class="barArea"></span>
+            <span class="dowLabel dowWeekend">Sun</span><span class="dateNum">18</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="pair">
+    <div class="col">
+    <!-- (g) a class block and the six kinds of planner event -->
+    <section class="frag" id="frag-planner" aria-labelledby="label-planner">
+      <h2 class="fragLabel" id="label-planner">Planner blocks</h2>
+      <div class="plannerDemo">
+        <div class="meetingBlock">
+          <span class="blockHead"><span class="blockCode">Course A</span><span class="blockTime">10:35 – 11:30 AM</span></span>
+          <span class="blockRoom">Room 204</span>
+          <span class="blockTopic">Week 7, sample topic</span>
+        </div>
+        <div class="eventBlock" data-kind="event">
+          <span class="blockHead"><span class="eventKind">Event</span><span class="blockTime">6:00 – 7:00 PM</span></span>
+          <button type="button" class="eventTitle">Club meeting</button>
+          <span class="eventMeta"><span class="blockRoom">Room 101</span></span>
+        </div>
+        <div class="eventBlock" data-kind="task">
+          <span class="blockHead"><input type="checkbox" class="eventDone" id="sample-task-done" aria-label="Done"><span class="eventKind">Task</span><span class="blockTime">2:00 – 2:30 PM</span></span>
+          <button type="button" class="eventTitle">Print the lab report</button>
+        </div>
+        <div class="eventBlock" data-kind="out_of_office">
+          <span class="blockHead"><span class="eventKind">Out of office</span><span class="blockTime">all day</span></span>
+          <button type="button" class="eventTitle">Travel day</button>
+        </div>
+        <div class="eventBlock" data-kind="focus_time">
+          <span class="blockHead"><span class="eventKind">Focus time</span><span class="blockTime">9:00 – 11:00 AM</span></span>
+          <button type="button" class="eventTitle">Problem set block</button>
+        </div>
+        <div class="eventBlock" data-kind="working_location">
+          <span class="blockHead"><span class="eventKind">Working location</span><span class="blockTime">1:00 – 5:00 PM</span></span>
+          <button type="button" class="eventTitle">Library, second floor</button>
+        </div>
+        <div class="eventBlock" data-kind="appointment_slot">
+          <span class="blockHead"><span class="eventKind">Appointment slot</span><span class="blockTime">3:30 – 4:00 PM</span></span>
+          <button type="button" class="eventTitle">Office hours slot</button>
+          <span class="eventMeta"><span class="zoneChip">PT</span><span class="blockRoom">Video call</span></span>
+        </div>
+      </div>
+      <p class="fragNote">The wide block on top is a class meeting, the block the planner shows most. The six under it are the kinds of event you add yourself.</p>
+    </section>
+
+    <!-- (g2) a course card from Home, with its week strip -->
+    <section class="frag" id="frag-course" aria-labelledby="label-course">
+      <h2 class="fragLabel" id="label-course">Course card on Home</h2>
+      <a class="card courseCard" href="#frag-course" aria-label="Open Course A, Sample course">
+        <div class="courseMain">
+          <div class="courseCodeRow">
+            <span class="courseCode">Course A</span>
+            <span class="courseTitle">Sample course</span>
+          </div>
+          <span class="courseMeet">MW 10:35–11:30 AM · Room 204</span>
+          <div class="courseStats">
+            <div class="stat"><span class="kicker">Next due · Fri 10/16</span><span class="statValue">1 quiz</span></div>
+            <div class="stat"><span class="kicker">Open</span><span class="statValue">3</span></div>
+          </div>
+        </div>
+        <div class="strip">
+          <span class="kicker stripKicker">this week</span>
+          <span class="stripCells">
+            <span class="stripCell"><span class="stripBar stripBarMeet"></span><span class="stripDot"></span><span class="stripLabel">M</span></span>
+            <span class="stripCell"><span class="stripBar"></span><span class="stripDot"></span><span class="stripLabel">T</span></span>
+            <span class="stripCell"><span class="stripBar stripBarMeet"></span><span class="stripDot stripDotDue"></span><span class="stripLabel">W</span></span>
+            <span class="stripCell"><span class="stripBar"></span><span class="stripDot"></span><span class="stripLabel">T</span></span>
+            <span class="stripCell"><span class="stripBar"></span><span class="stripDot stripDotDue"></span><span class="stripLabel">F</span></span>
+          </span>
+        </div>
+      </a>
+      <p class="fragNote">In the strip a filled bar is a day the class meets, and a dot is a day with something due. Here the class meets Monday and Wednesday.</p>
+    </section>
+    </div>
+
+    <!-- (h) an Inbox row -->
+    <section class="frag" id="frag-inbox" aria-labelledby="label-inbox">
+      <h2 class="fragLabel" id="label-inbox">Inbox row</h2>
+      <article class="card inboxCard" aria-labelledby="sample-inbox-title">
+        <div class="chips">
+          <span class="chip chipMono">Course A</span>
+          <span class="chip kindChip">conflict</span>
+          <span class="chip">from a sync</span>
+          <span class="chip age">2 h ago</span>
+        </div>
+        <h3 class="inboxTitle" id="sample-inbox-title">Blackboard moved the due date of Sample essay 2. Which date is right?</h3>
+        <div class="compare">
+          <span class="kicker field">due date</span>
+          <div class="panes">
+            <div class="pane" role="group" aria-label="Blackboard">
+              <span class="kicker">Blackboard</span>
+              <span class="value">Fri, Oct 16, 11:59 PM</span>
+            </div>
+            <div class="pane" role="group" aria-label="bb2dash has">
+              <span class="kicker">bb2dash has</span>
+              <span class="value">Wed, Oct 14, 11:59 PM</span>
+            </div>
+          </div>
+        </div>
+        <p class="meta"><span>Raised by the last sync.</span><a class="sourceLink" href="#frag-inbox">Open the assignment</a></p>
+        <div class="controls">
+          <label class="noteField" for="sample-why">
+            <span class="kicker">why (optional)</span>
+            <input type="text" class="input" id="sample-why" placeholder="the reason, for future you">
+          </label>
+          <div class="choices">
+            <div class="choice">
+              <button type="button" class="btn btnPrimary">Accept Blackboard</button>
+              <p class="outcome">Sets this assignment’s due date to Fri, Oct 16, 11:59 PM.</p>
+            </div>
+            <div class="choice">
+              <button type="button" class="btn btnSecondary">Keep mine</button>
+              <p class="outcome">Keeps this assignment’s due date at Wed, Oct 14, 11:59 PM and marks it confirmed, so the next sync stops asking.</p>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </div>
+
+  <div class="pair">
+    <div class="col">
+    <!-- (i) notices -->
+    <section class="frag" id="frag-notices" aria-labelledby="label-notices">
+      <h2 class="fragLabel" id="label-notices">Notices</h2>
+      <div class="stack">
+        <p class="problem">That change was not saved because the connection dropped. The controls are still live, so try again.</p>
+        <p class="empty">Nothing needs you right now. New questions show up here after the next sync.</p>
+      </div>
+    </section>
+
+    <!-- (i2) the search panel, before anything is typed -->
+    <section class="frag" id="frag-search" aria-labelledby="label-search">
+      <h2 class="fragLabel" id="label-search">Search panel</h2>
+      <div class="searchPop">
+        <div class="searchControls">
+          <div class="modeGroup" role="group" aria-label="Search mode, sample">
+            <button type="button" class="modeBtnActive" aria-pressed="true">Hybrid</button>
+            <button type="button" class="modeBtn" aria-pressed="false">Semantic</button>
+            <button type="button" class="modeBtn" aria-pressed="false">Keyword</button>
+          </div>
+          <label class="courseLabel">
+            <span class="sr-only">Filter by course, sample</span>
+            <select class="courseSelect">
+              <option>All courses</option>
+              <option>Course A · Sample course</option>
+            </select>
+          </label>
+        </div>
+        <div class="searchResults">
+          <p class="searchNote">Type at least two characters to search slides, readings, syllabi and schedules across your courses.</p>
+        </div>
+      </div>
+    </section>
+    </div>
+
+    <!-- (j) a popout header -->
+    <section class="frag" id="frag-popout" aria-labelledby="label-popout">
+      <h2 class="fragLabel" id="label-popout">Popout header</h2>
+      <div class="panel">
+        <button type="button" class="close" aria-label="Close">✕</button>
+        <div class="breadcrumb">
+          <span class="tag tagAccent">Course A</span>
+          <span class="tag tagNeutral">Quizzes</span>
+          <span class="mono">#2</span>
+          <span class="tag tagOutline">tentative</span>
+        </div>
+        <div>
+          <h3 class="popTitle">Sample quiz 2</h3>
+          <div class="subTitle"><span>quiz</span><span>· extra credit</span></div>
+        </div>
+        <div class="facts">
+          <div class="fact"><span class="kicker">Due</span><span class="factValue">Fri, Oct 16</span><span class="factNote">11:59 PM</span></div>
+          <div class="fact"><span class="kicker">Points</span><span class="factValue">20</span><span class="factNote">counts toward Quizzes</span></div>
+          <div class="fact"><span class="kicker">Status</span><span class="factValue">Not started</span><span class="factNote">set by you</span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- (k) swatches -->
+  <section class="frag" id="frag-swatches" aria-labelledby="label-swatches">
+    <h2 class="fragLabel" id="label-swatches">Main tokens</h2>
+    <ul class="swatches" aria-label="Roles">
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-bg)"></span><span class="swatchRole">ground</span><span class="swatchName">--color-bg</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-surface)"></span><span class="swatchRole">surface</span><span class="swatchName">--color-surface</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-text)"></span><span class="swatchRole">text</span><span class="swatchName">--color-text</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-muted)"></span><span class="swatchRole">muted</span><span class="swatchName">--color-muted</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-accent)"></span><span class="swatchRole">accent</span><span class="swatchName">--color-accent</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-accent-2)"></span><span class="swatchRole">second accent</span><span class="swatchName">--color-accent-2</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-danger)"></span><span class="swatchRole">danger</span><span class="swatchName">--color-danger</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-divider)"></span><span class="swatchRole">divider</span><span class="swatchName">--color-divider</span><span class="swatchValue" hidden></span></li>
+    </ul>
+    <h3 class="fragSub" id="label-ramp">Neutral ramp, <span class="swatchName">--color-neutral-100</span> to <span class="swatchName">-900</span>. 100 is the strong end on either ground.</h3>
+    <ul class="swatches swatchesRamp" aria-labelledby="label-ramp">
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-100)"></span><span class="swatchRole">100</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-200)"></span><span class="swatchRole">200</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-300)"></span><span class="swatchRole">300</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-400)"></span><span class="swatchRole">400</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-500)"></span><span class="swatchRole">500</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-600)"></span><span class="swatchRole">600</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-700)"></span><span class="swatchRole">700</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-800)"></span><span class="swatchRole">800</span><span class="swatchValue" hidden></span></li>
+      <li class="swatch"><span class="swatchChip" style="background: var(--color-neutral-900)"></span><span class="swatchRole">900</span><span class="swatchValue" hidden></span></li>
+    </ul>
+    <h3 class="fragSub" id="label-shapes">Corners and shadows</h3>
+    <div class="shapes" role="group" aria-labelledby="label-shapes">
+      <div class="shape shapeSm"><span class="swatchRole">small</span><span class="swatchName">--radius-sm</span><span class="swatchName">--shadow-sm</span></div>
+      <div class="shape shapeMd"><span class="swatchRole">medium</span><span class="swatchName">--radius-md</span><span class="swatchName">--shadow-md</span></div>
+      <div class="shape shapeLg"><span class="swatchRole">large</span><span class="swatchName">--radius-lg</span><span class="swatchName">--shadow-lg</span></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var root = document.documentElement;
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-theme-choice]'));
+  var stateLine = document.getElementById('theme-state');
+  var systemLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+
+  /* The viewer's pick is the data-theme attribute itself: light, dark, or absent for Auto. */
+  function pick() {
+    var value = root.getAttribute('data-theme');
+    return value === 'light' || value === 'dark' ? value : 'auto';
+  }
+  function shownTheme() {
+    var value = pick();
+    if (value !== 'auto') return value;
+    return systemLight && systemLight.matches ? 'light' : 'dark';
+  }
+
+  function twoHex(channel) {
+    var text = Math.round(Math.max(0, Math.min(255, channel))).toString(16);
+    return text.length === 1 ? '0' + text : text;
+  }
+  /* A computed colour as "#rrggbb", with "at NN%" when it is see-through. */
+  function readable(computed) {
+    var rgb = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,\/]\s*([\d.]+%?))?\s*\)$/.exec(computed);
+    var srgb = /^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/.exec(computed);
+    var parts = rgb
+      ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), rgb[4]]
+      : srgb
+        ? [Number(srgb[1]) * 255, Number(srgb[2]) * 255, Number(srgb[3]) * 255, srgb[4]]
+        : null;
+    if (!parts) return computed;
+    var hex = '#' + twoHex(parts[0]) + twoHex(parts[1]) + twoHex(parts[2]);
+    if (parts[3] === undefined) return hex;
+    var alpha = /%$/.test(parts[3]) ? Number(parts[3].slice(0, -1)) : Number(parts[3]) * 100;
+    return alpha >= 99.5 ? hex : hex + ' at ' + Math.round(alpha) + '%';
+  }
+  function fillSwatches() {
+    var rows = document.querySelectorAll('.swatch');
+    for (var i = 0; i < rows.length; i += 1) {
+      var chip = rows[i].querySelector('.swatchChip');
+      var out = rows[i].querySelector('.swatchValue');
+      if (!chip || !out) continue;
+      out.textContent = readable(window.getComputedStyle(chip).backgroundColor);
+      out.hidden = false;
+    }
+  }
+
+  function paint() {
+    var value = pick();
+    buttons.forEach(function (button) {
+      button.setAttribute('aria-pressed', button.getAttribute('data-theme-choice') === value ? 'true' : 'false');
+    });
+    if (stateLine) {
+      stateLine.textContent = value === 'auto'
+        ? 'Auto follows your system, which is ' + shownTheme() + ' now.'
+        : 'Showing the ' + value + ' theme.';
+    }
+    fillSwatches();
+  }
+
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      var value = button.getAttribute('data-theme-choice');
+      if (value === 'light' || value === 'dark') root.setAttribute('data-theme', value);
+      else root.removeAttribute('data-theme');
+      paint();
+    });
+  });
+
+  /* The page that hosts the tile may set data-theme too; follow it, and follow the system in Auto. */
+  if (window.MutationObserver) {
+    new MutationObserver(paint).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  if (systemLight) {
+    if (systemLight.addEventListener) systemLight.addEventListener('change', paint);
+    else if (systemLight.addListener) systemLight.addListener(paint);
+  }
+
+  paint();
+})();
+</script>

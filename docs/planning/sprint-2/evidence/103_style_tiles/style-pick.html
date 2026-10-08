@@ -1,0 +1,937 @@
+<title>bb2dash Style Pick</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400&amp;family=Source+Sans+3:wght@400;500;600&amp;family=Source+Serif+4:opsz,wght@8..60,600&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&amp;family=DM+Mono&amp;display=swap">
+<style>
+/* Layout: a quiet neutral frame (system type, ink-only controls) around three live samples.
+   The samples carry every colour and typeface under test, so the frame cannot tip the choice. */
+:root {
+  --wt-bg: #f2f3f6;
+  --wt-panel: #ffffff;
+  --wt-ink: #15171c;
+  --wt-soft: #565c6b;
+  --wt-line: #d3d7df;
+  --wt-fill: #15171c;
+  --wt-on-fill: #ffffff;
+  --wt-good: #1a6a45;
+  --wt-warn: #8a4a00;
+  --wt-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --wt-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --wt-bg: #101216;
+    --wt-panel: #191c23;
+    --wt-ink: #eceef2;
+    --wt-soft: #a3a9b7;
+    --wt-line: #333845;
+    --wt-fill: #eceef2;
+    --wt-on-fill: #101216;
+    --wt-good: #6fd3a4;
+    --wt-warn: #f0b262;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --wt-bg: #101216;
+  --wt-panel: #191c23;
+  --wt-ink: #eceef2;
+  --wt-soft: #a3a9b7;
+  --wt-line: #333845;
+  --wt-fill: #eceef2;
+  --wt-on-fill: #101216;
+  --wt-good: #6fd3a4;
+  --wt-warn: #f0b262;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--wt-bg);
+  color: var(--wt-ink);
+  font-family: var(--wt-font);
+  font-size: 15px;
+  line-height: 1.5;
+}
+button, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--wt-ink); outline-offset: 2px; }
+
+.wt {
+  max-width: 1320px;
+  margin-inline: auto;
+  padding-inline: clamp(16px, 3vw, 32px);
+  padding-block: 24px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---- header ---- */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 32px;
+}
+.headText { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--wt-soft);
+}
+h1 {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 28px);
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.lede { margin: 0; max-width: 66ch; color: var(--wt-soft); }
+.view { display: flex; flex-direction: column; gap: 6px; }
+.viewLabel { font-size: 12px; color: var(--wt-soft); }
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--wt-line);
+  border-radius: 9px;
+  background: var(--wt-panel);
+  padding: 3px;
+  gap: 3px;
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13.5px;
+}
+.seg button[aria-pressed="true"] { background: var(--wt-fill); color: var(--wt-on-fill); font-weight: 600; }
+
+/* ---- progress ---- */
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.stepBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 11px 6px 8px;
+  border: 1px solid var(--wt-line);
+  border-radius: 8px;
+  background: var(--wt-panel);
+  font-size: 13.5px;
+}
+.stepBtn[aria-current="step"] { border-color: var(--wt-ink); font-weight: 650; }
+.box {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1.5px solid var(--wt-ink);
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+}
+.stepBtn[data-done="true"] .box { background: var(--wt-fill); color: var(--wt-on-fill); }
+.tag { font-family: var(--wt-mono); font-size: 12px; color: var(--wt-soft); }
+
+/* ---- stage ---- */
+.stage {
+  background: var(--wt-panel);
+  border: 1px solid var(--wt-line);
+  border-radius: 14px;
+  padding: clamp(14px, 2.4vw, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.stageHead { display: flex; flex-direction: column; gap: 4px; }
+h2 { margin: 0; font-size: 21px; line-height: 1.2; font-weight: 650; text-wrap: balance; }
+.ask { margin: 0; max-width: 70ch; }
+.hint { margin: 0; font-size: 13px; color: var(--wt-soft); }
+
+.dirs { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+.dirs.rows { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1000px) { .dirs { grid-template-columns: minmax(0, 1fr); } }
+
+.dir {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--wt-line);
+  border-radius: 11px;
+  background: var(--wt-bg);
+  overflow: hidden;
+}
+.dir[data-picked="true"] { border-color: var(--wt-fill); box-shadow: 0 0 0 2px var(--wt-fill); }
+@supports (grid-template-rows: subgrid) {
+  .dirs.aligned { align-items: stretch; grid-template-rows: auto 1fr auto; }
+  .dirs.aligned > .dir { display: grid; grid-row: span 3; grid-template-rows: subgrid; }
+}
+.dirHead { padding: 11px 14px 10px; display: flex; flex-direction: column; gap: 3px; }
+.dirTitle { display: flex; align-items: center; gap: 9px; }
+.letter {
+  font-family: var(--wt-mono);
+  font-size: 13px;
+  font-weight: 700;
+  border: 1.5px solid var(--wt-ink);
+  border-radius: 5px;
+  padding: 0 6px;
+  line-height: 1.5;
+}
+.dirName { font-weight: 650; font-size: 16px; }
+.dirBlurb { margin: 0; font-size: 13px; color: var(--wt-soft); }
+.slots { display: flex; flex-direction: column; min-width: 0; }
+.dirs.rows .slots.two { flex-direction: row; flex-wrap: wrap; }
+.dirs.rows .slots.two .slot { flex: 1 1 380px; }
+.slot { min-width: 0; display: flex; flex-direction: column; }
+.modeLabel {
+  margin: 0;
+  padding: 5px 14px;
+  font-size: 11.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--wt-soft);
+  border-top: 1px solid var(--wt-line);
+}
+.sampleScroll { overflow-x: auto; min-width: 0; }
+.sampleHost { display: block; min-width: 0; }
+.dirFoot { padding: 11px 14px 13px; border-top: 1px solid var(--wt-line); display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.pickBtn {
+  flex: 1 1 160px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--wt-ink);
+  background: transparent;
+  font-weight: 650;
+}
+.pickBtn[aria-pressed="true"] { background: var(--wt-fill); color: var(--wt-on-fill); }
+.tileLink { font-size: 13px; color: var(--wt-ink); text-underline-offset: 3px; }
+
+.after { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-start; }
+.skipBtn {
+  padding: 8px 13px;
+  border-radius: 8px;
+  border: 1px dashed var(--wt-soft);
+  background: transparent;
+}
+.skipBtn[aria-pressed="true"] { border-style: solid; background: var(--wt-fill); color: var(--wt-on-fill); }
+.note { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--wt-soft); }
+/* On the result page the note sits straight in the stage's column, where a flex-basis would be a height. */
+.stage > .note { flex: none; }
+.note textarea {
+  width: 100%;
+  min-height: 44px;
+  resize: vertical;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--wt-line);
+  background: var(--wt-bg);
+  color: var(--wt-ink);
+}
+
+.nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.btn {
+  padding: 10px 18px;
+  border-radius: 9px;
+  border: 1.5px solid var(--wt-ink);
+  background: transparent;
+  font-weight: 650;
+}
+.btn[disabled] { opacity: 0.4; cursor: default; }
+.btnPrimary { background: var(--wt-fill); color: var(--wt-on-fill); }
+
+/* ---- result ---- */
+.picks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.picks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--wt-line);
+}
+.picks .what { flex: 1 1 200px; min-width: 0; }
+.picks .got { flex: 0 1 auto; font-weight: 650; }
+.picks .got.none { font-weight: 400; color: var(--wt-soft); }
+.linkBtn { border: 0; background: transparent; padding: 0; text-decoration: underline; text-underline-offset: 3px; font-size: 13px; color: var(--wt-soft); }
+.tally { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; max-width: 560px; }
+.tallyBar { height: 10px; border-radius: 5px; background: var(--wt-line); overflow: hidden; }
+.tallyBar span { display: block; height: 100%; background: var(--wt-fill); }
+.tallyNum { font-variant-numeric: tabular-nums; font-family: var(--wt-mono); font-size: 13px; }
+.lean { margin: 0; font-weight: 650; }
+.finals { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 760px) { .finals { grid-template-columns: minmax(0, 1fr); } }
+.finalBtn {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--wt-line);
+  background: var(--wt-bg);
+  min-width: 0;
+}
+.finalBtn[aria-pressed="true"] { border-color: var(--wt-fill); box-shadow: 0 0 0 2px var(--wt-fill); }
+.finalBtn .dirBlurb { color: var(--wt-soft); }
+.save { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
+.status { margin: 0; min-height: 1.5em; }
+.status[data-kind="good"] { color: var(--wt-good); font-weight: 650; }
+.status[data-kind="warn"] { color: var(--wt-warn); }
+.copyRow { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+.copyLine {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--wt-line);
+  border-radius: 8px;
+  background: var(--wt-bg);
+  font-family: var(--wt-mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.sub { margin: 0; font-size: 13px; color: var(--wt-soft); }
+h3 { margin: 6px 0 0; font-size: 15px; font-weight: 650; }
+.foot { margin: 0; font-size: 12.5px; color: var(--wt-soft); }
+</style>
+
+<div class="wt">
+  <header class="head">
+    <div class="headText">
+      <p class="eyebrow">bb2dash, Phase 22 styling</p>
+      <h1>Pick a style direction</h1>
+      <p class="lede">Seven short looks at the same components in three directions. At each one, pick the direction you prefer, or say you have no preference. The last page adds up your picks and you confirm one. Every name and number in the samples is made up.</p>
+    </div>
+    <div class="view">
+      <span class="viewLabel" id="view-label">Show the samples in</span>
+      <div class="seg" role="group" aria-labelledby="view-label" id="view-seg">
+        <button type="button" id="view-auto" data-view="auto" aria-pressed="true">My system</button>
+        <button type="button" id="view-dark" data-view="dark" aria-pressed="false">Dark</button>
+        <button type="button" id="view-light" data-view="light" aria-pressed="false">Light</button>
+        <button type="button" id="view-both" data-view="both" aria-pressed="false">Both</button>
+      </div>
+    </div>
+  </header>
+
+  <ol class="steps" id="steps" aria-label="Steps"></ol>
+
+  <main class="stage" id="stage" aria-live="polite"></main>
+
+  <nav class="nav" aria-label="Step navigation">
+    <button type="button" class="btn" id="nav-back">Back</button>
+    <button type="button" class="btn btnPrimary" id="nav-next">Next</button>
+  </nav>
+
+  <p class="foot">The samples are the app's own components drawn with each direction's colours, fonts, corners and shadows. Spacing, type sizes and layout are the same in all three and stay as they are today.</p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DATA = {"css":"/* ---- base: globals.css, rule for rule ------------------------------------------------ */\n*,\n*::before,\n*::after {\n  box-sizing: border-box;\n}\nbody {\n  margin: 0;\n  background: var(--color-bg);\n  color: var(--color-text);\n  font-family: var(--font-body);\n  font-size: var(--text-md);\n  line-height: 1.55;\n  font-weight: 400;\n  -webkit-font-smoothing: antialiased;\n}\nh1, h2, h3, h4 {\n  font-family: var(--font-heading);\n  font-weight: var(--font-heading-weight);\n  line-height: 1.12;\n  letter-spacing: -0.015em;\n  margin: 0 0 var(--space-2);\n}\nh1 { font-size: var(--text-2xl); }\nh2 { font-size: var(--text-lg); }\nh3 { font-size: var(--text-md); }\np { margin: 0 0 var(--space-3); }\na {\n  color: var(--color-accent);\n  text-underline-offset: 3px;\n}\na:hover { color: var(--color-accent-400); }\n.sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip-path: inset(50%);\n  white-space: nowrap;\n  border: 0;\n}\n:focus { outline: none; }\n:focus-visible {\n  outline: 2px solid var(--color-accent);\n  outline-offset: 2px;\n}\n::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }\n\n/* ---- the tile's own chrome: wrapper, header strip, labels, swatches ------------------ */\n.tile {\n  max-width: var(--content-max);\n  margin-inline: auto;\n  padding-inline: clamp(16px, 3vw, var(--space-12));\n  padding-block: var(--space-8) var(--space-12);\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-8);\n}\n.tileHead {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: flex-end;\n  gap: var(--space-6);\n  padding-bottom: var(--space-6);\n  border-bottom: 1px solid var(--color-divider);\n}\n.tileHeadText {\n  flex: 1 1 320px;\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-2);\n}\n.tileKicker {\n  font-size: 10px;\n  letter-spacing: 0.1em;\n  text-transform: uppercase;\n  color: var(--color-accent);\n}\n.tileName {\n  margin: 0;\n  text-wrap: balance;\n}\n.tileBlurb {\n  margin: 0;\n  max-width: 62ch;\n}\n.tileSample {\n  margin: 0;\n  font-size: var(--text-sm);\n  color: var(--color-muted);\n}\n.themePick {\n  display: flex;\n  flex-direction: column;\n  align-items: flex-start;\n  gap: var(--space-2);\n}\n.themeSwitch {\n  display: inline-flex;\n  gap: var(--space-1);\n  padding: var(--space-1);\n  border: 1px solid var(--color-divider);\n  border-radius: var(--radius-md);\n  background: var(--color-surface);\n}\n.themeBtn {\n  all: unset;\n  cursor: pointer;\n  padding: var(--space-2) var(--space-4);\n  border-radius: var(--radius-sm);\n  font-size: var(--text-sm);\n  color: var(--color-muted);\n}\n.themeBtn:hover { background: var(--color-hover); }\n.themeBtn:focus-visible {\n  outline: 2px solid var(--color-accent);\n  outline-offset: 2px;\n}\n.themeBtn[aria-pressed=\"true\"] {\n  color: var(--color-text);\n  background: var(--color-active);\n  box-shadow: inset 0 0 0 1px var(--color-accent);\n}\n.themeState {\n  margin: 0;\n  font-size: var(--text-xs);\n  color: var(--color-muted);\n}\n.frag {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-3);\n  min-width: 0;\n}\n.fragLabel {\n  margin: 0;\n  font-family: var(--font-body);\n  font-weight: 400;\n  font-size: var(--text-xs);\n  line-height: 1.55;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  color: var(--color-muted);\n}\n.fragNote {\n  margin: 0;\n  font-size: var(--text-xs);\n  color: var(--color-muted);\n}\n.pair {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr);\n  gap: var(--space-8);\n  align-items: start;\n}\n@media (min-width: 960px) {\n  .pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n.stack {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-4);\n  min-width: 0;\n}\n.scrollBox {\n  overflow-x: auto;\n  max-width: 100%;\n}\n.fragSub {\n  margin: var(--space-2) 0 0;\n  font-family: var(--font-body);\n  font-weight: 400;\n  font-size: var(--text-xs);\n  line-height: 1.55;\n  letter-spacing: 0;\n  color: var(--color-muted);\n}\n.swatches {\n  list-style: none;\n  margin: 0;\n  padding: 0;\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));\n  gap: var(--space-3);\n}\n.swatchesRamp { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }\n.swatch {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-1);\n  min-width: 0;\n  line-height: 1.35;\n}\n.swatchChip {\n  height: 40px;\n  border-radius: var(--radius-sm);\n  border: 1px solid var(--color-divider);\n}\n.swatchRole {\n  font-size: var(--text-xs);\n  color: var(--color-text);\n}\n.swatchName,\n.swatchValue {\n  font-family: var(--font-mono);\n  font-size: var(--text-xs);\n  color: var(--color-muted);\n  overflow-wrap: anywhere;\n}\n.shapes {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: var(--space-8);\n  max-width: 620px;\n  padding: var(--space-2) var(--space-2) var(--space-6);\n}\n.shape {\n  display: flex;\n  flex-direction: column;\n  min-width: 0;\n  padding: var(--space-3);\n  background: var(--color-surface);\n  line-height: 1.35;\n}\n.shapeSm {\n  border-radius: var(--radius-sm);\n  box-shadow: var(--shadow-sm);\n}\n.shapeMd {\n  border-radius: var(--radius-md);\n  box-shadow: var(--shadow-md);\n}\n.shapeLg {\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-lg);\n}\n\n/* ---- shared primitives: styles/tokens.module.css ------------------------------------ */\n.card {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-2);\n  padding: var(--space-3);\n  border-radius: var(--radius-md);\n  background: var(--color-surface);\n}\n.cardLg {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-4);\n  padding: var(--space-4);\n  border-radius: var(--radius-lg);\n  background: var(--color-surface);\n}\n.kicker {\n  font-size: 10px;\n  letter-spacing: 0.1em;\n  text-transform: uppercase;\n  color: var(--color-neutral-500);\n}\n.mono {\n  font-family: var(--font-mono);\n  font-size: var(--text-xs);\n  color: var(--color-neutral-400);\n}\n.tag {\n  display: inline-flex;\n  align-items: center;\n  font-size: var(--text-xs);\n  letter-spacing: 0.02em;\n  padding: 3px 10px;\n  border-radius: calc(var(--radius-md) * 0.75);\n  white-space: nowrap;\n  flex: none;\n}\n.tagAccent {\n  background: var(--color-accent-800);\n  color: var(--color-accent-100);\n}\n.tagNeutral {\n  background: var(--color-neutral-800);\n  color: var(--color-neutral-100);\n}\n.tagOutline {\n  border: 1px solid var(--color-accent);\n  color: var(--color-accent);\n}\n.btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  cursor: pointer;\n  text-decoration: none;\n  font-family: var(--font-heading);\n  font-weight: var(--font-heading-weight);\n  font-size: 14px;\n  line-height: 1.2;\n  color: var(--color-text);\n  background: transparent;\n  border: 1px solid transparent;\n  padding: var(--space-2) calc(var(--space-3) * 1.2);\n  border-radius: var(--radius-md);\n}\n.btn:disabled {\n  opacity: 0.45;\n  cursor: not-allowed;\n}\n.btnPrimary {\n  color: var(--color-accent);\n  border-color: var(--color-accent);\n}\n.btnPrimary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }\n.btnPrimary:active:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 22%, transparent); }\n.btnSecondary { border-color: var(--color-divider); }\n.btnSecondary:hover:not(:disabled) { background: var(--color-hover); }\n.btnSecondary:active:not(:disabled) { background: var(--color-active); }\n.btnGhost {\n  color: var(--color-accent);\n  padding-inline: var(--space-1);\n}\n.btnGhost:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }\n/* planner/PlannerEventForm.module.css .delete: the secondary button, its words in danger. */\n.btnDanger { color: var(--color-danger); }\n.isFocus {\n  outline: 2px solid var(--color-accent);\n  outline-offset: 2px;\n}\n.input {\n  width: 100%;\n  min-height: 36px;\n  padding: 6px 10px;\n  font: inherit;\n  font-size: 14px;\n  color: var(--color-text);\n  caret-color: var(--color-accent);\n  background: var(--color-surface);\n  border: 1px solid var(--color-divider);\n  border-radius: var(--radius-md);\n}\n.input::placeholder { color: var(--color-muted); }\n.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }\n.input:focus-visible {\n  border-color: var(--color-accent);\n  outline-offset: 0;\n}\n.glyph {\n  display: inline-grid;\n  place-items: center;\n  width: 18px;\n  height: 18px;\n  border-radius: var(--radius-sm);\n  font-size: 10px;\n  font-weight: 500;\n  background: var(--type-reading-bg);\n  color: var(--type-reading-fg);\n}\n.glyphAssignment {\n  background: var(--type-assignment-bg);\n  color: var(--type-assignment-fg);\n}\n.glyphQuiz {\n  background: var(--type-quiz-bg);\n  color: var(--type-quiz-fg);\n}\n.glyphProject {\n  background: var(--type-project-bg);\n  color: var(--type-project-fg);\n}\n.glyphExam {\n  background: var(--type-exam-bg);\n  color: var(--type-exam-fg);\n}\n\n/* ---- (b) top bar: shell/TopNav, SyncButton, NavSearch ------------------------------- */\n.bar {\n  display: flex;\n  align-items: center;\n  gap: var(--space-8);\n  padding: 10px 28px;\n  min-height: var(--nav-height);\n  background: var(--color-surface);\n  box-shadow: inset 0 -1px 0 var(--color-divider);\n  font-size: var(--text-base);\n}\n.barDesktop { min-width: 900px; }\n.brand {\n  display: flex;\n  align-items: center;\n  gap: 9px;\n  margin-right: 6px;\n  font-family: var(--font-heading);\n  font-weight: var(--font-heading-weight);\n  font-size: 16px;\n  color: var(--color-text);\n  text-decoration: none;\n}\n.brand:hover { color: var(--color-text); }\n.mark {\n  width: 9px;\n  height: 9px;\n  border-radius: var(--radius-xs, 2px);\n  background: var(--color-accent);\n  box-shadow: var(--shadow-mark, 0 0 10px var(--color-accent));\n}\n.links {\n  display: flex;\n  align-items: center;\n  gap: var(--space-8);\n}\n.link {\n  color: var(--color-text);\n  text-decoration: none;\n  padding: 6px 2px;\n  white-space: nowrap;\n}\n.link:hover { color: var(--color-accent); }\n.link[aria-current=\"page\"] {\n  color: var(--color-accent);\n  box-shadow: inset 0 -2px 0 var(--color-accent);\n}\n.right {\n  margin-left: auto;\n  display: flex;\n  gap: var(--space-1);\n  align-items: center;\n  position: relative;\n}\n.ic {\n  all: unset;\n  width: 32px;\n  height: 32px;\n  display: grid;\n  place-items: center;\n  border-radius: var(--radius-md);\n  color: var(--color-neutral-200);\n  position: relative;\n  cursor: pointer;\n}\n.ic:hover { background: var(--color-hover); }\n.ic:focus-visible {\n  outline: 2px solid var(--color-accent);\n  outline-offset: 2px;\n}\n.ic svg {\n  width: 18px;\n  height: 18px;\n  fill: currentColor;\n  display: block;\n}\n.icSearch { margin-left: var(--space-3); }\n.badge {\n  position: absolute;\n  top: 3px;\n  right: 3px;\n  font-size: 9px;\n  padding: 0 4px;\n  border-radius: var(--radius-pill, 7px);\n  background: var(--color-accent-800);\n  color: var(--color-accent-100);\n  line-height: 14px;\n}\n.sync {\n  all: unset;\n  display: inline-flex;\n  align-items: center;\n  gap: var(--space-2);\n  padding: 5px 10px;\n  border-radius: var(--radius-md);\n  border: 1px solid var(--color-divider);\n  color: var(--color-neutral-300);\n  font-size: var(--text-sm);\n  white-space: nowrap;\n  cursor: pointer;\n}\n.sync:hover {\n  background: var(--color-hover);\n  color: var(--color-text);\n  border-color: var(--color-accent);\n}\n.sync:focus-visible {\n  outline: 2px solid var(--color-accent);\n  outline-offset: 2px;\n}\n.sync svg {\n  width: 14px;\n  height: 14px;\n  fill: currentColor;\n  display: block;\n}\n/* Phone: the 480 px step of TopNav.module.css. The Menu button in place of the links and\n   Sync as its icon alone are not in the app today; they are drawn in the Sync button's shape. */\n.barPhone {\n  max-width: 390px;\n  gap: var(--space-2);\n  padding: 10px var(--space-3);\n}\n.barPhone .brand { margin-right: 0; }\n\n/* ---- (c) type specimen (tile chrome around the app's faces and sizes) ---------------- */\n.spec {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr);\n  gap: var(--space-4) var(--space-8);\n  align-items: start;\n}\n@media (min-width: 960px) {\n  .spec { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n.specCol {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-3);\n  min-width: 0;\n}\n.specRow {\n  margin: 0;\n  display: flex;\n  flex-wrap: wrap;\n  align-items: baseline;\n  gap: var(--space-1) var(--space-4);\n}\n.specSample {\n  min-width: 0;\n  overflow-wrap: anywhere;\n}\n.specHeading {\n  font-family: var(--font-heading);\n  font-weight: var(--font-heading-weight);\n  line-height: 1.12;\n  letter-spacing: -0.015em;\n}\n.specMono { font-family: var(--font-mono); }\n.specMeta {\n  margin-left: auto;\n  font-family: var(--font-mono);\n  font-size: var(--text-xs);\n  color: var(--color-muted);\n  white-space: nowrap;\n}\n.t2xl { font-size: var(--text-2xl); }\n.txl { font-size: var(--text-xl); }\n.tlg { font-size: var(--text-lg); }\n.tmd { font-size: var(--text-md); }\n.tbase { font-size: var(--text-base); }\n.tsm { font-size: var(--text-sm); }\n.txs { font-size: var(--text-xs); }\n.w400 { font-weight: 400; }\n.w500 { font-weight: 500; }\n.w600 { font-weight: 600; }\n.specRule {\n  height: 1px;\n  border: 0;\n  margin: var(--space-1) 0;\n  background: var(--color-divider);\n}\n.numerals {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto auto;\n  gap: var(--space-1) var(--space-6);\n  font-size: var(--text-base);\n}\n.numerals .num {\n  text-align: right;\n  font-variant-numeric: tabular-nums;\n}\n.numerals .numMono {\n  text-align: right;\n  font-family: var(--font-mono);\n}\n.numerals .numHead {\n  font-size: 10px;\n  letter-spacing: 0.1em;\n  text-transform: uppercase;\n  color: var(--color-muted);\n}\n\n/* ---- (d) buttons (tile chrome: the row and its captions) ---------------------------- */\n.btnCard {\n  padding: var(--space-4);\n  box-shadow: var(--shadow-sm);\n}\n.btnRow {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: flex-start;\n  gap: var(--space-4) var(--space-6);\n}\n.btnCell {\n  display: flex;\n  flex-direction: column;\n  align-items: flex-start;\n  gap: var(--space-2);\n}\n.btnCaption {\n  font-size: var(--text-xs);\n  color: var(--color-muted);\n}\n\n/* ---- (e) grades: CourseGradeCard, GradedSoFarFigure, GradebookTable ------------------ */\n.gradeHead {\n  display: flex;\n  align-items: baseline;\n  justify-content: space-between;\n  gap: var(--space-4);\n  flex-wrap: wrap;\n}\n.gradeHeadText {\n  display: flex;\n  align-items: baseline;\n  gap: var(--space-3);\n  flex-wrap: wrap;\n}\n.gradeTitle {\n  margin: 0;\n  font-family: var(--font-heading);\n  font-weight: var(--font-heading-weight);\n  font-size: var(--text-lg);\n  color: var(--color-text);\n}\n.gradeSubtitle {\n  font-size: var(--text-sm);\n  color: var(--color-muted);\n}\n.openLink {\n  margin-inline-start: auto;\n  font-size: var(--text-sm);\n  color: var(--color-accent);\n  text-decoration: none;\n  border-radius: var(--radius-sm);\n}\n.openLink:hover,\n.openLink:focus-visible {\n  text-decoration: underline;\n  text-underline-offset: 0.18em;\n}\n.figure {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-2);\n  align-items: flex-start;\n}\n.headline {\n  display: flex;\n  align-items: baseline;\n  gap: var(--space-3);\n  flex-wrap: wrap;\n}\n.percent {\n  font-family: var(--font-mono);\n  font-size: var(--text-xl);\n  color: var(--color-text);\n}\n.note {\n  font-size: var(--text-xs);\n  color: var(--color-muted);\n}\n.sentence {\n  margin: 0;\n  font-size: var(--text-xs);\n  color: var(--color-muted);\n  max-width: 62ch;\n}\n.blackboard {\n  display: flex;\n  align-items: baseline;\n  gap: var(--space-2);\n  flex-wrap: wrap;\n}\n.blackboardScore {\n  font-family: var(--font-mono);\n  font-size: var(--text-base);\n  color: var(--color-text);\n}\n.gbTable {\n  width: 100%;\n  min-width: 500px;\n  border-collapse: collapse;\n  font-size: var(--text-base);\n}\n.gbTable thead th {\n  text-align: left;\n  font-family: var(--font-heading);\n  font-weight: var(--font-heading-weight);\n  font-size: 10px;\n  letter-spacing: 0.1em;\n  text-transform: uppercase;\n  color: var(--color-neutral-500);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--color-divider);\n}\n.gbRow > th,\n.gbRow > td {\n  padding: var(--space-3);\n  vertical-align: top;\n  border-bottom: 1px solid var(--color-divider);\n}\n.nameCell {\n  text-align: left;\n  font-weight: 400;\n}\n.nameStack {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: var(--space-2);\n}\n.nameLine {\n  min-width: 0;\n  overflow-wrap: anywhere;\n}\n.feedbackMark {\n  font-size: var(--text-xs);\n  line-height: 0;\n  color: var(--color-accent);\n  margin-inline-start: 1px;\n  cursor: help;\n}\n.itemLink {\n  color: var(--color-accent);\n  text-decoration: none;\n}\n.itemLink:hover { text-decoration: underline; }\n.submissionStack {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-1);\n  align-items: flex-start;\n}\n.scoreCell,\n.seenCell {\n  white-space: nowrap;\n}\n.score {\n  font-family: var(--font-mono);\n  font-size: var(--text-base);\n  color: var(--color-text);\n}\n\n/* ---- (f) tracker: UpcomingTracker ---------------------------------------------------- */\n.sectionHead {\n  display: flex;\n  align-items: baseline;\n  gap: var(--space-4);\n  flex-wrap: wrap;\n}\n.sectionH2 {\n  font-size: var(--text-lg);\n  margin: 0;\n}\n.sectionSub {\n  font-size: var(--text-sm);\n  color: var(--color-muted);\n  white-space: nowrap;\n}\n.legend {\n  margin-left: auto;\n  display: flex;\n  gap: var(--space-3);\n  align-items: center;\n  font-size: var(--text-xs);\n  color: var(--color-neutral-500);\n  flex-wrap: wrap;\n}\n.legendItem {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n}\n.tracker {\n  display: flex;\n  overflow-x: auto;\n  overscroll-behavior-x: contain;\n  scrollbar-width: thin;\n  scrollbar-color: var(--color-neutral-600) var(--color-divider);\n  padding-bottom: var(--space-2);\n  align-items: flex-end;\n}\n.day {\n  all: unset;\n  cursor: pointer;\n  flex: none;\n  width: calc(100% / 7);\n  min-width: 54px;\n  box-sizing: border-box;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--space-2);\n  padding: var(--space-2) 4px;\n  border-radius: var(--radius-md);\n  border-left: 1px solid transparent;\n}\n.day:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }\n.day:focus-visible {\n  outline: 2px solid var(--color-accent);\n  outline-offset: -2px;\n}\n.daySelected,\n.daySelected:hover {\n  background: var(--color-accent-900);\n  box-shadow: inset 0 0 0 1px var(--color-accent);\n}\n.dayMonday { border-left: 1px solid var(--color-divider); }\n.dayCount {\n  font-size: var(--text-xs);\n  color: var(--color-neutral-300);\n  height: 14px;\n}\n.barArea {\n  display: flex;\n  flex-direction: column-reverse;\n  gap: 1px;\n  height: 120px;\n  width: 100%;\n  justify-content: flex-start;\n}\n.seg {\n  display: block;\n  width: 100%;\n  border-radius: var(--radius-xs, 2px);\n}\n.segReading { background: var(--type-reading-bg); }\n.segAssignment { background: var(--type-assignment-bg); }\n.segQuiz { background: var(--type-quiz-bg); }\n.segProject { background: var(--type-project-bg); }\n.segExam { background: var(--type-exam-bg); }\n.dowLabel {\n  font-size: var(--text-xs);\n  color: var(--color-neutral-300);\n  white-space: nowrap;\n}\n.dowWeekend { color: var(--color-neutral-600); }\n.dowToday { color: var(--color-accent); }\n.dateNum {\n  font-family: var(--font-mono);\n  font-size: 10px;\n  color: var(--color-neutral-400);\n}\n\n/* ---- (g) planner blocks: PlannerWeek ------------------------------------------------- */\n.plannerDemo {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: var(--space-3);\n  padding: var(--space-3);\n  border-radius: var(--radius-lg);\n  background: var(--color-surface);\n  box-shadow: inset 0 0 0 1px var(--color-divider);\n}\n@media (min-width: 560px) {\n  .plannerDemo { grid-template-columns: repeat(3, minmax(0, 1fr)); }\n}\n.eventBlock {\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  min-height: 62px;\n  padding: 3px 5px;\n  border-radius: var(--radius-sm);\n  font-size: var(--text-xs);\n  line-height: 14px;\n  cursor: pointer;\n  background: var(--planner-kind-bg);\n  color: var(--planner-kind-fg);\n  box-shadow: inset 2px 0 0 var(--planner-kind-edge);\n}\n.eventBlock[data-kind=\"event\"] {\n  --planner-kind-bg: var(--planner-event-bg);\n  --planner-kind-fg: var(--planner-event-fg);\n  --planner-kind-edge: var(--planner-event-edge);\n}\n.eventBlock[data-kind=\"task\"] {\n  --planner-kind-bg: var(--planner-task-bg);\n  --planner-kind-fg: var(--planner-task-fg);\n  --planner-kind-edge: var(--planner-task-edge);\n}\n.eventBlock[data-kind=\"out_of_office\"] {\n  --planner-kind-bg: var(--planner-ooo-bg);\n  --planner-kind-fg: var(--planner-ooo-fg);\n  --planner-kind-edge: var(--planner-ooo-edge);\n  background-image: repeating-linear-gradient(\n    135deg,\n    var(--planner-ooo-hatch) 0 4px,\n    transparent 4px 9px\n  );\n}\n.eventBlock[data-kind=\"focus_time\"] {\n  --planner-kind-bg: var(--planner-focus-bg);\n  --planner-kind-fg: var(--planner-focus-fg);\n  --planner-kind-edge: var(--planner-focus-edge);\n}\n.eventBlock[data-kind=\"working_location\"] {\n  --planner-kind-bg: var(--planner-worklocation-bg);\n  --planner-kind-fg: var(--planner-worklocation-fg);\n  --planner-kind-edge: var(--planner-worklocation-edge);\n  outline: 1px dashed var(--planner-worklocation-edge);\n  outline-offset: -1px;\n}\n.eventBlock[data-kind=\"appointment_slot\"] {\n  --planner-kind-bg: var(--planner-appointment-bg);\n  --planner-kind-fg: var(--planner-appointment-fg);\n  --planner-kind-edge: var(--planner-appointment-edge);\n  outline: 1px dotted var(--planner-appointment-edge);\n  outline-offset: -1px;\n}\n.blockHead {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 0 4px;\n  min-width: 0;\n}\n.eventKind {\n  font-size: 10px;\n  letter-spacing: 0.06em;\n  text-transform: uppercase;\n  opacity: 0.8;\n  white-space: nowrap;\n}\n.blockTime {\n  margin-left: auto;\n  font-size: var(--text-xs);\n  color: inherit;\n  opacity: 0.75;\n  white-space: normal;\n}\n.eventTitle {\n  all: unset;\n  display: block;\n  min-width: 0;\n  max-width: 100%;\n  overflow-wrap: anywhere;\n  cursor: pointer;\n}\n.eventTitle:focus-visible {\n  outline: 2px solid var(--color-accent);\n  outline-offset: 1px;\n}\n.eventDone {\n  flex: none;\n  width: 12px;\n  height: 12px;\n  margin: 0;\n  accent-color: var(--color-accent);\n  cursor: pointer;\n}\n.eventMeta {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  min-width: 0;\n}\n.zoneChip {\n  flex: none;\n  align-self: flex-start;\n  padding: 0 4px;\n  border-radius: var(--radius-sm);\n  font-family: var(--font-mono);\n  font-size: 10px;\n  white-space: nowrap;\n  background: color-mix(in srgb, var(--color-bg) 45%, transparent);\n}\n.blockRoom {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  opacity: 0.8;\n}\n\n/* ---- (h) Inbox row: InboxCard -------------------------------------------------------- */\n.inboxCard {\n  gap: var(--space-3);\n  padding: var(--space-4);\n  box-shadow: var(--shadow-sm);\n}\n.chips {\n  display: flex;\n  align-items: center;\n  gap: var(--space-2);\n  flex-wrap: wrap;\n}\n.chip {\n  font-size: var(--text-xs);\n  padding: 2px var(--space-2);\n  border-radius: var(--radius-sm);\n  border: 1px solid var(--color-divider);\n  color: var(--color-neutral-300);\n  white-space: nowrap;\n}\n.chipMono {\n  font-family: var(--font-mono);\n}\n.kindChip { color: var(--color-accent-300); }\n.age { color: var(--color-neutral-500); }\n.inboxTitle {\n  margin: 0;\n  font-family: var(--font-heading);\n  font-weight: var(--font-heading-weight);\n  font-size: var(--text-md);\n  max-width: 80ch;\n}\n.compare {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-2);\n}\n.field { color: var(--color-neutral-400); }\n.panes {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));\n  gap: var(--space-3);\n}\n.pane {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-radius: var(--radius-md);\n  border: 1px solid var(--color-divider);\n  background: var(--color-bg);\n  min-width: 0;\n}\n.value {\n  font-family: var(--font-mono);\n  font-size: var(--text-sm);\n  color: var(--color-text);\n  overflow-wrap: anywhere;\n}\n.meta {\n  margin: 0;\n  display: flex;\n  align-items: baseline;\n  gap: var(--space-2);\n  flex-wrap: wrap;\n  font-size: var(--text-sm);\n  color: var(--color-muted);\n}\n.sourceLink {\n  color: var(--color-accent);\n  text-decoration: none;\n  white-space: nowrap;\n}\n.sourceLink:hover { text-decoration: underline; }\n.controls {\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-3);\n  margin-top: var(--space-1);\n}\n.noteField {\n  display: flex;\n  flex-direction: column;\n  gap: 3px;\n  width: 100%;\n}\n.choices {\n  display: flex;\n  align-items: flex-start;\n  gap: var(--space-4);\n  flex-wrap: wrap;\n}\n.choice {\n  display: flex;\n  flex-direction: column;\n  align-items: flex-start;\n  gap: var(--space-2);\n  max-width: 44ch;\n}\n.outcome {\n  margin: 0;\n  font-size: var(--text-xs);\n  line-height: 1.45;\n  color: var(--color-neutral-400);\n}\n\n/* ---- (i) notices: Inbox.module.css .problem and .empty ------------------------------- */\n.problem {\n  margin: 0;\n  padding: var(--space-2) var(--space-3);\n  border-radius: var(--radius-md);\n  background: var(--color-danger-bg);\n  color: var(--color-danger);\n  font-size: var(--text-sm);\n}\n.empty {\n  margin: 0;\n  font-size: var(--text-base);\n  color: var(--color-muted);\n  max-width: 62ch;\n}\n\n/* ---- (j) popout header: Popout.module.css -------------------------------------------- */\n.panel {\n  position: relative;\n  width: min(760px, 100%);\n  display: flex;\n  flex-direction: column;\n  gap: var(--space-4);\n  padding: var(--space-6);\n  border-radius: var(--radius-lg);\n  border: 1px solid var(--color-divider);\n  background: var(--color-surface);\n  box-shadow: var(--shadow-lg);\n}\n.close {\n  all: unset;\n  position: absolute;\n  top: var(--space-4);\n  right: var(--space-4);\n  cursor: pointer;\n  line-height: 1;\n  padding: 4px 8px;\n  border-radius: var(--radius-sm);\n  color: var(--color-neutral-400);\n}\n.close:hover {\n  background: var(--color-hover);\n  color: var(--color-text);\n}\n.close:focus-visible { outline: 2px solid var(--color-accent); }\n.breadcrumb {\n  display: flex;\n  align-items: center;\n  gap: var(--space-2);\n  flex-wrap: wrap;\n  padding-right: var(--space-8);\n}\n.popTitle {\n  font-family: var(--font-heading);\n  font-weight: var(--font-heading-weight);\n  font-size: var(--text-lg);\n  margin: 0;\n}\n.subTitle {\n  display: flex;\n  align-items: center;\n  gap: var(--space-3);\n  flex-wrap: wrap;\n  font-size: var(--text-sm);\n  color: var(--color-neutral-400);\n}\n.facts {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));\n  gap: var(--space-4);\n  padding: var(--space-3) 0;\n  box-shadow: inset 0 1px 0 var(--color-divider), inset 0 -1px 0 var(--color-divider);\n}\n.fact {\n  display: flex;\n  flex-direction: column;\n  gap: 3px;\n  min-width: 0;\n}\n.factValue {\n  font-size: var(--text-base);\n  overflow-wrap: anywhere;\n}\n.factNote {\n  font-size: var(--text-xs);\n  color: var(--color-neutral-500);\n}\n\n@media (max-width: 620px) {\n  .panel { padding: var(--space-4); }\n}\n@media (prefers-reduced-motion: reduce) {\n  *,\n  *::before,\n  *::after {\n    animation: none !important;\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}","frags":{"topbar":"\u003csection class=\"frag\" id=\"frag-topbar\" aria-labelledby=\"label-topbar\">\n    \u003ch2 class=\"fragLabel\" id=\"label-topbar\">Top bar, desktop\u003c/h2>\n    \u003cdiv class=\"scrollBox\">\n      \u003cnav class=\"bar barDesktop\" aria-label=\"Primary, desktop sample\">\n        \u003ca class=\"brand\" href=\"#frag-topbar\">\n          \u003cspan class=\"mark\" aria-hidden=\"true\">\u003c/span>\n          \u003cspan>bb2dash\u003c/span>\n        \u003c/a>\n        \u003cspan class=\"links\">\n          \u003ca class=\"link\" href=\"#frag-topbar\" aria-current=\"page\">Home\u003c/a>\n          \u003ca class=\"link\" href=\"#frag-topbar\">Planner\u003c/a>\n          \u003ca class=\"link\" href=\"#frag-topbar\">Inbox\u003c/a>\n          \u003ca class=\"link\" href=\"#frag-topbar\">Grades\u003c/a>\n          \u003ca class=\"link\" href=\"#frag-topbar\">Materials\u003c/a>\n          \u003ca class=\"link\" href=\"#frag-topbar\">Workspace\u003c/a>\n        \u003c/span>\n        \u003cspan class=\"right\">\n          \u003cbutton type=\"button\" class=\"sync\" title=\"Sync\">\n            \u003csvg viewBox=\"0 0 24 24\" aria-hidden=\"true\">\u003cpath d=\"M12 5V2L8 6l4 4V7c2.76 0 5 2.24 5 5 0 .85-.21 1.65-.6 2.35l1.47 1.47A6.94 6.94 0 0 0 19 12c0-3.87-3.13-7-7-7zm0 12c-2.76 0-5-2.24-5-5 0-.85.21-1.65.6-2.35L6.13 8.18A6.94 6.94 0 0 0 5 12c0 3.87 3.13 7 7 7v3l4-4-4-4v3z\"/>\u003c/svg>\n            Sync\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"ic icSearch\" title=\"Search\">\n            \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"m229.66 218.34-50.07-50.06a88.11 88.11 0 1 0-11.31 11.31l50.06 50.07a8 8 0 0 0 11.32-11.32ZM40 112a72 72 0 1 1 72 72 72.08 72.08 0 0 1-72-72Z\"/>\u003c/svg>\n            \u003cspan class=\"sr-only\">Search\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"ic\" title=\"Courses sidebar\">\n            \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z\"/>\u003c/svg>\n            \u003cspan class=\"sr-only\">Courses sidebar\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"ic\" title=\"Activity\">\n            \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"M232 128a8 8 0 0 1-8 8h-42.11l-26.22 60.5a8 8 0 0 1-14.66-.2l-46.4-119.3-22.28 51.4A8 8 0 0 1 65 136H32a8 8 0 0 1 0-16h27.76l30.9-71.28a8 8 0 0 1 14.66.2l46.4 119.3 22.28-51.4A8 8 0 0 1 181.35 112H224a8 8 0 0 1 8 16Z\"/>\u003c/svg>\n            \u003cspan class=\"sr-only\">Activity\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"ic\" title=\"Announcements\">\n            \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z\"/>\u003c/svg>\n            \u003cspan class=\"sr-only\">Announcements, 2 unread\u003c/span>\n            \u003cspan class=\"badge\" aria-hidden=\"true\">2\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"ic\" title=\"Account\">\n            \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z\"/>\u003c/svg>\n            \u003cspan class=\"sr-only\">Account\u003c/span>\n          \u003c/button>\n        \u003c/span>\n      \u003c/nav>\n    \u003c/div>\n\n    \u003ch2 class=\"fragLabel\" id=\"label-topbar-phone\">Top bar, phone\u003c/h2>\n    \u003cnav class=\"bar barPhone\" aria-label=\"Primary, phone sample\">\n      \u003ca class=\"brand\" href=\"#frag-topbar\">\n        \u003cspan class=\"mark\" aria-hidden=\"true\">\u003c/span>\n        \u003cspan class=\"sr-only\">bb2dash\u003c/span>\n      \u003c/a>\n      \u003cbutton type=\"button\" class=\"sync\" aria-expanded=\"false\">Menu\u003c/button>\n      \u003cspan class=\"right\">\n        \u003cbutton type=\"button\" class=\"sync\" title=\"Sync\">\n          \u003csvg viewBox=\"0 0 24 24\" aria-hidden=\"true\">\u003cpath d=\"M12 5V2L8 6l4 4V7c2.76 0 5 2.24 5 5 0 .85-.21 1.65-.6 2.35l1.47 1.47A6.94 6.94 0 0 0 19 12c0-3.87-3.13-7-7-7zm0 12c-2.76 0-5-2.24-5-5 0-.85.21-1.65.6-2.35L6.13 8.18A6.94 6.94 0 0 0 5 12c0 3.87 3.13 7 7 7v3l4-4-4-4v3z\"/>\u003c/svg>\n          \u003cspan class=\"sr-only\">Sync\u003c/span>\n        \u003c/button>\n        \u003cbutton type=\"button\" class=\"ic icSearch\" title=\"Search\">\n          \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"m229.66 218.34-50.07-50.06a88.11 88.11 0 1 0-11.31 11.31l50.06 50.07a8 8 0 0 0 11.32-11.32ZM40 112a72 72 0 1 1 72 72 72.08 72.08 0 0 1-72-72Z\"/>\u003c/svg>\n          \u003cspan class=\"sr-only\">Search\u003c/span>\n        \u003c/button>\n        \u003cbutton type=\"button\" class=\"ic\" title=\"Courses sidebar\">\n          \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z\"/>\u003c/svg>\n          \u003cspan class=\"sr-only\">Courses sidebar\u003c/span>\n        \u003c/button>\n        \u003cbutton type=\"button\" class=\"ic\" title=\"Activity\">\n          \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"M232 128a8 8 0 0 1-8 8h-42.11l-26.22 60.5a8 8 0 0 1-14.66-.2l-46.4-119.3-22.28 51.4A8 8 0 0 1 65 136H32a8 8 0 0 1 0-16h27.76l30.9-71.28a8 8 0 0 1 14.66.2l46.4 119.3 22.28-51.4A8 8 0 0 1 181.35 112H224a8 8 0 0 1 8 16Z\"/>\u003c/svg>\n          \u003cspan class=\"sr-only\">Activity\u003c/span>\n        \u003c/button>\n        \u003cbutton type=\"button\" class=\"ic\" title=\"Announcements\">\n          \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.8a40 40 0 0 0 78.4 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z\"/>\u003c/svg>\n          \u003cspan class=\"sr-only\">Announcements, 2 unread\u003c/span>\n          \u003cspan class=\"badge\" aria-hidden=\"true\">2\u003c/span>\n        \u003c/button>\n        \u003cbutton type=\"button\" class=\"ic\" title=\"Account\">\n          \u003csvg viewBox=\"0 0 256 256\" aria-hidden=\"true\">\u003cpath d=\"M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z\"/>\u003c/svg>\n          \u003cspan class=\"sr-only\">Account\u003c/span>\n        \u003c/button>\n      \u003c/span>\n    \u003c/nav>\n  \u003c/section>","type":"\u003csection class=\"frag\" id=\"frag-type\" aria-labelledby=\"label-type\">\n    \u003ch2 class=\"fragLabel\" id=\"label-type\">Type\u003c/h2>\n    \u003cdiv class=\"spec\">\n      \u003cdiv class=\"specCol\">\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample specHeading t2xl\" data-font-probe=\"heading\">Thursday, week seven\u003c/span>\u003cspan class=\"specMeta\">heading 28\u003c/span>\u003c/p>\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample specHeading txl\">Course A, sample section\u003c/span>\u003cspan class=\"specMeta\">heading 20\u003c/span>\u003c/p>\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample specHeading tlg\">Upcoming work\u003c/span>\u003cspan class=\"specMeta\">heading 17\u003c/span>\u003c/p>\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample specHeading tmd\">Sample quiz 1 moved to Friday\u003c/span>\u003cspan class=\"specMeta\">heading 15\u003c/span>\u003c/p>\n        \u003chr class=\"specRule\">\n        \u003cp class=\"specRow tmd\">\n          \u003cspan class=\"specSample w400\">Regular 400\u003c/span>\n          \u003cspan class=\"specSample w500\">Medium 500\u003c/span>\n          \u003cspan class=\"specSample w600\">Semibold 600\u003c/span>\n          \u003cspan class=\"specSample specHeading\">Heading weight\u003c/span>\n          \u003cspan class=\"specMeta\">weights\u003c/span>\n        \u003c/p>\n      \u003c/div>\n      \u003cdiv class=\"specCol\">\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample tmd\" data-font-probe=\"body\">Body text at the page size. Two readings and one quiz are due this week.\u003c/span>\u003cspan class=\"specMeta\">body 15\u003c/span>\u003c/p>\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample tbase\">Table rows and the top bar links sit at this size.\u003c/span>\u003cspan class=\"specMeta\">body 13.5\u003c/span>\u003c/p>\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample tsm\">Notes, toasts and second lines sit at this size.\u003c/span>\u003cspan class=\"specMeta\">body 12.5\u003c/span>\u003c/p>\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample txs\">Chips, timestamps and planner blocks sit at this size.\u003c/span>\u003cspan class=\"specMeta\">body 11\u003c/span>\u003c/p>\n        \u003cp class=\"specRow\">\u003cspan class=\"specSample specMono tbase\" data-font-probe=\"mono\">18 / 20 &nbsp; 87.5% &nbsp; 09:30\u003c/span>\u003cspan class=\"specMeta\">mono 13.5\u003c/span>\u003c/p>\n        \u003chr class=\"specRule\">\n        \u003cdiv class=\"numerals\" role=\"table\" aria-label=\"Numerals, lined up\">\n          \u003cspan class=\"numHead\" role=\"columnheader\">Item\u003c/span>\n          \u003cspan class=\"numHead num\" role=\"columnheader\">Body, tabular\u003c/span>\n          \u003cspan class=\"numHead numMono\" role=\"columnheader\">Mono\u003c/span>\n          \u003cspan>Sample quiz 1\u003c/span>\u003cspan class=\"num\">18.00 / 20\u003c/span>\u003cspan class=\"numMono\">18.00 / 20\u003c/span>\n          \u003cspan>Sample essay 1\u003c/span>\u003cspan class=\"num\">111.50 / 120\u003c/span>\u003cspan class=\"numMono\">111.50 / 120\u003c/span>\n          \u003cspan>Sample lab 1\u003c/span>\u003cspan class=\"num\">7.25 / 10\u003c/span>\u003cspan class=\"numMono\">7.25 / 10\u003c/span>\n        \u003c/div>\n      \u003c/div>\n    \u003c/div>\n  \u003c/section>","buttons":"\u003csection class=\"frag\" id=\"frag-buttons\" aria-labelledby=\"label-buttons\">\n    \u003ch2 class=\"fragLabel\" id=\"label-buttons\">Buttons\u003c/h2>\n    \u003cdiv class=\"card btnCard\">\n      \u003cdiv class=\"btnRow\">\n        \u003cspan class=\"btnCell\">\u003cbutton type=\"button\" class=\"btn btnPrimary\">Save\u003c/button>\u003cspan class=\"btnCaption\">primary\u003c/span>\u003c/span>\n        \u003cspan class=\"btnCell\">\u003cbutton type=\"button\" class=\"btn btnSecondary\">Keep mine\u003c/button>\u003cspan class=\"btnCaption\">secondary\u003c/span>\u003c/span>\n        \u003cspan class=\"btnCell\">\u003cbutton type=\"button\" class=\"btn btnGhost\">Undo\u003c/button>\u003cspan class=\"btnCaption\">quiet\u003c/span>\u003c/span>\n        \u003cspan class=\"btnCell\">\u003cbutton type=\"button\" class=\"btn btnSecondary btnDanger\">Delete\u003c/button>\u003cspan class=\"btnCaption\">danger\u003c/span>\u003c/span>\n        \u003cspan class=\"btnCell\">\u003cbutton type=\"button\" class=\"btn btnPrimary\" disabled>Save\u003c/button>\u003cspan class=\"btnCaption\">disabled\u003c/span>\u003c/span>\n        \u003cspan class=\"btnCell\">\u003cbutton type=\"button\" class=\"btn btnSecondary isFocus\">Dismiss\u003c/button>\u003cspan class=\"btnCaption\">focus shown\u003c/span>\u003c/span>\n      \u003c/div>\n    \u003c/div>\n    \u003cp class=\"fragNote\">Danger is the planner's Delete: the secondary button with its words in the danger colour.\u003c/p>\n  \u003c/section>","grades":"\u003csection class=\"frag\" id=\"frag-grades\" aria-labelledby=\"label-grades\">\n      \u003ch2 class=\"fragLabel\" id=\"label-grades\">Graded so far, and a gradebook row\u003c/h2>\n      \u003cdiv class=\"cardLg\">\n        \u003cdiv class=\"gradeHead\">\n          \u003cdiv class=\"gradeHeadText\">\n            \u003ch3 class=\"gradeTitle\">Course A\u003c/h3>\n            \u003cspan class=\"gradeSubtitle\">Sample course\u003c/span>\n          \u003c/div>\n          \u003ca class=\"openLink\" href=\"#frag-grades\">Open course\u003c/a>\n        \u003c/div>\n        \u003cdiv class=\"figure\">\n          \u003cspan class=\"kicker\">Graded so far\u003c/span>\n          \u003cspan class=\"headline\">\n            \u003cspan class=\"percent\">87.5%\u003c/span>\n            \u003cspan class=\"tag tagOutline\">B+\u003c/span>\n            \u003cspan class=\"mono\">52.5 / 60\u003c/span>\n            \u003cspan class=\"note\">as of Oct 6, 9:12 AM\u003c/span>\n          \u003c/span>\n          \u003cp class=\"sentence\">Not counted yet: Sample project, Sample final exam\u003c/p>\n          \u003cspan class=\"blackboard\">\n            \u003cspan class=\"tag tagNeutral\">Blackboard’s own total\u003c/span>\n            \u003cspan class=\"blackboardScore\">88.1 / 100\u003c/span>\n            \u003cspan class=\"note\">as of Oct 6, 9:12 AM\u003c/span>\n          \u003c/span>\n        \u003c/div>\n        \u003cdiv class=\"scrollBox\">\n          \u003ctable class=\"gbTable\">\n            \u003ccaption class=\"sr-only\">Sample gradebook row\u003c/caption>\n            \u003cthead>\n              \u003ctr>\n                \u003cth scope=\"col\">Item\u003c/th>\n                \u003cth scope=\"col\">Submission\u003c/th>\n                \u003cth scope=\"col\">Score\u003c/th>\n                \u003cth scope=\"col\">Seen\u003c/th>\n              \u003c/tr>\n            \u003c/thead>\n            \u003ctbody>\n              \u003ctr class=\"gbRow\">\n                \u003cth scope=\"row\" class=\"nameCell\">\n                  \u003cdiv class=\"nameStack\">\n                    \u003cspan class=\"nameLine\">\u003ca class=\"itemLink\" href=\"#frag-grades\">Sample quiz 1\u003c/a>\u003csup class=\"feedbackMark\" title=\"The instructor left feedback.\">*\u003c/sup>\u003c/span>\n                    \u003cspan class=\"tag tagOutline\">counts toward grade\u003c/span>\n                  \u003c/div>\n                \u003c/th>\n                \u003ctd>\n                  \u003cdiv class=\"submissionStack\">\n                    \u003cspan class=\"tag tagNeutral\">Graded\u003c/span>\n                    \u003cspan class=\"note\">last attempt: completed\u003c/span>\n                  \u003c/div>\n                \u003c/td>\n                \u003ctd class=\"scoreCell\">\u003cspan class=\"score\">18 / 20\u003c/span>\u003c/td>\n                \u003ctd class=\"seenCell\">\u003cspan class=\"mono\">Oct 6, 9:12 AM\u003c/span>\u003c/td>\n              \u003c/tr>\n            \u003c/tbody>\n          \u003c/table>\n        \u003c/div>\n      \u003c/div>\n    \u003c/section>","tracker":"\u003csection class=\"frag\" id=\"frag-tracker\" aria-labelledby=\"label-tracker\">\n      \u003ch2 class=\"fragLabel\" id=\"label-tracker\">Tracker chips\u003c/h2>\n      \u003cdiv class=\"cardLg\">\n        \u003cdiv class=\"sectionHead\">\n          \u003ch3 class=\"sectionH2\">Upcoming work\u003c/h3>\n          \u003cspan class=\"sectionSub\">sample week\u003c/span>\n          \u003cspan class=\"legend\">\n            \u003cspan class=\"legendItem\">\u003cspan class=\"glyph\">R\u003c/span>reading\u003c/span>\n            \u003cspan class=\"legendItem\">\u003cspan class=\"glyph glyphAssignment\">A\u003c/span>assignment\u003c/span>\n            \u003cspan class=\"legendItem\">\u003cspan class=\"glyph glyphQuiz\">Q\u003c/span>quiz\u003c/span>\n            \u003cspan class=\"legendItem\">\u003cspan class=\"glyph glyphProject\">P\u003c/span>project\u003c/span>\n            \u003cspan class=\"legendItem\">\u003cspan class=\"glyph glyphExam\">E\u003c/span>exam\u003c/span>\n          \u003c/span>\n        \u003c/div>\n        \u003cdiv class=\"tracker\">\n          \u003cbutton type=\"button\" class=\"day dayMonday\">\n            \u003cspan class=\"dayCount\">2\u003c/span>\n            \u003cspan class=\"barArea\">\u003cspan class=\"seg segReading\" style=\"height: 28px\">\u003c/span>\u003cspan class=\"seg segAssignment\" style=\"height: 38px\">\u003c/span>\u003c/span>\n            \u003cspan class=\"dowLabel\">Mon\u003c/span>\u003cspan class=\"dateNum\">12\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"day\">\n            \u003cspan class=\"dayCount\">1\u003c/span>\n            \u003cspan class=\"barArea\">\u003cspan class=\"seg segReading\" style=\"height: 23px\">\u003c/span>\u003c/span>\n            \u003cspan class=\"dowLabel\">Tue\u003c/span>\u003cspan class=\"dateNum\">13\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"day\">\n            \u003cspan class=\"dayCount\">3\u003c/span>\n            \u003cspan class=\"barArea\">\u003cspan class=\"seg segReading\" style=\"height: 20px\">\u003c/span>\u003cspan class=\"seg segQuiz\" style=\"height: 30px\">\u003c/span>\u003cspan class=\"seg segAssignment\" style=\"height: 35px\">\u003c/span>\u003c/span>\n            \u003cspan class=\"dowLabel\">Wed\u003c/span>\u003cspan class=\"dateNum\">14\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"day daySelected\" aria-pressed=\"true\">\n            \u003cspan class=\"dayCount\">5\u003c/span>\n            \u003cspan class=\"barArea\">\u003cspan class=\"seg segReading\" style=\"height: 18px\">\u003c/span>\u003cspan class=\"seg segAssignment\" style=\"height: 23px\">\u003c/span>\u003cspan class=\"seg segQuiz\" style=\"height: 20px\">\u003c/span>\u003cspan class=\"seg segProject\" style=\"height: 28px\">\u003c/span>\u003cspan class=\"seg segExam\" style=\"height: 25px\">\u003c/span>\u003c/span>\n            \u003cspan class=\"dowLabel dowToday\">Thu\u003c/span>\u003cspan class=\"dateNum\">15\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"day\">\n            \u003cspan class=\"dayCount\">2\u003c/span>\n            \u003cspan class=\"barArea\">\u003cspan class=\"seg segProject\" style=\"height: 45px\">\u003c/span>\u003cspan class=\"seg segQuiz\" style=\"height: 25px\">\u003c/span>\u003c/span>\n            \u003cspan class=\"dowLabel\">Fri\u003c/span>\u003cspan class=\"dateNum\">16\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"day\">\n            \u003cspan class=\"dayCount\">1\u003c/span>\n            \u003cspan class=\"barArea\">\u003cspan class=\"seg segExam\" style=\"height: 55px\">\u003c/span>\u003c/span>\n            \u003cspan class=\"dowLabel dowWeekend\">Sat\u003c/span>\u003cspan class=\"dateNum\">17\u003c/span>\n          \u003c/button>\n          \u003cbutton type=\"button\" class=\"day\">\n            \u003cspan class=\"dayCount\">\u003c/span>\n            \u003cspan class=\"barArea\">\u003c/span>\n            \u003cspan class=\"dowLabel dowWeekend\">Sun\u003c/span>\u003cspan class=\"dateNum\">18\u003c/span>\n          \u003c/button>\n        \u003c/div>\n      \u003c/div>\n    \u003c/section>","planner":"\u003csection class=\"frag\" id=\"frag-planner\" aria-labelledby=\"label-planner\">\n      \u003ch2 class=\"fragLabel\" id=\"label-planner\">Planner blocks\u003c/h2>\n      \u003cdiv class=\"plannerDemo\">\n        \u003cdiv class=\"eventBlock\" data-kind=\"event\">\n          \u003cspan class=\"blockHead\">\u003cspan class=\"eventKind\">Event\u003c/span>\u003cspan class=\"blockTime\">6:00 – 7:00 PM\u003c/span>\u003c/span>\n          \u003cbutton type=\"button\" class=\"eventTitle\">Club meeting\u003c/button>\n          \u003cspan class=\"eventMeta\">\u003cspan class=\"blockRoom\">Room 101\u003c/span>\u003c/span>\n        \u003c/div>\n        \u003cdiv class=\"eventBlock\" data-kind=\"task\">\n          \u003cspan class=\"blockHead\">\u003cinput type=\"checkbox\" class=\"eventDone\" id=\"sample-task-done\" aria-label=\"Done\">\u003cspan class=\"eventKind\">Task\u003c/span>\u003cspan class=\"blockTime\">2:00 – 2:30 PM\u003c/span>\u003c/span>\n          \u003cbutton type=\"button\" class=\"eventTitle\">Print the lab report\u003c/button>\n        \u003c/div>\n        \u003cdiv class=\"eventBlock\" data-kind=\"out_of_office\">\n          \u003cspan class=\"blockHead\">\u003cspan class=\"eventKind\">Out of office\u003c/span>\u003cspan class=\"blockTime\">all day\u003c/span>\u003c/span>\n          \u003cbutton type=\"button\" class=\"eventTitle\">Travel day\u003c/button>\n        \u003c/div>\n        \u003cdiv class=\"eventBlock\" data-kind=\"focus_time\">\n          \u003cspan class=\"blockHead\">\u003cspan class=\"eventKind\">Focus time\u003c/span>\u003cspan class=\"blockTime\">9:00 – 11:00 AM\u003c/span>\u003c/span>\n          \u003cbutton type=\"button\" class=\"eventTitle\">Problem set block\u003c/button>\n        \u003c/div>\n        \u003cdiv class=\"eventBlock\" data-kind=\"working_location\">\n          \u003cspan class=\"blockHead\">\u003cspan class=\"eventKind\">Working location\u003c/span>\u003cspan class=\"blockTime\">1:00 – 5:00 PM\u003c/span>\u003c/span>\n          \u003cbutton type=\"button\" class=\"eventTitle\">Library, second floor\u003c/button>\n        \u003c/div>\n        \u003cdiv class=\"eventBlock\" data-kind=\"appointment_slot\">\n          \u003cspan class=\"blockHead\">\u003cspan class=\"eventKind\">Appointment slot\u003c/span>\u003cspan class=\"blockTime\">3:30 – 4:00 PM\u003c/span>\u003c/span>\n          \u003cbutton type=\"button\" class=\"eventTitle\">Office hours slot\u003c/button>\n          \u003cspan class=\"eventMeta\">\u003cspan class=\"zoneChip\">PT\u003c/span>\u003cspan class=\"blockRoom\">Video call\u003c/span>\u003c/span>\n        \u003c/div>\n      \u003c/div>\n    \u003c/section>","inbox":"\u003csection class=\"frag\" id=\"frag-inbox\" aria-labelledby=\"label-inbox\">\n      \u003ch2 class=\"fragLabel\" id=\"label-inbox\">Inbox row\u003c/h2>\n      \u003carticle class=\"card inboxCard\" aria-labelledby=\"sample-inbox-title\">\n        \u003cdiv class=\"chips\">\n          \u003cspan class=\"chip chipMono\">Course A\u003c/span>\n          \u003cspan class=\"chip kindChip\">conflict\u003c/span>\n          \u003cspan class=\"chip\">from a sync\u003c/span>\n          \u003cspan class=\"chip age\">2 h ago\u003c/span>\n        \u003c/div>\n        \u003ch3 class=\"inboxTitle\" id=\"sample-inbox-title\">Blackboard moved the due date of Sample quiz 1. Which date is right?\u003c/h3>\n        \u003cdiv class=\"compare\">\n          \u003cspan class=\"kicker field\">due date\u003c/span>\n          \u003cdiv class=\"panes\">\n            \u003cdiv class=\"pane\" role=\"group\" aria-label=\"Blackboard\">\n              \u003cspan class=\"kicker\">Blackboard\u003c/span>\n              \u003cspan class=\"value\">Fri, Oct 16, 11:59 PM\u003c/span>\n            \u003c/div>\n            \u003cdiv class=\"pane\" role=\"group\" aria-label=\"bb2dash has\">\n              \u003cspan class=\"kicker\">bb2dash has\u003c/span>\n              \u003cspan class=\"value\">Wed, Oct 14, 11:59 PM\u003c/span>\n            \u003c/div>\n          \u003c/div>\n        \u003c/div>\n        \u003cp class=\"meta\">\u003cspan>Raised by the last sync.\u003c/span>\u003ca class=\"sourceLink\" href=\"#frag-inbox\">Open the assignment\u003c/a>\u003c/p>\n        \u003cdiv class=\"controls\">\n          \u003clabel class=\"noteField\" for=\"sample-why\">\n            \u003cspan class=\"kicker\">why (optional)\u003c/span>\n            \u003cinput type=\"text\" class=\"input\" id=\"sample-why\" placeholder=\"the reason, for future you\">\n          \u003c/label>\n          \u003cdiv class=\"choices\">\n            \u003cdiv class=\"choice\">\n              \u003cbutton type=\"button\" class=\"btn btnPrimary\">Accept Blackboard\u003c/button>\n              \u003cp class=\"outcome\">Sets this assignment’s due date to Fri, Oct 16, 11:59 PM.\u003c/p>\n            \u003c/div>\n            \u003cdiv class=\"choice\">\n              \u003cbutton type=\"button\" class=\"btn btnSecondary\">Keep mine\u003c/button>\n              \u003cp class=\"outcome\">Keeps this assignment’s due date at Wed, Oct 14, 11:59 PM and marks it confirmed, so the next sync stops asking.\u003c/p>\n            \u003c/div>\n          \u003c/div>\n        \u003c/div>\n      \u003c/article>\n    \u003c/section>","notices":"\u003csection class=\"frag\" id=\"frag-notices\" aria-labelledby=\"label-notices\">\n      \u003ch2 class=\"fragLabel\" id=\"label-notices\">Notices\u003c/h2>\n      \u003cdiv class=\"stack\">\n        \u003cp class=\"problem\">That change was not saved because the connection dropped. The controls are still live, so try again.\u003c/p>\n        \u003cp class=\"empty\">Nothing needs you right now. New questions show up here after the next sync.\u003c/p>\n      \u003c/div>\n    \u003c/section>","popout":"\u003csection class=\"frag\" id=\"frag-popout\" aria-labelledby=\"label-popout\">\n      \u003ch2 class=\"fragLabel\" id=\"label-popout\">Popout header\u003c/h2>\n      \u003cdiv class=\"panel\">\n        \u003cbutton type=\"button\" class=\"close\" aria-label=\"Close\">✕\u003c/button>\n        \u003cdiv class=\"breadcrumb\">\n          \u003cspan class=\"tag tagAccent\">Course A\u003c/span>\n          \u003cspan class=\"tag tagNeutral\">Quizzes\u003c/span>\n          \u003cspan class=\"mono\">#1\u003c/span>\n          \u003cspan class=\"tag tagOutline\">tentative\u003c/span>\n        \u003c/div>\n        \u003cdiv>\n          \u003ch3 class=\"popTitle\">Sample quiz 1\u003c/h3>\n          \u003cdiv class=\"subTitle\">\u003cspan>quiz\u003c/span>\u003cspan>· extra credit\u003c/span>\u003c/div>\n        \u003c/div>\n        \u003cdiv class=\"facts\">\n          \u003cdiv class=\"fact\">\u003cspan class=\"kicker\">Due\u003c/span>\u003cspan class=\"factValue\">Fri, Oct 16\u003c/span>\u003cspan class=\"factNote\">11:59 PM\u003c/span>\u003c/div>\n          \u003cdiv class=\"fact\">\u003cspan class=\"kicker\">Points\u003c/span>\u003cspan class=\"factValue\">20\u003c/span>\u003cspan class=\"factNote\">counts toward Quizzes\u003c/span>\u003c/div>\n          \u003cdiv class=\"fact\">\u003cspan class=\"kicker\">Status\u003c/span>\u003cspan class=\"factValue\">Not started\u003c/span>\u003cspan class=\"factNote\">set by you\u003c/span>\u003c/div>\n        \u003c/div>\n      \u003c/div>\n    \u003c/section>"},"dirs":[{"letter":"a","name":"Nocturne","blurb":"Today’s look, finished: the same indigo night with easier-to-read greys, and a light mode to match.","dark":"--color-bg:#161826;--color-surface:#232532;--color-text:#e9e9ed;--color-accent:#968ae0;--color-accent-2:#a7a1db;--color-divider:color-mix(in srgb, #e9e9ed 16%, transparent);--color-muted:color-mix(in srgb, var(--color-text) 55%, transparent);--color-neutral-100:#f3f5fe;--color-neutral-200:#e4e7f5;--color-neutral-300:#cfd3e5;--color-neutral-400:#b2b6ca;--color-neutral-500:#9fa4b9;--color-neutral-600:#8c91a6;--color-neutral-700:#595d6c;--color-neutral-800:#3f424d;--color-neutral-900:#292b31;--color-accent-100:#f5f4ff;--color-accent-200:#e7e5fe;--color-accent-300:#d2cefd;--color-accent-400:#b5abfc;--color-accent-500:#968ae0;--color-accent-600:#796cbf;--color-accent-700:#5d5294;--color-accent-800:#423a6a;--color-accent-900:#2b2741;--color-accent-2-100:#f5f4ff;--color-accent-2-200:#e7e5fe;--color-accent-2-300:#d2cefd;--color-accent-2-400:#b5afe8;--color-accent-2-500:#9690c9;--color-accent-2-600:#7972a9;--color-accent-2-700:#5c5783;--color-accent-2-800:#423e5d;--color-accent-2-900:#2b293a;--color-danger:#e98179;--color-danger-bg:color-mix(in srgb, #c0453e 16%, transparent);--color-hover:color-mix(in srgb, var(--color-text) 7%, transparent);--color-active:color-mix(in srgb, var(--color-text) 14%, transparent);--font-heading:'Inter', system-ui, sans-serif;--font-heading-weight:500;--font-body:'Inter', system-ui, sans-serif;--font-mono:ui-monospace, SFMono-Regular, Menlo, monospace;--text-xs:11px;--text-sm:12.5px;--text-base:13.5px;--text-md:15px;--text-lg:17px;--text-xl:20px;--text-2xl:28px;--space-1:2.8px;--space-2:5.6px;--space-3:8.4px;--space-4:11.2px;--space-6:16.8px;--space-8:22.4px;--space-12:33.6px;--radius-sm:4px;--radius-md:8px;--radius-lg:14px;--shadow-sm:0 0 0 1px #3f424d;--shadow-md:0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);--shadow-lg:0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);--nav-height:52px;--content-max:1240px;--sidebar-side:row-reverse;--sidebar-width:260px;--type-reading-bg:#137d90;--type-reading-fg:#ffffff;--type-assignment-bg:#725edd;--type-assignment-fg:#ffffff;--type-quiz-bg:#9c6711;--type-quiz-fg:#ffffff;--type-project-bg:#198251;--type-project-fg:#ffffff;--type-exam-bg:#c7425a;--type-exam-fg:#ffffff;--planner-event-bg:color-mix(in srgb, var(--color-accent-700) 70%, var(--color-accent-800));--planner-event-fg:var(--color-accent-100);--planner-event-edge:var(--color-accent-300);--planner-task-bg:var(--color-neutral-800);--planner-task-fg:var(--color-neutral-100);--planner-task-edge:var(--color-neutral-300);--planner-ooo-bg:var(--color-danger-bg);--planner-ooo-fg:var(--color-text);--planner-ooo-edge:var(--color-danger);--planner-ooo-hatch:color-mix(in srgb, var(--color-danger) 14%, transparent);--planner-focus-bg:var(--color-accent-900);--planner-focus-fg:var(--color-accent-200);--planner-focus-edge:var(--color-accent-500);--planner-worklocation-bg:var(--color-neutral-900);--planner-worklocation-fg:var(--color-neutral-200);--planner-worklocation-edge:var(--color-neutral-500);--planner-appointment-bg:color-mix(in srgb, var(--color-accent-2-700) 40%, transparent);--planner-appointment-fg:var(--color-accent-2-100);--planner-appointment-edge:var(--color-accent-2-400);--shadow-mark:0 0 10px var(--color-accent)","light":"--color-bg:#edeef7;--color-surface:#ffffff;--color-text:#1e2035;--color-accent:#6254ca;--color-accent-2:#595692;--color-divider:color-mix(in srgb, #1e2035 16%, transparent);--color-muted:color-mix(in srgb, var(--color-text) 66%, transparent);--color-neutral-100:#181a2a;--color-neutral-200:#25273a;--color-neutral-300:#35384f;--color-neutral-400:#474b63;--color-neutral-500:#575b73;--color-neutral-600:#666a81;--color-neutral-700:#a1a4b9;--color-neutral-800:#d5d7e6;--color-neutral-900:#f2f3fc;--color-accent-100:#20194c;--color-accent-200:#302470;--color-accent-300:#413195;--color-accent-400:#5240b4;--color-accent-500:#6254ca;--color-accent-600:#837ce3;--color-accent-700:#aba7f1;--color-accent-800:#d2cefd;--color-accent-900:#f1effe;--color-accent-2-100:#1f1d3e;--color-accent-2-200:#2f2b5a;--color-accent-2-300:#3f3a77;--color-accent-2-400:#504b90;--color-accent-2-500:#615ea4;--color-accent-2-600:#8383c2;--color-accent-2-700:#aaaadb;--color-accent-2-800:#d3d4f2;--color-accent-2-900:#f1f1fc;--color-danger:#ad2826;--color-danger-bg:color-mix(in srgb, #c0453e 12%, transparent);--color-hover:color-mix(in srgb, var(--color-text) 6%, transparent);--color-active:color-mix(in srgb, var(--color-text) 12%, transparent);--shadow-sm:0 0 0 1px #d5d7e6, 0 1px 2px rgba(30, 32, 53, 0.05);--shadow-md:0 0 0 1px #c4c7d9, 0 2px 4px rgba(30, 32, 53, 0.05), 0 8px 20px rgba(30, 32, 53, 0.10);--shadow-lg:0 0 0 1px #b4b7cb, 0 4px 10px rgba(30, 32, 53, 0.07), 0 18px 44px rgba(30, 32, 53, 0.16);--shadow-mark:0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent)","tileUrl":""},{"letter":"b","name":"Chalkboard","blurb":"A blackboard in the dark and an exam booklet in the light: chalk and ink, serif headings, small corners.","dark":"--color-bg:#141c19;--color-surface:#1f2924;--color-text:#e9e7df;--color-accent:#e9d273;--color-accent-2:#a0d0f1;--color-divider:color-mix(in srgb, #e9e7df 17%, transparent);--color-muted:color-mix(in srgb, var(--color-text) 62%, transparent);--color-neutral-100:#f4f4ee;--color-neutral-200:#e4e3dc;--color-neutral-300:#d1d3cb;--color-neutral-400:#bec1b9;--color-neutral-500:#a9afa7;--color-neutral-600:#969e97;--color-neutral-700:#5c6660;--color-neutral-800:#39433e;--color-neutral-900:#29342f;--color-accent-100:#fbf7dd;--color-accent-200:#f7efc3;--color-accent-300:#f3e7a7;--color-accent-400:#f0dd8c;--color-accent-500:#e9d273;--color-accent-600:#aa9c51;--color-accent-700:#63602d;--color-accent-800:#454926;--color-accent-900:#2e3621;--color-accent-2-100:#e8f5fd;--color-accent-2-200:#d3ebfc;--color-accent-2-300:#badff8;--color-accent-2-400:#a0d0f1;--color-accent-2-500:#78afd5;--color-accent-2-600:#5589b0;--color-accent-2-700:#3b6587;--color-accent-2-800:#2d4c65;--color-accent-2-900:#233645;--color-danger:#f79890;--color-danger-bg:color-mix(in srgb, #f79890 13%, transparent);--color-hover:color-mix(in srgb, var(--color-text) 6%, transparent);--color-active:color-mix(in srgb, var(--color-text) 12%, transparent);--font-heading:'Source Serif 4', Georgia, 'Times New Roman', serif;--font-heading-weight:600;--font-body:'Source Sans 3', 'Segoe UI', system-ui, sans-serif;--font-mono:'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;--text-xs:11px;--text-sm:12.5px;--text-base:13.5px;--text-md:15px;--text-lg:17px;--text-xl:20px;--text-2xl:28px;--space-1:2.8px;--space-2:5.6px;--space-3:8.4px;--space-4:11.2px;--space-6:16.8px;--space-8:22.4px;--space-12:33.6px;--radius-sm:2px;--radius-md:3px;--radius-lg:4px;--shadow-sm:0 0 0 1px var(--color-neutral-800);--shadow-md:0 0 0 1px var(--color-neutral-700), 0 2px 6px rgba(0, 0, 0, 0.3);--shadow-lg:0 0 0 1px var(--color-neutral-600), 0 12px 28px rgba(0, 0, 0, 0.45);--nav-height:52px;--content-max:1240px;--sidebar-side:row-reverse;--sidebar-width:260px;--type-reading-bg:#59afd3;--type-reading-fg:var(--color-bg);--type-assignment-bg:#ae93df;--type-assignment-fg:var(--color-bg);--type-quiz-bg:#d59255;--type-quiz-fg:var(--color-bg);--type-project-bg:#6bb77c;--type-project-fg:var(--color-bg);--type-exam-bg:#e58094;--type-exam-fg:var(--color-bg);--planner-event-bg:var(--color-accent-700);--planner-event-fg:var(--color-accent-100);--planner-event-edge:var(--color-accent-300);--planner-task-bg:var(--color-neutral-800);--planner-task-fg:var(--color-neutral-100);--planner-task-edge:var(--color-neutral-300);--planner-ooo-bg:var(--color-danger-bg);--planner-ooo-fg:var(--color-text);--planner-ooo-edge:var(--color-danger);--planner-ooo-hatch:color-mix(in srgb, var(--color-danger) 14%, transparent);--planner-focus-bg:var(--color-accent-900);--planner-focus-fg:var(--color-accent-200);--planner-focus-edge:var(--color-accent-500);--planner-worklocation-bg:var(--color-neutral-900);--planner-worklocation-fg:var(--color-neutral-200);--planner-worklocation-edge:var(--color-neutral-500);--planner-appointment-bg:color-mix(in srgb, var(--color-accent-2-700) 40%, transparent);--planner-appointment-fg:var(--color-accent-2-100);--planner-appointment-edge:var(--color-accent-2-400);--radius-xs:1px;--radius-pill:2px;--shadow-mark:none","light":"--color-bg:#f1f5f6;--color-surface:#fcfdfe;--color-text:#1e2738;--color-accent:#0c6048;--color-accent-2:#284a98;--color-divider:color-mix(in srgb, #1e2738 15%, transparent);--color-muted:color-mix(in srgb, var(--color-text) 70%, transparent);--color-neutral-100:#121927;--color-neutral-200:#212a39;--color-neutral-300:#323b49;--color-neutral-400:#414b59;--color-neutral-500:#505a66;--color-neutral-600:#5d6772;--color-neutral-700:#a4acb3;--color-neutral-800:#d6dcdf;--color-neutral-900:#eaeef0;--color-accent-100:#05241a;--color-accent-200:#073728;--color-accent-300:#084735;--color-accent-400:#08523e;--color-accent-500:#0c6048;--color-accent-600:#4a9077;--color-accent-700:#9ecdba;--color-accent-800:#cde8dd;--color-accent-900:#e8f5ef;--color-accent-2-100:#101f43;--color-accent-2-200:#182f62;--color-accent-2-300:#203d80;--color-accent-2-400:#284a98;--color-accent-2-500:#395eb2;--color-accent-2-600:#678ccf;--color-accent-2-700:#adc5ed;--color-accent-2-800:#d5e3f8;--color-accent-2-900:#ebf2fc;--color-danger:#a32220;--color-danger-bg:color-mix(in srgb, #a32220 8%, transparent);--color-hover:color-mix(in srgb, var(--color-text) 5%, transparent);--color-active:color-mix(in srgb, var(--color-text) 10%, transparent);--shadow-sm:0 0 0 1px var(--color-neutral-800);--shadow-md:0 0 0 1px var(--color-neutral-800), 0 1px 3px rgba(27, 35, 51, 0.1);--shadow-lg:0 0 0 1px var(--color-neutral-700), 0 10px 28px rgba(27, 35, 51, 0.12);--type-reading-bg:#067198;--type-reading-fg:var(--color-surface);--type-assignment-bg:#6d4ebf;--type-assignment-fg:var(--color-surface);--type-quiz-bg:#965d05;--type-quiz-fg:var(--color-surface);--type-project-bg:#277d34;--type-project-fg:var(--color-surface);--type-exam-bg:#b52a4c;--type-exam-fg:var(--color-surface);--shadow-mark:none","tileUrl":""},{"letter":"c","name":"Orange","blurb":"Syracuse orange and navy: navy carries the page, orange marks where you are, rounder corners.","dark":"--color-bg:#08183f;--color-surface:#122654;--color-text:#eef3fc;--color-accent:#fe873a;--color-accent-2:#90bcfe;--color-divider:color-mix(in srgb, var(--color-text) 16%, transparent);--color-muted:color-mix(in srgb, var(--color-text) 64%, transparent);--color-neutral-100:#f2f6fd;--color-neutral-200:#dfe6f5;--color-neutral-300:#c8d5ed;--color-neutral-400:#afc0e0;--color-neutral-500:#98abd2;--color-neutral-600:#8398c3;--color-neutral-700:#516897;--color-neutral-800:#2d4476;--color-neutral-900:#1d3363;--color-accent-100:#feeddb;--color-accent-200:#fedcbd;--color-accent-300:#ffc597;--color-accent-400:#ffa868;--color-accent-500:#f76900;--color-accent-600:#d65b0f;--color-accent-700:#b54b0f;--color-accent-800:#963d0f;--color-accent-900:#393146;--color-accent-2-100:#edf4ff;--color-accent-2-200:#d5e6ff;--color-accent-2-300:#b6d3fe;--color-accent-2-400:#90bcfe;--color-accent-2-500:#62a2ff;--color-accent-2-600:#3483f3;--color-accent-2-700:#0055b9;--color-accent-2-800:#004395;--color-accent-2-900:#023578;--color-danger:#ff839d;--color-danger-bg:color-mix(in srgb, var(--color-danger) 15%, transparent);--color-hover:color-mix(in srgb, var(--color-text) 8%, transparent);--color-active:color-mix(in srgb, var(--color-text) 15%, transparent);--font-heading:'Nunito', system-ui, sans-serif;--font-heading-weight:700;--font-body:'Nunito', system-ui, sans-serif;--font-mono:'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace;--text-xs:11px;--text-sm:12.5px;--text-base:13.5px;--text-md:15px;--text-lg:17px;--text-xl:20px;--text-2xl:28px;--space-1:2.8px;--space-2:5.6px;--space-3:8.4px;--space-4:11.2px;--space-6:16.8px;--space-8:22.4px;--space-12:33.6px;--radius-sm:8px;--radius-md:12px;--radius-lg:14px;--shadow-sm:0 0 0 1px rgba(168, 190, 255, 0.14);--shadow-md:0 0 0 1px rgba(168, 190, 255, 0.18), 0 6px 16px rgba(3, 9, 28, 0.42);--shadow-lg:0 0 0 1px rgba(168, 190, 255, 0.24), 0 16px 36px rgba(3, 9, 28, 0.5);--nav-height:52px;--content-max:1240px;--sidebar-side:row-reverse;--sidebar-width:260px;--type-reading-bg:#4ad6d1;--type-reading-fg:#08183f;--type-assignment-bg:#bd9ffd;--type-assignment-fg:#08183f;--type-quiz-bg:#73c1ff;--type-quiz-fg:#08183f;--type-project-bg:#67e087;--type-project-fg:#08183f;--type-exam-bg:#f489ca;--type-exam-fg:#08183f;--planner-event-bg:var(--color-accent-2-700);--planner-event-fg:var(--color-accent-2-100);--planner-event-edge:var(--color-accent-2-300);--planner-task-bg:var(--color-neutral-800);--planner-task-fg:var(--color-neutral-100);--planner-task-edge:var(--color-neutral-300);--planner-ooo-bg:var(--color-danger-bg);--planner-ooo-fg:var(--color-text);--planner-ooo-edge:var(--color-danger);--planner-ooo-hatch:color-mix(in srgb, var(--color-danger) 16%, transparent);--planner-focus-bg:var(--color-accent-900);--planner-focus-fg:var(--color-accent-200);--planner-focus-edge:var(--color-accent-500);--planner-worklocation-bg:var(--color-neutral-900);--planner-worklocation-fg:var(--color-neutral-200);--planner-worklocation-edge:var(--color-neutral-500);--planner-appointment-bg:color-mix(in srgb, var(--color-accent-2-700) 40%, transparent);--planner-appointment-fg:var(--color-accent-2-100);--planner-appointment-edge:var(--color-accent-2-400);--radius-xs:3px;--radius-pill:999px;--shadow-mark:0 0 0 3px rgba(247, 105, 0, 0.28)","light":"--color-bg:#f2f4f9;--color-surface:#ffffff;--color-text:#0a1d48;--color-accent:#b84702;--color-accent-2:#0056bd;--color-divider:color-mix(in srgb, var(--color-text) 14%, transparent);--color-muted:color-mix(in srgb, var(--color-text) 72%, transparent);--color-neutral-100:#06163e;--color-neutral-200:#142752;--color-neutral-300:#263a64;--color-neutral-400:#3a4e76;--color-neutral-500:#4c5f85;--color-neutral-600:#5d6f92;--color-neutral-700:#99a6c1;--color-neutral-800:#dae0ec;--color-neutral-900:#ebeff6;--color-accent-100:#5b2001;--color-accent-200:#762c00;--color-accent-300:#913500;--color-accent-400:#a94002;--color-accent-500:#e86104;--color-accent-600:#ff9044;--color-accent-700:#ffc79e;--color-accent-800:#ffe0c6;--color-accent-900:#fef1e4;--color-accent-2-100:#002357;--color-accent-2-200:#003478;--color-accent-2-300:#00459a;--color-accent-2-400:#0056bd;--color-accent-2-500:#1a6fe1;--color-accent-2-600:#679ff1;--color-accent-2-700:#b7d3fc;--color-accent-2-800:#d8e8fe;--color-accent-2-900:#edf4fe;--color-danger:#b60c4e;--color-danger-bg:color-mix(in srgb, var(--color-danger) 9%, transparent);--color-hover:color-mix(in srgb, var(--color-text) 6%, transparent);--color-active:color-mix(in srgb, var(--color-text) 11%, transparent);--shadow-sm:0 0 0 1px rgba(13, 27, 69, 0.07), 0 1px 2px rgba(13, 27, 69, 0.06), 0 2px 6px rgba(13, 27, 69, 0.05);--shadow-md:0 0 0 1px rgba(13, 27, 69, 0.06), 0 2px 4px rgba(13, 27, 69, 0.06), 0 10px 24px rgba(13, 27, 69, 0.1);--shadow-lg:0 0 0 1px rgba(13, 27, 69, 0.06), 0 6px 12px rgba(13, 27, 69, 0.07), 0 22px 48px rgba(13, 27, 69, 0.16);--type-reading-bg:#057d80;--type-reading-fg:#ffffff;--type-assignment-bg:#814ad3;--type-assignment-fg:#ffffff;--type-quiz-bg:#016fc0;--type-quiz-fg:#ffffff;--type-project-bg:#128243;--type-project-fg:#ffffff;--type-exam-bg:#bb348a;--type-exam-fg:#ffffff;--planner-ooo-hatch:color-mix(in srgb, var(--color-danger) 14%, transparent);--shadow-mark:0 0 0 3px rgba(247, 105, 0, 0.26)","tileUrl":""}]};
+
+  var STEPS = [
+    {
+      id: 'first',
+      title: 'First look',
+      ask: 'The same small screen in each direction. Go with your gut: which one would you want to open every day?',
+      layout: 'cols',
+      frags: ['topbar:phone', 'grades', 'tracker', 'planner', 'notices']
+    },
+    {
+      id: 'type',
+      title: 'Type',
+      ask: 'Headings, body text and numbers at the sizes the app uses. Which reads best to you?',
+      layout: 'cols',
+      frags: ['type']
+    },
+    {
+      id: 'bar',
+      title: 'Top bar and buttons',
+      ask: 'The bar that sits on every page, at desktop and at phone width, and the buttons. The desktop bar scrolls sideways inside its box on a narrow window.',
+      layout: 'rows',
+      frags: ['topbar', 'buttons']
+    },
+    {
+      id: 'grades',
+      title: 'Grades',
+      ask: 'The graded-so-far figure and one gradebook row with its status pill.',
+      layout: 'rows',
+      frags: ['grades']
+    },
+    {
+      id: 'colour',
+      title: 'Colour coding',
+      ask: 'The five work-type chips and the six planner block kinds. Can you tell them apart at a glance, and do the colours sit well together?',
+      layout: 'cols',
+      frags: ['tracker', 'planner']
+    },
+    {
+      id: 'inbox',
+      title: 'Inbox and notices',
+      ask: 'An Inbox question, the red error notice next to a quiet one, and the header of a popout.',
+      layout: 'cols',
+      frags: ['inbox', 'notices', 'popout']
+    },
+    {
+      id: 'both',
+      title: 'Light and dark',
+      ask: 'Each direction in both themes at once. Which one holds up best in the theme you use less?',
+      layout: 'cols',
+      force: 'both',
+      frags: ['topbar:phone', 'grades', 'tracker', 'notices']
+    }
+  ];
+  var LAST_LOOK = ['topbar:phone', 'grades', 'tracker', 'planner', 'inbox', 'notices'];
+  var RESULT = STEPS.length;
+  var STORE_KEY = 'bb2dash-style-pick-v1';
+  var DOC_PATH = 'picks/current';
+
+  var root = document.documentElement;
+  var stage = document.getElementById('stage');
+  var stepsList = document.getElementById('steps');
+  var backBtn = document.getElementById('nav-back');
+  var nextBtn = document.getElementById('nav-next');
+  var viewButtons = Array.prototype.slice.call(document.querySelectorAll('[data-view]'));
+  var systemDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  var state = { step: 0, view: 'auto', picks: {}, notes: {}, choice: null, note: '' };
+  var saved = null;          /* the pick already stored for this page, if any */
+  var saveState = { kind: '', text: '' };
+  var saving = false;
+
+  /* ---- small helpers ---- */
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+  function dirByLetter(letter) {
+    for (var i = 0; i < DATA.dirs.length; i += 1) if (DATA.dirs[i].letter === letter) return DATA.dirs[i];
+    return null;
+  }
+  function label(letter) {
+    var dir = dirByLetter(letter);
+    return dir ? letter.toUpperCase() + ' (' + dir.name + ')' : '';
+  }
+  function loadLocal() {
+    try {
+      var raw = window.localStorage.getItem(STORE_KEY);
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') return;
+      if (typeof data.step === 'number' && data.step >= 0 && data.step <= RESULT) state.step = data.step;
+      if (['auto', 'dark', 'light', 'both'].indexOf(data.view) !== -1) state.view = data.view;
+      if (data.picks && typeof data.picks === 'object') state.picks = data.picks;
+      if (data.notes && typeof data.notes === 'object') state.notes = data.notes;
+      if (dirByLetter(data.choice)) state.choice = data.choice;
+      if (typeof data.note === 'string') state.note = data.note;
+    } catch (error) {
+      /* No storage here: the page still works, it just forgets on reload. */
+    }
+  }
+  function saveLocal() {
+    try {
+      window.localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    } catch (error) {
+      /* Same: nothing to do. */
+    }
+  }
+  function systemTheme() {
+    var set = root.getAttribute('data-theme');
+    if (set === 'dark' || set === 'light') return set;
+    return systemDark && systemDark.matches ? 'dark' : 'light';
+  }
+  function modesFor(step) {
+    if ((step && step.force === 'both') || state.view === 'both') return ['dark', 'light'];
+    if (state.view === 'dark' || state.view === 'light') return [state.view];
+    return [systemTheme()];
+  }
+
+  /* ---- a live sample: one direction, one theme, some fragments, in its own shadow root ---- */
+  var BASE_CSS =
+    ':host{display:block;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);' +
+    'font-size:var(--text-md);line-height:1.55;font-weight:400;-webkit-font-smoothing:antialiased;color-scheme:dark}' +
+    ':host([data-mode="light"]){color-scheme:light}';
+  var FIT_CSS = '.tile.wtIn{max-width:none;margin:0;padding:16px;gap:18px}';
+
+  function fragNode(key) {
+    var parts = key.split(':');
+    var holder = document.createElement('template');
+    holder.innerHTML = DATA.frags[parts[0]] || '';
+    var node = holder.content.firstElementChild;
+    if (!node) return document.createTextNode('');
+    if (parts[0] === 'topbar' && parts[1] === 'phone') {
+      removeAll(node, '.scrollBox');
+      removeAll(node, '#label-topbar');
+    }
+    if (parts[0] === 'topbar' && parts[1] === 'desktop') {
+      removeAll(node, '.barPhone');
+      removeAll(node, '#label-topbar-phone');
+    }
+    return node;
+  }
+  function removeAll(scope, selector) {
+    var found = scope.querySelectorAll(selector);
+    for (var i = 0; i < found.length; i += 1) found[i].parentNode.removeChild(found[i]);
+  }
+  function makeSample(dir, frags, mode) {
+    var host = el('div', 'sampleHost');
+    host.setAttribute('data-mode', mode);
+    if (!host.attachShadow) {
+      host.textContent = 'This browser cannot draw the samples. Open the full tile instead.';
+      return host;
+    }
+    var shadow = host.attachShadow({ mode: 'open' });
+    var style = document.createElement('style');
+    style.textContent =
+      BASE_CSS + DATA.css + FIT_CSS +
+      ':host{' + dir.dark + '}' +
+      ':host([data-mode="light"]){' + dir.light + '}';
+    shadow.appendChild(style);
+    var wrap = el('div', 'tile wtIn');
+    for (var i = 0; i < frags.length; i += 1) wrap.appendChild(fragNode(frags[i]));
+    shadow.appendChild(wrap);
+    /* The samples' links and buttons are for looking at, not for going anywhere. */
+    shadow.addEventListener('click', function (event) {
+      var target = event.target;
+      if (target && target.closest && target.closest('a')) event.preventDefault();
+    });
+    return host;
+  }
+  function slots(dir, frags, modes) {
+    var box = el('div', modes.length > 1 ? 'slots two' : 'slots');
+    for (var i = 0; i < modes.length; i += 1) {
+      var slot = el('div', 'slot');
+      if (modes.length > 1) slot.appendChild(el('p', 'modeLabel', modes[i] === 'dark' ? 'Dark' : 'Light'));
+      var scroll = el('div', 'sampleScroll');
+      scroll.appendChild(makeSample(dir, frags, modes[i]));
+      slot.appendChild(scroll);
+      box.appendChild(slot);
+    }
+    return box;
+  }
+
+  /* ---- progress ---- */
+  function renderSteps() {
+    stepsList.textContent = '';
+    for (var i = 0; i <= RESULT; i += 1) {
+      var item = el('li');
+      var button = el('button', 'stepBtn');
+      button.type = 'button';
+      button.id = 'step-' + i;
+      var pick = i < RESULT ? state.picks[STEPS[i].id] : (saved ? saved.choice : null);
+      var done = Boolean(pick);
+      button.setAttribute('data-done', done ? 'true' : 'false');
+      if (i === state.step) button.setAttribute('aria-current', 'step');
+      var box = el('span', 'box', done ? '✓' : '');
+      box.setAttribute('aria-hidden', 'true');
+      button.appendChild(box);
+      button.appendChild(el('span', '', i < RESULT ? (i + 1) + '. ' + STEPS[i].title : 'Your pick'));
+      if (done) {
+        button.appendChild(el('span', 'tag', pick === 'none' ? 'no pref' : String(pick).toUpperCase()));
+      }
+      button.setAttribute('aria-label',
+        (i < RESULT ? 'Step ' + (i + 1) + ', ' + STEPS[i].title : 'Your pick') +
+        (done ? (pick === 'none' ? ', no preference' : ', picked ' + String(pick).toUpperCase()) : ', not answered'));
+      (function (index) {
+        button.addEventListener('click', function () { go(index); });
+      })(i);
+      item.appendChild(button);
+      stepsList.appendChild(item);
+    }
+  }
+
+  /* ---- a comparison step ---- */
+  function renderStep(step, index) {
+    var head = el('div', 'stageHead');
+    head.appendChild(el('p', 'eyebrow', 'Step ' + (index + 1) + ' of ' + STEPS.length));
+    head.appendChild(el('h2', '', step.title));
+    head.appendChild(el('p', 'ask', step.ask));
+    if (step.force !== 'both' && state.view !== 'both') {
+      head.appendChild(el('p', 'hint', 'You are seeing the ' + modesFor(step)[0] + ' theme. Flip it with the control at the top before you choose.'));
+    }
+    stage.appendChild(head);
+
+    var modes = modesFor(step);
+    var grid = el('div', step.layout === 'rows' ? 'dirs rows' : 'dirs aligned');
+    var current = state.picks[step.id];
+    DATA.dirs.forEach(function (dir) {
+      var card = el('section', 'dir');
+      card.setAttribute('aria-label', 'Direction ' + dir.letter.toUpperCase() + ', ' + dir.name);
+      card.setAttribute('data-picked', current === dir.letter ? 'true' : 'false');
+      var cardHead = el('div', 'dirHead');
+      var title = el('div', 'dirTitle');
+      title.appendChild(el('span', 'letter', dir.letter.toUpperCase()));
+      title.appendChild(el('span', 'dirName', dir.name));
+      cardHead.appendChild(title);
+      cardHead.appendChild(el('p', 'dirBlurb', dir.blurb));
+      card.appendChild(cardHead);
+      card.appendChild(slots(dir, step.frags, modes));
+      var foot = el('div', 'dirFoot');
+      var pick = el('button', 'pickBtn', current === dir.letter ? 'Picked ' + dir.letter.toUpperCase() : 'Pick ' + dir.letter.toUpperCase());
+      pick.type = 'button';
+      pick.id = 'pick-' + step.id + '-' + dir.letter;
+      pick.setAttribute('aria-pressed', current === dir.letter ? 'true' : 'false');
+      pick.addEventListener('click', function () { choose(step.id, dir.letter); });
+      foot.appendChild(pick);
+      card.appendChild(foot);
+      grid.appendChild(card);
+    });
+    stage.appendChild(grid);
+
+    var after = el('div', 'after');
+    var skip = el('button', 'skipBtn', 'No preference on this one');
+    skip.type = 'button';
+    skip.id = 'skip-' + step.id;
+    skip.setAttribute('aria-pressed', current === 'none' ? 'true' : 'false');
+    skip.addEventListener('click', function () { choose(step.id, 'none'); });
+    after.appendChild(skip);
+    var note = el('label', 'note');
+    note.appendChild(el('span', '', 'Anything you would change here? (optional)'));
+    var area = document.createElement('textarea');
+    area.id = 'note-' + step.id;
+    area.rows = 2;
+    area.value = state.notes[step.id] || '';
+    area.addEventListener('input', function () {
+      state.notes[step.id] = area.value;
+      saveLocal();
+    });
+    note.appendChild(area);
+    after.appendChild(note);
+    stage.appendChild(after);
+  }
+
+  /* ---- the result ---- */
+  function tally() {
+    var counts = {};
+    DATA.dirs.forEach(function (dir) { counts[dir.letter] = 0; });
+    STEPS.forEach(function (step) {
+      var pick = state.picks[step.id];
+      if (pick && counts[pick] !== undefined) counts[pick] += 1;
+    });
+    return counts;
+  }
+  function leaders(counts) {
+    var best = 0;
+    var out = [];
+    DATA.dirs.forEach(function (dir) { if (counts[dir.letter] > best) best = counts[dir.letter]; });
+    if (best === 0) return out;
+    DATA.dirs.forEach(function (dir) { if (counts[dir.letter] === best) out.push(dir.letter); });
+    return out;
+  }
+  function pickLine() {
+    if (!state.choice) return '';
+    var parts = STEPS.map(function (step) {
+      var pick = state.picks[step.id];
+      return step.id + '=' + (pick ? (pick === 'none' ? 'none' : pick.toUpperCase()) : '-');
+    });
+    var notes = STEPS.filter(function (step) { return (state.notes[step.id] || '').trim(); })
+      .map(function (step) { return step.title + ': ' + state.notes[step.id].trim(); });
+    if (state.note.trim()) notes.push('Overall: ' + state.note.trim());
+    return 'Phase 22 style pick: ' + label(state.choice) + '. Steps: ' + parts.join(', ') + '.' +
+      (notes.length ? ' Notes: ' + notes.join(' | ') : '');
+  }
+  function renderResult() {
+    var counts = tally();
+    var lead = leaders(counts);
+    if (!state.choice && lead.length === 1) state.choice = lead[0];
+
+    var head = el('div', 'stageHead');
+    head.appendChild(el('p', 'eyebrow', 'Your pick'));
+    head.appendChild(el('h2', '', 'Confirm one direction'));
+    stage.appendChild(head);
+
+    if (saved && dirByLetter(saved.choice)) {
+      var when = saved.savedAt ? ' on ' + String(saved.savedAt).slice(0, 10) : '';
+      stage.appendChild(el('p', 'sub', 'A pick is already saved for this page: ' + label(saved.choice) + when + '. Saving again replaces it.'));
+    }
+
+    stage.appendChild(el('h3', '', 'What you picked at each step'));
+    var list = el('ul', 'picks');
+    STEPS.forEach(function (step, index) {
+      var row = el('li');
+      row.appendChild(el('span', 'what', (index + 1) + '. ' + step.title));
+      var pick = state.picks[step.id];
+      row.appendChild(el('span', pick && pick !== 'none' ? 'got' : 'got none',
+        !pick ? 'not answered' : pick === 'none' ? 'no preference' : label(pick)));
+      var change = el('button', 'linkBtn', 'look again');
+      change.type = 'button';
+      change.id = 'again-' + step.id;
+      change.addEventListener('click', function () { go(index); });
+      row.appendChild(change);
+      list.appendChild(row);
+    });
+    stage.appendChild(list);
+
+    var total = STEPS.length;
+    var bars = el('div', 'tally');
+    DATA.dirs.forEach(function (dir) {
+      bars.appendChild(el('span', '', dir.letter.toUpperCase() + ' ' + dir.name));
+      var bar = el('span', 'tallyBar');
+      var fill = el('span');
+      fill.style.width = Math.round((counts[dir.letter] / total) * 100) + '%';
+      bar.appendChild(fill);
+      bars.appendChild(bar);
+      bars.appendChild(el('span', 'tallyNum', counts[dir.letter] + ' of ' + total));
+    });
+    stage.appendChild(bars);
+    var leanText = lead.length === 0
+      ? 'You have not picked at any step yet. You can still choose below.'
+      : lead.length === 1
+        ? 'Your picks lean ' + label(lead[0]) + '.'
+        : 'It is a tie between ' + lead.map(label).join(' and ') + '. Choose below; the last look underneath follows your choice.';
+    stage.appendChild(el('p', 'lean', leanText));
+
+    stage.appendChild(el('h3', '', 'Your direction'));
+    var finals = el('div', 'finals');
+    DATA.dirs.forEach(function (dir) {
+      var button = el('button', 'finalBtn');
+      button.type = 'button';
+      button.id = 'final-' + dir.letter;
+      button.setAttribute('aria-pressed', state.choice === dir.letter ? 'true' : 'false');
+      var title = el('span', 'dirTitle');
+      title.appendChild(el('span', 'letter', dir.letter.toUpperCase()));
+      title.appendChild(el('span', 'dirName', dir.name));
+      button.appendChild(title);
+      button.appendChild(el('span', 'dirBlurb', dir.blurb));
+      button.addEventListener('click', function () {
+        state.choice = dir.letter;
+        saveState = { kind: '', text: '' };
+        saveLocal();
+        render();
+      });
+      finals.appendChild(button);
+    });
+    stage.appendChild(finals);
+    var withTiles = DATA.dirs.filter(function (dir) { return dir.tileUrl; });
+    if (withTiles.length > 0) {
+      var tiles = el('p', 'sub', 'Each direction also has a full page of its own: ');
+      withTiles.forEach(function (dir, index) {
+        var tileLink = el('a', 'tileLink', label(dir.letter));
+        tileLink.href = dir.tileUrl;
+        tileLink.target = '_blank';
+        tileLink.rel = 'noopener';
+        tiles.appendChild(tileLink);
+        if (index < withTiles.length - 1) tiles.appendChild(document.createTextNode(', '));
+      });
+      stage.appendChild(tiles);
+    }
+
+    if (state.choice) {
+      var chosen = dirByLetter(state.choice);
+      stage.appendChild(el('h3', '', 'One last look at ' + label(state.choice) + ', dark and light'));
+      var look = el('div', 'dirs rows');
+      var card = el('section', 'dir');
+      card.setAttribute('aria-label', 'Direction ' + label(state.choice));
+      card.appendChild(slots(chosen, LAST_LOOK, ['dark', 'light']));
+      if (chosen.tileUrl) {
+        var foot = el('div', 'dirFoot');
+        var link = el('a', 'tileLink', 'Open the full tile for ' + label(state.choice));
+        link.href = chosen.tileUrl;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        foot.appendChild(link);
+        card.appendChild(foot);
+      }
+      look.appendChild(card);
+      stage.appendChild(look);
+    }
+
+    var note = el('label', 'note');
+    note.appendChild(el('span', '', 'Anything to change in the direction you picked? (optional)'));
+    var area = document.createElement('textarea');
+    area.id = 'note-overall';
+    area.rows = 2;
+    area.value = state.note;
+    area.addEventListener('input', function () {
+      state.note = area.value;
+      saveLocal();
+      var line = document.getElementById('copy-line');
+      if (line) line.textContent = pickLine();
+    });
+    note.appendChild(area);
+    stage.appendChild(note);
+
+    var saveRow = el('div', 'save');
+    var saveBtn = el('button', 'btn btnPrimary', saving ? 'Saving' : 'Save my pick');
+    saveBtn.type = 'button';
+    saveBtn.id = 'save-pick';
+    saveBtn.disabled = !state.choice || saving;
+    saveBtn.addEventListener('click', savePick);
+    saveRow.appendChild(saveBtn);
+    var status = el('p', 'status', saveState.text || (state.choice ? '' : 'Choose a direction above first.'));
+    status.id = 'save-status';
+    status.setAttribute('role', 'status');
+    if (saveState.kind) status.setAttribute('data-kind', saveState.kind);
+    saveRow.appendChild(status);
+    stage.appendChild(saveRow);
+
+    if (state.choice) {
+      stage.appendChild(el('p', 'sub', 'If saving does not work here, copy this line and send it to Claude instead:'));
+      var copyRow = el('div', 'copyRow');
+      var line = el('p', 'copyLine', pickLine());
+      line.id = 'copy-line';
+      copyRow.appendChild(line);
+      var copyBtn = el('button', 'btn', 'Copy');
+      copyBtn.type = 'button';
+      copyBtn.id = 'copy-pick';
+      copyBtn.addEventListener('click', function () {
+        var text = pickLine();
+        function selectIt() {
+          try {
+            var range = document.createRange();
+            range.selectNodeContents(line);
+            var selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            copyBtn.textContent = 'Selected, press Ctrl+C';
+          } catch (error) {
+            copyBtn.textContent = 'Select the line by hand';
+          }
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { copyBtn.textContent = 'Copied'; }, selectIt);
+        } else {
+          selectIt();
+        }
+      });
+      copyRow.appendChild(copyBtn);
+      stage.appendChild(copyRow);
+    }
+  }
+
+  /* ---- saving the pick where Claude can read it ---- */
+  var dbReady = (window.claude && typeof window.claude.use === 'function')
+    ? window.claude.use('db').then(function (db) { return db; }, function () { return null; })
+    : Promise.resolve(null);
+
+  function buildDoc() {
+    var steps = {};
+    var notes = {};
+    STEPS.forEach(function (step) {
+      steps[step.id] = state.picks[step.id] || null;
+      if ((state.notes[step.id] || '').trim()) notes[step.id] = state.notes[step.id].trim();
+    });
+    var chosen = dirByLetter(state.choice);
+    return {
+      v: 1,
+      choice: state.choice,
+      name: chosen ? chosen.name : '',
+      steps: steps,
+      notes: notes,
+      note: state.note.trim(),
+      tally: tally(),
+      line: pickLine(),
+      savedAt: new Date().toISOString()
+    };
+  }
+  function setSave(kind, text) {
+    saveState = { kind: kind, text: text };
+    if (state.step === RESULT) render();
+  }
+  function savePick() {
+    if (!state.choice || saving) return;
+    saving = true;
+    setSave('', 'Saving your pick.');
+    var doc = buildDoc();
+    var failText = 'This page could not save your pick here. Copy the line below and send it to Claude.';
+    dbReady.then(function (db) {
+      if (!db) {
+        saving = false;
+        setSave('warn', failText);
+        return null;
+      }
+      function write() { return db.doc(DOC_PATH).set(doc); }
+      return write().then(null, function (error) {
+        if (error && error.code === 'unavailable') {
+          return new Promise(function (resolve) { window.setTimeout(resolve, 900); }).then(write);
+        }
+        throw error;
+      }).then(function () {
+        saving = false;
+        saved = doc;
+        setSave('good', 'Saved: ' + label(doc.choice) + '. Tell Claude "picked" and it will read it from here.');
+        renderSteps();
+      });
+    }).then(null, function () {
+      saving = false;
+      setSave('warn', failText);
+    });
+  }
+  dbReady.then(function (db) {
+    if (!db) return null;
+    return db.doc(DOC_PATH).get().then(function (snap) {
+      if (!snap || !snap.exists) return;
+      var data = snap.data();
+      if (data && dirByLetter(data.choice)) {
+        saved = data;
+        renderSteps();
+        if (state.step === RESULT) render();
+      }
+    });
+  }).then(null, function () { /* Reading the saved pick is a convenience; the page works without it. */ });
+
+  /* ---- moving around ---- */
+  function choose(stepId, value) {
+    state.picks[stepId] = state.picks[stepId] === value ? undefined : value;
+    if (state.picks[stepId] === undefined) delete state.picks[stepId];
+    saveLocal();
+    render();
+  }
+  function go(index) {
+    state.step = Math.max(0, Math.min(RESULT, index));
+    saveLocal();
+    render();
+    var top = document.getElementById('steps');
+    if (top && top.scrollIntoView) top.scrollIntoView({ block: 'start' });
+  }
+  function render() {
+    renderSteps();
+    stage.textContent = '';
+    if (state.step < RESULT) renderStep(STEPS[state.step], state.step);
+    else renderResult();
+    backBtn.disabled = state.step === 0;
+    nextBtn.hidden = state.step === RESULT;
+    nextBtn.textContent = state.step === RESULT - 1
+      ? 'See my result'
+      : state.step < RESULT - 1 ? 'Next: ' + STEPS[state.step + 1].title : 'Next';
+    viewButtons.forEach(function (button) {
+      button.setAttribute('aria-pressed', button.getAttribute('data-view') === state.view ? 'true' : 'false');
+    });
+  }
+
+  backBtn.addEventListener('click', function () { go(state.step - 1); });
+  nextBtn.addEventListener('click', function () { go(state.step + 1); });
+  viewButtons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      state.view = button.getAttribute('data-view');
+      saveLocal();
+      render();
+    });
+  });
+  function followSystem() { if (state.view === 'auto') render(); }
+  if (systemDark) {
+    if (systemDark.addEventListener) systemDark.addEventListener('change', followSystem);
+    else if (systemDark.addListener) systemDark.addListener(followSystem);
+  }
+  if (window.MutationObserver) {
+    new MutationObserver(followSystem).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+
+  loadLocal();
+  render();
+})();
+</script>
