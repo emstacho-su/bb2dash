@@ -100,7 +100,8 @@
             "since": "carry:run.started_at",
             "question_md5": "48ada2c5a1720b0b834f212397ef5753",
             "tool": "search_context",
-            "scope": "bb2dash-inbox-decisions"
+            "scope": "bb2dash-inbox-decisions",
+            "after": "carry:3.request_id"
           }
         }
       ]
@@ -120,7 +121,8 @@
             "tier": "low",
             "since": "carry:run.started_at",
             "question_md5": "29d2ec32a4d75ea731d789d95dd37bc4",
-            "tool": "get_material_text"
+            "tool": "get_material_text",
+            "after": "carry:4.request_id"
           }
         }
       ]
@@ -139,7 +141,8 @@
             "request": "carry:6.request_id",
             "tier": "mid",
             "since": "carry:run.started_at",
-            "question_md5": "0bf4dfbbee378a2cbdc562eb337a8f49"
+            "question_md5": "0bf4dfbbee378a2cbdc562eb337a8f49",
+            "after": "carry:5.request_id"
           }
         }
       ]
@@ -158,7 +161,8 @@
             "request": "carry:7.request_id",
             "tier": "high",
             "since": "carry:run.started_at",
-            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b"
+            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b",
+            "after": "carry:6.request_id"
           }
         }
       ]
@@ -176,7 +180,8 @@
           "with": {
             "request": "carry:8.request_id",
             "since": "carry:run.started_at",
-            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b"
+            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b",
+            "after": "carry:7.request_id"
           }
         }
       ]
@@ -195,7 +200,8 @@
             "request": "carry:9.request_id",
             "tier": "high",
             "since": "carry:run.started_at",
-            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b"
+            "question_md5": "1a4a4bc6f761a5a47224083e5c27706b",
+            "after": "carry:8.request_id"
           }
         }
       ]
@@ -240,7 +246,12 @@
       "proofs": [
         {
           "name": "turn-answered-after",
-          "with": { "request": "carry:14a.request_id", "since": "carry:run.started_at", "min_wait_s": 15 }
+          "with": {
+            "request": "carry:14a.request_id",
+            "since": "carry:run.started_at",
+            "min_wait_s": 15,
+            "question_md5": "fdcf22c80c0f1bbe98dedb149d968bd6"
+          }
         }
       ]
     },

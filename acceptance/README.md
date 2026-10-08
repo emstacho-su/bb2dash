@@ -187,10 +187,15 @@ hand over the id of an old request that looks right. So Phase 21's proofs also c
 - *It happened in this run.* Each takes `since`, always `carry:run.started_at`, and the row must
   have been made no earlier than 60 seconds before it. The 60 seconds are for a laptop clock that
   runs ahead of the database's.
-- *It is the step's question.* `turn` and `turn-stopped` take `question_md5`: the md5 of the
-  question the step's browser test types, written out in the manifest. The statement compares it
-  with the md5 of the stored question and never returns the question. A test computes each md5
-  from the browser-test file, so the manifest cannot drift from what is typed.
+- *It is the step's question.* `turn`, `turn-stopped` and `turn-answered-after` take
+  `question_md5`: the md5 of the question the step's browser test types (for step 14b, the one
+  step 14a typed), written out in the manifest. The statement compares it with the md5 of the
+  stored question and never returns the question. A test computes each md5 from the browser-test
+  file, so the manifest cannot drift from what is typed.
+- *One request stands for one step.* Steps 7, 8 and 9 ask the same question, and two of them at
+  the same tier. So from step 4 on, each step's proof also takes `after`: the request of the step
+  before it (`carry:<that step>.request_id`), and its own request must be the later one. The ids
+  of steps 3 to 9 therefore rise, and no one request can be handed in for two steps.
 - *The question really waited.* `turn-answered-after` takes `min_wait_s` (15 for step 14b, the
   seconds step 14a's test watches the question wait) and compares two times of the database: when
   the question was asked and when the Workspace service took it. No clock of a sandbox is read.
