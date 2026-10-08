@@ -145,6 +145,11 @@ Pass when all of this is true:
   picture shows no answer text; a badge may stand there.
 - `9-end.png` shows the last lines of the finished answer's text.
 
+`answer_landed_first` in `9.json` may be true or false, and neither is a fault. When
+`answer_landed_first` is true, the finished answer's text reached the page a moment before the page
+marked the answer as finished. The test then waited until the answer was marked as finished, and
+checked that the text on the page did not change in between.
+
 Guidance, not a pass condition: the answer of this step follows the answer that step 8 stopped,
 and it may open by saying that the earlier reply was empty. That is a known behaviour of the
 assistant after a stop and is not a reason to fail step 9. When you see it, write it in `notes`.

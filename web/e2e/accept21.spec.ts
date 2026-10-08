@@ -232,25 +232,38 @@ acceptStep('9 reload mid-answer', { shots: ['reloaded', 'end'] }, async ({ page 
 
   const first = await firstLookAfterReload(page, turn);
   rec.note({ state_after_reload: first.state, line_after_reload: first.line, text_chars_after_reload: Array.from(first.answer).length });
-  // Done already: the reload came too late to show anything. Not a pass, and not the page's fault.
-  if (first.state === 'done') throw new Error(FINISHED_BEFORE_RELOAD);
+  // Done already, or the stored answer already on the page with the turn about to be marked done:
+  // the reload came too late to show anything. Not a pass, and not the page's fault.
+  const landedAlready = first.state === 'streaming' && first.answer !== '' && first.line === null;
+  if (first.state === 'done' || landedAlready) throw new Error(FINISHED_BEFORE_RELOAD);
   await rec.shot(page, 'reloaded');
   expect(first.state, 'after the reload the answer is still being written').toBe('streaming');
   expect(first.line, 'the reloaded page says it is answering').toBe(LATE_STREAM_LINE);
-  expect(first.answer, 'and shows no half-written text').toBe('');
+  expect(Array.from(first.answer).length, 'and shows no half-written text (characters shown)').toBe(0);
 
   // "Answering…" stands until the turn is finished: every look in between is held to it.
   const watch = await watchAnswering(page, turn);
-  rec.note({ answering_looks: watch.looks, ended_as: watch.endedAs, closed_at: utcNow() });
+  rec.note({ answering_looks: watch.looks, answer_landed_first: watch.landed !== null, ended_as: watch.endedAs, closed_at: utcNow() });
   // Not one look after the picture found it still answering: the picture may show the finished answer.
   if (watch.looks === 0) throw new Error(FINISHED_WHILE_RECORDED);
-  expect(watch.endedAs, 'the answer finished').toBe('done');
+  if (watch.landed === null) {
+    expect(watch.endedAs, 'the answer finished').toBe('done');
+  } else {
+    // The stored answer reached the page a moment before the turn was marked done. Done itself is waited for.
+    await expect(turn, 'the answer that landed is then marked done').toHaveAttribute('data-turn', 'done', { timeout: STORED_ROW_TIMEOUT_MS });
+    rec.note({ ended_as: 'done', closed_at: utcNow() });
+  }
   // Then the finished answer is there: the stored row, whole.
   await expect(turn.locator('[data-answer-text]')).not.toBeEmpty({ timeout: STORED_ROW_TIMEOUT_MS });
   await page.waitForTimeout(STORED_SETTLE_MS);
-  rec.note(turnFacts(await readTurn(turn)));
+  const finished = await readTurn(turn);
+  rec.note(turnFacts(finished));
   await rec.shot(page, 'end');
   await expectAnswered(turn, { badge: BADGE_HIGH, usedTools: [] });
+  // What landed before done was the whole answer, not a part of one still being written.
+  if (watch.landed !== null) {
+    expect(finished.answer === watch.landed, 'the text that landed before the turn was marked done is the finished answer, whole').toBe(true);
+  }
 });
 
 /* ---------------------------------------------------------------------------

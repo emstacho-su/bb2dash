@@ -20,8 +20,10 @@
  * shots are each the size of the window, its end with the "Used:" line and its
  * start with the badge; a recorder takes only the shots its step declares;
  * streaming is seen, or the turn closing first; a reloaded page is held to
- * "Answering…" with no half-written text; and a row is found by its
- * conversation or by its exact title.
+ * "Answering…" with no half-written text beside it, and the stored answer
+ * reaching the page a moment before the turn is marked done ends that watching
+ * without a failure; and a row is found by its conversation or by its exact
+ * title.
  */
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';

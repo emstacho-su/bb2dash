@@ -379,22 +379,42 @@ export async function waitStreaming(page: Page, turn: Locator): Promise<boolean>
 export interface AnsweringWatch {
   /** How many times the turn was seen being written, each time with the line and no text. */
   looks: number;
-  /** The state the turn had when it was no longer being written. */
+  /** The state the turn had at the look that ended the watching. */
   endedAs: string | null;
+  /**
+   * The answer's text, when the watching ended on a look that found text and
+   * no line while the turn still read as being written: the stored answer had
+   * landed, and the turn was not yet marked done. Null when the watching ended
+   * because the turn was no longer being written.
+   */
+  landed: string | null;
 }
 
 /**
  * Looks at a turn of a reloaded page until it is no longer being written. At
  * every look while it is, the page must say "Answering…" and show no answer
- * text: a look that finds half-written text fails the test at once.
+ * text.
+ *
+ * The end of an answer reaches the page in two steps, not one: the stored
+ * message row (the whole answer, and no line), then the request row that marks
+ * the turn done. A look between the two finds answer text, no line, and a turn
+ * that still reads as being written. That is a correct page, so such a look
+ * ends the watching and hands the text back as `landed`; the caller waits for
+ * done and holds the finished answer against it.
+ *
+ * What fails the test at once: answer text shown beside "Answering…" (text
+ * half-written), answer text beside any other line, and a turn being written
+ * that shows neither the line nor text.
  */
 export async function watchAnswering(page: Page, turn: Locator): Promise<AnsweringWatch> {
   const until = Date.now() + TURN_TIMEOUT_MS;
   for (let looks = 0; ; looks += 1) {
     const reading = await readTurn(turn);
-    if (reading.state !== 'streaming') return { looks, endedAs: reading.state };
+    if (reading.state !== 'streaming') return { looks, endedAs: reading.state, landed: null };
+    if (reading.answer !== '' && reading.line === null) return { looks, endedAs: reading.state, landed: reading.answer };
     expect(reading.line, 'while the answer is being written the reloaded page says so').toBe(LATE_STREAM_LINE);
-    expect(reading.answer, 'and it shows no half-written text').toBe('');
+    // The count, not the text: a failure's message is printed, and an answer's text never is.
+    expect(Array.from(reading.answer).length, 'and it shows no half-written text (characters shown)').toBe(0);
     if (Date.now() > until) throw new Error("the answer was still being written when the turn's time ran out");
     await page.waitForTimeout(LOOK_EVERY_MS);
   }
