@@ -229,8 +229,9 @@ a question put to him before the freeze, and the freeze waits for his answer.
 14. **Order with the Phase 23 follow-ups.** Default: the follow-ups merge first, and 24a re-does the
     apply image's checks after merging `main`. The follow-ups' brief (110) took worker numbers W-80
     to W-84 the same afternoon, so this phase's umbrella worker is W-85 and the page's three are
-    W-86 to W-88. That brief also says neither phase edits a file under `docker/apply/`; 24a edits
-    four there, and the PM corrects the sentence in brief 110.
+    W-86 to W-88. That brief once said neither phase edits a file under `docker/apply/`; 24a edits
+    four there, and brief 110 has since corrected its own sentence (read at 500405b). Nothing on
+    the follow-ups' branch is the 24a session's to edit.
 15. **Phase 21's acceptance pack.** Default: not run again after 24a's cut-over. It is not removed,
     in 24a or in 24b: the acceptance suite uses pack 21 as its fixture, so its files stay in the
     tree. Phase 21 stays accepted.
