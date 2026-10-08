@@ -1,0 +1,681 @@
+# Phase 23 follow-ups: skipped answers, superseded files, the exporter's schedule, apply in `just up`, and the acceptance pack
+
+**DRAFT FOR STACK'S READ. NOTHING HERE IS BUILT.** Written 2026-10-08 by a planning session. It read
+the code and wrote this file and one DECISIONS row. It ran no test, no build and no docker command,
+and made no database write.
+
+Date 2026-10-08 · PM: the Fable session · Product manager: Stack · Requirements: none in
+`91_REQUIREMENTS_v3.md` (Phase 23 has no brief; its record is STATUS "Phase 23" and the DECISIONS rows
+of 2026-10-07). This brief closes STATUS's open items 3, 3a, 3b and 5 (`project-state/STATUS.md:1403-1412`)
+and the cut-over list's items 6 and 7 (`STATUS.md:1433-1436`) ·
+**bb2dash:** branch `fix/phase23-followups`, worktree `bb2dash-wt-23f` (cut from `main` at a58be34) ·
+**bb2dash-stack:** branch `fix/phase23-followups`, worktree `bb2dash-stack-wt-23f` (to be cut from its
+`main` at c4a54f8) · Workers W-80 to W-84 · Test compose project `bb2dash-wt23f` (build and image
+tests only, see Seams) · **Migrations 187 and 188; 189 is held back** · One PR per repository, as
+Phase 23 itself shipped (bb2dash #79, bb2dash-stack #4), merged bb2dash first · Verification record:
+`docs/planning/sprint-2/verification/110a_PHASE23_FOLLOWUPS_VERIFICATION.md` ("110a" below).
+
+**Why two migrations and not three.** Root `CLAUDE.md` gives Phase 23's fixes the numbers 187 to 189.
+The work falls into two parts that are applied at different moments: the apply side (187: the worker's
+functions, the filing functions, two objects for the acceptance run) and the sync's transform (188:
+two functions that run inside every fold). Phase 23 needed a new migration for each of its two review
+rounds (184 and 186). So 189 is kept free for this phase's review round. If the review needs none, 189
+stays unused.
+
+**Facts re-read for this brief, 2026-10-08, read-only.**
+
+* The shared checkout is on `main` at a58be34. `ls db/migrations` ends at `186_inbox_apply_notices.sql`.
+* Two reads of prod (SELECT only, counts and ids):
+  * Items 3435, 3436 and 3437 are all `archived`, by `inbox-apply request 2515`, at 2026-10-08 03:30Z,
+    each in bucket `applied_by_transform`. Files 2489 and 2490 carry the sessions he picked (45 and
+    44). Item 3435 is an answer of "none" with a note: file 2488 is unlinked and its record carries a
+    flag. `applied_at` is null on all three.
+  * 17 archived `inbox-decision/1` rows are unfiled and 0 are filed. The ids: 3425, 3426, 3427, 3433,
+    3434, 3435, 3436, 3437, 3441, 3453, 3562, 3563, 3666, 3667, 3668, 3669, 3782. The count was 14 at
+    the cut-over; the three session answers were archived since.
+* `gh repo view`: `emstacho-su/vault-projects` (the vault's `projects` realm) is PRIVATE.
+  `emstacho-su/bb2dash` is PUBLIC.
+* `Get-ScheduledTask` on the laptop: three tasks exist, `Bb2dash-LogonBuild` (logon trigger),
+  `Bb2dash-App` (no trigger) and `AgenticHarness-CheckpointCollect` (logon trigger). None runs an
+  exporter.
+* Phase 24's brief is a draft at 4bf223e on `feat/workspace-24`
+  (`docs/planning/sprint-2/briefs/109_PHASE24_workspace_assistant.md`). Phase 22's brief is frozen on
+  `feat/styling-22` at 3d02033, with worker commits on two more branches.
+
+## Why
+
+Phase 23 was merged and cut over on 2026-10-07. After a sync that closed done, the `sync` container
+files an `inbox_feedback` request when the Inbox's answered queue is not empty, and the `apply`
+container's worker claims it and runs `/inbox-apply`. Four things were left open after the first live
+run and the cut-over, and the phase was never accepted:
+
+1. An answer the worker cannot apply is handed to Claude again after every sync. Each try is a run on
+   Stack's plan, up to 12 a day (`apply/src/config.ts:33-34`).
+2. A "this file replaces that one" answer is asked again once it is archived, and a session answer the
+   fold applies carries no "applied" stamp.
+3. Nothing runs the script that turns archived decisions into vault notes. 17 wait.
+4. bb2dash-stack's `.env` does not name the `apply` profile, so a whole-project start does not know the
+   service, and the doctor has no row for it.
+
+Stack chose all four, and chose an automated acceptance run for the phase.
+
+## Stack's answers (2026-10-08)
+
+These reached the planner through the PM session's task text. The planner did not hear them first
+hand. The labels in quotes are his picks; the second column is the option's own wording as relayed.
+
+| his pick | what the option said |
+|---|---|
+| "Remember a skipped answer" | today an answer the worker could not apply is retried after every sync, each time costing a run; the fix remembers it was skipped and waits until he answers it again |
+| "Stop re-asking superseded files" | a "this file replaces that one" answer is asked again once archived, and session links are not stamped as applied; both are changes in the transform (a new migration in 187 to 189) |
+| "Schedule the decisions exporter" | the script that turns archived decisions into vault notes and the day's log is run by hand and 14 decisions were unfiled |
+| "Teach 'just up' about apply" | bb2dash-stack's `.env` has no profile line for the apply service, so a whole-project start does not know it exists; one line plus its doctor check |
+| "Notes only" (the schedule's rule) | the schedule files the private vault notes and marks the rows filed; the public day-file branch and its pull request stay a manual step |
+| "Mark it filed, no note" (test item 3782) | the test item of the cut-over run gets no vault note |
+| "Automated run" (acceptance) | an acceptance pack is written and Phase 23 is accepted by `just accept 23` from `main`, as Phase 21 was; anything only he can judge is marked as his |
+
+`.env` in bb2dash-stack is his file. Nobody in this phase opens or edits it. The brief gives him the
+line and the doctor checks for it.
+
+## Contract (draft)
+
+### Item 1: remember a skipped answer
+
+**Today.**
+
+* A run that ends by itself and leaves an item of its batch unarchived reports that item as not
+  applied (`apply/src/report.ts:103-108`), puts it in `result.skip` (`report.ts:113`, `:142`) and
+  closes failed with `not_applied` (`report.ts:115-116`, `:133`).
+* The skip list travels only down a follow-up chain. `inbox_apply_close` copies it into the
+  follow-up's `params.skip` (`db/migrations/186_inbox_apply_notices.sql:123-131`), and the worker
+  leaves those items out (`apply/src/batch.ts:129`, `:200-208`).
+* A request the sync files carries `{trigger, after}` and no skip, and is filed whenever
+  `v_inbox_queue` holds any row (`db/migrations/180_inbox_apply_trigger.sql:58`, `:62-66`). A press
+  of the button inserts a request with empty params (`web/src/components/inbox/InboxApplyButton.tsx:104`,
+  `web/src/lib/queries.sync.ts:1319-1338`). The Windows fallback skill files the same request when the
+  queue's count is above 0 (`skills/bb-sync/SKILL.md:401-425`).
+* So `inbox_apply_prepare` hands the worker the request's own params with no skip
+  (`db/migrations/185_inbox_apply_session_links.sql:72-75`), and the item goes to Claude again. The
+  constant's own comment says so: "A queue that cannot be applied retries on each sync"
+  (`apply/src/config.ts:33`).
+* The database already holds the rule that is needed. 186 keeps the failure notice open while an
+  answer that a failed run listed in its skip still waits and has not been answered again since
+  (DECISIONS 2026-10-07, the row on 186). It compares the request's `finished_at` with the item's
+  `resolved_at` (`186:105-112`).
+* Answering again moves `resolved_at`: Undo sets it to null (`web/src/lib/queries.inboxReopen.ts:49-54`)
+  and the next answer writes a new time (`web/src/lib/queries.sync.ts:385-388`).
+
+**The change.** One rule, in one function, read by every place that decides what to run.
+
+* A **held answer** is a row of `v_inbox_queue` that a failed request of the worker lists in
+  `result.skip`, where that request finished at or after the row's `resolved_at`. This is 186's own
+  test (`186:108-112`), moved into one new function, `inbox_apply_held_items()`, which returns the
+  ids. An item enters a skip list only through a run that then closes failed
+  (`apply/src/report.ts:113-116`), so every skipped answer is covered.
+* `sync_request_inbox_apply` files a request only when a row outside the held set waits. A queue that
+  holds held answers alone files nothing: no request, no run, no cost.
+* `inbox_apply_prepare` returns one more key, `held` (the ids). The worker adds them to its skip set,
+  so a held answer is never handed to Claude, whoever filed the request.
+* `inbox_apply_close` keeps 186's two tests (the follow-up and the "still stuck" rule of the notice)
+  with their first arm, this close's own skip, and reads the function for the rest. The notice of a
+  `not_applied` failure no longer says "press Apply answers to run the rest" (`186:92`). It says the
+  answers wait until he answers them again (Undo, then answer). Every other failure keeps its
+  sentence.
+* The worker's report says the same in its lines (`apply/src/report.ts:84`, `:120`, `:129-130`).
+  With nothing but held answers in the queue, a pressed request closes done without starting Claude,
+  and its first line says that nothing new was applied and how many answers wait for a new answer.
+* When he answers a held item again, its `resolved_at` is later than the request that skipped it. It is
+  no longer held, and the next sync or press takes it.
+* `skills/bb-sync/SKILL.md` step 5b counts rows outside the held set. `skills/inbox-apply/SKILL.md` and
+  `writer.md` say what a held answer is; `writer.md:45-49` ("sent again at the next one") is corrected.
+
+**Default taken (open item O-1).** His words are "waits until he answers it again". The brief reads
+them literally: a press of Apply answers does not retry a held answer either. The way to have one tried
+again without answering it is a session run of the skill on the host (`claude "/inbox-apply"`), which
+works every answered row (`skills/inbox-apply/SKILL.md:74-98`).
+
+**Objects and files.** `db/migrations/187_inbox_apply_followups.sql` section 1 (one new function, three
+re-created); `apply/src/batch.ts`, `report.ts`, `loop.ts` (a log line) and their tests;
+`skills/inbox-apply/SKILL.md`, `writer.md`; `skills/bb-sync/SKILL.md`. No file under `sync/src` and no
+file under `web/src` changes: the sync calls the same function by the same name
+(`sync/src/db.ts:191-193`), and the page shows the worker's first line as it does today
+(`web/src/lib/inbox-apply-phase.ts:164-176`).
+
+**Proof.** The unit `db/tests/phase23_187_held_answers.sql`: (1) a failed request of the worker with an
+item in its skip makes that item held; (2) with only that item answered, `sync_request_inbox_apply`
+returns null and inserts nothing, and with a second, unheld row it files one request; (3) `prepare`
+returns the id under `held`; (4) once the item's `resolved_at` is later than the request's
+`finished_at` it is not held; (5) a done close keeps `inbox-apply-failed` open while an item is held
+and archives it once none is; (6) the `not_applied` notice holds no "press Apply answers"; (7) `anon`,
+`authenticated`, `inbox_apply_runner` and `sync_runner` cannot execute the new function, and the
+service role can (the fallback skill's step 5b reads it in a host session). In `apply/`:
+a held item is skipped and never in the batch; a pass over held answers alone starts no run and closes
+done. The standing units still pass: `phase23_180`, `_181`, `_183`, `_185`, `_186` and the three
+`phase14_*` units that pin `sync_runner`'s fourteen functions. Two of them pin words in a function's
+source (`db/tests/phase23_185_session_links.sql:37`, `phase23_186_notices.sql:42`), so 187's bodies
+keep `session_link` and `c_signed_in`.
+
+**Known corner.** `resolved_at` is the browser's clock and `finished_at` is the database's. 186 already
+compares the two. A laptop clock that runs minutes behind could leave a fresh answer held. The doctor
+flags a skew above 30 s (bb2dash-stack `doctor/lib/constants.mjs:28`).
+
+### Item 2: stop re-asking superseded files, and stamp session links
+
+**Today, the superseded file.**
+
+* `supersede_replaced_files` asks one question when an item carries several files and one is new, or
+  when only a file name matches (`db/migrations/160_supersede_new_candidates_only.sql:181-209`). It
+  skips the question only while a matching answer is `resolved` or `dismissed` (`160:183-193`).
+* `/inbox-apply` archives every answered row, this one too (`skills/inbox-apply/SKILL.md:132-136`). So
+  at the next fold the settle test finds nothing and the question is raised again (`160:195`).
+* `link_file_sessions` had the same flaw and 163 fixed it by also reading an archived row that did not
+  close itself (`db/migrations/163_session_link_archived_answers.sql:118-130`).
+* STATUS lists it as open item 3a and says no such item exists on prod yet (`STATUS.md:1405-1407`).
+
+**Today, the session answer.**
+
+* The fold writes his pick into `bb_files.session_id` (`163:139-146`) and leaves the answer row as it
+  was. `applied_at` stays null, so the queue row reads `was_applied = false`
+  (`db/migrations/090_attention_archive.sql:156`).
+* The worker therefore carries a rule of its own that compares the file with the pick
+  (`apply/src/batch.ts:146-157`), fed by a read the role was given for it (`185:83-94`).
+* The page refuses Undo for every session answer by its ref, because no stamp tells an applied one
+  from one that is not (`web/src/lib/queries.inboxReopen.ts:18-20`, `:92`, `:114`).
+* The review of 185 advised the stamp. It was declined then as a change to the sync's transform with
+  a backfill (`STATUS.md:1383-1388`).
+* Prod today: items 3436 and 3437 are archived as applied by the transform with `applied_at` null.
+
+**The change.** Migration `188_transform_archived_answers.sql` re-creates two functions, each with its
+live body and one change, as 160 and 163 did before it.
+
+* `supersede_replaced_files`: the settle test also reads a row that is `archived` and did not close
+  itself, the same predicate as `163:127-128`. Nothing else in the function changes.
+* `link_file_sessions`: when step c writes his pick onto the file, it stamps `applied_at` on the
+  answer row it read, where that is still null. An answer of "none" gets no stamp: nothing was
+  written, which is the rule the apply side already keeps (`186:194-201`).
+* A backfill in the same file: every session answer (resolved or archived, not closed by itself,
+  `applied_at` null) whose pick is the session its current file carries is stamped. The migration
+  prints the count. The stamp's time is the migration's, not the fold's; the file's header and
+  `DATA_SYNTAX.md` say so. On prod that is at least items 3436 and 3437.
+* The worker reads the session rule before the general one. Today a row with `was_applied` is recorded
+  as "Applied by apply_resolutions()" (`apply/src/batch.ts:163`), which would be the wrong function's
+  name on a stamped session answer. The rule for "none" and for a file that already agrees stays.
+* The skill's two paragraphs follow: `skills/inbox-apply/SKILL.md:115-136` and `writer.md:33-44`.
+
+**What this does not do (open item O-2).** Nothing applies the pick of a `supersede/` answer. 122's
+header gives that job to `/inbox-apply` (`db/migrations/122_supersede_replaced_files.sql:20-22`), the
+function itself writes nothing on that path (`160:181-182`), the role cannot write `bb_files`
+(`185:252-256`) and the skill flags it (`skills/inbox-apply/writer.md:43-44`). After 188 an answer of
+"none" is complete: the question stays closed. A pick is recorded, flagged, and not asked again; the
+file is still not marked as replaced. His label is "Stop re-asking", so the brief stops there.
+
+**Objects and files.** `db/migrations/188_transform_archived_answers.sql`; `apply/src/batch.ts` and its
+test; `skills/inbox-apply/SKILL.md`, `writer.md`; `DATA_SYNTAX.md`. No file under `web/` changes: a
+stamped answer is already refused Undo by the general rule (`queries.inboxReopen.ts:89`, `:111`).
+
+**Proof.** The unit `db/tests/phase23_188_archived_answers.sql`: (a) with an archived answer for the
+same candidates a fold raises no question; with an archived row that closed itself it raises one; with
+other candidates it raises one; (b) a resolved pick and an archived pick each link the file and stamp
+the answer; "none" links nothing and stamps nothing; a pick outside the week's sessions links nothing
+and stamps nothing; (c) the backfill run twice stamps 0 the second time. The standing units
+`phase18_122_supersede_rule`, `phase18_123_file_sessions`, `phase18_124_stage_files_replay`,
+`phase18_162_lecture_number_links` and `phase18_163_session_link_answers` give the same verdict lines
+as on `main` at the cut (`phase18_122` has read failed on live course data since 2026-10-07,
+`STATUS.md:1440-1442`; the check is "no new line", not "PASS"). In `apply/`: a stamped session answer
+is recorded with `link_file_sessions` in its rule and never `apply_resolutions`.
+
+**When 188 goes on (open item O-5).** At the cut-over, after the merge and after `apply` is rebuilt,
+so the old worker never records a stamped session answer under the wrong name. Before the PR opens the
+PM runs the file and its unit inside one transaction that is rolled back and pastes the unit's PASS
+line into 110a. Until the cut-over the unit run by `scripts/db-test.mjs` reads "migration 188 is not
+applied", on purpose, as `phase23_183` did (`STATUS.md:1303-1304`).
+
+### Item 3: schedule the decisions exporter, notes only
+
+**Today.**
+
+* Nothing runs the exporter. STATUS lists it as open (`STATUS.md:1411`, `:1433-1434`), bb2dash-stack's
+  README says to run it by hand (`README.md:353-356`) and that the doctor has no row for it
+  (`README.md:358-359`). The skill says "the host runs the same script on a schedule"
+  (`skills/inbox-apply/SKILL.md:170-171`), which is not true yet.
+* The exporter files a decision in one go: the note, the day file, then one mark
+  (`scripts/inbox-decisions-export.mjs:16-18`, `:179-195`, `:240-251`). The mark requires both paths
+  (`db/migrations/182_inbox_decision_filing.sql:86-91`).
+* `scripts/inbox-decisions-pr.mjs` fetches, merges `origin/main` into the log branch, commits,
+  pushes, and opens the pull request (`scripts/inbox-decisions-pr.mjs:89-116`).
+* So "Notes only" cannot be done with what exists. A run that writes no day file has no day-file path
+  for the mark. And once a row is marked filed, the later manual step cannot find it: the exporter's
+  read lists only rows with `decision_filed_at` null (`182:67-69`).
+
+**The change: filing in two steps.**
+
+* Migration 187, section 2:
+  * `inbox_decision_filed(bigint, jsonb)` re-created: `note_path` is required; `log_path` may be absent
+    or null, which means the day-file entry is not written yet. When present it is a non-empty string.
+    Once only, as now.
+  * `inbox_decisions_unlogged(integer)`: the rows that are filed with a note path and no log path,
+    oldest first, the same columns as `inbox_decisions_unfiled`.
+  * `inbox_decision_logged(bigint, text)`: adds `log_path` and `logged_at` to such a row, once.
+  * `inbox_decision_skipped(bigint, text)`: marks an archived `inbox-decision/1` row filed with
+    `{"skipped": true, "why": ...}` and no path, once. Such a row is never listed by either read.
+  * All four are the service role's alone, invoker rights, as 182's are (`182:109-123`, `:132-144`).
+  * **Test item 3782** is marked by this migration with one guarded call of `inbox_decision_skipped`.
+    No note is written for it and no day-file entry. On a database without that row the call does
+    nothing.
+* `scripts/inbox-decisions-export.mjs`:
+  * `--notes-only`: for each unfiled row, the note, the ingest (best effort, as today), then the mark
+    with the note path alone. It writes no day file and refuses `--log-dir`. A row whose ref starts
+    `accept/` (a test question of an acceptance run, below) is marked skipped and gets no note.
+  * The default mode stays what a session and the manual step use: unfiled rows in full, then the
+    unlogged rows: the day-file entry (the renderer already skips an item the file holds,
+    `scripts/lib/inbox-decision-render.mjs:185-187`) and `inbox_decision_logged`.
+* `scripts/inbox-decisions-pr.mjs` does what it does today and is the manual step. Its header comment
+  (`:15-16`) is corrected: no scheduled task calls it.
+
+**The schedule.**
+
+| | |
+|---|---|
+| Mechanism | A Windows scheduled task on the laptop, registered by a script of the same shape as `desktop/launch/register-logon-task.ps1:1-22` |
+| Why this one | It is what Phase 23's approved plan named (a scheduled task on the host; `STATUS.md:1433`). The exporter needs the vault folder, the harness checkout's resolver and the service-key file together, and only the host has all three (`scripts/inbox-decisions-export.mjs:10-14`, `:113-131`). The harness-jobs container has the vault and a scheduler with two fixed jobs (agentic-harness `compose.yaml:38-71`, `hooks/lib/schedule.mjs:26-36`), but it holds the realm's push token and lives in a third repository; the bb2dash service key does not belong beside that token. A new compose service would be a new mechanism |
+| Task | `Bb2dash-Exports`, two triggers: at logon plus 5 minutes, and every 6 hours. Hidden, below-normal priority, a 15-minute limit, started when a missed time comes round, allowed on battery, never two at once |
+| What runs | `node scripts/exports-run.mjs` from the bb2dash checkout, which runs the exporter with `--notes-only` |
+| It may | read the unfiled rows as the service role (the key is read from its file at run time and never printed); write note files under the vault's `projects/bb2dash/decisions/`; run the harness ingest for those notes; mark each row; write its own state file and log |
+| It may not | touch any git repository (no fetch, no worktree, no commit, no push); open a pull request; write a day file; write anything under a bb2dash checkout; call any database function but the filing ones; start Docker |
+| Guard | the runner stops with exit 2, filing nothing, when the checkout it runs from is not on `main` |
+| State | `~/.bb2dash-exports/state.json` (start, end, exit code, and per exporter the counts filed, skipped and not filed) and a log that rolls, both outside every repository |
+| A failure is seen | on the doctor's new `exports` row in bb2dash-stack: a problem when there is no state file, the last run ended non-zero, a decision was not filed, or the last run is older than 36 hours (the limit the harness jobs already use, `doctor/lib/constants.mjs:34-35`). Also in the log, and in the task's last result |
+
+The name, the script name and the two triggers are the ones Phase 24's draft proposes for the same
+task (its task 21), so there is one task and one script (see Seams).
+
+Where the notes go: the vault's `projects` realm, whose remote is private (checked today). The
+harness's nightly job ingests the vault again and syncs the realm (agentic-harness
+`scripts/nightly-ingest.sh:134`, `:156-162`). The day files go to a public repository, which is why
+they stay his step.
+
+**The manual step.** A tenth `just` verb in bb2dash-stack, `file-decisions`, runs
+`scripts/inbox-decisions-pr.mjs` from the bb2dash checkout with the two folders from `.env`. The name
+is the Phase 23 plan's. He runs it when he wants the day files and their pull request (open item O-4).
+
+**After the first scheduled run** the 16 real decisions that wait today have notes (17 less item
+3782), with any archived since, and `inbox_decisions_unlogged` lists them until he runs the manual
+step.
+
+**Objects and files.** 187 section 2; `scripts/inbox-decisions-export.mjs` and its test;
+`scripts/inbox-decisions-pr.mjs` (comment) and its test; new `scripts/exports-run.mjs`, its test, and
+`scripts/register-exports.ps1`; bb2dash-stack: `doctor/lib/*`, `justfile`, `README.md`. The standing
+unit `db/tests/phase23_182_inbox_decision_filing.sql` is not edited: its five refusals (lines 134-141:
+null, an array, no note path, a blank log path, a numeric path) all still hold under the new rule.
+
+**Proof.** The unit `db/tests/phase23_187_decision_filing.sql`: a mark with no log path is accepted
+and the row is then listed as unlogged; `inbox_decision_logged` stamps once and the row leaves the
+list; a skipped row is on neither list; a blank log path is still refused; `inbox_apply_runner` and
+`authenticated` can execute none of the four. `node --test scripts/inbox-decisions-export.test.mjs`:
+`--notes-only` writes under the notes folder only, calls no git, and marks without a log path; a later
+default run writes the entry and stamps the log once; an `accept/` row is skipped and no file is
+written; `--notes-only` with `--log-dir` exits 2. `node --test scripts/exports-run.test.mjs`: the state
+file is written on success, on a failure and on a thrown error; a checkout that is not on `main`
+exits 2. After the cut-over, one read: 0 unfiled, at least 16 rows with a note path, 3782 skipped.
+
+### Item 4: teach `just up` about apply
+
+**Today.**
+
+* `just up` is `docker compose up -d --build` (bb2dash-stack `justfile:17-18`). `apply` sits behind
+  `profiles: [apply]` (bb2dash `compose.yaml:102-103`), so compose builds and starts it only when
+  `COMPOSE_PROFILES` names it.
+* bb2dash-stack's `.env` holds `COMPOSE_PROFILES=workspace` since the Phase 21 acceptance run added
+  that line (DECISIONS 2026-10-08, the "Phase 21 accepted" row), and `apply` was started at the
+  cut-over with the profile named on the command (`STATUS.md:1335-1337`). Not checked: the file
+  itself. It is his and was not opened.
+* `.env.example` already tells him the line (`.env.example:61-65`), and so does the README
+  (`README.md:341-351`).
+* The doctor has no row for the service. `diagnose` lists the Workspace's row and none for apply
+  (`doctor/lib/diagnose.mjs:36-49`); `APPLY_PROFILE` is used for the ports check only
+  (`doctor/lib/constants.mjs:76-83`). bb2dash-stack's compose file lists neither the service, its
+  volume nor its network in its header (bb2dash-stack `compose.yaml:11-23`).
+
+**The change.**
+
+* **His one line.** In bb2dash-stack's `.env`, `COMPOSE_PROFILES=workspace` becomes
+  `COMPOSE_PROFILES=workspace,apply`. Nobody else edits the file. The acceptance run's profile helper
+  never changes a line that is already there (`scripts/lib/accept-profile.mjs:7-10`), so the run
+  cannot do it for him either.
+* **The doctor's `apply` row.** The Workspace's row function (`doctor/lib/checks-docker.mjs:240-250`)
+  becomes one function for a service behind a profile, and both rows use it. For apply: profile on,
+  the row is a problem unless the container is running and healthy and `inbox_apply_db_url` is
+  non-empty. Profile off and no container: `off`, no problem. **Profile off and a container of the
+  service exists: a problem**, with the line to add in its text. That last case is the laptop today.
+  The Workspace's row keeps its present behaviour, and `doctor/workspace.test.mjs` is not edited.
+* `just up` itself does not change. With the line it builds and starts `apply` with the rest. The
+  rule of 2026-10-07 stands: `apply` is started, restarted and rebuilt alone, and `just up` is never
+  run while a sync is open.
+* The README's "Apply" section, `.env.example` and the compose header are brought level.
+
+**Objects and files.** bb2dash-stack only: `doctor/lib/checks-docker.mjs`, `constants.mjs`,
+`diagnose.mjs`, new `doctor/apply.test.mjs`, `compose.yaml` (comment), `README.md`, `.env.example`.
+
+**Proof.** `node --test doctor/` passes with the new file's four cases, and
+`git diff --stat origin/main...HEAD -- doctor/workspace.test.mjs` prints nothing. After his line:
+`docker compose config --services` from bb2dash-stack lists `apply` (it reads files and starts
+nothing), and `just doctor` shows the row `running, healthy`. The acceptance run reads the same row.
+
+## The acceptance pack for Phase 23
+
+The pack is `acceptance/23/` (`manifest.json`, `playbook.md`, `proofs.json`) and
+`web/e2e/accept23.spec.ts`, in the form `acceptance/README.md:64-104` fixes. The script it walks is the
+Phase 23 plan's seven steps, with two more for these follow-ups.
+
+**Test questions.** The run cannot answer Stack's own Inbox questions for him. So step 1 raises four
+questions of its own through the owner's session, by a new function, `inbox_accept_question`. Each has
+entity `agent_request`, no course, and a ref that starts `accept/`. A question of that shape names no
+course row: confirmed or dismissed with no note, the worker records it without starting Claude
+(`apply/src/batch.ts:162-170`); with a note it goes to Claude. Its text is the function's own fixed
+sentence. The four stay in the Archived tab afterwards as the run's record, and the exporter marks
+their decisions skipped.
+
+**The steps.**
+
+| id | kind | stage | what it does | host proof |
+|---|---|---|---|---|
+| 0 | host | `ready` | Nothing is open: no sync and no Inbox apply request waits or runs, no answer of Stack's waits unless it is held, and no `sync-login-required` item is open (the Blackboard login is alive). Otherwise the run is blocked, before anything is raised | `apply-quiet` |
+| 8 | host | `ready` | The doctor's `apply` row reads `running, healthy` with the profile on, and the `exports` row is green | actions `apply.doctorRow`, `exports.doctorRow` |
+| 1 | auto | `walk` | Raises the four test questions; in the Inbox confirms the first and dismisses the second | `questions-raised` |
+| 2 | auto | `walk` | Presses Sync in the top bar; the sync container takes the request | `sync-taken` |
+| 3 | auto | `walk` | Watches the Inbox until the request the sync filed has closed: a result line beside `Apply answers`, and nothing was pasted. The playbook names one second run when the sync was still running after nine minutes | `recorded-after-sync` |
+| 4 | auto | `walk` | Both questions are under Archived and gone from Answered, not applied | `nothing-written` |
+| 6 | auto | `walk` | Confirms the third question with a note and presses `Apply answers`: the request runs by itself, through one Claude run, and closes done | `applied-from-button` |
+| 9 | host | `walk-proofs` | After this run's fold: no session answer whose pick is on its file lacks the stamp, and no `supersede/` question is open beside an archived answer for the same file and candidates | `transform-answers` |
+| 7a | auto | `offline` | With `apply` stopped by the host: dismisses the fourth question and presses `Apply answers`; after the 75 s grace the button reads `waiting on the worker…` and a second press shows the paste command | `request-waiting` |
+| 7b | auto | `back` | With `apply` started again: the waiting request is taken and closes | `request-taken-after` (at least 75 s) |
+| 5 | host | `file` | The scheduled export is started now and ends with exit 0; the run's four test decisions are marked skipped with no note; no decision is left unfiled; 3782 is skipped | action `exports.runNow`; `test-decisions-skipped`, `decisions-filed` |
+| 1-real | human | none | One answer of his own that needs a change is applied after a sync, and the row reads right in the app | his |
+| 5-note | human | none | One decision note in the vault reads right to him | his |
+| 5-log | human | none | The day files and their pull request: `just file-decisions`, when he chooses | his |
+| held | waived | none | A held answer cannot be staged on the live site without making a real run fail. It stands on the unit and the worker's tests (110a) | none |
+
+The stages in order: `prepare`, `ready` (host), `walk` (sandbox), `walk-proofs` (host), `stop` (host:
+`apply.stop`), `offline` (sandbox), `start` (host: `apply.startNoBuild`), `back` (sandbox), `file`
+(host).
+
+**What each proof reads.** Every proof that takes an id from the sandbox also takes
+`carry:run.started_at` and holds the row to this run (`acceptance/README.md:190-196`).
+
+* `apply-quiet`: counts of open requests, of queue rows outside the held set, and of open
+  `sync-login-required` items; blocked when any is above 0.
+* `questions-raised`: the four rows exist, were raised in this run, carry `accept/` refs, and the
+  first two are answered as the step says.
+* `sync-taken`: the request is a sync of this run, claimed by `sync-runner`; blocked when it closed
+  `login_required`.
+* `recorded-after-sync`: that sync is done; one apply request names it, was filed by the sync, was
+  taken by the worker and is done; both questions are archived by that request, one in bucket
+  `recorded_elsewhere` and one in `dismissed`.
+* `nothing-written`: the write log holds no row for the two questions.
+* `applied-from-button`: the third question is archived by a later request of this run that was filed
+  from the button, started Claude and closed done; the write log holds no row for it.
+* `request-waiting` and `request-taken-after`: the Phase 21 pair for a stopped service
+  (`acceptance/21/proofs.json:37-55`), on `agent_requests`.
+* `test-decisions-skipped`, `decisions-filed`, `transform-answers`: counts over `attention_items`.
+
+**One view for the proofs.** A proof may not name `params` or `result`
+(`scripts/lib/accept-proofs-lint.mjs:100-104`, `scripts/lib/accept-proofs-shapes.mjs:34`), and who
+filed a request and whether it started Claude are held there. So 187 adds the view
+`v_inbox_apply_runs`: one row per `inbox_feedback` request with typed columns only (`id`, `state`,
+`filed_by`, `after_request`, `claimed_by`, the three times, `claude_started`, `error_code`,
+`archived_count`, `held_ids`). The lint is not loosened.
+
+**New host actions** (bb2dash-stack `scripts/lib/accept-actions.mjs:290-311`, repeated in bb2dash
+`acceptance/manifest.schema.json:57-67`): `apply.doctorRow`, `apply.stop`, `apply.startNoBuild`,
+`exports.doctorRow`, `exports.runNow`. The three `apply` actions name that one service. No action
+names the `sync` container: the run reaches a sync only through the app's own Sync button, and reads a
+dead Blackboard login from the database. `exports.runNow` starts the registered task (on a machine
+without one, the runner itself) and waits, at most five minutes, for the state file's end time to
+move.
+
+**What a green run means.** Every `auto` step has the operator's `pass`, a passed browser test, its
+evidence files and its host proofs, and every `host` step passed. From `main` it counts as the
+acceptance of Phase 23 (ORCHESTRATOR section 3 step 9): the PM writes the `**Phase 23 accepted` row
+and merges that docs-only PR without asking again. It does not cover the three `human` rows and the
+one waived row, and the record names them.
+
+**What a run costs and leaves.** Three operator sessions and one apply run on his plan; one real
+Blackboard sync (open item O-3); four archived test questions; no row written to any course table.
+
+**Blocked, not red:** the plan's limit; a dead Blackboard login; a sync, an apply request or an
+unheld answer of his waiting at the start; a sync still running after the second watch.
+
+**What rests on the sandbox alone:** what the page showed (the status line, the button's label, the
+paste command). The host proves what happened in the database.
+
+## Database objects
+
+| migration | objects | applied |
+|---|---|---|
+| `187_inbox_apply_followups.sql` | Section 1: new `inbox_apply_held_items()`; re-created `inbox_apply_prepare(bigint)` (185's body plus `held`), `sync_request_inbox_apply(bigint)` (180's body, the held test), `inbox_apply_close(bigint, text, jsonb)` (186's body, the held test, one sentence). Section 2: re-created `inbox_decision_filed(bigint, jsonb)`; new `inbox_decisions_unlogged(integer)`, `inbox_decision_logged(bigint, text)`, `inbox_decision_skipped(bigint, text)`; the mark on item 3782. Section 3: view `v_inbox_apply_runs` (security invoker, `anon` revoked); `inbox_accept_question(text, text)`, SECURITY DEFINER, for `authenticated` only, at most eight open at once. A guard block | during the build, on Stack's word, with no sync and no apply request open. The running worker ignores `held` until it is rebuilt |
+| `188_transform_archived_answers.sql` | re-created `supersede_replaced_files(uuid, bigint)` and `link_file_sessions(bigint)`; the backfill of `applied_at`; a guard block | at the cut-over, after `apply` is rebuilt |
+| 189 | held for the review round | |
+
+Additive in effect: no drop, no rename, no grant taken from a role that holds it. 180 to 186 are not
+edited. `sync_runner` still executes fourteen functions and `inbox_apply_runner` gains none.
+
+## Files by owner
+
+* **W-80, database:** `db/migrations/187_*.sql`, `188_*.sql`; `db/tests/phase23_187_held_answers.sql`,
+  `phase23_187_decision_filing.sql`, `phase23_187_accept_objects.sql`, `phase23_188_archived_answers.sql`;
+  `DATA_SYNTAX.md`. A standing unit is edited only where it pins a sentence or a rule that 187
+  changes, and each such edit is named in 110a (none is expected: the planner read `phase23_182`'s
+  refusals and the two source pins, not every case of every unit).
+* **W-81, the worker and the skills:** `apply/src/batch.ts`, `report.ts`, `loop.ts`; `apply/test/*`;
+  `skills/inbox-apply/SKILL.md`, `writer.md`; `skills/bb-sync/SKILL.md` (step 5b).
+* **W-82, the exporter and its schedule:** `scripts/inbox-decisions-export.mjs`,
+  `scripts/inbox-decisions-pr.mjs`, their tests; new `scripts/exports-run.mjs`,
+  `scripts/exports-run.test.mjs`, `scripts/register-exports.ps1`.
+* **W-83, bb2dash-stack:** `doctor/`, `justfile`, `README.md`, `.env.example`, `compose.yaml`
+  (comments), `scripts/lib/accept-actions.mjs` and the files beside it that track a service.
+* **W-84, the pack:** `acceptance/23/` (three files), `web/e2e/accept23.spec.ts`,
+  `acceptance/manifest.schema.json` (the action list), `acceptance/pack-check.mjs` and
+  `acceptance/OPERATOR.md` only where they name the Workspace alone (`pack-check.mjs:47`), and a case
+  per new proof in `scripts/accept-proofs-db.test.mjs`.
+* **PM:** `web/src/lib/supabase/database.types.ts` (regenerated at integration), `project-state/`,
+  root `CLAUDE.md`, 110a, both PRs, the prod applies, the cut-over.
+* **Nobody:** `db/migrations/180` to `186`; `sync/src`; `web/src` but for the generated types;
+  `web/test`; `workspace/`; `mcp-server/`; `desktop/`; `docker/apply/` (the image's files do not
+  change; the image is rebuilt); bb2dash-stack's `.env`, `machine.env` and anything under a secrets
+  folder.
+
+## Seams
+
+| with | seam | rule here |
+|---|---|---|
+| **Phase 24 (draft at 4bf223e). The PM's task calls its first part "24a"; no file on any ref names a 24a, so this row is written against the whole draft** | **The apply image.** Its bundle copies `apply/src` and `workspace/src` (`docker/apply/Dockerfile:39`) and the skill folder (`:108`). Phase 24 changes `workspace/src` modules that apply imports (its draft, lines 40-42, 289-295); this phase changes `apply/src` and the skill | Whoever merges second merges `origin/main`, runs `cd apply && npx vitest run` and the firewall diff, and rebuilds `apply` alone at its cut-over. Neither phase edits a file under `docker/apply/` |
+| Phase 24 | **Migration numbers.** This phase: 187, 188, with 189 held. Phase 24's draft: 190 to 199 (its lines 23-25) | no overlap. Neither re-creates a function of the other's |
+| Phase 24 | **The scheduled task.** Its draft's task 21 registers `Bb2dash-Exports` with `scripts/register-exports.ps1` for "the Inbox exporter and the notes exporter", and says the task "opens a pull request and never merges" (its lines 228, 279, 396) | Stack's "Notes only" of 2026-10-08 decides the Inbox half: no scheduled pull request. This phase creates the script, the runner and the task with one exporter in the runner's list. Phase 24 adds its exporter to that list and registers no second task. If Phase 24 merges first, W-82 edits its files instead |
+| Phase 24 | **Shared acceptance files:** the action list, `pack-check.mjs`, `OPERATOR.md`, and the generated types | each phase adds; the second to merge keeps both sets and regenerates the types |
+| Phase 24 | **Who merges first** | this phase. It is small and waits for nothing. Phase 24's page waits for Phase 22 (its task 25). Order of merging: bb2dash `fix/phase23-followups`, then bb2dash-stack's, then Phase 24 merges `origin/main` |
+| Phase 24 | **The sync image.** Phase 24 changes `sync/src/files.ts` and rebuilds `sync` | this phase changes nothing under `sync/src` and rebuilds nothing but `apply` |
+| **Phase 22 (executing)** | Checked: `git diff --stat main...<branch>` for `feat/styling-22`, `-foundation` and `-walkbox` shows docs, `web/test/token-audit.*`, `web/test/walk22-lib.test.ts`, `web/e2e/walk22.lib.ts`, `scripts/walk-box*`, `scripts/lib/walk-box-*` and `docker/walk/`. Its brief plans styles and components under `web/src`, two new specs under `web/e2e`, and one desktop file (brief 103 on `feat/styling-22`, lines 744-773) | **No file seam.** This phase touches none of those paths; under `web/` it adds one new spec and regenerates the types. One reading seam: W-69 restyles the Inbox that `accept23.spec.ts` reads, so the spec finds things by role and visible text, and the PM re-runs `just accept 23 --check` after Phase 22 merges. An acceptance run of this phase is not started inside a Phase 22 walk window: that walk treats a sync or an Inbox apply inside its window as blocked (brief 103, line 1065) |
+| The live `apply` | One worker on the queue at a time: two containers on the role's login fail each other's run (DECISIONS 2026-10-07, review round 1, on 184) | the test project `bb2dash-wt23f` is built and its image tests run. No container of it is started against the queue. The new image's first live run is at the cut-over |
+| The `sync` container | it holds the Blackboard login | not rebuilt, not restarted. `sync_request_inbox_apply` changes in SQL only. Every `apply` command names the one service and runs with no sync open |
+| The harness | the vault, the resolver, the nightly ingest | consumer only. No harness file changes and there is no harness PR |
+| Code freeze | Nov 30 to Dec 13 (ORCHESTRATOR section 2) | the merge and the applies land before or after |
+
+## Must respect
+
+* B-43 stands: the sync holds no model. A Claude process shares no network and no volume with the
+  Blackboard login (`docker/apply/image.test.mjs`).
+* Planner state: `inbox_apply_runner` gains no write and no read. `reading_progress` stays out of
+  reach.
+* 180 to 186 are frozen. A change is a new body in 187 or 188, never an edit.
+* Repo and prod never drift: each migration is applied under its file name, byte-identical, after a
+  dry run in a transaction that is rolled back.
+* The service key stays in its one file. The scheduled run reads it at run time, as the exporter does
+  today, and prints it nowhere.
+* This repository is public. The pack, the playbook and every test hold no course text. A test
+  question's text is the function's own sentence.
+* Anything visual goes in front of Stack before a merge. This phase changes no screen: the Inbox shows
+  the worker's own line, as now.
+
+## Definition of done
+
+**SOP gates**
+
+- [ ] `apply/`: `npm run typecheck`; `npx vitest run` gives 0 failures; line coverage of `src/` at
+      least 80 % (94.78 % at the session-answer fix).
+- [ ] `scripts/`: `node --test` over the exporter's, the runner's and the three `accept-proofs` test
+      files gives 0 failures.
+- [ ] `sync/`: its suite is run and unchanged (no file under `sync/` is in the diff).
+- [ ] `web/`: `npm run typecheck` and `npx eslint . --max-warnings 0` exit 0; `npx vitest run` is not
+      below `main`'s count; `npx playwright test -c e2e/accept.config.ts --list` lists the new titles
+      as skipped.
+- [ ] `docker/`: `node --test docker/apply/image.test.mjs docker/grep-clean.test.mjs` passes;
+      `node docker/apply/fork-firewall.mjs --write` then `git diff --exit-code docker/apply` exits 0;
+      the image builds as `bb2dash-wt23f`.
+- [ ] SQL: `node scripts/db-test.mjs --only <file>` prints PASS for the three `phase23_187_*` units
+      and for `phase23_180` to `_186`; `phase23_188_*` prints PASS in the rolled-back dry run before
+      the PR and through the runner after the cut-over.
+- [ ] `node --test acceptance/acceptance.test.mjs` gives 0 failures with the new pack.
+- [ ] bb2dash-stack: `node --test doctor/ scripts/` gives 0 failures; `just accept 23 --check` passes.
+- [ ] Supabase advisors: no new security finding on the new objects.
+- [ ] **`/code-review main high` and `/security-review` on both PRs. Required:** the apply worker
+      writes with its own role, 187 replaces two of that role's SECURITY DEFINER functions and one
+      of `sync_runner`'s and adds one that the app's own login can call, and a host script that holds
+      the service key runs unattended. CRITICAL and
+      HIGH are fixed test-first. Phase 23's two fix rounds were not reviewed again
+      (`STATUS.md:1287-1288`, `:1389-1390`); here the fix round gets a second review or an
+      independent check, recorded in 110a.
+
+**Contract**
+
+- [ ] Each of the four items has its unit or test named above, and each is green.
+- [ ] `git diff --name-only origin/main...HEAD -- sync/src web/src web/test workspace mcp-server desktop docker`
+      prints one line, `web/src/lib/supabase/database.types.ts`.
+
+**Live, after his merge word**
+
+- [ ] The cut-over (task 18) is done in its order, and the doctor's `apply` and `exports` rows are
+      green.
+- [ ] `just accept 23` from `main` is green.
+
+**Docs, same PR**
+
+- [ ] STATUS, DECISIONS (one row per answered open item, one for the migration block), ORCHESTRATOR's
+      row 23, root `CLAUDE.md`'s two Phase 23 paragraphs (187 and 188 join the frozen list; 189 is
+      what is left), `DATA_SYNTAX.md`; bb2dash-stack's README.
+
+## Task list
+
+Paths are from the bb2dash root unless the row says bb2dash-stack. "Runner on `<file>`" means
+`node scripts/db-test.mjs --only <file>` and its PASS line. Order: 1, then (2 to 4 beside 5 to 7
+beside 8 and 9 beside 10 to 12), then 13, then 14 to 19.
+
+| # | task | owner | deterministic check |
+|---|---|---|---|
+| 1 | Reads at the cut, read-only, written into 110a: how many `supersede/` items exist; how many session answers the backfill would stamp; the durations of the last five container syncs; the controls the Inbox card shows for a `stack_must_confirm` on `agent_request`; whether a standing `phase18_*` unit pins the source of either transform function | PM | `grep -c "^## Reads at the cut$" docs/planning/sprint-2/verification/110a_PHASE23_FOLLOWUPS_VERIFICATION.md` gives 1, with five answered lines under it |
+| 2 | Migration 187 and its three units, units first | W-80 | before the apply, Runner on each `phase23_187_*.sql` fails with "migration 187 is not applied"; after it, PASS on all three and on `phase23_180`, `_181`, `_182`, `_183`, `_185`, `_186`, `phase14_091_queue`, `phase14_093_review_fixes`, `phase14_095_storage_key` |
+| 3 | 187 on prod, on Stack's word | PM | the dry run's output and the file's md5 against the recorded migration are in 110a; one read shows 3782 marked `skipped` and absent from the unfiled ids |
+| 4 | Migration 188 and its unit, unit first | W-80 | the migration and the unit in one rolled-back transaction print PASS (pasted in 110a); the five `phase18_*` units in that transaction print the lines they print on `main`; Runner on `phase23_188_archived_answers.sql` reads "migration 188 is not applied" until task 18 |
+| 5 | The worker holds: `held` read into the skip set; the report's lines | W-81 | `cd apply && npx vitest run` gives 0 failures and holds the two new cases (a held item is never in the batch; held answers alone start no run and close done) |
+| 6 | The worker records a stamped session answer under the right function | W-81 | the same run holds the case: a session answer with `was_applied` true has `link_file_sessions` in its rule and no `apply_resolutions` |
+| 7 | Skill text: held answers, the two transform paragraphs, bb-sync step 5b | W-81 | `grep -c "sent again at the next one" skills/inbox-apply/writer.md` gives 0; `grep -c "asks the same question again" skills/inbox-apply/SKILL.md` gives 0; `grep -c "inbox_apply_held_items" skills/bb-sync/SKILL.md` gives 1; `node --test scripts/install-skills.test.mjs docker/apply/image.test.mjs docker/grep-clean.test.mjs` passes |
+| 8 | The exporter: `--notes-only`, the unlogged pass, the `accept/` rule | W-82 | `node --test scripts/inbox-decisions-export.test.mjs scripts/inbox-decisions-pr.test.mjs scripts/inbox-decision-render.test.mjs` gives 0 failures with the four new cases named under Item 3 |
+| 9 | The runner and the registration script | W-82 | `node --test scripts/exports-run.test.mjs` gives 0 failures; after task 18, `(Get-ScheduledTask -TaskName 'Bb2dash-Exports').Triggers.Count` gives 2 |
+| 10 | bb2dash-stack: the doctor's `apply` and `exports` rows | W-83 | `node --test doctor/` gives 0 failures; `git diff --stat origin/main...HEAD -- doctor/workspace.test.mjs` prints nothing |
+| 11 | bb2dash-stack: the verb `file-decisions`, the README, `.env.example`, the compose header | W-83 | `just --list` holds `file-decisions`; `grep -c "Not in the doctor yet" README.md` gives 0 |
+| 12 | bb2dash-stack: the five host actions, and the bookkeeping that puts a stopped service back, for a named service | W-83 | `node --test scripts/` gives 0 failures; the action names equal the enum of bb2dash's `acceptance/manifest.schema.json` (the test that compares them is named in 110a) |
+| 13 | The pack and its browser test | W-84 | `node --test acceptance/acceptance.test.mjs` gives 0 failures; `node --test scripts/accept-proofs.test.mjs scripts/accept-proofs-cli.test.mjs scripts/accept-proofs-db.test.mjs` gives 0 failures with one case per new proof; `cd web && npx playwright test -c e2e/accept.config.ts --list` lists seven new titles |
+| 14 | Integrate: worker branches merged, types regenerated, the SOP gates | PM | every box under "SOP gates" but the reviews |
+| 15 | The image, as a test project, never against the queue | PM | `docker compose -p bb2dash-wt23f --profile apply build apply` exits 0; `docker ps --filter name=bb2dash-wt23f -q` prints nothing |
+| 16 | Reviews, both repositories, and the fix round's second look | PM | both commands run on both PRs; findings, fixes and the second look are in 110a |
+| 17 | Docs and both PRs. Stop at "ready when you say so" | PM | `gh pr view --json state -q .state` prints `OPEN` in each repository |
+| 18 | Cut-over, after his "merge" (bb2dash first), in this order, with no sync and no apply request open: install the skills; his `.env` line; `docker compose up -d --build apply` from bb2dash-stack; 188 on prod; his word, then `scripts/register-exports.ps1`; the first export | PM, with Stack's line and his two words | `just doctor` shows `apply` as `running, healthy` and `exports` with exit 0; Runner on `phase23_188_archived_answers.sql` gives PASS; one read gives 0 unfiled, at least 16 rows with a note path, and 3782 skipped |
+| 19 | `just accept 23 --check`, then `just accept 23` from `main`; on green the accepted record | PM | the run's `verdict.json` reads green; `grep -c "Phase 23 accepted" project-state/DECISIONS.md` gives 1 |
+
+## Workers
+
+Workers are Opus, commit and push per task, never touch `project-state/`, and hand the PM a
+verification section that quotes each task's red run and green run. A worker that meets an unclear
+point states its default and takes it. Nobody answers a running worker by message. No worker applies
+anything to prod and none runs `docker compose`.
+
+| worker | stream | branch | worktree | tasks |
+|---|---|---|---|---|
+| W-80 | database | `fix/phase23-followups-db` | `bb2dash-wt-23f-db` | 2, 4 |
+| W-81 | worker and skills | `fix/phase23-followups-apply` | `bb2dash-wt-23f-apply` | 5, 6, 7 |
+| W-82 | exporter and schedule | `fix/phase23-followups-exports` | `bb2dash-wt-23f-exports` | 8, 9 |
+| W-83 | bb2dash-stack | `fix/phase23-followups` in bb2dash-stack | `bb2dash-stack-wt-23f` | 10, 11, 12 |
+| W-84 | acceptance pack | `fix/phase23-followups-accept` | `bb2dash-wt-23f-accept` | 13 |
+| PM | integration | `fix/phase23-followups` | `bb2dash-wt-23f` | 1, 3, 14 to 19 |
+
+W-76 to W-79 are Phase 24's and W-67 to W-70 and W-75 are Phase 22's. W-84 starts once W-80's 187 is
+written (its proofs read the view) and reads W-83's action names from its branch.
+
+## Out of scope
+
+* Applying the pick of a `supersede/` answer (open item O-2).
+* A question the writer has for Stack ending in an archived record with no Inbox item (STATUS open
+  item 4, `STATUS.md:1410`). He did not choose it.
+* Any change to a screen. A held answer is not marked on its card.
+* Relaxing Undo for session answers now that a stamp exists.
+* A second worker, a schedule inside a container, or the exporter inside harness-jobs.
+* A scheduled pull request for the day files.
+* The `net.http_post` exposure, the firewall's address list, and the shared helpers between `apply/`
+  and `workspace/` (STATUS "Known, and said plainly"; DECISIONS 2026-10-07).
+* Deleting the test questions an acceptance run leaves.
+* A Linux form of the registration script. `scripts/exports-run.mjs` is plain Node, so a cron line can
+  call it; none is written.
+
+## Open items for Stack
+
+Five. Each has the default this brief took. "Defaults" is an answer.
+
+| # | question | default taken |
+|---|---|---|
+| O-1 | Should a press of Apply answers try a held answer again? | No. It waits until he answers it again, as his option said. A session run on the host is the other way |
+| O-2 | Should the fold also apply the pick of a "this file replaces that one" answer? Today nothing does | No: the brief only stops the re-ask. Yes adds about 25 lines to 188's first function and one unit case |
+| O-3 | May the acceptance run press Sync, which is one real Blackboard sync per run? | Yes. Otherwise steps 2 and 3 become his |
+| O-4 | A tenth `just` verb, `file-decisions`, for the day files and their pull request? | Yes, with the Phase 23 plan's name |
+| O-5 | 187 goes on prod during the build and 188 at the cut-over, each on his word? | Yes |
+
+## What stays Stack's
+
+From this brief:
+
+* The one line in bb2dash-stack's `.env`: `COMPOSE_PROFILES=workspace,apply`.
+* His word for each prod apply (187, 188), the two merges, and the registration of the task.
+* The three `human` rows of the pack: one real answer of his applied, one note read, and the day
+  files' pull request when he wants it.
+* The five open items above.
+
+Not part of this brief, still open:
+
+* His check of the two grading components (30 and 33) the writer set on four items of one course
+  (3433, 3434, 3668, 3669; `STATUS.md:1344-1350`).
+* The question written into archived item 3425's record and never raised as an item: whether two exam
+  rows of one course are the same row (`STATUS.md:1351-1354`).
+* The three session answers. Read today: 3436 and 3437 are applied (their files carry his picks) and
+  archived. 3435 was "none" with a note; it is archived, its file is unlinked, and what its note asks
+  is flagged in the record, not done. That flag is his to read.
+
+## Not checked
+
+* bb2dash-stack's `.env` and `machine.env`, and anything under a secrets folder: never opened.
+* Whether a `supersede/` item exists on prod now (STATUS says none; the two reads were spent on the
+  session answers and the unfiled count), and how many rows the backfill would stamp beyond two.
+* How long a container sync takes. Step 3's nine-minute watch and its one second run rest on task 1.
+* The function that raises `sync-login-required`. The ref is taken from ORCHESTRATOR section 4; W-84
+  reads the migration before `apply-quiet` relies on it.
+* The Inbox card's controls for a test question, and whether `authenticated` can insert into
+  `attention_items` directly (the brief does not rely on it: the function is the path).
+* 042's scan in full (`apply_resolutions`), whether a `phase18_*` unit pins the source text of the
+  two transform functions, and the cases of the standing `phase23_*` units beyond `phase23_182`'s
+  refusals and the two source pins.
+* Stack's answers themselves: they are quoted from the PM session's task text.
+* What compose does with a running container whose profile is off under `just up` and `just logs`.
+  Task 10 confirms with `docker compose config --services`, which starts nothing.
+* Whether the host's `uv run ingest` works on this laptop. The exporter treats a failed ingest as "the
+  nightly takes it" (`scripts/inbox-decisions-export.mjs:197-208`).
+* bb2dash-stack's `scripts/lib/accept-*.mjs` beyond the action list, the profile helper and the carry
+  rule: how much of the stop-and-put-back bookkeeping is written for the Workspace alone.
+* Phase 24's "24a": no file on any ref defines it. Phase 24's brief is a draft and may change.
+* No test, build or docker command was run for this brief.
