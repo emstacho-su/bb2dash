@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 
-import { DOCKER_CLIENT, EXIT, WALK_IMAGE, main, runDocker, watchSignals } from './walk-box.mjs';
+import { DOCKER_CLIENT, EXIT, PRODUCTION_ORIGIN, WALK_IMAGE, main, runDocker, watchSignals } from './walk-box.mjs';
 import {
   COMMIT,
   CONTAINER,
@@ -142,6 +142,17 @@ test('main: a refusal starts no container, writes no folder and exits 64', async
   assert.equal(seen.docker.length, 0);
   assert.equal(fs.existsSync(f.outBase), false);
   assert.equal(seen.errors.length, 3);
+});
+
+test('main --url: a host that is not this project\'s starts no container, so the test login is typed into no stranger\'s form', async () => {
+  const f = fixture();
+  const { deps, seen } = harness(f);
+  for (const url of ['https://web-xi-ten.vercel.app', 'https://x.example']) {
+    assert.equal(await main(['--url', url, 'web/e2e/harness.spec.ts'], deps), EXIT.refused, url);
+  }
+  assert.equal(seen.docker.length, 0);
+  assert.equal(fs.existsSync(f.outBase), false);
+  assert.match(seen.errors.join('\n'), /not a host of this project/);
 });
 
 test('main: a run folder is never used twice', async () => {
@@ -414,7 +425,7 @@ test('no env value appears in a docker call, in what is logged, or in run.json',
   const ways = [
     ['web/e2e/harness.spec.ts'],
     ['--keep', 'web/e2e/harness.spec.ts'],
-    ['--url', 'https://x.example', 'web/e2e/harness.spec.ts'],
+    ['--url', PRODUCTION_ORIGIN, 'web/e2e/harness.spec.ts'],
   ];
   for (const argv of ways) {
     const f = fixture({ env: { WALK_VERCEL_SHARE: SECRET_SHARE, WALK_SHOTS: '1' } });

@@ -24,6 +24,7 @@ import {
   CONTAINER_PREFIX,
   KEPT_BOX_LIFE_S,
   NPM_CACHE_VOLUME,
+  PRODUCTION_ORIGIN,
   WALK_IMAGE,
   assertOutBase,
   containerNameOf,
@@ -202,12 +203,12 @@ test('a spec is read from the folder the script was started in', () => {
 
 test('--url: no env file, no build; the host is walked, and the share token goes by name only', () => {
   const f = fixture({ env: { WALK_VERCEL_SHARE: SECRET_SHARE } });
-  const plan = planRun(run(['web/e2e/harness.spec.ts'], { url: 'https://web-xi-ten.vercel.app' }), f);
+  const plan = planRun(run(['web/e2e/harness.spec.ts'], { url: PRODUCTION_ORIGIN }), f);
   const outDir = path.join(f.outBase, RUN_ID);
   assert.deepEqual(plan.calls, [
     [
       'run', '--rm', '--init', '--name', CONTAINER, '--shm-size', '1g',
-      '-e', 'WALK_BOX_MODE=url', '-e', 'WALK_BASE_URL=https://web-xi-ten.vercel.app', '-e', 'WALK_OUT=/out', '-e', 'WALK_SHOTS=0',
+      '-e', 'WALK_BOX_MODE=url', '-e', `WALK_BASE_URL=${PRODUCTION_ORIGIN}`, '-e', 'WALK_OUT=/out', '-e', 'WALK_SHOTS=0',
       '-e', 'WALK_VERCEL_SHARE',
       ...mounts(f, outDir),
       WALK_IMAGE,
@@ -217,7 +218,7 @@ test('--url: no env file, no build; the host is walked, and the share token goes
 });
 
 test('--url without a share token passes none, and a build never passes one', () => {
-  const noToken = planRun(run(['web/e2e/harness.spec.ts'], { url: 'https://x.example' }), fixture());
+  const noToken = planRun(run(['web/e2e/harness.spec.ts'], { url: PRODUCTION_ORIGIN }), fixture());
   assert.ok(!noToken.calls[0].includes('WALK_VERCEL_SHARE'));
   const build = planRun(run(['web/e2e/harness.spec.ts']), fixture({ env: { WALK_VERCEL_SHARE: SECRET_SHARE } }));
   assert.ok(!build.calls[0].includes('WALK_VERCEL_SHARE'));
@@ -226,10 +227,70 @@ test('--url without a share token passes none, and a build never passes one', ()
 test('--url takes an https origin and nothing more', () => {
   const f = fixture();
   const withUrl = (url) => () => planRun(run(['web/e2e/harness.spec.ts'], { url }), f);
-  assert.equal(withUrl('https://x.example/')().record.base_url, 'https://x.example');
-  for (const url of ['http://x.example', 'https://x.example/login', 'https://x.example/?a=1', 'https://u:p@x.example', 'x.example', 'https://']) {
+  const host = new URL(PRODUCTION_ORIGIN).host;
+  assert.equal(withUrl(`${PRODUCTION_ORIGIN}/`)().record.base_url, PRODUCTION_ORIGIN);
+  for (const url of [`http://${host}`, `${PRODUCTION_ORIGIN}/login`, `${PRODUCTION_ORIGIN}/?a=1`, `https://u:p@${host}`, host, 'https://']) {
     refusal(withUrl(url), /https origin/);
   }
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * The host of --url: the box types the owner's test login into it
+ * ------------------------------------------------------------------------------------------ */
+
+const BRANCH_PREVIEW = 'https://web-git-feat-styling-22-emstacho-sus-projects.vercel.app';
+const withUrl = (url, env = {}) => () => planRun(run(['web/e2e/harness.spec.ts'], { url }), fixture({ env }));
+
+test('the production origin is the desktop app\'s own', () => {
+  const config = fs.readFileSync(path.join(REPO_ROOT, 'desktop', 'src', 'core', 'config.ts'), 'utf8');
+  assert.ok(config.includes(`appUrl: '${PRODUCTION_ORIGIN}',`), 'desktop/src/core/config.ts and the walk box name the same production host');
+  assert.match(PRODUCTION_ORIGIN, /^https:\/\/[a-z0-9-]+\.vercel\.app$/);
+});
+
+test('--url takes production and a branch preview of this project', () => {
+  assert.equal(withUrl(PRODUCTION_ORIGIN)().record.base_url, PRODUCTION_ORIGIN);
+  assert.equal(withUrl(BRANCH_PREVIEW)().record.base_url, BRANCH_PREVIEW);
+  assert.equal(withUrl('https://web-git-main-emstacho-sus-projects.vercel.app')().record.mode, 'url');
+});
+
+test('--url refuses every other host: a mistyped or made-up one would be handed the test login', () => {
+  const others = [
+    // Production's name without its last part: a host anyone could hold on vercel.app.
+    'https://web-xi-ten.vercel.app',
+    'https://x.example',
+    // Another team's project, a name that only starts like a preview, one that only ends like one.
+    'https://web-git-feat-styling-22-someone-elses-projects.vercel.app',
+    `${BRANCH_PREVIEW}.evil.example`,
+    'https://evil-web-git-main-emstacho-sus-projects.vercel.app',
+    'https://web-git--emstacho-sus-projects.vercel.app',
+    'https://web-git-emstacho-sus-projects.vercel.app',
+    // One build's own address: not the branch form, so it is named a second time (next test).
+    'https://web-lciz8snh1-emstacho-sus-projects.vercel.app',
+    // The right names on another port.
+    `${PRODUCTION_ORIGIN}:8443`,
+    `${BRANCH_PREVIEW}:8443`,
+  ];
+  for (const url of others) refusal(withUrl(url), /not a host of this project/);
+  // The refusal says what would be taken, and how to name any other host.
+  refusal(withUrl('https://x.example'), /WALK_BOX_ALLOW_HOST/);
+  refusal(withUrl('https://x.example'), new RegExp(new URL(PRODUCTION_ORIGIN).host.replaceAll('.', '\\.')));
+});
+
+test('WALK_BOX_ALLOW_HOST names one more host, exactly as the address has it', () => {
+  assert.equal(withUrl('https://x.example', { WALK_BOX_ALLOW_HOST: 'x.example' })().record.base_url, 'https://x.example');
+  assert.equal(withUrl('https://x.example:8443', { WALK_BOX_ALLOW_HOST: 'x.example:8443' })().record.base_url, 'https://x.example:8443');
+  // Production and the previews are still taken with it set.
+  assert.equal(withUrl(PRODUCTION_ORIGIN, { WALK_BOX_ALLOW_HOST: 'x.example' })().record.base_url, PRODUCTION_ORIGIN);
+  const notThatHost = [
+    ['https://y.example', 'x.example'],
+    ['https://x.example:8443', 'x.example'],
+    ['https://x.example', 'x.example:8443'],
+    ['https://x.example', 'https://x.example'],
+    ['https://sub.x.example', 'x.example'],
+    ['https://x.example', '*'],
+    ['https://x.example', ''],
+  ];
+  for (const [url, allowed] of notThatHost) refusal(withUrl(url, { WALK_BOX_ALLOW_HOST: allowed }), /not a host of this project/);
 });
 
 test('--keep: the container is started detached and left, and the walk is a docker exec in it', () => {
@@ -258,7 +319,7 @@ test('a kept box lives for hours, not for good, and every box is started with --
   const starts = [
     planRun(run(['web/e2e/harness.spec.ts']), f).calls[0],
     planRun(run(['web/e2e/harness.spec.ts'], { keep: true }), f).calls[0],
-    planRun(run(['web/e2e/harness.spec.ts'], { url: 'https://x.example' }), f).calls[0],
+    planRun(run(['web/e2e/harness.spec.ts'], { url: PRODUCTION_ORIGIN }), f).calls[0],
   ];
   for (const call of starts) {
     assert.equal(call[0], 'run');
@@ -315,7 +376,7 @@ test('no call names compose, a network, a port, another volume or another contai
   const calls = [
     ...planRun(run(['web/e2e/harness.spec.ts']), f).calls,
     ...planRun(run(['web/e2e/harness.spec.ts'], { keep: true }), f).calls,
-    ...planRun(run(['web/e2e/harness.spec.ts'], { url: 'https://x.example' }), f).calls,
+    ...planRun(run(['web/e2e/harness.spec.ts'], { url: PRODUCTION_ORIGIN }), f).calls,
     planExec(exec, f).precheck,
     ...planExec(exec, f).calls,
     ...planRm({ command: 'rm', container: CONTAINER }).calls,
@@ -421,14 +482,14 @@ test('a missing web env file is refused for a build, and not asked for with --ur
   const f = fixture();
   fs.rmSync(f.webEnv);
   refusal(() => planRun(run(['web/e2e/harness.spec.ts']), f), /web env file/);
-  assert.equal(planRun(run(['web/e2e/harness.spec.ts'], { url: 'https://x.example' }), f).calls.length, 1);
+  assert.equal(planRun(run(['web/e2e/harness.spec.ts'], { url: PRODUCTION_ORIGIN }), f).calls.length, 1);
 });
 
 test('a missing test login file is refused', () => {
   const f = fixture();
   fs.rmSync(f.loginEnv);
   refusal(() => planRun(run(['web/e2e/harness.spec.ts']), f), /test login file/);
-  refusal(() => planRun(run(['web/e2e/harness.spec.ts'], { url: 'https://x.example' }), f), /test login file/);
+  refusal(() => planRun(run(['web/e2e/harness.spec.ts'], { url: PRODUCTION_ORIGIN }), f), /test login file/);
 });
 
 test('WALK_BOX_WEB_ENV and WALK_BOX_LOGIN_ENV name other files, by absolute path', () => {
