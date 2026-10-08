@@ -545,7 +545,8 @@ because one worker writes it (W-80) and another calls it (W-84).
   must match `^[a-z][a-z0-9-]{0,15}$`. Anything else is refused. The pack uses four labels:
   `confirm`, `dismiss`, `note` and `offline`. The browser test makes the tag once, in step 1. No
   later step needs it: a test finds its card by the label, and the host's proofs take the item ids.
-* The row: kind `stack_must_confirm`, entity `agent_request`, no course, ref `accept/<run>/<label>`.
+* The row: kind `stack_must_confirm` (**amended by Round 1 at the end of this brief: the labels
+  `dismiss` and `offline` raise kind `data_gap`**), entity `agent_request`, no course, ref `accept/<run>/<label>`.
   Its text is the function's own fixed sentence with the label in it, so a browser test tells the
   four cards apart by a word the function wrote. No argument is free text.
 * **It cleans up first.** Before it raises, it archives every row of this shape that carries another
@@ -1034,6 +1035,41 @@ on a point his words leave open was changed and is put to him (O-1).
 One reason in a finding was not taken over as written. F11 says 188's dry run "locks the two
 transform functions". That was not checked, so the brief gives the rule (no sync open) and marks the
 mechanism as not checked.
+
+## Round 1, 2026-10-08: the PM's ruling R1 after task 1's reads (the kind of a test question)
+
+Task 1 read the Inbox card (110a, "Reads at the cut", line 4). A `stack_must_confirm` card has an
+Answer box, a "why (optional)" field and Save. It has no Dismiss and no Confirm button; Dismiss is
+offered for the kinds `deadline` and `data_gap` alone (`web/src/components/inbox/InboxCard.tsx:159`,
+`:391-405`). So the pack's steps 1 and 7a, which dismiss a test question, cannot be walked on the
+row the Contract fixed. No screen changes for this (Out of scope). The Contract changes in one place,
+and W-80 and W-84 build to this section where it differs from the text above.
+
+* **`inbox_accept_question` fixes the row's kind from the label.** The labels `dismiss` and `offline`
+  raise kind `data_gap`. Every other label, `confirm` and `note` among them, raises
+  `stack_must_confirm`. Entity `agent_request`, no course, no `field`, and the ref
+  `accept/<run>/<label>` are as before, and so are the owner check, the two patterns, the clean-up,
+  the cap of eight open rows and the fixed sentence. The clean-up and the cap count rows by the
+  three-part shape (ref, entity, no course), not by kind.
+* **Why `data_gap`.** Its card offers Save and Dismiss together. Nothing closes such a row by
+  itself: `close_cleared_gaps` acts on a `data_gap` only for the entities `reading` and `bb_file`
+  (`db/migrations/161_outside_links.sql:87-96`), and no gap key of `stage_gaps` has the entity
+  `agent_request`. `deadline` was the other kind with a Dismiss and was not taken: its card has no
+  answer box at all, and the `dismiss` label would then be the only thing its card could do.
+* **What the steps do on the page.** "Confirms" means: types the pack's fixed word into the Answer
+  box and presses Save, with "why" left empty (step 1, the label `confirm`). "Confirms with a note"
+  means the same with the pack's fixed sentence in "why" (step 6, the label `note`). "Dismisses"
+  means the Dismiss button with "why" left empty (step 1 for `dismiss`, step 7a for `offline`). The
+  fixed word and sentence are the pack's own and hold no course text.
+* **What the worker does with each, unchanged code.** A saved answer with no note is recorded as
+  `recorded_elsewhere` (the entity is `agent_request`, `apply/src/batch.ts:170`). A dismissed row
+  with no note is recorded as `dismissed` (`batch.ts:167`). A row with a note goes to Claude
+  (`batch.ts:162`). So the proofs' buckets stand as the step table gives them.
+* **The exporter's rule and the proofs do not change.** A test question is still told by its ref,
+  its entity and its missing course, in both exporter modes.
+* **The unit `phase23_187_accept_objects.sql` gains two cases:** the label `dismiss` raises a
+  `data_gap` and the label `confirm` a `stack_must_confirm`; and a `data_gap` test row is still open
+  after `close_cleared_gaps` runs.
 
 ## Session prompt
 
