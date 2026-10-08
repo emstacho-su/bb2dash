@@ -11,11 +11,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 
-import { DOCKER_CLIENT, EXIT, WALK_IMAGE, main, runDocker } from './walk-box.mjs';
+import { DOCKER_CLIENT, EXIT, WALK_IMAGE, main, runDocker, watchSignals } from './walk-box.mjs';
 import {
   COMMIT,
   CONTAINER,
@@ -39,7 +40,7 @@ import {
 
 /** main()'s dependencies, with docker and git recorded instead of run. */
 function harness(f, { exits = [0], dirty = false, times = [NOW, LATER] } = {}) {
-  const seen = { docker: [], logged: [], errors: [], records: [] };
+  const seen = { docker: [], logged: [], errors: [], records: [], watchStops: 0 };
   let call = 0;
   let tick = 0;
   const deps = {
@@ -59,6 +60,13 @@ function harness(f, { exits = [0], dirty = false, times = [NOW, LATER] } = {}) {
       if (runJson) seen.records.push(JSON.parse(fs.readFileSync(runJson, 'utf8')));
       return exits[Math.min(call++, exits.length - 1)];
     },
+    // No signal ever comes, and the process's own signals are left alone.
+    watch: () => ({
+      interrupted: new Promise(() => {}),
+      stop: () => {
+        seen.watchStops += 1;
+      },
+    }),
     log: (line) => seen.logged.push(line),
     err: (line) => seen.errors.push(line),
   };
@@ -233,6 +241,168 @@ test('main: a checkout git cannot read is refused before any container starts', 
   };
   assert.equal(await main(['web/e2e/harness.spec.ts'], deps), EXIT.refused);
   assert.equal(seen.docker.length, 0);
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * A run that is stopped: the box does not outlive the script that started it
+ * ------------------------------------------------------------------------------------------ */
+
+const readRecord = (dir) => JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
+const aborted = () => Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+
+/**
+ * main()'s dependencies for a run that is stopped from outside: a watch the test fires by hand,
+ * and a docker whose walk stays open until the script ends its client, as the real one does.
+ * `rmExit` is what `docker rm -f` answers.
+ */
+function interruptible(f, { times, rmExit = 0 } = {}) {
+  const { deps, seen } = harness(f, { times });
+  let fire;
+  const interrupted = new Promise((resolve) => {
+    fire = resolve;
+  });
+  let walking;
+  const walkOpen = new Promise((resolve) => {
+    walking = resolve;
+  });
+  deps.watch = () => ({
+    interrupted,
+    stop: () => {
+      seen.watchStops += 1;
+    },
+  });
+  deps.docker = (argv, options) => {
+    seen.docker.push({ argv, options });
+    if (argv[0] === 'rm') return Promise.resolve(rmExit);
+    const isPrecheck = argv[0] === 'exec' && argv.at(-1) === 'true';
+    const isDetachedStart = argv[0] === 'run' && argv.includes('-d');
+    if (isPrecheck || isDetachedStart) return Promise.resolve(0);
+    return new Promise((_resolve, reject) => {
+      walking();
+      options.signal.addEventListener('abort', () => reject(aborted()));
+    });
+  };
+  return { deps, seen, fire, walkOpen };
+}
+
+test('main: a signal to the script removes the box it started, ends its docker client, and run.json says interrupted', async () => {
+  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
+    const f = fixture();
+    const { deps, seen, fire, walkOpen } = interruptible(f);
+    const ending = main(['web/e2e/harness.spec.ts'], deps);
+    await walkOpen;
+    assert.equal(readRecord(path.join(f.outBase, RUN_ID)).result, 'running');
+    fire(signal);
+    assert.equal(await ending, code, signal);
+    assert.deepEqual(seen.docker.map((call) => call.argv.slice(0, 3)), [['run', '--rm', '--init'], ['rm', '-f', CONTAINER]]);
+    assert.equal(seen.docker[0].options.signal.aborted, true, 'the docker client of the walk is ended');
+    assert.equal(seen.docker[1].options.logFile, null);
+    const record = readRecord(path.join(f.outBase, RUN_ID));
+    assert.equal(record.exit_code, code);
+    assert.equal(record.result, `interrupted (${signal}), box removed`);
+    assert.equal(record.finished_at, LATER.toISOString());
+    assert.equal(seen.watchStops, 1, 'the script stops listening when it ends');
+    assert.doesNotMatch(seen.errors.join('\n'), /could not be started/);
+  }
+});
+
+test('main --keep: a signal removes the kept box too, and it is not said to be left running', async () => {
+  const f = fixture();
+  const { deps, seen, fire, walkOpen } = interruptible(f);
+  const ending = main(['--keep', 'web/e2e/harness.spec.ts'], deps);
+  await walkOpen;
+  fire('SIGINT');
+  assert.equal(await ending, 130);
+  assert.deepEqual(seen.docker.map((call) => call.argv[0]), ['run', 'exec', 'rm']);
+  assert.deepEqual(seen.docker[2].argv, ['rm', '-f', CONTAINER]);
+  assert.equal(readRecord(path.join(f.outBase, RUN_ID)).result, 'interrupted (SIGINT), box removed');
+  assert.doesNotMatch(seen.logged.join('\n'), /left running|--exec/);
+});
+
+test('main --exec: a signal ends the docker client and leaves the kept box, which this call did not start', async () => {
+  const f = fixture();
+  const first = harness(f, { times: [NOW] });
+  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], first.deps), 0);
+  const { deps, seen, fire, walkOpen } = interruptible(f, { times: [LATER] });
+  const ending = main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], deps);
+  await walkOpen;
+  fire('SIGINT');
+  assert.equal(await ending, 130);
+  assert.deepEqual(seen.docker.map((call) => call.argv[0]), ['exec', 'exec']);
+  assert.equal(seen.docker[1].options.signal.aborted, true);
+  const record = readRecord(path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`));
+  assert.equal(record.exit_code, 130);
+  assert.equal(record.result, 'interrupted (SIGINT), kept box left running');
+  assert.match(seen.logged.join('\n'), new RegExp(`--rm ${CONTAINER}`));
+});
+
+test('main: a docker call that ends with a signal\'s code is a client that was stopped: the box is removed all the same', async () => {
+  for (const [exit, signal] of [[143, 'SIGTERM'], [130, 'SIGINT'], [137, 'SIGKILL'], [129, 'SIGHUP']]) {
+    const f = fixture();
+    const { deps, seen } = harness(f, { exits: [exit, 0] });
+    assert.equal(await main(['web/e2e/harness.spec.ts'], deps), exit);
+    assert.deepEqual(seen.docker.map((call) => call.argv.slice(0, 2)), [['run', '--rm'], ['rm', '-f']]);
+    assert.deepEqual(seen.docker[1].argv, ['rm', '-f', CONTAINER]);
+    const record = readRecord(path.join(f.outBase, RUN_ID));
+    assert.equal(record.exit_code, exit);
+    assert.equal(record.result, `interrupted (${signal}), box removed`);
+  }
+});
+
+test('main --exec: a docker call that ends with a signal\'s code leaves the kept box', async () => {
+  const f = fixture();
+  const first = harness(f, { times: [NOW] });
+  assert.equal(await main(['--keep', 'web/e2e/harness.spec.ts'], first.deps), 0);
+  const second = harness(f, { times: [LATER], exits: [0, 143] });
+  assert.equal(await main(['--exec', CONTAINER, 'web/e2e/harness.spec.ts'], second.deps), 143);
+  assert.deepEqual(second.seen.docker.map((call) => call.argv[0]), ['exec', 'exec']);
+  assert.equal(readRecord(path.join(f.outBase, RUN_ID, `exec-${LATER_RUN_ID}`)).result, 'interrupted (SIGTERM), kept box left running');
+});
+
+test('main: a box that docker did not remove is said so, with where to look', async () => {
+  const f = fixture();
+  const { deps, seen, fire, walkOpen } = interruptible(f, { rmExit: 1 });
+  const ending = main(['web/e2e/harness.spec.ts'], deps);
+  await walkOpen;
+  fire('SIGINT');
+  assert.equal(await ending, 130);
+  assert.equal(readRecord(path.join(f.outBase, RUN_ID)).result, 'interrupted (SIGINT), box not removed');
+  assert.match(seen.errors.join('\n'), new RegExp(`docker rm -f ${CONTAINER} ended with 1`));
+});
+
+test('main: a walk that ends by itself stops listening for signals and removes nothing', async () => {
+  for (const exit of [0, 1, 75]) {
+    const f = fixture();
+    const { deps, seen } = harness(f, { exits: [exit] });
+    assert.equal(await main(['web/e2e/harness.spec.ts'], deps), exit);
+    assert.equal(seen.watchStops, 1);
+    assert.deepEqual(seen.docker.map((call) => call.argv[0]), ['run']);
+  }
+});
+
+test('watchSignals: the first of SIGINT, SIGTERM and SIGHUP is told by name, and stop() takes every listener away', async () => {
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    const emitter = new EventEmitter();
+    const watch = watchSignals(emitter);
+    assert.deepEqual(emitter.eventNames().sort(), ['SIGHUP', 'SIGINT', 'SIGTERM']);
+    emitter.emit(signal, signal);
+    assert.equal(await watch.interrupted, signal);
+    // A second signal while the box is being removed is listened to as well: it ends nothing.
+    assert.equal(emitter.emit('SIGINT', 'SIGINT'), true);
+    watch.stop();
+    assert.deepEqual(emitter.eventNames(), []);
+  }
+});
+
+test('runDocker: a client that is still running is ended when its signal is aborted', async () => {
+  const dir = scratch('walkbox-waits-');
+  const script = write(dir, 'waits.mjs', "process.stdout.write('started\\n');\nsetTimeout(() => {}, 600000);\n");
+  const out = sink();
+  const stop = new AbortController();
+  const ending = runDocker(['run'], { logFile: null, client: [process.execPath, script], out: out.stream, err: sink().stream, signal: stop.signal });
+  while (!out.text().includes('started')) await new Promise((resolve) => setTimeout(resolve, 20));
+  stop.abort();
+  await assert.rejects(ending, { name: 'AbortError' });
 });
 
 /* ---------------------------------------------------------------------------------------------

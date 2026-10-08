@@ -22,6 +22,7 @@ import path from 'node:path';
 
 import {
   CONTAINER_PREFIX,
+  KEPT_BOX_LIFE_S,
   NPM_CACHE_VOLUME,
   WALK_IMAGE,
   assertOutBase,
@@ -232,16 +233,33 @@ test('--keep: the container is started detached and left, and the walk is a dock
   const outDir = path.join(f.outBase, RUN_ID);
   assert.deepEqual(plan.calls, [
     [
-      'run', '-d', '--init', '--name', CONTAINER, '--shm-size', '1g',
+      // --rm and a sleep that ends: a kept box nobody comes back to removes itself.
+      'run', '-d', '--rm', '--init', '--name', CONTAINER, '--shm-size', '1g',
       '--env-file', posix(f.webEnv),
       '-e', 'WALK_BOX_MODE=build', '-e', 'WALK_BASE_URL=http://localhost:3000', '-e', 'WALK_OUT=/out', '-e', 'WALK_SHOTS=0',
       ...mounts(f, outDir),
       WALK_IMAGE,
-      'sleep', 'infinity',
+      'sleep', String(KEPT_BOX_LIFE_S),
     ],
     ['exec', '-e', 'WALK_OUT=/out', '-e', 'WALK_SHOTS=0', CONTAINER, 'bash', '/src/docker/walk/entry.sh', 'all', 'e2e/harness.spec.ts', '--', '-g', 'no 404'],
   ]);
   assert.equal(plan.record.kept, true);
+});
+
+test('a kept box lives for hours, not for good, and every box is started with --rm', () => {
+  const HOUR_S = 3600;
+  assert.ok(Number.isInteger(KEPT_BOX_LIFE_S) && KEPT_BOX_LIFE_S >= HOUR_S && KEPT_BOX_LIFE_S <= 12 * HOUR_S, String(KEPT_BOX_LIFE_S));
+  const f = fixture();
+  const starts = [
+    planRun(run(['web/e2e/harness.spec.ts']), f).calls[0],
+    planRun(run(['web/e2e/harness.spec.ts'], { keep: true }), f).calls[0],
+    planRun(run(['web/e2e/harness.spec.ts'], { url: 'https://x.example' }), f).calls[0],
+  ];
+  for (const call of starts) {
+    assert.equal(call[0], 'run');
+    assert.ok(call.slice(0, call.indexOf(WALK_IMAGE)).includes('--rm'), call.join(' '));
+    assert.ok(!call.includes('infinity'));
+  }
 });
 
 test('--exec: more specs in a kept container, with a folder of their own under the box\'s', () => {

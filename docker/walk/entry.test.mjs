@@ -83,11 +83,24 @@ test("entry.sh never reads Playwright's exit code through a pipe", () => {
   assert.doesNotMatch(CODE, /\b(run_specs|playwright test)\b[^\n|]*\|(?!\|)/);
 });
 
-test('entry.sh gives npm ci and the build a time limit: a box nobody is watching still ends', () => {
-  assert.match(CODE, /^readonly INSTALL_LIMIT_S=[0-9]+$/m);
-  assert.match(CODE, /^readonly BUILD_LIMIT_S=[0-9]+$/m);
-  assert.match(CODE, /timeout [^\n]*"\$INSTALL_LIMIT_S" npm ci\b/);
-  assert.match(CODE, /timeout [^\n]*"\$BUILD_LIMIT_S" npm run build\b/);
+test('entry.sh gives every open-ended step a time limit: a box nobody is watching still ends', () => {
+  const limited = [
+    ['INSTALL_LIMIT_S', /timeout [^\n]*"\$INSTALL_LIMIT_S" npm ci\b/],
+    ['BUILD_LIMIT_S', /timeout [^\n]*"\$BUILD_LIMIT_S" npm run build\b/],
+    ['SIGN_IN_LIMIT_S', /timeout [^\n]*"\$SIGN_IN_LIMIT_S" node e2e\/login\.mjs\b/],
+    ['WALK_LIMIT_S', /timeout [^\n]*"\$WALK_LIMIT_S" npx playwright test\b/],
+  ];
+  let total = 0;
+  for (const [name, call] of limited) {
+    const set = new RegExp(`^readonly ${name}=([0-9]+)$`, 'm').exec(CODE);
+    assert.ok(set, `${name} is a number of seconds`);
+    assert.match(CODE, call);
+    total += Number(set[1]);
+  }
+  total += Number(/^readonly READY_LIMIT_S=([0-9]+)$/m.exec(CODE)[1]);
+  // The whole of a box, worst case: under three hours, and under the life of a kept box.
+  const THREE_HOURS_S = 3 * 3600;
+  assert.ok(total < THREE_HOURS_S, `the limits add up to ${total}s`);
 });
 
 /* ---------------------------------------------------------------------------------------------
@@ -193,6 +206,7 @@ const STAND_INS = Object.freeze({
     `      fill) printf 'login.mjs failed: locator.fill: Timeout 30000ms exceeded.\\nCall log:\\n  - waiting for locator(%s)\\n  - fill("%s")\\n' "'#password'" "$STUB_TYPED" >&2; exit 1 ;;`,
     `      goto) printf 'login.mjs failed: page.goto: net::ERR_CONNECTION_REFUSED at %s/?_vercel_share=%s\\n' "$WALK_BASE_URL" "$STUB_TYPED" >&2; exit 1 ;;`,
     `      other) printf 'Signing in.\\n'; printf 'TypeError: %s is not a function\\n' "$STUB_TYPED" >&2; exit 1 ;;`,
+    '      hang) sleep 30; exit 0 ;;',
     '    esac ;;',
     'esac',
   ],
@@ -395,6 +409,23 @@ runTest('walk, in a kept box: e2e/ is taken again from the worktree, nothing is 
   assert.ok(has(box, 'out/exec-1/results/.last-run.json'));
   // The app is the one the box built: nothing outside e2e/ is taken again.
   assert.ok(has(box, 'work/web/node_modules'));
+});
+
+runTest('a walk that runs past its limit is stopped and ends with 77, a code of its own, and its results are still kept', async () => {
+  const box = makeBox({ constants: { WALK_LIMIT_S: 1, KILL_AFTER_S: 1 } });
+  const { status, out } = await runEntry(box, ['all', SPEC, '--'], { STUB_WALK_SLEEP_S: '30' });
+  assert.equal(status, 77, out);
+  assert.match(out, /the walk ran past its limit of 1s and was stopped/);
+  assert.match(out, /playwright ended with exit code 77/);
+  assert.ok(fs.existsSync(path.join(box.dir, 'out', 'results')));
+});
+
+runTest('a sign-in that runs past its limit is stopped and ends with 75', async () => {
+  const box = makeBox({ constants: { SIGN_IN_LIMIT_S: 1, KILL_AFTER_S: 1 } });
+  const { status, out, calls } = await runEntry(box, ['all', SPEC, '--'], { STUB_LOGIN: 'hang' });
+  assert.equal(status, 75, out);
+  assert.match(out, /the sign-in ran past its limit of 1s and was stopped/);
+  assert.equal(called(calls, 'npx playwright').length, 0);
 });
 
 runTest('walk in a box that was never prepared is a wrong call, not a failed test', async () => {
