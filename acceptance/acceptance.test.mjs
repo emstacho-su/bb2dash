@@ -582,12 +582,15 @@ test("Phase 21: the steps are the acceptance script's fifteen, and each is done 
   assert.equal(new Set(['3', '4', '5', '6', '7'].map(asked)).size, 5, 'five questions');
   assert.deepEqual([asked('8'), asked('9')], [asked('7'), asked('7')], 'steps 8 and 9 ask the question of step 7');
   assert.deepEqual(turn('3'), { request: 'carry:3.request_id', tier: 'low', ...tied('3'), tool: 'search_materials' });
-  assert.deepEqual(turn('4'), { request: 'carry:4.request_id', tier: 'low', ...tied('4'), tool: 'search_context', scope: 'bb2dash-inbox-decisions' });
-  assert.deepEqual(turn('5'), { request: 'carry:5.request_id', tier: 'low', ...tied('5'), tool: 'get_material_text' });
-  assert.deepEqual(turn('6'), { request: 'carry:6.request_id', tier: 'mid', ...tied('6') });
-  assert.deepEqual(turn('7'), { request: 'carry:7.request_id', tier: 'high', ...tied('7') });
-  assert.deepEqual(turn('9'), { request: 'carry:9.request_id', tier: 'high', ...tied('9') });
-  assert.deepEqual(stepOf(manifest, '8').proofs, [{ name: 'turn-stopped', with: { request: 'carry:8.request_id', ...tied('8') } }]);
+  // From step 4 on, each names the step before it: its request must be the later one, so one request cannot stand for two steps.
+  const after = (id) => ({ after: `carry:${id}.request_id` });
+  assert.equal(turn('3').after, undefined, 'step 3 asks first');
+  assert.deepEqual(turn('4'), { request: 'carry:4.request_id', tier: 'low', ...tied('4'), tool: 'search_context', scope: 'bb2dash-inbox-decisions', ...after('3') });
+  assert.deepEqual(turn('5'), { request: 'carry:5.request_id', tier: 'low', ...tied('5'), tool: 'get_material_text', ...after('4') });
+  assert.deepEqual(turn('6'), { request: 'carry:6.request_id', tier: 'mid', ...tied('6'), ...after('5') });
+  assert.deepEqual(turn('7'), { request: 'carry:7.request_id', tier: 'high', ...tied('7'), ...after('6') });
+  assert.deepEqual(turn('9'), { request: 'carry:9.request_id', tier: 'high', ...tied('9'), ...after('8') });
+  assert.deepEqual(stepOf(manifest, '8').proofs, [{ name: 'turn-stopped', with: { request: 'carry:8.request_id', ...tied('8'), ...after('7') } }]);
   assert.equal(stepOf(manifest, '10').stage, 'walk-proofs');
   assert.deepEqual(stepOf(manifest, '10').actions, ['workspace.noApiKey', 'workspace.credentialSource']);
   assert.equal(stepOf(manifest, '11').stage, 'walk-proofs');
@@ -596,7 +599,7 @@ test("Phase 21: the steps are the acceptance script's fifteen, and each is done 
   assert.deepEqual(stepOf(manifest, '13').actions, ['workspace.stopTestRunner', 'workspace.ensureProfile', 'workspace.start', 'workspace.doctorRow']);
   // Step 14b: the question waited at least the 15 seconds step 14a's test watched it wait. No time of a sandbox is a parameter.
   assert.deepEqual(stepOf(manifest, '14b').proofs, [
-    { name: 'turn-answered-after', with: { request: 'carry:14a.request_id', since: RUN_START, min_wait_s: 15 } },
+    { name: 'turn-answered-after', with: { request: 'carry:14a.request_id', since: RUN_START, min_wait_s: 15, question_md5: asked('3') } },
   ]);
   assert.match(readText('web/e2e/accept21.spec.ts'), /const QUEUED_HOLD_MS = 15_000;/);
   assert.deepEqual(stepOf(manifest, '15').proofs, [
@@ -625,8 +628,10 @@ function md5OfQuestionAskedBy(specText, title) {
 test("Phase 21: each proof's question_md5 is the md5 of the question the step's own test types", () => {
   const { manifest, specText } = loadPack(REPO, '21');
   const tied = manifest.steps.filter((step) => (step.proofs ?? []).some((proof) => proof.with?.question_md5 !== undefined));
-  // The five questions, the stop and the reload: every step whose proof reads a turn or a stop.
-  assert.deepEqual(tied.map((step) => step.id), ['3', '4', '5', '6', '7', '8', '9']);
+  // The five questions, the stop, the reload and the question that waited: every step whose proof reads a turn or a stop.
+  // Step 14b's test types nothing: it names the question it looks for, the one step 14a's test typed.
+  assert.deepEqual(tied.map((step) => step.id), ['3', '4', '5', '6', '7', '8', '9', '14b']);
+  assert.equal(md5OfQuestionAskedBy(specText, '14a offline'), md5OfQuestionAskedBy(specText, '14b back'));
   for (const step of tied) {
     for (const proof of step.proofs.filter((candidate) => candidate.with?.question_md5 !== undefined)) {
       assert.equal(proof.with.question_md5, md5OfQuestionAskedBy(specText, step.test), `step ${step.id}, proof ${proof.name}`);

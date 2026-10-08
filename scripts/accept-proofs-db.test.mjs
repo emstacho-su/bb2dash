@@ -236,6 +236,7 @@ test("turn: this run's request, asking the step's question, answered at the tier
       finished: true,
       message_error_code: null,
       tools: USED_SEARCH,
+      asked_after_earlier: true,
     },
   );
   assert.equal((await prove('turn', turnOf(412, { tool: 'search_materials', scope: 'IST.323' }))).code, EXIT.pass);
@@ -274,6 +275,18 @@ test('turn: a request that failed, and an answer that is not finished, fail', as
   for (const request of [414, 415, 416]) assert.equal((await prove('turn', turnOf(request))).code, EXIT.fail, String(request));
 });
 
+test('turn: one request cannot stand for two steps: a step that names the one before it must be the later request', async () => {
+  await seedTurn({ request: 440 });
+  await seedTurn({ request: 441 });
+  assert.equal((await prove('turn', turnOf(441, { after: '440' }))).code, EXIT.pass);
+  // Step 9 handed step 7's request (the same question, the same tier), or its own id twice.
+  for (const [request, after] of [[440, '441'], [441, '441']]) {
+    const same = await prove('turn', turnOf(request, { after }));
+    assert.equal(same.code, EXIT.fail, `${request} after ${after}`);
+    assert.deepEqual([same.detail.asked_in_this_run, same.detail.question_matches, same.detail.asked_after_earlier], [true, true, false]);
+  }
+});
+
 const stoppedOf = (request, more = {}) => ({ request: String(request), since: SINCE, question_md5: md5(QUESTION), ...more });
 const STOPPED = { state: 'cancelled', errorCode: 'cancelled' };
 
@@ -299,7 +312,24 @@ test('turn-stopped: a stop from before the run fails, and so does a stop of anot
   assert.deepEqual([other.detail.asked_in_this_run, other.detail.question_matches], [true, false]);
 });
 
-const waitedOf = (request, more = {}) => ({ request: String(request), since: SINCE, min_wait_s: '15', ...more });
+test('turn-stopped: a stop that names the step before it must be the later request', async () => {
+  await seedTurn({ request: 442 });
+  await seedTurn({ request: 443, ...STOPPED, answer: null });
+  assert.equal((await prove('turn-stopped', stoppedOf(443, { after: '442' }))).code, EXIT.pass);
+  const earlier = await prove('turn-stopped', stoppedOf(443, { after: '443' }));
+  assert.equal(earlier.code, EXIT.fail);
+  assert.equal(earlier.detail.asked_after_earlier, false);
+});
+
+const waitedOf = (request, more = {}) => ({ request: String(request), since: SINCE, min_wait_s: '15', question_md5: md5(QUESTION), ...more });
+
+test('turn-answered-after: a request that waited but asks another question fails', async () => {
+  await seedTurn({ request: 436, claimedAfterS: 212, question: OTHER_QUESTION });
+  const other = await prove('turn-answered-after', waitedOf(436));
+  assert.equal(other.code, EXIT.fail);
+  assert.deepEqual([other.detail.asked_in_this_run, other.detail.question_matches, other.detail.waited_s], [true, false, 212]);
+  assert.equal((await prove('turn-answered-after', waitedOf(436, { question_md5: md5(OTHER_QUESTION) }))).code, EXIT.pass);
+});
 
 test('turn-answered-after: a request claimed at once fails, and one that waited passes', async () => {
   await seedTurn({ request: 430, claimedAfterS: 1 });

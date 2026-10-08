@@ -87,7 +87,7 @@ const GIVEN = {
   'planner-unchanged': { before: FINGERPRINT },
   turn: { request: '412', tier: 'low', since: SINCE, question_md5: QUESTION_MD5, tool: 'search_materials' },
   'turn-stopped': { request: '417', since: SINCE, question_md5: QUESTION_MD5 },
-  'turn-answered-after': { request: '419', since: SINCE, min_wait_s: '15' },
+  'turn-answered-after': { request: '419', since: SINCE, min_wait_s: '15', question_md5: QUESTION_MD5 },
   'spike-archived': {},
   'conversations-archived': { ids: `${UUID_A},${UUID_B}`, since: SINCE },
 };
@@ -250,17 +250,20 @@ test('a text parameter is a plain name: SQL metacharacters are refused', () => {
 test('parameters are bound in the order the proof declares them, and an absent optional one is null', () => {
   const turn = PACK_21.turn;
   const run = { since: SINCE, question_md5: QUESTION_MD5 };
-  assert.deepEqual(Object.keys(turn.params), ['request', 'tier', 'since', 'question_md5', 'tool', 'scope']);
-  assert.deepEqual(bindParams(turn, { tier: 'low', ...run, request: '412', tool: 'search_materials' }), ['412', 'low', SINCE, QUESTION_MD5, 'search_materials', null]);
-  assert.deepEqual(bindParams(turn, { request: '412', tier: 'mid', ...run }), ['412', 'mid', SINCE, QUESTION_MD5, null, null]);
+  assert.deepEqual(Object.keys(turn.params), ['request', 'tier', 'since', 'question_md5', 'tool', 'scope', 'after']);
+  assert.deepEqual(bindParams(turn, { tier: 'low', ...run, request: '412', tool: 'search_materials' }), ['412', 'low', SINCE, QUESTION_MD5, 'search_materials', null, null]);
+  assert.deepEqual(bindParams(turn, { request: '412', tier: 'low', ...run, after: '411' }), ['412', 'low', SINCE, QUESTION_MD5, null, null, '411']);
+  assert.deepEqual(bindParams(turn, { request: '412', tier: 'mid', ...run }), ['412', 'mid', SINCE, QUESTION_MD5, null, null, null]);
   assert.throws(() => bindParams(turn, { request: '412', ...run }), /parameter "tier" is required/);
   // A turn is never read without the run's start and its question: neither may be left out.
   assert.throws(() => bindParams(turn, { request: '412', tier: 'low', question_md5: QUESTION_MD5 }), /parameter "since" is required/);
   assert.throws(() => bindParams(turn, { request: '412', tier: 'low', since: SINCE }), /parameter "question_md5" is required/);
   assert.throws(() => bindParams(turn, { request: '412', tier: 'low', ...run, model: 'haiku' }), /has no parameter "model"/);
   assert.throws(() => bindParams(turn, { request: 'abc', tier: 'low', ...run }), /parameter "request"/);
-  assert.deepEqual(Object.keys(PACK_21['turn-stopped'].params), ['request', 'since', 'question_md5']);
-  assert.deepEqual(Object.keys(PACK_21['turn-answered-after'].params), ['request', 'since', 'min_wait_s']);
+  assert.deepEqual(Object.keys(PACK_21['turn-stopped'].params), ['request', 'since', 'question_md5', 'after']);
+  // The question that waited is held to its words too: any other request of the run that happened to wait proves nothing.
+  assert.deepEqual(Object.keys(PACK_21['turn-answered-after'].params), ['request', 'since', 'min_wait_s', 'question_md5']);
+  assert.throws(() => bindParams(PACK_21['turn-answered-after'], { request: '419', since: SINCE, min_wait_s: '15' }), /parameter "question_md5" is required/);
   assert.deepEqual(Object.keys(PACK_21['conversations-archived'].params), ['ids', 'since']);
   assert.deepEqual(PACK_21['planner-unchanged'].params, { before: 'fingerprint' });
   assert.deepEqual(bindParams(PACK_21['spike-archived'], {}), []);
@@ -471,7 +474,7 @@ test('the statement runs in a read-only transaction with a 15 s limit, and is ro
     client.queries.map((query) => query.text),
     ['begin', 'set transaction read only', "set local statement_timeout = '15s'", PACK_21.turn.sql, 'rollback'],
   );
-  assert.deepEqual(client.queries[3].values, ['412', 'low', SINCE, QUESTION_MD5, 'search_materials', null]);
+  assert.deepEqual(client.queries[3].values, ['412', 'low', SINCE, QUESTION_MD5, 'search_materials', null, null]);
   assert.equal(client.connected && client.ended, true);
   assert.deepEqual(line, { name: 'turn', pass: true, detail: { request_id: '412' } });
 });
