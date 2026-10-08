@@ -369,3 +369,80 @@ Defaults taken where the brief leaves room:
   condition fails, even around an allowed value.
 * An A5 key is one key. A second inline `height` in `PlannerWeek.tsx`, or a second `marginLeft` in
   `CourseClasswork.tsx`, fails the A5 case although the scanner counts it 0.
+
+## Task 3: the block-aware reader (P-17)
+
+Written 2026-10-08. The branch was merged with `origin/feat/styling-22` first (a merge, no rebase), so the
+brief read here is the current one. Three files, all W-67's: `web/test/css-tokens.ts` (new, 463 lines),
+`web/test/theme-tokens.test.ts` (new, 474 lines) and `web/test/type-tokens.contrast.test.ts` (moved onto the
+reader). Nothing under `web/src`, `project-state/`, the brief, `globals.css`, any lock file or `package.json`
+was touched. The allowlist is unchanged: `git diff --quiet ce2519f HEAD -- web/test/token-audit.allowlist.ts`
+exits 0. No dependency was added. Commit: `d84ce26` feat(22-T3).
+
+### RED, then GREEN
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED 1: tests written, `css-tokens.ts` a stub whose functions throw | `npx vitest run test/type-tokens.contrast.test.ts test/theme-tokens.test.ts` | 1 | 2 files failed at collection, no test ran (the stub threw on import-time reads) |
+| RED 2: stub returns empty maps, the rest still throws | same | 1 | 58 failed, 3 passed (61); the 3 are the selector-name case and two "reads nothing" cases that an empty map satisfies |
+| GREEN: the reader written | same | 0 | 2 files, 62 passed (62): 36 in `theme-tokens.test.ts`, 26 in `type-tokens.contrast.test.ts` |
+
+One case was loosened after GREEN's first run: the "unrounded composite" case bounded the float-versus-rounded
+gap at 0.01, and the real gap is 0.023. The bound is now 0.05. The case still asserts the two numbers are not
+equal, which is what proves nothing is rounded on the way.
+
+### The gates
+
+Each command ran by itself from `web/`, output to a file, exit code from the shell.
+
+| Command | Exit | Result |
+|---|---|---|
+| `npx vitest run test/type-tokens.contrast.test.ts test/theme-tokens.test.ts` | 0 | 2 files, 62 passed (62), 0 failed |
+| `npm test` | 0 | 159 files, 3094 passed (3094), 0 failed |
+| `npm run typecheck` | 0 | `tsc --noEmit`, no error |
+| `npx eslint . --max-warnings 0` | 0 | no output |
+
+### What the task row asked for, and where it is proven
+
+| Row | Case in `theme-tokens.test.ts` |
+|---|---|
+| appending `:root[data-theme='light'] { --color-surface: #ffffff; }` leaves the dark `--color-surface` at `#232532` | "a light block does not move the dark ground ..." |
+| `color-mix(in srgb, #e9e9ed 16%, transparent)` over `#232532` prints `#434450` | "prints today's --color-divider on the card as #434450" |
+| the reader composites in floating point and rounds only when it prints a hex | "contrast comes from the unrounded composite ..." (float 3.94-pair ratio differs from the ratio of two printed hexes by 0.023) |
+| `--color-neutral-600` on `--color-surface` = 3.52 | "--color-neutral-600 on --color-surface is 3.52" |
+| `--color-danger` on `--color-danger-bg` over `--color-surface` = 3.94 | "--color-danger on --color-danger-bg over --color-surface is 3.94" |
+| the fixture is a verbatim copy of `:root`, inline, never re-read from the live file | `DARK_ROOT` in the test. Checked at write time: the evaluated template literal equals `git show a5042fa:web/src/app/globals.css` lines 20-165 character for character. The four backticks in its comments are escaped in the source. |
+
+Further cases: the light map is the dark map overlaid, and a name only the light block declares reaches the
+light map only; a `var()` in the light block resolves against the light map (`--color-muted` over a white card
+with `--color-text: #111111` prints `#7c7c7c` in light and `#909199` in dark); the selector may be quoted either
+way, and a space before the bracket is a descendant selector and not the light block; comments, an `@import`
+with a semicolon in its URL, a `:root` inside an at-rule, and other selectors do not leak into either map;
+nested `color-mix`, a non-srgb space, a percentage outside 0 to 100, a translucent colour with no ground,
+circular and undeclared `var()` chains each fail with a named error.
+
+### Defaults taken
+
+1. **No light block exists yet, so "the light ground is the light block's `--color-surface`" has nothing to
+   read.** Following the brief's wording, the light map is the dark map overlaid by nothing, so the light map
+   equals the dark map. `type-tokens.contrast.test.ts` runs its assertions in both blocks, and until task 8 the
+   light run measures today's dark card again. The `'#ffffff'` stand-in is gone, as the row says. The honest
+   cost: between this commit and task 8 nothing measures the type tokens against a white card. Task 8 replaces
+   four of the six assertions and brings the real light block, so I did not keep a white check beside the reader.
+   `ThemeMaps.hasLightBlock` is false today and the test header says so.
+2. **The six assertions became thirteen cases per block.** The old "segment visible on a dark card" and "on a
+   light card" are one case per block now ("the segment is visible on the card", 5 categories), because each
+   block's own card is the ground. The other four are as before. 26 cases in the file against 18 before.
+3. **The reader reads top-level rules only.** A `:root` inside `@media` or `@supports` is skipped, so a theme
+   block inside an at-rule is not seen. If task 8 wants `@media (prefers-color-scheme)` blocks this needs to
+   change; the brief names only the two selectors.
+4. **A `color-mix` argument that reaches another `color-mix` (written out, or through a `var()`) throws.** The
+   brief says one level. Live `globals.css` has none: `--planner-ooo-bg` is a `var()` to a `color-mix`, which is
+   a chain, not a nesting, and resolves.
+5. **`toHex` and `contrastRatio` refuse a translucent colour**, and `resolveColour` refuses one with no ground.
+   `pairContrast(map, fg, bg, over)` lays a translucent `bg` over `over`, and a translucent `fg` over the
+   composited `bg`.
+6. **Colour moved out of the test.** `contrastRatio`, `deltaE` and the Lab maths moved from
+   `type-tokens.contrast.test.ts` into `css-tokens.ts` and now take parsed colours, not hex strings. Nothing else
+   imported them (searched `web/src`, `web/test`, `web/e2e` and `desktop`).
+7. **`css-tokens.ts` is under `web/test/`, so the token audit (which scans `web/src`) does not see it.**
