@@ -51,7 +51,7 @@ function deps(rpc: SyncRpc, rec: Recorder, over: Partial<PassDeps> = {}): PassDe
     login: { check: vi.fn(async (): Promise<Verdict> => { rec.calls.push('probe'); return 'alive'; }) },
     crawl: vi.fn(async () => { rec.calls.push('crawl'); }),
     waitFold: vi.fn(async (runId: string) => { rec.calls.push('wait'); return rpc.runOutcome(runId); }),
-    files: vi.fn(async () => { rec.calls.push('files'); return { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null }; }),
+    files: vi.fn(async () => { rec.calls.push('files'); return { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null, unitsPosted: 0 }; }),
     mintRunId: () => RUN_ID,
     setPassRunning: vi.fn(),
     log: () => {},
@@ -207,6 +207,34 @@ describe('the Inbox apply request after a done sync (Phase 23, migration 180)', 
     expect(lines.some((l) => l.includes('Inbox apply'))).toBe(false);
   });
 
+  it('Phase 24a: a pass with no new unit and an embed exit of 1 closes done, keeps the line and files the request', async () => {
+    const { rpc, rec } = fakeRpc({ requestInboxApply: vi.fn(async () => '9002') });
+    const d = deps(rpc, rec, {
+      files: vi.fn(async () => ({ files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: 'exit 1', unitsPosted: 0 })),
+    });
+    expect(await runPass(d)).toBe('done');
+    expect(rec.closes[0]?.state).toBe('done');
+    expect(rec.closes[0]?.report.error).toBeNull();
+    expect(rec.closes[0]?.report.lines.some((l: string) => l.startsWith('Embedding did not finish'))).toBe(true);
+    expect(rpc.requestInboxApply).toHaveBeenCalledWith('501');
+  });
+
+  it('Phase 24a: units posted and an embed error still fail the sync and file nothing', async () => {
+    const { rpc, rec } = fakeRpc();
+    const d = deps(rpc, rec, {
+      files: vi.fn(async () => ({ files: { pulled: 1, not_pulled: [] }, stopped: null, embedError: 'exit 1', unitsPosted: 2 })),
+    });
+    expect(await runPass(d)).toBe('failed');
+    expect(rpc.requestInboxApply).not.toHaveBeenCalled();
+  });
+
+  it('Phase 24a: a null from the apply-request call reads as nothing to apply', async () => {
+    const lines: string[] = [];
+    const { rpc, rec } = fakeRpc({ requestInboxApply: vi.fn(async () => null) });
+    expect(await runPass(deps(rpc, rec, { log: (l) => lines.push(l) }))).toBe('done');
+    expect(lines.some((l) => l.includes('Inbox apply request'))).toBe(false);
+  });
+
   it('a failed fold never asks for it', async () => {
     const { rpc, rec } = fakeRpc({ runOutcome: vi.fn(async () => ({ syncRunId: '62', status: 'failed' as const, summary: {} })) });
     expect(await runPass(deps(rpc, rec))).toBe('failed');
@@ -301,7 +329,7 @@ describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
       login: { check: async () => 'alive' as Verdict },
       crawl: async () => {},
       waitFold: (runId) => rpc.runOutcome(runId),
-      files: async () => ({ files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null }),
+      files: async () => ({ files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null, unitsPosted: 0 }),
       mintRunId: () => RUN_ID,
       setPassRunning: () => {},
       log: () => {},
@@ -342,7 +370,7 @@ describe('resuming the runner\'s own registered claims (R2 item 1)', () => {
 
   it('a resumed run that failed closes failed, and the files step is not run', async () => {
     const { rpc, closes, applyAfter } = statefulRpc('failed');
-    const files = vi.fn(async () => ({ files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null }));
+    const files = vi.fn(async () => ({ files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null, unitsPosted: 0 }));
     await runPass(stateDeps(rpc, { waitFold: async () => null }));
     await runPass(stateDeps(rpc, { files }));
     expect(closes.map((c) => [c.id, c.state, c.report.error])).toEqual([['601', 'failed', 'fold failed']]);

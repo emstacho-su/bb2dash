@@ -98,6 +98,25 @@ describe('the report shape', () => {
     expect(b.report.error).toBe('embed failed: exit 1');
   });
 
+  it('an embed failure on a pass that posted no unit is a line and never the error (Phase 24a)', () => {
+    const r = buildReport({ foldStatus: 'ok', files: { pulled: 0, not_pulled: [] }, claimAttempts: 1, embedError: 'exit 1', unitsPosted: 0 });
+    expect(r.state).toBe('done');
+    expect(r.report.error).toBeNull();
+    expect(r.report.lines).toEqual(['Files: nothing new to pull', 'Embedding did not finish: exit 1; it is tried again at the next sync']);
+  });
+
+  it('an embed failure on a pass that posted units still fails the sync', () => {
+    const r = buildReport({ foldStatus: 'ok', files: { pulled: 1, not_pulled: [] }, claimAttempts: 1, embedError: 'exit 1', unitsPosted: 3 });
+    expect(r.state).toBe('failed');
+    expect(r.report.error).toBe('embed failed: exit 1');
+  });
+
+  it('the soft embed line does not hide another error', () => {
+    const r = buildReport({ foldStatus: 'failed', files: { pulled: 0, not_pulled: [] }, claimAttempts: 1, embedError: 'x', unitsPosted: 0 });
+    expect(r.state).toBe('failed');
+    expect(r.report.error).toBe('fold failed');
+  });
+
   it('every line is text, as sync_close requires', () => {
     const { report } = buildReport({
       foldStatus: 'partial',
