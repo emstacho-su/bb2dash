@@ -2,21 +2,25 @@
 -- Phase 16 · migration 107 (v_gradebook_latest.counts_toward_grade follows the Grades tab's
 -- "Counts toward..." picker, grade_column_links). Brief: docs/planning/sprint-2/verification/115_SQL_UNITS_AUDIT_2026-10-09.md, section C.
 --
--- THE RULE UNDER TEST, for a gradebook row (course_id, column_id):
+-- THE RULE UNDER TEST, for a gradebook row (course_id, column_id) of kind item or attendance:
 --   a grade_column_links row for it that is excluded ("Not graded")          -> false
 --   else a grade_column_links row for it, not excluded, with a component_id   -> true
 --   else what 047 always did: bool_or(assignments.component_id is not null)
 --        over the assignments linked to the column, false when there are none.
+-- For every other kind (total, letter, calc_other) a link changes nothing: the model view (081,
+-- column_items) applies a link only to item and attendance columns, and the flag follows it.
 -- 057 forbids a link that is neither: grade_column_links_one_target says (component_id is not null)
 -- <> excluded, so "a link, not excluded, with a null component" cannot exist. Section 4 proves the
 -- table refuses it, which is why there is no fourth fixture case.
 --
 -- WHAT IS ASSERTED
 --   1  the first check: the view's definition mentions grade_column_links (107 is applied).
---   2  an invariant over EVERY live row: the flag equals the rule, computed here from the two tables.
+--   2  an invariant over EVERY live row: the flag equals the rule, computed here from the two tables
+--      by one temp function (pg_temp.counts_mismatch), called again in section 5.
 --   3  fixtures on one live gradebook row, all inside this transaction: no link (the assignment with
 --      a component, then without), an excluded link, a placed link; each case also compares the rest
 --      of the view's row with its snapshot, so only the flag may move.
+--   3b a total or calc_other column: an excluded link, then a placed link, leave its flag where it was.
 --   4  the table refuses a not-excluded link with no component (the reason for no case 4).
 --   5  the invariant of 2 again after the fixtures, and the grade model view agrees with the flag.
 --   6  inbox_apply_runner, which 181 lets read the view, still can: the view is security_invoker and
@@ -57,6 +61,27 @@ end $$;
 -- =============================================================================================
 -- 2. The flag equals the rule on every live row
 -- =============================================================================================
+-- The rule, written out here from the two tables and not read from the view. Returns the rows where
+-- the flag and the rule disagree, as text, or null. Called here and again after the fixtures.
+create function pg_temp.counts_mismatch() returns text
+  language sql stable as $$
+  select string_agg(format('%s/%s (%s): flag %s, rule %s', g.course_id, g.column_id, g.column_kind,
+                           g.counts_toward_grade, r.want),
+                    '; ' order by g.course_id, g.column_id)
+    from public.v_gradebook_latest g
+    left join public.grade_column_links l
+           on l.course_id = g.course_id and l.column_id = g.column_id
+   cross join lateral (
+     select case
+              when g.column_kind in ('item', 'attendance') and l.excluded then false
+              when g.column_kind in ('item', 'attendance') and l.component_id is not null then true
+              else coalesce((select bool_or(a.component_id is not null)
+                               from public.assignments a
+                              where a.course_id = g.course_id and a.bb_column_id = g.column_id), false)
+            end as want) r
+   where g.counts_toward_grade is distinct from r.want
+$$;
+
 do $$
 declare
   n_rows int;
@@ -66,24 +91,7 @@ begin
   if n_rows = 0 then
     raise exception 'FAIL precondition: v_gradebook_latest has no rows to check';
   end if;
-
-  select string_agg(format('%s/%s: flag %s, rule %s', g.course_id, g.column_id,
-                           g.counts_toward_grade, r.want),
-                    '; ' order by g.course_id, g.column_id) into bad
-    from public.v_gradebook_latest g
-   cross join lateral (
-     select case
-              when exists (select 1 from public.grade_column_links l
-                            where l.course_id = g.course_id and l.column_id = g.column_id
-                              and l.excluded) then false
-              when exists (select 1 from public.grade_column_links l
-                            where l.course_id = g.course_id and l.column_id = g.column_id
-                              and not l.excluded and l.component_id is not null) then true
-              else coalesce((select bool_or(a.component_id is not null)
-                               from public.assignments a
-                              where a.course_id = g.course_id and a.bb_column_id = g.column_id), false)
-            end as want) r
-   where g.counts_toward_grade is distinct from r.want;
+  bad := pg_temp.counts_mismatch();
   if bad is not null then
     raise exception 'FAIL counts_toward_grade disagrees with the rule on live rows: %', bad;
   end if;
@@ -163,6 +171,59 @@ begin
 end $$;
 
 -- =============================================================================================
+-- 3b. A column that is not an item or attendance column ignores the picker's links
+-- =============================================================================================
+-- The first total or calc_other column by (course_id, column_id) with no link, in a course whose
+-- scheme has a component. If there is none the case is skipped (a notice, not a pass of anything).
+do $$
+declare
+  v_course    text;
+  v_column    text;
+  v_kind      text;
+  v_component bigint;
+  v_before    boolean;
+  v_flag      boolean;
+begin
+  select g.course_id, g.column_id, g.column_kind,
+         (select min(gc.id) from public.grade_components gc
+           where gc.course_id = coalesce(co.parent_course_id, co.id)),
+         g.counts_toward_grade
+    into v_course, v_column, v_kind, v_component, v_before
+    from public.v_gradebook_latest g
+    join public.courses co on co.id = g.course_id
+   where g.column_kind in ('total', 'calc_other')
+     and not exists (select 1 from public.grade_column_links l
+                      where l.course_id = g.course_id and l.column_id = g.column_id)
+     and exists (select 1 from public.grade_components gc
+                  where gc.course_id = coalesce(co.parent_course_id, co.id))
+   order by g.course_id, g.column_id
+   limit 1;
+  if v_column is null then
+    raise notice 'phase16_107: case 3b skipped, no total or calc_other column without a link in a course with components';
+    return;
+  end if;
+
+  insert into public.grade_column_links (course_id, column_id, component_id, excluded)
+  values (v_course, v_column, null, true);
+  select g.counts_toward_grade into v_flag
+    from public.v_gradebook_latest g where g.course_id = v_course and g.column_id = v_column;
+  if v_flag is distinct from v_before then
+    raise exception 'FAIL case 3b: an excluded link moved the flag of the % column %/% from % to %',
+      v_kind, v_course, v_column, v_before, v_flag;
+  end if;
+
+  delete from public.grade_column_links where course_id = v_course and column_id = v_column;
+  insert into public.grade_column_links (course_id, column_id, component_id, excluded)
+  values (v_course, v_column, v_component, false);
+  select g.counts_toward_grade into v_flag
+    from public.v_gradebook_latest g where g.course_id = v_course and g.column_id = v_column;
+  if v_flag is distinct from v_before then
+    raise exception 'FAIL case 3b: a component link moved the flag of the % column %/% from % to %',
+      v_kind, v_course, v_column, v_before, v_flag;
+  end if;
+end $$;
+
+-- =============================================================================================
 -- 4. No case 4: 057 refuses a link that is not excluded and has no component
 -- =============================================================================================
 do $$
@@ -195,23 +256,7 @@ do $$
 declare
   bad text;
 begin
-  select string_agg(format('%s/%s: flag %s, rule %s', g.course_id, g.column_id,
-                           g.counts_toward_grade, r.want),
-                    '; ' order by g.course_id, g.column_id) into bad
-    from public.v_gradebook_latest g
-   cross join lateral (
-     select case
-              when exists (select 1 from public.grade_column_links l
-                            where l.course_id = g.course_id and l.column_id = g.column_id
-                              and l.excluded) then false
-              when exists (select 1 from public.grade_column_links l
-                            where l.course_id = g.course_id and l.column_id = g.column_id
-                              and not l.excluded and l.component_id is not null) then true
-              else coalesce((select bool_or(a.component_id is not null)
-                               from public.assignments a
-                              where a.course_id = g.course_id and a.bb_column_id = g.column_id), false)
-            end as want) r
-   where g.counts_toward_grade is distinct from r.want;
+  bad := pg_temp.counts_mismatch();
   if bad is not null then
     raise exception 'FAIL after the fixtures counts_toward_grade disagrees with the rule: %', bad;
   end if;

@@ -10,8 +10,10 @@
 --   E  every component_id (assignments and grade_column_links) belongs to the scheme course,
 --      coalesce(courses.parent_course_id, courses.id).
 --   D  (ratchet) an assignment with points_possible > 0 and no component of its own sits under an
---      excluded grade_column_links row, or the grade model places it (v_grade_model_items has a row
---      for the assignment with a component_id and not excluded), or its id is in D_EXCEPTIONS. The
+--      excluded grade_column_links row, or the grade model places its column (v_grade_model_items has
+--      a row for the assignment's shell and bb_column_id with a component_id and not excluded: matched
+--      by column, because the model's assignment_id is null when a column links several assignments),
+--      or its id is in D_EXCEPTIONS. The
 --      list only ever shrinks. The model is mirrored, not the raw link: it applies a link only to a
 --      column in v_gradebook_latest of kind item or attendance (081, column_items), and it takes
 --      the component from a non-excluded link first. Migration 106 folded links into
@@ -121,7 +123,7 @@ begin
                       where l.course_id = a.course_id and l.column_id = a.bb_column_id
                         and l.excluded)
      and not exists (select 1 from v_grade_model_items m
-                      where m.assignment_id = a.id
+                      where m.shell_course_id = a.course_id and m.column_id = a.bb_column_id
                         and m.component_id is not null and not m.excluded);
   if bad is not null then
     raise exception 'FAIL D point-bearing assignments with no component, not excluded, not placed by the grade model, not excepted: %', bad;

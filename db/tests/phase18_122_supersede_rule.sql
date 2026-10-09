@@ -13,6 +13,11 @@
 --       item, so the function re-creates each link straight to the chain's end. A hop that Stack's
 --       answer made (several files in the item) or an end that left Blackboard would fail here
 --       and want the unit read again.
+--       (1b) is the check that does not rest on the function's own output: each of the four and
+--       the end of its chain are one Blackboard item (bb_files.course_id and content_id equal, and
+--       the content id present) and the end is current (superseded_by is null). On 2026-10-09:
+--       2 and 151 share IST.323/_12928159_1, 74 and 2509 share IST.466/_12939631_1, and 150, 162
+--       and 2773 share IST.466/_12939679_1 (150 and 162 are two files of that one item).
 --   (2) a replay writes 0
 --   (3) 31, 32, 47 (the three IST.352 decks) and 155, 156 are unchanged
 --   (4) rows classified_by 'stack' are unchanged
@@ -41,6 +46,7 @@ declare
   v_expect   text;
   v_ends     int;
   v_end_of_2 bigint;
+  v_indep    text;
   -- how far a supersession chain is followed; reaching it means a cycle or a longer chain
   CHAIN_LIMIT constant int := 1000;
   v_watch    text;
@@ -71,10 +77,18 @@ begin
       from chain c join bb_files f on f.id = c.next_id
      where c.depth < CHAIN_LIMIT
   )
-  select string_agg(format('%s->%s', start_id, id), ', ' order by start_id), count(*),
-         (array_agg(id) filter (where start_id = 2))[1]
-    into v_expect, v_ends, v_end_of_2
-    from chain where next_id is null and depth > 0;
+  select string_agg(format('%s->%s', c.start_id, c.id), ', ' order by c.start_id), count(*),
+         (array_agg(c.id) filter (where c.start_id = 2))[1],
+         string_agg(format('%s->%s', c.start_id, c.id), ', ' order by c.start_id)
+           filter (where s.content_id is null
+                      or s.course_id is distinct from e.course_id
+                      or s.content_id is distinct from e.content_id
+                      or e.superseded_by is not null)
+    into v_expect, v_ends, v_end_of_2, v_indep
+    from chain c
+    join bb_files s on s.id = c.start_id
+    join bb_files e on e.id = c.id
+   where c.next_id is null and c.depth > 0;
 
   update bb_files set superseded_by = null where id in (2, 74, 150, 162);
 
@@ -96,6 +110,14 @@ begin
   elsif (v_r->>'superseded')::int <> 4 or v_got is distinct from v_expect then
     v_fail := v_fail || format('(1) newest run %s wrote %s: %s, expected the chain ends %s',
                                v_newest, v_r->>'superseded', coalesce(v_got, 'nothing'), v_expect);
+  end if;
+
+  -- (1b) the check that does not rest on the function's own output: each start file and the end of
+  -- its chain are one Blackboard item (same course_id and content_id) and the end is current.
+  -- The chains were read from superseded_by before the function ran, but that column is what 120
+  -- and 122 wrote; the item identity and the current flag are Blackboard's own.
+  if v_indep is not null then
+    v_fail := v_fail || format('(1b) a start file and its chain end are not one Blackboard item, or the end is superseded: %s', v_indep);
   end if;
 
   -- (2)
