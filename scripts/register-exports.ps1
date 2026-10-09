@@ -87,7 +87,13 @@ function Resolve-Folder {
     if (-not (Test-Path -LiteralPath $Value -PathType Container)) {
         Fail "-$ParamName '$Value' is not an existing folder." "Create it, or pass the real $ParamName."
     }
-    return (Resolve-Path -LiteralPath $Value).ProviderPath.TrimEnd('\', '/')
+    # The path that goes into the command is the resolved one (a relative value takes on the names of
+    # the folders above it), so it gets the same test as the value as typed.
+    $resolved = (Resolve-Path -LiteralPath $Value).ProviderPath.TrimEnd('\', '/')
+    if (Test-UnsafePath $resolved) {
+        Fail "-$ParamName resolves to a path that holds a double quote, a backtick or a typographic single quote." 'Pass a folder whose full path holds none of them.'
+    }
+    return $resolved
 }
 
 # ---------------------------------------------------------------- validation (nothing is registered yet)
@@ -130,7 +136,9 @@ function ConvertTo-SingleQuoted {
     return "'" + $Value.Replace("'", "''") + "'"
 }
 
-$nodeCommand = ('& {0} {1} --secrets-dir {2} --harness-dir {3}; exit $LASTEXITCODE' -f
+# The exit code is set to 1 first: if node.exe has moved since registration the call never starts,
+# $LASTEXITCODE would stay unset, and the task would end with 0 while the state file is untouched.
+$nodeCommand = ('$global:LASTEXITCODE = 1; & {0} {1} --secrets-dir {2} --harness-dir {3}; exit $LASTEXITCODE' -f
     (ConvertTo-SingleQuoted $node.Source), (ConvertTo-SingleQuoted $RUNNER),
     (ConvertTo-SingleQuoted $secrets), (ConvertTo-SingleQuoted $harness))
 $arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$nodeCommand`""
