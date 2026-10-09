@@ -558,6 +558,8 @@ acceptStep('7a offline press', { shots: ['queued', 'waiting', 'command'] }, asyn
   await expect(command).toBeVisible();
   const shown = ((await command.first().innerText()) ?? '').trim();
   rec.note({ command_shown: true, command_names_the_request: shown === `claude "/inbox-apply ${requestId}"` });
+  // The picture is for the command: it is brought into the window first, wherever the page put its box.
+  await command.first().scrollIntoViewIfNeeded();
   await rec.shot(page, 'command');
   expect(shown, 'the command names the request that was filed').toBe(`claude "/inbox-apply ${requestId}"`);
 });
