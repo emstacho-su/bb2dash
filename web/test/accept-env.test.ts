@@ -25,6 +25,7 @@ import {
   readFacts,
   requireCarried,
   slugOf,
+  stepId,
   stepOf,
   writeFacts,
 } from '../e2e/accept.env';
@@ -225,6 +226,52 @@ describe('the carry-over', () => {
     expect(() => readCarry(carryIn('{ not json'))).toThrow(/carry\.json is not valid JSON/);
     expect(() => readCarry(carryIn([1]))).toThrow(/carry\.json is not a JSON object/);
     expect(() => carried(readCarry(carryIn({ '3': 412 })), '3', 'request_id', 'integer')).toThrow(/3 is not a JSON object/);
+  });
+});
+
+describe('an id a step left', () => {
+  const FIELD = 'run_tag_id';
+
+  function carryWith(value: unknown): string {
+    const dir = scratch();
+    writeFileSync(join(dir, 'carry.json'), JSON.stringify(value));
+    return dir;
+  }
+
+  it('is what the running test holds, before its facts file exists: a step can read back the id it just made', () => {
+    const out = join(scratch(), 'walk');
+    expect(readFacts(out, '1')).toBeNull();
+    expect(stepId({ [FIELD]: 1791548609133 }, out, undefined, '1', FIELD)).toBe(1791548609133);
+  });
+
+  it("is this stage's facts file for a later test of the stage, which holds nothing itself", () => {
+    const out = join(scratch(), 'walk');
+    writeFacts(out, '1', { [FIELD]: 41, confirm_item_id: 6297 });
+    expect(stepId({}, out, undefined, '1', FIELD)).toBe(41);
+    expect(stepId({}, out, undefined, '1', 'confirm_item_id')).toBe(6297);
+  });
+
+  it('is the carry-over for a later stage, whose folder holds no facts of that step', () => {
+    const out = join(scratch(), 'offline');
+    const carry = carryWith({ '1': { [FIELD]: 42 } });
+    expect(stepId({}, out, carry, '1', FIELD)).toBe(42);
+    expect(stepId({}, null, carry, '1', FIELD)).toBe(42);
+  });
+
+  it('prefers what the test holds to the folder, and the folder to the carry-over', () => {
+    const out = join(scratch(), 'walk');
+    writeFacts(out, '1', { [FIELD]: 41 });
+    const carry = carryWith({ '1': { [FIELD]: 42 } });
+    expect(stepId({ [FIELD]: 40 }, out, carry, '1', FIELD)).toBe(40);
+    expect(stepId({}, out, carry, '1', FIELD)).toBe(41);
+  });
+
+  it('takes only a positive whole number from the test or the folder, and says what is missing when nothing holds one', () => {
+    const out = join(scratch(), 'walk');
+    writeFacts(out, '1', { [FIELD]: 'forty' });
+    for (const held of [{ [FIELD]: 0 }, { [FIELD]: -3 }, { [FIELD]: 4.5 }, { [FIELD]: '40' }, {}]) {
+      expect(() => stepId(held, out, undefined, '1', FIELD)).toThrow(/carry.json holds no 1.run_tag_id/);
+    }
   });
 });
 
