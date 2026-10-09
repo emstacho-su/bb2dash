@@ -12,7 +12,7 @@
  */
 
 import { bytesLookValid, sha256Hex } from '../../ingest/pull_files.mjs';
-import { MAX_UPLOAD_BYTES, PARSED_MIME_EXTENSIONS, TEXT_MIMES, type ErrorCode } from './constants.js';
+import { DOCUMENT_TIME_BUDGET_MS, MAX_UPLOAD_BYTES, PARSED_MIME_EXTENSIONS, TEXT_MIMES, type ErrorCode } from './constants.js';
 import type { FinishOutcome, IngestClaim, IngestRpc } from './db.js';
 import { handOver } from './exchange.js';
 import { downloadBytes, isTrustedLink } from './link.js';
@@ -21,8 +21,11 @@ import { prepareUnits, textFileUnits, type Checked, type Unit } from './units.js
 export interface ProcessDeps {
   readonly rpc: IngestRpc;
   readonly fetch: typeof fetch;
-  /** The embed loop for one document: exit code 0 when nothing is left to embed. */
-  readonly embed: (documentId: number) => Promise<{ exitCode: number }>;
+  /**
+   * The embed loop for one document, which must stop by `deadlineMs` (inside the claim's lease): exit
+   * code 0 when every part is stored. A try that stops with parts left keeps what it stored.
+   */
+  readonly embed: (documentId: number, deadlineMs: number) => Promise<{ exitCode: number; stop?: string | null; progressed?: boolean }>;
   readonly exchangeDir: string;
   readonly now: () => number;
   readonly sleep: (ms: number) => Promise<void>;
@@ -111,10 +114,14 @@ async function readStage(claim: IngestClaim, deps: ProcessDeps): Promise<End | n
 }
 
 /** Step 7. Null means every unit is embedded. */
-async function embedStage(claim: IngestClaim, deps: ProcessDeps): Promise<End | null> {
+async function embedStage(claim: IngestClaim, deps: ProcessDeps, deadlineMs: number): Promise<End | null> {
   try {
-    const result = await deps.embed(claim.document_id);
-    return result.exitCode === 0 ? null : retry('embed_failed');
+    const result = await deps.embed(claim.document_id, deadlineMs);
+    if (result.exitCode === 0) return null;
+    // A try that ran out of time with parts stored is a retry too: the next claim finds the document in
+    // `text_ready` and continues from the stored parts. The database counts it as one of three tries.
+    deps.log(`ingest: document ${claim.document_id} embed stopped (${result.stop ?? 'error'}${result.progressed ? ', progress made' : ''})`);
+    return retry('embed_failed');
   } catch (error) {
     deps.log(`ingest: document ${claim.document_id} embed threw (${describeError(error)})`);
     return retry('embed_failed');
@@ -141,7 +148,7 @@ export async function processDocument(claim: IngestClaim, deps: ProcessDeps): Pr
   const started = deps.now();
   let end: End | null = null;
   if (claim.step === 'read' && claim.kind === 'upload') end = await readStage(claim, deps);
-  if (end === null) end = await embedStage(claim, deps);
+  if (end === null) end = await embedStage(claim, deps, started + DOCUMENT_TIME_BUDGET_MS);
   const done = await finishWith(claim, end, deps);
   const label = done.end === null ? done.state : `${done.state} ${done.end.code}`;
   deps.log(`ingest: document ${claim.document_id} ${label} in ${deps.now() - started} ms (try ${claim.attempts + 1})`);

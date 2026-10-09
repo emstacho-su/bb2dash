@@ -46,6 +46,17 @@ export const WORKER_ALIVE_MAX_AGE_MS = 90_000;
 export const EMBED_LIMIT = 40;
 export const EMBED_MAX_PARTS = 3;
 
+/**
+ * The claim's lease is 10 minutes (workspace_ingest_claim). One document's work, the download and the
+ * parser included, ends this long before it, so the finish call still holds the lease.
+ */
+export const LEASE_MS = 600_000;
+export const LEASE_MARGIN_MS = 60_000;
+/** The most of the lease one document may use, measured from the claim. */
+export const DOCUMENT_TIME_BUDGET_MS = LEASE_MS - LEASE_MARGIN_MS;
+/** A backstop on calls to the embed function for one document: 3 parts a call is 15,000 parts. */
+export const EMBED_CALL_BUDGET = 5_000;
+
 /** The role the worker logs in as: four functions, no table grant. */
 export const INGEST_ROLE = 'workspace_ingest_runner';
 

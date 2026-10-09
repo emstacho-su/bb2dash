@@ -70,7 +70,7 @@ async function main(): Promise<number> {
       processDocument(claim, {
         rpc,
         fetch,
-        embed: (documentId) => embedDocument({ documentId, jwt: config.anonJwt, fetch }),
+        embed: (documentId, deadlineMs) => embedDocument({ documentId, jwt: config.anonJwt, fetch, deadlineMs }),
         exchangeDir: EXCHANGE_DIR,
         now: Date.now,
         sleep,

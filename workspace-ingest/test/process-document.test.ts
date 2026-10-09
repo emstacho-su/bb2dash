@@ -35,7 +35,7 @@ describe('a parsed file', () => {
     const state = await processDocument(claimFor(body, 'application/pdf'), h.deps);
     expect(state).toBe('indexed');
     expect(h.rpc.puts).toEqual([{ documentId: 17, units: TWO_PAGES }]);
-    expect(h.embed).toHaveBeenCalledWith(17);
+    expect(h.embed).toHaveBeenCalledWith(17, NOW_MS + 540_000);
     expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'indexed', code: null }]);
     expect(h.requests).toEqual([{ document_id: 17, file: 'doc-17.pdf' }]);
   });
@@ -194,6 +194,38 @@ describe('a parsed file', () => {
     const h = harness({ body, parser: answersWith(units) });
     await processDocument(claimFor(body, 'application/pdf'), h.deps);
     expect(h.rpc.puts[0]?.units).toEqual([units[0], units[2]]);
+  });
+});
+
+describe('NUL in parsed text (round 3)', () => {
+  it('is stripped from every unit before the put, so Postgres never sees U+0000', async () => {
+    const body = pdfBytes();
+    const units = [
+      { unit_kind: 'page', unit_no: 1, text: 'Syn thetic one.' },
+      { unit_kind: 'page', unit_no: 2, text: '   ' },
+      { unit_kind: 'page', unit_no: 3, text: 'Three.' },
+    ];
+    const h = harness({ body, parser: answersWith(units) });
+    expect(await processDocument(claimFor(body, 'application/pdf'), h.deps)).toBe('indexed');
+    expect(h.rpc.puts[0]?.units).toEqual([
+      { unit_kind: 'page', unit_no: 1, text: 'Synthetic one.' },
+      { unit_kind: 'page', unit_no: 3, text: 'Three.' },
+    ]);
+    expect(JSON.stringify(h.rpc.puts)).not.toContain('\u0000');
+  });
+
+  it('a file whose only text was NUL gives no_text', async () => {
+    const body = zipBytes();
+    const h = harness({ body, parser: answersWith([{ unit_kind: 'doc', unit_no: 1, text: '  ' }]) });
+    await processDocument(claimFor(body, DOCX), h.deps);
+    expect(h.rpc.finishes[0]).toMatchObject({ outcome: 'failed', code: 'no_text' });
+  });
+
+  it('a text file with a NUL byte is still bad_bytes (it is not stripped)', async () => {
+    const body = Buffer.from('abc def');
+    const h = harness({ body });
+    await processDocument(claimFor(body, 'text/plain'), h.deps);
+    expect(h.rpc.finishes[0]).toMatchObject({ outcome: 'failed', code: 'bad_bytes' });
   });
 });
 
@@ -360,7 +392,7 @@ describe('the claim itself', () => {
     });
     expect(await processDocument(claim, h.deps)).toBe('indexed');
     expect(h.fetch).not.toHaveBeenCalled();
-    expect(h.embed).toHaveBeenCalledWith(17);
+    expect(h.embed).toHaveBeenCalledWith(17, NOW_MS + 540_000);
     expect(h.rpc.puts).toEqual([]);
     expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'indexed', code: null }]);
   });
@@ -380,6 +412,14 @@ describe('the embed and the end', () => {
     const h = harness({ body, embedExit: 1 });
     await processDocument(claimFor(body, 'text/plain'), h.deps);
     expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'retry', code: 'embed_failed' }]);
+  });
+
+  it('an embed that stops with progress made is a retry too, and the stop is logged by name', async () => {
+    const h = harness({ body });
+    (h.embed as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({ exitCode: 1, stop: 'timed_out', progressed: true });
+    await processDocument(claimFor(body, 'text/plain'), h.deps);
+    expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'retry', code: 'embed_failed' }]);
+    expect(h.logs.some((l) => l.includes('embed stopped (timed_out, progress made)'))).toBe(true);
   });
 
   it('a finish that refuses indexed becomes a retry of embed_failed', async () => {
