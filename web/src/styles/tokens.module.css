@@ -204,6 +204,19 @@
   border-color: var(--color-accent);
   outline-offset: calc(var(--size-underline) * -1);
 }
+/* A field that cannot be used looks switched off: a flat grey box with a pointer that says no.
+   A field that is only busy (disabled while it saves, and it says so with aria-busy) keeps its
+   look at half strength with the progress pointer, so a save never flashes a grey box. */
+.input:disabled:not([aria-busy='true']) {
+  background: var(--color-neutral-900);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-600);
+  cursor: not-allowed;
+}
+.input:disabled[aria-busy='true'] {
+  opacity: 0.5;
+  cursor: progress;
+}
 
 /* — the assignment-type glyph (R · A · Q · P · E, T-15) ————————————— */
 .glyph {
