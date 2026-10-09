@@ -557,3 +557,5 @@ Loaded at the start of the round and `MASTER.md` was in hand (read earlier this 
 ### Gates
 
 `cd web && npm test`: 183 files, 3404 passed; typecheck 0; eslint 0; audit 89 passed.
+
+Full run on the committed and pushed tree, `node scripts/walk-box.mjs web/e2e/phone-width.spec.ts`: run **20261009T041719Z**, commit 4b77389, `"dirty": false`, exit 0, `"result": "passed"`, `54 passed`; the badge and the 800 px lines above are printed again in it.
