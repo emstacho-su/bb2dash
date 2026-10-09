@@ -1048,3 +1048,41 @@ as the PM asked), and `18 session-popout` and `21` pass because they assert only
 | the whole spec, `node scripts/walk-box.mjs web/e2e/theme-walk.spec.ts`, `fc1a7ee`, `dirty` false | run `20261009T043459Z`: `exit_code` 1, **63 passed, 1 failed**: `17 assignment-popout [dark]`, owed as above |
 
 No `WALK_SHOTS`; no `bb2dash-walk22-` or `bb2dash-accept-` container and no `accept.lock` before either run.
+
+## Round 3
+
+From the second `/code-review main high`, which read task 27. The branch was merged with `origin/feat/styling-22` first. Skill: loaded for the session; no
+search was run. The reviewer's third note (the failed-load page's own `did-finish-load` runs the poller's after-load hook once more, `index.ts:238`) is the
+behaviour the brief accepts (lines 1090 to 1095) and is not changed.
+
+### S-2: did the failed-load page hide the real error? Yes, it did (`2d34fd5`)
+
+Observed, not reasoned. `window.ts` records what the loader's rejection handler gets as `load-rejected` (a no-op outside the test variable), and `chrome.spec.ts`
+reads it in the shell that cannot reach the app, and also loads a route over the live failed-load page from the main process (the path a toast click takes).
+
+| | The first load's promise rejected with | A route loaded over the live page |
+|---|---|---|
+| RED, the page started inside `did-fail-load` (`473c777`) | **`ERR_ABORTED (-3) loading 'data:text/html;charset=utf-8,...'`**: the `data:` navigation superseded the failing one | not reached (the first case failed) |
+| after starting it on the next turn (`setImmediate`) | still `ERR_ABORTED (-3)` | |
+| GREEN (`2d34fd5`) | **`ERR_CONNECTION_REFUSED (-102) loading 'http://127.0.0.1:<port>/'`** | **`ERR_CONNECTION_REFUSED (-102) loading 'http://127.0.0.1:<port>/planner'** |
+
+So the finding was real: `deeplink.ts` `isBenignLoadFailure` matches `-3`, and an offline deep link would have been recorded as a superseded redirect. The fix needed
+more than the next turn of the event loop, because Electron settles a failing `loadURL` when loading stops (`did-stop-loading`), with the error it recorded, and a
+navigation started before that replaces the load. So `did-fail-load` now only queues the page: it is started on the turn after `did-stop-loading`, with a 1 s timer that shows it
+anyway if loading never reports a stop. A second thing the first attempt showed: a failed load also fires `did-finish-load`, with `getURL()` still naming the address that
+failed, so the handler that clears "the window shows the failed page" took that for the app loading and the page never appeared; a finish while the page is queued is now
+the failure, and only an `http(s)` page after that counts.
+
+`window-chrome.test.ts` follows the new order (the page is not loaded inside the event, nor before `did-stop-loading`; it loads once after it; a second failure while it is up
+or queued does not load it again; a finish naming the failed address does not clear it). `window.test.ts:189-201` is untouched and passes: the page is still shown only from
+`did-fail-load`, main frame, never for -3, and not by one more call in the loader. `cd desktop && npm run test:e2e`: exit 0, **33 passed, 0 failed** (10 in `chrome.spec.ts`:
+the 8 of task 27 and 2 for S-2); `npm run typecheck` exit 0; `npm test` exit 0, 49 files, 892 passed; `git diff --diff-filter=MD --name-only origin/main...HEAD -- desktop/test` prints
+nothing.
+
+### S-3: the sidebar toggle's label (`5c9528e`)
+
+The rule is `.tip[data-tip][aria-expanded='true']:not([aria-controls='course-sidebar'])::after { display: none; }`, with a comment that says why: the toggle's
+`aria-expanded` means "the rail is open", the rail does not open over it, and on `main` it always had its title. `SIDEBAR_ID` is `course-sidebar` and `TopNav.tsx` puts
+`aria-controls={SIDEBAR_ID}` beside the toggle's `data-tip`. `foundation-round2.test.ts` pins the selector, its place after the hover and focus rules (which it now also
+outweighs), that the toggle is the one excluded, and that no other rule hides a `.tip` label. RED against the old rule: 3 failed; GREEN: 99 passed with the audit.
+`cd web`: `npm test` exit 0 (187 files, 3428 passed); `npm run typecheck` exit 0; `npx eslint . --max-warnings 0` exit 0; `foundation.json` is `{}`.
