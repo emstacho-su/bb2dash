@@ -12,6 +12,7 @@ import type { Config } from '../config.js';
 import { DEFAULT_INCLUDE_SUPERSEDED, EMBEDDING_MODEL } from '../config.js';
 import { describeError } from '../errors.js';
 import { formatEmptyResults, formatSearchResults } from '../format.js';
+import { takeSearch } from '../limits.js';
 import type { ToolResult } from './schemas.js';
 import { errorResult, formatZodIssues, searchMaterialsSchema, searchMaterialsShape, textResult } from './schemas.js';
 
@@ -59,6 +60,10 @@ export async function handleSearchMaterials(deps: ToolDeps, rawArgs: unknown): P
     include_superseded: includeSupersededArg,
   } = parsed.data;
   const { search: searchConfig } = deps.config;
+
+  // The scope and the budget are checked after the arguments, so a bad call uses nothing up.
+  const refusal = takeSearch(deps, course);
+  if (refusal) return refusal;
 
   const context = {
     q,

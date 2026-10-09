@@ -17,6 +17,7 @@
 
 import { SERVICE_ROLE_FILE_VAR, readSecretFile } from './env-file.js';
 import { ConfigError } from './errors.js';
+import { type Limits, readLimits } from './limits.js';
 
 export const BB2DASH_PROJECT_REF = 'goultdzqcavefcgnifdy';
 export const HARNESS_PROJECT_REF = 'hqkytnyiiuxovnnyixye';
@@ -57,6 +58,8 @@ export interface Config {
     /** Null disables the floor. */
     readonly minSimilarity: number | null;
   };
+  /** Per-answer limits and course scope (Workspace); none set means no limit. */
+  readonly limits: Limits;
 }
 
 type Env = Record<string, string | undefined>;
@@ -166,5 +169,6 @@ export function loadConfig(env: Env = process.env): Config {
       maxLimit,
       minSimilarity: readSimilarity(env, 'BB2DASH_MIN_SIMILARITY', DEFAULT_MIN_SIMILARITY),
     },
+    limits: readLimits(env),
   };
 }

@@ -73,6 +73,14 @@ Requires Node ≥ 20.11 (developed on 24.13.0). Pass `C:/...` paths to Node, nev
 | `BB2DASH_DEFAULT_LIMIT` | no | `10` | `limit` when the caller omits it. |
 | `BB2DASH_MAX_LIMIT` | no | `50` | Hard ceiling on `limit`. |
 | `BB2DASH_TIMEOUT_MS` | no | `30000` | Per-request timeout. |
+| `BB2DASH_MAX_SEARCHES` | no | unset | Whole number. At most this many `search_materials` calls per server (one answering turn). Unset or empty: no limit, as before. |
+| `BB2DASH_MAX_READS` | no | unset | Whole number. The same for `get_material_text`. |
+| `BB2DASH_COURSES` | no | unset | Course ids separated by commas. With it, `search_materials` must name a course of the list; a read by id is not scoped. Unset or empty: no scope. |
+
+The last three are set by the Workspace runner in the per-request MCP config (Phase 24a). A call
+past its limit, or outside the scope, comes back as an **error result** (`isError`), never a
+protocol error, so the turn goes on. A refused search uses nothing up. Counts live in the process,
+one server one budget.
 
 **Why the service key.** `bb_file_text` and `bb_text_embeddings` are readable only by
 `authenticated`/service (anon is insert-only, by design — NOTES.md caveat 9), and `search` runs
@@ -266,6 +274,30 @@ or the Supabase MCP `deploy_edge_function` tool (`verify_jwt: true`).
 
 ---
 
+## The batch entry (Workspace runner only)
+
+`dist/batch.js` is **not an MCP tool**: `server.ts` still registers exactly three, so host sessions
+and the apply container gain nothing. The Workspace runner starts it once per question with the
+same two environment values the server gets, writes one JSON object on stdin and reads one on
+stdout (`workspace/test/fixtures/contract24/batch-request.json`, `batch-answer.json`):
+
+```powershell
+echo '{"version":1,"queries":[],"attachments":[]}' | node dist/batch.js
+```
+
+* Per query: `ok` and its hits, each with its `kind` (`material`, `upload`, `memory`), from the
+  `workspace-search` edge function. State `ok`; `refused` (the function answered 4xx); `failed`
+  (anything else, the 8 s limit of each call included).
+* Per attachment: what `workspace_attachment_read` returned (cut on the server). A read that fails
+  keeps its place with state `failed` and zero counts.
+* A hit is data. Nothing in a passage is read as an id, a label or another hit.
+* The project is read through `loadConfig`, as the server does, so the vault's project is refused
+  before any request. Exit 0 whenever the object was written; 1 only when none could be (bad
+  stdin, bad configuration). Stdout holds the object alone; stderr holds states, counts and
+  timings, never a query or a passage.
+
+---
+
 ## Error handling
 
 Every failure carries a `Fix:` line. Configuration problems are fatal at startup; everything else
@@ -292,7 +324,11 @@ mcp-server/
     server.ts                registers the three tools
     config.ts                env parsing, the two-stores guard, defaults
     env-file.ts              reads the key from the file SUPABASE_SERVICE_ROLE_FILE names
-    client.ts                fetch wrapper: search Edge Function + PostgREST; row validation
+    client.ts                fetch wrapper: search Edge Function + PostgREST; row validation;
+                             the workspace store's two reads (batch entry)
+    batch.ts                 the Workspace runner's batch entry (stdin -> stdout, not a tool)
+    limits.ts                BB2DASH_MAX_SEARCHES / MAX_READS / COURSES and their enforcement
+    workspace-shapes.ts      wire shapes of workspace_search and workspace_attachment_read
     format.ts                LLM-readable rendering; similarity vs score labelling
     errors.ts                typed errors with actionable hints
     tools/
@@ -309,8 +345,8 @@ mcp-server/
 ## Tests
 
 ```powershell
-npm test                 # 106 tests
-npm run test:coverage    # 95% statements, 85% branches, 100% functions
+npm test                 # see the verification file for the current figures
+npm run test:coverage
 npm run typecheck
 ```
 

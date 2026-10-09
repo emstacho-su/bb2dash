@@ -14,6 +14,14 @@
 import { z } from 'zod';
 import type { Mode } from './config.js';
 import { ApiError } from './errors.js';
+import {
+  type AttachmentKind,
+  type AttachmentRead,
+  type WorkspaceHit,
+  attachmentReadSchema,
+  workspaceHitSchema,
+  workspaceSearchBodySchema,
+} from './workspace-shapes.js';
 
 export type { Mode } from './config.js';
 
@@ -95,6 +103,22 @@ export interface MaterialsClient {
   listCourses(): Promise<CourseRow[]>;
 }
 
+/** The workspace store's two reads, used by the batch entry and by nothing the model can call. */
+export interface WorkspaceSearchRequest {
+  q: string;
+  kinds: readonly string[];
+  /** Null means no course filter. */
+  courses: readonly string[] | null;
+  limit: number;
+  /** Null sends no floor. */
+  minSimilarity: number | null;
+}
+
+export interface WorkspaceClient {
+  searchWorkspace(request: WorkspaceSearchRequest, timeoutMs?: number): Promise<WorkspaceHit[]>;
+  readAttachment(kind: AttachmentKind, id: number, maxChars: number, timeoutMs?: number): Promise<AttachmentRead>;
+}
+
 // ---------------------------------------------------------------- schemas
 
 const hitRow = z.object({
@@ -159,6 +183,8 @@ export interface SupabaseClientOptions {
 }
 
 const SEARCH_PATH = '/functions/v1/search';
+const WORKSPACE_SEARCH_PATH = '/functions/v1/workspace-search';
+const ATTACHMENT_READ_PATH = '/rest/v1/rpc/workspace_attachment_read';
 
 /**
  * PostgREST's own PGRST202 hint ("Perhaps you meant to call …") describes the
@@ -174,7 +200,7 @@ const MISSING_FUNCTION_HINT_SUPERSEDED =
 export const UNASSIGNED_COURSE = '(unassigned)';
 const TEXT_SELECT = 'id,unit_kind,unit_no,text,char_count,bb_files(id,file_name,course_id,bucket,path)';
 
-export class SupabaseMaterialsClient implements MaterialsClient {
+export class SupabaseMaterialsClient implements MaterialsClient, WorkspaceClient {
   readonly description: string;
 
   readonly #url: string;
@@ -282,12 +308,72 @@ export class SupabaseMaterialsClient implements MaterialsClient {
     return rows.data.map((row) => ({ id: row.id, title: row.title_short ?? row.id, kind: row.kind }));
   }
 
+  async searchWorkspace(request: WorkspaceSearchRequest, timeoutMs?: number): Promise<WorkspaceHit[]> {
+    const body: Record<string, unknown> = {
+      q: request.q,
+      kinds: request.kinds,
+      courses: request.courses,
+      limit: request.limit,
+    };
+    if (request.minSimilarity !== null) body['min_similarity'] = request.minSimilarity;
+
+    const raw = await this.#request(
+      WORKSPACE_SEARCH_PATH,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      MISSING_FUNCTION_HINT,
+      timeoutMs,
+    );
+    const parsed = workspaceSearchBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new ApiError(
+        'The workspace search function returned an unexpected shape (no `results` array).',
+        'The deployed `workspace-search` Edge Function may be out of sync with supabase/functions/workspace-search. Redeploy it.',
+      );
+    }
+    return parsed.data.results.map((row, index) => {
+      const hit = workspaceHitSchema.safeParse(row);
+      if (!hit.success) {
+        throw new ApiError(
+          `Result ${index + 1} from the workspace search has an unexpected shape: ${hit.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ')}.`,
+          'workspace_search (migration 192) and the deployed `workspace-search` function must agree on column names.',
+        );
+      }
+      return hit.data;
+    });
+  }
+
+  async readAttachment(kind: AttachmentKind, id: number, maxChars: number, timeoutMs?: number): Promise<AttachmentRead> {
+    const raw = await this.#request(
+      ATTACHMENT_READ_PATH,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_kind: kind, p_id: id, p_max_chars: maxChars }),
+      },
+      MISSING_FUNCTION_HINT,
+      timeoutMs,
+    );
+    const parsed = attachmentReadSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new ApiError(
+        'workspace_attachment_read returned an unexpected shape.',
+        'Check db/migrations/192_workspace_search.sql against workspace/test/fixtures/contract24/attachment-read.json.',
+      );
+    }
+    return parsed.data;
+  }
+
   // -------------------------------------------------------------- transport
 
-  async #request(path: string, init: RequestInit, missingFunctionHint = MISSING_FUNCTION_HINT): Promise<unknown> {
+  async #request(
+    path: string,
+    init: RequestInit,
+    missingFunctionHint = MISSING_FUNCTION_HINT,
+    timeoutMs: number = this.#timeoutMs,
+  ): Promise<unknown> {
     const url = `${this.#url}${path}`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     // The timer stays armed until the BODY has been read: a server that sends
     // headers and then stalls the stream would otherwise hang past the timeout.
@@ -308,7 +394,7 @@ export class SupabaseMaterialsClient implements MaterialsClient {
     } catch (cause) {
       if (isAbort(cause)) {
         throw new ApiError(
-          `Request to ${path} timed out after ${this.#timeoutMs} ms.`,
+          `Request to ${path} timed out after ${timeoutMs} ms.`,
           'The first search after an idle period loads gte-small inside the Edge Function (~1.5 s); anything slower is a network or project problem. Raise BB2DASH_TIMEOUT_MS if the project is merely slow.',
           null,
           { cause },
@@ -380,6 +466,7 @@ function errorFor(status: number, path: string, payload: unknown, missingFunctio
 
   const summary = `${path} returned HTTP ${status}${detail ? `: ${detail}` : ''}${code ? ` (code ${code})` : ''}`;
   const isFunction = path.startsWith('/functions/');
+  const functionName = isFunction ? (path.split('/')[3] ?? 'search') : 'search';
 
   let hint: string;
   if (code === 'PGRST202' || code === '42883') {
@@ -390,7 +477,7 @@ function errorFor(status: number, path: string, payload: unknown, missingFunctio
     hint = 'The key was rejected. SUPABASE_SERVICE_ROLE must be the bb2dash sb_secret_… key (or legacy service-role JWT); the publishable key cannot read bb_file_text or call `search` behind verify_jwt.';
   } else if (status === 404) {
     hint = isFunction
-      ? 'The `search` Edge Function is not deployed on this project. Deploy supabase/functions/search (e.g. `supabase functions deploy search --project-ref goultdzqcavefcgnifdy`).'
+      ? `The \`${functionName}\` Edge Function is not deployed on this project. Deploy supabase/functions/${functionName} (e.g. \`supabase functions deploy ${functionName} --project-ref goultdzqcavefcgnifdy\`).`
       : 'The table or relationship is missing. Apply db/migrations 005–012 to this project, and check SUPABASE_URL names bb2dash.';
   } else if (status >= 500) {
     hint = isFunction
