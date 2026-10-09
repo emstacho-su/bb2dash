@@ -135,6 +135,11 @@ workspace_ingest_finish(p_runner text, p_document_id bigint, p_outcome text, p_e
   -- try that may be made again; attempts goes up by one and the row goes back to `stored` (from
   -- `reading`) or stays `text_ready`, and on the third it ends `failed` with p_error_code instead.
   -- Every outcome frees the lease; 'indexed' and a `failed` end clear signed_url.
+  -- Since migration 199 (the review round): a fourth outcome, 'release', for a document in
+  -- `text_ready` only: the lease is freed, attempts is unchanged and the row stays `text_ready`, so
+  -- the next claim goes on from the parts that are stored. The worker uses it when a try ran out of
+  -- its time having stored at least one part; a try that stored nothing is a 'retry'. And a document
+  -- whose try failed is not handed out again until 60 s times its attempts have passed.
 workspace_ingest_heartbeat(p_runner text) returns void
 ```
 
