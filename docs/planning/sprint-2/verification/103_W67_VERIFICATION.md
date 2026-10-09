@@ -627,3 +627,31 @@ Defaults taken:
    Update row, as the tile does. Its rows are `menuitemradio`, so the Update row's `menuitem` list does not change.
 4. **Keyboard**: the rows are buttons, so Tab reaches them; the arrow-key behaviour of the account menu is W-68's task 32
    (the theme rows "are in the order").
+
+## Task 11: the desktop window background from the tokens (R-53, G-3)
+
+Files: `desktop/src/main/window-background.ts` (new, no Electron import), `desktop/src/main/window.ts` (the one literal
+`'#12131a'` becomes `windowBackground()` and one import), `desktop/test/unit/window-background.test.ts` (new). No old
+desktop test is edited. `desktop/node_modules` did not exist in this worktree; `npm ci --ignore-scripts` ran in
+`desktop/` (336 packages, no lock file change, Electron's binary download skipped because the unit suite mocks it).
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: the new test with no module | `cd desktop && npx vitest run test/unit/window-background.test.ts test/unit/window.test.ts test/unit/deeplink.test.ts` | 1 | the new file failed to load; the other two 53 passed |
+| GREEN | same | 0 | 3 files, 58 passed (58) |
+| whole unit suite | `cd desktop && npx vitest run` | 0 | 43 files, 829 passed (829) |
+| `npm run typecheck` | | 0 | no error |
+| `grep -c "12131a" desktop/src/main/window.ts` | | | 0 |
+| `git grep -c "nativeTheme" -- desktop/src` | | 1 (no match) | prints nothing |
+| `git diff --quiet origin/main...HEAD -- desktop/test/unit/window.test.ts` | | 0 | unchanged |
+
+The test pins `DARK` to `:root`'s `--color-bg` read from `../web/src/app/globals.css` (`#050505`), `windowBackground()`
+to `DARK` with no argument, and `window.ts` to no longer holding the old ground.
+
+**Can the change break the launch? No.** `window-background.ts` imports nothing, so it cannot fail at load; its one
+export is a constant six-digit hex, which is what `BrowserWindow`'s `backgroundColor` takes; `window.ts` already built
+the window with a hex there and only the value changed (`#12131a` to `#050505`). The one visible effect is that the
+frame before the page paints is the new dark ground, and a person who chose Light sees that dark frame at each open
+(accepted, DECISIONS 2026-10-08). `desktop/test/e2e/fixture-server.ts:36` still holds `#12131a` in a fixture page's
+inline style; it is test scaffolding, not the shell, and is not edited. The Playwright suite
+(`npm run test:e2e`, which builds and launches the real shell) was not run in this task: it is a gate of tasks 27 and 20.
