@@ -278,9 +278,18 @@
   outline: var(--size-focus) solid var(--color-accent);
   outline-offset: calc(var(--size-underline) * -1);
 }
+/* Busy (aria-busy): half strength, and the pointer says it is working. */
 .control:disabled {
   opacity: 0.5;
   cursor: progress;
+}
+/* Switched off, not busy: a flat grey box. */
+.control:disabled:not([aria-busy='true']) {
+  opacity: 1;
+  background: var(--color-neutral-900);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-600);
+  cursor: not-allowed;
 }
 .textArea {
   composes: control;

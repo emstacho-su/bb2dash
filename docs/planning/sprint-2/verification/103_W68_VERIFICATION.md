@@ -430,3 +430,10 @@ Two findings in W-67's files, not fixed by me:
 
 `web/test/shell-targets.css.test.ts` first: RED 3 failed, 2 passed; GREEN 5 passed. `Popout.module.css` `.close::after` and, inside `(max-width: 480px)`, `TopNav.module.css` `.brand::after` are `--size-target` square, centred, absolutely positioned;
 neither rule gains a `min-width`, `min-height` or padding. `npx vitest run test/shell-targets.css.test.ts test/ItemPopout.test.tsx test/TopNav.fold.test.tsx` plus the audit and `shell-motion`: 128 passed, exit 0.
+
+### Task 37, busy says busy (my part)
+
+The six `controlsDisabled` sites of `AssignmentPlannerBlock.tsx` take `aria-busy={pending}` and `SyncButton.tsx` takes `aria-busy={busy}`.
+`git grep -c -E "aria-busy=\{(pending|busy)\}" -- web/src/components/popout/AssignmentPlannerBlock.tsx web/src/components/shell/SyncButton.tsx` prints `…AssignmentPlannerBlock.tsx:6` and `…SyncButton.tsx:1`;
+`grep -c "aria-busy" web/src/components/shell/TopNav.tsx` prints 1 (the update row's). `Popout.module.css` `.control` gets the switched-off look on `:disabled:not([aria-busy='true'])` (flat grey, `cursor: not-allowed`, opacity 1); a busy one stays at half strength with `cursor: progress`.
+`SearchPanel.module.css` `.courseSelect` already carries its pair (task 17). Busy sites with the other workers' files not yet merged: `24 7` (my seven are among the 7). `cd web && npm test`: 172 files, 3340 passed; typecheck 0; eslint 0.

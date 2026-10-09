@@ -198,6 +198,7 @@ export function SyncButton() {
         className={styles.button}
         onClick={() => void press()}
         disabled={busy}
+        aria-busy={busy}
         title={title}
         data-testid="sync-button"
         data-live={isLivePhase(phase) ? '' : undefined}
