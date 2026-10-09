@@ -129,7 +129,12 @@ end $$;
 -- is not hypothetical here - the file's own header offers "paste the whole file into one
 -- `execute_sql` call" as a supported route, and migration 100 sets no `search_path` for
 -- `db_test_runner`, so the rendering rests on a cluster default nobody in this repo controls.
--- Both functions take no arguments, so `proname || '()'` is their full signature.
+-- The first two functions take no arguments, so `proname || '()'` is their full signature.
+--
+-- Phase 24a (migrations 190 and 194) adds four: workspace_upload_register, workspace_upload_retry,
+-- workspace_document_delete and workspace_ask_with, the browser's four. Each is owner-guarded inside:
+-- its first statement raises 42501 unless auth.uid() is the owner (phase24_190_store.sql and
+-- phase24_194_ask_options.sql prove it). They are listed by name alone, like the first two.
 do $$
 declare
   v_auth text;
@@ -140,9 +145,9 @@ begin
    where p.pronamespace = 'public'::regnamespace
      and p.prosecdef
      and has_function_privilege('authenticated', p.oid, 'execute');
-  if v_auth <> 'app_owner(), calendar_push_now(), inbox_accept_question()' then
+  if v_auth <> 'app_owner(), calendar_push_now(), inbox_accept_question(), workspace_ask_with(), workspace_document_delete(), workspace_upload_register(), workspace_upload_retry()' then
     raise exception 'FAIL authenticated may execute these SECURITY DEFINER functions in public: '
-                    '[%], expected [app_owner(), calendar_push_now(), inbox_accept_question()]', v_auth;
+                    '[%], expected [app_owner(), calendar_push_now(), inbox_accept_question(), workspace_ask_with(), workspace_document_delete(), workspace_upload_register(), workspace_upload_retry()]', v_auth;
   end if;
 
   select coalesce(string_agg(p.proname || '()', ', ' order by p.proname), '') into v_anon
