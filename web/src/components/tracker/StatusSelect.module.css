@@ -7,20 +7,31 @@
   font: inherit;
   font-size: var(--text-xs);
   color: var(--color-text);
-  background: var(--color-surface);
-  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  border: 1px solid var(--color-neutral-600);
   border-radius: var(--radius-sm);
   padding: 3px 6px;
   cursor: pointer;
+  transition: var(--motion-control);
 }
 .statusSelect:hover {
-  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  border-color: var(--color-neutral-400);
 }
+/* The one ring, on the field's own hairline edge. */
 .statusSelect:focus-visible {
-  border-color: var(--color-accent);
-  outline: none;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-underline) * -1);
 }
+/* Busy (a pick is being saved): half strength and the wait pointer. */
 .statusSelect:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: progress;
+}
+/* Switched off: a flat grey field, so a save in flight never flashes a grey box. */
+.statusSelect:disabled:not([aria-busy='true']) {
+  background: var(--color-neutral-900);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-600);
+  opacity: 1;
+  cursor: not-allowed;
 }

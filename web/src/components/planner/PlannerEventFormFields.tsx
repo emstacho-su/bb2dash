@@ -382,7 +382,7 @@ export function DeleteControl({
 }) {
   if (!confirming) {
     return (
-      <button type="button" className={styles.delete} onClick={onAsk} disabled={pending}>
+      <button type="button" className={styles.delete} onClick={onAsk} disabled={pending} aria-busy={pending}>
         Delete
       </button>
     );
@@ -390,7 +390,7 @@ export function DeleteControl({
   return (
     <span className={styles.confirm} role="group" aria-label="Confirm delete">
       <span>Delete it here and from Google Calendar?</span>
-      <button type="button" className={styles.delete} onClick={onConfirm} disabled={pending}>
+      <button type="button" className={styles.delete} onClick={onConfirm} disabled={pending} aria-busy={pending}>
         Yes, delete
       </button>
       <button type="button" className={tokens.btnGhost} onClick={onCancel}>

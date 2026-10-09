@@ -14,11 +14,12 @@
   align-items: center;
   padding: var(--space-4);
   overflow-y: auto;
-  background: color-mix(in srgb, var(--color-bg) 80%, transparent);
+  overscroll-behavior: contain;
+  background: var(--color-mix-bg-80-transparent);
 }
 
 .panel {
-  width: min(420px, 100%);
+  width: min(var(--size-420), 100%);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -30,8 +31,8 @@
 }
 
 .panel:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: var(--size-focus-gap);
 }
 
 .heading {

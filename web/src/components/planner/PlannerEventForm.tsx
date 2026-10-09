@@ -221,7 +221,7 @@ export function PlannerEventForm({
           <button type="button" className={tokens.btnSecondary} onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className={tokens.btnPrimary} disabled={pending}>
+          <button type="submit" className={tokens.btnPrimary} disabled={pending} aria-busy={pending}>
             {pending ? 'Saving…' : 'Save'}
           </button>
         </div>

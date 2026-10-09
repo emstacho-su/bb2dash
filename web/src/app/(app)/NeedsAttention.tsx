@@ -20,6 +20,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
+import { MARK_CHAR, Mark } from '@/components/shell/icons';
 import styles from './NeedsAttention.module.css';
 import {
   ATTENTION_KIND_LABEL,
@@ -93,7 +94,7 @@ export function NeedsAttentionView({
         onClick={() => setExpanded((v) => !v)}
       >
         <span className={styles.caret} aria-hidden="true">
-          {expanded ? '▾' : '▸'}
+          {expanded ? <Mark name="caretDown" /> : <Mark name="caretRight" />}
         </span>
         <span className={styles.title}>Needs attention</span>
 
@@ -155,8 +156,8 @@ export function NeedsAttentionView({
                 {open - top.length} more not shown
               </span>
             )}
-            <Link href="/inbox" className={tokens.btnGhost} style={{ fontSize: 'var(--text-sm)' }}>
-              Open inbox →
+            <Link href="/inbox" className={tokens.btnGhost}>
+              Open inbox <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
             </Link>
           </div>
         </div>

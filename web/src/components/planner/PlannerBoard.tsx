@@ -49,6 +49,7 @@ import {
 } from './PlannerItem';
 import type { BandDay, GridBlock, PlannerWeekData } from './usePlannerWeekData';
 import type { LaneSpan } from '@/lib/planner-week';
+import { Mark } from '@/components/shell/icons';
 import styles from './PlannerWeek.module.css';
 
 /** What the band says when the whole week holds nothing. */
@@ -172,7 +173,7 @@ function AllDayBand({
         onClick={band.toggle}
       >
         <span className={styles.bandChevron} aria-hidden="true">
-          {band.expanded ? '▾' : '▸'}
+          {band.expanded ? <Mark name="caretDown" /> : <Mark name="caretRight" />}
         </span>
         {/* The word is the cell's name, not its contents: it does not fit the
             gutter horizontally and rotating it made the band's height the thing

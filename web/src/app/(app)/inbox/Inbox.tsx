@@ -24,6 +24,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { InboxApplyButton } from '@/components/inbox/InboxApplyButton';
+import { MARK_CHAR, MarkedLabel } from '@/components/shell/icons';
 import { InboxCard } from '@/components/inbox/InboxCard';
 import {
   EMPTY_TAB_TEXT,
@@ -41,7 +42,6 @@ import {
 } from '@/lib/queries.inboxChoice';
 import { latestWrite } from '@/components/inbox/inbox-row';
 import { UNDO_BLOCKED, useReopenAttentionItem } from '@/lib/queries.inboxReopen';
-import tokens from '@/styles/tokens.module.css';
 import shell from '../Shell.module.css';
 import styles from './Inbox.module.css';
 import {
@@ -267,10 +267,10 @@ export function InboxView({
  * The Home row links here; keep one canonical label for the link.
  * ------------------------------------------------------------------------ */
 
-export function InboxLink({ label = 'Open inbox →' }: { label?: string }) {
+export function InboxLink({ label = `Open inbox ${MARK_CHAR.arrowRight}` }: { label?: string }) {
   return (
-    <Link href="/inbox" className={tokens.btnGhost} style={{ fontSize: 'var(--text-sm)' }}>
-      {label}
+    <Link href="/inbox" className={styles.inboxLink}>
+      <MarkedLabel label={label} />
     </Link>
   );
 }

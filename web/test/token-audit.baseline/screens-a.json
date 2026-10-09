@@ -1,18 +1,1 @@
-{
-  "web/src/app/(app)/NeedsAttention.module.css": 4,
-  "web/src/app/(app)/NeedsAttention.tsx": 1,
-  "web/src/app/(app)/Today.module.css": 16,
-  "web/src/app/(app)/Today.tsx": 2,
-  "web/src/app/(app)/inbox/Inbox.tsx": 1,
-  "web/src/components/announcements/AnnouncementsList.module.css": 6,
-  "web/src/components/inbox/InboxApplyButton.module.css": 8,
-  "web/src/components/inbox/InboxCard.module.css": 2,
-  "web/src/components/planner/PlannerEventForm.module.css": 4,
-  "web/src/components/planner/PlannerEventWizard.module.css": 2,
-  "web/src/components/planner/PlannerItemPopover.module.css": 2,
-  "web/src/components/planner/PlannerSeriesScopeDialog.module.css": 2,
-  "web/src/components/planner/PlannerWeek.module.css": 35,
-  "web/src/components/tracker/StatusSelect.module.css": 1,
-  "web/src/components/tracker/UpcomingTracker.module.css": 19,
-  "web/src/components/tracker/UpcomingTracker.tsx": 1
-}
+{}

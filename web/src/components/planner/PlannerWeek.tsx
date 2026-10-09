@@ -69,10 +69,15 @@ import { WeekHeader } from './PlannerWeekHeader';
 import { usePlannerEventEditor } from './usePlannerEventEditor';
 import type { ItemActions } from './PlannerItem';
 import { usePlannerWeekData } from './usePlannerWeekData';
+import { Mark } from '@/components/shell/icons';
 import styles from './PlannerWeek.module.css';
 
 /** What the server and the hydrating client both render (see `useHydrated`). */
 const LOADING_WEEK = 'Loading the week…';
+
+/** The two how-to lines that stood under the grid; they are the count line's tooltip now. */
+const GRID_CAPTION =
+  'Times are as recorded · a date-only item sits in the Assignments band · Click an empty slot to add an event · the grid shows New York time';
 
 /* ---------------------------------------------------------------------------
  * The screen
@@ -111,8 +116,12 @@ function PlannerWeekSkeleton() {
       <div className={styles.head}>
         <h2 className={styles.h2}>{LOADING_WEEK}</h2>
         <span className={styles.pager} data-planner-pager="true" aria-hidden="true">
-          <span className={styles.pageGhost}>◂</span>
-          <span className={styles.pageGhost}>▸</span>
+          <span className={styles.pageGhost}>
+            <Mark name="caretLeft" />
+          </span>
+          <span className={styles.pageGhost}>
+            <Mark name="caretRight" />
+          </span>
           <span className={styles.pageGhost}>Today</span>
         </span>
       </div>
@@ -220,6 +229,7 @@ function PlannerWeekScreen() {
         itemCount={itemCount}
         eventCount={data.eventCount}
         onAdd={openWizard}
+        captionTitle={GRID_CAPTION}
       />
 
       {data.error !== null && (
@@ -248,11 +258,6 @@ function PlannerWeekScreen() {
         now={nowSlot(view)}
         band={band}
       />
-
-      <div className={styles.legend}>
-        <span>Times are as recorded · a date-only item sits in the Assignments band</span>
-        <span>Click an empty slot to add an event · the grid shows New York time</span>
-      </div>
 
       {editor.form !== null &&
         (wizardOpen && editor.form.target.mode === 'create' ? (

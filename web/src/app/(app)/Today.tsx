@@ -24,6 +24,7 @@ import { useId } from 'react';
 import Link from 'next/link';
 import { HOME_COLLAPSE, UNDATED_SECTION, useCollapseState } from '@/lib/collapse-state';
 import tokens from '@/styles/tokens.module.css';
+import { MARK_CHAR, Mark } from '@/components/shell/icons';
 import styles from './Today.module.css';
 import {
   courseCodeFromId,
@@ -221,8 +222,8 @@ export function Today() {
           <h1 className={styles.title}>Today</h1>
         </div>
         <div className={styles.headerMeta}>
-          <a href="/planner" className={tokens.btnGhost} style={{ fontSize: 'var(--text-sm)' }}>
-            Open planner →
+          <a href="/planner" className={tokens.btnGhost}>
+            Open planner <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
           </a>
         </div>
       </header>
@@ -248,8 +249,12 @@ export function Today() {
       {/* ---- 2. Course cards (no grade line) ---- */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2 className={styles.h2}>Courses</h2>
-          <span className={styles.sub}>Open = items due this week · strip = meeting days, dot = something due</span>
+          <h2
+            className={styles.h2}
+            title="Open = items due this week · strip = meeting days, dot = something due"
+          >
+            Courses
+          </h2>
         </div>
         <div className={styles.courseGrid}>
           {(coursesQ.data ?? []).map((course) => (
@@ -265,7 +270,11 @@ export function Today() {
               grades={cardGrades(course)}
             />
           ))}
-          {coursesQ.isPending && <span className={styles.muted}>loading courses…</span>}
+          {coursesQ.isPending && (
+            <span className={styles.muted} data-loading>
+              loading courses…
+            </span>
+          )}
         </div>
       </section>
 
@@ -323,7 +332,7 @@ function UndatedTray({
             onClick={() => toggle(UNDATED_SECTION)}
           >
             <span className={styles.undatedCaret} aria-hidden="true">
-              {folded ? '▸' : '▾'}
+              {folded ? <Mark name="caretRight" /> : <Mark name="caretDown" />}
             </span>
             {`Undated${count}`}
           </button>
@@ -476,7 +485,7 @@ export function CourseCard({
         </div>
       </div>
       <div className={styles.strip}>
-        <span className={tokens.kicker} style={{ textAlign: 'center' }}>
+        <span className={styles.stripHead}>
           this week
         </span>
         <span className={styles.stripCells}>

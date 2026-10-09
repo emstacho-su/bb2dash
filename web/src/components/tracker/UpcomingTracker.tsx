@@ -65,6 +65,7 @@ import {
   MONTH_LABELS,
   type TrackerDay,
 } from './anchor';
+import { Mark } from '@/components/shell/icons';
 import styles from './UpcomingTracker.module.css';
 
 /* ---------------------------------------------------------------------------
@@ -137,13 +138,28 @@ const SUBMISSION_LABEL: Record<string, string> = {
   email: 'email',
 };
 
+/** Most urgent first: the legend reads in this order and a day's bars are stacked by it. */
 const LEGEND: { category: WorkCategory; glyph: string; label: string }[] = [
-  { category: 'reading', glyph: 'R', label: 'reading' },
-  { category: 'assignment', glyph: 'A', label: 'assignment' },
-  { category: 'quiz', glyph: 'Q', label: 'quiz' },
-  { category: 'project', glyph: 'P', label: 'project' },
   { category: 'exam', glyph: 'E', label: 'exam' },
+  { category: 'project', glyph: 'P', label: 'project' },
+  { category: 'quiz', glyph: 'Q', label: 'quiz' },
+  { category: 'assignment', glyph: 'A', label: 'assignment' },
+  { category: 'reading', glyph: 'R', label: 'reading' },
 ];
+
+/** How urgent a kind is: 0 is the most urgent. Read from the legend, so the two cannot disagree. */
+const URGENCY_RANK: Record<WorkCategory, number> = Object.fromEntries(
+  LEGEND.map((entry, index) => [entry.category, index]),
+) as Record<WorkCategory, number>;
+
+/**
+ * A day's items for drawing. The bar area is column-reverse, so the LAST child is the top bar:
+ * the least urgent come first. The sort is stable, so two items of one kind keep the order they
+ * arrived in. Returns a new array; the caller's is not touched.
+ */
+function barOrder(items: readonly WorkItem[]): WorkItem[] {
+  return [...items].sort((a, b) => URGENCY_RANK[b.category] - URGENCY_RANK[a.category]);
+}
 
 /* ---------------------------------------------------------------------------
  * Row-level display helpers (pure)
@@ -457,7 +473,7 @@ export function UpcomingTracker({
             title="Earlier"
             aria-label="Earlier days"
           >
-            ◂
+            <Mark name="caretLeft" />
           </button>
           <button
             type="button"
@@ -467,7 +483,7 @@ export function UpcomingTracker({
             title="Later"
             aria-label="Later days"
           >
-            ▸
+            <Mark name="caretRight" />
           </button>
         </span>
       </div>
@@ -477,6 +493,7 @@ export function UpcomingTracker({
         className={styles.tracker}
         role="tablist"
         aria-label="Effort by day"
+        title="line = Monday · click a day for detail"
         onScroll={handleScroll}
         style={{ ['--tracker-columns' as string]: String(columnsInView) }}
       >
@@ -494,20 +511,16 @@ export function UpcomingTracker({
 
       <div className={styles.windowSummary}>
         <span>Window · {formatDayRange(view.firstIso, view.lastIso)}</span>
-        <span>
-          Scrolls {formatDayRange(strip.firstIso, strip.lastIso)} · line = Monday · click a day for
-          detail
-        </span>
+        <span>Scrolls {formatDayRange(strip.firstIso, strip.lastIso)}</span>
       </div>
 
       <div className={styles.detail}>
         <div className={styles.detailHead}>
-          <span className={styles.detailTitle}>
+          <span className={styles.detailTitle} title="status is click-to-edit">
             {activeSelected === today ? 'Today' : DOW_LABELS[selectedDate.getDay()]},{' '}
             {MONTH_LABELS[selectedDate.getMonth()]} {selectedDate.getDate()}
           </span>
           <span className={styles.sub}>{detailSub}</span>
-          <span className={styles.detailHint}>status is click-to-edit</span>
         </div>
 
         {error !== null && (
@@ -593,11 +606,11 @@ function DayColumn({
       <span className={styles.monthLabel}>{day.monthLabel}</span>
       <span className={styles.dayCount}>{items.length || ''}</span>
       <span className={styles.barArea}>
-        {items.map((item) => (
+        {barOrder(items).map((item) => (
           <span
             key={`${item.item_kind}:${item.item_id}`}
             className={`${styles.seg} ${SEG_CLASS[item.category]}`}
-            style={{ height: `${Math.max(3, toNumber(item.effort) * scale)}px` }}
+            style={{ ['--seg-height' as string]: `${Math.max(3, toNumber(item.effort) * scale)}px` }}
             title={`${item.title} · ${effortLabel(toNumber(item.effort))}`}
           />
         ))}

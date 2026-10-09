@@ -11,7 +11,7 @@
   top: var(--popover-top, 0);
   left: var(--popover-left, 0);
   z-index: 55; /* under the `?item=` popout's backdrop (60), over the grid */
-  width: min(300px, calc(100vw - 2 * var(--space-4)));
+  width: min(var(--size-300), calc(100vw - 2 * var(--space-4)));
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -20,6 +20,21 @@
   border: 1px solid var(--color-divider);
   background: var(--color-surface);
   box-shadow: var(--shadow-lg);
+  /* Arrives from the block it belongs to: fades in and grows from the edge
+     nearest it (placePopover puts it below or above, centred on the block). */
+  transform-origin: top center;
+  transition:
+    opacity var(--motion-enter) var(--ease-out),
+    transform var(--motion-enter) var(--ease-out);
+}
+.panel[data-placement='above'] {
+  transform-origin: bottom center;
+}
+@starting-style {
+  .panel {
+    opacity: 0;
+    transform: scale(0.97);
+  }
 }
 
 /* Measured before it is placed: the first paint would otherwise flash at the
@@ -29,8 +44,8 @@
 }
 
 .panel:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: var(--size-focus-gap);
 }
 
 .head {
@@ -43,7 +58,7 @@
 
 .title {
   margin: 0;
-  font-family: var(--font-heading);
+  font-family: var(--font-body);
   font-weight: var(--font-heading-weight);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
@@ -56,7 +71,7 @@
   right: var(--space-2);
   cursor: pointer;
   line-height: 1;
-  padding: 2px 6px;
+  padding: 2px var(--size-6);
   border-radius: var(--radius-sm);
   color: var(--color-neutral-400);
 }
@@ -65,7 +80,8 @@
   color: var(--color-text);
 }
 .close:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: var(--size-focus-gap);
 }
 
 .line {
@@ -92,22 +108,47 @@
   font-size: var(--text-xs);
   color: var(--color-text);
   background: var(--color-bg);
-  border: 1px solid var(--color-divider);
+  border: 1px solid var(--color-neutral-600);
   border-radius: var(--radius-sm);
   padding: 2px var(--space-2);
+  cursor: pointer;
+  transition: var(--motion-control);
 }
+.control:hover {
+  border-color: var(--color-neutral-400);
+}
+/* Busy (a save is in flight): half strength and the wait pointer. */
 .control:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
+  cursor: progress;
 }
+/* Switched off (the planner is unavailable): a flat grey field, not a busy one. */
+.control:disabled:not([aria-busy='true']) {
+  background: var(--color-neutral-900);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-600);
+  opacity: 1;
+  cursor: not-allowed;
+}
+/* The ring sits on the field's own hairline edge, so a focused field shows two
+   pixels of ink. */
 .control:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-underline) * -1);
 }
 
+/* A bare line, no box: it takes the word of the shared error notice and nothing else. */
 .problem {
   margin: 0;
   font-size: var(--text-xs);
   color: var(--color-danger);
+}
+.problem::before {
+  content: 'Error';
+  margin-right: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .links {

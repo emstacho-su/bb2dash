@@ -41,6 +41,7 @@ import {
 } from '@/lib/queries.popout';
 import { isQueryUnresolved, queryStateText } from '@/components/shared/QueryState';
 import { formatDue } from '@/components/popout/assignment-detail-format';
+import { MARK_CHAR, Mark } from '@/components/shell/icons';
 import styles from './PlannerItemPopover.module.css';
 
 /** The board the popover must stay inside — `PlannerBoard` stamps this. */
@@ -241,7 +242,7 @@ export function PlannerItemPopover({
       }}
     >
       <button type="button" className={styles.close} onClick={onClose} aria-label="Close">
-        ✕
+        <Mark name="close" />
       </button>
 
       <div className={styles.head}>
@@ -276,6 +277,7 @@ export function PlannerItemPopover({
                 className={styles.control}
                 value={status}
                 disabled={save.isPending || plannerUnavailable}
+                aria-busy={save.isPending}
                 onChange={(e) =>
                   save.mutate({
                     assignmentId,
@@ -292,7 +294,7 @@ export function PlannerItemPopover({
             <div className={styles.links}>
               {detailsPath && (
                 <Link className={tokens.btnGhost} href={detailsPath}>
-                  See full details →
+                  See full details <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
                 </Link>
               )}
               {bbLink && (
@@ -303,7 +305,7 @@ export function PlannerItemPopover({
                   rel="noreferrer"
                   title={BLACKBOARD_LINK_TITLE[bbLink.scope]}
                 >
-                  Blackboard ↗
+                  Blackboard <Mark name="arrowUpRight" />
                 </a>
               )}
             </div>

@@ -7,7 +7,7 @@
   outline: none;
 }
 .card:focus-visible {
-  box-shadow: var(--shadow-sm), 0 0 0 2px var(--color-accent);
+  box-shadow: var(--shadow-sm), 0 0 0 var(--size-focus) var(--color-accent);
 }
 
 /* Context chips: course, kind, source, age, state. */
@@ -20,13 +20,17 @@
 .chip {
   font-size: var(--text-xs);
   padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--color-neutral-800);
+  background: var(--color-neutral-900);
   color: var(--color-neutral-300);
   white-space: nowrap;
 }
+/* The kind of question is the filled ink pill. */
 .kindChip {
-  color: var(--color-accent-300);
+  color: var(--color-bg);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
 }
 .age {
   color: var(--color-neutral-500);
@@ -38,6 +42,7 @@
   font-weight: var(--font-heading-weight);
   font-size: var(--text-md);
   max-width: 80ch;
+  text-wrap: balance;
 }
 
 /* R-56 (B-29): a gap that closed itself and came back within 24 h. */
@@ -59,7 +64,7 @@
 }
 .panes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--size-180), 1fr));
   gap: var(--space-3);
 }
 .pane {
@@ -73,7 +78,7 @@
   min-width: 0;
 }
 .value {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-size: var(--text-sm);
   color: var(--color-text);
   overflow-wrap: anywhere;
@@ -108,13 +113,12 @@
   font-size: var(--text-sm);
   color: var(--color-muted);
 }
+/* Colour and underline are the global link style. */
 .sourceLink {
-  color: var(--color-accent);
-  text-decoration: none;
   white-space: nowrap;
 }
-.sourceLink:hover {
-  text-decoration: underline;
+.sourceLink:active {
+  opacity: 0.7;
 }
 
 /* The answer controls, inline: a full-width answer box, the why, the actions. */
@@ -128,7 +132,7 @@
 .noteField {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--size-3);
   width: 100%;
 }
 .answerBox {
@@ -183,11 +187,10 @@
 }
 
 .problem {
+  composes: errorNotice from '@/styles/tokens.module.css';
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
   font-size: var(--text-sm);
 }
 
