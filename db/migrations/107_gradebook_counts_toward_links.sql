@@ -12,12 +12,16 @@
 --     * a column marked "Not graded" (an excluded link), whose assignment still carries a component,
 --       reads true, so the Grades table lists it among the items (the two GEO.103 attendance columns).
 --
--- THE FIX, one expression: for a gradebook row (course_id, column_id), counts_toward_grade is
+-- THE FIX, one expression: for a gradebook row (course_id, column_id) of kind item or attendance,
+--   counts_toward_grade is
 --     false  when a grade_column_links row for it is excluded;
 --     true   else when a grade_column_links row for it is not excluded (057 gives it a component);
 --     else   what it was: bool_or(component_id is not null) over the linked assignments, false when
 --            there are none.
---   The expression is marked "-- 107:" below.
+--   For every other kind (total, letter, calc_other) it stays that last rule whatever link exists,
+--   because the model view applies a link only to item and attendance columns (081, column_items).
+--   The link is read by one left join on grade_column_links' primary key (course_id, column_id), as
+--   081 does, so it cannot multiply rows. The change is marked "-- 107:" below.
 --
 -- WHAT DOES NOT CHANGE
 --   `create or replace view` with the same 36 columns in the same order, names and types, the same
@@ -87,18 +91,19 @@ select l.id,
        lk.linked_assignments,
        lk.counts_toward_grade
   from latest l
+  -- 107: at most one link per column (057: primary key (course_id, column_id)), so this join cannot
+  -- multiply rows. The form 081 uses for the model view.
+  left join public.grade_column_links lnk
+         on lnk.course_id = l.course_id and lnk.column_id = l.column_id
   left join lateral (
     select case when count(*) = 1 then min(a.id) end            as assignment_id,
            count(*)::int                                        as linked_assignments,
-           -- 107: the picker's link decides first (excluded = false, placed = true);
-           -- only with no link does the assignments rule of 047 apply.
+           -- 107: the picker's link decides first for item and attendance columns (the kinds the model
+           -- view applies a link to, 081): excluded is false, placed on a component is true. Any other
+           -- kind, and a column with no link, keeps the assignments rule of 047.
            case
-             when exists (select 1 from grade_column_links lnk
-                           where lnk.course_id = l.course_id and lnk.column_id = l.column_id
-                             and lnk.excluded) then false
-             when exists (select 1 from grade_column_links lnk
-                           where lnk.course_id = l.course_id and lnk.column_id = l.column_id
-                             and not lnk.excluded and lnk.component_id is not null) then true
+             when l.column_kind in ('item', 'attendance') and lnk.excluded then false
+             when l.column_kind in ('item', 'attendance') and lnk.component_id is not null then true
              else coalesce(bool_or(a.component_id is not null), false)
            end                                                  as counts_toward_grade
       from assignments a
@@ -109,9 +114,9 @@ comment on view public.v_gradebook_latest is
   'assignments link. assignment_id is the ONE assignments row carrying this bb_column_id and is '
   'null when there are none or more than one; linked_assignments says which. '
   'counts_toward_grade follows the Grades tab''s picker (107): false when grade_column_links marks '
-  'the column "Not graded", true when a grade_column_links row places it on a component, else true '
-  'when a linked assignment has a grade_components link (V-1''s data - 10a reads it and never sets '
-  'it). It decides whether an attendance column renders among the items or in the bookkeeping '
+  'an item or attendance column "Not graded", true when a grade_column_links row places it on a '
+  'component, else (and for every other column kind) true when a linked assignment has a '
+  'grade_components link (V-1''s data - 10a reads it and never sets it). It decides whether an attendance column renders among the items or in the bookkeeping '
   'group.';
 
 -- =============================================================================================

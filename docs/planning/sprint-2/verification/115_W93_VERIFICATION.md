@@ -123,3 +123,37 @@ one read the view now needs.
   mention of `v_inbox_queue` in the 187/188 section).
 * Not checked: everything that needs 107 applied. The two checks that the policy blocks every other role
   (`using (true)` applies to `inbox_apply_runner` only, `to inbox_apply_runner`) rest on reading 185.
+
+## Round 3 (the six code-review items)
+
+1. **107's flag**: one `left join public.grade_column_links lnk` on `(course_id, column_id)` (057: that is
+   the primary key, so at most one row and no row multiplied), and `case when kind in ('item','attendance')
+   and lnk.excluded then false when kind in (...) and lnk.component_id is not null then true else
+   coalesce(bool_or(...), false) end`. Every other kind (total, letter, calc_other) keeps the old rule
+   whatever link exists, as 081's `column_items` filter implies. Columns, order and rows unchanged; the
+   guard still holds the 36-column list. Header and `comment on view` updated. Unit: new case 3b picks the
+   first live `total`/`calc_other` column without a link in a course with components, inserts an excluded
+   link and then a component link, and asserts the flag does not move (skipped with a notice if none).
+2. **Unit**: sections 2 and 5 now call one `pg_temp.counts_mismatch()` (the rule, with the kind filter),
+   before and after the fixtures; section 3's fixtures are untouched. The function body is dollar-quoted
+   with `$$`; it never ran (the unit stops at its first check until 107 is on prod).
+3. **`phase23_181`**: the `replace` is gone and `grade_column_links:select` sits in the expected list
+   between `courses:select` and `grade_components:select`, with a one-line comment naming 107. Through the
+   runner today it FAILS, as intended: `FAIL phase23_181 (shape): the role holds table privileges
+   assignment_progress:insert,...,courses:select,grade_components:select,inbox_apply_writes:insert,...`
+   (no `grade_column_links:select`). It passes once 107 is on prod.
+4. **`grading_invariants` D**: matches the model's row by column (`m.shell_course_id = a.course_id and
+   m.column_id = a.bb_column_id`, component not null, not excluded), header sentence adjusted. PASS today.
+5. **`phase18_122` (1b)**: new check independent of the function's output: each start file and its chain end
+   have equal `course_id` and `content_id` (present) and the end is current. Probed read-only on prod
+   (a scratch unit raising the rows, not committed): 2 and 151 share `IST.323/_12928159_1`; 74 and 2509
+   share `IST.466/_12939631_1`; 150, 162 and 2773 share `IST.466/_12939679_1`. All four hold, so file 2 is
+   in the check. PASS today. Header says it is the check that does not rest on the function's output.
+6. **Web**: `useLinkColumn.onSettled` also invalidates `['grades', 'gradebook']` (the gradebook query key is
+   `['grades','gradebook', shellCacheKey]`, no course part, so the family). Test first (red, then green) in
+   `web/test/queries.grade-model.test.ts`, which reads the prefix from the real `gradesKeys.gradebook` so a
+   key rename fails it. `npm ci`, `npm run typecheck` (clean), `npx eslint src/lib/queries.grade-model.ts
+   test/queries.grade-model.test.ts --max-warnings 0` (clean), `npx vitest run test/queries.grade-model.test.ts
+   test/grade-model.audits.test.ts`: 2 files, 40 tests passed. No component, CSS or other `src` file touched;
+   no lock-file change. The assignment popout's `v_assignment_grade` rows also carry the flag; I did not
+   invalidate that query (not asked).
