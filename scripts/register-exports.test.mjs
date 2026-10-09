@@ -41,3 +41,15 @@ test('it checks every folder before it registers, and calls no git, gh or docker
   assert.doesNotMatch(code, /(^|[\s&;(|])(git|gh|docker|docker-compose)(\.exe)?\s/m);
   assert.doesNotMatch(code, /Get-Content[^\n]*SecretsDir|\.env\b/);
 });
+
+test('it refuses the four typographic single quotes, named by code point, and the file stays ASCII', () => {
+  // PowerShell reads U+2018 to U+201B as single quotes, so one in a folder path would end the quoted
+  // literal inside -Command. They are written as [char]0x... so that the file holds no non-ASCII byte.
+  for (const point of ['2018', '2019', '201A', '201B']) {
+    assert.match(source, new RegExp(`\[char\]0x${point}`, 'i'), `U+${point}`);
+  }
+  assert.doesNotMatch(source, /[^\x00-\x7F]/);
+  assert.ok(source.includes('Test-UnsafePath $Value'), 'the folder check uses the shared test');
+  assert.ok(source.includes('Test-UnsafePath $node.Source'), "node's own path gets the same test");
+  assert.match(source, /typographic single quote/);
+});
