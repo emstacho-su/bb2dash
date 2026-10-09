@@ -316,7 +316,7 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
   earliest candidate slot, has passed with nothing recorded), a bound, not pacing (batch item 9): whether 11/4 was the SITN pick or the individual slot,
   and which individual slot is yours (9/30, 10/14, 10/26, 11/4 or 11/16); each answer goes in as an Inbox value resolution.
 * The Google OAuth consent screen **stays in Testing for now** (your call, 2026-09-29; you know how to publish it):
-  the calendar token died 2026-10-01 18:45Z (308 failed runs) and you re-minted it about 2026-10-02 05:00Z; **the next expiry is about 2026-10-09 05:00Z**; look at Home's push-failure line while it is red (that closes R-52's live clause). You re-mint with `scripts/google-consent.mjs` when the
+  the calendar token died 2026-10-01 18:45Z (308 failed runs) and you re-minted it about 2026-10-02 05:00Z; it died again 2026-10-09 12:23Z (174 failed runs) and you re-minted it 18:10Z on a new OAuth client, still in Testing (your word, 2026-10-09); **the next expiry is about 2026-10-16 18:10Z**; look at Home's push-failure line while it is red (that closes R-52's live clause; not sighted in either outage). You re-mint with `scripts/google-consent.mjs` when the
   push starts failing, or publish first and then re-mint (batch item 28; DECISIONS 2026-09-29).
 * ~~Phase 16's six sittings as fast as you can sit them, in the order IST.323, IST.466, IST.352, ECN.304, GEO.103,
   IST.471; migration 106 on prod before the Nov 30 – Dec 13 code freeze (the IST.323 column is graded inside it, 2026-12-03)
