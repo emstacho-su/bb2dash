@@ -248,6 +248,10 @@ export function useLinkColumn() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['grade-model', 'items'] });
       void queryClient.invalidateQueries({ queryKey: ['grade-model', 'items-for'] });
+      // 107: v_gradebook_latest.counts_toward_grade follows these links, and the Grades table lists
+      // item rows by it. The gradebook query (gradesKeys.gradebook, queries.grades.ts) keys on the
+      // shell set, not on one course, so the whole family goes stale.
+      void queryClient.invalidateQueries({ queryKey: ['grades', 'gradebook'] });
     },
   });
 }

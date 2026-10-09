@@ -5,10 +5,13 @@
 --     row's answer_phrase
 --   * a file-only truth (no text_ids) has at least one unit that contains the answer_phrase, and
 --     names every current file of that course whose text carries it
--- Q7's truth is the two current IST.466 schedules, 149 and the one posted in a second place, both
--- carrying the answer, since migration 120 superseded 74. That second schedule is 967 (wK6) since
--- sync 394 (2026-10-01) superseded 150 (wK4) and 162 (wK5) with it; 967 has no text until a sync
--- pulls its bytes, which passes, because the checks need only one truth file to carry the phrase. Q10 (the IST.323 AI-use disclosure) was
+-- Until 2026-10-09 Q7 asked for a date in a schedule the course re-posts about weekly, so its truth
+-- (the schedule files by id) went stale at every re-post. On Stack's word it was replaced by a
+-- question answered in two documents that have one version each (IST.466 files 21 and 39, units 88
+-- and 101, "50 points"). The unit stays strict: when any truth file is superseded it fails and
+-- names the file that replaces it ("Q7 file not current: <old id> -> <new id>, ..."); put the new ids in the
+-- row AND in ingest/eval/golden_set.json (the eval scores by id through the search function, which
+-- hides superseded files, so a stale id there misses silently). Q10 (the IST.323 AI-use disclosure) was
 -- removed on 2026-09-29 by Stack's call to take the AI policy out of the app and the corpus (Phase 17
 -- migration 119), not for its ranking.
 -- The truth rows below are the same as ingest/eval/golden_set.json; ingest/eval_search.test.mjs
@@ -23,6 +26,9 @@ declare
   v_fail text[] := array[]::text[];
   r record;
   v_bad text;
+  -- how far a supersession chain is followed when a failure names the replacing file; reaching it
+  -- means a cycle or a chain longer than this
+  CHAIN_LIMIT constant int := 1000;
 begin
   for r in
     select * from (values
@@ -32,17 +38,33 @@ begin
       (4, array[213]::bigint[], array[23]::bigint[], 'Lowest Exam Grade'),
       (5, array[218]::bigint[], array[23]::bigint[], 'Exam 1'),
       (6, array[]::bigint[], array[21]::bigint[], 'less than 30 minutes'),
-      (7, array[]::bigint[], array[149, 967]::bigint[], 'Deloitte to Visit'),
+      (7, array[88, 101]::bigint[], array[21, 39]::bigint[], '50 points'),
       (8, array[]::bigint[], array[27]::bigint[], 'penalty of 20%'),
       (9, array[348]::bigint[], array[26]::bigint[], 'evaluation form will result in no credit')
     ) as g(qid, text_ids, file_ids, answer_phrase)
     order by qid
   loop
-    select string_agg(x::text, ',' order by x) into v_bad
+    -- A truth file that is not current is reported with the file that replaces it: the end of its
+    -- supersession chain (superseded_by followed until null, CHAIN_LIMIT steps at most).
+    select string_agg(
+             case when not exists (select 1 from bb_files f where f.id = x)
+                  then x::text || ' (no such file)'
+                  else x::text || ' -> ' || coalesce(
+                    (with recursive chain(id, next_id, depth) as (
+                       select f.id, f.superseded_by, 0 from bb_files f where f.id = x
+                       union all
+                       select f.id, f.superseded_by, c.depth + 1
+                         from chain c join bb_files f on f.id = c.next_id
+                        where c.depth < CHAIN_LIMIT
+                     )
+                     select id::text from chain where next_id is null),
+                    '(no end within ' || CHAIN_LIMIT || ' steps: a cycle or a longer chain)')
+             end, ', ' order by x) into v_bad
       from unnest(r.file_ids) x
      where not exists (select 1 from bb_files f where f.id = x and f.superseded_by is null);
     if v_bad is not null then
-      v_fail := v_fail || format('Q%s file not current: %s', r.qid, v_bad);
+      v_fail := v_fail || format('Q%s file not current: %s (refresh the ids in this row and in ingest/eval/golden_set.json)',
+                                 r.qid, v_bad);
     end if;
 
     select string_agg(x::text, ',' order by x) into v_bad

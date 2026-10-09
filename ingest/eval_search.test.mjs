@@ -36,11 +36,6 @@ test('golden set: EVAL_EMBEDDING_POC §2 queries 1–9, each well formed; Q10 re
   assert.throws(() => ev.validateGolden([{ qid: 1 }]), /qid 1/);
 });
 
-test('golden set: Q7 is the current documents (149 + 967): 120 superseded 74, sync 394 superseded 150 and 162 by 967', () => {
-  const byQ = Object.fromEntries(golden().map((r) => [r.qid, r]));
-  assert.deepEqual(byQ[7].truth.file_ids, [149, 967], 'the superseded schedules are gone; both current schedules carry the answer (POC §1: a file set when several near-duplicate files carry it)');
-});
-
 test('firstHitRank: a text-id truth matches by unit, a file truth by any unit of the file', () => {
   const results = [{ file_id: 4, text_id: 360 }, { file_id: 42, text_id: 271 }, { file_id: 42, text_id: 270 }];
   assert.equal(ev.firstHitRank(results, { text_ids: [270], file_ids: [42] }), 3, 'another unit of the file is not the answer');

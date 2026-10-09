@@ -1,11 +1,23 @@
 -- bb2dash :: db/tests/phase18_122_supersede_rule.sql
 -- Phase 18 (brief 98), task 9. Worker W-48. supersede_replaced_files (122), R-63:
 --   (1) with 2, 74, 150 and 162 un-superseded inside this transaction, the function over the
---       newest registered crawl writes exactly these four links, by id: 2 -> 151, 74 -> 149,
---       150 -> 967 and 162 -> 967. Since sync 394's crawl 1f10c823 (2026-10-01) IST.466 item
---       _12939679_1 carries only IST466_2Schedule_wK6.docx (967), replacing wK4 (150) and wK5
---       (162). The expectation follows the newest crawl, so a sync that changes that item again
---       moves it (it read "150 -> 162" after crawl f24a7ff5; the brief's "exactly 2" before that).
+--       newest registered crawl writes exactly four links, one from each of the four, and each
+--       points at the current END OF THAT FILE'S OWN SUPERSESSION CHAIN, which the unit reads
+--       (following superseded_by, at most CHAIN_LIMIT = 1000 hops, so only a cycle or an absurd
+--       chain stops it) BEFORE it clears the four. No other file is linked by that call. The expectation is the chain's end and not an id because the
+--       course re-posts these documents (the IST.466 schedule, the IST.352 decks) and each
+--       re-post supersedes the last, so any pinned id goes stale at the next sync: it first read
+--       "150 -> 162" (crawl f24a7ff5), then "150 -> 967" (crawl 1f10c823, 2026-10-01), and on
+--       2026-10-09 the chains were 2>151, 74>149>2509, 150>967>2640>2773, 162>967>2640>2773.
+--       The assumption it rests on: each re-post replaced the previous file ALONE in its content
+--       item, so the function re-creates each link straight to the chain's end. A hop that Stack's
+--       answer made (several files in the item) or an end that left Blackboard would fail here
+--       and want the unit read again.
+--       (1b) is the check that does not rest on the function's own output: each of the four and
+--       the end of its chain are one Blackboard item (bb_files.course_id and content_id equal, and
+--       the content id present) and the end is current (superseded_by is null). On 2026-10-09:
+--       2 and 151 share IST.323/_12928159_1, 74 and 2509 share IST.466/_12939631_1, and 150, 162
+--       and 2773 share IST.466/_12939679_1 (150 and 162 are two files of that one item).
 --   (2) a replay writes 0
 --   (3) 31, 32, 47 (the three IST.352 decks) and 155, 156 are unchanged
 --   (4) rows classified_by 'stack' are unchanged
@@ -15,7 +27,7 @@
 --   (7) a pre-existing sibling is not a replacement (160): an item held A.pdf and B.pdf in one
 --       registered crawl; the next (newest) crawl shows only A. B is NOT superseded by A and no
 --       question is raised; B is left for the missing marker. (1) still holds under 160 because
---       151, 149 and 967 never sat beside 2, 74, 150 and 162 in their items in any registered crawl.
+--       the chain ends never sat beside 2, 74, 150 and 162 in their items in any registered crawl.
 -- Needs migration 128's execute grant for db_test_runner. Collects every failure, raises once.
 -- RUN IT: `node scripts/db-test.mjs --only phase18_122_supersede_rule.sql`.
 
@@ -31,6 +43,12 @@ declare
   v_before   jsonb;
   v_r        jsonb;
   v_got      text;
+  v_expect   text;
+  v_ends     int;
+  v_end_of_2 bigint;
+  v_indep    text;
+  -- how far a supersession chain is followed; reaching it means a cycle or a longer chain
+  CHAIN_LIMIT constant int := 1000;
   v_watch    text;
   v_stack    text;
   v_synth    bigint;
@@ -49,6 +67,29 @@ begin
   select id into v_sync from sync_runs where run_id = v_newest order by id desc limit 1;
   select id into v_older_sync from sync_runs where run_id = v_older order by id desc limit 1;
 
+  -- the end of each of the four files' own chain, read before the four are cleared. A chain that
+  -- has no end within CHAIN_LIMIT steps (a cycle or a longer chain) or a file that is not
+  -- superseded at all yields no entry.
+  with recursive chain(start_id, id, next_id, depth) as (
+    select f.id, f.id, f.superseded_by, 0 from bb_files f where f.id in (2, 74, 150, 162)
+    union all
+    select c.start_id, f.id, f.superseded_by, c.depth + 1
+      from chain c join bb_files f on f.id = c.next_id
+     where c.depth < CHAIN_LIMIT
+  )
+  select string_agg(format('%s->%s', c.start_id, c.id), ', ' order by c.start_id), count(*),
+         (array_agg(c.id) filter (where c.start_id = 2))[1],
+         string_agg(format('%s->%s', c.start_id, c.id), ', ' order by c.start_id)
+           filter (where s.content_id is null
+                      or s.course_id is distinct from e.course_id
+                      or s.content_id is distinct from e.content_id
+                      or e.superseded_by is not null)
+    into v_expect, v_ends, v_end_of_2, v_indep
+    from chain c
+    join bb_files s on s.id = c.start_id
+    join bb_files e on e.id = c.id
+   where c.next_id is null and c.depth > 0;
+
   update bb_files set superseded_by = null where id in (2, 74, 150, 162);
 
   select jsonb_object_agg(id, superseded_by) into v_before from bb_files;
@@ -62,9 +103,21 @@ begin
   select string_agg(format('%s->%s', f.id, f.superseded_by), ', ' order by f.id) into v_got
     from bb_files f
    where f.superseded_by is distinct from (v_before->>f.id::text)::bigint;
-  if (v_r->>'superseded')::int <> 4 or v_got is distinct from '2->151, 74->149, 150->967, 162->967' then
-    v_fail := v_fail || format('(1) newest run %s wrote %s: %s', v_newest, v_r->>'superseded',
-                               coalesce(v_got, 'nothing'));
+  if v_ends <> 4 then
+    v_fail := v_fail || format('(1) precondition: only %s of files 2, 74, 150 and 162 have a supersession chain '
+                               'that ends (a file not superseded, a cycle or a chain longer than %s): %s',
+                               v_ends, CHAIN_LIMIT, coalesce(v_expect, 'none'));
+  elsif (v_r->>'superseded')::int <> 4 or v_got is distinct from v_expect then
+    v_fail := v_fail || format('(1) newest run %s wrote %s: %s, expected the chain ends %s',
+                               v_newest, v_r->>'superseded', coalesce(v_got, 'nothing'), v_expect);
+  end if;
+
+  -- (1b) the check that does not rest on the function's own output: each start file and the end of
+  -- its chain are one Blackboard item (same course_id and content_id) and the end is current.
+  -- The chains were read from superseded_by before the function ran, but that column is what 120
+  -- and 122 wrote; the item identity and the current flag are Blackboard's own.
+  if v_indep is not null then
+    v_fail := v_fail || format('(1b) a start file and its chain end are not one Blackboard item, or the end is superseded: %s', v_indep);
   end if;
 
   -- (2)
@@ -97,7 +150,7 @@ begin
   select g.bb_course_id, g.course_id, '_p18_synthetic_item_1', g.file_name,
          'https://blackboard.syracuse.edu/bbcswebdav/p18-synthetic-122', g.bucket,
          'rule', 0.6, 'phase18_122 synthetic'
-    from bb_files g where g.id = 151
+    from bb_files g where g.id = v_end_of_2  -- the current file of that name: the end of file 2's chain
   returning id into v_synth;
   v_r := supersede_replaced_files(v_newest, v_sync);
   select count(*) into v_open from attention_items

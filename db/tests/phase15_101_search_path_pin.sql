@@ -119,6 +119,9 @@ end $$;
 -- =============================================================================================
 -- Exactly two, both recorded: app_owner() because RLS policy evaluation needs it (DECISIONS
 -- 2026-09-10), calendar_push_now() because it is owner-guarded inside, which (f) proves.
+-- A third is allowed since migration 187 (section 3): inbox_accept_question(), granted to
+-- authenticated alone, whose first statement refuses unless auth.uid() is app_owner();
+-- db/tests/phase23_187_accept_objects.sql proves that refusal.
 --
 -- `p.proname || '()'` and NOT `p.oid::regprocedure::text`: regprocedure renders schema-qualified
 -- whenever `public` is not on the caller's current path, so the same catalogue would compare as
@@ -142,9 +145,9 @@ begin
    where p.pronamespace = 'public'::regnamespace
      and p.prosecdef
      and has_function_privilege('authenticated', p.oid, 'execute');
-  if v_auth <> 'app_owner(), calendar_push_now(), workspace_ask_with(), workspace_document_delete(), workspace_upload_register(), workspace_upload_retry()' then
+  if v_auth <> 'app_owner(), calendar_push_now(), inbox_accept_question(), workspace_ask_with(), workspace_document_delete(), workspace_upload_register(), workspace_upload_retry()' then
     raise exception 'FAIL authenticated may execute these SECURITY DEFINER functions in public: '
-                    '[%], expected [app_owner(), calendar_push_now(), workspace_ask_with(), workspace_document_delete(), workspace_upload_register(), workspace_upload_retry()]', v_auth;
+                    '[%], expected [app_owner(), calendar_push_now(), inbox_accept_question(), workspace_ask_with(), workspace_document_delete(), workspace_upload_register(), workspace_upload_retry()]', v_auth;
   end if;
 
   select coalesce(string_agg(p.proname || '()', ', ' order by p.proname), '') into v_anon

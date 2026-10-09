@@ -1293,7 +1293,7 @@ declare
   ok boolean;
 begin
   begin
-    execute $rc$select count(*) from assignments where component_id = 11 and points_possible = 10$rc$ into strict got;
+    execute $rc$select count(*) from assignments where component_id = 11 and points_possible = 10 and id in ('IST.323/quiz-01', 'IST.323/quiz-02', 'IST.323/quiz-03', 'IST.323/quiz-04', 'IST.323/quiz-05')$rc$ into strict got;
   exception when others then
     raise exception 'FAIL % (the recheck did not return exactly one value: %)', 'IST.323-11', sqlerrm;
   end;

@@ -86,7 +86,9 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   stamps `applied_at` on a session answer whose pick its file carries) is applied at the follow-ups'
   cut-over and frozen from then; a fix is migration 189, the one number left. Since 185 the role also reads `bb_files` (21 columns, never `source_url`,
   `local_path` or `sha256`) and `sessions`, and writes neither: a session answer (`session_link/<file id>`)
-  is `link_file_sessions`'s to apply, and the worker records it only when the file already shows it.
+  is `link_file_sessions`'s to apply, and the worker records it only when the file already shows it. Since 107 (2026-10-09)
+  the role also reads `grade_column_links` (select only), because `v_gradebook_latest`, which it already read,
+  now takes its "counts toward" flag from the Grades tab's picker.
 
 ## Environment gotchas (cloud sessions)
 
