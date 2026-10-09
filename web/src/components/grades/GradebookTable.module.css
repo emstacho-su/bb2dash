@@ -103,8 +103,12 @@
   color: var(--color-text);
 }
 
+/* The Seen stamp: the small, quiet size `tokens.mono` gave it before task 28 took
+   the code face off it (D-2). The size and colour sit on the cell now. */
 .seenCell {
   white-space: nowrap;
+  font-size: var(--text-xs);
+  color: var(--color-neutral-400);
 }
 
 /* — feedback ————————————————————————————————————————————————————————— */
