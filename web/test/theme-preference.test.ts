@@ -48,6 +48,10 @@ interface FakeQuery {
 
 let query: FakeQuery | null = null;
 let frames: Array<() => void> = [];
+/** The callbacks of the MutationObservers the boot script made, so a test can fire a mutation by hand. */
+let observers: Array<() => void> = [];
+/** The `storage` listeners the boot script added to window, taken off again after each test. */
+let storageListeners: EventListener[] = [];
 
 /** Install a `matchMedia` for the given system, or none. Returns the query it hands out. */
 function stubSystem(system: System): void {
@@ -101,10 +105,28 @@ beforeEach(() => {
   document.head.innerHTML = '<meta name="theme-color" content="#050505"><meta name="theme-color" content="#050505">';
   frames = [];
   vi.stubGlobal('requestAnimationFrame', (callback: () => void) => frames.push(callback));
+  observers = [];
+  storageListeners = [];
+  const addListener = window.addEventListener.bind(window);
+  vi.spyOn(window, 'addEventListener').mockImplementation(((type: string, listener: EventListener, options?: unknown) => {
+    if (type === 'storage') storageListeners.push(listener);
+    addListener(type, listener, options as AddEventListenerOptions);
+  }) as typeof window.addEventListener);
+  vi.stubGlobal(
+    'MutationObserver',
+    class {
+      constructor(callback: () => void) {
+        observers.push(callback);
+      }
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
   stubSystem('none');
 });
 
 afterEach(() => {
+  for (const listener of storageListeners) window.removeEventListener('storage', listener);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(window, 'matchMedia');
@@ -293,6 +315,72 @@ describe('stampTheme', () => {
     expect(document.documentElement.hasAttribute(THEME_SWITCHING_ATTRIBUTE)).toBe(true);
     flushFrame();
     expect(document.documentElement.hasAttribute(THEME_SWITCHING_ATTRIBUTE)).toBe(false);
+  });
+});
+
+describe('the theme-color meta after a client navigation (R2-3)', () => {
+  it('watches <head> once and re-stamps a fresh meta that holds the dark value while the page is light', () => {
+    stubSystem('dark');
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    runBootScript();
+    expect(observers).toHaveLength(1);
+    expect(metaColours()).toEqual([THEME_BG.light, THEME_BG.light]);
+
+    // Next inserts a fresh viewport meta with the server's value.
+    document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#050505">');
+    expect(metaColours()).toEqual([THEME_BG.light, THEME_BG.light, THEME_BG.dark]);
+    observers[0]();
+    expect(metaColours()).toEqual([THEME_BG.light, THEME_BG.light, THEME_BG.light]);
+  });
+
+  it('puts back a meta whose content is changed to the other ground', () => {
+    stubSystem('dark');
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    runBootScript();
+    document.head.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_BG.dark);
+    observers[0]();
+    expect(metaColours()).toEqual([THEME_BG.light, THEME_BG.light]);
+  });
+
+  it('follows a later pick: it syncs to whatever data-theme holds now', () => {
+    runBootScript();
+    stampTheme('light', false);
+    document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#050505">');
+    observers[0]();
+    expect(metaColours()).toEqual([THEME_BG.light, THEME_BG.light, THEME_BG.light]);
+    stampTheme('dark', false);
+    document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#f4f4f4">');
+    observers[0]();
+    expect(metaColours().every((colour) => colour === THEME_BG.dark)).toBe(true);
+  });
+
+  it('does nothing before the page is stamped, and writes no storage', () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    runBootScript();
+    document.documentElement.removeAttribute('data-theme');
+    document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#abcdef">');
+    observers[0]();
+    expect(metaColours().at(-1)).toBe('#abcdef');
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it('with no MutationObserver the script still stamps and does not throw', () => {
+    vi.stubGlobal('MutationObserver', undefined);
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    expect(runBootScript).not.toThrow();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+});
+
+describe('the real MutationObserver (last: its observer stays on <head> for the rest of the file)', () => {
+  it('re-stamps a fresh dark meta by itself after a tick', async () => {
+    vi.unstubAllGlobals();
+    stubSystem('dark');
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    runBootScript();
+    document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#050505">');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(metaColours()).toEqual([THEME_BG.light, THEME_BG.light, THEME_BG.light]);
   });
 });
 
