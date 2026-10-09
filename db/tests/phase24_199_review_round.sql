@@ -413,6 +413,54 @@ begin
   end if;
 end $$;
 
+-- =============================================================================================
+-- 5. v_workspace_store_proof
+-- =============================================================================================
+do $$
+declare
+  v_row  record;
+  v_n    integer;
+  v_got  text;
+begin
+  select count(*) into v_n from v_workspace_store_proof;
+  if v_n <> 1 then
+    raise exception 'FAIL 5: v_workspace_store_proof holds % rows, expected exactly one', v_n;
+  end if;
+  select * into v_row from v_workspace_store_proof;
+  if not (v_row.extension_ok and v_row.vector_columns_ok and v_row.vector_indexes_ok and v_row.no_links_ok) then
+    raise exception 'FAIL 5: the four checks read % % % %', v_row.extension_ok, v_row.vector_columns_ok,
+      v_row.vector_indexes_ok, v_row.no_links_ok;
+  end if;
+  if v_row.extension_schema is distinct from 'extensions' or v_row.extension_version is null
+     or v_row.vector_columns is distinct from
+        'public.bb_text_embeddings.embedding:384:t, public.workspace_text_embeddings.embedding:384:t'
+     or v_row.vector_indexes is distinct from
+        'public.bb_text_embeddings.bb_text_embeddings_hnsw:hnsw:vector_cosine_ops:t, public.workspace_text_embeddings.workspace_text_embeddings_hnsw:hnsw:vector_cosine_ops:t'
+     or v_row.foreign_servers <> 0 or v_row.foreign_tables <> 0 or v_row.link_extensions <> 0
+     or v_row.store_functions_that_call_out <> 0 then
+    raise exception 'FAIL 5: the view reads %', row_to_json(v_row);
+  end if;
+  -- Who may read it: anon and the browser are refused; it is security invoker; its columns are plain.
+  if pg_temp.w76_try('anon', '', 'select * from v_workspace_store_proof') <> '42501'
+     or pg_temp.w76_try('authenticated', app_owner()::text, 'select * from v_workspace_store_proof') <> '42501' then
+    raise exception 'FAIL 5: anon or authenticated can read v_workspace_store_proof';
+  end if;
+  if coalesce((select lower(split_part(o, '=', 2)) in ('true', 'on', '1', 'yes', 't', 'y')
+                 from pg_class c, unnest(c.reloptions) o
+                where c.oid = 'public.v_workspace_store_proof'::regclass
+                  and split_part(o, '=', 1) = 'security_invoker'), false) is false then
+    raise exception 'FAIL 5: v_workspace_store_proof is not security_invoker (phase15_101 (b) would fail)';
+  end if;
+  select string_agg(a.attname, ',' order by a.attnum) into v_got
+    from pg_attribute a where a.attrelid = 'public.v_workspace_store_proof'::regclass and a.attnum > 0 and not a.attisdropped;
+  if v_got is distinct from 'extension_version,extension_schema,extension_ok,vector_columns,vector_columns_ok,vector_indexes,vector_indexes_ok,foreign_servers,foreign_tables,link_extensions,store_functions_that_call_out,no_links_ok' then
+    raise exception 'FAIL 5: the columns are [%]', v_got;
+  end if;
+  if has_table_privilege('public', 'public.v_workspace_store_proof', 'select') then
+    raise exception 'FAIL 5: PUBLIC can read the view';
+  end if;
+end $$;
+
 select 'phase24_199_review_round: PASS' as result;
 
 rollback;

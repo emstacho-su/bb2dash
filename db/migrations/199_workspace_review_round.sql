@@ -3,7 +3,7 @@
 -- findings of the code review and the security review on 190 to 198, made here because those files are
 -- frozen once applied (as 143 did for 140 and 142). Worker W-76.
 --
--- WHAT. `create or replace` and `comment on` only: no table, column or index changes.
+-- WHAT. `create or replace`, `comment on` and ONE read-only view (5, below): no table, column or index changes.
 --   1. workspace_job_claim     the NEWEST finished message is never a rolling job's input and
 --                              `through` never reaches it; a message is old when the bytes of the
 --                              messages NEWER than it already pass 14,000 (196 counted the message
@@ -25,6 +25,8 @@
 --                              missing, no_text; one that does not fit is dropped; five at most); a
 --                              source's title is the database's own for material, upload and memory
 --                              rows and the fixed 'Planner and grades' for feed, cut to 200.
+--   5. v_workspace_store_proof  one row: the catalog answers of the store proofs 1, 2, 3 and 7 as plain
+--                              columns, for the acceptance run (its reader refuses pg_* relations).
 --
 -- The bodies are 196's and 193's, with only what is marked 199 changed. Grants are re-stated as they
 -- stand. No password, key or DSN is in this file.
@@ -719,6 +721,78 @@ comment on function public.workspace_ingest_finish(text, bigint, text, text) is
   'indexed and a failed end clear signed_url. Returns the state after the call. '
   'workspace_ingest_runner only.';
 
+-- =============================================================================================
+-- 5. v_workspace_store_proof: task 49's proofs 1, 2, 3 and 7 as one row of plain columns
+-- =============================================================================================
+-- The acceptance run reads the store's proofs on the host through a reader that refuses any statement
+-- naming a pg_* relation or a schema other than public, so it could only carry reduced forms. This view
+-- (read-only, security invoker, no text of his and no row of a store table) hands the catalog's answers
+-- out as columns, computed with the catalog expressions of phase24_store_proof.sql. Types are compared
+-- by oid and the text is built from nspname, relname and attname, so a search_path that does or does not
+-- carry 'extensions' changes nothing.
+create view public.v_workspace_store_proof
+  with (security_invoker = true) as
+select e.extension_version,
+       e.extension_schema,
+       coalesce(e.extension_schema = 'extensions', false) as extension_ok,
+       c.vector_columns,
+       c.vector_columns = 'public.bb_text_embeddings.embedding:384:t, public.workspace_text_embeddings.embedding:384:t'
+         as vector_columns_ok,
+       i.vector_indexes,
+       i.vector_indexes = 'public.bb_text_embeddings.bb_text_embeddings_hnsw:hnsw:vector_cosine_ops:t, '
+                          'public.workspace_text_embeddings.workspace_text_embeddings_hnsw:hnsw:vector_cosine_ops:t'
+         as vector_indexes_ok,
+       l.foreign_servers,
+       l.foreign_tables,
+       l.link_extensions,
+       l.store_functions_that_call_out,
+       (l.foreign_servers = 0 and l.foreign_tables = 0 and l.link_extensions = 0
+        and l.store_functions_that_call_out = 0) as no_links_ok
+  from (select (select x.extversion::text from pg_extension x where x.extname = 'vector') as extension_version,
+               (select n.nspname::text from pg_extension x join pg_namespace n on n.oid = x.extnamespace
+                 where x.extname = 'vector') as extension_schema) e
+ cross join (select coalesce(string_agg(n.nspname || '.' || r.relname || '.' || a.attname || ':' || a.atttypmod
+                                        || ':' || case when a.attnotnull then 't' else 'f' end, ', '
+                                        order by n.nspname collate "C", r.relname collate "C", a.attname collate "C"),
+                             '') as vector_columns
+               from pg_attribute a
+               join pg_class r on r.oid = a.attrelid
+               join pg_namespace n on n.oid = r.relnamespace
+              where a.atttypid = 'extensions.vector'::regtype
+                and a.attnum > 0 and not a.attisdropped
+                and r.relkind in ('r', 'p', 'v', 'm')) c
+ cross join (select coalesce(string_agg(n.nspname || '.' || t.relname || '.' || ic.relname || ':' || am.amname
+                                        || ':' || oc.opcname || ':' || case when ix.indisvalid then 't' else 'f' end, ', '
+                                        order by n.nspname collate "C", t.relname collate "C", ic.relname collate "C"),
+                             '') as vector_indexes
+               from pg_index ix
+               join pg_class ic on ic.oid = ix.indexrelid
+               join pg_class t on t.oid = ix.indrelid
+               join pg_namespace n on n.oid = t.relnamespace
+               join pg_am am on am.oid = ic.relam
+               join pg_opclass oc on oc.oid = ix.indclass[0]
+              where am.amname in ('hnsw', 'ivfflat')) i
+ cross join (select (select count(*) from pg_foreign_server)::integer as foreign_servers,
+                    (select count(*) from pg_foreign_table)::integer as foreign_tables,
+                    (select count(*) from pg_extension
+                      where extname in ('dblink', 'postgres_fdw', 'wrappers', 'http'))::integer as link_extensions,
+                    (select count(*) from pg_proc p
+                      where p.pronamespace = 'public'::regnamespace
+                        and p.prosrc ~ '(bb_file_text|bb_text_embeddings|workspace_documents|workspace_document_text|workspace_text_embeddings)'
+                        and p.prosrc ~* '(dblink|postgres_fdw|net\.http_|http_post|http_get|extensions\.http)'
+                    )::integer as store_functions_that_call_out) l;
+
+comment on view public.v_workspace_store_proof is
+  'One row (migration 199): the catalog answers of the store proofs 1, 2, 3 and 7 as plain columns, for '
+  'the acceptance run, which cannot read pg_* relations. extension_version, extension_schema, '
+  'extension_ok; vector_columns and vector_columns_ok (exactly the two vector(384) not null columns); '
+  'vector_indexes and vector_indexes_ok (exactly the two valid HNSW cosine indexes); foreign_servers, '
+  'foreign_tables, link_extensions, store_functions_that_call_out and no_links_ok. No text of his and no '
+  'row of a store table. security_invoker with anon revoked, as 036 requires.';
+
+revoke all on public.v_workspace_store_proof from public, anon, authenticated;
+grant select on public.v_workspace_store_proof to service_role;
+
 revoke all on function
   public.workspace_job_claim(text, text[]),
   public.workspace_job_finish(text, uuid, text, text, text, timestamptz),
@@ -778,6 +852,13 @@ begin
      and has_function_privilege('workspace_ingest_runner', p.oid, 'execute');
   if v_n <> 4 then
     raise exception 'FAIL 199: workspace_ingest_runner executes % SECURITY DEFINER functions, expected 4', v_n;
+  end if;
+
+  -- (b2) The proof view returns one row and its four checks are true.
+  if (select count(*) from public.v_workspace_store_proof) <> 1
+     or not (select p.extension_ok and p.vector_columns_ok and p.vector_indexes_ok and p.no_links_ok
+               from public.v_workspace_store_proof p) then
+    raise exception 'FAIL 199: v_workspace_store_proof is not one row with its four checks true';
   end if;
 
   -- (c) The new bodies are the ones in place.
