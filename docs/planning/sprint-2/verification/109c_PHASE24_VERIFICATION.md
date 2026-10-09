@@ -160,3 +160,48 @@ All four are Sonnet 5.5. The SQL runner answers `--ping` in `bb2dash-wt-24` and 
 by any other way. W-76 hands back each migration with its unit and the unit's red run. The PM runs
 `begin; <migration>; <unit>; rollback;` as the dry run of task 21 before a migration goes to Stack
 for his word, and the unit's green run through the runner follows the apply.
+
+## The workers' first hand-backs, 2026-10-08 evening
+
+| worker | merged into the phase branch | gates read by the PM on the merged branch |
+|---|---|---|
+| W-78, tasks 23 to 26 | 4eab863 | `mcp-server`: typecheck clean, 141 tests, build clean; `node --test` on the function tests, 32 pass; the PM's fixture test 25 of 25. No file outside its list; `package.json`, the lock file, `src/server.ts`, `search/` and `embed-corpus/` untouched |
+| W-79, tasks 36 and 39 | 31984a8 | `sync`: 166 tests. `workspace-ingest`: typecheck clean, 97 tests (98.36 % lines by its own run). No file outside its list |
+| W-76, tasks 13 to 20, 22, 49, 50 | fe233e8 | nine migrations and eleven units, none applied; each unit's red run is in `109_W76_VERIFICATION.md`. No file outside its list |
+
+**Findings that go back to a worker or change the plan**
+
+* **A test of the ingest worker depends on wall-clock time.** `workspace-ingest/test/exchange.test.ts`,
+  "an answer for another document does not satisfy the wait": timed out at 5 s twice on the merged
+  branch while other suites ran beside it, then passed three times in a row. It goes back to W-79
+  with tasks 37 and 38.
+* **A fourth standing unit pins a fact the applies move** (W-76's finding).
+  `db/tests/phase15_101_search_path_pin.sql`, part (c), lists the SECURITY DEFINER functions
+  `authenticated` may execute as exactly `app_owner()` and `calendar_push_now()`. 190 adds three
+  and 194 one, each owner-guarded as its first statement. The file is no worker's; the PM edited it
+  on the phase branch (a384f45), and it joins the three name lists in the port PR. So a unit on
+  `main` turns red at the first of those applies, not only at 193 and 196.
+* **197 needs 193** (W-76's finding): the status view reads the ingest heartbeat table. The order is
+  numeric, and 198 stands alone.
+* **So the applies are one sitting, not two groups.** The brief's task 21 had seven "as they pass"
+  and 193 with 196 on one day. With units on `main` red from 190 on, all nine go on in one sitting,
+  in numeric order, each after its own dry run, and the port PR (four test files) merges the same
+  sitting on Stack's word.
+* **The test login cannot read `storage.buckets`**, so `phase24_191_bucket.sql` checks the bucket's
+  row only for a login that can; the migration's own guard asserts the row at the apply.
+
+## Task 21: the dry runs before Stack's word
+
+Each is `begin; <migration>; <unit>; rollback;` through `execute_sql`, with a read afterwards that
+shows nothing was left. Comment lines were left out of the text sent; every statement ran as the
+file holds it. A dry run of a later migration needs the earlier ones on prod, so only three can run
+before the first apply; each of the rest is dry-run in its turn, after the one before it is on.
+
+| migration | dry run | read afterwards |
+|---|---|---|
+| 198 | **clean** (PM, 2026-10-09 01:4xZ): the policy drops, the guard passes, the unit's anon insert is refused with 42501, three policies are left on the two course tables | 2 policies on `bb_text_embeddings`: rolled back |
+| 191 | **clean** (PM): the bucket row, the four owner policies, the guard, the unit's checks (a) to (c) | 0 bucket rows, 0 policies: rolled back |
+| 190 | **clean** (a helper agent on the PM's exact procedure; the whole migration and the whole unit in one call) | `workspace_documents` absent, 0 of the three functions: rolled back |
+
+After the three, one read of prod: no relation and no function of the phase exists, no bucket
+`workspace-uploads`, no role `workspace_ingest_runner`, and no migration named 190 to 199.
