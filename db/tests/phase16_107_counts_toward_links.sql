@@ -19,6 +19,8 @@
 --      of the view's row with its snapshot, so only the flag may move.
 --   4  the table refuses a not-excluded link with no component (the reason for no case 4).
 --   5  the invariant of 2 again after the fixtures, and the grade model view agrees with the flag.
+--   6  inbox_apply_runner, which 181 lets read the view, still can (the view is security_invoker and
+--      now reads grade_column_links, which that role was never granted).
 --
 -- HOW THE FIXTURE ROW IS PICKED (deterministic): the first row of v_gradebook_latest, by course_id
 -- then column_id, whose column_kind is item or attendance, which links exactly one assignments row
@@ -245,6 +247,25 @@ begin
   if bad is not null then
     raise exception 'FAIL the grade model view and counts_toward_grade disagree: %', bad;
   end if;
+end $$;
+
+-- =============================================================================================
+-- 6. A role that already reads the view still can. The view is security_invoker, so since 107 its
+--    reader needs select on grade_column_links as well. inbox_apply_runner (181) is granted
+--    select on v_gradebook_latest and not on grade_column_links.
+-- =============================================================================================
+do $$
+declare
+  n bigint;
+begin
+  set local role inbox_apply_runner;
+  begin
+    select count(*) into n from public.v_gradebook_latest;
+  exception when insufficient_privilege then
+    reset role;
+    raise exception 'FAIL inbox_apply_runner can no longer read v_gradebook_latest: it has no select on grade_column_links (and no read policy there), which the view reads since 107';
+  end;
+  reset role;
 end $$;
 
 select 'phase16_107_counts_toward_links: PASS' as result, current_user as ran_as;
