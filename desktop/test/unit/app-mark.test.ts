@@ -29,6 +29,13 @@ interface Image {
   pixels: Buffer;
 }
 
+/** One byte of a buffer, or an error: the project compiles with unchecked index reads off. */
+function byte(buffer: Uint8Array, index: number): number {
+  const value = buffer[index];
+  if (value === undefined) throw new RangeError(`no byte at ${index} of ${buffer.length}`);
+  return value;
+}
+
 /** 8-bit, non-interlaced, filter-none PNG as `draw-mark.mjs` writes it, or a filtered one. */
 function decodePng(file: Buffer): Image {
   expect(file.subarray(0, 8).equals(PNG_SIGNATURE), 'a PNG signature').toBe(true);
@@ -45,8 +52,8 @@ function decodePng(file: Buffer): Image {
     if (type === 'IHDR') {
       width = data.readUInt32BE(0);
       height = data.readUInt32BE(4);
-      bitDepth = data[8];
-      colorType = data[9];
+      bitDepth = byte(data, 8);
+      colorType = byte(data, 9);
     } else if (type === 'IDAT') idat.push(data);
     else if (type === 'IEND') break;
     offset += 12 + length;
@@ -57,12 +64,12 @@ function decodePng(file: Buffer): Image {
   const stride = width * bytesPerPixel;
   const out = Buffer.alloc(height * stride);
   for (let y = 0; y < height; y += 1) {
-    const filter = raw[y * (stride + 1)];
+    const filter = byte(raw, y * (stride + 1));
     for (let x = 0; x < stride; x += 1) {
-      const value = raw[y * (stride + 1) + 1 + x];
-      const left = x >= bytesPerPixel ? out[y * stride + x - bytesPerPixel] : 0;
-      const up = y > 0 ? out[(y - 1) * stride + x] : 0;
-      const upLeft = y > 0 && x >= bytesPerPixel ? out[(y - 1) * stride + x - bytesPerPixel] : 0;
+      const value = byte(raw, y * (stride + 1) + 1 + x);
+      const left = x >= bytesPerPixel ? byte(out, y * stride + x - bytesPerPixel) : 0;
+      const up = y > 0 ? byte(out, (y - 1) * stride + x) : 0;
+      const upLeft = y > 0 && x >= bytesPerPixel ? byte(out, (y - 1) * stride + x - bytesPerPixel) : 0;
       let predicted = 0;
       if (filter === 1) predicted = left;
       else if (filter === 2) predicted = up;
@@ -81,19 +88,20 @@ function decodePng(file: Buffer): Image {
 }
 
 /** `--name: #rrggbb;` out of the dark (`:root`) block of the stylesheet. */
-function darkToken(name: string): readonly number[] {
+function darkToken(name: string): readonly [number, number, number] {
   const stripped = readFileSync(GLOBALS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const open = stripped.indexOf(':root {');
   const block = stripped.slice(open, stripped.indexOf('\n}', open));
-  const found = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(block);
-  if (found === null) throw new Error(`${name} is not a plain hex in the dark block`);
-  return [1, 3, 5].map((i) => Number.parseInt(found[1].slice(i, i + 2), 16));
+  const hex = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(block)?.[1];
+  if (hex === undefined) throw new Error(`${name} is not a plain hex in the dark block`);
+  const channel = (from: number): number => Number.parseInt(hex.slice(from, from + 2), 16);
+  return [channel(1), channel(3), channel(5)];
 }
 
 const icon = decodePng(readFileSync(join(BUILD, 'icon.png')));
-const pixelAt = (x: number, y: number): readonly number[] => {
+const pixelAt = (x: number, y: number): readonly [number, number, number, number] => {
   const at = (y * icon.width + x) * 4;
-  return [icon.pixels[at], icon.pixels[at + 1], icon.pixels[at + 2], icon.pixels[at + 3]];
+  return [byte(icon.pixels, at), byte(icon.pixels, at + 1), byte(icon.pixels, at + 2), byte(icon.pixels, at + 3)];
 };
 
 describe('build/icon.png', () => {
