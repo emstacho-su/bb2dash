@@ -385,3 +385,50 @@ confirmed its findings 1, 3 and 7 by bytes or by running a snippet.
 Rulings that change the Contract are brief 110's "Round 3" (R6, R7, the notice, the refused skip,
 the bb2dash-stack rules). W-84's own open point, step 6's fourteen minutes against the operator's
 ten-minute limit, is R7.
+
+## Task 18's fix round: what landed, and the dry runs on the final files (2026-10-09, about 01:40Z)
+
+* **W-80, round 4** (merged 267fe5c). 187 is 940 lines, SHA-256 `e93d830d...1df622` (57,726
+  bytes): the `not_applied` notice carries its new sentence only when a hold stands, after the
+  close has written its holds, for an id of that close's skip (`v_stands`, read from
+  `inbox_apply_held_items()`). 188 is 614 lines, `d9502013...b7a10` (31,462 bytes): R6,
+  `link_file_sessions` ends with one stamping statement and is otherwise 163's body again.
+* **W-82, round 3**: the path literal is right again (`grep -c -F` of it gives 1, control characters
+  0, parse errors 0) and `scripts/register-exports.test.mjs` reads the script's bytes; every
+  unlogged row gets its entry; a refused skip reads the unfiled list again; a timeout says so in
+  the log; one copy of `runCommand`, the line printer and the atomic write. 72 tests pass.
+* **W-84, round 2** (merged 04081e5): the regex is one constant used in both places; step 6 waits
+  nine minutes; `applied-from-button` and `recorded-after-sync` are blocked on a request still
+  queued or claimed; `request-taken-after` is blocked on one still claimed and fails on one still
+  queued after the worker was started. W-84 found that the host reads a step's proofs only on the
+  operator's `pass` and that `unsure` is red, so the playbook's step 6 now says `blocked` for a
+  wait that ends with the request open (238705d, the PM's one-sentence edit; acceptance test 41
+  pass).
+* **`/security-review` on the bb2dash branch** (read at 058bd21, before this round's fixes landed):
+  **no HIGH and no MEDIUM finding.** It traced the service key (read in one place, used as two
+  headers, redacted on both error paths, never in a log line, the state file or a file), how note
+  and day-file paths are built (from the integer item id and a formatted date; no row string
+  reaches a path), every spawn (argument arrays, no shell, no `git` or `gh` in `--notes-only`),
+  the registration script's quoting, the proofs' parameters (typed, bound as values in a read-only
+  transaction; `since` comes from the host, not the sandbox), and 187's rules since the first
+  review. Three LOW notes: the unlogged pass skipping a test-shaped row (P-2, fixed in this round);
+  the notice condition (P-6, fixed in this round); and typographic single quotes in a folder path
+  ending the quoted literal of the task's command (**taken**: the script refuses those four
+  characters; W-82's follow-up).
+
+**The dry runs, repeated on round 4's files.** One rolled-back transaction on prod, the method
+above, no request open and no answer waiting, each fetched text compared by SHA-256 with the local
+file first (commit 267fe5c).
+
+* Control before 187: `phase23_187_held_answers` stops at "migration 187 is not applied".
+* 187 executed whole, guards silent. Item 3782 skipped with its sentence; 16 unfiled; holds table
+  empty; `sync_runner` 14 functions, `inbox_apply_runner` 7; the view shows 18 rows.
+* **13 of 13 units PASS against 187** (the same thirteen as before).
+* Control before 188: `phase23_188_archived_answers` stops at "migration 188 is not applied".
+* 188 executed on top: the backfill stamped 14. `link_file_sessions` was then run once on prod's own
+  data inside the transaction: it examined 10 files, linked none, raised nothing, and the stamped
+  count stayed 14. `phase23_188_archived_answers` PASS; both held-answers units and `phase23_185`
+  PASS with 188 in; `phase18_124`, `_162`, `_163` PASS; `phase18_122` and `_123` give the two lines
+  they give on `main`.
+
+**187 is final and waits for Stack's word.** 188 waits for the cut-over.
