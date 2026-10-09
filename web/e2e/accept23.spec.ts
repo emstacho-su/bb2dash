@@ -27,8 +27,8 @@
  * `agent_requests` of the kind that button files). Anything else still reaches the guard and fails.
  *
  * TIME. The shared limit of `acceptStep()` is 9.75 minutes a test, and a test may set its own inside
- * its body (`test.setTimeout`): steps 3, 6 and 7a do. Step 3 watches for nine minutes, step 6 for up
- * to fourteen (the worker's own limit on a Claude run), and step 7a waits out the button's 75 second
+ * its body (`test.setTimeout`): steps 3, 6 and 7a do. Step 3 watches for nine minutes, step 6 for
+ * nine as well (the operator's own limit on one command is ten), and step 7a waits out the button's 75 second
  * grace and presses a second time.
  *
  * Everything is found by role and visible text, and nothing by a class name: another phase restyles
@@ -63,6 +63,8 @@ const QUEUED_FROM_BUTTON = 'Queued from Apply answers';
 const ANSWERED_TAB_EMPTY = 'Every answer has been applied.';
 const NOTHING_ANSWERED = '0 answered';
 const ANSWERED_COUNT = /^\d+ answered$/;
+/** The paste command the button shows as its fallback (`inboxApplyCommand`), whatever the request's number: "nothing was pasted" is its absence. */
+const PASTE_COMMAND = /inbox-apply \d+/;
 
 /** `src/lib/sync-request-phase.ts` (PHASE_LABEL): what the top bar's Sync button reads. */
 const SYNC_LABEL = 'Sync';
@@ -103,9 +105,14 @@ type Label = 'confirm' | 'dismiss' | 'note' | 'offline';
 /** Step 3 watches the Inbox for nine minutes for the apply request the sync files; the longest of the last five syncs took 125 s. */
 const SYNC_WATCH_MS = 9 * MINUTE_MS;
 const SYNC_WATCH_TEST_MS = 9.75 * MINUTE_MS;
-/** Step 6's Claude run may take up to 14 minutes (the worker's own limit); the test gets a minute more to open and record. */
-const APPLY_WATCH_MS = 14 * MINUTE_MS;
-const APPLY_WATCH_TEST_MS = 15 * MINUTE_MS;
+/**
+ * Step 6 waits for the request to close no longer than the operator can: one command of the operator is
+ * ten minutes at most (acceptance/OPERATOR.md), and the test spends about half a minute before the wait
+ * (open, save, press). The worker's own Claude limit is 14 minutes, so a slow run can still be open when
+ * the wait ends; the test then says so (`inconclusive:`) and the host's proof is blocked, not failed.
+ */
+const APPLY_WATCH_MS = 9 * MINUTE_MS;
+const APPLY_WATCH_TEST_MS = 9.75 * MINUTE_MS;
 /** Step 7a waits out the button's 75 second grace, and the label turns at the next 5 second tick of the page's clock. */
 const UNCLAIMED_WAIT_MS = 3 * MINUTE_MS;
 const OFFLINE_TEST_MS = 5 * MINUTE_MS;
@@ -271,7 +278,7 @@ async function expectClosedClean(page: Page, rec: Recorder, watch: ApplyWatch): 
   rec.note({ labels_seen: watch.labels, ended_as: watch.endedAs, status_line: line });
   expect(watch.endedAs, 'the request closed done').toBe(APPLY_DONE);
   expect(line, 'a result line stands beside the button').not.toBeNull();
-  await expect(page.locator('code').filter({ hasText: /inbox-apply \d+/ }), 'nothing was pasted: no command is shown').toHaveCount(0);
+  await expect(page.locator('code').filter({ hasText: PASTE_COMMAND }), 'nothing was pasted: no command is shown').toHaveCount(0);
   await expect(footerCount(page)).toHaveText(NOTHING_ANSWERED, { timeout: AFTER_CLOSE_WAIT_MS });
 }
 
@@ -391,7 +398,7 @@ acceptStep('3 watch apply', { shots: ['watching', 'done'] }, async ({ page }, re
     await openTab(page, TAB_ARCHIVED);
     await expect(cardOf(page, 'confirm')).toBeVisible();
     await expect(cardOf(page, 'dismiss')).toBeVisible();
-    await expect(page.locator('code').filter({ hasText: /inbox-apply d+/ }), 'nothing was pasted: no command is shown').toHaveCount(0);
+    await expect(page.locator('code').filter({ hasText: PASTE_COMMAND }), 'nothing was pasted: no command is shown').toHaveCount(0);
     rec.note({ closed_before_the_page_opened: true, labels_seen: [await applyLabel(page)], ended_as: null, status_line: await statusLine(page) });
     await bringToTop(cardOf(page, 'confirm'));
     await rec.shot(page, 'done');
@@ -453,7 +460,7 @@ acceptStep('6 note and apply', { shots: ['saved', 'done'] }, async ({ page, cont
 
   const watch = await watchApplyButton(page, APPLY_WATCH_MS);
   if (watch.endedAs === null) rec.note({ labels_seen: watch.labels });
-  if (watch.endedAs === null) throw new Error('the apply request was still open after fourteen minutes');
+  if (watch.endedAs === null) throw new Error('inconclusive: the apply request was still open after nine minutes');
   if (watch.endedAs === APPLY_UNCLAIMED) throw new Error('the apply worker did not take the request: the button read waiting on the worker');
   await expectClosedClean(page, rec, watch);
   await openTab(page, TAB_ARCHIVED);

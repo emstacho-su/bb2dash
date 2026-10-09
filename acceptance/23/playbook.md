@@ -132,12 +132,15 @@ Pass when all of this is true:
 
 The test answers the card labelled `note` with a word and a reason, saves it, and presses
 `Apply answers`. The request runs by itself: the apply worker takes it, starts one Claude run,
-and closes it. The test watches the label for up to fourteen minutes.
+and closes it. The test watches the label for nine minutes at the most. A Claude run can take
+longer than that, and one command of yours is limited to ten minutes, so the test does not wait
+for it.
 
-This title can take up to fifteen minutes, longer than the ten minutes the general rules give a
-test. Run it as the general rules say, in the foreground with the longest Bash timeout. If the
-Bash tool ends the command at its own limit before the command has printed `1 passed` or a
-failure, the verdict is `unsure`, and `saw` says so.
+If `test_error` in `6.json` begins `inconclusive: the apply request was still open`, the wait
+ended with the request still open. That is not a fault of the product. Look at `6-fail.png` and at
+`labels_seen` in `6.json`, say in `saw` what the page showed (the last label, and the line beside
+the button if there is one), and give the verdict `unsure`, never `fail`. Do not run the title a
+second time: the host checks the request in the database.
 
 Pass when all of this is true:
 

@@ -452,6 +452,15 @@ async function recordedAfterSyncCase3() {
   // Any other error is red.
   await db.exec('truncate public.attention_items, public.agent_requests restart identity');
   assert.equal((await prove('recorded-after-sync', afterSyncParams(await afterSync({ apply: { state: 'failed', error: 'timed_out' } })))).code, EXIT.fail);
+  // A request still open when the proof is read is a watch that ended, not a fault: blocked. The apply request, or the sync itself.
+  for (const state of ['queued', 'claimed']) {
+    const open = await rebuilt(() => afterSync({ apply: { state } }));
+    const waiting = await prove('recorded-after-sync', afterSyncParams(open));
+    assert.deepEqual([waiting.code, waiting.blocked, waiting.detail.apply_state], [EXIT.blocked, true, state], `apply request ${state}`);
+    const syncOpen = await rebuilt(() => afterSync({ apply: { state: 'queued' } }));
+    await db.query("update public.agent_requests set state = $1 where kind = 'sync'", [state]);
+    assert.equal((await prove('recorded-after-sync', afterSyncParams(syncOpen))).code, EXIT.blocked, `sync ${state}`);
+  }
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -543,6 +552,18 @@ async function appliedFromButtonCase3() {
     const capped = await prove('applied-from-button', buttonParams(world));
     assert.deepEqual([capped.code, capped.blocked, capped.detail.request_error_code], [EXIT.blocked, true, error]);
   }
+  // Still queued or claimed when read: step 6 waits no longer than the operator can, and a Claude run may take longer. Blocked.
+  for (const state of ['queued', 'claimed']) {
+    const open = await rebuilt(() => fromButton({ apply: { state, archived: 0 }, note: { by: null } }));
+    const waiting = await prove('applied-from-button', buttonParams(open));
+    assert.deepEqual([waiting.code, waiting.blocked, waiting.detail.request_state], [EXIT.blocked, true, state], state);
+  }
+  // The request the button filed itself is the one that counts; a follow-up of it (even one that retries held answers) is not.
+  const followUp = await rebuilt(() => fromButton({ apply: { trigger: 'followup', after: 1 } }));
+  assert.equal((await prove('applied-from-button', buttonParams(followUp))).code, EXIT.fail);
+  await db.query(`update public.agent_requests set params = '{"trigger": "followup", "after": 1, "retry_held": true}'::jsonb where id = $1`, [followUp.request]);
+  const retry = await prove('applied-from-button', buttonParams(followUp));
+  assert.deepEqual([retry.code, retry.detail.request_filed_by], [EXIT.fail, 'followup']);
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -610,6 +631,11 @@ test('request-taken-after: taken at least 75 seconds after it was filed, done, a
   await db.exec('truncate public.attention_items, public.agent_requests restart identity');
   const capped = await prove('request-taken-after', takenParams(await takenAfter({ request: { state: 'failed', error: 'daily_cap' }, item: { by: null } })));
   assert.deepEqual([capped.code, capped.blocked], [EXIT.blocked, true]);
+  // A worker that took the request and has not closed it yet is a slow run: blocked. One that never took it after it was started is what the step tests: failed.
+  const running = await prove('request-taken-after', takenParams(await rebuilt(() => takenAfter({ request: { state: 'claimed' }, item: { by: null } }))));
+  assert.deepEqual([running.code, running.blocked], [EXIT.blocked, true]);
+  const untaken = await prove('request-taken-after', takenParams(await rebuilt(() => takenAfter({ request: { state: 'queued' }, item: { by: null } }))));
+  assert.deepEqual([untaken.code, untaken.blocked], [EXIT.fail, false]);
 });
 
 /* ---------------------------------------------------------------------------------------------
