@@ -256,10 +256,9 @@
 
 /* — the error notice, once (Phase 22, entry error-notice-shared) —————————
    The danger tint, the danger words, a bar of the danger colour down the left
-   edge and the word "Error" in front. A boxed error rule composes this class
-   and keeps its own padding, radius and type size:
-
-       .problem { composes: errorNotice from '@/styles/tokens.module.css'; … }
+   edge and the word "Error" in front. A boxed error rule composes the errorNotice
+   class from this file (the compose line is written in the rule itself, not
+   here) and keeps its own padding, radius and type size.
 
    Tokens only: the bar is an inset shadow, so no size moves. */
 .errorNotice {
