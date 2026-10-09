@@ -1119,7 +1119,23 @@ W-80 and W-82 build to this section where it differs from the text above.
   other when the skip is refused. Item 3782 has a logged write (the cut-over's test row), and his
   answer for it stands ("Mark it filed, no note"): 187 marks it by its own guarded statement, not
   through the function.
-* **Not changed, and why** (110a has each in full): a held session answer that a later fold links
+* **The second look at this round (2026-10-09) found one gap in R3 as first built, closed before
+  anything was applied.** A retry follow-up is handed its own `params.skip` as `held`, the worker
+  copies those ids into its close's `skip` with the answer's present time, and a failed close then
+  wrote a hold for each, though that run never tried them. So an answer he gave again in the middle
+  of a press's chain could be held untried, and a hand-written request
+  `{trigger: followup, retry_held: true, skip: [...]}` could make things held, against the last
+  bullet of R3. **The rule: the failed close of a retry follow-up writes no hold for an id that is in
+  that request's own `params.skip`.** A hold that already stands for the same answer is kept as it
+  is. Such an id stays in the close's skip, so the notice stays open, and the next sync tries the
+  answer if no hold stands for it. With it: the `not_applied` notice carries its new sentence only
+  when the close sends `skip_seen` (the old worker's failed run keeps 186's sentence, which is the
+  true one while every sync still retries), and 187's guard also reads that `service_role` passes
+  row level security, since `inbox_decision_skipped` reads `inbox_apply_writes` with the caller's
+  rights.
+* **Not changed, and why** (110a has each in full): when a press's first six answers all fail and
+  nothing is archived, no follow-up is filed, so a held answer beyond the sixth is not reached by
+  that press (the brief's own rule that a run which gets nowhere never loops); a held session answer that a later fold links
   by the lecture-number rule stays held until a press, which records it at no cost (the code
   review's finding 6); the fold still does not apply a superseded-file pick (O-2, his default);
   migration 187 stays one file above 800 lines, because a migration is applied under one name and
