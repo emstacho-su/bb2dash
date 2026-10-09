@@ -520,3 +520,45 @@ Checked by the PM without reading the secret: the file `workspace_ingest_db_url`
 answers `current_user` = `workspace_ingest_runner`; the role may execute
 `workspace_ingest_heartbeat` and holds no select on `workspace_documents`. The first heartbeat row
 waits for the ingest worker's first start, which waits for the image.
+
+## The ingest image built, and probe P-11 (2026-10-09, about 12:30Z)
+
+The network no longer intercepted `deb.debian.org` that morning (`apt-get update` in the bare base
+image fetched its lists). The three test images were then built from the branch head after the
+review round, each under its test tag through the second compose file, with no walk box or
+acceptance run beside them:
+
+| image | id | size | build |
+|---|---|---|---|
+| `bb2dash-workspace:wt24` | `e7db1854eaf7` | 1.17 GB | 15 s (cached layers) |
+| `bb2dash-workspace-ingest:wt24` | `c2b6156562be` | 727 MB | 91 s, its first build |
+| `bb2dash-apply:wt24` | `ca8661b78909` | 1.17 GB | 11 s |
+
+The four live tags before and after the builds: `bb2dash-sync:local` `084b9ede6aad`,
+`bb2dash-mcp:local` `bf212746abf1`, `bb2dash-apply:local` `535b7075cb79`, `bb2dash-workspace:local`
+`42c552c05ad6`, the same at both readings. (`bb2dash-apply:local` read `3315bf7c18e2` the evening
+before: the follow-ups' cut-over rebuilt it in between. That change is theirs.)
+
+**In the ingest image, as the parser's user with no network and no secret:** `uid=1100(extract)
+gid=1100(exchange)`; `pdftotext` 22.12.0; `uv` 0.12.19 with `UV_OFFLINE=1`; `/app` holds `certs`,
+`docker`, `ingest`, `workspace-ingest`; `dist` holds `main.js`, `parser-main.js`, `healthcheck.js`.
+
+**The Workspace test image, a smoke with no runner loop and no model call** (a throwaway compose
+project, removed after): three secrets mounted (`workspace_runner_db_url`, `claude_oauth_token`,
+`bb2dash_mcp_service_key`); the CLI's config folder a tmpfs; six prompt files; no notes server in
+the image; `WORKSPACE_MEMORY_JOBS` off; the firewall allows three names, Anthropic answers and
+`example.com` is blocked; one retrieval through the image's own batch entry returned 10 hits with
+the frozen fourteen keys. (Run on the image built before the review round; the same build after it
+is the one the walk uses.)
+
+| probe | line |
+|---|---|
+| P-11 | **PASS.** In the `workspace-extract` service as compose defines it (user `extract`, only `lo`, a read-only root, no secret, `memory.max` 1 GiB, `pids.max` 128, the exchange volume `770 root:exchange`), one synthetic file of each parsed type, about 20 MB each with a noise picture as its bulk, extracted by the command the parser's loop runs. pdf: 20,006,000 bytes, 0.3 s, peak 30.7 MB, 60 units. docx: 19,869,952 bytes, 0.6 s, 88.3 MB, 1 unit. pptx: 19,912,690 bytes, 0.7 s, 97.1 MB, 60 units. xlsx: 19,977,680 bytes, 1.0 s, 39.0 MB, 2 units. Each far under 300 s and 1 GiB; the folder was empty afterwards. The size and the limit stand |
+
+**P-7 is the first step inside the walk window, a PM ruling.** The task list puts it before the
+walk, with a probe object of its own. The worker has no single-pass mode, and a probe object needs
+the owner's session to put and to remove. Inside the window the test worker's first real download
+of the walk's synthetic upload, through its firewall, is that probe: its line is written from the
+worker's log and the row's state (`reading` to `text_ready` means the link was fetched with no
+redirect and the bytes hashed to the row's hash). If it fails, the upload half of the walk stops
+there and the Workspace half still stands.

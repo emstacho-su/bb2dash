@@ -1644,11 +1644,10 @@ redesigned page, after Phase 22 (brief `111_PHASE24B_workspace_page.md`, not cut
 1. **The PM's walk** on today's page with the test runner the only one on the queue (a course
    question, a follow-up, a planner question, a nothing-matches question, a Stop). It needs a window
    Stack agrees to.
-2. **The ingest image has not been built**, so the upload path has had no run on a real container.
-   `apt-get update` fails on the network the laptop was on: `http://deb.debian.org` is answered by
-   another host with a certificate nothing trusts (the bare base image shows the same). Probes P-7
-   (a signed link through the worker's firewall) and P-11 (a 20 MB file of each type) and the upload
-   half of the walk wait for a build on another network.
+2. **The upload path has not run end to end.** The ingest image was built on 2026-10-09 (the network
+   that had blocked it the night before no longer did) and probe P-11 passed in the parser's own
+   container: a 20 MB file of each parsed type extracts in about a second. The first real upload,
+   through the worker and its firewall, is part of the walk.
 3. **The cut-over and `just accept 24`**, after the merge, each on its own word from Stack.
 
 **What Stack has to do:** agree a walk window; the merge words for the two PRs; later the cut-over
