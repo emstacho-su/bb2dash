@@ -19,6 +19,7 @@
    ========================================================================= */
 
 /* — surfaces ——————————————————————————————————————————————————————— */
+/* A card has a clear edge: a one-pixel ring in --shadow-sm, so no size changes. */
 .card {
   display: flex;
   flex-direction: column;
@@ -26,6 +27,7 @@
   padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .cardLg {
@@ -38,26 +40,21 @@
 .elevMd { box-shadow: var(--shadow-md); }
 .elevLg { box-shadow: var(--shadow-lg); }
 
-/* — the Nocturne signature rule: fades to transparent at both ends ——— */
+/* — a plain line in the divider colour, one hairline thick ——————————— */
 .rule {
-  height: 1px;
+  height: var(--size-underline);
   border: 0;
   margin: var(--space-4) 0;
-  background: linear-gradient(
-    to right,
-    transparent,
-    var(--color-divider) 48px,
-    var(--color-divider) calc(100% - 48px),
-    transparent
-  );
+  background: var(--color-divider);
 }
 
 /* — text roles ————————————————————————————————————————————————————— */
 .kicker {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-neutral-500);
+  user-select: none;
 }
 
 .mono {
@@ -74,16 +71,17 @@
   align-items: center;
   font-size: var(--text-xs);
   letter-spacing: 0.02em;
-  padding: 3px 10px;
-  border-radius: calc(var(--radius-md) * 0.75);
+  padding: var(--size-3) var(--size-10);
+  border-radius: var(--radius-chip);
   white-space: nowrap;
   flex: none;
 }
 
+/* the strong tag is the filled ink pill */
 .tagAccent {
   composes: tag;
-  background: var(--color-accent-800);
-  color: var(--color-accent-100);
+  background: var(--color-accent);
+  color: var(--color-bg);
 }
 
 .tagNeutral {
@@ -92,94 +90,134 @@
   color: var(--color-neutral-100);
 }
 
+/* the outline is the one every control has; the words keep the ink */
 .tagOutline {
   composes: tag;
-  border: 1px solid var(--color-accent);
+  border: 1px solid var(--color-neutral-600);
   color: var(--color-accent);
 }
 
-/* — buttons ————————————————————————————————————————————————————————— */
+/* — buttons ————————————————————————————————————————————————————————
+   Pills in the body face. One primary per view. None is red; danger is the
+   secondary button with its words in --color-danger. Nothing lifts on hover. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--size-6);
   cursor: pointer;
   text-decoration: none;
-  font-family: var(--font-heading);
-  font-weight: var(--font-heading-weight);
-  font-size: 14px;
+  font-family: var(--font-body);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--text-14);
   line-height: 1.2;
   color: var(--color-text);
   background: transparent;
   border: 1px solid transparent;
   padding: var(--space-2) calc(var(--space-3) * 1.2);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
+  transition: var(--motion-control);
+  user-select: none;
+  -webkit-user-drag: none;
 }
+/* a pill answers a press by scaling a hair; it moves no neighbour */
+.btn:active:not(:disabled) { transform: scale(0.98); }
 .btn:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btnPrimary {
   composes: btn;
-  color: var(--color-accent);
+  color: var(--color-bg);
+  background: var(--color-accent);
   border-color: var(--color-accent);
 }
-.btnPrimary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
-.btnPrimary:active:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.btnPrimary:hover:not(:disabled) {
+  background: var(--color-neutral-200);
+  border-color: var(--color-neutral-200);
+}
+.btnPrimary:active:not(:disabled) {
+  background: var(--color-neutral-300);
+  border-color: var(--color-neutral-300);
+}
+/* switched off, a primary is a flat grey pill at full strength, not a faded white one */
+.btnPrimary:disabled {
+  background: var(--color-neutral-800);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-600);
+  opacity: 1;
+}
 
 .btnSecondary {
   composes: btn;
-  border-color: var(--color-divider);
+  background: var(--color-neutral-900);
+  border-color: var(--color-neutral-600);
 }
-.btnSecondary:hover:not(:disabled) { background: var(--color-hover); }
-.btnSecondary:active:not(:disabled) { background: var(--color-active); }
+.btnSecondary:hover:not(:disabled) { background: var(--color-neutral-800); }
+.btnSecondary:active:not(:disabled) {
+  background: var(--color-neutral-800);
+  border-color: var(--color-accent);
+}
 
+/* the quiet button: the ink for words, the thin grey underline a link has */
 .btnGhost {
   composes: btn;
   color: var(--color-accent);
   padding-inline: var(--space-1);
+  text-decoration-line: underline;
+  text-decoration-color: var(--color-neutral-600);
+  text-decoration-thickness: var(--size-underline);
+  text-underline-offset: var(--size-underline-offset);
 }
-.btnGhost:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.btnGhost:hover:not(:disabled) { background: var(--color-hover); }
+.btnGhost:active:not(:disabled) { background: var(--color-active); }
 
 /* — forms ——————————————————————————————————————————————————————————— */
 .field > label {
   display: block;
-  font-size: 12px;
-  margin-bottom: 5px;
-  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  font-size: var(--text-12);
+  margin-bottom: var(--size-5);
+  color: var(--color-muted);
 }
 
+/* A text field is a well: the ground colour inside a clear edge. A select is a
+   field with a pointer. Its caret and its focused edge are the ink. */
 .input {
   width: 100%;
-  min-height: 36px;
-  padding: 6px 10px;
+  min-height: var(--size-36);
+  padding: var(--size-6) var(--size-10);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--text-14);
   color: var(--color-text);
   caret-color: var(--color-accent);
-  background: var(--color-surface);
-  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  border: 1px solid var(--color-neutral-600);
   border-radius: var(--radius-md);
+  transition: var(--motion-control);
 }
-.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:is(select) { cursor: pointer; }
+.input::placeholder { color: var(--color-muted); }
+.input:hover { border-color: var(--color-neutral-400); }
+/* the one ring sits on the field's own hairline edge, so a focused field shows 2px of ink */
 .input:focus-visible {
   border-color: var(--color-accent);
-  outline-offset: 0;
+  outline-offset: calc(var(--size-underline) * -1);
 }
 
 /* — the assignment-type glyph (R · A · Q · P · E, T-15) ————————————— */
 .glyph {
   display: inline-grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-sm);
-  font-size: 10px;
-  font-weight: 500;
+  width: var(--size-18);
+  height: var(--size-18);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-weight-bold);
   background: var(--type-reading-bg);
   color: var(--type-reading-fg);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .glyphReading { composes: glyph; }
 .glyphAssignment {
