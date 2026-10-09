@@ -20,6 +20,7 @@
  */
 
 import Link from 'next/link';
+import { MARK_CHAR, Mark } from '@/components/shell/icons';
 import tokens from '@/styles/tokens.module.css';
 import { courseCodeFromId } from '@/lib/queries.today';
 import { bucketLabel, fileTypeChip, formatBytes } from '@/lib/queries.materials';
@@ -201,7 +202,7 @@ export function SessionPopout({ sessionId }: { sessionId: number }) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Open ↗
+                    Open <Mark name="arrowUpRight" />
                   </a>
                 )}
               </div>
@@ -243,7 +244,7 @@ export function SessionPopout({ sessionId }: { sessionId: number }) {
         </span>
         <span className={styles.footerLinks}>
           <Link className={tokens.btnGhost} href={`/course/${session.course_id}/classwork`}>
-            Open in Classwork →
+            Open in Classwork <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
           </Link>
         </span>
       </div>

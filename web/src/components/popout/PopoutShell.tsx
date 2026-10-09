@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { Mark } from '@/components/shell/icons';
 import styles from './Popout.module.css';
 
 /**
@@ -105,7 +106,7 @@ export function PopoutShell({
         tabIndex={-1}
       >
         <button type="button" className={styles.close} onClick={onClose} aria-label="Close">
-          ✕
+          <Mark name="close" />
         </button>
         {children}
       </div>

@@ -48,6 +48,7 @@ import { FileOpenAction } from '@/components/materials/FileOpenAction';
 import { ScoreHistory } from '@/components/grades/ScoreHistory';
 import { UploadDropZone } from '@/components/grades/UploadDropZone';
 import { QueryState, isQueryUnresolved } from '@/components/shared/QueryState';
+import { MarkedLabel } from '@/components/shell/icons';
 import tokens from '@/styles/tokens.module.css';
 import styles from './SubmissionBlock.module.css';
 
@@ -92,7 +93,7 @@ function FileRow({
               rel="noreferrer"
               title="bb2dash cannot submit for you — open Blackboard and attach it there."
             >
-              {STAGED_LABEL}
+              <MarkedLabel label={STAGED_LABEL} />
             </a>
           ) : (
             <span className={styles.stagedLink}>{STAGED_LABEL}</span>

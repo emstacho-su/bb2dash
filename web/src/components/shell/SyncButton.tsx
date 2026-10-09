@@ -56,7 +56,7 @@ import {
   watchedRequest,
   type SyncPhase,
 } from '@/lib/sync-request-phase';
-import { SyncIcon } from './icons';
+import { MarkedLabel, SyncIcon } from './icons';
 import { useExit } from './useExit';
 import styles from './SyncButton.module.css';
 
@@ -245,7 +245,7 @@ export function SyncButton() {
                   <span className={styles.prompt}>{shownToast.prompt}</span>
                   <span className={styles.toastActions}>
                     <Link className={styles.toastLink} href="/inbox">
-                      {SYNC_COPY.openInbox}
+                      <MarkedLabel label={SYNC_COPY.openInbox} />
                     </Link>
                     <button
                       type="button"

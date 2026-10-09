@@ -437,3 +437,12 @@ The six `controlsDisabled` sites of `AssignmentPlannerBlock.tsx` take `aria-busy
 `git grep -c -E "aria-busy=\{(pending|busy)\}" -- web/src/components/popout/AssignmentPlannerBlock.tsx web/src/components/shell/SyncButton.tsx` prints `…AssignmentPlannerBlock.tsx:6` and `…SyncButton.tsx:1`;
 `grep -c "aria-busy" web/src/components/shell/TopNav.tsx` prints 1 (the update row's). `Popout.module.css` `.control` gets the switched-off look on `:disabled:not([aria-busy='true'])` (flat grey, `cursor: not-allowed`, opacity 1); a busy one stays at half strength with `cursor: progress`.
 `SearchPanel.module.css` `.courseSelect` already carries its pair (task 17). Busy sites with the other workers' files not yet merged: `24 7` (my seven are among the 7). `cd web && npm test`: 172 files, 3340 passed; typecheck 0; eslint 0.
+
+### Task 31, my own files (after the `icons.tsx` commit)
+
+The five characters in `components/popout/` are drawn by marks: `PopoutShell.tsx` (the close cross), `AssignmentDetailBody.tsx` ("Grades" caret right keeping its `→`, "Open in Blackboard" arrow up right) and
+`SessionPopout.tsx` ("Open" arrow up right, "Open in Classwork" caret right keeping its `→`). The two string labels are drawn through `MarkedLabel`: `STAGED_LABEL` in the link of `SubmissionBlock.tsx`
+(the typed span of the course with no link stays typed, as `SubmissionBlock.test.tsx:265` needs) and `SYNC_COPY.openInbox` in `SyncButton.tsx`.
+Mark characters before my files `41 20`, after `36 17` (5 characters in 3 files, as the row says). `grep -c "<MarkedLabel"`: `SubmissionBlock.tsx` 1, `SyncButton.tsx` 1; `grep -c "{STAGED_LABEL}</span>" web/src/components/popout/SubmissionBlock.tsx` 1.
+`npx vitest run test/marks.test.tsx test/TopNav.search.test.tsx test/SyncButton.test.tsx test/Bell.test.tsx test/ItemPopout.test.tsx test/SubmissionBlock.test.tsx test/AssignmentPopout.test.tsx test/SessionPopout.test.tsx`: 8 files, 128 passed, the six old files unedited.
+`cd web && npm test`: 172 files, 3340 passed; typecheck 0; eslint 0.

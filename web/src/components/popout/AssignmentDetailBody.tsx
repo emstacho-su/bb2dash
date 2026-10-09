@@ -22,6 +22,7 @@
  */
 
 import Link from 'next/link';
+import { MARK_CHAR, Mark } from '@/components/shell/icons';
 import tokens from '@/styles/tokens.module.css';
 import { courseCodeFromId } from '@/lib/queries.today';
 import { BLACKBOARD_LINK_TITLE, blackboardLink } from '@/lib/blackboard-link';
@@ -207,7 +208,7 @@ export function AssignmentDetailBody({ assignmentId }: { assignmentId: string })
       <div className={styles.footer}>
         <span className={styles.footerLinks}>
           <Link className={tokens.btnGhost} href={`/course/${assignment.course_id}/grades`}>
-            Grades →
+            Grades <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
           </Link>
           {bbLink ? (
             <a
@@ -217,7 +218,7 @@ export function AssignmentDetailBody({ assignmentId }: { assignmentId: string })
               rel="noreferrer"
               title={BLACKBOARD_LINK_TITLE[bbLink.scope]}
             >
-              Open in Blackboard ↗
+              Open in Blackboard <Mark name="arrowUpRight" />
               {bbLink.scope === 'course' && (
                 <>
                   {' '}
