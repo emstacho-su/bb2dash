@@ -207,10 +207,14 @@
   width: var(--size-16);
   height: var(--size-22);
   border-radius: var(--radius-3);
-  background: var(--color-neutral-800);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-accent-700);
 }
+/* One tone: a meeting day is filled with the colour a plain day is outlined in,
+   so the difference is a shape and not a tone alone. */
 .stripBarMeet {
   background: var(--color-accent-700);
+  box-shadow: none;
 }
 .stripDot {
   width: var(--size-5);

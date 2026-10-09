@@ -276,3 +276,16 @@ The rules left dead by it are deleted: `PlannerWeek.module.css` `.legend` and `U
 | `grep -c "the grid shows New York time" web/src/components/planner/PlannerWeek.tsx` | 1 | 1 |
 | `npx vitest run test/UpcomingTracker.scroll.test.tsx test/UpcomingTracker.test.tsx test/TodayLayout.test.tsx test/PlannerWeek.test.tsx` | | exit 0, 4 files, 109 passed; the four files unedited |
 | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | | exit 0 (165 files, 3242 tests); exit 0; exit 0 |
+
+## Task 35: the week strip
+
+`Today.module.css`: `.stripBar` is a clear fill inside an inset ring in `--color-accent-700` (the tile's own choice); `.stripBarMeet`
+is filled with that same token and draws no ring. Width, height and radius did not change. The label he chose, "Meeting days
+as outline", reads the other way round; the build follows entry `week-strip-shape` and the tile (default 16, taste call T-10).
+
+| Step | Command | Result |
+|---|---|---|
+| RED | `cd web && npx vitest run test/today-week-strip.css.test.ts` (new file, written first) | exit 1, 2 failed, 1 passed |
+| GREEN | `cd web && npx vitest run test/today-week-strip.css.test.ts test/TodayLayout.test.tsx test/CourseCard.test.tsx` | exit 0, 3 files, 46 passed; the two old files unedited |
+| Audit | `cd web && npx vitest run test/token-audit.test.ts` | exit 0 |
+| Gates | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (166 files, 3245 tests); exit 0; exit 0 |
