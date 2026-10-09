@@ -67,7 +67,7 @@
 }
 
 .attemptNo {
-  font-family: var(--font-heading);
+  font-family: var(--font-body);
   font-weight: var(--font-heading-weight);
   font-size: var(--text-sm);
   color: var(--color-text);

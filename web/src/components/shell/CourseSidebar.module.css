@@ -62,8 +62,8 @@
 .head {
   margin: 0;
   padding: var(--size-6) var(--size-14) var(--size-8);
-  font-family: var(--font-heading);
-  font-weight: var(--font-heading-weight);
+  font-family: var(--font-body);
+  font-weight: var(--font-weight-medium);
   font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;

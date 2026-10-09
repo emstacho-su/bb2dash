@@ -368,3 +368,9 @@ Defaults taken in the sweep: the Field and Strength rules for a disabled select/
 for `SearchPanel`'s `.courseSelect` now (the other rules follow with task 37); the nav-search pill keeps the one ring and the field inside it is
 `outline-color: transparent` rather than `outline: none` (the Ring check counts the latter as a removed ring); `--size-nav-search-width` (240px) is used for the
 three 240 px literals of the shell (account menu, search field, course select) because it is the only declared name for that value.
+
+### Task 28, type (my part)
+
+`CourseSidebar` `.head` and `SearchPanel` `.modeBtn, .modeBtnActive` take `--font-body` (weights `--font-weight-medium` and `--font-weight-semibold`), `SubmissionBlock` `.attemptNo` takes
+`--font-body` and keeps its weight. The popout's "seen" stamp loses `tokens.mono` (the sha keeps it). `git grep -c "font-family: var(--font-heading)" -- <the three>` prints nothing (exit 1);
+`grep -c "tokens.mono" web/src/components/popout/SubmissionBlock.tsx` prints 1; Weight check over shell and popout prints nothing. Tests: SubmissionBlock, CourseSidebar, audit, type-tokens: all passed.
