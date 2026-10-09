@@ -378,3 +378,61 @@ a throwaway folder of fake secrets (the stored string's shape, no byte-order mar
 replace a file without `-Force`), which was then deleted. The name `workspace_ingest_db_url` was
 added to the allow-list of `set-secret.ps1` in `SECRETS_DIR` (a name). Handed to Stack on
 2026-10-08 night; his step is done when `just doctor` shows no missing secret.
+
+## Task 44: the reviews, 2026-10-09
+
+Both ran from inside `bb2dash-wt-24`, on `origin/main...HEAD` at 4f58b89 (193 files, about 29,000
+added lines), after the nine applies and with `main` merged in.
+
+### `/security-review`
+
+One reviewer read the whole diff against the brief's own statement of the boundary (Freeze
+amendments, The fence, The stores, Uploads and extraction, Privacy rules, The security boundary).
+**No finding at or above the bar** (0.8 confidence, HIGH or MEDIUM), so the second pass, which
+filters false positives, had nothing to filter. What it read and judged sound: the four browser
+functions' owner check as the first statement; all fourteen definer functions pinned and revoked
+before their one grant, with no dynamic SQL in 190 to 198; the signed link fixed up to the `?` by
+the CHECK and by both functions; the runner's and the ingest role's functions refusing a request,
+job or document the caller does not hold; `workspace-search` holding no key; no secret in an argv,
+in the batch child's environment or in the per-request MCP config; the gate failing closed on two
+tools; the plan's bounds; every block built through the fence; log lines of ids, counts, states
+and classes only; the link check, the hash check and the exchange file names in the ingest worker;
+the two images and the compose blocks.
+
+Six notes under the bar, each placed:
+
+| note | where it goes |
+|---|---|
+| The worker follows a symlink in the folder it shares with the parser, so a parser that was taken over could make it write an upload's bytes elsewhere in the worker's own container, or read a device as the answer. It reaches no secret | **fixed in round 3, W-79**: no link is followed and only a regular file is used |
+| The fence splits lines on LF, CRLF and CR only; five other separators and a leading zero-width character can show a label at a visible line start. A block line still cannot be forged. Two titles sit outside any block | **fixed in round 2, W-77** |
+| `workspace_job_finish` does not check that the caller holds that job, its kind or its lease | **migration 199, W-76** |
+| `workspace_turn_put` stores `attachments` as any JSON array and a `feed` row's title as given, so "ids and states only" rests on the runner | **migration 199, W-76** |
+| A runner's name is its own word: "one document at a time" holds per name, and `workspace_claim_v2` closes a turn by name. The same data as the blast radius the brief gives a holder of the DSN, not one at a time | recorded, not changed |
+| `workspace-embed` answers any holder of the public anon JWT: it embeds a document by id with the service role and tells an id that exists from one that does not. No text comes back; `embed-corpus` is the same | recorded, not changed (109a, item 18 is the same gap for `search`) |
+
+### `/code-review main high`
+
+Ten findings, none in the gate, the fence's block lines or a grant. Each is a real fault and each
+is fixed in the review round; none is declined.
+
+| # | finding | severity (PM) | fix |
+|---|---|---|---|
+| 1 | `workspace-ingest/src/embed.ts`: one try stores at most 180 parts and a document gets three tries, so an upload over about 540 parts could never be indexed | HIGH | W-79, round 3: a try runs until the parts are stored, inside the lease |
+| 2 | `workspace/src/retrieve.ts`: the runner filtered every hit under 0.78, keyword matches among them, which the SQL keeps on purpose; an exact-term match was dropped and the turn stored `empty` | HIGH | W-77, round 2: the runner orders, it does not filter |
+| 3 | `workspace/src/context/attachments.ts`: a file whose first unit was cut to fit was reported as read whole | HIGH | W-77 |
+| 4 | `196`, `workspace_job_claim`: a newest message over 14,000 bytes was summarised away, leaving a follow-up no verbatim turn | HIGH | migration 199, W-76 |
+| 5 | `workspace/src/plan.ts`: an impossible plan date (`2026-11-31`) passed and the feed was then refused by Postgres | MEDIUM | W-77 |
+| 6 | `workspace/src/retrieve.ts`: the pause after three failed searches also skipped attachment reads | MEDIUM | W-77 |
+| 7 | `193`: a retried document was claimed again at once, so three tries burned in seconds | MEDIUM | migration 199, W-76: a wait of 60 s times the tries |
+| 8 | `workspace/src/context/attachments.ts`: the attachment budget was measured before the guard's prefixes, so a file of label-shaped lines could push the prompt past the argument limit | MEDIUM | W-77 |
+| 9 | `workspace-ingest/src/units.ts`: a NUL in parsed text failed the file for ever | MEDIUM | W-79 |
+| 10 | `workspace-embed`: every call read and re-chunked the whole document to store three parts | MEDIUM | W-78, round 3, then a redeploy on Stack's word |
+
+Three conventions it named are the PM's and are done in task 46: `project-state/STATUS.md` and the
+root `CLAUDE.md` (four read tools, the notes collections, `harness_database_url`, the login's
+reach) are stale for this branch; one comment in `compose.yaml` says `WORKSPACE_MEMORY_JOBS=off`
+turns off the rolling summary, which it does not (W-79 corrects the comment).
+
+**What the review round costs.** One more migration, 199, the last number of the block: `create or
+replace` only, applied on Stack's word after its dry run. One redeploy of `workspace-embed`. The
+Workspace test image is rebuilt before the walk.
