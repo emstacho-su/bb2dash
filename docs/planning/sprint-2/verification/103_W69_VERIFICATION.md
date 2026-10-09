@@ -397,3 +397,50 @@ the cause is either the box's network (W-75's `scripts/walk-box.mjs`, `docker/wa
 element of a W-69 file. I did not edit either, and I ran the harness once, as the rules say. What this leaves unproven: that the four
 routes still fit at 390px after the sweep (the last proof is run `20261008T235442Z`, before the sweep). The sweep moved no box, and
 the unit proofs in this file pass (`planner-phone-width.css.test.ts`, the token audit at 0).
+
+## Resume 2: after the fonts fix (ca52b96) and the merge
+
+`git merge origin/feat/styling-22` (clean). `npm test` exit 0 (172 files, 3324 tests); `npm run typecheck` exit 0; `npx eslint . --max-warnings 0`
+exit 0; `npx vitest run test/token-audit.test.ts` exit 0, 89 passed; `screens-a.json` is still `{}` (sum 0).
+
+### Run 1: `phone-width.spec.ts`, the four routes
+
+| Run id | Commit (`dirty` false) | Result | Printed |
+|---|---|---|---|
+| `20261009T013524Z` | 8d38d5f | exit 1, 6 passed, 2 failed | `route /` page `scrollWidth=402` (dark and light); the other three routes 390 |
+| `20261009T013914Z` | 9cdffec | exit 1, 6 passed, 2 failed | `route /` 402 again |
+| `20261009T014205Z` | 6e02189 | **exit 0, `passed`, 8 passed** | `/` 390, `/planner` 390 with `box scrollWidth=764 clientWidth=368`, `/inbox` 390, `/announcements` 390, each in dark and light |
+
+With the new faces Home was 12px too wide. I could not see which element it was (no screenshot or geometry in a failing run), so the first
+change was a guess and did not move the width: `Today.module.css` lets a course card's nowrap stats row wrap at 720px and below (kept: it only
+acts when the row does not fit). The second change fixed it: `UpcomingTracker.module.css`, at 820px and below the detail row's effort cell
+(`4h · start Sun 9/28 · override`, mono, `white-space: nowrap`) sits in a fixed 120px track and is wider than it in Source Code Pro, so it now
+wraps. That second cell is the probable cause; it is inferred from the run that went green, not shown by an overflow measurement.
+
+### Run 2: `theme-walk.spec.ts -g "planner targets"`
+
+| Run id | Commit (`dirty` false) | Result | Printed |
+|---|---|---|---|
+| `20261009T014345Z` | 2147ed0's parent (6e02189) | exit 1, 1 failed | `{"atTitle":"button","atBox":"label"}`; the box's centre was the label, expected `input[checkbox]` |
+| `20261009T014732Z` | 2147ed0 | **exit 0, `passed`, 1 passed** | `{"atTitle":"button","atBox":"input[checkbox]"}` |
+
+The failure was task 36's. The label's `::after` (z-index 1) came after the input in tree order, so it painted over the box. The box is now
+`z-index: 2`, its area 1, the title's area auto (`planner-targets.css.test.ts` follows). The case presses the title's first pixel only; neither
+the case nor I pressed the done box.
+
+### Why the done box's area is not the block's full height in a tall block (for taste call T-11)
+
+Default 5 says the done box's hit area is the block's full height and never reaches past the box's own edge on the title's side. In a one-row
+(compact) block both hold: the title is to the right, so the area is the full height and ends at the box's right edge. In a taller block the
+title is on the row below the box, so "the title's side" is the bottom: a full-height strip over the box's column would lie over the first
+12px of the title, and the case's own probe (the element at the title's first pixel is the title) would fail, and a press there would write a
+tick. So in a tall block the area stops at the box's bottom edge. These sizes come from the CSS, not from a measurement: the case prints
+element names only, and no run measured a rect.
+
+| Block | Hit area of the done box | Of which the box |
+|---|---|---|
+| one row (a half hour, 24px tall) | 17 x 24 px (5px of padding + the 12px box, by the block's full 24px) | 12 x 12 |
+| taller (one hour or more) | 17 x 16 px (from the block's top and left edge to the box's right and bottom edge: 3 + 1 + 12 high) | 12 x 12 |
+
+Both are under the 24px of `--size-target` in width, and the tall block's is also under it in height. A one-hour block's title has the rest of
+the block as its area.
