@@ -24,6 +24,7 @@ export function PopoutShell({
   label,
   onClose,
   leaving = false,
+  itemKey,
   onPanelNode,
   children,
 }: {
@@ -32,6 +33,8 @@ export function PopoutShell({
   onClose: () => void;
   /** The host has closed the popout and keeps it for its exit. */
   leaving?: boolean;
+  /** What the popout shows. A host that keeps the frame across items says which, so a different item inside an exit is a reopen. */
+  itemKey?: string;
   /** Receives the panel element (and null when it goes), for `useExit`. */
   onPanelNode?: (node: HTMLElement | null) => void;
   children: ReactNode;
@@ -46,15 +49,24 @@ export function PopoutShell({
   );
   const openerRef = useRef<Element | null>(null);
 
-  // Remember the opener, move focus in, and hand focus back on the way out.
-  useEffect(() => {
-    openerRef.current = document.activeElement;
-    panelRef.current?.focus();
-    return () => {
+  // Hand focus back to the opener when the popout goes for good.
+  useEffect(
+    () => () => {
       const opener = openerRef.current;
       if (opener instanceof HTMLElement && document.contains(opener)) opener.focus();
-    };
-  }, []);
+    },
+    [],
+  );
+
+  // Opening, and reopening inside an exit (the same item, or another one): remember what the reader
+  // opened it from, unless focus is already in the panel, and move focus in.
+  useEffect(() => {
+    if (leaving) return;
+    const panel = panelRef.current;
+    const active = document.activeElement;
+    if (panel !== null && !panel.contains(active)) openerRef.current = active;
+    panel?.focus();
+  }, [leaving, itemKey]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
