@@ -218,7 +218,7 @@ test('every table and column these cases are made of is in the migrations, and t
 
 test('pack 23 holds the twelve proofs, by name', () => {
   assert.deepEqual(Object.keys(PACK_23).sort(), [
-    'apply-idle', 'apply-quiet', 'applied-from-button', 'decisions-filed', 'nothing-written', 'questions-raised',
+    'applied-from-button', 'apply-idle', 'apply-quiet', 'decisions-filed', 'nothing-written', 'questions-raised',
     'recorded-after-sync', 'request-taken-after', 'request-waiting', 'sync-taken', 'test-decisions-skipped', 'transform-answers',
   ]);
 });
@@ -319,7 +319,7 @@ test('questions-raised: the four, raised in this run with the right kinds and la
 
 /** Empties the tables the cases fill, and builds what the case needs on them. */
 async function rebuilt(build) {
-  await db.exec('truncate public.attention_items, public.agent_requests, public.inbox_apply_writes, public.inbox_apply_holds restart identity');
+  await db.exec('truncate public.attention_items, public.agent_requests, public.inbox_apply_writes, public.inbox_apply_holds, public.bb_files restart identity');
   return build();
 }
 
@@ -729,6 +729,7 @@ test('transform-answers: passes on no rows at all, and says so in its counts; a 
 
 /** a supersede question open beside an archived answer for the same candidates is a question asked again, and fails */
 async function transformAnswersCase2() {
+  await rebuilt(async () => {});
   // An open question alone, or beside an answer for other candidates or one that closed itself, is not asked again.
   await addSupersede({ file: 7, state: 'open' });
   await addSupersede({ file: 8, state: 'open' });
@@ -737,7 +738,7 @@ async function transformAnswersCase2() {
   await addSupersede({ file: 9, state: 'archived', closedItself: true });
   const fine = await prove('transform-answers', transformParams);
   assert.equal(fine.code, EXIT.pass, fine.why);
-  assert.deepEqual([fine.detail.supersede_items_looked_at, fine.detail.supersede_reasked], [6, 0]);
+  assert.deepEqual([fine.detail.supersede_items_looked_at, fine.detail.supersede_reasked], [5, 0]);
   await addSupersede({ file: 7, state: 'archived' });
   const asked = await prove('transform-answers', transformParams);
   assert.deepEqual([asked.code, asked.detail.supersede_reasked], [EXIT.fail, 1]);
