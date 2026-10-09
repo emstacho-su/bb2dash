@@ -157,6 +157,7 @@ Required by the brief's working rules (amendment 3, H-1). One row per task that 
 |---|---|---|---|---|
 | 19, 28, 31, 34, 37 | yes (Skill tool, `ui-ux-pro-max`, once at the start of the resume, before task 19) | `design-system/bb2dash/MASTER.md` (all of it), `design-system/bb2dash/pages/grades.md`, `design-system/bb2dash/pages/workspace.md`; `direction-d.json` and `component-changes.json` for every value and entry | none. The brief names every rule these tasks write, the component-changes entries give each change word for word, and `direction-d.json` holds every value, so a query would only have returned advice the brief already overrides. No `--persist` was passed and no script ran | `touch-target-size` (44 px) and `web-target-size` lose to `--size-target` (task 36, not mine); `readable-font-size` (16 px body) and the type-floor advice lose to the seven pinned `--text-*` sizes and the brief's "no 11px floor" (D-2); `weight-hierarchy` loses to the sweep's rule that weights are `--font-weight-*` tokens at today's value; `truncation-strategy` and `spring-physics` do not apply (these tasks truncate and animate nothing new); the icon-package advice (a Phosphor import) loses to "no new dependency": the marks are the inline SVGs of `icons.tsx`; `grades.md` lines 21-22, 34, 36 and 37 ("waits", "needs his word") are read against D-2, D-3, D-5 and H-5 and the brief's table of overtaken lines: all of them are now in (tasks 28, 31, 34, 37) |
 | 26 (my line) | yes (Skill tool, at the start of the task) | `design-system/bb2dash/MASTER.md`; the brief's frame section and task row | none (the brief names the one line) | `fixed-element-offset` and `scroll-behavior` lose to D-1, the frame with scrolling panes: no bar lies over a scrolling page any more |
+| visual round (V-10 to V-13) | yes (Skill tool, at the start of the round) | `design-system/bb2dash/MASTER.md`, `pages/grades.md` | none (see `## Visual round`) | none set aside |
 
 ## Task 19: the sweep of screens B
 
@@ -370,3 +371,32 @@ not grow below the window (`workspace-layout.spec.ts`).
 
 The frame broke nothing on my screens: no failure in either run, so nothing to fix in my files and no element of another
 worker's to name.
+
+## Visual round
+
+From the PM's theme walk with shots (run `20261009T034707Z`, 64 passed) judged against tile D. Merged
+`origin/feat/styling-22` first. I opened `05-grades-dark.png` only, and describe no course data from it.
+
+**ui-ux-pro-max (visual round).** Loaded at the start; read `design-system/bb2dash/MASTER.md` and `pages/grades.md`
+(read earlier in this resume, and again for the "Shape" and "Typography" rules). No search run: each item is a rule
+the design system and `component-changes.json` already state. Advice set aside: none needed; `element-state` rules
+(`state-clarity`) agree with the Seen stamp keeping its quiet colour; `truncation-strategy` is not touched.
+
+| Item | Caused by this phase? | What `main` did | What changed |
+|---|---|---|---|
+| V-10 strip tiles | Yes, by the card-edge change (task 16, entry `card-edge`) | `main`'s `.card` (tokens) had no edge at all: a fill and a radius, no ring, so the scroll box (`.cards`, `overflow-x: auto`, `padding: 0 0 var(--space-2)`) had nothing to clip. Since task 16 the edge is a 1px `box-shadow` ring, which lies outside the padding box; a scroll box clips it on the top and left and on the last tile's right | `.cards` pads the ring back in (`padding: var(--size-underline) var(--size-underline) calc(var(--space-2) + var(--size-underline))`) and takes it back with `margin: calc(var(--size-underline) * -1)`: no box moves, and each tile has its whole edge. A strip wider than its pane still scrolls sideways inside its own box |
+| V-11 "scroll up for weeks" | Not caused by the sweep; the gap is main's | `main`'s `.earlier` is a `button` with no `font-family` (a button does not inherit it), so it took the browser's face; it only stands out now that the app's face is Source Sans | `font-family: var(--font-body)` on `.earlier`. The typed up-arrow is not one of D-3's characters (the Mark characters command does not list `↑`) and stays |
+| V-12 "tentative" tag | Yes, by task 8's token values | `main`'s `.tentativeTag` was a dashed box with `border-radius: calc(var(--radius-md) * 0.75)`; `--radius-md` was 8px, so 6px. Task 8 set `--radius-md` to 4px, so the same expression drew 3px: a square-ish corner. The entry `tag-pill` gives a tag `--radius-chip` "in place of `calc(var(--radius-md) * 0.75)`" | `.tentativeTag` and its sibling `.attendanceTag` (the identical expression) take `var(--radius-chip)`. The dashes (`1px dashed`) say "tentative" on `main` and stay. `CourseSubBar`'s `.dispute` label has the same expression; the brief's entry names it as not a tag, so it is left (and recorded here) |
+| V-13 Seen stamp | Yes, by my task 28 | `main`'s `.mono` class set `font-family`, `font-size: var(--text-xs)` (11px) and `color: var(--color-neutral-400)` | The stamp lost all three when the class came off, and grew to the table's `--text-base`. `.seenCell` now sets `font-size: var(--text-xs)` and `color: var(--color-neutral-400)` (no `font-family`, D-2). Same size and colour as `main`. The popout's stamp is W-68's file |
+
+* **Test.** `web/test/visual-round-b.css.test.ts` (new, 8 cases): the strip's scroll box and its ring padding and margin; `.earlier`'s face; both tag rules on `--radius-chip` and the tentative dashes kept; the Seen cell's size and colour and no code face.
+  RED (before the CSS): `npx vitest run test/visual-round-b.css.test.ts` → exit 1, 5 failed, 3 passed (the 3 are the cases that
+  already held: the strip is a scroll box, the dashes, no code face). GREEN: exit 0, 8 passed.
+* **Gates.** `npx vitest run test/visual-round-b.css.test.ts test/course-timeline-css.test.ts test/CourseTimeline.test.tsx
+  test/GradebookTable.test.tsx test/GradesTables.layout.test.tsx` → 0, 68 passed; `cd web && npm test` → 0, 183 files, 3410
+  passed; `npm run typecheck` → 0; `npx eslint . --max-warnings 0` → 0; `npx vitest run test/token-audit.test.ts` → 0 (`screens-b.json` still 0).
+* **Harness run** on the committed and pushed tree: run `20261009T041205Z`, commit `be4e30e`, `dirty` false, `exit_code` 0,
+  `passed`, `16 passed (51.8s)`.
+* **Recorded, no change asked** (not this phase's): columns that do not line up between course blocks on `/grades`;
+  the item link sitting low beside its link select on a course's Grades tab; the native disclosure triangle on "N earlier";
+  the assignment page marking Stream as the current tab; the faint small text on a dimmed no-class session card.

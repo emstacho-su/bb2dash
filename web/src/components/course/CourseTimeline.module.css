@@ -141,6 +141,8 @@
 }
 
 .earlier {
+  /* A button does not inherit the app's face. */
+  font-family: var(--font-body);
   display: flex;
   justify-content: center;
   padding: var(--space-2);
@@ -306,7 +308,7 @@
   display: inline-flex;
   align-items: center;
   padding: 1px var(--size-6);
-  border-radius: calc(var(--radius-md) * 0.75);
+  border-radius: var(--radius-chip);
   font-size: var(--text-3xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -419,7 +421,7 @@
   display: inline-flex;
   align-items: center;
   padding: 1px var(--size-6);
-  border-radius: calc(var(--radius-md) * 0.75);
+  border-radius: var(--radius-chip);
   font-size: var(--text-3xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;

@@ -4,11 +4,14 @@
   min-width: 0;
 }
 
-/* One row of cards; it scrolls sideways rather than wrapping the page wider. */
+/* One row of cards; it scrolls sideways rather than wrapping the page wider. A
+   card's edge is a 1px ring (a box-shadow), and a scroll box clips whatever lies
+   outside its padding box: so the box pads the ring back in on three sides and
+   takes the same amount back with a margin, and no tile loses its edge. */
 .cards {
   list-style: none;
-  margin: 0;
-  padding: 0 0 var(--space-2);
+  margin: calc(var(--size-underline) * -1);
+  padding: var(--size-underline) var(--size-underline) calc(var(--space-2) + var(--size-underline));
   display: flex;
   gap: var(--space-3);
   overflow-x: auto;
