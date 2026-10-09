@@ -310,11 +310,12 @@
   white-space: nowrap;
 }
 
-/* The unread count sits on red. */
+/* The unread count sits on red, off the icon's upper right corner: a two-digit count hangs past the
+   button's edge and covers a sliver of the glyph, which stays whole and recognisable. */
 .badge {
   position: absolute;
-  top: var(--size-3);
-  right: var(--size-3);
+  top: calc(var(--size-underline-mark) * -1);
+  right: calc(var(--size-8) * -1);
   font-size: var(--text-3xs);
   font-weight: var(--font-weight-bold);
   padding: 0 var(--size-4);
