@@ -7,8 +7,11 @@
  * stops at 180 parts, and a document may hold well over a thousand. So the call budget here is a
  * backstop only, and two rules stop a try that cannot finish:
  *
- *   no progress  an answer that stored nothing, or whose `remaining_parts` did not go down, while
- *                parts are left: the failed try it is
+ *   no progress  a 200 answer with `inserted_rows` 0 and `remaining_parts` above 0: the failed try it is.
+ *                Progress is parts stored. `remaining_parts` is a lower bound while unmarked units lie
+ *                outside the function's window (an unread unit counts as 1 until it is read), so it can
+ *                rise between two passes that each stored parts; only 0 is exact, and one pass's count is
+ *                never compared with another's
  *   timed out    the document's time bound (a deadline inside the claim's lease) has passed; the
  *                parts already stored stay (the units are not put again), so the next claim, which
  *                finds the document in `text_ready`, continues from them
@@ -99,7 +102,7 @@ export async function embedDocument(o: EmbedOptions): Promise<EmbedResult> {
   const send = makeEmbedPost(o);
   let stop: EmbedStop = null;
   let progressed = false;
-  let remaining: number | null = null;
+  let remaining: number | null = null; // the last answer's count, reported, never compared
 
   const post = async (body: object): Promise<EmbedPostResult> => {
     if (now() >= deadline) {
@@ -112,7 +115,7 @@ export async function embedDocument(o: EmbedOptions): Promise<EmbedResult> {
     const left = countOf((answer.body as { remaining_parts?: unknown } | null)?.remaining_parts);
     const failed = (answer.body as { failed?: unknown } | null)?.failed;
     if (stored > 0) progressed = true;
-    const stuck = left > 0 && (stored === 0 || (remaining !== null && left >= remaining));
+    const stuck = left > 0 && stored === 0;
     remaining = left;
     if (stuck && !(Array.isArray(failed) && failed.length > 0)) {
       stop = 'no_progress';

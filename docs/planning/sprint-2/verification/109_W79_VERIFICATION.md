@@ -377,3 +377,29 @@ and not the rolling summary, which is on from 24a. Nothing else in the file chan
 ## Declined
 
 Nothing declined. The migration in finding 1 is the PM's; I did not touch `db/`.
+
+---
+
+# Round 4: progress is parts stored; the `release` outcome
+
+Branch merged with `origin/feat/workspace-24` first. No docker command.
+
+Red (`npx vitest run`, tests first): `2 failed | 118 passed` (a `remaining_parts` that rises between passes
+stopped the try; a timed-out try with a stored part was a `retry`). Green: `Tests 120 passed (120)` three runs
+in a row; typecheck clean; line coverage 98.11 %.
+
+1. `embed.ts`: a pass made progress when `inserted_rows` is above 0; the try ends well at `remaining_parts` 0;
+   `no_progress` is a 200 with `inserted_rows` 0 and `remaining_parts` above 0 (a non-empty `failed` is still
+   the loop's own stop). One pass's `remaining_parts` is never compared with another's; it is only reported
+   (it is a lower bound while unmarked units lie outside the function's window). Tests: a fake whose count
+   goes 10, 16, 13, 19, ... while each pass stores 3 runs 11 calls to 0; a pass storing nothing with parts left
+   is `no_progress`. Nowhere else in the package compares counts. I still call `ingest/embed_corpus.mjs`'s loop
+   unedited. It stops only at 0, a non-200, a non-empty `failed` or its budget; a rising count only means more
+   calls, so it spends the 5,000-call budget (15,000 parts) and the 540 s document time bound, and the
+   no-progress rule above is the guard against a loop that goes nowhere.
+2. `release`: `FinishOutcome` gains `'release'`. When a try stops `timed_out` having stored at least one part,
+   the worker finishes with `release` (code null); everything else that fails (stored nothing, `no_progress`,
+   an error, a throw) is `retry` / `embed_failed` as before. An empty claim was never treated as an error
+   (the loop just sleeps), so 199's 60 s x attempts back-off needs no change. The 540 s bound stands.
+
+Declined: nothing.

@@ -414,12 +414,25 @@ describe('the embed and the end', () => {
     expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'retry', code: 'embed_failed' }]);
   });
 
-  it('an embed that stops with progress made is a retry too, and the stop is logged by name', async () => {
+  it('an embed that ran out of time having stored a part is a release: no try is counted', async () => {
     const h = harness({ body });
     (h.embed as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({ exitCode: 1, stop: 'timed_out', progressed: true });
     await processDocument(claimFor(body, 'text/plain'), h.deps);
-    expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'retry', code: 'embed_failed' }]);
+    expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'release', code: null }]);
     expect(h.logs.some((l) => l.includes('embed stopped (timed_out, progress made)'))).toBe(true);
+  });
+
+  it('ran out of time having stored nothing, no progress, or an error: a retry that counts', async () => {
+    for (const stopped of [
+      { exitCode: 1, stop: 'timed_out', progressed: false },
+      { exitCode: 1, stop: 'no_progress', progressed: true },
+      { exitCode: 1, stop: 'error', progressed: true },
+    ]) {
+      const h = harness({ body });
+      (h.embed as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce(stopped);
+      await processDocument(claimFor(body, 'text/plain'), h.deps);
+      expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'retry', code: 'embed_failed' }]);
+    }
   });
 
   it('a finish that refuses indexed becomes a retry of embed_failed', async () => {

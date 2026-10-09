@@ -169,8 +169,18 @@ describe('a large document is embedded in one try (Phase 24a round 3)', () => {
     expect(s.calls.length).toBe(1);
   });
 
-  it('a pass whose remaining count does not go down is no progress either', async () => {
-    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ ...embedFixture.answer, inserted_rows: 3, remaining_parts: 9, failed: [] }), { status: 200 }));
+  it('remaining_parts is a lower bound: it may rise between passes that each store parts, and the try runs to 0', async () => {
+    // Each pass stores 3 parts; a long unit enters the window on pass 2 (+9) and on pass 4 (+9).
+    const answers = [10, 16, 13, 19, 16, 13, 10, 7, 4, 1, 0];
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ ...embedFixture.answer, inserted_rows: 3, remaining_parts: answers.shift(), failed: [] }), { status: 200 }));
+    const r = await embedDocument({ documentId: 17, jwt, fetch: fetchFn as unknown as typeof fetch, sleep: async () => undefined });
+    expect(r).toMatchObject({ exitCode: 0, stop: null, progressed: true });
+    expect(fetchFn).toHaveBeenCalledTimes(11);
+  });
+
+  it('a pass that stores nothing with parts left is no_progress even when the count looks lower', async () => {
+    const answers = [{ inserted_rows: 3, remaining_parts: 9 }, { inserted_rows: 0, remaining_parts: 5 }];
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ ...embedFixture.answer, ...answers.shift(), failed: [] }), { status: 200 }));
     const r = await embedDocument({ documentId: 17, jwt, fetch: fetchFn as unknown as typeof fetch, sleep: async () => undefined });
     expect(r).toMatchObject({ exitCode: 1, stop: 'no_progress', progressed: true });
     expect(fetchFn).toHaveBeenCalledTimes(2);
