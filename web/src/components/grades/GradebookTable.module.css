@@ -20,8 +20,8 @@
 
 .table thead th {
   text-align: left;
-  font-family: var(--font-heading);
-  font-weight: var(--font-heading-weight);
+  font-family: var(--font-body);
+  font-weight: var(--font-weight-medium);
   font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
