@@ -189,3 +189,88 @@ entity makes the insert fail on the index. It fails closed.
 
 The fixes are W-80's and W-82's round 2, each test first. The second look at the fix round is
 recorded below when it is done.
+
+## Round 2 landed (2026-10-08)
+
+W-80's and W-82's fix rounds are merged into `fix/phase23-followups` (7c94cdd, 49802ce). Their own
+records carry the red and green runs ("Round 2" in `110_W80_VERIFICATION.md` and
+`110_W82_VERIFICATION.md`).
+
+* 187 is 917 lines after the round (854 before): R3, R4, the failed-close rule and R5 added lines.
+  The held-answers unit is two files, 593 and 610 lines (`phase23_187_held_answers.sql`, cases 0 to
+  9 and 18; `phase23_187_held_answers_b.sql`, cases 0, 10 to 17 and 19).
+* `db/tests/phase23_186_notices.sql` is byte-identical to `main`'s again.
+* **One standing unit is edited, one line:** `db/tests/phase23_181_inbox_apply_runner.sql:383`. Its
+  hand-made request has no `trigger`, so under R3 it is a press's request and its follow-up carries
+  `retry_held: true`. The comparison leaves that key out, so the unit reads the same before and
+  after 187.
+* W-82: the task's action is a hidden PowerShell that ends with `exit $LASTEXITCODE`; the three
+  helpers return their own results; a note that differs in `applied_at` alone is written again for
+  an unfiled row; a refused skip files the row. Exporter, runner, pr and render tests: 60 pass.
+
+## The rolled-back dry runs of 187 and 188 (tasks 5 and 6, the part before Stack's word)
+
+Made by the PM on 2026-10-09, about 01:10Z, on prod, through `execute_sql`, every run inside
+`begin; ... rollback;`. No `agent_requests` row was queued or claimed and `v_inbox_queue` held no
+row; each run checks that first and stops if one is. Nothing was applied.
+
+**How the text got there without being retyped.** The files are on a public repository at a pushed
+commit. `net.http_get` (pg_net, the project's own way to reach out from the database) fetched each
+file from `raw.githubusercontent.com/emstacho-su/bb2dash/49802cefde3fd58d19c0188ce442c6fbb4dd1a3e/`,
+and each run reads the text from `net._http_response`, compares its SHA-256 with the local file's
+and executes it only when they are equal. 187 is `e8190ef0...3f0559` (55,554 bytes) and 188 is
+`d1ae01d7...ed308e` (30,430 bytes), on both sides. A unit runs as the test login, as the runner
+does: inside the transaction `postgres` is granted the three runner roles with the set option
+(brief 102, B-42), the file's own `begin;` and `rollback;` lines are taken out, and each
+`reset role` goes back to `db_test_runner`. Each unit runs in a sub-transaction that is rolled back
+whether it passes or fails, so no unit sees another's rows.
+
+**187 alone.** The whole file executed and its guard blocks raised nothing. Read inside the same
+transaction, before the rollback:
+
+* item 3782: `decision_filed = {"skipped": true, "why": "test item of the Phase 23 cut-over run: no
+  note, no day-file entry"}`, filed time set, and it is no longer on the unfiled list, which holds
+  16 rows; the unlogged list holds 0;
+* `inbox_apply_holds`: 0 rows; `anon`, `authenticated`, `service_role`, `inbox_apply_runner` and
+  `sync_runner` hold neither select nor insert; `db_test_runner` holds select and no insert;
+* who may execute: `inbox_apply_prepare` and `inbox_apply_close`, `inbox_apply_runner` alone;
+  `sync_request_inbox_apply`, `sync_runner` alone, which still executes fourteen functions;
+  `inbox_apply_held_items` and the four filing functions, `service_role` and `db_test_runner`;
+  `inbox_accept_question`, `authenticated` alone;
+* `v_inbox_apply_runs`: 18 rows, the twelve columns of R2 in order and typed
+  (`skip_ids` is `bigint[]`, `archived_count` is `integer`, `claude_started` is `boolean`).
+
+**The units against 187, all in one rolled-back transaction: 13 of 13 PASS.**
+`phase23_187_held_answers`, `phase23_187_held_answers_b`, `phase23_187_decision_filing`,
+`phase23_187_accept_objects`, `phase23_180_inbox_apply_trigger`, `phase23_181_inbox_apply_runner`,
+`phase23_182_inbox_decision_filing`, `phase23_183_one_open_inbox_feedback`,
+`phase23_185_session_links`, `phase23_186_notices` (main's text), `phase14_093_review_fixes`,
+`phase14_095_storage_key`, and `phase14_091_queue` after its loader.
+
+**Two controls, so that a pass means something.** The held-answers unit and the decision-filing
+unit, run the same way with 187 not executed, each stopped at
+"migration 187 is not applied".
+
+**188, after 187, in one rolled-back transaction (task 6).** Both files executed.
+`phase23_188_archived_answers`: **PASS** (and "migration 188 is not applied" before the two files).
+The backfill stamped **14** session answers, the ids task 1 named (905 to 914, 1915, 3436, 3437,
+3453), each with the transaction's own time. The five `phase18_*` units and `phase23_185` read the
+same before and after the two files:
+
+| unit | before 187 and 188 | after |
+|---|---|---|
+| `phase18_122_supersede_rule` | FAIL (1), the newest run's four links (live course data; known since 2026-10-07) | the same line |
+| `phase18_123_file_sessions` | FAIL (4), "ambiguous without exactly one open question: 2488:0" (live data: file 2488's question was answered "none" and archived) | the same line |
+| `phase18_124_stage_files_replay` | PASS | PASS |
+| `phase18_162_lecture_number_links` | PASS | PASS |
+| `phase18_163_session_link_answers` | PASS | PASS |
+| `phase23_185_session_links` | PASS | PASS |
+
+`phase18_123` failing on `main` is new to the record: STATUS named three units that fail on live
+course data, and this is a fourth. It is not this phase's: it fails the same way with neither file
+executed.
+
+**After the last rollback, one read:** no `inbox_apply_holds` table and no `v_inbox_apply_runs`
+view exist, `inbox_apply_close` is 186's body by md5, item 3782 is unfiled, no migration row is
+named 187, and `postgres` holds no set option on a runner role. The only thing left behind is the
+fetched text in `net._http_response`, which pg_net clears by itself.
